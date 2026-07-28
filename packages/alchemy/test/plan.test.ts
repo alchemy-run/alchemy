@@ -6,7 +6,7 @@ import * as Output from "@/Output";
 import * as Plan from "@/Plan";
 import * as Provider from "@/Provider";
 import { UnsatisfiedResourceCycle } from "@/Plan";
-import type { ResourceBinding } from "@/Resource";
+import { Resource, type ResourceBinding } from "@/Resource";
 import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
 import {
@@ -121,6 +121,143 @@ const makePlanWithCustomStack =
         Effect.provide(TestLayers()),
       );
     });
+
+type FieldEffectInputProbeProps = {
+  domain?: string;
+  nested?: {
+    value?: string;
+    deeper?: {
+      enabled?: boolean;
+    };
+  };
+  optional?: string;
+  resolvedObject?: {
+    value?: string;
+  };
+};
+
+interface FieldEffectInputProbe extends Resource<
+  "Test.FieldEffectInputProbe",
+  FieldEffectInputProbeProps,
+  FieldEffectInputProbeProps
+> {}
+
+const FieldEffectInputProbe = Resource<FieldEffectInputProbe>(
+  "Test.FieldEffectInputProbe",
+);
+
+let fieldEffectInputProbeDiffNews: FieldEffectInputProbeProps | undefined;
+
+const fieldEffectInputProbeProvider = () =>
+  Provider.succeed(FieldEffectInputProbe, {
+    list: () => Effect.succeed([]),
+    diff: Effect.fn(function* ({ news }) {
+      fieldEffectInputProbeDiffNews = news as FieldEffectInputProbeProps;
+      return { action: "noop" };
+    }),
+    reconcile: Effect.fn(function* ({ news }) {
+      return news;
+    }),
+    delete: Effect.fn(function* () {}),
+  });
+
+describe("field-level Effect inputs", () => {
+  test(
+    "resolve before diff, including nested Effects and undefined",
+    Effect.gen(function* () {
+      fieldEffectInputProbeDiffNews = undefined;
+      yield* seed({
+        Probe: {
+          instanceId,
+          providerVersion: 0,
+          logicalId: "Probe",
+          fqn: "Probe",
+          namespace: undefined,
+          resourceType: "Test.FieldEffectInputProbe",
+          status: "created",
+          props: {
+            domain: "old.example.com",
+            nested: {
+              value: "old",
+              deeper: {
+                enabled: true,
+              },
+            },
+            optional: "old",
+            resolvedObject: {
+              value: "old",
+            },
+          },
+          attr: {
+            domain: "old.example.com",
+            nested: {
+              value: "old",
+              deeper: {
+                enabled: true,
+              },
+            },
+            optional: "old",
+            resolvedObject: {
+              value: "old",
+            },
+          },
+          downstream: [],
+          bindings: [],
+        },
+      });
+
+      const expected = {
+        domain: "test.example.com",
+        nested: {
+          value: "nested",
+          deeper: {
+            enabled: false,
+          },
+        },
+        optional: undefined,
+        resolvedObject: {
+          value: "recursive",
+        },
+      };
+
+      const state = yield* yield* State;
+      yield* Effect.gen(function* () {
+        const compiled: any = yield* Effect.gen(function* () {
+          yield* FieldEffectInputProbe("Probe", {
+            domain: Stack.Stack.use((stack) =>
+              Effect.succeed(
+                stack.stage === TEST_STAGE ? "test.example.com" : undefined,
+              ),
+            ),
+            nested: {
+              value: "nested",
+              deeper: {
+                enabled: Effect.succeed(false),
+              },
+            },
+            optional: Effect.succeed(undefined),
+            resolvedObject: Effect.succeed({
+              value: Effect.succeed("recursive"),
+            } as any),
+          });
+        }).pipe(
+          Stack.make({
+            name: TEST_STACK,
+            providers: fieldEffectInputProbeProvider(),
+            state: Layer.succeed(State, Effect.succeed(state)),
+          } as any) as any,
+          Effect.provideService(Stage, TEST_STAGE),
+        );
+
+        return yield* Plan.make(compiled).pipe(
+          Effect.provide(compiled.services),
+        );
+      });
+
+      expect(fieldEffectInputProbeDiffNews).toEqual(expected);
+    }) as Effect.Effect<void, never, State>,
+  );
+});
 
 test(
   "artifacts are isolated by FQN during plan diff for namespaced resources",

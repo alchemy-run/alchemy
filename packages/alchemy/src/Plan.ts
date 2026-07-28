@@ -416,6 +416,12 @@ export const make = <A>(
           // `Config.redacted` resolves to a `Redacted`, which stays opaque via
           // the branch below.
           return yield* resolveInput(yield* input);
+        } else if (Effect.isEffect(input)) {
+          // Field-level Input<T> Effects arrive here unwrapped, unlike whole-props
+          // Effects which Resource/asOutput turns into an EffectExpr.
+          const effect = input as Effect.Effect<any, Config.ConfigError>;
+          const resolved = yield* effect;
+          return yield* resolveInput(resolved);
         } else if (Duration.isDuration(input) || Redacted.isRedacted(input)) {
           // Opaque values that are resolved downstream. We don't walk them
           // because it would strip their prototype, resulting in a plain object
