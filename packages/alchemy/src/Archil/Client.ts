@@ -292,7 +292,11 @@ export interface ArchilClient {
  * Then fork a private writable copy per user at request time. Branch writes
  * are isolated from the base and from every sibling branch:
  * ```typescript
- * const base = archil.disk(baseDiskId);
+ * // init — pin the base image resource
+ * const baseDisk = yield* Archil.Disk("base");
+ * const base = archil.disk(yield* baseDisk.diskId);
+ *
+ * // request time
  * const branch = yield* base.createBranch({
  *   name: `user-${userId}`,
  *   fromCheckpoint: "golden-v1",
@@ -310,10 +314,15 @@ export interface ArchilClient {
  * @section Multi-Disk Execution
  * @example Aggregate across disks
  * ```typescript
+ * // init
+ * const data = archil.disk(yield* dataDisk.diskId);
+ * const logs = archil.disk(yield* logsDisk.diskId);
+ *
+ * // request time
  * yield* archil.exec({
  *   disks: {
- *     data: archil.disk(dataDiskId),
- *     logs: { disk: logsDiskId, readOnly: true },
+ *     data,
+ *     logs: { disk: logs, readOnly: true },
  *   },
  *   command: "wc -l /mnt/archil/logs/*.log > /mnt/archil/data/lines.txt",
  * });
