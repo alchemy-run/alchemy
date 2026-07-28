@@ -186,8 +186,9 @@ const REDIRECTS: Record<string, string> = {
   "/guides/custom-provider": "/infrastructure-as-code/custom-provider",
   "/guides/custom-state-store": "/state-store/custom-state-store",
   "/guides/file-layout": "/project-structure/file-layout",
-  "/guides/infrastructure-layers":
-    "/infrastructure-as-effects/infrastructure-layers",
+  "/guides/infrastructure-layers": "/infrastructure-as-effects/layers",
+  "/infrastructure-as-effects/infrastructure-layers":
+    "/infrastructure-as-effects/layers",
   "/guides/migrating-from-v1": "/migrating-from-v1",
   "/guides/monorepo": "/project-structure/monorepo",
   "/guides/monorepo-multi-stack": "/project-structure/monorepo-multi-stack",
@@ -242,10 +243,10 @@ export default {
 };
 
 /**
- * `llms.txt` is generated at build time with absolute canonical URLs, so a
- * PR preview would hand agents an index that points back at production.
- * Rewrite the baked origin to the request's own origin — the same treatment
- * `rewriteCanonicalHost` gives HTML meta tags.
+ * `llms.txt` / `llms-full.txt` are generated at build time with absolute
+ * canonical URLs, so a PR preview would hand agents an index that points back
+ * at production. Rewrite the baked origin to the request's own origin — the
+ * same treatment `rewriteCanonicalHost` gives HTML meta tags.
  */
 const rewriteLlmsTxtOrigin = async (
   request: Request,
@@ -253,7 +254,7 @@ const rewriteLlmsTxtOrigin = async (
 ): Promise<Response> => {
   const reqUrl = new URL(request.url);
   if (
-    reqUrl.pathname !== "/llms.txt" ||
+    (reqUrl.pathname !== "/llms.txt" && reqUrl.pathname !== "/llms-full.txt") ||
     reqUrl.host === CANONICAL_HOST ||
     !res.ok
   ) {

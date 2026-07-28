@@ -201,7 +201,7 @@ export class MyContainer extends Cloudflare.Container<
 export default MyContainer.make(
   {
     main: import.meta.url,
-    dockerfile: "FROM oven/bun:latest",
+    image: "oven/bun:latest",
   },
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2.ReadWriteBucket(Storage);

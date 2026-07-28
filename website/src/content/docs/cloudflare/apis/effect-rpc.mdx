@@ -126,15 +126,14 @@ import * as Cloudflare from "alchemy/Cloudflare";
 export const Tasks = Cloudflare.R2.Bucket("Tasks");
 ```
 
-```typescript twoslash
-// @noErrors
+```diff lang="typescript"
 +import { Tasks } from "./bucket.ts";
 
 export default Cloudflare.Worker(
   "Worker",
   { main: import.meta.url },
   Effect.gen(function* () {
-+   const tasks = yield* Cloudflare.R2.ReadWriteBucket(Tasks);
++    const tasks = yield* Cloudflare.R2.ReadWriteBucket(Tasks);
 
     return {};
   }),
@@ -156,8 +155,7 @@ is pure construction — it builds a value, it doesn't run the server.
 > request. Init only constructs; the work happens later, on each
 > `fetch` call.
 
-```typescript twoslash
-// @noErrors
+```diff lang="typescript"
   Effect.gen(function* () {
     const tasks = yield* Cloudflare.R2.ReadWriteBucket(Tasks);
 
@@ -213,8 +211,7 @@ provide two layers to it via `Layer.mergeAll`:
 Unlike the HTTP API approach, RPC doesn't need `HttpPlatform.layer`
 or `Etag.layer` — the RPC server handles message framing internally.
 
-```typescript twoslash
-// @noErrors
+```diff lang="typescript"
     return {
 +     fetch: RpcServer.toHttpEffect(TaskRpcs).pipe(
 +       Effect.provide(
@@ -379,12 +376,12 @@ The handler returns a `Stream<number>` directly:
 ```diff lang="typescript"
 +import * as Stream from "effect/Stream";
 
-    const handlersLayer = TaskRpcs.toLayer({
-      getTask: /* ... */,
-      createTask: /* ... */,
-+     countTasks: ({ upto }) =>
-+       Stream.fromIterable(Array.from({ length: upto }, (_, i) => i + 1)),
-    });
+   const handlersLayer = TaskRpcs.toLayer({
+     getTask: /* ... */,
+     createTask: /* ... */,
++    countTasks: ({ upto }) =>
++      Stream.fromIterable(Array.from({ length: upto }, (_, i) => i + 1)),
+   });
 ```
 
 On the client, `client.countTasks({ upto: 5 })` is a `Stream<number>`

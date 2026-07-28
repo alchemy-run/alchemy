@@ -1,10 +1,11 @@
 import * as AWS from "@/AWS";
 import { RouteTable, Vpc } from "@/AWS/EC2";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
+import * as Test from "./VpcTest.ts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { assertRouteTableGone, assertVpcGone } from "./Gone.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -19,7 +20,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const { routeTable } = yield* stack.deploy(
+      const { vpc, routeTable } = yield* stack.deploy(
         Effect.gen(function* () {
           const vpc = yield* Vpc("ListRouteTableVpc", {
             cidrBlock: "10.0.0.0/16",
@@ -39,6 +40,9 @@ test.provider(
       );
 
       yield* stack.destroy();
+
+      yield* assertRouteTableGone(routeTable.routeTableId);
+      yield* assertVpcGone(vpc.vpcId);
     }).pipe(logLevel),
   // VPC + RouteTable create, an account-wide DescribeRouteTables, then two
   // destroys (with VPC dependency-ordered teardown) can exceed the default

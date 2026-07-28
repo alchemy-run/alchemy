@@ -6,11 +6,10 @@ import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
-
-const runLive = process.env.ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS === "true";
 
 const TEST_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvTkfqkMHU8HMmIRKJaMl
@@ -24,7 +23,7 @@ HQIDAQAB
 `;
 
 describe("AWS.CloudFront.PublicKey", () => {
-  test.provider.skipIf(!runLive)(
+  test.provider(
     "create, update comment, and delete a public key",
     (stack) =>
       Effect.gen(function* () {
@@ -49,10 +48,13 @@ describe("AWS.CloudFront.PublicKey", () => {
           TEST_PUBLIC_KEY.trim(),
         );
 
+        // Update with the SAME key wrapped in Redacted — the provider's
+        // `extractValue` must unwrap it so diff sees no key change (update in
+        // place, not replacement) and the wire value round-trips unredacted.
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
             return yield* PublicKey("SignedUrlKey", {
-              encodedKey: TEST_PUBLIC_KEY,
+              encodedKey: Redacted.make(TEST_PUBLIC_KEY),
               comment: "updated",
             });
           }),
@@ -61,10 +63,22 @@ describe("AWS.CloudFront.PublicKey", () => {
         expect(updated.publicKeyId).toEqual(created.publicKeyId);
         expect(updated.callerReference).toEqual(created.callerReference);
 
-        const after = yield* cloudfront.getPublicKey({
-          Id: updated.publicKeyId,
-        });
+        // Control-plane reads are eventually consistent — poll until the
+        // update is visible, then assert.
+        const after = yield* cloudfront
+          .getPublicKey({ Id: updated.publicKeyId })
+          .pipe(
+            Effect.repeat({
+              schedule: Schedule.fixed("2 seconds"),
+              until: (r) => r.PublicKey?.PublicKeyConfig?.Comment === "updated",
+              times: 15,
+            }),
+          );
         expect(after.PublicKey?.PublicKeyConfig?.Comment).toEqual("updated");
+        // The Redacted-wrapped key reached the wire as the plain PEM.
+        expect(after.PublicKey?.PublicKeyConfig?.EncodedKey?.trim()).toEqual(
+          TEST_PUBLIC_KEY.trim(),
+        );
 
         yield* stack.destroy();
         yield* assertPublicKeyDeleted(updated.publicKeyId);
@@ -72,7 +86,7 @@ describe("AWS.CloudFront.PublicKey", () => {
     { timeout: 300_000 },
   );
 
-  test.provider.skipIf(!runLive)(
+  test.provider(
     "list enumerates the deployed public key",
     (stack) =>
       Effect.gen(function* () {
@@ -100,7 +114,7 @@ describe("AWS.CloudFront.PublicKey", () => {
     { timeout: 300_000 },
   );
 
-  test.provider.skipIf(!runLive)(
+  test.provider(
     "recovers a wedged creating-state row that lost its Output-valued encodedKey (#736)",
     (stack) =>
       Effect.gen(function* () {
@@ -141,6 +155,28 @@ describe("AWS.CloudFront.PublicKey", () => {
             ),
           );
         }
+        // Delete the public key out-of-band FIRST — while the state row is
+        // still intact — so the recovery `read` misses and the engine falls
+        // through to `diff` with the junk olds. Ordering matters for
+        // orphan-safety: CloudFront assigns the key Id (no user-controlled
+        // name), so if this test were killed after wedging the state row
+        // (attr: undefined) but before this delete, the ensuring
+        // stack.destroy could no longer identify the live key and it would
+        // orphan forever. Deleting before the state rewrite means every
+        // interruption point leaves either an intact row (destroy reclaims
+        // it) or an already-deleted key.
+        const current = yield* cloudfront.getPublicKey({
+          Id: created.publicKeyId,
+        });
+        yield* cloudfront
+          .deletePublicKey({
+            Id: created.publicKeyId,
+            IfMatch: current.ETag,
+          })
+          .pipe(Effect.catchTag("NoSuchPublicKey", () => Effect.void));
+        yield* assertPublicKeyDeleted(created.publicKeyId);
+
+        // Now rewrite the persisted row into the wedged shape.
         yield* state.set({
           stack: stack.name,
           stage,
@@ -155,19 +191,6 @@ describe("AWS.CloudFront.PublicKey", () => {
             },
           },
         });
-
-        // Delete the public key out-of-band so the recovery `read` misses
-        // and the engine falls through to `diff` with the junk olds.
-        const current = yield* cloudfront.getPublicKey({
-          Id: created.publicKeyId,
-        });
-        yield* cloudfront
-          .deletePublicKey({
-            Id: created.publicKeyId,
-            IfMatch: current.ETag,
-          })
-          .pipe(Effect.catchTag("NoSuchPublicKey", () => Effect.void));
-        yield* assertPublicKeyDeleted(created.publicKeyId);
 
         // Before the fix this crashed in `diff`: `extractValue(undefined)`
         // called `Redacted.value(undefined)` on the lost `olds.encodedKey`.

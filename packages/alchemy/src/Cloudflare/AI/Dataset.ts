@@ -341,15 +341,18 @@ const getDataset = (accountId: string, gatewayId: string, id: string) =>
  * dataset is gone too.
  */
 const findByName = (accountId: string, gatewayId: string, name: string) =>
-  aiGateway.listDatasets({ accountId, gatewayId, name, perPage: 50 }).pipe(
-    Effect.map((list) =>
-      list.result
-        .filter((d) => d.name === name)
-        .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-        .at(0),
-    ),
-    Effect.catchTag("GatewayNotFound", () => Effect.succeed(undefined)),
-  );
+  aiGateway.listDatasets
+    .items({ accountId, gatewayId, name, perPage: 50 })
+    .pipe(
+      Stream.filter((d) => d.name === name),
+      Stream.runCollect,
+      Effect.map((chunk) =>
+        Array.from(chunk)
+          .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+          .at(0),
+      ),
+      Effect.catchTag("GatewayNotFound", () => Effect.succeed(undefined)),
+    );
 
 const createDatasetName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {

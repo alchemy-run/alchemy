@@ -41,13 +41,21 @@ export interface Instance extends Resource<
   "AWS.IdentityCenter.Instance",
   InstanceProps,
   {
+    /** The ARN of the Identity Center instance. */
     instanceArn: string;
+    /** The identity store backing the instance. */
     identityStoreId: string;
+    /** The AWS account that owns the instance. */
     ownerAccountId: string | undefined;
+    /** The friendly name of the instance, if set. */
     name: string | undefined;
+    /** The current status of the instance (`ACTIVE`, ...). */
     status: string | undefined;
+    /** Details when the instance is in a failed state. */
     statusReason: string | undefined;
+    /** When the instance was created. */
     createdDate: Date | undefined;
+    /** How the resource was satisfied: `existing` (adopted) or `account` (created). */
     mode: "existing" | "account";
   },
   never,

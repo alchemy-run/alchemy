@@ -38,7 +38,7 @@ TanStack Start worker — /rpc proxy    (src/routes/rpc.ts)
   │  env.BACKEND.fetch(...)            (private service binding)
   ▼
 Backend RpcWorker (TodoRpcs)          (src/backend/api.ts)
-  │  Drizzle.postgres over Hyperdrive
+  │  Drizzle.Postgres over Hyperdrive
   ▼
 Neon Postgres branch
 ```
@@ -201,7 +201,7 @@ export default class Backend extends Cloudflare.Workers.RpcWorker<Backend>()(
   { main: import.meta.filename, url: false, schema: TodoRpcs },
   Effect.gen(function* () {
     const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
-    const db = yield* Drizzle.postgres(conn.connectionString, { relations });
+    const db = yield* Drizzle.Postgres(conn.connectionString, { relations });
 
     const handlers = TodoRpcs.toLayer({
       listTodos: () =>

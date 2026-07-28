@@ -36,10 +36,25 @@ export interface OrganizationalUnit extends Resource<
   "AWS.Organizations.OrganizationalUnit",
   OrganizationalUnitProps,
   {
+    /**
+     * ID of the OU (e.g. `ou-examplerootid-exampleouid`).
+     */
     ouId: OrganizationalUnitId;
+    /**
+     * ARN of the OU.
+     */
     ouArn: OrganizationalUnitArn;
+    /**
+     * Name of the OU.
+     */
     name: string;
+    /**
+     * ID of the parent root or OU.
+     */
     parentId: string | undefined;
+    /**
+     * Tags on the OU.
+     */
     tags: Record<string, string>;
   },
   never,

@@ -247,7 +247,7 @@ export const waitForEvent = <T = unknown>(
  * A fresh `Scope` is provided per run-invocation by `WorkflowBridge.run` and
  * threaded into every `task` via the surrounding body context, so `@binding`
  * helpers that acquire per-run resources against the ambient scope (e.g.
- * `Drizzle.postgres`) resolve them inside workflow steps just as they do in
+ * `Drizzle.Postgres`) resolve them inside workflow steps just as they do in
  * a Worker `fetch`/`queue` handler.
  */
 export type WorkflowRunServices =

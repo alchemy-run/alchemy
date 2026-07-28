@@ -20,6 +20,7 @@ export const AsyncWorker = Cloudflare.Worker("EnvAsyncWorker", {
     OBJ: { nested: { value: "ok" }, count: 7 },
     ARR: [1, 2, 3],
     OUTPUT_STR: Output.literal("output-str"),
+    RANDOM: Alchemy.makeRandom("WorkerEnvRandom"),
     SECRET_STR: Redacted.make("shh"),
     SECRET_JSON: Redacted.make({
       token: "abc",
@@ -44,6 +45,7 @@ export default Alchemy.Stack(
 
     return {
       asyncUrl: asyncWorker.url.as<string>(),
+      asyncWorkerName: asyncWorker.workerName,
       effectUrl: effectWorker.url.as<string>(),
     };
   }),

@@ -34,13 +34,37 @@ export interface DBProxyTargetGroup extends Resource<
   "AWS.RDS.DBProxyTargetGroup",
   DBProxyTargetGroupProps,
   {
+    /**
+     * Proxy that owns the target group.
+     */
     dbProxyName: string;
+    /**
+     * Name of the target group (`default` unless overridden).
+     */
     targetGroupName: string;
+    /**
+     * ARN of the target group.
+     */
     targetGroupArn: string | undefined;
+    /**
+     * Status of the target group (e.g. `available`).
+     */
     status: string | undefined;
+    /**
+     * Whether this is the proxy's default target group.
+     */
     isDefault: boolean | undefined;
+    /**
+     * Observed connection pool configuration.
+     */
     connectionPoolConfig: rds.ConnectionPoolConfigurationInfo | undefined;
+    /**
+     * Cluster targets registered with the proxy.
+     */
     dbClusterIdentifiers: string[];
+    /**
+     * Instance targets registered with the proxy.
+     */
     dbInstanceIdentifiers: string[];
   },
   never,
@@ -50,7 +74,32 @@ export interface DBProxyTargetGroup extends Resource<
 /**
  * The proxy target group that registers Aurora clusters or instances behind an
  * RDS Proxy.
+ *
+ * Every `DBProxy` has exactly one `default` target group; this resource
+ * adopts it, tunes its connection pool, and reconciles the registered
+ * cluster/instance targets. Deleting it deregisters the targets rather than
+ * deleting the group itself.
  * @resource
+ * @section Registering Targets
+ * @example Register a Cluster Behind a Proxy
+ * ```typescript
+ * const targets = yield* DBProxyTargetGroup("ProxyTargets", {
+ *   dbProxyName: proxy.dbProxyName,
+ *   dbClusterIdentifiers: [cluster.dbClusterIdentifier],
+ * });
+ * ```
+ *
+ * @example Tune the Connection Pool
+ * ```typescript
+ * const targets = yield* DBProxyTargetGroup("ProxyTargets", {
+ *   dbProxyName: proxy.dbProxyName,
+ *   dbClusterIdentifiers: [cluster.dbClusterIdentifier],
+ *   connectionPoolConfig: {
+ *     MaxConnectionsPercent: 90,
+ *     MaxIdleConnectionsPercent: 10,
+ *   },
+ * });
+ * ```
  */
 export const DBProxyTargetGroup = Resource<DBProxyTargetGroup>(
   "AWS.RDS.DBProxyTargetGroup",

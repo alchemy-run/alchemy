@@ -21,31 +21,60 @@ import { Assets } from "../Assets.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 
+/**
+ * Binding contract accepted by EC2-hosted runtimes: environment variables and
+ * IAM policy statements attached by capability bindings.
+ */
 export interface Ec2HostedBinding {
+  /** Environment variables injected into the hosted runtime. */
   env?: Record<string, any>;
+  /** IAM policy statements attached to the instance profile role. */
   policyStatements?: PolicyStatement[];
 }
 
+/**
+ * Shared props for EC2-backed hosted runtimes (an Instance that bundles and
+ * runs an application entrypoint).
+ */
 export interface Ec2HostedProps extends PlatformProps {
+  /** AMI ID to launch the instance from. */
   imageId: string;
+  /** EC2 instance type, e.g. `t3.micro`. */
   instanceType: string;
+  /** Name of an EC2 key pair for SSH access. */
   keyName?: Input<string>;
+  /** Existing instance profile to attach instead of a managed one. */
   instanceProfileName?: string;
+  /** Additional user-data script prepended to the runtime bootstrap. */
   userData?: string;
+  /** Subnet to launch the instance into. */
   subnetId?: any;
+  /** Security groups attached to the instance. */
   securityGroupIds?: readonly any[];
+  /** Whether to associate a public IP address. */
   associatePublicIpAddress?: boolean;
+  /** Static private IP address within the subnet. */
   privateIpAddress?: string;
+  /** Availability Zone to launch into. */
   availabilityZone?: string;
+  /** Tags applied to the instance. */
   tags?: Record<string, string>;
+  /** Path to the application entrypoint to bundle and run on the instance. */
   main?: string;
+  /** Named export of the handler within `main`. */
   handler?: string;
+  /** Port the hosted HTTP server listens on. */
   port?: number;
+  /** Environment variables injected into the hosted runtime. */
   env?: Record<string, any>;
+  /** Overrides for the rolldown bundling of `main`. */
   build?: {
+    /** Rolldown input options overrides. */
     input?: Partial<rolldown.InputOptions>;
+    /** Rolldown output options overrides. */
     output?: Partial<rolldown.OutputOptions>;
   };
+  /** Managed policy ARNs attached to the instance role. */
   roleManagedPolicyArns?: string[];
 }
 

@@ -35,14 +35,18 @@ export interface OpenIDConnectProvider extends Resource<
   "AWS.IAM.OpenIDConnectProvider",
   OpenIDConnectProviderProps,
   {
+    /** The ARN of the OIDC provider. */
     openIDConnectProviderArn: string;
+    /** The URL of the identity provider. */
     url: string;
+    /** The client IDs (audiences) registered with the provider. */
     clientIDList: string[];
     /**
      * Reflects the desired state — `undefined` when the user opted out of
      * managing thumbprints (AWS auto-manages them for well-known IdPs).
      */
     thumbprintList: string[] | undefined;
+    /** The tags applied to the provider. */
     tags: Record<string, string>;
   },
   never,

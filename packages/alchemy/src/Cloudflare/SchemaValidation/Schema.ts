@@ -321,10 +321,11 @@ const getSchema = (zoneId: string, schemaId: string) =>
  * schemas carry the same name, pick the oldest for determinism.
  */
 const findByName = (zoneId: string, name: string) =>
-  schemaValidation.listSchemas({ zoneId, omitSource: true }).pipe(
-    Effect.map((page) =>
-      page.result
-        .filter((s) => s.name === name)
+  schemaValidation.listSchemas.items({ zoneId, omitSource: true }).pipe(
+    Stream.filter((s) => s.name === name),
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk)
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
         .at(0),
     ),

@@ -79,6 +79,21 @@ export interface AwsResolvedCredentials {
 }
 
 /**
+ * An explicitly-set `AWS_REGION` env var wins over the region recorded in an
+ * SSO profile (`~/.aws/config`) or in stored credentials. `AWS_DEFAULT_REGION`
+ * deliberately does NOT override — it is a *default* for when no region is
+ * configured anywhere, and the profile's region is explicit configuration.
+ */
+export const applyEnvRegionOverride = <C extends { region: string }>(
+  creds: C,
+): Effect.Effect<C> =>
+  getEnv("AWS_REGION").pipe(
+    Effect.map((envRegion) =>
+      envRegion ? { ...creds, region: envRegion } : creds,
+    ),
+  );
+
+/**
  * Layer that registers the AWS {@link AuthProvider} into the
  * {@link AuthProviders} registry when built. Include this in the AWS
  * `providers()` layer so `alchemy login` can discover it.
@@ -365,6 +380,7 @@ export const AwsAuth = AuthProviderLayer<
           Effect.mapError(
             (e) => new AuthError({ message: "login failed", cause: e }),
           ),
+          Effect.flatMap(applyEnvRegionOverride),
         );
 
     const prettyPrint = (profileName: string, config: AwsAuthConfig) =>

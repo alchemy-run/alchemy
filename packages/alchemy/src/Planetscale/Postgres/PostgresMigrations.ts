@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { Client } from "pg";
-import { listSqlFiles, readSqlFile, type SqlFile } from "../../Sql/SqlFile.ts";
+import { listSqlFiles, readSqlFile, type SqlFile } from "../../SQL/SqlFile.ts";
 
 const MIGRATION_ROLE_TTL_SECONDS = 600;
 

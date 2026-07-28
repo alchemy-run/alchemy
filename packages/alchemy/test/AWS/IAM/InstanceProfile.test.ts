@@ -2,6 +2,7 @@ import * as AWS from "@/AWS";
 import { InstanceProfile } from "@/AWS/IAM";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
+import * as IAM from "@distilled.cloud/aws/iam";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
@@ -31,5 +32,10 @@ test.provider("list enumerates the deployed instance profile", (stack) =>
     ).toBe(true);
 
     yield* stack.destroy();
+
+    const deleted = yield* IAM.getInstanceProfile({
+      InstanceProfileName: profile.instanceProfileName,
+    }).pipe(Effect.option);
+    expect(deleted._tag).toBe("None");
   }),
 );

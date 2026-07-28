@@ -49,14 +49,15 @@ export default KinesisStreamFunction.make(
       },
       (records) =>
         records.pipe(
-          Stream.map((record) =>
-            JSON.stringify({
+          Stream.map((record) => ({
+            MessageBody: JSON.stringify({
               partitionKey: record.kinesis.partitionKey,
               data: Buffer.from(record.kinesis.data, "base64").toString("utf8"),
               eventID: record.eventID,
             }),
-          ),
+          })),
           Stream.run(sink),
+          Effect.orDie,
         ),
     );
 

@@ -481,9 +481,13 @@ export const GatewayResourceProvider = () =>
       const next = yield* desired(id, news);
       const oldGatewayId =
         output?.gatewayId ?? (yield* createGatewayId(id, olds.id));
+      // Auto-generated ids are engine-owned: the deployed id stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided id can force a replace.
+      const newGatewayId = news.id ?? oldGatewayId;
       if (
         (output?.accountId ?? accountId) !== accountId ||
-        oldGatewayId !== next.gatewayId
+        oldGatewayId !== newGatewayId
       ) {
         return { action: "replace" } as const;
       }
@@ -519,7 +523,9 @@ export const GatewayResourceProvider = () =>
       // idempotency: a peer reconciler may have created it concurrently,
       // or state persistence may have failed after a previous create.
       if (observed === undefined) {
-        const request = yield* createRequest(id, news);
+        // Prefer the deployed id: regenerating would target a different
+        // resource if the generator's output for this id ever drifts.
+        const request = { ...(yield* createRequest(id, news)), id: gatewayId };
         yield* aiGateway
           .createAiGateway(request)
           .pipe(
@@ -532,7 +538,12 @@ export const GatewayResourceProvider = () =>
       // Sync — the Cloudflare.AI. Gateway update API is a full PATCH that
       // overwrites all mutable fields. We always apply the desired shape
       // so adoption, drift, and routine updates all converge.
-      const update = yield* updateRequest(id, news, acct);
+      // Prefer the deployed id: regenerating would target a different
+      // resource if the generator's output for this id ever drifts.
+      const update = {
+        ...(yield* updateRequest(id, news, acct)),
+        id: gatewayId,
+      };
       const gateway = yield* aiGateway.updateAiGateway(update);
       return mapGateway(gateway, acct);
     }),

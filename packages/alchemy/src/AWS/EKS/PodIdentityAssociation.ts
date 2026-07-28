@@ -49,17 +49,29 @@ export interface PodIdentityAssociation extends Resource<
   "AWS.EKS.PodIdentityAssociation",
   PodIdentityAssociationProps,
   {
+    /** The ARN of the pod identity association. */
     associationArn: string;
+    /** The ID of the pod identity association. */
     associationId: string;
+    /** The name of the EKS cluster the association belongs to. */
     clusterName: string;
+    /** The Kubernetes namespace of the bound service account. */
     namespace: string;
+    /** The name of the Kubernetes service account bound to the role. */
     serviceAccount: string;
+    /** The ARN of the IAM role pods assume via the association. */
     roleArn: string;
+    /** Whether EKS session tags are disabled on the assumed-role session. */
     disableSessionTags: boolean;
+    /** The ARN of the target role for role chaining, if configured. */
     targetRoleArn: string | undefined;
+    /** The external ID EKS uses when assuming the target role. */
     externalId: string | undefined;
+    /** The ARN of the add-on that owns the association, if add-on managed. */
     ownerArn: string | undefined;
+    /** The inline policy document attached to the generated role, if any. */
     policy: string | undefined;
+    /** The tags applied to the association. */
     tags: Record<string, string>;
   },
   never,

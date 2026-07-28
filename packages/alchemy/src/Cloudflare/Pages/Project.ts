@@ -264,9 +264,12 @@ export const ProjectProvider = () =>
       }
       // The name is the project's identity (it forms the *.pages.dev
       // subdomain) — renames are a delete + create.
-      const name = yield* createProjectName(id, news.name);
       const oldName =
         output?.name ?? (yield* createProjectName(id, olds?.name));
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a replace.
+      const name = news.name ?? oldName;
       if (name !== oldName) {
         return { action: "replace" } as const;
       }

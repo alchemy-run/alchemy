@@ -111,6 +111,38 @@ test.provider.skipIf(!!process.env.FAST)(
 
 class CertificateNotListed extends Data.TaggedError("CertificateNotListed") {}
 
+// Exportability is fixed at request time — ACM rejects
+// `UpdateCertificateOptions` for the export option ("Export option for
+// certificates cannot be updated"), so changing `export` must REPLACE the
+// certificate with a freshly requested one.
+test.provider.skipIf(!!process.env.FAST)(
+  "replaces the certificate when the export option changes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const domainName = "alchemy-acm-options-test.example.com";
+      const deployWith = (exportOption: "ENABLED" | "DISABLED") =>
+        stack.deploy(
+          Certificate("OptionsCertificate", {
+            domainName,
+            export: exportOption,
+          }),
+        );
+
+      const created = yield* deployWith("ENABLED");
+      expect(created.certificateArn).toBeDefined();
+      expect(created.export).toBe("ENABLED");
+
+      const updated = yield* deployWith("DISABLED");
+      expect(updated.certificateArn).not.toEqual(created.certificateArn);
+      expect(updated.export).toBe("DISABLED");
+
+      yield* stack.destroy();
+    }),
+  { timeout: 180_000 },
+);
+
 // Regression test for https://github.com/alchemy-run/alchemy/issues/736.
 //
 // A `creating` state row persisted before upstream Outputs resolve cannot

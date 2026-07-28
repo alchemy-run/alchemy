@@ -49,6 +49,18 @@ yield* GitHub.Variables({
 });
 ```
 
+`Environment` manages a deployment environment and its protection
+rules; secrets and variables scope to it via their `environment` prop:
+
+```typescript
+const production = yield* GitHub.Environment("production", {
+  owner: "my-org",
+  repository: "api",
+  name: "production",
+  reviewers: { teams: ["platform"] },
+});
+```
+
 `Webhook` manages a repository webhook pointed at any URL, and
 `consumeRepositoryEvents` subscribes a host (e.g. a Cloudflare
 Worker) to repository webhooks with typed payloads — see
@@ -108,6 +120,7 @@ credential that was itself provisioned as code. Walk through it in
 ## Reference
 
 [Repository](/providers/github/repository) ·
+[Environment](/providers/github/environment) ·
 [Secret](/providers/github/secret) ·
 [Secrets](/providers/github/secrets) ·
 [Variable](/providers/github/variable) ·

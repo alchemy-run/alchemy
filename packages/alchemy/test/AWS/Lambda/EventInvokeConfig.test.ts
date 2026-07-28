@@ -30,7 +30,7 @@ test.provider(
       }) =>
         Effect.gen(function* () {
           const queue = yield* AWS.SQS.Queue("FailureQueue", {
-            visibilityTimeout: 30,
+            visibilityTimeout: "30 seconds",
           });
 
           const fn = yield* AWS.Lambda.Function("AsyncFn", {
@@ -68,7 +68,7 @@ test.provider(
         program({
           functionConfig: {
             maximumRetryAttempts: 0,
-            maximumEventAgeInSeconds: 60,
+            maximumEventAge: "1 minute",
           },
         }),
       );
@@ -88,7 +88,7 @@ test.provider(
         program({
           functionConfig: {
             maximumRetryAttempts: 1,
-            maximumEventAgeInSeconds: 120,
+            maximumEventAge: "2 minutes",
             destinationConfig: {
               OnFailure: {
                 Destination: created.queue.queueArn,
@@ -124,7 +124,7 @@ test.provider(
             functionVersion: version,
             eventInvokeConfig: {
               maximumRetryAttempts: 2,
-              maximumEventAgeInSeconds: 300,
+              maximumEventAge: "5 minutes",
               destinationConfig: {
                 OnFailure: {
                   Destination: created.queue.queueArn,
@@ -162,6 +162,25 @@ test.provider(
       );
 
       yield* stack.destroy();
+
+      // Out-of-band proof the destroy removed the host function (and with it
+      // the event invoke configs) from the cloud.
+      yield* Lambda.getFunction({
+        FunctionName: aliasCleared.fn.functionName,
+      }).pipe(
+        Effect.flatMap(() =>
+          Effect.fail(
+            new Error(`Function ${aliasCleared.fn.functionName} still exists`),
+          ),
+        ),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+        Effect.retry({
+          schedule: Schedule.max([
+            Schedule.exponential(500),
+            Schedule.recurs(8),
+          ]),
+        }),
+      );
     }).pipe(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
