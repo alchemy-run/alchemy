@@ -126,7 +126,10 @@ export const RulesetProvider = () =>
       }
 
       const oldName = output?.name ?? (yield* createRulesetName(id, olds.name));
-      const name = yield* createRulesetName(id, news.name);
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a rename.
+      const name = news.name ?? oldName;
       if (
         oldName !== name ||
         olds.description !== news.description ||

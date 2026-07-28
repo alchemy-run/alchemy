@@ -1,9 +1,9 @@
 import * as AWS from "@/AWS";
 import { KeyValueStore } from "@/AWS/CloudFront";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
-import { describe, expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
@@ -45,8 +45,9 @@ const assertKeyValueStoreDeleted = (name: string) =>
     Effect.retry({
       while: (error) =>
         error instanceof Error && error.message === "KeyValueStoreStillExists",
-      schedule: Schedule.fixed("5 seconds").pipe(
-        Schedule.both(Schedule.recurs(24)),
-      ),
+      schedule: Schedule.max([
+        Schedule.fixed("5 seconds"),
+        Schedule.recurs(24),
+      ]),
     }),
   );

@@ -3,11 +3,11 @@ import { Certificate, waitForRoute53Change } from "@/AWS/ACM/Certificate.ts";
 import { HostedZone } from "@/AWS/Route53";
 import * as Provider from "@/Provider";
 import { isResourceState, State, type ResourceState } from "@/State";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as acm from "@distilled.cloud/aws/acm";
 import * as route53 from "@distilled.cloud/aws/route-53";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -93,9 +93,10 @@ test.provider.skipIf(!!process.env.FAST)(
       }).pipe(
         Effect.retry({
           while: (e) => e._tag === "CertificateNotListed",
-          schedule: Schedule.fixed("3 seconds").pipe(
-            Schedule.both(Schedule.recurs(20)),
-          ),
+          schedule: Schedule.max([
+            Schedule.fixed("3 seconds"),
+            Schedule.recurs(20),
+          ]),
         }),
       );
 
@@ -110,7 +111,39 @@ test.provider.skipIf(!!process.env.FAST)(
 
 class CertificateNotListed extends Data.TaggedError("CertificateNotListed") {}
 
-// Regression test for https://github.com/alchemy-run/alchemy-effect/issues/736.
+// Exportability is fixed at request time — ACM rejects
+// `UpdateCertificateOptions` for the export option ("Export option for
+// certificates cannot be updated"), so changing `export` must REPLACE the
+// certificate with a freshly requested one.
+test.provider.skipIf(!!process.env.FAST)(
+  "replaces the certificate when the export option changes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const domainName = "alchemy-acm-options-test.example.com";
+      const deployWith = (exportOption: "ENABLED" | "DISABLED") =>
+        stack.deploy(
+          Certificate("OptionsCertificate", {
+            domainName,
+            export: exportOption,
+          }),
+        );
+
+      const created = yield* deployWith("ENABLED");
+      expect(created.certificateArn).toBeDefined();
+      expect(created.export).toBe("ENABLED");
+
+      const updated = yield* deployWith("DISABLED");
+      expect(updated.certificateArn).not.toEqual(created.certificateArn);
+      expect(updated.export).toBe("DISABLED");
+
+      yield* stack.destroy();
+    }),
+  { timeout: 180_000 },
+);
+
+// Regression test for https://github.com/alchemy-run/alchemy/issues/736.
 //
 // A `creating` state row persisted before upstream Outputs resolve cannot
 // round-trip Output-valued props (`domainName` from a HostedZone Output,
@@ -174,9 +207,10 @@ test.provider.skipIf(!!process.env.FAST)(
       }).pipe(
         Effect.retry({
           while: (e) => e._tag === "CertificateNotListed",
-          schedule: Schedule.fixed("3 seconds").pipe(
-            Schedule.both(Schedule.recurs(18)),
-          ),
+          schedule: Schedule.max([
+            Schedule.fixed("3 seconds"),
+            Schedule.recurs(18),
+          ]),
         }),
       );
 

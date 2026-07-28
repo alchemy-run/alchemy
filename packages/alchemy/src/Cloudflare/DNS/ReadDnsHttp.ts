@@ -1,8 +1,7 @@
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { authorizeWith } from "../HttpClientUtils.ts";
-import { makeHttpDnsBinding, type Token } from "./DnsHttp.ts";
+import { type DnsAuth, makeHttpDnsBinding } from "./DnsHttp.ts";
 import { ReadDns, type ReadDnsClient } from "./ReadDns.ts";
 
 /** Runtime layer for {@link ReadDns}. */
@@ -16,12 +15,12 @@ export const ReadDnsHttp = Layer.effect(
   ),
 );
 
-/** Build the read-only client over a bound token and zone id. */
+/** Build the read-only client over an injectable auth and zone id. */
 export const dnsReadClient = (
-  token: Token,
+  auth: DnsAuth,
   zoneId: Effect.Effect<string>,
 ): ReadDnsClient => {
-  const authorize = authorizeWith(token);
+  const authorize = auth.authorize;
   return {
     getDnsRecord: Effect.fn("Cloudflare.DNS.getDnsRecord")(
       function* (dnsRecordId) {

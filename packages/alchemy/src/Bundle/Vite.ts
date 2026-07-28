@@ -3,7 +3,9 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import type { PlatformError } from "effect/PlatformError";
 import type * as vite from "vite";
+import { cachedFunction } from "../Util/cached-function.ts";
 import { sha256 } from "../Util/index.ts";
 import {
   BundleError,
@@ -17,6 +19,7 @@ export interface ViteBuildOutput {
   readonly clientDirectory: string | undefined;
   // This is emitted as an Effect instead of a value so we can process it in parallel with reading the client assets.
   readonly serverBundle: Effect.Effect<BundleOutput | undefined, BundleError>;
+  readonly externalWorkspaces: Effect.Effect<Set<string>, PlatformError>;
 }
 
 // `@vitejs/plugin-rsc` writes these modules separately after build completes instead of emitting them as chunks.
@@ -26,6 +29,20 @@ const RSC_MANIFEST = {
   "virtual:vite-rsc/environment-imports": "__vite_rsc_env_imports_manifest.js",
 } as const;
 type RscManifestId = keyof typeof RSC_MANIFEST;
+
+/**
+ * Structural subset of `vite.Environment` used by the bundling helpers.
+ * Typed structurally rather than as `vite.Environment` so plugin hooks whose
+ * `this` context is typed against a different vite copy in the install graph
+ * (bun peer-variant duplication) still assign.
+ */
+interface EnvironmentLike {
+  readonly name: string;
+  readonly config: {
+    readonly root: string;
+    readonly build: { readonly outDir: string };
+  };
+}
 
 /**
  * A Vite plugin that collects the output of the build and makes it available as an Effect.
@@ -44,7 +61,42 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
     string,
     Effect.Effect<BundleFile, BundleError>
   >();
+  const maybeExternalWorkspaces = new Set<string>();
 
+  const findUp = yield* cachedFunction(
+    (
+      dir: string,
+      filenames: Array<string>,
+    ): Effect.Effect<string | undefined, PlatformError> =>
+      Effect.filter(
+        filenames.map((filename) => path.join(dir, filename)),
+        fs.exists,
+        { concurrency: "unbounded" },
+      ).pipe(
+        Effect.flatMap(([match]) => {
+          if (match) {
+            return Effect.succeed(match);
+          }
+          const parent = path.dirname(dir);
+          if (parent === dir) {
+            return Effect.undefined;
+          }
+          return findUp(parent, filenames);
+        }),
+      ),
+  );
+  const collectExternalWorkspaces = (): Effect.Effect<
+    Set<string>,
+    PlatformError
+  > =>
+    Effect.forEach(maybeExternalWorkspaces, (directory) =>
+      findUp(directory, ["package.json"]),
+    ).pipe(
+      Effect.map(
+        (paths) =>
+          new Set(paths.filter((file) => file !== undefined).map(path.dirname)),
+      ),
+    );
   const plugin: vite.Plugin = {
     name: "alchemy:build-output",
     sharedDuringBuild: true,
@@ -57,9 +109,20 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
     // `viteBuild` reads `output` *after* `builder.buildApp()` resolves — by
     // which point every environment that actually built has run `writeBundle`.
     async writeBundle(_, bundle) {
+      const root = path.resolve(this.environment.config.root);
+      for (const id of this.getModuleIds()) {
+        if (
+          !path.isAbsolute(id) ||
+          id.includes("node_modules") ||
+          id.startsWith(root)
+        ) {
+          continue;
+        }
+        maybeExternalWorkspaces.add(path.dirname(id));
+      }
       if (this.environment.name === "client") {
         clientDirectory = path.resolve(
-          this.environment.config.root,
+          root,
           this.environment.config.build.outDir,
         );
         return;
@@ -123,7 +186,7 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
   // worker module names and produce non-portable, leading-`/` specifiers that
   // Cloudflare rejects. Normalize it back to a path relative to the project root
   // so module names match the single-environment case (`dist/ssr/worker.js`).
-  const fileName = (name: string, environment: vite.Environment) => {
+  const fileName = (name: string, environment: EnvironmentLike) => {
     const outDir = environment.config.build.outDir;
     const relativeOutDir = path.isAbsolute(outDir)
       ? path.relative(environment.config.root, outDir)
@@ -135,7 +198,7 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
   // This is only safe to run *after* the build has completed.
   const readRscManifestChunk = (
     id: RscManifestId,
-    environment: vite.Environment,
+    environment: EnvironmentLike,
   ) => {
     const name = RSC_MANIFEST[id];
     return fs
@@ -199,6 +262,7 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
       (): ViteBuildOutput => ({
         clientDirectory,
         serverBundle: makeServerBundle(),
+        externalWorkspaces: collectExternalWorkspaces(),
       }),
     ),
   };

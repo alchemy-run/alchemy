@@ -1,11 +1,13 @@
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as Data from "effect/Data";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
@@ -52,7 +54,7 @@ export interface DistributionOrigin {
    */
   s3OriginConfig?: {
     originAccessIdentity?: string;
-    originReadTimeout?: number;
+    originReadTimeout?: Duration.Input;
   };
   /**
    * Optional custom origin settings.
@@ -61,8 +63,8 @@ export interface DistributionOrigin {
     httpPort?: number;
     httpsPort?: number;
     originProtocolPolicy?: cloudfront.OriginProtocolPolicy;
-    originReadTimeout?: number;
-    originKeepaliveTimeout?: number;
+    originReadTimeout?: Duration.Input;
+    originKeepaliveTimeout?: Duration.Input;
     originSslProtocols?: cloudfront.SslProtocol[];
     /**
      * IP address type CloudFront uses to connect to the origin.
@@ -81,8 +83,8 @@ export interface DistributionOrigin {
    */
   vpcOriginConfig?: {
     vpcOriginId: Input<string>;
-    originReadTimeout?: number;
-    originKeepaliveTimeout?: number;
+    originReadTimeout?: Duration.Input;
+    originKeepaliveTimeout?: Duration.Input;
     ownerAccountId?: string;
   };
   /**
@@ -101,32 +103,81 @@ export interface DistributionOrigin {
    */
   connectionAttempts?: number;
   /**
-   * Seconds CloudFront waits when trying to establish a connection (1-10).
+   * How long CloudFront waits when trying to establish a connection (1-10
+   * seconds), e.g. `"5 seconds"` (a bare number is milliseconds).
    */
-  connectionTimeout?: number;
+  connectionTimeout?: Duration.Input;
   /**
-   * Seconds CloudFront waits for the origin to deliver a complete response.
+   * How long CloudFront waits for the origin to deliver a complete response,
+   * e.g. `"30 seconds"` (a bare number is milliseconds).
    */
-  responseCompletionTimeout?: number;
+  responseCompletionTimeout?: Duration.Input;
 }
 
 export interface DistributionBehavior {
+  /**
+   * ID of the origin (or origin group) this behavior routes requests to.
+   */
   targetOriginId: string;
+  /**
+   * How viewers may connect (e.g. `redirect-to-https`, `https-only`).
+   */
   viewerProtocolPolicy?: cloudfront.ViewerProtocolPolicy;
+  /**
+   * HTTP methods CloudFront accepts and forwards to the origin.
+   */
   allowedMethods?: cloudfront.Method[];
+  /**
+   * HTTP methods whose responses CloudFront caches.
+   */
   cachedMethods?: cloudfront.Method[];
+  /**
+   * Whether CloudFront automatically compresses eligible responses.
+   */
   compress?: boolean;
+  /**
+   * Cache policy ID (a managed policy or a `CachePolicy`) controlling the
+   * cache key and TTLs.
+   */
   cachePolicyId?: string;
+  /**
+   * Origin request policy ID controlling which viewer values CloudFront
+   * forwards to the origin.
+   */
   originRequestPolicyId?: string;
+  /**
+   * Response headers policy ID applied to viewer responses.
+   */
   responseHeadersPolicyId?: string;
+  /**
+   * Legacy forwarded-values settings. Prefer `cachePolicyId` /
+   * `originRequestPolicyId` for new configurations.
+   */
   forwardedValues?: cloudfront.ForwardedValues;
-  minTtl?: number;
-  defaultTtl?: number;
-  maxTtl?: number;
+  /**
+   * Minimum time responses stay cached, e.g. `"1 hour"` (a bare number is
+   * milliseconds). Used with `forwardedValues`.
+   */
+  minTtl?: Duration.Input;
+  /**
+   * Default time responses stay cached when the origin sends no caching
+   * headers.
+   */
+  defaultTtl?: Duration.Input;
+  /**
+   * Maximum time responses stay cached.
+   */
+  maxTtl?: Duration.Input;
+  /**
+   * CloudFront Functions to run on viewer request/response events.
+   */
   functionAssociations?: {
     functionArn: string;
     eventType: cloudfront.EventType;
   }[];
+  /**
+   * Lambda@Edge functions to run on viewer/origin request/response events.
+   */
   lambdaFunctionAssociations?: {
     lambdaFunctionArn: string;
     eventType: cloudfront.EventType;
@@ -161,9 +212,23 @@ export interface DistributionBehavior {
 }
 
 export interface DistributionViewerCertificate {
+  /**
+   * Serve HTTPS with the default `*.cloudfront.net` certificate (no custom
+   * domains).
+   */
   cloudFrontDefaultCertificate?: boolean;
+  /**
+   * ARN of an ACM certificate (must live in `us-east-1`) covering the
+   * distribution's aliases.
+   */
   acmCertificateArn?: string;
+  /**
+   * How CloudFront serves HTTPS to viewers (`sni-only` for modern clients).
+   */
   sslSupportMethod?: cloudfront.SSLSupportMethod;
+  /**
+   * Minimum TLS protocol version viewers must support.
+   */
   minimumProtocolVersion?: cloudfront.MinimumProtocolVersion;
   /**
    * Legacy IAM certificate ID.
@@ -396,6 +461,28 @@ export interface Distribution extends Resource<
  * hosted zone ID needed for Route 53 alias records.
  * @resource
  * @section Creating Distributions
+ * @example CDN in Front of an HTTP Origin
+ * ```typescript
+ * import * as AWS from "alchemy/AWS";
+ *
+ * const distribution = yield* AWS.CloudFront.Distribution("ApiCdn", {
+ *   origins: [
+ *     {
+ *       id: "api",
+ *       domainName: "abc123.lambda-url.us-west-2.on.aws",
+ *       customOriginConfig: { originProtocolPolicy: "https-only" },
+ *     },
+ *   ],
+ *   defaultCacheBehavior: {
+ *     targetOriginId: "api",
+ *     viewerProtocolPolicy: "redirect-to-https",
+ *     cachePolicyId: AWS.CloudFront.MANAGED_CACHING_DISABLED_POLICY_ID,
+ *     originRequestPolicyId:
+ *       AWS.CloudFront.MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID,
+ *   },
+ * });
+ * ```
+ *
  * @example Private S3 Origin
  * ```typescript
  * const distribution = yield* Distribution("WebsiteCdn", {
@@ -420,6 +507,20 @@ export interface Distribution extends Resource<
  *   },
  * });
  * ```
+ *
+ * @section Invalidating the Cache
+ * @example Purge Paths on Deploy
+ * ```typescript
+ * // declaratively, whenever `version` changes:
+ * yield* AWS.CloudFront.Invalidation("PurgeBlog", {
+ *   distributionId: distribution.distributionId,
+ *   paths: ["/blog/*"],
+ *   version: buildId,
+ * });
+ * ```
+ *
+ * To purge at runtime from a Lambda Function, bind
+ * `CloudFront.CreateInvalidation(distribution)` instead.
  */
 export const Distribution = Resource<Distribution>(
   "AWS.CloudFront.Distribution",
@@ -456,9 +557,10 @@ export const DistributionProvider = () =>
           ),
           Effect.retry({
             while: (error) => error._tag === "DistributionPendingDeployment",
-            schedule: Schedule.fixed("10 seconds").pipe(
-              Schedule.both(Schedule.recurs(60)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("10 seconds"),
+              Schedule.recurs(60),
+            ]),
           }),
         );
       });
@@ -601,9 +703,10 @@ export const DistributionProvider = () =>
           Effect.retry({
             while: (error) =>
               error._tag === "DistributionPendingDeletionReadiness",
-            schedule: Schedule.fixed("10 seconds").pipe(
-              Schedule.both(Schedule.recurs(60)),
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("10 seconds"),
+              Schedule.recurs(60),
+            ]),
           }),
         );
       });
@@ -668,10 +771,10 @@ export const DistributionProvider = () =>
                     // resets quickly, so a fixed cadence drains far faster
                     // than an exponential whose tail delay can balloon past
                     // the test budget on a busy account.
-                    schedule: Schedule.spaced("1 second").pipe(
-                      Schedule.jittered,
-                      Schedule.both(Schedule.recurs(30)),
-                    ),
+                    schedule: Schedule.max([
+                      Schedule.spaced("1 second").pipe(Schedule.jittered),
+                      Schedule.recurs(30),
+                    ]),
                   }),
                   Effect.map((current) =>
                     current
@@ -824,9 +927,10 @@ export const DistributionProvider = () =>
                 Effect.retry({
                   while: (error) =>
                     error instanceof DistributionFunctionAssociationPending,
-                  schedule: Schedule.fixed("5 seconds").pipe(
-                    Schedule.both(Schedule.recurs(24)),
-                  ),
+                  schedule: Schedule.max([
+                    Schedule.fixed("5 seconds"),
+                    Schedule.recurs(24),
+                  ]),
                 }),
               );
 
@@ -850,7 +954,10 @@ export const DistributionProvider = () =>
           // Sync config — diff observed config against desired and patch
           // via `updateDistribution` with the freshly observed ETag. We
           // keep the observed `CallerReference` because CloudFront does
-          // not allow it to change.
+          // not allow it to change, and fill every member the props don't
+          // express from the observed config: UpdateDistribution replaces
+          // the whole config and rejects requests with missing members
+          // (see `mergeWithObservedConfig`).
           yield* Effect.logInfo(
             `CloudFront Distribution reconcile: updating config for ${observed.distribution.Id} with etag=${observed.etag ?? "missing"}`,
           );
@@ -858,9 +965,9 @@ export const DistributionProvider = () =>
             .updateDistribution({
               Id: observed.distribution.Id,
               IfMatch: observed.etag,
-              DistributionConfig: toConfig(
-                observed.config.CallerReference,
-                news,
+              DistributionConfig: mergeWithObservedConfig(
+                toConfig(observed.config.CallerReference, news),
+                observed.config,
               ),
             })
             .pipe(
@@ -892,9 +999,10 @@ export const DistributionProvider = () =>
               Effect.retry({
                 while: (error) =>
                   error instanceof DistributionFunctionAssociationPending,
-                schedule: Schedule.fixed("5 seconds").pipe(
-                  Schedule.both(Schedule.recurs(24)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.fixed("5 seconds"),
+                  Schedule.recurs(24),
+                ]),
               }),
             );
 
@@ -1041,10 +1149,18 @@ const toBehavior = (
   CachePolicyId: behavior.cachePolicyId,
   OriginRequestPolicyId: behavior.originRequestPolicyId,
   ResponseHeadersPolicyId: behavior.responseHeadersPolicyId,
-  ForwardedValues: behavior.forwardedValues,
-  MinTTL: behavior.minTtl,
-  DefaultTTL: behavior.defaultTtl,
-  MaxTTL: behavior.maxTtl,
+  // Without a cache policy, CloudFront is in legacy mode and rejects the
+  // request unless both ForwardedValues and MinTTL are present.
+  ForwardedValues:
+    behavior.forwardedValues ??
+    (behavior.cachePolicyId === undefined
+      ? { QueryString: false, Cookies: { Forward: "none" } }
+      : undefined),
+  MinTTL:
+    toWireSeconds(behavior.minTtl) ??
+    (behavior.cachePolicyId === undefined ? 0 : undefined),
+  DefaultTTL: toWireSeconds(behavior.defaultTtl),
+  MaxTTL: toWireSeconds(behavior.maxTtl),
   TrustedKeyGroups: behavior.trustedKeyGroups
     ? {
         Enabled: (behavior.trustedKeyGroups as string[]).length > 0,
@@ -1115,22 +1231,27 @@ const toOrigin = (origin: DistributionOrigin): cloudfront.Origin => {
         }
       : undefined,
     ConnectionAttempts: origin.connectionAttempts,
-    ConnectionTimeout: origin.connectionTimeout,
-    ResponseCompletionTimeout: origin.responseCompletionTimeout,
+    ConnectionTimeout: toWireSeconds(origin.connectionTimeout),
+    ResponseCompletionTimeout: toWireSeconds(origin.responseCompletionTimeout),
     VpcOriginConfig: isVpcOrigin
       ? {
           VpcOriginId: origin.vpcOriginConfig!.vpcOriginId as string,
           OwnerAccountId: origin.vpcOriginConfig!.ownerAccountId,
-          OriginReadTimeout: origin.vpcOriginConfig!.originReadTimeout,
-          OriginKeepaliveTimeout:
+          OriginReadTimeout: toWireSeconds(
+            origin.vpcOriginConfig!.originReadTimeout,
+          ),
+          OriginKeepaliveTimeout: toWireSeconds(
             origin.vpcOriginConfig!.originKeepaliveTimeout,
+          ),
         }
       : undefined,
     S3OriginConfig: isS3Origin
       ? {
           OriginAccessIdentity:
             origin.s3OriginConfig?.originAccessIdentity ?? "",
-          OriginReadTimeout: origin.s3OriginConfig?.originReadTimeout,
+          OriginReadTimeout: toWireSeconds(
+            origin.s3OriginConfig?.originReadTimeout,
+          ),
         }
       : undefined,
     CustomOriginConfig:
@@ -1149,9 +1270,12 @@ const toOrigin = (origin: DistributionOrigin): cloudfront.Origin => {
                 "TLSv1.2",
               ],
             },
-            OriginReadTimeout: origin.customOriginConfig?.originReadTimeout,
-            OriginKeepaliveTimeout:
+            OriginReadTimeout: toWireSeconds(
+              origin.customOriginConfig?.originReadTimeout,
+            ),
+            OriginKeepaliveTimeout: toWireSeconds(
               origin.customOriginConfig?.originKeepaliveTimeout,
+            ),
             IpAddressType: origin.customOriginConfig?.ipAddressType,
             OriginMtlsConfig: origin.customOriginConfig?.originMtlsConfig
               ? {
@@ -1162,6 +1286,105 @@ const toOrigin = (origin: DistributionOrigin): cloudfront.Origin => {
               : undefined,
           },
   };
+};
+
+/**
+ * Recursively fills `undefined` members of `desired` from `observed`.
+ * Defined values in `desired` always win; arrays are taken from `desired`
+ * wholesale (item-level merging is the caller's concern).
+ */
+const fillUndefined = <T>(desired: T, observed: T): T => {
+  if (desired === undefined) return observed;
+  if (
+    desired === null ||
+    typeof desired !== "object" ||
+    Array.isArray(desired) ||
+    observed === null ||
+    typeof observed !== "object" ||
+    Array.isArray(observed)
+  ) {
+    return desired;
+  }
+  const out: Record<string, unknown> = {
+    ...(desired as Record<string, unknown>),
+  };
+  const desiredObj = desired as Record<string, unknown>;
+  for (const key of Object.keys(observed as Record<string, unknown>)) {
+    // CloudFront list shapes pair `Quantity` with `Items`. A desired node
+    // that declares a `Quantity` but no `Items` (e.g. a geo restriction of
+    // `{ RestrictionType: "none", Quantity: 0 }`) is fully specified —
+    // filling `Items` from the observed config would desynchronize the two
+    // and CloudFront rejects the update with `InconsistentQuantities`.
+    if (
+      key === "Items" &&
+      typeof desiredObj.Quantity === "number" &&
+      desiredObj.Items === undefined
+    ) {
+      continue;
+    }
+    out[key] = fillUndefined(
+      desiredObj[key],
+      (observed as Record<string, unknown>)[key],
+    );
+  }
+  return out as T;
+};
+
+/**
+ * Completes a desired `DistributionConfig` with the freshly observed live
+ * config before an `updateDistribution` call.
+ *
+ * CloudFront's `UpdateDistribution` replaces the ENTIRE distribution config:
+ * any member missing from the request is rejected with `IllegalUpdate`
+ * (observed in practice: "Default root object is missing for the resource",
+ * "The 'OriginCustomHeaders' field is missing"). `toConfig` emits only the
+ * members the props express, so updating a live distribution fails on every
+ * member the props don't model — some of which (e.g. per-origin
+ * `CustomHeaders`, per-behavior `TrustedSigners`) are nested inside
+ * collections and not expressible as props at all.
+ *
+ * The standard CloudFront update pattern is read-modify-write, which the
+ * delete path here already uses (`{ ...current.config, Enabled: false }`).
+ * This applies the same idea to updates: desired values always win — the
+ * declared props still fully control drift — and only `undefined` members
+ * are carried over from the observed config. `Origins` and `CacheBehaviors`
+ * items are additionally merged by identity (`Id` / `PathPattern`) so their
+ * nested unexpressed members carry over too.
+ *
+ * Exported for unit tests.
+ */
+export const mergeWithObservedConfig = (
+  desired: cloudfront.DistributionConfig,
+  observed: cloudfront.DistributionConfig,
+): cloudfront.DistributionConfig => {
+  const merged = fillUndefined(desired, observed);
+  if (merged.Origins?.Items && observed.Origins?.Items) {
+    const observedOrigins = observed.Origins.Items;
+    merged.Origins = {
+      ...merged.Origins,
+      Items: merged.Origins.Items.map((item) =>
+        fillUndefined(
+          item,
+          observedOrigins.find((origin) => origin.Id === item.Id) ?? item,
+        ),
+      ),
+    };
+  }
+  if (merged.CacheBehaviors?.Items && observed.CacheBehaviors?.Items) {
+    const observedBehaviors = observed.CacheBehaviors.Items;
+    merged.CacheBehaviors = {
+      ...merged.CacheBehaviors,
+      Items: merged.CacheBehaviors.Items.map((item) =>
+        fillUndefined(
+          item,
+          observedBehaviors.find(
+            (behavior) => behavior.PathPattern === item.PathPattern,
+          ) ?? item,
+        ),
+      ),
+    };
+  }
+  return merged;
 };
 
 const toConfig = (

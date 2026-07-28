@@ -24,7 +24,9 @@ jobs:
       submodules: "true"
       # A submodule-pointer bump doesn't fall under any package dir, but
       # it changes what gets bundled — republish everything.
-      rebuild-all-paths: distilled
+      rebuild-all-paths: |
+        distilled
+        cloudflare-tools
       # `|| true` keeps the cp harmless in packages whose pkg dir is
       # nested differently or that don't need the root README.
       build-command: "cp ../../README.md . 2>/dev/null || true; bun run build"

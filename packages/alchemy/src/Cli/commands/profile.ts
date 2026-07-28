@@ -1,45 +1,21 @@
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import { Command } from "effect/unstable/cli";
 import * as Argument from "effect/unstable/cli/Argument";
 
 import { AuthProviders } from "../../Auth/AuthProvider.ts";
 import { CredentialsStore } from "../../Auth/Credentials.ts";
-import { AlchemyProfile, withProfileOverride } from "../../Auth/Profile.ts";
-import { AwsAuth } from "../../AWS/AuthProvider.ts";
-import { AxiomAuth } from "../../Axiom/AuthProvider.ts";
-import { CloudflareAuth } from "../../Cloudflare/Auth/AuthProvider.ts";
-import { GitHubAuth } from "../../GitHub/AuthProvider.ts";
-import { NeonAuth } from "../../Neon/AuthProvider.ts";
-import { PlanetscaleAuth } from "../../Planetscale/AuthProvider.ts";
-import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
-import { fileLogger } from "../../Util/FileLogger.ts";
+import { AlchemyProfile } from "../../Auth/Profile.ts";
 
 import {
+  buildBuiltinAuthProviders,
   buildStackProviders,
   envFile,
   instrumentCommand,
   printProfile,
   profile,
 } from "./_shared.ts";
-
-/**
- * The auth providers Alchemy ships with. Built into the registry as a
- * baseline so `profile show` can pretty-print any provider a profile
- * mentions, even one the current stack doesn't wire up.
- */
-const builtinAuth = Layer.mergeAll(
-  AwsAuth,
-  AxiomAuth,
-  CloudflareAuth,
-  GitHubAuth,
-  NeonAuth,
-  PlanetscaleAuth,
-);
 
 /**
  * Entrypoint whose `providers()` layer contributes the user's own auth
@@ -73,21 +49,11 @@ export const collectAuthProviders = Effect.fn("collectAuthProviders")(
     const authProviders: AuthProviders["Service"] = {};
 
     // 1. Built-in providers first (baseline).
-    yield* Layer.build(
-      Layer.provide(
-        builtinAuth,
-        Layer.mergeAll(
-          Layer.succeed(AuthProviders, authProviders),
-          ConfigProvider.layer(
-            withProfileOverride(
-              yield* loadConfigProvider(options.envFile),
-              options.profile,
-            ),
-          ),
-          Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
-        ),
-      ),
-    );
+    yield* buildBuiltinAuthProviders({
+      envFile: options.envFile,
+      profile: options.profile,
+      registry: authProviders,
+    });
 
     // 2. The user's own providers() layer on top — building into the same
     //    registry overrides the built-ins by name. Best-effort: swallow

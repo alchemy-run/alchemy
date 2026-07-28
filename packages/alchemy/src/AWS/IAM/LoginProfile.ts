@@ -27,8 +27,11 @@ export interface LoginProfile extends Resource<
   "AWS.IAM.LoginProfile",
   LoginProfileProps,
   {
+    /** The IAM user the login profile belongs to. */
     userName: string;
+    /** When the login profile was created. */
     createDate: Date | undefined;
+    /** Whether the user must set a new password on next sign-in. */
     passwordResetRequired: boolean | undefined;
   },
   never,

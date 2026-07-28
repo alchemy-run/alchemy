@@ -286,9 +286,10 @@ export const MonitorProvider = () =>
         .pipe(
           Effect.retry({
             while: (e) => e._tag === "MonitorInUse",
-            schedule: Schedule.exponential("1 second").pipe(
-              Schedule.both(Schedule.recurs(6)),
-            ),
+            schedule: Schedule.max([
+              Schedule.exponential("1 second"),
+              Schedule.recurs(6),
+            ]),
           }),
           Effect.catchTag("MonitorNotFound", () => Effect.void),
         );

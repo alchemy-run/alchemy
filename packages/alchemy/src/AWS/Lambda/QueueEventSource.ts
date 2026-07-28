@@ -8,6 +8,7 @@ import type { Queue } from "../SQS/Queue.ts";
 import {
   QueueEventSource as SQSQueueEventSource,
   type QueueEventSourceProps,
+  type QueueEventSourceService,
   type SQSRecord,
 } from "../SQS/QueueEventSource.ts";
 import { EventSourceMapping } from "./EventSourceMapping.ts";
@@ -21,9 +22,6 @@ export const isSQSEvent = (event: any): event is lambda.SQSEvent =>
 /** @binding */
 export const QueueEventSource = Layer.effect(
   SQSQueueEventSource,
-  // @ts-expect-error - the impl resolves plan-time services (EventSourceMapping)
-  // whereas QueueEventSourceService erases the requirement channel to `never`.
-  // @effect-diagnostics-next-line missingEffectContext:off
   Effect.gen(function* () {
     const host = yield* Lambda.Function;
     const Mapping = yield* EventSourceMapping;
@@ -63,8 +61,7 @@ export const QueueEventSource = Layer.effect(
               functionName: host.functionName,
               eventSourceArn: queue.queueArn,
               batchSize: props.batchSize,
-              maximumBatchingWindowInSeconds:
-                props.maximumBatchingWindowInSeconds,
+              maximumBatchingWindow: props.maximumBatchingWindow,
               enabled: true,
             });
           }),
@@ -82,6 +79,6 @@ export const QueueEventSource = Layer.effect(
           };
         }),
       );
-    });
+    }) as QueueEventSourceService;
   }),
 );

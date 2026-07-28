@@ -13,7 +13,10 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as EffectHttp from "effect/unstable/http/HttpEffect";
-import { makeEntrypointLayer } from "../../Runtime.ts";
+import {
+  makeEntrypointLayer,
+  reifyBoundConfigProvider,
+} from "../../Runtime.ts";
 import { Self } from "../../Self.ts";
 import { Stack } from "../../Stack.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -270,7 +273,14 @@ const getSharedBuild = (
               ConfigProvider.ConfigProvider,
               ConfigProvider.orElse(
                 ConfigProvider.fromUnknown({ ALCHEMY_PHASE: "runtime" }),
-                ConfigProvider.fromUnknown(env),
+                // Auto-bound `Config` values arrive in `env` as
+                // `{"_tag":"Redacted","value":...}` markers; reify them so a
+                // `Config` re-read inside a request handler decodes the raw
+                // source value instead of the marker JSON.
+                reifyBoundConfigProvider(
+                  ConfigProvider.fromUnknown(env),
+                  env as Record<string, unknown>,
+                ),
               ),
             ),
           ),

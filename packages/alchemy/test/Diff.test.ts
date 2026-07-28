@@ -1,5 +1,5 @@
 import { deepEqual, havePropsChanged } from "@/Diff";
-import { describe, expect, test } from "@effect/vitest";
+import { describe, expect, test } from "alchemy-test";
 import * as Redacted from "effect/Redacted";
 
 describe("Diff", () => {

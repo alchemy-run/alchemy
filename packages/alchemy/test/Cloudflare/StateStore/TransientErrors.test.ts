@@ -5,7 +5,7 @@ import {
 } from "@/Cloudflare/StateStore/State.ts";
 import { makeHttpStateStore } from "@/State/HttpStateStore.ts";
 import type { StateStoreError } from "@/State/State.ts";
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";

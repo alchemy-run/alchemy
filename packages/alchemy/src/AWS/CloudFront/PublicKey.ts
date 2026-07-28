@@ -1,6 +1,8 @@
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -98,9 +100,12 @@ export const PublicKeyProvider = () =>
       });
 
       const getByName = Effect.fn(function* (name: string) {
-        const listed = yield* cloudfront.listPublicKeys({});
-        const summary = listed.PublicKeyList?.Items?.find(
-          (item) => item.Name === name,
+        const summary = yield* cloudfront.listPublicKeys.pages({}).pipe(
+          Stream.map((page) => page.PublicKeyList?.Items ?? []),
+          Stream.flattenIterable,
+          Stream.filter((item) => item.Name === name),
+          Stream.runHead,
+          Effect.map(Option.getOrUndefined),
         );
         if (!summary?.Id) return undefined;
         return yield* getById(summary.Id).pipe(
@@ -287,7 +292,22 @@ export const PublicKeyProvider = () =>
               Id: output.publicKeyId,
               IfMatch: current.etag,
             })
-            .pipe(Effect.catchTag("NoSuchPublicKey", () => Effect.void));
+            .pipe(
+              Effect.catchTag("NoSuchPublicKey", () => Effect.void),
+              // Key groups and their public keys are independent resources in
+              // the engine graph, so their deletes may be scheduled together.
+              // CloudFront can continue reporting the key as associated for a
+              // short period after the group is deleted. Treat that typed
+              // dependency violation as eventual consistency, while keeping
+              // every other error immediately visible.
+              Effect.retry({
+                while: (error) => error._tag === "PublicKeyInUse",
+                schedule: Schedule.max([
+                  Schedule.fixed("2 seconds"),
+                  Schedule.recurs(15),
+                ]),
+              }),
+            );
         }),
       };
     }),

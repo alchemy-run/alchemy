@@ -9,7 +9,7 @@ import * as Effect from "effect/Effect";
  *  - `Cloudflare.Workflows.sleep` between steps
  *  - `Cloudflare.Workflows.waitForEvent` external event delivery
  *  - `Cloudflare.Workers.WorkerEnvironment` access from inside the body — regression
- *    guard for https://github.com/alchemy-run/alchemy-effect/pull/71
+ *    guard for https://github.com/alchemy-run/alchemy/pull/71
  */
 export default class TestWorkflow extends Cloudflare.Workflow<TestWorkflow>()(
   "TestWorkflow",

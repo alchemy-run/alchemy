@@ -1,10 +1,10 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import type { CertificateAttributes } from "@/Cloudflare/Gateway/Certificate";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -46,9 +46,10 @@ const expectGone = (accountId: string, certificateId: string) =>
     Effect.catchTag("GatewayCertificateNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "CertificateNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 
@@ -86,7 +87,9 @@ const deployUnlessQuotaReached = (
     .deploy(eff)
     .pipe(
       Effect.catchCause(
-        (cause): Effect.Effect<CertificateAttributes | undefined, any, never> =>
+        (
+          cause,
+        ): Effect.Effect<CertificateAttributes | undefined, any, never> =>
           findQuotaError(cause)
             ? Effect.succeed(undefined)
             : Effect.failCause(cause),

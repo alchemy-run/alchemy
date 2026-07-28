@@ -23,7 +23,18 @@ export interface QueueRouteTargetProps extends Pick<
   sqsParameters?: RuleTarget["SqsParameters"];
 }
 
-/** @binding */
+/**
+ * Routes matching events from an EventBridge bus to an SQS queue.
+ *
+ * Creates a {@link Rule} targeting the queue and binds a queue policy that
+ * allows `events.amazonaws.com` to send messages from that rule. Usually
+ * reached through the `events(...)` builder rather than called directly.
+ * @binding
+ * @example Route Matching Events to an SQS Queue
+ * ```typescript
+ * yield* AWS.EventBridge.events(bus, { source: ["my.app"] }).toQueue(queue);
+ * ```
+ */
 export const toQueue = (
   descriptor: EventDescriptor,
   queue: Queue,

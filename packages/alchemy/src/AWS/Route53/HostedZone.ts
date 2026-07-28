@@ -124,9 +124,10 @@ export const HostedZoneProvider = () =>
             Effect.map((r) => r.ChangeInfo.Status),
             Effect.catchTag("NoSuchChange", () => Effect.succeed("PENDING")),
             Effect.repeat({
-              schedule: Schedule.fixed("2 seconds").pipe(
-                Schedule.both(Schedule.recurs(60)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed("2 seconds"),
+                Schedule.recurs(60),
+              ]),
               until: (status) => status === "INSYNC",
             }),
           );
@@ -381,12 +382,18 @@ export const HostedZoneProvider = () =>
             Effect.asVoid,
             Effect.catchTag("NoSuchHostedZone", () => Effect.void),
             // A still-non-empty zone (without forceDestroy) is retried briefly
-            // in case a referencing record's delete is still propagating.
+            // in case a referencing record's delete is still propagating —
+            // records looked up by zone NAME (e.g. `ECS.Service`'s `domain`)
+            // have no dependency edge on the zone, so their deletes run
+            // concurrently with ours (a classic Dependency Violation).
             Effect.retry({
-              while: (e) => e._tag === "PriorRequestNotComplete",
-              schedule: Schedule.fixed("2 seconds").pipe(
-                Schedule.both(Schedule.recurs(10)),
-              ),
+              while: (e) =>
+                e._tag === "PriorRequestNotComplete" ||
+                e._tag === "HostedZoneNotEmpty",
+              schedule: Schedule.max([
+                Schedule.fixed("3 seconds"),
+                Schedule.recurs(20),
+              ]),
             }),
           );
         }),

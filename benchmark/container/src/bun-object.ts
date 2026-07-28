@@ -26,9 +26,7 @@ export class BunObject extends Cloudflare.DurableObject<BunObject>()(
             yield* fetch(HttpClientRequest.get("http://container/")).pipe(
               Effect.flatMap((r) => r.text),
               Effect.retry({
-                schedule: Schedule.exponential("1 second").pipe(
-                  Schedule.either(Schedule.spaced("5 seconds")),
-                ),
+                schedule: Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("5 seconds")]),
                 times: 40,
               }),
             );

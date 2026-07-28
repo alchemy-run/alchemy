@@ -8,6 +8,7 @@ import {
   type Assets as RuntimeAssets,
   type DurableObjectNamespace as RuntimeDurableObject,
   type QueueConsumer as RuntimeQueueConsumer,
+  type Workflow as RuntimeWorkflow,
   type RuntimeServices,
 } from "@distilled.cloud/cloudflare-runtime";
 import {
@@ -54,9 +55,10 @@ import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import type * as Bundle from "../../Bundle/Bundle.ts";
-import { isResolved } from "../../Diff.ts";
+import { isResolved, stripEffects } from "../../Diff.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
@@ -64,8 +66,10 @@ import { sha256, unwrapRedacted } from "../../Util/index.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { LOCAL_ENTRY_URL, LocalRuntimeState } from "../LocalRuntime.ts";
 import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
+import { readAssetsConfigFiles } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
-import { Worker } from "./Worker.ts";
+import { isPythonMain, watchPythonWorkerBundle } from "./PythonWorkerBundle.ts";
+import { isSelfUrl, Worker } from "./Worker.ts";
 import { getCronBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
 import { WorkerBundle, type WorkerBundleOptions } from "./WorkerBundle.ts";
@@ -74,6 +78,14 @@ import { createWorkerName } from "./WorkerName.ts";
 type WorkerPropsWithDev = Omit<WorkerProps, "dev"> & {
   dev: Extract<WorkerProps["dev"], { mode?: "worker" }>;
 };
+
+/**
+ * The normalized dev-server options a proxy is started with (`props.dev`
+ * with the default port applied). Named independently of `WorkerConfig` so
+ * `maybeStartProxy` — which `buildConfig` now calls to resolve `Worker.URL`
+ * — doesn't form a type cycle through `WorkerConfig["dev"]`.
+ */
+type DevServerOptions = WorkerPropsWithDev["dev"] & { port: number };
 
 export class WorkerValidationError extends Schema.TaggedErrorClass<WorkerValidationError>()(
   "WorkerValidationError",
@@ -98,7 +110,7 @@ export const LocalWorkerProvider = () =>
       const proxyInstances = new Map<
         string,
         {
-          serverOptions: WorkerConfig["dev"];
+          serverOptions: DevServerOptions;
           instance: WorkerProxy.WorkerProxyInstance;
           scope: Scope.Closeable;
         }
@@ -130,7 +142,7 @@ export const LocalWorkerProvider = () =>
 
       const startProxy = Effect.fn(function* (
         id: string,
-        serverOptions: WorkerConfig["dev"],
+        serverOptions: DevServerOptions,
       ) {
         const scope = yield* Scope.fork(rootScope);
         const instance = yield* workerProxy
@@ -150,7 +162,7 @@ export const LocalWorkerProvider = () =>
 
       const maybeStartProxy = Effect.fn(function* (
         id: string,
-        serverOptions: WorkerConfig["dev"],
+        serverOptions: DevServerOptions,
       ) {
         const existing = proxyInstances.get(id);
         if (existing) {
@@ -167,6 +179,35 @@ export const LocalWorkerProvider = () =>
       ) {
         const modules: Module[] = [];
         for (const file of bundle.files) {
+          // Vendored Python packages are opaque Data modules named by their
+          // `python_modules/<relpath>` — mirroring the deploy path — except
+          // the `workers-runtime-sdk` JS shims, which the runtime imports
+          // as ES modules via `import_from_javascript()`.
+          if (file.path.startsWith("python_modules/")) {
+            const isJsShim =
+              file.path.startsWith("python_modules/workers/") &&
+              /\.m?js$/.test(file.path);
+            modules.push(
+              isJsShim
+                ? {
+                    name: file.path,
+                    type: "ESModule",
+                    content:
+                      typeof file.content === "string"
+                        ? file.content
+                        : new TextDecoder().decode(file.content),
+                  }
+                : {
+                    name: file.path,
+                    type: "Data",
+                    content:
+                      typeof file.content === "string"
+                        ? new TextEncoder().encode(file.content)
+                        : file.content,
+                  },
+            );
+            continue;
+          }
           const ext = path.extname(file.path);
           const type = moduleTypeFromExtension(ext);
           if (type === "SourceMap") continue;
@@ -199,33 +240,197 @@ export const LocalWorkerProvider = () =>
         return modules;
       });
 
-      const serveScoped = Effect.fn(function* (
+      // Latest successful serve per worker id, so runtime wiring changes
+      // that arrive AFTER workerd started (e.g. a sibling `Consumer`
+      // resource registering this script as a queue consumer) can restart
+      // the instance with the same bundle.
+      const latestServes = new Map<
+        string,
+        {
+          worker: WorkerConfig;
+          bundle: Bundle.BundleOutput;
+          proxy: WorkerProxy.WorkerProxyInstance;
+        }
+      >();
+      // Serializes serves per worker id: a restart triggered by a sibling
+      // resource may otherwise interleave with a rebuild-triggered serve
+      // and leak a workerd scope.
+      const serveLocks = new Map<string, Semaphore.Semaphore>();
+      const serveLock = (id: string) => {
+        let lock = serveLocks.get(id);
+        if (!lock) {
+          lock = Semaphore.makeUnsafe(1);
+          serveLocks.set(id, lock);
+        }
+        return lock;
+      };
+
+      // Serve with make-before-break semantics: start the replacement
+      // workerd while the previous instance (if any) keeps serving — and
+      // stays registered in the dev registry — then cut the proxy over and
+      // tear the previous instance down. Cross-script consumers (e.g. a DO
+      // bound via `scriptName` from another Worker) therefore never observe
+      // a window where the script has no running instance and no registry
+      // entry, even when `runtime.start` is slow (container image builds).
+      // Both instances use the same registry key; the registry's entry
+      // removal is owner-aware, so closing the old scope after the
+      // replacement has re-registered cannot delete the replacement's
+      // registration.
+      //
+      // The workerd scope is forked from the provider's `rootScope`, NOT
+      // the instance scope: a reconcile that replaces the instance (or a
+      // restart triggered from a sibling provider's fiber) tears down the
+      // bundle watcher without killing the currently serving workerd — the
+      // last good instance keeps serving until the replacement's first
+      // serve completes. Ownership is tracked in `workerdScopes`, closed by
+      // the next successful serve, by `delete`, or by provider shutdown.
+      const serveWith = (
         worker: WorkerConfig,
         bundle: Bundle.BundleOutput,
         proxy: WorkerProxy.WorkerProxyInstance,
-      ) {
-        const scope = yield* Effect.scope.pipe(Effect.flatMap(Scope.fork));
-        const url = yield* runtime
-          .start({
-            name: worker.name,
-            compatibilityDate: worker.compatibility.date,
-            compatibilityFlags: worker.compatibility.flags,
-            bindings: worker.workerBindings as never,
-            hyperdrives: worker.hyperdrives,
-            durableObjectNamespaces: worker.durableObjectNamespaces,
-            queueConsumers: yield* getQueueConsumers(worker.name),
-            modules: yield* toRuntimeModules(bundle),
-            assets: toRuntimeAssets(worker.assets),
-          })
-          .pipe(Scope.provide(scope));
-        const previous = workerdScopes.get(worker.id);
-        if (previous) {
-          yield* Effect.forkDetach(Scope.close(previous, Exit.void));
+      ) =>
+        Semaphore.withPermits(
+          serveLock(worker.id),
+          1,
+        )(
+          // The bookkeeping around `runtime.start` must not be torn in half
+          // by an interrupt: once a replacement workerd is up, it must be
+          // recorded in `workerdScopes` and the superseded instances must be
+          // closed, or one of the workerds would leak until provider
+          // shutdown while holding the shared registry key.
+          Effect.uninterruptibleMask((restore) =>
+            Effect.gen(function* () {
+              const previous = workerdScopes.get(worker.id);
+              // Instances whose queue-consumer wiring went stale while they
+              // were starting; never exposed via the proxy, closed together
+              // with `previous` after the cutover below.
+              const superseded: Scope.Closeable[] = [];
+              let scope!: Scope.Closeable;
+              let url!: URL;
+              // Queue-consumer wiring can change while `runtime.start` is in
+              // flight (a sibling `Consumer` reconcile), before the restart
+              // hook below exists to pick it up. We hold the serve lock, so a
+              // restart would deadlock — instead, loop and serve again until
+              // the wiring is stable across a start.
+              while (true) {
+                const queueConsumers = yield* getQueueConsumers(worker.name);
+                scope = yield* Scope.fork(rootScope);
+                url = yield* restore(
+                  runtime
+                    .start({
+                      name: worker.name,
+                      compatibilityDate: worker.compatibility.date,
+                      compatibilityFlags: worker.compatibility.flags,
+                      bindings: worker.workerBindings as never,
+                      hyperdrives: worker.hyperdrives,
+                      durableObjectNamespaces: worker.durableObjectNamespaces,
+                      workflows: worker.workflows,
+                      queueConsumers,
+                      modules: yield* toRuntimeModules(bundle),
+                      assets: yield* toRuntimeAssets(worker.assets),
+                    })
+                    .pipe(Scope.provide(scope)),
+                ).pipe(
+                  // The scope hangs off `rootScope`, so a failed or
+                  // interrupted start must close it here — nothing else owns
+                  // it yet.
+                  Effect.onExit((exit) =>
+                    exit._tag === "Failure"
+                      ? Scope.close(scope, exit)
+                      : Effect.void,
+                  ),
+                );
+                workerdScopes.set(worker.id, scope);
+                latestServes.set(worker.id, { worker, bundle, proxy });
+                // Register the restart hook before the re-check below: changes
+                // landing after the re-check find the hook; changes before it
+                // are caught by the re-check. Nothing falls in between.
+                MutableHashMap.set(
+                  localRuntimeState.workerRestarts,
+                  worker.name,
+                  restartWorker(worker.id),
+                );
+                const currentConsumers = yield* getQueueConsumers(worker.name);
+                if (
+                  JSON.stringify(currentConsumers) !==
+                  JSON.stringify(queueConsumers)
+                ) {
+                  // Wiring changed while workerd was starting — serve again
+                  // with the fresh consumers before exposing the instance.
+                  superseded.push(scope);
+                  continue;
+                }
+                break;
+              }
+              yield* proxy.set(url);
+              // Only now tear the replaced instances down: `previous` kept
+              // serving — and stayed registered in the dev registry — until
+              // the cutover above. The registry's entry removal is
+              // owner-aware, so these closes cannot delete the replacement's
+              // registration.
+              for (const replaced of previous
+                ? [...superseded, previous]
+                : superseded) {
+                yield* Scope.close(replaced, Exit.void).pipe(
+                  Effect.catchCause((cause) =>
+                    Effect.logWarning(
+                      `[${worker.id}] Failed to stop previous local worker instance`,
+                      Cause.squash(cause),
+                    ),
+                  ),
+                );
+              }
+              return url;
+            }),
+          ),
+        );
+
+      /**
+       * Restart a running worker with its latest bundle so start-time
+       * runtime wiring (queue consumers) is re-read from
+       * {@link LocalRuntimeState}. No-op if the worker hasn't served yet —
+       * the pending first serve will already observe the updated state.
+       */
+      const restartWorker = (id: string) =>
+        Effect.suspend(() => {
+          const latest = latestServes.get(id);
+          if (!latest) return Effect.void;
+          return serveWith(latest.worker, latest.bundle, latest.proxy).pipe(
+            Effect.asVoid,
+            Effect.catchCause((cause) =>
+              Effect.logWarning(
+                `[${id}] Failed to restart local worker`,
+                Cause.squash(cause),
+              ),
+            ),
+          );
+        });
+
+      // Tear down the running workerd for a worker id, if any. Used when the
+      // Worker is deleted or handed off to an external dev process —
+      // instance replacement does NOT go through this: the previous workerd
+      // keeps serving until the replacement's first serve closes it.
+      const closeWorkerd = Effect.fn(function* (id: string) {
+        const scope = workerdScopes.get(id);
+        if (scope) {
+          workerdScopes.delete(id);
+          yield* Scope.close(scope, Exit.void);
         }
-        workerdScopes.set(worker.id, scope);
-        yield* proxy.set(url);
-        return url;
       });
+
+      // Note: `serveLocks` entries are intentionally retained — an
+      // in-flight restart may still hold the semaphore when the instance
+      // is torn down, and a same-id re-create must serialize against it.
+      const dropServeState = (id: string) => {
+        const latest = latestServes.get(id);
+        if (latest) {
+          MutableHashMap.remove(
+            localRuntimeState.workerRestarts,
+            latest.worker.name,
+          );
+          latestServes.delete(id);
+        }
+      };
 
       const buildConfig = Effect.fn(function* ({
         id,
@@ -239,12 +444,31 @@ export const LocalWorkerProvider = () =>
         const { accountId } = yield* yield* CloudflareEnvironment;
         const name = yield* createWorkerName(id, props.name);
         const compatibility = getCompatibility(props);
+        const dev: DevServerOptions = {
+          ...props.dev,
+          // This is the default. Vite and cloudflare-runtime will retry if unavailable, unless `strictPort` is true.
+          port: props.dev?.port ?? 1337,
+        };
+        // `Worker.URL` locally resolves to the worker's dev-proxy URL — the
+        // proxy is stable per worker id (the same instance `runWorker` /
+        // `runVite` attach to below), so the URL is known before workerd
+        // starts. Trailing slash stripped to match the cloud value's shape.
+        const needsSelfUrl =
+          bindings.some((b) =>
+            (b.data.bindings ?? []).some((item) => item.type === "self_url"),
+          ) || Object.values(props.env ?? {}).some(isSelfUrl);
+        const selfUrl = needsSelfUrl
+          ? (yield* maybeStartProxy(id, dev)).url.toString().replace(/\/$/, "")
+          : undefined;
         const workerBindings: BindingHook<BindingServices>[] = [
           Text.local("ALCHEMY_PHASE", "runtime"),
           Text.local("ALCHEMY_STACK_NAME", stack.name),
           Text.local("ALCHEMY_STAGE", stack.stage),
           Text.local("ALCHEMY_CLOUDFLARE_ACCOUNT_ID", accountId),
           ...Object.entries(props.env ?? {}).map(([key, value]) => {
+            if (isSelfUrl(value)) {
+              return Text.local(key, selfUrl!);
+            }
             const unredacted = Redacted.isRedacted(value)
               ? Redacted.value(value)
               : value;
@@ -258,10 +482,17 @@ export const LocalWorkerProvider = () =>
           string,
           RuntimeDurableObject & { uniqueKey: string }
         > = {};
+        const workflows: Record<string, RuntimeWorkflow> = {};
         const hyperdrives: Record<string, Required<HyperdriveOrigin>> = {};
         const containers: Record<string, ContainerImage> = {};
         for (const { data } of bindings) {
           for (const binding of data.bindings ?? []) {
+            if (binding.type === "self_url") {
+              // Lowered here rather than in `toRuntimeBinding` — only this
+              // scope knows the worker's own dev-proxy URL.
+              workerBindings.push(Text.local(binding.name, selfUrl!));
+              continue;
+            }
             if (
               binding.type === "durable_object_namespace" &&
               // The `durableObjectNamespaces` property is only used to declare DOs in this worker.
@@ -285,6 +516,18 @@ export const LocalWorkerProvider = () =>
                 }),
               );
             } else {
+              if (
+                binding.type === "workflow" &&
+                // Same ownership rule as DOs: only declare workflows hosted by
+                // this worker. Cross-script workflow bindings are routed via
+                // the registry proxy.
+                (!binding.scriptName || binding.scriptName === name)
+              ) {
+                workflows[binding.workflowName] = {
+                  workflowName: binding.workflowName,
+                  className: binding.className,
+                };
+              }
               workerBindings.push(yield* toRuntimeBinding(binding));
             }
           }
@@ -329,6 +572,7 @@ export const LocalWorkerProvider = () =>
           compatibility,
           workerBindings,
           durableObjectNamespaces: Object.values(durableObjectNamespaces),
+          workflows: Object.values(workflows),
           // Relative `vite.main` resolves from the Vite root (see the
           // matching normalization in WorkerProvider's `viteBuild`).
           viteMain: props.vite?.main
@@ -336,7 +580,17 @@ export const LocalWorkerProvider = () =>
             : undefined,
           viteEnvironments: props.vite?.viteEnvironments,
           hyperdrives,
-          env: props.env,
+          // Substitute `Worker.URL` sentinels so the Vite dev server inlines
+          // the local URL into VITE_*-prefixed define entries.
+          env:
+            props.env && selfUrl !== undefined
+              ? Object.fromEntries(
+                  Object.entries(props.env).map(([key, value]) => [
+                    key,
+                    isSelfUrl(value) ? selfUrl : value,
+                  ]),
+                )
+              : props.env,
           bundleOptions: {
             id,
             main: props.main!,
@@ -348,11 +602,7 @@ export const LocalWorkerProvider = () =>
             extraOptions: props.build,
           } satisfies WorkerBundleOptions,
           assets: props.assets,
-          dev: {
-            ...props.dev,
-            // This is the default. Vite and cloudflare-runtime will retry if unavailable, unless `strictPort` is true.
-            port: props.dev?.port ?? 1337,
-          },
+          dev,
         };
       });
 
@@ -362,7 +612,15 @@ export const LocalWorkerProvider = () =>
         let start = Date.now();
         let status: "start" | "update" = "start";
         const proxy = yield* maybeStartProxy(worker.id, worker.dev);
-        yield* bundler.watch(worker.bundleOptions).pipe(
+        yield* (
+          isPythonMain(worker.bundleOptions.main)
+            ? watchPythonWorkerBundle({
+                id: worker.bundleOptions.id,
+                main: worker.bundleOptions.main,
+                compatibility: worker.compatibility,
+              })
+            : bundler.watch(worker.bundleOptions)
+        ).pipe(
           Stream.tap((event) => {
             if (event._tag === "Start") {
               start = Date.now();
@@ -387,7 +645,7 @@ export const LocalWorkerProvider = () =>
               : Result.failVoid,
           ),
           Stream.mapEffect((bundle) =>
-            serveScoped(worker, bundle, proxy).pipe(
+            serveWith(worker, bundle, proxy).pipe(
               Effect.exit,
               Effect.tap((exit) => {
                 if (exit._tag === "Success") {
@@ -407,6 +665,34 @@ export const LocalWorkerProvider = () =>
           ),
           Stream.runDrain,
           Effect.forkScoped,
+        );
+        return proxy.url;
+      });
+
+      // Assets-only Worker: there is no entry module to bundle or watch.
+      // The local runtime requires a user worker module, so serve a stub
+      // that delegates every request to the ASSETS binding — the assets
+      // worker applies `htmlHandling` / `notFoundHandling` (including SPA
+      // fallback) itself, matching Cloudflare's deployed assets-only
+      // behavior.
+      const assetsOnlyBundle: Bundle.BundleOutput = {
+        files: [
+          {
+            path: "main.js",
+            content:
+              "export default { fetch: (request, env) => env.ASSETS.fetch(request) };",
+            hash: "assets-only-stub",
+          },
+        ],
+        hash: "assets-only-stub",
+      };
+
+      const runAssetsOnly = Effect.fn(function* (worker: WorkerConfig) {
+        const start = Date.now();
+        const proxy = yield* maybeStartProxy(worker.id, worker.dev);
+        yield* serveWith(worker, assetsOnlyBundle, proxy);
+        yield* Effect.log(
+          `[${worker.id}] Started in ${Math.round(Date.now() - start)}ms`,
         );
         return proxy.url;
       });
@@ -432,9 +718,10 @@ export const LocalWorkerProvider = () =>
               name: worker.name,
               bindings: worker.workerBindings,
               durableObjectNamespaces: worker.durableObjectNamespaces,
+              workflows: worker.workflows,
               hyperdrives: worker.hyperdrives,
               queueConsumers: yield* getQueueConsumers(worker.name),
-              assets: toRuntimeAssets(worker.assets),
+              assets: yield* toRuntimeAssets(worker.assets),
             },
             context,
           },
@@ -469,7 +756,11 @@ export const LocalWorkerProvider = () =>
         const { props, bindings } = options;
         const config = yield* buildConfig(options);
         const url = yield* (
-          props.vite ? runVite(config, props.vite.rootDir) : runWorker(config)
+          props.vite
+            ? runVite(config, props.vite.rootDir)
+            : props.main === undefined && props.assets
+              ? runAssetsOnly(config)
+              : runWorker(config)
         ).pipe(Effect.map((url) => url.toString()));
         return {
           workerId: config.name,
@@ -504,7 +795,12 @@ export const LocalWorkerProvider = () =>
             (instance) => Fiber.join(instance.fiber),
             { concurrency: "unbounded" },
           ),
-        diff: Effect.fn(function* ({ id, news, newBindings, output }) {
+        diff: Effect.fn(function* ({ id, news: desired, newBindings, output }) {
+          // Effect-valued `env` entries (tagged Worker classes) never resolve
+          // at plan time; their identity is carried by the resolved binding
+          // data. Strip them so the signature-based diff still runs — same
+          // rationale as the cloud WorkerProvider (#874).
+          const news = stripEffects(desired);
           if (!isResolved(news) || !isResolved(newBindings)) return undefined;
           const options = {
             id,
@@ -573,7 +869,9 @@ export const LocalWorkerProvider = () =>
               yield* Fiber.interrupt(existing.fiber);
               yield* Scope.close(existing.scope, Exit.void);
               instances.delete(id);
+              dropServeState(id);
             }
+            yield* closeWorkerd(id);
             const name = yield* createWorkerName(id, news.name);
             return {
               workerId: name,
@@ -602,9 +900,14 @@ export const LocalWorkerProvider = () =>
             yield* Effect.log(
               `[${options.id}] Changes detected, interrupting existing instance`,
             );
+            // Tears down the instance's bundle watcher and any in-flight
+            // serve — but NOT its running workerd, which keeps serving (and
+            // stays registered in the dev registry) until the replacement
+            // instance's first serve completes and cuts over.
             yield* Fiber.interrupt(existing.fiber);
             yield* Scope.close(existing.scope, Exit.void);
             instances.delete(options.id);
+            dropServeState(options.id);
           }
           const scope = yield* Scope.fork(rootScope);
           const fiber = yield* runInstance(options).pipe(
@@ -628,13 +931,18 @@ export const LocalWorkerProvider = () =>
             yield* Fiber.interrupt(existing.fiber);
             yield* Scope.close(existing.scope, Exit.void);
             instances.delete(id);
+            dropServeState(id);
           }
+          yield* closeWorkerd(id);
         }),
       };
     }),
   );
 
-export const toRuntimeBinding = Effect.fn(function* (b: WorkerBinding) {
+export const toRuntimeBinding = Effect.fn(function* (
+  b: WorkerBinding,
+  dev?: { remote?: boolean },
+) {
   const unsupported = () =>
     new WorkerValidationError({
       message: `${b.type} bindings are not supported in local mode`,
@@ -711,7 +1019,7 @@ export const toRuntimeBinding = Effect.fn(function* (b: WorkerBinding) {
     case "secrets_store_secret":
       return yield* unsupported();
     case "send_email":
-      return SendEmail.remote({
+      return SendEmail[dev?.remote ? "remote" : "local"]({
         binding: b.name,
         destinationAddress: b.destinationAddress,
         allowedDestinationAddresses: b.allowedDestinationAddresses,
@@ -787,19 +1095,40 @@ const structuralSignature = (value: unknown): Effect.Effect<string> => {
   return sha256(JSON.stringify(normalize(value)));
 };
 
-const toRuntimeAssets = (
+const toRuntimeAssets = Effect.fn(function* (
   assets: WorkerAssetsConfig | undefined,
-): RuntimeAssets | undefined => {
+) {
   if (!assets) return undefined;
+  // Mirror the deploy path: the special `_headers` / `_redirects` files
+  // in the assets directory carry the rules unless overridden by
+  // explicit `headers` / `redirects` props. The local runtime parses
+  // the raw string contents just like Cloudflare does.
+  //
+  // A Vite website's `assets` is config-only (`{ runWorkerFirst: true }`) —
+  // the client output directory is the build's business, and in `dev` the
+  // vite plugin serves assets from the dev server, so there is no directory
+  // to read here.
+  const directory: string | undefined =
+    typeof assets === "string" ? assets : assets.directory;
+  // An unreadable file just means no rules here — the assets plugin
+  // reports directory problems itself.
+  const files = yield* readAssetsConfigFiles(directory).pipe(
+    Effect.orElseSucceed(() => ({
+      _headers: undefined,
+      _redirects: undefined,
+    })),
+  );
   if (typeof assets === "string") {
     return {
       directory: assets,
+      headers: files._headers,
+      redirects: files._redirects,
     };
   }
   return {
     directory: assets.directory,
-    headers: assets.headers,
-    redirects: assets.redirects,
+    headers: assets.headers ?? files._headers,
+    redirects: assets.redirects ?? files._redirects,
     // Distilled widened generated string enums to open unions (`string & {}`);
     // the API only ever returns the known variants here.
     htmlHandling: assets.htmlHandling as
@@ -816,7 +1145,7 @@ const toRuntimeAssets = (
     runWorkerFirst: assets.runWorkerFirst,
     serveDirectly: assets.serveDirectly,
   };
-};
+});
 
 const moduleTypeFromExtension = (ext: string): Module["type"] | "SourceMap" => {
   switch (ext) {
@@ -834,6 +1163,8 @@ const moduleTypeFromExtension = (ext: string): Module["type"] | "SourceMap" => {
       return "ESModule";
     case ".cjs":
       return "CommonJsModule";
+    case ".py":
+      return "PythonModule";
     case ".map":
       return "SourceMap";
     default:

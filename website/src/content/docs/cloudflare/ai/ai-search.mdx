@@ -162,23 +162,23 @@ the pipeline.
 // alchemy.run.ts
 +import { Docs } from "./src/Docs.ts";
 +import { Search } from "./src/Search.ts";
- import Api from "./src/Api.ts";
+import Api from "./src/Api.ts";
 
- export default Alchemy.Stack(
-   "CloudflareWorkerExample",
-   { providers: Cloudflare.providers(), state: Cloudflare.state() },
-   Effect.gen(function* () {
-     const api = yield* Api;
+export default Alchemy.Stack(
+  "CloudflareWorkerExample",
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  Effect.gen(function* () {
+    const api = yield* Api;
 +    const docs = yield* Docs;
 +    const search = yield* Search;
 
-     return {
-       url: api.url.as<string>(),
+    return {
+      url: api.url.as<string>(),
 +      bucket: docs.bucketName,
 +      search: search.instanceId,
-     };
-   }),
- );
+    };
+  }),
+);
 ```
 
 `yield* Search` registers the construct — the bucket, both tokens, and
@@ -194,25 +194,25 @@ Call it during the Worker's init phase.
 
 ```diff lang="typescript"
 // src/Api.ts
- import * as Cloudflare from "alchemy/Cloudflare";
- import * as Effect from "effect/Effect";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
 +import { Search } from "./Search.ts";
 
- export default class Api extends Cloudflare.Worker<Api>()(
-   "Api",
-   { main: import.meta.url },
-   Effect.gen(function* () {
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
 +    const aiSearch = yield* Search;
 +    const search = yield* Cloudflare.AI.QuerySearch(aiSearch);
 
-     return {
-       fetch: Effect.gen(function* () {
-         // …existing routes
-       }),
-     };
+    return {
+      fetch: Effect.gen(function* () {
+        // …existing routes
+      }),
+    };
 -  }),
 +  }).pipe(Effect.provide(Cloudflare.AI.QuerySearchBinding)),
- ) {}
+) {}
 ```
 
 `Cloudflare.AI.QuerySearchBinding` is the runtime side of the

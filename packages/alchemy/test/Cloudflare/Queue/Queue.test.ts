@@ -5,9 +5,9 @@ import * as Provider from "@/Provider";
 import { poll } from "@/Util/poll.ts";
 import { State } from "@/State";
 import type { CreatedResourceState } from "@/State/ResourceState";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as queues from "@distilled.cloud/cloudflare/queues";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import { MinimumLogLevel } from "effect/References";
@@ -157,10 +157,10 @@ test.provider("list enumerates the deployed queue", (stack) =>
       description: "list() includes the deployed queue",
       effect: provider.list(),
       predicate: (all) => all.some((q) => q.queueId === deployed.queueId),
-      schedule: Schedule.both(
+      schedule: Schedule.max([
         Schedule.spaced("2 seconds"),
         Schedule.recurs(20),
-      ),
+      ]),
     });
 
     expect(all.some((q) => q.queueId === deployed.queueId)).toBe(true);

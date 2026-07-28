@@ -11,6 +11,7 @@ import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+import { retryWhileLingeringEnis } from "./LingeringEnis.ts";
 import type { VpcId } from "./Vpc.ts";
 
 export type SecurityGroupId<ID extends string = string> = `sg-${ID}`;
@@ -380,9 +381,14 @@ export const SecurityGroupProvider = () =>
         );
 
       const describeSecurityGroupRules = (groupId: string) =>
-        ec2.describeSecurityGroupRules({
-          Filters: [{ Name: "group-id", Values: [groupId] }],
-        });
+        ec2.describeSecurityGroupRules
+          .items({
+            Filters: [{ Name: "group-id", Values: [groupId] }],
+          })
+          .pipe(
+            Stream.runCollect,
+            Effect.map((chunk) => Array.from(chunk)),
+          );
 
       const toAttrs = Effect.fn(function* (
         sg: ec2.SecurityGroup,
@@ -464,8 +470,8 @@ export const SecurityGroupProvider = () =>
         read: Effect.fn(function* ({ output }) {
           if (!output) return undefined;
           const sg = yield* describeSecurityGroup(output.groupId);
-          const rulesResult = yield* describeSecurityGroupRules(output.groupId);
-          return yield* toAttrs(sg, rulesResult.SecurityGroupRules ?? []);
+          const rules = yield* describeSecurityGroupRules(output.groupId);
+          return yield* toAttrs(sg, rules);
         }),
 
         list: () =>
@@ -488,13 +494,8 @@ export const SecurityGroupProvider = () =>
               groups,
               (sg) =>
                 Effect.gen(function* () {
-                  const rulesResult = yield* describeSecurityGroupRules(
-                    sg.GroupId,
-                  );
-                  return yield* toAttrs(
-                    sg,
-                    rulesResult.SecurityGroupRules ?? [],
-                  );
+                  const rules = yield* describeSecurityGroupRules(sg.GroupId);
+                  return yield* toAttrs(sg, rules);
                 }),
               { concurrency: 10 },
             );
@@ -508,10 +509,12 @@ export const SecurityGroupProvider = () =>
           }
 
           // Group name change requires replacement
-          const newGroupName = yield* createGroupName(id, news.groupName);
-          const oldGroupName = output?.groupName
-            ? output.groupName
-            : yield* createGroupName(id, olds.groupName);
+          const oldGroupName =
+            output?.groupName ?? (yield* createGroupName(id, olds.groupName));
+          // Auto-generated names are engine-owned: the deployed name stays
+          // authoritative even if the generator would name this id differently
+          // today. Only an explicit user-provided name can force a replace.
+          const newGroupName = news.groupName ?? oldGroupName;
           if (newGroupName !== oldGroupName) {
             return { action: "replace" };
           }
@@ -520,7 +523,12 @@ export const SecurityGroupProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const groupName = yield* createGroupName(id, news.groupName);
+          // Prefer the deployed name: regenerating would target a different
+          // resource if the generator's output for this id ever drifts. (An
+          // explicit groupName change arrives here as a fresh replacement
+          // instance with no output.)
+          const groupName =
+            output?.groupName ?? (yield* createGroupName(id, news.groupName));
           const desiredTags = yield* createTags(id, news.tags);
 
           // Observe — find the SG via cached id, else fall through to create.
@@ -558,9 +566,10 @@ export const SecurityGroupProvider = () =>
                 // `InvalidVpcID.NotFound`. Retry, bounded.
                 Effect.retry({
                   while: (e) => e._tag === "InvalidVpcID.NotFound",
-                  schedule: Schedule.fixed("1 second").pipe(
-                    Schedule.both(Schedule.recurs(15)),
-                  ),
+                  schedule: Schedule.max([
+                    Schedule.fixed("1 second"),
+                    Schedule.recurs(15),
+                  ]),
                 }),
               );
             const newGroupId = result.GroupId! as SecurityGroupId;
@@ -599,8 +608,7 @@ export const SecurityGroupProvider = () =>
           // (cidr/group ref/prefix list), so the simplest convergent strategy
           // is full-replace each reconcile. Default egress (-1, 0.0.0.0/0)
           // is restored when no explicit egress is desired.
-          const currentRulesResult = yield* describeSecurityGroupRules(groupId);
-          const currentRules = currentRulesResult.SecurityGroupRules ?? [];
+          const currentRules = yield* describeSecurityGroupRules(groupId);
           const currentIngress = currentRules.filter((r) => !r.IsEgress);
           const currentEgress = currentRules.filter((r) => r.IsEgress);
           if (currentIngress.length > 0) {
@@ -666,7 +674,7 @@ export const SecurityGroupProvider = () =>
           // Re-read final state.
           const finalSg = yield* describeSecurityGroup(groupId);
           const finalRules = yield* describeSecurityGroupRules(groupId);
-          return yield* toAttrs(finalSg, finalRules.SecurityGroupRules ?? []);
+          return yield* toAttrs(finalSg, finalRules);
         }),
 
         delete: Effect.fn(function* ({ output, session }) {
@@ -674,32 +682,29 @@ export const SecurityGroupProvider = () =>
 
           yield* session.note(`Deleting Security Group: ${groupId}`);
 
-          yield* ec2
-            .deleteSecurityGroup({
-              GroupId: groupId,
-              DryRun: false,
-            })
-            .pipe(
-              Effect.catchTag("InvalidGroup.NotFound", () => Effect.void),
-              // Retry on dependency violations (e.g., ENIs still using the security group)
-              Effect.retry({
-                while: (e) => {
-                  return (
-                    e._tag === "DependencyViolation" ||
-                    (e._tag === "ValidationError" &&
-                      e.message?.includes("DependencyViolation"))
-                  );
-                },
-                schedule: Schedule.fixed(5000).pipe(
-                  Schedule.both(Schedule.recurs(30)), // Up to ~2.5 minutes
-                  Schedule.tapOutput(([, attempt]) =>
-                    session.note(
-                      `Waiting for dependencies to clear... (attempt ${attempt + 1})`,
-                    ),
-                  ),
-                ),
-              }),
-            );
+          // DependencyViolation means ENIs still reference the group — ALB,
+          // ECS task, or VPC-attached Lambda ENIs release minutes after the
+          // owning resource is deleted. Lambda Hyperplane ENIs are reaped
+          // explicitly between attempts (they otherwise linger up to ~20
+          // minutes and used to force a second `destroy` run).
+          yield* retryWhileLingeringEnis(
+            ec2
+              .deleteSecurityGroup({
+                GroupId: groupId,
+                DryRun: false,
+              })
+              .pipe(
+                Effect.catchTag("InvalidGroup.NotFound", () => Effect.void),
+              ),
+            {
+              scope: { name: "group-id", value: groupId },
+              isDependencyViolation: (e) =>
+                e._tag === "DependencyViolation" ||
+                (e._tag === "ValidationError" &&
+                  (e.message?.includes("DependencyViolation") ?? false)),
+              session,
+            },
+          );
 
           yield* session.note(`Security Group ${groupId} deleted`);
         }),

@@ -1,6 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -31,9 +31,7 @@ class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
 // Bounded spaced schedule — caps total wait so a genuine failure
 // surfaces fast instead of an uncapped exponential blowing past the
 // test timeout while riding out cold-start propagation.
-const ready = Schedule.spaced("2 seconds").pipe(
-  Schedule.both(Schedule.recurs(30)),
-);
+const ready = Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(30)]);
 
 /** Retry an HTTP call until it returns 200 (rides out cold-start 404s). */
 const untilOk = <E, R>(

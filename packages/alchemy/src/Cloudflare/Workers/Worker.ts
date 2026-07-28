@@ -7,11 +7,11 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import * as Bundle from "../../Bundle/Bundle.ts";
 import { type MemoOptions } from "../../Command/Memo.ts";
 import type { Dependencies } from "../../Dependencies.ts";
 import type { InputProps } from "../../Input.ts";
 import type { Named, Tag } from "../../Named.ts";
+import type * as Output from "../../Output.ts";
 import {
   Platform,
   type Main,
@@ -45,7 +45,7 @@ import type {
   WorkerBindingResource,
   WorkerBindings,
 } from "./WorkerBinding.ts";
-import { type ModuleRule } from "./WorkerBundle.ts";
+import { type ModuleRule, type WorkerBuildOptions } from "./WorkerBundle.ts";
 import {
   makeWorkerRuntimeContext,
   type WorkerRuntimeContext,
@@ -279,6 +279,13 @@ export type WorkerBindingProps = {
     | Effect.Effect<WorkerBindingResource, any, any>;
 };
 
+type Unwrap<T> = T extends Output.Output<infer A, infer _Req> ? A : T;
+
+// NOTE: `Worker<NormalizedBindings<...>>` must provably satisfy the
+// `WorkerBindings` constraint for *generic* `Bindings`, which restricts the
+// shapes usable here: conditional checks on the naked parameter `T` and an
+// outermost `Extract<..., WorkerBindingResource>` are provable; e.g.
+// `Unwrap<T> extends ...` as a check type is not.
 export type NormalizedBindings<
   Bindings extends WorkerBindingProps = {},
   AssetsConfig extends WorkerAssetsConfig | undefined = undefined,
@@ -288,10 +295,10 @@ export type NormalizedBindings<
     any,
     any
   >
-    ? T extends Redacted.Redacted<infer T> | Config.Config<infer T>
-      ? T
-      : T
-    : Extract<Bindings[B], WorkerBindingResource>;
+    ? T extends Redacted.Redacted<infer V> | Config.Config<infer V>
+      ? V
+      : Unwrap<T>
+    : Extract<Unwrap<Bindings[B]>, WorkerBindingResource>;
 } & (undefined extends AssetsConfig ? {} : { ASSETS: Assets });
 
 export type WorkerAssetsConfig = string | AssetsProps | AssetsWithHash;
@@ -316,6 +323,88 @@ export interface WorkerRouteConfig {
    * Alternative to `zoneId` / `zoneName`.
    */
   zone?: ZoneReference;
+}
+
+/**
+ * Versioning configuration for a Worker deploy — controls Worker
+ * [versions and gradual deployments](https://developers.cloudflare.com/workers/configuration/versions-and-deployments/).
+ *
+ * Two modes, selected by {@link parent}:
+ *
+ * - **Version worker** (`parent` set): instead of creating its own script,
+ *   this Worker uploads an immutable *version* to the referenced parent
+ *   Worker's script. With `traffic: 0` (the default) the parent's live
+ *   deployment is untouched and the version is reachable only at its
+ *   preview URL (`<version-prefix>-<name>.<subdomain>.workers.dev`) —
+ *   the PR-preview use case. With `traffic > 0` the version becomes a
+ *   canary taking that percentage of the parent's traffic.
+ * - **Gradual rollout** (`parent` omitted): when this Worker deploys
+ *   itself, the newly uploaded version receives {@link traffic} percent
+ *   and the currently-live version keeps the remainder, instead of the
+ *   default 100% cutover.
+ */
+export interface WorkerVersionOptions {
+  /**
+   * The Worker that owns the script this version is uploaded to. Accepts a
+   * Worker reference — typically `yield* Cloudflare.Worker.ref(id, { stage,
+   * stack })` for a Worker deployed in another stage/stack, or a
+   * locally-declared Worker — or a literal script name as an escape hatch.
+   *
+   * When set, this resource does not create a script of its own: it
+   * uploads a version (code + bindings + compatibility settings) to the
+   * parent's script. Script-level settings apply immediately to *all*
+   * versions of the parent, so they cannot be set on a version worker —
+   * `name`, `assets`, `namespace`, `crons`, `domain`, `routes`, `tags`,
+   * `logpush`, `observability`, `placement`, `limits`, and `subdomain` are
+   * rejected, as are locally-hosted Durable Object or Workflow classes
+   * (their migrations would mutate the parent).
+   *
+   * Changing the parent replaces the resource (a version belongs to
+   * exactly one script).
+   */
+  parent?: string | Worker;
+  /**
+   * Percentage of traffic (0–100) the newly uploaded version receives; the
+   * currently-live version keeps the remainder. Cloudflare deployments
+   * split between at most two versions, so one canary can be active per
+   * script at a time.
+   *
+   * With {@link parent} set, defaults to `0`: the version is
+   * preview-URL-only and the parent's live deployment is untouched.
+   * Without `parent`, defaults to `100` (today's full cutover); `0` means
+   * "upload the version without deploying it" (the equivalent of
+   * `wrangler versions upload`).
+   *
+   * Note that a subsequent full deploy of the parent (or of this Worker
+   * itself, at the default 100) resets traffic to 100% of its own new
+   * version.
+   */
+  traffic?: number;
+  /**
+   * Preview-URL alias for the uploaded version. Aliased preview URLs
+   * (`<alias>-<name>.<subdomain>.workers.dev`) are stable — each upload
+   * with the same alias re-points the URL at the new version — which is
+   * what makes them useful as shareable PR-preview links and lets
+   * `Worker.URL` resolve before the version exists.
+   *
+   * For a version worker ({@link parent} set) an alias is derived
+   * automatically from the stack, stage, and logical id, so every version
+   * worker gets a stable preview URL out of the box; set this to override
+   * it. Must start with a lowercase letter, contain only lowercase
+   * letters, digits, and dashes, and `<alias>-<worker-name>` must fit in
+   * 63 characters (a DNS label).
+   */
+  alias?: string;
+  /**
+   * Human-readable annotation attached to the uploaded version, shown in
+   * the Cloudflare dashboard and `wrangler versions list`.
+   */
+  message?: string;
+  /**
+   * Machine-readable tag annotation attached to the uploaded version
+   * (e.g. a git commit SHA or PR number).
+   */
+  tag?: string;
 }
 
 export interface WorkerProps<
@@ -351,6 +440,14 @@ export interface WorkerProps<
    */
   namespace?: string | DispatchNamespace;
   /**
+   * Worker versions & gradual deployments. Set `version.parent` to upload
+   * this Worker as a preview/canary *version* of another Worker's script
+   * instead of creating its own; set `version.traffic` below 100 to
+   * gradually roll out a deploy of this Worker's own script. See
+   * {@link WorkerVersionOptions}.
+   */
+  version?: WorkerVersionOptions;
+  /**
    * Whether to enable a workers.dev URL for this worker
    * @default true
    */
@@ -360,6 +457,11 @@ export interface WorkerProps<
    * - A string path to the assets directory
    * - An AssetsProps object with directory and config
    * - An object with path and hash (e.g., from a Build resource)
+   *
+   * When neither {@link main} nor {@link script} is provided, the Worker is
+   * deployed **assets-only**: no script is uploaded at all and Cloudflare's
+   * asset layer serves every request, applying `htmlHandling` /
+   * `notFoundHandling` (including single-page-application fallback) itself.
    */
   assets?: Assets;
   subdomain?: {
@@ -402,7 +504,14 @@ export interface WorkerProps<
   tags?: string[];
   /**
    * Path to the Worker's entry module. Bundled with rolldown before
-   * upload. Mutually exclusive with {@link script} — provide exactly one.
+   * upload. Mutually exclusive with {@link script} — provide at most one.
+   * Omit both (with {@link assets} set) to deploy an assets-only Worker.
+   *
+   * A `.py` entry deploys a Python Worker instead: no bundling runs — the
+   * entry plus every sibling `.py` file upload as Python modules, the
+   * `python_workers` compatibility flag is added, and dependencies from
+   * `pyproject.toml` (or a prebuilt `python_modules/` directory) are
+   * vendored alongside. See the Python Workers section above.
    */
   main?: string;
   /**
@@ -439,6 +548,11 @@ export interface WorkerProps<
    *   [Secrets & env](/cloudflare/security/secrets-env).
    * - Literal values — routed by shape: `Redacted<string>` →
    *   `secret_text`, `string` → `plain_text`, anything else → `json`.
+   * - `Output` values that resolve to a plain env value (e.g.
+   *   `Alchemy.makeRandom`) — classified at deploy time by their
+   *   resolved value using the literal rules above. Whole-resource
+   *   Outputs (`Output.of(bucket)`) are rejected at deploy time; bind
+   *   the resource itself instead.
    *
    * In Effect-native Workers you can alternatively `yield*` a
    * `Config` in the Init phase to register the binding implicitly;
@@ -462,6 +576,10 @@ export interface WorkerProps<
    * One or more custom hostnames (e.g. `"app.example.com"`) to bind to this
    * Worker. The Cloudflare Zone is inferred from the hostname — the zone must
    * already exist in the account.
+   *
+   * Pass an empty array to detach every custom domain. Omitting the prop
+   * leaves custom domains unmanaged — attachments made outside Alchemy are
+   * preserved.
    */
   domain?: string | string[];
   /**
@@ -472,10 +590,13 @@ export interface WorkerProps<
    */
   routes?: WorkerRouteConfig[];
   /**
-   * Extra bundler options applied on top of the standard rolldown input/output
-   * options used to build this Worker. See {@link Bundle.BundleExtraOptions}.
+   * Extra bundler options applied on top of the standard rolldown
+   * input/output options used to build this Worker. Includes the generic
+   * bundle extras (pure-annotation packages, bundle analyzer) plus an
+   * `output` field of rolldown output overrides (e.g. `codeSplitting`
+   * groups) merged over Alchemy's defaults. See {@link WorkerBuildOptions}.
    */
-  build?: Bundle.BundleExtraOptions;
+  build?: WorkerBuildOptions;
   /**
    * Whether to bundle {@link main} with rolldown before upload.
    *
@@ -585,7 +706,24 @@ export interface ViteOptions {
    *
    * @see {@link MemoOptions}
    */
-  memo?: MemoOptions;
+  memo?: MemoOptions & {
+    /**
+     * Configure additional workspaces to hash.
+     * By default, auto-detects workspaces during Vite build, then hashes all
+     * non-gitignored files in the workspace plus the nearest lockfile.
+     * @default "auto"
+     */
+    workspaces?:
+      | "auto"
+      | Array<
+          MemoOptions & {
+            /**
+             * The working directory to hash, relative to the Vite root.
+             */
+            cwd: string;
+          }
+        >;
+  };
   /**
    * Selects which Vite environments make up the deployed Worker, for
    * frameworks that build more than one (e.g. React Server Components).
@@ -628,10 +766,41 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
     domains: string[];
     routes: { id: string; pattern: string; zoneId: string }[];
     crons: string[];
+    /**
+     * The parent script name this Worker uploads versions to, when this
+     * resource is a version worker (`version.parent` set). `undefined` for
+     * a Worker that owns its own script — including one deploying with a
+     * gradual rollout. This is the discriminator `read`/`delete` use to
+     * avoid treating the parent's script as this resource's own.
+     */
+    versionOf?: string | undefined;
+    /**
+     * The id of the version uploaded by the most recent deploy. Only set
+     * when versioning is in play: always for a version worker
+     * (`version.parent`), and for a self-owned Worker when a gradual
+     * rollout (`version.traffic` < 100) deployed via the versions API.
+     */
+    versionId?: string | undefined;
+    /**
+     * The preview-URL alias attached to the uploaded version — the
+     * user-provided `version.alias`, or the auto-derived stable alias for
+     * a version worker. The aliased preview URL
+     * (`<alias>-<name>.<subdomain>.workers.dev`) is stable across
+     * deploys and is the version worker's primary `url`.
+     */
+    versionAlias?: string | undefined;
+    /**
+     * The id of the deployment created by the most recent deploy, when the
+     * deploy created one through the deployments API (a version with
+     * `traffic > 0`). Preview-only versions (`traffic: 0`) have no
+     * deployment.
+     */
+    deploymentId?: string | undefined;
     hash?: {
       assets: string | undefined;
       bundle: string | undefined;
       input: string | undefined;
+      additionalWorkspaces: string[] | undefined;
       // Hash of the deploy-time metadata surface (compatibility, env,
       // bindings, asset config, limits, observability, ...) so metadata-only
       // edits trigger an update (#745). Optional: state written before this
@@ -651,9 +820,90 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
     containers?: { className: string; dev: DevContainerImage | undefined }[];
     crons?: string[];
     hyperdrives?: Record<string, Required<DevOrigin>>;
+    dev?: { remote?: boolean };
   },
   Providers
 >;
+
+/** The env key the resolved URL is injected under when `yield*`-ed. */
+const SELF_URL_BINDING_NAME = "WORKER_URL";
+
+/**
+ * Effect-native accessor for the Worker's own URL. The value is injected as an
+ * env binding that only exists at the *exec* phase on the deployed Worker, so
+ * reading it is deferred behind an Effect that requires {@link RuntimeContext}.
+ * Yield it inside a handler to obtain the URL string.
+ */
+export type URLAccessor = Effect.Effect<string, never, RuntimeContext>;
+
+/**
+ * The type of {@link URL} (`Worker.URL`).
+ *
+ * It is a real `Effect` — `yield* Worker.URL` inside a Worker init attaches
+ * the binding and resolves the deferred {@link URLAccessor} — but it also
+ * carries the `~alchemy/Kind` marker statically, so when it is declared on a
+ * Worker's `env` the binding machinery recognises it as a `self_url` binding
+ * (`isSelfUrl`) instead of running it.
+ *
+ * Defined in this module (not its own file): the effect closes over the
+ * `Worker` tag and `WorkerEnvironment`, and a separate module would form a
+ * value cycle with Worker.ts that the deploy bundler's scope hoisting turns
+ * into a startup crash.
+ */
+export interface URLEffect extends Effect.Effect<
+  URLAccessor,
+  never,
+  WorkerEnvironment | Worker
+> {
+  "~alchemy/Kind": "Cloudflare.Workers.URL";
+}
+
+/**
+ * A Worker's own public URL, injected as a binding on that same Worker. At
+ * deploy time Alchemy resolves the URL the Worker will be served at (its first
+ * custom domain if any, otherwise its `workers.dev` URL) and injects it as a
+ * plain-text env binding, so the running Worker knows its own public address.
+ *
+ * Declare it on a Worker's `env` (it flows through `InferEnv` → `string`) or
+ * `yield*` it inside an Effect-native Worker to attach the binding and obtain
+ * a deferred {@link URLAccessor}. It is also exposed as
+ * `Cloudflare.Worker.URL`.
+ *
+ * Because the URL is resolved *before* the bundle is built, a `VITE_`-prefixed
+ * env key holding `Worker.URL` is inlined into the client bundle as
+ * `import.meta.env.VITE_*` — the canonical way to give a Vite frontend its own
+ * public URL.
+ */
+export const URL: URLEffect = Object.assign(
+  Effect.gen(function* () {
+    // Deploy-time only: register the binding on the host Worker. The provider
+    // lowers the `self_url` sentinel into a plain-text binding holding the
+    // resolved URL just before upload.
+    if (!globalThis.__ALCHEMY_RUNTIME__) {
+      yield* (yield* Worker).bind`${SELF_URL_BINDING_NAME}`({
+        bindings: [{ type: "self_url", name: SELF_URL_BINDING_NAME }],
+      });
+    }
+    // Captured at init; the deferred read only runs at exec phase (the
+    // accessor is colored with RuntimeContext), where env is populated.
+    const env = yield* WorkerEnvironment;
+    return Effect.sync(
+      () => (env as Record<string, string>)[SELF_URL_BINDING_NAME]!,
+    ) as URLAccessor;
+  }),
+  { "~alchemy/Kind": "Cloudflare.Workers.URL" as const },
+);
+
+/**
+ * Returns true when the value is the `Worker.URL` binding (keyed on the
+ * static `~alchemy/Kind` marker — the value is a real Effect, so every
+ * env-resolution site must check this before `Effect.isEffect`).
+ */
+export const isSelfUrl = (value: unknown): value is URLEffect =>
+  typeof value === "object" &&
+  value !== null &&
+  "~alchemy/Kind" in value &&
+  (value as URLEffect)["~alchemy/Kind"] === "Cloudflare.Workers.URL";
 
 /**
  * A Cloudflare Worker host with deploy-time binding support and runtime export
@@ -733,6 +983,57 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  *     return new Response("Not Found", { status: 404 });
  *   },
  * };
+ * ```
+ *
+ * @section Python Workers
+ * Point `main` at a `.py` file to deploy a
+ * [Python Worker](https://developers.cloudflare.com/workers/languages/python/)
+ * (open beta). There is no bundling step — the entry and every sibling
+ * `.py` module upload as-is and are interpreted by Pyodide, and the
+ * `python_workers` compatibility flag is added automatically. Like async
+ * Workers, Python Workers take no inline Effect implementation; declare
+ * bindings with the `env` prop and read them from `self.env` in Python.
+ *
+ * Dependencies come from `pyproject.toml` next to the entry: Alchemy
+ * vendors `[project.dependencies]` with [uv](https://docs.astral.sh/uv/)
+ * against the Pyodide wheel index and uploads them under
+ * `python_modules/`. If a `python_modules/` directory already exists
+ * (e.g. produced by `pywrangler sync`), it is uploaded as-is and uv is
+ * not invoked.
+ *
+ * See the [Python Workers guide](/cloudflare/compute/python-workers)
+ * for the full walkthrough.
+ *
+ * @example Defining a Python Worker in your stack
+ * ```typescript
+ * // alchemy.run.ts
+ * const kv = yield* Cloudflare.KV.Namespace("Cache");
+ *
+ * export const Worker = Cloudflare.Worker("Worker", {
+ *   main: "./src/worker.py",
+ *   env: { CACHE: kv },
+ * });
+ * ```
+ *
+ * @example Writing the Python handler
+ * ```python
+ * # src/worker.py
+ * from workers import Response, WorkerEntrypoint
+ *
+ * class Default(WorkerEntrypoint):
+ *     async def fetch(self, request):
+ *         cached = await self.env.CACHE.get("greeting")
+ *         return Response(cached or "Hello from Python!")
+ * ```
+ *
+ * @example Vendoring dependencies with pyproject.toml
+ * ```toml
+ * # src/pyproject.toml — vendored with uv on deploy
+ * [project]
+ * name = "my-worker"
+ * version = "0.1.0"
+ * requires-python = ">=3.13"
+ * dependencies = ["humanize"]
  * ```
  *
  * @section Effect Workers
@@ -844,6 +1145,22 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * }
  * ```
  *
+ * @example Assets-only Worker (static site)
+ * Omit `main` and `script` entirely to deploy a static site: no Worker
+ * code is uploaded — Cloudflare's asset layer serves every request and
+ * applies `htmlHandling` / `notFoundHandling` (including SPA fallback)
+ * itself, exactly like an assets-only `wrangler deploy`.
+ * ```typescript
+ * const site = yield* Cloudflare.Worker("Site", {
+ *   assets: {
+ *     directory: "./public",
+ *     htmlHandling: "drop-trailing-slash",
+ *     notFoundHandling: "404-page",
+ *   },
+ *   domain: "static.example.com",
+ * });
+ * ```
+ *
  * @example Zone routes
  * ```typescript
  * {
@@ -868,6 +1185,104 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  *   bundle: false,
  *   assets: "./.open-next/assets",
  * }
+ * ```
+ *
+ * @section Versions & Gradual Deployments
+ * The `version` prop maps Cloudflare's
+ * [versions and gradual deployments](https://developers.cloudflare.com/workers/configuration/versions-and-deployments/)
+ * onto Alchemy stages. A Worker with `version.parent` set uploads an
+ * immutable *version* to the parent Worker's script instead of creating its
+ * own — by default with no traffic, reachable only at its preview URL
+ * (`worker.url`), which is the PR-preview workflow. Give it `traffic` to
+ * run it as a canary, or use `version.traffic` on a normal Worker to roll
+ * out its own deploys gradually.
+ *
+ * A version worker's `url` is its *aliased* preview URL
+ * (`<alias>-<name>.<subdomain>.workers.dev`) — the alias is derived from
+ * the stack, stage, and logical id (override with `version.alias`), so the
+ * URL is stable across deploys and always points at the latest uploaded
+ * version. The per-version URL (`<version-prefix>-...`) is also returned
+ * in `domains`. Because the aliased URL is known before the version
+ * exists, `Worker.URL` works on version workers and resolves to it.
+ *
+ * A version carries code, bindings, and compatibility settings. Script-level
+ * settings (routes, domains, crons, tags, observability, …) belong to the
+ * parent and are rejected on version workers, as are locally-hosted Durable
+ * Object or Workflow classes. Preview URLs require the parent's workers.dev
+ * subdomain to be enabled (the default).
+ *
+ * @example PR preview: a version of another stage's Worker
+ * ```typescript
+ * // The staging stage deploys the real Worker; a PR stage uploads its
+ * // code as a zero-traffic version of staging's script and gets back a
+ * // stable preview URL.
+ * const parent = yield* Cloudflare.Worker.ref("MyWorker", {
+ *   stage: "staging",
+ * });
+ * const preview = yield* Cloudflare.Worker("MyWorker", {
+ *   main: "./src/worker.ts",
+ *   version: { parent, message: `PR #${process.env.PR_NUMBER}` },
+ * });
+ * // preview.url -> https://<alias>-<name>.<subdomain>.workers.dev
+ * // (stable across deploys; re-points at each newly uploaded version)
+ * ```
+ *
+ * @example Canary: send 10% of the parent's traffic to a version
+ * ```typescript
+ * const parent = yield* Cloudflare.Worker.ref("MyWorker", { stage: "prod" });
+ * yield* Cloudflare.Worker("MyWorker", {
+ *   main: "./src/worker.ts",
+ *   version: { parent, traffic: 10 },
+ * });
+ * ```
+ *
+ * @example Gradual rollout of a Worker's own deploy
+ * ```typescript
+ * // The new version takes 25% of traffic; the previously-live version
+ * // keeps 75%. Bump traffic (or remove the prop) and re-deploy to promote.
+ * yield* Cloudflare.Worker("MyWorker", {
+ *   main: "./src/worker.ts",
+ *   version: { traffic: 25 },
+ * });
+ * ```
+ *
+ * @section The Worker's own URL
+ * `Worker.URL` injects the URL a Worker is served at as a binding on that
+ * same Worker — the first custom `domain` if one is configured, otherwise
+ * its `workers.dev` URL, always equal to the resource's `url` attribute.
+ * Under `alchemy dev` it resolves to the local dev server's URL.
+ *
+ * @example Read the Worker's own URL inside a handler
+ * ```typescript
+ * Cloudflare.Worker(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     // Attaches the binding and returns a deferred accessor.
+ *     const url = yield* Cloudflare.Worker.URL;
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const publicUrl = yield* url;
+ *         return Response.json({ url: publicUrl });
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(Cloudflare.Workers.URLBinding)),
+ * );
+ * ```
+ *
+ * @example Inject the URL into an async Worker's env
+ * `InferEnv` types the entry as `string`. A `VITE_`-prefixed key on a
+ * vite-built Worker is additionally inlined into the client bundle as
+ * `import.meta.env.VITE_PUBLIC_URL` at build time.
+ * ```typescript
+ * export const Worker = Cloudflare.Worker("Worker", {
+ *   main: "./src/worker.ts",
+ *   env: { PUBLIC_URL: Cloudflare.Worker.URL },
+ * });
+ *
+ * export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
+ * //   { PUBLIC_URL: string }
  * ```
  *
  * @section Observability
@@ -1205,6 +1620,26 @@ export const Worker: ResourceClassLike<Worker> &
         Named<Id> & {
           new (): MakeShape<Shape, WorkerShape> & Named<Id> & Tag;
         };
+      /**
+       * Class form without an implementation — an external Worker (a plain
+       * bundled `main`, a raw `script`, or an assets-only Worker with no
+       * script at all):
+       *
+       * ```typescript
+       * export class Site extends Cloudflare.Worker<Site>()("Site", {
+       *   assets: { directory: "./public" },
+       * }) {}
+       * ```
+       */
+      <const Id extends string, Req = never>(
+        id: Id,
+        props:
+          | InputProps<WorkerProps>
+          | Effect.Effect<InputProps<WorkerProps>, ConfigError, Req>,
+      ): Effect.Effect<Worker & Rpc<{}>, never, Req | Providers> &
+        Named<Id> & {
+          new (): Named<Id> & Tag;
+        };
     };
     <
       const Bindings extends WorkerBindingProps = {},
@@ -1247,15 +1682,26 @@ export const Worker: ResourceClassLike<Worker> &
       Extract<Req, Container.Application<any>> | Providers
     > &
       Named<Id>;
-  } = Platform(WorkerTypeId, {
-  // Both hooks are wrapped in arrows so the imported references are resolved
-  // at call time rather than at module-load time. Worker.ts forms import
-  // cycles with both WorkerAsyncBindings.ts (which imports `isWorker` here)
-  // and WorkerRuntimeContext.ts (which imports `WorkerTypeId`/`WorkerEnvironment`
-  // here). Reading either binding eagerly here hits TDZ when Bun loads the
-  // package from node_modules in a different module-init order than the local
-  // workspace.
-  onCreate: (resource, props) =>
-    bindWorkerAsyncBindings(resource as Worker, props),
-  createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
-});
+    /**
+     * The Worker's own public URL, injected as a binding on that same Worker.
+     * Declare it on `env` (`env: { VITE_PUBLIC_URL: Worker.URL }`) or
+     * `yield*` it inside an Effect-native Worker to obtain a deferred
+     * accessor. See {@link URLEffect}.
+     */
+    readonly URL: URLEffect;
+  } = Platform(
+  WorkerTypeId,
+  {
+    // Both hooks are wrapped in arrows so the imported references are resolved
+    // at call time rather than at module-load time. Worker.ts forms import
+    // cycles with both WorkerAsyncBindings.ts (which imports `isWorker` here)
+    // and WorkerRuntimeContext.ts (which imports `WorkerTypeId`/`WorkerEnvironment`
+    // here). Reading either binding eagerly here hits TDZ when Bun loads the
+    // package from node_modules in a different module-init order than the local
+    // workspace.
+    onCreate: (resource, props) =>
+      bindWorkerAsyncBindings(resource as Worker, props),
+    createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
+  },
+  { URL },
+);

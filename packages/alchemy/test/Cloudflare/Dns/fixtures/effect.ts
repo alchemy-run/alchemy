@@ -31,6 +31,17 @@ export default class DnsEffectWorker extends Cloudflare.Worker<DnsEffectWorker>(
           const name = url.searchParams.get("name")!;
 
           return yield* Effect.gen(function* () {
+            // Tests use a deterministic record name — purge any leftover
+            // record from a previously crashed run before creating.
+            const leftovers = yield* dns.listDnsRecords({
+              type: "A",
+              name: { exact: name },
+            });
+            yield* Effect.forEach(
+              (leftovers.result ?? []).filter((r) => r.name === name),
+              (r) => dns.deleteDnsRecord(r.id),
+            );
+
             const created = yield* dns.createDnsRecord({
               type: "A",
               name,

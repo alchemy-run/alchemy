@@ -6,8 +6,22 @@ export interface ListAlarmMuteRulesRequest
   extends cloudwatch.ListAlarmMuteRulesInput {}
 
 /**
- * Runtime binding for `cloudwatch:ListAlarmMuteRules`.
+ * Runtime binding for `cloudwatch:ListAlarmMuteRules` — list the alarm
+ * mute rules in the account/region.
+ *
+ * Provide `CloudWatch.ListAlarmMuteRulesHttp` on the hosting Lambda
+ * Function to satisfy the requirement.
  * @binding
+ * @section Reading Mute Rules
+ * @example List Alarm Mute Rules
+ * ```typescript
+ * // init — grants cloudwatch:ListAlarmMuteRules
+ * const listAlarmMuteRules = yield* AWS.CloudWatch.ListAlarmMuteRules();
+ *
+ * // runtime
+ * const result = yield* listAlarmMuteRules();
+ * const summaries = result.AlarmMuteRuleSummaries ?? [];
+ * ```
  */
 export interface ListAlarmMuteRules extends Binding.Service<
   ListAlarmMuteRules,

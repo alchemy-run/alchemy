@@ -1,6 +1,8 @@
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import type { Input } from "../../Input.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import * as Namespace from "../../Namespace.ts";
 import type { SecurityGroupId } from "../EC2/SecurityGroup.ts";
 import type { SubnetId } from "../EC2/Subnet.ts";
@@ -192,9 +194,9 @@ export interface AuroraProps {
    */
   dataApi?: boolean;
   /**
-   * Backup retention period in days, forwarded to the cluster.
+   * Backup retention period (e.g. `"7 days"`), forwarded to the cluster.
    */
-  backupRetentionPeriod?: number;
+  backupRetentionPeriod?: Duration.Input;
   /**
    * Daily backup window (`hh:mm-hh:mm` UTC), forwarded to the cluster.
    */
@@ -233,18 +235,20 @@ export interface AuroraProps {
    */
   port?: number;
   /**
-   * Aurora MySQL backtrack window in seconds. Forwarded to the cluster.
+   * Aurora MySQL backtrack window (e.g. `"1 hour"`). Forwarded to the
+   * cluster.
    */
-  backtrackWindow?: number;
+  backtrackWindow?: Duration.Input;
   /**
    * Enhanced-monitoring + Performance Insights settings. Forwarded to the
    * cluster (and the enhanced-monitoring role to the instances).
    */
   monitoring?: {
     /**
-     * Enhanced-monitoring granularity in seconds (0, 1, 5, 10, 15, 30, 60).
+     * Enhanced-monitoring granularity (e.g. `"60 seconds"`). Sent to the
+     * API in whole seconds (valid: 0, 1, 5, 10, 15, 30, 60).
      */
-    interval?: number;
+    interval?: Duration.Input;
     /**
      * Existing IAM role ARN for enhanced monitoring. When omitted and
      * `interval > 0`, Aurora creates one automatically.
@@ -320,6 +324,7 @@ const inferProxyEngineFamily = (engine: string) => {
  * The return value intentionally exposes the underlying `DB*` resources so
  * users can expand into the lower-level surface without rewriting the stack.
  * @resource
+ * @section Creating a Database
  * @example Start a Small Aurora Cluster
  * ```typescript
  * const db = yield* AWS.RDS.Aurora("AppDb", {
@@ -328,6 +333,7 @@ const inferProxyEngineFamily = (engine: string) => {
  * });
  * ```
  *
+ * @section Scaling Out
  * @example Add Readers and a Proxy
  * ```typescript
  * const db = yield* AWS.RDS.Aurora("AppDb", {
@@ -336,6 +342,18 @@ const inferProxyEngineFamily = (engine: string) => {
  *   readers: 2,
  *   proxy: true,
  * });
+ * ```
+ *
+ * @section Querying from a Function
+ * @example Query over the Data API
+ * ```typescript
+ * // the Data API is enabled by default (dataApi: true) — bind
+ * // AWS.RDSData.ExecuteStatement to query without a VPC socket
+ * const executeStatement = yield* AWS.RDSData.ExecuteStatement(db.cluster, {
+ *   secret: db.secret,
+ *   database: "app",
+ * });
+ * const result = yield* executeStatement({ sql: "SELECT 1" });
  * ```
  */
 export const Aurora = (id: string, props: AuroraProps) =>
@@ -405,8 +423,8 @@ export const Aurora = (id: string, props: AuroraProps) =>
       // one when a non-zero interval is requested.
       const monitoringInterval = props.monitoring?.interval;
       const monitoringRole =
-        monitoringInterval &&
-        monitoringInterval > 0 &&
+        monitoringInterval !== undefined &&
+        (toWireSeconds(monitoringInterval) ?? 0) > 0 &&
         !props.monitoring?.roleArn
           ? yield* IAM.Role("MonitoringRole", {
               assumeRolePolicyDocument: {
@@ -499,7 +517,10 @@ export const Aurora = (id: string, props: AuroraProps) =>
         engineVersion,
         dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
         dbParameterGroupName: parameterGroup?.dbParameterGroupName,
-        vpcSecurityGroupIds: securityGroupIds,
+        // No vpcSecurityGroupIds: cluster members inherit security groups from
+        // the DB cluster. Passing them here fails with "The requested DB
+        // Instance will be a member of a DB Cluster. Set vpc security group
+        // for the DB Cluster."
         publiclyAccessible: props.instance?.publiclyAccessible ?? false,
         promotionTier: props.instance?.promotionTier ?? 0,
         autoMinorVersionUpgrade:
@@ -524,7 +545,8 @@ export const Aurora = (id: string, props: AuroraProps) =>
             engineVersion,
             dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
             dbParameterGroupName: parameterGroup?.dbParameterGroupName,
-            vpcSecurityGroupIds: securityGroupIds,
+            // No vpcSecurityGroupIds: security groups belong on the DB
+            // cluster, not its member instances (see Writer above).
             publiclyAccessible: props.instance?.publiclyAccessible ?? false,
             promotionTier: index + 1,
             autoMinorVersionUpgrade:

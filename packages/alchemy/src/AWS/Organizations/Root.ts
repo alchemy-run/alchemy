@@ -35,10 +35,25 @@ export interface Root extends Resource<
   "AWS.Organizations.Root",
   RootProps,
   {
+    /**
+     * ID of the root (e.g. `r-examplerootid`).
+     */
     rootId: RootId;
+    /**
+     * ARN of the root.
+     */
     rootArn: RootArn;
+    /**
+     * Friendly name of the root (usually `Root`).
+     */
     rootName: string;
+    /**
+     * Policy types and their enablement status on this root.
+     */
     policyTypes: organizations.PolicyTypeSummary[];
+    /**
+     * Tags on the root.
+     */
     tags: Record<string, string>;
   },
   never,
@@ -49,8 +64,31 @@ export interface Root extends Resource<
  * The organization root.
  *
  * `Root` is an import-style resource. It discovers the existing root returned by
- * AWS Organizations and can reconcile root tags.
+ * AWS Organizations and can reconcile root tags. Use `root.rootId` as the
+ * `parentId` for top-level {@link OrganizationalUnit}s and {@link Account}s,
+ * and as the `targetId`/`rootId` for {@link PolicyAttachment} and
+ * {@link RootPolicyType}.
  * @resource
+ * @section Importing the Root
+ * @example Adopt the Organization Root
+ * ```typescript
+ * const organization = yield* Organization("Org", { featureSet: "ALL" });
+ * const root = yield* Root("Root", {});
+ * ```
+ *
+ * @example Parent OUs and Accounts Under the Root
+ * ```typescript
+ * const workloads = yield* OrganizationalUnit("Workloads", {
+ *   parentId: root.rootId,
+ *   name: "workloads",
+ * });
+ *
+ * const sandbox = yield* Account("Sandbox", {
+ *   name: "sandbox",
+ *   email: "aws-sandbox@example.com",
+ *   parentId: root.rootId,
+ * });
+ * ```
  */
 export const Root = Resource<Root>("AWS.Organizations.Root");
 

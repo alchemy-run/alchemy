@@ -6,7 +6,7 @@ import {
   makeHttpQueueBinding,
   makeQueueHttpScope,
   toQueueSendError,
-  type HttpToken,
+  type QueueAuth,
 } from "./QueueHttp.ts";
 import { SendError, type SendMessage } from "./QueueTypes.ts";
 import { WriteQueue, type WriteQueueClient } from "./WriteQueue.ts";
@@ -27,7 +27,11 @@ export const WriteQueueHttp = Layer.effect(
   Effect.suspend(() =>
     makeHttpQueueBinding({
       permissionGroups: ["Queues Write"],
-      makeClient: makeWriteQueueHttpClient,
+      makeClient: (token, queueId) =>
+        makeWriteQueueHttpClient(
+          { authorize: authorizeWith(token), accountId: token.accountId },
+          queueId,
+        ),
     }),
   ),
 );
@@ -44,18 +48,23 @@ const toMessage = (message: SendMessage) =>
       }
     : { body: message.body, contentType: "json" as const };
 
-/** Build the producer client over the Queues bulk-push HTTP API. */
+/**
+ * Build the producer client over the Queues bulk-push HTTP API.
+ *
+ * Shared by {@link WriteQueueHttp} (scoped token auth) and
+ * `WriteQueueLocal` (current-credentials auth) — they differ only in the
+ * {@link QueueAuth} they inject.
+ */
 export const makeWriteQueueHttpClient = (
-  token: HttpToken,
+  auth: QueueAuth,
   queueId: Effect.Effect<string>,
 ): WriteQueueClient => {
-  const authorize = authorizeWith(token);
-  const scope = makeQueueHttpScope(token, queueId);
+  const scope = makeQueueHttpScope(auth, queueId);
 
   const push = (messages: ReadonlyArray<SendMessage>) =>
     scope.pipe(
       Effect.flatMap(({ accountId, queueId }) =>
-        authorize(
+        auth.authorize(
           queues.bulkPushMessages({
             accountId,
             queueId,

@@ -12,7 +12,7 @@ import { withLock } from "./Lock.ts";
  * here so the redirect target lives in exactly one place across all
  * provider OAuth clients.
  */
-export const AUTH_LANDING_HOST = "https://v2.alchemy.run";
+export const AUTH_LANDING_HOST = "https://alchemy.run";
 export const AUTH_SUCCESS_URL = `${AUTH_LANDING_HOST}/auth/success`;
 export const AUTH_ERROR_URL = `${AUTH_LANDING_HOST}/auth/error`;
 

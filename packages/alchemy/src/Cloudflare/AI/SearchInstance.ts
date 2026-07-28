@@ -594,9 +594,12 @@ export const SearchInstanceProvider = () =>
         return { action: "replace" } as const;
       }
       // The instance id is its identity — renaming is a replacement.
-      const newId = yield* createInstanceId(id, news.instanceId);
       const oldId =
         output?.instanceId ?? (yield* createInstanceId(id, olds.instanceId));
+      // Auto-generated ids are engine-owned: the deployed id stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided instanceId can force a replace.
+      const newId = news.instanceId ?? oldId;
       if (newId !== oldId) {
         return { action: "replace" } as const;
       }
@@ -835,9 +838,10 @@ const retryTokenPropagation = <A, E extends { _tag: string }, R>(
       // sparsely and detects a settled token tens of seconds late. Capped
       // polling detects within 6s of propagation completing while still
       // covering a long total window.
-      schedule: Schedule.exponential("1 second", 1.5).pipe(
-        Schedule.either(Schedule.spaced("6 seconds")),
-      ),
+      schedule: Schedule.min([
+        Schedule.exponential("1 second", 1.5),
+        Schedule.spaced("6 seconds"),
+      ]),
       times: 22,
     }),
   );

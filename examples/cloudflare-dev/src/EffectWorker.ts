@@ -28,6 +28,9 @@ export default class EffectWorker extends Cloudflare.Worker<EffectWorker>()(
     dev: {
       port: Config.number("PORT").pipe(Config.withDefault(1338)),
     },
+    build: {
+      bundleAnalyzer: true,
+    },
   },
   Effect.gen(function* () {
     const kv = yield* Cloudflare.KV.ReadWriteNamespace(KV);

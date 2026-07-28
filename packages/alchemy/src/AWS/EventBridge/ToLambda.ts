@@ -21,7 +21,28 @@ export interface LambdaRouteTargetProps extends Pick<
   | "DeadLetterConfig"
 > {}
 
-/** @binding */
+/**
+ * Routes matching events from an EventBridge bus to a Lambda function.
+ *
+ * Creates a {@link Rule} targeting the function and a Lambda permission
+ * allowing `events.amazonaws.com` to invoke it. Usually reached through the
+ * `events(...)` builder rather than called directly.
+ * @binding
+ * @example Route Matching Events to a Lambda Function
+ * ```typescript
+ * yield* AWS.EventBridge.events(bus, { source: ["my.app"] }).toLambda(fn);
+ * ```
+ *
+ * @example Transform the Event Payload Before Invoking
+ * ```typescript
+ * yield* AWS.EventBridge.events(bus, { source: ["my.app"] }).toLambda(fn, {
+ *   InputTransformer: {
+ *     InputPathsMap: { orderId: "$.detail.orderId" },
+ *     InputTemplate: '{"orderId": <orderId>}',
+ *   },
+ * });
+ * ```
+ */
 export const toLambda = (
   descriptor: EventDescriptor,
   fn: LambdaFunction,

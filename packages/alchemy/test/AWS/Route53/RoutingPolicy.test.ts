@@ -1,8 +1,8 @@
 import * as AWS from "@/AWS";
 import { HealthCheck, HostedZone, Record } from "@/AWS/Route53";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as route53 from "@distilled.cloud/aws/route-53";
-import { describe, expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -20,7 +20,7 @@ const findSet = (
 
 const zoneName = "alchemy-route53-routing.alchemy.";
 
-describe.skipIf(process.env.FAST)(() => {
+describe.skipIf(process.env.FAST)("RoutingPolicy", () => {
   test.provider(
     "weighted, failover, and alias routing records",
     (stack) =>
@@ -38,7 +38,7 @@ describe.skipIf(process.env.FAST)(() => {
               ipAddress: "1.1.1.1",
               port: 80,
               resourcePath: "/",
-              requestInterval: 30,
+              requestInterval: "30 seconds",
             });
 
             // Weighted pair — same name/type, distinct setIdentifier + weight.
@@ -46,7 +46,7 @@ describe.skipIf(process.env.FAST)(() => {
               hostedZoneId: zone.id,
               name: `api.${zoneName}`,
               type: "A",
-              ttl: 60,
+              ttl: "60 seconds",
               records: ["1.2.3.4"],
               setIdentifier: "blue",
               weight: 90,
@@ -55,7 +55,7 @@ describe.skipIf(process.env.FAST)(() => {
               hostedZoneId: zone.id,
               name: `api.${zoneName}`,
               type: "A",
-              ttl: 60,
+              ttl: "60 seconds",
               records: ["5.6.7.8"],
               setIdentifier: "green",
               weight: 10,
@@ -66,7 +66,7 @@ describe.skipIf(process.env.FAST)(() => {
               hostedZoneId: zone.id,
               name: `app.${zoneName}`,
               type: "A",
-              ttl: 60,
+              ttl: "60 seconds",
               records: ["1.1.1.1"],
               setIdentifier: "primary",
               failover: "PRIMARY",
@@ -76,7 +76,7 @@ describe.skipIf(process.env.FAST)(() => {
               hostedZoneId: zone.id,
               name: `app.${zoneName}`,
               type: "A",
-              ttl: 60,
+              ttl: "60 seconds",
               records: ["2.2.2.2"],
               setIdentifier: "secondary",
               failover: "SECONDARY",
@@ -99,6 +99,8 @@ describe.skipIf(process.env.FAST)(() => {
         const green = findSet(sets, `api.${zoneName}`, "green");
         expect(blue?.Weight).toBe(90);
         expect(green?.Weight).toBe(10);
+        // Duration.Input ttl ("60 seconds") lands on the wire as TTL: 60.
+        expect(blue?.TTL).toBe(60);
 
         const primary = findSet(sets, `app.${zoneName}`, "primary");
         const secondary = findSet(sets, `app.${zoneName}`, "secondary");

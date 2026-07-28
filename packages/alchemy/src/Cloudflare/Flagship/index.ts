@@ -8,3 +8,4 @@ export {
   type EvaluationDetails,
 } from "./ReadFlags.ts";
 export { ReadFlagsBinding } from "./ReadFlagsBinding.ts";
+export { ReadFlagsLocal } from "./ReadFlagsLocal.ts";

@@ -1,7 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -45,9 +45,10 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 // Cap exponential backoff at 3s so retries stay bounded when the CF edge is
 // slow (otherwise the geometric blow-up dominates wall time).
-const readinessSchedule = Schedule.exponential("500 millis").pipe(
-  Schedule.either(Schedule.spaced("3 seconds")),
-);
+const readinessSchedule = Schedule.min([
+  Schedule.exponential("500 millis"),
+  Schedule.spaced("3 seconds"),
+]);
 
 // `filterStatusOk` turns a cold-start non-200 (e.g. a 500 HTML error page)
 // into a retryable failure, and `catchDefect` promotes any cold-start defect

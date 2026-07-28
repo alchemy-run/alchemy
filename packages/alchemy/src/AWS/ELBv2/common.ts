@@ -1,4 +1,7 @@
 import type * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
+import type * as Duration from "effect/Duration";
+import type * as Redacted from "effect/Redacted";
+import { toSeconds } from "../../Util/Duration.ts";
 import type { TargetGroupArn } from "./TargetGroup.ts";
 
 /**
@@ -26,6 +29,7 @@ export interface ForwardTarget {
  * with session stickiness so a client stays pinned to a single target group.
  */
 export interface ForwardAction {
+  /** Discriminator identifying this as a forward action. */
   type: "forward";
   /** One or more target groups to forward to (weighted). */
   targetGroups: ForwardTarget[];
@@ -34,10 +38,11 @@ export interface ForwardAction {
     /** Whether target-group stickiness is enabled. */
     enabled: boolean;
     /**
-     * The time, in seconds, a client remains pinned to a target group.
-     * @default 3600
+     * The time a client remains pinned to a target group — e.g. `"1 hour"`
+     * or `Duration.hours(1)`. Sent to AWS as whole seconds.
+     * @default "1 hour"
      */
-    durationSeconds?: number;
+    duration?: Duration.Input;
   };
 }
 
@@ -48,6 +53,7 @@ export interface ForwardAction {
  * original request.
  */
 export interface RedirectAction {
+  /** Discriminator identifying this as a redirect action. */
   type: "redirect";
   /** The redirect status code. */
   statusCode: "HTTP_301" | "HTTP_302";
@@ -68,6 +74,7 @@ export interface RedirectAction {
  * balancer without forwarding to any target.
  */
 export interface FixedResponseAction {
+  /** Discriminator identifying this as a fixed-response action. */
   type: "fixedResponse";
   /** The HTTP response status code (2XX/4XX/5XX). */
   statusCode: string;
@@ -82,18 +89,38 @@ export interface FixedResponseAction {
  * (OIDC) identity provider before forwarding to the next action.
  */
 export interface AuthenticateOidcAction {
+  /** Discriminator identifying this as an authenticate-OIDC action. */
   type: "authenticateOidc";
+  /** The OIDC issuer identifier of the identity provider (IdP). */
   issuer: string;
+  /** The authorization endpoint of the IdP. */
   authorizationEndpoint: string;
+  /** The token endpoint of the IdP. */
   tokenEndpoint: string;
+  /** The user info endpoint of the IdP. */
   userInfoEndpoint: string;
+  /** The OAuth 2.0 client identifier registered with the IdP. */
   clientId: string;
   /** Required on first use; omit with `useExistingClientSecret: true` to keep the existing one. */
-  clientSecret?: string;
+  clientSecret?: Redacted.Redacted<string>;
+  /**
+   * The set of user claims requested from the IdP.
+   * @default "openid"
+   */
   scope?: string;
+  /**
+   * The name of the cookie used to maintain session information.
+   * @default "AWSELBAuthSessionCookie"
+   */
   sessionCookieName?: string;
-  sessionTimeout?: number;
+  /** The maximum duration of the authentication session — e.g. `"7 days"`. Sent to AWS as whole seconds. */
+  sessionTimeout?: Duration.Input;
+  /**
+   * Behavior when the user is not authenticated (`deny`, `allow`, or `authenticate`).
+   * @default "authenticate"
+   */
   onUnauthenticatedRequest?: "deny" | "allow" | "authenticate";
+  /** Set to `true` on updates to keep the client secret already stored on the action. */
   useExistingClientSecret?: boolean;
 }
 
@@ -102,13 +129,30 @@ export interface AuthenticateOidcAction {
  * Cognito user pool before forwarding to the next action.
  */
 export interface AuthenticateCognitoAction {
+  /** Discriminator identifying this as an authenticate-Cognito action. */
   type: "authenticateCognito";
+  /** The ARN of the Cognito user pool. */
   userPoolArn: string;
+  /** The ID of the Cognito user pool client. */
   userPoolClientId: string;
+  /** The domain prefix or fully-qualified domain of the Cognito user pool. */
   userPoolDomain: string;
+  /**
+   * The set of user claims requested from Cognito.
+   * @default "openid"
+   */
   scope?: string;
+  /**
+   * The name of the cookie used to maintain session information.
+   * @default "AWSELBAuthSessionCookie"
+   */
   sessionCookieName?: string;
-  sessionTimeout?: number;
+  /** The maximum duration of the authentication session — e.g. `"7 days"`. Sent to AWS as whole seconds. */
+  sessionTimeout?: Duration.Input;
+  /**
+   * Behavior when the user is not authenticated (`deny`, `allow`, or `authenticate`).
+   * @default "authenticate"
+   */
   onUnauthenticatedRequest?: "deny" | "allow" | "authenticate";
 }
 
@@ -149,7 +193,7 @@ export const serializeActions = (actions: ListenerAction[]): elbv2.Action[] =>
             TargetGroupStickinessConfig: action.stickiness
               ? {
                   Enabled: action.stickiness.enabled,
-                  DurationSeconds: action.stickiness.durationSeconds,
+                  DurationSeconds: toSeconds(action.stickiness.duration),
                 }
               : undefined,
           },
@@ -194,10 +238,13 @@ export const serializeActions = (actions: ListenerAction[]): elbv2.Action[] =>
             TokenEndpoint: action.tokenEndpoint,
             UserInfoEndpoint: action.userInfoEndpoint,
             ClientId: action.clientId,
+            // Redacted end-to-end: distilled's AuthenticateOidcActionConfig
+            // marks ClientSecret sensitive, so the Redacted passes straight
+            // through and is only unwrapped by the wire serializer.
             ClientSecret: action.clientSecret,
             Scope: action.scope,
             SessionCookieName: action.sessionCookieName,
-            SessionTimeout: action.sessionTimeout,
+            SessionTimeout: toSeconds(action.sessionTimeout),
             OnUnauthenticatedRequest: action.onUnauthenticatedRequest,
             UseExistingClientSecret: action.useExistingClientSecret,
           },
@@ -212,7 +259,7 @@ export const serializeActions = (actions: ListenerAction[]): elbv2.Action[] =>
             UserPoolDomain: action.userPoolDomain,
             Scope: action.scope,
             SessionCookieName: action.sessionCookieName,
-            SessionTimeout: action.sessionTimeout,
+            SessionTimeout: toSeconds(action.sessionTimeout),
             OnUnauthenticatedRequest: action.onUnauthenticatedRequest,
           },
         };

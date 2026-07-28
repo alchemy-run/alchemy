@@ -19,7 +19,7 @@ export class MyContainer extends Cloudflare.Container<
 export default MyContainer.make(
   {
     main: import.meta.url,
-    dockerfile: "FROM oven/bun:latest",
+    image: "oven/bun:latest",
   },
   Effect.gen(function* () {
     // The container reads R2 over a scoped HTTP API token (not the native

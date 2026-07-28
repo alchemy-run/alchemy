@@ -1,10 +1,12 @@
 import * as Lambda from "@distilled.cloud/aws/lambda";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { deepEqual } from "../../Diff.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 
 const DEFAULT_MAXIMUM_RETRY_ATTEMPTS = 2;
-const DEFAULT_MAXIMUM_EVENT_AGE_IN_SECONDS = 21_600;
+const DEFAULT_MAXIMUM_EVENT_AGE_SECONDS = 21_600;
 
 /**
  * Asynchronous invocation settings for a Lambda function or alias.
@@ -19,10 +21,11 @@ export interface EventInvokeConfig {
    */
   maximumRetryAttempts?: number;
   /**
-   * Maximum age in seconds that Lambda retains an asynchronous event.
-   * @default 21600
+   * Maximum age that Lambda retains an asynchronous event (e.g. `"6 hours"`).
+   * Rounded to whole seconds on the wire.
+   * @default "6 hours"
    */
-  maximumEventAgeInSeconds?: number;
+  maximumEventAge?: Duration.Input;
   /**
    * Destinations for successful or failed asynchronous invocation records.
    */
@@ -35,9 +38,7 @@ const retryOnConflict = <A, E extends { _tag: string }, R>(
   effect.pipe(
     Effect.retry({
       while: (e) => e._tag === "ResourceConflictException",
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
     }),
   );
 
@@ -100,8 +101,9 @@ export const syncEventInvokeConfig = Effect.fn(function* ({
   const desired = {
     maximumRetryAttempts:
       config.maximumRetryAttempts ?? DEFAULT_MAXIMUM_RETRY_ATTEMPTS,
-    maximumEventAgeInSeconds:
-      config.maximumEventAgeInSeconds ?? DEFAULT_MAXIMUM_EVENT_AGE_IN_SECONDS,
+    maximumEventAgeSeconds:
+      toWireSeconds(config.maximumEventAge) ??
+      DEFAULT_MAXIMUM_EVENT_AGE_SECONDS,
     destinationConfig: normalizeDestinationConfig(config.destinationConfig),
   };
 
@@ -109,9 +111,8 @@ export const syncEventInvokeConfig = Effect.fn(function* ({
     observed &&
     (observed.MaximumRetryAttempts ?? DEFAULT_MAXIMUM_RETRY_ATTEMPTS) ===
       desired.maximumRetryAttempts &&
-    (observed.MaximumEventAgeInSeconds ??
-      DEFAULT_MAXIMUM_EVENT_AGE_IN_SECONDS) ===
-      desired.maximumEventAgeInSeconds &&
+    (observed.MaximumEventAgeInSeconds ?? DEFAULT_MAXIMUM_EVENT_AGE_SECONDS) ===
+      desired.maximumEventAgeSeconds &&
     deepEqual(
       normalizeDestinationConfig(observed.DestinationConfig),
       desired.destinationConfig,
@@ -124,7 +125,7 @@ export const syncEventInvokeConfig = Effect.fn(function* ({
     FunctionName: functionName,
     Qualifier: qualifier,
     MaximumRetryAttempts: desired.maximumRetryAttempts,
-    MaximumEventAgeInSeconds: desired.maximumEventAgeInSeconds,
+    MaximumEventAgeInSeconds: desired.maximumEventAgeSeconds,
     DestinationConfig: desired.destinationConfig,
   }).pipe(
     Effect.retry({
@@ -142,9 +143,7 @@ export const syncEventInvokeConfig = Effect.fn(function* ({
             "The function execution role does not have permissions to call",
           ) ??
             false)),
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
     }),
   );
 });

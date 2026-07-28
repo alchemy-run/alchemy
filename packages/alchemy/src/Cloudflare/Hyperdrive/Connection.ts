@@ -1,5 +1,6 @@
 import * as hyperdrive from "@distilled.cloud/cloudflare/hyperdrive";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 
@@ -199,10 +200,11 @@ export const ConnectionProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      const name = yield* createConfigName(id, news.name);
-      const oldName = output?.name
-        ? output.name
-        : yield* createConfigName(id, olds.name);
+      const oldName = output?.name ?? (yield* createConfigName(id, olds.name));
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a replace.
+      const name = news.name ?? oldName;
       if (oldName !== name) {
         return { action: "replace" } as const;
       }
@@ -348,8 +350,11 @@ const createConfigName = (id: string, name: string | undefined) =>
 const findByName = (name: string) =>
   Effect.gen(function* () {
     const { accountId } = yield* yield* CloudflareEnvironment;
-    const list = yield* hyperdrive.listConfigs({ accountId });
-    return list.result.find((c) => c.name === name);
+    return yield* hyperdrive.listConfigs.items({ accountId }).pipe(
+      Stream.filter((c) => c.name === name),
+      Stream.runHead,
+      Effect.map(Option.getOrUndefined),
+    );
   });
 
 export const defaultPort = (scheme: Scheme): number =>

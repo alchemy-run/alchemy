@@ -1,10 +1,10 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import { poll } from "@/Util/poll.ts";
 import * as flagship from "@distilled.cloud/cloudflare/flagship";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -26,9 +26,10 @@ const expectFlagGone = (accountId: string, appId: string, flagKey: string) =>
     Effect.flatMap(() => Effect.fail(new FlagStillExists())),
     Effect.retry({
       while: (e): e is FlagStillExists => e instanceof FlagStillExists,
-      schedule: Schedule.exponential("250 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("250 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
     Effect.catchTag(
       ["FlagshipFlagNotFound", "FlagshipAppNotFound"],
@@ -312,9 +313,10 @@ test.provider(
             (f) =>
               f.appId === deployed.app.appId && f.key === deployed.flag.key,
           ),
-        schedule: Schedule.spaced("3 seconds").pipe(
-          Schedule.both(Schedule.recurs(30)),
-        ),
+        schedule: Schedule.max([
+          Schedule.spaced("3 seconds"),
+          Schedule.recurs(30),
+        ]),
       });
 
       expect(

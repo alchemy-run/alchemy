@@ -1,6 +1,8 @@
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Vitest";
-import { describe, expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import * as workers from "@distilled.cloud/cloudflare/workers";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import { expectUrlContains } from "../Utils/Http.ts";
@@ -14,6 +16,10 @@ const CONFIG_REDACTED_VALUE = (process.env.CONFIG_REDACTED =
   "config-redacted-value");
 const CONFIG_REDACTED_INIT_VALUE = (process.env.CONFIG_REDACTED_INIT =
   "config-redacted-init-value");
+// Read via `Config.string("HOST").pipe(Config.nested("CONFIG_NESTED"))` —
+// binds under the flattened `CONFIG_NESTED_HOST` key.
+const CONFIG_NESTED_HOST_VALUE = (process.env.CONFIG_NESTED_HOST =
+  "config-nested-host-value");
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
@@ -33,7 +39,7 @@ describe.concurrent("Cloudflare.Worker env bindings", () => {
     Effect.gen(function* () {
       const { asyncUrl } = yield* stack;
       expect(asyncUrl).toBeTypeOf("string");
-      console.log(asyncUrl);
+      yield* Effect.log(asyncUrl);
 
       const body = yield* expectUrlContains(asyncUrl, '"STR":"hello"', {
         timeout: "60 seconds",
@@ -47,6 +53,7 @@ describe.concurrent("Cloudflare.Worker env bindings", () => {
         OBJ: { nested: { value: "ok" }, count: 7 },
         ARR: [1, 2, 3],
         OUTPUT_STR: "output-str",
+        RANDOM_IS_HEX: true,
         SECRET_STR: "shh",
         SECRET_JSON: { token: "abc", scopes: ["read", "write"] },
         CONFIG_STR: CONFIG_STR_VALUE,
@@ -59,6 +66,29 @@ describe.concurrent("Cloudflare.Worker env bindings", () => {
         },
       });
     }).pipe(logLevel),
+  );
+
+  test.provider(
+    "Output env values classify by resolved value on the wire",
+    () =>
+      Effect.gen(function* () {
+        const { asyncWorkerName } = yield* stack;
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
+        const settings = yield* workers.getScriptScriptAndVersionSetting({
+          accountId,
+          scriptName: asyncWorkerName,
+        });
+        // Output<Redacted<string>> (Alchemy.Random) must deploy encrypted,
+        // never as a plaintext json binding.
+        expect(settings.bindings).toContainEqual(
+          expect.objectContaining({ type: "secret_text", name: "RANDOM" }),
+        );
+        // Output<string> resolves to a string, so it lands as plain_text.
+        expect(settings.bindings).toContainEqual(
+          expect.objectContaining({ type: "plain_text", name: "OUTPUT_STR" }),
+        );
+      }).pipe(logLevel),
   );
 
   test(
@@ -103,6 +133,35 @@ describe.concurrent("Cloudflare.Worker env bindings", () => {
   );
 
   test(
+    "effect worker re-resolves Config.xxx at request time inside a nested effect",
+    Effect.gen(function* () {
+      const { effectUrl } = yield* stack;
+
+      const body = yield* expectUrlContains(
+        `${effectUrl}/config-runtime`,
+        '"CONFIG_STR"',
+        { timeout: "60 seconds", label: "effect env-worker /config-runtime" },
+      );
+      expect(JSON.parse(body)).toEqual({
+        CONFIG_STR: CONFIG_STR_VALUE,
+        CONFIG_NUM: Number(CONFIG_NUM_VALUE),
+        CONFIG_NUM_WITH_DEFAULT: Number(CONFIG_NUM_VALUE),
+        CONFIG_UNSET_WITH_DEFAULT: 3000,
+        CONFIG_REDACTED_INIT: CONFIG_REDACTED_INIT_VALUE,
+        CONFIG_REDACTED_INIT_IS_REDACTED: true,
+        CONFIG_ALL_OBJ: {
+          str: CONFIG_STR_VALUE,
+          num: Number(CONFIG_NUM_VALUE),
+          redacted: CONFIG_REDACTED_INIT_VALUE,
+          redactedIsRedacted: true,
+        },
+        CONFIG_ALL_TUPLE: [CONFIG_STR_VALUE, Number(CONFIG_NUM_VALUE)],
+        CONFIG_NESTED_HOST: CONFIG_NESTED_HOST_VALUE,
+      });
+    }).pipe(logLevel),
+  );
+
+  test(
     "effect worker round-trips Config.xxx bindings captured in Init",
     Effect.gen(function* () {
       const { effectUrl } = yield* stack;
@@ -118,6 +177,14 @@ describe.concurrent("Cloudflare.Worker env bindings", () => {
         CONFIG_REDACTED: CONFIG_REDACTED_VALUE,
         CONFIG_REDACTED_INIT: CONFIG_REDACTED_INIT_VALUE,
         CONFIG_REDACTED_INIT_IS_REDACTED: true,
+        CONFIG_ALL_OBJ: {
+          str: CONFIG_STR_VALUE,
+          num: Number(CONFIG_NUM_VALUE),
+          redacted: CONFIG_REDACTED_INIT_VALUE,
+          redactedIsRedacted: true,
+        },
+        CONFIG_ALL_TUPLE: [CONFIG_STR_VALUE, Number(CONFIG_NUM_VALUE)],
+        CONFIG_NESTED_HOST: CONFIG_NESTED_HOST_VALUE,
       });
     }).pipe(logLevel),
   );

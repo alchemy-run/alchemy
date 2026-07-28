@@ -8,7 +8,25 @@ export interface DescribeEventBusRequest extends Omit<
   "Name"
 > {}
 
-/** @binding */
+/**
+ * Reads the configuration of an EventBridge event bus
+ * (`events:DescribeEventBus`).
+ *
+ * Bind this operation to an {@link EventBus} inside a function runtime to get
+ * a callable that automatically injects the bus name. Provide the
+ * `DescribeEventBusHttp` layer on the Function to satisfy the binding.
+ * @binding
+ * @section Describing Event Buses
+ * @example Describe the Bound Bus
+ * ```typescript
+ * // init — bind the bus (provide AWS.EventBridge.DescribeEventBusHttp on the Function)
+ * const describeEventBus = yield* AWS.EventBridge.DescribeEventBus(bus);
+ *
+ * // runtime — read the bus configuration
+ * const info = yield* describeEventBus();
+ * console.log(info.Arn, info.Policy);
+ * ```
+ */
 export interface DescribeEventBus extends Binding.Service<
   DescribeEventBus,
   "AWS.EventBridge.DescribeEventBus",
