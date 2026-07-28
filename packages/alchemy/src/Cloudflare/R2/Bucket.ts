@@ -4,10 +4,12 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
 import { deepEqual, isResolved } from "../../Diff.ts";
+import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { generateLocalId, isLiveId } from "../LocalRuntime.ts";
 import type * as Cloudflare from "../Providers.ts";
 import * as Zone from "../Zone/index.ts";
 
@@ -450,7 +452,7 @@ export declare namespace Bucket {
   };
 }
 
-export const BucketProvider = () =>
+export const ProviderLive = () =>
   Provider.effect(
     Bucket,
     Effect.gen(function* () {
@@ -943,6 +945,12 @@ export const BucketProvider = () =>
         diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
           if (!isResolved(news)) return undefined;
           const { accountId } = yield* yield* CloudflareEnvironment;
+          // A `dev:` bucket name means the live bucket doesn't exist yet —
+          // update (create) rather than replace. The dev name is about to be
+          // replaced by a real one, so it must not be advertised as stable.
+          if (output?.bucketName && !isLiveId(output.bucketName)) {
+            return { action: "update", stables: ["accountId"] } as const;
+          }
           const oldName =
             output?.bucketName ?? (yield* createBucketName(id, olds.name));
           // Auto-generated names are engine-owned: the deployed name stays
@@ -985,9 +993,13 @@ export const BucketProvider = () =>
         reconcile: Effect.fn(function* ({ id, news = {}, output }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
           // Prefer the deployed name: regenerating would target a different
-          // bucket if the generator's output for this id ever drifts.
+          // bucket if the generator's output for this id ever drifts. A
+          // `dev:` name only ever existed locally — generate the real one
+          // (promotion from dev to live).
           const name =
-            output?.bucketName ?? (yield* createBucketName(id, news.name));
+            output?.bucketName && isLiveId(output.bucketName)
+              ? output.bucketName
+              : yield* createBucketName(id, news.name);
           const acct = output?.accountId ?? accountId;
           const jurisdiction =
             output?.jurisdiction ?? news.jurisdiction ?? "default";
@@ -1099,6 +1111,8 @@ export const BucketProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
+          // A `dev:` name only ever existed locally — nothing upstream.
+          if (!isLiveId(output.bucketName)) return;
           yield* Effect.all(
             (output.domains ?? []).map((domain) =>
               r2
@@ -1129,8 +1143,12 @@ export const BucketProvider = () =>
         }),
         read: Effect.fn(function* ({ id, output, olds }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
+          // A `dev:` name never exists on Cloudflare — look up by the
+          // generated live name instead (promotion from dev to live).
           const name =
-            output?.bucketName ?? (yield* createBucketName(id, olds?.name));
+            output?.bucketName && isLiveId(output.bucketName)
+              ? output.bucketName
+              : yield* createBucketName(id, olds?.name);
           const acct = output?.accountId ?? accountId;
           return yield* r2
             .getBucket({
@@ -1158,6 +1176,60 @@ export const BucketProvider = () =>
       };
     }),
   );
+
+/**
+ * Local (dev) provider — the bucket is purely virtual: a `dev:`-prefixed
+ * bucket name keyed into the local workerd R2 simulator (data under
+ * `.alchemy/local/r2`). `toRuntimeBinding` lowers an `r2_bucket` binding
+ * whose bucket name is `dev:`-prefixed onto the local R2 service. R2 has no
+ * opaque id — the name IS the identity — so the `dev:` marker rides on the
+ * name (a `:` can never appear in a real R2 bucket name).
+ *
+ * Custom domains, lifecycle rules, and CORS are deploy-side concerns with
+ * no local behavior; the local attributes report them empty.
+ */
+export const ProviderLocal = () =>
+  Provider.succeed(Bucket, {
+    stables: ["accountId"],
+    // Local buckets are engine-state rows only — nothing to enumerate.
+    list: () => Effect.succeed([]),
+    diff: Effect.fn(function* ({ news = {}, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (!output?.bucketName) return { action: "update" } as const;
+      if (!isResolved(news)) return undefined;
+      if (output.accountId !== accountId) {
+        return { action: "replace" } as const;
+      }
+      // Fall through to the engine's default prop diff.
+    }),
+    read: Effect.fn(function* ({ output }) {
+      // Purely virtual — the persisted state row is the source of truth.
+      return output ?? undefined;
+    }),
+    reconcile: Effect.fn(function* ({ news = {}, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return {
+        bucketName: output?.bucketName ?? generateLocalId(),
+        storageClass: (news.storageClass ?? "Standard") as Bucket.StorageClass,
+        jurisdiction: (news.jurisdiction ?? "default") as Bucket.Jurisdiction,
+        location: undefined,
+        accountId: output?.accountId ?? accountId,
+        domains: [],
+        lifecycleRules: [],
+        cors: [],
+      };
+    }),
+    delete: Effect.fn(function* () {
+      // The simulator's on-disk data is keyed by the dev name; dropping the
+      // state row is enough — orphaned blobs are reclaimed with `.alchemy`.
+    }),
+  });
+
+export const BucketProvider = () =>
+  ProviderLayer.dual(Bucket, {
+    local: () => ProviderLocal(),
+    live: () => ProviderLive(),
+  });
 
 // R2 can make a newly-created bucket visible to `getBucket` before its
 // sub-resource endpoints (custom domains, lifecycle) accept it. Retry only

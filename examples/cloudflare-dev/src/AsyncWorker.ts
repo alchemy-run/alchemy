@@ -32,6 +32,28 @@ export default {
         const count = await counter.increment();
         return new Response(`Hello, world! ${count}`);
       }
+      case "/r2": {
+        await env.BUCKET.put("hello.txt", "hello from r2");
+        const object = await env.BUCKET.get("hello.txt");
+        const text = object === null ? null : await object.text();
+        const list = await env.BUCKET.list();
+        return Response.json({
+          text,
+          keys: list.objects.map((o) => o.key),
+        });
+      }
+      case "/d1": {
+        await env.DB.exec(
+          "CREATE TABLE IF NOT EXISTS greetings (id INTEGER PRIMARY KEY, text TEXT NOT NULL)",
+        );
+        await env.DB.prepare("INSERT INTO greetings (text) VALUES (?)")
+          .bind("hello from d1")
+          .run();
+        const row = await env.DB.prepare(
+          "SELECT text FROM greetings ORDER BY id DESC LIMIT 1",
+        ).first<{ text: string }>();
+        return Response.json({ text: row?.text ?? null });
+      }
       default:
         return env.ASSETS.fetch(request);
     }

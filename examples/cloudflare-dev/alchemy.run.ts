@@ -11,6 +11,8 @@ export type AsyncWorkerEnv = Cloudflare.InferEnv<typeof AsyncWorker>;
 
 const AsyncWorker = Effect.gen(function* () {
   const queue = yield* Cloudflare.Queues.Queue("AsyncWorkerQueue");
+  const bucket = yield* Cloudflare.R2.Bucket("AsyncWorkerBucket");
+  const db = yield* Cloudflare.D1.Database("AsyncWorkerDB");
   const worker = yield* Cloudflare.Worker("AsyncWorker", {
     main: "./src/AsyncWorker.ts",
     assets: {
@@ -22,6 +24,8 @@ const AsyncWorker = Effect.gen(function* () {
         className: "Counter",
       }),
       QUEUE: queue,
+      BUCKET: bucket,
+      DB: db,
       MESSAGES: Cloudflare.DurableObject<QueueMessages>("QueueMessages", {
         className: "QueueMessages",
       }),

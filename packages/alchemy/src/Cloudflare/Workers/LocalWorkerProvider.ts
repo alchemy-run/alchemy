@@ -61,7 +61,11 @@ import * as LocalProvider from "../../Local/LocalProvider.ts";
 import { Stack } from "../../Stack.ts";
 import { unwrapRedacted } from "../../Util/index.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import { LOCAL_ENTRY_URL, LocalRuntimeState } from "../LocalRuntime.ts";
+import {
+  isLocalId,
+  LOCAL_ENTRY_URL,
+  LocalRuntimeState,
+} from "../LocalRuntime.ts";
 import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
 import { readAssetsConfigFiles } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
@@ -854,7 +858,12 @@ export const toRuntimeBinding = Effect.fn(function* (b: WorkerBinding) {
     case "browser":
       return Browser.remote(b.name);
     case "d1":
-      return D1.remote(b.name, b.databaseId);
+      // A `dev:` id belongs to a locally-emulated database (local D1
+      // provider); a real id is a live database the dev worker proxies to
+      // (e.g. the resource opted out of emulation via `Alchemy.live()`).
+      return isLocalId(b.databaseId)
+        ? D1.local({ binding: b.name, id: b.databaseId })
+        : D1.remote(b.name, b.databaseId);
     case "data_blob":
       return Data.local(b.name, Buffer.from(b.part));
     case "dispatch_namespace":
@@ -882,7 +891,11 @@ export const toRuntimeBinding = Effect.fn(function* (b: WorkerBinding) {
     case "json":
       return Json.local(b.name, b.json);
     case "kv_namespace":
-      return KvNamespace.remote(b.name, b.namespaceId);
+      // A `dev:` id belongs to a locally-emulated namespace; a real id is
+      // a live namespace the dev worker proxies to.
+      return isLocalId(b.namespaceId)
+        ? KvNamespace.local({ binding: b.name, id: b.namespaceId })
+        : KvNamespace.remote(b.name, b.namespaceId);
     case "mtls_certificate":
       return MtlsCertificate.remote(b.name, b.certificateId);
     case "pipelines":
@@ -895,7 +908,12 @@ export const toRuntimeBinding = Effect.fn(function* (b: WorkerBinding) {
         queueName: b.queueName,
       });
     case "r2_bucket":
-      return R2Bucket.remote(b.name, b.bucketName, b.jurisdiction);
+      // A `dev:`-prefixed bucket name belongs to a locally-emulated bucket
+      // (R2 has no opaque id — the name is the identity); a real name is a
+      // live bucket the dev worker proxies to.
+      return isLocalId(b.bucketName)
+        ? R2Bucket.local({ binding: b.name, id: b.bucketName })
+        : R2Bucket.remote(b.name, b.bucketName, b.jurisdiction);
     case "ratelimit":
       return RateLimit.local({
         binding: b.name,

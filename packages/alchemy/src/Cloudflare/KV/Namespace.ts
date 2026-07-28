@@ -3,10 +3,12 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
+import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { generateLocalId, isLiveId } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
 
 export const isNamespace = (value: unknown): value is Namespace =>
@@ -71,12 +73,19 @@ export const Namespace = Resource<Namespace>("Cloudflare.KV.Namespace", {
   aliases: ["Cloudflare.KVNamespace"],
 });
 
-export const NamespaceProvider = () =>
+export const ProviderLive = () =>
   Provider.succeed(Namespace, {
     stables: ["namespaceId", "accountId"],
     diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!isResolved(news)) return undefined;
+      // A `dev:` id means the live namespace doesn't exist yet — update
+      // (create) rather than replace, even if name/account changed. The dev
+      // id is about to be replaced by a real one, so it must not be
+      // advertised as stable for this update.
+      if (output?.namespaceId && !isLiveId(output.namespaceId)) {
+        return { action: "update", stables: ["accountId"] } as const;
+      }
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
@@ -104,7 +113,9 @@ export const NamespaceProvider = () =>
             supportsUrlEncoding?: boolean | null | undefined;
           }
         | undefined;
-      if (output?.namespaceId) {
+      // A `dev:` id never exists on Cloudflare — skip straight to the
+      // title scan (promotion from dev to live).
+      if (output?.namespaceId && isLiveId(output.namespaceId)) {
         observed = yield* kv
           .getNamespace({
             accountId: acct,
@@ -166,6 +177,8 @@ export const NamespaceProvider = () =>
       };
     }),
     delete: Effect.fn(function* ({ output }) {
+      // A `dev:` id only ever existed locally — nothing to delete upstream.
+      if (!isLiveId(output.namespaceId)) return;
       yield* kv
         .deleteNamespace({
           accountId: output.accountId,
@@ -191,7 +204,7 @@ export const NamespaceProvider = () =>
     }),
     read: Effect.fn(function* ({ id, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      if (output?.namespaceId) {
+      if (output?.namespaceId && isLiveId(output.namespaceId)) {
         return yield* kv
           .getNamespace({
             accountId: output.accountId,
@@ -221,6 +234,52 @@ export const NamespaceProvider = () =>
       }
       return undefined;
     }),
+  });
+
+/**
+ * Local (dev) provider — the namespace is purely virtual: a `dev:` id keyed
+ * into the local workerd KV simulator. `toRuntimeBinding` lowers a
+ * `kv_namespace` binding whose id is `dev:`-prefixed onto the local KV
+ * service; data persists under `.alchemy/local/kv`.
+ */
+export const ProviderLocal = () =>
+  Provider.succeed(Namespace, {
+    stables: ["accountId"],
+    // Local namespaces are engine-state rows only — nothing to enumerate.
+    list: () => Effect.succeed([]),
+    diff: Effect.fn(function* ({ news = {}, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (!output?.namespaceId) return { action: "update" } as const;
+      if (!isResolved(news)) return undefined;
+      if (output.accountId !== accountId) {
+        return { action: "replace" } as const;
+      }
+      // Fall through to the engine's default prop diff (title renames
+      // update in place).
+    }),
+    read: Effect.fn(function* ({ output }) {
+      // Purely virtual — the persisted state row is the source of truth.
+      return output ?? undefined;
+    }),
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return {
+        title: yield* createTitle(id, news.title),
+        namespaceId: output?.namespaceId ?? generateLocalId(),
+        supportsUrlEncoding: true,
+        accountId: output?.accountId ?? accountId,
+      };
+    }),
+    delete: Effect.fn(function* () {
+      // The simulator's on-disk data is keyed by the dev id; dropping the
+      // state row is enough — orphaned blobs are reclaimed with `.alchemy`.
+    }),
+  });
+
+export const NamespaceProvider = () =>
+  ProviderLayer.dual(Namespace, {
+    local: () => ProviderLocal(),
+    live: () => ProviderLive(),
   });
 
 const createTitle = (id: string, title: string | undefined) =>

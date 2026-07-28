@@ -4,12 +4,14 @@ import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
+import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
 import { listSqlFiles, readSqlFile } from "../../SQL/SqlFile.ts";
 import { recordsEqual } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { generateLocalId, isLiveId } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
 import { applyMigrations } from "./ApplyMigrations.ts";
 import { cloneDatabase } from "./CloneDatabase.ts";
@@ -248,12 +250,19 @@ export type Database = Resource<
  */
 export const Database = Resource<Database>("Cloudflare.D1Database");
 
-export const DatabaseProvider = () =>
+export const ProviderLive = () =>
   Provider.succeed(Database, {
     stables: ["databaseId", "accountId"],
     diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!isResolved(news)) return undefined;
+      // A `dev:` id means the live database doesn't exist yet — update
+      // (create) rather than replace, even if name/account changed. The dev
+      // id is about to be replaced by a real one, so it must not be
+      // advertised as stable for this update.
+      if (output?.databaseId && !isLiveId(output.databaseId)) {
+        return { action: "update", stables: ["accountId"] } as const;
+      }
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
@@ -341,7 +350,7 @@ export const DatabaseProvider = () =>
     }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      if (output?.databaseId) {
+      if (output?.databaseId && isLiveId(output.databaseId)) {
         return yield* d1
           .getDatabase({
             accountId: output.accountId,
@@ -406,7 +415,9 @@ export const DatabaseProvider = () =>
             readReplication?: { mode: string } | null;
           }
         | undefined;
-      if (output?.databaseId) {
+      // A `dev:` id never exists on Cloudflare — skip straight to the
+      // name lookup (promotion from dev to live).
+      if (output?.databaseId && isLiveId(output.databaseId)) {
         observed = yield* d1
           .getDatabase({
             accountId: acct,
@@ -543,6 +554,8 @@ export const DatabaseProvider = () =>
       };
     }),
     delete: Effect.fn(function* ({ output }) {
+      // A `dev:` id only ever existed locally — nothing to delete upstream.
+      if (!isLiveId(output.databaseId)) return;
       yield* d1
         .deleteDatabase({
           accountId: output.accountId,
@@ -550,6 +563,68 @@ export const DatabaseProvider = () =>
         })
         .pipe(Effect.catchTag("DatabaseNotFound", () => Effect.void));
     }),
+  });
+
+/**
+ * Local (dev) provider — the database is purely virtual: a `dev:` id keyed
+ * into the local workerd D1 simulator (DO SQLite under `.alchemy/local/d1`).
+ * `toRuntimeBinding` lowers a `d1` binding whose id is `dev:`-prefixed onto
+ * the local D1 service.
+ *
+ * Migrations and imports are NOT applied locally: they run through
+ * Cloudflare's HTTP API, which has no local counterpart yet. A worker
+ * binding can still create schema at runtime; `migrationsDir` is
+ * intentionally ignored (with a warning) until the local runtime exposes a
+ * Node-side query path.
+ */
+export const ProviderLocal = () =>
+  Provider.succeed(Database, {
+    stables: ["accountId"],
+    // Local databases are engine-state rows only — nothing to enumerate.
+    list: () => Effect.succeed([]),
+    diff: Effect.fn(function* ({ news = {}, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (!output?.databaseId) return { action: "update" } as const;
+      if (!isResolved(news)) return undefined;
+      if (output.accountId !== accountId) {
+        return { action: "replace" } as const;
+      }
+      // Fall through to the engine's default prop diff.
+    }),
+    read: Effect.fn(function* ({ output }) {
+      // Purely virtual — the persisted state row is the source of truth.
+      return output ?? undefined;
+    }),
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (news.migrationsDir) {
+        yield* Effect.logWarning(
+          `[${id}] D1 migrations are not applied in local dev — ` +
+            "the local simulator has no Node-side query path yet.",
+        );
+      }
+      return {
+        databaseId: output?.databaseId ?? generateLocalId(),
+        databaseName: yield* createDatabaseName(id, news.name),
+        jurisdiction: (news.jurisdiction ?? "default") as Jurisdiction,
+        readReplication: news.readReplication,
+        accountId: output?.accountId ?? accountId,
+        migrationsDir: news.migrationsDir,
+        migrationsTable: undefined,
+        migrationsHashes: {},
+        importHashes: {},
+      };
+    }),
+    delete: Effect.fn(function* () {
+      // The simulator's on-disk data is keyed by the dev id; dropping the
+      // state row is enough — orphaned data is reclaimed with `.alchemy`.
+    }),
+  });
+
+export const DatabaseProvider = () =>
+  ProviderLayer.dual(Database, {
+    local: () => ProviderLocal(),
+    live: () => ProviderLive(),
   });
 
 const createDatabaseName = (id: string, name: string | undefined) =>

@@ -29,7 +29,10 @@ const stack = beforeAll(
           HttpClient.get(url).pipe(
             Effect.flatMap(HttpClientResponse.filterStatusOk),
             Effect.retry({
-              schedule: Schedule.max([Schedule.spaced("250 millis"), Schedule.recurs(25)]),
+              schedule: Schedule.max([
+                Schedule.spaced("250 millis"),
+                Schedule.recurs(25),
+              ]),
             }),
           ),
         );
@@ -79,6 +82,38 @@ test(
     const secondCount = Number(secondMatch![1]);
 
     expect(secondCount).toBe(firstCount + 1);
+  }),
+);
+
+/**
+ * Under `dev: true` the R2 bucket is emulated by the local provider and the
+ * `r2_bucket` binding is served by the local workerd R2 simulator — no cloud
+ * bucket is ever created.
+ */
+test(
+  "AsyncWorker reads and writes the local R2 bucket",
+  Effect.gen(function* () {
+    const { asyncWorker } = yield* stack;
+    const response = yield* HttpClient.get(new URL("/r2", asyncWorker));
+    expect(response.status).toBe(200);
+    const body = (yield* response.json) as { text: string; keys: string[] };
+    expect(body.text).toBe("hello from r2");
+    expect(body.keys).toContain("hello.txt");
+  }),
+);
+
+/**
+ * Same for D1: the database is a local `dev:` row and queries run against
+ * the local workerd D1 simulator (DO SQLite).
+ */
+test(
+  "AsyncWorker queries the local D1 database",
+  Effect.gen(function* () {
+    const { asyncWorker } = yield* stack;
+    const response = yield* HttpClient.get(new URL("/d1", asyncWorker));
+    expect(response.status).toBe(200);
+    const body = (yield* response.json) as { text: string | null };
+    expect(body.text).toBe("hello from d1");
   }),
 );
 
@@ -165,7 +200,10 @@ test(
       ),
       Effect.retry({
         while: (error) => error._tag === "MessageNotFound",
-        schedule: Schedule.max([Schedule.spaced("250 millis"), Schedule.recurs(25)]),
+        schedule: Schedule.max([
+          Schedule.spaced("250 millis"),
+          Schedule.recurs(25),
+        ]),
       }),
     );
     expect(message).toMatchObject({
@@ -222,7 +260,10 @@ test(
       ),
       Effect.retry({
         while: (error) => error._tag === "MessageNotFound",
-        schedule: Schedule.max([Schedule.spaced("250 millis"), Schedule.recurs(25)]),
+        schedule: Schedule.max([
+          Schedule.spaced("250 millis"),
+          Schedule.recurs(25),
+        ]),
       }),
     );
     expect(message).toMatchObject({

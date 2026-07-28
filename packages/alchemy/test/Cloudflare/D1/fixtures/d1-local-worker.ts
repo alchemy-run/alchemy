@@ -1,0 +1,45 @@
+// Async (non-Effect) Worker that exercises the native D1 binding against
+// the local workerd simulator: exec / prepared statements / batch.
+interface Env {
+  DB: {
+    exec(sql: string): Promise<{ count: number }>;
+    prepare(sql: string): {
+      bind(...params: unknown[]): {
+        run(): Promise<{ success: boolean }>;
+        all<T>(): Promise<{ results: T[] }>;
+      };
+      run(): Promise<{ success: boolean }>;
+      all<T>(): Promise<{ results: T[] }>;
+      first<T>(): Promise<T | null>;
+    };
+  };
+}
+
+export default {
+  fetch: async (request: Request, env: Env) => {
+    const url = new URL(request.url);
+    if (url.pathname === "/roundtrip") {
+      await env.DB.exec(
+        "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
+      );
+      await env.DB.prepare("DELETE FROM users").run();
+      await env.DB.prepare("INSERT INTO users (name) VALUES (?)")
+        .bind("alice")
+        .run();
+      await env.DB.prepare("INSERT INTO users (name) VALUES (?)")
+        .bind("bob")
+        .run();
+      const all = await env.DB.prepare(
+        "SELECT name FROM users ORDER BY name",
+      ).all<{ name: string }>();
+      const first = await env.DB.prepare(
+        "SELECT COUNT(*) AS n FROM users",
+      ).first<{ n: number }>();
+      return Response.json({
+        names: all.results.map((r) => r.name),
+        count: first?.n ?? null,
+      });
+    }
+    return new Response("not found", { status: 404 });
+  },
+};
