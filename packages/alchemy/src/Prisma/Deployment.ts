@@ -55,7 +55,8 @@ export interface DeploymentProps {
    */
   portMapping?: { http?: number | null };
   /**
-   * Create the deployment by reusing the latest artifact instead of uploading code.
+   * Create the deployment by reusing the App's currently promoted artifact
+   * instead of uploading code. Requires an existing promoted deployment.
    */
   skipCodeUpload?: boolean;
   /**
@@ -128,6 +129,12 @@ export interface Deployment extends Resource<
 /**
  * A Prisma deployment owned by an App.
  *
+ * The Deployment Management API is experimental. This is the low-level
+ * resource: it can upload or reuse an artifact, start it, and promote it, but
+ * it does not provide `Prisma.Compute`'s preview/stable health checks or
+ * automatic rollback. Prefer `Prisma.Compute` for production application
+ * deployments.
+ *
  * Prisma's create-deployment API currently exposes neither an idempotency key
  * nor a caller-defined natural key. After a crash that loses state immediately
  * after creation, Alchemy deliberately does not adopt the App's latest
@@ -137,7 +144,7 @@ export interface Deployment extends Resource<
  *
  * @resource
  * @section Creating a Deployment
- * @example Fork the latest uploaded artifact
+ * @example Fork the currently promoted artifact
  * ```typescript
  * const deployment = yield* Prisma.Deployment("web-v2", {
  *   app: app.appId,

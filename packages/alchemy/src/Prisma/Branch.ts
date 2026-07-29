@@ -35,6 +35,7 @@ export interface BranchProps {
    * Promote this branch to be the project's default branch. Setting this to
    * `false` does not demote a current default because the Management API only
    * supports promotion; promoting another branch atomically demotes it.
+   * Promotion changes `isDefault`, not the branch's immutable `preview` role.
    *
    * @default false
    */
@@ -86,6 +87,14 @@ export interface Branch extends Resource<
 /**
  * A Prisma project branch for preview-class databases and compute resources.
  *
+ * The Branch Management API is experimental. A standalone `Prisma.Branch`
+ * is created with Prisma's immutable `preview` role because the owning project
+ * already has its project-owned `production` branch. `isDefault: true`
+ * changes which branch is the default without changing that role. On destroy,
+ * Alchemy restores the displaced default before deleting a promoted preview
+ * branch. The project-owned production branch cannot be managed as a
+ * standalone Branch resource.
+ *
  * @resource
  * @section Creating a Branch
  * @example Preview branch
@@ -93,6 +102,16 @@ export interface Branch extends Resource<
  * const branch = yield* Prisma.Branch("preview", {
  *   project: project.projectId,
  *   gitName: "feature/search", // optional — omitted, a stable name is generated
+ * });
+ * ```
+ *
+ * @section Promoting a Branch
+ * @example Make a preview branch the default
+ * ```typescript
+ * const release = yield* Prisma.Branch("release", {
+ *   project,
+ *   gitName: "release/next",
+ *   isDefault: true,
  * });
  * ```
  */

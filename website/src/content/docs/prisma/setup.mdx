@@ -10,9 +10,25 @@ cloud's:
 
 ```typescript
 // alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
 import * as Prisma from "alchemy/Prisma";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 
-providers: Layer.mergeAll(Cloudflare.providers(), Prisma.providers()),
+export default Alchemy.Stack(
+  "App",
+  {
+    providers: Layer.mergeAll(
+      Cloudflare.providers(),
+      Prisma.providers(),
+    ),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    // Declare Prisma and Cloudflare resources here.
+  }),
+);
 ```
 
 The next `alchemy login` adds a `Prisma` step with two options:
@@ -30,10 +46,10 @@ and switched.
 
 ## Local dev
 
-`bun alchemy dev` needs no credentials at all: the Prisma providers
-run against a local `@prisma/dev` Postgres, and every resource
-(project, database, connection) resolves to its local equivalent
-with the same output shape. See
+`bun alchemy dev` needs no Prisma credentials. Database resources run
+against a local `@prisma/dev` Postgres, Compute resources run their
+configured `dev.command`, and the remaining Prisma resources return
+compatible local outputs. See
 [Postgres](/prisma/data/postgres) for the dev database options.
 
 ## Next steps

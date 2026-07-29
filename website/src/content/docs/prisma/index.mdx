@@ -12,6 +12,13 @@ provision.
 
 New here? [Set up credentials](/prisma/setup) first.
 
+:::caution[Experimental Management API surface]
+The App, Deployment, Branch, environment-variable, custom-domain, and
+source-repository endpoints used by these resources are experimental.
+Their request and response shapes may change while Prisma develops the
+Management API.
+:::
+
 ## Resources
 
 A `Prisma.Project` is the top-level container. A `Prisma.Postgres`
@@ -32,17 +39,17 @@ const connection = yield* Prisma.Connection("api", {
 });
 ```
 
-Names are optional everywhere — omit them and alchemy generates
-stable physical names from the Stack, logical ID, and stage.
+Display names are optional for these resources — omit them and alchemy
+generates stable physical names from the Stack, logical ID, and stage.
 
 The connection exposes ready-to-use outputs — a conventional
 `databaseUrl`, direct and pooled connection strings, and parsed
 `origin` components for poolers like Hyperdrive. See
 [Connections](/prisma/data/connections).
 
-[Branches](/prisma/data/branches) group databases under git-style
-names — a preview branch per stage, promoted to default when it
-ships.
+[Branches](/prisma/data/branches) group databases and apps under
+git-style names. A standalone `Prisma.Branch` has Prisma's `preview`
+role even when promoted to be the project's default branch.
 
 ## Compute
 
@@ -67,8 +74,10 @@ const app = yield* Prisma.Compute("api", {
 });
 ```
 
-Deployments are verified against the health check before promotion
-and rolled back when it fails — see [Compute](/prisma/compute/apps).
+The candidate health check gates promotion. If the stable endpoint
+fails after promotion, alchemy attempts to restore the previous
+deployment and fails closed if recovery cannot converge. See
+[Deployments](/prisma/compute/deployments).
 
 ## Runtime bindings
 
@@ -108,4 +117,6 @@ Postgres providers:
 - [Project](/providers/prisma/project)
 - [Database](/providers/prisma/database)
 - [Connection](/providers/prisma/connection)
+- [Branch](/providers/prisma/branch)
 - [Compute](/providers/prisma/compute)
+- [SourceRepository](/providers/prisma/sourcerepository)

@@ -3,10 +3,18 @@ title: Branches
 description: Prisma branches group databases under git-style names — preview branches per stage, default-branch promotion, and database attachment.
 ---
 
-A `Prisma.Branch` groups databases under a git-style name inside a
-project. Branches are how a project separates production data from
-previews: the default branch carries the `production` role, every
-other branch is a `preview`.
+A `Prisma.Branch` groups databases and apps under a git-style name
+inside a project. Prisma tracks two separate properties:
+
+- `role` controls whether Compute resolves `production` or `preview`
+  environment variables.
+- `isDefault` identifies the branch new resources use when they omit
+  a branch.
+
+The first branch created with a project has the immutable
+`production` role. Additional branches have the `preview` role.
+Promoting a preview branch changes `isDefault`; it does not change
+that branch's role.
 
 ```typescript
 import * as Prisma from "alchemy/Prisma";
@@ -35,9 +43,9 @@ const previewDb = yield* Prisma.Postgres("preview-db", {
 });
 ```
 
-Compute apps attach the same way — an app on a preview branch gets
-the `preview` environment class, so its environment variables stay
-separate from production's.
+Compute apps attach the same way. Environment-variable scope follows
+the branch's `role`, not `isDefault`, so a promoted preview branch
+continues to use the `preview` class.
 
 ## A branch per stage
 
@@ -58,10 +66,10 @@ const branch = yield* Prisma.Branch("stage", {
 
 ## Default-branch promotion
 
-`isDefault: true` promotes the branch, atomically demoting the
-current default. The Management API only supports promotion — a
-demotion happens by promoting another branch — and alchemy records
-the displaced branch so destroying the resource can restore it:
+`isDefault: true` promotes the branch, atomically clearing the current
+default flag. The Management API only supports promotion — demotion
+happens by promoting another branch — and alchemy records the
+displaced branch so destroying the resource can restore it:
 
 ```typescript
 const release = yield* Prisma.Branch("release", {
@@ -71,8 +79,11 @@ const release = yield* Prisma.Branch("release", {
 });
 ```
 
-The production branch itself is owned by the project and cannot be
-deleted directly — delete the owning `Prisma.Project` instead.
+The original `production`-role branch is owned by the project and
+cannot be deleted through `Prisma.Branch`. A preview-role
+`Prisma.Branch` promoted to default remains owned by its Branch
+resource: on destroy, alchemy restores the displaced default and then
+deletes the promoted branch.
 
 ## Where next
 

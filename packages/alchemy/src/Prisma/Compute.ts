@@ -545,7 +545,10 @@ const isEffectNativeCompute = (props: ComputeProps) =>
   hasEffectNativeComputeInput(props);
 
 /**
- * A Prisma Compute deployment resource.
+ * Build and deploy an application to Prisma Compute.
+ *
+ * The App, Deployment, environment-variable, and custom-domain Management API
+ * endpoints used by this resource are experimental.
  *
  * Prisma's create-deployment API exposes neither an idempotency key nor a
  * caller-defined recovery key. If the API commits a deployment but its create
@@ -578,7 +581,7 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  *   },
  *   Effect.gen(function* () {
  *     return {
- *       fetch: HttpServerResponse.text("ok"),
+ *       fetch: Effect.succeed(HttpServerResponse.text("ok")),
  *     };
  *   }),
  * );
@@ -601,7 +604,7 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  *     return {
  *       fetch: Effect.gen(function* () {
  *         const users = yield* sql`SELECT * FROM users`;
- *         return HttpServerResponse.json(users);
+ *         return yield* HttpServerResponse.json(users);
  *       }),
  *     };
  *   }).pipe(Effect.provide(Prisma.ConnectBinding)),
@@ -620,7 +623,7 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  *   },
  *   port: 8080,
  *   env: {
- *     DATABASE_URL: database.directConnectionString,
+ *     DATABASE_URL: connection.databaseUrl,
  *   },
  *   destroyOldDeployment: true,
  * });

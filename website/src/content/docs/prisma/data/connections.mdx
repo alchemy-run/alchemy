@@ -101,8 +101,8 @@ them back as `Redacted` values.
 
 ## Rotation
 
-Set `rotate: true` to mint fresh credentials on the next deploy
-while keeping the connection's identity:
+Change `rotate` from `false` to `true` to mint fresh credentials on
+the next deploy while keeping the connection's identity:
 
 ```typescript
 const connection = yield* Prisma.Connection("api", {
@@ -111,8 +111,10 @@ const connection = yield* Prisma.Connection("api", {
 });
 ```
 
-Rotation revokes the previous key, so downstream consumers pick up
-the new secret on the same deploy through their bindings.
+Prisma attempts to revoke the previous credentials on a best-effort
+basis. Downstream consumers receive the new secret on the same deploy
+through their bindings. To rotate again, deploy once with
+`rotate: false`, then change it back to `true`.
 
 ## Where next
 

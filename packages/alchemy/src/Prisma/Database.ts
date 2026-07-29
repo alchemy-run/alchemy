@@ -150,8 +150,9 @@ export interface DatabaseProps {
   dev?: false | DatabaseDev;
   /**
    * Rotate the adopted database's default connection to recover its one-time
-   * credentials. Rotation revokes the previous key and may interrupt existing
-   * consumers, so adoption leaves credentials unset unless explicitly opted in.
+   * credentials. Prisma revokes the previous key on a best-effort basis and
+   * rotation may interrupt existing consumers, so adoption leaves credentials
+   * unset unless explicitly opted in.
    *
    * @default false
    */
@@ -230,15 +231,28 @@ export interface Database extends Resource<
 /**
  * A Prisma Postgres database inside a Prisma project.
  *
+ * Standalone `Prisma.Database` resources cannot be the project's default
+ * database. Use `Prisma.Project` when the project should own a default
+ * database. Project, region, and source changes require replacement; display
+ * name and branch attachment can converge in place. Destroying this resource
+ * deletes its database and data.
+ *
  * @resource
  * @section Creating a Database
  * @example Database in a project
  * ```typescript
  * const project = yield* Prisma.Project("app", { createDatabase: false });
  * const database = yield* Prisma.Database("db", {
- *   project: project.projectId,
- *   name: "production",
+ *   project,
  *   region: "us-east-1",
+ * });
+ * ```
+ *
+ * @example Database attached to a preview branch
+ * ```typescript
+ * const database = yield* Prisma.Database("preview-db", {
+ *   project,
+ *   branchId: preview.branchId,
  * });
  * ```
  */

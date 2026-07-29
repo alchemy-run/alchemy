@@ -4,8 +4,8 @@ description: Prisma Compute apps as Stack resources — framework builds or Effe
 ---
 
 `Prisma.Compute` deploys an application onto Prisma's managed
-runtime. One resource covers the whole path: build (optional),
-upload, deploy, health-check, promote — see
+runtime. One resource covers the whole path: optional build, artifact
+upload, deployment, health check, and promotion — see
 [Deployments](/prisma/compute/deployments) for the lifecycle.
 
 ## Framework apps
@@ -16,6 +16,9 @@ entrypoint starts the server:
 
 ```typescript
 import * as Prisma from "alchemy/Prisma";
+import * as SQL from "alchemy/SQL/Postgres";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 const app = yield* Prisma.Compute("api", {
   project,
@@ -67,12 +70,21 @@ export default Prisma.Compute(
 
 ## Custom domains
 
+Custom domains can only attach to an app on the project's current
+default branch. Creating the resource starts DNS and certificate
+provisioning; use `domain.dnsRecords` to configure DNS and inspect
+`domain.status` before directing production traffic:
+
 ```typescript
 const domain = yield* Prisma.CustomDomain("api-domain", {
   app,
   hostname: "api.example.com",
 });
 ```
+
+Changing the hostname or app in place is intentionally rejected.
+Create a second domain, verify DNS and TLS, cut traffic over, and then
+remove the old resource.
 
 ## Local dev
 
