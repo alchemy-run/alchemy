@@ -9,6 +9,7 @@
 import * as AI from "@/AI/index.ts";
 import { KernelMemory } from "@/AI/KernelMemory.ts";
 import { RuntimeContext } from "@/RuntimeContext.ts";
+import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
 import { describe, expect, it } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
@@ -93,10 +94,7 @@ describe("RunSocket (KernelMemory)", () => {
         // The short shutdown budget matters: Bun's graceful stop never
         // resolves for a connection that carried a WebSocket upgrade,
         // so the default would hold teardown for its full 20 seconds.
-        const BunHttp = yield* Effect.promise(
-          () => import("@effect/platform-bun/BunHttpServer"),
-        );
-        const server = yield* BunHttp.make({
+        const server = yield* BunHttpServer.make({
           port: 0,
           gracefulShutdownTimeout: Duration.millis(100),
         });
@@ -233,10 +231,7 @@ describe("RunSocket (KernelMemory)", () => {
       return Effect.gen(function* () {
         yield* Researcher;
         const gateway = yield* AI.AgentGateway;
-        const BunHttp = yield* Effect.promise(
-          () => import("@effect/platform-bun/BunHttpServer"),
-        );
-        const server = yield* BunHttp.make({
+        const server = yield* BunHttpServer.make({
           port: 0,
           gracefulShutdownTimeout: Duration.millis(100),
         });
