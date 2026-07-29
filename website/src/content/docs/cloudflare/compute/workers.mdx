@@ -491,9 +491,10 @@ canary can be active per script at a time.
 
 ### Gradual rollouts
 
-On a Worker that owns its script, `version.traffic` below 100 turns a
-deploy into a gradual rollout — the new version takes that share and
-the previously-live version keeps the rest:
+On a Worker that deploys as its own script (no `version.parent`),
+`version.traffic` below 100 turns a deploy into a gradual rollout —
+the new version takes that share and the previously-live version
+keeps the rest:
 
 ```typescript
 yield* Cloudflare.Worker("Api", {

@@ -14,10 +14,12 @@ another stage's Worker, and traffic-free preview versions.
 
 ## Roll out a deploy gradually
 
-On a Worker that owns its script, set `version.traffic` below 100. The
-deploy uploads the new version and creates a deployment that routes
-that share of traffic to it, while the previously-live version keeps
-the remainder:
+A plain `Cloudflare.Worker` deploys as its own script, and by default
+each deploy cuts all traffic over to the new version at once. Set
+`version.traffic` below 100 to make that cutover gradual: the deploy
+uploads the new code as a version of the same script and routes only
+that share of traffic to it, while the version from the previous
+deploy keeps the remainder:
 
 ```typescript
 // alchemy.run.ts
