@@ -1,5 +1,6 @@
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
+import { isLocalId } from "@/Cloudflare/LocalRuntime";
 import * as Test from "@/Test/Alchemy";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
 import { expect } from "alchemy-test";
@@ -1104,6 +1105,9 @@ const waitForBucketToBeDeleted = Effect.fn(function* (
   bucketName: string,
   accountId: string,
 ) {
+  // Dev-mode buckets are purely virtual (`dev:`-prefixed identity) — there
+  // is no cloud bucket to wait on, and the real API rejects the name.
+  if (isLocalId(bucketName)) return;
   yield* r2
     .getBucket({
       accountId,
