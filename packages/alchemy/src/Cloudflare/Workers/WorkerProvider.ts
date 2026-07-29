@@ -2367,11 +2367,10 @@ export const LiveWorkerProvider = () =>
             scriptName: parentName,
             metadata: {
               mainModule: bundle.main!,
-              bindings:
-                metadataBindings as unknown as workers.CreateScriptVersionRequest["metadata"]["bindings"],
+              bindings: metadataBindings,
               compatibilityDate: compatibility.date,
               compatibilityFlags: compatibility.flags,
-              cache: news.cache ?? getCacheBinding(bindings),
+              cacheOptions: news.cache ?? getCacheBinding(bindings),
               annotations:
                 alias !== undefined ||
                 version.message !== undefined ||
@@ -3012,11 +3011,10 @@ export const LiveWorkerProvider = () =>
               scriptName: name,
               metadata: {
                 mainModule: metadata.mainModule!,
-                bindings:
-                  metadata.bindings as unknown as workers.CreateScriptVersionRequest["metadata"]["bindings"],
+                bindings: metadata.bindings,
                 compatibilityDate: metadata.compatibilityDate,
                 compatibilityFlags: metadata.compatibilityFlags,
-                cache: metadata.cache,
+                cacheOptions: metadata.cacheOptions,
                 annotations:
                   news.version?.alias !== undefined ||
                   news.version?.message !== undefined ||
