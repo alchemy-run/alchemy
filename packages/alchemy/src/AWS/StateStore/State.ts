@@ -11,6 +11,7 @@ import { decodeFqn, encodeFqn } from "../../FQN.ts";
 import { STATE_STORE_VERSION } from "../../State/HttpStateApi.ts";
 import {
   State,
+  stateDecodeError,
   StateStoreError,
   type PersistedState,
   type StateService,
@@ -261,11 +262,7 @@ export const makeS3State = (options: S3StateOptions = {}) =>
                 Effect.flatMap((text) =>
                   Effect.try({
                     try: () => JSON.parse(text, reviver) as T,
-                    catch: (cause) =>
-                      new StateStoreError({
-                        message: `Failed to parse state object '${key}'`,
-                        cause: cause instanceof Error ? cause : undefined,
-                      }),
+                    catch: stateDecodeError(key),
                   }),
                 ),
               ),

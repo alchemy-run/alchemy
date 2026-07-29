@@ -7,7 +7,12 @@ import { decodeFqn, encodeFqn } from "../FQN.ts";
 import { recordStateStoreInit } from "../Telemetry/Metrics.ts";
 import { STATE_STORE_VERSION } from "./HttpStateApi.ts";
 import { resolveSecretCodec } from "./SecretCodec.ts";
-import { State, StateStoreError, type StateService } from "./State.ts";
+import {
+  State,
+  stateDecodeError,
+  StateStoreError,
+  type StateService,
+} from "./State.ts";
 import { encodeState, makeStateReviver } from "./StateEncoding.ts";
 
 export const localState = () =>
@@ -100,13 +105,7 @@ export const makeLocalState = () =>
           contents.trim().length === 0
             ? undefined
             : JSON.parse(contents, reviver),
-        catch: (cause) =>
-          new StateStoreError({
-            message: `Failed to decode state '${what}': ${
-              cause instanceof Error ? cause.message : String(cause)
-            }`,
-            cause: cause instanceof Error ? cause : undefined,
-          }),
+        catch: stateDecodeError(what),
       });
 
     const created = new Set<string>();

@@ -8,6 +8,7 @@ import { StateApi } from "./HttpStateApi.ts";
 
 import type { ReplacedResourceState, ResourceState } from "./ResourceState.ts";
 import {
+  stateDecodeError,
   StateStoreError,
   type PersistedState,
   type StateService,
@@ -94,16 +95,10 @@ export const makeHttpStateStore = ({
     // Encrypts Redacted values before they leave the process when
     // ALCHEMY_PASSWORD is set; decrypts them on read.
     const codec = yield* resolveSecretCodec;
-    const tryRevive = <T>(s: unknown) =>
+    const tryRevive = <T>(s: unknown, what: string) =>
       Effect.try({
         try: () => reviveStateRecursive(s, codec) as T,
-        catch: (cause) =>
-          new StateStoreError({
-            message: `Failed to decode state: ${
-              cause instanceof Error ? cause.message : String(cause)
-            }`,
-            cause: cause instanceof Error ? cause : undefined,
-          }),
+        catch: stateDecodeError(what),
       });
 
     const service: StateService = {
@@ -135,14 +130,14 @@ export const makeHttpStateStore = ({
             Effect.flatMap((s) =>
               s == null
                 ? Effect.succeed(undefined)
-                : tryRevive<ResourceState>(s),
+                : tryRevive<ResourceState>(s, request.fqn),
             ),
             mapStateStoreError,
           ),
       getReplacedResources: (request) =>
         state.getReplacedResources({ params: request }).pipe(
           Effect.flatMap((resources) =>
-            tryRevive<ReplacedResourceState[]>(resources),
+            tryRevive<ReplacedResourceState[]>(resources, "replaced resources"),
           ),
           mapStateStoreError,
         ),
@@ -192,7 +187,9 @@ export const makeHttpStateStore = ({
           })
           .pipe(
             Effect.flatMap((s) =>
-              s == null ? Effect.succeed(undefined) : tryRevive(s),
+              s == null
+                ? Effect.succeed(undefined)
+                : tryRevive(s, "__stack_output__"),
             ),
             mapStateStoreError,
           ),

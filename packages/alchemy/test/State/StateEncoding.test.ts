@@ -178,4 +178,86 @@ describe("StateEncoding secrets", () => {
         ),
       ),
   );
+
+  it.effect(
+    "migrates legacy unencrypted local state: reads plaintext markers, re-writes encrypted",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const stack = "state-encoding-migration-test";
+        const key = { stack, stage: "test", fqn: "worker" };
+        const file = path.join(
+          process.cwd(),
+          ".alchemy",
+          "state",
+          stack,
+          "test",
+          "worker.json",
+        );
+        const value: ResourceState = {
+          kind: "resource",
+          resourceType: "Test.Resource",
+          namespace: undefined,
+          fqn: "worker",
+          logicalId: "worker",
+          instanceId: "i-1",
+          providerVersion: 1,
+          status: "created",
+          downstream: [],
+          bindings: [],
+          props: { apiKey: Redacted.make("sk-live-super-secret") },
+          attr: { url: "https://example.com" },
+        };
+
+        // 1. The old world: a store built WITHOUT a password persists the
+        //    plaintext `__redacted__` marker — the exact on-disk format
+        //    every pre-ALCHEMY_PASSWORD deployment left behind.
+        const legacyStore = yield* makeLocalState().pipe(
+          Effect.provide(
+            ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })),
+          ),
+        );
+        yield* legacyStore.set({ ...key, value });
+        const legacyRaw = yield* fs.readFileString(file);
+        expect(legacyRaw).toContain(REDACTED_MARKER);
+        expect(legacyRaw).toContain("sk-live-super-secret");
+
+        // 2. The user sets ALCHEMY_PASSWORD: the legacy plaintext state
+        //    must still read (backwards compatibility).
+        const store = yield* makeLocalState().pipe(
+          Effect.provide(
+            ConfigProvider.layer(
+              ConfigProvider.fromEnv({
+                env: { ALCHEMY_PASSWORD: Redacted.value(PASSWORD) },
+              }),
+            ),
+          ),
+        );
+        const revived = (yield* store.get(key)) as ResourceState;
+        expect(
+          Redacted.value(
+            (revived.props as { apiKey: Redacted.Redacted<string> }).apiKey,
+          ),
+        ).toBe("sk-live-super-secret");
+
+        // 3. The next write (what any subsequent deploy does) migrates the
+        //    file to the encrypted envelope.
+        yield* store.set({ ...key, value: revived });
+        const migratedRaw = yield* fs.readFileString(file);
+        expect(migratedRaw).toContain(SECRET_MARKER);
+        expect(migratedRaw).not.toContain(REDACTED_MARKER);
+        expect(migratedRaw).not.toContain("sk-live-super-secret");
+
+        // 4. The migrated state round-trips.
+        const migrated = (yield* store.get(key)) as ResourceState;
+        expect(
+          Redacted.value(
+            (migrated.props as { apiKey: Redacted.Redacted<string> }).apiKey,
+          ),
+        ).toBe("sk-live-super-secret");
+
+        yield* store.deleteStack({ stack });
+      }).pipe(Effect.provide(PlatformServices)),
+  );
 });
