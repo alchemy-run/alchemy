@@ -617,7 +617,7 @@ test.provider(
             shell: true,
             cwd,
             outdir: "dist",
-            url: false,
+            workersDev: false,
             env: {
               FROM_STRING: "plain",
               FROM_CONFIG: Config.string("STATICSITE_ENV_TEST"),

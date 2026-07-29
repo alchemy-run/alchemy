@@ -1836,8 +1836,7 @@ export default {
           Effect.gen(function* () {
             return yield* Cloudflare.Worker("NodeCompatDefault", {
               main: workerPath,
-              url: true,
-              subdomain: { enabled: true, previewsEnabled: true },
+              workersDev: true,
             });
           }),
         );
