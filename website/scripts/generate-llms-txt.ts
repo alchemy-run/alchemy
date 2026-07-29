@@ -273,6 +273,10 @@ const SECTIONS: Section[] = [
     pages: { directory: "aws/messaging" },
   },
   {
+    heading: "AWS — Email",
+    pages: { directory: "aws/email" },
+  },
+  {
     heading: "AWS — Security & secrets",
     pages: { directory: "aws/security" },
   },
