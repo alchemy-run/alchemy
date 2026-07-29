@@ -446,20 +446,12 @@ const toRequestBody = (news: ApplicationProps) => ({
 });
 
 /**
- * Distilled types `getApp`/`listApps` results as a union whose second
- * variant omits the optional configuration fields — normalize to a single
- * partial shape.
- */
-type FullApp = Extract<ObservedApp, { trafficType: unknown }>;
-const asFull = (app: ObservedApp): Partial<FullApp> & ObservedApp => app;
-
-/**
  * Compare observed cloud state against the desired props. Fields the user
  * left unset are only considered dirty when the observed value differs
  * from the API default, so a no-op deploy skips the PUT entirely.
  */
 const isDirty = (observed: ObservedApp, news: ApplicationProps): boolean => {
-  const o = asFull(observed);
+  const o = observed;
   return (
     o.dns.name !== news.dns.name ||
     o.dns.type !== news.dns.type ||
@@ -478,7 +470,7 @@ const isDirty = (observed: ObservedApp, news: ApplicationProps): boolean => {
   );
 };
 
-const edgeIpsDirty = (o: Partial<FullApp>, desired: EdgeIps): boolean => {
+const edgeIpsDirty = (o: ObservedApp, desired: EdgeIps): boolean => {
   const observed = o.edgeIps ?? {};
   const observedIps =
     "ips" in observed ? ((observed.ips ?? []) as readonly string[]) : [];
@@ -502,7 +494,7 @@ const toAttributes = (
   app: ObservedApp | spectrum.CreateAppResponse | spectrum.UpdateAppResponse,
   zoneId: string,
 ): ApplicationAttributes => {
-  const a = asFull(app as ObservedApp);
+  const a = app;
   return {
     appId: a.id,
     zoneId,
