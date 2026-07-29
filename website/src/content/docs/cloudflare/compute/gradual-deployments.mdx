@@ -40,6 +40,50 @@ no previous version to split with. `traffic: 0` uploads the version
 without touching the live deployment at all — the equivalent of
 `wrangler versions upload`.
 
+## Ramp from CI
+
+Hard-coding the percentage means every ramp step is a code change.
+`alchemy.run.ts` is a program, so read the percentage from the
+environment instead:
+
+```typescript
+// alchemy.run.ts
+yield* Cloudflare.Worker("Api", {
+  main: "./src/api.ts",
+  version: {
+    traffic: process.env.API_TRAFFIC ? Number(process.env.API_TRAFFIC) : 100,
+  },
+});
+```
+
+Expose it as a workflow input and ramping becomes re-running the same
+workflow with a new number:
+
+```yaml
+# .github/workflows/deploy.yml
+on:
+  workflow_dispatch:
+    inputs:
+      traffic:
+        description: "Traffic % for the new version"
+        default: "100"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bun alchemy deploy
+        env:
+          API_TRAFFIC: ${{ inputs.traffic }}
+```
+
+Deploy at `10`, watch your metrics, re-run at `50`, then promote by
+re-running with the default `100`. Run each ramp step from the same
+ref as the initial deploy — a re-run from a moving branch would ship
+whatever has landed since at the new percentage, which is a new
+rollout, not a ramp.
+
 ## Roll back
 
 A rollout is just a deployment pointing at two versions, so rolling
