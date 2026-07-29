@@ -10,8 +10,8 @@ it depends on the orchestrator you pick at creation:
 | | Slurm (default) | EKS (`orchestrator: { Eks }`) |
 |---|---|---|
 | Provision | [`alchemy.run.ts`](./alchemy.run.ts) | [`eks.run.ts`](./eks.run.ts) |
-| Low-level workloads | `ssm start-session` → `sbatch` | `AWS.EKS.Manifest` (or `kubectl`) |
-| High-level workloads | — (no submission API) | `AWS.EKS.Job` / `AWS.EKS.Deployment` with the `hyperpod:` prop |
+| Low-level workloads | `ssm start-session` → `sbatch` | `Kubernetes.Manifest` (or `kubectl`) |
+| High-level workloads | — (no submission API) | `Kubernetes.Job` / `Kubernetes.Deployment` with `AWS.EKS.hyperpod(...)` |
 | Governance | Slurm accounting | `ClusterSchedulerConfig` + `ComputeQuota` (Kueue) |
 
 ## The Slurm stack (`alchemy.run.ts`)
@@ -51,7 +51,7 @@ sbatch --nodes=1 train.sbatch
   and the research team's compute quota. `LifeCycleConfig` is required
   here too — the API enforces it for EKS-orchestrated instance groups.
 - **Low level** (`eks.run.ts`) — a raw batch/v1 Job applied with
-  `AWS.EKS.Manifest`, pinned to HyperPod nodes with the well-known labels
+  `Kubernetes.Manifest`, pinned to HyperPod nodes with the well-known labels
   and submitted through governance with the Kueue labels:
 
   ```typescript
@@ -67,26 +67,27 @@ sbatch --nodes=1 train.sbatch
   ```
 
 - **High level** ([`src/TrainJob.ts`](./src/TrainJob.ts)) — an effectful
-  `AWS.EKS.Job` bundled from TypeScript. The `hyperpod:` prop references
+  `Kubernetes.Job` bundled from TypeScript. The spread `AWS.EKS.hyperpod(...)`
+  helper references
   **resources through the graph**: the instance-group keys carry through
   to the cluster's attributes as types (a typo'd name is a compile
   error), and the quota resource derives the namespace, Kueue labels, and
   ordering:
 
   ```typescript
-  yield* AWS.EKS.Job("TrainJob", {
+  yield* Kubernetes.Job("TrainJob", {
     cluster: eks,
     main: import.meta.url,
-    hyperpod: {
+    ...AWS.EKS.hyperpod({
       instanceGroup: hyperpod.instanceGroups.workers, // key-typed group ref
       quota: researchQuota,      // → hyperpod-ns-research + Kueue queue label
       priorityClass: "training", // → training-priority
-    },
+    }),
   });
   ```
 
   Bindings resolve in init and land IAM on the pod-identity role, exactly
-  like any other EKS Job or Deployment.
+  like any other Kubernetes Job or Deployment on EKS.
 
 ```sh
 bun alchemy deploy ./eks.run.ts    # EKS ~10-15 min + HyperPod ~10-20 min

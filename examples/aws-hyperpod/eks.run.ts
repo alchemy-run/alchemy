@@ -5,26 +5,28 @@
  *   task governance (the amazon-sagemaker-hyperpod-taskgovernance add-on,
  *   an `AWS.SageMaker.ClusterSchedulerConfig` policy, and a team
  *   `AWS.SageMaker.ComputeQuota`),
- * - LOW LEVEL: a raw batch/v1 Job applied via `AWS.EKS.Manifest`, pinned
+ * - LOW LEVEL: a raw batch/v1 Job applied via `Kubernetes.Manifest`, pinned
  *   to HyperPod nodes with the well-known node labels and submitted
  *   through task governance with the Kueue labels (below),
- * - HIGH LEVEL: `src/TrainJob.ts`, an effectful `AWS.EKS.Job` bundled from
- *   TypeScript and pinned + governed via the `hyperpod:` prop.
+ * - HIGH LEVEL: `src/TrainJob.ts`, an effectful `Kubernetes.Job` bundled from
+ *   TypeScript and pinned + governed via the spread `AWS.EKS.hyperpod(...)` helper.
  *
  * Deploy with `bun alchemy deploy ./eks.run.ts`. The EKS control plane
  * takes ~10-15 minutes and the HyperPod cluster another ~10-20.
  */
 import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
+import * as Kubernetes from "alchemy/Kubernetes";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { HyperPodEksInfra } from "./src/eks-infra.ts";
 import TrainJob from "./src/TrainJob.ts";
 
 export default Alchemy.Stack(
   "AwsHyperPodEksExample",
   {
-    providers: AWS.providers(),
+    providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()),
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {
@@ -35,7 +37,7 @@ export default Alchemy.Stack(
     // governed: it runs in the research team's namespace (created by the
     // ComputeQuota) and carries the Kueue queue + priority labels, so
     // HyperPod task governance arbitrates it against the team's quota.
-    const governedJob = yield* AWS.EKS.Manifest("GovernedJob", {
+    const governedJob = yield* Kubernetes.Manifest("GovernedJob", {
       cluster: eks,
       manifest: {
         apiVersion: "batch/v1",
@@ -72,7 +74,7 @@ export default Alchemy.Stack(
     });
 
     // ── HIGH LEVEL: the effectful Job (bundled TypeScript, pinned +
-    // governed via the `hyperpod:` prop). See src/TrainJob.ts.
+    // governed via the spread `AWS.EKS.hyperpod(...)` helper). See src/TrainJob.ts.
     const trainJob = yield* TrainJob;
 
     return {

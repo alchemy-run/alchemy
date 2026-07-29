@@ -121,6 +121,12 @@
       "worker": "./src/Docker/index.ts",
       "import": "./lib/Docker/index.js"
     },
+    "./Kubernetes": {
+      "types": "./lib/Kubernetes/index.d.ts",
+      "bun": "./src/Kubernetes/index.ts",
+      "worker": "./src/Kubernetes/index.ts",
+      "import": "./lib/Kubernetes/index.js"
+    },
     "./ContentType": {
       "types": "./lib/ContentType.d.ts",
       "bun": "./src/ContentType.ts",

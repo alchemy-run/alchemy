@@ -1,4 +1,5 @@
 import * as AWS from "alchemy/AWS";
+import * as Kubernetes from "alchemy/Kubernetes";
 import * as Effect from "effect/Effect";
 import { EntriesTable, GuestbookCluster, GuestbookNamespace } from "./infra.ts";
 
@@ -9,7 +10,7 @@ const seedEntries = [
 ];
 
 /**
- * A one-shot `AWS.EKS.Job` in the INLINE EFFECT form: props + an init Effect
+ * A one-shot `Kubernetes.Job` in the INLINE EFFECT form: props + an init Effect
  * whose impl returns `{ run }` — a one-shot entry that executes to
  * completion inside the pod, after which the process exits (the Kubernetes
  * analog of `AWS.ECS.Task`).
@@ -23,7 +24,7 @@ const seedEntries = [
  * Adding `schedule: "0 3 * * *"` to the props would synthesize a CronJob
  * instead.
  */
-export default AWS.EKS.Job(
+export default Kubernetes.Job(
   "SeedJob",
   // Props are themselves an Effect so they can reference shared resources.
   Effect.gen(function* () {

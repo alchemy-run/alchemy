@@ -508,11 +508,7 @@ export const providers = () =>
       EKS.AccessEntry,
       EKS.Addon,
       EKS.Cluster,
-      EKS.Deployment,
       EKS.FargateProfile,
-      EKS.HelmChart,
-      EKS.Job,
-      EKS.Manifest,
       EKS.Nodegroup,
       EKS.PodIdentityAssociation,
       ElastiCache.ServerlessCache,
@@ -1169,11 +1165,7 @@ export const providers = () =>
           EKS.AccessEntryProvider(),
           EKS.AddonProvider(),
           EKS.ClusterProvider(),
-          EKS.DeploymentProvider(),
           EKS.FargateProfileProvider(),
-          EKS.HelmChartProvider(),
-          EKS.JobProvider(),
-          EKS.ManifestProvider(),
           EKS.NodegroupProvider(),
           EKS.PodIdentityAssociationProvider(),
           ElastiCache.ServerlessCacheProvider(),
@@ -1660,6 +1652,10 @@ export const providers = () =>
         ),
       ),
     ),
+    // The `aws-eks` Kubernetes cluster adapter is provideMerged (not just
+    // provided) so the cluster-agnostic `Kubernetes.*` workload providers
+    // can resolve it dynamically from the ambient stack context.
+    Layer.provideMerge(EKS.EksKubernetesAdapter()),
     Layer.provideMerge(
       Layer.mergeAll(
         Command.providers(),

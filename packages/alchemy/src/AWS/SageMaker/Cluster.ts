@@ -271,20 +271,20 @@ export type ClusterOf<Groups> = Omit<Cluster, "instanceGroups"> & {
  *
  * @example High level: an effectful Job pinned to HyperPod nodes
  * ```typescript
- * // AWS.EKS.Job / AWS.EKS.Deployment run on HyperPod via the orchestrating
- * // EKS cluster; the `hyperpod` prop derives the node selector, namespace,
- * // and Kueue labels — pass the ComputeQuota resource to submit through
- * // task governance.
- * const evaluate = yield* AWS.EKS.Job(
+ * // Kubernetes.Job / Kubernetes.Deployment run on HyperPod via the
+ * // orchestrating EKS cluster; spreading `AWS.EKS.hyperpod(...)` derives
+ * // the node selector, namespace, and Kueue labels — pass the
+ * // ComputeQuota resource to submit through task governance.
+ * const evaluate = yield* Kubernetes.Job(
  *   "Evaluate",
  *   {
  *     cluster: eksCluster,
  *     main: import.meta.url,
- *     hyperpod: {
+ *     ...AWS.EKS.hyperpod({
  *       instanceGroup: "workers",
  *       quota,
  *       priorityClass: "training",
- *     },
+ *     }),
  *   },
  *   Effect.gen(function* () {
  *     const putItem = yield* AWS.DynamoDB.PutItem(resultsTable);
@@ -310,7 +310,8 @@ export type ClusterOf<Groups> = Omit<Cluster, "instanceGroups"> & {
  * });
  *
  * // Creates the hyperpod-ns-research namespace + Kueue LocalQueue that
- * // `hyperpod: { quota }` on an EKS Job/Deployment submits into.
+ * // `AWS.EKS.hyperpod({ quota })` on a Kubernetes Job/Deployment submits
+ * // into.
  * const quota = yield* AWS.SageMaker.ComputeQuota("ResearchQuota", {
  *   clusterArn: hyperpod.clusterArn,
  *   computeQuotaTarget: { TeamName: "research", FairShareWeight: 10 },
