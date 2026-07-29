@@ -382,6 +382,7 @@ import { BunServices } from "@effect/platform-bun";
 import { BunHttpServer } from "alchemy/Http";
 import { Stack } from "alchemy/Stack";
 import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
+import { provideProcessTelemetry } from "alchemy/Telemetry";
 import * as Context from "effect/Context";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -414,8 +415,15 @@ const platform = Layer.mergeAll(
 // chain so EKS Pod Identity's container-credentials endpoint
 // (AWS_CONTAINER_CREDENTIALS_FULL_URI + token file) resolves inside the pod.
 const program = tag.pipe(
-  Effect.flatMap((host) => host.RuntimeContext.exports),
-  Effect.flatMap((exports) => exports.program),
+  // Process-lifetime telemetry: built once into the root scope; exporters
+  // batch on their intervals and flush when the scope closes on graceful
+  // shutdown.
+  Effect.flatMap((host) =>
+    host.RuntimeContext.exports.pipe(
+      Effect.flatMap((exports) => exports.program),
+      provideProcessTelemetry(host.RuntimeContext),
+    ),
+  ),
   Effect.provide(
     layer.pipe(Layer.provideMerge(Layer.effect(
       Stack,

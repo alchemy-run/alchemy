@@ -2,14 +2,19 @@ import * as AWS from "@/AWS";
 import { SecurityGroup } from "@/AWS/EC2";
 import { Cluster } from "@/AWS/ECS/Cluster.ts";
 import { Service } from "@/AWS/ECS/Service.ts";
+import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Test from "@/Test/Alchemy";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import { expect } from "alchemy-test";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as pathe from "pathe";
 import { getDefaultVpcNetwork } from "../DefaultVpc.ts";
+import type { OtelSink } from "./fixtures/otel-collector-worker.ts";
 import TestTask from "./fixtures/task.ts";
 import {
   E2E_CLUSTER_NAME,
@@ -18,7 +23,25 @@ import {
   scanTaskE2EOrphans,
 } from "./reclaimTaskE2EOrphans.ts";
 
-const { test } = Test.make({ providers: AWS.providers() });
+const { test } = Test.make({
+  providers: Layer.mergeAll(AWS.providers(), Cloudflare.providers()),
+});
+
+// The OTLP sink the task exports to (a workers.dev URL is reachable from
+// Fargate). Declared identically in both deploy steps so the second deploy
+// keeps it.
+const collectorMain = pathe.resolve(
+  import.meta.dirname,
+  "fixtures/otel-collector-worker.ts",
+);
+const collectorWorker = () =>
+  Cloudflare.Worker("EcsOtelCollector", {
+    main: collectorMain,
+    env: {
+      SINK: Cloudflare.DurableObject<OtelSink>("OtelSink"),
+    },
+    compatibility: { date: "2024-09-23" },
+  });
 
 // Full end-to-end: build + push the bundled Task image, run it on Fargate
 // behind an Alchemy-managed public ALB, and prove over HTTP that (a) the
@@ -57,77 +80,98 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
       }
       const publicSubnetIds = subnetIds.slice(0, 2);
 
+      // Deploy the OTLP collector first: the task fixture resolves
+      // `COLLECTOR_URL` from the deployer's config at deploy time.
+      const collector = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* collectorWorker();
+        }),
+      );
+      const collected = `${collector.url}/collected`;
+
+      const currentConfig = yield* ConfigProvider.ConfigProvider;
       const {
         url,
         targetGroupArn,
         clusterArn,
         serviceName,
         taskDefinitionArn,
-      } = yield* stack.deploy(
-        Effect.gen(function* () {
-          // The default VPC supplies public routing and subnets; this managed
-          // security group remains isolated to the test and is swept exactly.
-          const securityGroup = yield* SecurityGroup("EcsE2ESg", {
-            vpcId,
-            description: "alchemy ecs task e2e",
-            ingress: [
-              {
-                ipProtocol: "tcp",
-                fromPort: 80,
-                toPort: 80,
-                cidrIpv4: "0.0.0.0/0",
-                description: "ALB ingress",
+      } = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            yield* collectorWorker();
+            // The default VPC supplies public routing and subnets; this managed
+            // security group remains isolated to the test and is swept exactly.
+            const securityGroup = yield* SecurityGroup("EcsE2ESg", {
+              vpcId,
+              description: "alchemy ecs task e2e",
+              ingress: [
+                {
+                  ipProtocol: "tcp",
+                  fromPort: 80,
+                  toPort: 80,
+                  cidrIpv4: "0.0.0.0/0",
+                  description: "ALB ingress",
+                },
+                {
+                  ipProtocol: "tcp",
+                  fromPort: 3000,
+                  toPort: 3000,
+                  cidrIpv4: "0.0.0.0/0",
+                  description: "container traffic",
+                },
+              ],
+              egress: [
+                {
+                  ipProtocol: "-1",
+                  cidrIpv4: "0.0.0.0/0",
+                  description: "all outbound",
+                },
+              ],
+            });
+
+            const cluster = yield* Cluster("EcsE2ECluster", {
+              clusterName: E2E_CLUSTER_NAME,
+            });
+
+            // The bundled long-running Task (builds + pushes the image).
+            const task = yield* TestTask;
+
+            const service = yield* Service("EcsE2EService", {
+              cluster,
+              task: {
+                taskDefinitionArn: task.taskDefinitionArn,
+                containerName: task.containerName,
+                port: task.port,
               },
-              {
-                ipProtocol: "tcp",
-                fromPort: 3000,
-                toPort: 3000,
-                cidrIpv4: "0.0.0.0/0",
-                description: "container traffic",
-              },
-            ],
-            egress: [
-              {
-                ipProtocol: "-1",
-                cidrIpv4: "0.0.0.0/0",
-                description: "all outbound",
-              },
-            ],
-          });
+              desiredCount: 1,
+              public: true,
+              listenerPort: 80,
+              healthCheckPath: "/health",
+              vpcId,
+              subnets: publicSubnetIds,
+              securityGroups: [securityGroup.groupId],
+              assignPublicIp: true,
+            });
 
-          const cluster = yield* Cluster("EcsE2ECluster", {
-            clusterName: E2E_CLUSTER_NAME,
-          });
-
-          // The bundled long-running Task (builds + pushes the image).
-          const task = yield* TestTask;
-
-          const service = yield* Service("EcsE2EService", {
-            cluster,
-            task: {
-              taskDefinitionArn: task.taskDefinitionArn,
-              containerName: task.containerName,
-              port: task.port,
-            },
-            desiredCount: 1,
-            public: true,
-            listenerPort: 80,
-            healthCheckPath: "/health",
-            vpcId,
-            subnets: publicSubnetIds,
-            securityGroups: [securityGroup.groupId],
-            assignPublicIp: true,
-          });
-
-          return {
-            url: service.url,
-            targetGroupArn: service.targetGroupArn,
-            clusterArn: service.clusterArn,
-            serviceName: service.serviceName,
-            taskDefinitionArn: service.taskDefinitionArn,
-          };
-        }),
-      );
+            return {
+              url: service.url,
+              targetGroupArn: service.targetGroupArn,
+              clusterArn: service.clusterArn,
+              serviceName: service.serviceName,
+              taskDefinitionArn: service.taskDefinitionArn,
+            };
+          }),
+        )
+        .pipe(
+          Effect.provideService(
+            ConfigProvider.ConfigProvider,
+            ConfigProvider.orElse(
+              ConfigProvider.fromUnknown({ COLLECTOR_URL: collector.url }),
+              currentConfig,
+            ),
+          ),
+        );
 
       expect(url).toBeTruthy();
       expect(targetGroupArn).toBeTruthy();
@@ -180,6 +224,59 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
       yield* Effect.sleep("3 seconds");
       const second = yield* readTicks;
       expect(second).toBeGreaterThan(first);
+
+      // Process-mode telemetry: spans from SEPARATE requests must arrive in
+      // one batched traces payload (interval batching on the process root
+      // scope) — a per-request flush would put each span in its own POST
+      // and the pair would never share a payload item. Retry attempts with
+      // fresh tags in case a pair straddles a 5s export window.
+      const fetchCollected = HttpClient.get(collected).pipe(
+        Effect.flatMap((res) => res.json),
+        Effect.map(
+          (body) =>
+            (body as { items: { signal: string; payload: unknown }[] }).items,
+        ),
+      );
+      const attemptBatch = (i: number) =>
+        Effect.gen(function* () {
+          yield* HttpClient.get(`${url}/work?tag=a${i}`);
+          yield* HttpClient.get(`${url}/work?tag=b${i}`);
+          return yield* fetchCollected.pipe(
+            Effect.map((items) =>
+              items.some((item) => {
+                if (item.signal !== "traces") return false;
+                const payload = JSON.stringify(item.payload);
+                return (
+                  payload.includes(`work:a${i}`) &&
+                  payload.includes(`work:b${i}`)
+                );
+              }),
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("3 seconds"),
+              until: (found): boolean => found,
+              times: 8,
+            }),
+            Effect.catchCause(() => Effect.succeed(false)),
+          );
+        });
+      let batched = false;
+      for (let i = 0; i < 3 && !batched; i++) {
+        batched = yield* attemptBatch(i);
+      }
+      expect(batched).toBe(true);
+
+      // Logs from the same requests ship through the process-mode logger.
+      const items = yield* fetchCollected;
+      expect(
+        items.some(
+          (item) =>
+            item.signal === "logs" &&
+            JSON.stringify(item.payload).includes("ecs-work-log:"),
+        ),
+      ).toBe(true);
+      // And the process-mode resource attributes are stamped.
+      expect(JSON.stringify(items)).toContain("otel-ecs-e2e");
 
       yield* stack.destroy();
 

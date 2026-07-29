@@ -51,6 +51,41 @@ test.provider("diff pulls again unless alwaysPull is disabled", () =>
   }),
 );
 
+test.provider("diff pulls again when Docker context changes", () =>
+  Effect.gen(function* () {
+    const provider = yield* Provider.findProvider(Docker.RemoteImage);
+    const output = {
+      imageRef: "nginx:alpine",
+      imageId: "sha256:0",
+      createdAt: 0,
+      name: "nginx",
+      tag: "alpine",
+    };
+
+    const changed = yield* provider.diff!({
+      id: "nginx",
+      fqn: "nginx",
+      instanceId: "instance",
+      olds: {
+        name: "nginx",
+        tag: "alpine",
+        alwaysPull: false,
+        context: "default",
+      },
+      news: {
+        name: "nginx",
+        tag: "alpine",
+        alwaysPull: false,
+        context: "remote-build",
+      },
+      oldBindings: [],
+      newBindings: [],
+      output,
+    });
+    expect(changed).toEqual({ action: "update" });
+  }),
+);
+
 describe("Docker.RemoteImage", { concurrent: false }, () => {
   test.provider.skipIf(!isDockerReady)(
     "pulls a Docker image reference",

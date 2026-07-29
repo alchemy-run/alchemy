@@ -5,7 +5,7 @@ import * as Artifacts from "../Artifacts.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { Docker, dockerPhysicalName } from "./Docker.ts";
+import { Docker, dockerContextName, dockerPhysicalName } from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
 import {
   type ImageRegistry,
@@ -55,6 +55,8 @@ export interface ImageProps {
   registry?: ImageRegistry;
   /** Skip registry push even when `registry` is set. @default false */
   skipPush?: boolean;
+  /** Docker context name or context resource. */
+  context?: Docker.ContextRef;
   /** Docker build configuration. */
   build: DockerBuildOptions;
 }
@@ -121,6 +123,16 @@ export interface Image extends Resource<
  *   },
  * });
  * ```
+ *
+ * @section Docker Context
+ * @example Build in a named Docker context
+ * ```typescript
+ * const image = yield* Docker.Image("app", {
+ *   name: "my-app",
+ *   context: "remote-build",
+ *   build: { context: "./app" },
+ * });
+ * ```
  */
 export const Image = Resource<Image>("Docker.Image");
 
@@ -138,6 +150,7 @@ export const ImageProvider = () =>
         instanceId: string,
       ) {
         const name = yield* dockerPhysicalName(id, props, instanceId);
+        const engineContext = dockerContextName(props.context);
         const tag = props.tag ?? "latest";
         const ref = `${name}:${tag}`;
 
@@ -152,6 +165,7 @@ export const ImageProvider = () =>
           "cache-from": props.build.cacheFrom,
           "cache-to": props.build.cacheTo,
           args: props.build.options,
+          engineContext,
         });
 
         // Read the freshly built image's id and creation time straight from
@@ -159,7 +173,7 @@ export const ImageProvider = () =>
         return {
           name,
           tag,
-          image: yield* docker.image.inspect(ref),
+          image: yield* docker.image.inspect(ref, engineContext),
           ref,
         };
       }, Artifacts.cached("build"));
@@ -188,13 +202,14 @@ export const ImageProvider = () =>
       return Image.Provider.of({
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, instanceId, olds, output }) {
+          const context = dockerContextName(olds.context);
           const ref =
             output?.imageRef ??
             (yield* dockerPhysicalName(id, olds, instanceId).pipe(
               Effect.map((name) => `${name}:${olds.tag ?? "latest"}`),
             ));
           const image = yield* docker.image
-            .inspect(ref)
+            .inspect(ref, context)
             .pipe(
               Effect.catchReason(
                 "PlatformError",
@@ -212,14 +227,20 @@ export const ImageProvider = () =>
             builtAt: output?.builtAt ?? parseCreatedAt(image.Created),
           };
         }),
-        diff: Effect.fn(function* ({ id, instanceId, news, output }) {
+        diff: Effect.fn(function* ({ id, instanceId, news, output, olds }) {
           if (!isResolved(news) || !output) return undefined;
+          if (
+            dockerContextName(olds.context) !== dockerContextName(news.context)
+          ) {
+            return { action: "update" };
+          }
           const { image } = yield* buildAndInspectImage(id, news, instanceId);
           if (output?.imageId !== image.Id) {
             return { action: "update" };
           }
         }),
         reconcile: Effect.fn(function* ({ id, instanceId, news, session }) {
+          const context = dockerContextName(news.context);
           const { name, tag, image, ref } = yield* buildAndInspectImage(
             id,
             news,
@@ -234,7 +255,7 @@ export const ImageProvider = () =>
             );
             targetImageRef = withRegistryHost(ref, news.registry);
             repoDigest = yield* docker.image
-              .push(ref, news.registry)
+              .push(ref, news.registry, undefined, context)
               .pipe(
                 Effect.map((result) => parseRepoDigest(ref, result.stdout)),
               );
@@ -249,9 +270,9 @@ export const ImageProvider = () =>
             builtAt: parseCreatedAt(image.Created),
           };
         }),
-        delete: Effect.fn(({ output }) =>
+        delete: Effect.fn(({ olds, output }) =>
           docker.image
-            .remove(output.imageRef)
+            .remove(output.imageRef, undefined, dockerContextName(olds.context))
             .pipe(
               Effect.catchReason(
                 "PlatformError",

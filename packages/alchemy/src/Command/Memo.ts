@@ -16,10 +16,18 @@ import { sha256, sha256Object } from "../Util/sha256.ts";
  */
 export interface MemoOptions {
   /**
-   * Glob patterns of files to hash. Paths are relative to the working directory.
+   * Glob patterns of files to hash. Paths are relative to the working
+   * directory and may reach outside it with `../` segments — useful in a
+   * monorepo where the build consumes sibling workspace packages that the
+   * default (files under the working directory) does not cover.
+   *
+   * Note: providing `include` (or `exclude`) flips the {@link lockfile}
+   * default to `false` — pair it with `lockfile: true` to keep rebuilding
+   * when dependencies change.
    *
    * @default ["**\/*"] (all files, filtered by `exclude`)
    * @example ["src/**", "package.json", "tsconfig.json"]
+   * @example ["**\/*", "../env/src/**"] (also rebuild when a sibling workspace package changes)
    */
   include?: string[];
   /**
@@ -98,7 +106,16 @@ const Memo = Effect.gen(function* () {
     const resolvedCwd = cwd ? path.resolve(cwd) : process.cwd();
     return {
       cwd: resolvedCwd,
-      include: options.include ?? ["**/*"],
+      // Rewrite absolute include patterns to cwd-relative ones: fast-glob
+      // silently drops an absolute pattern's matches when the same call also
+      // contains relative patterns, and relative patterns keep the matched
+      // keys (and therefore the memo hash) free of machine-specific path
+      // prefixes.
+      include: (options.include ?? ["**/*"]).map((pattern) =>
+        path.isAbsolute(pattern)
+          ? path.relative(resolvedCwd, pattern).replaceAll("\\", "/")
+          : pattern,
+      ),
       exclude:
         options.exclude ??
         (yield* readGitIgnoreRules(resolvedCwd).pipe(
@@ -141,7 +158,14 @@ const Memo = Effect.gen(function* () {
     if (lockfile && !files.includes(lockfile)) {
       files.push(lockfile);
     }
-    return files.sort();
+    // Absolute include patterns produce absolute matches; normalize them to
+    // cwd-relative (like the lockfile above) so `hashFiles` resolves them
+    // correctly and machine-specific path prefixes never leak into the hash.
+    return files
+      .map((file) =>
+        path.isAbsolute(file) ? path.relative(options.cwd, file) : file,
+      )
+      .sort();
   });
 
   const hashFiles = Effect.fn(function* (
