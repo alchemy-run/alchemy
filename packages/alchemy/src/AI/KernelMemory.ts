@@ -25,7 +25,16 @@ import {
   type Interpretable,
   type Turn,
 } from "./Kernel.ts";
+import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { KernelObserver, type KernelObservation } from "./Observer.ts";
+import {
+  AgentGateway,
+  handleRunSocketFrame,
+  isLiveObservation,
+  type RunSocketClientFrame,
+  type RunSocketServerFrame,
+} from "./RunSocket.ts";
 import { isParameter } from "./Parameter.ts";
 import { dedentTemplate, isFragment, type Fragment } from "./Prose.ts";
 import { isDispatchTool, type DispatchTool } from "./Dispatch.ts";
@@ -94,6 +103,11 @@ interface RunState {
   readonly pendingNotes: Array<Fragment>;
   /** Next observation sequence number (the observer's cursor). */
   observed: number;
+  /** The DURABLE observation log — this run's own projection, what a
+   *  socket's `subscribe {fromSeq}` replays (ring-buffered). */
+  readonly log: Array<KernelObservation>;
+  /** Attached run sockets — each entry sends one wire frame. */
+  readonly sockets: Set<(frame: RunSocketServerFrame) => Effect.Effect<void>>;
   /** The last rendered stance — what `spawn`/`skill` grant from. */
   lastStance?: Stance;
   /**
@@ -164,12 +178,19 @@ interface TickResult {
  * with capped backoff before failing the run.
  */
 export const KernelMemory: Layer.Layer<
-  Kernel,
+  Kernel | AgentGateway,
   never,
   LanguageModel.LanguageModel
-> = Layer.effect(
-  Kernel,
+> = Layer.effectContext(
   Effect.gen(function* () {
+    /** term → the socket door its `interpret` registered. */
+    const socketHosts = new Map<
+      string,
+      {
+        readonly ensure: (key: string) => Effect.Effect<RunState>;
+        readonly submit: (key: string, input: unknown) => Effect.Effect<void>;
+      }
+    >();
     const model = yield* LanguageModel.LanguageModel;
 
     const interpret = (term: Interpretable, charter: Charter) =>
@@ -191,17 +212,36 @@ export const KernelMemory: Layer.Layer<
             "term" | "key" | "seq" | "at"
           >,
         ): Effect.Effect<void> =>
-          Option.isNone(observer)
-            ? Effect.void
-            : observer.value
-                .emit({
-                  ...observation,
-                  term: termName,
-                  key: run.key,
-                  seq: run.observed++,
-                  at: Date.now(),
-                } as KernelObservation)
-                .pipe(Effect.ignore);
+          Effect.gen(function* () {
+            // live facts (deltas, in-flight tool calls) never log and
+            // never advance the cursor — same split as the CF kernel
+            const live = isLiveObservation(observation.type);
+            const full = {
+              ...observation,
+              term: termName,
+              key: run.key,
+              seq: live ? run.observed : run.observed++,
+              at: Date.now(),
+            } as KernelObservation;
+            if (!live) {
+              run.log.push(full);
+              // ring: mirror ChatsMemory's eviction policy
+              if (run.log.length > 2000) run.log.splice(0, 500);
+            }
+            if (run.sockets.size > 0) {
+              const frame: RunSocketServerFrame = {
+                type: "observation",
+                durable: !live,
+                observation: full,
+              };
+              for (const send of run.sockets) {
+                yield* Effect.ignore(send(frame));
+              }
+            }
+            if (Option.isSome(observer)) {
+              yield* observer.value.emit(full).pipe(Effect.ignore);
+            }
+          });
 
         // ── the run-scoped AI.Thread / AI.Tick services ─────────────
         const makeThreadService = (run: RunState): ThreadService => ({
@@ -655,6 +695,8 @@ export const KernelMemory: Layer.Layer<
               prompt: Prompt.empty,
               pendingNotes: [],
               observed: 0,
+              log: [],
+              sockets: new Set(),
               children: new Map(),
             };
           });
@@ -1029,7 +1071,11 @@ export const KernelMemory: Layer.Layer<
           ) => Effect.Effect<TickResult>,
         ) =>
           Effect.gen(function* () {
-            let quiescent = false;
+            // starts QUIESCENT: a run created without input (a socket
+            // attach `ensure`s it; the admitting offer may lose the
+            // startup race) parks on the queue instead of sampling an
+            // empty thread
+            let quiescent = true;
             while (true) {
               if (yield* Deferred.isDone(run.settled)) break;
               let items: Array<InboxItem> = yield* Queue.clear(run.inbox);
@@ -1227,8 +1273,11 @@ export const KernelMemory: Layer.Layer<
          * that run (per-run init — the closure is the instance), then
          * start its loop.
          */
-        const admit = (
-          item: InboxItem,
+        /** Create-or-get a run WITHOUT admitting input — the run's
+         *  init and loop start; the inbox stays untouched. This is
+         *  what a socket ATTACH uses: observing a run must not feed
+         *  it. */
+        const ensure = (
           key?: string,
           parent?: { readonly term: string; readonly key: string },
         ) =>
@@ -1256,6 +1305,16 @@ export const KernelMemory: Layer.Layer<
               runs.set(runKey, run);
             }
             lastKey = runKey;
+            return run;
+          });
+
+        const admit = (
+          item: InboxItem,
+          key?: string,
+          parent?: { readonly term: string; readonly key: string },
+        ) =>
+          Effect.gen(function* () {
+            const run = yield* ensure(key, parent);
             if (!(yield* Deferred.isDone(run.settled))) {
               yield* Queue.offer(run.inbox, item);
             }
@@ -1319,9 +1378,83 @@ export const KernelMemory: Layer.Layer<
               }
             }),
         };
+        // the socket door: what `AgentGateway.attach` resolves a term
+        // to — ensure (never feeds the run) plus the submit sink
+        socketHosts.set(termName, {
+          ensure: (key: string) => ensure(key),
+          submit: (key: string, input: unknown) =>
+            Effect.asVoid(admit({ input }, key)),
+        });
         return actor;
       });
 
-    return { interpret } as Context.Service.Shape<typeof Kernel> as never;
+    /**
+     * The local {@link AgentGateway}: the SAME protocol the Cloudflare
+     * kernel speaks from its Durable Objects, served in-process — a
+     * WebSocket upgrade on the host's own HTTP server, replay from
+     * the run's in-memory log, live broadcast from `observe`.
+     */
+    // socket-serving fibers live HERE — the kernel's own lifetime —
+    // never on the HTTP request that carried the upgrade: Bun counts
+    // an unresolved upgraded request as in-flight, and the server's
+    // graceful stop would wait its whole 20s budget on it
+    const kernelScope = yield* Effect.scope;
+
+    const attach = (
+      term: string,
+      key: string,
+      request: HttpServerRequest.HttpServerRequest,
+    ): Effect.Effect<HttpServerResponse.HttpServerResponse, never, never> =>
+      Effect.gen(function* () {
+        const host = socketHosts.get(term);
+        if (host === undefined) {
+          return yield* Effect.die(
+            `KernelMemory: no interpreted term '${term}' to attach to — has its Layer been built?`,
+          );
+        }
+        const run = yield* host.ensure(key);
+        const socket = yield* request.upgrade.pipe(Effect.orDie);
+        const serve = Effect.gen(function* () {
+          const write = yield* socket.writer;
+          const send = (frame: RunSocketServerFrame): Effect.Effect<void> =>
+            Effect.asVoid(
+              Effect.ignore(write(JSON.stringify(frame))),
+            ) as Effect.Effect<void>;
+          const handle = handleRunSocketFrame(
+            {
+              replay: (fromSeq) =>
+                Effect.sync(() =>
+                  run.log.filter((observation) => observation.seq >= fromSeq),
+                ),
+              watermark: Effect.sync(() => run.observed),
+              submit: (input) => host.submit(key, input),
+            },
+            send,
+          );
+          run.sockets.add(send);
+          yield* socket
+            .runString((raw: string) =>
+              handle(JSON.parse(raw) as RunSocketClientFrame).pipe(
+                Effect.catchDefect((defect) =>
+                  Effect.logWarning(`[run-socket] bad frame: ${defect}`),
+                ),
+              ),
+            )
+            .pipe(
+              Effect.ignore,
+              Effect.ensuring(Effect.sync(() => run.sockets.delete(send))),
+            );
+        });
+        yield* Effect.forkIn(Effect.scoped(serve), kernelScope);
+        return HttpServerResponse.empty();
+      });
+
+    return Context.add(
+      Context.make(Kernel, {
+        interpret,
+      } as Context.Service.Shape<typeof Kernel>),
+      AgentGateway,
+      { attach },
+    );
   }) as never,
 );

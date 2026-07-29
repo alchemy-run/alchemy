@@ -25,6 +25,7 @@ export default class KernelTestWorker extends Cloudflare.Worker<KernelTestWorker
   Effect.gen(function* () {
     const scribe = yield* Scribe;
     const supervisor = yield* Supervisor;
+    const gateway = yield* Cloudflare.AI.AgentGateway;
     const actors = { Scribe: scribe, Supervisor: supervisor };
 
     return {
@@ -35,6 +36,12 @@ export default class KernelTestWorker extends Cloudflare.Worker<KernelTestWorker
         const input = url.searchParams.get("input") ?? "hello";
         const actor =
           actors[(url.searchParams.get("agent") ?? "Scribe") as "Scribe"];
+
+        // the live view: ws(s)://…/attach/<agent>/<key>
+        if (url.pathname.startsWith("/attach/")) {
+          const [, , agent, ...rest] = url.pathname.split("/");
+          return yield* gateway.attach(agent!, rest.join("/"), request);
+        }
 
         switch (url.pathname) {
           // admit + join: resolves at `AI.reply`, or at quiescence

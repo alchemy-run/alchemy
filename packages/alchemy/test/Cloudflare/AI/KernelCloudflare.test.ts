@@ -17,14 +17,18 @@
  * - `Thread.remind` is a real alarm: it wakes a parked run with no
  *   process holding a timer.
  */
+import type * as AI from "@/AI/index.ts";
 import * as Cloudflare from "@/Cloudflare";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Queue from "effect/Queue";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Socket from "effect/unstable/socket/Socket";
 import KernelTestWorker from "./fixtures/KernelWorker.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -102,11 +106,24 @@ interface Report {
 
 const drive = (url: string, route: string, params: Record<string, string>) =>
   Effect.gen(function* () {
-    const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+    const client = yield* HttpClient.HttpClient;
     const query = new URLSearchParams(params).toString();
-    const response = yield* client
-      .get(`${url}${route}?${query}`)
-      .pipe(retryReady);
+    const response = yield* client.get(`${url}${route}?${query}`).pipe(
+      // carry the BODY into the failure: the fixture writes the actual
+      // cause there on a 500, and filterStatusOk would discard it
+      Effect.flatMap((response) =>
+        response.status === 200
+          ? Effect.succeed(response)
+          : Effect.flatMap(response.text, (body) =>
+              Effect.fail(
+                new Error(
+                  `${route} -> ${response.status}: ${body.slice(0, 600)}`,
+                ),
+              ),
+            ),
+      ),
+      retryReady,
+    );
     return yield* response.json;
   });
 
@@ -264,10 +281,16 @@ test(
     const after = yield* report(url, { key, input: "status" });
     // the input survived the crash (append-first drain)…
     expect(after.thread).toContain(directive);
-    // …and was ANSWERED before this poll arrived — only the alarm
-    // can have done that, since nothing else touched the run
+    // …the re-sample was told it was a recovery (informed
+    // re-decision: side effects may already have happened)…
+    expect(
+      after.thread.some((entry) => entry.includes("interrupted mid-sampling")),
+    ).toBe(true);
+    // …and the round was ANSWERED before this poll arrived — only
+    // the alarm can have done that, since nothing else touched the run
     expect(after.assistants).toBeGreaterThanOrEqual(1);
-    expect(after.users).toBe(2);
+    // the crash input, the recovery note, and this status poll
+    expect(after.users).toBe(3);
   }).pipe(logLevel),
   { timeout: 300_000 },
 );
@@ -288,7 +311,7 @@ test(
     const after = yield* report(url, { key, input: "status" });
     // the abandonment is IN THE THREAD, not swallowed — the model
     // (and any observer) can see the round died
-    expect(after.thread.some((entry) => entry.includes("interrupted"))).toBe(
+    expect(after.thread.some((entry) => entry.includes("abandoned"))).toBe(
       true,
     );
     // no assistant message ever landed for the poisoned round…
@@ -297,6 +320,128 @@ test(
     // crash-loop did NOT run forever (bounded attempts)
     expect(after.last).toBe("status");
   }).pipe(logLevel),
+  { timeout: 300_000 },
+);
+
+// ── the run socket: live view over hibernatable WebSockets ──────────
+
+/** A connected run-socket client: typed frames in, frames out. */
+const connect = (url: string) =>
+  Effect.gen(function* () {
+    const socket = yield* Socket.makeWebSocket(url);
+    const frames = yield* Queue.unbounded<AI.RunSocketServerFrame>();
+    const write = yield* socket.writer;
+    const opened = yield* Deferred.make<void>();
+
+    yield* Effect.forkScoped(
+      socket.runString(
+        (message) =>
+          Queue.offer(frames, JSON.parse(message) as AI.RunSocketServerFrame),
+        { onOpen: Deferred.succeed(opened, undefined) },
+      ),
+    );
+    yield* Deferred.await(opened);
+
+    return {
+      send: (frame: AI.RunSocketClientFrame) => write(JSON.stringify(frame)),
+      next: Queue.take(frames),
+    };
+  });
+
+/** Take frames until the predicate matches, returning everything taken. */
+const framesUntil = (
+  client: { next: Effect.Effect<AI.RunSocketServerFrame, unknown> },
+  done: (frame: AI.RunSocketServerFrame) => boolean,
+) =>
+  Effect.gen(function* () {
+    const seen: Array<AI.RunSocketServerFrame> = [];
+    while (true) {
+      const frame = yield* client.next.pipe(Effect.timeout("30 seconds"));
+      seen.push(frame);
+      if (done(frame)) return seen;
+    }
+  });
+
+const isDurable = (
+  frame: AI.RunSocketServerFrame,
+  type: AI.KernelObservation["type"],
+) =>
+  frame.type === "observation" &&
+  frame.durable &&
+  frame.observation.type === type;
+
+test(
+  "the run socket: submit drives the agent, deltas stream live, the cursor resumes",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const key = runKey("socket");
+    const wsUrl = `${url.replace(/^http/, "ws")}/attach/Scribe/${key}`;
+
+    // ── round 1: attach, submit over the socket, watch it stream
+    const first = yield* Effect.scoped(
+      Effect.gen(function* () {
+        const client = yield* connect(wsUrl);
+        yield* client.send({ type: "submit", input: "hello socket" });
+        return yield* framesUntil(client, (frame) =>
+          isDurable(frame, "parked"),
+        );
+      }),
+    );
+
+    const durables = first.filter(
+      (frame) => frame.type === "observation" && frame.durable,
+    ) as Array<Extract<AI.RunSocketServerFrame, { type: "observation" }>>;
+    const types = durables.map((frame) => frame.observation.type);
+    // the whole round arrived as observations: admission, the input,
+    // the sampling, the park
+    expect(types).toContain("input");
+    expect(types).toContain("assistant");
+    // …with LIVE token deltas streamed mid-sampling (the
+    // deterministic model streams its report as one text block)
+    expect(
+      first.some(
+        (frame) =>
+          frame.type === "observation" &&
+          !frame.durable &&
+          frame.observation.type === "assistant-delta",
+      ),
+    ).toBe(true);
+    // durable seq is strictly monotonic — the cursor is trustworthy
+    const seqs = durables.map((frame) => frame.observation.seq);
+    expect([...seqs].sort((a, b) => a - b)).toEqual(seqs);
+    const cursor = seqs[seqs.length - 1]! + 1;
+
+    // ── a second round happens while NOBODY is attached
+    const answer = yield* report(url, { key, input: "second round" });
+    expect(answer.users).toBe(2);
+
+    // ── reconnect with the cursor: replay is exactly the missed rows
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        const client = yield* connect(wsUrl);
+        yield* client.send({ type: "subscribe", fromSeq: cursor });
+        const replayed = yield* framesUntil(
+          client,
+          (frame) => frame.type === "live",
+        );
+        const texts = replayed.flatMap((frame) =>
+          frame.type === "observation" && frame.observation.type === "input"
+            ? [frame.observation.text]
+            : [],
+        );
+        // the missed round is there…
+        expect(texts).toContain("second round");
+        // …the already-seen round is NOT re-delivered…
+        expect(texts).not.toContain("hello socket");
+        // …and every replayed row is at or above the cursor
+        for (const frame of replayed) {
+          if (frame.type === "observation") {
+            expect(frame.observation.seq).toBeGreaterThanOrEqual(cursor);
+          }
+        }
+      }),
+    );
+  }).pipe(logLevel, Effect.provide(Socket.layerWebSocketConstructorGlobal)),
   { timeout: 300_000 },
 );
 

@@ -1227,14 +1227,22 @@ ${
           "tool-result",
           "assistant", // tick 1: quiesces with the answer
         ]);
-        // every observation carries the run identity + a monotonic seq
+        // every observation carries the run identity; DURABLE ones
+        // carry a strictly monotonic seq (the resume cursor), while
+        // live facts (deltas, in-flight tool calls) repeat the current
+        // watermark instead of advancing it
         expect(seen.every((observation) => observation.key === "o#1")).toBe(
           true,
         );
+        const durable = seen.filter(
+          (observation) =>
+            observation.type !== "assistant-delta" &&
+            observation.type !== "tool-call",
+        );
         expect(
-          seen.every(
+          durable.every(
             (observation, index) =>
-              index === 0 || observation.seq > seen[index - 1]!.seq,
+              index === 0 || observation.seq > durable[index - 1]!.seq,
           ),
         ).toBe(true);
         const second = record[2]!;

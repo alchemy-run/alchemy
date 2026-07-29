@@ -367,8 +367,8 @@
     "yaml": "catalog:"
   },
   "devDependencies": {
+    "@ai-sdk/react": "^3.0.0",
     "@aws/durable-execution-sdk-js": "^2.1.0",
-    "alchemy-test": "workspace:*",
     "@clack/prompts": "^0.11.0",
     "@cloudflare/containers": "catalog:",
     "@cloudflare/puppeteer": "^1.1.0",
@@ -389,6 +389,7 @@
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "catalog:fixtures",
     "@vitejs/plugin-rsc": "catalog:fixtures",
+    "alchemy-test": "workspace:*",
     "better-auth": "catalog:",
     "effect": "catalog:",
     "iovalkey": "^0.3.3",

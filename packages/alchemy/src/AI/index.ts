@@ -8,6 +8,7 @@ export * from "./Kernel.ts";
 export * from "./KernelMemory.ts";
 export * from "./Chats.ts";
 export * from "./Observer.ts";
+export * from "./RunSocket.ts";
 export * from "./UIMessage.ts";
 export * from "./Parameter.ts";
 export * from "./Prose.ts";

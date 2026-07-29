@@ -56,6 +56,8 @@ import * as S from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
+import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
+import type * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as Prompt from "effect/unstable/ai/Prompt";
 import * as Response from "effect/unstable/ai/Response";
 import type * as AiTool from "effect/unstable/ai/Tool";
@@ -88,6 +90,12 @@ import {
 import { KernelObserver, type KernelObservation } from "../../AI/Observer.ts";
 import { isParameter } from "../../AI/Parameter.ts";
 import { dedentTemplate, isFragment, type Fragment } from "../../AI/Prose.ts";
+import {
+  AgentGateway,
+  handleRunSocketFrame,
+  type RunSocketClientFrame,
+  type RunSocketServerFrame,
+} from "../../AI/RunSocket.ts";
 import { isSkill, type Skill, type SkillService } from "../../AI/Skill.ts";
 import {
   Thread,
@@ -96,10 +104,12 @@ import {
   type TickService,
 } from "../../AI/Thread.ts";
 import { isTool, isToolImpl } from "../../AI/Tool.ts";
+import type { HttpEffect } from "../../Http.ts";
 import type { MainRpc } from "../../Platform.ts";
 import { RuntimeContext } from "../../RuntimeContext.ts";
 import { DurableObject } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
+import { upgrade, type WebSocket } from "../Workers/WebSocket.ts";
 import { Worker } from "../Workers/Worker.ts";
 
 /** What one `interpret` call recorded — all the run engine needs to
@@ -129,10 +139,13 @@ const parseRunName = (name: string) => {
 // ── storage layout (one run per DO) ──────────────────────────────────
 // inbox:{seq}      pending inputs, drained per burst
 // msg:{seq}        thread messages, appended (the transcript)
+// obs:{seq}        durable observations — the run's own projection,
+//                  replayable from any cursor (the chat/board source)
 // remind:{fireAt}  scheduled notes (the alarm re-arms from these)
 // meta             { tick, observed, active[], settled?, drained, busy? }
 const INBOX = "inbox:";
 const MSG = "msg:";
+const OBS = "obs:";
 const REMIND = "remind:";
 const META = "meta";
 
@@ -222,7 +235,21 @@ interface RunRpc extends MainRpc<DurableObjectState> {
     outcome: unknown,
   ) => Effect.Effect<void, unknown, RuntimeContext>;
   readonly alarm: () => Effect.Effect<void, unknown, RuntimeContext>;
+  /** The live-view seam: WebSocket attach + the run-socket frames. */
+  readonly fetch: HttpEffect<DurableObjectState | RuntimeContext>;
+  readonly webSocketMessage: (
+    socket: WebSocket,
+    message: string | ArrayBuffer,
+  ) => Effect.Effect<void>;
+  readonly webSocketClose: (
+    socket: WebSocket,
+    code: number,
+    reason: string,
+    wasClean: boolean,
+  ) => Effect.Effect<void>;
 }
+
+export { AgentGateway } from "../../AI/RunSocket.ts";
 
 /**
  * The `AI.Kernel` for Cloudflare — no argument, and no class for the
@@ -236,11 +263,10 @@ interface RunRpc extends MainRpc<DurableObjectState> {
  * LanguageModel>` — the substrate is in the type.
  */
 export const KernelCloudflare: Layer.Layer<
-  Kernel,
+  Kernel | AgentGateway,
   never,
   LanguageModel.LanguageModel | Worker
-> = Layer.effect(
-  Kernel,
+> = Layer.effectContext(
   Effect.gen(function* () {
     const model = yield* LanguageModel.LanguageModel;
     const registrations = new Map<string, RegisteredCharter>();
@@ -338,27 +364,99 @@ export const KernelCloudflare: Layer.Layer<
           if (deadlines.length === 0) return;
           yield* storage.setAlarm(Math.min(...deadlines)).pipe(Effect.orDie);
         });
+        /**
+         * Fan a wire frame out to every attached socket. `sendIfOpen`
+         * discipline: a closing socket's send throws and is IGNORED —
+         * the client owns catch-up via `subscribe { fromSeq }`, so a
+         * dropped frame is never an error, only a gap the cursor
+         * closes. Sockets are re-read from the runtime each time (no
+         * in-memory session map to rehydrate after hibernation).
+         */
+        const broadcast = (frame: RunSocketServerFrame) =>
+          Effect.gen(function* () {
+            // runtime-colored, but only ever called from inside a DO
+            // event — seal rather than thread the phantom capability
+            // through every observation site
+            const sockets = yield* Effect.provide(
+              state.getWebSockets(),
+              RuntimeContext.phantom,
+            );
+            if (sockets.length === 0) return;
+            const data = JSON.stringify(frame);
+            for (const socket of sockets) {
+              yield* Effect.ignore(Effect.try(() => socket.ws.send(data)));
+            }
+          });
+
+        /**
+         * A DURABLE observation: written as a row (the replay log —
+         * this run's own projection) with the watermark bump in ONE
+         * atomic write, then fanned out to attached sockets and the
+         * external observer. The row is the record; delivery is
+         * best-effort on both channels.
+         */
         const observe = (
           observation: DistributiveOmit<
             KernelObservation,
             "term" | "key" | "seq" | "at"
           >,
         ) =>
-          Option.isNone(observer)
-            ? Effect.void
-            : Effect.gen(function* () {
-                const meta = yield* readMeta;
-                yield* writeMeta({ ...meta, observed: meta.observed + 1 });
-                yield* observer.value
-                  .emit({
-                    ...observation,
-                    term: me.term,
-                    key: me.key,
-                    seq: meta.observed,
-                    at: Date.now(),
-                  } as KernelObservation)
-                  .pipe(Effect.ignore);
-              });
+          Effect.gen(function* () {
+            const meta = yield* readMeta;
+            const full = {
+              ...observation,
+              term: me.term,
+              key: me.key,
+              seq: meta.observed,
+              at: Date.now(),
+            } as KernelObservation;
+            yield* storage
+              .put({
+                [seqKey(OBS, meta.observed)]: full,
+                [META]: { ...meta, observed: meta.observed + 1 },
+              })
+              .pipe(Effect.orDie);
+            yield* broadcast({
+              type: "observation",
+              durable: true,
+              observation: full,
+            });
+            if (Option.isSome(observer)) {
+              yield* observer.value.emit(full).pipe(Effect.ignore);
+            }
+          });
+
+        /**
+         * A LIVE observation — token deltas, in-flight tool calls:
+         * broadcast and emitted but never a row, and the cursor does
+         * not advance (`seq` repeats the current watermark). A client
+         * that missed them is covered by the durable `assistant`
+         * restatement of the whole sampling.
+         */
+        const observeLive = (
+          observation: DistributiveOmit<
+            KernelObservation,
+            "term" | "key" | "seq" | "at"
+          >,
+        ) =>
+          Effect.gen(function* () {
+            const meta = yield* readMeta;
+            const full = {
+              ...observation,
+              term: me.term,
+              key: me.key,
+              seq: meta.observed,
+              at: Date.now(),
+            } as KernelObservation;
+            yield* broadcast({
+              type: "observation",
+              durable: false,
+              observation: full,
+            });
+            if (Option.isSome(observer)) {
+              yield* observer.value.emit(full).pipe(Effect.ignore);
+            }
+          });
 
         /**
          * The round's waiters: `dispatch` RPCs held open for this
@@ -366,13 +464,17 @@ export const KernelCloudflare: Layer.Layer<
          * the caller, which re-drives from the world (durable
          * continuations are the layering phase).
          */
-        const waiters: Array<Deferred.Deferred<unknown>> = [];
+        const waiters: Array<Deferred.Deferred<unknown, unknown>> = [];
         const pendingNotes: Array<Fragment> = [];
         /** Session children, for the supervision cascade. */
         const children = new Map<string, { term: string; key: string }>();
 
         const resolveWaiters = (value: unknown) =>
           Effect.forEach(waiters.splice(0), (w) => Deferred.succeed(w, value), {
+            discard: true,
+          });
+        const failWaiters = (error: unknown) =>
+          Effect.forEach(waiters.splice(0), (w) => Deferred.fail(w, error), {
             discard: true,
           });
 
@@ -613,10 +715,21 @@ export const KernelCloudflare: Layer.Layer<
                 )) as Toolkit.WithHandler<any>;
               }) as Effect.Effect<Toolkit.WithHandler<any> | undefined>);
 
-        /** One sampling — tool handlers execute INSIDE this call. */
+        /** One sampling — tool handlers execute INSIDE this call.
+         *  `onLive` surfaces deltas and tool calls AS THEY STREAM. */
         const step = (
           prompt: Prompt.Prompt,
           toolkit: Toolkit.WithHandler<any> | undefined,
+          onLive: (
+            part:
+              | { kind: "text" | "reasoning"; delta: string }
+              | {
+                  kind: "tool-call";
+                  id: string;
+                  name: string;
+                  params: unknown;
+                },
+          ) => Effect.Effect<void> = () => Effect.void,
         ) =>
           Effect.gen(function* () {
             const parts: Array<unknown> = [];
@@ -631,7 +744,7 @@ export const KernelCloudflare: Layer.Layer<
                 ) => Stream.Stream<any, unknown>
               )({ prompt, toolkit }),
               (part: any) =>
-                Effect.sync(() => {
+                Effect.gen(function* () {
                   switch (part.type) {
                     case "text-start":
                     case "reasoning-start":
@@ -651,6 +764,10 @@ export const KernelCloudflare: Layer.Layer<
                       open.set(part.id, block);
                       block.text += part.delta;
                       Object.assign(block.metadata, part.metadata);
+                      yield* onLive({
+                        kind: kind as "text" | "reasoning",
+                        delta: part.delta,
+                      });
                       return;
                     }
                     case "text-end":
@@ -668,6 +785,16 @@ export const KernelCloudflare: Layer.Layer<
                       return;
                     }
                     case "tool-call":
+                      parts.push(part);
+                      // surface the call NOW — its handler may run
+                      // for minutes before the sampling completes
+                      yield* onLive({
+                        kind: "tool-call",
+                        id: part.id,
+                        name: part.name,
+                        params: part.params,
+                      });
+                      return;
                     // the RESULT is load-bearing: it is what
                     // `Prompt.fromResponseParts` turns into the tool
                     // message answering the call. Drop it and the
@@ -746,11 +873,33 @@ export const KernelCloudflare: Layer.Layer<
                 type: "crashed",
                 error: `round abandoned after ${maxAttempts} interrupted attempts`,
               });
+              // exhaustion is the ONE crash that answers waiters — as
+              // a failure the caller can see, never a silent undefined
+              yield* failWaiters(
+                new Error(
+                  `KernelCloudflare run '${me.term}/${me.key}': round abandoned after ${maxAttempts} interrupted attempts`,
+                ),
+              );
             } else {
               meta = { ...meta, busy: { attempts, since: Date.now() } };
               yield* writeMeta(meta);
               yield* armAlarm;
               recovering = true;
+              // INFORMED re-decision, without transcript surgery: the
+              // interrupted attempt's tool calls never persisted (only
+              // complete samplings append), so the re-sample would
+              // otherwise repeat side effects blind. The note is the
+              // cheap alternative to think's repaired tool parts —
+              // appended at the TAIL, so the cached prefix stands.
+              yield* appendThread([
+                noteMessage(
+                  `The previous attempt at this work was interrupted mid-sampling (attempt ${attempts} of ${maxAttempts}). Any actions it took may or may not have completed — verify before repeating anything with side effects.`,
+                ),
+              ]);
+              yield* observe({
+                type: "input",
+                text: `<note>\nrecovering an interrupted round (attempt ${attempts}/${maxAttempts})\n</note>`,
+              });
               yield* Effect.logInfo(
                 `KernelCloudflare run '${me.term}/${me.key}': recovering an interrupted round (attempt ${attempts}/${maxAttempts})`,
               );
@@ -1019,6 +1168,23 @@ export const KernelCloudflare: Layer.Layer<
                 thread,
               ),
               toolkit,
+              (part) =>
+                sealed(
+                  part.kind === "tool-call"
+                    ? observeLive({
+                        type: "tool-call",
+                        tick: meta.tick,
+                        toolCallId: part.id,
+                        toolName: part.name,
+                        input: part.params,
+                      })
+                    : observeLive({
+                        type: "assistant-delta",
+                        tick: meta.tick,
+                        channel: part.kind,
+                        delta: part.delta,
+                      }),
+                ),
             );
 
             yield* appendThread(
@@ -1038,6 +1204,18 @@ export const KernelCloudflare: Layer.Layer<
                 input: call.params,
               })),
             });
+            // tool OUTPUTS are not restated by `assistant` — they are
+            // their own durable rows, upgrading the call's state in
+            // any projection that replays this run
+            for (const result of response.toolResults) {
+              yield* observe({
+                type: "tool-result",
+                toolCallId: result.id,
+                toolName: result.name,
+                output: result.result,
+                isFailure: result.isFailure,
+              });
+            }
             quiescent = response.toolCalls.length === 0;
             meta = yield* readMeta;
             yield* writeMeta({
@@ -1064,8 +1242,21 @@ export const KernelCloudflare: Layer.Layer<
                 cause,
               );
               yield* observe({ type: "crashed", error: String(cause) });
-              // never leave a caller hanging on a dead round
-              yield* resolveWaiters(undefined);
+              // do NOT answer waiters: the round is still OWED —
+              // recovery re-enters (the alarm, or any event) and
+              // answers them at quiescence; exhaustion is the only
+              // crash that fails them. What we MUST guarantee here is
+              // that the wake is coming: a crash before the drain
+              // opened the round would otherwise leave no alarm armed
+              // and a caller parked forever.
+              const meta = yield* readMeta;
+              if (meta.busy === undefined && meta.settled === undefined) {
+                yield* writeMeta({
+                  ...meta,
+                  busy: { attempts: 0, since: Date.now() },
+                });
+              }
+              yield* armAlarm;
             }),
           ),
         );
@@ -1086,6 +1277,63 @@ export const KernelCloudflare: Layer.Layer<
           });
 
         return Effect.succeed<RunRpc>({
+          /**
+           * The LIVE VIEW attaches here (via {@link AgentGateway}):
+           * accept the WebSocket and hibernate freely — there is no
+           * in-memory session state to lose, because `broadcast`
+           * re-reads the attached sockets from the runtime every time.
+           */
+          fetch: Effect.gen(function* () {
+            const [response] = yield* upgrade();
+            return response;
+          }),
+          webSocketMessage: (socket, message) =>
+            Effect.suspend(() =>
+              handleRunSocketFrame(
+                {
+                  replay: (fromSeq) =>
+                    sealed(
+                      Effect.map(listRows<KernelObservation>(OBS), (rows) =>
+                        rows.flatMap(([k, observation]) =>
+                          seqOf(OBS, k) >= fromSeq ? [observation] : [],
+                        ),
+                      ),
+                    ),
+                  watermark: sealed(
+                    Effect.map(readMeta, (meta) => meta.observed),
+                  ),
+                  // the socket's steer: admit input; the answer
+                  // arrives as observations, never as a response
+                  submit: (input) =>
+                    sealed(
+                      Effect.gen(function* () {
+                        const meta = yield* readMeta;
+                        if (meta.settled !== undefined) return;
+                        if (meta.tick === 0 && meta.seq === 0) {
+                          yield* observe({ type: "admitted" });
+                        }
+                        yield* enqueue(input);
+                        yield* state.waitUntil(burst);
+                      }),
+                    ),
+                },
+                (frame) => Effect.ignore(socket.send(JSON.stringify(frame))),
+              )(
+                JSON.parse(
+                  typeof message === "string"
+                    ? message
+                    : new TextDecoder().decode(message),
+                ) as RunSocketClientFrame,
+              ),
+            ).pipe(
+              // a malformed frame must never kill the socket's DO
+              Effect.catchDefect((defect) =>
+                Effect.logWarning(`[run-socket] bad frame: ${defect}`),
+              ),
+              Effect.provide(RuntimeContext.phantom),
+            ) as Effect.Effect<void>,
+          webSocketClose: (socket, code, reason) =>
+            Effect.ignore(socket.close(code, reason)),
           deliver: (input: unknown, options?: { parent?: RunRef }) =>
             Effect.gen(function* () {
               const meta = yield* readMeta;
@@ -1103,7 +1351,7 @@ export const KernelCloudflare: Layer.Layer<
               if (meta.tick === 0 && meta.seq === 0) {
                 yield* observe({ type: "admitted", parent: options?.parent });
               }
-              const waiter = yield* Deferred.make<unknown>();
+              const waiter = yield* Deferred.make<unknown, unknown>();
               yield* enqueue(input);
               waiters.push(waiter);
               // waitUntil, NOT forkChild: `AI.reply` answers this RPC
@@ -1219,6 +1467,23 @@ export const KernelCloudflare: Layer.Layer<
         } as Actor;
       }) as Effect.Effect<Actor, KernelError, never>;
 
-    return { interpret };
+    /** The gateway: route a WebSocket upgrade into the run's own DO. */
+    const attach = (
+      term: string,
+      key: string,
+      request: HttpServerRequest.HttpServerRequest,
+    ) =>
+      runs
+        .getByName(runName(term, key))
+        .fetch(request)
+        .pipe(Effect.orDie) as Effect.Effect<
+        HttpServerResponse.HttpServerResponse,
+        never,
+        RuntimeContext
+      >;
+
+    return Context.add(Context.make(Kernel, { interpret }), AgentGateway, {
+      attach,
+    });
   }),
 );

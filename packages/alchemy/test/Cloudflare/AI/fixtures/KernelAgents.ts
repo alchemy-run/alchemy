@@ -98,19 +98,21 @@ const respond = (prompt: Prompt.Prompt): Array<Response.PartEncoded> => {
 
 /**
  * The CRASH directive, for the durability tests: while a directive
- * `call:crash:<id>:<n>` is the LAST user message and its budget `n`
- * is not spent, the sampling DIES — the way an eviction, deploy, or
- * defect kills a burst mid-round. The budget is isolate memory on
- * purpose: recovery re-enters in the same isolate, and the (n+1)th
- * sampling succeeding is exactly the "transient failure" shape. Once
- * any later message arrives, the directive stops firing, so a
- * post-mortem poll can always read the thread.
+ * `call:crash:<id>:<n>` is the last REAL user message and its budget
+ * `n` is not spent, the sampling DIES — the way an eviction, deploy,
+ * or defect kills a burst mid-round. Kernel-authored `<note>` rows
+ * (recovery notices, abandonment) are skipped when finding it, so a
+ * recovery re-sample crashes again until the budget is spent — but
+ * any later ordinary message (a post-mortem poll) shields it. The
+ * budget is isolate memory on purpose: recovery re-enters in the same
+ * isolate, and the (n+1)th sampling succeeding is exactly the
+ * "transient failure" shape.
  */
 const crashBudgets = new Map<string, number>();
 
 const crashRequested = (prompt: Prompt.Prompt): string | undefined => {
-  const users = userTexts(prompt);
-  const last = users[users.length - 1];
+  const real = userTexts(prompt).filter((text) => !text.startsWith("<note>"));
+  const last = real[real.length - 1];
   const match = last?.match(/^call:crash:([^:]+):(\d+)$/);
   if (match === null || match === undefined) return undefined;
   const [, id, budget] = match;
