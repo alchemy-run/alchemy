@@ -187,7 +187,7 @@ export const ConsumerProviderLive = () =>
                     {
                       consumerId: c.consumerId,
                       queueId,
-                      scriptName: c.scriptName ?? "",
+                      scriptName: c.script ?? "",
                       accountId,
                       deadLetterQueue: c.deadLetterQueue ?? undefined,
                       settings: s
