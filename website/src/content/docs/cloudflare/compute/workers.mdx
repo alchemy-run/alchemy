@@ -438,7 +438,11 @@ Every deploy of a Worker uploads an immutable
 and a deployment routes traffic across up to two versions. By default
 alchemy deploys each new version at 100%. The `version` prop unlocks the
 other shapes: preview versions of another Worker, canaries, and gradual
-rollouts of a Worker's own deploys.
+rollouts of a Worker's own deploys. The
+[Gradual deployments](/cloudflare/compute/gradual-deployments) guide
+covers the full rollout workflow — ramping, rollback, smoke testing
+with version overrides, and pinning users to a version with version
+affinity.
 
 ### Preview versions
 
@@ -559,6 +563,8 @@ and `InferEnv` types the entry as the native
 
 Guides that build on Workers:
 
+- [Gradual deployments](/cloudflare/compute/gradual-deployments) —
+  canary and ramp deploys across versions instead of cutting over.
 - [Custom domains](/cloudflare/networking/custom-domains) — serve
   Workers from your own hostnames and routes.
 - [Effect HTTP API](/cloudflare/apis/effect-http-api) — a

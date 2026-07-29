@@ -630,6 +630,10 @@ export default defineConfig({
               items: [
                 { label: "Workers", link: "/cloudflare/compute/workers" },
                 {
+                  label: "Gradual deployments",
+                  link: "/cloudflare/compute/gradual-deployments",
+                },
+                {
                   label: "Python Workers",
                   link: "/cloudflare/compute/python-workers",
                 },
