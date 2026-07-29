@@ -13,10 +13,10 @@ const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "SESBindings");
 
-// The account is in the SES sandbox with no verified identities: sends from
-// the fixture's (unverified) domain identity fail with the typed
-// MessageRejected tag — that IS the ungated assertion. Set AWS_TEST_SES_FROM
-// to a verified from-address to exercise the success path.
+// A verified from-address on the account. It does NOT unlock a successful
+// `SendEmail` — that binding is scoped to the identity the fixture binds — but
+// the suppression-list write plane needs production access, and an account
+// that has a verified sender is invariably out of the sandbox.
 const VERIFIED_FROM = process.env.AWS_TEST_SES_FROM;
 
 // Names an existing custom verification email template. Creating one requires
@@ -24,10 +24,17 @@ const VERIFIED_FROM = process.env.AWS_TEST_SES_FROM;
 // created out of band to exercise the real send.
 const CVE_TEMPLATE = process.env.AWS_TEST_SES_CVE_TEMPLATE;
 
+// Recipient for the real custom-verification send. Defaults to the mailbox
+// simulator; override only with an address you own.
+const CVE_RECIPIENT = process.env.AWS_TEST_SES_CVE_RECIPIENT;
+
 // Never skips a test — tightens it. With Virtual Deliverability Manager
 // enabled the insight bindings must return real data rather than the typed
 // rejection a VDM-less account gives.
 const VDM_ENABLED = !!process.env.AWS_TEST_SES_VDM;
+
+// The SES mailbox simulator accepts mail without affecting reputation.
+const SIMULATOR = "success@simulator.amazonses.com";
 
 // A syntactically valid address at the fixture's (unverified) domain
 // identity — SES rejects it with the typed MessageRejected tag in sandbox.
@@ -174,39 +181,35 @@ describe("SES Bindings", () => {
         }),
     );
 
-    test.provider.skipIf(!VERIFIED_FROM)(
-      "sends to the mailbox simulator from a verified identity (AWS_TEST_SES_FROM)",
+    // `SendEmail` is identity-scoped: the binding grants ses:SendEmail only on
+    // the ARN of the identity it was bound to (plus that domain's addresses,
+    // its templates, and the configuration set). A sender outside that
+    // identity is refused by IAM before SES ever evaluates the message —
+    // including one that is verified on the account. Verified in a live
+    // production account with a verified sender, where the send returns
+    // AccessDeniedException rather than a MessageId.
+    //
+    // Exercising a genuine successful send therefore needs an identity the
+    // FIXTURE binds and that is really verified, i.e. a domain under our
+    // control with DKIM published — the setup Receiving.smoke.test.ts builds
+    // on the standing Cloudflare test zone. AWS_TEST_SES_FROM alone cannot
+    // grant it.
+    test.provider(
+      "a sender outside the bound identity is denied by the scoped IAM policy",
       (_stack) =>
         Effect.gen(function* () {
+          const outsider = encodeURIComponent(
+            "sender@not-the-bound-domain.test",
+          );
           const response = (yield* send(
-            HttpClientRequest.post(
-              `${baseUrl}/send-simple?from=${encodeURIComponent(VERIFIED_FROM!)}`,
-            ),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
-            messageId?: string;
-            error?: string;
-            message?: string;
-          };
-
-          expect(response.error).toBeUndefined();
-          expect(response.messageId).toBeTruthy();
-        }),
-    );
-
-    test.provider.skipIf(!VERIFIED_FROM)(
-      "sends without a configuration set (AWS_TEST_SES_FROM)",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.post(
-              `${baseUrl}/send-plain?from=${encodeURIComponent(VERIFIED_FROM!)}`,
-            ),
+            HttpClientRequest.post(`${baseUrl}/send-simple?from=${outsider}`),
           ).pipe(Effect.flatMap((r) => r.json))) as {
             messageId?: string;
             error?: string;
           };
-          expect(response.error).toBeUndefined();
-          expect(response.messageId).toBeTruthy();
+
+          expect(response.error).toBe("AccessDeniedException");
+          expect(response.messageId).toBeUndefined();
         }),
     );
   });
@@ -437,9 +440,15 @@ describe("SES Bindings", () => {
   });
 
   describe("SendCustomVerificationEmail", () => {
+    // The unknown-template case never leaves SES, so its recipient is
+    // irrelevant. The gated case sends for real, so it goes to the mailbox
+    // simulator, which accepts mail without touching reputation — an address
+    // at the fixture's example.com domain would hard-bounce.
     const sendCustomVerification = (template?: string) => {
       const email = encodeURIComponent(
-        "verify-target@ses-bindings.alchemy-test.example.com",
+        template
+          ? (CVE_RECIPIENT ?? SIMULATOR)
+          : "verify-target@ses-bindings.alchemy-test.example.com",
       );
       const query = template
         ? `?email=${email}&template=${encodeURIComponent(template)}`

@@ -307,8 +307,12 @@ export default SESTestFunction.make(
         }
 
         if (request.method === "POST" && pathname === "/metric-data") {
+          // SES rejects partial-day windows: "To get daily aggregated data
+          // you must not specify partial-day timestamps. Please make your
+          // interval go from midnight to midnight UTC."
           const end = new Date();
-          const start = new Date(end.getTime() - 24 * 3600 * 1000);
+          end.setUTCHours(0, 0, 0, 0);
+          const start = new Date(end.getTime() - 7 * 24 * 3600 * 1000);
           return yield* respond(
             batchGetMetricData({
               Queries: [
