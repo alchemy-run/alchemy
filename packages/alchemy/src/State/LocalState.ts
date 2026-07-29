@@ -6,7 +6,7 @@ import type { PlatformError } from "effect/PlatformError";
 import { decodeFqn, encodeFqn } from "../FQN.ts";
 import { recordStateStoreInit } from "../Telemetry/Metrics.ts";
 import { STATE_STORE_VERSION } from "./HttpStateApi.ts";
-import { resolveSecretCodec } from "./SecretCodec.ts";
+import { resolveLocalSecretCodec } from "./SecretCodec.ts";
 import {
   State,
   stateDecodeError,
@@ -36,9 +36,23 @@ export const makeLocalState = () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    // Encrypts Redacted values at rest when ALCHEMY_PASSWORD is set.
-    const codec = yield* resolveSecretCodec;
-    const reviver = makeStateReviver(codec);
+    const context = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
+    // Local state is encrypted by default: ALCHEMY_PASSWORD when set,
+    // otherwise the auto-generated `~/.alchemy/state.key`. Resolved
+    // lazily (cached) so store construction stays infallible and no
+    // key file is created until state is actually touched.
+    const getCodec = yield* Effect.cached(
+      resolveLocalSecretCodec.pipe(
+        Effect.mapError(
+          (e) =>
+            new StateStoreError({
+              message: `Failed to initialize the state secret key: ${e.message}`,
+              cause: e,
+            }),
+        ),
+        Effect.provideContext(context),
+      ),
+    );
     const dotAlchemy = path.join(process.cwd(), ".alchemy");
     const stateDir = path.join(dotAlchemy, "state");
 
@@ -97,16 +111,20 @@ export const makeLocalState = () =>
     // linger from a write that was interrupted before this atomic-write change
     // (or any non-atomic external writer); treat it as "absent" rather than
     // throwing a JSON parse error that would abort the whole operation.
-    // Decode failures (malformed JSON, missing/wrong ALCHEMY_PASSWORD for
-    // `__secret__` envelopes) surface as StateStoreError, not defects.
+    // Decode failures (malformed JSON, wrong state key for `__secret__`
+    // envelopes) surface as StateStoreError, not defects.
     const parseState = (contents: string, what: string) =>
-      Effect.try({
-        try: () =>
-          contents.trim().length === 0
-            ? undefined
-            : JSON.parse(contents, reviver),
-        catch: stateDecodeError(what),
-      });
+      getCodec.pipe(
+        Effect.flatMap((codec) =>
+          Effect.try({
+            try: () =>
+              contents.trim().length === 0
+                ? undefined
+                : JSON.parse(contents, makeStateReviver(codec)),
+            catch: stateDecodeError(what),
+          }),
+        ),
+      );
 
     const created = new Set<string>();
 
@@ -147,8 +165,8 @@ export const makeLocalState = () =>
         )).filter((r) => r?.status === "replaced");
       }),
       set: (request) =>
-        ensure(stageDir(request)).pipe(
-          Effect.flatMap(() =>
+        Effect.all([getCodec, ensure(stageDir(request))]).pipe(
+          Effect.flatMap(([codec]) =>
             writeAtomic(
               resource(request),
               JSON.stringify(encodeState(request.value, codec), null, 2),
@@ -194,8 +212,8 @@ export const makeLocalState = () =>
           recover,
         ),
       setOutput: (request) =>
-        ensure(stageDir(request)).pipe(
-          Effect.flatMap(() =>
+        Effect.all([getCodec, ensure(stageDir(request))]).pipe(
+          Effect.flatMap(([codec]) =>
             writeAtomic(
               outputFile(request),
               JSON.stringify(encodeState(request.value as any, codec), null, 2),

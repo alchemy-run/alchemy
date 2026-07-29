@@ -1,8 +1,11 @@
 import type { Credentials } from "@distilled.cloud/aws/Credentials";
 import type { Region } from "@distilled.cloud/aws/Region";
+import * as kms from "@distilled.cloud/aws/kms";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
@@ -16,7 +19,12 @@ import {
   type PersistedState,
   type StateService,
 } from "../../State/State.ts";
-import { resolveSecretCodec } from "../../State/SecretCodec.ts";
+import {
+  makeSecretCodec,
+  makeSecretCodecFromKey,
+  resolveSecretPassword,
+  type SecretCodec,
+} from "../../State/SecretCodec.ts";
 import { encodeState, makeStateReviver } from "../../State/StateEncoding.ts";
 import { recordStateStoreInit } from "../../Telemetry/Metrics.ts";
 import { AwsAuth } from "../AuthProvider.ts";
@@ -64,7 +72,32 @@ export interface S3StateOptions {
    * @default `{ sseAlgorithm: "AES256" }`
    */
   encryption?: BucketEncryption;
+  /**
+   * How `Redacted` secret values are protected inside state objects
+   * (bucket-level SSE protects the objects at rest, but their JSON
+   * content is still readable by anyone with `s3:GetObject`).
+   *
+   * - `"kms"` (default): envelope encryption with an auto-managed KMS
+   *   key. On first use the store creates (or reuses) the
+   *   `alias/alchemy-state` KMS key, mints a data key, and stores the
+   *   KMS-wrapped data key at `{prefix}__state_key__.json` in the
+   *   bucket. Anyone who can deploy (`kms:Decrypt` on the key) can read
+   *   state — no key to manage or distribute.
+   * - `"off"`: secrets are persisted as plaintext
+   *   `{ "__redacted__": ... }` markers (the legacy behavior).
+   *
+   * Setting `ALCHEMY_PASSWORD` overrides both modes with password-based
+   * encryption — use it when readers can't reach KMS. Use one key source
+   * consistently per bucket: values encrypted under one key cannot be
+   * read with another.
+   *
+   * @default "kms"
+   */
+  secretEncryption?: "kms" | "off";
 }
+
+/** Alias of the auto-managed KMS key that wraps state data keys. */
+const STATE_KMS_ALIAS = "alias/alchemy-state";
 
 /** Context required by the distilled S3 operations. */
 type S3Deps = Credentials | HttpClient | Region;
@@ -167,18 +200,16 @@ export const makeS3State = (options: S3StateOptions = {}) =>
       ? `${options.prefix.replace(/\/+$/, "")}/`
       : "";
 
-    // Encrypts Redacted values at rest when ALCHEMY_PASSWORD is set.
-    const codec = yield* resolveSecretCodec;
-    const reviver = makeStateReviver(codec);
-
     const toError = (cause: unknown) =>
-      new StateStoreError({
-        message:
-          cause instanceof Error
-            ? cause.message
-            : `S3 state store error: ${String(cause)}`,
-        cause: cause instanceof Error ? cause : undefined,
-      });
+      cause instanceof StateStoreError
+        ? cause
+        : new StateStoreError({
+            message:
+              cause instanceof Error
+                ? cause.message
+                : `S3 state store error: ${String(cause)}`,
+            cause: cause instanceof Error ? cause : undefined,
+          });
 
     // Anything that touches AWS credentials must NOT run at layer
     // construction time. Resolving the environment (account/region),
@@ -196,6 +227,165 @@ export const makeS3State = (options: S3StateOptions = {}) =>
         return bucketName;
       }).pipe(Effect.provideContext(context), Effect.mapError(toError)),
     );
+
+    // Resolve the secret codec once, lazily (it may need the bucket for
+    // the wrapped data key, so it cannot run before `bucket`):
+    // ALCHEMY_PASSWORD → password codec; `secretEncryption: "off"` →
+    // plaintext markers; otherwise KMS envelope encryption (below).
+    const codecCached = yield* Effect.cached(
+      Effect.gen(function* () {
+        const password = yield* resolveSecretPassword;
+        if (Option.isSome(password)) {
+          return yield* Effect.sync(() => makeSecretCodec(password.value));
+        }
+        if (options.secretEncryption === "off") return undefined;
+        const bucketName = yield* bucket;
+        return yield* resolveKmsCodec(bucketName).pipe(
+          Effect.provideContext(context),
+          Effect.mapError(toError),
+        );
+      }),
+    );
+
+    /** S3 key of the KMS-wrapped data key, shared by every stack. */
+    const stateKeyObjectKey = `${prefix}__state_key__.json`;
+
+    interface WrappedStateKey {
+      keyId?: string;
+      ciphertext: string;
+    }
+
+    const readWrappedKey = (bucketName: string) =>
+      s3.getObject({ Bucket: bucketName, Key: stateKeyObjectKey }).pipe(
+        Effect.flatMap((result) =>
+          result.Body === undefined
+            ? Effect.succeed(undefined)
+            : Stream.mkString(Stream.decodeText(result.Body)).pipe(
+                Effect.map((text) => JSON.parse(text) as WrappedStateKey),
+              ),
+        ),
+        Effect.catchTag("NoSuchKey", () => Effect.succeed(undefined)),
+      );
+
+    const unwrapDataKey = (wrapped: WrappedStateKey) =>
+      kms
+        .decrypt({
+          CiphertextBlob: Buffer.from(wrapped.ciphertext, "base64"),
+        })
+        .pipe(
+          Effect.flatMap((result) => {
+            const plaintext = Redacted.isRedacted(result.Plaintext)
+              ? Redacted.value(result.Plaintext)
+              : result.Plaintext;
+            return plaintext === undefined
+              ? Effect.fail(
+                  new StateStoreError({
+                    message:
+                      "KMS Decrypt returned no plaintext for the state data key",
+                  }),
+                )
+              : Effect.sync(() => makeSecretCodecFromKey(plaintext));
+          }),
+        );
+
+    /** Resolve the KeyId behind `alias/alchemy-state`, creating key + alias on first use. */
+    const ensureKmsKey = Effect.gen(function* () {
+      const existing = yield* kms.describeKey({ KeyId: STATE_KMS_ALIAS }).pipe(
+        Effect.map((r) => r.KeyMetadata?.KeyId),
+        Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+      );
+      if (existing !== undefined) return existing;
+      const created = yield* kms.createKey({
+        Description: "Alchemy state store secret encryption key",
+      });
+      const keyId = created.KeyMetadata?.KeyId;
+      if (keyId === undefined) {
+        return yield* Effect.fail(
+          new StateStoreError({ message: "KMS CreateKey returned no KeyId" }),
+        );
+      }
+      return yield* kms
+        .createAlias({ AliasName: STATE_KMS_ALIAS, TargetKeyId: keyId })
+        .pipe(
+          Effect.map(() => keyId),
+          // Lost the alias-creation race: schedule our now-orphaned key
+          // for deletion and converge on the winner behind the alias.
+          Effect.catchTag("AlreadyExistsException", () =>
+            kms
+              .scheduleKeyDeletion({ KeyId: keyId, PendingWindowInDays: 7 })
+              .pipe(
+                Effect.ignore,
+                Effect.flatMap(() =>
+                  kms.describeKey({ KeyId: STATE_KMS_ALIAS }),
+                ),
+                Effect.flatMap((r) =>
+                  r.KeyMetadata?.KeyId === undefined
+                    ? Effect.fail(
+                        new StateStoreError({
+                          message: `KMS alias ${STATE_KMS_ALIAS} exists but has no target key`,
+                        }),
+                      )
+                    : Effect.succeed(r.KeyMetadata.KeyId),
+                ),
+              ),
+          ),
+        );
+    });
+
+    /**
+     * Envelope encryption: a 32-byte data key is minted via KMS
+     * `GenerateDataKey` against the auto-managed `alias/alchemy-state`
+     * key and persisted (KMS-wrapped) in the bucket. Every reader with
+     * `kms:Decrypt` unwraps the same data key, so teammates and CI work
+     * with nothing to distribute. The conditional `IfNoneMatch: "*"` put
+     * plus the read-back make concurrent first-time minters converge on
+     * a single key.
+     */
+    const resolveKmsCodec = (bucketName: string) =>
+      Effect.gen(function* () {
+        const existing = yield* readWrappedKey(bucketName);
+        if (existing !== undefined) return yield* unwrapDataKey(existing);
+        const keyId = yield* ensureKmsKey;
+        const dataKey = yield* kms.generateDataKey({
+          KeyId: keyId,
+          KeySpec: "AES_256",
+        });
+        if (dataKey.CiphertextBlob === undefined) {
+          return yield* Effect.fail(
+            new StateStoreError({
+              message: "KMS GenerateDataKey returned no CiphertextBlob",
+            }),
+          );
+        }
+        const wrapped: WrappedStateKey = {
+          keyId: dataKey.KeyId,
+          ciphertext: Buffer.from(dataKey.CiphertextBlob).toString("base64"),
+        };
+        yield* s3
+          .putObject({
+            Bucket: bucketName,
+            Key: stateKeyObjectKey,
+            Body: JSON.stringify(wrapped, null, 2),
+            ContentType: "application/json",
+            IfNoneMatch: "*",
+          })
+          .pipe(
+            Effect.catchTag(
+              ["PreconditionFailed", "ConditionalRequestConflict"],
+              () => Effect.void,
+            ),
+          );
+        // Converge on whatever is stored — covers losing the put race.
+        const stored = yield* readWrappedKey(bucketName);
+        if (stored === undefined) {
+          return yield* Effect.fail(
+            new StateStoreError({
+              message: `State data key object '${stateKeyObjectKey}' missing after write`,
+            }),
+          );
+        }
+        return yield* unwrapDataKey(stored);
+      });
 
     // Close over the captured context so every StateService method is
     // self-contained (`R = never`), matching the StateService contract.
@@ -254,29 +444,33 @@ export const makeS3State = (options: S3StateOptions = {}) =>
 
     /** Read and revive a JSON object; `undefined` when the key is absent. */
     const readJson = <T>(bucket: string, key: string) =>
-      s3.getObject({ Bucket: bucket, Key: key }).pipe(
-        Effect.flatMap((result) =>
-          result.Body === undefined
-            ? Effect.succeed(undefined)
-            : Stream.mkString(Stream.decodeText(result.Body)).pipe(
-                Effect.flatMap((text) =>
-                  Effect.try({
-                    try: () => JSON.parse(text, reviver) as T,
-                    catch: stateDecodeError(key),
-                  }),
+      Effect.flatMap(codecCached, (codec: SecretCodec | undefined) =>
+        s3.getObject({ Bucket: bucket, Key: key }).pipe(
+          Effect.flatMap((result) =>
+            result.Body === undefined
+              ? Effect.succeed(undefined)
+              : Stream.mkString(Stream.decodeText(result.Body)).pipe(
+                  Effect.flatMap((text) =>
+                    Effect.try({
+                      try: () => JSON.parse(text, makeStateReviver(codec)) as T,
+                      catch: stateDecodeError(key),
+                    }),
+                  ),
                 ),
-              ),
+          ),
+          Effect.catchTag("NoSuchKey", () => Effect.succeed(undefined)),
         ),
-        Effect.catchTag("NoSuchKey", () => Effect.succeed(undefined)),
       );
 
     const writeJson = (bucket: string, key: string, value: unknown) =>
-      s3.putObject({
-        Bucket: bucket,
-        Key: key,
-        Body: JSON.stringify(encodeState(value, codec), null, 2),
-        ContentType: "application/json",
-      });
+      Effect.flatMap(codecCached, (codec: SecretCodec | undefined) =>
+        s3.putObject({
+          Bucket: bucket,
+          Key: key,
+          Body: JSON.stringify(encodeState(value, codec), null, 2),
+          ContentType: "application/json",
+        }),
+      );
 
     /** Delete every object under `keyPrefix` in batches. Idempotent. */
     const deleteAll = (bucket: string, keyPrefix: string) =>

@@ -6,6 +6,8 @@ import * as Test from "@/Test/Alchemy";
 import * as s3 from "@distilled.cloud/aws/s3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+import * as Stream from "effect/Stream";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -242,6 +244,66 @@ test.provider(
           stage,
         });
         expect(result.map((r) => r.fqn)).toEqual(["Replaced"]);
+      }).pipe(Effect.ensuring(cleanStage(state, stage)));
+    }),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "secrets are KMS-encrypted at rest and revive on read",
+  () =>
+    Effect.gen(function* () {
+      const state = yield* makeS3State({ prefix: "test-state" });
+      const stage = "kms-secrets";
+
+      yield* state.deleteStack({ stack: STACK, stage });
+
+      yield* Effect.gen(function* () {
+        const value = {
+          ...resource("SecretResource", { url: "https://example.com" }),
+          props: { apiKey: Redacted.make("sk-live-kms-secret") },
+        } as ResourceState;
+        yield* state.set({ stack: STACK, stage, fqn: value.fqn, value });
+
+        const { accountId, region } = yield* AWS.AWSEnvironment.current;
+        const bucket = createStateBucketName(accountId, region);
+        const readRaw = (key: string) =>
+          s3
+            .getObject({ Bucket: bucket, Key: key })
+            .pipe(
+              Effect.flatMap((r) =>
+                r.Body === undefined
+                  ? Effect.succeed("")
+                  : Stream.mkString(Stream.decodeText(r.Body)),
+              ),
+            );
+
+        // The raw S3 object holds an encrypted envelope, never plaintext.
+        const raw = yield* readRaw(
+          `test-state/${STACK}/${stage}/SecretResource.json`,
+        );
+        expect(raw).toContain("__secret__");
+        expect(raw).not.toContain("sk-live-kms-secret");
+        // Non-secret state stays introspectable.
+        expect(raw).toContain("https://example.com");
+
+        // The KMS-wrapped data key is persisted at the prefix root.
+        const wrapped = yield* readRaw("test-state/__state_key__.json");
+        expect(wrapped).toContain("ciphertext");
+        expect(wrapped).not.toContain("sk-live-kms-secret");
+
+        // Reading through the store unwraps the data key via KMS and
+        // decrypts back into a Redacted.
+        const revived = (yield* state.get({
+          stack: STACK,
+          stage,
+          fqn: "SecretResource",
+        })) as ResourceState | undefined;
+        expect(
+          Redacted.value(
+            (revived?.props as { apiKey: Redacted.Redacted<string> }).apiKey,
+          ),
+        ).toBe("sk-live-kms-secret");
       }).pipe(Effect.ensuring(cleanStage(state, stage)));
     }),
   { timeout: 120_000 },

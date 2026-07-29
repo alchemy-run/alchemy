@@ -1,6 +1,11 @@
+import { rootDir } from "@/Auth/Profile.ts";
 import { makeLocalState } from "@/State/LocalState.ts";
 import type { ResourceState } from "@/State/ResourceState.ts";
-import { makeSecretCodec, resolveSecretCodec } from "@/State/SecretCodec.ts";
+import {
+  localStateKeyFileName,
+  makeSecretCodec,
+  resolveSecretCodec,
+} from "@/State/SecretCodec.ts";
 import {
   encodeState,
   makeStateReviver,
@@ -210,15 +215,14 @@ describe("StateEncoding secrets", () => {
           attr: { url: "https://example.com" },
         };
 
-        // 1. The old world: a store built WITHOUT a password persists the
-        //    plaintext `__redacted__` marker — the exact on-disk format
-        //    every pre-ALCHEMY_PASSWORD deployment left behind.
-        const legacyStore = yield* makeLocalState().pipe(
-          Effect.provide(
-            ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })),
-          ),
+        // 1. The old world: hand-write the exact plaintext-marker JSON
+        //    every pre-encryption version of alchemy persisted (encodeState
+        //    without a codec is that legacy writer).
+        yield* fs.makeDirectory(path.dirname(file), { recursive: true });
+        yield* fs.writeFileString(
+          file,
+          JSON.stringify(encodeState(value), null, 2),
         );
-        yield* legacyStore.set({ ...key, value });
         const legacyRaw = yield* fs.readFileString(file);
         expect(legacyRaw).toContain(REDACTED_MARKER);
         expect(legacyRaw).toContain("sk-live-super-secret");
@@ -254,6 +258,65 @@ describe("StateEncoding secrets", () => {
         expect(
           Redacted.value(
             (migrated.props as { apiKey: Redacted.Redacted<string> }).apiKey,
+          ),
+        ).toBe("sk-live-super-secret");
+
+        yield* store.deleteStack({ stack });
+      }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect(
+    "encrypts local state by default via the auto-generated ~/.alchemy/state.key",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const stack = "state-encoding-keyfile-default-test";
+        const key = { stack, stage: "test", fqn: "worker" };
+        const value: ResourceState = {
+          kind: "resource",
+          resourceType: "Test.Resource",
+          namespace: undefined,
+          fqn: "worker",
+          logicalId: "worker",
+          instanceId: "i-1",
+          providerVersion: 1,
+          status: "created",
+          downstream: [],
+          bindings: [],
+          props: { apiKey: Redacted.make("sk-live-super-secret") },
+          attr: { url: "https://example.com" },
+        };
+
+        // No ALCHEMY_PASSWORD anywhere in scope — the store must fall
+        // back to (and auto-create) the machine key.
+        const store = yield* makeLocalState().pipe(
+          Effect.provide(
+            ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })),
+          ),
+        );
+        yield* store.set({ ...key, value });
+
+        const keyFile = path.join(rootDir, localStateKeyFileName);
+        expect(yield* fs.exists(keyFile)).toBe(true);
+
+        const raw = yield* fs.readFileString(
+          path.join(
+            process.cwd(),
+            ".alchemy",
+            "state",
+            stack,
+            "test",
+            "worker.json",
+          ),
+        );
+        expect(raw).toContain(SECRET_MARKER);
+        expect(raw).not.toContain("sk-live-super-secret");
+
+        const revived = (yield* store.get(key)) as ResourceState;
+        expect(
+          Redacted.value(
+            (revived.props as { apiKey: Redacted.Redacted<string> }).apiKey,
           ),
         ).toBe("sk-live-super-secret");
 

@@ -134,7 +134,7 @@ const decodeSecret = (
   }
   if (codec === undefined) {
     throw new Error(
-      `State contains encrypted secrets ("${SECRET_MARKER}") but no ALCHEMY_PASSWORD is set. Set ALCHEMY_PASSWORD to the password that wrote this state.`,
+      `State contains encrypted secrets ("${SECRET_MARKER}") but no decryption key is available. Set ALCHEMY_PASSWORD to the key that wrote this state.`,
     );
   }
   return Redacted.make(
