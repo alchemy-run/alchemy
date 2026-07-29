@@ -283,7 +283,7 @@ export const make = <A>(
     });
 
     // The run-level default provider mode (`alchemy dev` → "local",
-    // `alchemy deploy` → "live"). A resource-scoped `live()` (captured on
+    // `alchemy deploy` → "live"). A resource-scoped `remote()` (captured on
     // the resource at registration as `Mode`) opts out of local emulation.
     const runDefaultMode = yield* defaultProviderMode;
 

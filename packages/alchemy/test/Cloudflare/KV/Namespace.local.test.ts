@@ -174,14 +174,14 @@ test.provider(
 );
 
 /**
- * `Alchemy.live()` opts a resource OUT of local emulation: even under
+ * `Alchemy.remote()` opts a resource OUT of local emulation: even under
  * `alchemy dev` the namespace is created on real Cloudflare (live provider)
  * and the worker's binding proxies to it remotely, while a sibling default
  * namespace in the same stack stays fully local. Out-of-band reads through
  * the cloud API prove the worker's writes landed in the real namespace.
  */
 test.provider(
-  "Alchemy.live() namespace runs live in dev alongside a local one",
+  "Alchemy.remote() namespace runs live in dev alongside a local one",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -190,7 +190,7 @@ test.provider(
         Effect.gen(function* () {
           const localKv = yield* Cloudflare.KV.Namespace("MixedLocalKV");
           const liveKv = yield* Cloudflare.KV.Namespace("MixedLiveKV").pipe(
-            Alchemy.live(),
+            Alchemy.remote(),
           );
           const worker = yield* Cloudflare.Worker("kv-mixed-worker", {
             main: pathe.resolve(
@@ -203,7 +203,7 @@ test.provider(
         }),
       );
 
-      // The default namespace is emulated; the live() one is real.
+      // The default namespace is emulated; the remote() one is real.
       expect(deployed.localKv.namespaceId).toMatch(/^dev:/);
       expect(deployed.liveKv.namespaceId).not.toMatch(/^dev:/);
 

@@ -6,7 +6,7 @@ import * as Output from "@/Output";
 import * as Plan from "@/Plan";
 import * as Provider from "@/Provider";
 import { UnsatisfiedResourceCycle } from "@/Plan";
-import { live } from "@/ProviderMode.ts";
+import { remote } from "@/ProviderMode.ts";
 import type { ResourceBinding } from "@/Resource";
 import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
@@ -3563,10 +3563,10 @@ describe("provider modes (local ⇄ live)", () => {
   );
 
   test(
-    "live() opts a resource out of local emulation during dev",
+    "remote() opts a resource out of local emulation during dev",
     Effect.gen(function* () {
       const plan = yield* inDev(
-        makePlan(ModalResource("A", { value: "v1" }).pipe(live())),
+        makePlan(ModalResource("A", { value: "v1" }).pipe(remote())),
       );
       expect(plan.resources.A).toMatchObject({
         action: "create",

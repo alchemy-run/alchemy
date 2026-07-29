@@ -9,7 +9,7 @@ machine. A **local provider** is the implementation that serves a resource
 type in dev, alongside the **live provider** used by `alchemy deploy`.
 
 This guide is about *building* one. For the user-facing dev model — and
-opting a resource out of local emulation with `live()` — see
+opting a resource out of local emulation with `remote()` — see
 [Local development](/environments/local-development). If you haven't built
 a provider before, start with
 [Custom Provider](/infrastructure-as-code/custom-provider) — a local
@@ -187,14 +187,14 @@ test.provider("promotes a dev worker to a live worker", (stack) =>
     // Same props, pinned live: planned as a REPLACEMENT — the live
     // provider creates the deployed worker, the local provider kills
     // workerd.
-    yield* program.pipe(Alchemy.live(), stack.deploy);
+    yield* program.pipe(Alchemy.remote(), stack.deploy);
     yield* stack.destroy();
   }),
 );
 ```
 
 `Test.make({ dev: true })` gives the file `alchemy dev` semantics, and
-`live()` works in tests exactly like in programs.
+`remote()` works in tests exactly like in programs.
 
 ## Reference implementations
 
@@ -211,7 +211,7 @@ test.provider("promotes a dev worker to a live worker", (stack) =>
 ## Where next
 
 - [Local development](/environments/local-development) — the user-facing
-  dev loop, and opting resources out of local emulation with `live()`.
+  dev loop, and opting resources out of local emulation with `remote()`.
 - [Custom Provider](/infrastructure-as-code/custom-provider) — the
   lifecycle contract both implementations share.
 - [Resource lifecycle](/infrastructure-as-code/resource-lifecycle) —

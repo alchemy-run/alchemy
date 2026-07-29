@@ -1,5 +1,5 @@
 /**
- * Dev-mode remote-producer shim for `Alchemy.live()` queues.
+ * Dev-mode remote-producer shim for `Alchemy.remote()` queues.
  *
  * Cloudflare's preview/remote-binding sessions reject queue bindings
  * outright (a preview worker carrying one serves 503 for every request;
@@ -33,7 +33,7 @@ import type * as Redacted from "effect/Redacted";
 import type * as Output from "../../Output.ts";
 import {
   defaultProviderMode,
-  live,
+  remote,
   type ProviderMode,
 } from "../../ProviderMode.ts";
 import { Random } from "../../Random.ts";
@@ -162,7 +162,7 @@ export interface QueueShimBinding {
 
 /**
  * Conditionally instantiate the queue shim for a producer binding: when a
- * LOCAL host worker binds a LIVE queue (dev run + `Alchemy.live()` on the
+ * LOCAL host worker binds a LIVE queue (dev run + `Alchemy.remote()` on the
  * queue), register the shim worker + its token and return their outputs
  * for the binding data. Any other mode combination returns `undefined` —
  * including the shim worker's own eval of its queue binding (the shim is
@@ -185,7 +185,7 @@ export const maybeQueueShim = Effect.fn(function* (
       QUEUE: queue,
       SHIM_TOKEN: token.text,
     },
-  }).pipe(live());
+  }).pipe(remote());
   return {
     url: shim.url,
     token: token.text,

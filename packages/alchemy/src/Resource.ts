@@ -138,7 +138,7 @@ export interface ResourceLike<
   /**
    * Per-resource provider mode captured from the ambient
    * {@link ProviderModePolicy} at registration time. `"live"` when the
-   * resource was pinned via `.pipe(live())` (opting out of local emulation
+   * resource was pinned via `.pipe(remote())` (opting out of local emulation
    * during dev); `undefined` means the run default (`AlchemyContext.dev`).
    */
   Mode: ProviderMode | undefined;
@@ -277,10 +277,10 @@ export function Resource<R extends ResourceLike>(
       const namespace = yield* CurrentNamespace;
       const fqn = toFqn(namespace, id);
 
-      // `live()` opts resources out of local emulation during dev. The
+      // `remote()` opts resources out of local emulation during dev. The
       // captured Mode is either "live" (pinned) or undefined (run default).
       // The Reference default is `undefined` — "no explicit decoration" —
-      // which is distinct from an explicit `live(false)`.
+      // which is distinct from an explicit `remote(false)`.
       const ambientPolicy = yield* ProviderModePolicy;
       const ambientMode: ProviderMode | undefined = ambientPolicy
         ? "live"
@@ -305,7 +305,7 @@ export function Resource<R extends ResourceLike>(
                 "resource must resolve to a single provider mode: register " +
                 "it once and close over the returned value, or make both " +
                 "registration sites agree (e.g. wrap both in the same " +
-                "`live()` scope).",
+                "`remote()` scope).",
               fqn,
               existingMode: existing.Mode,
               conflictingMode: ambientMode,

@@ -24,13 +24,13 @@ const logLevel = Effect.provideService(
  * themselves carry no promotion logic:
  *
  * 1. dev (all local)          — `dev:` rows, zero cloud calls
- * 2. dev + live() on KV       — hybrid: the namespace switches local → live
+ * 2. dev + remote() on KV       — hybrid: the namespace switches local → live
  *                               WITHIN dev (replacement, real cloud id);
  *                               bucket/DB stay local
  * 3. deploy (all live)        — bucket/DB promote (replacements, new real
  *                               ids); the already-live namespace keeps its
  *                               identity (no churn)
- * 4. dev, live() removed      — demotion: all three switch live → local;
+ * 4. dev, remote() removed      — demotion: all three switch live → local;
  *                               the real cloud resources are deleted by the
  *                               live provider (the stamped mode) and fresh
  *                               `dev:` rows replace them
@@ -46,7 +46,7 @@ test.provider(
       const program = (liveKV: boolean) =>
         Effect.gen(function* () {
           const namespace = yield* Cloudflare.KV.Namespace("CycleKV").pipe(
-            Alchemy.live(liveKV),
+            Alchemy.remote(liveKV),
           );
           const bucket = yield* Cloudflare.R2.Bucket("CycleBucket");
           const database = yield* Cloudflare.D1.Database("CycleDB");
@@ -75,7 +75,7 @@ test.provider(
       expect(dev1.bucket.bucketName).toMatch(/^dev:/);
       expect(dev1.database.databaseId).toMatch(/^dev:/);
 
-      // 2. dev + live() on the namespace — hybrid. The engine replaces the
+      // 2. dev + remote() on the namespace — hybrid. The engine replaces the
       // local KV row with a real cloud namespace; the others stay local
       // (identities unchanged — no churn from an unrelated sibling switch).
       const dev2 = yield* inDev(stack.deploy(program(true)));
@@ -94,7 +94,7 @@ test.provider(
       expect(yield* bucketExists(live.bucket.bucketName)).toBe(true);
       expect(yield* databaseExists(live.database.databaseId)).toBe(true);
 
-      // 4. back to dev with live() removed — demotion. Every resource
+      // 4. back to dev with remote() removed — demotion. Every resource
       // switches live → local: fresh `dev:` rows, and the live provider
       // (the stamped mode that created them) deletes the cloud resources.
       const dev3 = yield* inDev(stack.deploy(program(false)));

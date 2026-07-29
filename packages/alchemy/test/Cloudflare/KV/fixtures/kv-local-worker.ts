@@ -2,7 +2,7 @@
 // put / get / getWithMetadata / list / delete. The binding under test is
 // selected with `?binding=NAME` (default `KV`) so one worker can exercise
 // several namespaces — e.g. a locally-simulated one and an
-// `Alchemy.live()`-opted one side by side.
+// `Alchemy.remote()`-opted one side by side.
 interface KVNamespaceLike {
   put(
     key: string,

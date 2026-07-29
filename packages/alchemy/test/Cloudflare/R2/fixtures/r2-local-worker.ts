@@ -27,7 +27,7 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/seed") {
       // Writes without deleting, so the test can verify out-of-band (via
-      // the cloud API for an `Alchemy.live()` bucket) that the object
+      // the cloud API for an `Alchemy.remote()` bucket) that the object
       // actually landed in the bound bucket.
       await env.BUCKET.put("seed.txt", "seeded by worker", {
         httpMetadata: { contentType: "text/plain" },

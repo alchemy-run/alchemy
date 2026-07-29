@@ -77,7 +77,7 @@ export type Consumer = Resource<
     /**
      * Dev only, live queues only: the real queue's name, resolved from the
      * cloud so the local runtime can wire the broker + pull loop for a
-     * locally-running consumer of an `Alchemy.live()` queue.
+     * locally-running consumer of an `Alchemy.remote()` queue.
      */
     queueName?: string;
     /**
@@ -650,7 +650,7 @@ export const ConsumerProviderLocal = () =>
         }),
         reconcile: Effect.fn(function* ({ news, output }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
-          // A LIVE queue (`Alchemy.live()`) consumed by a LOCAL worker:
+          // A LIVE queue (`Alchemy.remote()`) consumed by a LOCAL worker:
           // Cloudflare only pushes to deployed consumers, so the local
           // runtime drains the real queue via the HTTP pull API instead.
           // Observe the queue (name + existing consumers) and ensure an

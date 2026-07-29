@@ -308,14 +308,14 @@ test.provider(
 );
 
 /**
- * `Alchemy.live()` opts the database OUT of local emulation: even under
+ * `Alchemy.remote()` opts the database OUT of local emulation: even under
  * `alchemy dev` it is created on real Cloudflare (a real UUID, not a `dev:`
  * id) and the worker's `d1` binding proxies to it remotely. An out-of-band
  * query through the cloud API proves the worker's writes landed in the real
  * database, and destroy removes it.
  */
 test.provider(
-  "Alchemy.live() database runs live in dev",
+  "Alchemy.remote() database runs live in dev",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -323,7 +323,7 @@ test.provider(
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
           const db = yield* Cloudflare.D1.Database("LiveDevDB").pipe(
-            Alchemy.live(),
+            Alchemy.remote(),
           );
           const worker = yield* Cloudflare.Worker("d1-live-worker", {
             main: pathe.resolve(

@@ -45,7 +45,7 @@ export const makeQueueBinding = <Client>(options: {
               queueName: queue.queueName,
               // Alchemy-only mode discriminator for dev (stripped before
               // upload): a `dev:` id keeps the local broker, a real id
-              // (Alchemy.live()) routes through the deployed shim.
+              // (Alchemy.remote()) routes through the deployed shim.
               queueId: queue.queueId,
               ...(shim ? { shim } : {}),
             },

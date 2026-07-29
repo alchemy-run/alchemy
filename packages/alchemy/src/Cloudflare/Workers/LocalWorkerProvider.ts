@@ -158,7 +158,7 @@ export const LocalWorkerProvider = () =>
           localRuntimeState.queueConsumers,
         )) {
           if (consumer.scriptName === scriptName) {
-            // A LIVE queue (`Alchemy.live()`) consumed locally: the broker
+            // A LIVE queue (`Alchemy.remote()`) consumed locally: the broker
             // is still local, but it is fed by the runtime's pull loop
             // draining the real queue over the HTTP pull API (the
             // Consumer's local provider attached the `http_pull` consumer
@@ -1055,7 +1055,7 @@ export const toRuntimeBinding = Effect.fn(function* (
     case "d1":
       // A `dev:` id belongs to a locally-emulated database (local D1
       // provider); a real id is a live database the dev worker proxies to
-      // (e.g. the resource opted out of emulation via `Alchemy.live()`).
+      // (e.g. the resource opted out of emulation via `Alchemy.remote()`).
       return isLocalId(b.databaseId)
         ? D1.local({ binding: b.name, id: b.databaseId })
         : D1.remote(b.name, b.databaseId);
@@ -1098,7 +1098,7 @@ export const toRuntimeBinding = Effect.fn(function* (
     case "plain_text":
       return Text.local(b.name, b.text);
     case "queue": {
-      // A real queueId belongs to an `Alchemy.live()` queue. Queue bindings
+      // A real queueId belongs to an `Alchemy.remote()` queue. Queue bindings
       // are NOT supported in Cloudflare's remote/preview sessions — a
       // platform limitation (cloudflare/workers-sdk#9929) — so live
       // production goes through the deployed shim worker registered at
@@ -1114,8 +1114,8 @@ export const toRuntimeBinding = Effect.fn(function* (
           return yield* new WorkerValidationError({
             message:
               `Queue binding "${b.name}" targets a live queue ` +
-              "(Alchemy.live()) but no producer shim was registered for it — " +
-              "re-deploy, or remove live() from the queue (local emulation).",
+              "(Alchemy.remote()) but no producer shim was registered for it — " +
+              "re-deploy, or remove remote() from the queue (local emulation).",
             value: b,
           });
         }

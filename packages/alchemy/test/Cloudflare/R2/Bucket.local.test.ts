@@ -176,14 +176,14 @@ test.provider(
 );
 
 /**
- * `Alchemy.live()` opts the bucket OUT of local emulation: even under
+ * `Alchemy.remote()` opts the bucket OUT of local emulation: even under
  * `alchemy dev` the bucket is created on real Cloudflare (a real bucket
  * name, not `dev:`-prefixed) and the worker's `r2_bucket` binding proxies
  * to it remotely. An out-of-band read through the cloud API proves the
  * worker's write landed in the real bucket, and destroy removes it.
  */
 test.provider(
-  "Alchemy.live() bucket runs live in dev",
+  "Alchemy.remote() bucket runs live in dev",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -191,7 +191,7 @@ test.provider(
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
           const bucket = yield* Cloudflare.R2.Bucket("LiveDevBucket").pipe(
-            Alchemy.live(),
+            Alchemy.remote(),
           );
           const worker = yield* Cloudflare.Worker("r2-live-worker", {
             main: pathe.resolve(

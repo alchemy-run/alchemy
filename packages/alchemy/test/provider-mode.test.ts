@@ -3,7 +3,7 @@
  *
  * Covers the engine behavior added by ProviderMode / ProviderLayer.dual:
  *   - the resolved mode is stamped on state (`providerMode`) on every commit
- *   - dev runs resolve local providers; `live()` opts a resource out of
+ *   - dev runs resolve local providers; `remote()` opts a resource out of
  *     local emulation; mode-agnostic providers satisfy any requested mode
  *   - switching modes plans a REPLACEMENT; the old generation / orphan row
  *     is deleted with the provider variant of the mode that created it
@@ -17,7 +17,7 @@
  */
 import * as LocalProvider from "@/Local/LocalProvider.ts";
 import * as Provider from "@/Provider.ts";
-import { live } from "@/ProviderMode.ts";
+import { remote } from "@/ProviderMode.ts";
 import { Resource } from "@/Resource";
 import { Stack } from "@/Stack";
 import { State, type ResourceState } from "@/State";
@@ -114,16 +114,16 @@ describe("provider modes", () => {
   );
 
   test.provider(
-    "live() opts a resource out of local emulation during dev",
+    "remote() opts a resource out of local emulation during dev",
     (stack) =>
       Effect.gen(function* () {
         const output = yield* inDev(
-          modal("A", "v1").pipe(live(), stack.deploy),
+          modal("A", "v1").pipe(remote(), stack.deploy),
         );
         expect(output.runtime).toEqual("live");
         expect((yield* getState("A"))?.providerMode).toEqual("live");
 
-        // Dropping live() in a later dev run switches it back to local —
+        // Dropping remote() in a later dev run switches it back to local —
         // a replacement like any other mode switch.
         const back = yield* inDev(modal("A", "v1").pipe(stack.deploy));
         expect(back.runtime).toEqual("local");
@@ -253,7 +253,7 @@ describe("provider modes", () => {
       Effect.gen(function* () {
         const exit = yield* Effect.gen(function* () {
           yield* ModalResource("A", { value: "v1" });
-          yield* ModalResource("A", { value: "v1" }).pipe(live());
+          yield* ModalResource("A", { value: "v1" }).pipe(remote());
           return {};
         }).pipe(stack.deploy, Effect.exit);
 
@@ -272,7 +272,7 @@ describe("provider modes", () => {
         // pattern must keep working.
         const output = yield* inDev(
           Effect.gen(function* () {
-            yield* ModalResource("A", { value: "v1" }).pipe(live());
+            yield* ModalResource("A", { value: "v1" }).pipe(remote());
             const again = yield* ModalResource("A", { value: "v1" });
             return { runtime: again.runtime };
           }).pipe(stack.deploy),

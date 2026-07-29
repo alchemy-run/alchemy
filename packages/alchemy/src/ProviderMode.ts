@@ -25,12 +25,12 @@ export type ProviderMode = "live" | "local";
  * resources registered while it is in context resolve the **live**
  * provider even during `alchemy dev`.
  *
- * Apply it with the {@link live} combinator. During `alchemy deploy`
+ * Apply it with the {@link remote} combinator. During `alchemy deploy`
  * everything is live anyway, so the policy only has an effect in dev.
  *
  * Tri-state `Context.Reference`: `undefined` (the default — no explicit
- * decoration, inherit/run default), `true` (`live()`), `false`
- * (`live(false)` — explicitly follow the run default again). The unset vs
+ * decoration, inherit/run default), `true` (`remote()`), `false`
+ * (`remote(false)` — explicitly follow the run default again). The unset vs
  * explicit distinction is load-bearing for conflict detection at
  * registration (see `Resource.ts`).
  */
@@ -42,7 +42,7 @@ export const ProviderModePolicy = Context.Reference<boolean | undefined>(
 /**
  * The same resource (identified by FQN) was registered (`yield*`ed) from two
  * places whose ambient {@link ProviderModePolicy} disagree — e.g. once inside
- * `live()` and once without it. Context-based decoration cannot decide which
+ * `remote()` and once without it. Context-based decoration cannot decide which
  * one wins, so the engine fails loudly instead of silently picking one.
  *
  * Fix: register the resource once and close over the returned value, or make
@@ -60,31 +60,31 @@ export class ConflictingProviderModeError extends Data.TaggedError(
 }> {}
 
 /**
- * Run the wrapped resources **live even during `alchemy dev`** — the
- * opt-out from local emulation. During `alchemy deploy` this is a no-op
- * (everything is live).
+ * Run the wrapped resources **remotely (against the real cloud) even during
+ * `alchemy dev`** — the opt-out from local emulation. During `alchemy deploy`
+ * this is a no-op (everything is remote).
  *
  * Captured at registration time like `adopt()` / `retain()`, so it can be
  * applied to a single resource or a whole scope:
  *
  * ```ts
  * // This queue talks to real Cloudflare even in dev
- * const queue = yield* Queue("Jobs", {}).pipe(Alchemy.live());
+ * const queue = yield* Queue("Jobs", {}).pipe(Alchemy.remote());
  *
  * // Everything in this scope runs live in dev
  * yield* Effect.gen(function* () {
  *   const queue = yield* Queue("Jobs", {});
  *   const consumer = yield* Consumer("JobsConsumer", { queue });
- * }).pipe(Alchemy.live());
+ * }).pipe(Alchemy.remote());
  * ```
  *
- * `live(false)` (or an `Effect<boolean>` resolving to false) removes the
+ * `remote(false)` (or an `Effect<boolean>` resolving to false) removes the
  * pin — the resource follows the run default again.
  *
  * Providers with a single implementation are mode-agnostic and already run
- * live in dev; `live()` on them is a no-op.
+ * live in dev; `remote()` on them is a no-op.
  */
-export const live: {
+export const remote: {
   (
     enabled?: boolean,
   ): <A, E, R = never>(
@@ -106,7 +106,7 @@ export const live: {
 /**
  * Resolve the run-level default provider mode:
  *
- * 1. An ambient {@link ProviderModePolicy} of `true` (e.g. `live()` wrapped
+ * 1. An ambient {@link ProviderModePolicy} of `true` (e.g. `remote()` wrapped
  *    around a whole program) forces `"live"`.
  * 2. Otherwise `AlchemyContext.dev` decides: `dev: true` → `"local"`.
  * 3. Without an AlchemyContext (bare engine tests), default to `"live"`.

@@ -69,7 +69,7 @@ export interface SelfUrlWorkerBinding {
 /**
  * The `queue` metadata binding extended with the alchemy-only `queueId`.
  * The local worker provider uses it to discriminate a locally-emulated
- * queue (`dev:` id → local broker) from an `Alchemy.live()` queue in dev
+ * queue (`dev:` id → local broker) from an `Alchemy.remote()` queue in dev
  * (real id → remote-proxied producer). Stripped from the binding before
  * the script upload — Cloudflare never sees it.
  */
@@ -80,7 +80,7 @@ export type QueueWorkerBinding = Extract<
   queueId?: string;
   /**
    * Alchemy-only (stripped before upload): dev-mode remote-producer shim
-   * for an `Alchemy.live()` queue. Cloudflare preview sessions reject
+   * for an `Alchemy.remote()` queue. Cloudflare preview sessions reject
    * queue bindings, so a local worker produces to the live queue through
    * this deployed shim worker instead (see `Queues/QueueShim.ts`).
    */

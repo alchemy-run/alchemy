@@ -107,14 +107,14 @@ test.provider(
 );
 
 /**
- * The full `Alchemy.live()` queue roundtrip in dev: the local worker
+ * The full `Alchemy.remote()` queue roundtrip in dev: the local worker
  * produces through the deployed shim into the REAL queue, and its local
  * `queue()` handler receives the messages back through the runtime's pull
  * loop (the Consumer's local provider attaches an `http_pull` consumer to
  * the real queue; the pull loop drains it into the local broker).
  */
 test.provider(
-  "Alchemy.live() queue round-trips: local produce, real queue, local consume",
+  "Alchemy.remote() queue round-trips: local produce, real queue, local consume",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -123,7 +123,7 @@ test.provider(
         Effect.gen(function* () {
           const queue = yield* Cloudflare.Queues.Queue(
             "LiveRoundtripQueue",
-          ).pipe(Alchemy.live());
+          ).pipe(Alchemy.remote());
           const worker = yield* Cloudflare.Worker("queue-roundtrip-worker", {
             main: pathe.resolve(
               import.meta.dirname,
@@ -178,7 +178,7 @@ test.provider(
 );
 
 /**
- * `Alchemy.live()` queues in dev: Cloudflare's remote-binding (preview)
+ * `Alchemy.remote()` queues in dev: Cloudflare's remote-binding (preview)
  * sessions reject queue bindings at the platform level
  * (cloudflare/workers-sdk#9929), so production goes through the deployed
  * shim instead — the eval registers a real shim worker holding the actual
@@ -189,7 +189,7 @@ test.provider(
  * the cloud API pulls the messages back from the REAL queue.
  */
 test.provider(
-  "Alchemy.live() queue in dev produces through the deployed shim",
+  "Alchemy.remote() queue in dev produces through the deployed shim",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -197,7 +197,7 @@ test.provider(
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
           const queue = yield* Cloudflare.Queues.Queue("LiveDevQueue").pipe(
-            Alchemy.live(),
+            Alchemy.remote(),
           );
           const worker = yield* Cloudflare.Worker("queue-live-worker", {
             main: pathe.resolve(

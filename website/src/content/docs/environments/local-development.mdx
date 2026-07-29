@@ -98,13 +98,13 @@ implementation; everything else is live in dev automatically. See
 
 ## Running a resource live in dev
 
-`Alchemy.live()` opts a resource out of local emulation — "run this live
+`Alchemy.remote()` opts a resource out of local emulation — "run this live
 even in dev":
 
 ```typescript
 import * as Alchemy from "alchemy";
 
-const worker = yield* Worker("Api", { ... }).pipe(Alchemy.live());
+const worker = yield* Worker("Api", { ... }).pipe(Alchemy.remote());
 ```
 
 During `alchemy deploy` the pin is a no-op — everything is live anyway.
@@ -115,18 +115,18 @@ During `alchemy deploy` the pin is a no-op — everything is live anyway.
 yield* Effect.gen(function* () {
   const api = yield* Worker("Api", { ... });
   const site = yield* Worker("Site", { ... });
-}).pipe(Alchemy.live());
+}).pipe(Alchemy.remote());
 ```
 
 The policy is ambient and captured at registration (like `adopt()`), so
 everything inside the scope runs live. Resources with no local emulation
-(an R2 Bucket, a D1 Database) already run live in dev — `live()` on them
+(an R2 Bucket, a D1 Database) already run live in dev — `remote()` on them
 is a no-op.
 
 ### Switching is a replacement
 
 When a resource moves between local and live — you deploy after a dev
-session, or add/remove `live()` — it's planned as a **replacement**: the
+session, or add/remove `remote()` — it's planned as a **replacement**: the
 new instance is created live, and the local one (the workerd instance, the
 dev process) is torn down.
 
