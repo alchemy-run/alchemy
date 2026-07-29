@@ -27,9 +27,10 @@ Alchemy models these with
 [`Cluster`](/providers/aws/sagemaker/cluster),
 [`ClusterSchedulerConfig`](/providers/aws/sagemaker/clusterschedulerconfig),
 and [`ComputeQuota`](/providers/aws/sagemaker/computequota), and
-EKS workloads opt onto HyperPod nodes with the `hyperpod` prop on
-[`Deployment`](/providers/aws/eks/deployment) and
-[`Job`](/providers/aws/eks/job).
+Kubernetes workloads opt onto HyperPod nodes by spreading
+`AWS.EKS.hyperpod(...)` into
+[`Kubernetes.Deployment`](/providers/kubernetes/deployment) and
+[`Kubernetes.Job`](/providers/kubernetes/job) props.
 
 ## Choose an orchestrator
 
@@ -132,7 +133,7 @@ enforces a few constraints, all encoded in the example:
   must be installed on the EKS cluster before the HyperPod
   cluster attaches — SageMaker validates it. The example fetches
   the chart with an `Action` and applies it with
-  [`HelmChart`](/providers/aws/eks/helmchart).
+  [`Kubernetes.HelmChart`](/providers/kubernetes/helmchart).
 
 ```typescript
 const eks = yield* AWS.EKS.Cluster("Orchestrator", {
