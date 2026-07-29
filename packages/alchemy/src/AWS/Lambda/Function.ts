@@ -25,7 +25,12 @@ import { deepEqual, havePropsChanged, isResolved } from "../../Diff.ts";
 import { isScopeEjected, type HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
+import {
+  Platform,
+  type Main,
+  type PlatformProps,
+  type PlatformServices,
+} from "../../Platform.ts";
 import type { LogLine, LogsInput } from "../../Provider.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
@@ -997,11 +1002,19 @@ export const Function: Platform<
   Function,
   FunctionServices,
   FunctionShape,
-  Serverless.FunctionContext,
+  Serverless.FunctionContext<
+    Scope.Scope | FunctionServices | PlatformServices,
+    Scope.Scope | HandlerContext
+  >,
   {},
   FunctionZipProps
 > = Platform(FunctionTypeId, {
-  createRuntimeContext: (id: string): Serverless.FunctionContext => {
+  createRuntimeContext: (
+    id: string,
+  ): Serverless.FunctionContext<
+    Scope.Scope | FunctionServices | PlatformServices,
+    Scope.Scope | HandlerContext
+  > => {
     const listeners: Effect.Effect<Serverless.FunctionListener>[] = [];
     const env: Record<string, any> = {};
 
@@ -1035,7 +1048,10 @@ export const Function: Platform<
           Effect.isEffect(handler)
             ? listeners.push(handler)
             : listeners.push(Effect.succeed(handler)),
-        )) as any as Serverless.FunctionContext["listen"],
+        )) as any as Serverless.FunctionContext<
+        Scope.Scope | FunctionServices | PlatformServices,
+        Scope.Scope | HandlerContext
+      >["listen"],
       exports: Effect.sync(() => ({
         // construct an Effect that produces the Function's entrypoint
         // Effect<(event, context) => Promise<any>>

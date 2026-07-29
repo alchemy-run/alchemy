@@ -49,17 +49,21 @@ export default class InitIOProbe extends AWS.Lambda.Function<InitIOProbe>()(
     functionUrl: true,
   },
   Effect.gen(function* () {
-    const config = yield* TraceConfig;
-
-    return {
-      fetch: Effect.gen(function* () {
-        return yield* HttpServerResponse.json({
-          nonce: config.nonce,
-          traceLength: config.trace.length,
-          hasUag: config.trace.includes("uag="),
-          initFetches: (globalThis as any).__initFetches ?? 0,
-        });
+    const host = yield* AWS.Lambda.Function;
+    yield* host.listen(
+      Effect.gen(function* () {
+        const services = yield* Layer.build(TraceConfigLive);
+        return () =>
+          Effect.gen(function* () {
+            const config = yield* TraceConfig;
+            return yield* HttpServerResponse.json({
+              nonce: config.nonce,
+              traceLength: config.trace.length,
+              hasUag: config.trace.includes("uag="),
+              initFetches: (globalThis as any).__initFetches ?? 0,
+            }).pipe(Effect.orDie);
+          }).pipe(Effect.provide(services));
       }),
-    };
-  }).pipe(Effect.provide(TraceConfigLive)),
+    );
+  }),
 ) {}
