@@ -37,6 +37,13 @@ Raise the number and re-deploy to ramp — 10, then 25, then 50. Remove
 the prop (or set `traffic: 100`) to promote the version to all
 traffic.
 
+`message` is optional — it is the human-readable note shown next to
+the version in the Cloudflare dashboard and in
+`wrangler versions list`, where a commit message is the usual choice.
+Its machine-readable sibling `version.tag` (a commit SHA or PR number)
+also comes back at runtime through the
+[version metadata binding](#verify-which-version-served-a-request).
+
 The very first deploy of a script always goes to 100%, since there is
 no previous version to split with. `traffic: 0` uploads the version
 without touching the live deployment at all — the equivalent of
@@ -170,6 +177,21 @@ enabled by default. To keep the stable workers.dev URL off while each
 version stays reachable at its preview URL, set
 `workersDev: { enabled: false, previewsEnabled: true }` on the parent.
 
+### Preview version or preview stage?
+
+Deploying the whole stack to its own stage is also a preview, so use
+whichever fits: a separate *stage* creates fully independent
+infrastructure — its own script, its own script-level settings, its
+own copies of every other resource — with no relationship to the
+environment it previews. A preview *version* lives on the parent's
+script, so it runs with the parent's routes, domains, and settings,
+appears in the parent's version history, and adds no new scripts to
+the account — while still carrying its own bindings for the data
+layer. Reach for a stage when the change touches script-level settings
+or infrastructure beyond the Worker; reach for a version when you want
+a cheap, shareable preview of code running as close to the parent
+environment as possible.
+
 ## Smoke test before shifting traffic
 
 The `Cloudflare-Workers-Version-Overrides` request header pins a
@@ -199,6 +221,20 @@ Overrides also apply to `fetch()`-based service binding calls —
 forward the incoming request (or set the header on the subrequest) to
 keep cooperating Workers on matching versions during a rollout.
 
+Why `traffic: 1` and not `0`: overrides only reach versions that are
+in the current deployment, and `traffic: 0` uploads the version
+without entering it into the deployment — so a zero-traffic version is
+reachable only at its [preview URL](#preview-versions), not through an
+override. `traffic: 1` is the smallest deployment that makes the
+version override-addressable; it does put 1% of live traffic on the
+new version, so treat it as the first ramp step, not a private
+preview.
+
+If the smoke test fails, abort by re-deploying the previous code at
+the default 100 — from CI, re-run the deploy from the last good ref
+(see [Roll back](#roll-back)). The bad version drops out of the
+deployment and stops receiving its slice.
+
 ## Keep users on one version
 
 Percentages route each request independently, so consecutive requests
@@ -212,11 +248,42 @@ deterministically from the configured percentages:
 curl -s https://api.example.com -H 'Cloudflare-Workers-Version-Key: user-123'
 ```
 
-On a zone you control, a
+For traffic served through a zone (custom domains and routes), declare
+the pinning as infrastructure: a
 [Transform Rule](https://developers.cloudflare.com/rules/transform/request-header-modification/)
-can populate the header from an existing cookie or claim, with no code
-changes. As the rollout ramps up, pinned users only ever move forward
-to the new version, never back — unless you roll back.
+in the same Stack populates the header from an existing cookie, with
+no Worker code changes:
+
+```typescript
+const zone = yield* Cloudflare.Zone.Zone("Zone", { name: "example.com" });
+
+yield* Cloudflare.Ruleset.Ruleset("VersionAffinity", {
+  zone,
+  phase: "http_request_late_transform",
+  rules: [
+    {
+      description: "Pin users to a Worker version by session cookie",
+      expression: `len(http.request.cookies["session_id"]) > 0`,
+      action: "rewrite",
+      actionParameters: {
+        headers: {
+          "Cloudflare-Workers-Version-Key": {
+            operation: "set",
+            expression: `http.request.cookies["session_id"][0]`,
+          },
+        },
+      },
+    },
+  ],
+});
+```
+
+Any stable request property works as the key — a session cookie, an
+auth claim, a tenant id. Transform Rules run on zone traffic, so this
+does not cover requests to the bare `workers.dev` URL; those clients
+can send the header themselves. As the rollout ramps up, pinned users
+only ever move forward to the new version, never back — unless you
+roll back.
 
 ## Verify which version served a request
 
@@ -260,6 +327,22 @@ subdomain — apply immediately to *all* versions. They are rejected on
 a version worker (they belong to the parent), and during a gradual
 rollout of a Worker's own deploy they keep their live values until the
 next full deploy.
+
+Anything the Worker *calls* — Durable Objects, Workflows, service
+bindings to other Workers — sits outside the version too, so both
+versions talk to it for the duration of the rollout. Ship changes to
+those in expand-and-contract order:
+
+1. Deploy the new capability first, at 100% — the new DO handler, the
+   new Workflow, the new RPC method — alongside the old one.
+2. Gradually roll out the caller that uses the new path, while the
+   still-live old version keeps calling the old path.
+3. Once the caller is promoted to 100%, remove the old path in a
+   later deploy.
+
+The same discipline applies to data: both versions read and write the
+same KV namespaces, D1 databases, and DO storage, so schema changes
+must stay compatible with both versions until the rollout completes.
 
 Platform limits to plan around:
 
