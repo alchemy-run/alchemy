@@ -281,6 +281,33 @@ Platform limits to plan around:
   `crossVersionCache: true` to share cached responses across versions
   during a rollout.
 
+## Containers roll out by instance, not by request
+
+[Containers](/cloudflare/compute/containers) have their own gradual
+mechanism, and it is a different shape: a rollout replaces running
+*instances* with the new image in steps, rather than splitting
+*requests* between two versions. Set `rollout` on the container class
+and alchemy creates the rollout automatically whenever the image or
+configuration changes:
+
+```typescript
+export class Api extends Cloudflare.Container<Api>()("Api", {
+  main: import.meta.url,
+  instances: 4,
+  maxInstances: 4,
+  rollout: { strategy: "rolling", stepPercentage: 25 },
+}) {}
+```
+
+The steps advance automatically as new instances become healthy —
+there is no holding a container canary at 10% of requests the way
+`version.traffic` holds a Worker version. The default (no `rollout`)
+replaces all instances at once. Because the fronting Worker cuts over
+immediately while instances roll, keep the Worker-to-container
+protocol compatible across both image versions until the rollout
+completes. See [Rollouts](/cloudflare/compute/containers#rollouts) in
+the Containers guide.
+
 ## Where next
 
 - [Workers](/cloudflare/compute/workers) — the full Worker reference,

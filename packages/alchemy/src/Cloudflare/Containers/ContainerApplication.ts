@@ -613,7 +613,15 @@ export type ContainerShape = Main<ContainerServices>;
  *
  * A `rolling` strategy with `stepPercentage: 25` replaces instances in 25%
  * increments so the application stays available during the update; the default
- * `immediate` strategy swaps everything at once.
+ * `immediate` strategy swaps everything at once. Steps advance automatically
+ * as new instances become healthy; each replaced instance receives `SIGTERM`
+ * and has 15 minutes to shut down cleanly before `SIGKILL`.
+ *
+ * Rollouts replace instances — they do not split requests between two image
+ * versions (request-level traffic splitting exists one layer up, on the
+ * Worker, via `version.traffic`). The fronting Worker and Durable Object cut
+ * over immediately while instances roll, so keep the Worker-to-container
+ * protocol compatible across both image versions until a rollout completes.
  */
 export interface ContainerApplication<Shape = unknown> extends Resource<
   ContainerTypeId,
