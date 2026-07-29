@@ -1,15 +1,13 @@
 import {
   Runtime,
-  RuntimeError,
   type BindingHook,
   type BindingServices,
   type HyperdriveOrigin,
   type Module,
-  type Assets as RuntimeAssets,
   type DurableObjectNamespace as RuntimeDurableObject,
   type QueueConsumer as RuntimeQueueConsumer,
-  type Workflow as RuntimeWorkflow,
   type RuntimeServices,
+  type Workflow as RuntimeWorkflow,
 } from "@distilled.cloud/cloudflare-runtime";
 import {
   Ai,
@@ -47,7 +45,7 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as Exit from "effect/Exit";
-import * as Fiber from "effect/Fiber";
+import type * as FileSystem from "effect/FileSystem";
 import * as MutableHashMap from "effect/MutableHashMap";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
@@ -57,14 +55,19 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
+import type * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
+import * as os from "node:os";
 import type * as Bundle from "../../Bundle/Bundle.ts";
-import { isResolved, stripEffects } from "../../Diff.ts";
-import * as RpcProvider from "../../Local/RpcProvider.ts";
-import type { ResourceBinding } from "../../Resource.ts";
+import * as LocalProvider from "../../Local/LocalProvider.ts";
 import { Stack } from "../../Stack.ts";
-import { sha256, unwrapRedacted } from "../../Util/index.ts";
+import { unwrapRedacted } from "../../Util/index.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import { LOCAL_ENTRY_URL, LocalRuntimeState } from "../LocalRuntime.ts";
+import {
+  isLiveId,
+  isLocalId,
+  LOCAL_ENTRY_URL,
+  LocalRuntimeState,
+} from "../LocalRuntime.ts";
 import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
 import { readAssetsConfigFiles } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
@@ -75,17 +78,43 @@ import type { WorkerBinding } from "./WorkerBinding.ts";
 import { WorkerBundle, type WorkerBundleOptions } from "./WorkerBundle.ts";
 import { createWorkerName } from "./WorkerName.ts";
 
-type WorkerPropsWithDev = Omit<WorkerProps, "dev"> & {
-  dev: Extract<WorkerProps["dev"], { mode?: "worker" }>;
+/** Local dev-server options (the worker-mode arm of `WorkerProps["dev"]`). */
+type DevServerOptions = Extract<WorkerProps["dev"], { mode?: "worker" }> & {
+  port: number;
 };
 
+// Hosts that bind every interface — the dev server is then reachable at
+// `localhost` *and* at each LAN address, like Vite's `--host` output.
+const isWildcardHost = (host: string) =>
+  host === "0.0.0.0" || host === "::" || host === "[::]" || host === "*";
+
 /**
- * The normalized dev-server options a proxy is started with (`props.dev`
- * with the default port applied). Named independently of `WorkerConfig` so
- * `maybeStartProxy` — which `buildConfig` now calls to resolve `Worker.URL`
- * — doesn't form a type cycle through `WorkerConfig["dev"]`.
+ * Resolve every URL a local dev server is reachable at, most relevant
+ * first. A loopback or explicit host yields just that URL; a wildcard host
+ * (`0.0.0.0`, `::`) yields `http://localhost:<port>` followed by one URL
+ * per external IPv4 interface (`http://192.168.0.12:<port>`, ...) —
+ * mirroring Vite's "Local / Network" dev-server output.
  */
-type DevServerOptions = WorkerPropsWithDev["dev"] & { port: number };
+const resolveLocalUrls = (serverUrl: URL): Effect.Effect<string[]> =>
+  Effect.sync(() => {
+    const port = serverUrl.port;
+    const host = serverUrl.hostname;
+    if (!isWildcardHost(host)) {
+      return [serverUrl.origin];
+    }
+    // `os.networkInterfaces()` is a sync, CPU-only syscall with no Effect
+    // platform equivalent — wrapped in `Effect.sync` so it participates in
+    // the runtime.
+    const interfaces = os.networkInterfaces();
+    const lanAddresses = Object.values(interfaces)
+      .flatMap((addresses) => addresses ?? [])
+      .filter((address) => address.family === "IPv4" && !address.internal)
+      .map((address) => address.address);
+    return [
+      `http://localhost:${port}`,
+      ...lanAddresses.map((address) => `http://${address}:${port}`),
+    ];
+  });
 
 export class WorkerValidationError extends Schema.TaggedErrorClass<WorkerValidationError>()(
   "WorkerValidationError",
@@ -97,7 +126,7 @@ export class WorkerValidationError extends Schema.TaggedErrorClass<WorkerValidat
 ) {}
 
 export const LocalWorkerProvider = () =>
-  RpcProvider.effect(
+  LocalProvider.make(
     Worker,
     LOCAL_ENTRY_URL,
     Effect.gen(function* () {
@@ -107,6 +136,13 @@ export const LocalWorkerProvider = () =>
       const path = yield* Path.Path;
       const localRuntimeState = yield* LocalRuntimeState;
       const workerProxy = yield* WorkerProxy.WorkerProxy;
+      const cloudflareEnv = yield* CloudflareEnvironment;
+      const context = yield* Effect.context<RuntimeServices>();
+      const rootScope = yield* Effect.scope;
+
+      // Proxies are deliberately NOT owned by the per-instance scope: they
+      // survive restarts so the worker's URL stays stable across rebuilds
+      // and config changes. Torn down by `stop` on delete.
       const proxyInstances = new Map<
         string,
         {
@@ -122,6 +158,28 @@ export const LocalWorkerProvider = () =>
           localRuntimeState.queueConsumers,
         )) {
           if (consumer.scriptName === scriptName) {
+            // A LIVE queue (`Alchemy.remote()`) consumed locally: the broker
+            // is still local, but it is fed by the runtime's pull loop
+            // draining the real queue over the HTTP pull API (the
+            // Consumer's local provider attached the `http_pull` consumer
+            // and resolved the queue's real name).
+            if (isLiveId(consumer.queueId)) {
+              if (!consumer.queueName) {
+                return yield* Effect.die(
+                  `Consumer of live queue ${consumer.queueId} is missing its resolved queueName — re-deploy the consumer`,
+                );
+              }
+              consumers.push({
+                queueName: consumer.queueName,
+                deadLetterQueue: consumer.deadLetterQueue,
+                ...consumer.settings,
+                pull: {
+                  queueId: consumer.queueId,
+                  accountId: consumer.accountId,
+                },
+              });
+              continue;
+            }
             const queue = MutableHashMap.get(
               localRuntimeState.queues,
               consumer.queueId,
@@ -240,6 +298,227 @@ export const LocalWorkerProvider = () =>
         return modules;
       });
 
+      /**
+       * The restart-relevant, canonically-hashable view of a local Worker's
+       * desired state — `LocalProvider`'s `resolveConfig`. Everything here
+       * is plain data: binding *descriptors* (not `BindingHook` closures —
+       * those are materialized in `start` via {@link toRuntimeBinding}),
+       * DO-namespace/hyperdrive/container-image records, bundle options.
+       *
+       * Queue consumers are deliberately EXCLUDED: `getQueueConsumers`
+       * reads `LocalRuntimeState` at serve time and sibling `Consumer`
+       * reconciles drive restarts through the `workerRestarts` hook — they
+       * are runtime wiring observed at start, not desired-state config.
+       */
+      const resolveConfig = Effect.fn(function* ({
+        id,
+        news,
+        bindings,
+      }: LocalProvider.LocalProviderInput<Worker>) {
+        const props = news as WorkerProps;
+        const name = yield* createWorkerName(id, props.name);
+        const compatibility = getCompatibility(props);
+        const bindingDescriptors: WorkerBinding[] = [];
+        const durableObjectNamespaces: Record<
+          string,
+          RuntimeDurableObject & { uniqueKey: string }
+        > = {};
+        const workflows: Record<string, RuntimeWorkflow> = {};
+        const hyperdrives: Record<string, Required<HyperdriveOrigin>> = {};
+        const containers: Record<string, ContainerImage> = {};
+        for (const { data } of bindings) {
+          for (const binding of data.bindings ?? []) {
+            if (
+              binding.type === "durable_object_namespace" &&
+              // The `durableObjectNamespaces` property is only used to declare DOs in this worker.
+              // Otherwise, it's a cross-worker durable object binding, which cloudflare-runtime handles automatically.
+              (!binding.scriptName || binding.scriptName === name)
+            ) {
+              // Reuse the existing namespace id if it was provided, otherwise generate a new one.
+              // `workerd` uses this for the object's storage path, so it must be safe to use as a file name.
+              const namespaceId =
+                binding.namespaceId ??
+                encodeURIComponent(`${name}-${binding.className}`);
+              durableObjectNamespaces[binding.className] = {
+                className: binding.className,
+                uniqueKey: namespaceId,
+                sql: true,
+              };
+              bindingDescriptors.push({ ...binding, namespaceId });
+            } else {
+              if (
+                binding.type === "workflow" &&
+                // Same ownership rule as DOs: only declare workflows hosted by
+                // this worker. Cross-script workflow bindings are routed via
+                // the registry proxy.
+                (!binding.scriptName || binding.scriptName === name)
+              ) {
+                workflows[binding.workflowName] = {
+                  workflowName: binding.workflowName,
+                  className: binding.className,
+                };
+              }
+              bindingDescriptors.push(binding);
+            }
+          }
+          if (data.hyperdrives) {
+            for (const [id, origin] of Object.entries(data.hyperdrives)) {
+              hyperdrives[id] = {
+                scheme: origin.scheme,
+                host: origin.host,
+                port: origin.port,
+                user: origin.user,
+                database: origin.database,
+                password: unwrapRedacted(origin.password),
+                sslmode: origin.sslmode,
+              };
+            }
+          }
+          if (data.containers) {
+            for (const container of data.containers) {
+              if (!container.dev) {
+                return yield* Effect.die(
+                  `Container ${container.className} has no dev image`,
+                );
+              }
+              containers[container.className] = {
+                ...container.dev,
+                env: unwrapRedacted(container.dev.env),
+              };
+            }
+          }
+        }
+        for (const [className, dev] of Object.entries(containers)) {
+          if (!durableObjectNamespaces[className]) {
+            return yield* Effect.die(
+              `Durable Object namespace ${className} not found`,
+            );
+          }
+          durableObjectNamespaces[className].container = dev;
+        }
+        const dev:
+          | DevServerOptions
+          | { readonly mode: "external"; readonly url?: string } =
+          props.dev?.mode === "external"
+            ? props.dev
+            : {
+                ...props.dev,
+                mode: "worker" as const,
+                // This is the default. Vite and cloudflare-runtime will retry
+                // if unavailable, unless `strictPort` is true.
+                port: props.dev?.port ?? 1337,
+              };
+        return {
+          id,
+          name,
+          compatibility,
+          /** User env (Redacted preserved — the canonical hasher unwraps). */
+          env: props.env,
+          /**
+           * Raw inline module source (mutually exclusive with `main`).
+           * Serves as-is without the bundler; part of the hashed config so
+           * editing the script restarts the instance.
+           */
+          script: props.script,
+          hasAssets: !!(props.assets || props.vite),
+          /**
+           * Assets-only Worker (no entry module at all): served locally by
+           * a stub that delegates every request to the ASSETS binding.
+           */
+          assetsOnly:
+            props.main === undefined &&
+            props.script === undefined &&
+            !props.vite &&
+            !!props.assets,
+          bindingDescriptors,
+          durableObjectNamespaces: Object.values(durableObjectNamespaces),
+          workflows: Object.values(workflows),
+          hyperdrives,
+          vite: !!props.vite,
+          // Relative `vite.main` resolves from the Vite root (see the
+          // matching normalization in WorkerProvider's `viteBuild`).
+          viteMain: props.vite?.main
+            ? path.resolve(props.vite.rootDir ?? process.cwd(), props.vite.main)
+            : undefined,
+          viteEnvironments: props.vite?.viteEnvironments,
+          viteRootDir: props.vite?.rootDir,
+          bundleOptions: {
+            id,
+            main: props.main!,
+            compatibility,
+            entry: props.isExternal
+              ? { kind: "external" as const }
+              : {
+                  kind: "effect" as const,
+                  exports: props.exports ?? {},
+                },
+            stack: { name: stack.name, stage: stack.stage },
+            extraOptions: props.build,
+          } satisfies WorkerBundleOptions,
+          assets: props.assets,
+          dev,
+          crons: Array.from(
+            new Set([...getCronBindings(bindings), ...(props.crons ?? [])]),
+          ),
+        };
+      });
+
+      type WorkerConfig = Effect.Success<ReturnType<typeof resolveConfig>>;
+      /** A worker-mode config with its runtime `BindingHook`s materialized. */
+      type RunnableWorkerConfig = Omit<WorkerConfig, "dev"> & {
+        dev: DevServerOptions;
+        workerBindings: BindingHook<BindingServices>[];
+      };
+
+      /**
+       * Materialize the plain binding descriptors from {@link resolveConfig}
+       * into live cloudflare-runtime `BindingHook`s. This is the non-plain
+       * half of the old `buildConfig` — kept out of the hashed config.
+       */
+      const materializeWorkerBindings = Effect.fn(function* (
+        config: WorkerConfig,
+        selfUrl: string | undefined,
+      ) {
+        const { accountId } = yield* cloudflareEnv;
+        // Resource-backed env entries (e.g. `env: { KV: namespace }`) are
+        // represented by their binding descriptor (same name) — don't ALSO
+        // serialize the resolved attributes as a duplicate json binding.
+        const descriptorNames = new Set(
+          config.bindingDescriptors.map((descriptor) => descriptor.name),
+        );
+        const workerBindings: BindingHook<BindingServices>[] = [
+          Text.local("ALCHEMY_PHASE", "runtime"),
+          Text.local("ALCHEMY_WORKER_NAME", config.name),
+          Text.local("ALCHEMY_STACK_NAME", stack.name),
+          Text.local("ALCHEMY_STAGE", stack.stage),
+          Text.local("ALCHEMY_CLOUDFLARE_ACCOUNT_ID", accountId),
+          ...Object.entries(config.env ?? {})
+            .filter(([key]) => !descriptorNames.has(key))
+            .map(([key, value]) => {
+              if (isSelfUrl(value)) {
+                return Text.local(key, selfUrl!);
+              }
+              const unredacted = Redacted.isRedacted(value)
+                ? Redacted.value(value)
+                : value;
+              return typeof unredacted === "string"
+                ? Text.local(key, unredacted)
+                : Json.local(key, unredacted);
+            }),
+          ...(config.hasAssets ? [Assets.local("ASSETS")] : []),
+        ];
+        for (const descriptor of config.bindingDescriptors) {
+          if (descriptor.type === "self_url") {
+            // Lowered here rather than in `toRuntimeBinding` — only this
+            // scope knows the worker's own dev-proxy URL.
+            workerBindings.push(Text.local(descriptor.name, selfUrl!));
+            continue;
+          }
+          workerBindings.push(yield* toRuntimeBinding(descriptor));
+        }
+        return workerBindings;
+      });
+
       // Latest successful serve per worker id, so runtime wiring changes
       // that arrive AFTER workerd started (e.g. a sibling `Consumer`
       // resource registering this script as a queue consumer) can restart
@@ -247,7 +526,7 @@ export const LocalWorkerProvider = () =>
       const latestServes = new Map<
         string,
         {
-          worker: WorkerConfig;
+          worker: RunnableWorkerConfig;
           bundle: Bundle.BundleOutput;
           proxy: WorkerProxy.WorkerProxyInstance;
         }
@@ -264,6 +543,8 @@ export const LocalWorkerProvider = () =>
         }
         return lock;
       };
+
+      const workerdScopes = new Map<string, Scope.Closeable>();
 
       // Serve with make-before-break semantics: start the replacement
       // workerd while the previous instance (if any) keeps serving — and
@@ -285,7 +566,7 @@ export const LocalWorkerProvider = () =>
       // serve completes. Ownership is tracked in `workerdScopes`, closed by
       // the next successful serve, by `delete`, or by provider shutdown.
       const serveWith = (
-        worker: WorkerConfig,
+        worker: RunnableWorkerConfig,
         bundle: Bundle.BundleOutput,
         proxy: WorkerProxy.WorkerProxyInstance,
       ) =>
@@ -326,6 +607,11 @@ export const LocalWorkerProvider = () =>
                       durableObjectNamespaces: worker.durableObjectNamespaces,
                       workflows: worker.workflows,
                       queueConsumers,
+                      // Cache API opt-out (`dev: { cache: false }`) — matches
+                      // production workers.dev, where the Cache API is a no-op.
+                      cache: worker.dev.cache,
+                      // Per-worker request.cf override (`dev: { cf: {...} }`).
+                      cf: worker.dev.cf,
                       modules: yield* toRuntimeModules(bundle),
                       assets: yield* toRuntimeAssets(worker.assets),
                     })
@@ -432,187 +718,28 @@ export const LocalWorkerProvider = () =>
         }
       };
 
-      const buildConfig = Effect.fn(function* ({
-        id,
-        props,
-        bindings,
-      }: {
-        id: string;
-        props: WorkerPropsWithDev;
-        bindings: ResourceBinding<Worker["Binding"]>[];
-      }) {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const name = yield* createWorkerName(id, props.name);
-        const compatibility = getCompatibility(props);
-        const dev: DevServerOptions = {
-          ...props.dev,
-          // This is the default. Vite and cloudflare-runtime will retry if unavailable, unless `strictPort` is true.
-          port: props.dev?.port ?? 1337,
-        };
-        // `Worker.URL` locally resolves to the worker's dev-proxy URL — the
-        // proxy is stable per worker id (the same instance `runWorker` /
-        // `runVite` attach to below), so the URL is known before workerd
-        // starts. Trailing slash stripped to match the cloud value's shape.
-        const needsSelfUrl =
-          bindings.some((b) =>
-            (b.data.bindings ?? []).some((item) => item.type === "self_url"),
-          ) || Object.values(props.env ?? {}).some(isSelfUrl);
-        const selfUrl = needsSelfUrl
-          ? (yield* maybeStartProxy(id, dev)).url.toString().replace(/\/$/, "")
-          : undefined;
-        const workerBindings: BindingHook<BindingServices>[] = [
-          Text.local("ALCHEMY_PHASE", "runtime"),
-          Text.local("ALCHEMY_WORKER_NAME", name),
-          Text.local("ALCHEMY_STACK_NAME", stack.name),
-          Text.local("ALCHEMY_STAGE", stack.stage),
-          Text.local("ALCHEMY_CLOUDFLARE_ACCOUNT_ID", accountId),
-          ...Object.entries(props.env ?? {}).map(([key, value]) => {
-            if (isSelfUrl(value)) {
-              return Text.local(key, selfUrl!);
-            }
-            const unredacted = Redacted.isRedacted(value)
-              ? Redacted.value(value)
-              : value;
-            return typeof unredacted === "string"
-              ? Text.local(key, unredacted)
-              : Json.local(key, unredacted);
-          }),
-          ...(props.assets || props.vite ? [Assets.local("ASSETS")] : []),
-        ];
-        const durableObjectNamespaces: Record<
-          string,
-          RuntimeDurableObject & { uniqueKey: string }
-        > = {};
-        const workflows: Record<string, RuntimeWorkflow> = {};
-        const hyperdrives: Record<string, Required<HyperdriveOrigin>> = {};
-        const containers: Record<string, ContainerImage> = {};
-        for (const { data } of bindings) {
-          for (const binding of data.bindings ?? []) {
-            if (binding.type === "self_url") {
-              // Lowered here rather than in `toRuntimeBinding` — only this
-              // scope knows the worker's own dev-proxy URL.
-              workerBindings.push(Text.local(binding.name, selfUrl!));
-              continue;
-            }
-            if (
-              binding.type === "durable_object_namespace" &&
-              // The `durableObjectNamespaces` property is only used to declare DOs in this worker.
-              // Otherwise, it's a cross-worker durable object binding, which cloudflare-runtime handles automatically.
-              (!binding.scriptName || binding.scriptName === name)
-            ) {
-              // Reuse the existing namespace id if it was provided, otherwise generate a new one.
-              // `workerd` uses this for the object's storage path, so it must be safe to use as a file name.
-              const namespaceId =
-                binding.namespaceId ??
-                encodeURIComponent(`${name}-${binding.className}`);
-              durableObjectNamespaces[binding.className] = {
-                className: binding.className,
-                uniqueKey: namespaceId,
-                sql: true,
-              };
-              workerBindings.push(
-                yield* toRuntimeBinding({
-                  ...binding,
-                  namespaceId,
-                }),
-              );
-            } else {
-              if (
-                binding.type === "workflow" &&
-                // Same ownership rule as DOs: only declare workflows hosted by
-                // this worker. Cross-script workflow bindings are routed via
-                // the registry proxy.
-                (!binding.scriptName || binding.scriptName === name)
-              ) {
-                workflows[binding.workflowName] = {
-                  workflowName: binding.workflowName,
-                  className: binding.className,
-                };
-              }
-              workerBindings.push(yield* toRuntimeBinding(binding));
-            }
-          }
-          if (data.hyperdrives) {
-            for (const [id, origin] of Object.entries(data.hyperdrives)) {
-              hyperdrives[id] = {
-                scheme: origin.scheme,
-                host: origin.host,
-                port: origin.port,
-                user: origin.user,
-                database: origin.database,
-                password: unwrapRedacted(origin.password),
-                sslmode: origin.sslmode,
-              };
-            }
-          }
-          if (data.containers) {
-            for (const container of data.containers) {
-              if (!container.dev) {
-                return yield* Effect.die(
-                  `Container ${container.className} has no dev image`,
-                );
-              }
-              containers[container.className] = {
-                ...container.dev,
-                env: unwrapRedacted(container.dev.env),
-              };
-            }
-          }
-        }
-        for (const [className, dev] of Object.entries(containers)) {
-          if (!durableObjectNamespaces[className]) {
-            return yield* Effect.die(
-              `Durable Object namespace ${className} not found`,
-            );
-          }
-          durableObjectNamespaces[className].container = dev;
-        }
-        return {
-          id,
-          name,
-          compatibility,
-          workerBindings,
-          durableObjectNamespaces: Object.values(durableObjectNamespaces),
-          workflows: Object.values(workflows),
-          // Relative `vite.main` resolves from the Vite root (see the
-          // matching normalization in WorkerProvider's `viteBuild`).
-          viteMain: props.vite?.main
-            ? path.resolve(props.vite.rootDir ?? process.cwd(), props.vite.main)
-            : undefined,
-          viteEnvironments: props.vite?.viteEnvironments,
-          hyperdrives,
-          // Substitute `Worker.URL` sentinels so the Vite dev server inlines
-          // the local URL into VITE_*-prefixed define entries.
-          env:
-            props.env && selfUrl !== undefined
-              ? Object.fromEntries(
-                  Object.entries(props.env).map(([key, value]) => [
-                    key,
-                    isSelfUrl(value) ? selfUrl : value,
-                  ]),
-                )
-              : props.env,
-          bundleOptions: {
-            id,
-            main: props.main!,
-            compatibility,
-            entry: props.isExternal
-              ? { kind: "external" }
-              : { kind: "effect", exports: props.exports ?? {} },
-            stack: { name: stack.name, stage: stack.stage },
-            extraOptions: props.build,
-          } satisfies WorkerBundleOptions,
-          assets: props.assets,
-          dev,
-        };
-      });
-
-      type WorkerConfig = Effect.Success<ReturnType<typeof buildConfig>>;
-
-      const runWorker = Effect.fn(function* (worker: WorkerConfig) {
+      const runWorker = Effect.fn(function* (worker: RunnableWorkerConfig) {
         let start = Date.now();
         let status: "start" | "update" = "start";
         const proxy = yield* maybeStartProxy(worker.id, worker.dev);
+        // Inline `script` workers bypass the bundler entirely — the string
+        // IS the module (mirroring the deploy path, which uploads it as a
+        // single `main.js`). There is nothing to watch: script changes flow
+        // through the hashed config and restart the instance.
+        if (worker.script !== undefined) {
+          yield* serveWith(
+            worker,
+            {
+              files: [{ path: "main.js", content: worker.script, hash: "" }],
+              hash: "",
+            },
+            proxy,
+          );
+          yield* Effect.log(
+            `[${worker.id}] Started in ${Math.round(Date.now() - start)}ms`,
+          );
+          return proxy.url;
+        }
         yield* (
           isPythonMain(worker.bundleOptions.main)
             ? watchPythonWorkerBundle({
@@ -688,7 +815,7 @@ export const LocalWorkerProvider = () =>
         hash: "assets-only-stub",
       };
 
-      const runAssetsOnly = Effect.fn(function* (worker: WorkerConfig) {
+      const runAssetsOnly = Effect.fn(function* (worker: RunnableWorkerConfig) {
         const start = Date.now();
         const proxy = yield* maybeStartProxy(worker.id, worker.dev);
         yield* serveWith(worker, assetsOnlyBundle, proxy);
@@ -699,7 +826,7 @@ export const LocalWorkerProvider = () =>
       });
 
       const runVite = Effect.fn(function* (
-        worker: WorkerConfig,
+        worker: RunnableWorkerConfig,
         rootDir: string | undefined,
       ) {
         const proxy = yield* maybeStartProxy(worker.id, worker.dev);
@@ -732,92 +859,17 @@ export const LocalWorkerProvider = () =>
         return proxy.url;
       });
 
-      const rootScope = yield* Effect.scope;
-      const workerdScopes = new Map<string, Scope.Closeable>();
-
-      const context = yield* Effect.context<RuntimeServices>();
-      const instances = new Map<
-        string,
-        {
-          signature: string;
-          fiber: Fiber.Fiber<
-            Worker["Attributes"],
-            Bundle.BundleError | WorkerValidationError | RuntimeError
-          >;
-          scope: Scope.Closeable;
-        }
-      >();
-
-      const runInstance = Effect.fn(function* (options: {
-        id: string;
-        props: WorkerPropsWithDev;
-        bindings: ResourceBinding<Worker["Binding"]>[];
-      }) {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const { props, bindings } = options;
-        const config = yield* buildConfig(options);
-        const url = yield* (
-          props.vite
-            ? runVite(config, props.vite.rootDir)
-            : props.main === undefined && props.assets
-              ? runAssetsOnly(config)
-              : runWorker(config)
-        ).pipe(Effect.map((url) => url.toString()));
-        return {
-          workerId: config.name,
-          workerName: config.name,
-          namespace: undefined,
-          logpush: undefined,
-          url,
-          tags: [],
-          durableObjectNamespaces: Object.fromEntries(
-            config.durableObjectNamespaces.map((namespace) => [
-              namespace.className,
-              namespace.uniqueKey,
-            ]),
-          ),
-          domains: [url],
-          routes: [],
-          crons: Array.from(
-            new Set([...getCronBindings(bindings), ...(props.crons ?? [])]),
-          ),
-          accountId,
-        } satisfies Worker["Attributes"];
-      });
-
       return {
-        // Local dev provider: there is no cloud enumeration API. The set of
-        // locally running Workers is the in-memory `instances` map; each
-        // instance's fiber resolves to the Worker Attributes once it has
-        // started, so enumerate that local state.
-        list: () =>
-          Effect.forEach(
-            Array.from(instances.values()),
-            (instance) => Fiber.join(instance.fiber),
-            { concurrency: "unbounded" },
+        resolveConfig,
+
+        // The physical name only survives an update when it isn't changing.
+        stables: ({ output, config }) =>
+          Effect.succeed(
+            output?.workerName === config.name
+              ? (["workerName"] as ["workerName"])
+              : undefined,
           ),
-        diff: Effect.fn(function* ({ id, news: desired, newBindings, output }) {
-          // Effect-valued `env` entries (tagged Worker classes) never resolve
-          // at plan time; their identity is carried by the resolved binding
-          // data. Strip them so the signature-based diff still runs — same
-          // rationale as the cloud WorkerProvider (#874).
-          const news = stripEffects(desired);
-          if (!isResolved(news) || !isResolved(newBindings)) return undefined;
-          const options = {
-            id,
-            props: news,
-            bindings: newBindings,
-          };
-          const signature = yield* structuralSignature(options);
-          if (instances.get(options.id)?.signature === signature) {
-            return { action: "noop" };
-          }
-          const name = yield* createWorkerName(id, news.name);
-          return {
-            action: "update",
-            stables: output?.workerName === name ? ["workerName"] : undefined,
-          };
-        }),
+
         precreate: Effect.fn(function* ({ id, news, bindings }) {
           const name = yield* createWorkerName(id, news.name);
           const durableObjectNamespaces: Record<string, string> = {};
@@ -832,24 +884,26 @@ export const LocalWorkerProvider = () =>
               }
             }
           }
-          const { accountId } = yield* yield* CloudflareEnvironment;
-          const url =
+          const { accountId } = yield* cloudflareEnv;
+          const urls =
             news.dev?.mode === "external"
               ? // news.dev.url may be an unresolved output; avoid trying to resolve it here.
-                undefined
+                []
               : yield* maybeStartProxy(id, {
                   ...news.dev,
+                  mode: "worker" as const,
                   port: news.dev?.port ?? 1337,
-                }).pipe(Effect.map((proxy) => proxy.url.toString()));
+                }).pipe(Effect.flatMap((proxy) => resolveLocalUrls(proxy.url)));
           return {
             workerId: name,
             workerName: name,
             namespace: undefined,
             logpush: undefined,
-            url,
+            url: urls[0],
+            urls,
+            domain: undefined,
             tags: [],
             durableObjectNamespaces,
-            domains: url ? [url] : [],
             routes: [],
             crons: Array.from(
               new Set([...getCronBindings(bindings), ...(news.crons ?? [])]),
@@ -857,86 +911,120 @@ export const LocalWorkerProvider = () =>
             accountId,
           };
         }),
-        reconcile: Effect.fn(function* ({ id, news, bindings }) {
-          // `dev: false` opts out of running a local Worker entirely —
-          // typically because an external dev process (DevCommand) is
-          // serving requests. Tear down any prior instance and return a
-          // stub Attributes; the resource exists in state but has no
-          // running workerd / proxy behind it.
-          if (news.dev?.mode === "external") {
-            const { accountId } = yield* yield* CloudflareEnvironment;
-            const existing = instances.get(id);
-            if (existing) {
-              yield* Fiber.interrupt(existing.fiber);
-              yield* Scope.close(existing.scope, Exit.void);
-              instances.delete(id);
-              dropServeState(id);
-            }
+
+        start: Effect.fn(function* ({ id, config }) {
+          const { accountId } = yield* cloudflareEnv;
+
+          // `dev: { mode: "external" }` opts out of running a local Worker
+          // entirely — typically because an external dev process
+          // (Command.Dev) is serving requests. The instance exists in the
+          // registry (with an empty scope) but has no workerd behind it. A
+          // previous worker-mode instance for this id may have registered
+          // serve/restart state — drop it, and tear down its workerd (with
+          // make-before-break the running workerd outlives instance scopes
+          // and must be closed explicitly on handoff).
+          if (config.dev.mode === "external") {
+            dropServeState(id);
             yield* closeWorkerd(id);
-            const name = yield* createWorkerName(id, news.name);
+            const urls = config.dev.url ? [config.dev.url] : [];
             return {
-              workerId: name,
-              workerName: name,
+              workerId: config.name,
+              workerName: config.name,
               namespace: undefined,
               logpush: undefined,
-              url: news.dev.url,
+              url: urls[0],
+              urls,
+              domain: undefined,
               tags: [],
               durableObjectNamespaces: {},
               accountId,
-              domains: [],
               routes: [],
-              crons: news.crons ?? [],
+              crons: config.crons,
             } satisfies Worker["Attributes"];
           }
-          const options = { id, props: news as WorkerPropsWithDev, bindings };
-          const signature = yield* structuralSignature(options);
-          const existing = instances.get(options.id);
-          if (existing) {
-            if (existing.signature === signature) {
-              yield* Effect.log(
-                `[${options.id}] No changes, using existing instance`,
-              );
-              return yield* Fiber.join(existing.fiber);
-            }
-            yield* Effect.log(
-              `[${options.id}] Changes detected, interrupting existing instance`,
-            );
-            // Tears down the instance's bundle watcher and any in-flight
-            // serve — but NOT its running workerd, which keeps serving (and
-            // stays registered in the dev registry) until the replacement
-            // instance's first serve completes and cuts over.
-            yield* Fiber.interrupt(existing.fiber);
-            yield* Scope.close(existing.scope, Exit.void);
-            instances.delete(options.id);
-            dropServeState(options.id);
-          }
-          const scope = yield* Scope.fork(rootScope);
-          const fiber = yield* runInstance(options).pipe(
-            Effect.forkDetach,
-            Scope.provide(scope),
+
+          // `Worker.URL` locally resolves to the worker's dev-proxy URL —
+          // the proxy is stable per worker id (the same instance `runWorker`
+          // / `runVite` attach to below), so the URL is known before workerd
+          // starts. Trailing slash stripped to match the cloud value's shape.
+          const needsSelfUrl =
+            config.bindingDescriptors.some((b) => b.type === "self_url") ||
+            Object.values(config.env ?? {}).some(isSelfUrl);
+          const selfUrl = needsSelfUrl
+            ? (yield* maybeStartProxy(id, config.dev)).url
+                .toString()
+                .replace(/\/$/, "")
+            : undefined;
+          const workerBindings = yield* materializeWorkerBindings(
+            config,
+            selfUrl,
           );
-          instances.set(options.id, { signature, fiber, scope });
-          return yield* Fiber.join(fiber).pipe(
-            Effect.onExit((exit) =>
-              Effect.sync(() => {
-                if (exit._tag === "Failure") {
-                  instances.delete(options.id);
-                }
-              }),
+          const worker: RunnableWorkerConfig = {
+            ...config,
+            // Substitute `Worker.URL` sentinels so the Vite dev server
+            // inlines the local URL into VITE_*-prefixed define entries.
+            env:
+              config.env && selfUrl !== undefined
+                ? Object.fromEntries(
+                    Object.entries(config.env).map(([key, value]) => [
+                      key,
+                      isSelfUrl(value) ? selfUrl : value,
+                    ]),
+                  )
+                : config.env,
+            dev: config.dev,
+            workerBindings,
+          };
+          const serverUrl = yield* config.vite
+            ? runVite(worker, config.viteRootDir)
+            : config.assetsOnly
+              ? runAssetsOnly(worker)
+              : runWorker(worker);
+          // In dev, `urls` is the dev server's actual surface — localhost
+          // first, then LAN addresses for wildcard hosts. Deployed domains
+          // are not served by this session, so they don't appear.
+          const urls = yield* resolveLocalUrls(serverUrl);
+          return {
+            workerId: config.name,
+            workerName: config.name,
+            namespace: undefined,
+            logpush: undefined,
+            url: urls[0],
+            urls,
+            domain: undefined,
+            tags: [],
+            durableObjectNamespaces: Object.fromEntries(
+              config.durableObjectNamespaces.map((namespace) => [
+                namespace.className,
+                namespace.uniqueKey,
+              ]),
             ),
-          );
+            routes: [],
+            crons: config.crons,
+            accountId,
+          } satisfies Worker["Attributes"];
         }),
-        delete: Effect.fn(function* ({ id }) {
-          const existing = instances.get(id);
-          if (existing) {
-            yield* Fiber.interrupt(existing.fiber);
-            yield* Scope.close(existing.scope, Exit.void);
-            instances.delete(id);
-            dropServeState(id);
-          }
+
+        stop: Effect.fn(function* ({ id }) {
+          // Cross-restart state: the serve/restart bookkeeping, the running
+          // workerd (which outlives instance scopes for make-before-break),
+          // and the URL proxy live outside instance scopes and are only
+          // reclaimed on a real delete.
+          dropServeState(id);
           yield* closeWorkerd(id);
+          yield* stopProxy(id);
         }),
-      };
+      } satisfies LocalProvider.LocalProviderSpec<
+        Worker,
+        Effect.Success<ReturnType<typeof resolveConfig>>,
+        // The Python-bundle watcher spawns `uv` (ChildProcessSpawner) and
+        // reads vendored modules (FileSystem) from inside `start`;
+        // `readAssetsConfigFiles` (assets `_headers`/`_redirects`) needs
+        // FileSystem + Path.
+        | ChildProcessSpawner.ChildProcessSpawner
+        | FileSystem.FileSystem
+        | Path.Path
+      >;
     }),
   );
 
@@ -965,7 +1053,12 @@ export const toRuntimeBinding = Effect.fn(function* (
     case "browser":
       return Browser.remote(b.name);
     case "d1":
-      return D1.remote(b.name, b.databaseId);
+      // A `dev:` id belongs to a locally-emulated database (local D1
+      // provider); a real id is a live database the dev worker proxies to
+      // (e.g. the resource opted out of emulation via `Alchemy.remote()`).
+      return isLocalId(b.databaseId)
+        ? D1.local({ binding: b.name, id: b.databaseId })
+        : D1.remote(b.name, b.databaseId);
     case "data_blob":
       return Data.local(b.name, Buffer.from(b.part));
     case "dispatch_namespace":
@@ -993,20 +1086,58 @@ export const toRuntimeBinding = Effect.fn(function* (
     case "json":
       return Json.local(b.name, b.json);
     case "kv_namespace":
-      return KvNamespace.remote(b.name, b.namespaceId);
+      // A `dev:` id belongs to a locally-emulated namespace; a real id is
+      // a live namespace the dev worker proxies to.
+      return isLocalId(b.namespaceId)
+        ? KvNamespace.local({ binding: b.name, id: b.namespaceId })
+        : KvNamespace.remote(b.name, b.namespaceId);
     case "mtls_certificate":
       return MtlsCertificate.remote(b.name, b.certificateId);
     case "pipelines":
       return Pipelines.remote(b.name, b.pipeline);
     case "plain_text":
       return Text.local(b.name, b.text);
-    case "queue":
+    case "queue": {
+      // A real queueId belongs to an `Alchemy.remote()` queue. Queue bindings
+      // are NOT supported in Cloudflare's remote/preview sessions — a
+      // platform limitation (cloudflare/workers-sdk#9929) — so live
+      // production goes through the deployed shim worker registered at
+      // eval time (see `Queues/QueueShim.ts`): the local binding targets a
+      // forwarder service that relays the queue wire protocol to the shim
+      // over HTTPS with a bearer token.
+      if (b.queueId !== undefined && !isLocalId(b.queueId)) {
+        const url = b.shim?.url;
+        const token = b.shim?.token;
+        if (url === undefined || token === undefined) {
+          // Defensive: binding data produced by current eval always carries
+          // the shim for this mode combination.
+          return yield* new WorkerValidationError({
+            message:
+              `Queue binding "${b.name}" targets a live queue ` +
+              "(Alchemy.remote()) but no producer shim was registered for it — " +
+              "re-deploy, or remove remote() from the queue (local emulation).",
+            value: b,
+          });
+        }
+        return Queue.remote({
+          binding: b.name,
+          queueName: b.queueName,
+          url,
+          token: typeof token === "string" ? token : Redacted.value(token),
+        });
+      }
       return Queue.local({
         binding: b.name,
         queueName: b.queueName,
       });
+    }
     case "r2_bucket":
-      return R2Bucket.remote(b.name, b.bucketName, b.jurisdiction);
+      // A `dev:`-prefixed bucket name belongs to a locally-emulated bucket
+      // (R2 has no opaque id — the name is the identity); a real name is a
+      // live bucket the dev worker proxies to.
+      return isLocalId(b.bucketName)
+        ? R2Bucket.local({ binding: b.name, id: b.bucketName })
+        : R2Bucket.remote(b.name, b.bucketName, b.jurisdiction);
     case "ratelimit":
       return RateLimit.local({
         binding: b.name,
@@ -1053,48 +1184,6 @@ export const toRuntimeBinding = Effect.fn(function* (
       return yield* unsupported();
   }
 });
-
-/**
- * Stable, collision-free structural signature used to decide whether a
- * locally-running dev Worker needs to be torn down and restarted.
- *
- * We deliberately do NOT use `Hash.structure` here: Effect's structural
- * hash folds sibling fields together with XOR, so when the *same* value
- * change appears in two sibling subtrees the diffs cancel and the hash is
- * unchanged. The Worker config mirrors `env` values into `bindings`
- * (e.g. `DEV_MARKER`/an R2 bucket name appear in both `props.env` and the
- * derived `bindings`), which is exactly the shape that collides — so an
- * env-only or rebind change would be silently treated as "no change" and
- * the dev Worker would never restart with the new bindings.
- *
- * A canonical JSON serialization (sorted keys, unwrapped `Redacted`,
- * cycle-safe) gives an exact comparison instead of a lossy fingerprint. We
- * hash that serialization with SHA-256 so each retained signature is a fixed
- * 64-char digest rather than a copy of the whole props/bindings blob.
- */
-const structuralSignature = (value: unknown): Effect.Effect<string> => {
-  const seen = new WeakSet<object>();
-  const normalize = (input: unknown): unknown => {
-    if (typeof input === "bigint") return `bigint:${input.toString()}`;
-    if (input === null || typeof input !== "object") return input;
-    if (Redacted.isRedacted(input)) {
-      return { __redacted: normalize(Redacted.value(input)) };
-    }
-    if (seen.has(input)) return "[circular]";
-    seen.add(input);
-    if (input instanceof Uint8Array) return { __bytes: Array.from(input) };
-    if (Array.isArray(input)) return input.map(normalize);
-    return Object.fromEntries(
-      Object.keys(input)
-        .sort()
-        .map((key) => [
-          key,
-          normalize((input as Record<string, unknown>)[key]),
-        ]),
-    );
-  };
-  return sha256(JSON.stringify(normalize(value)));
-};
 
 const toRuntimeAssets = Effect.fn(function* (
   assets: WorkerAssetsConfig | undefined,

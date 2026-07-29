@@ -84,12 +84,12 @@ const purgeDomains = (...hostnames: string[]) =>
   });
 
 // #942: an omitted `domain` prop must leave live attachments alone —
-// including hostnames attached outside Alchemy — while `domain: []` is the
+// including hostnames attached outside Alchemy — while `domain: null` is the
 // explicit detach-all. The gate keys on declared intent (props), never on
 // domains persisted in state, so state written by older providers that
 // observed listDomains unconditionally cannot re-arm the destructive path.
 test.provider.skipIf(!zoneName)(
-  "omitted domain preserves live attachments; empty array detaches all",
+  "omitted domain preserves live attachments; null detaches all",
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -106,15 +106,20 @@ test.provider.skipIf(!zoneName)(
           Effect.gen(function* () {
             return yield* Cloudflare.Worker("DomainWorker", {
               main,
-              url: false,
+              workersDev: false,
               compatibility: { date: "2024-01-01" },
-              domain: [DECLARED_HOSTNAME],
+              domain: DECLARED_HOSTNAME,
             });
           }),
         );
         workerName = worker.workerName;
 
-        expect(worker.domains).toEqual([`https://${DECLARED_HOSTNAME}`]);
+        expect(worker.urls).toEqual([`https://${DECLARED_HOSTNAME}`]);
+        expect(worker.domain).toEqual({
+          name: DECLARED_HOSTNAME,
+          aliases: [],
+          redirects: [],
+        });
         const declared = yield* findAttachment(DECLARED_HOSTNAME);
         expect(declared?.service).toEqual(worker.workerName);
 
@@ -146,7 +151,7 @@ test.provider.skipIf(!zoneName)(
           Effect.gen(function* () {
             return yield* Cloudflare.Worker("DomainWorker", {
               main,
-              url: false,
+              workersDev: false,
               compatibility: { date: "2024-01-02" },
             });
           }),
@@ -160,7 +165,8 @@ test.provider.skipIf(!zoneName)(
         );
         // Previously-observed custom domains carry forward in state so
         // subsequent reads keep observing them.
-        expect(unmanaged.domains).toContain(`https://${DECLARED_HOSTNAME}`);
+        expect(unmanaged.domain?.name).toEqual(DECLARED_HOSTNAME);
+        expect(unmanaged.urls).toContain(`https://${DECLARED_HOSTNAME}`);
 
         // The unmanaged surface must also converge: the custom domains
         // carried forward in state must not diff dirty against the omitted
@@ -169,7 +175,7 @@ test.provider.skipIf(!zoneName)(
           Effect.gen(function* () {
             return yield* Cloudflare.Worker("DomainWorker", {
               main,
-              url: false,
+              workersDev: false,
               compatibility: { date: "2024-01-02" },
             });
           }),
@@ -179,19 +185,20 @@ test.provider.skipIf(!zoneName)(
         )?.action;
         expect(settledAction).toBe("noop");
 
-        // `domain: []` is the explicit detach-all.
+        // `domain: null` is the explicit detach-all.
         const detached = yield* stack.deploy(
           Effect.gen(function* () {
             return yield* Cloudflare.Worker("DomainWorker", {
               main,
-              url: false,
+              workersDev: false,
               compatibility: { date: "2024-01-02" },
-              domain: [],
+              domain: null,
             });
           }),
         );
 
-        expect(detached.domains).toHaveLength(0);
+        expect(detached.domain).toBeUndefined();
+        expect(detached.urls).toHaveLength(0);
         expect(yield* findAttachment(DECLARED_HOSTNAME)).toBeUndefined();
         expect(yield* findAttachment(OUT_OF_BAND_HOSTNAME)).toBeUndefined();
       }).pipe(

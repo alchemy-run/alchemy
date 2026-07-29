@@ -48,6 +48,7 @@ function providersSidebarEntry() {
       { label: "Cloudflare", link: "/cloudflare" },
       { label: "PlanetScale", link: "/planetscale" },
       { label: "Neon", link: "/neon" },
+      { label: "Prisma", link: "/prisma" },
       { label: "Axiom", link: "/axiom" },
       { label: "GitHub", link: "/github" },
       { label: "Docker", link: "/docker" },
@@ -436,6 +437,10 @@ export default defineConfig({
                   label: "Custom Provider",
                   link: "/infrastructure-as-code/custom-provider",
                 },
+                {
+                  label: "Local Providers",
+                  link: "/infrastructure-as-code/local-provider",
+                },
               ],
             },
             {
@@ -629,6 +634,10 @@ export default defineConfig({
               label: "Compute",
               items: [
                 { label: "Workers", link: "/cloudflare/compute/workers" },
+                {
+                  label: "Gradual deployments",
+                  link: "/cloudflare/compute/gradual-deployments",
+                },
                 {
                   label: "Python Workers",
                   link: "/cloudflare/compute/python-workers",
@@ -986,6 +995,38 @@ export default defineConfig({
               ],
             },
             providerResourcesEntry("Neon"),
+          ],
+        },
+        {
+          label: "Prisma",
+          items: [
+            { label: "Overview", link: "/prisma" },
+            { label: "Setup", link: "/prisma/setup" },
+            {
+              label: "Data",
+              items: [
+                { label: "Postgres", link: "/prisma/data/postgres" },
+                { label: "Branches", link: "/prisma/data/branches" },
+                { label: "Connections", link: "/prisma/data/connections" },
+              ],
+            },
+            {
+              label: "Compute",
+              items: [
+                { label: "Apps", link: "/prisma/compute/apps" },
+                { label: "Deployments", link: "/prisma/compute/deployments" },
+              ],
+            },
+            {
+              label: "Guides",
+              items: [
+                {
+                  label: "Connect from Workers",
+                  link: "/prisma/guides/cloudflare-workers",
+                },
+              ],
+            },
+            providerResourcesEntry("Prisma"),
           ],
         },
         {

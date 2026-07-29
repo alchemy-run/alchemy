@@ -277,6 +277,35 @@ extend `Cloudflare.Container` rather than using it directly, but
 the same props shape (`instanceType`, `observability`, `runtime`,
 …) flows through `.make()`.
 
+## Rollouts
+
+When a deploy changes the image or configuration, running instances
+are replaced with the new version. By default the replacement is
+immediate — every instance at once. Set `rollout` to replace them in
+steps instead, so the application stays available through the update:
+
+```typescript
+export class Api extends Cloudflare.Container<Api>()("Api", {
+  main: import.meta.url,
+  instances: 4,
+  maxInstances: 4,
+  rollout: { strategy: "rolling", stepPercentage: 25 },
+}) {}
+```
+
+A `rolling` strategy replaces `stepPercentage` of the instances per
+step and advances automatically as the new instances come up. Each
+replaced instance receives `SIGTERM` and has 15 minutes to shut down
+cleanly before `SIGKILL`.
+
+Rollouts replace instances; they do not split requests between two
+image versions. The Worker and Durable Object fronting the container
+cut over immediately while instances roll, so keep the
+Worker-to-container protocol compatible across both image versions
+until the rollout completes. Request-level traffic splitting exists
+one layer up, on the Worker — see
+[Gradual deployments](/cloudflare/compute/gradual-deployments).
+
 ## Where next
 
 The full walkthrough:

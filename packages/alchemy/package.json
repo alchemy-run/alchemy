@@ -22,7 +22,7 @@
   "scripts": {
     "clear:state": "cd ../../ && bun clear:state",
     "dev": "tsdown --watch",
-    "build": "tsc -b && tsc -b tsconfig.bin.json && bun bundle",
+    "build": "rm -rf lib && tsc -b --force && tsc -b tsconfig.bin.json --force && bun bundle",
     "bundle": "tsdown",
     "bundle:watch": "tsdown --watch",
     "publish:npm": "cp ../README.md . && bun publish && rm README.md",
@@ -199,6 +199,38 @@
       "worker": "./src/Neon/*/index.ts",
       "import": "./lib/Neon/*/index.js"
     },
+    "./Prisma": {
+      "types": "./lib/Prisma/index.d.ts",
+      "bun": "./src/Prisma/index.ts",
+      "worker": "./src/Prisma/index.ts",
+      "import": "./lib/Prisma/index.js"
+    },
+    "./Prisma/ComputeApp": null,
+    "./Prisma/ComputeService": null,
+    "./Prisma/ComputeVersion": null,
+    "./Prisma/ComputeVersionObserve": null,
+    "./Prisma/App": {
+      "types": "./lib/Prisma/App.d.ts",
+      "bun": "./src/Prisma/App.ts",
+      "worker": "./src/Prisma/App.ts",
+      "import": "./lib/Prisma/App.js"
+    },
+    "./Prisma/Deployment": {
+      "types": "./lib/Prisma/Deployment.d.ts",
+      "bun": "./src/Prisma/Deployment.ts",
+      "worker": "./src/Prisma/Deployment.ts",
+      "import": "./lib/Prisma/Deployment.js"
+    },
+    "./Prisma/EnvironmentVariableValidation": null,
+    "./Prisma/Internal/*": null,
+    "./Prisma/PrismaDevDatabase": null,
+    "./Prisma/Refs": null,
+    "./Prisma/*": {
+      "types": "./lib/Prisma/*.d.ts",
+      "bun": "./src/Prisma/*.ts",
+      "worker": "./src/Prisma/*.ts",
+      "import": "./lib/Prisma/*.js"
+    },
     "./Output": {
       "types": "./lib/Output.d.ts",
       "bun": "./src/Output.ts",
@@ -332,10 +364,12 @@
     "@libsql/client": "catalog:",
     "@octokit/rest": "^22.0.1",
     "@octokit/webhooks": "^14.2.0",
+    "@prisma/dev": "^0.20.0",
     "@smithy/node-config-provider": "catalog:",
     "@smithy/shared-ini-file-loader": "catalog:",
     "@smithy/types": "catalog:",
     "@types/aws-lambda": "catalog:",
+    "@vercel/nft": "^1.10.2",
     "aws4fetch": "catalog:",
     "capnweb": "^0.6.1",
     "fast-glob": "^3.3.2",

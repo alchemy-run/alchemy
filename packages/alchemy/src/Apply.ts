@@ -31,7 +31,11 @@ import {
   type Delete,
   type Plan,
 } from "./Plan.ts";
-import { missingProviderError, tryFindProviderByType } from "./Provider.ts";
+import {
+  findProviderByType,
+  missingProviderError,
+  tryFindProviderByType,
+} from "./Provider.ts";
 import type { ResourceBinding } from "./Resource.ts";
 import { Stack } from "./Stack.ts";
 import { Stage } from "./Stage.ts";
@@ -540,6 +544,7 @@ const executeNode = (
           resourceType: node.resource.Type,
           bindings: excludeDeletedBindings(node.bindings),
           removalPolicy: node.resource.RemovalPolicy,
+          providerMode: node.mode,
         });
         return id;
       } else if (node.action === "replace") {
@@ -566,6 +571,7 @@ const executeNode = (
           old: node.state,
           deleteFirst: node.deleteFirst,
           removalPolicy: node.resource.RemovalPolicy,
+          providerMode: node.mode,
         });
         return id;
       } else if (node.state?.instanceId) {
@@ -597,6 +603,7 @@ const executeNode = (
             bindings: excludeDeletedBindings(node.bindings),
             downstream: node.downstream,
             removalPolicy: node.resource.RemovalPolicy,
+            providerMode: node.mode,
           });
         }
 
@@ -647,6 +654,7 @@ const executeNode = (
             bindings: excludeDeletedBindings(node.bindings),
             downstream: node.downstream,
             removalPolicy: node.resource.RemovalPolicy,
+            providerMode: node.mode,
           });
           yield* storeAndSignal({
             output: attr,
@@ -717,6 +725,7 @@ const executeNode = (
           providerVersion: node.provider.version ?? 0,
           downstream: node.downstream,
           removalPolicy: node.resource.RemovalPolicy,
+          providerMode: node.mode,
         });
 
         tracker[fqn] = {
@@ -765,6 +774,9 @@ const executeNode = (
           string,
           any
         >;
+        const adopting =
+          node.adopting === true ||
+          (node.state.status === "updating" && node.state.adopting === true);
 
         yield* node.state.status === "replaced"
           ? commit<ReplacedResourceState>({
@@ -773,6 +785,7 @@ const executeNode = (
               ...node.state,
               attr: node.state.attr,
               props: news,
+              providerMode: node.mode,
             })
           : commit<UpdatingReourceState>({
               // For ordinary updates we snapshot the previously stable props/attrs
@@ -789,15 +802,18 @@ const executeNode = (
               downstream: node.downstream,
               old:
                 node.state.status === "updating" ? node.state.old : node.state,
+              adopting: adopting ? true : undefined,
               removalPolicy: node.resource.RemovalPolicy,
+              providerMode: node.mode,
             });
 
         yield* report("updating");
 
-        const previousProps =
-          node.state.status === "created" ||
-          node.state.status === "updated" ||
-          node.state.status === "replaced"
+        const previousProps = adopting
+          ? undefined
+          : node.state.status === "created" ||
+              node.state.status === "updated" ||
+              node.state.status === "replaced"
             ? node.state.props
             : node.state.old.props;
 
@@ -835,6 +851,7 @@ const executeNode = (
             ...node.state,
             attr,
             props: news,
+            providerMode: node.mode,
           });
         } else {
           yield* commit<UpdatedResourceState>({
@@ -850,6 +867,7 @@ const executeNode = (
             providerVersion: node.provider.version ?? 0,
             downstream: node.downstream,
             removalPolicy: node.resource.RemovalPolicy,
+            providerMode: node.mode,
           });
         }
 
@@ -904,6 +922,7 @@ const executeNode = (
             old: node.state,
             downstream: node.downstream,
             removalPolicy: node.resource.RemovalPolicy,
+            providerMode: node.mode,
           });
         } else {
           // Resume the same replacement generation after an interrupted apply.
@@ -931,7 +950,17 @@ const executeNode = (
           Effect.gen(function* () {
             const retain = node.resource.RemovalPolicy === "retain";
             if (old.attr !== undefined && !retain) {
-              yield* node.provider
+              // Delete each old generation with the provider variant of the
+              // mode that created it — after a local ⇄ live switch,
+              // `node.provider` (the new mode) cannot tear down the other
+              // runtime's instance. `providerMode: undefined` (legacy row or
+              // mode-agnostic provider) resolves to the provider as
+              // registered.
+              const oldProvider = yield* findProviderByType(
+                node.resource.Type,
+                old.providerMode,
+              );
+              yield* oldProvider
                 .delete({
                   id: logicalId,
                   fqn,
@@ -1010,6 +1039,7 @@ const executeNode = (
             old: replState.old,
             deleteFirst: node.deleteFirst,
             removalPolicy: node.resource.RemovalPolicy,
+            providerMode: node.mode,
           });
           yield* storeAndSignal({
             output: attr,
@@ -1077,6 +1107,7 @@ const executeNode = (
             bindings: bindingOutputs,
             downstream: node.downstream,
             removalPolicy: node.resource.RemovalPolicy,
+            providerMode: node.mode,
           });
         } else {
           yield* commit<ReplacedResourceState>({
@@ -1098,6 +1129,7 @@ const executeNode = (
             old: replState.old,
             deleteFirst: node.deleteFirst,
             removalPolicy: node.resource.RemovalPolicy,
+            providerMode: node.mode,
           });
         }
 
@@ -1469,6 +1501,7 @@ const converge = Effect.fn(function* (
           downstream: node.downstream,
           namespace,
           removalPolicy: node.resource.RemovalPolicy,
+          providerMode: node.mode,
         } as UpdatedResourceState,
       });
 
@@ -1675,6 +1708,7 @@ const collectGarbage = Effect.fn(function* (
           props,
           attr: persistedAttr,
           provider,
+          providerMode,
         } = isDeleteNode(node)
           ? {
               // Use the persisted FQN verbatim — never recompute it from
@@ -1691,7 +1725,10 @@ const collectGarbage = Effect.fn(function* (
               downstream: node.downstream,
               props: node.state.props,
               attr: node.state.attr,
+              // Plan resolved this provider for the row's persisted
+              // `providerMode` (see the deletions builder in Plan.ts).
               provider: node.provider,
+              providerMode: node.state.providerMode,
             }
           : {
               fqn: node.fqn,
@@ -1704,9 +1741,12 @@ const collectGarbage = Effect.fn(function* (
               attr: node.old.attr,
               // A missing provider is fatal — plan already dies on zombie
               // rows (see the deletions builder in Plan.ts); this guards
-              // the replaced-chain generations that bypass plan.
+              // the replaced-chain generations that bypass plan. The old
+              // generation is torn down with the provider variant of the
+              // mode that created it (local ⇄ live replacements).
               provider: yield* tryFindProviderByType(
                 node.old.resourceType,
+                node.old.providerMode,
               ).pipe(
                 Effect.flatMap(
                   Option.match({
@@ -1718,6 +1758,7 @@ const collectGarbage = Effect.fn(function* (
                   }),
                 ),
               ),
+              providerMode: node.old.providerMode,
             };
 
         // Mutable: an attr-less row (interrupted create) may recover its
@@ -1915,6 +1956,7 @@ const collectGarbage = Effect.fn(function* (
                 providerVersion: provider.version ?? 0,
                 bindings: excludeDeletedBindings(node.bindings),
                 removalPolicy: node.resource.RemovalPolicy,
+                providerMode,
               });
             }
 
@@ -1972,6 +2014,7 @@ const collectGarbage = Effect.fn(function* (
                   old: node.old.old,
                   deleteFirst: node.deleteFirst,
                   removalPolicy: node.removalPolicy,
+                  providerMode: node.providerMode,
                 });
               } else {
                 // The old chain is fully drained, so the current replacement is now
@@ -1988,6 +2031,7 @@ const collectGarbage = Effect.fn(function* (
                   downstream: node.downstream,
                   bindings: excludeDeletedBindings(node.bindings),
                   removalPolicy: node.removalPolicy,
+                  providerMode: node.providerMode,
                 });
               }
               yield* scopedSession.note(

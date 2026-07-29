@@ -617,7 +617,7 @@ test.provider(
             shell: true,
             cwd,
             outdir: "dist",
-            url: false,
+            workersDev: false,
             env: {
               FROM_STRING: "plain",
               FROM_CONFIG: Config.string("STATICSITE_ENV_TEST"),
@@ -657,8 +657,7 @@ const staticSiteProps = (cwd: string): Cloudflare.Website.StaticSiteProps => ({
   cwd,
   outdir: "dist",
   main: workerEntry,
-  url: true as const,
-  subdomain: { enabled: true, previewsEnabled: true },
+  workersDev: true,
   compatibility: { date: "2024-01-01" },
 });
 

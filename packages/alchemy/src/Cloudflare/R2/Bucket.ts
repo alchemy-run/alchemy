@@ -4,10 +4,12 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
 import { deepEqual, isResolved } from "../../Diff.ts";
+import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { generateLocalId } from "../LocalRuntime.ts";
 import type * as Cloudflare from "../Providers.ts";
 import * as Zone from "../Zone/index.ts";
 
@@ -450,7 +452,7 @@ export declare namespace Bucket {
   };
 }
 
-export const BucketProvider = () =>
+export const ProviderLive = () =>
   Provider.effect(
     Bucket,
     Effect.gen(function* () {
@@ -1158,6 +1160,58 @@ export const BucketProvider = () =>
       };
     }),
   );
+
+/**
+ * Local (dev) provider — the bucket is purely virtual: a `dev:`-prefixed
+ * bucket name keyed into the local workerd R2 simulator (data under
+ * `.alchemy/local/r2`). `toRuntimeBinding` lowers an `r2_bucket` binding
+ * whose bucket name is `dev:`-prefixed onto the local R2 service. R2 has no
+ * opaque id — the name IS the identity — so the `dev:` marker rides on the
+ * name (a `:` can never appear in a real R2 bucket name).
+ *
+ * Custom domains, lifecycle rules, and CORS are deploy-side concerns with
+ * no local behavior; the local attributes report them empty.
+ */
+export const ProviderLocal = () =>
+  Provider.succeed(Bucket, {
+    stables: ["accountId"],
+    diff: Effect.fn(function* ({ news = {}, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (!output?.bucketName) return { action: "update" } as const;
+      if (!isResolved(news)) return undefined;
+      if (output.accountId !== accountId) {
+        return { action: "replace" } as const;
+      }
+      // Fall through to the engine's default prop diff.
+    }),
+    read: Effect.fn(function* ({ output }) {
+      // Purely virtual — the persisted state row is the source of truth.
+      return output ?? undefined;
+    }),
+    reconcile: Effect.fn(function* ({ news = {}, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return {
+        bucketName: output?.bucketName ?? generateLocalId(),
+        storageClass: (news.storageClass ?? "Standard") as Bucket.StorageClass,
+        jurisdiction: (news.jurisdiction ?? "default") as Bucket.Jurisdiction,
+        location: undefined,
+        accountId: output?.accountId ?? accountId,
+        domains: [],
+        lifecycleRules: [],
+        cors: [],
+      };
+    }),
+    delete: Effect.fn(function* () {
+      // The simulator's on-disk data is keyed by the dev name; dropping the
+      // state row is enough — orphaned blobs are reclaimed with `.alchemy`.
+    }),
+  });
+
+export const BucketProvider = () =>
+  ProviderLayer.dual(Bucket, {
+    local: () => ProviderLocal(),
+    live: () => ProviderLive(),
+  });
 
 // R2 can make a newly-created bucket visible to `getBucket` before its
 // sub-resource endpoints (custom domains, lifecycle) accept it. Retry only
