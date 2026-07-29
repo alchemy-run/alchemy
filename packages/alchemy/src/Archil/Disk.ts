@@ -1,3 +1,4 @@
+import * as crypto from "node:crypto";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -8,6 +9,7 @@ import * as Provider from "../Provider.ts";
 import { isResourceOfType, Resource } from "../Resource.ts";
 import {
   createDisk,
+  execDisk,
   deleteDisk,
   getDisk,
   listDisks,
@@ -17,7 +19,12 @@ import {
   type MountConfig,
 } from "./Api.ts";
 import { Credentials } from "./Credentials.ts";
-import { ALL_REGIONS, endpointForRegion, type ArchilRegion } from "./Region.ts";
+import {
+  ALL_REGIONS,
+  endpointForRegion,
+  EXEC_REGIONS,
+  type ArchilRegion,
+} from "./Region.ts";
 import type { Providers } from "./Providers.ts";
 
 export type { MountConfig } from "./Api.ts";
@@ -43,6 +50,36 @@ export interface DiskProps {
    * the disk.
    */
   mount?: MountConfig;
+  /**
+   * Shell commands run against the disk after it is provisioned — how you
+   * build a base image. Each runs via serverless execution with the disk
+   * mounted at `/mnt/archil`, in order, stopping at the first non-zero exit.
+   *
+   * The exec sandbox's own image is fixed (coreutils, curl, jq, python3,
+   * node), so "installing" means writing into the disk and invoking from
+   * there — the disk is the layer you control:
+   *
+   * ```typescript
+   * commands: [
+   *   "mkdir -p /mnt/archil/lib",
+   *   "pip install --target /mnt/archil/lib pandas",
+   * ]
+   * // later, at runtime:
+   * //   PYTHONPATH=/mnt/archil/lib python3 -c 'import pandas'
+   * ```
+   *
+   * Commands re-run only when this list changes — they are fingerprinted
+   * and the fingerprint is persisted — so they must be safe to re-run from
+   * whatever state a previous version left behind. Prefer idempotent forms
+   * (`mkdir -p`, `curl -o`, `install -m`) over appends.
+   *
+   * Each command is bounded by the platform's exec limits: 5 minutes and
+   * 128 KiB of output. Split long installs across several entries.
+   *
+   * Requires a region where serverless execution is available (the AWS
+   * regions); setting this on a storage-only region fails the deploy.
+   */
+  commands?: string[];
 }
 
 export type Disk = Resource<
@@ -72,6 +109,11 @@ export type Disk = Resource<
     diskToken: Redacted.Redacted<string> | undefined;
     /** Last 4 characters of the disk token. */
     diskTokenSuffix: string | undefined;
+    /**
+     * Fingerprint of the `commands` last applied to this disk. Undefined
+     * when the disk has no provisioning commands.
+     */
+    commandsHash: string | undefined;
   },
   never,
   Providers
@@ -83,6 +125,16 @@ type DiskAttributes = Disk["Attributes"];
 export class DiskNotReady extends Data.TaggedError("DiskNotReady")<{
   diskId: string;
   status: DiskStatus;
+}> {}
+
+/** A `commands` entry exited non-zero while provisioning the disk. */
+export class DiskProvisionFailed extends Data.TaggedError(
+  "DiskProvisionFailed",
+)<{
+  diskId: string;
+  command: string;
+  exitCode: number;
+  stderr: string;
 }> {}
 
 /**
@@ -130,6 +182,36 @@ export class DiskNotReady extends Data.TaggedError("DiskNotReady")<{
  * });
  * ```
  *
+ * @section Building a Base Image
+ * @example Provision the disk's contents at deploy time
+ * The exec sandbox's image is fixed, so the disk itself is the layer you
+ * control: install into it once and every later `exec` sees it. Commands
+ * run in order and are fingerprinted — they re-run only when the list
+ * changes, so write them idempotently.
+ * ```typescript
+ * const base = yield* Archil.Disk("base", {
+ *   commands: [
+ *     "mkdir -p /mnt/archil/lib /mnt/archil/bin",
+ *     "pip install --target /mnt/archil/lib pandas pyarrow",
+ *     "curl -fsSL https://example.com/tool -o /mnt/archil/bin/tool",
+ *     "chmod +x /mnt/archil/bin/tool",
+ *   ],
+ * });
+ * ```
+ * A non-zero exit fails the deploy with the command's stderr. To hand each
+ * user a private copy of this image, checkpoint it once from a mounted host
+ * (`archil checkpoints create`) and bind {@link Fork}.
+ *
+ * @example Seed a file without leaving the stack
+ * ```typescript
+ * const seeded = yield* Archil.Disk("seeded", {
+ *   commands: [
+ *     "cat > /mnt/archil/requirements.txt <<'EOF'\npandas==2.2.3\nEOF",
+ *     "pip install --target /mnt/archil/lib -r /mnt/archil/requirements.txt",
+ *   ],
+ * });
+ * ```
+ *
  * @section Running Commands on a Disk
  * @example Execute bash from a Function or Worker
  * Bind {@link Connect} to run shell commands in an ephemeral container with
@@ -173,6 +255,7 @@ const toAttributes = (
   tokens: {
     diskToken?: Redacted.Redacted<string>;
     diskTokenSuffix?: string;
+    commandsHash?: string;
   },
 ): DiskAttributes => ({
   diskId: disk.id,
@@ -184,7 +267,58 @@ const toAttributes = (
   createdAt: disk.createdAt,
   diskToken: tokens.diskToken,
   diskTokenSuffix: tokens.diskTokenSuffix,
+  commandsHash: tokens.commandsHash,
 });
+
+/** Stable fingerprint of a `commands` list; `undefined` when there are none. */
+const commandsFingerprint = (
+  commands: string[] | undefined,
+): Effect.Effect<string | undefined> =>
+  commands === undefined || commands.length === 0
+    ? Effect.succeed(undefined)
+    : Effect.sync(() =>
+        crypto
+          .createHash("sha256")
+          .update(JSON.stringify(commands))
+          .digest("hex"),
+      );
+
+/**
+ * Run the disk's provisioning commands, in order, stopping at the first
+ * non-zero exit. A failing command fails the deploy with its stderr — the
+ * exec API reports command failure as an exit code, not an error.
+ */
+const runCommands = (
+  region: ArchilRegion,
+  diskId: string,
+  commands: string[],
+) =>
+  Effect.gen(function* () {
+    if (!EXEC_REGIONS.has(region)) {
+      return yield* new DiskProvisionFailed({
+        diskId,
+        command: commands[0] ?? "",
+        exitCode: -1,
+        stderr:
+          `Serverless execution is not available in ${region}, so \`commands\` ` +
+          "cannot run. Use an AWS region (aws-us-east-1, aws-us-west-2, " +
+          "aws-eu-west-1) or drop `commands`.",
+      });
+    }
+    for (const command of commands) {
+      const result = yield* execDisk({ region, diskId, command }).pipe(
+        retryTransient,
+      );
+      if (result.exitCode !== 0) {
+        return yield* new DiskProvisionFailed({
+          diskId,
+          command,
+          exitCode: result.exitCode,
+          stderr: result.stderr.slice(0, 4000),
+        });
+      }
+    }
+  });
 
 const resolveName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {
@@ -260,6 +394,13 @@ export const DiskProvider = () =>
       if (mountFingerprint(news.mount) !== mountFingerprint(olds.mount)) {
         return { action: "replace" } as const;
       }
+      // Provisioning commands are the one thing that can change in place —
+      // the disk stays, its contents get re-provisioned.
+      if (
+        (yield* commandsFingerprint(news.commands)) !== output?.commandsHash
+      ) {
+        return { action: "update" } as const;
+      }
       return undefined;
     }),
     read: Effect.fn(function* ({ id, output, olds }) {
@@ -272,6 +413,9 @@ export const DiskProvider = () =>
             toAttributes(disk, output.region, {
               diskToken: output.diskToken,
               diskTokenSuffix: output.diskTokenSuffix,
+              // The cloud has no notion of our commands; carry the recorded
+              // fingerprint forward so a refresh doesn't force a re-run.
+              commandsHash: output.commandsHash,
             }),
           ),
           Effect.catchTag("DiskNotFound", () => Effect.succeed(undefined)),
@@ -302,6 +446,7 @@ export const DiskProvider = () =>
       // (200 when an identical disk already exists), which also absorbs
       // create races. The one-time disk token only appears on a fresh
       // create.
+      const desiredHash = yield* commandsFingerprint(news.commands);
       if (observed === undefined) {
         const created = yield* createDisk({
           region,
@@ -312,21 +457,31 @@ export const DiskProvider = () =>
           (u) => u.token !== undefined,
         );
         const disk = yield* waitForAvailable(region, created.diskId);
+        if (news.commands?.length) {
+          yield* runCommands(region, created.diskId, news.commands);
+        }
         return toAttributes(disk, region, {
           diskToken: tokenUser?.token
             ? Redacted.make(tokenUser.token)
             : undefined,
           diskTokenSuffix: tokenUser?.tokenSuffix,
+          commandsHash: desiredHash,
         });
       }
 
-      // Sync — nothing is mutable in place (name/region/mount changes are
-      // replacements via diff); just settle to `available` and preserve the
-      // one-time disk token captured at creation.
+      // Sync — the disk itself has nothing mutable in place (name/region/
+      // mount changes are replacements via diff), but its *contents* do:
+      // re-run the provisioning commands when their fingerprint moves.
+      // Adoption (`output` absent) re-runs them too, since we have no
+      // record of what the foreign disk already contains.
       const disk = yield* waitForAvailable(region, observed.id);
+      if (news.commands?.length && desiredHash !== output?.commandsHash) {
+        yield* runCommands(region, observed.id, news.commands);
+      }
       return toAttributes(disk, region, {
         diskToken: output?.diskToken,
         diskTokenSuffix: output?.diskTokenSuffix,
+        commandsHash: desiredHash,
       });
     }),
     delete: Effect.fn(function* ({ output }) {

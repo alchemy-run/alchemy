@@ -67,6 +67,97 @@ test.provider.skipIf(!hasArchil)(
 );
 
 test.provider.skipIf(!hasArchil)(
+  "commands provision the disk and re-run only when they change",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const built = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Archil.Disk("BuiltDisk", {
+            commands: [
+              "mkdir -p /mnt/archil/bin",
+              "printf 'v1' > /mnt/archil/bin/version",
+            ],
+          });
+        }),
+      );
+      expect(built.commandsHash).toBeDefined();
+
+      // The commands actually ran against the filesystem.
+      const v1 = yield* Archil.execDisk({
+        region: built.region,
+        diskId: built.diskId,
+        command: "cat /mnt/archil/bin/version",
+      });
+      expect(v1.stdout.trim()).toBe("v1");
+
+      // Unchanged commands are a no-op: same disk, same fingerprint.
+      const same = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Archil.Disk("BuiltDisk", {
+            commands: [
+              "mkdir -p /mnt/archil/bin",
+              "printf 'v1' > /mnt/archil/bin/version",
+            ],
+          });
+        }),
+      );
+      expect(same.diskId).toBe(built.diskId);
+      expect(same.commandsHash).toBe(built.commandsHash);
+
+      // Changing the commands re-provisions in place — an update, not a
+      // replacement, so the disk keeps its identity.
+      const rebuilt = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Archil.Disk("BuiltDisk", {
+            commands: [
+              "mkdir -p /mnt/archil/bin",
+              "printf 'v2' > /mnt/archil/bin/version",
+            ],
+          });
+        }),
+      );
+      expect(rebuilt.diskId).toBe(built.diskId);
+      expect(rebuilt.commandsHash).not.toBe(built.commandsHash);
+
+      const v2 = yield* Archil.execDisk({
+        region: rebuilt.region,
+        diskId: rebuilt.diskId,
+        command: "cat /mnt/archil/bin/version",
+      });
+      expect(v2.stdout.trim()).toBe("v2");
+
+      yield* stack.destroy();
+    }),
+  { timeout: 240_000 },
+);
+
+test.provider.skipIf(!hasArchil)(
+  "a failing command fails the deploy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      // A non-zero exit is a *value* on the exec API, so the provider has to
+      // translate it — otherwise a broken build would deploy green.
+      const result = yield* Effect.result(
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* Archil.Disk("FailingBuildDisk", {
+              commands: ["exit 7"],
+            });
+          }),
+        ),
+      );
+      expect(result._tag).toBe("Failure");
+
+      yield* stack.destroy();
+    }),
+  { timeout: 120_000 },
+);
+
+test.provider.skipIf(!hasArchil)(
   "explicit name and region are honored",
   (stack) =>
     Effect.gen(function* () {
