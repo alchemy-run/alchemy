@@ -17,7 +17,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import { Issues } from "../src/processes/Issues.ts";
 import { PullRequests } from "../src/processes/PullRequests.ts";
-import { OrgLive } from "../src/Server.ts";
+import { OrgLocal as OrgLive } from "../src/OrgLocal.ts";
 
 /**
  * The GitHub Providers requirement is PHANTOM on this path: the org

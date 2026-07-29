@@ -17,6 +17,7 @@ import {
   ReadOutput,
 } from "../tools/index.ts";
 import { ReadToolsLocal, RunToolsLocal } from "../tools/LocalToolbox.ts";
+import { ReadToolsSandbox, RunToolsSandbox } from "../tools/SandboxToolbox.ts";
 
 export class QualityAssurance extends AI.Skill<QualityAssurance>()(
   "QualityAssurance",
@@ -47,4 +48,14 @@ export const QualityAssuranceLive = QualityAssurance.make`
  */
 export const QualityAssuranceLocal = QualityAssuranceLive.pipe(
   Layer.provide([ReadToolsLocal, RunToolsLocal]),
+);
+
+
+/**
+ * Cloudflare composition — the SAME teaching, read + run forwarded to
+ * the sandbox container: the reviewer explores and tests in the exact
+ * worktree the engineer built in, one RPC hop away.
+ */
+export const QualityAssuranceWorker = QualityAssuranceLive.pipe(
+  Layer.provide([ReadToolsSandbox, RunToolsSandbox]),
 );

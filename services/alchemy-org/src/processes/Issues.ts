@@ -16,11 +16,13 @@
  * through GitHub or not at all.
  */
 import * as AI from "alchemy/AI";
+import { WorkerExecutionContext } from "alchemy/Cloudflare";
 import * as GitHub from "alchemy/GitHub";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import { Engineer, type OpenedPullRequest } from "../agents/Engineer.ts";
 import { IssueOwner, IssueOwnerLive } from "../agents/IssueOwner.ts";
 import { Reviewer } from "../agents/Reviewer.ts";
@@ -105,9 +107,29 @@ export const IssuesLive = Layer.effect(
         // the router IS the running host — discharge the runtime color
         // the tool callable carries (the kernel's own pattern)
         Effect.provide(RuntimeContext.phantom),
-        Effect.forkIn(scope),
-        Effect.asVoid,
+        background,
       );
+
+    /**
+     * Minutes-long work OFF the delivery path — a review must never
+     * stall event ingestion. Substrate-aware at the last inch: on a
+     * Worker the delivery runs inside a request, whose lifetime
+     * `waitUntil` extends (a fiber forked into the BUILD scope would
+     * die with the event); locally there is no request, and the
+     * process-long build scope is the right home.
+     */
+    function background<E>(work: Effect.Effect<void, E>): Effect.Effect<void> {
+      return Effect.gen(function* () {
+        const ctx = yield* Effect.serviceOption(WorkerExecutionContext);
+        if (Option.isSome(ctx)) {
+          yield* ctx.value
+            .waitUntil(work)
+            .pipe(Effect.provide(RuntimeContext.phantom));
+        } else {
+          yield* Effect.asVoid(Effect.forkIn(work, scope));
+        }
+      });
+    }
 
     /**
      * The issue a PR's events belong to: the RECORDED link first; a

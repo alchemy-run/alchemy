@@ -29,6 +29,11 @@ import {
   RunToolsLocal,
   WriteToolsLocal,
 } from "../tools/LocalToolbox.ts";
+import {
+  ReadToolsSandbox,
+  RunToolsSandbox,
+  WriteToolsSandbox,
+} from "../tools/SandboxToolbox.ts";
 import { ResourceEngineering } from "./ResourceEngineering.ts";
 
 export class Coding extends AI.Skill<Coding>()("Coding") {}
@@ -72,3 +77,14 @@ export const CodingLive = Coding.make`
 export const CodingLocal = CodingLive.pipe(
   Layer.provide([ReadToolsLocal, RunToolsLocal, WriteToolsLocal]),
 );
+
+/**
+ * Cloudflare composition — the SAME teaching over the SAME physics,
+ * one RPC hop away: the tools forward to the sandbox container
+ * (services/Sandbox.ts), where `tools/LocalToolbox.ts` runs verbatim
+ * on a real machine with the repository checkouts.
+ */
+export const CodingWorker = CodingLive.pipe(
+  Layer.provide([ReadToolsSandbox, RunToolsSandbox, WriteToolsSandbox]),
+);
+

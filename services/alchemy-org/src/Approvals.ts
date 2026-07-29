@@ -10,6 +10,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
+import { Ledger } from "./Ledger.ts";
 
 export interface PullRequestKey {
   readonly owner: string;
@@ -42,6 +43,25 @@ export const ApprovalsLive = Layer.effect(
         Ref.update(approved, (set) => new Set(set).add(keyOf(pr))),
       isApproved: (pr) =>
         Ref.get(approved).pipe(Effect.map((set) => set.has(keyOf(pr)))),
+    };
+  }),
+);
+
+/**
+ * Ledger-backed: the approval is a coordination FACT in the org's book
+ * of record, so it survives restarts locally and is shared by every
+ * Worker instance on Cloudflare — the same physics on both substrates
+ * (whatever Ledger the composition provided answers).
+ */
+export const ApprovalsLedger = Layer.effect(
+  Approvals,
+  Effect.gen(function* () {
+    const ledger = yield* Ledger;
+    const key = (pr: PullRequestKey) => `approval:${keyOf(pr)}`;
+    return {
+      record: (pr) => ledger.put(key(pr), true),
+      isApproved: (pr) =>
+        Effect.map(ledger.get(key(pr)), (value) => value === true),
     };
   }),
 );

@@ -1260,22 +1260,19 @@ export const Worker: ResourceClassLike<Worker> &
         };
     };
     <Self>(): {
-      <
-        const Id extends string,
-        Shape extends WorkerShape,
-        Req extends
-          | WorkerServices
-          | Container.Application<any>
-          | PlatformServices
-          | Tag,
-      >(
+      <const Id extends string, Shape extends WorkerShape, Req = never>(
         id: Id,
         props: InputProps<WorkerProps>,
         impl: Effect.Effect<Shape, ConfigError, Req>,
       ): Effect.Effect<
         Worker & Rpc<Self>,
         never,
-        Extract<Req, Container.Application<any>> | Providers
+        // worker-ambient services are satisfied by the runtime
+        // bridge; anything else the init needs (foreign resource
+        // constructors, provider collections — e.g. a GitHub `*Http`
+        // binding minting its PersonalAccessToken) flows OUT to the
+        // Stack, exactly as the props-only overload already lets it
+        Exclude<Req, WorkerServices | PlatformServices | Tag> | Providers
       > &
         Named<Id> & {
           new (): MakeShape<Shape, WorkerShape> & Named<Id> & Tag;
@@ -1305,21 +1302,19 @@ export const Worker: ResourceClassLike<Worker> &
       never,
       Req | Providers
     >;
-    <
-      const Id extends string,
-      Shape extends WorkerShape,
-      Req extends
-        | WorkerServices
-        | Container.Application<any>
-        | PlatformServices,
-    >(
+    x<const Id extends string, Shape extends WorkerShape, Req = never>(
       id: string,
       props: InputProps<WorkerProps>,
       impl: Effect.Effect<Shape, ConfigError, Req>,
     ): Effect.Effect<
       Worker & Rpc<Shape>,
       never,
-      Extract<Req, Container.Application<any>> | Providers
+      // worker-ambient services are satisfied by the runtime bridge;
+      // anything else the init needs (foreign resource constructors,
+      // provider collections — e.g. a GitHub `*Http` binding minting
+      // its PersonalAccessToken) flows OUT to the Stack, exactly as
+      // the props-only overload already lets it
+      Exclude<Req, WorkerServices | PlatformServices> | Providers
     > &
       Named<Id>;
   } = Platform(WorkerTypeId, {
