@@ -230,7 +230,7 @@ export const WarpConnectorProvider = () =>
 interface ObservedConnector {
   id?: string;
   name?: string;
-  status?: string;
+  status?: "inactive" | "degraded" | "healthy" | "down";
   createdAt?: string;
   deletedAt?: string;
 }
