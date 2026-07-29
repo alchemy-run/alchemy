@@ -83,7 +83,9 @@ test.provider(
       // The local provider fabricates a `dev:` id — proof no cloud call ran.
       expect(deployed.db.databaseId).toMatch(/^dev:/);
 
-      const body = (yield* getJsonReady(`${deployed.worker.url}roundtrip`)) as {
+      const body = (yield* getJsonReady(
+        `${deployed.worker.url}/roundtrip`,
+      )) as {
         names: string[];
         count: number | null;
       };
@@ -141,13 +143,13 @@ test.provider(
       expect(Object.keys(v1.db.migrationsHashes)).toEqual(["0001_users.sql"]);
 
       const url = v1.worker.url!;
-      const schema = (yield* getJsonReady(`${url}tables`)) as {
+      const schema = (yield* getJsonReady(`${url}/tables`)) as {
         tables: string[];
       };
       expect(schema.tables).toContain("users");
       expect(schema.tables).toContain("d1_migrations");
 
-      const users = (yield* getJsonReady(`${url}users`)) as {
+      const users = (yield* getJsonReady(`${url}/users`)) as {
         users: string[];
       };
       expect(users.users).toEqual(["seed"]);
@@ -167,7 +169,7 @@ test.provider(
         "0002_posts.sql",
       ]);
 
-      const migrations = (yield* getJsonReady(`${url}migrations`)) as {
+      const migrations = (yield* getJsonReady(`${url}/migrations`)) as {
         migrations: Array<{ id: string; name: string }>;
       };
       expect(migrations.migrations).toEqual([
@@ -176,7 +178,7 @@ test.provider(
       ]);
 
       // Data written by 0001 survived the second deploy (not re-applied).
-      const usersAfter = (yield* getJsonReady(`${url}users`)) as {
+      const usersAfter = (yield* getJsonReady(`${url}/users`)) as {
         users: string[];
       };
       expect(usersAfter.users).toEqual(["seed"]);
@@ -230,7 +232,7 @@ test.provider(
       expect(deployed.db.databaseId).toMatch(/^dev:/);
       expect(Object.keys(deployed.db.importHashes)).toEqual([importFile]);
 
-      const users = (yield* getJsonReady(`${deployed.worker.url}users`)) as {
+      const users = (yield* getJsonReady(`${deployed.worker.url}/users`)) as {
         users: string[];
       };
       expect(users.users).toEqual(["imported"]);
@@ -295,7 +297,7 @@ test.provider(
 
       // The worker's native binding reads the same simulator storage the
       // Action's gateway wrote to.
-      const users = (yield* getJsonReady(`${deployed.worker.url}users`)) as {
+      const users = (yield* getJsonReady(`${deployed.worker.url}/users`)) as {
         users: string[];
       };
       expect(users.users).toEqual(["ada"]);
@@ -337,7 +339,9 @@ test.provider(
       // A real UUID — the live provider created it on Cloudflare.
       expect(deployed.db.databaseId).not.toMatch(/^dev:/);
 
-      const body = (yield* getJsonReady(`${deployed.worker.url}roundtrip`)) as {
+      const body = (yield* getJsonReady(
+        `${deployed.worker.url}/roundtrip`,
+      )) as {
         names: string[];
       };
       expect(body.names).toEqual(["alice", "bob"]);

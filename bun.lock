@@ -565,6 +565,16 @@
         "effect": "catalog:",
       },
     },
+    "examples/aws-bedrock-ai": {
+      "name": "aws-bedrock-ai",
+      "version": "0.0.0",
+      "dependencies": {
+        "@distilled.cloud/aws": "catalog:",
+        "@effect/platform-node": "catalog:",
+        "alchemy": "workspace:*",
+        "effect": "catalog:",
+      },
+    },
     "examples/aws-ec2": {
       "name": "aws-ec2-example",
       "version": "0.0.0",
@@ -2723,6 +2733,8 @@
     "async-sema": ["async-sema@3.1.1", "", {}, "sha512-tLRNUXati5MFePdAk8dw7Qt7DpxPB60ofAgn8WRhW6a2rcimZnYBP9oxHiv0OHy+Wz7kPMG+t4LGdt31+4EmGg=="],
 
     "auto-bind": ["auto-bind@5.0.1", "", {}, "sha512-ooviqdwwgfIfNmDwo94wlshcdzfO64XV0Cg6oDsDYBJfITDz1EngD2z7DkbvCWn+XIMsIqW27sEVF6qcpJrRcg=="],
+
+    "aws-bedrock-ai": ["aws-bedrock-ai@workspace:examples/aws-bedrock-ai"],
 
     "aws-ec2-example": ["aws-ec2-example@workspace:examples/aws-ec2"],
 

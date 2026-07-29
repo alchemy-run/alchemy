@@ -352,4 +352,4 @@ Cloud-agnostic local process primitives — memoized builds, one-off commands, a
 
 Per-resource API reference, generated from JSDoc on the source `.ts` files via `bun generate:api-reference`. Each page documents the resource's input properties (with types, defaults, and constraints), output attributes, and Quick Reference / Examples sections derived from `@section` / `@example` JSDoc tags.
 
-The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~843 KB) — only fetch it when you need to locate a specific resource's reference page.
+The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~44 KB) — only fetch it when you need to locate a specific resource's reference page.

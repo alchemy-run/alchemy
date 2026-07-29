@@ -73,7 +73,7 @@ describe.concurrent("Cloudflare.Worker assets-only", () => {
             Effect.gen(function* () {
               return yield* Cloudflare.Worker("AssetsOnly", {
                 ...props,
-                subdomain: { enabled: true },
+                workersDev: true,
                 compatibility: { date: "2024-01-01" },
               });
             }),
@@ -128,5 +128,34 @@ describe.concurrent("Cloudflare.Worker assets-only", () => {
         yield* stack.destroy();
       }),
     { timeout: 360_000 },
+  );
+
+  test.provider(
+    "class form deploys an assets-only Worker",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        class Site extends Cloudflare.Worker<Site>()("AssetsOnlyClass", {
+          assets: {
+            directory: fixtureDir,
+            notFoundHandling: "404-page",
+          },
+          workersDev: true,
+          compatibility: { date: "2024-01-01" },
+        }) {}
+
+        const worker = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Site;
+          }),
+        );
+        const url = worker.url!;
+        yield* expectUrlContains(`${url}/`, "alchemy-assets-only-index");
+        yield* expectCustom404(`${url}/does-not-exist`);
+
+        yield* stack.destroy();
+      }),
+    { timeout: 240_000 },
   );
 });

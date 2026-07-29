@@ -7,6 +7,7 @@ import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as ecr from "@distilled.cloud/aws/ecr";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
+import * as iam from "@distilled.cloud/aws/iam";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -60,6 +61,12 @@ test.provider(
             port: 80,
             desiredCount: 0,
             loadBalancer: true,
+            environmentFiles: [
+              {
+                value: "arn:aws:s3:::alchemy-test-ecs-env-files/edge.env",
+                type: "s3",
+              },
+            ],
           });
         }),
       );
@@ -94,6 +101,21 @@ test.provider(
         "while true; do sleep 30; done",
       ]);
       expect(container?.portMappings?.[0]?.containerPort).toBe(80);
+      // `environmentFiles` lands on the synthesized primary container, with
+      // the execution role granted read access to the referenced object.
+      expect(container?.environmentFiles).toEqual([
+        {
+          value: "arn:aws:s3:::alchemy-test-ecs-env-files/edge.env",
+          type: "s3",
+        },
+      ]);
+      const envFilesPolicy = yield* iam.getRolePolicy({
+        RoleName: deployed.executionRoleArn!.split(":role/")[1]!,
+        PolicyName: "alchemy-environment-files",
+      });
+      expect(decodeURIComponent(envFilesPolicy.PolicyDocument ?? "")).toContain(
+        "arn:aws:s3:::alchemy-test-ecs-env-files/edge.env",
+      );
 
       // Out-of-band: the service is wired to the generated target group.
       const services = yield* ecs.describeServices({

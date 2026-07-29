@@ -75,7 +75,7 @@ test.provider(
 
       // request.cf: the middleware injects Miniflare's static fallback blob,
       // so `colo`/`country` are present without any configuration.
-      const cf = (yield* getJsonReady(`${url}cf`)) as {
+      const cf = (yield* getJsonReady(`${url}/cf`)) as {
         colo: string | null;
         country: string | null;
         clientAcceptEncoding: string | null;
@@ -86,14 +86,14 @@ test.provider(
       // Cache API: first request misses and populates, second hits. The
       // simulator's storage persists across runs, so use a per-run key.
       const cacheKey = crypto.randomUUID();
-      const first = (yield* getJsonReady(`${url}cache?key=${cacheKey}`)) as {
+      const first = (yield* getJsonReady(`${url}/cache?key=${cacheKey}`)) as {
         hit: boolean;
         body: string;
       };
       expect(first.hit).toBe(false);
       expect(first.body).toBe("cached-body");
 
-      const second = (yield* getJsonReady(`${url}cache?key=${cacheKey}`)) as {
+      const second = (yield* getJsonReady(`${url}/cache?key=${cacheKey}`)) as {
         hit: boolean;
         body: string;
       };
@@ -134,7 +134,7 @@ test.provider(
       const url = deployed.worker.url!;
 
       // The overridden blob is served verbatim.
-      const cf = (yield* getJsonReady(`${url}cf`)) as {
+      const cf = (yield* getJsonReady(`${url}/cf`)) as {
         colo: string | null;
         country: string | null;
       };
@@ -142,8 +142,8 @@ test.provider(
       expect(cf.country).toBe("XX");
 
       // With the cache disabled, every request misses — the put is a no-op.
-      const first = (yield* getJsonReady(`${url}cache`)) as { hit: boolean };
-      const second = (yield* getJsonReady(`${url}cache`)) as { hit: boolean };
+      const first = (yield* getJsonReady(`${url}/cache`)) as { hit: boolean };
+      const second = (yield* getJsonReady(`${url}/cache`)) as { hit: boolean };
       expect(first.hit).toBe(false);
       expect(second.hit).toBe(false);
 

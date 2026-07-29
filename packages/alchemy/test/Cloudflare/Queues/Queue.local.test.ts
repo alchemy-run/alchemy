@@ -84,13 +84,13 @@ test.provider(
       expect(deployed.queue.queueId).toMatch(/^dev:/);
 
       const sent = (yield* getJsonReady(
-        `${deployed.worker.url}send?text=local-hello`,
+        `${deployed.worker.url}/send?text=local-hello`,
       )) as { sent: string };
       expect(sent.sent).toBe("local-hello");
 
       // Poll until the broker delivers to the fixture's queue() handler.
       const received = yield* getJsonReady(
-        `${deployed.worker.url}received`,
+        `${deployed.worker.url}/received`,
       ).pipe(
         Effect.map((body) => (body as { received: string[] }).received),
         Effect.repeat({
@@ -144,14 +144,14 @@ test.provider(
 
       // Produce through the shim into the real queue.
       const sent = (yield* getJsonReady(
-        `${deployed.worker.url}send?text=roundtrip-hello`,
+        `${deployed.worker.url}/send?text=roundtrip-hello`,
       )) as { sent: string };
       expect(sent.sent).toBe("roundtrip-hello");
 
       // The pull loop drains the real queue into the local broker, which
       // delivers to the fixture's queue() handler.
       const received = yield* getJsonReady(
-        `${deployed.worker.url}received`,
+        `${deployed.worker.url}/received`,
       ).pipe(
         Effect.map((body) => (body as { received: string[] }).received),
         Effect.repeat({
@@ -228,11 +228,11 @@ test.provider(
       // (the forwarder retries 404/503 internally; the outer retry covers
       // the tail).
       const sent = (yield* getJsonReady(
-        `${deployed.worker.url}send?text=live-hello`,
+        `${deployed.worker.url}/send?text=live-hello`,
       )) as { sent: string };
       expect(sent.sent).toBe("live-hello");
       const batch = (yield* getJsonReady(
-        `${deployed.worker.url}sendbatch?text=live-batch`,
+        `${deployed.worker.url}/sendbatch?text=live-batch`,
       )) as { sent: number };
       expect(batch.sent).toBe(2);
 

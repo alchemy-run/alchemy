@@ -472,6 +472,10 @@ export default defineConfig({
                   link: "/infrastructure-as-effects/circular-bindings",
                 },
                 {
+                  label: "Telemetry",
+                  link: "/infrastructure-as-effects/telemetry",
+                },
+                {
                   label: "Custom Runtime",
                   link: "/infrastructure-as-effects/custom-runtime",
                 },
@@ -871,6 +875,12 @@ export default defineConfig({
               ],
             },
             {
+              label: "AI",
+              items: [
+                { label: "Bedrock & Effect AI", link: "/aws/ai/bedrock" },
+              ],
+            },
+            {
               label: "Messaging & events",
               items: [
                 { label: "SQS", link: "/aws/messaging/sqs" },
@@ -885,6 +895,15 @@ export default defineConfig({
                   link: "/aws/messaging/dynamodb-streams",
                 },
                 { label: "S3 events", link: "/aws/messaging/s3-events" },
+              ],
+            },
+            {
+              label: "Email",
+              items: [
+                {
+                  label: "Receiving inbound email",
+                  link: "/aws/email/receiving",
+                },
               ],
             },
             {

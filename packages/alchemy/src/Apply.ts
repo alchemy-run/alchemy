@@ -1,4 +1,5 @@
 import * as Cause from "effect/Cause";
+import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -24,7 +25,6 @@ import { havePropsChanged, stripUnresolved } from "./Diff.ts";
 import type { Input } from "./Input.ts";
 import { generateInstanceId, InstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
-import * as Data from "effect/Data";
 import {
   type ActionApply,
   type Apply,
@@ -141,7 +141,10 @@ export const apply = <P extends Plan>(
   plan: P,
 ): Effect.Effect<
   Input.Resolve<P["output"]>,
-  Output.InvalidReferenceError | Output.MissingSourceError | StateStoreError,
+  | Output.InvalidReferenceError
+  | Output.MissingSourceError
+  | StateStoreError
+  | DestroyError,
   Cli | State | Stack | Stage
 > =>
   Effect.gen(function* () {
@@ -1579,18 +1582,54 @@ const converge = Effect.fn(function* (
 
 // ── Phase 2: delete orphans and old replaced resources ─────────────────────
 
-/**
- * Internal marker: this node's deletion was skipped because a DEPENDENT
- * resource (one that still references it) failed to delete. The dependent's
- * own failure is already recorded in the GC failure list, so nodes failing
- * with ONLY this marker are not re-recorded — they just keep their state so
- * the next destroy retries the whole chain.
- */
-class DependentDeletionFailed extends Data.TaggedError(
-  "DependentDeletionFailed",
-)<{
+/** A provider delete (or its attr-recovery read / state commit) that failed. */
+export interface DeleteFailure {
   fqn: string;
-}> {}
+  logicalId: string;
+  resourceType: string;
+  cause: Cause.Cause<unknown>;
+}
+
+/**
+ * A delete that was never attempted because a dependent's delete failed (or
+ * was itself blocked). The resource may legitimately be undeletable while its
+ * dependents still exist, so skipping is not an error in its own right.
+ */
+export interface BlockedDelete {
+  fqn: string;
+  logicalId: string;
+  resourceType: string;
+  /** FQNs of the dependents whose failed/blocked deletes block this one. */
+  blockedBy: string[];
+}
+
+/**
+ * Aggregate raised at the end of the deletion phase when one or more
+ * resource deletes failed. Every resource whose delete did not depend on a
+ * failed one was still attempted — a single failure no longer strands
+ * unrelated siblings.
+ */
+export class DestroyError extends Data.TaggedError("DestroyError")<{
+  failures: ReadonlyArray<DeleteFailure>;
+  blocked: ReadonlyArray<BlockedDelete>;
+}> {
+  override get message(): string {
+    return [
+      `Failed to delete ${this.failures.length} resource(s)` +
+        (this.blocked.length > 0
+          ? ` (${this.blocked.length} more skipped because a dependent's delete failed)`
+          : "") +
+        ":",
+      ...this.failures.map(
+        (f) => `  ✗ ${f.fqn} (${f.resourceType}): ${Cause.pretty(f.cause)}`,
+      ),
+      ...this.blocked.map(
+        (b) =>
+          `  ⊘ ${b.fqn} (${b.resourceType}): skipped — blocked by failed delete of ${b.blockedBy.join(", ")}`,
+      ),
+    ].join("\n");
+  }
+}
 
 const collectGarbage = Effect.fn(function* (
   plan: Plan,
@@ -1600,12 +1639,6 @@ const collectGarbage = Effect.fn(function* (
   const stack = yield* Stack;
   const stackName = stack.name;
   const stage = yield* Stage;
-
-  // GC failures are aggregated, never fail-fast: one resource that refuses
-  // to delete must not interrupt sibling deletions mid-flight (which would
-  // leave THEIR physical resources behind too). Every deletable resource is
-  // deleted, then the combined cause is raised at the end.
-  const failures: LifecycleFailure[] = [];
 
   // Task deletions are pure state drops — no body is invoked. Run them in
   // parallel before resource GC; tasks never have provider-side dependencies
@@ -1633,17 +1666,28 @@ const collectGarbage = Effect.fn(function* (
     { concurrency: "unbounded" },
   );
 
+  // Failures are collected — not propagated — so one bad delete never
+  // strands unrelated siblings. `unresolved` tracks every FQN whose delete
+  // failed or was blocked this run: later passes must not retry them (a
+  // still-`replaced` row would otherwise spin the drain loop forever) and
+  // dependencies scheduled in later passes must observe them as blocking.
+  const failures: DeleteFailure[] = [];
+  const blockedDeletes: BlockedDelete[] = [];
+  const unresolved = new Set<string>();
+
+  type DeleteOutcome = "deleted" | "failed" | "blocked";
+
   const deleteGraph = Effect.fn(function* (
     deletionGraph: Record<string, Delete | ReplacedResourceState | undefined>,
   ) {
     const deletions: {
-      [fqn in string]: Effect.Effect<void, StateStoreError, ArtifactStore>;
+      [fqn in string]: Effect.Effect<DeleteOutcome, never, ArtifactStore>;
     } = {};
 
     const deleteResource = (
       node: Delete | ReplacedResourceState,
       ancestors: ReadonlySet<string> = new Set(),
-    ): Effect.Effect<void, StateStoreError, ArtifactStore> =>
+    ): Effect.Effect<DeleteOutcome, never, ArtifactStore> =>
       Effect.gen(function* () {
         const isDeleteNode = (
           node: Delete | ReplacedResourceState,
@@ -1753,28 +1797,66 @@ const collectGarbage = Effect.fn(function* (
 
         return yield* (deletions[fqn] ??= yield* Effect.cached(
           Effect.gen(function* () {
-            // Dependents (downstream) delete first. When one of them fails,
-            // this resource cannot safely be deleted this pass — its
-            // physical delete would hit a dependency violation. Replace the
-            // propagated cause with the DependentDeletionFailed marker so
-            // the catch below skips the delete WITHOUT re-recording the
-            // dependent's failure (it already recorded itself).
-            yield* Effect.all(
+            // Dependents (`downstream`) are deleted before this resource. A
+            // dependent whose delete failed (or was itself blocked) may make
+            // this resource legitimately undeletable (dependency violation),
+            // so it is skipped with a "blocked by" note instead of surfacing
+            // a spurious second error.
+            const dependents = yield* Effect.all(
               downstream.map((dep) =>
-                dep !== fqn && dep in deletionGraph && !ancestors.has(dep)
-                  ? deleteResource(
-                      deletionGraph[dep] as Delete | ReplacedResourceState,
-                      nextAncestors,
-                    )
-                  : Effect.void,
+                dep !== fqn && !ancestors.has(dep)
+                  ? dep in deletionGraph
+                    ? deleteResource(
+                        deletionGraph[dep] as Delete | ReplacedResourceState,
+                        nextAncestors,
+                      ).pipe(Effect.map((outcome) => ({ dep, outcome })))
+                    : // Not in this pass's graph — but it may have failed in
+                      // an earlier drain pass of the same destroy.
+                      Effect.sync(() => ({
+                        dep,
+                        outcome: unresolved.has(dep)
+                          ? ("failed" as const)
+                          : ("deleted" as const),
+                      }))
+                  : Effect.succeed({ dep, outcome: "deleted" as const }),
               ),
               { concurrency: "unbounded" },
-            ).pipe(
-              Effect.catchCause(() =>
-                Effect.fail(new DependentDeletionFailed({ fqn })),
-              ),
             );
 
+            const blockedBy = dependents
+              .filter(({ outcome }) => outcome !== "deleted")
+              .map(({ dep }) => dep);
+
+            if (blockedBy.length > 0) {
+              unresolved.add(fqn);
+              blockedDeletes.push({
+                fqn,
+                logicalId,
+                resourceType,
+                blockedBy,
+              });
+              yield* scopedSession.note(
+                `Skipping delete — blocked by failed delete of ${blockedBy.join(", ")}.`,
+              );
+              yield* report("skipped");
+              return "blocked" as const;
+            }
+
+            return yield* deleteResourceBody().pipe(
+              Effect.catchCause((cause) =>
+                Effect.gen(function* () {
+                  unresolved.add(fqn);
+                  failures.push({ fqn, logicalId, resourceType, cause });
+                  yield* report("fail");
+                  return "failed" as const;
+                }),
+              ),
+            );
+          }),
+        ));
+
+        function deleteResourceBody() {
+          return Effect.gen(function* () {
             if (isDeleteNode(node)) {
               yield* report("deleting");
               if (node.resource.RemovalPolicy === "retain") {
@@ -1784,7 +1866,8 @@ const collectGarbage = Effect.fn(function* (
                   fqn,
                 });
                 yield* report("retained");
-                return;
+                // Retention is intentional — it never blocks dependencies.
+                return "deleted" as const;
               }
             }
 
@@ -1952,42 +2035,19 @@ const collectGarbage = Effect.fn(function* (
                   : "Replaced resource cleanup complete.",
               );
             }
-          }).pipe(
-            Effect.catchCause((cause) =>
-              Effect.gen(function* () {
-                // Record only DIRECT failures. A cause consisting solely of
-                // the DependentDeletionFailed marker means the real failure
-                // was already recorded by the dependent that produced it.
-                const dependentOnly = cause.reasons.every(
-                  (reason) =>
-                    Cause.isFailReason(reason) &&
-                    reason.error instanceof DependentDeletionFailed,
-                );
-                if (!dependentOnly) {
-                  failures.push({
-                    fqn,
-                    logicalId,
-                    type: resourceType,
-                    cause,
-                  });
-                }
-                yield* report("fail");
-                // Keep the cached effect failed so resources that depend on
-                // this one skip their own physical delete too.
-                return yield* Effect.failCause(cause);
-              }),
-            ),
-          ),
-        ));
+            return "deleted" as const;
+          });
+        }
       });
 
     // Attempt every root. Per-node failures were recorded (and their state
-    // retained) by the catch above — swallow them here so one bad resource
-    // never interrupts sibling deletions mid-flight.
+    // retained) inside each node's delete effect — the effects resolve to
+    // outcomes and never fail, so one bad resource never interrupts sibling
+    // deletions mid-flight.
     yield* Effect.all(
       Object.values(deletionGraph)
         .filter((node) => node !== undefined)
-        .map((node) => deleteResource(node).pipe(Effect.ignore)),
+        .map((node) => deleteResource(node)),
       { concurrency: "unbounded" },
     );
   });
@@ -1997,10 +2057,15 @@ const collectGarbage = Effect.fn(function* (
   // chains that were re-committed as `replaced` while deleting older generations.
   let first = true;
   while (true) {
-    const remainingReplacedResources = yield* state.getReplacedResources({
+    const remainingReplacedResources = (yield* state.getReplacedResources({
       stack: stackName,
       stage,
-    });
+    }))
+      // A row whose drain already failed (or was blocked) this run stays
+      // `replaced` in state — retrying it in a later pass would loop forever.
+      // It stays behind for the next destroy; the aggregate error below
+      // reports it.
+      .filter((replaced) => !unresolved.has(replaced.fqn));
     if (!first && remainingReplacedResources.length === 0) {
       break;
     }
@@ -2017,17 +2082,14 @@ const collectGarbage = Effect.fn(function* (
       ),
     });
     first = false;
-    // A failed pass cannot make further progress — the failing rows stay
-    // `replaced`/`deleting` in state, so looping again would spin on the
-    // same failures forever. Stop and surface the aggregate below.
-    if (failures.length > 0) {
-      break;
-    }
   }
 
   if (failures.length > 0) {
-    return yield* Effect.failCause(
-      failures.map((f) => f.cause).reduce(Cause.combine),
+    // Every independent delete was still attempted; now surface everything
+    // that went wrong (and everything skipped as a consequence) as one
+    // typed aggregate. The destroy as a whole still fails.
+    return yield* Effect.fail(
+      new DestroyError({ failures, blocked: blockedDeletes }),
     );
   }
 });

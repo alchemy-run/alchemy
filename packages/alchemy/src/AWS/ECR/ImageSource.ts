@@ -271,6 +271,7 @@ import { BunServices } from "@effect/platform-bun";
 import { BunHttpServer } from "alchemy/Http";
 import { Stack } from "alchemy/Stack";
 import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
+import { provideProcessTelemetry } from "alchemy/Telemetry";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
@@ -317,8 +318,15 @@ const stack = Layer.effect(
 // handler is actually served and host.run loops stay alive. A pure one-shot
 // { run } program completes and the process exits 0.
 const program = tag.pipe(
-  Effect.flatMap((task) => task.RuntimeContext.exports),
-  Effect.flatMap((exports) => exports.program),
+  // Process-lifetime telemetry: built once into the root scope; exporters
+  // batch on their intervals and flush when the scope closes on graceful
+  // shutdown.
+  Effect.flatMap((task) =>
+    task.RuntimeContext.exports.pipe(
+      Effect.flatMap((exports) => exports.program),
+      provideProcessTelemetry(task.RuntimeContext),
+    ),
+  ),
   Effect.provide(
     layer.pipe(
       Layer.provideMerge(stack),

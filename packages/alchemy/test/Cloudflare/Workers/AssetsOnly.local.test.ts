@@ -75,7 +75,7 @@ test.provider(
       // itself — the stub only delegates.
       const client = yield* HttpClient.HttpClient;
       const missing = yield* client
-        .get(`${deployed.worker.url}does-not-exist`)
+        .get(`${deployed.worker.url}/does-not-exist`)
         .pipe(Effect.orDie);
       expect(missing.status).toBe(404);
       const missingBody = yield* missing.text.pipe(Effect.orDie);

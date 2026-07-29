@@ -164,7 +164,7 @@ test.provider(
       // The worker's native binding reads the same simulator storage the
       // Action's gateway wrote to.
       const body = (yield* getJsonReady(
-        `${deployed.worker.url}get?key=seeded`,
+        `${deployed.worker.url}/get?key=seeded`,
       )) as { value: string | null };
       expect(body.value).toBe("from-action");
 
@@ -209,12 +209,12 @@ test.provider(
 
       // Both bindings round-trip through the same locally-served worker.
       const local = (yield* getJsonReady(
-        `${deployed.worker.url}roundtrip`,
+        `${deployed.worker.url}/roundtrip`,
       )) as { value: string };
       expect(local.value).toBe("value1");
 
       const live = (yield* getJsonReady(
-        `${deployed.worker.url}roundtrip?binding=KV_LIVE`,
+        `${deployed.worker.url}/roundtrip?binding=KV_LIVE`,
       )) as { value: string; value2: string };
       expect(live.value).toBe("value1");
       expect(live.value2).toBe("value2");

@@ -19,7 +19,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import {
-  createHostRuntimeContext,
+  createContainerRuntimeContext,
   type HostRuntimeContext,
   type ServerHost,
 } from "../../Server/Process.ts";
@@ -104,6 +104,17 @@ export interface TaskDefinitionConfig {
    * Additional environment variables for the container.
    */
   env?: Record<string, any>;
+  /**
+   * Environment files to load into the primary container, e.g. `.env`
+   * objects stored in S3:
+   * `[{ value: "arn:aws:s3:::my-bucket/app.env", type: "s3" }]`.
+   *
+   * Variables from `env` (and the container's own `environment`) take
+   * precedence over values loaded from environment files. The execution
+   * role is automatically granted `s3:GetObject` on the referenced objects
+   * and `s3:GetBucketLocation` on their buckets.
+   */
+  environmentFiles?: ecs.EnvironmentFile[];
   /**
    * Command override for the primary container (Docker `CMD`).
    */
@@ -298,37 +309,8 @@ export interface TaskRuntimeContext extends HostRuntimeContext {
   readonly Type: "AWS.ECS.Task";
 }
 
-/**
- * Host runtime context for ECS container platforms: extends the shared
- * process host context so an impl shape's `run` effect is registered as a
- * one-shot runner (the container exits when it completes) and the HTTP
- * server only boots when the impl actually declares a `fetch` handler.
- */
-export const createContainerRuntimeContext =
-  (type: string) =>
-  (id: string): HostRuntimeContext => {
-    const base = createHostRuntimeContext(type)(id);
-    // Capture the host serve BEFORE Object.assign overwrites `base.serve`
-    // with the wrapper below — calling `base.serve` inside the wrapper would
-    // resolve to the wrapper itself (property lookup happens at call time)
-    // and recurse without bound the moment an impl declares `fetch`.
-    const serveBase = base.serve;
-    const serve: HostRuntimeContext["serve"] = (handler, options) =>
-      Effect.gen(function* () {
-        const shape = options?.shape;
-        const run = shape?.run;
-        if (Effect.isEffect(run)) {
-          yield* base.run(run as Effect.Effect<void, never, any>);
-        }
-        // Boot the HTTP server only for an impl that declared `fetch` — a
-        // pure one-shot `{ run }` program must exit when `run` completes
-        // rather than parking behind the 404 fallback server forever.
-        if (shape === undefined || shape.fetch !== undefined) {
-          yield* serveBase(handler, options);
-        }
-      }) as Effect.Effect<void, never, never>;
-    return Object.assign(base, { serve });
-  };
+// Shared with `Docker.Service`; lives beside the host runtime context.
+export { createContainerRuntimeContext } from "../../Server/Process.ts";
 
 /**
  * A Fargate task definition with a container image from one of three
@@ -426,6 +408,16 @@ export const createContainerRuntimeContext =
  *   },
  * });
  * ```
+ *
+ * @example Environment Files from S3
+ * ```typescript
+ * const task = yield* Task("ApiTask", {
+ *   main: import.meta.url,
+ *   environmentFiles: [
+ *     { value: "arn:aws:s3:::my-config-bucket/app.env", type: "s3" },
+ *   ],
+ * });
+ * ```
  */
 export const Task: Platform<Task, TaskServices, TaskShape, TaskRuntimeContext> =
   Platform("AWS.ECS.Task", {
@@ -516,6 +508,56 @@ export const ensureTaskExecutionRole = Effect.fn(function* ({
       .pipe(Effect.catchTag("LimitExceededException", () => Effect.void));
   }
   return roleArn;
+});
+
+/** Inline policy granting the execution role read access to `environmentFiles`. */
+const ENVIRONMENT_FILES_POLICY_NAME = "alchemy-environment-files";
+
+/**
+ * Sync the execution role's read access to the S3 `environmentFiles`: put
+ * an inline policy granting `s3:GetObject` on the referenced objects (and
+ * `s3:GetBucketLocation` on their buckets), or delete the policy when no
+ * environment files are configured.
+ */
+export const syncEnvironmentFilesPolicy = Effect.fn(function* ({
+  roleName,
+  environmentFiles,
+}: {
+  roleName: string;
+  environmentFiles: ecs.EnvironmentFile[] | undefined;
+}) {
+  const objectArns = (environmentFiles ?? [])
+    .filter((file) => file.type === "s3")
+    .map((file) => file.value);
+  if (objectArns.length === 0) {
+    yield* iam
+      .deleteRolePolicy({
+        RoleName: roleName,
+        PolicyName: ENVIRONMENT_FILES_POLICY_NAME,
+      })
+      .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+    return;
+  }
+  const bucketArns = [...new Set(objectArns.map((arn) => arn.split("/")[0]))];
+  yield* iam.putRolePolicy({
+    RoleName: roleName,
+    PolicyName: ENVIRONMENT_FILES_POLICY_NAME,
+    PolicyDocument: JSON.stringify({
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Allow",
+          Action: ["s3:GetObject"],
+          Resource: objectArns,
+        },
+        {
+          Effect: "Allow",
+          Action: ["s3:GetBucketLocation"],
+          Resource: bucketArns,
+        },
+      ],
+    }),
+  });
 });
 
 /** Ensure the CloudWatch log group the task writes to exists. */
@@ -655,6 +697,7 @@ export const registerTaskDefinitionRevision = Effect.fn(function* ({
       name,
       value: typeof value === "string" ? value : JSON.stringify(value),
     })),
+    environmentFiles: props.environmentFiles,
     logConfiguration: {
       logDriver: "awslogs",
       options: {
@@ -1136,6 +1179,13 @@ export const TaskProvider = () =>
                 Effect.catchTag("LimitExceededException", () => Effect.void),
               );
           }
+
+          // Environment files: the execution role reads the referenced S3
+          // objects at task start.
+          yield* syncEnvironmentFilesPolicy({
+            roleName: executionRoleName,
+            environmentFiles: news.environmentFiles,
+          });
 
           const {
             env: bindingEnv,

@@ -939,10 +939,10 @@ const freshConn = HttpClient.mapRequest(
   HttpClientRequest.setHeader("connection", "close"),
 );
 
-// The local dev provider returns `worker.url` from `URL#toString()`, which
-// keeps a trailing slash (`http://localhost:PORT/`), whereas the cloud
-// provider returns a bare origin (`https://….workers.dev`). Join without
-// producing a `//` path that the dev server's router won't match.
+// Both providers return `worker.url` as a bare origin these days, but an
+// external dev server URL parsed from stdout can still carry a trailing
+// slash. Join without producing a `//` path that the dev server's router
+// won't match.
 const joinUrl = (base: string, path: string) =>
   `${base.replace(/\/+$/, "")}${path}`;
 
@@ -1064,8 +1064,7 @@ const expectBundleContains = (
 
 const viteProps = (rootDir: string, memoInclude: string[]) => ({
   rootDir,
-  url: true as const,
-  subdomain: { enabled: true, previewsEnabled: true },
+  workersDev: true,
   compatibility: {
     date: "2024-09-23",
     flags: ["nodejs_compat"],

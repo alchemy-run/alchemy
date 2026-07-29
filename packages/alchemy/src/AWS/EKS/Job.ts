@@ -357,6 +357,7 @@ export const makeEksJobBootstrap =
 import { BunServices } from "@effect/platform-bun";
 import { Stack } from "alchemy/Stack";
 import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
+import { provideProcessTelemetry } from "alchemy/Telemetry";
 import * as Context from "effect/Context";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -386,8 +387,15 @@ const platform = Layer.mergeAll(
 // Resolve the bundled program's registered one-shot runners (the shape's
 // \`run\` effect and any host.run work) and execute them to completion.
 const program = tag.pipe(
-  Effect.flatMap((host) => host.RuntimeContext.exports),
-  Effect.flatMap((exports) => exports.program),
+  // Process-lifetime telemetry: built once into the root scope; exporters
+  // batch on their intervals and flush when the scope closes as the
+  // one-shot program completes.
+  Effect.flatMap((host) =>
+    host.RuntimeContext.exports.pipe(
+      Effect.flatMap((exports) => exports.program),
+      provideProcessTelemetry(host.RuntimeContext),
+    ),
+  ),
   Effect.provide(
     layer.pipe(Layer.provideMerge(Layer.effect(
       Stack,

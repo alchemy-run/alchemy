@@ -82,7 +82,9 @@ test.provider(
       // The local provider fabricates a `dev:` name — proof no cloud call ran.
       expect(deployed.bucket.bucketName).toMatch(/^dev:/);
 
-      const body = (yield* getJsonReady(`${deployed.worker.url}roundtrip`)) as {
+      const body = (yield* getJsonReady(
+        `${deployed.worker.url}/roundtrip`,
+      )) as {
         text: string;
         etag: string | null;
         size: number | null;
@@ -164,7 +166,7 @@ test.provider(
       // The worker's native binding reads the same simulator storage the
       // Action's gateway wrote to.
       const body = (yield* getJsonReady(
-        `${deployed.worker.url}get?key=seeded.txt`,
+        `${deployed.worker.url}/get?key=seeded.txt`,
       )) as { text: string | null };
       expect(body.text).toBe("from-action");
 
@@ -205,7 +207,7 @@ test.provider(
       // A real bucket name — the live provider created it on Cloudflare.
       expect(deployed.bucket.bucketName).not.toMatch(/^dev:/);
 
-      const seeded = (yield* getJsonReady(`${deployed.worker.url}seed`)) as {
+      const seeded = (yield* getJsonReady(`${deployed.worker.url}/seed`)) as {
         etag: string | null;
       };
       expect(seeded.etag).toBeTruthy();

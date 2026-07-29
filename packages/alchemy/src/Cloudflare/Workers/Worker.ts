@@ -303,6 +303,63 @@ export type NormalizedBindings<
 
 export type WorkerAssetsConfig = string | AssetsProps | AssetsWithHash;
 
+/**
+ * Fine-grained control over the Worker's `workers.dev` surface. The two
+ * toggles are independent on the Cloudflare API.
+ */
+export interface WorkersDevConfig {
+  /**
+   * Serve the Worker at its stable `workers.dev` URL
+   * (`https://<worker-name>.<account-subdomain>.workers.dev`).
+   * @default true
+   */
+  enabled?: boolean;
+  /**
+   * Enable version preview URLs — a distinct
+   * `https://<version-prefix>-<worker-name>.<account-subdomain>.workers.dev`
+   * URL per uploaded version, plus stable aliased preview URLs
+   * (`https://<alias>-...`) for versions uploaded with an alias.
+   *
+   * When previews are enabled but {@link enabled} is `false`, the current
+   * version's preview URL becomes the Worker's primary `url` output.
+   * @default true
+   */
+  previewsEnabled?: boolean;
+}
+
+/**
+ * The Worker's custom-domain configuration: one canonical hostname, plus
+ * optional aliases that also serve the Worker and redirect hostnames that
+ * 301 to the canonical name.
+ */
+export interface WorkerDomainConfig {
+  /**
+   * The canonical hostname (e.g. `"example.com"`). Attached to the Worker
+   * as a Cloudflare custom domain — DNS record and edge certificate are
+   * managed automatically. The Cloudflare zone is inferred from the
+   * hostname and must already exist in the account.
+   *
+   * When set, `https://<name>` is the Worker's primary `url` output.
+   */
+  name: string;
+  /**
+   * Additional hostnames that serve the Worker (e.g. `"www.example.com"`,
+   * `"api.example.com"`). Each is attached as its own custom domain.
+   * Order matters: aliases follow `name` in the `urls` output.
+   */
+  aliases?: string[];
+  /**
+   * Hostnames that permanently redirect (HTTP 301, path and query
+   * preserved) to {@link name} — e.g. `"old.example.com"`. Each is
+   * attached as a custom domain (for DNS + TLS) with a redirect rule in
+   * the zone's `http_request_dynamic_redirect` phase, which runs before
+   * the Worker — redirected requests never invoke it. Redirect hostnames
+   * serve no content, so they appear in the `domain` output but never in
+   * `urls`.
+   */
+  redirects?: string[];
+}
+
 export interface WorkerRouteConfig {
   /**
    * URL pattern to match incoming requests against, e.g.
@@ -323,6 +380,88 @@ export interface WorkerRouteConfig {
    * Alternative to `zoneId` / `zoneName`.
    */
   zone?: ZoneReference;
+}
+
+/**
+ * Versioning configuration for a Worker deploy — controls Worker
+ * [versions and gradual deployments](https://developers.cloudflare.com/workers/configuration/versions-and-deployments/).
+ *
+ * Two modes, selected by {@link parent}:
+ *
+ * - **Version worker** (`parent` set): instead of creating its own script,
+ *   this Worker uploads an immutable *version* to the referenced parent
+ *   Worker's script. With `traffic: 0` (the default) the parent's live
+ *   deployment is untouched and the version is reachable only at its
+ *   preview URL (`<version-prefix>-<name>.<subdomain>.workers.dev`) —
+ *   the PR-preview use case. With `traffic > 0` the version becomes a
+ *   canary taking that percentage of the parent's traffic.
+ * - **Gradual rollout** (`parent` omitted): when this Worker deploys
+ *   itself, the newly uploaded version receives {@link traffic} percent
+ *   and the currently-live version keeps the remainder, instead of the
+ *   default 100% cutover.
+ */
+export interface WorkerVersionOptions {
+  /**
+   * The Worker that owns the script this version is uploaded to. Accepts a
+   * Worker reference — typically `yield* Cloudflare.Worker.ref(id, { stage,
+   * stack })` for a Worker deployed in another stage/stack, or a
+   * locally-declared Worker — or a literal script name as an escape hatch.
+   *
+   * When set, this resource does not create a script of its own: it
+   * uploads a version (code + bindings + compatibility settings) to the
+   * parent's script. Script-level settings apply immediately to *all*
+   * versions of the parent, so they cannot be set on a version worker —
+   * `name`, `assets`, `namespace`, `crons`, `domain`, `routes`, `tags`,
+   * `logpush`, `observability`, `placement`, `limits`, and `subdomain` are
+   * rejected, as are locally-hosted Durable Object or Workflow classes
+   * (their migrations would mutate the parent).
+   *
+   * Changing the parent replaces the resource (a version belongs to
+   * exactly one script).
+   */
+  parent?: string | Worker;
+  /**
+   * Percentage of traffic (0–100) the newly uploaded version receives; the
+   * currently-live version keeps the remainder. Cloudflare deployments
+   * split between at most two versions, so one canary can be active per
+   * script at a time.
+   *
+   * With {@link parent} set, defaults to `0`: the version is
+   * preview-URL-only and the parent's live deployment is untouched.
+   * Without `parent`, defaults to `100` (today's full cutover); `0` means
+   * "upload the version without deploying it" (the equivalent of
+   * `wrangler versions upload`).
+   *
+   * Note that a subsequent full deploy of the parent (or of this Worker
+   * itself, at the default 100) resets traffic to 100% of its own new
+   * version.
+   */
+  traffic?: number;
+  /**
+   * Preview-URL alias for the uploaded version. Aliased preview URLs
+   * (`<alias>-<name>.<subdomain>.workers.dev`) are stable — each upload
+   * with the same alias re-points the URL at the new version — which is
+   * what makes them useful as shareable PR-preview links and lets
+   * `Worker.URL` resolve before the version exists.
+   *
+   * For a version worker ({@link parent} set) an alias is derived
+   * automatically from the stack, stage, and logical id, so every version
+   * worker gets a stable preview URL out of the box; set this to override
+   * it. Must start with a lowercase letter, contain only lowercase
+   * letters, digits, and dashes, and `<alias>-<worker-name>` must fit in
+   * 63 characters (a DNS label).
+   */
+  alias?: string;
+  /**
+   * Human-readable annotation attached to the uploaded version, shown in
+   * the Cloudflare dashboard and `wrangler versions list`.
+   */
+  message?: string;
+  /**
+   * Machine-readable tag annotation attached to the uploaded version
+   * (e.g. a git commit SHA or PR number).
+   */
+  tag?: string;
 }
 
 export interface WorkerProps<
@@ -358,10 +497,26 @@ export interface WorkerProps<
    */
   namespace?: string | DispatchNamespace;
   /**
-   * Whether to enable a workers.dev URL for this worker
+   * Worker versions & gradual deployments. Set `version.parent` to upload
+   * this Worker as a preview/canary *version* of another Worker's script
+   * instead of creating its own; set `version.traffic` below 100 to
+   * gradually roll out a deploy of this Worker's own script. See
+   * {@link WorkerVersionOptions}.
+   */
+  version?: WorkerVersionOptions;
+  /**
+   * Controls the Worker's `workers.dev` surface.
+   *
+   * - `true` (the default) — serve the Worker at its stable `workers.dev`
+   *   URL and enable version preview URLs.
+   * - `false` — no `workers.dev` URLs at all.
+   * - An object — toggle the stable URL and version previews independently,
+   *   e.g. `{ enabled: false, previewsEnabled: true }` keeps the stable URL
+   *   off while each deployed version stays reachable at its preview URL.
+   *
    * @default true
    */
-  url?: boolean;
+  workersDev?: boolean | WorkersDevConfig;
   /**
    * Static assets to serve. Can be:
    * - A string path to the assets directory
@@ -374,10 +529,6 @@ export interface WorkerProps<
    * `notFoundHandling` (including single-page-application fallback) itself.
    */
   assets?: Assets;
-  subdomain?: {
-    enabled?: boolean;
-    previewsEnabled?: boolean;
-  };
   /** @internal used by Cloudflare.Website.Vite resource */
   vite?: ViteOptions;
   logpush?: boolean;
@@ -483,11 +634,20 @@ export interface WorkerProps<
    */
   crons?: string[];
   /**
-   * One or more custom hostnames (e.g. `"app.example.com"`) to bind to this
-   * Worker. The Cloudflare Zone is inferred from the hostname — the zone must
-   * already exist in the account.
+   * The Worker's custom domain: one canonical hostname, plus optional
+   * `aliases` that also serve the Worker and `redirects` that 301 to the
+   * canonical name. A bare string is shorthand for `{ name }`. The
+   * Cloudflare zone is inferred from each hostname — the zone must already
+   * exist in the account.
+   *
+   * When set, `https://<name>` becomes the Worker's primary `url` output,
+   * ranking above the `workers.dev` URL. See {@link WorkerDomainConfig}.
+   *
+   * Omitting the prop leaves custom domains unmanaged — attachments made
+   * outside Alchemy are preserved. Pass `null` to explicitly detach every
+   * custom domain (and remove their redirect rules).
    */
-  domain?: string | string[];
+  domain?: string | WorkerDomainConfig | null;
   /**
    * Zone routes that map URL patterns to this Worker. Equivalent to Wrangler's
    * `routes` array — provide `zoneName` or `zoneId` (or `zone`) alongside each
@@ -681,13 +841,67 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
      */
     namespace: string | undefined;
     logpush: boolean | undefined;
+    /**
+     * The most significant URL the Worker is reachable at — always
+     * `urls[0]`, or `undefined` when the Worker is not reachable at any
+     * URL (e.g. a dispatch-namespace user worker). Ranking: the canonical
+     * custom domain, then aliases, then the stable `workers.dev` URL; a
+     * version worker's `url` is its aliased preview URL; under
+     * `alchemy dev` it is the local dev server's URL.
+     */
     url: string | undefined;
+    /**
+     * Every URL that serves this Worker, most significant first —
+     * `[https://<domain.name>?, ...aliases, <workers.dev URL>?,
+     * <version preview URLs>?]`, or the local dev server's
+     * `[localhost, ...LAN]` URLs under `alchemy dev`. Redirect hostnames
+     * never appear (they don't serve the Worker). Useful wholesale, e.g.
+     * as a CORS allow-list.
+     */
+    urls: string[];
+    /**
+     * The Worker's resolved custom-domain configuration — canonical
+     * `name`, `aliases`, and `redirects` as deployed — or `undefined`
+     * when no custom domain is configured.
+     */
+    domain:
+      | { name: string; aliases: string[]; redirects: string[] }
+      | undefined;
     tags: string[] | undefined;
     durableObjectNamespaces: Record<string, string>;
     accountId: string;
-    domains: string[];
     routes: { id: string; pattern: string; zoneId: string }[];
     crons: string[];
+    /**
+     * The parent script name this Worker uploads versions to, when this
+     * resource is a version worker (`version.parent` set). `undefined` for
+     * a Worker that owns its own script — including one deploying with a
+     * gradual rollout. This is the discriminator `read`/`delete` use to
+     * avoid treating the parent's script as this resource's own.
+     */
+    versionOf?: string | undefined;
+    /**
+     * The id of the version uploaded by the most recent deploy. Only set
+     * when versioning is in play: always for a version worker
+     * (`version.parent`), and for a self-owned Worker when a gradual
+     * rollout (`version.traffic` < 100) deployed via the versions API.
+     */
+    versionId?: string | undefined;
+    /**
+     * The preview-URL alias attached to the uploaded version — the
+     * user-provided `version.alias`, or the auto-derived stable alias for
+     * a version worker. The aliased preview URL
+     * (`<alias>-<name>.<subdomain>.workers.dev`) is stable across
+     * deploys and is the version worker's primary `url`.
+     */
+    versionAlias?: string | undefined;
+    /**
+     * The id of the deployment created by the most recent deploy, when the
+     * deploy created one through the deployments API (a version with
+     * `traffic > 0`). Preview-only versions (`traffic: 0`) have no
+     * deployment.
+     */
+    deploymentId?: string | undefined;
     hash?: {
       assets: string | undefined;
       bundle: string | undefined;
@@ -712,6 +926,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
     containers?: { className: string; dev: DevContainerImage | undefined }[];
     crons?: string[];
     hyperdrives?: Record<string, Required<DevOrigin>>;
+    dev?: { remote?: boolean };
   },
   Providers
 >;
@@ -1076,6 +1291,115 @@ export const isSelfUrl = (value: unknown): value is URLEffect =>
  *   bundle: false,
  *   assets: "./.open-next/assets",
  * }
+ * ```
+ *
+ * @section URLs & Domains
+ * Every URL that serves the Worker is collected in `worker.urls`, most
+ * significant first, and `worker.url` is always `urls[0]`. The ranking:
+ * the canonical custom domain (`domain.name`), then aliases in declared
+ * order, then the stable `workers.dev` URL, then version preview URLs.
+ * Under `alchemy dev`, `urls` is the local dev server's
+ * `[localhost, ...LAN]` addresses instead. Redirect hostnames never
+ * appear in `urls` — they serve no content.
+ *
+ * The `workersDev` prop controls the `workers.dev` surface (`true` by
+ * default = stable URL + version previews; `false` = neither; object form
+ * toggles independently), and the `domain` prop attaches custom domains —
+ * DNS records and edge certificates are managed automatically.
+ *
+ * @example Custom domain with aliases and redirects
+ * ```typescript
+ * const worker = yield* Cloudflare.Worker("Api", {
+ *   main: "./src/api.ts",
+ *   domain: {
+ *     name: "example.com",
+ *     aliases: ["www.example.com"],
+ *     redirects: ["old.example.com"], // 301 → https://example.com
+ *   },
+ * });
+ * // worker.url  === "https://example.com"
+ * // worker.urls === ["https://example.com", "https://www.example.com",
+ * //                  "https://<name>.<account>.workers.dev"]
+ * ```
+ *
+ * @example workers.dev toggles
+ * ```typescript
+ * // No workers.dev URLs at all:
+ * { main: "./src/api.ts", workersDev: false, domain: "api.example.com" }
+ *
+ * // Previews only — each deploy's version preview URL becomes worker.url:
+ * { main: "./src/api.ts", workersDev: { enabled: false, previewsEnabled: true } }
+ * ```
+ *
+ * @example All URLs as a CORS allow-list
+ * ```typescript
+ * const site = yield* Cloudflare.Worker("Site", {
+ *   main: "./src/site.ts",
+ *   domain: { name: "example.com", aliases: ["www.example.com"] },
+ * });
+ * const api = yield* Cloudflare.Worker("Api", {
+ *   main: "./src/api.ts",
+ *   env: { ALLOWED_ORIGINS: site.urls },
+ * });
+ * ```
+ *
+ * @section Versions & Gradual Deployments
+ * The `version` prop maps Cloudflare's
+ * [versions and gradual deployments](https://developers.cloudflare.com/workers/configuration/versions-and-deployments/)
+ * onto Alchemy stages. A Worker with `version.parent` set uploads an
+ * immutable *version* to the parent Worker's script instead of creating its
+ * own — by default with no traffic, reachable only at its preview URL
+ * (`worker.url`), which is the PR-preview workflow. Give it `traffic` to
+ * run it as a canary, or use `version.traffic` on a normal Worker to roll
+ * out its own deploys gradually.
+ *
+ * A version worker's `url` is its *aliased* preview URL
+ * (`<alias>-<name>.<subdomain>.workers.dev`) — the alias is derived from
+ * the stack, stage, and logical id (override with `version.alias`), so the
+ * URL is stable across deploys and always points at the latest uploaded
+ * version. The per-version URL (`<version-prefix>-...`) is also returned
+ * in `domains`. Because the aliased URL is known before the version
+ * exists, `Worker.URL` works on version workers and resolves to it.
+ *
+ * A version carries code, bindings, and compatibility settings. Script-level
+ * settings (routes, domains, crons, tags, observability, …) belong to the
+ * parent and are rejected on version workers, as are locally-hosted Durable
+ * Object or Workflow classes. Preview URLs require the parent's workers.dev
+ * subdomain to be enabled (the default).
+ *
+ * @example PR preview: a version of another stage's Worker
+ * ```typescript
+ * // The staging stage deploys the real Worker; a PR stage uploads its
+ * // code as a zero-traffic version of staging's script and gets back a
+ * // stable preview URL.
+ * const parent = yield* Cloudflare.Worker.ref("MyWorker", {
+ *   stage: "staging",
+ * });
+ * const preview = yield* Cloudflare.Worker("MyWorker", {
+ *   main: "./src/worker.ts",
+ *   version: { parent, message: `PR #${process.env.PR_NUMBER}` },
+ * });
+ * // preview.url -> https://<alias>-<name>.<subdomain>.workers.dev
+ * // (stable across deploys; re-points at each newly uploaded version)
+ * ```
+ *
+ * @example Canary: send 10% of the parent's traffic to a version
+ * ```typescript
+ * const parent = yield* Cloudflare.Worker.ref("MyWorker", { stage: "prod" });
+ * yield* Cloudflare.Worker("MyWorker", {
+ *   main: "./src/worker.ts",
+ *   version: { parent, traffic: 10 },
+ * });
+ * ```
+ *
+ * @example Gradual rollout of a Worker's own deploy
+ * ```typescript
+ * // The new version takes 25% of traffic; the previously-live version
+ * // keeps 75%. Bump traffic (or remove the prop) and re-deploy to promote.
+ * yield* Cloudflare.Worker("MyWorker", {
+ *   main: "./src/worker.ts",
+ *   version: { traffic: 25 },
+ * });
  * ```
  *
  * @section The Worker's own URL
@@ -1451,6 +1775,26 @@ export const Worker: ResourceClassLike<Worker> &
       > &
         Named<Id> & {
           new (): MakeShape<Shape, WorkerShape> & Named<Id> & Tag;
+        };
+      /**
+       * Class form without an implementation — an external Worker (a plain
+       * bundled `main`, a raw `script`, or an assets-only Worker with no
+       * script at all):
+       *
+       * ```typescript
+       * export class Site extends Cloudflare.Worker<Site>()("Site", {
+       *   assets: { directory: "./public" },
+       * }) {}
+       * ```
+       */
+      <const Id extends string, Req = never>(
+        id: Id,
+        props:
+          | InputProps<WorkerProps>
+          | Effect.Effect<InputProps<WorkerProps>, ConfigError, Req>,
+      ): Effect.Effect<Worker & Rpc<{}>, never, Req | Providers> &
+        Named<Id> & {
+          new (): Named<Id> & Tag;
         };
     };
     <

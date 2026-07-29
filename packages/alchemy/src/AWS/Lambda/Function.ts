@@ -30,7 +30,7 @@ import {
   type PackageInstall,
 } from "../../Bundle/InstalledPackages.ts";
 import * as TempRoot from "../../Bundle/TempRoot.ts";
-import { deepEqual, isResolved } from "../../Diff.ts";
+import { deepEqual, havePropsChanged, isResolved } from "../../Diff.ts";
 import { isScopeEjected, type HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -41,6 +41,7 @@ import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { packEnvValue, unpackEnvValue } from "../../RuntimeContext.ts";
 import { Self } from "../../Self.ts";
 import * as Serverless from "../../Serverless/index.ts";
+import { buildEventTelemetry } from "../../Telemetry.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import {
@@ -136,6 +137,17 @@ export type FunctionArchitecture = "x86_64" | "arm64";
 export type AccessPointRef = string | { accessPointArn: string };
 
 /**
+ * Reference to a Lambda layer version: a raw layer version ARN or anything
+ * exposing a `layerVersionArn` attribute (e.g. an `AWS.Lambda.LayerVersion`
+ * resource).
+ */
+export type LayerRef = string | { layerVersionArn: string };
+
+/** Resolve a {@link LayerRef} to its layer version ARN. */
+const layerVersionArnOf = (layer: LayerRef): string =>
+  typeof layer === "string" ? layer : layer.layerVersionArn;
+
+/**
  * Resolve an {@link AccessPointRef} (or the legacy raw-`arn` field) on a
  * `fileSystemConfigs` entry to the access point ARN.
  */
@@ -195,6 +207,13 @@ export interface FunctionProps extends PlatformProps {
    */
   architecture?: FunctionArchitecture;
   memorySize?: number;
+  /**
+   * Lambda layers to attach — pass an `AWS.Lambda.LayerVersion` resource
+   * directly, or a raw layer version ARN (e.g. an AWS-managed layer). Layers
+   * are extracted into `/opt` in the order given. Omit or pass `[]` to detach
+   * every layer.
+   */
+  layers?: LayerRef[];
   build?: FunctionBuildOptions;
   uploadSourceMap?: boolean;
   env?: Record<string, any>;
@@ -776,53 +795,76 @@ export const Function: Platform<
       exports: Effect.sync(() => ({
         // construct an Effect that produces the Function's entrypoint
         // Effect<(event, context) => Promise<any>>
-        handler: Effect.map(
-          Effect.all(listeners, {
+        handler: Effect.gen(function* () {
+          const handlers = yield* Effect.all(listeners, {
             concurrency: "unbounded",
-          }),
-          (handlers) =>
-            async (event: any, context: lambda.Context): Promise<any> => {
-              for (const handler of handlers) {
-                const eff = handler(event);
-                if (Effect.isEffect(eff)) {
-                  // Each invocation gets a fresh request scope, matching the
-                  // Worker / Durable Object / Workflow bridges. The scope is
-                  // settled inline before returning: a buffered Lambda
-                  // response is not released to the caller until the Invoke
-                  // phase completes, so deferring cleanup (e.g. via an
-                  // INVOKE-subscribed extension window) shows up as response
-                  // latency anyway — keep request finalizers fast. A failing
-                  // finalizer is logged and ignored so it can't mask the
-                  // invocation's outcome.
-                  const scope = Scope.makeUnsafe();
-                  const exit = await eff.pipe(
-                    Effect.provide(
-                      Layer.mergeAll(
-                        Layer.succeed(HandlerContext, context),
-                        Layer.succeed(Scope.Scope, scope),
+          });
+          // Sandbox-lifetime services, captured so each invocation can
+          // build its telemetry exporters and run the handler effect
+          // against the same context the init phase saw (mirrors
+          // WorkerBridge). The build's memo map is stripped so a Layer the
+          // user `Effect.provide`s inside a handler builds per invocation.
+          const services = Context.omit(Layer.CurrentMemoMap)(
+            yield* Effect.context<never>(),
+          );
+          return async (event: any, context: lambda.Context): Promise<any> => {
+            for (const handler of handlers) {
+              const eff = handler(event);
+              if (Effect.isEffect(eff)) {
+                // Each invocation gets a fresh request scope, matching the
+                // Worker / Durable Object / Workflow bridges. The scope is
+                // settled inline before returning: a buffered Lambda
+                // response is not released to the caller until the Invoke
+                // phase completes, so deferring cleanup (e.g. via an
+                // INVOKE-subscribed extension window) shows up as response
+                // latency anyway — keep request finalizers fast. A failing
+                // finalizer is logged and ignored so it can't mask the
+                // invocation's outcome.
+                const scope = Scope.makeUnsafe();
+                const exit = await eff.pipe(
+                  Effect.provide(
+                    Layer.mergeAll(
+                      Layer.succeed(HandlerContext, context),
+                      Layer.succeed(Scope.Scope, scope),
+                      // The configured telemetry exporters, attached to the
+                      // invocation scope by `buildEventTelemetry` so
+                      // buffered spans/logs/metrics flush when it settles
+                      // below.
+                      Layer.effectContext(
+                        buildEventTelemetry(
+                          services,
+                          scope,
+                          (ctx as Serverless.FunctionContext).telemetry,
+                        ),
                       ),
-                    ),
-                    Effect.tap(Effect.logDebug),
-                    Effect.runPromiseExit,
+                    ).pipe(Layer.provideMerge(Layer.succeedContext(services))),
+                  ),
+                  Effect.tap(Effect.logDebug),
+                  Effect.runPromiseExit,
+                );
+                if (!isScopeEjected(scope)) {
+                  // The HttpMiddleware tracer ends the request's root span
+                  // in a dispatcher task scheduled after the handler effect
+                  // resolves; yield one macrotask so it reaches the
+                  // telemetry exporter's buffer before the flush finalizer.
+                  await new Promise((resolve) => setTimeout(resolve, 0));
+                  await Scope.close(scope, exit).pipe(
+                    Effect.ignoreCause({
+                      log: "Warn",
+                      message: "Lambda invocation scope close failed",
+                    }),
+                    Effect.runPromise,
                   );
-                  if (!isScopeEjected(scope)) {
-                    await Scope.close(scope, exit).pipe(
-                      Effect.ignoreCause({
-                        log: "Warn",
-                        message: "Lambda invocation scope close failed",
-                      }),
-                      Effect.runPromise,
-                    );
-                  }
-                  if (Exit.isSuccess(exit)) {
-                    return exit.value;
-                  }
-                  throw Cause.squash(exit.cause);
                 }
+                if (Exit.isSuccess(exit)) {
+                  return exit.value;
+                }
+                throw Cause.squash(exit.cause);
               }
-              throw new Error("No event handler found");
-            },
-        ),
+            }
+            throw new Error("No event handler found");
+          };
+        }),
       })),
     };
     return ctx;
@@ -1514,6 +1556,10 @@ export default handler;
           Runtime: news.runtime ?? "nodejs22.x",
           Architectures: [news.architecture ?? "x86_64"],
           MemorySize: news.memorySize,
+          // Always explicit: `UpdateFunctionConfiguration` treats an omitted
+          // `Layers` as "leave as-is", so removing the prop would strand the
+          // previously-attached layers.
+          Layers: (news.layers ?? []).map(layerVersionArnOf),
           Environment: runtimeEnv
             ? {
                 Variables: {
@@ -1831,6 +1877,18 @@ export default handler;
             news.reservedConcurrentExecutions
           ) {
             return { action: "update" };
+          }
+          // `layers` accepts a LayerVersion resource or a raw ARN, and the
+          // two forms are structurally different props even when they name
+          // the same layer. Compare them normalized so switching between the
+          // forms isn't a phantom change; everything else still falls through
+          // to the engine's default props comparison.
+          const normalizeLayers = (props: FunctionProps) => ({
+            ...props,
+            layers: (props.layers ?? []).map(layerVersionArnOf),
+          });
+          if (!havePropsChanged(normalizeLayers(olds), normalizeLayers(news))) {
+            return { action: "noop" };
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
