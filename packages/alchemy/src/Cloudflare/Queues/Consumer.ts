@@ -569,10 +569,15 @@ type ObservedConsumer = {
 const toObserved = (c: {
   consumerId?: string | null;
   scriptName?: string | null;
+  /** The get-consumer wire names the worker script `script`. */
+  script?: string | null;
   type?: "worker" | "http_pull" | null;
 }): ObservedConsumer | undefined =>
   c.consumerId && c.type === "worker"
-    ? { consumerId: c.consumerId, script: c.scriptName ?? undefined }
+    ? {
+        consumerId: c.consumerId,
+        script: c.scriptName ?? c.script ?? undefined,
+      }
     : undefined;
 
 // ~60s budget — Worker reconcile uploads typically land in 2–10s,
