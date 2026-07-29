@@ -131,6 +131,8 @@ are no-ops.
 +import { ServerHost } from "alchemy/Server/Process";
 +import * as Schedule from "effect/Schedule";
 
+const api = yield* Docker.Service(
+  // ...
   Effect.gen(function* () {
 +    const host = yield* ServerHost;
 +    yield* host.run(
@@ -145,6 +147,7 @@ are no-ops.
       }),
     };
   }),
+);
 ```
 
 `host.run` registers a long-running loop that executes alongside the HTTP

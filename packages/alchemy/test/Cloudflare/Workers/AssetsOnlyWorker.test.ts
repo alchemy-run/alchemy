@@ -73,7 +73,7 @@ describe.concurrent("Cloudflare.Worker assets-only", () => {
             Effect.gen(function* () {
               return yield* Cloudflare.Worker("AssetsOnly", {
                 ...props,
-                subdomain: { enabled: true },
+                workersDev: true,
                 compatibility: { date: "2024-01-01" },
               });
             }),
@@ -141,7 +141,7 @@ describe.concurrent("Cloudflare.Worker assets-only", () => {
             directory: fixtureDir,
             notFoundHandling: "404-page",
           },
-          subdomain: { enabled: true },
+          workersDev: true,
           compatibility: { date: "2024-01-01" },
         }) {}
 

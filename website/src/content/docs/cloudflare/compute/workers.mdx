@@ -227,22 +227,54 @@ contract. See
 [Instance scope vs request scope](/infrastructure-as-effects/functions-and-servers#instance-scope-vs-request-scope)
 for the model across all runtimes.
 
-## Custom domains
+## URLs & domains
 
-The `workers.dev` URL is for development. To serve a Worker from
-your own hostname, pass `domain` — a single hostname or an array.
-The zone is inferred from the hostname and must already exist in
-the account:
+`worker.urls` is every URL that serves the Worker, most significant
+first — and `worker.url` is always `urls[0]`:
 
 ```typescript
-export default Cloudflare.Worker(
-  "Worker",
-  {
-    main: import.meta.url,
-    domain: "app.example.com",
+const worker = yield* Cloudflare.Worker("Api", {
+  main: "./src/api.ts",
+  domain: {
+    name: "example.com",
+    aliases: ["www.example.com"],
+    redirects: ["old.example.com"], // 301 → https://example.com
   },
-  // ...
-);
+});
+// worker.url    === "https://example.com"
+// worker.urls   === ["https://example.com", "https://www.example.com",
+//                    "https://<name>.<account>.workers.dev"]
+// worker.domain === { name: "example.com", aliases: ["www.example.com"],
+//                     redirects: ["old.example.com"] }
+```
+
+Every hostname is attached as a Cloudflare custom domain — DNS records
+and edge certificates are managed for you (the zone must already exist
+in the account). A bare string is shorthand for `{ name }`. Redirect
+hostnames answer with a permanent redirect (path and query preserved)
+before the Worker runs, so they never appear in `urls`.
+
+`workersDev` controls the `workers.dev` surface:
+
+```typescript
+workersDev: false, // no workers.dev URLs — url is the custom domain
+workersDev: { enabled: false, previewsEnabled: true }, // preview URLs only
+```
+
+Under `alchemy dev`, `urls` is the dev server's actual surface:
+
+```typescript
+// worker.url  === "http://localhost:1337"
+// worker.urls === ["http://localhost:1337", "http://192.168.0.12:1337"]
+```
+
+Pass `urls` wholesale wherever a list of origins is needed:
+
+```typescript
+const api = yield* Cloudflare.Worker("Api", {
+  main: "./src/api.ts",
+  env: { ALLOWED_ORIGINS: site.urls }, // CORS allow-list
+});
 ```
 
 For zone setup, DNS records, and route patterns, see the
@@ -430,7 +462,7 @@ alias from the stack, stage, and logical id (override it with
 `version.alias`), so the link stays the same across re-deploys and always
 serves the latest uploaded version, while the parent's live traffic is
 untouched — the PR-preview workflow. The per-version URL
-(`<version-prefix>-...`) is also returned in `domains`. The version
+(`<version-prefix>-...`) is also returned in `urls`. The version
 carries its own bindings, so a preview stage binds its own KV namespaces,
 D1 databases, and secrets for a fully isolated environment — and because
 the aliased URL is known before upload, [`Worker.URL`](#the-workers-own-url)
