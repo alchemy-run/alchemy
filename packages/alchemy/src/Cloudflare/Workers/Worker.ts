@@ -230,7 +230,7 @@ export interface WorkerLimits extends Exclude<
 > {}
 
 export interface WorkerCache extends Exclude<
-  workers.PutScriptRequest["metadata"]["cache"],
+  workers.PutScriptRequest["metadata"]["cacheOptions"],
   undefined
 > {}
 

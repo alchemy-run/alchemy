@@ -197,13 +197,10 @@ export const MagicAppProvider = () =>
     }),
   });
 
-interface ObservedApp {
-  accountAppId: string;
-  name?: string | null;
-  type?: string | null;
-  hostnames?: string[] | null;
-  ipSubnets?: string[] | null;
-}
+type ObservedApp = Extract<
+  magicTransit.ListAppsResponse["result"][number],
+  { accountAppId: string }
+>;
 
 const isAccountApp = (
   app: magicTransit.ListAppsResponse["result"][number],

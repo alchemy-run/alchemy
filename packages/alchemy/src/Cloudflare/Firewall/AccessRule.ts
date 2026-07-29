@@ -351,9 +351,7 @@ export const AccessRuleProvider = () =>
 // Scoped API helpers (zone-level when zoneId is set, account-level otherwise)
 // ---------------------------------------------------------------------------
 
-type ObservedRule =
-  | firewall.GetAccessRuleForZoneResponse
-  | firewall.GetAccessRuleForAccountResponse;
+type ObservedRule = firewall.GetAccessRuleResponse;
 
 /**
  * Read a rule by id, mapping "gone" (`AccessRuleNotFound`, Cloudflare error

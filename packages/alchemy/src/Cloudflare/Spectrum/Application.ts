@@ -402,6 +402,18 @@ export const ApplicationProvider = () =>
 type ObservedApp = spectrum.GetAppResponse;
 
 /**
+ * Distilled types `getApp`/`listApps` results as a union whose second
+ * variant omits the optional configuration fields — normalize to a single
+ * partial shape.
+ */
+type FullApp = Extract<ObservedApp, { trafficType: unknown }>;
+type AnyApp =
+  | ObservedApp
+  | spectrum.CreateAppResponse
+  | spectrum.UpdateAppResponse;
+const asFull = (app: AnyApp): Partial<FullApp> & AnyApp => app;
+
+/**
  * Read an application by id, mapping "gone" (`SpectrumAppNotFound`,
  * Cloudflare error code 10006) to `undefined`.
  */
@@ -451,7 +463,7 @@ const toRequestBody = (news: ApplicationProps) => ({
  * from the API default, so a no-op deploy skips the PUT entirely.
  */
 const isDirty = (observed: ObservedApp, news: ApplicationProps): boolean => {
-  const o = observed;
+  const o = asFull(observed);
   return (
     o.dns.name !== news.dns.name ||
     o.dns.type !== news.dns.type ||
@@ -470,7 +482,7 @@ const isDirty = (observed: ObservedApp, news: ApplicationProps): boolean => {
   );
 };
 
-const edgeIpsDirty = (o: ObservedApp, desired: EdgeIps): boolean => {
+const edgeIpsDirty = (o: Partial<FullApp>, desired: EdgeIps): boolean => {
   const observed = o.edgeIps ?? {};
   const observedIps =
     "ips" in observed ? ((observed.ips ?? []) as readonly string[]) : [];
@@ -494,7 +506,7 @@ const toAttributes = (
   app: ObservedApp | spectrum.CreateAppResponse | spectrum.UpdateAppResponse,
   zoneId: string,
 ): ApplicationAttributes => {
-  const a = app;
+  const a = asFull(app);
   return {
     appId: a.id,
     zoneId,

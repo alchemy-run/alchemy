@@ -33,8 +33,8 @@ import * as Schedule from "effect/Schedule";
 import { FetchHttpClient } from "effect/unstable/http";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 
-import { fromChain } from "@distilled.cloud/aws/credentials";
-import { Region } from "@distilled.cloud/aws/region";
+import { fromChain } from "@distilled.cloud/aws/Credentials";
+import { Region } from "@distilled.cloud/aws/Region";
 
 import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
@@ -94,7 +94,7 @@ const parseArgs = Effect.sync((): Args => {
 // ---------------------------------------------------------------------------
 
 type Env =
-  | import("@distilled.cloud/aws/credentials").Credentials
+  | import("@distilled.cloud/aws/Credentials").Credentials
   | Region
   | HttpClient.HttpClient;
 

@@ -271,8 +271,8 @@ const toAttrs = (observed: ObservedBookmark, accountId: string) => ({
 
 type ObservedBookmark = {
   id?: string;
-  name?: string;
-  domain?: string;
-  logoUrl?: string;
-  appLauncherVisible?: boolean;
+  name?: string | null;
+  domain?: string | null;
+  logoUrl?: string | null;
+  appLauncherVisible?: boolean | null;
 };

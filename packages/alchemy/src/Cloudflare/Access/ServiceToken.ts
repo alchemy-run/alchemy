@@ -381,9 +381,9 @@ const differs = (
 
 type ObservedToken = {
   id?: string;
-  clientId?: string;
-  clientSecret?: string;
-  name?: string;
-  duration?: string;
-  expiresAt?: string;
+  clientId?: string | null;
+  clientSecret?: string | null;
+  name?: string | null;
+  duration?: string | null;
+  expiresAt?: string | null;
 };
