@@ -338,6 +338,7 @@ const HttpServer = NodeHttpServer;
 }
 import { Stack } from "alchemy/Stack";
 import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
+import { provideProcessTelemetry } from "alchemy/Telemetry";
 import { CloudflareEnvironment } from "alchemy/Cloudflare";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
@@ -367,8 +368,15 @@ const stack = Layer.succeed(Stack, {
 });
 
 const serverEffect = tag.pipe(
-  Effect.flatMap(func => func.RuntimeContext.exports),
-  Effect.flatMap(exports => exports.default),
+  // Process-lifetime telemetry: built once into the root scope; exporters
+  // batch on their intervals and flush when the scope closes on graceful
+  // shutdown.
+  Effect.flatMap((func) =>
+    func.RuntimeContext.exports.pipe(
+      Effect.flatMap((exports) => exports.default),
+      provideProcessTelemetry(func.RuntimeContext),
+    ),
+  ),
   Effect.provide(
     layer.pipe(
       Layer.provideMerge(stack),

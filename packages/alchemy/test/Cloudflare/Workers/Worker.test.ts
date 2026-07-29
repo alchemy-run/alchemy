@@ -1802,4 +1802,54 @@ describe.concurrent("Cloudflare.Worker", () => {
       }).pipe(logLevel),
     { timeout: 360_000 },
   );
+
+  test.provider(
+    "plain worker importing node builtins deploys without explicit compatibility flags",
+    (stack) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
+        yield* stack.destroy();
+
+        // Regression for #796: a plain (external) `export default { fetch }`
+        // Worker importing `node:crypto`, with NO `compatibility` prop. The
+        // default `nodejs_compat` must reach both the bundler (so `node:*`
+        // stays external instead of warning) and the upload metadata (so
+        // Cloudflare doesn't reject with `No such module "node:crypto"`).
+        const workerDir = yield* fs.makeTempDirectory({
+          prefix: "alchemy-worker-node-compat-",
+        });
+        const workerPath = path.join(workerDir, "worker.ts");
+        yield* fs.writeFileString(
+          workerPath,
+          `import { randomBytes } from "node:crypto";
+export default {
+  fetch: async () =>
+    new Response("node-compat:" + randomBytes(8).toString("hex")),
+};
+`,
+        );
+
+        const worker = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Worker("NodeCompatDefault", {
+              main: workerPath,
+              url: true,
+              subdomain: { enabled: true, previewsEnabled: true },
+            });
+          }),
+        );
+
+        yield* expectUrlContains(worker.url!, "node-compat:", {
+          timeout: "60 seconds",
+          label: "node:crypto served under default nodejs_compat",
+        });
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
+      }).pipe(logLevel),
+    { timeout: 360_000 },
+  );
 });

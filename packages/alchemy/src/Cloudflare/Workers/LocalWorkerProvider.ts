@@ -496,6 +496,7 @@ export const LocalWorkerProvider = () =>
           : undefined;
         const workerBindings: BindingHook<BindingServices>[] = [
           Text.local("ALCHEMY_PHASE", "runtime"),
+          Text.local("ALCHEMY_WORKER_NAME", name),
           Text.local("ALCHEMY_STACK_NAME", stack.name),
           Text.local("ALCHEMY_STAGE", stack.stage),
           Text.local("ALCHEMY_CLOUDFLARE_ACCOUNT_ID", accountId),
@@ -607,7 +608,11 @@ export const LocalWorkerProvider = () =>
           workerBindings,
           durableObjectNamespaces: Object.values(durableObjectNamespaces),
           workflows: Object.values(workflows),
-          viteMain: props.vite?.main,
+          // Relative `vite.main` resolves from the Vite root (see the
+          // matching normalization in WorkerProvider's `viteBuild`).
+          viteMain: props.vite?.main
+            ? path.resolve(props.vite.rootDir ?? process.cwd(), props.vite.main)
+            : undefined,
           viteEnvironments: props.vite?.viteEnvironments,
           hyperdrives,
           // Substitute `Worker.URL` sentinels so the Vite dev server inlines
