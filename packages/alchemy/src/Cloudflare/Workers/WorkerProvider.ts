@@ -45,6 +45,7 @@ import {
   type ViteOptions,
   type WorkerProps,
   type WorkerRouteConfig,
+  type WorkerVersionAffinity,
 } from "./Worker.ts";
 import { getCacheBinding, getCronBindings } from "./WorkerAsyncBindings.ts";
 import type {
@@ -191,6 +192,188 @@ const validateTraffic = (traffic: number | undefined) =>
         }),
       )
     : Effect.void;
+
+/** The request header Cloudflare hashes to pin a request to a version. */
+const AFFINITY_HEADER = "Cloudflare-Workers-Version-Key";
+
+/**
+ * `version.affinity` normalized to a single key source plus the optional
+ * IP fallback.
+ *
+ * @internal exported for unit testing.
+ */
+export interface ResolvedVersionAffinity {
+  source:
+    | { kind: "cookie" | "header"; name: string }
+    | { kind: "ip" }
+    | { kind: "key"; expression: string };
+  ipFallback: boolean;
+}
+
+// Cookie / header names are interpolated into a double-quoted Rules-language
+// string literal — restrict them to the token characters real-world names
+// use so a name can never terminate the literal or smuggle expression text.
+const AFFINITY_NAME_PATTERN = /^[A-Za-z0-9_.-]+$/;
+
+/**
+ * Validate `version.affinity` and normalize it to its key source: exactly
+ * one of `cookie` / `header` / `key`, or `ip: true` alone; `ip` combines
+ * with `cookie` / `header` as the absent-source fallback.
+ *
+ * @internal exported for unit testing.
+ */
+export const resolveVersionAffinity = (
+  affinity: WorkerVersionAffinity,
+): Effect.Effect<ResolvedVersionAffinity, WorkerVersionConfigError> =>
+  Effect.gen(function* () {
+    const declared = [
+      ...(affinity.cookie !== undefined ? ["cookie"] : []),
+      ...(affinity.header !== undefined ? ["header"] : []),
+      ...(affinity.key !== undefined ? ["key"] : []),
+    ];
+    if (declared.length > 1) {
+      return yield* Effect.fail(
+        new WorkerVersionConfigError({
+          message: `version.affinity accepts exactly one key source, got ${declared.join(" and ")}. Combine sources with a raw \`key\` expression instead.`,
+        }),
+      );
+    }
+    if (declared.length === 0 && affinity.ip !== true) {
+      return yield* Effect.fail(
+        new WorkerVersionConfigError({
+          message:
+            "version.affinity requires a key source: set `cookie`, `header`, `key`, or `ip: true`.",
+        }),
+      );
+    }
+    if (affinity.key !== undefined && affinity.ip === true) {
+      return yield* Effect.fail(
+        new WorkerVersionConfigError({
+          message:
+            "version.affinity: `ip` is the fallback for an absent `cookie`/`header` — a raw `key` expression has no absence condition to fall back from. Fold `ip.src` into the expression instead.",
+        }),
+      );
+    }
+    for (const [prop, name] of [
+      ["cookie", affinity.cookie],
+      ["header", affinity.header],
+    ] as const) {
+      if (name !== undefined && !AFFINITY_NAME_PATTERN.test(name)) {
+        return yield* Effect.fail(
+          new WorkerVersionConfigError({
+            message: `version.affinity.${prop} '${name}' is not a valid ${prop} name: expected only letters, digits, '_', '.', and '-'.`,
+          }),
+        );
+      }
+    }
+    const source: ResolvedVersionAffinity["source"] =
+      affinity.cookie !== undefined
+        ? { kind: "cookie", name: affinity.cookie }
+        : affinity.header !== undefined
+          ? // Rules-language header map keys are lowercase.
+            { kind: "header", name: affinity.header.toLowerCase() }
+          : affinity.key !== undefined
+            ? { kind: "key", expression: affinity.key }
+            : { kind: "ip" };
+    return {
+      source,
+      ipFallback:
+        affinity.ip === true &&
+        (source.kind === "cookie" || source.kind === "header"),
+    };
+  });
+
+/** A hostname a Worker serves on within one zone. */
+interface AffinityZoneHost {
+  host: string;
+  /** `true` when `host` came from a route pattern containing `*`. */
+  wildcard: boolean;
+}
+
+/**
+ * The `http.host` clause scoping a zone's affinity rules to the Worker's
+ * own hostnames, so unrelated zone traffic — and other Workers' rollouts
+ * on the same zone — never get this Worker's version key.
+ *
+ * @internal exported for unit testing.
+ */
+export const affinityHostExpression = (
+  hosts: readonly AffinityZoneHost[],
+): string => {
+  const dedupe = (values: string[]) => [...new Set(values)].sort();
+  const exact = dedupe(hosts.filter((h) => !h.wildcard).map((h) => h.host));
+  const wild = dedupe(hosts.filter((h) => h.wildcard).map((h) => h.host));
+  const clauses = [
+    ...(exact.length === 1
+      ? [`http.host eq "${exact[0]}"`]
+      : exact.length > 1
+        ? [`http.host in {${exact.map((h) => `"${h}"`).join(" ")}}`]
+        : []),
+    ...wild.map((h) => `http.host wildcard "${h}"`),
+  ];
+  return clauses.length === 1 ? clauses[0] : `(${clauses.join(" or ")})`;
+};
+
+interface AffinityRuleSpec {
+  description: string;
+  expression: string;
+  /** Rules-language expression producing the header value. */
+  value: string;
+}
+
+const affinityRulePrefix = (scriptName: string) =>
+  `alchemy:worker:${scriptName}:affinity`;
+
+/**
+ * The transform rules pinning one zone's traffic: a primary rule filling
+ * the version-key header from the configured source, plus — for
+ * `cookie`/`header` sources with `ip: true` — a fallback rule keying
+ * requests that lack the source by client IP.
+ *
+ * @internal exported for unit testing.
+ */
+export const buildAffinityZoneRules = (
+  scriptName: string,
+  affinity: ResolvedVersionAffinity,
+  hosts: readonly AffinityZoneHost[],
+): AffinityRuleSpec[] => {
+  const prefix = affinityRulePrefix(scriptName);
+  const hostExpr = affinityHostExpression(hosts);
+  const { source } = affinity;
+  if (source.kind === "ip" || source.kind === "key") {
+    return [
+      {
+        description: `${prefix}:key`,
+        expression: hostExpr,
+        value: source.kind === "ip" ? "to_string(ip.src)" : source.expression,
+      },
+    ];
+  }
+  const field =
+    source.kind === "cookie"
+      ? `http.request.cookies["${source.name}"]`
+      : `http.request.headers["${source.name}"]`;
+  return [
+    {
+      description: `${prefix}:key`,
+      expression: `${hostExpr} and len(${field}) > 0`,
+      value: `${field}[0]`,
+    },
+    ...(affinity.ipFallback
+      ? [
+          {
+            // An absent cookie/header is a *missing* value in the Rules
+            // language, and every comparison on missing evaluates false —
+            // `len(field) == 0` can never match. `not (len(field) > 0)`
+            // is the complement that does: missing → false → `not` → true.
+            description: `${prefix}:ip`,
+            expression: `${hostExpr} and not (len(${field}) > 0)`,
+            value: "to_string(ip.src)",
+          },
+        ]
+      : []),
+  ];
+};
 
 /**
  * A Worker's `domain` configuration is invalid — a hostname appears in more
@@ -785,6 +968,7 @@ const resolveWorkerMetadataHash = ({
           parent: resolveVersionParentName(props.version),
           traffic: props.version.traffic,
           alias: props.version.alias,
+          affinity: props.version.affinity,
           message: props.version.message,
           tag: props.version.tag,
         }
@@ -1305,6 +1489,127 @@ export const LiveWorkerProvider = () =>
             rules: [...foreign, ...ourDesired] as PutZoneRedirectRules,
           });
         }
+      });
+
+      /**
+       * Converge the version-affinity transform rules (`version.affinity`)
+       * in each serving zone's `http_request_late_transform` phase
+       * entrypoint: `rewrite` rules that fill the
+       * `Cloudflare-Workers-Version-Key` header from the configured source,
+       * scoped to the Worker's hostnames in that zone. Rules are identified
+       * by an `alchemy:worker:<script>:affinity` description prefix; only
+       * our own rules are added/updated/removed — every other rule in the
+       * shared entrypoint passes through untouched. Zones that previously
+       * held our rules but no longer should (affinity removed, zone no
+       * longer served) are cleaned the same way. Returns the zone ids now
+       * holding rules, for persistence in `affinityZoneIds`.
+       */
+      const reconcileAffinityRules = Effect.fn(function* (params: {
+        scriptName: string;
+        /** `undefined` removes every rule (affinity removed / delete). */
+        desired:
+          | {
+              affinity: ResolvedVersionAffinity;
+              hostsByZone: ReadonlyMap<string, AffinityZoneHost[]>;
+            }
+          | undefined;
+        /** zone ids holding rules per previous state (for cleanup). */
+        previousZoneIds: readonly string[];
+      }) {
+        const prefix = affinityRulePrefix(params.scriptName);
+        const zoneIds = new Set([
+          ...(params.desired?.hostsByZone.keys() ?? []),
+          ...params.previousZoneIds,
+        ]);
+        for (const zoneId of zoneIds) {
+          const hosts = params.desired?.hostsByZone.get(zoneId);
+          const ourDesired =
+            params.desired !== undefined && hosts !== undefined
+              ? buildAffinityZoneRules(
+                  params.scriptName,
+                  params.desired.affinity,
+                  hosts,
+                )
+              : [];
+          const entrypoint = yield* rulesets
+            .getPhasForZone({
+              zoneId,
+              rulesetPhase: "http_request_late_transform",
+            })
+            .pipe(Effect.catch(() => Effect.succeed(undefined)));
+          const existingRules = entrypoint?.rules ?? [];
+          const isOurs = (rule: { description?: string | null }) =>
+            (rule.description ?? "").startsWith(prefix);
+          // The header-value expression of an existing rewrite rule, for
+          // convergence comparison. `headers` is an untyped wire record:
+          // `{ "<Header-Name>": { operation, expression | value } }`.
+          const existingValue = (rule: (typeof existingRules)[number]) => {
+            const headers =
+              "actionParameters" in rule
+                ? (
+                    rule.actionParameters as
+                      | { headers?: Record<string, unknown> | null }
+                      | null
+                      | undefined
+                  )?.headers
+                : undefined;
+            const header = headers?.[AFFINITY_HEADER] as
+              | { expression?: unknown }
+              | undefined;
+            return typeof header?.expression === "string"
+              ? header.expression
+              : undefined;
+          };
+          const ourExisting = existingRules.filter(isOurs);
+          const converged =
+            ourExisting.length === ourDesired.length &&
+            ourDesired.every((rule) =>
+              ourExisting.some(
+                (existing) =>
+                  existing.description === rule.description &&
+                  existing.expression === rule.expression &&
+                  existingValue(existing) === rule.value,
+              ),
+            );
+          if (converged) continue;
+          // Pass foreign rules through untouched (minus the read-only
+          // fields the PUT schema doesn't accept) and replace our own set.
+          const foreign = existingRules
+            .filter((rule) => !isOurs(rule))
+            .map((rule) => {
+              const {
+                lastUpdated: _lastUpdated,
+                version: _version,
+                ...rest
+              } = rule as Record<string, unknown> & {
+                lastUpdated?: string;
+                version?: string;
+              };
+              return rest;
+            });
+          yield* rulesets.putPhasForZone({
+            zoneId,
+            rulesetPhase: "http_request_late_transform",
+            rules: [
+              ...foreign,
+              ...ourDesired.map((rule) => ({
+                action: "rewrite" as const,
+                description: rule.description,
+                enabled: true,
+                expression: rule.expression,
+                actionParameters: {
+                  headers: {
+                    [AFFINITY_HEADER]: {
+                      operation: "set",
+                      expression: rule.value,
+                    },
+                  },
+                },
+              })),
+            ] as PutZoneRedirectRules,
+          });
+        }
+        return [...(params.desired?.hostsByZone.keys() ?? [])].sort();
       });
 
       type NormalizedWorkerRoute = {
@@ -2286,6 +2591,7 @@ export const LiveWorkerProvider = () =>
         news: WorkerProps,
         bindings: ResourceBinding<Worker["Binding"]>[],
         session: ScopedPlanStatusSession,
+        output: Worker["Attributes"] | undefined,
       ) {
         const { accountId } = yield* yield* CloudflareEnvironment;
         const version = news.version!;
@@ -2417,6 +2723,69 @@ export const LiveWorkerProvider = () =>
             message: version.message,
           });
         }
+        // Version-affinity transform rules (`version.affinity`): a canary
+        // rides the *parent's* zone traffic, so the rules land on the
+        // parent's zones — observed custom-domain attachments plus, when
+        // `parent` was passed as a Worker resource, its recorded routes.
+        const previousAffinityZoneIds = output?.affinityZoneIds ?? [];
+        let affinityZoneIds: string[] | undefined;
+        if (version.affinity !== undefined || previousAffinityZoneIds.length) {
+          const resolvedAffinity =
+            version.affinity !== undefined
+              ? yield* resolveVersionAffinity(version.affinity)
+              : undefined;
+          let hostsByZone: Map<string, AffinityZoneHost[]> | undefined;
+          if (resolvedAffinity !== undefined) {
+            hostsByZone = new Map();
+            const addHost = (zoneId: string, host: AffinityZoneHost) => {
+              const hosts = hostsByZone!.get(zoneId) ?? [];
+              hosts.push(host);
+              hostsByZone!.set(zoneId, hosts);
+            };
+            // A `version.parent` passed as a Worker resource resolves to
+            // the parent's Attributes at reconcile time (see
+            // resolveVersionParentName) — its recorded routes and domain
+            // tell us the zones the parent serves on.
+            const parentAttrs =
+              typeof version.parent === "object" && version.parent !== null
+                ? (version.parent as unknown as Partial<Worker["Attributes"]>)
+                : undefined;
+            const redirectHosts = new Set(parentAttrs?.domain?.redirects ?? []);
+            const attached = yield* workers
+              .listDomains({ accountId, service: parentName })
+              .pipe(Effect.map((r) => r.result ?? []));
+            for (const d of attached) {
+              if (!d.hostname || !d.zoneId || redirectHosts.has(d.hostname)) {
+                continue;
+              }
+              addHost(d.zoneId, { host: d.hostname, wildcard: false });
+            }
+            for (const route of parentAttrs?.routes ?? []) {
+              const host = route.pattern.split("/")[0];
+              if (!host || host.includes('"')) continue;
+              addHost(route.zoneId, { host, wildcard: host.includes("*") });
+            }
+            if (hostsByZone.size === 0) {
+              return yield* Effect.fail(
+                new WorkerVersionConfigError({
+                  message:
+                    `version.affinity pins users via a zone Transform Rule setting the ${AFFINITY_HEADER} header, which only sees zone traffic — the parent '${parentName}' has no custom domains (or recorded zone routes) to place the rule on. ` +
+                    `Give the parent a \`domain\` or zone \`routes\`, or pass the parent as a Worker resource so its routes are visible here.`,
+                }),
+              );
+            }
+            yield* session.note("Reconciling version-affinity rules ...");
+          }
+          const placed = yield* reconcileAffinityRules({
+            scriptName: parentName,
+            desired:
+              resolvedAffinity !== undefined && hostsByZone !== undefined
+                ? { affinity: resolvedAffinity, hostsByZone }
+                : undefined,
+            previousZoneIds: previousAffinityZoneIds,
+          });
+          affinityZoneIds = placed.length > 0 ? placed : undefined;
+        }
         // The aliased URL is primary (`url`): it is stable across deploys,
         // re-pointing at each newly uploaded version. The per-version URL
         // (prefixed by the version id) rides along in `urls`.
@@ -2444,6 +2813,7 @@ export const LiveWorkerProvider = () =>
           versionId,
           versionAlias: alias,
           deploymentId,
+          affinityZoneIds,
           hash,
         } satisfies Worker["Attributes"];
       });
@@ -3289,6 +3659,68 @@ export const LiveWorkerProvider = () =>
           desiredRoutes,
           previousRoutes,
         );
+        // Version-affinity transform rules (`version.affinity`): pin each
+        // user to one version during gradual rollouts by filling the
+        // version-key header from a stable request property, on every zone
+        // this Worker serves on. Runs after the domain/route reconciles so
+        // freshly attached surfaces resolve their zones, and also when only
+        // *previous* state holds rules, so removing affinity converges.
+        const affinity =
+          news.version?.parent == null ? news.version?.affinity : undefined;
+        const previousAffinityZoneIds = output?.affinityZoneIds ?? [];
+        let affinityZoneIds: string[] | undefined;
+        if (affinity !== undefined || previousAffinityZoneIds.length > 0) {
+          const resolvedAffinity =
+            affinity !== undefined
+              ? yield* resolveVersionAffinity(affinity)
+              : undefined;
+          let hostsByZone: Map<string, AffinityZoneHost[]> | undefined;
+          if (resolvedAffinity !== undefined) {
+            hostsByZone = new Map();
+            const addHost = (zoneId: string, host: AffinityZoneHost) => {
+              const hosts = hostsByZone!.get(zoneId) ?? [];
+              hosts.push(host);
+              hostsByZone!.set(zoneId, hosts);
+            };
+            // Serving hostnames from *observed* domain attachments (covers
+            // managed, unmanaged, and adopted domains alike); redirect
+            // hostnames 301 before the Worker and never need a key.
+            const redirectHosts = new Set(effectiveDomain?.redirects ?? []);
+            const attached = yield* workers
+              .listDomains({ accountId, service: name })
+              .pipe(Effect.map((r) => r.result ?? []));
+            for (const d of attached) {
+              if (!d.hostname || !d.zoneId || redirectHosts.has(d.hostname)) {
+                continue;
+              }
+              addHost(d.zoneId, { host: d.hostname, wildcard: false });
+            }
+            for (const route of routes) {
+              const host = route.pattern.split("/")[0];
+              if (!host || host.includes('"')) continue;
+              addHost(route.zoneId, { host, wildcard: host.includes("*") });
+            }
+            if (hostsByZone.size === 0) {
+              return yield* Effect.fail(
+                new WorkerVersionConfigError({
+                  message:
+                    `version.affinity pins users via a zone Transform Rule setting the ${AFFINITY_HEADER} header, which only sees zone traffic — give '${name}' a custom domain (\`domain\`) or zone \`routes\`. ` +
+                    `On the bare workers.dev URL, clients must send the header themselves.`,
+                }),
+              );
+            }
+            yield* session.note("Reconciling version-affinity rules ...");
+          }
+          const placed = yield* reconcileAffinityRules({
+            scriptName: name,
+            desired:
+              resolvedAffinity !== undefined && hostsByZone !== undefined
+                ? { affinity: resolvedAffinity, hostsByZone }
+                : undefined,
+            previousZoneIds: previousAffinityZoneIds,
+          });
+          affinityZoneIds = placed.length > 0 ? placed : undefined;
+        }
         const desiredCrons = normalizeCrons([
           ...getCronBindings(bindings),
           ...(news.crons ?? []),
@@ -3316,6 +3748,7 @@ export const LiveWorkerProvider = () =>
           versionOf: undefined,
           versionId,
           deploymentId,
+          affinityZoneIds,
           hash,
         } satisfies Worker["Attributes"];
       });
@@ -4127,6 +4560,10 @@ export const LiveWorkerProvider = () =>
               durableObjectNamespaces: getDurableObjects(settings.bindings),
               routes: routesList,
               crons,
+              // Rule placement is provider-managed state, not observed here
+              // (a getPhas call per known zone on every read); carry the
+              // cleanup list forward like any other stable cache.
+              affinityZoneIds: output?.affinityZoneIds,
             } satisfies Worker["Attributes"];
 
             // Centralized ownership decision: the engine routes `read`'s
@@ -4171,7 +4608,7 @@ export const LiveWorkerProvider = () =>
           // script instead of owning a script of its own — none of the
           // script-level observation below applies.
           if (news.version?.parent != null) {
-            return yield* putWorkerVersion(id, news, bindings, session);
+            return yield* putWorkerVersion(id, news, bindings, session, output);
           }
           const { accountId } = yield* yield* CloudflareEnvironment;
           const name =
@@ -4248,6 +4685,17 @@ export const LiveWorkerProvider = () =>
           // current deployment routes traffic to our version, restore 100%
           // to the other version in the split.
           if (output.versionOf !== undefined) {
+            // Remove our affinity rules from the parent's zones — the
+            // canary owned them, and with the canary gone there is no
+            // split left to pin. Best-effort: a zone we can no longer
+            // touch must not fail the destroy.
+            if (output.affinityZoneIds?.length) {
+              yield* reconcileAffinityRules({
+                scriptName: output.versionOf,
+                desired: undefined,
+                previousZoneIds: output.affinityZoneIds,
+              }).pipe(Effect.catch(() => Effect.void));
+            }
             if (!output.versionId) return;
             yield* Effect.logInfo(
               `Cloudflare Worker delete: releasing version ${output.versionId} of ${output.versionOf}`,
@@ -4334,6 +4782,15 @@ export const LiveWorkerProvider = () =>
           // Reconciling with an empty domain config removes exactly the
           // rules tagged `alchemy:worker:<script>:redirect:*`, leaving
           // everything else in the shared entrypoint untouched.
+          // Remove our version-affinity rules from every zone state says
+          // holds them. Best-effort, like the redirect rules below.
+          if (output.affinityZoneIds?.length) {
+            yield* reconcileAffinityRules({
+              scriptName: output.workerName,
+              desired: undefined,
+              previousZoneIds: output.affinityZoneIds,
+            }).pipe(Effect.catch(() => Effect.void));
+          }
           const redirects = stateWorkerDomain(output)?.redirects ?? [];
           if (redirects.length > 0) {
             yield* reconcileRedirectRules({
