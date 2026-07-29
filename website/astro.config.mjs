@@ -50,6 +50,7 @@ function providersSidebarEntry() {
       { label: "PlanetScale", link: "/planetscale" },
       { label: "Neon", link: "/neon" },
       { label: "Axiom", link: "/axiom" },
+      { label: "Archil", link: "/archil" },
       { label: "GitHub", link: "/github" },
       { label: "Docker", link: "/docker" },
       { label: "Kubernetes", link: "/kubernetes" },
@@ -836,6 +837,37 @@ export default defineConfig({
               ],
             },
             providerResourcesEntry("Neon"),
+          ],
+        },
+        {
+          label: "Archil",
+          items: [
+            { label: "Overview", link: "/archil" },
+            { label: "Setup", link: "/archil/setup" },
+            {
+              label: "Data",
+              items: [{ label: "Disks", link: "/archil/data/disks" }],
+            },
+            {
+              label: "Compute",
+              items: [
+                { label: "Exec and search", link: "/archil/compute/exec" },
+                {
+                  label: "Base images",
+                  link: "/archil/compute/base-images",
+                },
+              ],
+            },
+            {
+              label: "Guides",
+              items: [
+                {
+                  label: "Per-user workspaces",
+                  link: "/archil/guides/per-user-workspaces",
+                },
+              ],
+            },
+            providerResourcesEntry("Archil"),
           ],
         },
         {

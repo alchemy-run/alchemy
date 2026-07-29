@@ -1,0 +1,129 @@
+---
+title: Base images
+description: Build a disk with commands at deploy time, then hand every user a copy-on-write clone.
+---
+
+The exec sandbox's image is fixed, so the disk is where your tools
+live. Install into it once at deploy time and every later exec sees
+them.
+
+```typescript
+const base = yield* Archil.Disk("base", {
+  commands: [
+    "mkdir -p /mnt/archil/lib /mnt/archil/bin",
+    "pip install --target /mnt/archil/lib pandas pyarrow",
+    "curl -fsSL https://example.com/tool -o /mnt/archil/bin/tool",
+    "chmod +x /mnt/archil/bin/tool",
+  ],
+});
+```
+
+Then at runtime:
+
+```typescript
+yield* exec("PYTHONPATH=/mnt/archil/lib python3 /mnt/archil/job.py");
+```
+
+This is closer to a Nix profile or a Lambda layer than a Dockerfile.
+You are adding a userland to their base, not replacing it.
+
+## How commands run
+
+They run in order through serverless execution, once the disk is
+available, stopping at the first non-zero exit. A failing command
+fails the deploy and reports the command and its stderr — worth
+stating because the exec API reports command failure as an exit code
+rather than an error, so an unchecked build would deploy green.
+
+The list is fingerprinted into a `commandsHash` attribute. Commands
+re-run only when the list changes, and re-running is an **update, not
+a replacement** — the disk keeps its ID, its contents, and its mount
+token, so editing your build never destroys user data on the disk.
+
+Two consequences worth planning for:
+
+- Commands must be safe to re-run over whatever a previous version
+  left behind. Prefer `mkdir -p`, `curl -o`, and `install -m` over
+  appends.
+- Each command is bounded by the exec limits — five minutes, 128 KiB
+  of output. Split long installs across entries.
+
+`commands` needs a region where execution is available, so setting it
+on `gcp-us-central1` fails the deploy.
+
+## Seeding files
+
+There is no file-upload prop. Write content from the commands
+themselves:
+
+```typescript
+commands: [
+  "cat > /mnt/archil/requirements.txt <<'EOF'\npandas==2.2.3\nEOF",
+  "pip install --target /mnt/archil/lib -r /mnt/archil/requirements.txt",
+],
+```
+
+For anything large, `curl` it from a URL you already publish, or point
+the disk at an object-storage [mount](/archil/data/disks) and let
+Archil sync it.
+
+## Know your libc
+
+Archil does not document the sandbox's distro, architecture, or libc.
+It is Linux, and that is all that is specified.
+
+This matters for `commands`. Whether `pip install` can use binary
+wheels depends on glibc versus musl, and any static binary you fetch
+has to match the architecture. Both fail at runtime, on a machine you
+cannot inspect. One exec call settles it before you rely on either:
+
+```typescript
+yield* exec("uname -sm; cat /etc/os-release; ldd --version 2>&1 | head -1");
+```
+
+## Handing out copies
+
+A checkpoint is an immutable snapshot; a branch is a writable fork of
+one. Writes on a branch are isolated from the base and from every
+sibling branch, so forking is how each user gets the base image
+without a copy.
+
+Checkpoints are created from a **mounted** disk. The control plane has
+no route for it, so this step happens on a build box or a CI job, not
+from a Worker:
+
+```bash
+sudo archil mount myorg/base /mnt/archil --region aws-us-east-1
+archil checkpoints create /mnt/archil golden-v1
+```
+
+Then fork at request time:
+
+```typescript
+const fork = yield* Archil.Fork(BaseDisk);
+
+const workspace = yield* fork(`user-${userId}`);
+yield* workspace.exec("python3 /mnt/archil/run.py");
+```
+
+`fork` is idempotent by name — an existing fork is returned rather
+than re-created — and with no `from` it uses the newest committed
+checkpoint, failing with `NoCheckpoint` if the disk has none. Pin one
+explicitly with `fork(name, { from: "golden-v1" })`.
+
+Two limits to plan around. Branches cannot be deleted; Archil exposes
+no route for it, so a fork per user is permanent. And a branch is not
+a security boundary — the disk's credentials cover all of its
+branches.
+
+So the full pipeline has one manual seam in it:
+
+```
+Disk({ commands })      →  archil checkpoints create  →  Fork(disk)
+   over HTTP, in-stack        on a mounted host           at request time
+```
+
+## Next steps
+
+- [Per-user workspaces](/archil/guides/per-user-workspaces) — when to fork and when not to.
+- [Exec and search](/archil/compute/exec) — the runtime surface.

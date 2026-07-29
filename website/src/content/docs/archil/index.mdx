@@ -1,0 +1,106 @@
+---
+title: Archil
+description: Elastic POSIX file systems with serverless bash execution — disks as Stack resources, addressable from Workers, Durable Objects, and Lambda.
+---
+
+Archil gives you a POSIX file system that scales on its own and bills
+for the bytes you actually store. Disks appear in milliseconds, mount
+on many machines at once, and — in AWS regions — can run bash without
+you provisioning any compute.
+
+That last part is why it pairs well with serverless. A Worker or a
+Lambda has no disk and no shell. `disk.exec("python3 …")` hands it
+both: a real operating system with your files already mounted, billed
+per millisecond of execution.
+
+New here? [Set up credentials](/archil/setup) first.
+
+## Resources
+
+An `Archil.Disk` is the unit. It is empty by default, or synced with
+object storage, or built by shell commands at deploy time:
+
+```typescript
+const data = yield* Archil.Disk("data");
+
+const base = yield* Archil.Disk("base", {
+  commands: [
+    "mkdir -p /mnt/archil/lib",
+    "pip install --target /mnt/archil/lib pandas",
+  ],
+});
+```
+
+`commands` is how you build a base image — see
+[Base images](/archil/compute/base-images). Disks can also back onto
+S3, GCS, R2, S3-compatible, or Azure Blob storage; see
+[Disks](/archil/data/disks) for that, plus mount credentials
+(`Archil.DiskUser`) and control-plane keys (`Archil.ApiToken`).
+
+## Bindings
+
+Bind a disk to a host to get a runtime client. Four bindings, from
+narrowest to broadest:
+
+```typescript
+const exec = yield* Archil.Exec(base);     // run one command
+const grep = yield* Archil.Grep(base);     // parallel search
+const fork = yield* Archil.Fork(base);     // copy-on-write clones
+const disk = yield* Archil.Connect(base);  // all of the above, plus lifecycle
+```
+
+Each ships two interchangeable layers: `*Http` mints a dedicated
+`Archil.ApiToken` for the host and binds it as a secret, and `*Local`
+runs on your ambient CLI credentials for scripts and tests.
+
+```typescript
+Effect.gen(function* () {
+  const exec = yield* Archil.Exec(base);
+
+  return {
+    fetch: Effect.gen(function* () {
+      const { stdout } = yield* exec("wc -l /mnt/archil/*.csv");
+      return yield* HttpServerResponse.text(stdout);
+    }),
+  };
+}).pipe(Effect.provide(Archil.ExecHttp));
+```
+
+The runtime calls are plain HTTPS, so the same binding works from a
+Cloudflare Worker, a Durable Object, a Lambda, an ECS task, or a
+script. See [Exec and search](/archil/compute/exec).
+
+## Disks you never declare
+
+Most Archil applications want far more disks than a Stack should
+contain — one per user, per agent, or per chat thread. Those are
+derived at request time from a disk you did declare:
+
+```typescript
+const base = yield* Archil.Connect(BaseDisk);
+
+// empty sibling, deletable
+const { disk } = yield* base.create(`thread-${threadId}`);
+
+// copy-on-write clone of the base image, permanent
+const workspace = yield* fork(`user-${userId}`);
+```
+
+Both are idempotent by name, so the same call serves first touch and
+every request after. [Per-user workspaces](/archil/guides/per-user-workspaces)
+compares the three isolation models and their lifecycle tradeoffs.
+
+## Regions
+
+Four regions: `aws-us-east-1`, `aws-us-west-2`, `aws-eu-west-1`, and
+`gcp-us-central1`. Storage works everywhere; serverless execution runs
+only in the AWS three. Each region is its own control plane, and disks
+never move between them — a region change replaces the disk.
+
+## Next steps
+
+- [Setup](/archil/setup) — credentials and provider registration.
+- [Disks](/archil/data/disks) — storage backends, users, tokens.
+- [Exec and search](/archil/compute/exec) — the runtime surface.
+- [Base images](/archil/compute/base-images) — build a disk, fork it.
+- [Per-user workspaces](/archil/guides/per-user-workspaces) — one disk per entity.

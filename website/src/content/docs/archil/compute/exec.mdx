@@ -1,0 +1,133 @@
+---
+title: Exec and search
+description: Run bash on a disk from a Worker, Durable Object, or Lambda — mounts, subdirectories, parallel grep, and the limits.
+---
+
+`exec` boots a container with the disk mounted at `/mnt/archil`, runs
+your command through `bash -c`, and returns the result. There is no
+compute to provision and nothing to keep warm.
+
+```typescript
+const exec = yield* Archil.Exec(DataDisk);
+
+const { stdout, stderr, exitCode, timing } = yield* exec(
+  "wc -l /mnt/archil/*.csv",
+);
+```
+
+A non-zero exit is a **value**, not a failure — `exitCode` is part of
+the result, and only transport or platform problems reach the error
+channel. Check it explicitly:
+
+```typescript
+const result = yield* exec("test -f /mnt/archil/ready");
+if (result.exitCode !== 0) { /* … */ }
+```
+
+`timing` reports `totalMs`, `queueMs` (scheduling, boot, mount), and
+`executeMs`. You are billed on `executeMs`, in 1 ms increments with a
+100 ms minimum.
+
+## The sandbox
+
+The image is Archil's and cannot be changed. There is no field for a
+container image, OS, architecture, environment variables, or memory.
+It ships coreutils, grep, sed, awk, find, curl, jq, python3, and node,
+with the disk as the working directory.
+
+The disk is the layer you control. Install into it once and every
+later exec sees it — see [Base images](/archil/compute/base-images).
+
+Limits: five minutes per command, and stdout and stderr are each
+capped at 128 KiB.
+
+Serverless execution runs only in the AWS regions. A disk in
+`gcp-us-central1` stores fine but cannot exec.
+
+## Several disks at once
+
+Pass a `mounts` map and each entry is mounted at `/mnt/archil/<key>`.
+The bound disk is not mounted implicitly — list it if you want it, so
+every path in the command appears in the call:
+
+```typescript
+const data = yield* Archil.Connect(DataDisk);
+
+yield* data.exec(
+  "wc -l /mnt/archil/logs/*.log > /mnt/archil/data/lines.txt",
+  { data, logs: logs.readonly() },
+);
+```
+
+Activation is atomic: every disk mounts or none do. All of them must
+live in the same region.
+
+## Narrowing a mount
+
+Mounts chain. `readonly()` makes writes fail with `EROFS`;
+`subdir(path)` exposes only that subtree at the mountpoint, as if it
+were the disk's root:
+
+```typescript
+yield* data.exec("ls /mnt/archil/work", {
+  work: shared.subdir(`tenants/${tenantId}`).readonly(),
+});
+```
+
+The command cannot path out of a subdirectory mount, which makes
+`subdir` + `readonly` a good way to run untrusted or model-generated
+bash against part of a disk. It constrains the *command*, not the
+caller — whoever holds the API key can issue another exec with a
+different subdirectory.
+
+A subdirectory has to exist before it can be mounted.
+
+## Parallel search
+
+A single container can't scan a large tree inside a request budget, so
+search is its own service. `grep` fans listing and matching out across
+ephemeral containers and overlaps the two phases:
+
+```typescript
+const grep = yield* Archil.Grep(DataDisk);
+
+const { matches, stoppedReason } = yield* grep({
+  directory: "logs",
+  pattern: "ERROR|FATAL",
+  recursive: true,
+});
+```
+
+`pattern` is an extended regular expression, passed to `grep -E`.
+Three knobs trade cost against completeness: `maxDurationSeconds`
+(deadline, capped at 30), `concurrency` (up to 100 workers), and
+`maxResults`.
+
+Always check `stoppedReason` before trusting an empty result:
+
+- `completed` — everything under `directory` was scanned.
+- `max_results` / `deadline` — stopped early; the matches you got are
+  whichever workers reported first, not the first N in path order.
+- `incomplete` / `list_failed` — some batches errored. Results may be
+  partial or wrong.
+
+The result also carries `filesScanned`, `containersDispatched`, and
+`computeSecondsUsed`, which is what grep bills on.
+
+## Which binding
+
+| Binding | You get |
+| --- | --- |
+| `Archil.Exec` | `exec(command)` |
+| `Archil.Grep` | `grep(request)` |
+| `Archil.Fork` | `fork(name)` → a connection to a clone |
+| `Archil.Connect` | all of the above, plus `create`, `open`, `info`, `delete`, users, branches, checkpoints |
+
+Prefer the narrow ones. They give a host one function instead of the
+whole control plane, and several bindings on one host still mint a
+single API token between them.
+
+## Next steps
+
+- [Base images](/archil/compute/base-images) — installing tools into a disk.
+- [Per-user workspaces](/archil/guides/per-user-workspaces) — a disk per entity.

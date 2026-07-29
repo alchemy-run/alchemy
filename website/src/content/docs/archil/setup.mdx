@@ -1,0 +1,53 @@
+---
+title: Setup
+description: Connect alchemy to Archil — account, API key, and profiles.
+---
+
+Sign up at [archil.com](https://archil.com) and create an API key in
+the [Archil console](https://console.archil.com). Register the
+provider next to your cloud's:
+
+```typescript
+// alchemy.run.ts
+import * as Archil from "alchemy/Archil";
+
+providers: Layer.mergeAll(Cloudflare.providers(), Archil.providers()),
+```
+
+The next `alchemy login` adds an `Archil` step with two options:
+
+- **Environment variable** — reads `ARCHIL_API_KEY` (good for CI).
+- **Stored API key** — entered interactively, saved under
+  `~/.alchemy/credentials/<profile>/archil-stored.json`.
+
+In CI (`CI=true`), the environment-variable method is selected
+automatically — no prompt, just set `ARCHIL_API_KEY`.
+
+Set `ARCHIL_REGION` to change the default region for disks that don't
+name one. It defaults to `aws-us-east-1`.
+
+See [Profiles](/environments/profiles) for how credentials are stored
+and switched.
+
+## Two kinds of credential
+
+Archil has two credential types and they are not interchangeable:
+
+- **API keys** authenticate the control plane. They are account-scoped
+  — there is no per-disk or read-only variant — and this is what the
+  provider and every binding use.
+- **Disk tokens** are per-disk mount credentials, used by `archil
+  mount`, the Kubernetes CSI driver, and the `disk` SDK. A disk's
+  token is returned exactly once, at creation, and surfaces as the
+  `diskToken` attribute.
+
+Because API keys are account-scoped, a binding narrows the *interface*
+a host gets, not the credential behind it. `Archil.Exec` hands a Worker
+one function instead of the whole control plane, but the minted token
+it carries can still reach the account. Treat every host that binds
+Archil as trusted with the account.
+
+## Next steps
+
+- [Archil overview](/archil) — resources and bindings.
+- [Disks](/archil/data/disks) — mount credentials in detail.

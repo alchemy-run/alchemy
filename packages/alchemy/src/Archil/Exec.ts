@@ -19,7 +19,7 @@ export interface ExecClient {
  *
  * Bind a disk declared at module scope, exactly like any other capability;
  * for disks only known at request time (one per user, per thread) use
- * {@link Client} instead, which addresses disks dynamically.
+ * {@link Connect} instead, which derives disks at request time.
  *
  * @binding
  * @section Running Commands

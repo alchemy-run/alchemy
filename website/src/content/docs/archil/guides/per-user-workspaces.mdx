@@ -1,0 +1,120 @@
+---
+title: Per-user workspaces
+description: One file system per user, agent, or chat thread — three isolation models and how to choose.
+---
+
+Most Archil applications want thousands of file systems: one per user,
+per agent, per chat thread. Those don't belong in a Stack — they are
+application data, created and destroyed by your code.
+
+Every one of them is reached through a disk you *did* declare:
+
+```typescript
+// disks.ts
+export const BaseDisk = Archil.Disk("base");
+
+// worker.ts — init
+const base = yield* Archil.Connect(BaseDisk);
+
+// request time
+const { disk } = yield* base.create(`myapp-prod-thread-${threadId}`);
+yield* disk.exec("cat /mnt/archil/history.md");
+```
+
+`create` is idempotent by name, so the same call serves first touch
+and every request after: first touch provisions in milliseconds, later
+calls resolve.
+
+## Three models
+
+|  | Starts from | Reclaimable | Cost |
+| --- | --- | --- | --- |
+| `create(name)` — a disk each | empty | yes, `delete()` | one disk per entity |
+| `fork(name)` — a branch each | the base image, copy-on-write | **no** delete route | cheap |
+| `subdir(name)` — a directory each | empty | `rm -rf` | free |
+
+**A disk each** is the default. Full isolation, and you can delete it
+when the thread closes. Names are account-global per region, so
+include your app and stage in them.
+
+**A branch each** gives every entity the contents of your base image
+without copying it — the right answer when workspaces need a
+preinstalled toolchain. See [Base images](/archil/compute/base-images).
+The catch is permanence: Archil has no route to delete a branch, so
+plan on them accumulating.
+
+**A directory each** on one shared disk is the cheapest thing that
+works. No provisioning call, nothing to clean up beyond an `rm -rf`:
+
+```typescript
+yield* base.exec("ls /mnt/archil/work", {
+  work: base.subdir(`threads/${threadId}`),
+});
+```
+
+The exec sees that subtree as its root and cannot path out of it. The
+tradeoff is that everyone shares one disk's concurrency behavior.
+
+None of the three is a security boundary. An API key reaches the whole
+account, so isolation here is about blast radius and cleanup, not
+about defending one tenant from another.
+
+## With Durable Objects
+
+A Durable Object is a natural owner for a workspace: the DO holds
+identity and single-writer coordination, Archil holds the bytes. The
+DO's instance name becomes the disk's name, so addressing them is one
+lookup.
+
+```typescript
+export class Workspace extends Cloudflare.DurableObject<Workspace>()(
+  "Workspace",
+  Effect.gen(function* () {
+    // init — binds the API token once per isolate
+    const base = yield* Archil.Connect(BaseDisk);
+    const state = yield* Cloudflare.DurableObjectState;
+
+    return Effect.gen(function* () {
+      // per-instance — get-or-create on every wake
+      const name = `myapp-prod-ws-${state.id.name}`;
+      const { disk } = yield* base.create(name).pipe(Effect.orDie);
+
+      return {
+        run: (command: string) => disk.exec(command).pipe(Effect.orDie),
+        destroy: () => disk.delete().pipe(Effect.orDie),
+      };
+    });
+  }).pipe(Effect.provide(Archil.ConnectHttp)),
+) {}
+```
+
+The Worker in front routes by name and binds nothing itself:
+
+```typescript
+const workspaces = yield* Workspace;
+const workspace = workspaces.getByName(userId);
+yield* workspace.run("python3 /mnt/archil/run.py");
+```
+
+The phase split matters. Binding happens in DO init, once per isolate.
+The get-or-create happens in the per-instance closure, once per wake.
+`exec` happens per call.
+
+## Cleaning up
+
+Runtime-created disks are not Stack state. `stack.destroy()` does not
+collect them — deleting them is your application's job, on whatever
+signal means "this thread is over":
+
+```typescript
+yield* disk.delete();   // idempotent
+```
+
+Forks are the exception, and it is worth repeating: they cannot be
+deleted at all. If workspaces need to be reclaimed, use `create` even
+though it starts empty.
+
+## Next steps
+
+- [Exec and search](/archil/compute/exec) — mounts and limits.
+- [Base images](/archil/compute/base-images) — building the disk you fork from.
