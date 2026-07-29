@@ -41,8 +41,8 @@ import * as Effect from "effect/Effect";
 export default Alchemy.Stack(
   "MyApp",
   {
--   providers: Cloudflare.providers(),
-+   providers: Layer.mergeAll(Cloudflare.providers(), Axiom.providers()),
+-    providers: Cloudflare.providers(),
++    providers: Layer.mergeAll(Cloudflare.providers(), Axiom.providers()),
     state: Cloudflare.state(),
   },
   // ...
@@ -139,15 +139,15 @@ export default Cloudflare.Worker(
   { main: import.meta.url },
   Effect.gen(function* () {
     // ...
-- }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
-+ }).pipe(
-+   Effect.provide(
-+     Layer.mergeAll(
-+       Cloudflare.R2.ReadWriteBucketBinding,
-+       Axiom.Telemetry({ token: Ingest, traces: Traces, logs: Logs }),
-+     ),
-+   ),
-+ ),
+-  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
++  }).pipe(
++    Effect.provide(
++      Layer.mergeAll(
++        Cloudflare.R2.ReadWriteBucketBinding,
++        Axiom.Telemetry({ token: Ingest, traces: Traces, logs: Logs }),
++      ),
++    ),
++  ),
 );
 ```
 
@@ -192,10 +192,10 @@ time went*, wrap the R2 read in its own span:
           // ...
         }
 
--       const object = yield* bucket.get(key);
-+       const object = yield* bucket
-+         .get(key)
-+         .pipe(Effect.withSpan("bucket.get", { attributes: { key } }));
+-        const object = yield* bucket.get(key);
++        const object = yield* bucket
++          .get(key)
++          .pipe(Effect.withSpan("bucket.get", { attributes: { key } }));
 ```
 
 `Effect.withSpan` opens a child span under whatever span is current —
@@ -211,7 +211,7 @@ span IDs, so Axiom can jump from a log line to its trace:
 ```diff lang="typescript"
 // src/worker.ts
         const text = yield* object.text();
-+       yield* Effect.log("served object", { key });
++        yield* Effect.log("served object", { key });
         return HttpServerResponse.text(text);
 ```
 
