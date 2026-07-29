@@ -399,6 +399,14 @@ export interface WorkerRouteConfig {
  *   itself, the newly uploaded version receives {@link traffic} percent
  *   and the currently-live version keeps the remainder, instead of the
  *   default 100% cutover.
+ *
+ * A gradual rollout carries only what a version can: code, bindings,
+ * compatibility settings, and cache configuration. Workers with static
+ * assets cannot roll out gradually (the versions API cannot carry assets),
+ * a deploy that changes Durable Object class migrations must go out at
+ * 100% (migrations cannot ride a rollout), and script-level settings
+ * (tags, observability, limits, placement, logpush) keep their live
+ * values until the next full deploy.
  */
 export interface WorkerVersionOptions {
   /**
@@ -431,6 +439,16 @@ export interface WorkerVersionOptions {
    * Without `parent`, defaults to `100` (today's full cutover); `0` means
    * "upload the version without deploying it" (the equivalent of
    * `wrangler versions upload`).
+   *
+   * Percentages replace the previous deployment, they never add. Each
+   * versioned deploy splits its new version against the *stable* version —
+   * the majority holder of the current deployment — so deploying at 10 and
+   * then at 20 yields the second version at 20% against the stable version
+   * at 80%, with the earlier 10% version dropped from routing entirely
+   * (still uploaded, but unreachable even via a version-override header).
+   * With unchanged code that replacement is exactly a ramp; with changed
+   * code it swaps canaries. The first deploy of a script always goes to
+   * 100%, since there is no previous version to split with.
    *
    * Note that a subsequent full deploy of the parent (or of this Worker
    * itself, at the default 100) resets traffic to 100% of its own new
