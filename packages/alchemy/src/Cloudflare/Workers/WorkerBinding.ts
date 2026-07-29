@@ -67,14 +67,44 @@ export interface SelfUrlWorkerBinding {
 }
 
 /**
+ * The `queue` metadata binding extended with the alchemy-only `queueId`.
+ * The local worker provider uses it to discriminate a locally-emulated
+ * queue (`dev:` id → local broker) from an `Alchemy.remote()` queue in dev
+ * (real id → remote-proxied producer). Stripped from the binding before
+ * the script upload — Cloudflare never sees it.
+ */
+export type QueueWorkerBinding = Extract<
+  DistilledWorkerBinding,
+  { type: "queue" }
+> & {
+  queueId?: string;
+  /**
+   * Alchemy-only (stripped before upload): dev-mode remote-producer shim
+   * for an `Alchemy.remote()` queue. Cloudflare preview sessions reject
+   * queue bindings, so a local worker produces to the live queue through
+   * this deployed shim worker instead (see `Queues/QueueShim.ts`).
+   */
+  shim?: {
+    /** The shim worker's workers.dev URL. */
+    url: string | undefined;
+    /** Bearer token the shim requires. */
+    token: Redacted.Redacted<string> | string;
+  };
+};
+
+/**
  * The wire-shape binding union the Cloudflare API accepts — {@link WorkerBinding}
  * minus the alchemy-only members that must be lowered before upload.
  */
 export type WireWorkerBinding = Exclude<WorkerBinding, SelfUrlWorkerBinding>;
 
 export type WorkerBinding =
-  | Exclude<DistilledWorkerBinding, { type: "durable_object_namespace" }>
+  | Exclude<
+      DistilledWorkerBinding,
+      { type: "durable_object_namespace" } | { type: "queue" }
+    >
   | DurableObjectNamespaceWorkerBinding
+  | QueueWorkerBinding
   | SelfUrlWorkerBinding;
 
 export type WorkerSettingsBinding = Exclude<

@@ -28,6 +28,7 @@ import {
   havePropsChanged,
   isResolved,
   type NoopDiff,
+  type ReplaceDiff,
   type UpdateDiff,
 } from "./Diff.ts";
 import { parseFqn } from "./FQN.ts";
@@ -37,9 +38,11 @@ import {
   findProviderByType,
   missingProviderError,
   Provider,
+  providerForMode,
   tryFindProviderByType,
   type ProviderService,
 } from "./Provider.ts";
+import { defaultProviderMode, type ProviderMode } from "./ProviderMode.ts";
 import {
   isResource,
   type ResourceBinding,
@@ -103,6 +106,14 @@ export interface BaseNode<
 > {
   resource: R;
   provider: ProviderService<R>;
+  /**
+   * The {@link ProviderMode} this node's `provider` was resolved for.
+   * `undefined` for mode-agnostic providers (a single implementation
+   * serves both dev and deploy) — such resources never persist a mode and
+   * never replace on a mode switch. Apply stamps this onto every state
+   * commit as `providerMode`.
+   */
+  mode: ProviderMode | undefined;
   downstream: string[];
   bindings: BindingNode<R["Binding"]>[];
 }
@@ -273,6 +284,48 @@ export const make = <A>(
       });
     });
 
+    // The run-level default provider mode (`alchemy dev` → "local",
+    // `alchemy deploy` → "live"). A resource-scoped `remote()` (captured on
+    // the resource at registration as `Mode`) opts out of local emulation.
+    const runDefaultMode = yield* defaultProviderMode;
+
+    /**
+     * Resolve the effective provider mode and the concrete provider
+     * service for a resource.
+     *
+     * The mode only "sticks" when the provider actually distinguishes
+     * modes (registered via `ProviderLayer.dual`). Mode-agnostic providers
+     * satisfy any requested mode with their single implementation — in a
+     * dev run, a construct that mixes emulatable resources with live-only
+     * ones (e.g. R2 buckets) just works.
+     */
+    const resolveProviderAndMode = Effect.fn(function* (resource: {
+      Type: string;
+      Mode?: ProviderMode | undefined;
+    }) {
+      const base = yield* findProviderByType(resource.Type);
+      const mode =
+        base.modes !== undefined
+          ? (resource.Mode ?? runDefaultMode)
+          : undefined;
+      const provider = yield* providerForMode(base, mode);
+      return { provider, mode };
+    });
+
+    /**
+     * Has this resource switched provider modes since it was last
+     * reconciled? Rows without a persisted mode (legacy rows, or rows
+     * written by a mode-agnostic provider) are assumed to already be in
+     * the current run's mode — no replacement churn.
+     */
+    const hasModeSwitched = (
+      mode: ProviderMode | undefined,
+      oldState: ResourceState | undefined,
+    ): boolean =>
+      mode !== undefined &&
+      oldState?.providerMode !== undefined &&
+      oldState.providerMode !== mode;
+
     const resourceFqns = yield* state.list({
       stack: stackName,
       stage: stage,
@@ -302,7 +355,8 @@ export const make = <A>(
             Effect.gen(function* () {
               const resource = resourceExpr.src;
 
-              const provider = yield* findProviderByType(resource.Type);
+              const { provider, mode } =
+                yield* resolveProviderAndMode(resource);
               const props = yield* resolveInput(resource.Props);
               const persisted = yield* state.get({
                 stack: stackName,
@@ -316,6 +370,13 @@ export const make = <A>(
                 : (persisted as ResourceState | undefined);
 
               if (!oldState || oldState.status === "creating") {
+                return resourceExpr;
+              }
+
+              // The resource is switching provider modes (local ⇄ live):
+              // it will be replaced, so nothing about the persisted attrs
+              // is stable for downstream consumers.
+              if (hasModeSwitched(mode, oldState)) {
                 return resourceExpr;
               }
 
@@ -703,7 +764,7 @@ export const make = <A>(
       (yield* Effect.all(
         resources.map(
           Effect.fn("plan.diff.resource")(function* (resource) {
-            const provider = yield* findProviderByType(resource.Type);
+            const { provider, mode } = yield* resolveProviderAndMode(resource);
             const id = resource.LogicalId;
             const fqn = resource.FQN;
             const news = yield* resolveInput(resource.Props);
@@ -815,6 +876,7 @@ export const make = <A>(
                   bindings: [],
                   downstream,
                   removalPolicy: resource.RemovalPolicy,
+                  providerMode: mode,
                 } satisfies CreatedResourceState;
                 // In-memory only — do NOT persist here. Plan.make runs for
                 // `alchemy plan` / `deploy --dry-run` too, so a `state.set`
@@ -832,10 +894,19 @@ export const make = <A>(
             const oldBindings = dedupeBindings(oldState?.bindings ?? []);
             const bindingDiffs = diffBindings(oldBindings, newBindings);
 
+            // Local ⇄ live switch: the persisted row was reconciled by a
+            // different provider mode than the one resolved for this run.
+            // The two runtimes host distinct physical instances, so this is
+            // always a replacement — the new instance is created with the
+            // new mode's provider, and Apply deletes the old generation
+            // with the provider of the mode that created it (see
+            // `deleteOldGenerations` / `collectGarbage`).
+            const modeSwitched = hasModeSwitched(mode, oldState);
+
             const Node = <T extends Apply>(
               node: Omit<
                 T,
-                "provider" | "resource" | "bindings" | "downstream"
+                "provider" | "resource" | "bindings" | "downstream" | "mode"
               >,
             ) =>
               ({
@@ -844,6 +915,7 @@ export const make = <A>(
                 resource,
                 bindings: bindingDiffs,
                 downstream,
+                mode,
               }) as any as T;
 
             // Plan against the persisted state we have, not the ideal final state we
@@ -856,6 +928,7 @@ export const make = <A>(
                 state: oldState,
               });
             } else if (
+              !modeSwitched &&
               oldState.status === "creating" &&
               oldState.attr === undefined
             ) {
@@ -918,50 +991,59 @@ export const make = <A>(
             // not the older generations stored under `old`.
             const oldProps = oldState.props;
 
-            const diff = yield* asEffect(
-              provider
-                ?.diff?.({
-                  id,
-                  fqn,
-                  olds: oldProps,
-                  instanceId: oldState.instanceId,
-                  output: oldState.attr,
-                  news,
-                  oldBindings,
-                  newBindings,
-                })
-                .pipe(providePlanScope(fqn, oldState.instanceId)),
-            ).pipe(
-              Effect.map(
-                (diff) =>
-                  diff ??
-                  ({
-                    action:
-                      havePropsChanged(oldProps, news) ||
-                      bindingDiffs.some((b) => b.action !== "noop")
-                        ? "update"
-                        : "noop",
-                  } as UpdateDiff | NoopDiff),
-              ),
-              Effect.map((diff) =>
-                options.force && diff.action === "noop"
-                  ? ({
-                      action: "update",
-                    } satisfies UpdateDiff)
-                  : diff,
-              ),
-              // After a cold-start adoption (silent or takeover), force at
-              // least an update so the provider re-syncs ownership tags /
-              // config against the desired props (otherwise the engine
-              // would noop and any drift between the existing cloud
-              // resource and `news` — including foreign-owned tags after a
-              // takeover — would persist).
-              Effect.map((diff) =>
-                forceUpdateAfterAdoption && diff.action === "noop"
-                  ? ({ action: "update" } satisfies UpdateDiff)
-                  : diff,
-              ),
-            );
+            // On a mode switch the provider diff is skipped entirely:
+            // comparing props across runtimes is meaningless (and the new
+            // mode's provider has never seen the old mode's state). The
+            // action is a replacement by definition.
+            const diff = modeSwitched
+              ? ({
+                  action: "replace",
+                  deleteFirst: false,
+                } satisfies ReplaceDiff)
+              : yield* asEffect(
+                  provider
+                    ?.diff?.({
+                      id,
+                      fqn,
+                      olds: oldProps,
+                      instanceId: oldState.instanceId,
+                      output: oldState.attr,
+                      news,
+                      oldBindings,
+                      newBindings,
+                    })
+                    .pipe(providePlanScope(fqn, oldState.instanceId)),
+                ).pipe(
+                  Effect.map(
+                    (diff) =>
+                      diff ??
+                      ({
+                        action:
+                          havePropsChanged(oldProps, news) ||
+                          bindingDiffs.some((b) => b.action !== "noop")
+                            ? "update"
+                            : "noop",
+                      } as UpdateDiff | NoopDiff),
+                  ),
+                  Effect.map((diff) =>
+                    options.force && diff.action === "noop"
+                      ? ({
+                          action: "update",
+                        } satisfies UpdateDiff)
+                      : diff,
+                  ),
+                  // After a cold-start adoption (silent or takeover), force at
+                  // least an update so the provider re-syncs ownership tags /
+                  // config against the desired props (otherwise the engine
+                  // would noop and any drift between the existing cloud
+                  // resource and `news` — including foreign-owned tags after a
+                  // takeover — would persist).
+                  Effect.map((diff) =>
+                    forceUpdateAfterAdoption && diff.action === "noop"
+                      ? ({ action: "update" } satisfies UpdateDiff)
+                      : diff,
+                  ),
+                );
 
             if (oldState.status === "creating") {
               if (diff.action === "noop") {
@@ -1319,7 +1401,15 @@ export const make = <A>(
               // the provider the row's physical resource cannot be deleted
               // anyway. Die at plan time with a typed error naming the row
               // and the remediation instead of limping into a partial apply.
-              const providerOption = yield* tryFindProviderByType(resourceType);
+              //
+              // Orphan deletes resolve the provider variant for the mode
+              // that created the row (`providerMode`), so e.g. a local dev
+              // worker's row is deleted by the local provider even during a
+              // live deploy — and vice versa.
+              const providerOption = yield* tryFindProviderByType(
+                resourceType,
+                oldState.providerMode,
+              );
               if (Option.isNone(providerOption)) {
                 return yield* Effect.die(
                   missingProviderError(resourceType, fqn),
@@ -1337,6 +1427,7 @@ export const make = <A>(
                   action: "delete",
                   state: oldState,
                   provider: provider,
+                  mode: oldState.providerMode,
                   resource: {
                     Namespace: oldState.namespace,
                     FQN: fqn,
@@ -1348,6 +1439,7 @@ export const make = <A>(
                     Provider: Provider(resourceType),
                     RemovalPolicy: oldState.removalPolicy,
                     Adopt: undefined,
+                    Mode: oldState.providerMode,
                     RuntimeContext: undefined!,
                     Providers: undefined,
                   } as ResourceLike,

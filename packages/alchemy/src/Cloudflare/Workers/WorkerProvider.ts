@@ -6,6 +6,7 @@ import * as zones from "@distilled.cloud/cloudflare/zones";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
@@ -26,6 +27,7 @@ import { Stack } from "../../Stack.ts";
 import { cachedFunction } from "../../Util/cached-function.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { localRuntimeServices } from "../LocalRuntime.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import { resolveZoneId } from "../Zone/lookup.ts";
 import {
@@ -790,9 +792,14 @@ const resolveWorkerMetadataHash = ({
   }).pipe(Effect.flatMap((metadata) => sha256Object({ metadata })));
 
 export const WorkerProvider = () =>
-  ProviderLayer.select({
+  ProviderLayer.dual(Worker, {
     live: () => LiveWorkerProvider(),
-    local: () => LocalWorkerProvider(),
+    // The local runtime deps (workerd, WorkerProxy, LocalRuntimeState)
+    // compose INTO the local variant so a live deploy only constructs them
+    // if the local provider is actually demanded (e.g. deleting a local
+    // dev worker's state row). See ProviderLayer.dual.
+    local: () =>
+      LocalWorkerProvider().pipe(Layer.provide(localRuntimeServices())),
   });
 
 export const LiveWorkerProvider = () =>
@@ -2531,6 +2538,16 @@ export const LiveWorkerProvider = () =>
               item.transferredFrom !== undefined
             ) {
               const { transferredFrom: _, ...rest } = item;
+              return rest;
+            }
+            // `queueId` (mode discrimination) and `shim` (dev-mode remote
+            // producer) are alchemy-only metadata on queue bindings — strip
+            // them from the wire shape.
+            if (
+              item.type === "queue" &&
+              (item.queueId !== undefined || item.shim !== undefined)
+            ) {
+              const { queueId: _, shim: __, ...rest } = item;
               return rest;
             }
             return item;

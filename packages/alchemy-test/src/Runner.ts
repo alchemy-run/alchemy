@@ -15,6 +15,7 @@ import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Logger from "effect/Logger";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Semaphore from "effect/Semaphore";
 import { inspect } from "node:util";
@@ -411,6 +412,51 @@ const hookError = (attempt: TestAttempt): string | undefined => {
   return errors.length === 0 ? undefined : errors.join("\n\n");
 };
 
+/**
+ * How long a timed-out test body's interruption (finalizers included) may
+ * run before the runner abandons the fiber and reports the timeout anyway.
+ * Without this bound, a finalizer blocked on the same wedged machinery the
+ * timeout just interrupted (e.g. a `test.provider` scratch destroy against
+ * a hung dev deploy) swallows the report entirely — the test never finishes
+ * and the run dies at the wall clock with no error attribution.
+ */
+const INTERRUPT_GRACE_MS = 10_000;
+
+/**
+ * Run a test body with a timeout that cannot be swallowed by hung
+ * finalizers: on timeout the body fiber is interrupted, its finalizers get
+ * {@link INTERRUPT_GRACE_MS} to settle, and then the fiber is abandoned
+ * (it dies with the run) and the timeout is reported.
+ */
+const runBodyWithTimeout = Effect.fn(function* (
+  body: () => Effect.Effect<unknown, unknown>,
+  timeoutMs: number,
+) {
+  // Detached: a timed-out body whose teardown never settles must not block
+  // the attempt fiber's own completion (a supervised child would).
+  const fiber = yield* Effect.forkDetach(Effect.suspend(body), {
+    startImmediately: true,
+  });
+  const awaited = yield* Fiber.await(fiber).pipe(
+    Effect.timeoutOption(Duration.millis(timeoutMs)),
+  );
+  if (Option.isSome(awaited)) return awaited.value;
+  // Fire-and-forget interrupt: `Fiber.interrupt` AWAITS settlement, which a
+  // hung finalizer never provides. Fire it, then give teardown a bounded
+  // grace before abandoning the fiber (it dies with the process).
+  yield* Effect.sync(() => fiber.interruptUnsafe());
+  const settled = yield* Fiber.await(fiber).pipe(
+    Effect.timeoutOption(Duration.millis(INTERRUPT_GRACE_MS)),
+  );
+  return Exit.fail(
+    new Error(
+      Option.isNone(settled)
+        ? `test timed out after ${timeoutMs}ms (teardown did not settle within ${INTERRUPT_GRACE_MS}ms and was abandoned)`
+        : `test timed out after ${timeoutMs}ms`,
+    ),
+  ) as Exit.Exit<unknown, unknown>;
+});
+
 const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
   const meta = metaOf(ctx.file, test);
   const skipped = isSkipped(test);
@@ -443,10 +489,7 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
     return Effect.gen(function* () {
       const beforeExit = yield* runHooks(before, timeoutMs).pipe(Effect.exit);
       const bodyExit = Exit.isSuccess(beforeExit)
-        ? yield* Effect.suspend(test.body!).pipe(
-            Effect.timeout(Duration.millis(timeoutMs)),
-            Effect.exit,
-          )
+        ? yield* runBodyWithTimeout(test.body!, timeoutMs)
         : undefined;
       return { beforeEach: beforeExit, body: bodyExit };
     }).pipe(

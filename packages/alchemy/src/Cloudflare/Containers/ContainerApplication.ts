@@ -728,7 +728,12 @@ export declare namespace DevContainerImage {
 }
 
 export const ContainerProvider = () =>
-  ProviderLayer.select({
-    live: () => LiveContainerProvider(),
-    local: () => LocalContainerProvider(),
-  });
+  // `{ Type }` instead of `ContainerPlatform` — importing the platform here
+  // would create a module cycle (ContainerPlatform.ts imports this file).
+  ProviderLayer.dual(
+    { Type: ContainerTypeId },
+    {
+      live: () => LiveContainerProvider(),
+      local: () => LocalContainerProvider(),
+    },
+  );
