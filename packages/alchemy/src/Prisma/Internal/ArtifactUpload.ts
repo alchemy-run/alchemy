@@ -6,6 +6,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import { artifactFileStream, type ArtifactFile } from "./ArtifactFile.ts";
+import { PrismaUploadClient } from "./HttpClient.ts";
 
 const ARTIFACT_UPLOAD_TIMEOUT = Duration.minutes(5);
 const UPLOAD_ERROR_BODY_BYTES = 64 * 1024;
@@ -16,7 +17,14 @@ export const executeArtifactUpload = (
   contentType: string,
 ) =>
   Effect.gen(function* () {
-    const http = yield* HttpClient.HttpClient;
+    // Prefer the Prisma-scoped upload client (node transport, provided by
+    // live wiring — presigned upload URLs need explicit Content-Length on
+    // file-backed bodies); fall back to the ambient client so tests can
+    // stub uploads through `HttpClient.HttpClient`.
+    const uploadClient = yield* Effect.serviceOption(PrismaUploadClient);
+    const http = Option.isSome(uploadClient)
+      ? uploadClient.value
+      : yield* HttpClient.HttpClient;
     const request = HttpClientRequest.put(uploadUrl).pipe(
       artifact instanceof Uint8Array
         ? HttpClientRequest.bodyUint8Array(artifact, contentType)

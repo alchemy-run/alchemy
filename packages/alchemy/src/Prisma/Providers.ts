@@ -29,7 +29,10 @@ import {
   ensurePrismaDevDatabase,
 } from "./PrismaDevDatabase.ts";
 import { PrismaClientLive } from "./Client.ts";
-import { PrismaHttpClientLive } from "./Internal/HttpClient.ts";
+import {
+  PrismaHttpClientLive,
+  PrismaUploadClientLive,
+} from "./Internal/HttpClient.ts";
 import { fromProfile } from "./PrismaEnvironment.ts";
 import { Project, ProjectProvider } from "./Project.ts";
 import {
@@ -52,11 +55,20 @@ const managementApiLayer = () =>
     Layer.provideMerge(
       Layer.mergeAll(
         Layer.succeed(AuthProviders, {}),
-        PrismaHttpClientLive,
+        // The Prisma-scoped upload client (node transport) rides the
+        // providers' output so artifact uploads can reach it at op time.
+        PrismaUploadClientLive,
         Layer.provide(ProfileLive, PlatformServices),
         Layer.provide(CredentialsStoreLive, PlatformServices),
       ),
     ),
+    // Provide (NOT provideMerge) the node transport privately: it must serve
+    // only the Prisma management client. Exposing it from `providers()` would
+    // override the ambient HttpClient for every other provider in the stack —
+    // Cloudflare Worker script uploads then go out via node:http, which
+    // streams multipart bodies as `Transfer-Encoding: chunked`, and
+    // api.cloudflare.com never answers chunked uploads.
+    Layer.provide(PrismaHttpClientLive),
   );
 
 /**
