@@ -40,6 +40,10 @@ The connection exposes ready-to-use outputs — a conventional
 `origin` components for poolers like Hyperdrive. See
 [Connections](/prisma/data/connections).
 
+[Branches](/prisma/data/branches) group databases under git-style
+names — a preview branch per stage, promoted to default when it
+ships.
+
 ## Compute
 
 `Prisma.Compute` builds, uploads, and promotes an application next
@@ -64,7 +68,7 @@ const app = yield* Prisma.Compute("api", {
 ```
 
 Deployments are verified against the health check before promotion
-and rolled back when it fails — see [Compute](/prisma/compute).
+and rolled back when it fails — see [Compute](/prisma/compute/apps).
 
 ## Runtime bindings
 

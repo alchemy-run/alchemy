@@ -998,10 +998,17 @@ export default defineConfig({
               label: "Data",
               items: [
                 { label: "Postgres", link: "/prisma/data/postgres" },
+                { label: "Branches", link: "/prisma/data/branches" },
                 { label: "Connections", link: "/prisma/data/connections" },
               ],
             },
-            { label: "Compute", link: "/prisma/compute" },
+            {
+              label: "Compute",
+              items: [
+                { label: "Apps", link: "/prisma/compute/apps" },
+                { label: "Deployments", link: "/prisma/compute/deployments" },
+              ],
+            },
             {
               label: "Guides",
               items: [

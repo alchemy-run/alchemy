@@ -1,12 +1,12 @@
 ---
-title: Compute
-description: Prisma Compute apps as Stack resources — build, upload, health-check, promote, and roll back deployments next to the database they use.
+title: Apps
+description: Prisma Compute apps as Stack resources — framework builds or Effect-native services, env wiring, custom domains, and a local dev command.
 ---
 
 `Prisma.Compute` deploys an application onto Prisma's managed
 runtime. One resource covers the whole path: build (optional),
-upload, deploy, health-check, promote — and roll back when the new
-deployment doesn't converge.
+upload, deploy, health-check, promote — see
+[Deployments](/prisma/compute/deployments) for the lifecycle.
 
 ## Framework apps
 
@@ -36,10 +36,10 @@ const app = yield* Prisma.Compute("api", {
 
 The server must listen on `PORT` (injected at runtime). With
 `build: "auto"` — the default when `path` points at a recognizable
-app — alchemy detects the framework and derives the build for you.
+app — alchemy detects the framework (Bun, Next.js, Nuxt, Astro,
+TanStack Start, NestJS) and derives the build for you.
 
-`app.url` is the deployed endpoint, and `destroyOldDeployment`
-cleans up the previous generation once the new one is promoted.
+`app.url` is the deployed endpoint.
 
 ## Effect-native apps
 
@@ -64,13 +64,6 @@ export default Prisma.Compute(
   }).pipe(Effect.provide(Prisma.ConnectBinding)),
 );
 ```
-
-## Health checks and promotion
-
-Every deploy creates a new deployment, probes `healthCheck.path`
-until it answers, and only then promotes it to receive traffic. A
-deployment that never becomes healthy is destroyed and the previous
-one keeps serving — a failed deploy never takes the app down.
 
 ## Custom domains
 
@@ -99,6 +92,8 @@ const app = yield* Prisma.Compute("web", {
 
 ## Where next
 
+- [Deployments](/prisma/compute/deployments) — health-checked
+  promotion, rollback, and deployment reuse.
 - [Connections](/prisma/data/connections) — the env and binding
   wiring in detail.
 

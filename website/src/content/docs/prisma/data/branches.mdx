@@ -1,0 +1,85 @@
+---
+title: Branches
+description: Prisma branches group databases under git-style names — preview branches per stage, default-branch promotion, and database attachment.
+---
+
+A `Prisma.Branch` groups databases under a git-style name inside a
+project. Branches are how a project separates production data from
+previews: the default branch carries the `production` role, every
+other branch is a `preview`.
+
+```typescript
+import * as Prisma from "alchemy/Prisma";
+
+const branch = yield* Prisma.Branch("preview", { project });
+```
+
+`gitName` is optional — omitted, alchemy generates a stable physical
+name. Pass one when the branch should mirror a real git branch:
+
+```typescript
+const branch = yield* Prisma.Branch("feature", {
+  project,
+  gitName: "feature/search",
+});
+```
+
+## Attaching databases
+
+A database joins a branch by `branchId` (or `branchGitName`):
+
+```typescript
+const previewDb = yield* Prisma.Postgres("preview-db", {
+  project,
+  branchId: branch.branchId,
+});
+```
+
+Compute apps attach the same way — an app on a preview branch gets
+the `preview` environment class, so its environment variables stay
+separate from production's.
+
+## A branch per stage
+
+Branch names can come from the Stack's stage, giving every preview
+stage its own branch — and the databases and apps attached to it —
+that tears down with the stage:
+
+```typescript
+import { Stage } from "alchemy";
+
+const stage = yield* Stage;
+
+const branch = yield* Prisma.Branch("stage", {
+  project,
+  gitName: `preview/${stage}`,
+});
+```
+
+## Default-branch promotion
+
+`isDefault: true` promotes the branch, atomically demoting the
+current default. The Management API only supports promotion — a
+demotion happens by promoting another branch — and alchemy records
+the displaced branch so destroying the resource can restore it:
+
+```typescript
+const release = yield* Prisma.Branch("release", {
+  project,
+  gitName: "release/next",
+  isDefault: true,
+});
+```
+
+The production branch itself is owned by the project and cannot be
+deleted directly — delete the owning `Prisma.Project` instead.
+
+## Where next
+
+- [Postgres](/prisma/data/postgres) — projects and databases.
+- [Connections](/prisma/data/connections) — credentials for the
+  databases on a branch.
+
+Reference:
+
+- [Branch API reference](/providers/prisma/branch)

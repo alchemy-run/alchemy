@@ -42,8 +42,7 @@ interrupted create recovers instead of duplicating the database.
 ## Branches
 
 A `Prisma.Branch` groups databases under a git-style name, and a
-database attaches to one by `branchId` (or `branchGitName`). Omit
-`gitName` and alchemy generates one:
+database attaches to one by `branchId` (or `branchGitName`):
 
 ```typescript
 const branch = yield* Prisma.Branch("preview", { project });
@@ -53,6 +52,9 @@ const previewDb = yield* Prisma.Postgres("preview-db", {
   branchId: branch.branchId,
 });
 ```
+
+See [Branches](/prisma/data/branches) for preview-per-stage
+patterns and default-branch promotion.
 
 ## Local dev
 
@@ -78,7 +80,7 @@ dev session; the default (`"stateful"`) keeps data across restarts.
 
 - [Connections](/prisma/data/connections) — credentials, connection
   strings, and origins for Hyperdrive.
-- [Compute](/prisma/compute) — deploy an app next to the database.
+- [Compute](/prisma/compute/apps) — deploy an app next to the database.
 
 Reference:
 
