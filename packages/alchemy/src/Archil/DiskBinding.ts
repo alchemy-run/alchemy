@@ -8,8 +8,10 @@ import type { Disk } from "./Disk.ts";
 import type { ExecClient } from "./Exec.ts";
 import type { GrepClient } from "./Grep.ts";
 import type { DiskConnection } from "./Connect.ts";
+import type { ForkClient } from "./Fork.ts";
 import {
   authorizeWith,
+  forkBranch,
   makeConnection,
   type ArchilAuth,
 } from "./RuntimeAuth.ts";
@@ -83,6 +85,21 @@ export const makeConnectionClient = (
   diskId: Effect.Effect<string>,
   region: Effect.Effect<ArchilRegion>,
 ): DiskConnection => makeConnection(auth, diskId, region);
+
+export const makeForkClient = (
+  auth: ArchilAuth,
+  diskId: Effect.Effect<string>,
+  region: Effect.Effect<ArchilRegion>,
+): ForkClient =>
+  Effect.fn("Archil.Fork")(function* (
+    name: string,
+    options?: { from?: string; fromBranch?: string },
+  ) {
+    const branch = yield* forkBranch(auth, diskId, region, name, options);
+    // A branch carries its own filesystem id, so it is addressed like any
+    // other disk.
+    return makeConnection(auth, Effect.succeed(branch.filesystemId), region);
+  });
 
 export const makeExecClient = (
   auth: ArchilAuth,

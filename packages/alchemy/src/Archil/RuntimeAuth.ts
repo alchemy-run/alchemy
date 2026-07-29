@@ -16,6 +16,7 @@ import {
   grepDisk,
   listBranches,
   listCheckpoints,
+  NoCheckpoint,
   removeDiskUser,
   type DiskStatus,
   type DiskUserSpec,
@@ -85,6 +86,69 @@ const waitAvailable = (region: ArchilRegion, diskId: string) =>
     }),
     Effect.asVoid,
   );
+
+/**
+ * Fork a branch of `diskId`, shared by `Connect.fork` and the `Fork`
+ * binding.
+ *
+ * Idempotent by branch name: an existing branch is returned as-is rather
+ * than re-forked, so the per-user call is safe to make on every request.
+ * With no explicit checkpoint the newest `committed` one is used — Archil
+ * lists checkpoints oldest-first, so that is the last committed entry.
+ */
+export const forkBranch = (
+  auth: ArchilAuth,
+  id: Effect.Effect<string>,
+  region: Effect.Effect<ArchilRegion>,
+  name: string,
+  options?: { from?: string; fromBranch?: string },
+) =>
+  Effect.gen(function* () {
+    const currentRegion = yield* region;
+    const diskId = yield* id;
+
+    const existing = yield* auth.authorize(
+      listBranches({ region: currentRegion, diskId }),
+    );
+    const already = existing.find((b) => b.branchName === name);
+    if (already !== undefined) return already;
+
+    const from =
+      options?.from ??
+      (yield* latestCheckpoint(
+        auth,
+        currentRegion,
+        diskId,
+        options?.fromBranch,
+      ));
+    return yield* auth.authorize(
+      createBranch({
+        region: currentRegion,
+        diskId,
+        branchName: name,
+        fromCheckpoint: from,
+        fromBranch: options?.fromBranch,
+      }),
+    );
+  });
+
+const latestCheckpoint = (
+  auth: ArchilAuth,
+  region: ArchilRegion,
+  diskId: string,
+  branch: string | undefined,
+) =>
+  Effect.gen(function* () {
+    const checkpoints = yield* auth.authorize(
+      listCheckpoints({ region, diskId, branch }),
+    );
+    const committed = checkpoints.filter((c) => c.status === "committed");
+    const latest = committed[committed.length - 1];
+    if (latest === undefined) {
+      return yield* new NoCheckpoint({ diskId, branch });
+    }
+    return latest.checkpointName;
+  });
 
 /**
  * Build a {@link DiskConnection} over a resolved disk id + region. Derived
@@ -189,18 +253,10 @@ export const makeConnection = (
     }),
     fork: Effect.fn("Archil.Connect.fork")(function* (
       name: string,
-      options: { from: string; fromBranch?: string },
+      options?: { from?: string; fromBranch?: string },
     ) {
       const currentRegion = yield* region;
-      const branch = yield* auth.authorize(
-        createBranch({
-          region: currentRegion,
-          diskId: yield* id,
-          branchName: name,
-          fromCheckpoint: options.from,
-          fromBranch: options.fromBranch,
-        }),
-      );
+      const branch = yield* forkBranch(auth, id, region, name, options);
       return {
         // A branch carries its own filesystem id, so it is addressed like
         // any other disk.

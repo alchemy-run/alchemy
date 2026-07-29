@@ -11,6 +11,7 @@ import type {
   DiskData,
   DiskNotFound,
   DiskUserSpec,
+  NoCheckpoint,
   ExecError,
   ExecResult,
   GrepError,
@@ -112,11 +113,13 @@ export interface DiskConnection {
   /**
    * Fork a **branch** of this disk from one of its checkpoints and connect
    * to it — a copy-on-write clone of the data, unlike {@link create}.
+   * Idempotent by name: an existing branch is returned rather than
+   * re-forked.
    *
    * Writes on the branch are isolated from this disk and from sibling
-   * branches. The checkpoint must be `committed`; take checkpoints
-   * out-of-band from a mounted disk (`archil checkpoints create`), as the
-   * control plane exposes no route for creating them.
+   * branches. With no `from`, the newest `committed` checkpoint is used;
+   * take checkpoints out-of-band from a mounted disk (`archil checkpoints
+   * create`), as the control plane exposes no route for creating them.
    *
    * Branches cannot be deleted — Archil exposes no delete route — so prefer
    * {@link create} for workspaces that need to be reclaimed.
@@ -126,13 +129,17 @@ export interface DiskConnection {
    */
   fork(
     name: string,
-    options: {
-      /** Checkpoint to fork from. */
-      from: string;
+    options?: {
+      /** Checkpoint to fork from. @default the newest committed checkpoint */
+      from?: string;
       /** Branch the checkpoint was taken on. Omit for the root branch. */
       fromBranch?: string;
     },
-  ): Effect.Effect<ForkedDisk, DiskNotFound | CommonError, RuntimeContext>;
+  ): Effect.Effect<
+    ForkedDisk,
+    DiskNotFound | NoCheckpoint | CommonError,
+    RuntimeContext
+  >;
   /** List this disk's checkpoints — the snapshots {@link fork} can use. */
   checkpoints(options?: {
     branch?: string;

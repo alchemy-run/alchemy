@@ -89,6 +89,17 @@ export class ApiTokenNotFound extends Data.TaggedError("ApiTokenNotFound")<{
   message: string;
 }> {}
 
+/**
+ * A fork was requested with no explicit checkpoint and the disk has no
+ * `committed` checkpoint to fork from. Checkpoints are taken from a mounted
+ * disk (`archil checkpoints create <mountpoint> <name>`) — the control plane
+ * exposes no route for creating them.
+ */
+export class NoCheckpoint extends Data.TaggedError("NoCheckpoint")<{
+  diskId: string;
+  branch?: string;
+}> {}
+
 /** The exec command hit the server-side timeout (HTTP 504). */
 export class ExecTimeout extends Data.TaggedError("ExecTimeout")<{
   message: string;
