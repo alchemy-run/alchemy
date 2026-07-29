@@ -22,20 +22,28 @@ import type {
 import type { Disk } from "./Disk.ts";
 
 /**
- * A mount in a multi-disk {@link DiskConnection.execWith}: another
- * connection, a raw disk ID, or a spec selecting a subdirectory and/or
- * marking the mount read-only.
+ * A disk mounted into an exec container, narrowed by chaining:
+ *
+ * ```typescript
+ * logs                          // whole disk, read-write
+ * logs.readonly()               // whole disk, writes fail with EROFS
+ * logs.subdir("app/2026")       // that subtree exposed as the mount root
+ * logs.subdir("app").readonly() // both
+ * ```
  */
-export type ExecMount =
-  | string
-  | DiskConnection
-  | {
-      disk: string | DiskConnection;
-      /** Subdirectory of the disk to expose (relative, no `.`/`..`). */
-      subdirectory?: string;
-      /** Mount read-only — writes fail with EROFS. @default false */
-      readOnly?: boolean;
-    };
+export interface DiskMount {
+  /**
+   * Expose only this subtree at the mountpoint, as if it were the disk's
+   * root. Relative, no `.`/`..` segments. The command cannot path out of
+   * it — pair with {@link readonly} to sandbox untrusted commands.
+   */
+  subdir(path: string): DiskMount;
+  /** Mount read-only — writes fail with `EROFS`. */
+  readonly(): DiskMount;
+}
+
+/** Anything accepted as a mount: a connection, a raw disk ID, or a {@link DiskMount}. */
+export type MountRef = string | DiskConnection | DiskMount;
 
 /**
  * A live connection to one Archil disk: run commands on it, inspect it, and
@@ -46,24 +54,35 @@ export type ExecMount =
  * {@link create} and {@link fork} inherit this connection's region and
  * credentials.
  */
-export interface DiskConnection {
+export interface DiskConnection extends DiskMount {
   /** This disk's ID. */
   readonly id: Effect.Effect<string, never, RuntimeContext>;
   /**
-   * Run a bash command in an ephemeral container with this disk mounted at
-   * `/mnt/archil`. Non-zero exit codes are returned, not raised.
+   * Run a bash command in an ephemeral container.
+   *
+   * With no `mounts`, this disk is mounted at `/mnt/archil`:
+   * ```typescript
+   * yield* data.exec("wc -l /mnt/archil/*.csv");
+   * ```
+   *
+   * With `mounts`, each entry is mounted at `/mnt/archil/<key>` and this
+   * disk is *not* implicitly mounted — list it if you want it, so every
+   * path in the command is visible in the call:
+   * ```typescript
+   * yield* data.exec("wc -l /mnt/archil/logs/*.log > /mnt/archil/data/n", {
+   *   data,
+   *   logs: logs.readonly(),
+   * });
+   * ```
+   *
+   * Non-zero exit codes are returned, not raised. All disks must live in
+   * this connection's region; activation is atomic (every disk mounts or
+   * none do).
    */
-  exec(command: string): Effect.Effect<ExecResult, ExecError, RuntimeContext>;
-  /**
-   * Run a bash command with several disks mounted, each at
-   * `/mnt/archil/<key>` — including this one, which is *not* implicitly
-   * mounted, so every path in the command is explicit. All disks must live
-   * in this connection's region. Activation is atomic.
-   */
-  execWith(request: {
-    disks: Record<string, ExecMount>;
-    command: string;
-  }): Effect.Effect<ExecResult, ExecError, RuntimeContext>;
+  exec(
+    command: string,
+    mounts?: Record<string, MountRef>,
+  ): Effect.Effect<ExecResult, ExecError, RuntimeContext>;
   /** Parallel `grep -E` across this disk, fanned out over containers. */
   grep(
     request: GrepRequest,
@@ -239,12 +258,17 @@ export interface ForkedDisk {
  * @section Multiple Disks
  * @example Aggregate across disks in one container
  * ```typescript
- * yield* data.execWith({
- *   disks: {
- *     data,
- *     logs: { disk: logs, readOnly: true },
- *   },
- *   command: "wc -l /mnt/archil/logs/*.log > /mnt/archil/data/lines.txt",
+ * yield* data.exec(
+ *   "wc -l /mnt/archil/logs/*.log > /mnt/archil/data/lines.txt",
+ *   { data, logs: logs.readonly() },
+ * );
+ * ```
+ *
+ * @example Scope a command to one tenant's subtree
+ * The command sees that subtree as its root and cannot path out of it.
+ * ```typescript
+ * yield* data.exec("ls /mnt/archil/work", {
+ *   work: shared.subdir(`tenants/${tenantId}`).readonly(),
  * });
  * ```
  *

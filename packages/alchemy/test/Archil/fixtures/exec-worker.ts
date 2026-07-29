@@ -36,7 +36,10 @@ export default class ArchilExecWorker extends Cloudflare.Worker<ArchilExecWorker
 
         if (request.url.startsWith("/static")) {
           const result = yield* exec(
-            "echo worker-was-here > /mnt/archil/from-worker.txt && cat /mnt/archil/from-worker.txt",
+            "echo worker-was-here > /mnt/archil/from-worker.txt && " +
+              "mkdir -p /mnt/archil/nested && " +
+              "echo inner > /mnt/archil/nested/inner.txt && " +
+              "cat /mnt/archil/from-worker.txt",
           ).pipe(Effect.orDie);
           return yield* HttpServerResponse.json(result);
         }
@@ -52,10 +55,22 @@ export default class ArchilExecWorker extends Cloudflare.Worker<ArchilExecWorker
 
         if (request.url.startsWith("/multi")) {
           const result = yield* data
-            .execWith({
-              disks: { data },
-              command: "cat /mnt/archil/data/from-worker.txt",
-            })
+            .exec("cat /mnt/archil/data/from-worker.txt", { data })
+            .pipe(Effect.orDie);
+          return yield* HttpServerResponse.json(result);
+        }
+
+        if (request.url.startsWith("/scoped")) {
+          // A subdirectory mount exposes only that subtree, read-only, so
+          // the command cannot see or write the rest of the disk.
+          const result = yield* data
+            .exec(
+              // Sees the subtree's own file, and NOT the disk-root file that
+              // lives outside it.
+              "cat /mnt/archil/only/inner.txt && " +
+                "! test -e /mnt/archil/only/from-worker.txt",
+              { only: data.subdir("nested").readonly() },
+            )
             .pipe(Effect.orDie);
           return yield* HttpServerResponse.json(result);
         }

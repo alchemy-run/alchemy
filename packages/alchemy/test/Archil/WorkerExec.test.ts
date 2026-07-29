@@ -75,6 +75,12 @@ test.provider.skipIf(!hasArchil)(
       expect(multi.exitCode).toBe(0);
       expect(multi.stdout.trim()).toBe("worker-was-here");
 
+      // Subdirectory mount: the container sees the subtree as its root and
+      // cannot reach the file sitting outside it at the disk root.
+      const scoped = yield* fetchExecResult(`${url}/scoped`);
+      expect(scoped.exitCode).toBe(0);
+      expect(scoped.stdout.trim()).toBe("inner");
+
       // Grep: the Worker searches for the marker it wrote (retry through
       // listing consistency).
       const client = yield* HttpClient.HttpClient;

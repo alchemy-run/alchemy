@@ -24,7 +24,7 @@ import {
   type GrepRequest,
   type MountConfig,
 } from "./Api.ts";
-import type { DiskConnection, ExecMount } from "./Connect.ts";
+import type { DiskConnection, DiskMount, MountRef } from "./Connect.ts";
 import { Credentials } from "./Credentials.ts";
 import { DEFAULT_REGION, type ArchilRegion } from "./Region.ts";
 
@@ -151,6 +151,57 @@ const latestCheckpoint = (
   });
 
 /**
+ * Internal shape behind {@link DiskMount} — a disk id plus the narrowing
+ * applied by `.subdir()` / `.readonly()`. Kept structural (rather than a
+ * class) so a plain `DiskConnection` is itself a valid mount.
+ */
+interface MountState {
+  readonly id: Effect.Effect<string>;
+  readonly subdirectory?: string;
+  readonly readOnly?: boolean;
+}
+
+const MountStateKey = "~archil.mount" as const;
+
+type MountCarrier = DiskMount & { readonly [MountStateKey]: MountState };
+
+/** Build the chainable `.subdir()` / `.readonly()` pair over a mount state. */
+const makeMount = (state: MountState): MountCarrier => ({
+  [MountStateKey]: state,
+  subdir: (path: string) =>
+    makeMount({
+      ...state,
+      // Chained subdirs compose, so `a.subdir("x").subdir("y")` is `x/y`.
+      subdirectory:
+        state.subdirectory === undefined
+          ? path
+          : `${state.subdirectory.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`,
+    }),
+  readonly: () => makeMount({ ...state, readOnly: true }),
+});
+
+/** Resolve any accepted mount reference to the wire shape. */
+const toMountSpec = (
+  mount: MountRef,
+): Effect.Effect<string | ExecMountSpec, never, RuntimeContext> =>
+  Effect.gen(function* () {
+    if (typeof mount === "string") return mount;
+    const state = (mount as Partial<MountCarrier>)[MountStateKey];
+    if (state === undefined) {
+      // A bare `DiskConnection` with no narrowing: mount its root.
+      return yield* (mount as DiskConnection).id;
+    }
+    const disk = yield* state.id;
+    return state.subdirectory === undefined && state.readOnly === undefined
+      ? disk
+      : {
+          disk,
+          subdirectory: state.subdirectory,
+          readOnly: state.readOnly,
+        };
+  });
+
+/**
  * Build a {@link DiskConnection} over a resolved disk id + region. Derived
  * connections (`create`, `fork`, `open`) reuse the same auth and region, so
  * everything reachable from a bound disk stays inside its blast radius.
@@ -160,36 +211,27 @@ export const makeConnection = (
   id: Effect.Effect<string>,
   region: Effect.Effect<ArchilRegion>,
 ): DiskConnection => {
+  const mount = makeMount({ id });
   const connection: DiskConnection = {
     id,
-    exec: Effect.fn("Archil.Connect.exec")(function* (command: string) {
-      return yield* auth.authorize(
-        execDisk({ region: yield* region, diskId: yield* id, command }),
-      );
-    }),
-    execWith: Effect.fn("Archil.Connect.execWith")(function* (request: {
-      disks: Record<string, ExecMount>;
-      command: string;
-    }) {
+    subdir: mount.subdir,
+    readonly: mount.readonly,
+    exec: Effect.fn("Archil.Connect.exec")(function* (
+      command: string,
+      mounts?: Record<string, MountRef>,
+    ) {
+      // No mounts: the single-disk endpoint, this disk at /mnt/archil.
+      if (mounts === undefined) {
+        return yield* auth.authorize(
+          execDisk({ region: yield* region, diskId: yield* id, command }),
+        );
+      }
       const disks: Record<string, string | ExecMountSpec> = {};
-      for (const [path, mount] of Object.entries(request.disks)) {
-        if (typeof mount === "string") {
-          disks[path] = mount;
-        } else if ("disk" in mount) {
-          disks[path] = {
-            disk:
-              typeof mount.disk === "string"
-                ? mount.disk
-                : yield* mount.disk.id,
-            subdirectory: mount.subdirectory,
-            readOnly: mount.readOnly,
-          };
-        } else {
-          disks[path] = yield* mount.id;
-        }
+      for (const [path, ref] of Object.entries(mounts)) {
+        disks[path] = yield* toMountSpec(ref);
       }
       return yield* auth.authorize(
-        exec({ region: yield* region, disks, command: request.command }),
+        exec({ region: yield* region, disks, command }),
       );
     }),
     grep: Effect.fn("Archil.Connect.grep")(function* (request: GrepRequest) {
