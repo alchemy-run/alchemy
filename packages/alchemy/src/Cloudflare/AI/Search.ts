@@ -391,7 +391,7 @@ export const Search = (id: string, props: Props) =>
   }).pipe(CoreNamespace.push(id));
 
 /** Drop `undefined` entries; return `undefined` when nothing is left. */
-const clean = <T extends Record<string, unknown>>(
+const clean = <T extends object>(
   obj: T,
 ): { [K in keyof T]: T[K] } | undefined => {
   const entries = Object.entries(obj).filter(([, v]) => v !== undefined);
