@@ -61,7 +61,7 @@ const parseEvents = (
   if (response.events?.events) {
     for (const event of response.events.events) {
       const ts = new Date(event.timestamp);
-      const meta = event.$metadata;
+      const meta = event.metadata;
       const msg =
         meta.message ??
         (meta.level === "error"
@@ -155,7 +155,7 @@ export const CloudflareLogs = Effect.gen(function* () {
       const { id: tailId, url } = yield* createScriptTail({
         scriptName: opts.scriptName,
         accountId: opts.accountId,
-        body: { filters: [] },
+        filters: [],
       });
 
       const socket = yield* Socket.makeWebSocket(url, {
