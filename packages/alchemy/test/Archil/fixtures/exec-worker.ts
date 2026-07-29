@@ -1,6 +1,7 @@
 import * as Archil from "@/Archil/index.ts";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { WorkerDisk } from "./disks.ts";
@@ -21,9 +22,12 @@ export default class ArchilExecWorker extends Cloudflare.Worker<ArchilExecWorker
     main: import.meta.url,
   },
   Effect.gen(function* () {
+    // Disk-scoped capabilities: the module-scope resource is bound directly,
+    // the same shape as `Cloudflare.R2.ReadBucket(TestBucket)`.
+    const exec = yield* Archil.Exec(WorkerDisk);
+    const grep = yield* Archil.Grep(WorkerDisk);
+    // Account-scoped client for the dynamic half (disks with no resource).
     const archil = yield* Archil.Client();
-    // The disk resource is declared at module scope and passed straight in;
-    // its ID and region are read through the resource's own accessors.
     const data = yield* archil.disk(WorkerDisk);
 
     return {
@@ -31,22 +35,18 @@ export default class ArchilExecWorker extends Cloudflare.Worker<ArchilExecWorker
         const request = yield* HttpServerRequest;
 
         if (request.url.startsWith("/static")) {
-          const result = yield* data
-            .exec(
-              "echo worker-was-here > /mnt/archil/from-worker.txt && cat /mnt/archil/from-worker.txt",
-            )
-            .pipe(Effect.orDie);
+          const result = yield* exec(
+            "echo worker-was-here > /mnt/archil/from-worker.txt && cat /mnt/archil/from-worker.txt",
+          ).pipe(Effect.orDie);
           return yield* HttpServerResponse.json(result);
         }
 
         if (request.url.startsWith("/grep")) {
-          const result = yield* data
-            .grep({
-              directory: "",
-              pattern: "worker-was-here",
-              recursive: true,
-            })
-            .pipe(Effect.orDie);
+          const result = yield* grep({
+            directory: "",
+            pattern: "worker-was-here",
+            recursive: true,
+          }).pipe(Effect.orDie);
           return yield* HttpServerResponse.json(result);
         }
 
@@ -80,5 +80,9 @@ export default class ArchilExecWorker extends Cloudflare.Worker<ArchilExecWorker
         return HttpServerResponse.text("ok");
       }),
     };
-  }).pipe(Effect.provide(Archil.ClientHttp)),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(Archil.ClientHttp, Archil.ExecHttp, Archil.GrepHttp),
+    ),
+  ),
 ) {}
