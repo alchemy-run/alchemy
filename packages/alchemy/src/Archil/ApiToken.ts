@@ -64,7 +64,7 @@ type ApiTokenAttributes = ApiToken["Attributes"];
  * An Archil control-plane API token for programmatic access to disks,
  * serverless execution, and disk users.
  *
- * The `Archil.ClientHttp` binding layer mints one of these per host
+ * The `Archil.ConnectHttp` binding layer mints one of these per host
  * Function/Worker automatically, so the deployed code authenticates with
  * its own revocable token instead of your CLI credentials.
  *

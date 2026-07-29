@@ -7,7 +7,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { WorkerDisk } from "./disks.ts";
 
 /**
- * Worker fixture exercising the Archil {@link Archil.Client} binding from
+ * Worker fixture exercising the Archil {@link Archil.Connect} binding from
  * the workerd runtime:
  *
  * - `/static` — exec on a module-scope `Archil.Disk` resource
@@ -22,13 +22,13 @@ export default class ArchilExecWorker extends Cloudflare.Worker<ArchilExecWorker
     main: import.meta.url,
   },
   Effect.gen(function* () {
-    // Disk-scoped capabilities: the module-scope resource is bound directly,
+    // Narrow, single-operation capabilities over the module-scope resource,
     // the same shape as `Cloudflare.R2.ReadBucket(TestBucket)`.
     const exec = yield* Archil.Exec(WorkerDisk);
     const grep = yield* Archil.Grep(WorkerDisk);
-    // Account-scoped client for the dynamic half (disks with no resource).
-    const archil = yield* Archil.Client();
-    const data = yield* archil.disk(WorkerDisk);
+    // Full connection to the same disk — everything dynamic is derived
+    // from it rather than from an account-scoped handle.
+    const data = yield* Archil.Connect(WorkerDisk);
 
     return {
       fetch: Effect.gen(function* () {
@@ -51,8 +51,8 @@ export default class ArchilExecWorker extends Cloudflare.Worker<ArchilExecWorker
         }
 
         if (request.url.startsWith("/multi")) {
-          const result = yield* archil
-            .exec({
+          const result = yield* data
+            .execWith({
               disks: { data },
               command: "cat /mnt/archil/data/from-worker.txt",
             })
@@ -61,13 +61,11 @@ export default class ArchilExecWorker extends Cloudflare.Worker<ArchilExecWorker
         }
 
         if (request.url.startsWith("/dynamic")) {
-          // Provision → exec → destroy, all at request time. The name is
+          // Derive → exec → destroy, all at request time. The name is
           // deterministic and the disk is deleted before responding, so
           // repeated calls are idempotent and leak-free.
           const result = yield* Effect.gen(function* () {
-            const scratch = yield* archil.createDisk({
-              name: "alchemy-archil-dynamic-test",
-            });
+            const scratch = yield* data.create("alchemy-archil-dynamic-test");
             const out = yield* scratch.disk.exec(
               "echo dynamic-was-here > /mnt/archil/scratch.txt && cat /mnt/archil/scratch.txt",
             );
@@ -82,7 +80,7 @@ export default class ArchilExecWorker extends Cloudflare.Worker<ArchilExecWorker
     };
   }).pipe(
     Effect.provide(
-      Layer.mergeAll(Archil.ClientHttp, Archil.ExecHttp, Archil.GrepHttp),
+      Layer.mergeAll(Archil.ConnectHttp, Archil.ExecHttp, Archil.GrepHttp),
     ),
   ),
 ) {}

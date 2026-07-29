@@ -7,7 +7,12 @@ import { Credentials } from "./Credentials.ts";
 import type { Disk } from "./Disk.ts";
 import type { ExecClient } from "./Exec.ts";
 import type { GrepClient } from "./Grep.ts";
-import { authorizeWith, type ArchilAuth } from "./RuntimeAuth.ts";
+import type { DiskConnection } from "./Connect.ts";
+import {
+  authorizeWith,
+  makeConnection,
+  type ArchilAuth,
+} from "./RuntimeAuth.ts";
 import type { ArchilRegion } from "./Region.ts";
 
 /**
@@ -36,8 +41,8 @@ export const makeHttpDiskBinding = <C>(
     const Token = yield* ApiToken;
     return Effect.fn(tag)(function* (disk: Disk) {
       // `Binding.Host` (requirement-free, unlike `Self`) resolves the host on
-      // every platform. The token id matches `ClientHttp`'s so a host binding
-      // both capabilities mints one token, not two.
+      // every platform. All capabilities share one token id per host, so a
+      // host binding several of them mints one token, not one each.
       const host = yield* Binding.Host;
       const token = yield* Token(`${host.LogicalId}ArchilToken`);
       const value = yield* token.value;
@@ -72,6 +77,12 @@ export const makeLocalDiskBinding = <C>(
       return makeClient(auth, yield* disk.diskId, yield* disk.region);
     });
   });
+
+export const makeConnectionClient = (
+  auth: ArchilAuth,
+  diskId: Effect.Effect<string>,
+  region: Effect.Effect<ArchilRegion>,
+): DiskConnection => makeConnection(auth, diskId, region);
 
 export const makeExecClient = (
   auth: ArchilAuth,

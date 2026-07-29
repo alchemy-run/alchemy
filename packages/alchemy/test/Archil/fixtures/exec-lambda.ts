@@ -10,7 +10,7 @@ export class ArchilExecFunction extends Lambda.Function<Lambda.Function>()(
 ) {}
 
 /**
- * Lambda fixture exercising the same Archil {@link Archil.Client} binding
+ * Lambda fixture exercising the same Archil {@link Archil.Connect} binding
  * from the Node runtime — the exact same capability layer as the Worker
  * fixture, proving the binding is host-agnostic.
  */
@@ -20,8 +20,7 @@ export default ArchilExecFunction.make(
     url: true,
   },
   Effect.gen(function* () {
-    const archil = yield* Archil.Client();
-    const data = yield* archil.disk(LambdaDisk);
+    const data = yield* Archil.Connect(LambdaDisk);
 
     return {
       fetch: Effect.gen(function* () {
@@ -40,5 +39,5 @@ export default ArchilExecFunction.make(
         return HttpServerResponse.text("ok");
       }),
     };
-  }).pipe(Effect.provide(Archil.ClientHttp)),
+  }).pipe(Effect.provide(Archil.ConnectHttp)),
 );
