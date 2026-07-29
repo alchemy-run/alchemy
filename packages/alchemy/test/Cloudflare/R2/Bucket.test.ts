@@ -166,7 +166,7 @@ test.provider("destroying a bucket empties its objects first", (stack) =>
       r2.putObject({
         accountId,
         bucketName: bucket.bucketName,
-        objectName: key,
+        objectKey: key,
         contentType: "text/plain",
         body: new Blob([body], { type: "text/plain" }),
       });
