@@ -19,6 +19,7 @@ import { AlchemyContext } from "../AlchemyContext.ts";
 import { Unowned } from "../AdoptPolicy.ts";
 import * as Bundle from "../Bundle/Bundle.ts";
 import { findCwdForBundle } from "../Bundle/TempRoot.ts";
+import { createPhysicalName } from "../PhysicalName.ts";
 import { isResolved } from "../Diff.ts";
 import { HttpServer, type HttpEffect } from "../Http.ts";
 import type { InputProps } from "../Input.ts";
@@ -242,9 +243,9 @@ export interface ComputeProps extends PlatformProps {
    */
   project: string | Project;
   /**
-   * App display name.
+   * App display name. If omitted, Alchemy generates a stable physical name.
    */
-  appName: string;
+  appName?: string;
   /**
    * Region where the App is placed.
    *
@@ -559,7 +560,6 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  * ```typescript
  * const app = yield* Prisma.Compute("api", {
  *   project: project.projectId,
- *   appName: "api",
  *   path: "./apps/api",
  *   entrypoint: "server.ts",
  *   port: 3000,
@@ -612,7 +612,6 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  * ```typescript
  * const app = yield* Prisma.Compute("api", {
  *   project: project.projectId,
- *   appName: "api",
  *   path: "./apps/api",
  *   build: {
  *     command: "bun build src/server.ts --target bun --outdir dist",
@@ -631,7 +630,6 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  * ```typescript
  * const app = yield* Prisma.Compute("api", {
  *   project: project.projectId,
- *   appName: "api",
  *   path: "./apps/web",
  *   build: "auto",
  *   destroyOldDeployment: true,
@@ -642,7 +640,6 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  * ```typescript
  * const app = yield* Prisma.Compute("api", {
  *   project: project.projectId,
- *   appName: "api",
  *   artifactPath: "./dist/app.tar.gz",
  *   port: 8080,
  * });
@@ -653,7 +650,6 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  * ```typescript
  * const app = yield* Prisma.Compute("api", {
  *   project,
- *   appName: "api",
  *   path: "./apps/api",
  *   entrypoint: "server.ts",
  *   healthCheck: {
@@ -669,7 +665,6 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  * ```typescript
  * const app = yield* Prisma.Compute("api", {
  *   project: project.projectId,
- *   appName: "api",
  *   path: "./apps/api",
  *   entrypoint: "server.ts",
  *   dev: {
@@ -846,6 +841,9 @@ const desiredComputeBranchId = Effect.fn(function* (
     : { resolved: false as const };
 });
 
+const createAppName = (id: string, appName: string | undefined) =>
+  appName === undefined ? createPhysicalName({ id }) : Effect.succeed(appName);
+
 const findApp = Effect.fn(function* (
   client: PrismaManagementClient,
   projectId: string,
@@ -873,7 +871,7 @@ const findApp = Effect.fn(function* (
 const createApp = (
   client: PrismaManagementClient,
   projectId: string,
-  props: ComputeProps,
+  props: ComputeProps & { appName: string },
   branchId: string,
 ) =>
   client.createApp({
@@ -1675,7 +1673,7 @@ const findExistingApp = Effect.fn(function* (
 const ensureApp = Effect.fn(function* (
   client: PrismaManagementClient,
   projectId: string,
-  props: ComputeProps,
+  props: ComputeProps & { appName: string },
   output: Compute["Attributes"] | undefined,
   observedApp?: ApiApp,
 ) {
@@ -2130,7 +2128,7 @@ export const ComputeProvider = () =>
           // reconcile must rerun and decide from the computed artifact hash.
           return { action: "update" } as const;
         }),
-        read: Effect.fn(function* ({ output, olds }) {
+        read: Effect.fn(function* ({ id, output, olds }) {
           if (output?.local) return output;
           const appId =
             output?.appId && !isPrismaDevId(output.appId)
@@ -2145,7 +2143,12 @@ export const ComputeProvider = () =>
             : yield* Effect.gen(function* () {
                 const projectId = unresolvedProjectIdOf(olds.project);
                 return projectId
-                  ? yield* findApp(client, projectId, olds.appName, olds)
+                  ? yield* findApp(
+                      client,
+                      projectId,
+                      yield* createAppName(id, olds.appName),
+                      olds,
+                    )
                   : undefined;
               });
           if (!app) return undefined;
@@ -2203,10 +2206,11 @@ export const ComputeProvider = () =>
           };
           return appId ? attrs : Unowned(attrs);
         }),
-        reconcile: Effect.fn(function* ({ news, olds, output, bindings }) {
+        reconcile: Effect.fn(function* ({ id, news, olds, output, bindings }) {
           const bindingEnv = activeBindingEnv(bindings);
           const effectiveNews = {
             ...news,
+            appName: yield* createAppName(id, news.appName),
             env: {
               ...bindingEnv,
               ...news.env,
@@ -2845,7 +2849,7 @@ export const ComputeDevProvider = () =>
             appId: output?.appId ?? `dev:${id}`,
             deploymentId: undefined,
             projectId,
-            appName: effectiveNews.appName,
+            appName: effectiveNews.appName ?? id,
             regionId: effectiveNews.regionId ?? "us-east-1",
             deploymentEndpointDomain: localUrl,
             deploymentUrl: localUrl,

@@ -589,6 +589,33 @@ describe("Prisma Connection provider", () => {
     );
   });
 
+  it.effect("defaults the connection name to the logical ID", () => {
+    const created = withSecrets(
+      connection("connection-1", "Connection-aaaaaaaaaaaa"),
+      "new",
+    );
+    let createdName: string | undefined;
+    const client = {
+      getConnection: () => Effect.succeed(undefined),
+      listDatabaseConnections: () => Effect.succeed([]),
+      createConnection: (input: { name: string }) =>
+        Effect.sync(() => {
+          createdName = input.name;
+          return created;
+        }),
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const provider = yield* Connection.Provider;
+      yield* provider.reconcile({
+        ...reconcileInput(),
+        news: { database: "database-1" },
+      });
+      // name omitted -> logical ID prefix + instance identity suffix
+      expect(createdName).toBe("Connection-aaaaaaaaaaaa");
+    }).pipe(Effect.provide(providerLayer(client)));
+  });
+
   it.effect("materializes databaseUrl and parsed origins on reconcile", () => {
     const created = withSecrets(
       connection("connection-1", "api-aaaaaaaaaaaa"),

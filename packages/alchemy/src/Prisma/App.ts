@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import { Unowned } from "../AdoptPolicy.ts";
 import { deepEqual, isResolved } from "../Diff.ts";
+import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import {
@@ -28,9 +29,9 @@ export interface AppProps {
    */
   project: string | Project;
   /**
-   * App display name.
+   * App display name. If omitted, Alchemy generates a stable physical name.
    */
-  displayName: string;
+  displayName?: string;
   /**
    * Region where the App is placed.
    *
@@ -97,7 +98,6 @@ export interface App extends Resource<
  * ```typescript
  * const app = yield* Prisma.App("web", {
  *   project: project.projectId,
- *   displayName: "web",
  *   branchGitName: "main",
  * });
  * ```
@@ -142,6 +142,11 @@ const desiredBranchId = Effect.fn(function* (
     ? { resolved: true as const, id: defaultBranch.id }
     : { resolved: false as const };
 });
+
+const createDisplayName = (id: string, displayName: string | undefined) =>
+  displayName === undefined
+    ? createPhysicalName({ id })
+    : Effect.succeed(displayName);
 
 const findApp = Effect.fn(function* (
   client: PrismaManagementClient,
@@ -220,7 +225,7 @@ export const AppProvider = () =>
         stables: ["appId"],
         list: () =>
           client.listApps().pipe(Effect.map((apps) => apps.map(attrsFrom))),
-        diff: Effect.fn(function* ({ olds, news, output }) {
+        diff: Effect.fn(function* ({ id, olds, news, output }) {
           if (!isInputObject(news)) return undefined;
           if (isPrismaDevId(output?.appId)) {
             return { action: "update" } as const;
@@ -252,13 +257,19 @@ export const AppProvider = () =>
             branchGitName: news.branchGitName,
           };
           if (!isResolved(updateProps)) return undefined;
-          const resolvedUpdateProps = updateProps as Pick<
-            AppProps,
-            "displayName" | "branchId" | "branchGitName"
-          >;
+          const resolvedUpdateProps = {
+            ...(updateProps as Pick<
+              AppProps,
+              "displayName" | "branchId" | "branchGitName"
+            >),
+            displayName: yield* createDisplayName(
+              id,
+              (updateProps as Pick<AppProps, "displayName">).displayName,
+            ),
+          };
           if (!output) {
             return deepEqual(resolvedUpdateProps, {
-              displayName: olds.displayName,
+              displayName: yield* createDisplayName(id, olds.displayName),
               branchId: olds.branchId,
               branchGitName: olds.branchGitName,
             })
@@ -277,7 +288,7 @@ export const AppProvider = () =>
             ? ({ action: "update" } as const)
             : undefined;
         }),
-        read: Effect.fn(function* ({ output, olds }) {
+        read: Effect.fn(function* ({ id, output, olds }) {
           const appId = isPrismaDevId(output?.appId)
             ? undefined
             : output?.appId;
@@ -290,23 +301,29 @@ export const AppProvider = () =>
             : yield* Effect.gen(function* () {
                 const projectId = unresolvedProjectIdOf(olds.project);
                 return projectId
-                  ? yield* findApp(client, projectId, olds.displayName, olds)
+                  ? yield* findApp(
+                      client,
+                      projectId,
+                      yield* createDisplayName(id, olds.displayName),
+                      olds,
+                    )
                   : undefined;
               });
           if (!app) return undefined;
           const attrs = attrsFrom(app);
           return appId ? attrs : Unowned(attrs);
         }),
-        reconcile: Effect.fn(function* ({ news, output }) {
+        reconcile: Effect.fn(function* ({ id, news, output }) {
           yield* validateAppProps(news);
           const projectId = yield* resolveProjectId(news.project);
+          const displayName = yield* createDisplayName(id, news.displayName);
           const branch = yield* desiredBranchId(client, projectId, news);
           if (!branch.resolved) {
             return yield* Effect.fail(
               new Error(
                 news.branchGitName === undefined
-                  ? `Prisma project '${projectId}' has no default branch to attach App '${news.displayName}'. Create or promote a default branch, or specify branchId/branchGitName.`
-                  : `Prisma project '${projectId}' has no branch named '${news.branchGitName}' to attach App '${news.displayName}'.`,
+                  ? `Prisma project '${projectId}' has no default branch to attach App '${displayName}'. Create or promote a default branch, or specify branchId/branchGitName.`
+                  : `Prisma project '${projectId}' has no branch named '${news.branchGitName}' to attach App '${displayName}'.`,
               ),
             );
           }
@@ -324,7 +341,7 @@ export const AppProvider = () =>
             const result = yield* client
               .createApp({
                 projectId,
-                displayName: news.displayName,
+                displayName,
                 regionId: news.regionId,
                 branchId: branch.id,
                 branchGitName: undefined,
@@ -335,7 +352,7 @@ export const AppProvider = () =>
                   created: true,
                 })),
                 Effect.catchIf(isConflict, (conflict) =>
-                  findApp(client, projectId, news.displayName, news).pipe(
+                  findApp(client, projectId, displayName, news).pipe(
                     Effect.flatMap((app) =>
                       app &&
                       output?.appId !== undefined &&
@@ -343,7 +360,7 @@ export const AppProvider = () =>
                         ? Effect.succeed({ app, created: false })
                         : Effect.fail(
                             new Error(
-                              `Prisma app '${news.displayName}' already exists on the requested branch but is not owned by this App resource. Import it with explicit adoption or choose a different display name.`,
+                              `Prisma app '${displayName}' already exists on the requested branch but is not owned by this App resource. Import it with explicit adoption or choose a different display name.`,
                               { cause: conflict },
                             ),
                           ),
@@ -364,17 +381,17 @@ export const AppProvider = () =>
             app,
             news,
           );
-          if (app.name !== news.displayName || needsBranchSync) {
+          if (app.name !== displayName || needsBranchSync) {
             app = yield* client.updateApp(app.id, {
-              displayName: news.displayName,
+              displayName,
               branchId: branch.id,
               branchGitName: undefined,
             });
           }
-          if (app.name !== news.displayName || app.branchId !== branch.id) {
+          if (app.name !== displayName || app.branchId !== branch.id) {
             return yield* Effect.fail(
               new Error(
-                `Prisma App '${app.id}' did not converge to display name '${news.displayName}' and branch '${branch.id ?? "null"}'. Refusing to persist mismatched App state.`,
+                `Prisma App '${app.id}' did not converge to display name '${displayName}' and branch '${branch.id ?? "null"}'. Refusing to persist mismatched App state.`,
               ),
             );
           }

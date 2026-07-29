@@ -26,7 +26,6 @@ export const PrismaDb = Effect.gen(function* () {
   });
   const connection = yield* Connection("PrismaHyperdriveConnection", {
     database,
-    name: "hyperdrive",
   });
   return { project, database, connection };
 });

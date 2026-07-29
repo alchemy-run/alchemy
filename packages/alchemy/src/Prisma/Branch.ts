@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
+import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import {
@@ -26,9 +27,10 @@ export interface BranchProps {
    */
   project: string | Project;
   /**
-   * Git-style branch name.
+   * Git-style branch name. If omitted, Alchemy generates a stable physical
+   * name.
    */
-  gitName: string;
+  gitName?: string;
   /**
    * Promote this branch to be the project's default branch. Setting this to
    * `false` does not demote a current default because the Management API only
@@ -90,11 +92,14 @@ export interface Branch extends Resource<
  * ```typescript
  * const branch = yield* Prisma.Branch("preview", {
  *   project: project.projectId,
- *   gitName: "feature/search",
+ *   gitName: "feature/search", // optional — omitted, a stable name is generated
  * });
  * ```
  */
 export const Branch = Resource<Branch>("Prisma.Branch");
+
+const createGitName = (id: string, gitName: string | undefined) =>
+  gitName === undefined ? createPhysicalName({ id }) : Effect.succeed(gitName);
 
 const findBranch = (
   client: PrismaManagementClient,
@@ -168,7 +173,7 @@ export const BranchProvider = () =>
             )
             .map((branch) => attrsFrom(branch));
         }),
-        diff: Effect.fn(function* ({ olds, news, output }) {
+        diff: Effect.fn(function* ({ id, olds, news, output }) {
           if (!isInputObject(news)) return undefined;
           if (isPrismaDevId(output?.branchId)) {
             return { action: "update" } as const;
@@ -178,10 +183,14 @@ export const BranchProvider = () =>
           const newProjectId = isResolved(news.project)
             ? unresolvedProjectIdOf(news.project)
             : undefined;
+          const newGitName = isResolved(news.gitName)
+            ? yield* createGitName(id, news.gitName)
+            : undefined;
           if (
             concreteIdsChanged(oldProjectId, newProjectId) ||
-            (isResolved(news.gitName) &&
-              news.gitName !== (output?.gitName ?? olds.gitName))
+            (newGitName !== undefined &&
+              newGitName !==
+                (output?.gitName ?? (yield* createGitName(id, olds.gitName))))
           ) {
             return { action: "replace" } as const;
           }
@@ -194,7 +203,7 @@ export const BranchProvider = () =>
           }
           return undefined;
         }),
-        read: Effect.fn(function* ({ output, olds }) {
+        read: Effect.fn(function* ({ id, output, olds }) {
           const branchId = isPrismaDevId(output?.branchId)
             ? undefined
             : output?.branchId;
@@ -207,15 +216,20 @@ export const BranchProvider = () =>
             : yield* Effect.gen(function* () {
                 const projectId = unresolvedProjectIdOf(olds.project);
                 return projectId
-                  ? yield* findBranch(client, projectId, olds.gitName)
+                  ? yield* findBranch(
+                      client,
+                      projectId,
+                      yield* createGitName(id, olds.gitName),
+                    )
                   : undefined;
               });
           if (!branch) return undefined;
           const attrs = attrsFrom(branch, output?.previousDefaultBranchId);
           return branchId === undefined ? Unowned(attrs) : attrs;
         }),
-        reconcile: Effect.fn(function* ({ news, output }) {
+        reconcile: Effect.fn(function* ({ id, news, output }) {
           const projectId = yield* resolveProjectId(news.project);
+          const gitName = yield* createGitName(id, news.gitName);
           let previousDefaultBranchId = output?.previousDefaultBranchId;
           const branchId = isPrismaDevId(output?.branchId)
             ? undefined
@@ -244,14 +258,14 @@ export const BranchProvider = () =>
             previousDefaultBranchId = defaults[0]!.id;
             branch = yield* client
               .createBranch(projectId, {
-                gitName: news.gitName,
+                gitName,
                 isDefault: news.isDefault,
               })
               .pipe(
                 Effect.catchIf(isConflict, () =>
                   Effect.fail(
                     new Error(
-                      `Prisma branch '${news.gitName}' appeared after the adoption check. Refusing to take it over; rerun with adoption enabled if it is the intended branch.`,
+                      `Prisma branch '${gitName}' appeared after the adoption check. Refusing to take it over; rerun with adoption enabled if it is the intended branch.`,
                     ),
                   ),
                 ),
@@ -259,7 +273,7 @@ export const BranchProvider = () =>
           }
           yield* ensureBranchIdentity(branch, {
             projectId,
-            gitName: news.gitName,
+            gitName,
           });
           if (news.isDefault === true && !branch.isDefault) {
             const liveBranches = yield* client.listBranches(projectId);
@@ -279,7 +293,7 @@ export const BranchProvider = () =>
             });
             yield* ensureBranchIdentity(branch, {
               projectId,
-              gitName: news.gitName,
+              gitName,
             });
             if (!branch.isDefault) {
               return yield* Effect.fail(

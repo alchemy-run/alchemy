@@ -64,7 +64,6 @@ export default Alchemy.Stack(
     // `@prisma/dev` URLs from Postgres, so the app keeps the same env names.
     const connection = yield* Prisma.Connection("Connection", {
       database: postgres,
-      name: "web",
     });
 
     // Apply checked-in, transactional Prisma Next migrations before building a

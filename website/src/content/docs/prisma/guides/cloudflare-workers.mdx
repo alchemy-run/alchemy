@@ -14,7 +14,6 @@ const project = yield* Prisma.Project("app", { createDatabase: false });
 const postgres = yield* Prisma.Postgres("db", { project });
 const connection = yield* Prisma.Connection("api", {
   database: postgres,
-  name: "api",
 });
 ```
 

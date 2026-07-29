@@ -3,17 +3,17 @@ title: Connections
 description: Prisma Connections materialize database credentials — a conventional databaseUrl, direct and pooled connection strings, parsed origins for Hyperdrive, and the Connect runtime binding.
 ---
 
-A `Prisma.Connection` is a named credential (an API key) for one
-database. Alchemy appends the resource's instance identity to the
-name so connections stay unambiguous, and every secret output is
-`Redacted` so nothing prints in logs or plan output.
+A `Prisma.Connection` is a credential (an API key) for one
+database. The `name` prop is optional — alchemy derives one from the
+logical ID and appends the resource's instance identity so
+connections stay unambiguous — and every secret output is `Redacted`
+so nothing prints in logs or plan output.
 
 ```typescript
 import * as Prisma from "alchemy/Prisma";
 
 const connection = yield* Prisma.Connection("api", {
   database: postgres,
-  name: "api",
 });
 ```
 
@@ -36,7 +36,6 @@ straight into an app's env:
 ```typescript
 const app = yield* Prisma.Compute("api", {
   project,
-  appName: "api",
   path: "./app",
   env: {
     DATABASE_URL: connection.databaseUrl,
@@ -108,7 +107,6 @@ while keeping the connection's identity:
 ```typescript
 const connection = yield* Prisma.Connection("api", {
   database: postgres,
-  name: "api",
   rotate: true,
 });
 ```

@@ -294,7 +294,7 @@ const connectionDevProvider = () =>
     };
     return {
       connectionId: devId("connection", id),
-      connectionName: news.name,
+      connectionName: news.name ?? id,
       databaseId: attrOrString(news.database, "databaseId"),
       kind: "postgres",
       createdAt: DEV_TIMESTAMP,
@@ -309,7 +309,7 @@ const connectionDevProvider = () =>
 const branchDevProvider = () =>
   devProvider(Branch, ["branchId"], ({ id, news }) => ({
     branchId: devId("branch", id),
-    gitName: news.gitName,
+    gitName: news.gitName ?? id,
     projectId: attrOrString(news.project, "projectId"),
     isDefault: news.isDefault ?? false,
     role: news.isDefault ? "production" : "preview",
@@ -320,7 +320,7 @@ const branchDevProvider = () =>
 const appDevProvider = () =>
   devProvider(App, ["appId"], ({ id, news }) => ({
     appId: devId("app", id),
-    name: news.displayName,
+    name: news.displayName ?? id,
     projectId: attrOrString(news.project, "projectId"),
     regionId: news.regionId ?? "us-east-1",
     branchId: news.branchId ?? null,

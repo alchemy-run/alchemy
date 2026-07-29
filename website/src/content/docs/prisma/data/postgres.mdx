@@ -42,17 +42,15 @@ interrupted create recovers instead of duplicating the database.
 ## Branches
 
 A `Prisma.Branch` groups databases under a git-style name, and a
-database attaches to one by `branchGitName` (or `branchId`):
+database attaches to one by `branchId` (or `branchGitName`). Omit
+`gitName` and alchemy generates one:
 
 ```typescript
-const branch = yield* Prisma.Branch("preview", {
-  project,
-  gitName: "preview/my-feature",
-});
+const branch = yield* Prisma.Branch("preview", { project });
 
 const previewDb = yield* Prisma.Postgres("preview-db", {
   project,
-  branchGitName: "preview/my-feature",
+  branchId: branch.branchId,
 });
 ```
 

@@ -19,7 +19,6 @@ import * as Prisma from "alchemy/Prisma";
 
 const app = yield* Prisma.Compute("api", {
   project,
-  appName: "api",
   path: "./app",
   build: {
     command: "bun run build",
@@ -51,7 +50,7 @@ Cloudflare Worker or Lambda:
 ```typescript
 export default Prisma.Compute(
   "api",
-  { project, appName: "api", main: import.meta.filename },
+  { project, main: import.meta.filename },
   Effect.gen(function* () {
     const db = yield* Prisma.Connect(connection);
     const sql = yield* SQL.Postgres({ url: db.databaseUrl });
@@ -92,7 +91,6 @@ connection bindings, which resolve to the local
 ```typescript
 const app = yield* Prisma.Compute("web", {
   project,
-  appName: "web",
   path: ".",
   dev: { command: "bun run dev" },
   env: { DATABASE_URL: connection.databaseUrl },

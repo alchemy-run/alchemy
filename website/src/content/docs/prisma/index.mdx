@@ -29,9 +29,11 @@ const postgres = yield* Prisma.Postgres("db", {
 
 const connection = yield* Prisma.Connection("api", {
   database: postgres,
-  name: "api",
 });
 ```
+
+Names are optional everywhere — omit them and alchemy generates
+stable physical names from the Stack, logical ID, and stage.
 
 The connection exposes ready-to-use outputs — a conventional
 `databaseUrl`, direct and pooled connection strings, and parsed
@@ -47,7 +49,6 @@ an Effect-native app defined inline:
 ```typescript
 const app = yield* Prisma.Compute("api", {
   project,
-  appName: "api",
   path: "./app",
   build: {
     command: "bun run build",

@@ -42,8 +42,10 @@ export interface ConnectionProps {
    * Human-readable connection name prefix. Alchemy appends the resource
    * instance identity because Prisma permits duplicate connection names and
    * exposes no ownership tags.
+   *
+   * @default the resource's logical ID
    */
-  name: string;
+  name?: string;
   /**
    * Rotate credentials during the next update while keeping the connection ID.
    *
@@ -132,7 +134,6 @@ export interface Connection extends Resource<
  * ```typescript
  * const connection = yield* Prisma.Connection("api", {
  *   database: database.databaseId,
- *   name: "api",
  * });
  * ```
  *
@@ -141,7 +142,6 @@ export interface Connection extends Resource<
  * ```typescript
  * const connection = yield* Prisma.Connection("api", {
  *   database,
- *   name: "api",
  * });
  *
  * const app = yield* Prisma.Compute("api", {
@@ -388,7 +388,7 @@ export const ConnectionProvider = () =>
                 connections.map((c) => attrsFrom(c, {})),
               ),
             ),
-        diff: Effect.fn(function* ({ olds, news, output }) {
+        diff: Effect.fn(function* ({ id, olds, news, output }) {
           if (!isInputObject(news)) return undefined;
           if (isPrismaDevId(output?.connectionId)) {
             return { action: "update" } as const;
@@ -399,10 +399,11 @@ export const ConnectionProvider = () =>
             ? unresolvedDatabaseIdOf(news.database)
             : undefined;
           const resolvedName = isResolved(news.name)
-            ? yield* validateConnectionName(news.name)
+            ? yield* validateConnectionName(news.name ?? id)
             : undefined;
           const nameChanged =
-            resolvedName !== undefined && resolvedName !== olds.name.trim();
+            resolvedName !== undefined &&
+            resolvedName !== (olds.name ?? id).trim();
           if (concreteIdsChanged(oldDatabaseId, newDatabaseId) || nameChanged) {
             return { action: "replace" } as const;
           }
@@ -412,7 +413,7 @@ export const ConnectionProvider = () =>
           }
           return undefined;
         }),
-        read: Effect.fn(function* ({ instanceId, output, olds }) {
+        read: Effect.fn(function* ({ id, instanceId, output, olds }) {
           const connectionId = isPrismaDevId(output?.connectionId)
             ? undefined
             : output?.connectionId;
@@ -446,7 +447,7 @@ export const ConnectionProvider = () =>
 
           const databaseId = unresolvedDatabaseIdOf(olds.database);
           if (!databaseId) return undefined;
-          const name = yield* validateConnectionName(olds.name);
+          const name = yield* validateConnectionName(olds.name ?? id);
           const expectedName = physicalConnectionName(name, instanceId);
           const owned = yield* uniqueConnection(
             client,
@@ -476,9 +477,15 @@ export const ConnectionProvider = () =>
           if (!connection) return undefined;
           return Unowned(attrsFrom(connection, {}));
         }),
-        reconcile: Effect.fn(function* ({ instanceId, news, olds, output }) {
+        reconcile: Effect.fn(function* ({
+          id,
+          instanceId,
+          news,
+          olds,
+          output,
+        }) {
           const databaseId = yield* resolveDatabaseId(news.database);
-          const name = yield* validateConnectionName(news.name);
+          const name = yield* validateConnectionName(news.name ?? id);
           const connectionId = isPrismaDevId(output?.connectionId)
             ? undefined
             : output?.connectionId;
