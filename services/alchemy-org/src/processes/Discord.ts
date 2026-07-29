@@ -27,7 +27,7 @@ import {
   FrontDesk,
   FrontDeskLive,
 } from "../agents/FrontDesk.ts";
-import { Ledger } from "../Ledger.ts";
+import { Ledger } from "../services/Ledger.ts";
 
 /**
  * What the org may ask of the DiscordDesk from code. `mention` is a

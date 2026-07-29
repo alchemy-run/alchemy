@@ -7,7 +7,7 @@ import * as S from "effect/Schema";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import { runProcess } from "../lib/ProcessRunner.ts";
 import { ToolOutputStore } from "../lib/ToolOutputStore.ts";
-import { Ledger } from "../Ledger.ts";
+import { Ledger } from "../services/Ledger.ts";
 import { prLinkKey, testAlchemy } from "../Repos.ts";
 import { body, IssueRef, title } from "../Vocabulary.ts";
 

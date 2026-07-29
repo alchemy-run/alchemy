@@ -1302,7 +1302,7 @@ export const Worker: ResourceClassLike<Worker> &
       never,
       Req | Providers
     >;
-    x<const Id extends string, Shape extends WorkerShape, Req = never>(
+    <const Id extends string, Shape extends WorkerShape, Req = never>(
       id: string,
       props: InputProps<WorkerProps>,
       impl: Effect.Effect<Shape, ConfigError, Req>,

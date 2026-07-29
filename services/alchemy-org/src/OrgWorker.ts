@@ -16,8 +16,8 @@
  */
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Layer from "effect/Layer";
-import { ApprovalsLedger } from "./Approvals.ts";
-import { D1Ledger } from "./LedgerD1.ts";
+import { ApprovalsLedger } from "./services/Approvals.ts";
+import { D1Ledger } from "./services/LedgerD1.ts";
 import { DoctrineSkills, Org } from "./Org.ts";
 import { CodingWorker } from "./skills/Coding.ts";
 import { QualityAssuranceWorker } from "./skills/QualityAssurance.ts";

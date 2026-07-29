@@ -17,8 +17,8 @@ import * as Stream from "effect/Stream";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { Approvals } from "./Approvals.ts";
-import { buildBoard } from "./Board.ts";
+import { Approvals } from "./services/Approvals.ts";
+import { buildBoard } from "./lib/Board.ts";
 import { Issues, PullRequests } from "./Org.ts";
 import { testAlchemy } from "./Repos.ts";
 

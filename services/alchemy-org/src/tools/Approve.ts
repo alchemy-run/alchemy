@@ -2,7 +2,7 @@ import * as AI from "alchemy/AI";
 import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { Approvals } from "../Approvals.ts";
+import { Approvals } from "../services/Approvals.ts";
 import { testAlchemy } from "../Repos.ts";
 import { pr } from "../Vocabulary.ts";
 

@@ -13,7 +13,7 @@ import * as AI from "alchemy/AI";
 import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { Ledger } from "../Ledger.ts";
+import { Ledger } from "../services/Ledger.ts";
 import { prLinkKey, testAlchemy } from "../Repos.ts";
 import SandboxHost from "../services/SandboxHost.ts";
 import {

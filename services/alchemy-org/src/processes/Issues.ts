@@ -26,7 +26,7 @@ import * as Option from "effect/Option";
 import { Engineer, type OpenedPullRequest } from "../agents/Engineer.ts";
 import { IssueOwner, IssueOwnerLive } from "../agents/IssueOwner.ts";
 import { Reviewer } from "../agents/Reviewer.ts";
-import { Ledger } from "../Ledger.ts";
+import { Ledger } from "../services/Ledger.ts";
 import { prLinkKey, testAlchemy } from "../Repos.ts";
 import { Coding } from "../skills/Coding.ts";
 import { MergePullRequest, OpenPullRequest } from "../tools/index.ts";
