@@ -42,6 +42,33 @@ no previous version to split with. `traffic: 0` uploads the version
 without touching the live deployment at all — the equivalent of
 `wrangler versions upload`.
 
+## Percentages replace, they never add
+
+A deployment is a complete routing table, and only the latest one
+routes traffic. Each versioned deploy splits its new version against
+the *stable* side of the current deployment — the version holding the
+majority — so deploying at 10 and then at 20 does not stack two
+canaries:
+
+1. Deploy at `traffic: 10` → new version **v2** at 10%, stable **v1**
+   at 90%.
+2. Deploy at `traffic: 20` → new version **v3** at 20%, split against
+   the majority holder **v1** at 80%. **v2** drops out of routing
+   entirely.
+
+The abandoned version still exists as an upload, but it receives no
+traffic and is no longer part of the current deployment, so a version
+override can no longer reach it either.
+
+This replacement is what makes ramping work: if the code is unchanged
+between the two deploys, v3 is identical to v2 and "v3 at 20%" *is*
+the ramp from 10 to 20. If the code did change, you have swapped
+canaries — the 10% experiment ends and the new code starts fresh at
+20% against the same stable version. Either way there is always
+exactly one stable version and at most one canary per script, because
+Cloudflare deployments hold at most two versions. The stable version
+keeps serving the majority until you promote.
+
 ## Ramp from CI
 
 Hard-coding the percentage means every ramp step is a code change.
