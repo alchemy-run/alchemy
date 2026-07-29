@@ -1,0 +1,181 @@
+import { makeLocalState } from "@/State/LocalState.ts";
+import type { ResourceState } from "@/State/ResourceState.ts";
+import { makeSecretCodec, resolveSecretCodec } from "@/State/SecretCodec.ts";
+import {
+  encodeState,
+  makeStateReviver,
+  reviveState,
+  reviveStateRecursive,
+  REDACTED_MARKER,
+  SECRET_MARKER,
+} from "@/State/StateEncoding.ts";
+import { PlatformServices } from "@/Util/PlatformServices.ts";
+import { describe, expect, it } from "alchemy-test";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
+
+const PASSWORD = Redacted.make("correct horse battery staple");
+const codec = makeSecretCodec(PASSWORD);
+
+const sampleState = {
+  props: {
+    name: "my-worker",
+    apiKey: Redacted.make("sk-live-super-secret"),
+    nested: { tokens: [Redacted.make("t-1"), Redacted.make("t-2")] },
+  },
+  attr: { url: "https://example.com" },
+};
+
+describe("StateEncoding secrets", () => {
+  it("round-trips Redacted values without a codec (legacy plaintext marker)", () => {
+    const json = JSON.stringify(encodeState(sampleState));
+    expect(json).toContain(REDACTED_MARKER);
+    expect(json).toContain("sk-live-super-secret");
+    const revived = JSON.parse(json, reviveState);
+    expect(Redacted.value(revived.props.apiKey)).toBe("sk-live-super-secret");
+    expect(Redacted.value(revived.props.nested.tokens[1])).toBe("t-2");
+  });
+
+  it("encrypts Redacted values with a codec — plaintext never in the output", () => {
+    const json = JSON.stringify(encodeState(sampleState, codec));
+    expect(json).toContain(SECRET_MARKER);
+    expect(json).not.toContain(REDACTED_MARKER);
+    expect(json).not.toContain("sk-live-super-secret");
+    expect(json).not.toContain("t-1");
+    // Non-secret values stay introspectable.
+    expect(json).toContain("my-worker");
+    expect(json).toContain("https://example.com");
+
+    const revived = JSON.parse(json, makeStateReviver(codec));
+    expect(Redacted.value(revived.props.apiKey)).toBe("sk-live-super-secret");
+    expect(Redacted.value(revived.props.nested.tokens[0])).toBe("t-1");
+  });
+
+  it("reviveStateRecursive decrypts __secret__ envelopes", () => {
+    const encoded = encodeState(sampleState, codec);
+    // Simulate the HTTP store: value arrives pre-parsed, not as a JSON string.
+    const roundTripped = JSON.parse(JSON.stringify(encoded));
+    const revived = reviveStateRecursive(roundTripped, codec) as any;
+    expect(Redacted.value(revived.props.apiKey)).toBe("sk-live-super-secret");
+  });
+
+  it("still revives legacy plaintext __redacted__ markers when a codec is active", () => {
+    const legacyJson = JSON.stringify(encodeState(sampleState));
+    const revived = JSON.parse(legacyJson, makeStateReviver(codec));
+    expect(Redacted.value(revived.props.apiKey)).toBe("sk-live-super-secret");
+  });
+
+  it("fails with an actionable error when encrypted state is read without a password", () => {
+    const json = JSON.stringify(encodeState(sampleState, codec));
+    expect(() => JSON.parse(json, reviveState)).toThrow(/ALCHEMY_PASSWORD/);
+  });
+
+  it("fails with an actionable error on a wrong password", () => {
+    const json = JSON.stringify(encodeState(sampleState, codec));
+    const wrong = makeSecretCodec(Redacted.make("not the password"));
+    expect(() => JSON.parse(json, makeStateReviver(wrong))).toThrow(
+      /does not match/,
+    );
+  });
+
+  it.effect(
+    "resolveSecretCodec is undefined when ALCHEMY_PASSWORD is unset",
+    () =>
+      Effect.gen(function* () {
+        const resolved = yield* resolveSecretCodec;
+        expect(resolved).toBeUndefined();
+      }).pipe(
+        Effect.provide(
+          ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })),
+        ),
+      ),
+  );
+
+  it.effect(
+    "resolveSecretCodec builds a working codec from ALCHEMY_PASSWORD",
+    () =>
+      Effect.gen(function* () {
+        const resolved = yield* resolveSecretCodec;
+        expect(resolved).toBeDefined();
+        const ciphertext = resolved!.encrypt("hello");
+        expect(ciphertext).not.toContain("hello");
+        // Interoperates with a codec built directly from the same password.
+        expect(codec.decrypt(ciphertext)).toBe("hello");
+      }).pipe(
+        Effect.provide(
+          ConfigProvider.layer(
+            ConfigProvider.fromEnv({
+              env: { ALCHEMY_PASSWORD: Redacted.value(PASSWORD) },
+            }),
+          ),
+        ),
+      ),
+  );
+
+  it.effect(
+    "LocalState writes encrypted secrets to disk and revives them on read",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const state = yield* makeLocalState();
+        const stack = "state-encoding-secret-codec-test";
+        const key = { stack, stage: "test", fqn: "worker" };
+        const value: ResourceState = {
+          kind: "resource",
+          resourceType: "Test.Resource",
+          namespace: undefined,
+          fqn: "worker",
+          logicalId: "worker",
+          instanceId: "i-1",
+          providerVersion: 1,
+          status: "created",
+          downstream: [],
+          bindings: [],
+          props: { apiKey: Redacted.make("sk-live-super-secret") },
+          attr: { url: "https://example.com" },
+        };
+        yield* state.set({ ...key, value });
+
+        // The raw file on disk must not contain the plaintext secret.
+        const file = path.join(
+          process.cwd(),
+          ".alchemy",
+          "state",
+          stack,
+          "test",
+          "worker.json",
+        );
+        const raw = yield* fs.readFileString(file);
+        expect(raw).toContain(SECRET_MARKER);
+        expect(raw).not.toContain("sk-live-super-secret");
+        // Non-secret state stays introspectable.
+        expect(raw).toContain("https://example.com");
+
+        // Reading through the store decrypts back into a Redacted.
+        const revived = (yield* state.get(key)) as ResourceState;
+        expect(
+          Redacted.value(
+            (revived.props as { apiKey: Redacted.Redacted<string> }).apiKey,
+          ),
+        ).toBe("sk-live-super-secret");
+
+        yield* state.deleteStack({ stack });
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            ConfigProvider.layer(
+              ConfigProvider.fromEnv({
+                env: { ALCHEMY_PASSWORD: Redacted.value(PASSWORD) },
+              }),
+            ),
+            PlatformServices,
+          ),
+        ),
+      ),
+  );
+});

@@ -10,6 +10,7 @@ import { AuthProviders } from "../../Auth/AuthProvider.ts";
 import { withProfileOverride } from "../../Auth/Profile.ts";
 import { Stage } from "../../Stage.ts";
 import * as State from "../../State/index.ts";
+import { resolveSecretCodec } from "../../State/SecretCodec.ts";
 import { encodeState } from "../../State/StateEncoding.ts";
 import * as Clank from "../../Util/Clank.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
@@ -197,8 +198,13 @@ const getCommand = Command.make(
           }
           // encodeState produces a JSON-friendly view: redacted secrets
           // are unwrapped into `{ __redacted__: ... }`, Resources are
-          // flattened, etc. Same shape the store persists.
-          yield* Console.log(JSON.stringify(encodeState(value), null, 2));
+          // flattened, etc. Same shape the store persists. When
+          // ALCHEMY_PASSWORD is set, secrets print as encrypted
+          // `{ __secret__: ... }` envelopes instead of plaintext.
+          const codec = yield* resolveSecretCodec;
+          yield* Console.log(
+            JSON.stringify(encodeState(value, codec), null, 2),
+          );
         }),
       );
     }),

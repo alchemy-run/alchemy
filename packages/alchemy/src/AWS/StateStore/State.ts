@@ -15,7 +15,8 @@ import {
   type PersistedState,
   type StateService,
 } from "../../State/State.ts";
-import { encodeState, reviveState } from "../../State/StateEncoding.ts";
+import { resolveSecretCodec } from "../../State/SecretCodec.ts";
+import { encodeState, makeStateReviver } from "../../State/StateEncoding.ts";
 import { recordStateStoreInit } from "../../Telemetry/Metrics.ts";
 import { AwsAuth } from "../AuthProvider.ts";
 import * as AwsCredentials from "../Credentials.ts";
@@ -165,6 +166,10 @@ export const makeS3State = (options: S3StateOptions = {}) =>
       ? `${options.prefix.replace(/\/+$/, "")}/`
       : "";
 
+    // Encrypts Redacted values at rest when ALCHEMY_PASSWORD is set.
+    const codec = yield* resolveSecretCodec;
+    const reviver = makeStateReviver(codec);
+
     const toError = (cause: unknown) =>
       new StateStoreError({
         message:
@@ -255,7 +260,7 @@ export const makeS3State = (options: S3StateOptions = {}) =>
             : Stream.mkString(Stream.decodeText(result.Body)).pipe(
                 Effect.flatMap((text) =>
                   Effect.try({
-                    try: () => JSON.parse(text, reviveState) as T,
+                    try: () => JSON.parse(text, reviver) as T,
                     catch: (cause) =>
                       new StateStoreError({
                         message: `Failed to parse state object '${key}'`,
@@ -272,7 +277,7 @@ export const makeS3State = (options: S3StateOptions = {}) =>
       s3.putObject({
         Bucket: bucket,
         Key: key,
-        Body: JSON.stringify(encodeState(value), null, 2),
+        Body: JSON.stringify(encodeState(value, codec), null, 2),
         ContentType: "application/json",
       });
 
