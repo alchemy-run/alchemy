@@ -67,6 +67,12 @@
       "worker": "./src/Dashboard/Projections.ts",
       "import": "./lib/Dashboard/Projections.js"
     },
+    "./Dashboard/Viewer": {
+      "types": "./lib/Dashboard/Viewer.d.ts",
+      "bun": "./src/Dashboard/Viewer.ts",
+      "worker": "./src/Dashboard/Viewer.ts",
+      "import": "./lib/Dashboard/Viewer.js"
+    },
     "./AWS/UI": {
       "types": "./lib/AWS/UI.d.ts",
       "bun": "./src/AWS/UI.ts",
