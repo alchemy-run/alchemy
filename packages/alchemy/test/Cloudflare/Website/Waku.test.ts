@@ -6,6 +6,8 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectDirectStatus, expectUrlContains } from "../Utils/Http.ts";
@@ -158,3 +160,137 @@ test.provider(
     }).pipe(logLevel),
   { timeout: 600_000 },
 );
+
+// ─────────────────────────────────────────────────────────────────────
+// Custom worker entry (seam: WakuProps.main → the waku target's
+// user-entry carriage → framework-core's DeployTarget.entry)
+//
+// `main` points the deploy at the user's own module, which wraps waku's
+// emitted handler via `virtual:waku/server-entry` and re-exports the
+// `Counter` Durable Object class — DO classes must live on the deployed
+// worker for their namespace bindings to resolve. Mirrors
+// `Website.Vite`'s "main overrides the worker entry" test.
+// ─────────────────────────────────────────────────────────────────────
+
+test.provider(
+  "Waku: main deploys a custom worker entry hosting a Durable Object",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const rootDir = yield* cloneFixture(fixtureDir, {
+        prefix: "alchemy-waku-main-",
+        tempRoot,
+        entries: [
+          ".gitignore",
+          "package.json",
+          "tsconfig.json",
+          "public",
+          "src",
+        ],
+      });
+
+      const site = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Website.Waku("WakuMainSite", {
+            ...wakuProps(rootDir),
+            // The user's own worker entry: wraps waku's handler (imported
+            // from `virtual:waku/server-entry`) and exports the Counter DO.
+            main: "src/worker-entry.ts",
+            env: {
+              MESSAGE: "waku-main-marker",
+              COUNTER: Cloudflare.DurableObject("Counter", {
+                className: "Counter",
+              }),
+            },
+          });
+        }),
+      );
+
+      expect(site.url).toBeDefined();
+      yield* expectWorkerExists(site.workerName, accountId);
+
+      // The deployed entry is the USER module, not waku's own entry.
+      const entry = yield* fetchJsonReady<{ entry: string }>(
+        `${site.url!}/api/entry`,
+      );
+      expect(entry.entry).toBe("worker-entry");
+
+      // The DO namespace is bound and state increments ACROSS requests —
+      // instance identity on the deployed worker, through the custom entry.
+      const first = yield* fetchJsonReady<{ count: number }>(
+        `${site.url!}/api/counter/increment`,
+      );
+      const second = yield* fetchJsonReady<{ count: number }>(
+        `${site.url!}/api/counter/increment`,
+      );
+      expect(second.count).toBe(first.count + 1);
+
+      const read = yield* fetchJsonReady<{ count: number }>(
+        `${site.url!}/api/counter`,
+      );
+      expect(read.count).toBe(second.count);
+
+      // Wrapping waku's handler keeps every framework route working:
+      // the dynamic RSC page still renders (and still reads bindings).
+      yield* expectUrlContains(`${site.url!}/`, "WAKU_PAGE_MARKER", {
+        timeout: "120 seconds",
+        label: "waku dynamic page through the custom entry",
+      });
+      yield* expectUrlContains(`${site.url!}/`, "MESSAGE=waku-main-marker", {
+        timeout: "60 seconds",
+        label: "waku env binding through the custom entry",
+      });
+
+      // SSG page + public asset still serve from assets alongside the
+      // custom entry.
+      yield* expectUrlContains(
+        `${site.url!}/about`,
+        "WAKU_ABOUT_STATIC_MARKER",
+        {
+          timeout: "60 seconds",
+          label: "waku SSG page with custom entry",
+        },
+      );
+      yield* expectUrlContains(
+        `${site.url!}/hello.txt`,
+        "hello from public/",
+        {
+          timeout: "60 seconds",
+          label: "waku static asset with custom entry",
+        },
+      );
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+    }).pipe(logLevel),
+  { timeout: 600_000 },
+);
+
+/**
+ * GET `url` until it answers 200 with a JSON body (fresh workers.dev URLs
+ * take a few seconds to start serving; DO namespaces can lag the first
+ * deploy). Mirrors Vite.test.ts's helper of the same name.
+ */
+const fetchJsonReady = <T>(url: string) =>
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    return yield* client.get(url).pipe(
+      Effect.flatMap((res) =>
+        res.status === 200
+          ? Effect.flatMap(res.text, (body) =>
+              Effect.try({
+                try: () => JSON.parse(body) as T,
+                catch: () => new Error(`non-json body: ${body}`),
+              }),
+            )
+          : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+      ),
+      Effect.retry({
+        schedule: Schedule.exponential("500 millis"),
+        times: 15,
+      }),
+    );
+  });

@@ -22,6 +22,26 @@ export interface WakuProps<
   Bindings extends WorkerBindingProps = {},
 > extends Omit<WorkerProps<Bindings>, "vite" | "main" | "assets"> {
   /**
+   * Overrides the module that becomes the deployed Worker entry. Relative
+   * paths resolve from {@link rootDir}.
+   *
+   * By default Waku's own RSC server entry is deployed. Point `main` at a
+   * custom module when the deployed Worker must export more than Waku's
+   * fetch handler — e.g. Durable Object classes or additional handlers.
+   * The custom entry wraps Waku's handler by importing it from
+   * `virtual:waku/server-entry` and re-exports the extras:
+   *
+   * ```typescript
+   * // src/worker-entry.ts
+   * import wakuHandler from "virtual:waku/server-entry";
+   * export class Counter extends DurableObject {}
+   * export default {
+   *   fetch: (request, env, ctx) => wakuHandler.fetch(request, env, ctx),
+   * };
+   * ```
+   */
+  main?: string;
+  /**
    * Root directory of the Waku project. Defaults to the process working
    * directory.
    */
@@ -128,6 +148,30 @@ export interface WakuProps<
  * });
  * ```
  *
+ * @section Custom Worker Entry
+ * By default the deployed Worker entry is Waku's own RSC server entry.
+ * When the Worker must export more than Waku's fetch handler — Durable
+ * Object classes, additional handlers — point `main` at your own module
+ * that wraps Waku's handler (imported from `virtual:waku/server-entry`)
+ * and re-exports the extras.
+ *
+ * @example Custom entry hosting a Durable Object
+ * ```typescript
+ * // src/worker-entry.ts
+ * // import wakuHandler from "virtual:waku/server-entry";
+ * // export class Counter extends DurableObject { ... }
+ * // export default { fetch: (req, env, ctx) => wakuHandler.fetch(req, env, ctx) };
+ *
+ * const site = yield* Cloudflare.Website.Waku("Site", {
+ *   main: "src/worker-entry.ts",
+ *   env: {
+ *     COUNTER: Cloudflare.DurableObject("Counter", {
+ *       className: "Counter",
+ *     }),
+ *   },
+ * });
+ * ```
+ *
  * @section Custom Rebuild Scope
  * By default, every non-gitignored file is hashed to decide whether a
  * rebuild is needed. Use `memo` to narrow the scope when your project has
@@ -217,6 +261,10 @@ export const Waku: {
               provider: WAKU_SOURCE_PROVIDER,
               options: {
                 rootDir: props?.rootDir,
+                // Custom worker entry (wraps waku's handler via
+                // `virtual:waku/server-entry`); resolved against `rootDir`
+                // by the source provider.
+                main: props?.main,
                 srcDir: props?.srcDir,
                 distDir: props?.distDir,
                 basePath: props?.basePath,
