@@ -122,6 +122,22 @@ export interface AstroProps<
  * });
  * ```
  *
+ * @section Static Sites
+ * With `astro: { output: "static" }` every page is prerendered at build
+ * time and the deploy is **assets-only**: no server bundle is uploaded —
+ * Cloudflare's asset layer answers every request (including the built
+ * `404.html` via `assets.notFoundHandling: "404-page"`). Session
+ * provisioning is skipped for declared-static sites since no Worker code
+ * runs at request time.
+ *
+ * @example Fully static Astro site
+ * ```typescript
+ * const site = yield* Cloudflare.Website.Astro("Docs", {
+ *   astro: { output: "static" },
+ *   assets: { notFoundHandling: "404-page" },
+ * });
+ * ```
+ *
  * @section Bindings
  * Bind resources through `env` like any other Worker. Astro code reads
  * them via `import { env } from "cloudflare:workers"` (or
@@ -260,9 +276,15 @@ export const Astro: {
           // Auto-provision the KV namespace backing Astro's session API
           // unless the user opted out (`sessionKVBindingName: false`) or
           // already bound their own namespace under the session name.
-          // Resource creation is deduped by logical id, so re-evaluating
-          // this props effect is safe.
-          if (session !== false && env?.[sessionBindingName] === undefined) {
+          // A declared `output: "static"` site is assets-only — no Worker
+          // script runs at request time, so a session namespace could never
+          // be read; skip provisioning it. Resource creation is deduped by
+          // logical id, so re-evaluating this props effect is safe.
+          if (
+            session !== false &&
+            props.astro?.output !== "static" &&
+            env?.[sessionBindingName] === undefined
+          ) {
             const sessions = yield* Namespace(`${id}Session`);
             env = { ...env, [sessionBindingName]: sessions };
           }
