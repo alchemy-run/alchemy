@@ -49,7 +49,7 @@
     "prepare": "husky && bun setup:git && effect-tsgo patch && bun build:cloudflare-tools",
     "publish:npm": "bun run build && bun run --filter alchemy publish:npm",
     "setup": "effect-tsgo patch && bun run download:external",
-    "setup:git": "git config submodule.alternateLocation superproject && git config submodule.alternateErrorStrategy info",
+    "setup:git": "git config include.path ../.gitconfig",
     "sync:submodules": "git submodule sync --recursive && git submodule update --init --recursive",
     "test:cross-version": "bun run test/cross-version-test/run.ts",
     "test:examples": "bun scripts/test-examples.ts",
