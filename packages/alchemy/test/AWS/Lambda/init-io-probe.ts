@@ -3,7 +3,6 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 /**
  * A service whose Layer performs real async I/O during the sandbox's init
@@ -56,12 +55,16 @@ export default class InitIOProbe extends AWS.Lambda.Function<InitIOProbe>()(
         return () =>
           Effect.gen(function* () {
             const config = yield* TraceConfig;
-            return yield* HttpServerResponse.json({
-              nonce: config.nonce,
-              traceLength: config.trace.length,
-              hasUag: config.trace.includes("uag="),
-              initFetches: (globalThis as any).__initFetches ?? 0,
-            }).pipe(Effect.orDie);
+            return {
+              statusCode: 200,
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                nonce: config.nonce,
+                traceLength: config.trace.length,
+                hasUag: config.trace.includes("uag="),
+                initFetches: (globalThis as any).__initFetches ?? 0,
+              }),
+            };
           }).pipe(Effect.provide(services));
       }),
     );

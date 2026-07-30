@@ -1,7 +1,6 @@
 import * as AWS from "@/AWS/index.ts";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 /**
  * Probe for Lambda's Shutdown phase.
@@ -35,7 +34,7 @@ export default class ShutdownProbe extends AWS.Lambda.Function<ShutdownProbe>()(
             yield* Effect.addFinalizer(() =>
               Effect.sync(() => console.log("ALCHEMY_REQUEST_FINALIZED")),
             );
-            return HttpServerResponse.text("ok");
+            return { statusCode: 200, body: "ok" };
           });
       }),
     );
