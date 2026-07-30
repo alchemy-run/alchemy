@@ -247,10 +247,67 @@ there is no in-cluster Helm release record. Charts that rely on
 install/upgrade hooks for correctness should be installed with Helm
 directly.
 
+## Run on SageMaker HyperPod
+
+An EKS cluster can also orchestrate a
+[SageMaker HyperPod](/aws/compute/hyperpod) fleet — persistent,
+health-checked ML compute whose nodes join the cluster as
+ordinary Kubernetes nodes.
+[`AWS.SageMaker.Cluster`](/providers/aws/sagemaker/cluster)
+attaches the fleet to the EKS control plane:
+
+```typescript
+const hyperpod = yield* AWS.SageMaker.Cluster("HyperPod", {
+  orchestrator: { Eks: { ClusterArn: cluster.clusterArn } },
+  vpcConfig: {
+    SecurityGroupIds: [clusterSecurityGroupId],
+    Subnets: network.privateSubnetIds,
+  },
+  instanceGroups: {
+    workers: {
+      InstanceType: "ml.g5.xlarge",
+      InstanceCount: 4,
+      ExecutionRole: role.roleArn,
+      LifeCycleConfig: {
+        SourceS3Uri: script.sourceS3Uri,
+        OnCreate: script.onCreate,
+      },
+    },
+  },
+});
+```
+
+`Deployment` and `Job` then opt onto those nodes with the
+`hyperpod` prop. The instance-group keys carry through to the
+cluster's attributes as types — `hyperpod.instanceGroups.workers`
+is typed per key and a typo'd name is a compile error — so the
+workload is connected to the fleet through the resource graph,
+and a team's `ComputeQuota` submits it through HyperPod task
+governance:
+
+```typescript
+const train = yield* AWS.EKS.Job("Train", {
+  cluster,
+  main: import.meta.url,
+  hyperpod: {
+    instanceGroup: hyperpod.instanceGroups.workers,
+    quota: researchQuota, // → hyperpod-ns-research + Kueue queue label
+    priorityClass: "training",
+  },
+});
+```
+
+See [HyperPod](/aws/compute/hyperpod) for the fleet's
+prerequisites (lifecycle scripts, the dependencies Helm chart,
+EKS auth-mode and version constraints) and the full governance
+surface.
+
 ## Where next
 
 - [VPC & networking](/aws/networking) — what the `Network` helper
   builds under the cluster.
+- [HyperPod](/aws/compute/hyperpod) — run training fleets on this
+  cluster's nodes.
 - [Choosing a runtime](/aws/compute/choosing-a-runtime) — when Lambda or ECS
   is the better fit than running your own Kubernetes workloads.
 - [`Cluster` reference](/providers/aws/eks/cluster),

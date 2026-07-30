@@ -1,4 +1,5 @@
 import * as Cloudflare from "@/Cloudflare";
+import * as Alchemy from "@/index.ts";
 import type { RuntimeContext } from "@/RuntimeContext.ts";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -24,8 +25,15 @@ export default MyContainer.make(
   Effect.gen(function* () {
     // The container reads R2 over a scoped HTTP API token (not the native
     // Worker binding) — this proves the HTTP R2 client works from inside a
-    // container process.
-    const bucket = yield* Cloudflare.R2.ReadWriteBucket(Storage);
+    // container process. `Alchemy.remote()` pins the bucket (and the minted
+    // token) live even under `alchemy dev`: the HTTP client talks to real
+    // Cloudflare, which a `dev:` local bucket can't serve. This is the
+    // FIRST registration site (the container layer builds before the stack
+    // body), so the DO's later undecorated native-binding site inherits the
+    // pin and both paths converge on the same live bucket.
+    const bucket = yield* Cloudflare.R2.ReadWriteBucket(Storage).pipe(
+      Alchemy.remote(),
+    );
 
     const read = (key: string) =>
       bucket.get(key).pipe(

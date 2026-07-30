@@ -243,20 +243,9 @@ export const execStack = Effect.fn(function* ({
     const stack = yield* stackEffect;
 
     yield* Effect.gen(function* () {
-      const updatePlan = yield* Plan.make(
-        destroy
-          ? {
-              ...stack,
-              // zero these out (destroy will treat all as orphans)
-              // TODO(sam): probably better to have Plan.destroy and Plan.update
-              resources: {},
-              bindings: {},
-              actions: {},
-              output: {},
-            }
-          : stack,
-        { force },
-      );
+      const updatePlan = destroy
+        ? yield* Plan.destroy(stack)
+        : yield* Plan.make(stack, { force });
       // The plan is ready — NOW bring up the dashboard, so the tab opens
       // with the plan overlay and the approval prompt in the same breath
       // (see ensureDashboard above).

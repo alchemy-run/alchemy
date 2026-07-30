@@ -36,6 +36,12 @@ import {
   type KubernetesClusterConnection,
 } from "./internal/client.ts";
 import {
+  hyperpodNamespace,
+  hyperpodNodeSelector,
+  hyperpodWorkloadLabels,
+  type HyperPodWorkloadProps,
+} from "./HyperPod.ts";
+import {
   toKubernetesObjectRef,
   type KubernetesObjectDefinition,
   type KubernetesObjectRef,
@@ -76,9 +82,17 @@ export interface DeploymentPropsBase extends PlatformProps {
   /**
    * Kubernetes namespace to deploy into. The namespace must already exist
    * (Auto Mode clusters ship a `default` namespace).
-   * @default "default"
+   * @default "default" (or `hyperpod-ns-<team>` when `hyperpod.quota` is set)
    */
   namespace?: string;
+  /**
+   * Run on SageMaker HyperPod nodes attached to this EKS cluster: pin to an
+   * instance group, keep off unhealthy nodes, and optionally submit through
+   * HyperPod task governance by passing the team's
+   * `AWS.SageMaker.ComputeQuota` (which derives the namespace and Kueue
+   * labels).
+   */
+  hyperpod?: HyperPodWorkloadProps;
   /**
    * HTTP port exposed by the container and the Service.
    * @default 3000
@@ -368,6 +382,7 @@ import { BunServices } from "@effect/platform-bun";
 import { BunHttpServer } from "alchemy/Http";
 import { Stack } from "alchemy/Stack";
 import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
+import { provideProcessTelemetry } from "alchemy/Telemetry";
 import * as Context from "effect/Context";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -400,8 +415,15 @@ const platform = Layer.mergeAll(
 // chain so EKS Pod Identity's container-credentials endpoint
 // (AWS_CONTAINER_CREDENTIALS_FULL_URI + token file) resolves inside the pod.
 const program = tag.pipe(
-  Effect.flatMap((host) => host.RuntimeContext.exports),
-  Effect.flatMap((exports) => exports.program),
+  // Process-lifetime telemetry: built once into the root scope; exporters
+  // batch on their intervals and flush when the scope closes on graceful
+  // shutdown.
+  Effect.flatMap((host) =>
+    host.RuntimeContext.exports.pipe(
+      Effect.flatMap((exports) => exports.program),
+      provideProcessTelemetry(host.RuntimeContext),
+    ),
+  ),
   Effect.provide(
     layer.pipe(Layer.provideMerge(Layer.effect(
       Stack,
@@ -539,9 +561,11 @@ export const DeploymentProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+          const effectiveNamespace = (props: DeploymentProps) =>
+            props.namespace ?? hyperpodNamespace(props.hyperpod) ?? "default";
           if (
-            olds.namespace !== undefined &&
-            (olds.namespace ?? "default") !== (news.namespace ?? "default")
+            olds.cluster?.clusterName !== undefined &&
+            effectiveNamespace(olds) !== effectiveNamespace(news)
           ) {
             return { action: "replace" } as const;
           }
@@ -585,7 +609,8 @@ export const DeploymentProvider = () =>
         }) {
           const connection = toConnection(news.cluster);
           const clusterName = news.cluster.clusterName;
-          const namespace = news.namespace ?? "default";
+          const namespace =
+            news.namespace ?? hyperpodNamespace(news.hyperpod) ?? "default";
           const port = news.port ?? 3000;
           const serviceType = news.serviceType ?? "LoadBalancer";
 
@@ -651,7 +676,10 @@ export const DeploymentProvider = () =>
           // get no region env var — inject it so the bootstrap's
           // `Region.fromEnv()` resolves inside the pod.
           const { region } = yield* AWSEnvironment.current;
-          const labels = news.labels ?? { "app.kubernetes.io/name": baseName };
+          const labels = {
+            ...(news.labels ?? { "app.kubernetes.io/name": baseName }),
+            ...hyperpodWorkloadLabels(news.hyperpod),
+          };
           const containerEnv = {
             ...bindingEnv,
             ...alchemyEnv,
@@ -670,6 +698,7 @@ export const DeploymentProvider = () =>
               metadata: { labels },
               spec: {
                 serviceAccountName,
+                nodeSelector: hyperpodNodeSelector(news.hyperpod),
                 containers: [
                   {
                     name: baseName,

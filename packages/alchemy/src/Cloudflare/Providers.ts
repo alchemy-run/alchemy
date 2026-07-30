@@ -78,7 +78,6 @@ import * as KeylessCertificate from "./KeylessCertificate/index.ts";
 import * as KV from "./KV/index.ts";
 import * as LeakedCredentialCheck from "./LeakedCredentialCheck/index.ts";
 import * as LoadBalancer from "./LoadBalancer/index.ts";
-import { localRuntimeServices } from "./LocalRuntime.ts";
 import * as Logpush from "./Logpush/index.ts";
 import * as LogsControl from "./LogsControl/index.ts";
 import * as MagicCloudNetworking from "./MagicCloudNetworking/index.ts";
@@ -683,7 +682,10 @@ export const providers = () =>
       ),
     ),
     Layer.provide(DockerLive),
-    Layer.provideMerge(localRuntimeServices()),
+    // Note: `localRuntimeServices()` is no longer provided globally — each
+    // local provider composes it into its `ProviderLayer.dual` local thunk,
+    // so workerd machinery only builds when a local variant is actually
+    // demanded (dev runs, or deleting a local-mode row during deploy).
     Layer.provideMerge(CloudflareApiLive()),
     Layer.orDie,
   );

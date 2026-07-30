@@ -32,6 +32,8 @@ pnpm-workspace.yaml
 *.tgz
 *.js
 *.d.ts
+!examples/prisma-tanstack-start/migrations/**/start-contract.d.ts
+!examples/prisma-tanstack-start/migrations/**/end-contract.d.ts
 *.map
 
 .attest

@@ -35,6 +35,12 @@ import {
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
+import {
+  hyperpodNamespace,
+  hyperpodNodeSelector,
+  hyperpodWorkloadLabels,
+  type HyperPodWorkloadProps,
+} from "./HyperPod.ts";
 import { reconcileObjects, deleteObjects } from "./internal/client.ts";
 import type {
   KubernetesObjectDefinition,
@@ -75,9 +81,17 @@ export interface JobPropsBase extends PlatformProps {
   /**
    * Kubernetes namespace to run in. The namespace must already exist (Auto
    * Mode clusters ship a `default` namespace).
-   * @default "default"
+   * @default "default" (or `hyperpod-ns-<team>` when `hyperpod.quota` is set)
    */
   namespace?: string;
+  /**
+   * Run on SageMaker HyperPod nodes attached to this EKS cluster: pin to an
+   * instance group, keep off unhealthy nodes, and optionally submit through
+   * HyperPod task governance by passing the team's
+   * `AWS.SageMaker.ComputeQuota` (which derives the namespace and Kueue
+   * labels).
+   */
+  hyperpod?: HyperPodWorkloadProps;
   /**
    * Number of retries before the Job is marked failed (Kubernetes
    * `backoffLimit`).
@@ -343,6 +357,7 @@ export const makeEksJobBootstrap =
 import { BunServices } from "@effect/platform-bun";
 import { Stack } from "alchemy/Stack";
 import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
+import { provideProcessTelemetry } from "alchemy/Telemetry";
 import * as Context from "effect/Context";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -372,8 +387,15 @@ const platform = Layer.mergeAll(
 // Resolve the bundled program's registered one-shot runners (the shape's
 // \`run\` effect and any host.run work) and execute them to completion.
 const program = tag.pipe(
-  Effect.flatMap((host) => host.RuntimeContext.exports),
-  Effect.flatMap((exports) => exports.program),
+  // Process-lifetime telemetry: built once into the root scope; exporters
+  // batch on their intervals and flush when the scope closes as the
+  // one-shot program completes.
+  Effect.flatMap((host) =>
+    host.RuntimeContext.exports.pipe(
+      Effect.flatMap((exports) => exports.program),
+      provideProcessTelemetry(host.RuntimeContext),
+    ),
+  ),
   Effect.provide(
     layer.pipe(Layer.provideMerge(Layer.effect(
       Stack,
@@ -472,9 +494,11 @@ export const JobProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+          const effectiveNamespace = (props: JobProps) =>
+            props.namespace ?? hyperpodNamespace(props.hyperpod) ?? "default";
           if (
-            olds.namespace !== undefined &&
-            (olds.namespace ?? "default") !== (news.namespace ?? "default")
+            olds.cluster?.clusterName !== undefined &&
+            effectiveNamespace(olds) !== effectiveNamespace(news)
           ) {
             return { action: "replace" } as const;
           }
@@ -515,7 +539,8 @@ export const JobProvider = () =>
         }) {
           const connection = toConnection(news.cluster);
           const clusterName = news.cluster.clusterName;
-          const namespace = news.namespace ?? "default";
+          const namespace =
+            news.namespace ?? hyperpodNamespace(news.hyperpod) ?? "default";
 
           const baseName = yield* toBaseName(id, news);
           const serviceAccountName = output?.serviceAccountName ?? baseName;
@@ -569,7 +594,10 @@ export const JobProvider = () =>
           });
 
           // Synthesize the Kubernetes objects.
-          const labels = news.labels ?? { "app.kubernetes.io/name": baseName };
+          const labels = {
+            ...(news.labels ?? { "app.kubernetes.io/name": baseName }),
+            ...hyperpodWorkloadLabels(news.hyperpod),
+          };
           const containerEnv = {
             ...bindingEnv,
             ...alchemyEnv,
@@ -586,6 +614,7 @@ export const JobProvider = () =>
               metadata: { labels },
               spec: {
                 serviceAccountName,
+                nodeSelector: hyperpodNodeSelector(news.hyperpod),
                 restartPolicy: news.restartPolicy ?? "Never",
                 containers: [
                   {
@@ -620,9 +649,13 @@ export const JobProvider = () =>
           // hash of the spec, and a spec change applies a NEW Job (which
           // runs) while `reconcileObjects` deletes the previous one.
           // CronJobs are mutable and keep the stable base name.
+          // Kubernetes rejects Job names over 63 characters (the API
+          // stamps the name into the batch.kubernetes.io/job-name pod
+          // label, and label values cap at 63) — truncate the base so the
+          // content-address suffix always fits.
           const jobName = news.schedule
-            ? baseName
-            : `${baseName}-${(yield* sha256Object(jobSpec)).slice(0, 8)}`;
+            ? baseName.slice(0, 52).replace(/-+$/, "")
+            : `${baseName.slice(0, 54).replace(/-+$/, "")}-${(yield* sha256Object(jobSpec)).slice(0, 8)}`;
 
           const workloadObject: KubernetesObjectDefinition = news.schedule
             ? {

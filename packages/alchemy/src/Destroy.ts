@@ -23,15 +23,7 @@ export const destroy = ({
   evalStack(
     stack,
     (stack) =>
-      Plan.make({
-        ...stack,
-        // zero these out (destroy will treat all as orphans)
-        // TODO(sam): probably better to have Plan.destroy and Plan.update
-        resources: {},
-        bindings: {},
-        actions: {},
-        output: {},
-      }).pipe(
+      Plan.destroy(stack).pipe(
         Effect.flatMap((plan) => Apply.apply(plan, { command: "destroy" })),
       ),
     { stage, dev, scope },

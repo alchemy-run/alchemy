@@ -27,6 +27,7 @@ import {
   Default as DefaultEnvironment,
 } from "../Environment.ts";
 import * as AwsRegion from "../Region.ts";
+import type { BucketEncryption } from "../S3/Bucket.ts";
 
 /**
  * The bookkeeping object that stores a stack's resolved output. Lives
@@ -77,6 +78,12 @@ export interface S3StateOptions {
    * @default "" (bucket root)
    */
   prefix?: string;
+  /**
+   * Default encryption enforced on the state bucket.
+   *
+   * @default `{ sseAlgorithm: "AES256" }`
+   */
+  encryption?: BucketEncryption;
 }
 
 /** Context required by the distilled S3 operations. */
@@ -129,6 +136,10 @@ type S3Deps = Credentials | HttpClient | Region;
  *     state: AWS.state({
  *       bucketName: "my-company-state",
  *       prefix: "alchemy",
+ *       encryption: {
+ *         sseAlgorithm: "aws:kms",
+ *         kmsMasterKeyId: "alias/alchemy-state",
+ *       },
  *     }),
  *   },
  *   Effect.gen(function* () {
@@ -199,7 +210,7 @@ export const makeS3State = (options: S3StateOptions = {}) =>
         const { accountId, region } = yield* AWSEnvironment.current;
         const bucketName =
           options.bucketName ?? createStateBucketName(accountId, region);
-        yield* ensureStateBucket(bucketName, region);
+        yield* ensureStateBucket(bucketName, region, options);
         return bucketName;
       }).pipe(Effect.provideContext(context), Effect.mapError(toError)),
     );
@@ -454,7 +465,11 @@ export const createStateBucketName = (accountId: string, region: string) =>
  * Observe-then-ensure the state bucket: head it, create it if missing
  * (tolerating create races), and wait for it to become available.
  */
-const ensureStateBucket = (bucket: string, region: string) =>
+const ensureStateBucket = (
+  bucket: string,
+  region: string,
+  options: S3StateOptions,
+) =>
   Effect.gen(function* () {
     // An absent bucket surfaces as either `NotFound` (the HEAD 404) or
     // `NoSuchBucket` depending on the namespace/path — treat both as "create
@@ -466,56 +481,158 @@ const ensureStateBucket = (bucket: string, region: string) =>
         Effect.succeed(false),
       ),
     );
-    if (exists) {
-      return;
+    if (!exists) {
+      yield* Effect.logInfo(
+        `S3 state store: creating bucket ${bucket} in ${region}`,
+      );
+      yield* s3
+        .createBucket({
+          Bucket: bucket,
+          // account-regional namespace: the bucket name only needs to be
+          // unique within this account+region, so deterministic default
+          // names can't collide with other AWS customers.
+          BucketNamespace: "account-regional",
+          // us-east-1 rejects an explicit LocationConstraint
+          ...(region === "us-east-1"
+            ? {}
+            : {
+                CreateBucketConfiguration: {
+                  LocationConstraint: region as s3.BucketLocationConstraint,
+                },
+              }),
+        })
+        .pipe(
+          // Many callers race to create the shared default state bucket on
+          // first use. The loser sees the create already done
+          // (`BucketAlreadyOwnedByYou`/`BucketAlreadyExists`) or mid-flight
+          // (`OperationAborted`). All mean "someone else is creating it".
+          Effect.catchTag(
+            [
+              "BucketAlreadyOwnedByYou",
+              "BucketAlreadyExists",
+              "OperationAborted",
+            ],
+            () => Effect.void,
+          ),
+        );
+
+      // Wait for the bucket to become available. Under a concurrent create
+      // the bucket is briefly not yet head-able and object/configuration ops
+      // would race ahead of it.
+      yield* s3.headBucket({ Bucket: bucket }).pipe(
+        Effect.retry({
+          while: (error) =>
+            error._tag === "NotFound" || error._tag === "NoSuchBucket",
+          schedule: Schedule.max([
+            Schedule.spaced("1 second"),
+            Schedule.recurs(10),
+          ]),
+        }),
+      );
     }
 
-    yield* Effect.logInfo(
-      `S3 state store: creating bucket ${bucket} in ${region}`,
-    );
-    yield* s3
-      .createBucket({
+    // Secure defaults are reconciled for BOTH newly-created and existing
+    // buckets. This makes AWS.state converge out-of-band drift and explicit
+    // custom buckets rather than only securing the greenfield path.
+    const desiredVersioning = "Enabled";
+    const observedVersioning = yield* s3.getBucketVersioning({
+      Bucket: bucket,
+    });
+    if (observedVersioning.Status !== desiredVersioning) {
+      yield* s3.putBucketVersioning({
         Bucket: bucket,
-        // account-regional namespace: the bucket name only needs to be
-        // unique within this account+region, so deterministic default
-        // names can't collide with other AWS customers.
-        BucketNamespace: "account-regional",
-        // us-east-1 rejects an explicit LocationConstraint
-        ...(region === "us-east-1"
-          ? {}
-          : {
-              CreateBucketConfiguration: {
-                LocationConstraint: region as s3.BucketLocationConstraint,
-              },
-            }),
-      })
-      .pipe(
-        // Many callers race to create the shared default state bucket on first
-        // use. The loser sees the create already done
-        // (`BucketAlreadyOwnedByYou`/`BucketAlreadyExists`) or mid-flight
-        // (`OperationAborted` — "a conflicting conditional operation is in
-        // progress"). All mean "someone else is creating it" — fall through to
-        // the readiness wait.
-        Effect.catchTag(
-          [
-            "BucketAlreadyOwnedByYou",
-            "BucketAlreadyExists",
-            "OperationAborted",
-          ],
-          () => Effect.void,
-        ),
-      );
+        VersioningConfiguration: { Status: desiredVersioning },
+      });
+    }
 
-    // Wait for the bucket to become available. Under a concurrent create the
-    // bucket is briefly not yet head-able (NotFound/NoSuchBucket) and object
-    // ops would race ahead of it — keep polling until HEAD succeeds.
-    yield* s3
-      .headBucket({ Bucket: bucket })
+    const desiredEncryption = options.encryption ?? {
+      sseAlgorithm: "AES256",
+    };
+    const observedEncryption = (yield* s3.getBucketEncryption({
+      Bucket: bucket,
+    })).ServerSideEncryptionConfiguration?.Rules?.[0];
+    const desiredEncryptionRule: s3.ServerSideEncryptionRule = {
+      ApplyServerSideEncryptionByDefault: {
+        SSEAlgorithm: desiredEncryption.sseAlgorithm,
+        KMSMasterKeyID: desiredEncryption.kmsMasterKeyId,
+      },
+      BucketKeyEnabled: desiredEncryption.bucketKeyEnabled ?? false,
+    };
+    const encryptionFingerprint = (
+      rule: s3.ServerSideEncryptionRule | undefined,
+    ) =>
+      JSON.stringify({
+        algorithm:
+          rule?.ApplyServerSideEncryptionByDefault?.SSEAlgorithm ?? null,
+        key: rule?.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID ?? null,
+        bucketKey: rule?.BucketKeyEnabled ?? false,
+      });
+    if (
+      encryptionFingerprint(observedEncryption) !==
+      encryptionFingerprint(desiredEncryptionRule)
+    ) {
+      yield* s3.putBucketEncryption({
+        Bucket: bucket,
+        ServerSideEncryptionConfiguration: {
+          Rules: [desiredEncryptionRule],
+        },
+      });
+    }
+
+    const desiredPublicAccess: s3.PublicAccessBlockConfiguration = {
+      BlockPublicAcls: true,
+      IgnorePublicAcls: true,
+      BlockPublicPolicy: true,
+      RestrictPublicBuckets: true,
+    };
+    const observedPublicAccess = yield* s3
+      .getPublicAccessBlock({ Bucket: bucket })
       .pipe(
-        Effect.retry(
-          Schedule.max([Schedule.spaced("1 second"), Schedule.recurs(15)]),
+        Effect.map((result) => result.PublicAccessBlockConfiguration),
+        Effect.catchTag("NoSuchPublicAccessBlockConfiguration", () =>
+          Effect.succeed<s3.PublicAccessBlockConfiguration | undefined>(
+            undefined,
+          ),
         ),
       );
+    const publicAccessFingerprint = (
+      config: s3.PublicAccessBlockConfiguration | undefined,
+    ) =>
+      JSON.stringify({
+        blockAcls: config?.BlockPublicAcls ?? false,
+        ignoreAcls: config?.IgnorePublicAcls ?? false,
+        blockPolicy: config?.BlockPublicPolicy ?? false,
+        restrictBuckets: config?.RestrictPublicBuckets ?? false,
+      });
+    if (
+      publicAccessFingerprint(observedPublicAccess) !==
+      publicAccessFingerprint(desiredPublicAccess)
+    ) {
+      yield* s3.putPublicAccessBlock({
+        Bucket: bucket,
+        PublicAccessBlockConfiguration: desiredPublicAccess,
+      });
+    }
+
+    const desiredOwnership = "BucketOwnerEnforced";
+    const observedOwnership = yield* s3
+      .getBucketOwnershipControls({ Bucket: bucket })
+      .pipe(
+        Effect.map(
+          (result) => result.OwnershipControls?.Rules?.[0]?.ObjectOwnership,
+        ),
+        Effect.catchTag("OwnershipControlsNotFoundError", () =>
+          Effect.succeed<string | undefined>(undefined),
+        ),
+      );
+    if (observedOwnership !== desiredOwnership) {
+      yield* s3.putBucketOwnershipControls({
+        Bucket: bucket,
+        OwnershipControls: {
+          Rules: [{ ObjectOwnership: desiredOwnership }],
+        },
+      });
+    }
   }).pipe(
     // The whole observe→create→wait sequence races other first-callers of the
     // shared bucket; `OperationAborted` (conflicting create) and a transiently

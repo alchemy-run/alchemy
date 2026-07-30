@@ -327,10 +327,17 @@ const findSite = (
     Stream.runCollect,
     Effect.map((chunk) =>
       Array.from(chunk)
-        .filter(
-          (site) =>
-            (host !== undefined && site.host === host) ||
-            (zoneTag !== undefined && site.ruleset?.zoneTag === zoneTag),
+        .filter((site) =>
+          host !== undefined
+            ? site.host === host
+            : // A zone-identity site has no `host`. Host-scoped sites on the
+              // zone's subdomains ALSO carry `ruleset.zoneTag`, so a zone
+              // probe must only match true zone sites — otherwise an
+              // unrelated host site satisfies the probe and the engine
+              // refuses adoption with OwnedBySomeoneElse.
+              zoneTag !== undefined &&
+              !site.host &&
+              site.ruleset?.zoneTag === zoneTag,
         )
         .sort((a, b) => (a.created ?? "").localeCompare(b.created ?? ""))
         .at(0),

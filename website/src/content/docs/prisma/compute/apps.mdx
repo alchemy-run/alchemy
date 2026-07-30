@@ -1,0 +1,103 @@
+---
+title: Apps
+description: Prisma Compute apps as Stack resources — framework builds or Effect-native services, env wiring, custom domains, and a local dev command.
+---
+
+`Prisma.Compute` deploys an application onto Prisma's managed
+runtime. One resource covers the whole path: build (optional),
+upload, deploy, health-check, promote — see
+[Deployments](/prisma/compute/deployments) for the lifecycle.
+
+## Framework apps
+
+Point `path` at the app and describe its build. The command runs
+locally, the output directory is archived and uploaded, and the
+entrypoint starts the server:
+
+```typescript
+import * as Prisma from "alchemy/Prisma";
+
+const app = yield* Prisma.Compute("api", {
+  project,
+  path: "./app",
+  build: {
+    command: "bun run build",
+    outdir: ".output",
+    entrypoint: "server/index.mjs",
+  },
+  port: 3000,
+  healthCheck: { path: "/api/health" },
+  env: {
+    DATABASE_URL: connection.databaseUrl,
+  },
+  destroyOldDeployment: true,
+});
+```
+
+The server must listen on `PORT` (injected at runtime). With
+`build: "auto"` — the default when `path` points at a recognizable
+app — alchemy detects the framework (Bun, Next.js, Nuxt, Astro,
+TanStack Start, NestJS) and derives the build for you.
+
+`app.url` is the deployed endpoint.
+
+## Effect-native apps
+
+Pass `main` and an Effect body instead of a build, and the app is
+bundled from your Stack file — same shape as an Effect-native
+Cloudflare Worker or Lambda:
+
+```typescript
+export default Prisma.Compute(
+  "api",
+  { project, main: import.meta.filename },
+  Effect.gen(function* () {
+    const db = yield* Prisma.Connect(connection);
+    const sql = yield* SQL.Postgres({ url: db.databaseUrl });
+
+    return {
+      fetch: Effect.gen(function* () {
+        const users = yield* sql`SELECT * FROM users`;
+        return yield* HttpServerResponse.json(users);
+      }),
+    };
+  }).pipe(Effect.provide(Prisma.ConnectBinding)),
+);
+```
+
+## Custom domains
+
+```typescript
+const domain = yield* Prisma.CustomDomain("api-domain", {
+  app,
+  hostname: "api.example.com",
+});
+```
+
+## Local dev
+
+Under `bun alchemy dev`, `dev.command` runs your app locally (e.g.
+`vite dev`) with the same env the deployed app would see — including
+connection bindings, which resolve to the local
+[dev database](/prisma/data/postgres#local-dev):
+
+```typescript
+const app = yield* Prisma.Compute("web", {
+  project,
+  path: ".",
+  dev: { command: "bun run dev" },
+  env: { DATABASE_URL: connection.databaseUrl },
+});
+```
+
+## Where next
+
+- [Deployments](/prisma/compute/deployments) — health-checked
+  promotion, rollback, and deployment reuse.
+- [Connections](/prisma/data/connections) — the env and binding
+  wiring in detail.
+
+Reference:
+
+- [Compute API reference](/providers/prisma/compute)
+- [CustomDomain API reference](/providers/prisma/customdomain)

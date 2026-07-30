@@ -109,7 +109,7 @@ export default Worker(
   {
     name: STATE_STORE_SCRIPT_NAME,
     main: import.meta.url,
-    url: true,
+    workersDev: true,
     compatibility: {
       flags: ["nodejs_compat"],
       date: "2026-03-17",

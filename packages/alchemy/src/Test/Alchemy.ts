@@ -3,7 +3,7 @@
 /**
  * Test adapter for the `alchemy-test` runner (see `packages/alchemy-test`).
  *
- * Same shape as {@link "./Bun.ts"}, but registers
+ * Same shape as {@link "./Vitest.ts"} / {@link "./Bun.ts"}, but registers
  * tests as raw Effects with the alchemy-test harness so the single-process
  * runner can inject a buffering Logger/Console per test and manage
  * concurrency + timeouts itself.
@@ -264,7 +264,9 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   // closes it. We defer registration to a microtask so it runs AFTER any
   // user-registered `afterAll` (including `destroy(Stack)`); the runner
   // executes afterAll hooks in registration order, and file collection
-  // flushes microtasks before sealing the file's suite tree.
+  // flushes microtasks before sealing the file's suite tree. (Files are
+  // collected in parallel, but the microtask carries the AsyncLocalStorage
+  // context of this file's import, so the hook lands on the right suite.)
   queueMicrotask(() => {
     registerHook("afterAll", {
       body: () => closeScope,

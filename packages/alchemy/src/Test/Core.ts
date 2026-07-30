@@ -288,14 +288,7 @@ export const scratchStack = <ROut>(
     plan: ((effect: Effect.Effect<any, any, any>) =>
       buildPlan(effect)) as ScratchStack<ROut>["plan"],
     destroy: () =>
-      Plan.make({
-        name: stackName,
-        stage,
-        resources: {},
-        bindings: {},
-        actions: {},
-        output: {},
-      }).pipe(
+      Plan.destroy({ name: stackName, stage }).pipe(
         Effect.flatMap((plan) => apply(plan, { command: "destroy" })),
         Effect.asVoid,
         Effect.provide(stateLayer),

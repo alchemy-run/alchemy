@@ -43,9 +43,9 @@ export const WorkerUI = UIProvider.succeed<Worker>("Cloudflare.Worker", {
       mono: true,
     },
     {
-      label: "domains",
-      value: ctx.attrs?.domains?.length
-        ? ctx.attrs.domains.join(", ")
+      label: "domain",
+      value: ctx.attrs?.domain
+        ? [ctx.attrs.domain.name, ...ctx.attrs.domain.aliases].join(", ")
         : undefined,
     },
   ],

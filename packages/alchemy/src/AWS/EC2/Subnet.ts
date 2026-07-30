@@ -7,6 +7,7 @@ import * as Stream from "effect/Stream";
 
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved, somePropsAreDifferent } from "../../Diff.ts";
+import { retryWhileLingeringEnis } from "./LingeringEnis.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
@@ -597,40 +598,28 @@ export const SubnetProvider = () =>
 
           yield* session.note(`Deleting subnet: ${subnetId}`);
 
-          // 1. Attempt to delete subnet
-          yield* ec2
-            .deleteSubnet({
-              SubnetId: subnetId,
-              DryRun: false,
-            })
-            .pipe(
-              Effect.tapError(Effect.logDebug),
-              Effect.catchTag("InvalidSubnetID.NotFound", () => Effect.void),
-              // Retry on dependency violations (resources still being deleted).
-              // ENIs from a just-deleted ALB or CloudFront VPC origin can take
-              // several minutes to detach after the owning resource is gone, so
-              // budget ~12 min (fast exponential start, capped at 30s steps).
-              Effect.retry({
-                while: (e) => {
-                  // DependencyViolation means there are still dependent resources
-                  // This can happen if ENIs/instances are being deleted concurrently
-                  return e._tag === "DependencyViolation";
-                },
-                schedule: Schedule.max([
-                  Schedule.min([
-                    Schedule.exponential(1000, 1.5),
-                    Schedule.spaced("30 seconds"),
-                  ]),
-                  Schedule.recurs(30),
-                ]).pipe(
-                  Schedule.tap(({ attempt }) =>
-                    session.note(
-                      `Waiting for dependencies to clear... (attempt ${attempt})`,
-                    ),
-                  ),
-                ),
-              }),
-            );
+          // 1. Attempt to delete subnet. DependencyViolation means resources
+          // still occupy it — ENIs from a just-deleted ALB, CloudFront VPC
+          // origin, or a VPC-attached Lambda can take minutes to release
+          // after the owning resource is gone. Lambda Hyperplane ENIs are
+          // reaped explicitly between attempts (they otherwise linger up to
+          // ~20 minutes and used to force a second `destroy` run).
+          yield* retryWhileLingeringEnis(
+            ec2
+              .deleteSubnet({
+                SubnetId: subnetId,
+                DryRun: false,
+              })
+              .pipe(
+                Effect.tapError(Effect.logDebug),
+                Effect.catchTag("InvalidSubnetID.NotFound", () => Effect.void),
+              ),
+            {
+              scope: { name: "subnet-id", value: subnetId },
+              isDependencyViolation: (e) => e._tag === "DependencyViolation",
+              session,
+            },
+          );
 
           // 2. Wait for subnet to be fully deleted
           yield* waitForSubnetDeleted(subnetId, session);

@@ -10,6 +10,7 @@ import { AwsClient } from "aws4fetch";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import * as https from "node:https";
 import { AWSEnvironment } from "../../Environment.ts";
 import {
@@ -30,7 +31,13 @@ export class KubernetesApiError extends Data.TaggedError("KubernetesApiError")<{
   path: string;
   statusCode: number;
   body: string;
-}> {}
+}> {
+  override get message(): string {
+    return `${this.method} ${this.path} responded ${this.statusCode}: ${
+      this.body.length > 0 ? this.body.slice(0, 1000) : "(empty body)"
+    }`;
+  }
+}
 
 export interface KubernetesClusterConnection {
   clusterName: string;
@@ -163,7 +170,20 @@ const requestJson = Effect.fn(function* ({
         : new Error(
             `Failed Kubernetes ${method} ${path}: ${error instanceof Error ? error.message : String(error)}`,
           ),
-  });
+  }).pipe(
+    // Transport-level failures (ECONNREFUSED/ECONNRESET/ETIMEDOUT/DNS)
+    // are transient — a fresh EKS endpoint's NLB can refuse connections
+    // for a short window after the cluster reports ACTIVE. Every request
+    // here is idempotent (GET / SSA PATCH / DELETE), so retry them; HTTP
+    // errors (KubernetesApiError) are handled by the callers.
+    Effect.retry({
+      while: (e): boolean => !(e instanceof KubernetesApiError),
+      schedule: Schedule.max([
+        Schedule.spaced("5 seconds"),
+        Schedule.recurs(8),
+      ]),
+    }),
+  );
 });
 
 // ─────────────────────────────────────────────────────── kind discovery ──
@@ -285,7 +305,24 @@ export const applyObject = Effect.fn(function* ({
     method: "PATCH",
     path,
     body: object,
-  });
+  }).pipe(
+    // A freshly ACTIVE cluster's API server briefly 5xxes while warming
+    // up, and the creator's bootstrap access entry propagates
+    // asynchronously (401/403 in the first minute) — retry transient
+    // failures for ~1 min.
+    Effect.retry({
+      while: (e): boolean =>
+        e instanceof KubernetesApiError &&
+        (e.statusCode >= 500 ||
+          e.statusCode === 429 ||
+          e.statusCode === 401 ||
+          e.statusCode === 403),
+      schedule: Schedule.max([
+        Schedule.spaced("6 seconds"),
+        Schedule.recurs(10),
+      ]),
+    }),
+  );
 });
 
 export const deleteObject = Effect.fn(function* ({
