@@ -321,14 +321,17 @@ const getEvaluation = (accountId: string, gatewayId: string, id: string) =>
  * returns an empty list on this endpoint.
  */
 const findByName = (accountId: string, gatewayId: string, name: string) =>
-  aiGateway.listEvaluations({ accountId, gatewayId, name, perPage: 50 }).pipe(
-    Effect.map((list) =>
-      list.result
-        .filter((e) => e.name === name)
-        .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-        .at(0),
-    ),
-  );
+  aiGateway.listEvaluations
+    .items({ accountId, gatewayId, name, perPage: 50 })
+    .pipe(
+      Stream.filter((e) => e.name === name),
+      Stream.runCollect,
+      Effect.map((chunk) =>
+        Array.from(chunk)
+          .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+          .at(0),
+      ),
+    );
 
 const createEvaluationName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {

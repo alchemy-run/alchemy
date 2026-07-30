@@ -37,6 +37,37 @@ test.provider("diff replaces a volume when labels change", () =>
   }),
 );
 
+test.provider("diff replaces a volume when its Docker context changes", () =>
+  Effect.gen(function* () {
+    const volumeProvider = yield* Provider.findProvider(Docker.Volume);
+    const volumeDiff = yield* volumeProvider.diff!({
+      id: "data",
+      fqn: "data",
+      instanceId: "instance",
+      olds: {
+        name: "data",
+        context: "default",
+      },
+      news: {
+        name: "data",
+        context: "remote-build",
+      },
+      oldBindings: [],
+      newBindings: [],
+      output: {
+        id: "data",
+        name: "data",
+        driver: "local",
+        driverOpts: {},
+        labels: {},
+        mountpoint: undefined,
+        createdAt: 0,
+      },
+    });
+    expect(volumeDiff).toEqual({ action: "replace", deleteFirst: true });
+  }),
+);
+
 describe("Docker.Volume", { concurrent: false }, () => {
   test.provider.skipIf(!isDockerReady)(
     "creates a volume with labels",

@@ -101,10 +101,13 @@ export const UserProvider = () =>
           : createPhysicalName({ id, maxLength: 64 });
 
       const readManagedPolicies = Effect.fn(function* (userName: string) {
-        const listed = yield* iam.listAttachedUserPolicies({
-          UserName: userName,
-        });
-        return (listed.AttachedPolicies ?? [])
+        const attached = yield* iam.listAttachedUserPolicies
+          .items({ UserName: userName })
+          .pipe(
+            Stream.runCollect,
+            Effect.map((chunk) => Array.from(chunk)),
+          );
+        return attached
           .map((policy) => policy.PolicyArn)
           .filter(
             (policyArn): policyArn is string => typeof policyArn === "string",
@@ -112,11 +115,14 @@ export const UserProvider = () =>
       });
 
       const readInlinePolicies = Effect.fn(function* (userName: string) {
-        const listed = yield* iam.listUserPolicies({
-          UserName: userName,
-        });
+        const policyNames = yield* iam.listUserPolicies
+          .items({ UserName: userName })
+          .pipe(
+            Stream.runCollect,
+            Effect.map((chunk) => Array.from(chunk)),
+          );
         const entries = yield* Effect.all(
-          (listed.PolicyNames ?? []).map((policyName) =>
+          policyNames.map((policyName) =>
             iam
               .getUserPolicy({
                 UserName: userName,
@@ -435,47 +441,44 @@ export const UserProvider = () =>
             })
             .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
 
-          const inlinePolicies = yield* iam
-            .listUserPolicies({
-              UserName: output.userName,
-            })
-            .pipe(
-              Effect.catchTag("NoSuchEntityException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
-          for (const policyName of inlinePolicies?.PolicyNames ?? []) {
-            yield* iam
-              .deleteUserPolicy({
-                UserName: output.userName,
-                PolicyName: policyName,
-              })
-              .pipe(
-                Effect.catchTag("NoSuchEntityException", () => Effect.void),
-              );
-          }
-
-          const attachedPolicies = yield* iam
-            .listAttachedUserPolicies({
-              UserName: output.userName,
-            })
-            .pipe(
-              Effect.catchTag("NoSuchEntityException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
-          for (const policy of attachedPolicies?.AttachedPolicies ?? []) {
-            if (policy.PolicyArn) {
-              yield* iam
-                .detachUserPolicy({
+          yield* iam.listUserPolicies.items({ UserName: output.userName }).pipe(
+            Stream.mapEffect((policyName) =>
+              iam
+                .deleteUserPolicy({
                   UserName: output.userName,
-                  PolicyArn: policy.PolicyArn,
+                  PolicyName: policyName,
                 })
                 .pipe(
                   Effect.catchTag("NoSuchEntityException", () => Effect.void),
-                );
-            }
-          }
+                ),
+            ),
+            Stream.runDrain,
+            // The user itself may already be gone.
+            Effect.catchTag("NoSuchEntityException", () => Effect.void),
+          );
+
+          yield* iam.listAttachedUserPolicies
+            .items({ UserName: output.userName })
+            .pipe(
+              Stream.mapEffect((policy) =>
+                policy.PolicyArn
+                  ? iam
+                      .detachUserPolicy({
+                        UserName: output.userName,
+                        PolicyArn: policy.PolicyArn,
+                      })
+                      .pipe(
+                        Effect.catchTag(
+                          "NoSuchEntityException",
+                          () => Effect.void,
+                        ),
+                      )
+                  : Effect.void,
+              ),
+              Stream.runDrain,
+              // The user itself may already be gone.
+              Effect.catchTag("NoSuchEntityException", () => Effect.void),
+            );
 
           yield* iam
             .deleteUser({

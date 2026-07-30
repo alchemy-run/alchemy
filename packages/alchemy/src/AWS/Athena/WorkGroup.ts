@@ -158,8 +158,9 @@ export const WorkGroupProvider = () =>
         );
 
       const fetchTags = (arn: string) =>
-        athena.listTagsForResource({ ResourceARN: arn }).pipe(
-          Effect.map((res) => observedTagsOf(res.Tags)),
+        athena.listTagsForResource.items({ ResourceARN: arn }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => observedTagsOf(Array.from(chunk))),
           Effect.catch(() => Effect.succeed({} as Record<string, string>)),
         );
 

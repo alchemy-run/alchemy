@@ -124,8 +124,7 @@ test.provider(
           Effect.gen(function* () {
             const site = yield* Cloudflare.Website.Astro("AstroSite", {
               rootDir,
-              url: true,
-              subdomain: { enabled: true, previewsEnabled: true },
+              workersDev: { enabled: true, previewsEnabled: true },
               compatibility: {
                 date: "2026-03-10",
                 flags: ["nodejs_compat"],

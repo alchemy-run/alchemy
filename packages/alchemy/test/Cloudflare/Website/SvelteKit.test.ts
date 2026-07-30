@@ -33,8 +33,7 @@ const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
 const svelteKitProps = (rootDir: string) => ({
   rootDir,
-  url: true as const,
-  subdomain: { enabled: true, previewsEnabled: true },
+  workersDev: { enabled: true, previewsEnabled: true },
   memo: { include: ["src/**", "static/**", "package.json"] },
 });
 

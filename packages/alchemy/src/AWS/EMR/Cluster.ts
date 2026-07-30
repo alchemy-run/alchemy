@@ -1,6 +1,7 @@
 import * as emr from "@distilled.cloud/aws/emr";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -347,14 +348,13 @@ export const ClusterProvider = () =>
       // is. Find the live (non-terminal) cluster carrying our name — used
       // when state was lost and we only know the derived name.
       const findClusterByName = Effect.fn(function* (name: string) {
-        const matches = yield* emr.listClusters
+        const summary = yield* emr.listClusters
           .items({ ClusterStates: [...ACTIVE_STATES] })
           .pipe(
             Stream.filter((summary) => summary.Name === name),
-            Stream.take(1),
-            Stream.runCollect,
+            Stream.runHead,
+            Effect.map(Option.getOrUndefined),
           );
-        const summary = Array.from(matches)[0];
         return summary?.Id ? yield* readCluster(summary.Id) : undefined;
       });
 
@@ -656,12 +656,13 @@ export const ClusterProvider = () =>
           // Core instance-group resize (in place between non-zero counts).
           const desiredCore = props.instances?.coreInstanceCount ?? 1;
           if (desiredCore > 0) {
-            const groups = yield* emr.listInstanceGroups({
-              ClusterId: clusterId,
-            });
-            const core = (groups.InstanceGroups ?? []).find(
-              (g) => g.InstanceGroupType === "CORE",
-            );
+            const core = yield* emr.listInstanceGroups
+              .items({ ClusterId: clusterId })
+              .pipe(
+                Stream.filter((g) => g.InstanceGroupType === "CORE"),
+                Stream.runHead,
+                Effect.map(Option.getOrUndefined),
+              );
             if (
               core?.Id !== undefined &&
               (core.RequestedInstanceCount ?? 0) !== desiredCore

@@ -29,8 +29,7 @@ const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
 const wakuProps = (rootDir: string) => ({
   rootDir,
-  url: true as const,
-  subdomain: { enabled: true, previewsEnabled: true },
+  workersDev: { enabled: true, previewsEnabled: true },
   // Deliberately NO `flags`: Waku's server runtime needs
   // AsyncLocalStorage, and the resource must default to `nodejs_als`
   // when the user provides no compatibility flags (a zero-config deploy

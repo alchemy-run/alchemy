@@ -121,7 +121,10 @@ export const SecurityConfigurationProvider = () =>
   Provider.effect(
     SecurityConfiguration,
     Effect.gen(function* () {
-      const toName = (id: string, props: Partial<SecurityConfigurationProps>) =>
+      const toName = (
+        id: string,
+        props: Partial<SecurityConfigurationProps>,
+      ) =>
         props.securityConfigurationName
           ? Effect.succeed(props.securityConfigurationName)
           : createPhysicalName({ id, maxLength: 64 });

@@ -15,7 +15,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
   },
   Effect.gen(function* () {
     const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
-    const db = yield* Drizzle.postgres(conn.connectionString, {
+    const db = yield* Drizzle.Postgres(conn.connectionString, {
       relations,
     });
 

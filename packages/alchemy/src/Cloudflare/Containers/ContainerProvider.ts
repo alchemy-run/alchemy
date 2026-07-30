@@ -18,14 +18,18 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { isLiveId } from "../LocalRuntime.ts";
 import { CloudflareLogs, type TelemetryFilter } from "../Logs.ts";
 import type {
+  AnyContainerApplicationProps,
   ContainerApplication,
-  ContainerApplicationProps,
 } from "./ContainerApplication.ts";
+import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
 import {
   buildFinalDockerfile,
   bundleContainerProgram,
+  containerEnvPreamble,
   createContainerApplicationName,
   makeContainerEnv,
+  materializeInlineDockerfileContext,
+  validateContainerImageProps,
 } from "./ContainerBundle.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
 
@@ -36,6 +40,8 @@ import { ContainerPlatform } from "./ContainerPlatform.ts";
  * - `effectful` — bundle an Effect-native `main` and build a generated image.
  * - `external` — build a user-supplied Dockerfile against a context directory.
  * - `remote` — pull a pre-built remote image and re-push it to Cloudflare.
+ * - `prepushed` — the image already lives in the target registry; use the
+ *   reference as-is with no docker pull/build/push at all.
  */
 type ImageBuild =
   | {
@@ -50,7 +56,39 @@ type ImageBuild =
   | {
       readonly kind: "remote";
       readonly image: string;
+    }
+  | {
+      readonly kind: "prepushed";
+      readonly image: string;
     };
+
+/**
+ * Whether an image reference already points at the target registry host —
+ * e.g. `registry.cloudflare.com/<accountId>/repo@sha256:...` pushed by CI.
+ * Such references are deployed as-is; there is nothing to pull or push.
+ */
+const isTargetRegistryRef = (image: string, registryId: string) =>
+  image.startsWith(`${registryId}/`);
+
+/**
+ * Insert the account namespace into a Cloudflare-registry reference that
+ * omits it (`registry.cloudflare.com/app:tag` →
+ * `registry.cloudflare.com/<accountId>/app:tag`), mirroring wrangler's
+ * `resolveImageName`. Custom registries are left untouched — the account
+ * namespace rule is specific to Cloudflare's managed registry.
+ */
+const normalizePrepushedRef = (
+  image: string,
+  registryId: string,
+  accountId: string,
+) => {
+  if (registryId !== "registry.cloudflare.com") return image;
+  const rest = image.slice(registryId.length + 1);
+  const first = rest.split("/")[0];
+  return first !== undefined && /^[a-f0-9]{32}$/.test(first)
+    ? image
+    : `${registryId}/${accountId}/${rest}`;
+};
 
 export const LiveContainerProvider = () =>
   Provider.effect(
@@ -105,7 +143,7 @@ export const LiveContainerProvider = () =>
         );
 
       const desiredConfiguration = (
-        props: ContainerApplicationProps,
+        props: AnyContainerApplicationProps,
         env: Record<string, string | Redacted.Redacted<string>>,
         imageRef: string,
       ) =>
@@ -156,7 +194,7 @@ export const LiveContainerProvider = () =>
       // A maxInstances default of 1 (the previous value) silently serialised
       // every Durable Object instance through a single container slot, which is
       // the dominant cause of "containers are slow under load".
-      const scalingDefaults = (props: ContainerApplicationProps) => ({
+      const scalingDefaults = (props: AnyContainerApplicationProps) => ({
         instances: props.instances ?? 0,
         maxInstances: props.maxInstances ?? 20,
         schedulingPolicy: props.schedulingPolicy ?? "default",
@@ -165,7 +203,7 @@ export const LiveContainerProvider = () =>
 
       const computeImage = Effect.fn(function* (
         id: string,
-        props: ContainerApplicationProps,
+        props: AnyContainerApplicationProps,
         env: Record<string, string | Redacted.Redacted<string>>,
       ) {
         const { accountId } = yield* yield* CloudflareEnvironment;
@@ -175,8 +213,11 @@ export const LiveContainerProvider = () =>
         const makeRef = (imageHash: string) =>
           `${registryId}/${accountId}/${repositoryName}:${imageHash}`;
 
+        yield* validateContainerImageProps(props);
+
         // Variant 1 — Effect-native program. Bundle `main` and build a
-        // generated Dockerfile around it.
+        // generated Dockerfile around it; the environment preamble comes
+        // from `image` / inline `dockerfile` (default: the runtime base).
         if (props.main) {
           const runtime = props.runtime ?? "bun";
           const { files, hash: bundleHash } = yield* bundleContainerProgram({
@@ -188,7 +229,7 @@ export const LiveContainerProvider = () =>
             external: props.external,
           });
           const finalDockerfile = buildFinalDockerfile(
-            props.dockerfile,
+            yield* containerEnvPreamble(props),
             runtime,
             props.external,
             props.autoInstallExternals,
@@ -226,6 +267,25 @@ export const LiveContainerProvider = () =>
           const imageHash = (yield* sha256Object({
             image: props.image,
           })).slice(0, 16);
+          // Already in the target registry (e.g. pushed by CI as a digest
+          // reference) — deploy the reference as-is and skip the docker
+          // pull/tag/push round-trip entirely.
+          if (isTargetRegistryRef(props.image, registryId)) {
+            const prepushedRef = normalizePrepushedRef(
+              props.image,
+              registryId,
+              accountId,
+            );
+            return {
+              build: { kind: "prepushed" as const, image: prepushedRef },
+              imageRef: prepushedRef,
+              imageHash,
+              // The local runtime pulls this image directly (no build
+              // context); pulling from the Cloudflare registry requires a
+              // local `docker login`.
+              dev: { imageUri: prepushedRef, env },
+            };
+          }
           return {
             build: { kind: "remote" as const, image: props.image },
             imageRef: makeRef(imageHash),
@@ -235,7 +295,41 @@ export const LiveContainerProvider = () =>
           };
         }
 
-        // Variant 3 — user-supplied Dockerfile + build context directory.
+        // Variant 3a — inline Dockerfile content (`Dockerfile.inline`), no
+        // build context. Materialize the content into a stable generated
+        // context directory and build that.
+        if (
+          props.dockerfile !== undefined &&
+          isInlineDockerfile(props.dockerfile)
+        ) {
+          const content = props.dockerfile.content;
+          if (typeof content !== "string") {
+            return yield* Effect.die(
+              new Error(
+                "Inline `dockerfile` content is an unresolved Output at image-build time — its dependencies have not resolved yet (e.g. during precreate of a circular binding). Break the cycle or inline the resolved value.",
+              ),
+            );
+          }
+          const { context, dockerfile } =
+            yield* materializeInlineDockerfileContext(id, content);
+          const imageHash = (yield* sha256Object({
+            dockerfile: content,
+          })).slice(0, 16);
+          return {
+            build: { kind: "external" as const, context, dockerfile },
+            imageRef: makeRef(imageHash),
+            imageHash,
+            // The local runtime builds the same materialized context.
+            dev: {
+              context: path.relative(process.cwd(), context),
+              dockerfile: "Dockerfile",
+              env,
+            },
+          };
+        }
+
+        // Variant 3b — user-supplied Dockerfile path + build context
+        // directory.
         const context = yield* fs.realPath(props.context ?? ".");
         const dockerfile = props.dockerfile
           ? yield* fs.realPath(props.dockerfile)
@@ -262,13 +356,22 @@ export const LiveContainerProvider = () =>
 
       const buildAndPushImage = Effect.fn(function* (
         id: string,
-        props: ContainerApplicationProps,
+        props: AnyContainerApplicationProps,
         build: ImageBuild,
         imageRef: string,
         session?: { note: (message: string) => Effect.Effect<void> },
       ) {
         const { accountId } = yield* yield* CloudflareEnvironment;
         const platform = "linux/amd64";
+
+        if (build.kind === "prepushed") {
+          // The reference already lives in the target registry — nothing to
+          // pull, build, or push.
+          yield* Effect.logInfo(
+            `Cloudflare Container image: using pre-pushed ${imageRef}`,
+          );
+          return;
+        }
 
         if (build.kind === "remote") {
           // Pull the pre-built image and re-tag it to the Cloudflare registry
@@ -312,7 +415,7 @@ export const LiveContainerProvider = () =>
             `${id}-container`,
           );
           const finalDockerfile = buildFinalDockerfile(
-            props.dockerfile,
+            yield* containerEnvPreamble(props),
             runtime,
             props.external,
             props.autoInstallExternals,
@@ -405,7 +508,7 @@ export const LiveContainerProvider = () =>
         session,
       }: {
         id: string;
-        news: ContainerApplicationProps;
+        news: AnyContainerApplicationProps;
         name: string;
         configuration: ContainerApplication.Configuration;
         durableObjects:
@@ -545,7 +648,7 @@ export const LiveContainerProvider = () =>
         session,
       }: {
         id: string;
-        news: ContainerApplicationProps;
+        news: AnyContainerApplicationProps;
         existing: ContainerApplication["Attributes"];
         // The DO attachment to (re)create with if the "existing" application
         // turns out to be gone. Threaded through so the update→create fallback

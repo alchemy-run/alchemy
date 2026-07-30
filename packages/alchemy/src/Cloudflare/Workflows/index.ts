@@ -1,2 +1,2 @@
 export * from "./Workflow.ts";
-export * from "./WorkflowBridge.ts";
+export { makeWorkflowBridge } from "./WorkflowBridge.ts";

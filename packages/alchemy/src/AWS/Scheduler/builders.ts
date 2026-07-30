@@ -1,5 +1,6 @@
 import type * as scheduler from "@distilled.cloud/aws/scheduler";
 import * as Effect from "effect/Effect";
+import type { Input, InputProps } from "../../Input.ts";
 import type { Cluster } from "../ECS/Cluster.ts";
 import * as IAM from "../IAM/index.ts";
 import type { Function } from "../Lambda/Function.ts";
@@ -99,19 +100,25 @@ export interface QueueTargetProps {
 export interface EcsTaskTargetProps {
   /** ECS cluster the task runs on. */
   cluster: Cluster;
-  /** Task definition and the roles Scheduler passes to it. */
+  /**
+   * Task definition and the roles Scheduler passes to it.
+   *
+   * This is a builder argument (not resource Props), so the fields are
+   * `Input`-typed explicitly: an `AWS.ECS.Task` resource — whose attributes
+   * are `Output`s — is directly assignable here.
+   */
   task: {
     /** ARN of the task definition to run. */
-    taskDefinitionArn: string;
+    taskDefinitionArn: Input<string>;
     /** ARN of the task role (`iam:PassRole` is granted automatically). */
-    taskRoleArn: string;
+    taskRoleArn: Input<string>;
     /** ARN of the execution role (`iam:PassRole` is granted automatically). */
-    executionRoleArn: string;
+    executionRoleArn: Input<string>;
   };
   /** Subnets for the task's awsvpc network configuration. */
-  subnets: string[];
+  subnets: Input<string[]>;
   /** Security groups for the task's awsvpc network configuration. */
-  securityGroups?: string[];
+  securityGroups?: Input<string[]>;
   /**
    * Whether the task gets a public IP.
    * @default false
@@ -255,7 +262,10 @@ const materializeSchedule = (
   state: ScheduleBuilderState,
   targetId: string,
   statements: any[],
-  target: Omit<scheduler.Target, "RoleArn">,
+  // `InputProps` so target fields may carry unresolved `Output`s (e.g. a
+  // Task's `taskDefinitionArn`); they flow into the `Schedule` resource's
+  // Input-typed `target` prop and resolve at deploy time.
+  target: InputProps<Omit<scheduler.Target, "RoleArn">>,
 ) =>
   Effect.gen(function* () {
     const scheduleId = state.name ?? `${targetId}Schedule`;
@@ -269,7 +279,6 @@ const materializeSchedule = (
               Service: "scheduler.amazonaws.com",
             },
             Action: ["sts:AssumeRole"],
-            Resource: ["*"],
           },
         ],
       },

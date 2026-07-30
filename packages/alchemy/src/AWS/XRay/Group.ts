@@ -134,9 +134,10 @@ export const GroupProvider = () =>
         );
 
       const observedTags = (groupArn: string) =>
-        xray.listTagsForResource({ ResourceARN: groupArn }).pipe(
-          Effect.map((r) =>
-            Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value])),
+        xray.listTagsForResource.items({ ResourceARN: groupArn }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Object.fromEntries(Array.from(chunk).map((t) => [t.Key, t.Value])),
           ),
           Effect.catchTag("ResourceNotFoundException", () =>
             Effect.succeed({} as Record<string, string>),

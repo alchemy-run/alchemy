@@ -55,7 +55,7 @@ describe.concurrent("Cloudflare.Worker with a Python entrypoint", () => {
           Effect.gen(function* () {
             return yield* Cloudflare.Worker("PythonWorker", {
               main,
-              subdomain: { enabled: true },
+              workersDev: true,
               env: { PY_SUFFIX: "42" },
             });
           }),
@@ -111,7 +111,7 @@ describe.concurrent("Cloudflare.Worker with a Python entrypoint", () => {
           Effect.gen(function* () {
             return yield* Cloudflare.Worker("PythonDepsWorker", {
               main: depsMain,
-              subdomain: { enabled: true },
+              workersDev: true,
             });
           }),
         );
@@ -147,7 +147,7 @@ describe.concurrent("Cloudflare.Worker with a Python entrypoint", () => {
           Effect.gen(function* () {
             return yield* Cloudflare.Worker("PythonFastapiWorker", {
               main: fastapiMain,
-              subdomain: { enabled: true },
+              workersDev: true,
               env: { DEPLOYMENT: "alchemy-fastapi-e2e" },
             });
           }),

@@ -1,6 +1,7 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
@@ -302,13 +303,10 @@ export const NatGatewayProvider = () =>
       // Find NAT Gateway by alchemy tags when we don't have the ID
       const findNatGatewayByTags = Effect.fn(function* (id: string) {
         const filters = yield* createAlchemyTagFilters(id);
-        const result = yield* ec2.describeNatGateways({ Filter: filters });
-
         // Find a NAT Gateway that's not deleted and has matching tags
-        for (const gw of result.NatGateways ?? []) {
-          return gw;
-        }
-        return undefined;
+        return yield* ec2.describeNatGateways
+          .items({ Filter: filters })
+          .pipe(Stream.runHead, Effect.map(Option.getOrUndefined));
       });
 
       return {

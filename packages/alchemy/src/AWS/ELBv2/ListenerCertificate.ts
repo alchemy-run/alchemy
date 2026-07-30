@@ -1,5 +1,6 @@
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
@@ -76,16 +77,18 @@ export const ListenerCertificateProvider = () =>
       if (!output) {
         return undefined;
       }
-      const described = yield* elbv2
-        .describeListenerCertificates({ ListenerArn: output.listenerArn })
+      const attached = yield* elbv2.describeListenerCertificates
+        .items({ ListenerArn: output.listenerArn })
         .pipe(
+          Stream.filter(
+            (c) => !c.IsDefault && c.CertificateArn === output.certificateArn,
+          ),
+          Stream.runHead,
+          Effect.map(Option.isSome),
           Effect.catchTag("ListenerNotFoundException", () =>
-            Effect.succeed(undefined),
+            Effect.succeed(false),
           ),
         );
-      const attached = described?.Certificates?.some(
-        (c) => !c.IsDefault && c.CertificateArn === output.certificateArn,
-      );
       return attached ? output : undefined;
     }),
     // Certificates belong to a listener, which belongs to a load balancer.
@@ -130,19 +133,20 @@ export const ListenerCertificateProvider = () =>
       const rows = yield* Effect.forEach(
         listenerArns.flat(),
         (listenerArn) =>
-          elbv2.describeListenerCertificates({ ListenerArn: listenerArn }).pipe(
-            Effect.map((res) =>
-              (res.Certificates ?? [])
-                .filter((c) => !c.IsDefault && c.CertificateArn)
-                .map((c) => ({
-                  listenerArn,
-                  certificateArn: c.CertificateArn!,
-                })),
+          elbv2.describeListenerCertificates
+            .items({ ListenerArn: listenerArn })
+            .pipe(
+              Stream.filter((c) => !c.IsDefault && c.CertificateArn != null),
+              Stream.map((c) => ({
+                listenerArn,
+                certificateArn: c.CertificateArn!,
+              })),
+              Stream.runCollect,
+              Effect.map((chunk) => Array.from(chunk)),
+              Effect.catchTag("ListenerNotFoundException", () =>
+                Effect.succeed([]),
+              ),
             ),
-            Effect.catchTag("ListenerNotFoundException", () =>
-              Effect.succeed([]),
-            ),
-          ),
         { concurrency: 10 },
       );
       const result: ListenerCertificate["Attributes"][] = rows.flat();
@@ -152,12 +156,15 @@ export const ListenerCertificateProvider = () =>
       const listenerArn = news.listenerArn as ListenerArn;
 
       // Observe — is the certificate already attached?
-      const described = yield* elbv2.describeListenerCertificates({
-        ListenerArn: listenerArn,
-      });
-      const attached = described.Certificates?.some(
-        (c) => !c.IsDefault && c.CertificateArn === news.certificateArn,
-      );
+      const attached = yield* elbv2.describeListenerCertificates
+        .items({ ListenerArn: listenerArn })
+        .pipe(
+          Stream.filter(
+            (c) => !c.IsDefault && c.CertificateArn === news.certificateArn,
+          ),
+          Stream.runHead,
+          Effect.map(Option.isSome),
+        );
 
       // Ensure — the API is an idempotent add, but skip the call on no-op.
       if (!attached) {

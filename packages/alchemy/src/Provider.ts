@@ -1,4 +1,5 @@
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -9,6 +10,7 @@ import type { Diff } from "./Diff.ts";
 import type { Input } from "./Input.ts";
 import type { InstanceId } from "./InstanceId.ts";
 import type { Platform } from "./Platform.ts";
+import type { ProviderMode } from "./ProviderMode.ts";
 import type {
   ResourceBinding,
   ResourceClass,
@@ -111,6 +113,27 @@ export interface ProviderService<
    */
   aliases?: readonly string[];
   /**
+   * The {@link ProviderMode} this service operates in.
+   *
+   * Set by `ProviderLayer.dual` registrations: the delegating service
+   * registered in context carries the run's default mode, and each built
+   * variant carries its concrete mode. Mode-agnostic providers (plain
+   * {@link succeed}/{@link effect} registrations) leave it `undefined` —
+   * their resources never persist a mode and never replace on a mode
+   * switch.
+   */
+  mode?: ProviderMode;
+  /**
+   * Lazily-built mode variants, present only for `ProviderLayer.dual`
+   * registrations. Each effect builds (once, memoized, into the stack's
+   * layer scope) the provider service for that mode — including any
+   * mode-specific dependency layers — and returns it. The engine resolves
+   * a concrete variant via {@link findProviderByType} with a mode so that
+   * e.g. a local-mode state row is always deleted by the local provider,
+   * even during a live deploy (and vice versa).
+   */
+  modes?: { readonly [M in ProviderMode]: Effect.Effect<ProviderService<Res>> };
+  /**
    * Account-wide teardown (`alchemy unsafe nuke`) behaviour. Providers whose
    * resources can't meaningfully be deleted opt out here so nuke doesn't
    * report an endless "deleted but still there" loop. `read`/import are
@@ -133,6 +156,26 @@ export interface ProviderService<
      * {@link singleton}, these are ordinary multi-instance resources.
      */
     skip?: boolean;
+    /**
+     * Provider IDs (picomatch globs, e.g. `"AWS.IAM.Role"` or `"AWS.EC2.*"`)
+     * whose resources this type's **cloud-side teardown** consumes — they
+     * must still exist while this type is deleting. `alchemy unsafe nuke`
+     * topologically orders deletion so every resource of this type is fully
+     * gone before any matching type starts deleting; if this type's deletes
+     * fail, the matching types are held back rather than deleted out from
+     * under an in-flight teardown.
+     *
+     * Example: SageMaker HyperPod deletes node ENIs by assuming the
+     * instance group's execution role — deleting the role (or the VPC)
+     * mid-teardown wedges the cluster in `Deleting` permanently, so
+     * `AWS.SageMaker.Cluster` declares `dependsOn: ["AWS.IAM.Role", ...]`.
+     *
+     * The constraint only takes effect when resources of this type are
+     * actually present in the nuke target set; declaration cycles collapse
+     * into a single concurrent wave (with a logged warning) instead of
+     * failing.
+     */
+    dependsOn?: readonly string[];
   };
   /**
    * Enumerates every existing resource of this type in the ambient scope
@@ -292,6 +335,64 @@ export interface ProviderService<
   }): Effect.Effect<void, any, DeleteReq>;
 }
 
+/**
+ * The provider shape accepted by {@link effect} / {@link succeed}: identical
+ * to {@link ProviderService} except `list` is **optional**. Providers with no
+ * native enumeration API (local/dev providers, account singletons,
+ * sub-resources keyed entirely by a parent) simply omit it and get a safe
+ * `() => Effect.succeed([])` default.
+ *
+ * Making `list` optional at the constructor (rather than on
+ * {@link ProviderService} itself) keeps the engine's contract intact — every
+ * registered provider still has a callable `list` — while removing the
+ * type-inference trap where a missing required member silently defaults all
+ * `*Req` type params to `never` and produces baffling `R is not assignable
+ * to never` cascades at every other property.
+ */
+export type ProviderServiceInput<
+  Res extends ResourceLike = ResourceLike,
+  ReadReq = never,
+  DiffReq = never,
+  PrecreateReq = never,
+  ReconcileReq = never,
+  DeleteReq = never,
+  TailReq = never,
+  LogsReq = never,
+  ListReq = never,
+> = Omit<
+  ProviderService<
+    Res,
+    ReadReq,
+    DiffReq,
+    PrecreateReq,
+    ReconcileReq,
+    DeleteReq,
+    TailReq,
+    LogsReq,
+    ListReq
+  >,
+  "list"
+> &
+  Partial<
+    Pick<
+      ProviderService<
+        Res,
+        ReadReq,
+        DiffReq,
+        PrecreateReq,
+        ReconcileReq,
+        DeleteReq,
+        TailReq,
+        LogsReq,
+        ListReq
+      >,
+      "list"
+    >
+  >;
+
+const withDefaultList = <S extends { list?: unknown }>(service: S): S =>
+  service.list ? service : { ...service, list: () => Effect.succeed([]) };
+
 export const effect = <
   R extends ResourceLike,
   Req = never,
@@ -306,7 +407,7 @@ export const effect = <
 >(
   cls: ResourceClassLike<R> | Platform<R, any, any, any, any>,
   eff: Effect.Effect<
-    ProviderService<
+    ProviderServiceInput<
       R,
       ReadReq,
       DiffReq,
@@ -333,7 +434,7 @@ export const effect = <
     Provider(cls.Type),
     Effect.map(eff, (service) => ({
       aliases: "Aliases" in cls ? cls.Aliases : undefined,
-      ...service,
+      ...withDefaultList(service),
     })),
   ) as any;
 
@@ -349,7 +450,7 @@ export const succeed = <
   ListReq = never,
 >(
   cls: ResourceClass<R> | Platform<R, any, any, any, any>,
-  service: ProviderService<
+  service: ProviderServiceInput<
     R,
     ReadReq,
     DiffReq,
@@ -371,7 +472,7 @@ export const succeed = <
   // @ts-expect-error
   Layer.succeed(Provider(cls.Type), {
     aliases: "Aliases" in cls ? cls.Aliases : undefined,
-    ...service,
+    ...withDefaultList(service),
   });
 
 export interface ProviderCollectionLike {
@@ -474,12 +575,33 @@ const isProviderService = (value: unknown): value is ProviderService =>
   "delete" in value &&
   typeof (value as ProviderService).delete === "function";
 
+/**
+ * Resolve the concrete service for `mode` from a provider found in context.
+ *
+ * - `mode === undefined` → the service as registered (for dual
+ *   registrations that is the delegating service for the run's default
+ *   mode).
+ * - `mode` given and the provider carries {@link ProviderService.modes} →
+ *   the (lazily built, memoized) variant for that mode.
+ * - `mode` given but the provider is mode-agnostic → the service itself:
+ *   a single implementation satisfies every mode (hybrid), which is what
+ *   lets live-only resources (e.g. R2 buckets) participate in dev runs.
+ */
+export const providerForMode = <R extends ResourceLike>(
+  service: ProviderService<R>,
+  mode: ProviderMode | undefined,
+): Effect.Effect<ProviderService<R>> =>
+  mode !== undefined && service.modes !== undefined
+    ? service.modes[mode]
+    : Effect.succeed(service);
+
 export const findProviderByType: {
   <R extends ResourceLike>(
     resourceType: R["Type"],
+    mode?: ProviderMode,
   ): Effect.Effect<ProviderService<R>>;
-} = ((type: string) =>
-  tryFindProviderByType(type).pipe(
+} = ((type: string, mode?: ProviderMode) =>
+  tryFindProviderByType(type, mode).pipe(
     Effect.flatMap(
       Option.match({
         onNone: () => Effect.die(`Provider not found for ${type}`),
@@ -497,51 +619,102 @@ export const findProviderByType: {
 export const findProvider: {
   <R extends ResourceLike>(
     resource: ResourceClassLike<R> | Platform<R, any, any, any, any>,
+    mode?: ProviderMode,
   ): Effect.Effect<ProviderService<R>>;
-} = (resource: { Type?: string; key?: string }) =>
-  findProviderByType((resource.Type ?? resource.key) as string) as any;
+} = (resource: { Type?: string; key?: string }, mode?: ProviderMode) =>
+  findProviderByType((resource.Type ?? resource.key) as string, mode) as any;
+
+/**
+ * A persisted state row references a resource type with no registered
+ * provider — the type was removed from the program (or renamed without an
+ * alias) while its state row still exists ("zombie" row).
+ *
+ * This is FATAL at plan time: the program and state fundamentally disagree,
+ * and without the provider the row's physical resource cannot be deleted
+ * anyway, so proceeding would only strand it silently. The plan dies with
+ * this error; nothing is deployed or destroyed until the provider is
+ * re-registered (or aliased), or the state row is cleared manually.
+ */
+export class MissingProviderError extends Data.TaggedError(
+  "MissingProviderError",
+)<{
+  message: string;
+  resourceType: string;
+  fqn: string;
+}> {}
+
+/** Build the fatal plan-time error for a zombie state row. */
+export const missingProviderError = (
+  resourceType: string,
+  fqn: string,
+): MissingProviderError =>
+  new MissingProviderError({
+    message:
+      `No provider is registered for resource type '${resourceType}' ` +
+      `(state row '${fqn}'). The type was removed from the program or ` +
+      "renamed without an alias. Re-register the provider (or add the " +
+      "old name to the resource's `aliases`) so this row can be " +
+      "destroyed, or clear the state row manually if the physical " +
+      "resource is already gone.",
+    resourceType,
+    fqn,
+  });
 
 export const tryFindProviderByType: {
   <R extends ResourceLike>(
     resourceType: R["Type"],
+    mode?: ProviderMode,
   ): Effect.Effect<Option.Option<ProviderService<R>>>;
-} = Effect.fn(function* <R extends ResourceLike>(resourceType: R["Type"]) {
-  const Tag = Provider<R>(resourceType) as unknown as Context.Service<
-    Provider<R>,
-    any
-  >;
-  const direct = yield* Effect.serviceOption(Tag);
-  if (Option.isSome(direct)) {
-    return direct;
-  }
-
-  const context = yield* Effect.context<never>();
-  for (const value of context.mapUnsafe.values()) {
-    if (isProviderCollectionService(value)) {
-      const provider = value.get(resourceType);
-      if (provider) {
-        return Option.some(provider);
-      }
+} = Effect.fn(function* <R extends ResourceLike>(
+  resourceType: R["Type"],
+  mode?: ProviderMode,
+) {
+  // When a mode is requested, resolve the found service to that mode's
+  // variant (building it lazily if needed) before returning.
+  const found = yield* Effect.gen(function* () {
+    const Tag = Provider<R>(resourceType) as unknown as Context.Service<
+      Provider<R>,
+      any
+    >;
+    const direct = yield* Effect.serviceOption(Tag);
+    if (Option.isSome(direct)) {
+      return direct;
     }
-  }
 
-  // State persisted before a type rename carries the legacy name, so no
-  // provider is keyed under it. Fall back to a provider that declares the
-  // name in its `aliases` — scanning both bare Provider layers and the
-  // members of every ProviderCollection.
-  for (const value of context.mapUnsafe.values()) {
-    if (isProviderCollectionService(value)) {
-      for (const provider of Object.values(value.providers)) {
-        if (provider.aliases?.includes(resourceType)) {
+    const context = yield* Effect.context<never>();
+    for (const value of context.mapUnsafe.values()) {
+      if (isProviderCollectionService(value)) {
+        const provider = value.get(resourceType);
+        if (provider) {
           return Option.some(provider);
         }
       }
-    } else if (
-      isProviderService(value) &&
-      value.aliases?.includes(resourceType)
-    ) {
-      return Option.some(value);
     }
+
+    // State persisted before a type rename carries the legacy name, so no
+    // provider is keyed under it. Fall back to a provider that declares the
+    // name in its `aliases` — scanning both bare Provider layers and the
+    // members of every ProviderCollection.
+    for (const value of context.mapUnsafe.values()) {
+      if (isProviderCollectionService(value)) {
+        for (const provider of Object.values(value.providers)) {
+          if (provider.aliases?.includes(resourceType)) {
+            return Option.some(provider);
+          }
+        }
+      } else if (
+        isProviderService(value) &&
+        value.aliases?.includes(resourceType)
+      ) {
+        return Option.some(value);
+      }
+    }
+    return Option.none();
+  });
+  if (Option.isNone(found)) {
+    return found;
   }
-  return Option.none();
+  return Option.some(
+    yield* providerForMode(found.value as ProviderService<R>, mode),
+  );
 }) as any;

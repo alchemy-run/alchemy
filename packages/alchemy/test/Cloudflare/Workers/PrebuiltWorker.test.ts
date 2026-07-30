@@ -43,7 +43,7 @@ describe.concurrent("Cloudflare.Worker with bundle: false", () => {
             return yield* Cloudflare.Worker("PrebuiltWorker", {
               main,
               bundle: false,
-              subdomain: { enabled: true },
+              workersDev: true,
               compatibility: {
                 date: "2024-01-01",
               },
@@ -71,7 +71,7 @@ describe.concurrent("Cloudflare.Worker with bundle: false", () => {
             return yield* Cloudflare.Worker("PrebuiltWorker", {
               main,
               bundle: false,
-              subdomain: { enabled: true },
+              workersDev: true,
               compatibility: {
                 date: "2024-01-01",
               },

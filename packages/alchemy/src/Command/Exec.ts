@@ -2,10 +2,10 @@ import * as Effect from "effect/Effect";
 import { havePropsChanged, isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { CommandExecutor, type CommandProps } from "./Command.ts";
+import { CommandExecutor, type CommandRunProps } from "./Command.ts";
 import { hashDirectory, type MemoOptions } from "./Memo.ts";
 
-export interface ExecProps extends CommandProps {
+export interface ExecProps extends CommandRunProps {
   /**
    * Controls which files are hashed to decide whether the command should
    * re-run. By default every non-gitignored file in `cwd` is hashed, plus the
@@ -70,6 +70,15 @@ export interface Exec extends Resource<
  * yield* Exec("codegen", {
  *   command: "npm run codegen",
  *   memo: { include: ["schema/**"] },
+ * });
+ * ```
+ *
+ * @section Bounding Command Runtime
+ * @example Time Out a Migration
+ * ```typescript
+ * yield* Exec("migrate", {
+ *   command: "npm run db:migrate",
+ *   timeout: "5 minutes",
  * });
  * ```
  */

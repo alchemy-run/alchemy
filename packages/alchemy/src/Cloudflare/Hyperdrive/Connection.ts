@@ -1,5 +1,6 @@
 import * as hyperdrive from "@distilled.cloud/cloudflare/hyperdrive";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 
@@ -349,8 +350,11 @@ const createConfigName = (id: string, name: string | undefined) =>
 const findByName = (name: string) =>
   Effect.gen(function* () {
     const { accountId } = yield* yield* CloudflareEnvironment;
-    const list = yield* hyperdrive.listConfigs({ accountId });
-    return list.result.find((c) => c.name === name);
+    return yield* hyperdrive.listConfigs.items({ accountId }).pipe(
+      Stream.filter((c) => c.name === name),
+      Stream.runHead,
+      Effect.map(Option.getOrUndefined),
+    );
   });
 
 export const defaultPort = (scheme: Scheme): number =>

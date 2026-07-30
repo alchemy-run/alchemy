@@ -16,9 +16,7 @@ support. Configure providers (and state) once at the top of the file
 with `Test.make({...})` — the same `Cloudflare.providers()` /
 `Cloudflare.state()` you used in your `Stack`:
 
-```typescript twoslash
-// @filename: ../alchemy.run.ts
-// ---cut---
+```typescript
 // test/integ.test.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
@@ -41,9 +39,7 @@ Effect-aware test runner pieces.
 Use `beforeAll` with `deploy` to deploy your stack once before any
 tests run:
 
-```typescript twoslash
-// @filename: ../alchemy.run.ts
-// ---cut---
+```diff lang="typescript"
 // test/integ.test.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
@@ -68,9 +64,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 Write your first test. Use `yield* stack` to get the outputs you
 returned from your Stack in Part 2:
 
-```typescript twoslash
-// @filename: ../alchemy.run.ts
-// ---cut---
+```diff lang="typescript"
 // test/integ.test.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
@@ -113,9 +107,7 @@ and skips unchanged resources.
 The basic test just checks that a URL exists. Let's verify the Worker
 actually handles requests:
 
-```typescript twoslash
-// @filename: ../alchemy.run.ts
-// ---cut---
+```diff lang="typescript"
 // test/integ.test.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
@@ -177,9 +169,7 @@ stack. But on CI you want to clean up.
 Add `afterAll` with `destroy`, using `skipIf` to only tear down when
 `CI` is set:
 
-```typescript twoslash
-// @filename: ../alchemy.run.ts
-// ---cut---
+```diff lang="typescript"
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
 import { expect } from "bun:test";

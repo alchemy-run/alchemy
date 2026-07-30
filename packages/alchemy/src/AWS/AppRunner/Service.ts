@@ -5,6 +5,7 @@ import type { Region } from "@distilled.cloud/aws/Region";
 import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -1114,17 +1115,17 @@ await Effect.runPromise(program).catch((err) => {
 
       /** Find a live service by name (list has no name filter). */
       const findByName = Effect.fn(function* (name: string) {
-        const summaries = yield* apprunner.listServices.pages({}).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) => page.ServiceSummaryList ?? []),
+        const summary = yield* apprunner.listServices.pages({}).pipe(
+          Stream.map((page) => page.ServiceSummaryList ?? []),
+          Stream.flattenIterable,
+          Stream.filter(
+            (s) =>
+              s.ServiceName === name &&
+              !statusIs(s.Status, "DELETED") &&
+              s.ServiceArn !== undefined,
           ),
-        );
-        const summary = summaries.find(
-          (s) =>
-            s.ServiceName === name &&
-            !statusIs(s.Status, "DELETED") &&
-            s.ServiceArn !== undefined,
+          Stream.runHead,
+          Effect.map(Option.getOrUndefined),
         );
         if (!summary?.ServiceArn) return undefined;
         return yield* readService(summary.ServiceArn);
@@ -1587,53 +1588,42 @@ await Effect.runPromise(program).catch((err) => {
             output.accessRoleName,
           ]) {
             if (roleName === undefined) continue;
-            yield* iam.listRolePolicies({ RoleName: roleName }).pipe(
+            yield* iam.listRolePolicies.items({ RoleName: roleName }).pipe(
+              Stream.mapEffect((policyName) =>
+                iam
+                  .deleteRolePolicy({
+                    RoleName: roleName,
+                    PolicyName: policyName,
+                  })
+                  .pipe(
+                    Effect.catchTag("NoSuchEntityException", () => Effect.void),
+                  ),
+              ),
+              Stream.runDrain,
               // The role may already be gone (delete re-run / race) —
               // treat a missing role as "no policies" so delete is
               // idempotent.
-              Effect.catchTag("NoSuchEntityException", () =>
-                Effect.succeed({ PolicyNames: [] as string[] }),
-              ),
-              Effect.flatMap((policies) =>
-                Effect.all(
-                  (policies.PolicyNames ?? []).map((policyName) =>
-                    iam
-                      .deleteRolePolicy({
-                        RoleName: roleName,
-                        PolicyName: policyName,
-                      })
-                      .pipe(
-                        Effect.catchTag(
-                          "NoSuchEntityException",
-                          () => Effect.void,
-                        ),
-                      ),
-                  ),
-                ),
-              ),
+              Effect.catchTag("NoSuchEntityException", () => Effect.void),
             );
-            yield* iam.listAttachedRolePolicies({ RoleName: roleName }).pipe(
-              Effect.catchTag("NoSuchEntityException", () =>
-                Effect.succeed({ AttachedPolicies: [] }),
-              ),
-              Effect.flatMap((policies) =>
-                Effect.all(
-                  (policies.AttachedPolicies ?? []).map((policy) =>
-                    iam
-                      .detachRolePolicy({
-                        RoleName: roleName,
-                        PolicyArn: policy.PolicyArn!,
-                      })
-                      .pipe(
-                        Effect.catchTag(
-                          "NoSuchEntityException",
-                          () => Effect.void,
-                        ),
+            yield* iam.listAttachedRolePolicies
+              .items({ RoleName: roleName })
+              .pipe(
+                Stream.mapEffect((policy) =>
+                  iam
+                    .detachRolePolicy({
+                      RoleName: roleName,
+                      PolicyArn: policy.PolicyArn!,
+                    })
+                    .pipe(
+                      Effect.catchTag(
+                        "NoSuchEntityException",
+                        () => Effect.void,
                       ),
-                  ),
+                    ),
                 ),
-              ),
-            );
+                Stream.runDrain,
+                Effect.catchTag("NoSuchEntityException", () => Effect.void),
+              );
             yield* iam
               .deleteRole({ RoleName: roleName })
               .pipe(

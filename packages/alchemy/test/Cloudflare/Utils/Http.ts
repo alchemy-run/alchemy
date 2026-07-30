@@ -147,21 +147,22 @@ export const expectUrlContains = (
   );
 };
 
-export class HttpStatusMismatch extends Data.TaggedError("HttpStatusMismatch")<{
+export class HttpResponseMismatch extends Data.TaggedError(
+  "HttpResponseMismatch",
+)<{
   url: string;
-  expected: number;
-  actual: number;
-  bodyExcerpt: string;
+  expected: string;
+  actual: string;
 }> {}
 
-const fetchOnceStatus = (url: string, expected: number) =>
+const fetchOnceResponse = (
+  url: string,
+  check: (res: Response) => HttpResponseMismatch | undefined,
+) =>
   Effect.tryPromise({
     try: async (signal) => {
       const u = new URL(url);
       u.searchParams.set("__alchemy_cb", String(Date.now()));
-      // `redirect: "manual"` so a 3xx is observed as-is instead of being
-      // transparently followed — this helper exists to assert that a URL
-      // serves (or redirects) *directly*.
       const res = await fetch(u, {
         signal,
         cache: "no-store",
@@ -172,19 +173,14 @@ const fetchOnceStatus = (url: string, expected: number) =>
           accept: "*/*",
         },
       });
-      const body = await res.text();
-      if (res.status !== expected || looksLikeCloudflarePlaceholder(body)) {
-        throw new HttpStatusMismatch({
-          url,
-          expected,
-          actual: res.status,
-          bodyExcerpt: body.slice(0, 240),
-        });
+      const mismatch = check(res);
+      if (mismatch) {
+        throw mismatch;
       }
-      return res.status;
+      return res;
     },
     catch: (e) =>
-      e instanceof HttpStatusMismatch
+      e instanceof HttpResponseMismatch
         ? e
         : new HttpFetchFailed({
             url,
@@ -192,24 +188,18 @@ const fetchOnceStatus = (url: string, expected: number) =>
           }),
   });
 
-/**
- * Fetch `url` WITHOUT following redirects and assert the immediate
- * response status equals `expected`. Retries through deploy propagation
- * like `expectUrlContains`. Use it to prove a URL serves directly (200)
- * rather than bouncing through a 3xx first.
- */
-export const expectDirectStatus = (
+const retryResponse = (
   url: string,
-  expected: number,
-  options: ExpectUrlContainsOptions = {},
+  expected: string,
+  effect: Effect.Effect<Response, HttpResponseMismatch | HttpFetchFailed>,
+  options: ExpectUrlContainsOptions,
 ) => {
   const totalTimeout = Duration.fromInputUnsafe(
     options.timeout ?? "90 seconds",
   );
   const initial = options.initialBackoff ?? "750 millis";
   const label = options.label ?? "url";
-
-  return fetchOnceStatus(url, expected).pipe(
+  return effect.pipe(
     Effect.retry({
       schedule: Schedule.min([
         Schedule.exponential(initial, 1.5),
@@ -220,19 +210,127 @@ export const expectDirectStatus = (
       duration: totalTimeout,
       orElse: () =>
         Effect.fail(
-          new HttpStatusMismatch({
+          new HttpResponseMismatch({
             url,
             expected,
-            actual: 0,
-            bodyExcerpt: `[timed out after ${Duration.toMillis(totalTimeout)}ms waiting for a direct ${expected}]`,
+            actual: `[timed out after ${Duration.toMillis(totalTimeout)}ms waiting for ${expected}]`,
           }),
         ),
     }),
     Effect.tapError((error) =>
-      Effect.logError(`expectDirectStatus(${label}) failed`, error),
+      Effect.logError(`expect response (${label}) failed`, error),
     ),
   );
 };
+
+/**
+ * Fetch `url` without following redirects and assert the response is a
+ * redirect to `location` (with `status`, default 301). Retries through
+ * deploy propagation like {@link expectUrlContains}.
+ */
+export const expectUrlRedirect = (
+  url: string,
+  location: string,
+  options: ExpectUrlContainsOptions & { status?: number } = {},
+) => {
+  const status = options.status ?? 301;
+  const expected = `${status} -> ${location}`;
+  return retryResponse(
+    url,
+    expected,
+    fetchOnceResponse(url, (res) => {
+      // Cloudflare appends the request's query string to the Location
+      // header, so compare pathnames rather than the raw value.
+      const actual = res.headers.get("location");
+      const actualPath = actual === null ? null : new URL(actual, url).pathname;
+      return res.status === status && actualPath === location
+        ? undefined
+        : new HttpResponseMismatch({
+            url,
+            expected,
+            actual: `${res.status} -> ${actual}`,
+          });
+    }),
+    options,
+  );
+};
+
+/**
+ * Fetch `url` and assert response header `header` equals `value`.
+ * Retries through deploy propagation like {@link expectUrlContains}.
+ */
+export const expectUrlHeader = (
+  url: string,
+  header: string,
+  value: string,
+  options: ExpectUrlContainsOptions = {},
+) => {
+  const expected = `${header}: ${value}`;
+  return retryResponse(
+    url,
+    expected,
+    fetchOnceResponse(url, (res) =>
+      res.headers.get(header) === value
+        ? undefined
+        : new HttpResponseMismatch({
+            url,
+            expected,
+            actual: `${res.status} ${header}: ${res.headers.get(header)}`,
+          }),
+    ),
+    options,
+  );
+};
+
+/**
+ * Fetch `url` WITHOUT following redirects and assert the immediate
+ * response status equals `expected` (and the body is not a Cloudflare
+ * placeholder page). Retries through deploy propagation like
+ * {@link expectUrlContains}. Use it to prove a URL serves (or redirects)
+ * *directly* rather than bouncing through a 3xx first.
+ */
+export const expectDirectStatus = (
+  url: string,
+  expected: number,
+  options: ExpectUrlContainsOptions = {},
+) =>
+  retryResponse(
+    url,
+    `direct ${expected}`,
+    Effect.tryPromise({
+      try: async (signal) => {
+        const u = new URL(url);
+        u.searchParams.set("__alchemy_cb", String(Date.now()));
+        const res = await fetch(u, {
+          signal,
+          cache: "no-store",
+          redirect: "manual",
+          headers: {
+            "cache-control": "no-cache",
+            pragma: "no-cache",
+            accept: "*/*",
+          },
+        });
+        const body = await res.text();
+        if (res.status !== expected || looksLikeCloudflarePlaceholder(body)) {
+          throw new HttpResponseMismatch({
+            url,
+            expected: `direct ${expected}`,
+            actual: `${res.status} ${body.slice(0, 240)}`,
+          });
+        }
+        return res;
+      },
+      catch: (e) =>
+        e instanceof HttpResponseMismatch
+          ? e
+          : new HttpFetchFailed({
+              url,
+              message: e instanceof Error ? e.message : String(e),
+            }),
+    }),
+    options,
+  );
 
 const fetchOnceAbsent = (url: string, marker: string) =>
   Effect.tryPromise({

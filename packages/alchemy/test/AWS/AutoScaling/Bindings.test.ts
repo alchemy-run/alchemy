@@ -253,17 +253,21 @@ describe("AutoScaling runtime bindings", () => {
     "consumeInstanceEvents created the EventBridge rule for instance events",
     (_stack) =>
       Effect.gen(function* () {
-        // The rule's physical name embeds the fixture's logical id
-        // (`BindingsGroup-InstanceEvents`); find it on the default bus with
-        // bounded manual pagination (listRules is not paginated in distilled).
+        // The rule's physical name is `{stack}-{logicalId}` truncated to fit
+        // the instance-id suffix (e.g. `AutoScalingBindings-BindingsGroup-
+        // Instan3unhktjkefuey4…`), so the full logical id may not survive.
+        // Filter server-side on the stable stack+logical prefix and pick the
+        // autoscaling-pattern rule.
         let rule: eventbridge.Rule | undefined;
         let nextToken: string | undefined;
         for (let page = 0; page < 10 && !rule; page++) {
           const result = yield* eventbridge.listRules({
+            NamePrefix: "AutoScalingBindings-BindingsGroup-",
             NextToken: nextToken,
+            Limit: 100,
           });
           rule = (result.Rules ?? []).find((candidate) =>
-            candidate.Name?.includes("InstanceEvents"),
+            candidate.EventPattern?.includes("aws.autoscaling"),
           );
           nextToken = result.NextToken;
           if (!nextToken) break;

@@ -27,7 +27,7 @@ export class RDSDrizzleIamFunction extends Lambda.Function<Lambda.Function>()(
  *   through the Function binding contract's `vpc` channel (DECISION #5) —
  *   the isolated VPC is fine because IAM-auth needs zero AWS API calls at
  *   runtime (the presign is local; credentials come from the Lambda env).
- * - `Drizzle.postgres(url)` proves the `ConnectionInfo.url` composition:
+ * - `Drizzle.Postgres(url)` proves the `ConnectionInfo.url` composition:
  *   the pool dials the cluster endpoint over a real socket per execution.
  *
  * Shares the Aurora infra with the RDSData fixture (`infra.ts`); the
@@ -56,7 +56,7 @@ export default RDSDrizzleIamFunction.make(
 
     // `url` embeds the freshly minted token; the pool is per-execution
     // (ExecutionMemo), so every invoke re-runs `connect` and re-mints.
-    const db = yield* Drizzle.postgres(Effect.map(connect, (info) => info.url));
+    const db = yield* Drizzle.Postgres(Effect.map(connect, (info) => info.url));
 
     return {
       fetch: Effect.gen(function* () {

@@ -3,7 +3,11 @@
 import type * as Effect from "effect/Effect";
 import type { Redacted } from "effect/Redacted";
 import type * as Stream from "effect/Stream";
-import type { Rpc } from "../../Rpc.ts";
+import type { Output } from "../../Output.ts";
+// Aliased so the ambient Cloudflare `Rpc` namespace (from
+// @cloudflare/workers-types, referenced above) stays reachable for
+// `Rpc.DurableObjectBranded`.
+import type { Rpc as AlchemyRpc } from "../../Rpc.ts";
 import type { WorkflowLike } from "../Workflows/Workflow.ts";
 // NOTE: import the service modules directly rather than `import * as Cloudflare
 // from "../index.ts"`. Importing the whole Cloudflare barrel here creates a
@@ -13,6 +17,7 @@ import type { WorkflowLike } from "../Workflows/Workflow.ts";
 import type * as AI from "../AI/index.ts";
 import type * as AnalyticsEngine from "../AnalyticsEngine/index.ts";
 import type * as ArtifactsNs from "../Artifacts/index.ts";
+import type { Container } from "../Containers/Container.ts";
 import type * as D1 from "../D1/index.ts";
 import type * as Email from "../Email/index.ts";
 import type * as FlagshipNs from "../Flagship/index.ts";
@@ -42,66 +47,76 @@ export type InferEnv<W> =
         };
 
 export type GetBindingType<T> =
-  T extends Effect.Effect<infer A, infer _E, infer _R>
-    ? GetBindingType<A>
-    : T extends FlagshipNs.App
-      ? Flagship
-      : T extends Assets
-        ? Service
-        : T extends Rpc<infer Shape extends object>
-          ? RpcWireShape<Shape> & Service
-          : T extends D1.Database
-            ? D1Database
-            : T extends R2.Bucket
-              ? R2Bucket
-              : T extends KV.Namespace
-                ? KVNamespace
-                : T extends DispatchNamespaceResource
-                  ? DispatchNamespace
-                  : T extends Queues.Queue
-                    ? Queue<unknown>
-                    : T extends AI.Gateway
-                      ? Ai
-                      : T extends AIBinding
+  // A Container bound in `env` is a container-backed Durable Object class —
+  // the runtime binding is the class's namespace. Must be tested BEFORE the
+  // generic Effect unwrap: a Container declaration is itself an Effect.
+  T extends Container.Decl<any, any, any, any, infer DOShape>
+    ? DurableObjectNamespace<DOShape & Rpc.DurableObjectBranded>
+    : // `Worker.URL` (an Effect resolving to a deferred string accessor) needs
+      // no case of its own: the generic Effect unwrap below reduces it to
+      // `string` via the fallthrough.
+      T extends
+          | Output<infer A, infer _Req>
+          | Effect.Effect<infer A, infer _E, infer _R>
+      ? GetBindingType<A>
+      : T extends FlagshipNs.App
+        ? Flagship
+        : T extends Assets
+          ? Service
+          : T extends AlchemyRpc<infer Shape extends object>
+            ? RpcWireShape<Shape> & Service
+            : T extends D1.Database
+              ? D1Database
+              : T extends R2.Bucket
+                ? R2Bucket
+                : T extends KV.Namespace
+                  ? KVNamespace
+                  : T extends DispatchNamespaceResource
+                    ? DispatchNamespace
+                    : T extends Queues.Queue
+                      ? Queue<unknown>
+                      : T extends AI.Gateway
                         ? Ai
-                        : T extends AI.Search
-                          ? AiSearchInstance
-                          : T extends AI.SearchNamespace
-                            ? AiSearchNamespace
-                            : T extends Email.SendEmail
-                              ? SendEmail
-                              : T extends AnalyticsEngine.Dataset
-                                ? AnalyticsEngineDataset
-                                : T extends ArtifactsNs.Namespace
-                                  ? Artifacts
-                                  : T extends RateLimitBinding
-                                    ? RateLimit
-                                    : T extends ImagesNs.ImagesBinding
-                                      ? ImagesBinding
-                                      : T extends BrowserBinding
-                                        ? BrowserRun
-                                        : T extends HyperdriveNs.Connection
-                                          ? Hyperdrive
-                                          : T extends VersionMetadataBinding
-                                            ? WorkerVersionMetadata
-                                            : T extends WorkerLoaderResource
-                                              ? WorkerLoader
-                                              : T extends WorkflowLike<
-                                                    infer Params
-                                                  >
-                                                ? Workflow<Params>
-                                                : T extends DurableObjectLike
-                                                  ? DurableObjectNamespace<
-                                                      Exclude<
-                                                        T["Shape"],
-                                                        undefined
-                                                      >
+                        : T extends AIBinding
+                          ? Ai
+                          : T extends AI.Search
+                            ? AiSearchInstance
+                            : T extends AI.SearchNamespace
+                              ? AiSearchNamespace
+                              : T extends Email.SendEmail
+                                ? SendEmail
+                                : T extends AnalyticsEngine.Dataset
+                                  ? AnalyticsEngineDataset
+                                  : T extends ArtifactsNs.Namespace
+                                    ? Artifacts
+                                    : T extends RateLimitBinding
+                                      ? RateLimit
+                                      : T extends ImagesNs.ImagesBinding
+                                        ? ImagesBinding
+                                        : T extends BrowserBinding
+                                          ? BrowserRun
+                                          : T extends HyperdriveNs.Connection
+                                            ? Hyperdrive
+                                            : T extends VersionMetadataBinding
+                                              ? WorkerVersionMetadata
+                                              : T extends WorkerLoaderResource
+                                                ? WorkerLoader
+                                                : T extends WorkflowLike<
+                                                      infer Params
                                                     >
-                                                  : T extends Redacted<any>
-                                                    ? // redacteds are always stored as secret_text, so are always string
-                                                      // we JSON.stringify when not a Redacted<string>
-                                                      string
-                                                    : T;
+                                                  ? Workflow<Params>
+                                                  : T extends DurableObjectLike
+                                                    ? DurableObjectNamespace<
+                                                        Exclude<
+                                                          T["Shape"],
+                                                          undefined
+                                                        >
+                                                      >
+                                                    : T extends Redacted<any>
+                                                      ? // redacteds are always stored as secret_text, so are always string
+                                                        // we JSON.stringify when not a Redacted<string>
+                                                        string
+                                                      : T;
 
 /**
  * Cloudflare service-binding wire shape for an Effect-native Worker.

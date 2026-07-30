@@ -1,6 +1,7 @@
 import * as sd from "@distilled.cloud/aws/servicediscovery";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -222,12 +223,19 @@ export const ServiceProvider = () =>
             return byId;
           }
         }
-        const listed = yield* sd.listServices({
-          Filters: [
-            { Name: "NAMESPACE_ID", Values: [namespaceId], Condition: "EQ" },
-          ],
-        });
-        const summary = listed.Services?.find((s) => s.Name === name);
+        const summary = yield* sd.listServices
+          .pages({
+            Filters: [
+              { Name: "NAMESPACE_ID", Values: [namespaceId], Condition: "EQ" },
+            ],
+          })
+          .pipe(
+            Stream.map((page) => page.Services ?? []),
+            Stream.flattenIterable,
+            Stream.filter((s) => s.Name === name),
+            Stream.runHead,
+            Effect.map(Option.getOrUndefined),
+          );
         if (summary?.Id === undefined) {
           return undefined;
         }

@@ -1,5 +1,6 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
@@ -244,14 +245,16 @@ export const NetworkAclAssociationProvider = () =>
             return;
           }
 
-          const defaultAclResult = yield* ec2.describeNetworkAcls({
-            Filters: [
-              { Name: "vpc-id", Values: [vpcId] },
-              { Name: "default", Values: ["true"] },
-            ],
-          });
+          const defaultAcl = yield* ec2.describeNetworkAcls
+            .items({
+              Filters: [
+                { Name: "vpc-id", Values: [vpcId] },
+                { Name: "default", Values: ["true"] },
+              ],
+            })
+            .pipe(Stream.runHead, Effect.map(Option.getOrUndefined));
 
-          const defaultAclId = defaultAclResult.NetworkAcls?.[0]?.NetworkAclId;
+          const defaultAclId = defaultAcl?.NetworkAclId;
 
           if (defaultAclId && defaultAclId !== (olds.networkAclId as string)) {
             // Replace with default NACL

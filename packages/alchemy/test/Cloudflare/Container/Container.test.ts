@@ -14,7 +14,9 @@ describe.concurrent.each([
   {
     dev: true,
     stage: "test-local",
-    timeout: 120_000,
+    // Must cover the full readiness budget (readinessRetries × 3s ≈ 3 min)
+    // when a saturated machine keeps the local container answering 500s.
+    timeout: 300_000,
   },
   {
     dev: false,
@@ -185,7 +187,11 @@ const readinessSchedule = Schedule.min([
   Schedule.exponential("500 millis"),
   Schedule.spaced("3 seconds"),
 ]);
-const readinessRetries = 30;
+// ~3 min of 3s-spaced polls: a saturated full-suite run (many concurrent
+// docker builds/pushes on this machine) can keep a dev container answering
+// 500 well past the ~90s that 30 retries buys. Failing attempts return
+// fast, so the extra budget only matters on the slow path.
+const readinessRetries = 60;
 
 // While a freshly pre-created worker propagates, Cloudflare's edge serves
 // Alchemy's pre-create stub (200 with this body); any poll that sees it retries.

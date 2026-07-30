@@ -15,26 +15,16 @@ const main = path.resolve(import.meta.dirname, "nested-ecs-lambda.ts");
 // nested Task's layer builds, and the fix ensures the host `get` reads
 // `process.env` directly instead of recursing back through the interceptor.
 //
-// The busybox `docker.dockerfile` override keeps the Task cheaply deployable
-// (the bundled program is never executed); we only need the Task to deploy
-// and the Lambda sandbox to boot.
-class NestedOneShotTask extends ECS.Task<NestedOneShotTask>()(
-  "NestedReproOneShotTask",
-  {
-    main,
-    cpu: 256,
-    memory: 512,
-    taskName: "alchemy-nested-repro-oneshot",
-    docker: {
-      dockerfile: [
-        "FROM busybox:stable",
-        'CMD ["sh", "-c", "echo alchemy-nested-repro-oneshot"]',
-        "",
-      ].join("\n"),
-    },
-  },
-  Effect.gen(function* () {}),
-) {}
+// Honest external form: a pre-built busybox image (mirrored into ECR), no
+// Effect program — we only need the Task to deploy and the Lambda sandbox
+// to boot.
+const NestedOneShotTask = ECS.Task("NestedReproOneShotTask", {
+  image: "busybox:stable",
+  command: ["sh", "-c", "echo alchemy-nested-repro-oneshot"],
+  cpu: 256,
+  memory: 512,
+  taskName: "alchemy-nested-repro-oneshot",
+});
 
 export class NestedEcsReproFunction extends Lambda.Function<Lambda.Function>()(
   "NestedEcsReproFunction",

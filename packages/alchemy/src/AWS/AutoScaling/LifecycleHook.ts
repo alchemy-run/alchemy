@@ -175,7 +175,10 @@ export const LifecycleHookProvider = () =>
   Provider.effect(
     LifecycleHook,
     Effect.gen(function* () {
-      const toName = (id: string, props: { lifecycleHookName?: string } = {}) =>
+      const toName = (
+        id: string,
+        props: { lifecycleHookName?: string } = {},
+      ) =>
         props.lifecycleHookName
           ? Effect.succeed(props.lifecycleHookName)
           : createPhysicalName({ id, maxLength: 255, lowercase: true });

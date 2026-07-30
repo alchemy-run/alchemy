@@ -72,7 +72,10 @@ const make = Effect.fn(function* (spawnerUrl: string) {
             RpcProxyApi["getProvider"]
           >,
       );
-      return unwrapRpcHandlers(provider, ["tail"]);
+      // The served shape omits the process-local `mode`/`modes` variant
+      // machinery (see RpcProviderService); the unwrapped stub is a plain
+      // (mode-agnostic) ProviderService.
+      return unwrapRpcHandlers(provider, ["tail"]) as ProviderService<any>;
     }),
   });
 });

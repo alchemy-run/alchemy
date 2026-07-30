@@ -4,10 +4,12 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
 import { deepEqual, isResolved } from "../../Diff.ts";
+import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { generateLocalId } from "../LocalRuntime.ts";
 import type * as Cloudflare from "../Providers.ts";
 import * as Zone from "../Zone/index.ts";
 
@@ -450,7 +452,7 @@ export declare namespace Bucket {
   };
 }
 
-export const BucketProvider = () =>
+export const ProviderLive = () =>
   Provider.effect(
     Bucket,
     Effect.gen(function* () {
@@ -694,7 +696,8 @@ export const BucketProvider = () =>
               perPage,
               startAfter,
             });
-            const page = (response.buckets ?? []).filter(
+            const raw = response.buckets ?? [];
+            const page = raw.filter(
               (b): b is typeof b & { name: string } =>
                 typeof b.name === "string" && b.name !== "",
             );
@@ -708,7 +711,10 @@ export const BucketProvider = () =>
                 location: normalizeLocation(b.location),
               });
             }
-            if (page.length < perPage) break;
+            // Terminate on the RAW page length — the filtered length can be
+            // shorter on a full page (nameless entries), which would end the
+            // walk early and silently drop the remaining buckets.
+            if (raw.length < perPage || page.length === 0) break;
             startAfter = page[page.length - 1].name;
           }
           return all;
@@ -859,43 +865,47 @@ export const BucketProvider = () =>
               buckets,
               (bucket) =>
                 Effect.gen(function* () {
-                  const domains =
-                    (yield* listCustomDomains(
-                      bucket.name,
-                      bucket.jurisdiction,
-                      {
+                  // The three hydration reads are independent — issue them
+                  // concurrently so each bucket costs one round-trip of wall
+                  // clock instead of three (a large leaked-bucket census can
+                  // otherwise blow the nuke scan's per-provider timeout).
+                  const [domains, lifecycleRules, cors] = yield* Effect.all(
+                    [
+                      listCustomDomains(bucket.name, bucket.jurisdiction, {
                         retryMissing: false,
-                      },
-                    )) ?? [];
-                  const lifecycleRules = yield* r2
-                    .getBucketLifecycle({
-                      accountId,
-                      bucketName: bucket.name,
-                      jurisdiction: bucket.jurisdiction,
-                    })
-                    .pipe(
-                      Effect.map((observed) =>
-                        (observed.rules ?? []).map(toLifecycleRule),
-                      ),
-                      Effect.catchTag("NoSuchBucket", () =>
-                        Effect.succeed([] as Bucket.LifecycleRule[]),
-                      ),
-                    );
-                  const cors = yield* r2
-                    .getBucketCors({
-                      accountId,
-                      bucketName: bucket.name,
-                      jurisdiction: bucket.jurisdiction,
-                    })
-                    .pipe(
-                      Effect.map((observed) =>
-                        (observed.rules ?? []).map(toCorsRule),
-                      ),
-                      Effect.catchTag(
-                        ["NoSuchBucket", "NoCorsConfiguration"],
-                        () => Effect.succeed([] as Bucket.CorsRule[]),
-                      ),
-                    );
+                      }).pipe(Effect.map((d) => d ?? [])),
+                      r2
+                        .getBucketLifecycle({
+                          accountId,
+                          bucketName: bucket.name,
+                          jurisdiction: bucket.jurisdiction,
+                        })
+                        .pipe(
+                          Effect.map((observed) =>
+                            (observed.rules ?? []).map(toLifecycleRule),
+                          ),
+                          Effect.catchTag("NoSuchBucket", () =>
+                            Effect.succeed([] as Bucket.LifecycleRule[]),
+                          ),
+                        ),
+                      r2
+                        .getBucketCors({
+                          accountId,
+                          bucketName: bucket.name,
+                          jurisdiction: bucket.jurisdiction,
+                        })
+                        .pipe(
+                          Effect.map((observed) =>
+                            (observed.rules ?? []).map(toCorsRule),
+                          ),
+                          Effect.catchTag(
+                            ["NoSuchBucket", "NoCorsConfiguration"],
+                            () => Effect.succeed([] as Bucket.CorsRule[]),
+                          ),
+                        ),
+                    ] as const,
+                    { concurrency: 3 },
+                  );
                   return {
                     bucketName: bucket.name,
                     storageClass: bucket.storageClass,
@@ -908,13 +918,26 @@ export const BucketProvider = () =>
                   };
                 }).pipe(
                   // The custom-domain endpoint intermittently 500s ("Failed to
-                  // access or modify the bucket policy"). Ride out the transient
-                  // blip with a bounded retry rather than aborting the whole
-                  // enumeration.
-                  Effect.retry({
-                    while: (e) => e._tag === "InternalServerError",
-                    schedule: r2TransientServerErrorSchedule,
-                  }),
+                  // access or modify the bucket policy"), and some buckets 500
+                  // PERSISTENTLY. The blanket Cloudflare retry policy already
+                  // retries each call's transient blips; don't stack another
+                  // retry here (the budgets multiply into minutes per bucket).
+                  // A bucket that still 500s must not abort the account-wide
+                  // enumeration (nuke would then see ZERO buckets) — degrade
+                  // it to an un-hydrated shape; delete can still tear the
+                  // bucket down.
+                  Effect.catchTag("InternalServerError", () =>
+                    Effect.succeed({
+                      bucketName: bucket.name,
+                      storageClass: bucket.storageClass,
+                      jurisdiction: bucket.jurisdiction,
+                      location: bucket.location,
+                      accountId,
+                      domains: [] as Bucket.CustomDomain[],
+                      lifecycleRules: [] as Bucket.LifecycleRule[],
+                      cors: [] as Bucket.CorsRule[],
+                    }),
+                  ),
                 ),
               { concurrency: 10 },
             );
@@ -1137,6 +1160,58 @@ export const BucketProvider = () =>
       };
     }),
   );
+
+/**
+ * Local (dev) provider — the bucket is purely virtual: a `dev:`-prefixed
+ * bucket name keyed into the local workerd R2 simulator (data under
+ * `.alchemy/local/r2`). `toRuntimeBinding` lowers an `r2_bucket` binding
+ * whose bucket name is `dev:`-prefixed onto the local R2 service. R2 has no
+ * opaque id — the name IS the identity — so the `dev:` marker rides on the
+ * name (a `:` can never appear in a real R2 bucket name).
+ *
+ * Custom domains, lifecycle rules, and CORS are deploy-side concerns with
+ * no local behavior; the local attributes report them empty.
+ */
+export const ProviderLocal = () =>
+  Provider.succeed(Bucket, {
+    stables: ["accountId"],
+    diff: Effect.fn(function* ({ news = {}, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (!output?.bucketName) return { action: "update" } as const;
+      if (!isResolved(news)) return undefined;
+      if (output.accountId !== accountId) {
+        return { action: "replace" } as const;
+      }
+      // Fall through to the engine's default prop diff.
+    }),
+    read: Effect.fn(function* ({ output }) {
+      // Purely virtual — the persisted state row is the source of truth.
+      return output ?? undefined;
+    }),
+    reconcile: Effect.fn(function* ({ news = {}, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return {
+        bucketName: output?.bucketName ?? generateLocalId(),
+        storageClass: (news.storageClass ?? "Standard") as Bucket.StorageClass,
+        jurisdiction: (news.jurisdiction ?? "default") as Bucket.Jurisdiction,
+        location: undefined,
+        accountId: output?.accountId ?? accountId,
+        domains: [],
+        lifecycleRules: [],
+        cors: [],
+      };
+    }),
+    delete: Effect.fn(function* () {
+      // The simulator's on-disk data is keyed by the dev name; dropping the
+      // state row is enough — orphaned blobs are reclaimed with `.alchemy`.
+    }),
+  });
+
+export const BucketProvider = () =>
+  ProviderLayer.dual(Bucket, {
+    local: () => ProviderLocal(),
+    live: () => ProviderLive(),
+  });
 
 // R2 can make a newly-created bucket visible to `getBucket` before its
 // sub-resource endpoints (custom domains, lifecycle) accept it. Retry only
