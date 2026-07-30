@@ -383,6 +383,66 @@ export interface WorkerRouteConfig {
 }
 
 /**
+ * Version-affinity configuration — keeps each user on one version for the
+ * duration of a gradual rollout.
+ *
+ * Percentages route each request independently, so one user can bounce
+ * between versions mid-rollout. Cloudflare pins a request to a version
+ * deterministically when it carries a `Cloudflare-Workers-Version-Key`
+ * header: the key is hashed and assigned a version from the current
+ * percentages, so equal keys always land on the same version, and pinned
+ * users only move forward as percentages rise.
+ *
+ * Setting `affinity` provisions that header as infrastructure: a `rewrite`
+ * Transform Rule in the `http_request_late_transform` phase of every zone
+ * the Worker serves on (custom domains and zone routes), scoped to the
+ * Worker's hostnames, filling the header from the configured source. The
+ * rule is updated in place as the config changes and removed when
+ * `affinity` is removed or the Worker is destroyed; other rules in the
+ * zone's shared entrypoint are left untouched.
+ *
+ * Exactly one of {@link cookie}, {@link header}, or {@link key} may be
+ * set; {@link ip} combines with `cookie`/`header` as a fallback or stands
+ * alone as the sole source.
+ *
+ * Transform Rules only see **zone traffic** — the Worker must have a
+ * `domain` or `routes` (or, with `version.parent`, the parent must).
+ * A workers.dev-only Worker fails the deploy with
+ * `WorkerVersionConfigError`; on the bare workers.dev URL clients must
+ * send the header themselves.
+ */
+export interface WorkerVersionAffinity {
+  /**
+   * Pin by the value of this request cookie (e.g. a session id). Requests
+   * without the cookie fall back to {@link ip} when set, otherwise they
+   * route independently by percentage.
+   */
+  cookie?: string;
+  /**
+   * Pin by the value of this request header (e.g. a tenant or user id
+   * your edge already stamps, or a stable auth claim forwarded as a
+   * header). Requests without the header fall back to {@link ip} when
+   * set, otherwise they route independently by percentage.
+   */
+  header?: string;
+  /**
+   * Pin by client IP. On its own (`{ ip: true }`) every request is keyed
+   * by `ip.src`; combined with {@link cookie} or {@link header} it is the
+   * fallback for requests missing the primary source (e.g. sticky by
+   * session cookie, falling back to sticky IP before the cookie is set).
+   */
+  ip?: boolean;
+  /**
+   * Escape hatch: a raw [Rules-language](https://developers.cloudflare.com/ruleset-engine/rules-language/)
+   * expression that computes the version key — e.g. a JWT claim via API
+   * Shield's `http.request.jwt.claims`, or any composite of request
+   * fields. Applied to every request on the Worker's hostnames; cannot be
+   * combined with the other sources.
+   */
+  key?: string;
+}
+
+/**
  * Versioning configuration for a Worker deploy — controls Worker
  * [versions and gradual deployments](https://developers.cloudflare.com/workers/configuration/versions-and-deployments/).
  *
@@ -399,6 +459,14 @@ export interface WorkerRouteConfig {
  *   itself, the newly uploaded version receives {@link traffic} percent
  *   and the currently-live version keeps the remainder, instead of the
  *   default 100% cutover.
+ *
+ * A gradual rollout carries only what a version can: code, bindings,
+ * compatibility settings, and cache configuration. Workers with static
+ * assets cannot roll out gradually (the versions API cannot carry assets),
+ * a deploy that changes Durable Object class migrations must go out at
+ * 100% (migrations cannot ride a rollout), and script-level settings
+ * (tags, observability, limits, placement, logpush) keep their live
+ * values until the next full deploy.
  */
 export interface WorkerVersionOptions {
   /**
@@ -432,6 +500,16 @@ export interface WorkerVersionOptions {
    * "upload the version without deploying it" (the equivalent of
    * `wrangler versions upload`).
    *
+   * Percentages replace the previous deployment, they never add. Each
+   * versioned deploy splits its new version against the *stable* version —
+   * the majority holder of the current deployment — so deploying at 10 and
+   * then at 20 yields the second version at 20% against the stable version
+   * at 80%, with the earlier 10% version dropped from routing entirely
+   * (still uploaded, but unreachable even via a version-override header).
+   * With unchanged code that replacement is exactly a ramp; with changed
+   * code it swaps canaries. The first deploy of a script always goes to
+   * 100%, since there is no previous version to split with.
+   *
    * Note that a subsequent full deploy of the parent (or of this Worker
    * itself, at the default 100) resets traffic to 100% of its own new
    * version.
@@ -452,6 +530,27 @@ export interface WorkerVersionOptions {
    * 63 characters (a DNS label).
    */
   alias?: string;
+  /**
+   * Keep each user on one version for the duration of the rollout by
+   * pinning them to a stable request property — a session cookie, a
+   * header, the client IP, or a raw Rules-language expression:
+   *
+   * ```typescript
+   * version: {
+   *   traffic: 10,
+   *   // sticky by session cookie, falling back to sticky IP
+   *   affinity: { cookie: "session_id", ip: true },
+   * }
+   * ```
+   *
+   * Provisions a Transform Rule that fills the
+   * `Cloudflare-Workers-Version-Key` header on the zones the Worker
+   * serves on — the Worker (or, with {@link parent}, the parent) must
+   * have a `domain` or `routes`. With `parent` set, the rule lands on the
+   * parent's zones, pinning users across the canary split. See
+   * {@link WorkerVersionAffinity}.
+   */
+  affinity?: WorkerVersionAffinity;
   /**
    * Human-readable annotation attached to the uploaded version, shown in
    * the Cloudflare dashboard and `wrangler versions list`.
@@ -902,6 +1001,14 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
      * deployment.
      */
     deploymentId?: string | undefined;
+    /**
+     * The zone ids currently holding this resource's version-affinity
+     * Transform Rules (`version.affinity`) — the cleanup list consulted
+     * when affinity is removed or the resource is deleted. For a version
+     * worker these are the *parent's* zones. `undefined` when no affinity
+     * rules are deployed.
+     */
+    affinityZoneIds?: string[] | undefined;
     hash?: {
       assets: string | undefined;
       bundle: string | undefined;
@@ -1399,6 +1506,22 @@ export const isSelfUrl = (value: unknown): value is URLEffect =>
  * yield* Cloudflare.Worker("MyWorker", {
  *   main: "./src/worker.ts",
  *   version: { traffic: 25 },
+ * });
+ * ```
+ *
+ * @example Keep users on one version during the rollout
+ * ```typescript
+ * // Percentages route each request independently; affinity pins users by
+ * // filling the Cloudflare-Workers-Version-Key header on zone traffic —
+ * // here from the session cookie, falling back to the client IP. Requires
+ * // a `domain` or `routes` (with `parent`, the parent's).
+ * yield* Cloudflare.Worker("MyWorker", {
+ *   main: "./src/worker.ts",
+ *   domain: "api.example.com",
+ *   version: {
+ *     traffic: 25,
+ *     affinity: { cookie: "session_id", ip: true },
+ *   },
  * });
  * ```
  *

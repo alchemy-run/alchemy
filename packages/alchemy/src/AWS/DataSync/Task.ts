@@ -1,5 +1,6 @@
 import * as datasync from "@distilled.cloud/aws/datasync";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -201,21 +202,35 @@ export const TaskProvider = () =>
 
           // 2. ENSURE — create if missing.
           if (t === undefined) {
-            const created = yield* datasync.createTask({
-              SourceLocationArn: news.sourceLocationArn,
-              DestinationLocationArn: news.destinationLocationArn,
-              Name: name,
-              Options: news.options,
-              Excludes: news.excludes,
-              Includes: news.includes,
-              Schedule: news.schedule,
-              CloudWatchLogGroupArn: news.cloudWatchLogGroupArn,
-              TaskMode: news.taskMode,
-              Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
-                Key,
-                Value,
-              })),
-            });
+            const created = yield* datasync
+              .createTask({
+                SourceLocationArn: news.sourceLocationArn,
+                DestinationLocationArn: news.destinationLocationArn,
+                Name: name,
+                Options: news.options,
+                Excludes: news.excludes,
+                Includes: news.includes,
+                Schedule: news.schedule,
+                CloudWatchLogGroupArn: news.cloudWatchLogGroupArn,
+                TaskMode: news.taskMode,
+                Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
+                  Key,
+                  Value,
+                })),
+              })
+              .pipe(
+                // createTask synchronously probes the locations' S3 access,
+                // and a freshly-created location role's IAM policy can lag
+                // (typed `LocationAccessTestFailed`). Retry bounded through
+                // the propagation window.
+                Effect.retry({
+                  while: (e) => e._tag === "LocationAccessTestFailed",
+                  schedule: Schedule.max([
+                    Schedule.spaced("5 seconds"),
+                    Schedule.recurs(9),
+                  ]),
+                }),
+              );
             arn = created.TaskArn!;
             t = yield* describe(arn);
           } else {

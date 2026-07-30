@@ -50,7 +50,7 @@
     },
     "cloudflare-tools/packages/cloudflare-rolldown-plugin": {
       "name": "@distilled.cloud/cloudflare-rolldown-plugin",
-      "version": "0.13.10",
+      "version": "0.15.0",
       "dependencies": {
         "@cloudflare/unenv-preset": "^2.16.0",
         "magic-string": "^0.30.21",
@@ -75,7 +75,7 @@
     },
     "cloudflare-tools/packages/cloudflare-runtime": {
       "name": "@distilled.cloud/cloudflare-runtime",
-      "version": "0.13.10",
+      "version": "0.15.0",
       "dependencies": {
         "@alchemy.run/node-utils": "catalog:",
         "workerd": "catalog:workers",
@@ -110,7 +110,7 @@
     },
     "cloudflare-tools/packages/cloudflare-vite-plugin": {
       "name": "@distilled.cloud/cloudflare-vite-plugin",
-      "version": "0.13.10",
+      "version": "0.15.0",
       "dependencies": {
         "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:*",
       },
@@ -208,7 +208,11 @@
     },
     "distilled/packages/aws": {
       "name": "@distilled.cloud/aws",
+<<<<<<< HEAD
       "version": "0.29.1",
+=======
+      "version": "0.30.3",
+>>>>>>> main
       "dependencies": {
         "@aws-crypto/crc32": "catalog:",
         "@aws-crypto/util": "catalog:",
@@ -239,7 +243,11 @@
     },
     "distilled/packages/axiom": {
       "name": "@distilled.cloud/axiom",
+<<<<<<< HEAD
       "version": "0.31.0",
+=======
+      "version": "0.30.3",
+>>>>>>> main
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
         "@effect/platform-bun": "catalog:",
@@ -252,7 +260,11 @@
     },
     "distilled/packages/azure": {
       "name": "@distilled.cloud/azure",
+<<<<<<< HEAD
       "version": "0.31.0",
+=======
+      "version": "0.30.3",
+>>>>>>> main
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
         "@effect/platform-bun": "catalog:",
@@ -265,7 +277,11 @@
     },
     "distilled/packages/cloudflare": {
       "name": "@distilled.cloud/cloudflare",
+<<<<<<< HEAD
       "version": "0.0.0",
+=======
+      "version": "0.30.3",
+>>>>>>> main
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
         "@effect/platform-bun": "catalog:",
@@ -278,7 +294,11 @@
     },
     "distilled/packages/coinbase": {
       "name": "@distilled.cloud/coinbase",
+<<<<<<< HEAD
       "version": "0.31.0",
+=======
+      "version": "0.30.3",
+>>>>>>> main
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
         "@effect/platform-bun": "catalog:",
@@ -291,7 +311,11 @@
     },
     "distilled/packages/core": {
       "name": "@distilled.cloud/core",
+<<<<<<< HEAD
       "version": "0.0.0",
+=======
+      "version": "0.30.3",
+>>>>>>> main
       "devDependencies": {
         "@effect/platform-bun": "catalog:",
         "@types/bun": "catalog:",
@@ -304,7 +328,11 @@
     },
     "distilled/packages/expo-eas": {
       "name": "@distilled.cloud/expo-eas",
+<<<<<<< HEAD
       "version": "0.31.0",
+=======
+      "version": "0.30.3",
+>>>>>>> main
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
         "@effect/platform-bun": "catalog:",
@@ -317,7 +345,11 @@
     },
     "distilled/packages/fly-io": {
       "name": "@distilled.cloud/fly-io",
+<<<<<<< HEAD
       "version": "0.31.0",
+=======
+      "version": "0.30.3",
+>>>>>>> main
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
         "@effect/platform-bun": "catalog:",
@@ -330,7 +362,11 @@
     },
     "distilled/packages/gcp": {
       "name": "@distilled.cloud/gcp",
+<<<<<<< HEAD
       "version": "0.31.0",
+=======
+      "version": "0.30.3",
+>>>>>>> main
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
         "@effect/platform-bun": "catalog:",
@@ -343,7 +379,11 @@
     },
     "distilled/packages/kubernetes": {
       "name": "@distilled.cloud/kubernetes",
+<<<<<<< HEAD
       "version": "0.31.0",
+=======
+      "version": "0.30.3",
+>>>>>>> main
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
         "@effect/platform-bun": "catalog:",
@@ -356,7 +396,11 @@
     },
     "distilled/packages/mongodb-atlas": {
       "name": "@distilled.cloud/mongodb-atlas",
+<<<<<<< HEAD
       "version": "0.31.0",
+=======
+      "version": "0.30.3",
+>>>>>>> main
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
         "@effect/platform-bun": "catalog:",
@@ -369,7 +413,11 @@
     },
     "distilled/packages/neon": {
       "name": "@distilled.cloud/neon",
+<<<<<<< HEAD
       "version": "0.31.0",
+=======
+      "version": "0.30.3",
+>>>>>>> main
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
         "@effect/platform-bun": "catalog:",
@@ -382,7 +430,11 @@
     },
     "distilled/packages/planetscale": {
       "name": "@distilled.cloud/planetscale",
+<<<<<<< HEAD
       "version": "0.31.0",
+=======
+      "version": "0.30.3",
+>>>>>>> main
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
         "@effect/platform-bun": "catalog:",
@@ -395,7 +447,11 @@
     },
     "distilled/packages/posthog": {
       "name": "@distilled.cloud/posthog",
+<<<<<<< HEAD
       "version": "0.31.0",
+=======
+      "version": "0.30.3",
+>>>>>>> main
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
         "@effect/platform-bun": "catalog:",
@@ -408,7 +464,11 @@
     },
     "distilled/packages/prisma-postgres": {
       "name": "@distilled.cloud/prisma-postgres",
+<<<<<<< HEAD
       "version": "0.31.0",
+=======
+      "version": "0.30.3",
+>>>>>>> main
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
         "@effect/platform-bun": "catalog:",
@@ -421,7 +481,11 @@
     },
     "distilled/packages/stripe": {
       "name": "@distilled.cloud/stripe",
+<<<<<<< HEAD
       "version": "0.31.0",
+=======
+      "version": "0.30.3",
+>>>>>>> main
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
         "@effect/platform-bun": "catalog:",
@@ -434,7 +498,11 @@
     },
     "distilled/packages/supabase": {
       "name": "@distilled.cloud/supabase",
+<<<<<<< HEAD
       "version": "0.31.0",
+=======
+      "version": "0.30.3",
+>>>>>>> main
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
         "@effect/platform-bun": "catalog:",
@@ -447,7 +515,11 @@
     },
     "distilled/packages/turso": {
       "name": "@distilled.cloud/turso",
+<<<<<<< HEAD
       "version": "0.31.0",
+=======
+      "version": "0.30.3",
+>>>>>>> main
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
         "@effect/platform-bun": "catalog:",
@@ -460,7 +532,11 @@
     },
     "distilled/packages/typesense": {
       "name": "@distilled.cloud/typesense",
+<<<<<<< HEAD
       "version": "0.31.0",
+=======
+      "version": "0.30.3",
+>>>>>>> main
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
         "@effect/platform-bun": "catalog:",
@@ -473,7 +549,11 @@
     },
     "distilled/packages/workos": {
       "name": "@distilled.cloud/workos",
+<<<<<<< HEAD
       "version": "0.31.0",
+=======
+      "version": "0.30.3",
+>>>>>>> main
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
         "@effect/platform-bun": "catalog:",
@@ -4639,15 +4719,71 @@
 
     "@cloudflare/vitest-pool-workers/wrangler": ["wrangler@4.78.0", "", { "dependencies": { "@cloudflare/kv-asset-handler": "0.4.2", "@cloudflare/unenv-preset": "2.16.0", "blake3-wasm": "2.1.5", "esbuild": "0.27.3", "miniflare": "4.20260317.3", "path-to-regexp": "6.3.0", "unenv": "2.0.0-rc.24", "workerd": "1.20260317.1" }, "optionalDependencies": { "fsevents": "~2.3.2" }, "peerDependencies": { "@cloudflare/workers-types": "^4.20260317.1" }, "optionalPeers": ["@cloudflare/workers-types"], "bin": { "wrangler": "bin/wrangler.js", "wrangler2": "bin/wrangler.js" } }, "sha512-He/vUhk4ih0D0eFmtNnlbT6Od8j+BEokaSR+oYjbVsH0SWIrIch+eHqfLRSBjBQaOoh6HCNxcafcIkBm2u0Hag=="],
 
+    "@distilled.cloud/aws/@types/node": ["@types/node@26.1.2", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-Vu4a5UFA9rIIFJ7rB/Vaafh9lrCQszopTCx6KjFboXTGQbPNasehVR5TEiithSDGyd1DEiUByggTZsg8jukeIg=="],
+
     "@distilled.cloud/aws/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
 
+<<<<<<< HEAD
+=======
+    "@distilled.cloud/axiom/@types/node": ["@types/node@26.1.2", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-Vu4a5UFA9rIIFJ7rB/Vaafh9lrCQszopTCx6KjFboXTGQbPNasehVR5TEiithSDGyd1DEiUByggTZsg8jukeIg=="],
+
+    "@distilled.cloud/axiom/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
+
+    "@distilled.cloud/azure/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
+
+    "@distilled.cloud/cloudflare/@types/node": ["@types/node@26.1.2", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-Vu4a5UFA9rIIFJ7rB/Vaafh9lrCQszopTCx6KjFboXTGQbPNasehVR5TEiithSDGyd1DEiUByggTZsg8jukeIg=="],
+
+    "@distilled.cloud/cloudflare/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
+
+>>>>>>> main
     "@distilled.cloud/cloudflare-rolldown-plugin/@cloudflare/workers-types": ["@cloudflare/workers-types@5.20260718.1", "", {}, "sha512-PSeVPF0ZPsqv7snSwiywQX/c4jNDSXClOvFwxWoVysoltQEr6oPnOh7oRh1GoAUnVxkzzrqXbsPRTxzb3LIbag=="],
 
     "@distilled.cloud/cloudflare-runtime/@cloudflare/workers-types": ["@cloudflare/workers-types@5.20260718.1", "", {}, "sha512-PSeVPF0ZPsqv7snSwiywQX/c4jNDSXClOvFwxWoVysoltQEr6oPnOh7oRh1GoAUnVxkzzrqXbsPRTxzb3LIbag=="],
 
     "@distilled.cloud/cloudflare-vite-plugin/@cloudflare/workers-types": ["@cloudflare/workers-types@5.20260718.1", "", {}, "sha512-PSeVPF0ZPsqv7snSwiywQX/c4jNDSXClOvFwxWoVysoltQEr6oPnOh7oRh1GoAUnVxkzzrqXbsPRTxzb3LIbag=="],
 
+<<<<<<< HEAD
+=======
+    "@distilled.cloud/coinbase/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
+
+    "@distilled.cloud/core/@types/node": ["@types/node@26.1.2", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-Vu4a5UFA9rIIFJ7rB/Vaafh9lrCQszopTCx6KjFboXTGQbPNasehVR5TEiithSDGyd1DEiUByggTZsg8jukeIg=="],
+
+    "@distilled.cloud/core/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
+
+    "@distilled.cloud/expo-eas/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
+
+    "@distilled.cloud/fly-io/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
+
+    "@distilled.cloud/gcp/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
+
+    "@distilled.cloud/kubernetes/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
+
+    "@distilled.cloud/mongodb-atlas/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
+
+    "@distilled.cloud/neon/@types/node": ["@types/node@26.1.2", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-Vu4a5UFA9rIIFJ7rB/Vaafh9lrCQszopTCx6KjFboXTGQbPNasehVR5TEiithSDGyd1DEiUByggTZsg8jukeIg=="],
+
+    "@distilled.cloud/neon/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
+
+    "@distilled.cloud/planetscale/@types/node": ["@types/node@26.1.2", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-Vu4a5UFA9rIIFJ7rB/Vaafh9lrCQszopTCx6KjFboXTGQbPNasehVR5TEiithSDGyd1DEiUByggTZsg8jukeIg=="],
+
+    "@distilled.cloud/planetscale/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
+
+    "@distilled.cloud/posthog/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
+
+    "@distilled.cloud/prisma-postgres/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
+
+    "@distilled.cloud/stripe/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
+
+    "@distilled.cloud/supabase/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
+
+    "@distilled.cloud/turso/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
+
+    "@distilled.cloud/typesense/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
+
+>>>>>>> main
     "@distilled.cloud/vendor-workers-shared/@cloudflare/workers-types": ["@cloudflare/workers-types@5.20260718.1", "", {}, "sha512-PSeVPF0ZPsqv7snSwiywQX/c4jNDSXClOvFwxWoVysoltQEr6oPnOh7oRh1GoAUnVxkzzrqXbsPRTxzb3LIbag=="],
+
+    "@distilled.cloud/vendor-workers-shared/@types/node": ["@types/node@26.1.2", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-Vu4a5UFA9rIIFJ7rB/Vaafh9lrCQszopTCx6KjFboXTGQbPNasehVR5TEiithSDGyd1DEiUByggTZsg8jukeIg=="],
 
     "@distilled.cloud/vendor-workflows-shared/@cloudflare/workers-types": ["@cloudflare/workers-types@5.20260718.1", "", {}, "sha512-PSeVPF0ZPsqv7snSwiywQX/c4jNDSXClOvFwxWoVysoltQEr6oPnOh7oRh1GoAUnVxkzzrqXbsPRTxzb3LIbag=="],
 
@@ -4796,6 +4932,8 @@
     "@vue/language-core/@vue/compiler-dom": ["@vue/compiler-dom@3.5.40", "", { "dependencies": { "@vue/compiler-core": "3.5.40", "@vue/shared": "3.5.40" } }, "sha512-pwkx4vqlqOspFstrcmzwkKLePVMD3PT65imRzLhanU2V1Fj4K13g6OXjanOyzw3aTAuRk84BOmY8f3rEHqPaVA=="],
 
     "@vue/language-core/@vue/shared": ["@vue/shared@3.5.40", "", {}, "sha512-WxnBtruIqOoV3rA4jeKDWzrYI5h7Cp4+pjwDi8kWGHz+IslhiN+wguLVVhtv2l8VoU02rzDCVfDjgCl1lNpZVg=="],
+
+    "alchemy/@types/node": ["@types/node@26.1.2", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-Vu4a5UFA9rIIFJ7rB/Vaafh9lrCQszopTCx6KjFboXTGQbPNasehVR5TEiithSDGyd1DEiUByggTZsg8jukeIg=="],
 
     "alchemy/capnweb": ["capnweb@0.6.1", "", {}, "sha512-fmhV26QPd1ewf5R74h55oVZnGwIcSaRMzbfLQUy8+zOBjuTmT3KXoT8wxHvnp1m9Ht9BoUUS5ZwNLoVLfQTyBg=="],
 

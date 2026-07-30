@@ -24,19 +24,11 @@ export type Parse = {
    * How pages are discovered:
    * - `"sitemap"` (default) — read `<seed>/sitemap.xml` (found via
    *   `robots.txt`) and index the URLs it lists.
-   * - `"crawl"` — start at `source` and follow links.
-   * - `"feed-rss"` — treat the seed as an RSS / Atom feed.
+   * - `"discover"` — start at `source` and follow links.
    * @default "sitemap"
    */
   type?: NonNullable<WebCrawlerParams["parseType"]>;
 } & NonNullable<WebCrawlerParams["parseOptions"]>;
-
-/**
- * Link-discovery options for a web crawler (mainly for `parse.type: "crawl"`):
- * `depth`, `includeSubdomains`, `includeExternalLinks`, `maxAge`, and `source`
- * (`"all"` | `"sitemaps"` | `"links"`).
- */
-export type Crawl = NonNullable<WebCrawlerParams["crawlOptions"]>;
 
 /**
  * Where crawled content is stored. Cloudflare provisions managed storage by
@@ -94,7 +86,6 @@ export type R2Props = SharedProps & {
   /** R2 data-residency jurisdiction of the source bucket. */
   jurisdiction?: string;
   parse?: never;
-  crawl?: never;
   store?: never;
 };
 
@@ -107,8 +98,6 @@ export type WebCrawlerProps = SharedProps & {
   source: Input<string>;
   /** How pages are discovered and parsed. */
   parse?: Parse;
-  /** How links are followed from the seed. */
-  crawl?: Crawl;
   /** Where crawl output is stored (defaults to managed storage). */
   store?: Store;
   prefix?: never;
@@ -197,13 +186,12 @@ export type Search = SearchInstance & {
  *
  * @example Web-crawler source
  * Pass a URL as `source` to crawl and index a website (no service token
- * needed). `parse.type` defaults to `"sitemap"`; use `"crawl"` to follow
+ * needed). `parse.type` defaults to `"sitemap"`; use `"discover"` to follow
  * links from the seed instead.
  * ```typescript
  * const search = yield* Cloudflare.AI.Search("site-search", {
  *   source: "https://example.com",
- *   parse: { type: "crawl", contentSelector: [{ path: "/docs", selector: "main" }] },
- *   crawl: { depth: 3, includeSubdomains: true },
+ *   parse: { type: "discover", contentSelector: [{ path: "/docs", selector: "main" }] },
  * });
  * ```
  *
@@ -212,7 +200,7 @@ export type Search = SearchInstance & {
  * const store = yield* Cloudflare.R2.Bucket("crawl-store");
  * const search = yield* Cloudflare.AI.Search("site-search", {
  *   source: "https://example.com",
- *   parse: { type: "crawl" },
+ *   parse: { type: "discover" },
  *   store: { bucket: store },
  * });
  * ```
@@ -303,7 +291,6 @@ export const Search = (id: string, props: Props) =>
       exclude,
       jurisdiction,
       parse,
-      crawl,
       store,
       namespace,
       ...shared
@@ -359,7 +346,6 @@ export const Search = (id: string, props: Props) =>
       const webCrawler = clean({
         parseType,
         parseOptions: clean(parseOptions),
-        crawlOptions: crawl ? clean(crawl) : undefined,
         storeOptions: store
           ? clean({
               storageId: store.bucket.bucketName,
