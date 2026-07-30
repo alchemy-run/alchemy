@@ -1,6 +1,6 @@
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
-import { readPrebuiltWorkerBundle } from "@/Cloudflare/Workers/WorkerBundle";
+import { readPrebuiltWorkerBundle } from "@/Cloudflare/Workers/Sources/Prebuilt";
 import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";

@@ -54,8 +54,9 @@ import type {
   WorkerBinding,
   WorkerSettingsBinding,
 } from "./WorkerBinding.ts";
-import { isPythonMain, readPythonWorkerBundle } from "./PythonWorkerBundle.ts";
-import { readPrebuiltWorkerBundle, WorkerBundle } from "./WorkerBundle.ts";
+import { readPrebuiltWorkerBundle } from "./Sources/Prebuilt.ts";
+import { isPythonMain, readPythonWorkerBundle } from "./Sources/Python.ts";
+import { WorkerBundle } from "./Sources/Rolldown.ts";
 import { isWorkerLoader } from "./WorkerLoader.ts";
 import { createWorkerName } from "./WorkerName.ts";
 class MissingDurableObjects extends Data.TaggedError("MissingDurableObjects")<{
@@ -2077,10 +2078,11 @@ export const LiveWorkerProvider = () =>
         selfUrl?: string,
       ) {
         const compatibility = getCompatibility(props);
-        // Loaded lazily: `./Vite.ts` pulls in `@distilled.cloud/cloudflare-vite-plugin`
-        // (~0.5s), which is only needed for vite-based workers at build time —
-        // not for every Worker definition at module-load time.
-        const Vite = yield* Effect.promise(() => import("./Vite.ts"));
+        // Loaded lazily: `./Sources/Vite.ts` pulls in
+        // `@distilled.cloud/cloudflare-vite-plugin` (~0.5s), which is only
+        // needed for vite-based workers at build time — not for every Worker
+        // definition at module-load time.
+        const Vite = yield* Effect.promise(() => import("./Sources/Vite.ts"));
         const { clientDirectory, serverBundle, externalWorkspaces } =
           yield* Vite.viteBuild(
             props.vite?.rootDir,

@@ -45,7 +45,8 @@ import type {
   WorkerBindingResource,
   WorkerBindings,
 } from "./WorkerBinding.ts";
-import { type ModuleRule, type WorkerBuildOptions } from "./WorkerBundle.ts";
+import type { ModuleRule } from "./Sources/Prebuilt.ts";
+import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
 import {
   makeWorkerRuntimeContext,
   type WorkerRuntimeContext,

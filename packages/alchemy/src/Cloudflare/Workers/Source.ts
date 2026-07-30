@@ -21,12 +21,10 @@ import type * as Bundle from "../../Bundle/Bundle.ts";
 import type { WorkflowExport } from "../Workflows/Workflow.ts";
 import type { AssetReadResult, ValidationError } from "./Assets.ts";
 import type { DurableObjectExport } from "./DurableObject.ts";
-import { isPythonMain } from "./PythonWorkerBundle.ts";
 import { makeInlineScriptSource } from "./Sources/InlineScript.ts";
 import { makePrebuiltSource } from "./Sources/Prebuilt.ts";
-import { makePythonSource } from "./Sources/Python.ts";
+import { isPythonMain, makePythonSource } from "./Sources/Python.ts";
 import { makeRolldownSource } from "./Sources/Rolldown.ts";
-import { makeViteSource } from "./Sources/Vite.ts";
 import type {
   WorkerAssetsConfig,
   WorkerProps,
@@ -364,7 +362,13 @@ export const resolveSource = (
     return Effect.succeed(makeInlineScriptSource(props.script));
   }
   if (props.vite) {
-    return Effect.succeed(makeViteSource(props.vite));
+    // Loaded lazily: `./Sources/Vite.ts` pulls in
+    // `@distilled.cloud/cloudflare-vite-plugin` (~0.5s), which is only
+    // needed for vite-based workers — not for every Worker resolution.
+    const vite = props.vite;
+    return Effect.promise(() => import("./Sources/Vite.ts")).pipe(
+      Effect.map((Vite) => Vite.makeViteSource(vite)),
+    );
   }
   if (isPythonMain(props.main)) {
     return Effect.succeed(makePythonSource(props.main));

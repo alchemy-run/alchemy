@@ -71,7 +71,7 @@ import {
 import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
 import { readAssetsConfigFiles } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
-import { isPythonMain, watchPythonWorkerBundle } from "./PythonWorkerBundle.ts";
+import { isPythonMain, watchPythonWorkerBundle } from "./Sources/Python.ts";
 import {
   Artifacts as AlchemyArtifacts,
   makeScopedArtifacts,
@@ -80,7 +80,7 @@ import { loadSource, type DevContext } from "./Source.ts";
 import { isSelfUrl, Worker } from "./Worker.ts";
 import { getCronBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
-import { WorkerBundle, type WorkerBundleOptions } from "./WorkerBundle.ts";
+import { WorkerBundle, type WorkerBundleOptions } from "./Sources/Rolldown.ts";
 import { createWorkerName } from "./WorkerName.ts";
 
 /** Local dev-server options (the worker-mode arm of `WorkerProps["dev"]`). */
@@ -842,9 +842,10 @@ export const LocalWorkerProvider = () =>
       ) {
         const proxy = yield* maybeStartProxy(worker.id, worker.dev);
         yield* proxy.unset().pipe(Effect.forkChild);
-        // Loaded lazily: `./Vite.ts` pulls in `@distilled.cloud/cloudflare-vite-plugin`
-        // (~0.5s); only needed when running a vite dev server.
-        const Vite = yield* Effect.promise(() => import("./Vite.ts"));
+        // Loaded lazily: `./Sources/Vite.ts` pulls in
+        // `@distilled.cloud/cloudflare-vite-plugin` (~0.5s); only needed when
+        // running a vite dev server.
+        const Vite = yield* Effect.promise(() => import("./Sources/Vite.ts"));
         const devServer = yield* Vite.viteDev(
           rootDir,
           worker.env ?? {},
