@@ -110,8 +110,9 @@ export interface DurableStartOptions<Input = unknown> {
   params?: Input;
   /**
    * Function version or alias to pin the execution to. Durable executions
-   * replay against the version they started on, so production starts should
-   * target a published version/alias.
+   * replay against the version they started on. `$LATEST` is suitable for
+   * disposable development; production starts should target an immutable
+   * numbered {@link Version} or a stable {@link Alias}.
    */
   qualifier?: string;
 }
@@ -614,6 +615,26 @@ const composeDurableImpl = (
  * const ref = yield* orders.start({
  *   name: "order-123", // idempotent start
  *   params: { orderId: "123" },
+ *   qualifier: "live",
+ * });
+ * ```
+ *
+ * @example Publish and promote for production
+ * ```typescript
+ * const orders = yield* OrderFlow;
+ * const version = yield* AWS.Lambda.Version("OrderFlowVersion", {
+ *   function: orders.function,
+ * });
+ * yield* AWS.Lambda.Alias("OrderFlowLive", {
+ *   functionName: version.functionName,
+ *   functionVersion: version.version,
+ *   aliasName: "live",
+ * });
+ *
+ * const ref = yield* orders.start({
+ *   name: "order-123",
+ *   params: { orderId: "123" },
+ *   qualifier: "live",
  * });
  * ```
  *
