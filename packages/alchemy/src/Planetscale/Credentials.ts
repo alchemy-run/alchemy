@@ -8,8 +8,7 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import { getAuthProvider } from "../Auth/AuthProvider.ts";
-import { ALCHEMY_PROFILE, AlchemyProfile } from "../Auth/Profile.ts";
+import { resolveProviderConfig } from "../Auth/Profile.ts";
 import {
   PLANETSCALE_AUTH_PROVIDER_NAME,
   type PlanetscaleAuthConfig,
@@ -62,27 +61,21 @@ export const fromToken = (input: {
 /**
  * Build a PlanetScale `Credentials` Layer that resolves credentials via the
  * Alchemy AuthProvider using the configured profile (defaults to "default",
- * overridable with the `ALCHEMY_PROFILE` env/config value).
+ * selected by the current Alchemy profile).
  */
 export const fromAuthProvider = () =>
   Layer.effect(
     Credentials,
     Effect.gen(function* () {
-      const profile = yield* AlchemyProfile;
-      const auth = yield* getAuthProvider<
-        PlanetscaleAuthConfig,
-        PlanetscaleResolvedCredentials
-      >(PLANETSCALE_AUTH_PROVIDER_NAME);
-      const profileName = yield* ALCHEMY_PROFILE;
-      const ci = yield* Config.boolean("CI").pipe(Config.withDefault(false));
       const apiBaseUrl = yield* Config.string("PLANETSCALE_API_BASE_URL").pipe(
         Config.withDefault(DEFAULT_API_BASE_URL),
       );
+      const { auth, profileName, config } = yield* resolveProviderConfig<
+        PlanetscaleAuthConfig,
+        PlanetscaleResolvedCredentials
+      >(PLANETSCALE_AUTH_PROVIDER_NAME);
 
-      return yield* profile.loadOrConfigure(auth, profileName, { ci }).pipe(
-        Effect.flatMap((config) =>
-          auth.read(profileName, config as PlanetscaleAuthConfig),
-        ),
+      return yield* auth.read(profileName, config).pipe(
         Effect.map(
           (creds): PlanetscaleClientConfig =>
             creds.type === "oauth"

@@ -50,7 +50,7 @@ export const pkgs = `"alchemy@next" "effect@${effectVersion}" "@effect/platform-
 
 ## How Alchemy gets AWS credentials
 
-The first time you `alchemy deploy` (or `plan`, `dev`,
+The first time you run `alchemy deploy` (or `plan`, `dev`,
 `destroy`) a stack that uses `AWS.providers()`, Alchemy prompts
 you to pick an authentication method. The choice is saved to
 your **`default`** [profile](/environments/profiles) and reused on
@@ -63,8 +63,8 @@ There are three methods:
 Alchemy runs `aws sso login --profile <name>` for you and loads
 credentials from the AWS SSO cache. You pick which profile from
 `~/.aws/config` to use; the account ID and region come from that
-profile. When the SSO session expires, run `alchemy login` to
-refresh it.
+profile. When the SSO session expires, run
+`alchemy profile edit --re-configure AWS` to refresh it.
 
 ### Environment variables
 
@@ -97,8 +97,9 @@ Re-run the setup at any time (e.g. to switch from stored keys to
 SSO, or to configure a separate `prod` profile):
 
 ```sh
-alchemy login --configure
-alchemy login --profile prod --configure
+alchemy profile edit --re-configure AWS
+alchemy profile create prod
+alchemy profile edit prod --add AWS
 ```
 
 Inspect what's stored (secrets are redacted):

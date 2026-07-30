@@ -12,7 +12,7 @@ import * as GitHub from "alchemy/GitHub";
 providers: Layer.mergeAll(Cloudflare.providers(), GitHub.providers()),
 ```
 
-The next `alchemy login` adds a `GitHub` step with three options:
+Run `alchemy profile edit --add GitHub` and pick between three options:
 
 - **`gh` CLI** — shells out to `gh auth token` (recommended).
 - **Environment variables** — reads `GITHUB_ACCESS_TOKEN`, falling back
@@ -20,7 +20,7 @@ The next `alchemy login` adds a `GitHub` step with three options:
 - **Stored PAT** — a personal access token entered interactively,
   saved under `~/.alchemy/credentials/<profile>/`.
 
-When `CI=true`, the login step skips the prompt and selects the
+When `CI=true`, the configure step skips the prompt and selects the
 environment-variables method automatically.
 
 See [Profiles](/environments/profiles) for how credentials are stored
@@ -29,8 +29,8 @@ and switched.
 ## GitHub Enterprise
 
 All three methods work against GitHub Enterprise Server and GitHub
-Enterprise Cloud with data residency. `alchemy login --configure`
-prompts for the host — leave it blank for github.com, or enter your
+Enterprise Cloud with data residency. `alchemy profile edit
+re-configure GitHub` prompts for the host — leave it blank for github.com, or enter your
 enterprise host (e.g. `github.example.com` or `acme.ghe.com`).
 
 The host is normalized into the REST API base URL automatically:
@@ -57,7 +57,7 @@ configuration or the environment — pass it to `providers()`:
 providers: GitHub.providers({ baseUrl: "github.example.com" }),
 ```
 
-The auth provider sees the pinned host too: `alchemy login` stops
+The auth provider sees the pinned host too: the configure flow stops
 prompting for it and authenticates against it directly.
 
 ### Per-resource host override

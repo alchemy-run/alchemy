@@ -94,3 +94,14 @@ export const withLock = <A, E, R>(
     (release) => Effect.promise(() => release().catch(() => {})),
   );
 };
+
+/**
+ * Serialize an operation with every credential mutation for a profile. The
+ * lock key is shared by every credential operation for the profile,
+ * including profile-wide rename and delete operations.
+ */
+export const withProfileCredentialsLock = <A, E, R>(
+  profileName: string,
+  effect: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  withLock(`profile-credentials-${profileName}`, effect);

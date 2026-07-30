@@ -7,6 +7,7 @@ import {
   AuthError,
   AuthProviderLayer,
   type ConfigureContext,
+  reconfigureHint,
 } from "../Auth/AuthProvider.ts";
 import { CredentialsStore, displayRedacted } from "../Auth/Credentials.ts";
 import { getEnv, getEnvRedacted, retryOnce } from "../Auth/Env.ts";
@@ -77,7 +78,7 @@ const promptOrgId = (required: boolean) =>
 /**
  * Layer that registers the Axiom {@link AuthProvider} into the
  * {@link AuthProviders} registry when built. Include this in the Axiom
- * `providers()` layer so `alchemy login` can discover it.
+ * `providers()` layer so the alchemy CLI can discover it.
  */
 export const AxiomAuth = AuthProviderLayer<
   AxiomAuthConfig,
@@ -237,8 +238,7 @@ export const AxiomAuth = AuthProviderLayer<
               creds == null
                 ? Effect.fail(
                     new AuthError({
-                      message:
-                        "Axiom stored credentials not found. Run: alchemy login --configure",
+                      message: `Axiom stored credentials not found. ${reconfigureHint("Axiom", profileName)}`,
                     }),
                   )
                 : Effect.succeed(

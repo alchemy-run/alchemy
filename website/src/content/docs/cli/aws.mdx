@@ -29,7 +29,7 @@ Re-running is a no-op:
 
 | Option              | Description                                                                     |
 | ------------------- | ------------------------------------------------------------------------------- |
-| `--profile <name>`  | AWS profile to use for credentials (default: `default`)                        |
+| `--aws-profile <name>` | AWS CLI/SSO profile to use for credentials (default: `default`)              |
 | `--region <region>` | AWS region to bootstrap. Defaults to the SSO profile's region, then `us-east-1`. |
 | `--destroy`         | Destroy all bootstrap buckets in the selected region                            |
 | `--env-file <path>` | Load environment variables from a file                                          |
@@ -55,7 +55,7 @@ If there's nothing to remove:
 alchemy aws bootstrap
 
 # Bootstrap a specific region and profile
-alchemy aws bootstrap --profile prod --region us-west-2
+alchemy aws bootstrap --aws-profile prod --region us-west-2
 
 # Remove bootstrap resources
 alchemy aws bootstrap --destroy

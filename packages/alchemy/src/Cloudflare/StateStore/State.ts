@@ -17,7 +17,7 @@ import { adopt } from "../../AdoptPolicy.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import { AuthError } from "../../Auth/AuthProvider.ts";
 import { CredentialsStore } from "../../Auth/Credentials.ts";
-import { ALCHEMY_PROFILE } from "../../Auth/Profile.ts";
+import { currentProfileName } from "../../Auth/Profile.ts";
 import * as Cloudflare from "../../Cloudflare/Providers.ts";
 import { deploy } from "../../Deploy.ts";
 import * as Output from "../../Output.ts";
@@ -60,7 +60,7 @@ export const state = () =>
     Effect.gen(function* () {
       const isCI = yield* CI;
       const scriptName = STATE_STORE_SCRIPT_NAME;
-      const profileName = yield* ALCHEMY_PROFILE;
+      const profileName = yield* currentProfileName;
       const localStage = `${profileName}_${scriptName}`;
       const credStore = yield* CredentialsStore;
       // `deploy --yes` flows in here (via AlchemyContext.updateStateStore) to
@@ -255,7 +255,7 @@ export interface BootstrapOptions {
 export const bootstrap = (options: BootstrapOptions = {}) =>
   Effect.gen(function* () {
     const isCI = yield* CI;
-    const profileName = options.profile ?? (yield* ALCHEMY_PROFILE);
+    const profileName = options.profile ?? (yield* currentProfileName);
     const scriptName = options.workerName ?? STATE_STORE_SCRIPT_NAME;
     const force = options.force ?? false;
     const localStage = `${profileName}_${scriptName}`;
@@ -383,7 +383,7 @@ export interface TeardownOptions {
  */
 export const teardownStateStore = (options: TeardownOptions = {}) =>
   Effect.gen(function* () {
-    const profileName = options.profile ?? (yield* ALCHEMY_PROFILE);
+    const profileName = options.profile ?? (yield* currentProfileName);
     const scriptName = options.workerName ?? STATE_STORE_SCRIPT_NAME;
     const deleteEmptyStore = options.deleteEmptySecretsStore ?? true;
     const { accountId } =
@@ -1056,7 +1056,7 @@ const readSecretViaEdge = (
 
 const writeCredentials = (url: string, authToken: string) =>
   Effect.gen(function* () {
-    const profileName = yield* ALCHEMY_PROFILE;
+    const profileName = yield* currentProfileName;
     const credStore = yield* CredentialsStore;
     const { accountId } =
       yield* yield* CloudflareEnvironment.CloudflareEnvironment;

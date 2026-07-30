@@ -6,10 +6,11 @@ import {
   AuthError,
   AuthProviderLayer,
   type ConfigureContext,
+  reconfigureHint,
 } from "../Auth/AuthProvider.ts";
 import { CredentialsStore, displayRedacted } from "../Auth/Credentials.ts";
 import { getEnvRedacted, retryOnce } from "../Auth/Env.ts";
-import { AlchemyProfile } from "../Auth/Profile.ts";
+import { ProfileStore } from "../Auth/Profile.ts";
 import * as Clank from "../Util/Clank.ts";
 
 export const NEON_AUTH_PROVIDER_NAME = "Neon";
@@ -54,7 +55,7 @@ export const NeonAuth = AuthProviderLayer<
 >()(
   NEON_AUTH_PROVIDER_NAME,
   Effect.gen(function* () {
-    const profiles = yield* AlchemyProfile;
+    const profiles = yield* ProfileStore;
     const store = yield* CredentialsStore;
 
     const loginStored = Effect.fn(function* (profileName: string) {
@@ -128,8 +129,7 @@ export const NeonAuth = AuthProviderLayer<
               creds == null
                 ? Effect.fail(
                     new AuthError({
-                      message:
-                        "Neon stored credentials not found. Run: alchemy login --configure",
+                      message: `Neon stored credentials not found. ${reconfigureHint("Neon", profileName)}`,
                     }),
                   )
                 : Effect.succeed({

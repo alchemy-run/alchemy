@@ -3,8 +3,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import { getAuthProvider } from "../Auth/AuthProvider.ts";
-import { ALCHEMY_PROFILE, AlchemyProfile } from "../Auth/Profile.ts";
+import { resolveProviderConfig } from "../Auth/Profile.ts";
 import {
   CLOUDFLARE_AUTH_PROVIDER_NAME,
   type CloudflareAuthConfig,
@@ -36,22 +35,15 @@ export const fromProfile = () =>
   Layer.effect(
     CloudflareEnvironment,
     Effect.gen(function* () {
-      const profile = yield* AlchemyProfile;
-      const auth = yield* getAuthProvider<
+      // `resolveProviderConfig` reads the persisted config under the canonical
+      // provider name (`Cloudflare`); only runs `configure` (and persists the
+      // result) if no stored config exists.
+      const { auth, profileName, config } = yield* resolveProviderConfig<
         CloudflareAuthConfig,
         CloudflareResolvedCredentials
       >(CLOUDFLARE_AUTH_PROVIDER_NAME);
-      const profileName = yield* ALCHEMY_PROFILE;
-      const ci = yield* Config.boolean("CI").pipe(Config.withDefault(false));
-      // `loadOrConfigure` reads the persisted config under the canonical
-      // provider name (`Cloudflare`); only runs `configure` (and persists the
-      // result) if no stored config exists.
-      return yield* profile.loadOrConfigure(auth, profileName, { ci }).pipe(
-        Effect.flatMap((config) =>
-          auth.read(profileName, config as CloudflareAuthConfig),
-        ),
-        Effect.orDie,
-        Effect.cached,
-      );
+      return yield* auth
+        .read(profileName, config)
+        .pipe(Effect.orDie, Effect.cached);
     }),
   );

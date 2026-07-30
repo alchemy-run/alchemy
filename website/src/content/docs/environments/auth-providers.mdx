@@ -46,8 +46,8 @@ export class AuthProviders extends Context.Service<
 >()("AuthProviders") {}
 ```
 
-That's how [`alchemy login`](/cli/login) works: it imports your
-stack, reads the registry, and runs each discovered provider's
+That's how [`alchemy profile edit`](/cli/profile#profile-edit) works: it
+imports your stack, reads the registry, and runs the selected providers'
 `configure`/`login`. The factory also wraps `read`, `login`,
 `logout`, and `configure` in a cross-process file lock (so two
 processes never refresh credentials simultaneously) and serializes
@@ -145,17 +145,11 @@ export const fromProfile = () =>
   Layer.effect(
     CloudflareEnvironment,
     Effect.gen(function* () {
-      const profile = yield* AlchemyProfile;
-      const auth = yield* getAuthProvider<
+      const { auth, profileName, config } = yield* resolveProviderConfig<
         CloudflareAuthConfig,
         CloudflareResolvedCredentials
       >(CLOUDFLARE_AUTH_PROVIDER_NAME);
-      const profileName = yield* ALCHEMY_PROFILE;
-      const ci = yield* Config.boolean("CI").pipe(Config.withDefault(false));
-      return yield* profile.loadOrConfigure(auth, profileName, { ci }).pipe(
-        Effect.flatMap((config) =>
-          auth.read(profileName, config as CloudflareAuthConfig),
-        ),
+      return yield* auth.read(profileName, config).pipe(
         Effect.orDie,
         Effect.cached,
       );
@@ -163,10 +157,10 @@ export const fromProfile = () =>
   );
 ```
 
-`loadOrConfigure` reads the stored config for the current profile —
-or runs the provider's `configure` on first use and persists the
+`resolveProviderConfig` selects the current profile and loads its stored
+config — or runs the provider's `configure` on first use and persists the
 result — then `read` materializes credentials. Profile selection
-itself (`--profile`, `$ALCHEMY_PROFILE`, `alchemy login`) is covered
+itself (`--profile`, `$ALCHEMY_PROFILE`, `alchemy profile`) is covered
 in [Profiles](/environments/profiles).
 
 ### The env fallback
@@ -197,7 +191,7 @@ const fresh =
         Effect.mapError(
           (e) =>
             new AuthError({
-              message: "Cloudflare OAuth refresh failed. Run: alchemy login",
+              message: "Cloudflare OAuth refresh failed. Run: alchemy profile edit --re-configure Cloudflare",
               cause: e,
             }),
         ),

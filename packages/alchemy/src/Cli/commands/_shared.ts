@@ -12,6 +12,8 @@ import * as Argument from "effect/unstable/cli/Argument";
 import * as CliError from "effect/unstable/cli/CliError";
 import * as Flag from "effect/unstable/cli/Flag";
 import { pathToFileURL } from "node:url";
+import { format, styleText } from "node:util";
+import * as Runtime from "effect/Runtime";
 
 import {
   type AuthProvider,
@@ -19,8 +21,8 @@ import {
   AuthProviders,
 } from "../../Auth/AuthProvider.ts";
 import {
-  type AlchemyProfileProviders,
-  ALCHEMY_PROFILE,
+  type Profile,
+  ProfileStore,
   withProfileOverride,
 } from "../../Auth/Profile.ts";
 import { AwsAuth } from "../../AWS/AuthProvider.ts";
@@ -99,6 +101,61 @@ export const handleCancellation = <A, E, R>(self: Effect.Effect<A, E, R>) =>
     Effect.onInterrupt(() => Console.log("\nInterrupted.")),
   );
 
+/**
+ * Wraps a cause that has already been printed to the user. The
+ * `errorReported` marker tells the runtime's main runner to skip its own
+ * cause dump; the process still exits non-zero.
+ */
+class ReportedCliError {
+  readonly [Runtime.errorReported] = false;
+  constructor(readonly cause: unknown) {}
+}
+
+/**
+ * Errors whose `message` IS the user-facing diagnosis (missing or invalid
+ * profile, unconfigured credentials, bad provider config): alchemy's own
+ * auth errors plus distilled's `ConfigError`, which per-cloud credential
+ * layers use to wrap profile/credential resolution failures (often via
+ * `orDie`, so it can surface as a defect). Matched structurally by tag
+ * because these arrive as `unknown` defects and schema-tagged errors don't
+ * always survive `instanceof` across module boundaries.
+ */
+const isUserFacingError = S.is(
+  S.Struct({
+    _tag: S.Literals(["AuthError", "ProfileError", "ConfigError"]),
+    message: S.String,
+  }),
+);
+
+/**
+ * Prints auth/profile/config failures (nonexistent profile, unconfigured
+ * credentials, invalid profile name, ...) as a single clean `error:` line
+ * instead of a raw cause dump, and exits non-zero. Anything else propagates
+ * unchanged. Apply *outside* {@link handleCancellation} so prompt
+ * cancellations wrapped in {@link AuthError} are still handled as
+ * cancellations first.
+ */
+export const handleUserErrors = <A, E, R>(self: Effect.Effect<A, E, R>) =>
+  self.pipe(
+    Effect.catchCause((cause) => {
+      for (const reason of cause.reasons) {
+        const error = Cause.isFailReason(reason)
+          ? reason.error
+          : Cause.isDieReason(reason)
+            ? reason.defect
+            : undefined;
+        if (isUserFacingError(error)) {
+          return Console.error(
+            `${styleText("red", "error:")} ${error.message}`,
+          ).pipe(
+            Effect.flatMap(() => Effect.fail(new ReportedCliError(cause))),
+          ) as Effect.Effect<never, E | ReportedCliError, never>;
+        }
+      }
+      return Effect.failCause(cause) as Effect.Effect<never, E, never>;
+    }),
+  );
+
 export const stage = Flag.string("stage").pipe(
   Flag.withSchema(S.String.check(S.isPattern(/^[a-z0-9]+([-_a-z0-9]+)*$/gi))),
   Flag.withDescription("Stage to deploy to, defaults to dev_${USER}"),
@@ -143,6 +200,7 @@ export const dryRun = Flag.boolean("dry-run").pipe(
 );
 
 export const yes = Flag.boolean("yes").pipe(
+  Flag.withAlias("y"),
   Flag.withDescription("Yes to all prompts"),
   Flag.withDefault(false),
 );
@@ -163,23 +221,43 @@ export const script = Argument.file("main", {
 
 export const profile = Flag.string("profile").pipe(
   Flag.withDescription(
-    "Auth profile to use (~/.alchemy/profiles.json). Defaults to $ALCHEMY_PROFILE or 'default'.",
+    "Auth profile to use. Defaults to $ALCHEMY_PROFILE, the stored default, or 'default'.",
   ),
   Flag.optional,
-  Flag.mapEffect(
-    Effect.fn(function* (profile) {
-      // --profile wins; otherwise fall back to $ALCHEMY_PROFILE (which
-      // itself defaults to "default"). Without this, the flag's default
-      // would shadow the env var via withProfileOverride.
-      if (Option.isSome(profile)) {
-        return profile.value;
-      }
-      return yield* ALCHEMY_PROFILE.pipe(
-        Effect.catch(() => Effect.succeed("default")),
-      );
-    }),
-  ),
+  Flag.map(Option.getOrUndefined),
 );
+
+/**
+ * Resolve the selected Alchemy profile after the command's dotenv provider is
+ * known. Keeping the flag optional is important: otherwise the root CLI's
+ * environment-only provider eagerly turns an omitted flag into `"default"`
+ * and shadows `ALCHEMY_PROFILE` from `.env` / `--env-file`.
+ */
+export const resolveProfileSelection = Effect.fn(function* (
+  envFile: Option.Option<string>,
+  override: string | undefined,
+) {
+  const base = yield* loadConfigProvider(envFile);
+  const profiles = yield* ProfileStore;
+  const selected = yield* profiles.current.pipe(
+    Effect.provideService(
+      ConfigProvider.ConfigProvider,
+      withProfileOverride(base, override),
+    ),
+  );
+  return {
+    ...selected,
+    source:
+      override === undefined ? selected.source : ("command-line" as const),
+  };
+});
+
+export const resolveProfileName = Effect.fn(function* (
+  envFile: Option.Option<string>,
+  override: string | undefined,
+) {
+  return (yield* resolveProfileSelection(envFile, override)).name;
+});
 
 export const resourceFilter = Flag.string("filter").pipe(
   Flag.withDescription(
@@ -290,54 +368,102 @@ export const instrumentCommand =
     );
 
 /**
- * Render a profile's stored credential entries the same way across
- * `alchemy login` and `alchemy profile show`: one `── Provider ──`
- * header per entry, then either the provider's own `prettyPrint` block
- * (preferred) or a JSON-style fallback when the provider isn't
- * registered in the supplied {@link AuthProviders} registry.
+ * Lazy accessor for the ink-based profile TUI components, shared by every
+ * render site so react/ink stay off the CLI startup path.
+ */
+export const profileTui = Effect.promise(
+  () => import("../tui/components/Profile.tsx"),
+);
+
+/**
+ * Resolve a profile's stored credential entries into display records —
+ * provider name, method, live status, and detail lines. Provider
+ * `prettyPrint` output is captured through Effect's Console service so it
+ * can be composed into the profile card (or serialized as JSON) instead of
+ * being emitted as unrelated loose lines.
+ */
+export const resolveProfileDisplay = Effect.fn(function* (
+  profile: string,
+  stored: Profile,
+  registry: AuthProviders["Service"],
+) {
+  const renderProvider = (name: string) =>
+    Effect.gen(function* () {
+      const cfg = stored[name]!;
+      const provider: AuthProvider | undefined = registry[name];
+      if (provider == null) {
+        const { method: _method, ...rest } = cfg as Record<string, unknown> & {
+          method: string;
+        };
+        return {
+          name,
+          method: cfg.method,
+          status: "configured" as const,
+          lines: Object.entries(rest).map(
+            ([k, v]) =>
+              `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`,
+          ),
+        };
+      }
+
+      const lines: string[] = [];
+      const capture = (...args: ReadonlyArray<unknown>) => {
+        lines.push(format(...args).trimStart());
+      };
+      const capturedConsole = {
+        ...globalThis.console,
+        log: capture,
+        info: capture,
+        warn: capture,
+        error: capture,
+      } as Console.Console;
+
+      // A provider's `prettyPrint` catches its own credential-resolution
+      // failures, but some resolve paths `Effect.orDie` (e.g. AWS SSO with an
+      // expired token), which escapes as a defect. Contain it here so one broken
+      // provider can't abort rendering the rest of the profile.
+      let failed = false;
+      yield* provider.prettyPrint(profile, cfg).pipe(
+        Effect.provideService(Console.Console, capturedConsole),
+        Effect.catchCause((cause) => {
+          const error = Cause.squash(cause);
+          const message =
+            error instanceof Error ? error.message : String(error);
+          return Effect.sync(() => {
+            failed = true;
+            lines.push(`Failed to retrieve credentials: ${message}`);
+          });
+        }),
+      );
+      return {
+        name,
+        method: cfg.method,
+        status: failed ? ("error" as const) : ("ready" as const),
+        lines: lines.filter((line) => line !== `source: ${cfg.method}`),
+      };
+    });
+
+  // `prettyPrint` is read-only but resolves live credentials (SSO, OAuth
+  // refresh, whoami calls) — render providers concurrently so wall time is
+  // the slowest provider, not the sum.
+  return yield* Effect.forEach(Object.keys(stored).sort(), renderProvider, {
+    concurrency: 4,
+  });
+});
+
+/**
+ * Render a profile's stored credential entries in an Ink box across
+ * `alchemy profile edit`, `alchemy profile show`, and the interactive hub.
  */
 export const printProfile = Effect.fn(function* (
   profile: string,
-  stored: AlchemyProfileProviders,
+  stored: Profile,
   registry: AuthProviders["Service"],
+  active = true,
 ) {
-  yield* Console.log(`Profile: ${profile}`);
-  const names = Object.keys(stored).sort();
-  if (names.length === 0) {
-    yield* Console.log("(no providers configured)");
-    return;
-  }
-  for (const name of names) {
-    const cfg = stored[name]!;
-    yield* Console.log("");
-    yield* Console.log(`── ${name} ──`);
-    const provider: AuthProvider | undefined = registry[name];
-    if (provider == null) {
-      yield* Console.log(`  method: ${cfg.method}`);
-      const { method: _method, ...rest } = cfg as Record<string, unknown> & {
-        method: string;
-      };
-      for (const [k, v] of Object.entries(rest)) {
-        yield* Console.log(
-          `  ${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`,
-        );
-      }
-      continue;
-    }
-    // A provider's `prettyPrint` catches its own credential-resolution
-    // failures, but some resolve paths `Effect.orDie` (e.g. AWS SSO with an
-    // expired token), which escapes as a defect. Contain it here — via
-    // `Console.log` so the message stays on stdout under this provider's
-    // header instead of interleaving on stderr — so one broken provider
-    // can't abort rendering the rest of the profile.
-    yield* provider.prettyPrint(profile, cfg).pipe(
-      Effect.catchCause((cause) => {
-        const error = Cause.squash(cause);
-        const message = error instanceof Error ? error.message : String(error);
-        return Console.log(`  Failed to retrieve credentials: ${message}`);
-      }),
-    );
-  }
+  const providers = yield* resolveProfileDisplay(profile, stored, registry);
+  const { renderProfileDetails } = yield* profileTui;
+  yield* Effect.sync(() => renderProfileDetails(profile, providers, active));
 });
 
 export const importStack = Effect.fn(function* (main: string) {
@@ -414,11 +540,11 @@ export interface BuildStackProvidersOptions {
  * registry and the built context holds every resource provider plus the
  * cloud-environment services their operations need.
  *
- * Shared by `alchemy login`, `alchemy profile show`, and `alchemy unsafe
- * nuke`. The caller decides what to do with the result — use `authProviders`
- * (login / profile show) or `context` (nuke) — and whether a missing/invalid
- * entrypoint is fatal (login / nuke let it propagate) or best-effort
- * (profile show wraps the call in `Effect.catchCause`).
+ * Shared by `alchemy profile show` and `alchemy unsafe nuke`. The caller
+ * decides what to do with the result — use `authProviders` (profile show) or
+ * `context` (nuke) — and whether a missing/invalid entrypoint is fatal (nuke
+ * lets it propagate) or best-effort (profile show wraps the call in
+ * `Effect.catchCause`).
  */
 export const buildStackProviders = Effect.fn("buildStackProviders")(function* (
   options: BuildStackProvidersOptions,
@@ -450,7 +576,7 @@ export const buildStackProviders = Effect.fn("buildStackProviders")(function* (
 
 /**
  * The auth providers Alchemy ships with. Used as the baseline registry so
- * `alchemy login` works from any folder (no `alchemy.run.ts` required) and
+ * `alchemy profile edit` works from any folder (no `alchemy.run.ts` required) and
  * `alchemy profile show` can pretty-print any provider a profile mentions,
  * even one the current stack doesn't wire up.
  */

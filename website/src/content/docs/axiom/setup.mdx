@@ -14,7 +14,7 @@ import * as Axiom from "alchemy/Axiom";
 providers: Layer.mergeAll(Cloudflare.providers(), Axiom.providers()),
 ```
 
-The next `alchemy login` adds an `Axiom` step with two options:
+Run `alchemy profile edit --add Axiom` and pick between two options:
 
 - **Environment variables** — reads `AXIOM_TOKEN` (or
   `AXIOM_API_KEY`), plus optional `AXIOM_ORG_ID` and `AXIOM_URL`

@@ -35,7 +35,7 @@ if (wantsLive && !hasLiveCredentials) {
       new Error(
         [
           "Live Prisma Compute smoke requested but no credentials are configured.",
-          "Set PRISMA_SERVICE_TOKEN, set PRISMA_API_TOKEN, or run `alchemy login --configure` and select `Service Token`,",
+          "Set PRISMA_SERVICE_TOKEN, set PRISMA_API_TOKEN, or run `alchemy profile edit --re-configure Prisma` and select `Service Token`,",
           "then rerun this live test with ALCHEMY_RUN_LIVE_PRISMA_TESTS=true.",
         ].join(" "),
       ),
@@ -50,7 +50,7 @@ if (wantsCleanup && !hasLiveCredentials) {
       new Error(
         [
           "Live Prisma Compute cleanup requested but no credentials are configured.",
-          "Set PRISMA_SERVICE_TOKEN, set PRISMA_API_TOKEN, or run `alchemy login --configure` and select `Service Token`.",
+          "Set PRISMA_SERVICE_TOKEN, set PRISMA_API_TOKEN, or run `alchemy profile edit --re-configure Prisma` and select `Service Token`.",
         ].join(" "),
       ),
     ),

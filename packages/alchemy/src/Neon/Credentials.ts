@@ -1,10 +1,8 @@
 import { ConfigError } from "@distilled.cloud/core/errors";
 import { Credentials } from "@distilled.cloud/neon";
-import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { getAuthProvider } from "../Auth/AuthProvider.ts";
-import { ALCHEMY_PROFILE, AlchemyProfile } from "../Auth/Profile.ts";
+import { resolveProviderConfig } from "../Auth/Profile.ts";
 import {
   NEON_AUTH_PROVIDER_NAME,
   type NeonAuthConfig,
@@ -19,18 +17,12 @@ export const fromAuthProvider = () =>
   Layer.effect(
     Credentials,
     Effect.gen(function* () {
-      const profile = yield* AlchemyProfile;
-      const auth = yield* getAuthProvider<
+      const { auth, profileName, config } = yield* resolveProviderConfig<
         NeonAuthConfig,
         NeonResolvedCredentials
       >(NEON_AUTH_PROVIDER_NAME);
-      const profileName = yield* ALCHEMY_PROFILE;
-      const ci = yield* Config.boolean("CI").pipe(Config.withDefault(false));
 
-      return yield* profile.loadOrConfigure(auth, profileName, { ci }).pipe(
-        Effect.flatMap((config) =>
-          auth.read(profileName, config as NeonAuthConfig),
-        ),
+      return yield* auth.read(profileName, config).pipe(
         Effect.map((creds) => ({
           apiKey: creds.apiKey,
           apiBaseUrl: DEFAULT_BASE_URL,

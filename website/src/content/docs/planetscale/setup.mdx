@@ -14,14 +14,14 @@ import * as Planetscale from "alchemy/Planetscale";
 providers: Layer.mergeAll(Cloudflare.providers(), Planetscale.providers()),
 ```
 
-The next `alchemy login` adds a `Planetscale` step with two options:
+Run `alchemy profile edit --add Planetscale` and pick between two options:
 
 - **Environment variables** — reads `PLANETSCALE_API_TOKEN_ID`,
   `PLANETSCALE_API_TOKEN`, and `PLANETSCALE_ORGANIZATION` (good for CI).
 - **Stored service token** — entered interactively, saved under
   `~/.alchemy/credentials/<profile>/planetscale-stored.json`.
 
-When `CI=true`, the login step skips the prompt and selects the
+When `CI=true`, the configure step skips the prompt and selects the
 environment-variables method automatically.
 
 There is no OAuth option — intentionally. PlanetScale does not publish a

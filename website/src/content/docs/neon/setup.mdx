@@ -14,7 +14,7 @@ import * as Neon from "alchemy/Neon";
 providers: Layer.mergeAll(Cloudflare.providers(), Neon.providers()),
 ```
 
-The next `alchemy login` adds a `Neon` step with two options:
+Run `alchemy profile edit --add Neon` and pick between two options:
 
 - **Environment variable** — reads `NEON_API_KEY` (good for CI).
 - **Stored API key** — entered interactively, saved under

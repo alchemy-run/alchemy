@@ -7,31 +7,15 @@ import {
 } from "@/Prisma/AuthProvider";
 import { AuthProviders, getAuthProvider } from "@/Auth/AuthProvider";
 import { CredentialsStore } from "@/Auth/Credentials";
-import { AlchemyProfile } from "@/Auth/Profile";
+import { ProfileStore } from "@/Auth/Profile";
 import { describe, expect, it } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import { makeFakeCredentialsStore, makeFakeProfileStore } from "./fakes.ts";
 
-const fakeProfile: AlchemyProfile["Service"] = {
-  readConfig: Effect.succeed({ version: 0, profiles: {} }),
-  writeConfig: () => Effect.void,
-  getProfile: () => Effect.succeed(undefined),
-  setProfile: () => Effect.void,
-  deleteProfile: () => Effect.succeed(false),
-  loadOrConfigure: <Config extends { method: string }>() =>
-    Effect.succeed({ method: "env" } as Config),
-};
-
-const makeCredentialsStore = (
-  stored?: PrismaStoredCredentials,
-): CredentialsStore["Service"] => ({
-  read: <T>() => Effect.succeed(stored as T | undefined),
-  write: () => Effect.void,
-  delete: () => Effect.void,
-  deleteProfile: () => Effect.void,
-});
+const fakeProfile = makeFakeProfileStore();
 
 const testLayer = (
   config: Record<string, string> = {},
@@ -41,8 +25,8 @@ const testLayer = (
   const authRegistry = Layer.succeed(AuthProviders, authProviders);
   const base = Layer.mergeAll(
     authRegistry,
-    Layer.succeed(AlchemyProfile, fakeProfile),
-    Layer.succeed(CredentialsStore, makeCredentialsStore(stored)),
+    Layer.succeed(ProfileStore, fakeProfile),
+    Layer.succeed(CredentialsStore, makeFakeCredentialsStore(stored)),
     ConfigProvider.layer(ConfigProvider.fromUnknown(config)),
   );
   return PrismaAuth.pipe(Layer.provideMerge(base));
@@ -215,7 +199,7 @@ describe("Prisma auth provider", () => {
       expect(exit._tag).toBe("Failure");
       if (exit._tag === "Failure") {
         expect(String(exit.cause)).toContain(
-          "Prisma stored credentials not found",
+          "Run: alchemy profile edit default --re-configure Prisma",
         );
       }
     }).pipe(Effect.provide(testLayer())),

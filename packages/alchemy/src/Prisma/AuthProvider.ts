@@ -6,10 +6,11 @@ import {
   AuthError,
   AuthProviderLayer,
   type ConfigureContext,
+  reconfigureHint,
 } from "../Auth/AuthProvider.ts";
 import { CredentialsStore, displayRedacted } from "../Auth/Credentials.ts";
 import { getEnvRedacted, retryOnce } from "../Auth/Env.ts";
-import { AlchemyProfile } from "../Auth/Profile.ts";
+import { ProfileStore } from "../Auth/Profile.ts";
 import * as Clank from "../Util/Clank.ts";
 
 export const PRISMA_AUTH_PROVIDER_NAME = "Prisma";
@@ -89,7 +90,7 @@ export const PrismaAuth = AuthProviderLayer<
 >()(
   PRISMA_AUTH_PROVIDER_NAME,
   Effect.gen(function* () {
-    const profiles = yield* AlchemyProfile;
+    const profiles = yield* ProfileStore;
     const store = yield* CredentialsStore;
 
     const loginStored = Effect.fnUntraced(function* (profileName: string) {
@@ -169,8 +170,8 @@ export const PrismaAuth = AuthProviderLayer<
                       new AuthError({
                         message:
                           creds == null
-                            ? "Prisma stored credentials not found. Run: alchemy login --configure"
-                            : "Prisma stored credentials are invalid. Run: alchemy login --configure",
+                            ? `Prisma stored credentials not found. ${reconfigureHint("Prisma", profileName)}`
+                            : `Prisma stored credentials are invalid. ${reconfigureHint("Prisma", profileName)}`,
                       }),
                     )
                   : Effect.succeed({

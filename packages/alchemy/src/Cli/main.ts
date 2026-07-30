@@ -7,13 +7,13 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { AlchemyContextLive } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
-import { ProfileLive } from "alchemy/Auth/Profile";
+import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import { TelemetryLive } from "alchemy/Telemetry/Layer";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 import packageJson from "../../package.json" with { type: "json" };
 
 import { checkLatestVersion } from "./checkVersion.ts";
-import { handleCancellation } from "./commands/_shared.ts";
+import { handleCancellation, handleUserErrors } from "./commands/_shared.ts";
 import { awsCommand } from "./commands/aws.ts";
 import { cloudflareCommand } from "./commands/cloudflare.ts";
 import {
@@ -22,7 +22,6 @@ import {
   planCommand,
 } from "./commands/deploy.ts";
 import { devCommand } from "./commands/dev.ts";
-import { loginCommand } from "./commands/login.ts";
 import { logsCommand } from "./commands/logs.ts";
 import { unsafeCommand } from "./commands/nuke.ts";
 import { profileCommand } from "./commands/profile.ts";
@@ -41,7 +40,6 @@ const root = Command.make("alchemy", {}).pipe(
     planCommand,
     tailCommand,
     logsCommand,
-    loginCommand,
     profileCommand,
     stateCommand,
     syncCommand,
@@ -56,7 +54,7 @@ const cli = Command.run(root, {
 
 const services = Layer.mergeAll(
   Layer.provideMerge(AlchemyContextLive, PlatformServices),
-  Layer.provide(ProfileLive, PlatformServices),
+  Layer.provide(ProfileStoreLive, PlatformServices),
   Layer.provide(CredentialsStoreLive, PlatformServices),
   // Ambient per-CLI-run artifact root. Commands that define their own run
   // boundary (deploy, sync) provide a fresh store closer to the work, which
@@ -82,4 +80,5 @@ export const main = program.pipe(
   Effect.provide(services),
   Effect.scoped,
   handleCancellation,
+  handleUserErrors,
 );

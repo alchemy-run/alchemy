@@ -6,14 +6,12 @@ import {
   type ResolvedCredentials,
 } from "@distilled.cloud/cloudflare/Credentials";
 import { ConfigError } from "@distilled.cloud/core/errors";
-import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
 import * as Redacted from "effect/Redacted";
 import * as Semaphore from "effect/Semaphore";
-import { getAuthProvider } from "../Auth/AuthProvider.ts";
-import { ALCHEMY_PROFILE, AlchemyProfile } from "../Auth/Profile.ts";
+import { resolveProviderConfig } from "../Auth/Profile.ts";
 import {
   CLOUDFLARE_AUTH_PROVIDER_NAME,
   type CloudflareAuthConfig,
@@ -91,24 +89,18 @@ export const cacheUntilExpiry = <E>(
 /**
  * Build a `Credentials` layer that resolves Cloudflare credentials via the
  * Alchemy AuthProvider using the configured profile (defaults to "default",
- * overridable with the `ALCHEMY_PROFILE` env/config value).
+ * selected by the current Alchemy profile).
  */
 export const fromAuthProvider = () =>
   Layer.effect(
     Credentials,
     Effect.gen(function* () {
-      const profile = yield* AlchemyProfile;
-      const auth = yield* getAuthProvider<
+      const { auth, profileName, config } = yield* resolveProviderConfig<
         CloudflareAuthConfig,
         CloudflareResolvedCredentials
       >(CLOUDFLARE_AUTH_PROVIDER_NAME);
-      const profileName = yield* ALCHEMY_PROFILE;
-      const ci = yield* Config.boolean("CI").pipe(Config.withDefault(false));
 
-      const resolve = profile.loadOrConfigure(auth, profileName, { ci }).pipe(
-        Effect.flatMap((config) =>
-          auth.read(profileName, config as CloudflareAuthConfig),
-        ),
+      const resolve = auth.read(profileName, config).pipe(
         Effect.map((creds) =>
           Match.value(creds).pipe(
             Match.when({ type: "apiToken" }, (c) =>

@@ -34,6 +34,7 @@ import {
   instrumentCommand,
   parseSince,
   profile,
+  resolveProfileName,
 } from "./_shared.ts";
 
 /**
@@ -99,21 +100,22 @@ const bootstrapCommand = Command.make(
   instrumentCommand(
     "cloudflare.bootstrap",
     (a: {
-      profile: string;
+      profile: string | undefined;
       force: boolean;
       workerName: string | undefined;
     }) => ({
-      "alchemy.profile": a.profile,
+      "alchemy.profile": a.profile ?? "",
       "alchemy.force": a.force,
       "alchemy.worker_name": a.workerName ?? "",
     }),
   )(
     Effect.fn(function* ({ envFile, profile, force, workerName }) {
-      const services = yield* cloudflareLayers(envFile, profile);
+      const profileName = yield* resolveProfileName(envFile, profile);
+      const services = yield* cloudflareLayers(envFile, profileName);
       yield* bootstrapCloudflare({
         workerName,
         force,
-        profile,
+        profile: profileName,
       }).pipe(Effect.provide(services));
     }),
   ),
@@ -128,16 +130,17 @@ const teardownCommand = Command.make(
   },
   instrumentCommand(
     "cloudflare.teardown",
-    (a: { profile: string; workerName: string | undefined }) => ({
-      "alchemy.profile": a.profile,
+    (a: { profile: string | undefined; workerName: string | undefined }) => ({
+      "alchemy.profile": a.profile ?? "",
       "alchemy.worker_name": a.workerName ?? "",
     }),
   )(
     Effect.fn(function* ({ envFile, profile, workerName }) {
-      const services = yield* cloudflareLayers(envFile, profile);
+      const profileName = yield* resolveProfileName(envFile, profile);
+      const services = yield* cloudflareLayers(envFile, profileName);
       yield* teardownStateStore({
         workerName,
-        profile,
+        profile: profileName,
       }).pipe(Effect.provide(services));
     }),
   ),
@@ -571,19 +574,20 @@ const stateLogsCommand = Command.make(
   instrumentCommand(
     "cloudflare.state.logs",
     (a: {
-      profile: string;
+      profile: string | undefined;
       workerName: string | undefined;
       tail: boolean;
       limit: number;
     }) => ({
-      "alchemy.profile": a.profile,
+      "alchemy.profile": a.profile ?? "",
       "alchemy.worker_name": a.workerName ?? STATE_STORE_SCRIPT_NAME,
       "alchemy.tail": a.tail,
       "alchemy.limit": a.limit,
     }),
   )(
     Effect.fn(function* ({ envFile, profile, workerName, tail, limit, since }) {
-      const services = yield* cloudflareLayers(envFile, profile);
+      const profileName = yield* resolveProfileName(envFile, profile);
+      const services = yield* cloudflareLayers(envFile, profileName);
       const scriptName = workerName ?? STATE_STORE_SCRIPT_NAME;
 
       yield* Effect.gen(function* () {

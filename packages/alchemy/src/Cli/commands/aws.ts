@@ -23,8 +23,8 @@ import { fileLogger } from "../../Util/FileLogger.ts";
 
 import { envFile, instrumentCommand } from "./_shared.ts";
 
-const awsProfile = Flag.string("profile").pipe(
-  Flag.withDescription("AWS profile to use for credentials"),
+const awsProfile = Flag.string("aws-profile").pipe(
+  Flag.withDescription("AWS CLI/SSO profile to use for bootstrap credentials"),
   Flag.optional,
   Flag.map(Option.getOrElse(() => "default")),
 );
@@ -53,7 +53,7 @@ const bootstrapCommand = Command.make(
   instrumentCommand(
     "aws.bootstrap",
     (a: { profile: string; region: string | undefined; destroy: boolean }) => ({
-      "alchemy.profile": a.profile,
+      "aws.profile": a.profile,
       "alchemy.region": a.region ?? "",
       "alchemy.destroy": a.destroy,
     }),

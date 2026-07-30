@@ -251,9 +251,9 @@ variables or `wrangler login` required.
 
 :::tip
 To re-run the credential prompt later (e.g. to switch from OAuth to
-an API token, or to add a `prod` profile) use
-`alchemy login --configure` or
-`alchemy login --profile prod --configure`.
+an API token), use `alchemy profile edit --re-configure Cloudflare`.
+For a separate profile, run `alchemy profile create prod` followed by
+`alchemy profile edit prod`.
 :::
 
 <Terminal content={`[u]Plan[/u]: [g]1 to create[/g]

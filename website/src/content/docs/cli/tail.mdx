@@ -29,7 +29,7 @@ Only deployed resources whose provider implements tailing are streamed; if none 
 | ------------------- | ------------------------------------------------------------------- |
 | `--stage <name>`    | Stage to tail (defaults to `dev_$USER`)                             |
 | `--filter <ids>`    | Comma-separated logical resource IDs to include (e.g. `Worker,Api`) |
-| `--profile <name>`  | Auth profile to use (defaults to `default` or `$ALCHEMY_PROFILE`)   |
+| `--profile <name>`  | Auth profile to use (defaults to `$ALCHEMY_PROFILE`, the stored default, or `default`) |
 | `--env-file <path>` | Load environment variables from a file                              |
 | `[file]`            | Stack file to tail (defaults to `alchemy.run.ts`)                   |
 

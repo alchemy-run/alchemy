@@ -22,8 +22,7 @@ alchemy
 ├─ tail [file]          # stream live logs from deployed resources
 ├─ logs [file]          # fetch past log entries
 │
-├─ login [file]         # authenticate every provider in your stack
-├─ profile show|clear   # inspect or wipe stored credentials
+├─ profile create|rename|edit|current|set-default|list|show|delete # manage credentials and accounts
 │
 ├─ state stacks|stages|resources|get|tree|clear   # inspect and manage the state store
 │
@@ -31,19 +30,19 @@ alchemy
 └─ cloudflare bootstrap|create-token|state logs   # state-store worker, API tokens, its logs
 ```
 
-Each command has its own page: [deploy](/cli/deploy), [plan](/cli/plan), [destroy](/cli/destroy), [unsafe nuke](/cli/nuke), [dev](/cli/dev), [tail](/cli/tail), [logs](/cli/logs), [login](/cli/login), [profile](/cli/profile), [state](/cli/state), [aws](/cli/aws), [cloudflare](/cli/cloudflare) — plus two workflow guides, [Adopting Resources](/cli/adopting-resources) and [Inspecting State](/cli/inspecting-state).
+Each command has its own page: [deploy](/cli/deploy), [plan](/cli/plan), [destroy](/cli/destroy), [unsafe nuke](/cli/nuke), [dev](/cli/dev), [tail](/cli/tail), [logs](/cli/logs), [profile](/cli/profile), [state](/cli/state), [aws](/cli/aws), [cloudflare](/cli/cloudflare) — plus two workflow guides, [Adopting Resources](/cli/adopting-resources) and [Inspecting State](/cli/inspecting-state).
 
 ## Common options
 
 | Option              | Description                                                                                                                              |
 | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | `--stage <name>`    | Stage to target. Falls back to the `stage` env config, then `dev_$USER`. Must match `[a-z0-9]+([-_a-z0-9]+)*` (case-insensitive).        |
-| `--profile <name>`  | Auth profile from `~/.alchemy/profiles.json`. Defaults to `default` or `$ALCHEMY_PROFILE`.                                                |
+| `--profile <name>`  | Auth profile from `~/.alchemy/profiles.json`. Overrides `$ALCHEMY_PROFILE`, the stored default, and the built-in `default`.             |
 | `--env-file <path>` | File to load environment variables from. Defaults to `.env`.                                                                             |
 | `--yes`             | Yes to all prompts.                                                                                                                       |
 | `[file]`            | Stack entrypoint. Defaults to `alchemy.run.ts`; must exist.                                                                              |
 
-`--profile` is genuinely common — `deploy`, `plan`, `destroy`, `dev`, `tail`, `logs`, `login`, and `state` all take it.
+`--profile` is genuinely common — `deploy`, `plan`, `destroy`, `dev`, `tail`, `logs`, and `state` all take it.
 
 ## The interactive TUI
 
@@ -67,7 +66,7 @@ Running these commands in a pipeline? See [CI](/environments/ci).
 
 - [deploy](/cli/deploy) — plan, approve, and apply changes
 - [dev](/cli/dev) — hot-reloading development loop
-- [login](/cli/login) — authenticate your stack's providers
+- [profile](/cli/profile) — manage credentials and connected accounts
 - [state](/cli/state) — inspect and manage the state store
 - [Stages](/environments/stages) — how environments are isolated
 - [CI](/environments/ci) — run the CLI in pipelines

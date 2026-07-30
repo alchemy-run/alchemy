@@ -80,7 +80,7 @@ export const CloudflareLogs = Effect.gen(function* () {
 
   /**
    * The telemetry query needs the `workers_observability:read` OAuth scope.
-   * A token minted by an older `alchemy login` (before the scope joined the
+   * A token minted by an older login (before the scope joined the
    * defaults) keeps its original grants forever, so the query fails with a
    * bare `Unauthorized`/`Forbidden` even though a fresh login would work —
    * explain the fix instead of surfacing the raw tag.
@@ -94,8 +94,8 @@ export const CloudflareLogs = Effect.gen(function* () {
           new Error(
             "Cloudflare rejected the observability telemetry query (Unauthorized). " +
               'Your stored credentials are likely missing the "workers_observability:read" scope — ' +
-              "OAuth tokens keep the scopes they were minted with, so tokens from an older " +
-              "`alchemy login` won't have it. Run `alchemy login` again to mint a token with " +
+              "OAuth tokens keep the scopes they were minted with, so tokens minted by " +
+              "an older login won't have it. Run `alchemy profile edit --re-configure Cloudflare` to mint a token with " +
               "the current default scopes, or use an API token that grants Workers Observability read access.",
           ),
         ),

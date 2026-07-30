@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
-import { withLock } from "./Lock.ts";
+import { withProfileCredentialsLock } from "./Lock.ts";
 
 /**
  * Canonical web host for OAuth provider-agnostic landing pages
@@ -18,9 +18,10 @@ export const AUTH_ERROR_URL = `${AUTH_LANDING_HOST}/auth/error`;
 
 /**
  * Methods on an {@link AuthProviderImpl} that mutate (or could trigger
- * mutation of) on-disk credentials. The factory wraps these in a
- * cross-process file lock keyed by `(profileName, providerName)` so that
- * concurrent processes never refresh / write credentials simultaneously.
+ * mutation of) on-disk credentials. The factory wraps these in the
+ * cross-process profile-credentials file lock so that concurrent processes
+ * never refresh / write credentials simultaneously, and so profile-wide
+ * operations (rename, delete) exclude in-flight credential ops.
  *
  * `prettyPrint` is intentionally excluded: it's read-only display.
  */
@@ -47,6 +48,14 @@ export class AuthError extends Schema.TaggedErrorClass<AuthError>()(
     cause: Schema.optional(Schema.Defect()),
   },
 ) {}
+
+/**
+ * Standard CLI hint appended to stored-credential errors ("credentials not
+ * found", "refresh failed", ...). Centralized so the command phrasing lives
+ * in one place when the CLI surface changes.
+ */
+export const reconfigureHint = (provider: string, profileName: string) =>
+  `Run: alchemy profile edit ${profileName} --re-configure ${provider}`;
 
 export class AuthProviders extends Context.Service<
   AuthProviders,
@@ -174,8 +183,7 @@ export const AuthProvider =
                   );
                   if (LOCKED_METHODS.has(methodName)) {
                     // First positional arg is always `profileName`.
-                    const profileName = args[0] as string;
-                    eff = withLock(`${profileName}-${name}`, eff);
+                    eff = withProfileCredentialsLock(args[0] as string, eff);
                   }
                   if (INTERACTIVE_METHODS.has(methodName)) {
                     eff = Semaphore.withPermits(interactiveMutex, 1)(eff);
@@ -191,7 +199,7 @@ export const AuthProvider =
 /**
  * Build a Layer that registers an AuthProvider into the {@link AuthProviders}
  * registry when its parent layer is built. Use this from a provider's
- * top-level `providers()` Layer so that `alchemy login` can discover the
+ * top-level `providers()` Layer so that the alchemy CLI can discover the
  * provider via the registry without forcing credential resolution.
  */
 export const AuthProviderLayer =

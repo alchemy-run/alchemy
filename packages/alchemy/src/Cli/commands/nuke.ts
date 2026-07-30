@@ -20,6 +20,7 @@ import {
   envFile,
   instrumentCommand,
   profile,
+  resolveProfileName,
   script,
   yes,
 } from "./_shared.ts";
@@ -358,10 +359,13 @@ const nukeCommand = Command.make(
     exclude: excludeFlag,
     filter: filterFlag,
   },
-  instrumentCommand("unsafe.nuke", (a: { profile: string; main: string }) => ({
-    "alchemy.profile": a.profile,
-    "alchemy.main": a.main,
-  }))(
+  instrumentCommand(
+    "unsafe.nuke",
+    (a: { profile: string | undefined; main: string }) => ({
+      "alchemy.profile": a.profile ?? "",
+      "alchemy.main": a.main,
+    }),
+  )(
     Effect.fn(function* ({
       main,
       envFile,
@@ -377,6 +381,7 @@ const nukeCommand = Command.make(
       exclude,
       filter,
     }) {
+      const profileName = yield* resolveProfileName(envFile, profile);
       // DEBUG=1 routes provider logs to the console (instead of the
       // .alchemy/log/out file) at Debug level and disables the TUI so the
       // log stream isn't clobbered by the progress renderer.
@@ -390,7 +395,7 @@ const nukeCommand = Command.make(
       const { context } = yield* buildStackProviders({
         main,
         envFile,
-        profile,
+        profile: profileName,
         logger: debug ? Logger.layer([Logger.defaultLogger]) : undefined,
         extra: Layer.succeed(MinimumLogLevel, debug ? "Debug" : "Info"),
       });

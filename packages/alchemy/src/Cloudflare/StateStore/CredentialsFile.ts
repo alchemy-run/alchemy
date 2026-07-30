@@ -6,7 +6,7 @@ import type { HttpStateStoreCredentials } from "../../State/HttpStateStore.ts";
  *
  * Kept in this leaf module (rather than `StateStore/State.ts`) so the
  * Cloudflare auth provider can invalidate the cache on
- * `login --configure` / `logout` without importing the heavy state-store
+ * `profile edit` / provider logout without importing the heavy state-store
  * module and creating an import cycle
  * (`StateStore/State.ts` -> `Providers.ts` -> `Auth/AuthProvider.ts`).
  */

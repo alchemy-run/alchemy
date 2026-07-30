@@ -12,6 +12,7 @@ import {
   AuthError,
   AuthProviderLayer,
   type ConfigureContext,
+  reconfigureHint,
 } from "../Auth/AuthProvider.ts";
 import { CredentialsStore, displayRedacted } from "../Auth/Credentials.ts";
 import {
@@ -168,7 +169,7 @@ export type PlanetscaleResolvedCredentials =
 /**
  * Layer that registers the PlanetScale {@link AuthProvider} into the
  * {@link AuthProviders} registry when built. Include this in the
- * PlanetScale `providers()` layer so `alchemy login` can discover it.
+ * PlanetScale `providers()` layer so the alchemy CLI can discover it.
  *
  * Supported methods:
  * - `env`: reads `PLANETSCALE_API_TOKEN_ID`/`PLANETSCALE_API_TOKEN`/`PLANETSCALE_ORGANIZATION`.
@@ -348,8 +349,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
                 creds == null
                   ? Effect.fail(
                       new AuthError({
-                        message:
-                          "Planetscale stored credentials not found. Run: alchemy login --configure",
+                        message: `Planetscale stored credentials not found. ${reconfigureHint("Planetscale", profileName)}`,
                       }),
                     )
                   : Effect.succeed({
@@ -374,8 +374,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
             if (creds == null || creds.type !== "oauth") {
               return yield* Effect.fail(
                 new AuthError({
-                  message:
-                    "Planetscale OAuth credentials not found. Run: alchemy login",
+                  message: `Planetscale OAuth credentials not found. ${reconfigureHint("Planetscale", profileName)}`,
                 }),
               );
             }
@@ -392,8 +391,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
                     Effect.mapError(
                       (e) =>
                         new AuthError({
-                          message:
-                            "Planetscale OAuth refresh failed. Run: alchemy login",
+                          message: `Planetscale OAuth refresh failed. ${reconfigureHint("Planetscale", profileName)}`,
                           cause: e,
                         }),
                     ),

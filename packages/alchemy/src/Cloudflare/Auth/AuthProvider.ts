@@ -12,6 +12,7 @@ import {
   AuthError,
   AuthProviderLayer,
   type ConfigureContext,
+  reconfigureHint,
 } from "../../Auth/AuthProvider.ts";
 import { CredentialsStore, displayRedacted } from "../../Auth/Credentials.ts";
 import {
@@ -146,7 +147,7 @@ export const validateAccountId = (
       new AuthError({
         message:
           `Cloudflare account ID is missing (${source}). ` +
-          "Set CLOUDFLARE_ACCOUNT_ID or re-run 'alchemy login' and provide your account ID " +
+          "Set CLOUDFLARE_ACCOUNT_ID or re-run 'alchemy profile edit --re-configure Cloudflare' and provide your account ID " +
           "(found in the Cloudflare dashboard under Workers & Pages → Account details).",
       }),
     );
@@ -157,7 +158,7 @@ export const validateAccountId = (
         message:
           `'${trimmed}' is not a valid Cloudflare account ID (${source}) — expected 32 hex characters. ` +
           "Copy the account ID from the Cloudflare dashboard (Workers & Pages → Account details) " +
-          "into CLOUDFLARE_ACCOUNT_ID or re-run 'alchemy login'.",
+          "into CLOUDFLARE_ACCOUNT_ID or re-run 'alchemy profile edit --re-configure Cloudflare'.",
       }),
     );
   }
@@ -206,7 +207,7 @@ const promptOAuthScopes = () =>
 /**
  * Layer that registers the Cloudflare {@link AuthProvider} into the
  * {@link AuthProviders} registry when built. Include this in the Cloudflare
- * `providers()` layer so `alchemy login` can discover it.
+ * `providers()` layer so the alchemy CLI can discover it.
  */
 export const CloudflareAuth = AuthProviderLayer<
   CloudflareAuthConfig,
@@ -428,8 +429,7 @@ export const CloudflareAuth = AuthProviderLayer<
                 creds == null
                   ? Effect.fail(
                       new AuthError({
-                        message:
-                          "Cloudflare stored credentials not found. Run: alchemy login --configure",
+                        message: `Cloudflare stored credentials not found. ${reconfigureHint("Cloudflare", profileName)}`,
                       }),
                     )
                   : Effect.gen(function* () {
@@ -476,8 +476,7 @@ export const CloudflareAuth = AuthProviderLayer<
             if (creds == null || creds.type !== "oauth") {
               return yield* Effect.fail(
                 new AuthError({
-                  message:
-                    "Cloudflare OAuth credentials not found. Run: alchemy login",
+                  message: `Cloudflare OAuth credentials not found. ${reconfigureHint("Cloudflare", profileName)}`,
                 }),
               );
             }
@@ -494,8 +493,7 @@ export const CloudflareAuth = AuthProviderLayer<
                     Effect.mapError(
                       (e) =>
                         new AuthError({
-                          message:
-                            "Cloudflare OAuth refresh failed. Run: alchemy login",
+                          message: `Cloudflare OAuth refresh failed. ${reconfigureHint("Cloudflare", profileName)}`,
                           cause: e,
                         }),
                     ),

@@ -65,7 +65,7 @@ const withStateService = <A, E>(
   args: {
     main: string;
     envFile: Option.Option<string>;
-    profile: string;
+    profile: string | undefined;
     local: boolean;
   },
   body: (state: State.StateService) => Effect.Effect<A, E, never>,

@@ -9,6 +9,7 @@ import {
   AuthError,
   AuthProviderLayer,
   type ConfigureContext,
+  reconfigureHint,
 } from "../Auth/AuthProvider.ts";
 import { CredentialsStore, displayRedacted } from "../Auth/Credentials.ts";
 import { getEnvRedacted, retryOnce } from "../Auth/Env.ts";
@@ -120,7 +121,7 @@ export const readEnvCredentials = (
 /**
  * Build the Layer that registers the GitHub {@link AuthProvider} into the
  * {@link AuthProviders} registry. Included in the GitHub `providers()` layer
- * so `alchemy login` can discover it.
+ * so the alchemy CLI can discover it.
  *
  * Supported methods:
  * - `gh-cli`: shells out to `gh auth token` (recommended).
@@ -129,7 +130,7 @@ export const readEnvCredentials = (
  * - `stored`: prompts for a PAT and writes it to `~/.alchemy/credentials`.
  *
  * GitHub Enterprise (Server or Cloud with data residency) is supported by
- * every method: `alchemy login --configure` prompts for the host, or set
+ * every method: `alchemy profile edit --re-configure GitHub` prompts for the host, or set
  * `GITHUB_BASE_URL` / `GITHUB_API_URL` / `GH_HOST` in the environment. The
  * host is normalized into the REST API base URL passed to Octokit, and
  * `gh auth token` is invoked with `--hostname` so the CLI returns the token
@@ -144,7 +145,7 @@ export interface GitHubAuthOptions {
    * Hard-code the GitHub host or API base URL (e.g. `github.example.com`
    * or `https://github.example.com/api/v3`). When set, it takes precedence
    * over the profile's configured host and the environment for every auth
-   * method, `alchemy login` stops prompting for a host, and the `gh` CLI
+   * method, the configure flow stops prompting for a host, and the `gh` CLI
    * method authenticates against this host. `GitHub.providers({ baseUrl })`
    * threads its option here.
    */
@@ -342,8 +343,7 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
               );
               if (creds == null) {
                 return yield* new AuthError({
-                  message:
-                    "GitHub stored credentials not found. Run: alchemy login --configure",
+                  message: `GitHub stored credentials not found. ${reconfigureHint("GitHub", profileName)}`,
                 });
               }
               return {

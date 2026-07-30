@@ -15,7 +15,7 @@ import { apply } from "../Apply.ts";
 import { provideFreshArtifactStore } from "../Artifacts.ts";
 import { AuthProviders } from "../Auth/AuthProvider.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
-import { ProfileLive, withProfileOverride } from "../Auth/Profile.ts";
+import { ProfileStoreLive, withProfileOverride } from "../Auth/Profile.ts";
 import { LoggingCli } from "../Cli/LoggingCli.ts";
 import { deploy as _deploy } from "../Deploy.ts";
 import { destroy as _destroy } from "../Destroy.ts";
@@ -44,7 +44,7 @@ export interface MakeOptions<ROut = any> {
   providers: Layer.Layer<ROut, never, StackServices>;
   /** State store for top-level `deploy(Stack)` / `destroy(Stack)`; defaults to {@link State.localState}. */
   state?: Layer.Layer<State.State, never, StackServices>;
-  /** Override `ALCHEMY_PROFILE`; otherwise resolved from env / .env. */
+  /** Override the current profile; otherwise resolved from env, stored default, or fallback. */
   profile?: string;
   /** Default stage for deploy/destroy (default `"test"`). */
   stage?: string;
@@ -192,7 +192,7 @@ export type TestEffect<A, Req = never> = StackEffect<A, any, Req>;
 const platformLayer = Layer.mergeAll(
   PlatformServices,
   FetchHttpClient.layer,
-  Layer.provide(ProfileLive, PlatformServices),
+  Layer.provide(ProfileStoreLive, PlatformServices),
   Layer.provide(CredentialsStoreLive, PlatformServices),
 );
 

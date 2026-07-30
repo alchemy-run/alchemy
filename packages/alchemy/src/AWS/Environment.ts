@@ -7,8 +7,7 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { getAuthProvider } from "../Auth/AuthProvider.ts";
-import { ALCHEMY_PROFILE, AlchemyProfile } from "../Auth/Profile.ts";
+import { resolveProviderConfig } from "../Auth/Profile.ts";
 import {
   AWS_AUTH_PROVIDER_NAME,
   type AwsAuthConfig,
@@ -64,17 +63,13 @@ export class AWSEnvironment extends Context.Service<
 export const Default = Layer.effect(
   AWSEnvironment,
   Effect.gen(function* () {
-    const profile = yield* AlchemyProfile;
-    const auth = yield* getAuthProvider<AwsAuthConfig, AwsResolvedCredentials>(
-      AWS_AUTH_PROVIDER_NAME,
-    );
-    const profileName = yield* ALCHEMY_PROFILE;
-    const ci = yield* Config.boolean("CI").pipe(Config.withDefault(false));
+    const { auth, profileName, config } = yield* resolveProviderConfig<
+      AwsAuthConfig,
+      AwsResolvedCredentials
+    >(AWS_AUTH_PROVIDER_NAME);
 
-    return yield* profile.loadOrConfigure(auth, profileName, { ci }).pipe(
-      Effect.flatMap((config) => auth.read(profileName, config)),
-      Effect.orDie,
-      Effect.cached,
-    );
+    return yield* auth
+      .read(profileName, config)
+      .pipe(Effect.orDie, Effect.cached);
   }),
 ).pipe(Layer.orDie);

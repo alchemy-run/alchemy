@@ -1,6 +1,6 @@
 ---
 title: Custom Auth Provider
-description: Plug a third-party API into alchemy login — a lazy credentials service backed by an AuthProvider that resolves keys from a Profile, env vars, or a refreshable session.
+description: Plug a third-party API into alchemy's auth system — a lazy credentials service backed by an AuthProvider that resolves keys from a Profile, env vars, or a refreshable session.
 ---
 
 The [Custom Provider](/infrastructure-as-code/custom-provider) guide builds a
@@ -103,7 +103,7 @@ export const StripeAuth = AuthProviderLayer<
 ```
 
 `AuthProviderLayer` registers the implementation into the `AuthProviders`
-registry — that's how `alchemy login` discovers it. The factory also wraps
+registry — that's how the alchemy CLI discovers it. The factory also wraps
 `read`/`login`/`logout`/`configure` in a cross-process file lock and serializes
 interactive prompts across providers, so you don't handle either concern
 yourself.
@@ -211,7 +211,7 @@ const resolveCredentials = (
             ? Effect.fail(
                 new AuthError({
                   message:
-                    "Stripe stored credentials not found. Run: alchemy login --configure",
+                    "Stripe stored credentials not found. Run: alchemy profile edit --re-configure Stripe",
                 }),
               )
             : Effect.succeed({
@@ -307,9 +307,7 @@ provide the result as the `StripeCredentials` Effect:
 
 ```typescript
 // src/stripe/Credentials.ts (additions)
-import { getAuthProvider } from "alchemy/Auth/AuthProvider";
-import { ALCHEMY_PROFILE, AlchemyProfile } from "alchemy/Auth/Profile";
-import * as Config from "effect/Config";
+import { resolveProviderConfig } from "alchemy/Auth/Profile";
 import * as Layer from "effect/Layer";
 import {
   STRIPE_AUTH_PROVIDER_NAME,
@@ -321,18 +319,12 @@ export const fromAuthProvider = () =>
   Layer.effect(
     StripeCredentials,
     Effect.gen(function* () {
-      const profile = yield* AlchemyProfile;
-      const auth = yield* getAuthProvider<
+      const { auth, profileName, config } = yield* resolveProviderConfig<
         StripeAuthConfig,
         StripeResolvedCredentials
       >(STRIPE_AUTH_PROVIDER_NAME);
-      const profileName = yield* ALCHEMY_PROFILE;
-      const ci = yield* Config.boolean("CI").pipe(Config.withDefault(false));
 
-      return yield* profile.loadOrConfigure(auth, profileName, { ci }).pipe(
-        Effect.flatMap((config) =>
-          auth.read(profileName, config as StripeAuthConfig),
-        ),
+      return yield* auth.read(profileName, config).pipe(
         Effect.map((creds) => ({ apiKey: creds.apiKey })),
         Effect.orDie,
         Effect.cached,
@@ -341,9 +333,11 @@ export const fromAuthProvider = () =>
   );
 ```
 
-Two details matter. `loadOrConfigure` returns the stored config for the
-Profile, or runs `configure` and persists the answer — so the first deploy
-configures itself. And the value returned to `Layer.effect` is the *Effect*
+Two details matter. `resolveProviderConfig` applies the standard profile
+selection order, then returns the stored config or runs `configure` and
+persists the answer — so the first deploy configures its providers. A missing
+explicit Profile fails with a command to create it. And the value returned to
+`Layer.effect` is the *Effect*
 (closed by `Effect.cached`), not its result: nothing resolves until a handler
 runs it, and within one process `read` (and its file lock) runs at most once.
 Every built-in bridge — Neon, Planetscale, Cloudflare — has this exact shape.
@@ -357,7 +351,7 @@ resource providers, mirroring
 ```typescript
 // src/stripe/Providers.ts
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
-import { ProfileLive } from "alchemy/Auth/Profile";
+import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import * as Provider from "alchemy/Provider";
 import * as Layer from "effect/Layer";
 import { StripeAuth } from "./AuthProvider.ts";
@@ -373,14 +367,14 @@ export const providers = () =>
     Layer.provide(StripeProductProvider()),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(StripeAuth),
-    Layer.provideMerge(ProfileLive),
+    Layer.provideMerge(ProfileStoreLive),
     Layer.provideMerge(CredentialsStoreLive),
     Layer.orDie,
   );
 ```
 
-`StripeAuth` registers the provider so `alchemy login` discovers it;
-`ProfileLive` and `CredentialsStoreLive` give the auth machinery its
+`StripeAuth` registers the provider so the alchemy CLI discovers it;
+`ProfileStoreLive` and `CredentialsStoreLive` give the auth machinery its
 file-system services. (Providers that call APIs through an Effect `HttpClient`
 also merge `FetchHttpClient.layer` here, as Neon does.)
 
@@ -406,7 +400,7 @@ demanded exactly when an operation runs, never at Layer construction.
 
 ```sh
 alchemy deploy             # first run: prompts for a method, saves it to the profile
-alchemy login --configure  # re-run the method picker
+alchemy profile edit --re-configure Stripe   # re-run the method picker
 alchemy profile show       # renders your prettyPrint
 ```
 

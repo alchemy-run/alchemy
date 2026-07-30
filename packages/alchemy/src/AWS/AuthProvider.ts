@@ -15,6 +15,7 @@ import {
   AuthError,
   AuthProviderLayer,
   type ConfigureContext,
+  reconfigureHint,
 } from "../Auth/AuthProvider.ts";
 import { CredentialsStore, displayRedacted } from "../Auth/Credentials.ts";
 import {
@@ -96,7 +97,7 @@ export const applyEnvRegionOverride = <C extends { region: string }>(
 /**
  * Layer that registers the AWS {@link AuthProvider} into the
  * {@link AuthProviders} registry when built. Include this in the AWS
- * `providers()` layer so `alchemy login` can discover it.
+ * `providers()` layer so the alchemy CLI can discover it.
  */
 export const AwsAuth = AuthProviderLayer<
   AwsAuthConfig,
@@ -286,8 +287,7 @@ export const AwsAuth = AuthProviderLayer<
                 creds == null
                   ? Effect.fail(
                       new AuthError({
-                        message:
-                          "AWS stored credentials not found. Run: alchemy login --configure",
+                        message: `AWS stored credentials not found. ${reconfigureHint("AWS", profileName)}`,
                       }),
                     )
                   : Effect.succeed({
