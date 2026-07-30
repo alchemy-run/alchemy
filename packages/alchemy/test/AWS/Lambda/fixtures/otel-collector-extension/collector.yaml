@@ -1,0 +1,32 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 127.0.0.1:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 128
+    spike_limit_mib: 32
+  batch:
+    timeout: 100ms
+  decouple:
+    max_queue_size: 200
+
+exporters:
+  otlphttp:
+    endpoint: ${env:COLLECTOR_EXPORTER_OTLP_ENDPOINT}
+    headers:
+      x-otel-test-delay-ms: ${env:OTEL_TEST_EXPORT_DELAY_MS}
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, decouple]
+      exporters: [otlphttp]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, decouple]
+      exporters: [otlphttp]

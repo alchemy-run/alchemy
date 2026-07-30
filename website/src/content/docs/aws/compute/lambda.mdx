@@ -278,19 +278,33 @@ and request finalizers should be fast (closing a pool is
 milliseconds).
 
 :::caution[There is no `waitUntil` on Lambda — request finalizers block the response]
-No mechanism delivers post-response work reliably on Lambda. A
-buffered invocation's response is not released to the caller until
-the entire Invoke phase completes, so deferring cleanup past the
-handler (we measured an extension-held post-response window) still
-shows up as response latency — and environments whose invoke phase
-is held open this way get recycled. Dangling promises resume on a
-later thaw at best: TCP connections rarely survive the freeze, and a
-crash or timeout reset drops the work entirely — silent data loss
-for anything that mattered.
+Lambda provides no handler API that reliably continues arbitrary
+application work after the response. Request finalizers run before
+the runtime returns the handler result, so keep them cheap.
+Dangling promises resume on a later thaw at best: TCP connections
+rarely survive the freeze, and a crash or timeout reset drops the
+work entirely.
 
-The contract is blocking and honest: request finalizers run before
-the response, keep them cheap, and anything that must not be lost
-gets written durably (a queue, a table) inside the handler itself.
+An **external extension** is different from dangling handler work.
+It is a separate lifecycle participant: after the runtime sends the
+response, an extension may finish processing the current `INVOKE`
+event before asking Lambda for the next one. That work can be outside
+caller-visible response latency, but it still adds billed duration
+and holds the environment unavailable for reuse.
+
+Alchemy's
+[`aws-lambda-opentelemetry` example](https://github.com/alchemy-run/alchemy/tree/main/examples/aws-lambda-opentelemetry)
+uses this boundary: the invocation finalizer flushes Effect telemetry
+to a local Collector extension, and the extension exports remotely.
+Its deployed test asserts that the handler returns at least one
+second before a deliberately delayed four-second remote export can
+finish. This remains best-effort telemetry, not a delivery
+guarantee.
+
+Anything that must not be lost still gets written durably (a queue,
+a table) inside the handler itself. See
+[Telemetry](/infrastructure-as-effects/telemetry#lambda-export-through-a-collector-extension)
+for the Collector extension pattern.
 :::
 
 Init-level finalizers run at **sandbox shutdown**. A Lambda sandbox
