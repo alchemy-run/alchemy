@@ -4,7 +4,11 @@
   "exclude": [
     "test/Local/fixtures/rpc-server-entry.ts",
     "test/Local/fixtures/rpc-spawner-parent.ts",
-    "test/Local/fixtures/rpc-spawner-devserver-parent.ts"
+    "test/Local/fixtures/rpc-spawner-devserver-parent.ts",
+    // Nuxt fixture: server routes use nitro's auto-imported globals
+    // (`defineEventHandler`), which only type-check against the `.nuxt/`
+    // types a nuxt build generates.
+    "test/Cloudflare/Website/fixtures/nuxt-app"
   ],
   "compilerOptions": {
     "composite": true,
