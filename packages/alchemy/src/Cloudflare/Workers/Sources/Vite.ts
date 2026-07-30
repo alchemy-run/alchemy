@@ -239,10 +239,18 @@ export const hashViteInput = Effect.fn(function* <E, R>(
   additionalWorkspaces: Effect.Effect<Iterable<string>, E, R>,
 ) {
   const path = yield* Path.Path;
-  const hashWorkspaceDirectory = (cwd: string, memo?: MemoOptions) =>
-    hashDirectory({ cwd: path.resolve(rootDir, cwd), memo }).pipe(
-      Effect.map((hash) => `${path.relative(rootDir, cwd)}:${hash}`),
+  // Workspace paths arrive in two spellings: absolute (build-time module
+  // graph discovery) and rootDir-relative (persisted state fed back at
+  // diff time). Normalize against `rootDir` BEFORE relativizing for the
+  // hash label — `path.relative(rootDir, "../lib")` would resolve
+  // "../lib" against `process.cwd()`, so the diff-time hash could never
+  // match the build-time hash whenever the vite root isn't the cwd.
+  const hashWorkspaceDirectory = (cwd: string, memo?: MemoOptions) => {
+    const resolved = path.resolve(rootDir, cwd);
+    return hashDirectory({ cwd: resolved, memo }).pipe(
+      Effect.map((hash) => `${path.relative(rootDir, resolved)}:${hash}`),
     );
+  };
   const hashRoot = hashWorkspaceDirectory(rootDir, options);
   if (Array.isArray(options?.workspaces)) {
     return yield* Effect.all(
@@ -273,7 +281,7 @@ export const hashViteInput = Effect.fn(function* <E, R>(
   return {
     hash,
     workspaces: Array.from(workspaces).map((cwd) =>
-      path.relative(rootDir, cwd),
+      path.relative(rootDir, path.resolve(rootDir, cwd)),
     ),
   };
 });
