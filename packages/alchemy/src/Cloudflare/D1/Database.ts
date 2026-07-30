@@ -643,8 +643,11 @@ export const ProviderLocal = () =>
                   migrationsFiles: files,
                 }),
               ).pipe(
-                Effect.provide(localD1GatewayRuntime),
-                Effect.provideContext(runtimeContext),
+                Effect.provide(
+                  localD1GatewayRuntime.pipe(
+                    Layer.provideMerge(Layer.succeedContext(runtimeContext)),
+                  ),
+                ),
               );
             }
             for (const file of files) migrationsHashes[file.id] = file.hash;
@@ -673,8 +676,11 @@ export const ProviderLocal = () =>
                   discard: true,
                 }),
               ).pipe(
-                Effect.provide(localD1GatewayRuntime),
-                Effect.provideContext(runtimeContext),
+                Effect.provide(
+                  localD1GatewayRuntime.pipe(
+                    Layer.provideMerge(Layer.succeedContext(runtimeContext)),
+                  ),
+                ),
               );
               for (const file of pending) {
                 importHashes[file.path] = file.hash;
