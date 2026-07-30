@@ -35,6 +35,10 @@ const logLevel = Effect.provideService(
 const fixtureDir = pathe.resolve(import.meta.dirname, "vite-fixture");
 const spaFixtureDir = pathe.resolve(import.meta.dirname, "vite-spa-fixture");
 const doFixtureDir = pathe.resolve(import.meta.dirname, "vite-do-fixture");
+const containerFixtureDir = pathe.resolve(
+  import.meta.dirname,
+  "vite-container-fixture",
+);
 const reactRouterRscFixtureDir = pathe.resolve(
   import.meta.dirname,
   "react-router-rsc-fixture",
@@ -628,6 +632,75 @@ test.provider(
 );
 
 test.provider(
+  "Vite: Container binding on env deploys a container-backed DO class",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const rootDir = yield* cloneFixture(containerFixtureDir, {
+        prefix: "alchemy-vite-container-",
+        tempRoot,
+        entries: ["index.html", "package.json", "vite.config.ts", "src"],
+      });
+      const memoInclude = [
+        "index.html",
+        "src/**",
+        "package.json",
+        "vite.config.ts",
+      ];
+
+      // A `Cloudflare.Container` declaration on `env` is Effect-shaped —
+      // before #997 the Vite build's env resolution ran it as an inlined
+      // env Effect and the deploy died before the build started.
+      const site = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Website.Vite("ViteContainer", {
+            ...viteProps(rootDir, memoInclude),
+            compatibility: {
+              date: "2026-03-17",
+              flags: ["nodejs_compat"],
+            },
+            assets: {
+              runWorkerFirst: ["/api/*"],
+            },
+            env: {
+              ECHO: Cloudflare.Container("ViteEchoContainer", {
+                className: "EchoObject",
+                image: "mendhak/http-https-echo:latest",
+                observability: { logs: { enabled: true } },
+              }),
+            },
+          });
+        }),
+      );
+
+      expect(site.url).toBeDefined();
+      yield* expectWorkerExists(site.workerName, accountId);
+      yield* expectUrlContains(`${site.url!}/`, "Vite Container fixture", {
+        timeout: "120 seconds",
+        label: "vite container fixture assets",
+      });
+
+      // The echo image reflects the request as JSON ("method" only appears
+      // in a real echo response, never in an error page) — proof the request
+      // went Worker → DO class → container port 8080 and back.
+      const echo = yield* fetchContainerReady(
+        `${site.url!}/api/echo`,
+        "method",
+      );
+      expect(echo).toContain("method");
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+    }).pipe(logLevel),
+  // Container image pull + push + rollout comfortably exceeds the plain
+  // Vite deploy budget (mirrors AsyncContainer.test.ts).
+  { timeout: 600_000 },
+);
+
+test.provider(
   "Vite: main overrides the worker entry from the Vite config",
   (stack) =>
     Effect.gen(function* () {
@@ -963,6 +1036,40 @@ const fetchJsonReady = <T>(url: string) =>
       Effect.retry({
         schedule: Schedule.exponential("500 millis"),
         times: 15,
+      }),
+    );
+  });
+
+// Retry a container-backed route until it answers 200 with a body containing
+// `expected` — the container's first request rides through image provisioning
+// and instance cold start, which comfortably outlasts fetchJsonReady's budget
+// (mirrors AsyncContainer.test.ts's readiness poll).
+const fetchContainerReady = (url: string, expected: string) =>
+  Effect.gen(function* () {
+    const client = freshConn(yield* HttpClient.HttpClient);
+    return yield* client.get(url).pipe(
+      Effect.flatMap((res) =>
+        res.text.pipe(
+          Effect.flatMap((body) =>
+            res.status === 200 && body.includes(expected)
+              ? Effect.succeed(body)
+              : Effect.fail(
+                  new Error(
+                    `container not ready: ${res.status} ${body.slice(0, 200)}`,
+                  ),
+                ),
+          ),
+        ),
+      ),
+      Effect.timeout("10 seconds"),
+      Effect.retry({
+        // Cap exponential backoff at 3s — snappy fast path without the
+        // geometric blow-up dominating wall time on a slow rollout.
+        schedule: Schedule.min([
+          Schedule.exponential("500 millis"),
+          Schedule.spaced("3 seconds"),
+        ]),
+        times: 60,
       }),
     );
   });

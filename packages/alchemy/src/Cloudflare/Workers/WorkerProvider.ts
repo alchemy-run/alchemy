@@ -47,7 +47,11 @@ import {
   type WorkerRouteConfig,
   type WorkerVersionAffinity,
 } from "./Worker.ts";
-import { getCacheBinding, getCronBindings } from "./WorkerAsyncBindings.ts";
+import {
+  getCacheBinding,
+  getCronBindings,
+  isContainerDecl,
+} from "./WorkerAsyncBindings.ts";
 import type {
   WireWorkerBinding,
   WorkerBinding,
@@ -2101,9 +2105,16 @@ export const LiveWorkerProvider = () =>
                               // so we don't execute it as an inlined env entry.
                               isWorkerLoader(value)
                               ? undefined
-                              : Effect.isEffect(value)
-                                ? yield* value as any as Effect.Effect<any>
-                                : undefined,
+                              : // A `Cloudflare.Container` declaration is likewise
+                                // Effect-shaped but is a binding (DO namespace +
+                                // ContainerApplication) — yielding it would resolve
+                                // the started-instance tag, which only exists inside
+                                // a Durable Object (#997).
+                                isContainerDecl(value)
+                                ? undefined
+                                : Effect.isEffect(value)
+                                  ? yield* value as any as Effect.Effect<any>
+                                  : undefined,
                     ];
                   }),
                 ),
