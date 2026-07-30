@@ -61,7 +61,7 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
       // its ContainerApplication. Handled before the generic Effect
       // resolution below — yielding the Container class would resolve its
       // *started instance* tag, which only exists inside a Durable Object.
-      if (isContainerDecl(bindingEff)) {
+      if (isContainerDeclaration(bindingEff)) {
         yield* bindContainerClass(resource, bindingName, bindingEff);
         continue;
       }
@@ -168,8 +168,13 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
  * the `~alchemy/Container/ClassName` marker (rather than importing from
  * `Containers/Container.ts`) to avoid a value-level import cycle through
  * `ContainerPlatform` → `Worker.ts` → this module.
+ *
+ * Also used by Vite build env resolution: Container declarations are
+ * Effect-shaped bindings and must not be executed as inlined env Effects.
  */
-const isContainerDecl = (value: unknown): value is Container.Decl.Any =>
+export const isContainerDeclaration = (
+  value: unknown,
+): value is Container.Decl.Any =>
   (typeof value === "function" || typeof value === "object") &&
   value !== null &&
   "~alchemy/Container/ClassName" in value;

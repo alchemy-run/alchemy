@@ -47,7 +47,7 @@ import {
   type WorkerRouteConfig,
   type WorkerVersionAffinity,
 } from "./Worker.ts";
-import { getCacheBinding, getCronBindings } from "./WorkerAsyncBindings.ts";
+import { getCacheBinding, getCronBindings, isContainerDeclaration } from "./WorkerAsyncBindings.ts";
 import type {
   WireWorkerBinding,
   WorkerBinding,
@@ -2101,9 +2101,14 @@ export const LiveWorkerProvider = () =>
                               // so we don't execute it as an inlined env entry.
                               isWorkerLoader(value)
                               ? undefined
-                              : Effect.isEffect(value)
-                                ? yield* value as any as Effect.Effect<any>
-                                : undefined,
+                              : // Direct Container declarations are also Effect-shaped
+                                // bindings. Resolving one here asks Effect for a service
+                                // that is only available while deploying the Worker.
+                                isContainerDeclaration(value)
+                                ? undefined
+                                : Effect.isEffect(value)
+                                  ? yield* value as any as Effect.Effect<any>
+                                  : undefined,
                     ];
                   }),
                 ),
