@@ -71,6 +71,7 @@ import {
 import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
 import { readAssetsConfigFiles } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
+import { watchPrebuiltWorkerBundle } from "./Sources/Prebuilt.ts";
 import { isPythonMain, watchPythonWorkerBundle } from "./Sources/Python.ts";
 import {
   Artifacts as AlchemyArtifacts,
@@ -287,16 +288,17 @@ export const LocalWorkerProvider = () =>
               content: file.content,
             });
           } else {
-            if (typeof file.content !== "string") {
-              return yield* new WorkerValidationError({
-                message: `Expected string for ${file.path} (${type})`,
-                value: file.content,
-              });
-            }
+            // Prebuilt (`bundle: false`) workers read every module as raw
+            // bytes; string-typed workerd modules (ESModule, Text, ...)
+            // are decoded here, mirroring the deploy path which uploads
+            // the same bytes with a text content type.
             modules.push({
               name: file.path,
               type,
-              content: file.content,
+              content:
+                typeof file.content === "string"
+                  ? file.content
+                  : new TextDecoder().decode(file.content),
             });
           }
         }
@@ -445,6 +447,13 @@ export const LocalWorkerProvider = () =>
            * the instance.
            */
           source: props.source,
+          /**
+           * Prebuilt worker (`bundle: false`): local dev must serve the
+           * entry + rule-matched sibling modules byte-for-byte (fs-watch +
+           * re-read) — never re-bundle the prebuilt artifact with rolldown.
+           */
+          prebuilt: props.bundle === false,
+          rules: props.rules,
           vite: !!props.vite,
           // Relative `vite.main` resolves from the Vite root (see the
           // matching normalization in WorkerProvider's `viteBuild`).
@@ -758,7 +767,16 @@ export const LocalWorkerProvider = () =>
                 main: worker.bundleOptions.main,
                 compatibility: worker.compatibility,
               })
-            : bundler.watch(worker.bundleOptions)
+            : worker.prebuilt
+              ? // Prebuilt (`bundle: false`): fs-watch the entry directory
+                // and re-read the module graph byte-for-byte — running the
+                // rolldown watcher would re-bundle the prebuilt artifact
+                // and violate the deploy path's byte-for-byte contract.
+                watchPrebuiltWorkerBundle({
+                  main: worker.bundleOptions.main,
+                  rules: worker.rules,
+                })
+              : bundler.watch(worker.bundleOptions)
         ).pipe(
           Stream.tap((event) => {
             if (event._tag === "Start") {

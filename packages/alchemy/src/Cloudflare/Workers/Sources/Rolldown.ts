@@ -3,6 +3,7 @@ import * as FileSystem from "effect/FileSystem";
 import { flow } from "effect/Function";
 import type * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
+import { builtinModules } from "node:module";
 import path from "pathe";
 import type * as rolldown from "rolldown";
 import * as Artifacts from "../../../Artifacts.ts";
@@ -22,6 +23,15 @@ import type {
   SourceProvider,
 } from "../Source.ts";
 import { mainToPath } from "./shared.ts";
+
+/**
+ * Node builtin specifiers, prefixed or not — the same shape the cloudflare
+ * rolldown plugin matches (its vite half uses an identical regex for the
+ * deps-optimizer `esmExternalRequirePlugin` registration).
+ */
+const NODE_BUILTIN_MODULES_REGEXP = new RegExp(
+  `^(${builtinModules.filter((name) => !name.startsWith("node:")).join("|")}|node:.+)$`,
+);
 
 /**
  * Bundler options for a Worker: the generic {@link Bundle.BundleExtraOptions}
@@ -70,9 +80,13 @@ export const WorkerBundle = Effect.gen(function* () {
     // Loaded lazily so importing the Cloudflare provider (or the CLI, whose
     // command tree reaches this module) never loads rolldown's native
     // binding — only actually bundling a Worker does (#562).
-    const { default: cloudflareRolldown } = yield* Effect.promise(
-      () => import("@distilled.cloud/cloudflare-rolldown-plugin"),
-    );
+    const [{ default: cloudflareRolldown }, { esmExternalRequirePlugin }] =
+      yield* Effect.promise(() =>
+        Promise.all([
+          import("@distilled.cloud/cloudflare-rolldown-plugin"),
+          import("rolldown/plugins"),
+        ]),
+      );
     const realMain = yield* sanitizeMain(options.main);
     const inputOptions: rolldown.InputOptions = {
       input: realMain,
@@ -94,6 +108,25 @@ export const WorkerBundle = Effect.gen(function* () {
         Effect.provide(context),
       ),
       plugins: [
+        // The cloudflare plugin injects this builtin conversion itself, but
+        // constructs it from ITS OWN rolldown package instance. Rolldown
+        // recognizes builtin plugins via `instanceof BuiltinPlugin`, so
+        // when the plugin's `rolldown` resolves to a different install
+        // than ours (dual-workspace/dual-store node_modules), its instance
+        // is silently treated as a hookless JS plugin and CJS `require`s
+        // of Node builtins survive into the ESM output — throwing
+        // "Calling `require` for ..." at Worker startup. Inject the
+        // builtin from OUR rolldown instance so the conversion always
+        // applies under nodejs_compat (`skipDuplicateCheck` keeps the two
+        // registrations compatible when the instances do coincide).
+        options.compatibility.flags.some(
+          (flag) => flag === "nodejs_compat" || flag === "nodejs_compat_v2",
+        )
+          ? esmExternalRequirePlugin({
+              external: [NODE_BUILTIN_MODULES_REGEXP],
+              skipDuplicateCheck: true,
+            })
+          : undefined,
         cloudflareRolldown({
           compatibilityDate: options.compatibility.date,
           compatibilityFlags: options.compatibility.flags,
