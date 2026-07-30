@@ -1,5 +1,6 @@
 import * as Layer from "effect/Layer";
 import * as UIProvider from "../../UI/UIProvider.ts";
+import type { PlatformApplication } from "./PlatformApplication.ts";
 import type { Subscription } from "./Subscription.ts";
 import type { Topic } from "./Topic.ts";
 
@@ -64,4 +65,27 @@ export const SubscriptionUI = UIProvider.succeed<Subscription>(
   },
 );
 
-export const ui = () => Layer.mergeAll(TopicUI, SubscriptionUI);
+export const PlatformApplicationUI = UIProvider.succeed<PlatformApplication>(
+  "AWS.SNS.PlatformApplication",
+  {
+    displayName: "SNS Platform Application",
+    icon: "bell",
+    color: "#E7157B",
+    category: "eventing",
+    summary: (ctx) => ctx.attrs?.name,
+    facts: (ctx) => [
+      { label: "name", value: ctx.attrs?.name, copy: true },
+      {
+        label: "arn",
+        value: ctx.attrs?.platformApplicationArn,
+        mono: true,
+        copy: true,
+      },
+      { label: "platform", value: ctx.attrs?.platform },
+      { label: "enabled", value: ctx.attrs?.enabled },
+    ],
+  },
+);
+
+export const ui = () =>
+  Layer.mergeAll(TopicUI, SubscriptionUI, PlatformApplicationUI);

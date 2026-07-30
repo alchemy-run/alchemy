@@ -1,5 +1,6 @@
 import * as Layer from "effect/Layer";
 import * as UIProvider from "../../UI/UIProvider.ts";
+import type { AccountConfiguration } from "./AccountConfiguration.ts";
 import type { Certificate } from "./Certificate.ts";
 
 /**
@@ -53,4 +54,21 @@ export const CertificateUI = UIProvider.succeed<Certificate>(
   },
 );
 
-export const ui = () => Layer.mergeAll(CertificateUI);
+export const AccountConfigurationUI = UIProvider.succeed<AccountConfiguration>(
+  "AWS.ACM.AccountConfiguration",
+  {
+    displayName: "ACM Account Configuration",
+    icon: "settings",
+    color: ACM_COLOR,
+    category: "security",
+    summary: (ctx) =>
+      ctx.attrs?.daysBeforeExpiry === undefined
+        ? undefined
+        : `${ctx.attrs.daysBeforeExpiry} days before expiry`,
+    facts: (ctx) => [
+      { label: "days before expiry", value: ctx.attrs?.daysBeforeExpiry },
+    ],
+  },
+);
+
+export const ui = () => Layer.mergeAll(CertificateUI, AccountConfigurationUI);

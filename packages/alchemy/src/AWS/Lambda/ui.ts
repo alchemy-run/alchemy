@@ -3,6 +3,7 @@ import * as UIProvider from "../../UI/UIProvider.ts";
 import type { Alias } from "./Alias.ts";
 import type { EventSourceMapping } from "./EventSourceMapping.ts";
 import type { Function } from "./Function.ts";
+import type { LayerVersion } from "./LayerVersion.ts";
 import type { MicrovmImage } from "./MicrovmImage.ts";
 import type { NetworkConnector } from "./NetworkConnector.ts";
 import type { Permission } from "./Permission.ts";
@@ -180,6 +181,33 @@ export const MicrovmImageUI = UIProvider.succeed<MicrovmImage>(
   },
 );
 
+export const LayerVersionUI = UIProvider.succeed<LayerVersion>(
+  "AWS.Lambda.LayerVersion",
+  {
+    displayName: "Lambda Layer Version",
+    icon: "layers",
+    color: "#ED7100",
+    category: "compute",
+    summary: (ctx) =>
+      ctx.attrs?.layerName === undefined
+        ? undefined
+        : `${ctx.attrs.layerName}:${ctx.attrs.version ?? ""}`,
+    facts: (ctx) => [
+      { label: "layer", value: ctx.attrs?.layerName, copy: true },
+      { label: "arn", value: ctx.attrs?.layerArn, mono: true, copy: true },
+      {
+        label: "version arn",
+        value: ctx.attrs?.layerVersionArn,
+        mono: true,
+        copy: true,
+      },
+      { label: "version", value: ctx.attrs?.version },
+      { label: "code size", value: ctx.attrs?.codeSize },
+      { label: "license", value: ctx.attrs?.licenseInfo },
+    ],
+  },
+);
+
 export const ui = () =>
   Layer.mergeAll(
     FunctionUI,
@@ -188,4 +216,5 @@ export const ui = () =>
     AliasUI,
     NetworkConnectorUI,
     MicrovmImageUI,
+    LayerVersionUI,
   );

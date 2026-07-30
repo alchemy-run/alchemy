@@ -3,6 +3,10 @@ import * as UIProvider from "../../UI/UIProvider.ts";
 import type { AccessEntry } from "./AccessEntry.ts";
 import type { Addon } from "./Addon.ts";
 import type { Cluster } from "./Cluster.ts";
+import type { FargateProfile } from "./FargateProfile.ts";
+import type { HelmChart } from "./HelmChart.ts";
+import type { Manifest } from "./Manifest.ts";
+import type { Nodegroup } from "./Nodegroup.ts";
 import type { PodIdentityAssociation } from "./PodIdentityAssociation.ts";
 
 /**
@@ -119,5 +123,109 @@ export const AccessEntryUI = UIProvider.succeed<AccessEntry>(
   },
 );
 
+export const FargateProfileUI = UIProvider.succeed<FargateProfile>(
+  "AWS.EKS.FargateProfile",
+  {
+    displayName: "EKS Fargate Profile",
+    icon: "cloud",
+    color: "#ED7100",
+    category: "compute",
+    summary: (ctx) => ctx.attrs?.fargateProfileName,
+    facts: (ctx) => [
+      {
+        label: "profile",
+        value: ctx.attrs?.fargateProfileName,
+        copy: true,
+      },
+      {
+        label: "arn",
+        value: ctx.attrs?.fargateProfileArn,
+        mono: true,
+        copy: true,
+      },
+      { label: "cluster", value: ctx.attrs?.clusterName },
+      { label: "status", value: ctx.attrs?.status },
+      {
+        label: "subnets",
+        value: ctx.attrs?.subnets?.length
+          ? ctx.attrs.subnets.join(", ")
+          : undefined,
+        mono: true,
+      },
+    ],
+  },
+);
+
+export const HelmChartUI = UIProvider.succeed<HelmChart>("AWS.EKS.HelmChart", {
+  displayName: "EKS Helm Chart",
+  icon: "package",
+  color: "#ED7100",
+  category: "config",
+  summary: (ctx) => ctx.attrs?.releaseName,
+  facts: (ctx) => [
+    { label: "release", value: ctx.attrs?.releaseName, copy: true },
+    { label: "cluster", value: ctx.attrs?.clusterName },
+    { label: "namespace", value: ctx.attrs?.namespace },
+    { label: "chart", value: ctx.attrs?.chart, mono: true },
+    { label: "version", value: ctx.attrs?.version },
+    { label: "code hash", value: ctx.attrs?.code?.hash, mono: true },
+  ],
+});
+
+export const ManifestUI = UIProvider.succeed<Manifest>("AWS.EKS.Manifest", {
+  displayName: "EKS Manifest",
+  icon: "file-text",
+  color: "#ED7100",
+  category: "config",
+  summary: (ctx) =>
+    ctx.attrs?.kind === undefined
+      ? ctx.attrs?.name
+      : `${ctx.attrs.kind}/${ctx.attrs.name}`,
+  facts: (ctx) => [
+    { label: "name", value: ctx.attrs?.name, copy: true },
+    { label: "cluster", value: ctx.attrs?.clusterName },
+    { label: "kind", value: ctx.attrs?.kind },
+    { label: "api version", value: ctx.attrs?.apiVersion, mono: true },
+    { label: "namespace", value: ctx.attrs?.namespace },
+    { label: "uid", value: ctx.attrs?.uid, mono: true, copy: true },
+  ],
+});
+
+export const NodegroupUI = UIProvider.succeed<Nodegroup>("AWS.EKS.Nodegroup", {
+  displayName: "EKS Node Group",
+  icon: "cpu",
+  color: "#ED7100",
+  category: "compute",
+  summary: (ctx) => ctx.attrs?.nodegroupName,
+  facts: (ctx) => [
+    { label: "node group", value: ctx.attrs?.nodegroupName, copy: true },
+    {
+      label: "arn",
+      value: ctx.attrs?.nodegroupArn,
+      mono: true,
+      copy: true,
+    },
+    { label: "cluster", value: ctx.attrs?.clusterName },
+    { label: "status", value: ctx.attrs?.status },
+    { label: "capacity type", value: ctx.attrs?.capacityType },
+    {
+      label: "instance types",
+      value: ctx.attrs?.instanceTypes?.length
+        ? ctx.attrs.instanceTypes.join(", ")
+        : undefined,
+      mono: true,
+    },
+  ],
+});
+
 export const ui = () =>
-  Layer.mergeAll(ClusterUI, AddonUI, PodIdentityAssociationUI, AccessEntryUI);
+  Layer.mergeAll(
+    ClusterUI,
+    AddonUI,
+    PodIdentityAssociationUI,
+    AccessEntryUI,
+    FargateProfileUI,
+    HelmChartUI,
+    ManifestUI,
+    NodegroupUI,
+  );

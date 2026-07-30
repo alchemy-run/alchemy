@@ -1,5 +1,8 @@
 import * as Layer from "effect/Layer";
 import * as UIProvider from "../../UI/UIProvider.ts";
+import type { ApiDestination } from "./ApiDestination.ts";
+import type { Archive } from "./Archive.ts";
+import type { Connection } from "./Connection.ts";
 import type { EventBus } from "./EventBus.ts";
 import type { Permission } from "./Permission.ts";
 import type { Rule } from "./Rule.ts";
@@ -86,4 +89,98 @@ export const PermissionUI = UIProvider.succeed<Permission>(
   },
 );
 
-export const ui = () => Layer.mergeAll(EventBusUI, RuleUI, PermissionUI);
+export const ApiDestinationUI = UIProvider.succeed<ApiDestination>(
+  "AWS.EventBridge.ApiDestination",
+  {
+    displayName: "EventBridge API Destination",
+    icon: "webhook",
+    color: "#E7157B",
+    category: "eventing",
+    summary: (ctx) => ctx.attrs?.apiDestinationName,
+    consoleUrl: (ctx) => {
+      const region = regionOf(ctx.attrs?.apiDestinationArn);
+      return ctx.attrs?.apiDestinationName === undefined || region === undefined
+        ? undefined
+        : `https://${region}.console.aws.amazon.com/events/home?region=${region}#/apidestinations/${encodeURIComponent(ctx.attrs.apiDestinationName)}`;
+    },
+    facts: (ctx) => [
+      {
+        label: "destination",
+        value: ctx.attrs?.apiDestinationName,
+        copy: true,
+      },
+      {
+        label: "arn",
+        value: ctx.attrs?.apiDestinationArn,
+        mono: true,
+        copy: true,
+      },
+      { label: "state", value: ctx.attrs?.apiDestinationState },
+      { label: "endpoint", value: ctx.props?.invocationEndpoint, mono: true },
+      { label: "method", value: ctx.props?.httpMethod },
+      { label: "connection", value: ctx.props?.connectionArn, mono: true },
+    ],
+  },
+);
+
+export const ArchiveUI = UIProvider.succeed<Archive>(
+  "AWS.EventBridge.Archive",
+  {
+    displayName: "EventBridge Archive",
+    icon: "archive",
+    color: "#E7157B",
+    category: "eventing",
+    summary: (ctx) => ctx.attrs?.archiveName,
+    consoleUrl: (ctx) => {
+      const region = regionOf(ctx.attrs?.archiveArn);
+      return ctx.attrs?.archiveName === undefined || region === undefined
+        ? undefined
+        : `https://${region}.console.aws.amazon.com/events/home?region=${region}#/archives/${encodeURIComponent(ctx.attrs.archiveName)}`;
+    },
+    facts: (ctx) => [
+      { label: "archive", value: ctx.attrs?.archiveName, copy: true },
+      { label: "arn", value: ctx.attrs?.archiveArn, mono: true, copy: true },
+      { label: "event source", value: ctx.attrs?.eventSourceArn, mono: true },
+      { label: "retention", value: ctx.props?.retention?.toString() },
+    ],
+  },
+);
+
+export const ConnectionUI = UIProvider.succeed<Connection>(
+  "AWS.EventBridge.Connection",
+  {
+    displayName: "EventBridge Connection",
+    icon: "plug",
+    color: "#E7157B",
+    category: "eventing",
+    summary: (ctx) => ctx.attrs?.connectionName,
+    consoleUrl: (ctx) => {
+      const region = regionOf(ctx.attrs?.connectionArn);
+      return ctx.attrs?.connectionName === undefined || region === undefined
+        ? undefined
+        : `https://${region}.console.aws.amazon.com/events/home?region=${region}#/connections/${encodeURIComponent(ctx.attrs.connectionName)}`;
+    },
+    facts: (ctx) => [
+      { label: "connection", value: ctx.attrs?.connectionName, copy: true },
+      {
+        label: "arn",
+        value: ctx.attrs?.connectionArn,
+        mono: true,
+        copy: true,
+      },
+      { label: "state", value: ctx.attrs?.connectionState },
+      { label: "auth type", value: ctx.props?.authorizationType },
+      { label: "secret", value: ctx.attrs?.secretArn, mono: true, copy: true },
+    ],
+  },
+);
+
+export const ui = () =>
+  Layer.mergeAll(
+    EventBusUI,
+    RuleUI,
+    PermissionUI,
+    ApiDestinationUI,
+    ArchiveUI,
+    ConnectionUI,
+  );

@@ -1,5 +1,7 @@
 import * as Layer from "effect/Layer";
 import * as UIProvider from "../../UI/UIProvider.ts";
+import type { Image } from "./Image.ts";
+import type { RegistryPolicy } from "./RegistryPolicy.ts";
 import type { Repository } from "./Repository.ts";
 
 /**
@@ -49,4 +51,43 @@ export const RepositoryUI = UIProvider.succeed<Repository>(
   },
 );
 
-export const ui = () => Layer.mergeAll(RepositoryUI);
+export const ImageUI = UIProvider.succeed<Image>("AWS.ECR.Image", {
+  displayName: "ECR Image",
+  icon: "layers",
+  color: "#ED7100",
+  category: "storage",
+  summary: (ctx) => ctx.attrs?.imageTag,
+  facts: (ctx) => [
+    { label: "image", value: ctx.attrs?.imageUri, mono: true, copy: true },
+    { label: "digest", value: ctx.attrs?.digest, mono: true, copy: true },
+    {
+      label: "repository",
+      value: ctx.attrs?.repositoryName,
+      mono: true,
+    },
+    { label: "tag", value: ctx.attrs?.imageTag, mono: true },
+    { label: "owns repository", value: ctx.attrs?.ownsRepository },
+  ],
+});
+
+export const RegistryPolicyUI = UIProvider.succeed<RegistryPolicy>(
+  "AWS.ECR.RegistryPolicy",
+  {
+    displayName: "ECR Registry Policy",
+    icon: "lock",
+    color: "#ED7100",
+    category: "security",
+    summary: (ctx) => ctx.attrs?.registryId,
+    facts: (ctx) => [
+      {
+        label: "registry",
+        value: ctx.attrs?.registryId,
+        mono: true,
+        copy: true,
+      },
+      { label: "policy", value: ctx.attrs?.policy, mono: true },
+    ],
+  },
+);
+
+export const ui = () => Layer.mergeAll(RepositoryUI, ImageUI, RegistryPolicyUI);

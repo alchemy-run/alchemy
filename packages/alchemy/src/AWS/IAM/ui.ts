@@ -13,6 +13,7 @@ import type { Role } from "./Role.ts";
 import type { SAMLProvider } from "./SAMLProvider.ts";
 import type { SSHPublicKey } from "./SSHPublicKey.ts";
 import type { ServerCertificate } from "./ServerCertificate.ts";
+import type { ServiceLinkedRole } from "./ServiceLinkedRole.ts";
 import type { ServiceSpecificCredential } from "./ServiceSpecificCredential.ts";
 import type { SigningCertificate } from "./SigningCertificate.ts";
 import type { User } from "./User.ts";
@@ -510,6 +511,29 @@ export const AccountPasswordPolicyUI =
     ],
   });
 
+export const ServiceLinkedRoleUI = UIProvider.succeed<ServiceLinkedRole>(
+  "AWS.IAM.ServiceLinkedRole",
+  {
+    displayName: "IAM Service-Linked Role",
+    icon: "link",
+    color: IAM_RED,
+    category: "auth",
+    summary: (ctx) => ctx.attrs?.roleName,
+    consoleUrl: (ctx) =>
+      ctx.attrs?.roleName === undefined
+        ? undefined
+        : `https://console.aws.amazon.com/iam/home#/roles/details/${ctx.attrs.roleName}`,
+    facts: (ctx) => [
+      { label: "name", value: ctx.attrs?.roleName, copy: true },
+      { label: "arn", value: ctx.attrs?.roleArn, mono: true, copy: true },
+      { label: "id", value: ctx.attrs?.roleId, mono: true },
+      { label: "service", value: ctx.attrs?.awsServiceName },
+      { label: "suffix", value: ctx.attrs?.customSuffix },
+      { label: "description", value: ctx.attrs?.description },
+    ],
+  },
+);
+
 export const ui = () =>
   Layer.mergeAll(
     RoleUI,
@@ -529,4 +553,5 @@ export const ui = () =>
     VirtualMFADeviceUI,
     AccountAliasUI,
     AccountPasswordPolicyUI,
+    ServiceLinkedRoleUI,
   );

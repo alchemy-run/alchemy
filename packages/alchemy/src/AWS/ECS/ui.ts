@@ -4,6 +4,7 @@ import type { CapacityProvider } from "./CapacityProvider.ts";
 import type { Cluster } from "./Cluster.ts";
 import type { Service } from "./Service.ts";
 import type { Task } from "./Task.ts";
+import type { TaskDefinition } from "./TaskDefinition.ts";
 
 /**
  * Dashboard UI providers for AWS ECS resources.
@@ -133,5 +134,52 @@ export const CapacityProviderUI = UIProvider.succeed<CapacityProvider>(
   },
 );
 
+export const TaskDefinitionUI = UIProvider.succeed<TaskDefinition>(
+  "AWS.ECS.TaskDefinition",
+  {
+    displayName: "ECS Task Definition",
+    icon: "scroll-text",
+    color: "#ED7100",
+    category: "compute",
+    summary: (ctx) =>
+      ctx.attrs?.family === undefined
+        ? undefined
+        : `${ctx.attrs.family}:${ctx.attrs.revision}`,
+    consoleUrl: (ctx) => {
+      const region = regionOf(ctx.attrs?.taskDefinitionArn);
+      return region === undefined ||
+        ctx.attrs?.family === undefined ||
+        ctx.attrs?.revision === undefined
+        ? undefined
+        : `https://${region}.console.aws.amazon.com/ecs/v2/task-definitions/${ctx.attrs.family}/${ctx.attrs.revision}?region=${region}`;
+    },
+    facts: (ctx) => [
+      { label: "family", value: ctx.attrs?.family, copy: true },
+      { label: "revision", value: ctx.attrs?.revision },
+      {
+        label: "arn",
+        value: ctx.attrs?.taskDefinitionArn,
+        mono: true,
+        copy: true,
+      },
+      { label: "container", value: ctx.attrs?.containerName },
+      { label: "port", value: ctx.attrs?.port },
+      { label: "task role", value: ctx.attrs?.taskRoleArn, mono: true },
+      {
+        label: "execution role",
+        value: ctx.attrs?.executionRoleArn,
+        mono: true,
+      },
+      { label: "log group", value: ctx.attrs?.logGroupName, mono: true },
+    ],
+  },
+);
+
 export const ui = () =>
-  Layer.mergeAll(ClusterUI, TaskUI, ServiceUI, CapacityProviderUI);
+  Layer.mergeAll(
+    ClusterUI,
+    TaskUI,
+    ServiceUI,
+    CapacityProviderUI,
+    TaskDefinitionUI,
+  );

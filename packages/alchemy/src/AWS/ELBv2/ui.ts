@@ -1,9 +1,11 @@
 import * as Layer from "effect/Layer";
 import * as UIProvider from "../../UI/UIProvider.ts";
 import type { Listener } from "./Listener.ts";
+import type { ListenerCertificate } from "./ListenerCertificate.ts";
 import type { ListenerRule } from "./ListenerRule.ts";
 import type { LoadBalancer } from "./LoadBalancer.ts";
 import type { TargetGroup } from "./TargetGroup.ts";
+import type { TargetGroupAttachment } from "./TargetGroupAttachment.ts";
 import type { TrustStore } from "./TrustStore.ts";
 
 /**
@@ -157,6 +159,46 @@ export const TrustStoreUI = UIProvider.succeed<TrustStore>(
   },
 );
 
+export const ListenerCertificateUI = UIProvider.succeed<ListenerCertificate>(
+  "AWS.ELBv2.ListenerCertificate",
+  {
+    displayName: "Listener Certificate",
+    icon: "shield-check",
+    color: "#ED7100",
+    category: "security",
+    summary: (ctx) => ctx.attrs?.certificateArn,
+    facts: (ctx) => [
+      {
+        label: "certificate",
+        value: ctx.attrs?.certificateArn,
+        mono: true,
+        copy: true,
+      },
+      { label: "listener", value: ctx.attrs?.listenerArn, mono: true },
+    ],
+  },
+);
+
+export const TargetGroupAttachmentUI =
+  UIProvider.succeed<TargetGroupAttachment>("AWS.ELBv2.TargetGroupAttachment", {
+    displayName: "Target Group Attachment",
+    icon: "link",
+    color: "#ED7100",
+    category: "network",
+    summary: (ctx) => ctx.attrs?.targetId,
+    facts: (ctx) => [
+      { label: "target", value: ctx.attrs?.targetId, mono: true, copy: true },
+      {
+        label: "target group",
+        value: ctx.attrs?.targetGroupArn,
+        mono: true,
+        copy: true,
+      },
+      { label: "port", value: ctx.attrs?.port },
+      { label: "availability zone", value: ctx.attrs?.availabilityZone },
+    ],
+  });
+
 export const ui = () =>
   Layer.mergeAll(
     LoadBalancerUI,
@@ -164,4 +206,6 @@ export const ui = () =>
     ListenerUI,
     ListenerRuleUI,
     TrustStoreUI,
+    ListenerCertificateUI,
+    TargetGroupAttachmentUI,
   );

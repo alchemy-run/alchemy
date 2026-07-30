@@ -11,6 +11,7 @@ import type { KvRoutesUpdate } from "./KvRoutesUpdate.ts";
 import type { OriginAccessControl } from "./OriginAccessControl.ts";
 import type { OriginRequestPolicy } from "./OriginRequestPolicy.ts";
 import type { PublicKey } from "./PublicKey.ts";
+import type { RealtimeLogConfig } from "./RealtimeLogConfig.ts";
 import type { ResponseHeadersPolicy } from "./ResponseHeadersPolicy.ts";
 import type { VpcOrigin } from "./VpcOrigin.ts";
 
@@ -343,6 +344,24 @@ export const VpcOriginUI = UIProvider.succeed<VpcOrigin>(
   },
 );
 
+export const RealtimeLogConfigUI = UIProvider.succeed<RealtimeLogConfig>(
+  "AWS.CloudFront.RealtimeLogConfig",
+  {
+    displayName: "CloudFront Real-Time Log Config",
+    icon: "scroll-text",
+    color: CLOUDFRONT_COLOR,
+    category: "cdn",
+    summary: (ctx) => ctx.attrs?.name,
+    facts: (ctx) => [
+      { label: "name", value: ctx.attrs?.name, copy: true },
+      { label: "arn", value: ctx.attrs?.arn, mono: true, copy: true },
+      { label: "sampling rate", value: ctx.attrs?.samplingRate },
+      { label: "fields", value: ctx.attrs?.fields?.join(", "), mono: true },
+      { label: "endpoints", value: ctx.attrs?.endpoints?.length },
+    ],
+  },
+);
+
 export const ui = () =>
   Layer.mergeAll(
     DistributionUI,
@@ -358,4 +377,5 @@ export const ui = () =>
     KvRoutesUpdateUI,
     InvalidationUI,
     VpcOriginUI,
+    RealtimeLogConfigUI,
   );

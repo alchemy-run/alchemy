@@ -2,7 +2,9 @@ import * as Layer from "effect/Layer";
 import * as UIProvider from "../../UI/UIProvider.ts";
 import type { AutoScalingGroup } from "./AutoScalingGroup.ts";
 import type { LaunchTemplate } from "./LaunchTemplate.ts";
+import type { LifecycleHook } from "./LifecycleHook.ts";
 import type { ScalingPolicy } from "./ScalingPolicy.ts";
+import type { ScheduledAction } from "./ScheduledAction.ts";
 
 /**
  * Dashboard UI providers for AWS AutoScaling resources.
@@ -116,5 +118,64 @@ export const ScalingPolicyUI = UIProvider.succeed<ScalingPolicy>(
   },
 );
 
+export const LifecycleHookUI = UIProvider.succeed<LifecycleHook>(
+  "AWS.AutoScaling.LifecycleHook",
+  {
+    displayName: "Lifecycle Hook",
+    icon: "timer",
+    color: COMPUTE_ORANGE,
+    category: "compute",
+    summary: (ctx) => ctx.attrs?.lifecycleHookName,
+    facts: (ctx) => [
+      { label: "name", value: ctx.attrs?.lifecycleHookName, copy: true },
+      { label: "auto scaling group", value: ctx.attrs?.autoScalingGroupName },
+      { label: "transition", value: ctx.attrs?.lifecycleTransition },
+      { label: "heartbeat timeout (s)", value: ctx.attrs?.heartbeatTimeout },
+      { label: "default result", value: ctx.attrs?.defaultResult },
+      {
+        label: "notification target",
+        value: ctx.attrs?.notificationTargetARN,
+        mono: true,
+      },
+    ],
+  },
+);
+
+export const ScheduledActionUI = UIProvider.succeed<ScheduledAction>(
+  "AWS.AutoScaling.ScheduledAction",
+  {
+    displayName: "Scheduled Action",
+    icon: "calendar",
+    color: COMPUTE_ORANGE,
+    category: "compute",
+    summary: (ctx) => ctx.attrs?.scheduledActionName,
+    facts: (ctx) => [
+      { label: "name", value: ctx.attrs?.scheduledActionName, copy: true },
+      {
+        label: "arn",
+        value: ctx.attrs?.scheduledActionARN,
+        mono: true,
+        copy: true,
+      },
+      { label: "auto scaling group", value: ctx.attrs?.autoScalingGroupName },
+      { label: "recurrence", value: ctx.attrs?.recurrence, mono: true },
+      { label: "start time", value: ctx.attrs?.startTime },
+      {
+        label: "capacity",
+        value:
+          ctx.attrs?.desiredCapacity === undefined
+            ? undefined
+            : `${ctx.attrs.minSize ?? ""} / ${ctx.attrs.desiredCapacity} / ${ctx.attrs.maxSize ?? ""} (min/desired/max)`,
+      },
+    ],
+  },
+);
+
 export const ui = () =>
-  Layer.mergeAll(AutoScalingGroupUI, LaunchTemplateUI, ScalingPolicyUI);
+  Layer.mergeAll(
+    AutoScalingGroupUI,
+    LaunchTemplateUI,
+    ScalingPolicyUI,
+    LifecycleHookUI,
+    ScheduledActionUI,
+  );
