@@ -175,6 +175,12 @@
       "worker": "./src/Axiom/index.ts",
       "import": "./lib/Axiom/index.js"
     },
+    "./Sentry": {
+      "types": "./lib/Sentry/index.d.ts",
+      "bun": "./src/Sentry/index.ts",
+      "worker": "./src/Sentry/index.ts",
+      "import": "./lib/Sentry/index.js"
+    },
     "./GitHub": {
       "types": "./lib/GitHub/index.d.ts",
       "bun": "./src/GitHub/index.ts",
