@@ -1830,7 +1830,12 @@ export const FunctionProvider = () =>
           const hash = yield* hashBundle(code);
           yield* createOrUpdateFunction({
             id,
-            news,
+            // `news` is unresolved during precreate. A LayerVersion resource
+            // exposes its ARN as an Output, so attaching it here would send
+            // the Output object to AWS instead of a string. The stub does not
+            // need layers; reconcile runs after dependencies resolve and
+            // attaches the desired list.
+            news: { ...news, layers: [] },
             roleArn: role.Role.Arn,
             archive,
             hash,

@@ -59,12 +59,19 @@ test.provider(
         });
 
       // --- create ---
-      const created = yield* stack.deploy(program({ path: layerV1Path }));
+      const created = yield* stack.deploy(
+        program({ path: layerV1Path, withFunction: true }),
+      );
       const v1 = created.layer;
 
       expect(v1.version).toBeGreaterThan(0);
       expect(v1.layerVersionArn).toBe(`${v1.layerArn}:${v1.version}`);
       expect(v1.compatibleRuntimes).toEqual(["nodejs22.x"]);
+      expect(
+        (yield* getFunctionLayers(created.fn!.functionName)).map(
+          (layer) => layer.Arn,
+        ),
+      ).toEqual([v1.layerVersionArn]);
 
       const cloudV1 = yield* getLayerVersionOrUndefined(
         v1.layerName,
