@@ -323,7 +323,7 @@ export interface WorkflowRefProps {
 
 /**
  * Props for the Effect-native form of {@link Workflow}
- * (`Workflow(name, impl, props)`). Used when the workflow's implementation is
+ * (`Workflow(name, props, impl)`). Used when the workflow's implementation is
  * defined inline by the hosting Worker.
  */
 export interface WorkflowProps {
@@ -462,7 +462,17 @@ export interface WorkflowClass extends Effect.Effect<
     <Input = unknown, Result = unknown, InitReq = never>(
       name: string,
       impl: Effect.Effect<WorkflowImpl<Input, Result>, ConfigError, InitReq>,
-      props?: WorkflowProps,
+    ): Effect.Effect<
+      WorkflowHandle<Input, Result>,
+      never,
+      Worker | Exclude<InitReq, WorkflowServices>
+    > & {
+      new (_: never): WorkflowImpl<Input, Result>;
+    };
+    <Input = unknown, Result = unknown, InitReq = never>(
+      name: string,
+      props: WorkflowProps,
+      impl: Effect.Effect<WorkflowImpl<Input, Result>, ConfigError, InitReq>,
     ): Effect.Effect<
       WorkflowHandle<Input, Result>,
       never,
@@ -478,7 +488,15 @@ export interface WorkflowClass extends Effect.Effect<
   <Input = unknown, Result = unknown, InitReq = never>(
     name: string,
     impl: Effect.Effect<WorkflowImpl<Input, Result>, ConfigError, InitReq>,
-    props?: WorkflowProps,
+  ): Effect.Effect<
+    WorkflowHandle<Input, Result>,
+    never,
+    Worker | Exclude<InitReq, WorkflowServices>
+  >;
+  <Input = unknown, Result = unknown, InitReq = never>(
+    name: string,
+    props: WorkflowProps,
+    impl: Effect.Effect<WorkflowImpl<Input, Result>, ConfigError, InitReq>,
   ): Effect.Effect<
     WorkflowHandle<Input, Result>,
     never,
@@ -537,12 +555,12 @@ export class WorkflowScope extends Context.Service<
  * ```typescript
  * export default class MyWorkflow extends Cloudflare.Workflow<MyWorkflow>()(
  *   "MyWorkflow",
+ *   { limits: { steps: 25000 } },
  *   Effect.gen(function* () {
  *     return Effect.fn(function* (input: { name: string }) {
  *       return { received: input.name };
  *     });
  *   }),
- *   { limits: { steps: 25000 } },
  * ) {}
  * ```
  *
@@ -791,18 +809,24 @@ export class WorkflowScope extends Context.Service<
 export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
   ...args:
     | []
+    | [name: string, impl: Effect.Effect<WorkflowImpl<any, any>>]
     | [
         name: string,
+        props: WorkflowProps,
         impl: Effect.Effect<WorkflowImpl<any, any>>,
-        props?: WorkflowProps,
       ]
     | [name: string, props?: WorkflowRefProps]
 ) => {
   if (args.length === 0) {
     return Workflow;
   }
-  const [name, second, props] = args;
-  if (!Effect.isEffect(second)) {
+  const [name, second, third] = args;
+  const impl = Effect.isEffect(second)
+    ? second
+    : Effect.isEffect(third)
+      ? third
+      : undefined;
+  if (impl === undefined) {
     // Props-only (async) reference form: returns a plain `WorkflowLike` that an
     // async Worker binds via `env`. `WorkerAsyncBindings` emits the `workflow`
     // binding and drives `putWorkflow` for locally-hosted workflows.
@@ -815,7 +839,7 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
       limits: refProps?.limits,
     } satisfies WorkflowLike;
   }
-  const impl = second;
+  const props = Effect.isEffect(second) ? undefined : (second as WorkflowProps);
   return effectClass(
     Effect.gen(function* () {
       const worker = yield* Worker;

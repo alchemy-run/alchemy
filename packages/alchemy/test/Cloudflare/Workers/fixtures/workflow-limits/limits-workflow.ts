@@ -6,10 +6,11 @@ export const STEP_LIMIT = 250;
 
 /**
  * Fixture workflow used by `Workflow.test.ts`. Declares a per-workflow step
- * limit through the Effect-native form's third argument.
+ * limit through the Effect-native form's props argument.
  */
 export default class LimitsWorkflow extends Cloudflare.Workflow<LimitsWorkflow>()(
   "LimitsWorkflow",
+  { limits: { steps: STEP_LIMIT } },
   Effect.gen(function* () {
     return Effect.fn(function* (input: { value: string }) {
       return yield* Cloudflare.Workflows.task(
@@ -18,5 +19,4 @@ export default class LimitsWorkflow extends Cloudflare.Workflow<LimitsWorkflow>(
       );
     });
   }),
-  { limits: { steps: STEP_LIMIT } },
 ) {}
