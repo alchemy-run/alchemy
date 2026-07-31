@@ -92,12 +92,11 @@ export interface App extends Resource<
 /**
  * A Prisma App, the long-lived application configuration that owns deployments.
  *
- * The App Management API is experimental. Omit `branchId` and
- * `branchGitName` to attach the App to the project's current default branch.
- * App regions are immutable; create a second App and cut traffic over when
- * moving regions. Use `Prisma.Compute` for the usual build, deployment,
- * health-check, and promotion workflow; use `App` directly when managing
- * standalone `Prisma.Deployment` resources.
+ * Omit `branchId` and `branchGitName` to attach the App to the project's
+ * current default branch. App regions are immutable; create a second App and
+ * cut traffic over when moving regions. Use `Prisma.Compute` for the usual
+ * build, deployment, health-check, and promotion workflow; use `App` directly
+ * when managing standalone `Prisma.Deployment` resources.
  *
  * @resource
  * @section Creating an App

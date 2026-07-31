@@ -87,13 +87,9 @@ export interface Branch extends Resource<
 /**
  * A Prisma project branch for preview-class databases and compute resources.
  *
- * The Branch Management API is experimental. A standalone `Prisma.Branch`
- * is created with Prisma's immutable `preview` role because the owning project
- * already has its project-owned `production` branch. `isDefault: true`
- * changes which branch is the default without changing that role. On destroy,
- * Alchemy restores the displaced default before deleting a promoted preview
- * branch. The project-owned production branch cannot be managed as a
- * standalone Branch resource.
+ * Standalone Branch resources always have the `preview` role. Promotion
+ * changes only the default branch; Alchemy restores the previous default
+ * before deleting a promoted branch.
  *
  * @resource
  * @section Creating a Branch
@@ -103,6 +99,9 @@ export interface Branch extends Resource<
  *   project: project.projectId,
  *   gitName: "feature/search", // optional — omitted, a stable name is generated
  * });
+ *
+ * branch.role;      // "preview"
+ * branch.isDefault; // false
  * ```
  *
  * @section Promoting a Branch
@@ -113,6 +112,9 @@ export interface Branch extends Resource<
  *   gitName: "release/next",
  *   isDefault: true,
  * });
+ *
+ * release.role;      // still "preview"
+ * release.isDefault; // true
  * ```
  */
 export const Branch = Resource<Branch>("Prisma.Branch");

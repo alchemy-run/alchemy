@@ -91,11 +91,10 @@ export interface CustomDomain extends Resource<
 /**
  * A Prisma app custom domain.
  *
- * The custom-domain Management API is experimental. Domains can only attach
- * to Apps on the project's current default branch. Creating this resource
- * starts asynchronous DNS and certificate provisioning; configure the
- * returned `dnsRecords` and inspect `status`, `foundryStatus`, and
- * `failureReason` before routing production traffic.
+ * Domains can only attach to Apps on the project's current default branch.
+ * Creating this resource starts asynchronous DNS and certificate provisioning;
+ * configure the returned `dnsRecords` and inspect `status`, `foundryStatus`,
+ * and `failureReason` before routing production traffic.
  *
  * App and hostname changes are intentionally rejected because the Management
  * API cannot replace a live domain atomically. Create a second resource,

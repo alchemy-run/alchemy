@@ -547,9 +547,6 @@ const isEffectNativeCompute = (props: ComputeProps) =>
 /**
  * Build and deploy an application to Prisma Compute.
  *
- * The App, Deployment, environment-variable, and custom-domain Management API
- * endpoints used by this resource are experimental.
- *
  * Prisma's create-deployment API exposes neither an idempotency key nor a
  * caller-defined recovery key. If the API commits a deployment but its create
  * response is lost before Alchemy persists the returned ID, that deployment

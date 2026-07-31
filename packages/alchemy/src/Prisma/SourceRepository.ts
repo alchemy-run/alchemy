@@ -109,11 +109,11 @@ export interface SourceRepository extends Resource<
 /**
  * A linked source repository for Prisma apps.
  *
- * The source-repository Management API is experimental and currently supports
- * GitHub only. Linking requires an existing Prisma SCM installation.
- * `providerRepositoryId` is GitHub's permanent numeric repository ID; retrieve
- * it with `gh api repos/OWNER/REPO --jq '.id'`. When `installationId` is
- * omitted, Prisma selects the workspace installation.
+ * GitHub is currently the only supported provider. Linking requires an
+ * existing Prisma SCM installation. `providerRepositoryId` is GitHub's
+ * permanent numeric repository ID; retrieve it with
+ * `gh api repos/OWNER/REPO --jq '.id'`. When `installationId` is omitted,
+ * Prisma selects the workspace installation.
  *
  * Linking creates or renames the repository-owned default branch. Observe
  * that branch through the Management API; do not declare it again as a
