@@ -744,12 +744,8 @@ export const run = Effect.fn(function* (options: RunOptions) {
   // hang), and it maximizes exposure to loader races under concurrent
   // dynamic imports. The shared dependency graph is deduped by the module
   // cache, so a modest bound keeps nearly all of the speedup.
-  const bunNeedsSerialCollection =
-    typeof globalThis.Bun !== "undefined" &&
-    /^1\.(?:[4-9]|\d{2,})\./.test(globalThis.Bun.version);
-  const collectConcurrency = bunNeedsSerialCollection
-    ? 1
-    : options.concurrency === "unbounded"
+  const collectConcurrency =
+    options.concurrency === "unbounded"
       ? 32
       : Math.min(options.concurrency, 32);
   // collectFile never fails — import errors are captured on the result.
