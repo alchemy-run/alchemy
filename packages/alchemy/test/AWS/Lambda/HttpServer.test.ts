@@ -216,8 +216,8 @@ describe("AWS.Lambda.HttpServer", () => {
     );
 
     expect(result.statusCode).toBe(500);
-    expect(result.headers?.["content-type"]).toContain("text/plain");
-    expect(result.body).toBe("Internal Server Error");
+    expect(result.headers?.["content-type"]).toBeUndefined();
+    expect(result.body).toBeUndefined();
   });
 });
 

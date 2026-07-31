@@ -1,12 +1,15 @@
-import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as ErrorReporter from "effect/ErrorReporter";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type { Scope } from "effect/Scope";
 import type { HttpBodyError } from "effect/unstable/http/HttpBody";
-import type { HttpServerError } from "effect/unstable/http/HttpServerError";
+import {
+  causeResponse,
+  type HttpServerError,
+} from "effect/unstable/http/HttpServerError";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
@@ -82,25 +85,13 @@ export const safeHttpEffect = <Req = never>(
           : response,
       ),
     ) as any as HttpEffect<Req>,
-    (cause) => {
-      // ClientAbort interrupts are not real failures — the client closed
-      // the connection. Skip logging and respond with 499 if applicable.
-      if (Cause.hasInterruptsOnly(cause)) {
-        return Effect.succeed(HttpServerResponse.empty({ status: 499 }));
-      }
-      // Log the full cause server-side so operators can debug, but return
-      // a generic 500 to the client. Causes can contain sensitive data
-      // (prompt contents, API keys baked into error messages, internal
-      // file paths) and should never be echoed back to the network.
-      return Effect.logError("HTTP handler failed", cause).pipe(
-        Effect.as(
-          HttpServerResponse.text("Internal Server Error", {
-            status: 500,
-            statusText: "Internal Server Error",
-          }),
+    (cause) =>
+      causeResponse(cause).pipe(
+        Effect.tap(([, reportableCause]) =>
+          ErrorReporter.report(reportableCause),
         ),
-      );
-    },
+        Effect.map(([response]) => response),
+      ),
   );
 
 export const resolvePort = (options: { port?: number } | undefined) =>
