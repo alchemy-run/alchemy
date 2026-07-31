@@ -95,10 +95,28 @@ export const devChannel = (prefix: string) => `${prefix}/in`;
 
 /** Channel a bridge sandbox subscribes to: the dev machine publishes here. */
 export const workerChannel = (prefix: string, workerId: string) =>
-  `${prefix}/${workerId}/in`;
+  `${prefix}/${sanitizeSegment(workerId)}/in`;
 
-const sanitizeSegment = (segment: string) =>
-  segment.replace(/[^a-zA-Z0-9_-]/g, "-");
+const hashSegment = (segment: string) => {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < segment.length; index++) {
+    hash = Math.imul(hash ^ segment.charCodeAt(index), 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+};
+
+/**
+ * AppSync channel segments are 1-50 alphanumeric-or-dash characters. Preserve
+ * a readable prefix and append a stable hash when truncation is necessary so
+ * long stack names cannot collide.
+ */
+const sanitizeSegment = (segment: string) => {
+  const sanitized =
+    segment.replace(/[^a-zA-Z0-9-]+/g, "-").replace(/^-+|-+$/g, "") || "x";
+  if (sanitized.length <= 50) return sanitized;
+  const prefix = sanitized.slice(0, 41).replace(/-+$/g, "");
+  return `${prefix}-${hashSegment(segment)}`;
+};
 
 /**
  * Channel prefix for a stack+stage, e.g. `/alchemy/my-app/dev-sam`.

@@ -8,6 +8,7 @@ import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
@@ -20,7 +21,7 @@ import * as Provider from "../../Provider.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
-import { AWS_LOCAL_ENTRY_URL } from "../LocalRuntime.ts";
+import { AWS_LOCAL_ENTRY_URL, localRuntimeServices } from "../LocalRuntime.ts";
 import {
   Function,
   makeFunctionProvider,
@@ -34,7 +35,8 @@ import { LiveLambdaRuntime } from "./Live/LiveRuntime.ts";
 export const FunctionProvider = () =>
   ProviderLayer.dual(Function, {
     live: () => LiveFunctionProvider(),
-    local: () => LocalFunctionProvider(),
+    local: () =>
+      LocalFunctionProvider().pipe(Layer.provide(localRuntimeServices())),
   });
 
 export const LiveFunctionProvider = () =>
@@ -59,11 +61,12 @@ const devTimeout = (
 const sanitizeId = (id: string) => id.replace(/[^a-zA-Z0-9_-]/g, "-");
 
 /** A mode-specific physical name, always distinct from the production name. */
-export const createLiveDevFunctionName = (
-  id: string,
-  instanceId: string,
-): string => {
-  const suffix = `-${instanceId.slice(-12)}`;
+export const createLiveDevFunctionName = (id: string, fqn: string): string => {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < fqn.length; index++) {
+    hash = Math.imul(hash ^ fqn.charCodeAt(index), 0x01000193);
+  }
+  const suffix = `-${(hash >>> 0).toString(16).padStart(8, "0")}`;
   const prefix = `alchemy-dev-${sanitizeId(id)}`;
   return `${prefix.slice(0, 64 - suffix.length)}${suffix}`;
 };
@@ -129,11 +132,11 @@ export const LocalFunctionProvider = () =>
 
       const toDevProps = (
         id: string,
-        instanceId: string,
+        fqn: string,
         props: FunctionProps,
       ): FunctionProps => ({
         ...props,
-        functionName: createLiveDevFunctionName(id, instanceId),
+        functionName: createLiveDevFunctionName(id, fqn),
         handler: "handler",
         timeout: devTimeout(props.timeout),
       });
@@ -213,16 +216,16 @@ export const LocalFunctionProvider = () =>
       });
 
       return {
-        resolveConfig: ({ id, instanceId, news, bindings }) =>
+        resolveConfig: ({ id, fqn, news, bindings }) =>
           Effect.succeed({
             news,
             bindings,
-            functionName: createLiveDevFunctionName(id, instanceId),
+            functionName: createLiveDevFunctionName(id, fqn),
           } satisfies LocalFunctionConfig),
         precreate: Effect.fn(function* (args) {
           return yield* live.precreate!({
             ...args,
-            news: toDevProps(args.id, args.instanceId, args.news),
+            news: toDevProps(args.id, args.fqn, args.news),
             bindings: toDevBindings(args.id, args.bindings),
             session: usableSession(args.session),
           });
@@ -260,10 +263,8 @@ export const LocalFunctionProvider = () =>
             id: ctx.id,
             fqn: ctx.fqn,
             instanceId: ctx.instanceId,
-            news: toDevProps(ctx.id, ctx.instanceId, ctx.news),
-            olds: ctx.olds
-              ? toDevProps(ctx.id, ctx.instanceId, ctx.olds)
-              : undefined,
+            news: toDevProps(ctx.id, ctx.fqn, ctx.news),
+            olds: ctx.olds ? toDevProps(ctx.id, ctx.fqn, ctx.olds) : undefined,
             output: ctx.output,
             bindings: toDevBindings(ctx.id, ctx.bindings),
             session: usableSession(ctx.session),
@@ -273,7 +274,7 @@ export const LocalFunctionProvider = () =>
           yield* runtime.removeTarget(ctx.id);
           yield* live.delete({
             ...ctx,
-            olds: toDevProps(ctx.id, ctx.instanceId, ctx.olds),
+            olds: toDevProps(ctx.id, ctx.fqn, ctx.olds),
             bindings: toDevBindings(ctx.id, ctx.bindings),
             session: usableSession(ctx.session),
           });

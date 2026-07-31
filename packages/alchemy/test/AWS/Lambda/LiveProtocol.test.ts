@@ -47,10 +47,16 @@ describe("Live Lambda protocol", () => {
   });
 
   it("sanitizes stack and stage channel segments", () => {
-    const prefix = channelPrefix("alchemy", "my stack", "dev/saatvik");
-    expect(prefix).toBe("/alchemy/my-stack/dev-saatvik");
+    const prefix = channelPrefix(
+      "alchemy",
+      "my stack",
+      "dev/saatvik_with_a_name_that_is_far_too_long_for_appsync",
+    );
+    expect(prefix).toBe(
+      "/alchemy/my-stack/dev-saatvik-with-a-name-that-is-far-too-l-1f08b227",
+    );
     expect(workerChannel(prefix, "sandbox-1")).toBe(
-      "/alchemy/my-stack/dev-saatvik/sandbox-1/in",
+      "/alchemy/my-stack/dev-saatvik-with-a-name-that-is-far-too-l-1f08b227/sandbox-1/in",
     );
   });
 });
