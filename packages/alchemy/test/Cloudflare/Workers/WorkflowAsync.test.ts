@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Test from "@/Test/Alchemy";
+import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as workflows from "@distilled.cloud/cloudflare/workflows";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -261,9 +262,27 @@ export default {
 };
 `;
 
+// Physical workflow names are derived from the host Worker name and class, so
+// read the name off the deployed binding rather than assuming the class name.
+const readWorkflowName = (scriptName: string) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+    const settings = yield* workers.getScriptScriptAndVersionSetting({
+      accountId,
+      scriptName,
+    });
+    const binding = (settings.bindings ?? []).find(
+      (b): b is Extract<typeof b, { type: "workflow" }> =>
+        b.type === "workflow",
+    );
+    return binding === undefined
+      ? yield* Effect.fail(new Error(`no workflow binding on '${scriptName}'`))
+      : binding.workflowName;
+  });
+
 // Read the applied step limit out-of-band via the versions API, retrying until
 // it propagates (bounded, so a missing limit fails fast).
-const waitForAppliedSteps = (workflowName: string, expected: number) =>
+const waitForAppliedStepLimit = (workflowName: string, expected: number) =>
   Effect.gen(function* () {
     const { accountId } = yield* yield* CloudflareEnvironment;
     const versions = yield* workflows.listVersions
@@ -287,7 +306,7 @@ test.provider(
     Effect.gen(function* () {
       const steps = 100;
 
-      yield* scratch.deploy(
+      const deployed = yield* scratch.deploy(
         Effect.gen(function* () {
           return {
             worker: yield* Cloudflare.Worker("limits-workflow-worker", {
@@ -302,7 +321,8 @@ test.provider(
         }),
       );
 
-      const applied = yield* waitForAppliedSteps("LimitsWorkflow", steps);
+      const workflowName = yield* readWorkflowName(deployed.worker.workerName);
+      const applied = yield* waitForAppliedStepLimit(workflowName, steps);
       expect(applied).toBe(steps);
 
       yield* scratch.destroy();
