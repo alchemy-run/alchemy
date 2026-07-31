@@ -68,6 +68,10 @@ test.provider(
         }),
       );
 
+      // The local provider serves from the dev proxy — proof no cloud call
+      // ran.
+      expect(deployed.worker.url).toMatch(/^http:\/\/localhost:\d+$/);
+
       const body = yield* getTextReady(`${deployed.worker.url}`);
       expect(body).toContain("alchemy-assets-only-index");
 
