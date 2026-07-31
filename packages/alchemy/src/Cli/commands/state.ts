@@ -10,6 +10,8 @@ import { AuthProviders } from "../../Auth/AuthProvider.ts";
 import { withProfileOverride } from "../../Auth/Profile.ts";
 import { Stage } from "../../Stage.ts";
 import * as State from "../../State/index.ts";
+import { resolveLocalSecretCodec } from "../../State/SecretCodec.ts";
+import { PlatformServices } from "../../Util/PlatformServices.ts";
 import { encodeState } from "../../State/StateEncoding.ts";
 import * as Clank from "../../Util/Clank.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
@@ -195,10 +197,17 @@ const getCommand = Command.make(
             yield* Console.log(`(not found: ${stackName}/${stageName}/${fqn})`);
             return;
           }
-          // encodeState produces a JSON-friendly view: redacted secrets
-          // are unwrapped into `{ __redacted__: ... }`, Resources are
-          // flattened, etc. Same shape the store persists.
-          yield* Console.log(JSON.stringify(encodeState(value), null, 2));
+          // encodeState produces a JSON-friendly view: Resources are
+          // flattened, Durations tagged, etc. Secrets print as encrypted
+          // `{ __secret__: ... }` envelopes (ALCHEMY_PASSWORD or the
+          // local state key), never as plaintext.
+          const codec = yield* resolveLocalSecretCodec.pipe(
+            Effect.provide(PlatformServices),
+            Effect.orDie,
+          );
+          yield* Console.log(
+            JSON.stringify(encodeState(value, codec), null, 2),
+          );
         }),
       );
     }),
