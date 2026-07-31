@@ -54,6 +54,8 @@ export interface LocalProviderInput<R extends ResourceLike> {
   fqn: string;
   instanceId: string;
   news: R["Props"];
+  olds: R["Props"] | undefined;
+  output: R["Attributes"] | undefined;
   bindings: ResourceBinding<R["Binding"]>[];
 }
 
@@ -80,9 +82,15 @@ export interface StartContext<
   invalidate: Effect.Effect<void>;
 }
 
-export interface StopContext {
+export interface StopContext<R extends ResourceLike = ResourceLike> {
   id: string;
+  fqn: string;
   instanceId: string;
+  olds: R["Props"];
+  output: R["Attributes"];
+  bindings: ResourceBinding<R["Binding"]>[];
+  session: ScopedPlanStatusSession;
+  force?: boolean;
 }
 
 export interface StablesContext<
@@ -147,7 +155,7 @@ export interface LocalProviderSpec<
    * shared state. Must be idempotent; also called when nothing is running
    * (e.g. cleaning up a local row during a live deploy).
    */
-  stop?: (ctx: StopContext) => Effect.Effect<void, any>;
+  stop?: (ctx: StopContext<R>) => Effect.Effect<void, any, any>;
   /**
    * Attributes that remain stable across the update the generated `diff`
    * is about to report (see `Diff.stables`). Called only when the diff is
@@ -380,6 +388,7 @@ export const make = <
           id,
           fqn,
           instanceId,
+          olds,
           news: rawNews,
           newBindings,
           output,
@@ -387,6 +396,7 @@ export const make = <
           id: string;
           fqn: string;
           instanceId: string;
+          olds: R["Props"] | undefined;
           news: any;
           newBindings: any;
           output: R["Attributes"] | undefined;
@@ -401,6 +411,8 @@ export const make = <
             fqn,
             instanceId,
             news: news as R["Props"],
+            olds,
+            output,
             bindings: newBindings as ResourceBinding<R["Binding"]>[],
           };
           const { config, configHash } = yield* resolveDesired(input);
@@ -420,6 +432,8 @@ export const make = <
           fqn,
           instanceId,
           news,
+          olds,
+          output,
           bindings,
           session,
         }: {
@@ -427,6 +441,8 @@ export const make = <
           fqn: string;
           instanceId: string;
           news: R["Props"];
+          olds: R["Props"] | undefined;
+          output: R["Attributes"] | undefined;
           bindings: ResourceBinding<R["Binding"]>[];
           session: ScopedPlanStatusSession;
         }) {
@@ -438,6 +454,8 @@ export const make = <
                 fqn,
                 instanceId,
                 news: stripEffects(news) as R["Props"],
+                olds,
+                output,
                 bindings,
               };
               const { config, configHash } = yield* resolveDesired(input);
@@ -462,13 +480,17 @@ export const make = <
             }),
           );
         }),
-        delete: Effect.fn(function* ({
-          id,
-          instanceId,
-        }: {
+        delete: Effect.fn(function* (args: {
           id: string;
+          fqn: string;
           instanceId: string;
+          olds: R["Props"];
+          output: R["Attributes"];
+          session: ScopedPlanStatusSession;
+          bindings: ResourceBinding<R["Binding"]>[];
+          force?: boolean;
         }) {
+          const { id, instanceId } = args;
           yield* withLock(
             id,
             Effect.gen(function* () {
@@ -487,7 +509,7 @@ export const make = <
               // (proxies, restart hooks) and out-of-session cleanup (e.g.
               // deleting a local row during a live deploy) still need it.
               if (stop) {
-                yield* stop({ id, instanceId });
+                yield* stop(args);
               }
             }),
           );
