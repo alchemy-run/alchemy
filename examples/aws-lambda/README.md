@@ -11,14 +11,15 @@ mode:
 AWS_PROFILE=your-profile AWS_REGION=us-west-2 bun run dev
 ```
 
-Alchemy provisions a separate dev Lambda in your AWS account. Its real
-Function URL, IAM role, bindings, and AWS event integrations remain active,
-while invocations are forwarded through AppSync Events to the handler running
-on your machine. Edit `src/JobFunction.ts`; the next invocation uses the
-rebuilt local bundle without redeploying the Lambda.
+Alchemy temporarily replaces this stage's Lambda bundle with a bridge. The
+same Function URL, ARN, IAM role, bindings, and AWS event integrations remain
+active while invocations are forwarded through AppSync Events to the handler
+running on your machine. Edit `src/JobFunction.ts`; the next invocation uses
+the rebuilt local bundle without redeploying the Lambda.
 
-The dev Lambda has its own `alchemy-dev-*` physical name, so switching between
-`alchemy dev` and `alchemy deploy` cannot overwrite the deployed function.
+Running `alchemy deploy` for the same stage restores the application bundle
+onto that same Lambda. Use a personal development stage: while `alchemy dev`
+owns the stage, its Lambda intentionally routes invocations to your machine.
 
 Run `bun run destroy` when you are finished. The account-and-region-wide
 AppSync Events API named `alchemy` is shared bootstrap infrastructure and is

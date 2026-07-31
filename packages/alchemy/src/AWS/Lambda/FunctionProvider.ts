@@ -37,6 +37,7 @@ export const FunctionProvider = () =>
     live: () => LiveFunctionProvider(),
     local: () =>
       LocalFunctionProvider().pipe(Layer.provide(localRuntimeServices())),
+    modeTransition: "in-place",
   });
 
 export const LiveFunctionProvider = () =>
@@ -60,23 +61,11 @@ const devTimeout = (
 
 const sanitizeId = (id: string) => id.replace(/[^a-zA-Z0-9_-]/g, "-");
 
-/** A mode-specific physical name, always distinct from the production name. */
-export const createLiveDevFunctionName = (id: string, fqn: string): string => {
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < fqn.length; index++) {
-    hash = Math.imul(hash ^ fqn.charCodeAt(index), 0x01000193);
-  }
-  const suffix = `-${(hash >>> 0).toString(16).padStart(8, "0")}`;
-  const prefix = `alchemy-dev-${sanitizeId(id)}`;
-  return `${prefix.slice(0, 64 - suffix.length)}${suffix}`;
-};
-
 type FunctionBinding = ResourceBinding<Function["Binding"]>;
 
 interface LocalFunctionConfig {
   news: FunctionProps;
   bindings: FunctionBinding[];
-  functionName: string;
 }
 
 type LocalFunctionProviderRequirements =
@@ -130,13 +119,8 @@ export const LocalFunctionProvider = () =>
         },
       });
 
-      const toDevProps = (
-        id: string,
-        fqn: string,
-        props: FunctionProps,
-      ): FunctionProps => ({
+      const toDevProps = (props: FunctionProps): FunctionProps => ({
         ...props,
-        functionName: createLiveDevFunctionName(id, fqn),
         handler: "handler",
         isExternal: true,
         timeout: devTimeout(props.timeout),
@@ -220,16 +204,15 @@ export const LocalFunctionProvider = () =>
       });
 
       return {
-        resolveConfig: ({ id, fqn, news, bindings }) =>
+        resolveConfig: ({ news, bindings }) =>
           Effect.succeed({
             news,
             bindings,
-            functionName: createLiveDevFunctionName(id, fqn),
           } satisfies LocalFunctionConfig),
         precreate: Effect.fn(function* (args) {
           return yield* live.precreate!({
             ...args,
-            news: toDevProps(args.id, args.fqn, args.news),
+            news: toDevProps(args.news),
             bindings: toDevBindings(args.id, args.bindings),
             session: usableSession(args.session),
           });
@@ -267,18 +250,18 @@ export const LocalFunctionProvider = () =>
             id: ctx.id,
             fqn: ctx.fqn,
             instanceId: ctx.instanceId,
-            news: toDevProps(ctx.id, ctx.fqn, ctx.news),
-            olds: ctx.olds ? toDevProps(ctx.id, ctx.fqn, ctx.olds) : undefined,
+            news: toDevProps(ctx.news),
+            olds: ctx.olds ? toDevProps(ctx.olds) : undefined,
             output: ctx.output,
             bindings: toDevBindings(ctx.id, ctx.bindings),
             session: usableSession(ctx.session),
           });
         }),
+        deactivate: (ctx) => runtime.removeTarget(ctx.id),
         stop: Effect.fn(function* (ctx) {
-          yield* runtime.removeTarget(ctx.id);
           yield* live.delete({
             ...ctx,
-            olds: toDevProps(ctx.id, ctx.fqn, ctx.olds),
+            olds: toDevProps(ctx.olds),
             bindings: toDevBindings(ctx.id, ctx.bindings),
             session: usableSession(ctx.session),
           });
