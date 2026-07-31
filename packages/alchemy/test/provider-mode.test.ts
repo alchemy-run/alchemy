@@ -7,6 +7,8 @@
  *     local emulation; mode-agnostic providers satisfy any requested mode
  *   - switching modes plans a REPLACEMENT; the old generation / orphan row
  *     is deleted with the provider variant of the mode that created it
+ *   - providers may opt into an in-place handoff that preserves physical
+ *     identity and deactivates the outgoing runtime without deleting it
  *   - unstamped rows are assumed to be the current run's mode
  *   - conflicting mode decorations on the same FQN die loudly
  *   - the non-default variant is only constructed when demanded (laziness)
@@ -28,7 +30,9 @@ import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import {
   Bucket,
+  InPlaceModalResource,
   inDev,
+  inPlaceModalCalls,
   ModalResource,
   modalBuilds,
   modalCalls,
@@ -57,6 +61,11 @@ const modal = (id: string, value?: string) =>
   Effect.gen(function* () {
     const a = yield* ModalResource(id, { value });
     return { runtime: a.runtime };
+  });
+
+const inPlaceModal = (id: string, value?: string) =>
+  Effect.gen(function* () {
+    return yield* InPlaceModalResource(id, { value });
   });
 
 const callsFor = (stackName: string) =>
@@ -183,6 +192,75 @@ describe("provider modes", () => {
           op: "delete",
           id: "A",
         });
+
+        yield* stack.destroy();
+      }),
+  );
+
+  test.provider(
+    "an in-place mode switch preserves identity and deactivates the outgoing provider",
+    (stack) =>
+      Effect.gen(function* () {
+        const live = yield* inPlaceModal("A", "v1").pipe(stack.deploy);
+        const initialState = yield* getState("A");
+        expect(initialState?.providerMode).toEqual("live");
+
+        const localPlan = yield* inDev(
+          inPlaceModal("A", "v1").pipe(stack.plan),
+        );
+        expect(localPlan.resources["A"].action).toEqual("update");
+
+        const beforeLocal = inPlaceModalCalls.length;
+        const local = yield* inDev(inPlaceModal("A", "v1").pipe(stack.deploy));
+        const localState = yield* getState("A");
+        expect(local.runtime).toEqual("local");
+        expect(local.physicalId).toEqual(live.physicalId);
+        expect(localState?.instanceId).toEqual(initialState?.instanceId);
+        expect(localState?.providerMode).toEqual("local");
+        expect(inPlaceModalCalls.slice(beforeLocal)).toEqual([
+          {
+            stack: stack.name,
+            mode: "live",
+            op: "deactivate",
+            id: "A",
+            instanceId: initialState?.instanceId,
+            physicalId: live.physicalId,
+          },
+          {
+            stack: stack.name,
+            mode: "local",
+            op: "reconcile",
+            id: "A",
+            instanceId: initialState?.instanceId,
+            physicalId: live.physicalId,
+          },
+        ]);
+
+        const beforeLive = inPlaceModalCalls.length;
+        const restored = yield* inPlaceModal("A", "v1").pipe(stack.deploy);
+        const restoredState = yield* getState("A");
+        expect(restored.runtime).toEqual("live");
+        expect(restored.physicalId).toEqual(live.physicalId);
+        expect(restoredState?.instanceId).toEqual(initialState?.instanceId);
+        expect(restoredState?.providerMode).toEqual("live");
+        expect(inPlaceModalCalls.slice(beforeLive)).toEqual([
+          {
+            stack: stack.name,
+            mode: "local",
+            op: "deactivate",
+            id: "A",
+            instanceId: initialState?.instanceId,
+            physicalId: live.physicalId,
+          },
+          {
+            stack: stack.name,
+            mode: "live",
+            op: "reconcile",
+            id: "A",
+            instanceId: initialState?.instanceId,
+            physicalId: live.physicalId,
+          },
+        ]);
 
         yield* stack.destroy();
       }),
@@ -329,6 +407,10 @@ const localThingProvider = () =>
           );
           return { value: config.value ?? id };
         }),
+        deactivate: ({ id }: LocalProvider.DeactivateContext) =>
+          Effect.sync(() => {
+            localThingEvents.push(`deactivate:${id}`);
+          }),
         stop: ({ id }: LocalProvider.StopContext) =>
           Effect.sync(() => {
             localThingEvents.push(`stop:${id}`);
@@ -358,7 +440,7 @@ const lifecycleInput = (instanceId: string, news: LocalThing["Props"]) => ({
 });
 
 test(
-  "LocalProvider.make: config-hash noop/restart, guarded delete, invalidate, stop",
+  "LocalProvider.make: config-hash restart, deactivate, guarded delete, invalidate, stop",
   Effect.gen(function* () {
     const provider = yield* Provider.findProvider(LocalThing);
     localThingEvents.length = 0;
@@ -394,6 +476,12 @@ test(
     yield* provider.reconcile(lifecycleInput("i1", { value: "v2" }));
     expect(localThingEvents).toEqual(["start:A:v1", "kill:A", "start:A:v2"]);
 
+    // In-place provider handoff tears down only the local runtime. It does
+    // not run the physical-resource stop hook.
+    yield* provider.deactivate!(lifecycleInput("i1", { value: "v2" }) as any);
+    expect(localThingEvents.slice(-2)).toEqual(["kill:A", "deactivate:A"]);
+    yield* provider.reconcile(lifecycleInput("i1", { value: "v2" }));
+
     // delete with a STALE instanceId (replacement ordering) must not touch
     // the running instance nor run `stop`
     yield* provider.delete(lifecycleInput("i0", { value: "v2" }) as any);
@@ -406,13 +494,17 @@ test(
     ).toEqual({ action: "update" });
     yield* provider.reconcile(lifecycleInput("i1", { value: "v2" }));
 
-    // matching delete tears down and runs stop
+    // matching delete tears down, deactivates local state, then runs stop
     yield* provider.delete(lifecycleInput("i1", { value: "v2" }) as any);
-    expect(localThingEvents.slice(-2)).toEqual(["kill:A", "stop:A"]);
+    expect(localThingEvents.slice(-3)).toEqual([
+      "kill:A",
+      "deactivate:A",
+      "stop:A",
+    ]);
 
-    // idempotent: deleting again only re-runs the (idempotent) stop hook
+    // idempotent: deleting again re-runs the idempotent cleanup hooks
     yield* provider.delete(lifecycleInput("i1", { value: "v2" }) as any);
-    expect(localThingEvents.slice(-2)).toEqual(["stop:A", "stop:A"]);
+    expect(localThingEvents.slice(-2)).toEqual(["deactivate:A", "stop:A"]);
   }).pipe(
     Effect.provide(localThingProvider()),
     Effect.provide(

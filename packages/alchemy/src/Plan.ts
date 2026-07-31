@@ -896,11 +896,10 @@ export const make = <A>(
 
             // Local ⇄ live switch: the persisted row was reconciled by a
             // different provider mode than the one resolved for this run.
-            // The two runtimes host distinct physical instances, so this is
-            // always a replacement — the new instance is created with the
-            // new mode's provider, and Apply deletes the old generation
-            // with the provider of the mode that created it (see
-            // `deleteOldGenerations` / `collectGarbage`).
+            // Most dual providers own distinct physical instances and
+            // replace. Explicit in-place providers preserve the generation
+            // and let Apply deactivate the outgoing runtime before the
+            // incoming provider reconciles the existing output.
             const modeSwitched = hasModeSwitched(mode, oldState);
 
             const Node = <T extends Apply>(
@@ -994,12 +993,15 @@ export const make = <A>(
             // On a mode switch the provider diff is skipped entirely:
             // comparing props across runtimes is meaningless (and the new
             // mode's provider has never seen the old mode's state). The
-            // action is a replacement by definition.
+            // dual provider's transition policy decides whether the engine
+            // updates the existing generation or replaces it.
             const diff = modeSwitched
-              ? ({
-                  action: "replace",
-                  deleteFirst: false,
-                } satisfies ReplaceDiff)
+              ? provider.modeTransition === "in-place"
+                ? ({ action: "update" } satisfies UpdateDiff)
+                : ({
+                    action: "replace",
+                    deleteFirst: false,
+                  } satisfies ReplaceDiff)
               : yield* asEffect(
                   provider
                     ?.diff?.({

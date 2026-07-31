@@ -817,6 +817,43 @@ const executeNode = (
             ? node.state.props
             : node.state.old.props;
 
+        const previousState =
+          node.state.status === "updating" ? node.state.old : node.state;
+        const previousMode = previousState.providerMode;
+        if (
+          node.provider.modeTransition === "in-place" &&
+          node.mode !== undefined &&
+          previousMode !== undefined &&
+          previousMode !== node.mode &&
+          previousProps !== undefined
+        ) {
+          const outgoingProvider = yield* findProviderByType(
+            node.resource.Type,
+            previousMode,
+          );
+          if (outgoingProvider.deactivate) {
+            yield* outgoingProvider
+              .deactivate({
+                id: logicalId,
+                fqn,
+                instanceId,
+                olds: previousProps,
+                output: previousState.attr,
+                session: scopedSession,
+                bindings: previousState.bindings ?? [],
+              })
+              .pipe(
+                instrumentLifecycle(
+                  "deactivate",
+                  fqn,
+                  node.resource.Type,
+                  logicalId,
+                  instanceId,
+                ),
+              );
+          }
+        }
+
         // Providers receive the resolved binding payload for this exact pass, while
         // `previousProps` tells them what state the live resource is being updated from.
         const bindingOutputs = excludeDeletedBindings(

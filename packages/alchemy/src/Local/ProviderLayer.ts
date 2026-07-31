@@ -48,6 +48,10 @@ import type { ResourceClassLike, ResourceLike } from "../Resource.ts";
  *       LocalWorkerProvider().pipe(Layer.provide(localRuntimeServices())),
  *   });
  * ```
+ *
+ * Providers whose modes operate on the same physical resource can opt into
+ * `modeTransition: "in-place"`. The engine then preserves resource identity
+ * and reconciles the incoming variant as an update instead of replacing it.
  */
 export const dual = <
   R extends ResourceLike,
@@ -64,6 +68,7 @@ export const dual = <
   input: {
     live: () => LayerLive;
     local: () => LayerLocal;
+    modeTransition?: "replace" | "in-place";
   },
 ): Layer.Layer<
   Layer.Success<LayerLive | LayerLocal>,
@@ -90,6 +95,7 @@ export const dual = <
             (built): ProviderService<R> => ({
               ...(built.mapUnsafe.get(cls.Type) as ProviderService<R>),
               mode,
+              modeTransition: input.modeTransition ?? "replace",
             }),
           ),
         );

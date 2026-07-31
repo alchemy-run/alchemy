@@ -93,6 +93,11 @@ export interface StopContext<R extends ResourceLike = ResourceLike> {
   force?: boolean;
 }
 
+export type DeactivateContext<R extends ResourceLike = ResourceLike> = Omit<
+  StopContext<R>,
+  "force"
+>;
+
 export interface StablesContext<
   R extends ResourceLike,
   Config,
@@ -147,6 +152,13 @@ export interface LocalProviderSpec<
   start: (
     ctx: StartContext<R, Config>,
   ) => Effect.Effect<R["Attributes"], any, Scope.Scope | StartR>;
+  /**
+   * Release local-runtime state when ownership moves to another provider mode
+   * without deleting the physical resource. Called after the instance scope
+   * closes and also when no instance is registered after a process restart.
+   * Must be idempotent.
+   */
+  deactivate?: (ctx: DeactivateContext<R>) => Effect.Effect<void, any, any>;
   /**
    * Extra cleanup on delete, after the instance scope has closed — for
    * state that intentionally spans restarts and therefore cannot live in
@@ -288,6 +300,7 @@ export const make = <
       const {
         resolveConfig = defaultResolveConfig<R, Config>,
         start,
+        deactivate: deactivateHook,
         stop,
         stables,
         precreate,
@@ -373,6 +386,32 @@ export const make = <
               : Effect.void,
           ),
         );
+      });
+
+      const deactivateInstance = Effect.fn(function* ({
+        input,
+        deleting,
+      }: {
+        input: StopContext<R>;
+        deleting: boolean;
+      }) {
+        const existing = instances.get(input.id);
+        if (existing && existing.instanceId !== input.instanceId) {
+          // A newer generation is active under this logical id. Neither an
+          // old-generation transition nor delete may tear it down or clean
+          // up its shared local-runtime state.
+          return;
+        }
+        if (existing) {
+          yield* teardown(existing);
+          instances.delete(input.id);
+        }
+        if (deactivateHook) {
+          yield* deactivateHook(input);
+        }
+        if (deleting && stop) {
+          yield* stop(input);
+        }
       });
 
       const provider = {
@@ -480,6 +519,12 @@ export const make = <
             }),
           );
         }),
+        deactivate: Effect.fn(function* (args: DeactivateContext<R>) {
+          yield* withLock(
+            args.id,
+            deactivateInstance({ input: args, deleting: false }),
+          );
+        }),
         delete: Effect.fn(function* (args: {
           id: string;
           fqn: string;
@@ -490,28 +535,10 @@ export const make = <
           bindings: ResourceBinding<R["Binding"]>[];
           force?: boolean;
         }) {
-          const { id, instanceId } = args;
+          const { id } = args;
           yield* withLock(
             id,
-            Effect.gen(function* () {
-              const existing = instances.get(id);
-              if (existing && existing.instanceId !== instanceId) {
-                // A replacement's new generation is registered under this
-                // logical id — the old generation's delete must not touch
-                // it (nor the cross-restart state `stop` would clean up).
-                return;
-              }
-              if (existing) {
-                yield* teardown(existing);
-                instances.delete(id);
-              }
-              // Runs even when nothing is registered: cross-restart state
-              // (proxies, restart hooks) and out-of-session cleanup (e.g.
-              // deleting a local row during a live deploy) still need it.
-              if (stop) {
-                yield* stop(args);
-              }
-            }),
+            deactivateInstance({ input: args, deleting: true }),
           );
         }),
         ...(precreate ? { precreate } : {}),

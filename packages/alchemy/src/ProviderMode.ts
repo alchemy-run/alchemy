@@ -13,10 +13,10 @@ import { AlchemyContext } from "./AlchemyContext.ts";
  *   by the dev sidecar.
  *
  * The mode a resource was last reconciled with is persisted on its state
- * row (`providerMode`). Switching a resource between modes is planned as a
- * **replacement**: the new instance is created with the new mode's provider
- * and the old instance is deleted with the provider of the mode that
- * created it.
+ * row (`providerMode`). Switching modes is a replacement by default. A dual
+ * provider may explicitly opt into an in-place transition when both variants
+ * operate on the same physical resource; the outgoing variant is deactivated
+ * and the incoming variant reconciles the existing output.
  */
 export type ProviderMode = "live" | "local";
 

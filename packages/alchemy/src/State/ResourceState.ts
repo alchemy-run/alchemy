@@ -62,9 +62,9 @@ interface BaseResourceState {
    *
    * Stamped by Apply on every commit for resources whose provider
    * distinguishes modes (`ProviderLayer.dual`). Plan treats a mismatch
-   * between the persisted mode and the resolved desired mode as a
-   * **replacement**, and deletion always uses the provider variant of the
-   * mode that created the row.
+   * between the persisted mode and the resolved desired mode according to
+   * the dual provider's transition policy. Deletion always uses the provider
+   * variant of the mode that owns the row.
    *
    * `undefined` means either a mode-agnostic provider (single
    * implementation serves both dev and deploy) or a legacy row written
@@ -94,6 +94,8 @@ export interface UpdatingReourceState extends BaseResourceState {
   adopting?: true;
   /** The new resource properties that are being (or have been) applied. */
   props: Props;
+  /** The output attributes being updated in place. */
+  attr: Attr;
   old: {
     /** The old resource properties that have been successfully applied. */
     props: Props;
@@ -101,6 +103,8 @@ export interface UpdatingReourceState extends BaseResourceState {
     bindings: any[];
     /** The old output properties that have been successfully applied. */
     attr: Attr;
+    /** Provider mode that owns the resource until this update succeeds. */
+    providerMode?: ProviderMode;
     // TODO(sam): do I need to track the old downstream edges?
     // downstream: string[];
   };

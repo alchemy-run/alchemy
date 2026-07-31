@@ -5,7 +5,8 @@ import * as Metric from "effect/Metric";
 
 /**
  * Counter for resource lifecycle operations. Tagged per call with
- * `resource_type`, `op` (`precreate`/`create`/`update`/`delete`/`read`),
+ * `resource_type`, `op`
+ * (`precreate`/`create`/`update`/`deactivate`/`delete`/`read`),
  * and `status` (`success`/`error`).
  */
 export const resourceCounter = Metric.counter("alchemy.resource.operations", {
@@ -160,7 +161,13 @@ export const recordStateStoreInit = <A extends { readonly id: string }, E, R>(
     Effect.withSpan("state_store.init"),
   );
 
-export type ResourceOp = "precreate" | "create" | "update" | "delete" | "read";
+export type ResourceOp =
+  | "precreate"
+  | "create"
+  | "update"
+  | "deactivate"
+  | "delete"
+  | "read";
 
 const elapsed = (startNs: bigint): Duration.Duration =>
   Duration.nanos(process.hrtime.bigint() - startNs);

@@ -1274,6 +1274,84 @@ export const modalResourceProvider = () =>
     local: () => modalVariant("local"),
   });
 
+export interface InPlaceModalResource extends Resource<
+  "Test.InPlaceModalResource",
+  { value?: string },
+  {
+    value: string;
+    runtime: ProviderMode;
+    physicalId: string;
+  }
+> {}
+
+export const InPlaceModalResource = Resource<InPlaceModalResource>(
+  "Test.InPlaceModalResource",
+);
+
+export const inPlaceModalCalls: {
+  stack: string;
+  mode: ProviderMode;
+  op: "reconcile" | "deactivate" | "delete";
+  id: string;
+  instanceId: string;
+  physicalId: string | undefined;
+}[] = [];
+
+const inPlaceModalVariant = (mode: ProviderMode) =>
+  Provider.effect(
+    InPlaceModalResource,
+    Effect.gen(function* () {
+      const record = (
+        op: "reconcile" | "deactivate" | "delete",
+        input: {
+          id: string;
+          instanceId: string;
+          output?: InPlaceModalResource["Attributes"];
+        },
+      ) =>
+        Effect.gen(function* () {
+          inPlaceModalCalls.push({
+            stack: yield* modalStackName,
+            mode,
+            op,
+            id: input.id,
+            instanceId: input.instanceId,
+            physicalId: input.output?.physicalId,
+          });
+        });
+
+      return {
+        list: () => Effect.succeed([]),
+        read: ({ output }: { output?: InPlaceModalResource["Attributes"] }) =>
+          Effect.succeed(output),
+        diff: Effect.fn(function* ({ news, olds }) {
+          if (!isResolved(news)) return undefined;
+          return news.value === olds?.value
+            ? ({ action: "noop" } as const)
+            : ({ action: "update" } as const);
+        }),
+        reconcile: Effect.fn(function* (input) {
+          yield* record("reconcile", input);
+          return {
+            value: input.news.value ?? input.id,
+            runtime: mode,
+            physicalId:
+              input.output?.physicalId ?? `physical-${input.instanceId}`,
+          };
+        }),
+        deactivate: (input) => record("deactivate", input),
+        delete: (input) => record("delete", input),
+      };
+    }),
+  );
+
+export const inPlaceModalResourceProvider = () =>
+  ProviderLayer.dual(InPlaceModalResource, {
+    live: () => inPlaceModalVariant("live"),
+    local: () => inPlaceModalVariant("local"),
+    modeTransition: "in-place",
+  });
+
 // Layers
 export const TestLayers = () =>
   Layer.mergeAll(
@@ -1294,6 +1372,7 @@ export const TestLayers = () =>
     deleteFirstResourceProvider(),
     driftResourceProvider(),
     modalResourceProvider(),
+    inPlaceModalResourceProvider(),
   );
 
 export const InMemoryTestLayers = () =>
