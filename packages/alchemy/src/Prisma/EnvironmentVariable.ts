@@ -104,12 +104,12 @@ export interface EnvironmentVariable extends Resource<
  * @section Creating a Variable
  * @example Project-level production variable
  * ```typescript
- * yield* Prisma.EnvironmentVariable("database-url", {
+ * yield* Prisma.EnvironmentVariable("api-url", {
  *   project: project.projectId,
  *   // No branchId: this is a project-level template.
  *   class: "production",
- *   key: "DATABASE_URL",
- *   value: Redacted.make("postgres://..."),
+ *   key: "API_URL",
+ *   value: Redacted.make("https://api.example.com"),
  * });
  * ```
  *

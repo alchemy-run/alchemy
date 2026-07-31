@@ -10,37 +10,30 @@ upload, deployment, health check, and promotion — see
 
 ## Framework apps
 
-Point `path` at the app and describe its build. The command runs
-locally, the output directory is archived and uploaded, and the
-entrypoint starts the server:
+Point `path` at the app. With `build: "auto"`, alchemy detects the
+framework, builds it, archives the output, and deploys the correct
+server entrypoint:
 
 ```typescript
-import * as Prisma from "alchemy/Prisma";
-import * as SQL from "alchemy/SQL/Postgres";
-import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-
 const app = yield* Prisma.Compute("api", {
   project,
   path: "./app",
-  build: {
-    command: "bun run build",
-    outdir: ".output",
-    entrypoint: "server/index.mjs",
-  },
-  port: 3000,
+  build: "auto",
   healthCheck: { path: "/api/health" },
-  env: {
-    DATABASE_URL: connection.databaseUrl,
-  },
   destroyOldDeployment: true,
 });
 ```
 
-The server must listen on `PORT` (injected at runtime). With
-`build: "auto"` — the default when `path` points at a recognizable
-app — alchemy detects the framework (Bun, Next.js, Nuxt, Astro,
-TanStack Start, NestJS) and derives the build for you.
+The server must listen on `PORT` (injected at runtime). Auto-build
+supports Bun, Next.js, Nuxt, Astro, TanStack Start, and NestJS. Use an
+explicit build object when an app needs a custom command, output
+directory, or entrypoint.
+
+When `Prisma.Project` creates its default database, Prisma injects
+system-managed `DATABASE_URL` and `DATABASE_URL_POOLED` values into
+Compute deployments. Leave those keys out of `env`. For a standalone
+`Prisma.Postgres` database, create a `Prisma.Connection` and pass its
+outputs explicitly as shown in [Connections](/prisma/data/connections).
 
 `app.url` is the deployed endpoint.
 

@@ -19,10 +19,11 @@ const project = yield* Prisma.Project("app", {
 ```
 
 By default, creating a project also provisions a default Prisma
-Postgres database in the chosen region. Pass
+Postgres database in the chosen region. Prisma Compute deployments
+under that project receive system-managed `DATABASE_URL` and
+`DATABASE_URL_POOLED` variables automatically. Pass
 `createDatabase: false` (as above) when you'd rather declare
-databases explicitly — the recommended shape, since standalone
-databases have their own lifecycle and outputs.
+databases explicitly with their own lifecycle and connection outputs.
 
 :::caution[Projects own their data]
 Destroying a `Prisma.Project` deletes the project and its contained
