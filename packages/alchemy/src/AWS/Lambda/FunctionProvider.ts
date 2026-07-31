@@ -138,6 +138,7 @@ export const LocalFunctionProvider = () =>
         ...props,
         functionName: createLiveDevFunctionName(id, fqn),
         handler: "handler",
+        isExternal: true,
         timeout: devTimeout(props.timeout),
       });
 
@@ -151,7 +152,10 @@ export const LocalFunctionProvider = () =>
         props: FunctionProps,
         ready: Deferred.Deferred<void>,
       ) {
-        const config = yield* resolveFunctionBundleConfig(props);
+        const config = yield* resolveFunctionBundleConfig(props, {
+          externalizeAwsSdk: false,
+          registerRuntimeExtension: false,
+        });
         const bundleDir = path.join(
           dotAlchemy,
           "local",

@@ -876,6 +876,18 @@ export const Function: Platform<
  */
 export const resolveFunctionBundleConfig = Effect.fn(function* (
   props: FunctionProps,
+  options?: {
+    /**
+     * Register Lambda's internal extension in the generated entrypoint.
+     * Local children run outside the Lambda Runtime API and disable this.
+     */
+    registerRuntimeExtension?: boolean;
+    /**
+     * Externalize the AWS SDK that is available in the Lambda runtime.
+     * Local children bundle it because they execute outside Lambda.
+     */
+    externalizeAwsSdk?: boolean;
+  },
 ) {
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
   const {
@@ -896,7 +908,12 @@ export const resolveFunctionBundleConfig = Effect.fn(function* (
     parentId: string | undefined,
     isResolvedId: boolean,
   ): boolean => {
-    if (moduleId.startsWith("@aws-sdk/")) return true;
+    if (
+      options?.externalizeAwsSdk !== false &&
+      moduleId.startsWith("@aws-sdk/")
+    ) {
+      return true;
+    }
     for (const root of installRoots) {
       if (matchesPackageRoot(moduleId, root)) return true;
     }
@@ -931,7 +948,7 @@ import { MinimumLogLevel } from "effect/References";
 
 import entrypoint from ${JSON.stringify(importPath)};
 
-await registerLambdaExtension();
+${options?.registerRuntimeExtension === false ? "" : "await registerLambdaExtension();"}
 const instanceScope = Scope.makeUnsafe();
 const tag = Context.Service("${Self.key}")
 const layer = makeEntrypointLayer(tag, entrypoint);

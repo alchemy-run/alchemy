@@ -237,12 +237,36 @@ export const makeLiveLambdaRuntime = Effect.gen(function* () {
       Effect.ignore,
       Effect.forkIn(scope),
     );
+    const stderr: string[] = [];
     yield* handle.stderr.pipe(
       Stream.decodeText,
       Stream.splitLines,
-      Stream.runForEach((line) => Effect.logError(`${label} ${line}`)),
+      Stream.runForEach((line) =>
+        Effect.sync(() => {
+          stderr.push(line);
+        }).pipe(Effect.andThen(Effect.logError(`${label} ${line}`))),
+      ),
       Effect.ignore,
       Effect.forkIn(scope),
+    );
+
+    yield* Effect.raceAllFirst([
+      Deferred.await(address),
+      handle.exitCode.pipe(
+        Effect.flatMap((exitCode) =>
+          Effect.fail(
+            new Error(
+              `local handler child exited with code ${exitCode}${stderr.length > 0 ? `: ${stderr.join("\n")}` : ""}`,
+            ),
+          ),
+        ),
+      ),
+    ]).pipe(
+      Effect.timeoutOrElse({
+        duration: "30 seconds",
+        orElse: () =>
+          Effect.fail(new Error("local handler child failed to start")),
+      }),
     );
 
     const child: HandlerChild = {
