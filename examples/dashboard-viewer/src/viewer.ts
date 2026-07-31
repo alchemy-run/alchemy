@@ -4,6 +4,8 @@ import { makeHttpStateStore } from "alchemy/State/HttpStateStore";
 import { Config } from "effect";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 /**
@@ -20,6 +22,9 @@ const dashboardDist =
   typeof process !== "undefined" && process.env !== undefined
     ? (process.env.ALCHEMY_DASHBOARD_DIST ?? "../../packages/dashboard/dist")
     : "";
+
+/** The env key the state-store service binding is registered under. */
+const STATE_STORE_BINDING = "ALCHEMY_STATE_STORE";
 
 export default class Viewer extends Cloudflare.Worker<Viewer>()(
   "Viewer",
@@ -50,11 +55,52 @@ export default class Viewer extends Cloudflare.Worker<Viewer>()(
   },
   Effect.gen(function* () {
     const env = yield* Cloudflare.Workers.WorkerEnvironment;
+
+    // Deploy time: service-bind the state-store Worker. Cloudflare blocks
+    // same-zone worker-to-worker `fetch` (error 1042, surfaced as a 404),
+    // so when the viewer and `alchemy-state-store` share an account the
+    // state API must ride a service binding. `ALCHEMY_STATE_SERVICE`
+    // overrides the script name; set it to "" to skip the binding for
+    // cross-zone deployments (custom domain on either side).
+    if (!globalThis.__ALCHEMY_RUNTIME__) {
+      const service = yield* Effect.sync(
+        () => process.env.ALCHEMY_STATE_SERVICE ?? "alchemy-state-store",
+      );
+      if (service !== "") {
+        const self = yield* Cloudflare.Workers.Worker;
+        yield* self.bind`${self}`({
+          bindings: [
+            { type: "service", name: STATE_STORE_BINDING, service },
+          ],
+        });
+      }
+    }
+
+    // Runtime: ride the service binding when it exists, else plain fetch.
+    // The URL keeps addressing/auth identical in both modes — the binding
+    // only replaces the transport.
+    const stateStore = (env as Record<string, unknown>)[
+      STATE_STORE_BINDING
+    ] as { fetch: typeof globalThis.fetch } | undefined;
+    const httpClient =
+      stateStore === undefined
+        ? FetchHttpClient.layer
+        : FetchHttpClient.layer.pipe(
+            Layer.provide(
+              Layer.succeed(FetchHttpClient.Fetch, ((input, init) =>
+                stateStore.fetch(
+                  input as never,
+                  init as never,
+                )) as typeof globalThis.fetch),
+            ),
+          );
+
     const state = yield* makeHttpStateStore({
       id: "cloudflare-http",
       url: String(env.ALCHEMY_STATE_URL),
       authToken: String(env.ALCHEMY_STATE_TOKEN),
-    });
+    }).pipe(Effect.provide(httpClient));
+
     const handle = viewer({
       state,
       stack: String(env.ALCHEMY_VIEWER_STACK ?? "") || undefined,

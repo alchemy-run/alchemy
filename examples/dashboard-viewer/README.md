@@ -27,7 +27,20 @@ Optional:
 export ALCHEMY_VIEWER_STACK="MyStack"   # default: first stack in the store
 export ALCHEMY_VIEWER_STAGE="prod"      # default: first stage of the stack
 export ALCHEMY_DASHBOARD_DIST=".../dist" # default: ../../packages/dashboard/dist
+export ALCHEMY_STATE_SERVICE="alchemy-state-store" # "" to disable the service binding
 ```
+
+## Same-zone transport
+
+Cloudflare blocks same-zone worker-to-worker `fetch` (error 1042, which
+surfaces as a 404), so a viewer deployed on the same account as
+`alchemy-state-store` cannot reach it over plain HTTP. The example
+therefore registers a **service binding** to the state-store Worker
+(script name from `ALCHEMY_STATE_SERVICE`, default `alchemy-state-store`)
+and routes the state client's requests through it; the URL and bearer
+token stay the same in both modes. If the two workers live on different
+zones (a custom domain on either side), set `ALCHEMY_STATE_SERVICE=""`
+to skip the binding and use plain fetch.
 
 ## Deploy
 
