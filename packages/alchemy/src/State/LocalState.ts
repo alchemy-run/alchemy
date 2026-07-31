@@ -20,14 +20,16 @@ import {
   type StoredDeploymentRecord,
 } from "./Deployment.ts";
 import { STATE_STORE_VERSION } from "./HttpStateApi.ts";
+import { resolveLocalSecretCodec } from "./SecretCodec.ts";
 import {
   fencedWriteRejected,
   State,
+  stateDecodeError,
   StateStoreError,
   type PersistedState,
   type StateService,
 } from "./State.ts";
-import { encodeState, reviveState } from "./StateEncoding.ts";
+import { encodeState, makeStateReviver } from "./StateEncoding.ts";
 
 export interface LocalStateOptions {
   /**
@@ -58,6 +60,23 @@ export const makeLocalState = (options?: LocalStateOptions) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
+    const context = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
+    // Local state is encrypted by default: ALCHEMY_PASSWORD when set,
+    // otherwise the auto-generated `~/.alchemy/state.key`. Resolved
+    // lazily (cached) so store construction stays infallible and no
+    // key file is created until state is actually touched.
+    const getCodec = yield* Effect.cached(
+      resolveLocalSecretCodec.pipe(
+        Effect.mapError(
+          (e) =>
+            new StateStoreError({
+              message: `Failed to initialize the state secret key: ${e.message}`,
+              cause: e,
+            }),
+        ),
+        Effect.provideContext(context),
+      ),
+    );
     const rootDir =
       options?.rootDir ?? (yield* Effect.sync(() => process.cwd()));
     const dotAlchemy = path.join(rootDir, ".alchemy");
@@ -71,7 +90,9 @@ export const makeLocalState = (options?: LocalStateOptions) =>
         }),
       );
 
-    const recover = <T>(effect: Effect.Effect<T, PlatformError, never>) =>
+    const recover = <T>(
+      effect: Effect.Effect<T, PlatformError | StateStoreError, never>,
+    ) =>
       effect.pipe(
         Effect.catchTag("PlatformError", (e) =>
           e.reason._tag === "NotFound" ? Effect.void : fail(e),
@@ -116,10 +137,20 @@ export const makeLocalState = (options?: LocalStateOptions) =>
     // linger from a write that was interrupted before this atomic-write change
     // (or any non-atomic external writer); treat it as "absent" rather than
     // throwing a JSON parse error that would abort the whole operation.
-    const parseState = (contents: string) =>
-      contents.trim().length === 0
-        ? undefined
-        : JSON.parse(contents, reviveState);
+    // Decode failures (malformed JSON, wrong state key for `__secret__`
+    // envelopes) surface as StateStoreError, not defects.
+    const parseState = (contents: string, what: string) =>
+      getCodec.pipe(
+        Effect.flatMap((codec) =>
+          Effect.try({
+            try: () =>
+              contents.trim().length === 0
+                ? undefined
+                : JSON.parse(contents, makeStateReviver(codec)),
+            catch: stateDecodeError(what),
+          }),
+        ),
+      );
 
     const created = new Set<string>();
 
@@ -548,7 +579,7 @@ export const makeLocalState = (options?: LocalStateOptions) =>
         ),
       get: (request) =>
         fs.readFile(resource(request)).pipe(
-          Effect.map((file) => parseState(file.toString())),
+          Effect.flatMap((file) => parseState(file.toString(), request.fqn)),
           recover,
         ),
       getReplacedResources: Effect.fn(function* (request) {
@@ -565,16 +596,15 @@ export const makeLocalState = (options?: LocalStateOptions) =>
       set: (request) =>
         checkFence(request).pipe(
           Effect.flatMap(() =>
-            ensure(stageDir(request)).pipe(
-              Effect.flatMap(() =>
-                writeAtomic(
-                  resource(request),
-                  JSON.stringify(encodeState(request.value), null, 2),
-                ),
-              ),
-              recover,
+            Effect.all([getCodec, ensure(stageDir(request))]),
+          ),
+          Effect.flatMap(([codec]) =>
+            writeAtomic(
+              resource(request),
+              JSON.stringify(encodeState(request.value, codec), null, 2),
             ),
           ),
+          recover,
           Effect.map(() => request.value),
         ),
       delete: (request) =>
@@ -612,22 +642,23 @@ export const makeLocalState = (options?: LocalStateOptions) =>
         ),
       getOutput: (request) =>
         fs.readFile(outputFile(request)).pipe(
-          Effect.map((file) => parseState(file.toString())),
+          Effect.flatMap((file) =>
+            parseState(file.toString(), "__stack_output__"),
+          ),
           recover,
         ),
       setOutput: (request) =>
         checkFence(request).pipe(
           Effect.flatMap(() =>
-            ensure(stageDir(request)).pipe(
-              Effect.flatMap(() =>
-                writeAtomic(
-                  outputFile(request),
-                  JSON.stringify(encodeState(request.value as any), null, 2),
-                ),
-              ),
-              recover,
+            Effect.all([getCodec, ensure(stageDir(request))]),
+          ),
+          Effect.flatMap(([codec]) =>
+            writeAtomic(
+              outputFile(request),
+              JSON.stringify(encodeState(request.value as any, codec), null, 2),
             ),
           ),
+          recover,
           Effect.map(() => request.value),
         ),
       getAll: (request) =>

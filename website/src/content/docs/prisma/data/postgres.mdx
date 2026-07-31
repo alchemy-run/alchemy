@@ -24,10 +24,18 @@ Postgres database in the chosen region. Pass
 databases explicitly — the recommended shape, since standalone
 databases have their own lifecycle and outputs.
 
+:::caution[Projects own their data]
+Destroying a `Prisma.Project` deletes the project and its contained
+databases and apps. Use a durable state backend and review the destroy
+plan before removing a project from a Stack.
+:::
+
 ## Database
 
 `Prisma.Postgres` and `Prisma.Database` are the same resource under
-two names — use whichever reads better:
+two names — use whichever reads better. Standalone database resources
+cannot be the project's default database; let `Prisma.Project` own the
+default database when you need one:
 
 ```typescript
 const postgres = yield* Prisma.Postgres("db", {

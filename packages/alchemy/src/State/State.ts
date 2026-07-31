@@ -67,6 +67,20 @@ export const fencedWriteRejected = (request: {
       `${request.stack}/${request.stage} has been superseded by a newer deployment`,
   });
 
+/**
+ * Wrap a state decode failure (malformed JSON, missing/wrong
+ * `ALCHEMY_PASSWORD` for encrypted `__secret__` envelopes) in a
+ * {@link StateStoreError}. Shared by every client-side store so decode
+ * failures carry the same message shape everywhere.
+ */
+export const stateDecodeError = (what: string) => (cause: unknown) =>
+  new StateStoreError({
+    message: `Failed to decode state '${what}': ${
+      cause instanceof Error ? cause.message : String(cause)
+    }`,
+    cause: cause instanceof Error ? cause : undefined,
+  });
+
 export class State extends Context.Service<
   State,
   Effect.Effect<StateService>

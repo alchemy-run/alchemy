@@ -97,15 +97,31 @@ export interface EnvironmentVariable extends Resource<
 /**
  * A Prisma compute environment variable.
  *
+ * Values are write-only in Prisma. Alchemy stores them as `Redacted` values
+ * and reapplies the desired value to repair drift.
+ *
  * @resource
  * @section Creating a Variable
- * @example Production secret
+ * @example Project-level production variable
  * ```typescript
  * yield* Prisma.EnvironmentVariable("database-url", {
  *   project: project.projectId,
+ *   // No branchId: this is a project-level template.
  *   class: "production",
  *   key: "DATABASE_URL",
  *   value: Redacted.make("postgres://..."),
+ * });
+ * ```
+ *
+ * @example Preview branch override
+ * ```typescript
+ * yield* Prisma.EnvironmentVariable("preview-api-url", {
+ *   project,
+ *   branchId: preview.branchId,
+ *   // Branch overrides always use the preview class.
+ *   class: "preview",
+ *   key: "API_URL",
+ *   value: Redacted.make("https://preview.example.com"),
  * });
  * ```
  */
