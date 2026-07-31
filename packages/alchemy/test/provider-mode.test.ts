@@ -63,11 +63,6 @@ const modal = (id: string, value?: string) =>
     return { runtime: a.runtime };
   });
 
-const inPlaceModal = (id: string, value?: string) =>
-  Effect.gen(function* () {
-    return yield* InPlaceModalResource(id, { value });
-  });
-
 const callsFor = (stackName: string) =>
   modalCalls.filter((c) => c.stack === stackName);
 const buildsFor = (stackName: string) =>
@@ -201,17 +196,21 @@ describe("provider modes", () => {
     "an in-place mode switch preserves identity and deactivates the outgoing provider",
     (stack) =>
       Effect.gen(function* () {
-        const live = yield* inPlaceModal("A", "v1").pipe(stack.deploy);
+        const live = yield* InPlaceModalResource("A", { value: "v1" }).pipe(
+          stack.deploy,
+        );
         const initialState = yield* getState("A");
         expect(initialState?.providerMode).toEqual("live");
 
         const localPlan = yield* inDev(
-          inPlaceModal("A", "v1").pipe(stack.plan),
+          InPlaceModalResource("A", { value: "v1" }).pipe(stack.plan),
         );
         expect(localPlan.resources["A"].action).toEqual("update");
 
         const beforeLocal = inPlaceModalCalls.length;
-        const local = yield* inDev(inPlaceModal("A", "v1").pipe(stack.deploy));
+        const local = yield* inDev(
+          InPlaceModalResource("A", { value: "v1" }).pipe(stack.deploy),
+        );
         const localState = yield* getState("A");
         expect(local.runtime).toEqual("local");
         expect(local.physicalId).toEqual(live.physicalId);
@@ -237,7 +236,9 @@ describe("provider modes", () => {
         ]);
 
         const beforeLive = inPlaceModalCalls.length;
-        const restored = yield* inPlaceModal("A", "v1").pipe(stack.deploy);
+        const restored = yield* InPlaceModalResource("A", {
+          value: "v1",
+        }).pipe(stack.deploy);
         const restoredState = yield* getState("A");
         expect(restored.runtime).toEqual("live");
         expect(restored.physicalId).toEqual(live.physicalId);

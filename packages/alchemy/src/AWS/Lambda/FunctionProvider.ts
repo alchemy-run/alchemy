@@ -63,11 +63,6 @@ const sanitizeId = (id: string) => id.replace(/[^a-zA-Z0-9_-]/g, "-");
 
 type FunctionBinding = ResourceBinding<Function["Binding"]>;
 
-interface LocalFunctionConfig {
-  news: FunctionProps;
-  bindings: FunctionBinding[];
-}
-
 type LocalFunctionProviderRequirements =
   | AlchemyContext
   | FileSystem.FileSystem
@@ -78,7 +73,7 @@ type LocalFunctionProviderRequirements =
 export const LocalFunctionProvider = () =>
   LocalProvider.make<
     Function,
-    LocalFunctionConfig,
+    LocalProvider.DefaultLocalConfig<Function>,
     never,
     LocalFunctionProviderRequirements
   >(
@@ -204,11 +199,6 @@ export const LocalFunctionProvider = () =>
       });
 
       return {
-        resolveConfig: ({ news, bindings }) =>
-          Effect.succeed({
-            news,
-            bindings,
-          } satisfies LocalFunctionConfig),
         precreate: Effect.fn(function* (args) {
           return yield* live.precreate!({
             ...args,
@@ -266,6 +256,6 @@ export const LocalFunctionProvider = () =>
             session: usableSession(ctx.session),
           });
         }),
-      } as LocalProvider.LocalProviderSpec<Function, LocalFunctionConfig>;
+      } as LocalProvider.LocalProviderSpec<Function>;
     }),
   );
