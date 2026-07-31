@@ -27,6 +27,13 @@ const storage: AsyncLocalStorage<FileContext> = ((globalThis as any)[key] ??=
   new AsyncLocalStorage<FileContext>());
 
 /**
+ * Bun 1.4 does not propagate AsyncLocalStorage through dynamic module
+ * evaluation. The runner collects files serially on affected Bun versions,
+ * allowing this explicit ambient context to preserve registration.
+ */
+let serialContext: FileContext | undefined;
+
+/**
  * Collect one file: run `f` (the file's dynamic import + microtask flush)
  * with a fresh root as the ambient collector, and return the root.
  */
@@ -35,12 +42,19 @@ export const collect = async (
   f: () => Promise<void>,
 ): Promise<FileSuite> => {
   const root = makeFileSuite(file);
-  await storage.run({ current: root }, f);
+  const context = { current: root };
+  const previous = serialContext;
+  serialContext = context;
+  try {
+    await storage.run(context, f);
+  } finally {
+    serialContext = previous;
+  }
   return root;
 };
 
 const currentContext = (): FileContext => {
-  const context = storage.getStore();
+  const context = storage.getStore() ?? serialContext;
   if (context === undefined) {
     throw new Error(
       "alchemy-test: describe/test/hook called outside of a test file collection. " +
