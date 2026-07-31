@@ -671,6 +671,49 @@ describe("discarded-result calls (issue #949)", () => {
     }
   });
 
+  it("does NOT delete registrations from the AUTO-DETECTED entry package even when it declares sideEffects: false", async () => {
+    const root = nodeFs.mkdtempSync(
+      nodePath.join(os.tmpdir(), "alchemy-pure-949-autodetect-"),
+    );
+    try {
+      // The app declares `sideEffects: false` (commonly cargo-culted for
+      // downstream module pruning). Auto-detection must not escalate that
+      // into deleting the app's own top-level registrations.
+      nodeFs.writeFileSync(
+        nodePath.join(root, "package.json"),
+        JSON.stringify({ name: "my-app", type: "module", sideEffects: false }),
+      );
+      const plugin = purePlugin();
+      await callOptions(plugin, {
+        input: nodePath.join(root, "entry.ts"),
+        cwd: root,
+      });
+
+      // A NON-entry module of the app (the entry-module guard does not
+      // apply here) with a discarded-result route registration.
+      const code = [
+        `import { app } from "./app.ts";`,
+        `app.get("/r", () => "ok");`,
+        `export const x = makeX();`,
+      ].join("\n");
+      const result = await callTransform(
+        plugin,
+        code,
+        nodePath.join(root, "routes.ts"),
+      );
+      expect(result).not.toBeNull();
+      const out = codeOf(result);
+      // Bound calls stay tree-shakeable...
+      expect(out).toContain("/*#__PURE__*/ makeX()");
+      // ...but the registration survives, and the module keeps its
+      // side effects (no moduleSideEffects: false override).
+      expect(out).not.toContain("/*#__PURE__*/ app.get");
+      expect((result as TransformOutput).moduleSideEffects).not.toBe(false);
+    } finally {
+      nodeFs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("STILL annotates expression-statement calls in packages that declare sideEffects: false", async () => {
     // effect ships `sideEffects: []` on purpose — full annotation there is
     // intentional and must be preserved. Use a fake on-disk package to

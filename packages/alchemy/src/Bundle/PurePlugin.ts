@@ -109,6 +109,13 @@ export const purePlugin = (
   // collapsing the whole bundle. We always preserve entries' side
   // effects, regardless of the package they belong to.
   const entryPaths = new Set<string>();
+  // Name of the package the `options` hook auto-detected (as opposed to
+  // packages the user listed explicitly). Auto-detection is a convenience
+  // for tree-shaking the app's own BOUND calls; it must never escalate the
+  // app's `sideEffects: false` (usually declared for module-level pruning
+  // by downstream bundlers) into deleting discarded-result statements like
+  // route registrations from the app's own modules.
+  let autoDetectedPackage: string | null = null;
 
   return {
     name: "alchemy:annotate-pure",
@@ -126,6 +133,7 @@ export const purePlugin = (
         if (!patterns.includes(info.name)) {
           patterns.push(info.name);
           isMatch = picomatch(patterns);
+          autoDetectedPackage = info.name;
         }
         break;
       }
@@ -152,7 +160,12 @@ export const purePlugin = (
         // registrations / mutations the author made at the top level of
         // files in packages that did not declare so.
         const isEntry = entryPaths.has(cleanId);
-        const sideEffectFreePkg = isSideEffectFree(info?.sideEffects);
+        // The auto-detected entry package's `sideEffects: false` is a
+        // module-pruning claim aimed at downstream bundlers, not an opt-in
+        // to statement deletion inside its own bundled modules (packages
+        // the user listed explicitly DO opt in — see issue #949's contract).
+        const sideEffectFreePkg =
+          isSideEffectFree(info?.sideEffects) && name !== autoDetectedPackage;
         const markSideEffectFree =
           markSideEffectFreeOpt && !isEntry && sideEffectFreePkg;
 
