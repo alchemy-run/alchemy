@@ -31,6 +31,7 @@ import * as Acm from "./Acm/index.ts";
 import * as Addressing from "./Addressing/index.ts";
 import * as AI from "./AI/index.ts";
 import * as Alerting from "./Alerting/index.ts";
+import { CloudflareApiHttpClient } from "./ApiConcurrency.ts";
 import * as ApiShield from "./ApiShield/index.ts";
 import * as ApiToken from "./ApiToken/index.ts";
 import * as Argo from "./Argo/index.ts";
@@ -714,6 +715,13 @@ export const providers = () =>
  * Authentication error` would silently loop on genuinely invalid
  * tokens.
  *
+ * Requests to `api.cloudflare.com` additionally share a bounded
+ * concurrency pool ({@link CloudflareApiHttpClient}): an unbounded
+ * fan-out (large stacks, `--adopt` deploys reading every resource)
+ * re-triggers Cloudflare's code-10000 "Authentication error" throttle
+ * faster than the retry backoff drains it, turning a transient blip
+ * into a persistent 401 (issue #1008).
+ *
  * TODO(distilled): once
  * https://github.com/alchemy-run/distilled/pull/233 lands, the retry
  * wrapper can collapse back to `Retry.makeDefault`.
@@ -726,6 +734,7 @@ export const CloudflareApiLive = () =>
     Layer.provideMerge(ProfileLive),
     Layer.provideMerge(CredentialsStoreLive),
     Layer.provideMerge(Layer.succeed(Retry.Retry, cloudflareRetryFactory)),
+    Layer.provideMerge(CloudflareApiHttpClient),
   );
 
 const cloudflareRetryFactory: Retry.Factory = (lastError) => {
