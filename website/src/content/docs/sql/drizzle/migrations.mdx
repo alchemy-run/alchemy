@@ -63,6 +63,66 @@ const db = yield* Cloudflare.D1.Database("app-db", {
 This is also the working path for MySQL today, where schema
 generation is not wired through `Drizzle.Schema`.
 
+## Durable Object migrations
+
+A Durable Object's SQLite database is per-instance, so its
+migrations run inside the object at runtime rather than from the
+deploy graph. Generate them with drizzle-kit's `durable-sqlite`
+driver:
+
+```typescript
+// drizzle.config.ts
+import { defineConfig } from "drizzle-kit";
+
+export default defineConfig({
+  dialect: "sqlite",
+  driver: "durable-sqlite",
+  schema: "./src/schema.ts",
+  out: "./drizzle",
+});
+```
+
+`drizzle-kit generate` writes the migration directories plus a
+`migrations.js` bundle that imports each migration's `.sql` file.
+The alchemy bundler loads bare `.sql` imports as text modules (the
+same way it handles `.txt` and `.html`), so the generated bundle
+imports directly into your Durable Object. Commit it and run
+drizzle's migrator at instance init:
+
+```typescript
+import { drizzle } from "drizzle-orm/durable-sqlite";
+import { migrate } from "drizzle-orm/durable-sqlite/migrator";
+import migrations from "./drizzle/migrations.js";
+import { users } from "./schema.ts";
+
+export class Users extends Cloudflare.DurableObject<Users>()(
+  "Users",
+  Effect.gen(function* () {
+    const state = yield* Cloudflare.DurableObjectState;
+    const db = yield* Effect.sync(() => drizzle(state.raw.storage));
+
+    if (globalThis.__ALCHEMY_RUNTIME__) {
+      yield* Effect.sync(() => migrate(db, migrations));
+    }
+
+    return Effect.gen(function* () {
+      return {
+        addUser: (name: string) =>
+          Effect.sync(() => db.insert(users).values({ name }).run()),
+        listUsers: () => Effect.sync(() => db.select().from(users).all()),
+      };
+    });
+  }),
+) {}
+```
+
+The constructor also runs at plan time with a mock
+`DurableObjectState` to discover bindings, so the
+[`__ALCHEMY_RUNTIME__` guard](/infrastructure-as-effects/phases#the-__alchemy_runtime__-guard)
+keeps the migration for the deployed object, where real storage
+exists. Both the driver and the migrator are synchronous, and the
+init runs before any request reaches the instance's methods.
+
 ## The migrations table
 
 Drizzle's tooling expects applied migrations tracked in a
