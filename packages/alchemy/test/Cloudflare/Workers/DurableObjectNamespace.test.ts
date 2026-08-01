@@ -218,7 +218,13 @@ const fetchJsonReady = <T>(url: string) =>
       // check (a 200 status alone does not mean the real script is live yet).
       Effect.flatMap((r) =>
         r.status !== 200
-          ? Effect.fail(new Error(`Worker not ready: ${r.status}`))
+          ? Effect.flatMap(r.text, (body) =>
+              Effect.fail(
+                new Error(
+                  `Worker not ready: ${r.status} ${body.slice(0, 500)}`,
+                ),
+              ),
+            )
           : Effect.flatMap(r.text, (body) =>
               body.includes(DEPLOY_PLACEHOLDER)
                 ? Effect.fail(new Error("stale: still deploying"))

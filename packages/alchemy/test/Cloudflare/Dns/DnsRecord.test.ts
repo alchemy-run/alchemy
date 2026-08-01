@@ -29,6 +29,8 @@ const NAME_DEFAULT = `alchemy-dnsrecord-default.${zoneName}`;
 const NAME_UPDATE = `alchemy-dnsrecord-update.${zoneName}`;
 const NAME_REPLACE = `alchemy-dnsrecord-replace.${zoneName}`;
 const NAME_ADOPT = `alchemy-dnsrecord-adopt.${zoneName}`;
+const NAME_ADOPT_RELATIVE = "alchemy-dnsrecord-relative-adopt";
+const NAME_ADOPT_RELATIVE_FQDN = `${NAME_ADOPT_RELATIVE}.${zoneName}`;
 const NAME_LIST = `alchemy-dnsrecord-list.${zoneName}`;
 
 const resolveZoneId = Effect.gen(function* () {
@@ -300,6 +302,45 @@ test.provider(
       yield* stack.destroy();
 
       const gone = yield* findRecord(zoneId, NAME_ADOPT, "A");
+      expect(gone).toBeUndefined();
+    }).pipe(logLevel),
+);
+
+test.provider(
+  "adoption finds a normalized FQDN when given a relative record name",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+
+      yield* stack.destroy();
+      yield* purgeRecords(zoneId, NAME_ADOPT_RELATIVE_FQDN, "TXT");
+
+      const pre = yield* dns.createRecord({
+        zoneId,
+        name: NAME_ADOPT_RELATIVE_FQDN,
+        type: "TXT",
+        content: "pre-existing",
+        ttl: 1,
+      });
+
+      const adopted = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.DNS.Record("RelativeAdoptedRecord", {
+            zoneId,
+            name: NAME_ADOPT_RELATIVE,
+            type: "TXT",
+            content: "adopted",
+          }).pipe(adopt(true));
+        }),
+      );
+
+      expect(adopted.recordId).toEqual(pre.id);
+      expect(adopted.name).toEqual(NAME_ADOPT_RELATIVE_FQDN);
+      expect(adopted.content).toEqual("adopted");
+
+      yield* stack.destroy();
+
+      const gone = yield* findRecord(zoneId, NAME_ADOPT_RELATIVE_FQDN, "TXT");
       expect(gone).toBeUndefined();
     }).pipe(logLevel),
 );

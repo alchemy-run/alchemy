@@ -5,14 +5,12 @@
  */
 export const managementApiContract = {
   repository: "prisma/pdp-control-plane",
-  commit: "77354f04b2dcd573682a87d0be6fb66a05d27a86",
+  commit: "4a71a1f3500c02c6d6914f86435c251f95fda536",
   routes: [
     "DELETE /v1/apps/{appId}",
     "DELETE /v1/branches/{branchId}",
     "DELETE /v1/buckets/{bucketId}",
     "DELETE /v1/buckets/{bucketId}/keys/{keyId}",
-    "DELETE /v1/compute-services/versions/{versionId}",
-    "DELETE /v1/compute-services/{computeServiceId}",
     "DELETE /v1/connections/{id}",
     "DELETE /v1/databases/{databaseId}",
     "DELETE /v1/deployments/{deploymentId}",
@@ -21,7 +19,6 @@ export const managementApiContract = {
     "DELETE /v1/integrations/{id}",
     "DELETE /v1/projects/{id}",
     "DELETE /v1/source-repositories/{id}",
-    "DELETE /v1/versions/{versionId}",
     "DELETE /v1/workspaces/{workspaceId}/integrations/{clientId}",
     "GET /v1/apps",
     "GET /v1/apps/{appId}",
@@ -32,12 +29,6 @@ export const managementApiContract = {
     "GET /v1/buckets",
     "GET /v1/buckets/{bucketId}",
     "GET /v1/buckets/{bucketId}/keys",
-    "GET /v1/compute-services",
-    "GET /v1/compute-services/versions/{versionId}",
-    "GET /v1/compute-services/versions/{versionId}/logs",
-    "GET /v1/compute-services/{computeServiceId}",
-    "GET /v1/compute-services/{computeServiceId}/domains",
-    "GET /v1/compute-services/{computeServiceId}/versions",
     "GET /v1/connections",
     "GET /v1/connections/{id}",
     "GET /v1/databases",
@@ -56,7 +47,6 @@ export const managementApiContract = {
     "GET /v1/projects",
     "GET /v1/projects/{id}",
     "GET /v1/projects/{projectId}/branches",
-    "GET /v1/projects/{projectId}/compute-services",
     "GET /v1/projects/{projectId}/databases",
     "GET /v1/regions",
     "GET /v1/regions/accelerate",
@@ -65,14 +55,11 @@ export const managementApiContract = {
     "GET /v1/scm-installations/{installationId}/repositories",
     "GET /v1/source-repositories",
     "GET /v1/source-repositories/{id}",
-    "GET /v1/versions",
-    "GET /v1/versions/{versionId}",
     "GET /v1/workspaces",
     "GET /v1/workspaces/{id}",
     "GET /v1/workspaces/{workspaceId}/integrations",
     "PATCH /v1/apps/{appId}",
     "PATCH /v1/branches/{branchId}",
-    "PATCH /v1/compute-services/{computeServiceId}",
     "PATCH /v1/databases/{databaseId}",
     "PATCH /v1/environment-variables/{envVarId}",
     "PATCH /v1/projects/{id}",
@@ -83,13 +70,6 @@ export const managementApiContract = {
     "POST /v1/apps/{appId}/rollback",
     "POST /v1/buckets",
     "POST /v1/buckets/{bucketId}/keys",
-    "POST /v1/compute-services",
-    "POST /v1/compute-services/versions/{versionId}/start",
-    "POST /v1/compute-services/versions/{versionId}/stop",
-    "POST /v1/compute-services/{computeServiceId}/domains",
-    "POST /v1/compute-services/{computeServiceId}/promote",
-    "POST /v1/compute-services/{computeServiceId}/rollback",
-    "POST /v1/compute-services/{computeServiceId}/versions",
     "POST /v1/connections",
     "POST /v1/connections/{id}/rotate",
     "POST /v1/databases",
@@ -102,44 +82,9 @@ export const managementApiContract = {
     "POST /v1/projects",
     "POST /v1/projects/{id}/transfer",
     "POST /v1/projects/{projectId}/branches",
-    "POST /v1/projects/{projectId}/compute-services",
     "POST /v1/projects/{projectId}/databases",
     "POST /v1/scm-installations/install-intents",
     "POST /v1/source-repositories",
-    "POST /v1/versions",
-    "POST /v1/versions/{versionId}/start",
-    "POST /v1/versions/{versionId}/stop",
-  ],
-  /**
-   * Compatibility aliases still mounted by the server but marked deprecated
-   * (plus the project-scoped compute-service aliases that share that legacy
-   * model). Alchemy intentionally exposes only Apps and Deployments.
-   */
-  deprecatedRoutes: [
-    "DELETE /v1/compute-services/versions/{versionId}",
-    "DELETE /v1/compute-services/{computeServiceId}",
-    "DELETE /v1/versions/{versionId}",
-    "GET /v1/compute-services",
-    "GET /v1/compute-services/versions/{versionId}",
-    "GET /v1/compute-services/versions/{versionId}/logs",
-    "GET /v1/compute-services/{computeServiceId}",
-    "GET /v1/compute-services/{computeServiceId}/domains",
-    "GET /v1/compute-services/{computeServiceId}/versions",
-    "GET /v1/projects/{projectId}/compute-services",
-    "GET /v1/versions",
-    "GET /v1/versions/{versionId}",
-    "PATCH /v1/compute-services/{computeServiceId}",
-    "POST /v1/compute-services",
-    "POST /v1/compute-services/versions/{versionId}/start",
-    "POST /v1/compute-services/versions/{versionId}/stop",
-    "POST /v1/compute-services/{computeServiceId}/domains",
-    "POST /v1/compute-services/{computeServiceId}/promote",
-    "POST /v1/compute-services/{computeServiceId}/rollback",
-    "POST /v1/compute-services/{computeServiceId}/versions",
-    "POST /v1/projects/{projectId}/compute-services",
-    "POST /v1/versions",
-    "POST /v1/versions/{versionId}/start",
-    "POST /v1/versions/{versionId}/stop",
   ],
   /**
    * Prisma Object Storage is a new product surface and is intentionally
@@ -157,13 +102,8 @@ export const managementApiContract = {
   ],
 } as const;
 
-const deprecatedRouteSet = new Set<string>(
-  managementApiContract.deprecatedRoutes,
-);
 const deferredRouteSet = new Set<string>(managementApiContract.deferredRoutes);
 
 /** Canonical production routes that Alchemy must map. */
 export const productionManagementApiRoutes =
-  managementApiContract.routes.filter(
-    (route) => !deprecatedRouteSet.has(route) && !deferredRouteSet.has(route),
-  );
+  managementApiContract.routes.filter((route) => !deferredRouteSet.has(route));

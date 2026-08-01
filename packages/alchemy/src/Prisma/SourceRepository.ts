@@ -38,7 +38,12 @@ export interface SourceRepositoryProps {
    */
   provider?: "github";
   /**
-   * Numeric provider repository ID.
+   * GitHub's permanent numeric repository ID, not `owner/repo`, a Prisma
+   * project ID, or an SCM installation ID. Retrieve it with:
+   *
+   * ```bash
+   * gh api repos/OWNER/REPO --jq '.id'
+   * ```
    */
   providerRepositoryId: number;
   /**
@@ -104,6 +109,12 @@ export interface SourceRepository extends Resource<
 /**
  * A linked source repository for Prisma apps.
  *
+ * GitHub is currently the only supported provider. Linking requires an
+ * existing Prisma SCM installation. `providerRepositoryId` is GitHub's
+ * permanent numeric repository ID; retrieve it with
+ * `gh api repos/OWNER/REPO --jq '.id'`. When `installationId` is omitted,
+ * Prisma selects the workspace installation.
+ *
  * Linking creates or renames the repository-owned default branch. Observe
  * that branch through the Management API; do not declare it again as a
  * separate `Prisma.Branch` resource. Use this resource's outputs to order
@@ -111,12 +122,24 @@ export interface SourceRepository extends Resource<
  * Deleting the link does not roll those side effects back: existing branches,
  * databases, and apps remain in the project.
  *
+ * The project, repository ID, provider, and installation form an immutable
+ * link identity. Alchemy refuses an automatic relink because unlinking cannot
+ * roll back branch and resource attachments. Existing links require explicit
+ * adoption.
+ *
  * @resource
+ * @section Finding the Repository ID
+ * @example Read the numeric GitHub repository ID
+ * ```bash
+ * gh api repos/OWNER/REPO --jq '.id'
+ * ```
+ *
  * @section Linking a Repository
  * @example GitHub repository
  * ```typescript
  * const repo = yield* Prisma.SourceRepository("repo", {
  *   project: project.projectId,
+ *   // Replace with the value returned by the GitHub command above.
  *   providerRepositoryId: 123456789,
  * });
  * const database = yield* Prisma.Database("database", {
