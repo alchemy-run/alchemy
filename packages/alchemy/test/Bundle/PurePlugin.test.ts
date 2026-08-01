@@ -530,14 +530,21 @@ describe("explicitly listed user package", () => {
           callOptions(plugin, { input: entryPath, cwd: root }),
         );
 
+        // A bound call so the transform produces a non-null result — a
+        // discarded-only entry returns null and would skip the assertion.
         const entryResult = yield* Effect.promise(() =>
-          callTransform(plugin, `console.log("hello");`, entryPath),
+          callTransform(
+            plugin,
+            `const x = make();\nconsole.log(x);`,
+            entryPath,
+          ),
         );
         // The entry's moduleSideEffects flag must NOT be false regardless
         // of what its package declares.
-        if (entryResult !== null && typeof entryResult === "object") {
-          expect(entryResult.moduleSideEffects).not.toBe(false);
-        }
+        expect(entryResult).not.toBeNull();
+        expect((entryResult as TransformOutput).moduleSideEffects).not.toBe(
+          false,
+        );
 
         yield* fs.remove(root, { recursive: true });
       }).pipe(Effect.provide(NodeServices.layer)),
@@ -638,6 +645,32 @@ describe("discarded-result calls (issue #949)", () => {
       const result = await callTransform(
         plugin,
         code,
+        nodePath.join(root, "routes.ts"),
+      );
+      expect(result).toBeNull();
+    } finally {
+      nodeFs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("leaves the entry app's package untouched when it is not listed and declares no sideEffects field", async () => {
+    const root = nodeFs.mkdtempSync(
+      nodePath.join(os.tmpdir(), "alchemy-pure-949-unlisted-nosef-"),
+    );
+    try {
+      nodeFs.writeFileSync(
+        nodePath.join(root, "package.json"),
+        JSON.stringify({ name: "my-app", type: "module" }),
+      );
+      const plugin = purePlugin();
+      await callOptions(plugin, {
+        input: nodePath.join(root, "entry.ts"),
+        cwd: root,
+      });
+
+      const result = await callTransform(
+        plugin,
+        `import { app } from "./app.ts";\napp.get("/r", () => "ok");\nexport const x = makeX();`,
         nodePath.join(root, "routes.ts"),
       );
       expect(result).toBeNull();
