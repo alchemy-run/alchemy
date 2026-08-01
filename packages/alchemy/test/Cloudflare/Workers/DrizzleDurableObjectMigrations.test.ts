@@ -45,26 +45,22 @@ test(
     // even when the stack is kept alive between runs (NO_DESTROY).
     const instance = crypto.randomUUID();
 
-    const post = yield* client
-      .post(`${url}/users?do=${instance}&name=gimli`)
-      .pipe(
-        Effect.flatMap((res) =>
-          res.status === 200
-            ? Effect.succeed(res)
-            : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+    // Marker-anchored readiness: a freshly-enabled workers.dev hostname can
+    // serve Cloudflare's placeholder page with a 200 before the deployed
+    // Worker propagates, so gate on the route's JSON body, not the status.
+    const addUser = (name: string) =>
+      client.post(`${url}/users?do=${instance}&name=${name}`).pipe(
+        Effect.flatMap((res) => res.text),
+        Effect.flatMap((body) =>
+          body.includes(`"ok":true`)
+            ? Effect.void
+            : Effect.fail(new Error(`Worker not ready: ${body.slice(0, 200)}`)),
         ),
         Effect.retry({ schedule: readinessSchedule, times: 15 }),
       );
-    expect(post.status).toBe(200);
 
-    yield* client.post(`${url}/users?do=${instance}&name=legolas`).pipe(
-      Effect.flatMap((res) =>
-        res.status === 200
-          ? Effect.succeed(res)
-          : Effect.fail(new Error(`add user failed: ${res.status}`)),
-      ),
-      Effect.retry({ schedule: readinessSchedule, times: 5 }),
-    );
+    yield* addUser("gimli");
+    yield* addUser("legolas");
 
     const res = yield* client.get(`${url}/users?do=${instance}`);
     expect(res.status).toBe(200);

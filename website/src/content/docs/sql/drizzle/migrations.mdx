@@ -98,14 +98,14 @@ import { users } from "./schema.ts";
 export class Users extends Cloudflare.DurableObject<Users>()(
   "Users",
   Effect.gen(function* () {
-    const state = yield* Cloudflare.DurableObjectState;
-    const db = yield* Effect.sync(() => drizzle(state.raw.storage));
-
-    if (globalThis.__ALCHEMY_RUNTIME__) {
-      yield* Effect.sync(() => migrate(db, migrations));
-    }
-
     return Effect.gen(function* () {
+      const state = yield* Cloudflare.DurableObjectState;
+      const db = yield* Effect.sync(() => {
+        const db = drizzle(state.raw.storage);
+        migrate(db, migrations);
+        return db;
+      });
+
       return {
         addUser: (name: string) =>
           Effect.sync(() => db.insert(users).values({ name }).run()),
@@ -116,12 +116,10 @@ export class Users extends Cloudflare.DurableObject<Users>()(
 ) {}
 ```
 
-The constructor also runs at plan time with a mock
-`DurableObjectState` to discover bindings, so the
-[`__ALCHEMY_RUNTIME__` guard](/infrastructure-as-effects/phases#the-__alchemy_runtime__-guard)
-keeps the migration for the deployed object, where real storage
-exists. Both the driver and the migrator are synchronous, and the
-init runs before any request reaches the instance's methods.
+The inner Effect is the instance init: it runs only in the deployed
+object, when the instance activates and before any request reaches
+its methods — the right place for runtime storage work like
+migrations. Both the driver and the migrator are synchronous.
 
 ## The migrations table
 

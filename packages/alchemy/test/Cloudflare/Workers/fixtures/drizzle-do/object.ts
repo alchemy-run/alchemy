@@ -13,17 +13,17 @@ import { users } from "./schema.ts";
 export class DrizzleUsersObject extends Cloudflare.DurableObject<DrizzleUsersObject>()(
   "DrizzleUsersObject",
   Effect.gen(function* () {
-    const state = yield* Cloudflare.DurableObjectState;
-    const db = yield* Effect.sync(() => drizzle(state.raw.storage));
-    // The durable-sqlite driver and migrator are synchronous — run the
-    // migrations once at instance init, before any request touches the db.
-    // Guarded: the constructor also runs at plan time (binding discovery)
-    // with a mock DurableObjectState that has no real storage.
-    if (globalThis.__ALCHEMY_RUNTIME__) {
-      yield* Effect.sync(() => migrate(db, migrations));
-    }
-
     return Effect.gen(function* () {
+      const state = yield* Cloudflare.DurableObjectState;
+      // The durable-sqlite driver and migrator are synchronous — run the
+      // migrations when the instance activates, before any request
+      // touches the db.
+      const db = yield* Effect.sync(() => {
+        const db = drizzle(state.raw.storage);
+        migrate(db, migrations);
+        return db;
+      });
+
       return {
         addUser: (name: string) =>
           Effect.sync(() => db.insert(users).values({ name }).run()).pipe(
