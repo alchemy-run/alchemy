@@ -21,12 +21,10 @@ import {
 import type { ReplacedResourceState, ResourceState } from "./ResourceState.ts";
 import {
   fencedWriteRejected,
-  stateDecodeError,
   StateStoreError,
   type PersistedState,
   type StateService,
 } from "./State.ts";
-import { resolveSecretCodec } from "./SecretCodec.ts";
 import { encodeState, reviveStateRecursive } from "./StateEncoding.ts";
 
 /**
@@ -105,15 +103,6 @@ export const makeHttpStateStore = ({
     });
     const state = apiClient.state;
 
-    // Encrypts Redacted values before they leave the process when
-    // ALCHEMY_PASSWORD is set; decrypts them on read.
-    const codec = yield* resolveSecretCodec;
-    const tryRevive = <T>(s: unknown, what: string) =>
-      Effect.try({
-        try: () => reviveStateRecursive(s, codec) as T,
-        catch: stateDecodeError(what),
-      });
-
     const service: StateService = {
       id,
       getVersion: () =>
@@ -140,17 +129,19 @@ export const makeHttpStateStore = ({
             },
           })
           .pipe(
-            Effect.flatMap((s) =>
+            Effect.map((s) =>
               s == null
-                ? Effect.succeed(undefined)
-                : tryRevive<ResourceState>(s, request.fqn),
+                ? undefined
+                : (reviveStateRecursive(s) as ResourceState),
             ),
             mapStateStoreError,
           ),
       getReplacedResources: (request) =>
         state.getReplacedResources({ params: request }).pipe(
-          Effect.flatMap((resources) =>
-            tryRevive<ReplacedResourceState[]>(resources, "replaced resources"),
+          Effect.map((resources) =>
+            resources.map(
+              (s) => reviveStateRecursive(s) as ReplacedResourceState,
+            ),
           ),
           mapStateStoreError,
         ),
@@ -169,7 +160,7 @@ export const makeHttpStateStore = ({
               fqn: encodeURIComponent(request.fqn),
             },
             query: { fence: request.fence },
-            payload: encodeState(request.value, codec),
+            payload: encodeState(request.value),
           })
           .pipe(
             // Server echoes the stored value, but the client already
@@ -203,10 +194,8 @@ export const makeHttpStateStore = ({
             params: { stack: request.stack, stage: request.stage },
           })
           .pipe(
-            Effect.flatMap((s) =>
-              s == null
-                ? Effect.succeed(undefined)
-                : tryRevive(s, "__stack_output__"),
+            Effect.map((s) =>
+              s == null ? undefined : reviveStateRecursive(s),
             ),
             mapStateStoreError,
           ),
@@ -215,7 +204,7 @@ export const makeHttpStateStore = ({
           .setStackOutput({
             params: { stack: request.stack, stage: request.stage },
             query: { fence: request.fence },
-            payload: encodeState(request.value as any, codec),
+            payload: encodeState(request.value as any),
           })
           .pipe(
             Effect.map(() => request.value),
