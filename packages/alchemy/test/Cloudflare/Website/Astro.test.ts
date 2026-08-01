@@ -105,7 +105,7 @@ test.provider(
       const rootDir = yield* cloneFixture(fixtureDir, {
         prefix: "alchemy-astro-",
         tempRoot,
-        entries: ["package.json", "public", "src"],
+        entries: ["astro.config.mjs", "package.json", "public", "src"],
       });
 
       // Restrict the input memo to fixture sources so the test isn't
@@ -116,7 +116,7 @@ test.provider(
       // the unchanged-rebuild memo assertion below. Workspace-aware
       // memoization has its own dedicated test in Vite.test.ts.
       const memo = {
-        include: ["src/**", "public/**", "package.json"],
+        include: ["src/**", "public/**", "package.json", "astro.config.mjs"],
         workspaces: [],
       };
 
@@ -388,8 +388,8 @@ test.provider(
       // no KV namespace titled for this stack's session id may exist.
       // (Physical titles embed the logical id verbatim:
       // `{stack}-AstroStaticSiteSession-{stage}-{suffix}`.)
-      const sessionNamespace = yield* kv
-        .listNamespaces.items({ accountId })
+      const sessionNamespace = yield* kv.listNamespaces
+        .items({ accountId })
         .pipe(
           Stream.filter((ns) => ns.title.includes("AstroStaticSiteSession")),
           Stream.runHead,

@@ -254,14 +254,10 @@ test.provider(
           label: "waku SSG page with custom entry",
         },
       );
-      yield* expectUrlContains(
-        `${site.url!}/hello.txt`,
-        "hello from public/",
-        {
-          timeout: "60 seconds",
-          label: "waku static asset with custom entry",
-        },
-      );
+      yield* expectUrlContains(`${site.url!}/hello.txt`, "hello from public/", {
+        timeout: "60 seconds",
+        label: "waku static asset with custom entry",
+      });
 
       yield* stack.destroy();
       yield* waitForWorkerToBeDeleted(site.workerName, accountId);
