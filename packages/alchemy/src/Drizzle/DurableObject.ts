@@ -65,8 +65,8 @@ export interface DurableObjectConfig<
  *           Effect.sync(() => db.insert(users).values({ name }).run()),
  *         listUsers: () => Effect.sync(() => db.select().from(users).all()),
  *         listUsersWithPosts: () =>
- *           Effect.promise(() =>
- *             db.query.users.findMany({ with: { posts: true } }),
+ *           Effect.sync(() =>
+ *             db.query.users.findMany({ with: { posts: true } }).sync(),
  *           ),
  *       };
  *     });

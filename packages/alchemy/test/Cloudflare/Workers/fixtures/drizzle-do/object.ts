@@ -38,15 +38,14 @@ export class DrizzleUsersObject extends Cloudflare.DurableObject<DrizzleUsersObj
         // Relational query through the `relations` config — proves the
         // schema/relationships flow through Drizzle.DurableObject's types.
         listUsersWithPosts: () =>
-          Effect.promise(() =>
-            db.query.users.findMany({ with: { posts: true } }),
-          ).pipe(
-            Effect.map((rows) =>
-              rows.map((row) => ({
+          Effect.sync(() =>
+            db.query.users
+              .findMany({ with: { posts: true } })
+              .sync()
+              .map((row) => ({
                 name: row.name,
                 posts: row.posts.map((post) => post.title),
               })),
-            ),
           ),
       };
     });
