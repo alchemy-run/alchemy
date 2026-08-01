@@ -269,7 +269,6 @@ export interface FunctionZipProps extends FunctionCommonProps {
    */
   main: string;
   image?: never;
-  imageConfig?: never;
   /**
    * Exported handler symbol inside the bundled module.
    * @default "handler"
@@ -309,16 +308,6 @@ export interface FunctionImageProps extends FunctionCommonProps {
    * image.
    */
   image: FunctionImageSource;
-  /**
-   * Optional Lambda overrides for instructions in the built image:
-   *
-   * - `EntryPoint` overrides Dockerfile `ENTRYPOINT`
-   * - `Command` overrides Dockerfile `CMD`
-   * - `WorkingDirectory` overrides Dockerfile `WORKDIR`
-   *
-   * Omit this property to run with the Dockerfile's values.
-   */
-  imageConfig?: Lambda.ImageConfig;
   handler?: never;
   runtime?: never;
   build?: never;
@@ -332,17 +321,6 @@ export type FunctionProps = FunctionZipProps | FunctionImageProps;
 const isFunctionImageProps = (
   props: FunctionProps,
 ): props is FunctionImageProps => props.image !== undefined;
-
-/**
- * `UpdateFunctionConfiguration` leaves existing image overrides unchanged
- * when `ImageConfig` is omitted. An empty object removes those overrides,
- * allowing the image's Dockerfile instructions to take effect again when
- * `imageConfig` is removed from the desired props.
- */
-const imageConfigForUpdate = (
-  props: FunctionProps,
-): Lambda.ImageConfig | undefined =>
-  isFunctionImageProps(props) ? (props.imageConfig ?? {}) : undefined;
 
 /**
  * Normalize a {@link FunctionProps.timeout} to whole seconds.
@@ -1721,7 +1699,6 @@ export default handler;
           ...(isFunctionImageProps(news)
             ? {
                 PackageType: "Image" as const,
-                ImageConfig: news.imageConfig,
               }
             : {
                 // Effect-mode functions are wrapped in a generated entry whose
@@ -1804,7 +1781,6 @@ export default handler;
                 EphemeralStorage: createFunctionRequest.EphemeralStorage,
                 FileSystemConfigs: createFunctionRequest.FileSystemConfigs,
                 Handler: createFunctionRequest.Handler,
-                ImageConfig: imageConfigForUpdate(news),
                 KMSKeyArn: createFunctionRequest.KMSKeyArn,
                 Layers: createFunctionRequest.Layers,
                 LoggingConfig: createFunctionRequest.LoggingConfig,

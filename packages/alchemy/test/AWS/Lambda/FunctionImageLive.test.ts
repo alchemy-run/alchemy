@@ -30,14 +30,10 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
       });
       yield* fs.copy(fixture, context, { overwrite: true });
 
-      const image = (
-        architecture: AWS.Lambda.FunctionArchitecture,
-        imageConfig?: Lambda.ImageConfig,
-      ) =>
+      const image = (architecture: AWS.Lambda.FunctionArchitecture) =>
         AWS.Lambda.Function("ContainerFunction", {
           functionName,
           image: { context, dockerfile: "Dockerfile" },
-          imageConfig,
           architecture,
           env: {
             IMAGE_FUNCTION_ENV: "bound",
@@ -99,9 +95,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
       yield* assertRepositoryDeleted(firstRepository);
 
       // And Zip -> Image uses the same replacement behavior.
-      const replaced = yield* stack.deploy(
-        image("x86_64", { Command: ["index.handler"] }),
-      );
+      const replaced = yield* stack.deploy(image("x86_64"));
       expect(replaced.functionName).toBe(functionName);
       yield* assertFunctionImage(replaced.functionName, "x86_64");
       expect((yield* invoke(replaced.functionName, "two")).marker).toBe("two");
