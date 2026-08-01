@@ -57,8 +57,7 @@ test.provider(
           const live =
             includeAlias && version
               ? yield* AWS.Lambda.Alias("Live", {
-                  functionName: version.functionName,
-                  functionVersion: version.version,
+                  version,
                   aliasName: "live",
                 })
               : undefined;

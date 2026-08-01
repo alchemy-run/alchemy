@@ -138,8 +138,7 @@ export interface VersionClass extends ResourceClassLike<Version> {
  *   function: campaign.function,
  * });
  * const live = yield* AWS.Lambda.Alias("CampaignRunLive", {
- *   functionName: version.functionName,
- *   functionVersion: version.version,
+ *   version,
  *   aliasName: "live",
  * });
  * ```

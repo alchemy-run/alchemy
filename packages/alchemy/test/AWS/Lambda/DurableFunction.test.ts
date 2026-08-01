@@ -65,8 +65,7 @@ describe("Lambda DurableFunction", () => {
               function: flow.function,
             });
             const live = yield* AWS.Lambda.Alias("DurableFlowLive", {
-              functionName: version.functionName,
-              functionVersion: version.version,
+              version,
               aliasName: "live",
             });
             return {

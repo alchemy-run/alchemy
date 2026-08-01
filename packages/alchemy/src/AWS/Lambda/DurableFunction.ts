@@ -626,8 +626,7 @@ const composeDurableImpl = (
  *   function: orders.function,
  * });
  * yield* AWS.Lambda.Alias("OrderFlowLive", {
- *   functionName: version.functionName,
- *   functionVersion: version.version,
+ *   version,
  *   aliasName: "live",
  * });
  *
