@@ -1,6 +1,6 @@
 import { Match as M, Schema as S } from "effect";
 import { Command, Runtime } from "foldkit";
-import { html, type Document } from "foldkit/html";
+import type { Document, HtmlBuilder } from "foldkit/html";
 import { m } from "foldkit/message";
 
 // MODEL
@@ -13,8 +13,6 @@ export type Model = typeof Model.Type;
 export const ClickedIncrement = m("ClickedIncrement");
 export const Message = S.Union([ClickedIncrement]);
 export type Message = typeof Message.Type;
-
-const h = html<Message>();
 
 // UPDATE
 
@@ -40,7 +38,7 @@ export const init: Runtime.ApplicationInit<Model, Message> = () => [
 
 // VIEW
 
-export const view = (model: Model): Document => ({
+export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
   title: `Counter: ${model.count}`,
   body: h.div(
     [h.Id("app")],
