@@ -187,7 +187,7 @@ export const ConsumerProviderLive = () =>
                     {
                       consumerId: c.consumerId,
                       queueId,
-                      scriptName: c.script ?? "",
+                      scriptName: c.scriptName ?? "",
                       accountId,
                       deadLetterQueue: c.deadLetterQueue ?? undefined,
                       settings: s
@@ -298,8 +298,8 @@ export const ConsumerProviderLive = () =>
       if (
         owned &&
         observed &&
-        observed.script !== undefined &&
-        observed.script !== news.scriptName
+        observed.scriptName !== undefined &&
+        observed.scriptName !== news.scriptName
       ) {
         yield* queues
           .deleteConsumer({
@@ -341,12 +341,12 @@ export const ConsumerProviderLive = () =>
       if (
         observed &&
         !owned &&
-        observed.script !== undefined &&
-        observed.script !== news.scriptName
+        observed.scriptName !== undefined &&
+        observed.scriptName !== news.scriptName
       ) {
         return yield* Effect.die(
           `Cloudflare queue "${queueId}" already has a worker ` +
-            `consumer for script "${observed.script}", but this ` +
+            `consumer for script "${observed.scriptName}", but this ` +
             `resource is configured for "${news.scriptName}" and ` +
             `local state for the consumer was missing. Each queue ` +
             `can have only one worker consumer — delete the ` +
@@ -406,12 +406,12 @@ export const ConsumerProviderLive = () =>
                   );
                 }
                 if (
-                  match.script !== undefined &&
-                  match.script !== news.scriptName
+                  match.scriptName !== undefined &&
+                  match.scriptName !== news.scriptName
                 ) {
                   return yield* Effect.die(
                     `Cloudflare queue "${queueId}" already has a ` +
-                      `worker consumer for script "${match.script}", ` +
+                      `worker consumer for script "${match.scriptName}", ` +
                       `but this resource is configured for ` +
                       `"${news.scriptName}". Each queue can have only ` +
                       `one worker consumer — delete the existing one ` +
@@ -452,7 +452,7 @@ export const ConsumerProviderLive = () =>
 
       yield* queues.getConsumer({ accountId: acct, queueId, consumerId }).pipe(
         Effect.flatMap((fetched) =>
-          toObserved(fetched)?.script === news.scriptName
+          toObserved(fetched)?.scriptName === news.scriptName
             ? Effect.void
             : Effect.fail("ScriptUnbound" as const),
         ),
@@ -527,10 +527,7 @@ export const ConsumerProviderLive = () =>
           return {
             consumerId: fetched.consumerId!,
             queueId: output.queueId,
-            scriptName:
-              ("scriptName" in fetched && typeof fetched.scriptName === "string"
-                ? fetched.scriptName
-                : output.scriptName) ?? output.scriptName,
+            scriptName: toObserved(fetched)?.scriptName ?? output.scriptName,
             accountId: output.accountId,
             deadLetterQueue: output.deadLetterQueue,
             settings: output.settings,
@@ -550,7 +547,7 @@ export const ConsumerProviderLive = () =>
           return {
             consumerId: match.consumerId,
             queueId: output.queueId,
-            scriptName: match.script ?? output.scriptName,
+            scriptName: match.scriptName ?? output.scriptName,
             accountId: output.accountId,
             deadLetterQueue: output.deadLetterQueue,
             settings: output.settings,
@@ -563,21 +560,16 @@ export const ConsumerProviderLive = () =>
 
 type ObservedConsumer = {
   consumerId: string;
-  script: string | undefined;
+  scriptName: string | undefined;
 };
 
 const toObserved = (c: {
   consumerId?: string | null;
   scriptName?: string | null;
-  /** The get-consumer wire names the worker script `script`. */
-  script?: string | null;
   type?: "worker" | "http_pull" | null;
 }): ObservedConsumer | undefined =>
   c.consumerId && c.type === "worker"
-    ? {
-        consumerId: c.consumerId,
-        script: c.scriptName ?? c.script ?? undefined,
-      }
+    ? { consumerId: c.consumerId, scriptName: c.scriptName ?? undefined }
     : undefined;
 
 // ~60s budget — Worker reconcile uploads typically land in 2–10s,
