@@ -35,6 +35,7 @@ const logLevel = Effect.provideService(
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "vite-fixture");
 const spaFixtureDir = pathe.resolve(import.meta.dirname, "vite-spa-fixture");
+const foldkitFixtureDir = pathe.resolve(import.meta.dirname, "foldkit-fixture");
 const doFixtureDir = pathe.resolve(import.meta.dirname, "vite-do-fixture");
 const containerFixtureDir = pathe.resolve(
   import.meta.dirname,
@@ -175,6 +176,62 @@ test.provider(
       yield* expectUrlContains(`${site.url!}/`, marker, {
         timeout: "120 seconds",
         label: "spa marker",
+      });
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+    }).pipe(logLevel),
+  { timeout: 360_000 },
+);
+
+// Foldkit (foldkit.dev) is an Effect-native Elm-architecture frontend
+// framework. Its apps are plain client-only Vite projects (the Foldkit Vite
+// plugin only adds HMR/devtools wiring), so `Cloudflare.Website.Vite` deploys
+// them as-is. This pins that the Foldkit plugin composes with the injected
+// Cloudflare Vite plugin and that deep links fall back to `index.html` via
+// `single-page-application` not-found handling.
+test.provider(
+  "Vite: Foldkit SPA deploys and serves with SPA fallback",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const rootDir = yield* cloneFixture(foldkitFixtureDir, {
+        prefix: "alchemy-vite-foldkit-",
+        tempRoot,
+        entries: ["index.html", "package.json", "vite.config.ts", "src"],
+      });
+      const memoInclude = [
+        "index.html",
+        "src/**",
+        "package.json",
+        "vite.config.ts",
+      ];
+
+      const site = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Website.Vite("FixViteFoldkit", {
+            ...viteProps(rootDir, memoInclude),
+            assets: {
+              notFoundHandling: "single-page-application",
+            },
+          });
+        }),
+      );
+
+      expect(site.url).toBeDefined();
+      expect(site.hash?.input).toBeDefined();
+      yield* expectWorkerExists(site.workerName, accountId);
+      yield* expectUrlContains(`${site.url!}/`, "Foldkit Fixture", {
+        timeout: "120 seconds",
+        label: "foldkit index",
+      });
+      // Deep link falls back to index.html so client-side routing can boot.
+      yield* expectUrlContains(`${site.url!}/counter/42`, "Foldkit Fixture", {
+        timeout: "60 seconds",
+        label: "foldkit spa fallback",
       });
 
       yield* stack.destroy();
