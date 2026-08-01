@@ -1,6 +1,6 @@
 {
   "name": "alchemy",
-  "version": "2.0.0-beta.66",
+  "version": "2.0.0-beta.67",
   "homepage": "https://alchemy.run",
   "license": "Apache-2.0",
   "author": "Sam Goodwin <sam@alchemy.run>",
@@ -469,6 +469,7 @@
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/platform-node-shared": "catalog:",
+    "@foldkit/vite-plugin": "catalog:fixtures",
     "@oxc-project/types": "^0.139.0",
     "@tanstack/react-router": "catalog:fixtures",
     "@tanstack/react-start": "catalog:fixtures",
@@ -484,6 +485,7 @@
     "@vitejs/plugin-rsc": "catalog:fixtures",
     "better-auth": "catalog:",
     "effect": "catalog:",
+    "foldkit": "catalog:fixtures",
     "iovalkey": "^0.3.3",
     "react-devtools-core": "^7.0.1",
     "react-dom": "catalog:fixtures",

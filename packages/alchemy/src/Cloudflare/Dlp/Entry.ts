@@ -55,7 +55,7 @@ export type EntryAttributes = {
   /** Whether the entry participates in scans. */
   enabled: boolean;
   /** Observed detection pattern. */
-  pattern: { regex: string; validation: "luhn" | undefined };
+  pattern: { regex: string; validation: "luhn" | (string & {}) | undefined };
   /** The profile the entry is attached to, if any. */
   profileId: string | undefined;
 };
@@ -145,7 +145,7 @@ export const EntryProvider = () =>
           Array.from(chunk).flatMap((page) =>
             (page.result ?? [])
               .filter(
-                (entry): entry is typeof entry & { type: "custom" } =>
+                (entry): entry is zeroTrust.DlpEntriesListResultItemCase0 =>
                   "type" in entry && entry.type === "custom",
               )
               .map((entry) => toAttributes(entry, accountId)),
@@ -221,7 +221,7 @@ type ObservedEntry = {
   id: string;
   enabled: boolean;
   name: string;
-  pattern: { regex: string; validation?: "luhn" | null };
+  pattern: { regex: string; validation?: "luhn" | (string & {}) | null };
   description?: string | null;
   profileId?: string | null;
 };
@@ -233,7 +233,9 @@ type ObservedEntry = {
 const observeEntry = (accountId: string, entryId: string) =>
   zeroTrust.getDlpEntryCustom({ accountId, entryId }).pipe(
     Effect.map((entry) =>
-      "type" in entry && entry.type === "custom" ? entry : undefined,
+      "type" in entry && entry.type === "custom"
+        ? (entry as zeroTrust.DlpEntriesGetResultCase0)
+        : undefined,
     ),
     Effect.catchTag("DlpEntryNotFound", () => Effect.succeed(undefined)),
   );

@@ -1,3 +1,17 @@
+## v2.0.0-beta.67
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**:
+  - Provide runtime for local D1 migrations &nbsp;-&nbsp; by **Patrik Duksin** in https://github.com/alchemy-run/alchemy/issues/1009 [<samp>(50017)</samp>](https://github.com/alchemy-run/alchemy/commit/5001713c)
+  - Match existing DNS record with relative records too &nbsp;-&nbsp; by **Rahul Mishra** in https://github.com/alchemy-run/alchemy/issues/1017 [<samp>(06c02)</samp>](https://github.com/alchemy-run/alchemy/commit/06c02536)
+- **prisma**:
+  - Align provider with management api &nbsp;-&nbsp; by **Aman Varshney** in https://github.com/alchemy-run/alchemy/issues/1012 [<samp>(914dd)</samp>](https://github.com/alchemy-run/alchemy/commit/914ddc3b)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.66...HEAD)
+
+---
+
 ## v2.0.0-beta.66
 
 ### &nbsp;&nbsp;&nbsp;🚨 Breaking Changes

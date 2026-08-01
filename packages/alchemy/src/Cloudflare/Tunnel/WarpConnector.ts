@@ -228,9 +228,9 @@ export const WarpConnectorProvider = () =>
   });
 
 interface ObservedConnector {
-  id?: string | null;
+  id?: string;
   name?: string | null;
-  status?: string | null;
+  status?: "inactive" | "degraded" | "healthy" | "down" | null;
   createdAt?: string | null;
   deletedAt?: string | null;
 }

@@ -2293,6 +2293,25 @@ const collectGarbage = Effect.fn(function* (
                       logicalId,
                       instanceId,
                     ),
+                    // The persisted props of an interrupted create can carry
+                    // holes where unresolved Outputs were stripped at commit
+                    // time (see stripUnresolved) — e.g. a parent reference
+                    // persisted as `{}`. A provider that dereferences one
+                    // crashes deep inside its SDK client (a SchemaError
+                    // defect), which would make the stage impossible to
+                    // destroy. Recovery is best-effort: degrade the defect
+                    // to "nothing recovered", surface a note, and let the
+                    // row be dropped (#995).
+                    Effect.catchDefect((defect) =>
+                      scopedSession
+                        .note(
+                          "Recovery read crashed while looking up this " +
+                            "resource's interrupted create " +
+                            `(${String(defect)}) — if a physical resource ` +
+                            "was created, it must be cleaned up manually.",
+                        )
+                        .pipe(Effect.as(undefined)),
+                    ),
                   );
                 if (recovered !== undefined) {
                   if (Unowned.is(recovered)) {

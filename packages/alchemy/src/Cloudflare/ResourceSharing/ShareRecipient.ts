@@ -206,9 +206,9 @@ export const ShareRecipientProvider = () =>
 
       // Ensure — greenfield (or out-of-band delete).
       const created = yield* resourceSharing.createRecipient({
-        pathAccountId: acct,
+        accountId: acct,
         shareId,
-        bodyAccountId: targetAccountId,
+        recipientAccountId: targetAccountId,
         organizationId: targetOrganizationId,
       });
       return toAttributes(created, acct, shareId);

@@ -14,14 +14,24 @@ New here? [Set up credentials](/prisma/setup) first.
 
 ## Resources
 
-A `Prisma.Project` is the top-level container. A `Prisma.Postgres`
-database lives inside it, and a `Prisma.Connection` materializes the
-credentials an application uses to reach that database:
+A `Prisma.Project` is the top-level container. By default it creates
+a Prisma Postgres database in `us-east-1`:
 
 ```typescript
 const project = yield* Prisma.Project("app", {
-  createDatabase: false,
+  region: "us-east-1",
 });
+```
+
+Prisma injects that database's system-managed `DATABASE_URL` and
+`DATABASE_URL_POOLED` variables into Compute deployments
+automatically.
+
+When you need a database with an independent lifecycle and explicit
+connection outputs, declare it separately:
+
+```typescript
+const project = yield* Prisma.Project("app", { createDatabase: false });
 
 const postgres = yield* Prisma.Postgres("db", {
   project,
@@ -54,18 +64,13 @@ an Effect-native app defined inline:
 const app = yield* Prisma.Compute("api", {
   project,
   path: "./app",
-  build: {
-    command: "bun run build",
-    outdir: ".output",
-    entrypoint: "server/index.mjs",
-  },
-  port: 3000,
+  build: "auto",
   healthCheck: { path: "/api/health" },
-  env: {
-    DATABASE_URL: connection.databaseUrl,
-  },
 });
 ```
+
+For a standalone database, pass `connection.databaseUrl` explicitly
+as shown in [Connections](/prisma/data/connections).
 
 The candidate health check gates promotion. If the stable endpoint
 fails after promotion, alchemy attempts to restore the previous

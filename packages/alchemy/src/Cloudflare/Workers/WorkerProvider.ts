@@ -2177,9 +2177,13 @@ export const LiveWorkerProvider = () =>
         options: ViteOptions["memo"],
         additionalWorkspaces: Effect.Effect<Iterable<string>, E>,
       ) {
+        // Relative paths participate in memo hashes and surface in outputs;
+        // keep them POSIX so Windows and CI agree.
+        const relativeToRoot = (cwd: string) =>
+          path.relative(rootDir, cwd).replaceAll("\\", "/");
         const hashWorkspaceDirectory = (cwd: string, memo?: MemoOptions) =>
           hashDirectory({ cwd: path.resolve(rootDir, cwd), memo }).pipe(
-            Effect.map((hash) => `${path.relative(rootDir, cwd)}:${hash}`),
+            Effect.map((hash) => `${relativeToRoot(cwd)}:${hash}`),
           );
         const hashRoot = hashWorkspaceDirectory(rootDir, options);
         if (Array.isArray(options?.workspaces)) {
@@ -2210,9 +2214,7 @@ export const LiveWorkerProvider = () =>
         const hash = yield* sha256Object([root, ...workspaceHashes.sort()]);
         return {
           hash,
-          workspaces: Array.from(workspaces).map((cwd) =>
-            path.relative(rootDir, cwd),
-          ),
+          workspaces: Array.from(workspaces).map(relativeToRoot),
         };
       });
 
@@ -2682,11 +2684,10 @@ export const LiveWorkerProvider = () =>
             scriptName: parentName,
             metadata: {
               mainModule: bundle.main!,
-              bindings:
-                metadataBindings as unknown as workers.CreateScriptVersionRequest["metadata"]["bindings"],
+              bindings: metadataBindings,
               compatibilityDate: compatibility.date,
               compatibilityFlags: compatibility.flags,
-              cache: news.cache ?? getCacheBinding(bindings),
+              cacheOptions: news.cache ?? getCacheBinding(bindings),
               annotations:
                 alias !== undefined ||
                 version.message !== undefined ||
@@ -3319,7 +3320,7 @@ export const LiveWorkerProvider = () =>
           assets: metadataAssets,
           bindings: metadataBindings,
           bodyPart: undefined,
-          cache: news.cache ?? getCacheBinding(bindings),
+          cacheOptions: news.cache ?? getCacheBinding(bindings),
           compatibilityDate: compatibility.date,
           compatibilityFlags: compatibility.flags,
           containers:
@@ -3391,11 +3392,10 @@ export const LiveWorkerProvider = () =>
               scriptName: name,
               metadata: {
                 mainModule: metadata.mainModule!,
-                bindings:
-                  metadata.bindings as unknown as workers.CreateScriptVersionRequest["metadata"]["bindings"],
+                bindings: metadata.bindings,
                 compatibilityDate: metadata.compatibilityDate,
                 compatibilityFlags: metadata.compatibilityFlags,
-                cache: metadata.cache,
+                cacheOptions: metadata.cacheOptions,
                 annotations:
                   news.version?.alias !== undefined ||
                   news.version?.message !== undefined ||

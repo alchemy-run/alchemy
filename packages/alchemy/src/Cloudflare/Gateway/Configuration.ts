@@ -323,7 +323,7 @@ const managedKeys = (
  * Cloudflare's PATCH ignores `null` blocks.
  */
 const captureBlocks = (
-  observedSettings: Record<string, unknown>,
+  observedSettings: Partial<Record<ConfigurationBlockKey, unknown>>,
   keys: ConfigurationBlockKey[],
 ): ConfigurationSnapshot => {
   const snapshot: ConfigurationSnapshot = {};

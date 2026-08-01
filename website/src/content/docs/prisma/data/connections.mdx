@@ -30,8 +30,9 @@ connection.pooledOrigin; //               parsed pooled connection components
 
 `databaseUrl` is the serverless-safe default for application
 traffic: it prefers the pooled endpoint, then direct, then
-Accelerate. Pass it (and the direct URL for migration tooling)
-straight into an app's env:
+Accelerate. For a standalone database under a project created with
+`createDatabase: false`, pass it (and the direct URL for migration
+tooling) straight into an app's env:
 
 ```typescript
 const app = yield* Prisma.Compute("api", {
@@ -43,6 +44,10 @@ const app = yield* Prisma.Compute("api", {
   },
 });
 ```
+
+If `Prisma.Project` created the project's default database, omit
+these env entries. Prisma injects system-managed `DATABASE_URL` and
+`DATABASE_URL_POOLED` values into Compute deployments automatically.
 
 ## The origin shape
 

@@ -620,6 +620,8 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  *   },
  *   port: 8080,
  *   env: {
+ *     // Use this for a standalone Connection. A project's default database
+ *     // is injected by Prisma without an explicit DATABASE_URL entry.
  *     DATABASE_URL: connection.databaseUrl,
  *   },
  *   destroyOldDeployment: true,

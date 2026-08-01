@@ -4,12 +4,12 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import type { Providers } from "./Providers.ts";
 
-export type AnnotationProps = Axiom.CreateAnnotationInput;
+export type AnnotationProps = Axiom.CreateAnnotationRequest;
 
 export type Annotation = Resource<
   "Axiom.Annotation",
   AnnotationProps,
-  Axiom.CreateAnnotationOutput,
+  Axiom.Annotation,
   never,
   Providers
 >;
