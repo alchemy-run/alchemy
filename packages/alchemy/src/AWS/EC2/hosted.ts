@@ -264,7 +264,10 @@ const program = handler.pipe(
         }))
       )
     ).pipe(
-      Layer.provideMerge(Credentials.fromEnv()),
+      // The instance authenticates via its instance profile (IMDS), which
+      // only the full provider chain resolves — env-only credentials never
+      // exist on a hosted EC2 box.
+      Layer.provideMerge(Credentials.fromChain()),
       Layer.provideMerge(Region.fromEnv()),
       Layer.provideMerge(BunHttpServer()),
       Layer.provideMerge(platform),
@@ -712,6 +715,11 @@ systemctl enable --now ${unitName}.service
     const env = {
       ...bindingEnv,
       ...alchemyEnv,
+      // Lambda injects AWS_REGION natively; an EC2 systemd service does not
+      // get one, and the runtime's `Region.fromEnv()` (and any composition
+      // code that reads the region, e.g. EC2.Network's runtime AZ branch)
+      // dies without it.
+      AWS_REGION: region,
       ...(news.port !== undefined ? { PORT: news.port } : {}),
       ...news.env,
     };
