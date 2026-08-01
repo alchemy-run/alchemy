@@ -335,20 +335,14 @@ const isFunctionImageProps = (
 
 /**
  * `UpdateFunctionConfiguration` leaves existing image overrides unchanged
- * when `ImageConfig` is omitted. Empty values explicitly remove those
- * overrides, allowing the image's Dockerfile instructions to take effect
- * again when `imageConfig` is removed from the desired props.
+ * when `ImageConfig` is omitted. An empty object removes those overrides,
+ * allowing the image's Dockerfile instructions to take effect again when
+ * `imageConfig` is removed from the desired props.
  */
 const imageConfigForUpdate = (
   props: FunctionProps,
 ): Lambda.ImageConfig | undefined =>
-  isFunctionImageProps(props)
-    ? (props.imageConfig ?? {
-        Command: [],
-        EntryPoint: [],
-        WorkingDirectory: "",
-      })
-    : undefined;
+  isFunctionImageProps(props) ? (props.imageConfig ?? {}) : undefined;
 
 /**
  * Normalize a {@link FunctionProps.timeout} to whole seconds.
