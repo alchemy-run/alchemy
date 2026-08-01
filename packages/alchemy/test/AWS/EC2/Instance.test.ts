@@ -8,7 +8,9 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import { assertInstanceTerminated, assertVpcGone } from "./Gone.ts";
 
-const { test } = Test.make({ providers: AWS.providers() });
+// Two permits: the list test and the replacement test each hold a custom VPC
+// and may run concurrently within this file.
+const { test } = Test.make({ providers: AWS.providers() }, 2);
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
