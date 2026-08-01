@@ -24,25 +24,10 @@ export const ubuntuKeyPair = AWS.EC2.KeyPair("Ec2UbuntuKeyPair", {
 export default class TestUbuntuInstance extends AWS.EC2.Instance<TestUbuntuInstance>()(
   "Ec2UbuntuE2EInstance",
   Effect.gen(function* () {
-    // Props (image AMI lookup, networking) are only needed at plan/deploy
-    // time; inside the deployed instance only `exports.program` is used, so
-    // short-circuit before the infra-resolving calls (`__ALCHEMY_RUNTIME__`
-    // is folded to `true` in the bundle and this branch is eliminated).
-    if (globalThis.__ALCHEMY_RUNTIME__) {
-      return {
-        main: import.meta.filename,
-        imageId: "",
-        instanceType: "t3.small",
-        port: 3000,
-      };
-    }
-
-    const imageId = yield* AWS.EC2.ubuntu2404();
-    if (!imageId) {
-      return yield* Effect.die(
-        new Error("could not resolve an Ubuntu 24.04 AMI"),
-      );
-    }
+    // This composition is re-executed inside the deployed instance's bundle:
+    // the AMI lookup is an `Output` resolved at plan/deploy time only, and
+    // resource yields resolve to references at runtime, so no runtime guard
+    // is needed.
     const network = yield* AWS.EC2.Network("Ec2UbuntuE2ENetwork", {
       cidrBlock: "10.82.0.0/16",
       availabilityZones: 1,
@@ -79,7 +64,7 @@ export default class TestUbuntuInstance extends AWS.EC2.Instance<TestUbuntuInsta
 
     return {
       main: import.meta.filename,
-      imageId,
+      imageId: AWS.EC2.ubuntu2404(),
       instanceType: "t3.small",
       subnetId: network.publicSubnetIds[0],
       securityGroupIds: [securityGroup.groupId],

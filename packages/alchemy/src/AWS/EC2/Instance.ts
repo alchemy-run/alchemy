@@ -278,7 +278,7 @@ export type InstanceRuntimeContext = Ec2HostRuntimeContext;
  * @example Basic Instance
  * ```typescript
  * const instance = yield* AWS.EC2.Instance("AppInstance", {
- *   imageId,
+ *   imageId: AWS.EC2.amazonLinux2023(),
  *   instanceType: "t3.micro",
  *   subnetId: subnet.subnetId,
  * });
@@ -294,7 +294,7 @@ export type InstanceRuntimeContext = Ec2HostRuntimeContext;
  *
  *   return {
  *     main: import.meta.url,
- *     imageId,
+ *     imageId: AWS.EC2.amazonLinux2023(),
  *     instanceType: "t3.small",
  *     subnetId: subnet.subnetId,
  *     securityGroupIds: [securityGroup.groupId],

@@ -28,7 +28,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const imageId = (yield* amazonLinux2023()) ?? "ami-00000000000000000";
+      const imageId = amazonLinux2023();
 
       // The testing account has no default VPC, so provision a VPC + subnet to
       // launch the instance into.
@@ -78,7 +78,7 @@ test.provider.skipIf(!!process.env.FAST)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const imageId = (yield* amazonLinux2023()) ?? "ami-00000000000000000";
+      const imageId = amazonLinux2023();
 
       const deploy = (userData: string) =>
         stack.deploy(

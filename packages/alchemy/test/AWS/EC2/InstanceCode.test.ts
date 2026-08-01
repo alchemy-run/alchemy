@@ -22,7 +22,7 @@ test.provider.skipIf(!!process.env.FAST)(
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
 
-      const imageId = (yield* amazonLinux2023()) ?? "ami-00000000000000000";
+      const imageId = amazonLinux2023();
       const dir = yield* fs.makeTempDirectory({ prefix: "alchemy-ec2-code-" });
       const mainPath = path.join(dir, "main.ts");
       // A marker-bearing long-running program; only its bundle hash matters
