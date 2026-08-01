@@ -53,19 +53,35 @@ test(
         Effect.flatMap((res) => res.text),
         Effect.flatMap((body) =>
           body.includes(`"ok":true`)
-            ? Effect.void
+            ? Effect.succeed((JSON.parse(body) as { id: number }).id)
             : Effect.fail(new Error(`Worker not ready: ${body.slice(0, 200)}`)),
         ),
         Effect.retry({ schedule: readinessSchedule, times: 15 }),
       );
 
-    yield* addUser("gimli");
+    const gimli = yield* addUser("gimli");
     yield* addUser("legolas");
+    yield* client
+      .post(`${url}/posts?do=${instance}&user=${gimli}&title=axes`)
+      .pipe(Effect.flatMap((res) => res.json));
 
     const res = yield* client.get(`${url}/users?do=${instance}`);
     expect(res.status).toBe(200);
     const body = (yield* res.json) as { names: string[] };
     expect(body.names).toEqual(["gimli", "legolas"]);
+
+    // Relational query through the `relations` config.
+    const withPosts = yield* client.get(
+      `${url}/users-with-posts?do=${instance}`,
+    );
+    expect(withPosts.status).toBe(200);
+    const relational = (yield* withPosts.json) as {
+      users: { name: string; posts: string[] }[];
+    };
+    expect(relational.users).toEqual([
+      { name: "gimli", posts: ["axes"] },
+      { name: "legolas", posts: [] },
+    ]);
   }),
   { timeout: 120_000 },
 );

@@ -22,13 +22,25 @@ export default class DrizzleDurableObjectWorker extends Cloudflare.Worker<Drizzl
 
         if (request.method === "POST" && url.pathname === "/users") {
           const name = url.searchParams.get("name") ?? "anonymous";
-          yield* object.addUser(name).pipe(Effect.orDie);
+          const id = yield* object.addUser(name).pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({ ok: true, id });
+        }
+
+        if (request.method === "POST" && url.pathname === "/posts") {
+          const userId = Number(url.searchParams.get("user"));
+          const title = url.searchParams.get("title") ?? "untitled";
+          yield* object.addPost(userId, title).pipe(Effect.orDie);
           return yield* HttpServerResponse.json({ ok: true });
         }
 
         if (request.method === "GET" && url.pathname === "/users") {
           const names = yield* object.listUsers().pipe(Effect.orDie);
           return yield* HttpServerResponse.json({ names });
+        }
+
+        if (request.method === "GET" && url.pathname === "/users-with-posts") {
+          const rows = yield* object.listUsersWithPosts().pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({ users: rows });
         }
 
         return HttpServerResponse.text("Not Found", { status: 404 });
