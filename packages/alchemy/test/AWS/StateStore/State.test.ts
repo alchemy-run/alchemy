@@ -3,6 +3,7 @@ import { makeS3State } from "@/AWS";
 import { createStateBucketName } from "@/AWS/StateStore/State.ts";
 import type { ResourceState, StateService } from "@/State";
 import * as Test from "@/Test/Alchemy";
+import * as kms from "@distilled.cloud/aws/kms";
 import * as s3 from "@distilled.cloud/aws/s3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -245,6 +246,72 @@ test.provider(
         });
         expect(result.map((r) => r.fqn)).toEqual(["Replaced"]);
       }).pipe(Effect.ensuring(cleanStage(state, stage)));
+    }),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "recovers the KMS state key from a pending deletion",
+  () =>
+    Effect.gen(function* () {
+      const stage = "kms-recovery";
+
+      // Ensure the alias key and wrapped data key exist by writing a
+      // secret through a store first.
+      const before = yield* makeS3State({ prefix: "test-state" });
+      yield* before.deleteStack({ stack: STACK, stage });
+
+      yield* Effect.gen(function* () {
+        const value = {
+          ...resource("RecoveryResource", {}),
+          props: { apiKey: Redacted.make("sk-live-recovery-secret") },
+        } as ResourceState;
+        yield* before.set({ stack: STACK, stage, fqn: value.fqn, value });
+
+        // Schedule the state key for deletion out-of-band — exactly what
+        // an account-wide cleanup (`bun nuke`) does. Resolve the key from
+        // the wrapped data key object rather than the alias: a cleanup
+        // deletes the alias immediately while the key sits in its
+        // pending-deletion window.
+        const { accountId, region } = yield* AWS.AWSEnvironment.current;
+        const wrappedBody = yield* s3
+          .getObject({
+            Bucket: createStateBucketName(accountId, region),
+            Key: "test-state/__state_key__.json",
+          })
+          .pipe(
+            Effect.flatMap((r) =>
+              r.Body === undefined
+                ? Effect.succeed("")
+                : Stream.mkString(Stream.decodeText(r.Body)),
+            ),
+          );
+        const keyId = (JSON.parse(wrappedBody) as { keyId?: string }).keyId;
+        expect(keyId).toBeDefined();
+        yield* kms
+          .scheduleKeyDeletion({ KeyId: keyId!, PendingWindowInDays: 7 })
+          .pipe(
+            // another concurrent test may have raced the same transition
+            Effect.catchTag("KMSInvalidStateException", () => Effect.void),
+          );
+
+        // A fresh store (fresh codec cache) must cancel the deletion,
+        // re-enable the key, and read the secret back.
+        const after = yield* makeS3State({ prefix: "test-state" });
+        const revived = (yield* after.get({
+          stack: STACK,
+          stage,
+          fqn: "RecoveryResource",
+        })) as ResourceState | undefined;
+        expect(
+          Redacted.value(
+            (revived?.props as { apiKey: Redacted.Redacted<string> }).apiKey,
+          ),
+        ).toBe("sk-live-recovery-secret");
+
+        const recovered = yield* kms.describeKey({ KeyId: keyId! });
+        expect(recovered.KeyMetadata?.KeyState).toBe("Enabled");
+      }).pipe(Effect.ensuring(cleanStage(before, stage)));
     }),
   { timeout: 120_000 },
 );

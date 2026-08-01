@@ -267,8 +267,27 @@ export const makeS3State = (options: S3StateOptions = {}) =>
         Effect.catchTag("NoSuchKey", () => Effect.succeed(undefined)),
       );
 
-    const unwrapDataKey = (wrapped: WrappedStateKey) =>
-      kms
+    /**
+     * Recover the state key after an out-of-band cleanup (e.g. an
+     * account nuke) scheduled it for deletion: cancel the pending
+     * deletion and re-enable it. State encrypted under the key's data
+     * key would become permanently unreadable if the deletion
+     * completed, so recovery — not replacement — is the only correct
+     * move. Both calls tolerate a concurrent deployer racing the same
+     * recovery.
+     */
+    const recoverKmsKey = (keyId: string) =>
+      kms.cancelKeyDeletion({ KeyId: keyId }).pipe(
+        // Not pending deletion (already cancelled by a racer, or only
+        // disabled) — fall through to enable.
+        Effect.catchTag("KMSInvalidStateException", () => Effect.void),
+        Effect.andThen(kms.enableKey({ KeyId: keyId })),
+        Effect.catchTag("KMSInvalidStateException", () => Effect.void),
+        Effect.asVoid,
+      );
+
+    const unwrapDataKey = (wrapped: WrappedStateKey) => {
+      const decrypt = kms
         .decrypt({
           CiphertextBlob: Buffer.from(wrapped.ciphertext, "base64"),
         })
@@ -287,14 +306,32 @@ export const makeS3State = (options: S3StateOptions = {}) =>
               : Effect.sync(() => makeSecretCodecFromKey(plaintext));
           }),
         );
+      return decrypt.pipe(
+        Effect.catchTag(
+          ["KMSInvalidStateException", "DisabledException"],
+          (error) =>
+            wrapped.keyId === undefined
+              ? Effect.fail(error)
+              : recoverKmsKey(wrapped.keyId).pipe(Effect.andThen(decrypt)),
+        ),
+      );
+    };
 
     /** Resolve the KeyId behind `alias/alchemy-state`, creating key + alias on first use. */
     const ensureKmsKey = Effect.gen(function* () {
       const existing = yield* kms.describeKey({ KeyId: STATE_KMS_ALIAS }).pipe(
-        Effect.map((r) => r.KeyMetadata?.KeyId),
+        Effect.map((r) => r.KeyMetadata),
         Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
       );
-      if (existing !== undefined) return existing;
+      if (existing?.KeyId !== undefined) {
+        if (
+          existing.KeyState === "PendingDeletion" ||
+          existing.KeyState === "Disabled"
+        ) {
+          yield* recoverKmsKey(existing.KeyId);
+        }
+        return existing.KeyId;
+      }
       const created = yield* kms.createKey({
         Description: "Alchemy state store secret encryption key",
       });
