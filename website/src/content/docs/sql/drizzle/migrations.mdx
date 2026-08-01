@@ -98,8 +98,9 @@ import { users } from "./schema.ts";
 export class Users extends Cloudflare.DurableObject<Users>()(
   "Users",
   Effect.gen(function* () {
+    const state = yield* Cloudflare.DurableObjectState;
+
     return Effect.gen(function* () {
-      const state = yield* Cloudflare.DurableObjectState;
       const db = yield* Effect.sync(() => {
         const db = drizzle(state.raw.storage);
         migrate(db, migrations);

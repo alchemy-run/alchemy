@@ -13,8 +13,9 @@ import { users } from "./schema.ts";
 export class DrizzleUsersObject extends Cloudflare.DurableObject<DrizzleUsersObject>()(
   "DrizzleUsersObject",
   Effect.gen(function* () {
+    const state = yield* Cloudflare.DurableObjectState;
+
     return Effect.gen(function* () {
-      const state = yield* Cloudflare.DurableObjectState;
       // The durable-sqlite driver and migrator are synchronous — run the
       // migrations when the instance activates, before any request
       // touches the db.
