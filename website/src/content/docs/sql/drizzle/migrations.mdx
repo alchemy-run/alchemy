@@ -86,41 +86,35 @@ export default defineConfig({
 `migrations.js` bundle that imports each migration's `.sql` file.
 The alchemy bundler loads bare `.sql` imports as text modules (the
 same way it handles `.txt` and `.html`), so the generated bundle
-imports directly into your Durable Object. Commit it and run
-drizzle's migrator at instance init:
+imports directly into your Durable Object. Commit it and hand it to
+`Drizzle.DurableObject`:
 
 ```typescript
-import { drizzle } from "drizzle-orm/durable-sqlite";
-import { migrate } from "drizzle-orm/durable-sqlite/migrator";
 import migrations from "./drizzle/migrations.js";
 import { users } from "./schema.ts";
 
 export class Users extends Cloudflare.DurableObject<Users>()(
   "Users",
   Effect.gen(function* () {
-    const state = yield* Cloudflare.DurableObjectState;
+    const db = yield* Drizzle.DurableObject({ migrations });
 
     return Effect.gen(function* () {
-      const db = yield* Effect.sync(() => {
-        const db = drizzle(state.raw.storage);
-        migrate(db, migrations);
-        return db;
-      });
-
       return {
-        addUser: (name: string) =>
-          Effect.sync(() => db.insert(users).values({ name }).run()),
-        listUsers: () => Effect.sync(() => db.select().from(users).all()),
+        addUser: (name: string) => db.insert(users).values({ name }),
+        listUsers: () => db.select().from(users),
       };
     });
   }),
 ) {}
 ```
 
-The inner Effect is the instance init: it runs only in the deployed
-object, when the instance activates and before any request reaches
-its methods — the right place for runtime storage work like
-migrations. Both the driver and the migrator are synchronous.
+`Drizzle.DurableObject` opens drizzle over the instance's own SQLite
+storage using the `drizzle-orm/effect-sqlite-do` integration — the
+same effect-native query surface as [`Drizzle.D1`](/sql/drizzle/d1)
+and [`Drizzle.Postgres`](/sql/drizzle/postgres), so queries yield
+directly as Effects. Migrations apply before the instance's first
+query, and the client build is deferred, so plan-time evaluation of
+the constructor touches no storage.
 
 ## The migrations table
 
