@@ -47,7 +47,10 @@ export interface ConnectionProps {
    */
   name?: string;
   /**
-   * Rotate credentials during the next update while keeping the connection ID.
+   * Rotate credentials when this value changes from `false` to `true` while
+   * keeping the connection ID. Prisma revokes the previous credentials on a
+   * best-effort basis. Deploy `false` before changing back to `true` for a
+   * later rotation.
    *
    * @default false
    */
@@ -129,6 +132,11 @@ export interface Connection extends Resource<
 /**
  * A Prisma database connection/API key.
  *
+ * Prisma returns connection credentials only when it creates or rotates a
+ * connection. Alchemy stores those outputs as `Redacted` values. Changing the
+ * database or name replaces the connection; changing `rotate` from `false` to
+ * `true` keeps the connection ID and requests fresh credentials.
+ *
  * @section Creating a Connection
  * @example Application connection
  * ```typescript
@@ -146,8 +154,7 @@ export interface Connection extends Resource<
  *
  * const app = yield* Prisma.Compute("api", {
  *   project,
- *   appName: "api",
- *   main: import.meta.filename,
+ *   path: "./apps/api",
  *   env: {
  *     DATABASE_URL: connection.databaseUrl,
  *     DIRECT_URL: connection.directConnectionString,
@@ -195,17 +202,27 @@ export interface Connection extends Resource<
  * ```typescript
  * export default Cloudflare.Worker(
  *   "api",
- *   { main: import.meta.filename },
+ *   { main: import.meta.filename, compatibility: { flags: ["nodejs_compat"] } },
  *   Effect.gen(function* () {
  *     const db = yield* Prisma.Connect(connection);
+ *     const sql = yield* SQL.Postgres({ url: db.databaseUrl });
  *     return {
  *       fetch: Effect.gen(function* () {
- *         const databaseUrl = yield* db.databaseUrl;
- *         return yield* HttpServerResponse.text("connected");
+ *         const result = yield* sql`SELECT 1 AS ok`;
+ *         return yield* HttpServerResponse.json(result);
  *       }),
  *     };
  *   }).pipe(Effect.provide(Prisma.ConnectBinding)),
  * );
+ * ```
+ *
+ * @section Rotating Credentials
+ * @example Request one rotation
+ * ```typescript
+ * const connection = yield* Prisma.Connection("api", {
+ *   database,
+ *   rotate: true,
+ * });
  * ```
  *
  * @section Connecting over Hyperdrive

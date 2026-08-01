@@ -54,8 +54,9 @@ export interface ProjectProps {
   settings?: Record<string, unknown>;
   /**
    * Rotate the adopted default database connection to recover its one-time
-   * credentials. Rotation revokes the previous key and may interrupt existing
-   * consumers, so adoption leaves credentials unset unless explicitly opted in.
+   * credentials. Prisma revokes the previous key on a best-effort basis and
+   * rotation may interrupt existing consumers, so adoption leaves credentials
+   * unset unless explicitly opted in.
    *
    * @default false
    */
@@ -125,6 +126,11 @@ export interface Project extends Resource<
 
 /**
  * A Prisma project, optionally with a default Prisma Postgres database.
+ *
+ * A Project is the ownership boundary for its databases, branches, apps, and
+ * repository link. Destroying this resource deletes the project and its
+ * contained data. Set `createDatabase: false` when you want standalone
+ * `Prisma.Database` resources with independent lifecycles.
  *
  * @resource
  * @section Creating a Project

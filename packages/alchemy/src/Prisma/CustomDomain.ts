@@ -25,7 +25,8 @@ type AppReference = string | App | Compute;
 
 export interface CustomDomainProps {
   /**
-   * App ID or Compute output that owns the domain.
+   * App ID or Compute output that owns the domain. The App must be attached to
+   * the project's current default branch.
    */
   app: AppReference;
   /**
@@ -89,6 +90,15 @@ export interface CustomDomain extends Resource<
 
 /**
  * A Prisma app custom domain.
+ *
+ * Domains can only attach to Apps on the project's current default branch.
+ * Creating this resource starts asynchronous DNS and certificate provisioning;
+ * configure the returned `dnsRecords` and inspect `status`, `foundryStatus`,
+ * and `failureReason` before routing production traffic.
+ *
+ * App and hostname changes are intentionally rejected because the Management
+ * API cannot replace a live domain atomically. Create a second resource,
+ * verify DNS and TLS, cut traffic over, and then remove the old resource.
  *
  * @resource
  * @section Creating a Custom Domain

@@ -19,7 +19,10 @@ import type { Providers } from "../Providers.ts";
 import { applyMigrations, applyMigrationsWith } from "./ApplyMigrations.ts";
 import { cloneDatabase } from "./CloneDatabase.ts";
 import { importD1Database } from "./ImportDatabase.ts";
-import { withLocalD1Executor } from "./LocalD1Gateway.ts";
+import {
+  localD1GatewayRuntime,
+  withLocalD1Executor,
+} from "./LocalD1Gateway.ts";
 
 export const isDatabase = (value: unknown): value is Database =>
   isResourceOfType(value, "Cloudflare.D1Database");
@@ -639,7 +642,13 @@ export const ProviderLocal = () =>
                   migrationsTable,
                   migrationsFiles: files,
                 }),
-              ).pipe(Effect.provideContext(runtimeContext));
+              ).pipe(
+                Effect.provide(
+                  localD1GatewayRuntime.pipe(
+                    Layer.provideMerge(Layer.succeedContext(runtimeContext)),
+                  ),
+                ),
+              );
             }
             for (const file of files) migrationsHashes[file.id] = file.hash;
           } else {
@@ -666,7 +675,13 @@ export const ProviderLocal = () =>
                 Effect.forEach(pending, (file) => executor(file.sql), {
                   discard: true,
                 }),
-              ).pipe(Effect.provideContext(runtimeContext));
+              ).pipe(
+                Effect.provide(
+                  localD1GatewayRuntime.pipe(
+                    Layer.provideMerge(Layer.succeedContext(runtimeContext)),
+                  ),
+                ),
+              );
               for (const file of pending) {
                 importHashes[file.path] = file.hash;
               }
