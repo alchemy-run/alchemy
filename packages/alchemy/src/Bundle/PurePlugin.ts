@@ -63,21 +63,6 @@ export interface PurePluginOptions {
    * @default true
    */
   readonly markSideEffectFree?: boolean;
-  /**
-   * If true, automatically detect the npm package that owns the bundle
-   * entry (by walking up to the nearest `package.json`) and annotate it
-   * too. This makes the user's own source tree-shakeable without any
-   * configuration.
-   *
-   * Only calls whose result is used (variable initializers, exports) are
-   * annotated in the auto-detected package. Top-level calls whose result
-   * is discarded (e.g. Hono/Express-style `app.get("/", handler)` route
-   * registrations) are preserved unless the package explicitly declares
-   * `"sideEffects": false` (or `[]`) in its `package.json`.
-   *
-   * @default true
-   */
-  readonly autoDetectEntryPackage?: boolean;
 }
 
 const PURE_COMMENT = "/*#__PURE__*/ ";
@@ -88,6 +73,13 @@ const SUPPORTED_FILE_RE = /\.(?:m?[jt]sx?|cjs|cts)$/;
  * call/new expressions of modules belonging to the configured packages,
  * enabling tree-shaking of `effect`, `@effect/*`, and any user-listed
  * packages without requiring a babel post-build pass.
+ *
+ * Annotation is strictly explicit: only {@link DEFAULT_PURE_PACKAGES} and
+ * packages listed via `packages` are touched. Listing a package that
+ * declares `sideEffects: false` / `[]` is a deliberate opt-in to full
+ * annotation, including discarded-result statement calls (#949). The
+ * package owning the bundle entry gets no special treatment — apps that
+ * want their own bound calls tree-shaken list themselves explicitly.
  */
 export const purePlugin = (
   options: PurePluginOptions = {},
@@ -96,10 +88,7 @@ export const purePlugin = (
     ? [...(options.packages ?? DEFAULT_PURE_PACKAGES)]
     : [...DEFAULT_PURE_PACKAGES, ...(options.packages ?? [])];
   const markSideEffectFreeOpt = options.markSideEffectFree ?? true;
-  const autoDetect = options.autoDetectEntryPackage ?? true;
-  // Mutable so the `options` hook can append the auto-detected entry
-  // package without rebuilding the plugin instance.
-  let isMatch = picomatch(patterns);
+  const isMatch = picomatch(patterns);
   // Per-bundle cache of directory -> owning package metadata.
   // Avoids walking the filesystem for every module of a large package.
   const pkgInfoCache = new Map<string, PackageInfo | null>();
@@ -109,34 +98,11 @@ export const purePlugin = (
   // collapsing the whole bundle. We always preserve entries' side
   // effects, regardless of the package they belong to.
   const entryPaths = new Set<string>();
-  // Name of the package the `options` hook auto-detected (as opposed to
-  // packages the user listed explicitly). Auto-detection is a convenience
-  // for tree-shaking the app's own BOUND calls; it must never escalate the
-  // app's `sideEffects: false` (usually declared for module-level pruning
-  // by downstream bundlers) into deleting discarded-result statements like
-  // route registrations from the app's own modules.
-  let autoDetectedPackage: string | null = null;
 
   return {
     name: "alchemy:annotate-pure",
-    async options(opts) {
-      const inputs = inputFilePaths(opts);
-      for (const input of inputs) entryPaths.add(input);
-      if (!autoDetect) return null;
-      const candidates = [
-        ...inputs.map((input) => path.dirname(input)),
-        opts.cwd ?? process.cwd(),
-      ];
-      for (const dir of candidates) {
-        const info = await resolvePackageInfo(dir, pkgInfoCache);
-        if (info === null || info.name === null) continue;
-        if (!patterns.includes(info.name)) {
-          patterns.push(info.name);
-          isMatch = picomatch(patterns);
-          autoDetectedPackage = info.name;
-        }
-        break;
-      }
+    options(opts) {
+      for (const input of inputFilePaths(opts)) entryPaths.add(input);
       return null;
     },
     transform: {
@@ -160,12 +126,7 @@ export const purePlugin = (
         // registrations / mutations the author made at the top level of
         // files in packages that did not declare so.
         const isEntry = entryPaths.has(cleanId);
-        // The auto-detected entry package's `sideEffects: false` is a
-        // module-pruning claim aimed at downstream bundlers, not an opt-in
-        // to statement deletion inside its own bundled modules (packages
-        // the user listed explicitly DO opt in — see issue #949's contract).
-        const sideEffectFreePkg =
-          isSideEffectFree(info?.sideEffects) && name !== autoDetectedPackage;
+        const sideEffectFreePkg = isSideEffectFree(info?.sideEffects);
         const markSideEffectFree =
           markSideEffectFreeOpt && !isEntry && sideEffectFreePkg;
 

@@ -432,61 +432,15 @@ describe("purePlugin", () => {
   });
 });
 
-describe("auto-detect entry package", () => {
+describe("explicitly listed user package", () => {
   it.effect(
-    "auto-detects the entry's owning package even WITHOUT a sideEffects field (default-on for user code)",
+    "overrides moduleSideEffects when a listed package declares sideEffects: false",
     () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const root = yield* fs.makeTempDirectory({
-          prefix: "alchemy-pure-autodetect-",
-        });
-        // Plain user package.json — no `sideEffects` field.
-        yield* fs.writeFileString(
-          path.join(root, "package.json"),
-          JSON.stringify({ name: "my-app", type: "module" }),
-        );
-        yield* fs.writeFileString(
-          path.join(root, "entry.ts"),
-          `export const x = makeX();\nfunction makeX() { return 1; }`,
-        );
-
-        const plugin = purePlugin();
-        yield* Effect.promise(() =>
-          callOptions(plugin, {
-            input: path.join(root, "entry.ts"),
-            cwd: root,
-          }),
-        );
-
-        // Annotation must happen even though `sideEffects` is absent.
-        const sourcePath = path.join(root, "lib.ts");
-        const result = yield* Effect.promise(() =>
-          callTransform(
-            plugin,
-            `export const v = make();\nfunction make() { return 1; }`,
-            sourcePath,
-          ),
-        );
-        expect(result).not.toBeNull();
-        expect(codeOf(result)).toContain("/*#__PURE__*/ make()");
-        // …but moduleSideEffects must NOT be forced false on a package
-        // that did not declare `sideEffects: false`.
-        expect((result as TransformOutput).moduleSideEffects).not.toBe(false);
-
-        yield* fs.remove(root, { recursive: true });
-      }).pipe(Effect.provide(NodeServices.layer)),
-  );
-
-  it.effect(
-    "still overrides moduleSideEffects when the package DOES declare sideEffects: false",
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectory({
-          prefix: "alchemy-pure-autodetect-sef-",
+          prefix: "alchemy-pure-listed-sef-",
         });
         yield* fs.writeFileString(
           path.join(root, "package.json"),
@@ -497,13 +451,7 @@ describe("auto-detect entry package", () => {
           }),
         );
 
-        const plugin = purePlugin();
-        yield* Effect.promise(() =>
-          callOptions(plugin, {
-            input: path.join(root, "entry.ts"),
-            cwd: root,
-          }),
-        );
+        const plugin = purePlugin({ packages: ["my-pure-app"] });
 
         const result = yield* Effect.promise(() =>
           callTransform(
@@ -537,13 +485,7 @@ describe("auto-detect entry package", () => {
           }),
         );
 
-        const plugin = purePlugin();
-        yield* Effect.promise(() =>
-          callOptions(plugin, {
-            input: path.join(root, "entry.ts"),
-            cwd: root,
-          }),
-        );
+        const plugin = purePlugin({ packages: ["my-pure-app"] });
 
         // Only function declarations — nothing to annotate. The plugin
         // must set moduleSideEffects WITHOUT returning `code` (returning
@@ -583,7 +525,7 @@ describe("auto-detect entry package", () => {
         );
         const entryPath = path.join(root, "entry.ts");
 
-        const plugin = purePlugin();
+        const plugin = purePlugin({ packages: ["my-app"] });
         yield* Effect.promise(() =>
           callOptions(plugin, { input: entryPath, cwd: root }),
         );
@@ -613,7 +555,7 @@ describe("discarded-result calls (issue #949)", () => {
         JSON.stringify({ name: "my-app", type: "module" }),
       );
       const entryPath = nodePath.join(root, "entry.ts");
-      const plugin = purePlugin();
+      const plugin = purePlugin({ packages: ["my-app"] });
       await callOptions(plugin, { input: entryPath, cwd: root });
 
       const code = [
@@ -642,11 +584,7 @@ describe("discarded-result calls (issue #949)", () => {
         nodePath.join(root, "package.json"),
         JSON.stringify({ name: "my-app", type: "module" }),
       );
-      const plugin = purePlugin();
-      await callOptions(plugin, {
-        input: nodePath.join(root, "entry.ts"),
-        cwd: root,
-      });
+      const plugin = purePlugin({ packages: ["my-app"] });
 
       // A NON-entry module of the user's package, imported for its side
       // effects (`import "./routes.ts"`).
@@ -671,14 +609,15 @@ describe("discarded-result calls (issue #949)", () => {
     }
   });
 
-  it("does NOT delete registrations from the AUTO-DETECTED entry package even when it declares sideEffects: false", async () => {
+  it("leaves the entry app's package completely untouched when it is not listed, even with sideEffects: false", async () => {
     const root = nodeFs.mkdtempSync(
-      nodePath.join(os.tmpdir(), "alchemy-pure-949-autodetect-"),
+      nodePath.join(os.tmpdir(), "alchemy-pure-949-unlisted-"),
     );
     try {
       // The app declares `sideEffects: false` (commonly cargo-culted for
-      // downstream module pruning). Auto-detection must not escalate that
-      // into deleting the app's own top-level registrations.
+      // downstream module pruning). Without an explicit `packages` entry
+      // this must not opt the app into any annotation — deleting its own
+      // top-level registrations under minification least of all.
       nodeFs.writeFileSync(
         nodePath.join(root, "package.json"),
         JSON.stringify({ name: "my-app", type: "module", sideEffects: false }),
@@ -701,14 +640,7 @@ describe("discarded-result calls (issue #949)", () => {
         code,
         nodePath.join(root, "routes.ts"),
       );
-      expect(result).not.toBeNull();
-      const out = codeOf(result);
-      // Bound calls stay tree-shakeable...
-      expect(out).toContain("/*#__PURE__*/ makeX()");
-      // ...but the registration survives, and the module keeps its
-      // side effects (no moduleSideEffects: false override).
-      expect(out).not.toContain("/*#__PURE__*/ app.get");
-      expect((result as TransformOutput).moduleSideEffects).not.toBe(false);
+      expect(result).toBeNull();
     } finally {
       nodeFs.rmSync(root, { recursive: true, force: true });
     }
