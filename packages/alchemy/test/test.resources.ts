@@ -1,8 +1,12 @@
 import { Unowned } from "@/AdoptPolicy";
+import { AlchemyContext } from "@/AlchemyContext.ts";
 import { Artifacts } from "@/Artifacts";
 import { isResolved } from "@/Diff.ts";
+import * as ProviderLayer from "@/Dev/ProviderLayer.ts";
 import * as Provider from "@/Provider.ts";
+import type { ProviderMode } from "@/ProviderMode.ts";
 import { Resource, type ResourceBinding } from "@/Resource";
+import { Stack } from "@/Stack";
 import * as State from "@/State/index";
 import { isUnknown } from "@/Util/unknown";
 import { Data } from "effect";
@@ -1123,6 +1127,153 @@ export const fqnProbeProvider = () =>
     delete: Effect.fn(function* () {}),
   });
 
+/**
+ * Run `eff` as if under `alchemy dev`: overrides `AlchemyContext.dev` so
+ * plans and applies inside resolve the LOCAL provider mode by default —
+ * exactly what the `alchemy dev` command does for a whole run.
+ */
+export const inDev = <A, E, R>(
+  eff: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R | AlchemyContext> =>
+  AlchemyContext.pipe(
+    Effect.flatMap((ctx) =>
+      eff.pipe(Effect.provideService(AlchemyContext, { ...ctx, dev: true })),
+    ),
+  );
+
+// ModalResource — a resource registered via `ProviderLayer.dual` with
+// distinct live and local implementations. Used by provider-mode tests to
+// assert: mode stamping in state, replace-on-mode-switch, mode-correct
+// deletes of old generations/orphans, and lazy non-default-variant builds.
+//
+// Both recorders are module-level (like `aliasedWidgetDeletes`) and tag
+// every entry with the scratch stack name so concurrent tests in the same
+// file can filter to their own activity.
+
+export type ModalResourceProps = {
+  value?: string;
+  /**
+   * Changing this forces an ordinary (same-mode) replacement — used to
+   * assert that `providerMode` survives provider-diff replacements and
+   * that old generations are deleted with their own stamped mode.
+   */
+  replaceValue?: string;
+  /**
+   * Changing this forces a `deleteFirst` replacement — used to assert that
+   * `deleteOldGenerations` (the pre-create teardown) resolves each old
+   * generation's provider by ITS stamped mode.
+   */
+  deleteFirstValue?: string;
+};
+
+export interface ModalResource extends Resource<
+  "Test.ModalResource",
+  ModalResourceProps,
+  {
+    value: string;
+    /** Which provider variant reconciled this instance. */
+    runtime: ProviderMode;
+  }
+> {}
+
+export const ModalResource = Resource<ModalResource>("Test.ModalResource");
+
+/** Variant layer constructions, in order. */
+export const modalBuilds: { stack: string; mode: ProviderMode }[] = [];
+/** Lifecycle calls dispatched to each variant, in order. */
+export const modalCalls: {
+  stack: string;
+  mode: ProviderMode;
+  op: "reconcile" | "delete";
+  id: string;
+}[] = [];
+
+// Some plan-level test harnesses build `TestLayers()` without a `Stack`
+// service in context, so the discriminator is resolved as an option with a
+// fallback rather than required at layer build.
+const modalStackName = Effect.serviceOption(Stack).pipe(
+  Effect.map(Option.match({ onNone: () => "unknown", onSome: (s) => s.name })),
+);
+
+const modalVariant = (mode: ProviderMode) =>
+  Provider.effect(
+    ModalResource,
+    Effect.gen(function* () {
+      modalBuilds.push({ stack: yield* modalStackName, mode });
+      return {
+        list: () => Effect.succeed([]),
+        read: Effect.fn(function* ({ output }) {
+          // Echo persisted attrs (the TestResource default): no cloud to
+          // observe, and a cold-start probe (output undefined) finds nothing.
+          return output;
+        }),
+        diff: Effect.fn(function* ({ news, olds }) {
+          if (!isResolved(news)) return undefined;
+          const n = news as ModalResourceProps;
+          const o = olds as ModalResourceProps | undefined;
+          if (n.deleteFirstValue !== o?.deleteFirstValue) {
+            return { action: "replace", deleteFirst: true } as const;
+          }
+          if (n.replaceValue !== o?.replaceValue) {
+            return { action: "replace" } as const;
+          }
+          return n.value !== o?.value
+            ? ({ action: "update" } as const)
+            : ({ action: "noop" } as const);
+        }),
+        reconcile: Effect.fn(function* ({ id, news = {}, olds }) {
+          // Failure injection via the shared TestResourceHooks (same pattern
+          // as bindingTargetProvider): `olds === undefined` is the engine's
+          // create intent — greenfield or replacement-create.
+          const hooks = Option.getOrUndefined(
+            yield* Effect.serviceOption(TestResourceHooks),
+          );
+          if (olds === undefined) {
+            if (hooks?.create) {
+              yield* hooks.create(id, {
+                string: (news as ModalResourceProps).value,
+              });
+            }
+          } else if (hooks?.update) {
+            yield* hooks.update(id, {
+              string: (news as ModalResourceProps).value,
+            });
+          }
+          modalCalls.push({
+            stack: yield* modalStackName,
+            mode,
+            op: "reconcile",
+            id,
+          });
+          return {
+            value: (news as ModalResourceProps).value ?? id,
+            runtime: mode,
+          };
+        }),
+        delete: Effect.fn(function* ({ id }) {
+          const hooks = Option.getOrUndefined(
+            yield* Effect.serviceOption(TestResourceHooks),
+          );
+          if (hooks?.delete) {
+            yield* hooks.delete(id);
+          }
+          modalCalls.push({
+            stack: yield* modalStackName,
+            mode,
+            op: "delete",
+            id,
+          });
+        }),
+      };
+    }),
+  );
+
+export const modalResourceProvider = () =>
+  ProviderLayer.dual(ModalResource, {
+    live: () => modalVariant("live"),
+    local: () => modalVariant("local"),
+  });
+
 // Layers
 export const TestLayers = () =>
   Layer.mergeAll(
@@ -1142,6 +1293,7 @@ export const TestLayers = () =>
     durationResourceProvider(),
     deleteFirstResourceProvider(),
     driftResourceProvider(),
+    modalResourceProvider(),
   );
 
 export const InMemoryTestLayers = () =>

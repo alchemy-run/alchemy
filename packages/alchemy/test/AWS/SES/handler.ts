@@ -76,6 +76,7 @@ export default SESTestFunction.make(
     const getSuppressed = yield* SES.GetSuppressedDestination();
     const listSuppressed = yield* SES.ListSuppressedDestinations();
     const unsuppress = yield* SES.DeleteSuppressedDestination();
+    const sendBounce = yield* SES.SendBounce();
     const TemplateName = yield* template.templateName;
 
     return {
@@ -236,6 +237,28 @@ export default SESTestFunction.make(
           }));
         }
 
+        if (request.method === "POST" && pathname === "/send-bounce") {
+          // A fabricated message id when none is supplied — SES only accepts a
+          // bounce for a message it actually received within 24h, so the
+          // ungated test drives this path and asserts a typed rejection. Set
+          // ?messageId= to a real received message id to exercise the success
+          // path (gated behind AWS_TEST_SES_BOUNCE_MESSAGE_ID in the test).
+          const messageId =
+            url.searchParams.get("messageId") ??
+            "00000000000000000000000000000000000000000000000000-0000";
+          return yield* respond(
+            sendBounce({
+              OriginalMessageId: messageId,
+              BounceSender:
+                from ?? "mailer-daemon@ses-bindings.alchemy-test.example.com",
+              BouncedRecipientInfoList: [
+                { Recipient: to, BounceType: "DoesNotExist" },
+              ],
+            }),
+            (result) => ({ messageId: result.MessageId }),
+          );
+        }
+
         if (request.method === "GET" && pathname === "/health") {
           return HttpServerResponse.text("ok");
         }
@@ -258,6 +281,7 @@ export default SESTestFunction.make(
         SES.GetSuppressedDestinationHttp,
         SES.ListSuppressedDestinationsHttp,
         SES.DeleteSuppressedDestinationHttp,
+        SES.SendBounceHttp,
       ),
     ),
   ),

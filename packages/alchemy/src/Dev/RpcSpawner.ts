@@ -13,8 +13,8 @@ import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
-import * as NodeChildProcess from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { killProcessGroup } from "../Util/killProcessGroup.ts";
 import { httpServer } from "../Util/PlatformServices.ts";
 import {
   RPC_SERVER_ENVIRONMENT_KEY,
@@ -195,15 +195,3 @@ const getRpcAddress = (stdout: Stream.Stream<Uint8Array, PlatformError>) =>
     );
     return yield* Deferred.await(address);
   });
-
-const killProcessGroup = (pid: number, signal: NodeJS.Signals) => {
-  try {
-    if (process.platform === "win32") {
-      NodeChildProcess.execSync(`taskkill /pid ${pid} /T /F`);
-    } else {
-      process.kill(-pid, signal);
-    }
-  } catch {
-    // ignore errors during best-effort cleanup
-  }
-};

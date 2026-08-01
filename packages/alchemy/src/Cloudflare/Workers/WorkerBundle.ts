@@ -1,38 +1,42 @@
-import cloudflareRolldown from "@distilled.cloud/cloudflare-rolldown-plugin";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import { flow } from "effect/Function";
 import type * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 import fg from "fast-glob";
-import { builtinModules } from "node:module";
 import { fileURLToPath } from "node:url";
 import path from "pathe";
 import type * as rolldown from "rolldown";
-import { esmExternalRequirePlugin } from "rolldown/plugins";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
 import { sha256 } from "../../Util/sha256.ts";
 import {
-  isDurableObjectExport,
-  type DurableObjectExport,
-} from "./DurableObject.ts";
-import {
   isWorkflowExport,
   type WorkflowExport,
 } from "../Workflows/Workflow.ts";
+import {
+  isDurableObjectExport,
+  type DurableObjectExport,
+} from "./DurableObject.ts";
 
 /**
- * Node builtin specifiers in both bare (`events`) and prefixed
- * (`node:events`) forms. Some entries (`node:sea`, `node:test`, bun's
- * `bun:*`) only exist prefixed, so already-prefixed names are kept as-is.
+ * Bundler options for a Worker: the generic {@link Bundle.BundleExtraOptions}
+ * plus rolldown output overrides merged over Alchemy's defaults.
  */
-const nodeBuiltinModules = builtinModules.flatMap((name) =>
-  name.includes(":") ? [name] : [name, `node:${name}`],
-);
-
-const hasNodejsCompat = (flags: string[]) =>
-  flags.includes("nodejs_compat") || flags.includes("nodejs_compat_v2");
+export interface WorkerBuildOptions extends Bundle.BundleExtraOptions {
+  /**
+   * Rolldown output options merged over Alchemy's defaults. Use this to
+   * control chunking (`codeSplitting`), minification, etc.
+   */
+  output?: rolldown.OutputOptions;
+  /**
+   * Forwarded to rolldown's `preserveEntrySignatures` input option. Some
+   * `output.codeSplitting` configurations require relaxing it (e.g.
+   * `includeDependenciesRecursively: false` needs `"allow-extension"`).
+   * Workers must keep their entry exports, so never pass `false`.
+   */
+  preserveEntrySignatures?: rolldown.InputOptions["preserveEntrySignatures"];
+}
 
 export interface WorkerBundleOptions {
   id: string;
@@ -50,7 +54,7 @@ export interface WorkerBundleOptions {
         exports: Record<string, DurableObjectExport | WorkflowExport>;
       };
   stack: { name: string; stage: string };
-  extraOptions: Bundle.BundleExtraOptions | undefined;
+  extraOptions: WorkerBuildOptions | undefined;
 }
 
 export const WorkerBundle = Effect.gen(function* () {
@@ -59,9 +63,16 @@ export const WorkerBundle = Effect.gen(function* () {
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
 
   const makeOptions = Effect.fn(function* (options: WorkerBundleOptions) {
+    // Loaded lazily so importing the Cloudflare provider (or the CLI, whose
+    // command tree reaches this module) never loads rolldown's native
+    // binding — only actually bundling a Worker does (#562).
+    const { default: cloudflareRolldown } = yield* Effect.promise(
+      () => import("@distilled.cloud/cloudflare-rolldown-plugin"),
+    );
     const realMain = yield* sanitizeMain(options.main);
     const inputOptions: rolldown.InputOptions = {
       input: realMain,
+      preserveEntrySignatures: options.extraOptions?.preserveEntrySignatures,
       // Forever-devtool native modules that vite/chokidar reference behind
       // runtime guards. Rolldown resolves before tree-shaking, so the dead
       // `require('../pkg')` (lightningcss < 1.32) and `require('fsevents')`
@@ -79,24 +90,6 @@ export const WorkerBundle = Effect.gen(function* () {
         Effect.provide(context),
       ),
       plugins: [
-        // Convert CommonJS `require("events")` etc. of Node builtins into
-        // ESM imports so deps like `pg` run under `nodejs_compat`.
-        // cloudflareRolldown registers this same converter from its own
-        // `options` hook, but rolldown recognizes builtin plugins by class
-        // identity (`instanceof BuiltinPlugin`) — when the package manager
-        // installs the plugin's rolldown as a separate copy from ours, that
-        // registration silently no-ops and the bundle keeps rolldown's
-        // throwing `require` fallback, failing Cloudflare startup
-        // validation (#880). Registering it here, from the same rolldown
-        // instance that runs the build, is identity-safe.
-        ...(hasNodejsCompat(options.compatibility.flags)
-          ? [
-              esmExternalRequirePlugin({
-                external: nodeBuiltinModules,
-                skipDuplicateCheck: true,
-              }),
-            ]
-          : []),
         cloudflareRolldown({
           compatibilityDate: options.compatibility.date,
           compatibilityFlags: options.compatibility.flags,
@@ -121,7 +114,17 @@ export const WorkerBundle = Effect.gen(function* () {
       sourcemap: "hidden",
       minify: true,
       keepNames: true,
+      // Rolldown's default chunking can split top-level initializer modules
+      // (e.g. Drizzle `pgTable` schemas) away from the classes they read,
+      // and workerd then evaluates a reader before its imported binding is
+      // initialized — the script fails Cloudflare startup validation with
+      // `ScriptStartupError: Cannot access '<minified>' before
+      // initialization` (#749). `strictExecutionOrder` wraps cross-chunk
+      // modules so evaluation follows ESM semantics regardless of how the
+      // graph was chunked. See DrizzleSchemaChunks.test.ts.
+      strictExecutionOrder: true,
       dir: `.alchemy/bundles/${options.id}`,
+      ...options.extraOptions?.output,
     };
     return { inputOptions, outputOptions, extraOptions: options.extraOptions };
   });

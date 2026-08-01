@@ -3,10 +3,12 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
+import * as ProviderLayer from "../../Dev/ProviderLayer.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { generateLocalId } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
 
 export const isNamespace = (value: unknown): value is Namespace =>
@@ -71,7 +73,7 @@ export const Namespace = Resource<Namespace>("Cloudflare.KV.Namespace", {
   aliases: ["Cloudflare.KVNamespace"],
 });
 
-export const NamespaceProvider = () =>
+export const ProviderLive = () =>
   Provider.succeed(Namespace, {
     stables: ["namespaceId", "accountId"],
     diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
@@ -221,6 +223,50 @@ export const NamespaceProvider = () =>
       }
       return undefined;
     }),
+  });
+
+/**
+ * Local (dev) provider — the namespace is purely virtual: a `dev:` id keyed
+ * into the local workerd KV simulator. `toRuntimeBinding` lowers a
+ * `kv_namespace` binding whose id is `dev:`-prefixed onto the local KV
+ * service; data persists under `.alchemy/local/kv`.
+ */
+export const ProviderLocal = () =>
+  Provider.succeed(Namespace, {
+    stables: ["accountId"],
+    diff: Effect.fn(function* ({ news = {}, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (!output?.namespaceId) return { action: "update" } as const;
+      if (!isResolved(news)) return undefined;
+      if (output.accountId !== accountId) {
+        return { action: "replace" } as const;
+      }
+      // Fall through to the engine's default prop diff (title renames
+      // update in place).
+    }),
+    read: Effect.fn(function* ({ output }) {
+      // Purely virtual — the persisted state row is the source of truth.
+      return output ?? undefined;
+    }),
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return {
+        title: yield* createTitle(id, news.title),
+        namespaceId: output?.namespaceId ?? generateLocalId(),
+        supportsUrlEncoding: true,
+        accountId: output?.accountId ?? accountId,
+      };
+    }),
+    delete: Effect.fn(function* () {
+      // The simulator's on-disk data is keyed by the dev id; dropping the
+      // state row is enough — orphaned blobs are reclaimed with `.alchemy`.
+    }),
+  });
+
+export const NamespaceProvider = () =>
+  ProviderLayer.dual(Namespace, {
+    local: () => ProviderLocal(),
+    live: () => ProviderLive(),
   });
 
 const createTitle = (id: string, title: string | undefined) =>

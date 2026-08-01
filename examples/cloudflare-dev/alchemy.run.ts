@@ -11,6 +11,12 @@ export type AsyncWorkerEnv = Cloudflare.InferEnv<typeof AsyncWorker>;
 
 const AsyncWorker = Effect.gen(function* () {
   const queue = yield* Cloudflare.Queues.Queue("AsyncWorkerQueue");
+  const bucket = yield* Cloudflare.R2.Bucket("AsyncWorkerBucket");
+  const db = yield* Cloudflare.D1.Database("AsyncWorkerDB", {
+    // Applied on deploy — including local dev, where they run against the
+    // local D1 simulator through an ephemeral workerd gateway.
+    migrationsDir: "./migrations",
+  });
   const worker = yield* Cloudflare.Worker("AsyncWorker", {
     main: "./src/AsyncWorker.ts",
     assets: {
@@ -22,6 +28,8 @@ const AsyncWorker = Effect.gen(function* () {
         className: "Counter",
       }),
       QUEUE: queue,
+      BUCKET: bucket,
+      DB: db,
       MESSAGES: Cloudflare.DurableObject<QueueMessages>("QueueMessages", {
         className: "QueueMessages",
       }),
@@ -29,6 +37,8 @@ const AsyncWorker = Effect.gen(function* () {
       MY_SECRET: Config.redacted("MY_SECRET").pipe(
         Config.withDefault(Redacted.make("my-secret-abc123")),
       ),
+      // The worker's own URL, injected as a plain-text binding (`self_url`).
+      PUBLIC_URL: Cloudflare.Worker.URL,
     },
   });
   yield* Cloudflare.Queues.Consumer("Consumer", {

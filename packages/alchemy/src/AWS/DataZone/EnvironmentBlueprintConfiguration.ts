@@ -2,6 +2,7 @@ import * as datazone from "@distilled.cloud/aws/datazone";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -184,13 +185,18 @@ export const EnvironmentBlueprintConfigurationProvider = () =>
         domainId: string,
         nameOrId: string,
       ) {
-        const found = yield* datazone.listEnvironmentBlueprints({
-          domainIdentifier: domainId,
-          managed: true,
-        });
-        const match = (found.items ?? []).find(
-          (b) => b.name === nameOrId || b.id === nameOrId,
-        );
+        const match = yield* datazone.listEnvironmentBlueprints
+          .items({
+            domainIdentifier: domainId,
+            managed: true,
+          })
+          .pipe(
+            Stream.filter((b) => b.name === nameOrId || b.id === nameOrId),
+            Stream.runHead,
+            Effect.map((head) =>
+              head._tag === "Some" ? head.value : undefined,
+            ),
+          );
         if (match === undefined) {
           return yield* new EnvironmentBlueprintNotFound({
             domainId,

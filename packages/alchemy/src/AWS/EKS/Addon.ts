@@ -161,7 +161,11 @@ class AddonNotReady extends Data.TaggedError("AddonNotReady")<{
   readonly clusterName: string;
   readonly addonName: string;
   readonly status: string | undefined;
-}> {}
+}> {
+  override get message(): string {
+    return `addon '${this.clusterName}/${this.addonName}' is not ACTIVE (status: ${this.status ?? "absent"})`;
+  }
+}
 
 class AddonStillExists extends Data.TaggedError("AddonStillExists")<{
   readonly clusterName: string;
@@ -233,8 +237,14 @@ export const AddonProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ id, olds }) {
+          const clusterName = olds.clusterName as string | undefined;
+          // A crashed prior run can persist a row before its unresolved
+          // inputs were stripped — nothing observable yet.
+          if (clusterName === undefined || olds.addonName === undefined) {
+            return undefined;
+          }
           const state = yield* readAddon({
-            clusterName: olds.clusterName as string,
+            clusterName,
             addonName: olds.addonName,
           });
           if (!state) return undefined;
@@ -404,11 +414,14 @@ const waitForAddonActive = Effect.fn(function* ({
     }),
     Effect.retry({
       while: (error) => error instanceof AddonNotReady,
-      // Flat 5s polls, ~10 min budget (uncapped exponential sleeps for
+      // Flat 5s polls, ~20 min budget (uncapped exponential sleeps for
       // multi-minute stretches late in the wait — looks like a deadlock).
+      // Node-bound addons (e.g. HyperPod task governance) stay DEGRADED
+      // until nodes join and pull images, which can take most of the
+      // budget when the addon installs alongside its node group.
       schedule: Schedule.max([
         Schedule.spaced("5 seconds"),
-        Schedule.recurs(120),
+        Schedule.recurs(240),
       ]),
     }),
   );

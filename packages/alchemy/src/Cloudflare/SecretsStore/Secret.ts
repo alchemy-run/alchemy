@@ -276,7 +276,12 @@ export const StoreSecretProvider = () =>
             Effect.catchTag("StoreNotFound", () => Effect.succeed(undefined)),
           );
       }
-      if (!olds?.store) return undefined;
+      // An interrupted first deploy can persist `creating` props whose
+      // parent Outputs were stripped to holes (see stripUnresolved), so
+      // `olds.store` can survive as `{}`. Treat an unresolved parent
+      // reference like a missing one — the plan falls through to the
+      // create path instead of handing `undefined` to the API (#995).
+      if (!olds?.store?.storeId || !olds.store.accountId) return undefined;
       const name = resolveName(id, olds.name);
       const match = yield* secretsStore.listStoreSecrets
         .items({

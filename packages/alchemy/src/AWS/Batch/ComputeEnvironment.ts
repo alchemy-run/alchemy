@@ -228,9 +228,14 @@ const resolveDefaultNetwork = Effect.gen(function* () {
       }),
     );
   }
-  const subnets = yield* ec2.describeSubnets({
-    Filters: [{ Name: "vpc-id", Values: [vpcId] }],
-  });
+  const subnets = yield* ec2.describeSubnets
+    .items({
+      Filters: [{ Name: "vpc-id", Values: [vpcId] }],
+    })
+    .pipe(
+      Stream.runCollect,
+      Effect.map((chunk) => Array.from(chunk)),
+    );
   const groups = yield* ec2.describeSecurityGroups({
     Filters: [
       { Name: "vpc-id", Values: [vpcId] },
@@ -238,7 +243,7 @@ const resolveDefaultNetwork = Effect.gen(function* () {
     ],
   });
   const network = {
-    subnets: (subnets.Subnets ?? []).flatMap((s) =>
+    subnets: subnets.flatMap((s) =>
       s.SubnetId && (s.State === undefined || s.State === "available")
         ? [s.SubnetId]
         : [],

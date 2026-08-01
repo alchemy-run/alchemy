@@ -1,5 +1,6 @@
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
@@ -151,22 +152,24 @@ export const SubscriptionFilterProvider = () =>
         logGroupName: string,
         filterName: string,
       ) {
-        const described = yield* logs
-          .describeSubscriptionFilters({
+        return yield* logs.describeSubscriptionFilters
+          .items({
             logGroupName,
             filterNamePrefix: filterName,
           })
           .pipe(
+            Stream.filter(
+              (
+                filter,
+              ): filter is logs.SubscriptionFilter & { filterName: string } =>
+                filter.filterName === filterName,
+            ),
+            Stream.runHead,
+            Effect.map(Option.getOrUndefined),
             Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed({ subscriptionFilters: [] }),
+              Effect.succeed(undefined),
             ),
           );
-        return (described.subscriptionFilters ?? []).find(
-          (
-            filter,
-          ): filter is logs.SubscriptionFilter & { filterName: string } =>
-            filter.filterName === filterName,
-        );
       });
 
       return {
@@ -187,17 +190,19 @@ export const SubscriptionFilterProvider = () =>
             const perGroup = yield* Effect.forEach(
               groups,
               (logGroupName) =>
-                logs.describeSubscriptionFilters({ logGroupName }).pipe(
-                  Effect.map((r) =>
-                    (r.subscriptionFilters ?? [])
-                      .filter(
-                        (
-                          filter,
-                        ): filter is logs.SubscriptionFilter & {
-                          filterName: string;
-                        } => filter.filterName != null,
-                      )
-                      .map((filter) => toAttributes(logGroupName, filter)),
+                logs.describeSubscriptionFilters.items({ logGroupName }).pipe(
+                  Stream.filter(
+                    (
+                      filter,
+                    ): filter is logs.SubscriptionFilter & {
+                      filterName: string;
+                    } => filter.filterName != null,
+                  ),
+                  Stream.runCollect,
+                  Effect.map((chunk) =>
+                    Array.from(chunk).map((filter) =>
+                      toAttributes(logGroupName, filter),
+                    ),
                   ),
                   // group deleted between list and describe — skip
                   Effect.catchTag("ResourceNotFoundException", () =>

@@ -1,6 +1,7 @@
 import * as appsync from "@distilled.cloud/aws/appsync";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -311,19 +312,18 @@ export const DataSourceProvider = () =>
 
       /** Delete the auto-created service role and its inline policies. */
       const deleteServiceRole = Effect.fn(function* (roleName: string) {
-        yield* iam.listRolePolicies({ RoleName: roleName }).pipe(
-          Effect.flatMap((policies) =>
-            Effect.forEach(policies.PolicyNames ?? [], (policyName) =>
-              iam
-                .deleteRolePolicy({
-                  RoleName: roleName,
-                  PolicyName: policyName,
-                })
-                .pipe(
-                  Effect.catchTag("NoSuchEntityException", () => Effect.void),
-                ),
-            ),
+        yield* iam.listRolePolicies.items({ RoleName: roleName }).pipe(
+          Stream.mapEffect((policyName) =>
+            iam
+              .deleteRolePolicy({
+                RoleName: roleName,
+                PolicyName: policyName,
+              })
+              .pipe(
+                Effect.catchTag("NoSuchEntityException", () => Effect.void),
+              ),
           ),
+          Stream.runDrain,
           Effect.catchTag("NoSuchEntityException", () => Effect.void),
         );
         yield* iam

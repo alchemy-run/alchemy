@@ -39,7 +39,7 @@ const forbiddenRetrySchedule = Schedule.exponential("500 millis");
 // Email Routing must be enabled on the zone for rules to be created and
 // visible to `list()`.
 const enableRouting = (zoneId: string) =>
-  emailRouting.enableEmailRouting({ zoneId, body: {} }).pipe(
+  emailRouting.enableEmailRouting({ zoneId }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
       schedule: forbiddenRetrySchedule,

@@ -31,6 +31,17 @@ export class RpcServer extends Context.Service<RpcServer, never>()(
 ) {}
 
 /**
+ * The provider shape served over RPC. The `mode`/`modes` variant machinery
+ * (lazy Layer-built Effects, see `ProviderLayer.dual`) is process-local and
+ * cannot cross the RPC boundary — the sidecar serves the concrete provider
+ * implementation, never the mode-dispatching wrapper.
+ */
+export type RpcProviderService<R extends ResourceLike> = Omit<
+  ProviderService<R>,
+  "mode" | "modes"
+>;
+
+/**
  * The RPC API that is implemented by the server and consumed by {@link RpcProviderProxy}.
  */
 export interface RpcProxyApi {
@@ -40,7 +51,7 @@ export interface RpcProxyApi {
    */
   readonly getProvider: <R extends ResourceLike>(
     type: R["Type"],
-  ) => Promise<RpcSerialization.RpcWrapped<ProviderService<R>>>;
+  ) => Promise<RpcSerialization.RpcWrapped<RpcProviderService<R>>>;
 }
 
 const serverPlatformLayer = platformLayer({
@@ -128,8 +139,15 @@ export const layerServer = (
               if (!provider) {
                 throw new Error(`Provider "${type}" not found`);
               }
+              // Strip the process-local variant machinery (see
+              // RpcProviderService above) — lazy Effects don't serialize.
+              const {
+                mode: _mode,
+                modes: _modes,
+                ...serializable
+              } = provider as ProviderService<R>;
               return RpcSerialization.wrapRpcHandlers(
-                provider as ProviderService<R>,
+                serializable as RpcProviderService<R>,
                 ["tail"],
               );
             },

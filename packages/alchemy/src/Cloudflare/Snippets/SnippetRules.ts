@@ -212,10 +212,11 @@ export const SnippetRulesProvider = () =>
 
 /**
  * `ListRulesResponse` is untyped in distilled (`unknown`); the wire shape
- * is an array of snake_case rule objects under `result`.
+ * is an array of rule objects under `result`, camelized by the service key
+ * dictionary at decode (`snippet_name` → `snippetName`).
  */
 interface WireRule {
-  readonly snippet_name?: string;
+  readonly snippetName?: string;
   readonly expression?: string;
   readonly enabled?: boolean;
   readonly description?: string | null;
@@ -229,11 +230,11 @@ const listObservedRules = (zoneId: string) =>
     Effect.map((result): SnippetRuleAttribute[] => {
       if (!Array.isArray(result)) return [];
       return (result as WireRule[]).flatMap((rule) =>
-        rule.snippet_name === undefined || rule.expression === undefined
+        rule.snippetName === undefined || rule.expression === undefined
           ? []
           : [
               {
-                snippetName: rule.snippet_name,
+                snippetName: rule.snippetName,
                 expression: rule.expression,
                 enabled: rule.enabled ?? true,
                 description: rule.description ?? undefined,

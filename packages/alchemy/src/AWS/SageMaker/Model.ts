@@ -135,12 +135,16 @@ const createModelName = (
     : createPhysicalName({ id, maxLength: 63 });
 
 const fetchModelTags = Effect.fn(function* (arn: string) {
-  const response = yield* sagemaker.listTags({ ResourceArn: arn }).pipe(
+  const tags = yield* sagemaker.listTags.items({ ResourceArn: arn }).pipe(
+    EffectStream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
     // A just-deleted (or foreign) resource ARN surfaces as AccessDenied.
-    Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)),
+    Effect.catchTag("AccessDeniedException", () =>
+      Effect.succeed<sagemaker.Tag[]>([]),
+    ),
   );
   return Object.fromEntries(
-    (response?.Tags ?? []).flatMap((tag) =>
+    tags.flatMap((tag) =>
       tag.Key !== undefined ? [[tag.Key, tag.Value ?? ""]] : [],
     ),
   );

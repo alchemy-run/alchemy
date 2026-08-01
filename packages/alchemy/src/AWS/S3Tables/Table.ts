@@ -128,7 +128,9 @@ const createTableName = (id: string, props: { name?: string | undefined }) =>
     return base.replaceAll("-", "_");
   });
 
-const buildMetadata = (props: TableProps): s3tables.TableMetadata | undefined =>
+const buildMetadata = (
+  props: TableProps,
+): s3tables.TableMetadata | undefined =>
   props.schema
     ? {
         iceberg: {

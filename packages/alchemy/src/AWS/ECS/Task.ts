@@ -19,7 +19,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import {
-  createHostRuntimeContext,
+  createContainerRuntimeContext,
   type HostRuntimeContext,
   type Host,
 } from "../../Local/Process.ts";
@@ -104,6 +104,17 @@ export interface TaskDefinitionConfig {
    * Additional environment variables for the container.
    */
   env?: Record<string, any>;
+  /**
+   * Environment files to load into the primary container, e.g. `.env`
+   * objects stored in S3:
+   * `[{ value: "arn:aws:s3:::my-bucket/app.env", type: "s3" }]`.
+   *
+   * Variables from `env` (and the container's own `environment`) take
+   * precedence over values loaded from environment files. The execution
+   * role is automatically granted `s3:GetObject` on the referenced objects
+   * and `s3:GetBucketLocation` on their buckets.
+   */
+  environmentFiles?: ecs.EnvironmentFile[];
   /**
    * Command override for the primary container (Docker `CMD`).
    */
@@ -298,37 +309,8 @@ export interface TaskRuntimeContext extends HostRuntimeContext {
   readonly Type: "AWS.ECS.Task";
 }
 
-/**
- * Host runtime context for ECS container platforms: extends the shared
- * process host context so an impl shape's `run` effect is registered as a
- * one-shot runner (the container exits when it completes) and the HTTP
- * server only boots when the impl actually declares a `fetch` handler.
- */
-export const createContainerRuntimeContext =
-  (type: string) =>
-  (id: string): HostRuntimeContext => {
-    const base = createHostRuntimeContext(type)(id);
-    // Capture the host serve BEFORE Object.assign overwrites `base.serve`
-    // with the wrapper below — calling `base.serve` inside the wrapper would
-    // resolve to the wrapper itself (property lookup happens at call time)
-    // and recurse without bound the moment an impl declares `fetch`.
-    const serveBase = base.serve;
-    const serve: HostRuntimeContext["serve"] = (handler, options) =>
-      Effect.gen(function* () {
-        const shape = options?.shape;
-        const run = shape?.run;
-        if (Effect.isEffect(run)) {
-          yield* base.run(run as Effect.Effect<void, never, any>);
-        }
-        // Boot the HTTP server only for an impl that declared `fetch` — a
-        // pure one-shot `{ run }` program must exit when `run` completes
-        // rather than parking behind the 404 fallback server forever.
-        if (shape === undefined || shape.fetch !== undefined) {
-          yield* serveBase(handler, options);
-        }
-      }) as Effect.Effect<void, never, never>;
-    return Object.assign(base, { serve });
-  };
+// Shared with `Docker.Service`; lives beside the host runtime context.
+export { createContainerRuntimeContext } from "../../Local/Process.ts";
 
 /**
  * A Fargate task definition with a container image from one of three
@@ -426,6 +408,16 @@ export const createContainerRuntimeContext =
  *   },
  * });
  * ```
+ *
+ * @example Environment Files from S3
+ * ```typescript
+ * const task = yield* Task("ApiTask", {
+ *   main: import.meta.url,
+ *   environmentFiles: [
+ *     { value: "arn:aws:s3:::my-config-bucket/app.env", type: "s3" },
+ *   ],
+ * });
+ * ```
  */
 export const Task: Platform<Task, TaskServices, TaskShape, TaskRuntimeContext> =
   Platform("AWS.ECS.Task", {
@@ -516,6 +508,56 @@ export const ensureTaskExecutionRole = Effect.fn(function* ({
       .pipe(Effect.catchTag("LimitExceededException", () => Effect.void));
   }
   return roleArn;
+});
+
+/** Inline policy granting the execution role read access to `environmentFiles`. */
+const ENVIRONMENT_FILES_POLICY_NAME = "alchemy-environment-files";
+
+/**
+ * Sync the execution role's read access to the S3 `environmentFiles`: put
+ * an inline policy granting `s3:GetObject` on the referenced objects (and
+ * `s3:GetBucketLocation` on their buckets), or delete the policy when no
+ * environment files are configured.
+ */
+export const syncEnvironmentFilesPolicy = Effect.fn(function* ({
+  roleName,
+  environmentFiles,
+}: {
+  roleName: string;
+  environmentFiles: ecs.EnvironmentFile[] | undefined;
+}) {
+  const objectArns = (environmentFiles ?? [])
+    .filter((file) => file.type === "s3")
+    .map((file) => file.value);
+  if (objectArns.length === 0) {
+    yield* iam
+      .deleteRolePolicy({
+        RoleName: roleName,
+        PolicyName: ENVIRONMENT_FILES_POLICY_NAME,
+      })
+      .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+    return;
+  }
+  const bucketArns = [...new Set(objectArns.map((arn) => arn.split("/")[0]))];
+  yield* iam.putRolePolicy({
+    RoleName: roleName,
+    PolicyName: ENVIRONMENT_FILES_POLICY_NAME,
+    PolicyDocument: JSON.stringify({
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Allow",
+          Action: ["s3:GetObject"],
+          Resource: objectArns,
+        },
+        {
+          Effect: "Allow",
+          Action: ["s3:GetBucketLocation"],
+          Resource: bucketArns,
+        },
+      ],
+    }),
+  });
 });
 
 /** Ensure the CloudWatch log group the task writes to exists. */
@@ -655,6 +697,7 @@ export const registerTaskDefinitionRevision = Effect.fn(function* ({
       name,
       value: typeof value === "string" ? value : JSON.stringify(value),
     })),
+    environmentFiles: props.environmentFiles,
     logConfiguration: {
       logDriver: "awslogs",
       options: {
@@ -753,33 +796,102 @@ export const syncTaskDefinitionTags = Effect.fn(function* ({
   }
 });
 
+/** The family segment of a task definition revision ARN (`…:task-definition/<family>:<revision>`). */
+const taskFamilyOfArn = (arn: string) => arn.split("/").pop()?.split(":")[0];
+
 /**
- * Tear down the infrastructure a task definition owns: the revision
- * (deregister + hard delete), the ECR repository, the log group, and the
- * task/execution roles. Idempotent — every step tolerates "already gone".
+ * Reap the task-definition revision superseded by a reconcile: registering
+ * always produces a NEW revision, so without this every reconcile strands
+ * the previous revision ACTIVE forever. Deregister + hard-delete the prior
+ * revision once the new one is registered.
+ *
+ * Guarded to the same family — `previousArn` can reference a foreign task
+ * definition this resource does not own (e.g. an `ECS.Service` switched from
+ * a BYO `task:` reference to the image-owning form), which must be left
+ * untouched. Idempotent: both calls tolerate "already gone", and a revision
+ * still referenced by running tasks parks in `DELETE_IN_PROGRESS` until AWS
+ * finishes the delete.
+ */
+export const reapSupersededTaskDefinitionRevision = Effect.fn(function* ({
+  previousArn,
+  nextArn,
+}: {
+  /** The revision recorded before this reconcile (`output.taskDefinitionArn`). */
+  previousArn: string | undefined;
+  /** The freshly-registered revision ARN. */
+  nextArn: string;
+}) {
+  if (
+    previousArn === undefined ||
+    previousArn === nextArn ||
+    taskFamilyOfArn(previousArn) !== taskFamilyOfArn(nextArn)
+  ) {
+    return;
+  }
+  yield* ecs
+    .deregisterTaskDefinition({ taskDefinition: previousArn })
+    .pipe(Effect.catchTag("ClientException", () => Effect.void));
+  yield* ecs
+    .deleteTaskDefinitions({ taskDefinitions: [previousArn] })
+    .pipe(Effect.catchTag("ClientException", () => Effect.void));
+});
+
+/**
+ * Tear down the infrastructure a task definition owns: every remaining
+ * revision of the family (deregister + hard delete), the ECR repository, the
+ * log group, and the task/execution roles. Idempotent — every step tolerates
+ * "already gone".
  */
 export const deleteTaskDefinitionInfrastructure = Effect.fn(function* (output: {
   taskDefinitionArn: string;
+  /**
+   * The family owned by this resource. When present, EVERY remaining ACTIVE
+   * revision is swept — state rows written before reconcile-time revision
+   * reaping can have superseded revisions beyond the recorded one.
+   */
+  taskFamily?: string;
   repositoryName: string;
   logGroupName: string;
   taskRoleName: string;
   executionRoleName: string;
 }) {
-  yield* ecs
-    .deregisterTaskDefinition({
-      taskDefinition: output.taskDefinitionArn,
-    })
-    .pipe(Effect.catchTag("ClientException", () => Effect.void));
+  const familyArns = output.taskFamily
+    ? yield* ecs.listTaskDefinitions
+        .items({
+          familyPrefix: output.taskFamily,
+          status: "ACTIVE",
+        })
+        .pipe(
+          // `familyPrefix` is a prefix match — filter to the exact family so
+          // a family that happens to prefix another resource's is untouched.
+          // A nonexistent family is an empty list, not an error, so nothing
+          // is caught here: a real list failure must propagate — swallowing
+          // it would silently skip the sweep and leak the revisions.
+          Stream.filter((arn) => taskFamilyOfArn(arn) === output.taskFamily),
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+        )
+    : [];
+  const revisionArns = [...new Set([output.taskDefinitionArn, ...familyArns])];
 
-  // Deregistering only flips the revision to INACTIVE — it still
-  // exists (and shows up in `listTaskDefinitions --status INACTIVE`)
-  // forever. Hard-delete it so destroying a Task leaves zero
-  // task-definition leftovers.
-  yield* ecs
-    .deleteTaskDefinitions({
-      taskDefinitions: [output.taskDefinitionArn],
-    })
-    .pipe(Effect.catchTag("ClientException", () => Effect.void));
+  for (const arn of revisionArns) {
+    yield* ecs
+      .deregisterTaskDefinition({ taskDefinition: arn })
+      .pipe(Effect.catchTag("ClientException", () => Effect.void));
+  }
+
+  // Deregistering only flips the revisions to INACTIVE — they still
+  // exist (and show up in `listTaskDefinitions --status INACTIVE`)
+  // forever. Hard-delete them so destroying a Task leaves zero
+  // task-definition leftovers. `deleteTaskDefinitions` accepts at most
+  // 10 ARNs per call.
+  for (let i = 0; i < revisionArns.length; i += 10) {
+    yield* ecs
+      .deleteTaskDefinitions({
+        taskDefinitions: revisionArns.slice(i, i + 10),
+      })
+      .pipe(Effect.catchTag("ClientException", () => Effect.void));
+  }
 
   yield* ecr
     .deleteRepository({
@@ -794,55 +906,45 @@ export const deleteTaskDefinitionInfrastructure = Effect.fn(function* (output: {
     })
     .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
 
-  yield* iam
-    .listRolePolicies({
-      RoleName: output.taskRoleName,
-    })
-    .pipe(
-      // The role may already be gone (delete re-run / race) — treat a
-      // missing role as "no policies to delete" so delete is idempotent.
-      Effect.catchTag("NoSuchEntityException", () =>
-        Effect.succeed({ PolicyNames: [] as string[] }),
-      ),
-      Effect.flatMap((policies) =>
-        Effect.all(
-          (policies.PolicyNames ?? []).map((policyName) =>
-            iam
-              .deleteRolePolicy({
-                RoleName: output.taskRoleName,
-                PolicyName: policyName,
-              })
-              .pipe(
-                Effect.catchTag("NoSuchEntityException", () => Effect.void),
-              ),
-          ),
-        ),
-      ),
-    );
-
   for (const roleName of [output.taskRoleName, output.executionRoleName]) {
-    yield* iam
-      .listAttachedRolePolicies({
+    // Delete inline policies on BOTH roles — the task role carries the
+    // bindings policy, and the execution role can carry inline policies too
+    // (e.g. the Service's secrets-read policy). A role with any inline
+    // policy left rejects `deleteRole` with `DeleteConflictException`.
+    yield* iam.listRolePolicies
+      .items({
         RoleName: roleName,
       })
       .pipe(
-        Effect.catchTag("NoSuchEntityException", () =>
-          Effect.succeed({ AttachedPolicies: [] }),
+        Stream.mapEffect((policyName) =>
+          iam
+            .deleteRolePolicy({
+              RoleName: roleName,
+              PolicyName: policyName,
+            })
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
         ),
-        Effect.flatMap((policies) =>
-          Effect.all(
-            (policies.AttachedPolicies ?? []).map((policy) =>
-              iam
-                .detachRolePolicy({
-                  RoleName: roleName,
-                  PolicyArn: policy.PolicyArn!,
-                })
-                .pipe(
-                  Effect.catchTag("NoSuchEntityException", () => Effect.void),
-                ),
-            ),
-          ),
+        Stream.runDrain,
+        // The role may already be gone (delete re-run / race) — treat a
+        // missing role as "no policies to delete" so delete is idempotent.
+        Effect.catchTag("NoSuchEntityException", () => Effect.void),
+      );
+
+    yield* iam.listAttachedRolePolicies
+      .items({
+        RoleName: roleName,
+      })
+      .pipe(
+        Stream.mapEffect((policy) =>
+          iam
+            .detachRolePolicy({
+              RoleName: roleName,
+              PolicyArn: policy.PolicyArn!,
+            })
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
         ),
+        Stream.runDrain,
+        Effect.catchTag("NoSuchEntityException", () => Effect.void),
       );
     yield* iam
       .deleteRole({
@@ -1078,6 +1180,13 @@ export const TaskProvider = () =>
               );
           }
 
+          // Environment files: the execution role reads the referenced S3
+          // objects at task start.
+          yield* syncEnvironmentFilesPolicy({
+            roleName: executionRoleName,
+            environmentFiles: news.environmentFiles,
+          });
+
           const {
             env: bindingEnv,
             volumes: bindingVolumes,
@@ -1100,7 +1209,7 @@ export const TaskProvider = () =>
           // pushing into the task's ECR repository, then register a new
           // task definition revision. Task definitions are versioned in
           // AWS, so registering a new revision is the unit of "update" —
-          // the prior revision is deregistered only on `delete`.
+          // the superseded revision is reaped after registration below.
           const source = news as ImageSourceLike;
           const resolved = yield* imageSource.resolve({
             id,
@@ -1143,6 +1252,13 @@ export const TaskProvider = () =>
           yield* syncTaskDefinitionTags({
             revisionArn: taskDefinition.taskDefinitionArn!,
             tags,
+          });
+
+          // The registration above superseded the previously-recorded
+          // revision — reap it so revisions don't accumulate ACTIVE forever.
+          yield* reapSupersededTaskDefinitionRevision({
+            previousArn: output?.taskDefinitionArn,
+            nextArn: taskDefinition.taskDefinitionArn!,
           });
 
           yield* session.note(taskDefinition.taskDefinitionArn!);

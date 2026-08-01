@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../AdoptPolicy.ts";
-import { isResolved } from "../Diff.ts";
+import { havePropsChanged, isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import type { ResourceClass, ResourceLike } from "../Resource.ts";
@@ -263,6 +263,29 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
     diff: Effect.fn(function* ({ news, olds, output }: any) {
       if (!isResolved(news)) return undefined;
 
+      // Branch names are rename-mutable (reconcile syncs `news.name` in
+      // place), so `name` cannot live in the provider-level stables. But
+      // almost no update is a rename — for those, advertise `name` as
+      // stable on the update so downstream consumers referencing this
+      // branch still resolve `branch.name` at plan time. Without it, a
+      // metadata-only update (e.g. an embedded database ref whose
+      // `migrationsHashes` moved) resolves consumer refs to just
+      // `{ organization, database }`, and identity-sensitive consumers
+      // (PostgresRole) falsely plan a replacement against `name: undefined`.
+      //
+      // The name only changes when the `name` prop itself changes: an
+      // explicit name renames iff it differs from the observed name, and
+      // an omitted name is engine-generated deterministically (stable
+      // across updates — the instance id only rotates on replacement).
+      const nameIsStable =
+        output?.name !== undefined &&
+        (news.name !== undefined
+          ? news.name === output.name
+          : olds?.name === undefined);
+      const stables = nameIsStable
+        ? ["organization", "database", "name"]
+        : undefined;
+
       const newDb = resolveDatabase(news.database).name;
       const oldDbRef = output?.database ?? olds.database;
       if (oldDbRef) {
@@ -289,7 +312,7 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
 
       if (news.replicas !== undefined) {
         if (output?.desiredReplicas !== news.replicas) {
-          return { action: "update" } as const;
+          return { action: "update", stables } as const;
         }
 
         const desiredHasReplicas = news.replicas > 0;
@@ -297,27 +320,37 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
           output?.hasReplicas !== undefined &&
           output.hasReplicas !== desiredHasReplicas
         ) {
-          return { action: "update" } as const;
+          return { action: "update", stables } as const;
         }
       }
 
       if (news.migrationsDir) {
         const newHashes = yield* hashMigrations(news.migrationsDir);
         if (!recordsEqual(newHashes, output?.migrationsHashes ?? {})) {
-          return { action: "update" } as const;
+          return { action: "update", stables } as const;
         }
         if (
           (news.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE) !==
           (output?.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE)
         ) {
-          return { action: "update" } as const;
+          return { action: "update", stables } as const;
         }
       }
       if (news.importFiles?.length) {
         const newHashes = yield* hashImports(news.importFiles, yield* rootDir);
         if (!recordsEqual(newHashes, output?.importHashes ?? {})) {
-          return { action: "update" } as const;
+          return { action: "update", stables } as const;
         }
+      }
+
+      // Remaining prop changes (rename, safeMigrations, clusterSize,
+      // metadata embedded in resource refs) are all in-place updates.
+      // Decide them here instead of falling back to the engine's default
+      // deep-compare so the conditional `name` stable above is attached —
+      // the default path uses the provider-level stables, which strip
+      // `name` from downstream plan resolution.
+      if (havePropsChanged(olds, news)) {
+        return { action: "update", stables } as const;
       }
 
       return undefined;

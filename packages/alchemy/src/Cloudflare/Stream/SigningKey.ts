@@ -98,7 +98,7 @@ export const SigningKeyProvider = () =>
           Array.from(chunk).flatMap((page) =>
             (page.result ?? [])
               .filter(
-                (key): key is { id: string; created?: string | null } =>
+                (key): key is stream.KeysGetResultItem & { id: string } =>
                   typeof key.id === "string",
               )
               .map(
@@ -153,7 +153,7 @@ export const SigningKeyProvider = () =>
       }
 
       // Ensure — create a new key (`createKey` takes an empty body).
-      const created = yield* stream.createKey({ accountId, body: {} });
+      const created = yield* stream.createKey({ accountId });
       return {
         keyId: created.id ?? "",
         accountId,

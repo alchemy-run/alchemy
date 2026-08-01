@@ -6,6 +6,7 @@
 import * as eks from "@distilled.cloud/aws/eks";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../../PhysicalName.ts";
 import type { ResourceBinding } from "../../../Resource.ts";
 import { createInternalTags, hasTags } from "../../../Tags.ts";
@@ -267,40 +268,30 @@ export const deleteAssociation = Effect.fn(function* ({
  * then the role itself. Idempotent throughout.
  */
 export const deletePodRole = Effect.fn(function* (roleName: string) {
-  yield* iam.listRolePolicies({ RoleName: roleName }).pipe(
-    Effect.catchTag("NoSuchEntityException", () =>
-      Effect.succeed({ PolicyNames: [] as string[] }),
+  yield* iam.listRolePolicies.items({ RoleName: roleName }).pipe(
+    Stream.mapEffect((policyName) =>
+      iam
+        .deleteRolePolicy({
+          RoleName: roleName,
+          PolicyName: policyName,
+        })
+        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
     ),
-    Effect.flatMap((policies) =>
-      Effect.all(
-        (policies.PolicyNames ?? []).map((policyName) =>
-          iam
-            .deleteRolePolicy({
-              RoleName: roleName,
-              PolicyName: policyName,
-            })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
-        ),
-      ),
-    ),
+    Stream.runDrain,
+    Effect.catchTag("NoSuchEntityException", () => Effect.void),
   );
 
-  yield* iam.listAttachedRolePolicies({ RoleName: roleName }).pipe(
-    Effect.catchTag("NoSuchEntityException", () =>
-      Effect.succeed({ AttachedPolicies: [] }),
+  yield* iam.listAttachedRolePolicies.items({ RoleName: roleName }).pipe(
+    Stream.mapEffect((policy) =>
+      iam
+        .detachRolePolicy({
+          RoleName: roleName,
+          PolicyArn: policy.PolicyArn!,
+        })
+        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
     ),
-    Effect.flatMap((policies) =>
-      Effect.all(
-        (policies.AttachedPolicies ?? []).map((policy) =>
-          iam
-            .detachRolePolicy({
-              RoleName: roleName,
-              PolicyArn: policy.PolicyArn!,
-            })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
-        ),
-      ),
-    ),
+    Stream.runDrain,
+    Effect.catchTag("NoSuchEntityException", () => Effect.void),
   );
 
   yield* iam

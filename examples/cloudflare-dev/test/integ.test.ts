@@ -29,7 +29,10 @@ const stack = beforeAll(
           HttpClient.get(url).pipe(
             Effect.flatMap(HttpClientResponse.filterStatusOk),
             Effect.retry({
-              schedule: Schedule.max([Schedule.spaced("250 millis"), Schedule.recurs(25)]),
+              schedule: Schedule.max([
+                Schedule.spaced("250 millis"),
+                Schedule.recurs(25),
+              ]),
             }),
           ),
         );
@@ -82,6 +85,38 @@ test(
   }),
 );
 
+/**
+ * Under `dev: true` the R2 bucket is emulated by the local provider and the
+ * `r2_bucket` binding is served by the local workerd R2 simulator — no cloud
+ * bucket is ever created.
+ */
+test(
+  "AsyncWorker reads and writes the local R2 bucket",
+  Effect.gen(function* () {
+    const { asyncWorker } = yield* stack;
+    const response = yield* HttpClient.get(new URL("/r2", asyncWorker));
+    expect(response.status).toBe(200);
+    const body = (yield* response.json) as { text: string; keys: string[] };
+    expect(body.text).toBe("hello from r2");
+    expect(body.keys).toContain("hello.txt");
+  }),
+);
+
+/**
+ * Same for D1: the database is a local `dev:` row and queries run against
+ * the local workerd D1 simulator (DO SQLite).
+ */
+test(
+  "AsyncWorker queries the local D1 database",
+  Effect.gen(function* () {
+    const { asyncWorker } = yield* stack;
+    const response = yield* HttpClient.get(new URL("/d1", asyncWorker));
+    expect(response.status).toBe(200);
+    const body = (yield* response.json) as { text: string | null };
+    expect(body.text).toBe("hello from d1");
+  }),
+);
+
 test(
   "AsyncWorker serves assets",
   Effect.gen(function* () {
@@ -108,6 +143,40 @@ test(
   }),
 );
 
+/**
+ * `env: { PUBLIC_URL: Cloudflare.Worker.URL }` lowers the `self_url`
+ * sentinel to a plain-text binding holding the worker's own URL. Under the
+ * local provider (this suite runs with `dev: true`) that URL is the dev
+ * proxy's address, resolved before workerd starts. The binding value has no
+ * trailing slash; the stack's URL output does — normalize before comparing.
+ */
+test(
+  "AsyncWorker receives its own URL via env: { PUBLIC_URL: Worker.URL }",
+  Effect.gen(function* () {
+    const { asyncWorker } = yield* stack;
+    const response = yield* HttpClient.get(new URL("/env", asyncWorker));
+    expect(response.status).toBe(200);
+    const body = (yield* response.json) as { PUBLIC_URL: string };
+    expect(body.PUBLIC_URL).toBe(asyncWorker.replace(/\/$/, ""));
+  }),
+);
+
+/**
+ * The Effect-native form: `yield* Cloudflare.Worker.URL` at init attaches
+ * the `self_url` binding and returns a deferred accessor the handler reads
+ * at request time.
+ */
+test(
+  "EffectWorker reads its own URL via yield* Worker.URL",
+  Effect.gen(function* () {
+    const { effectWorker } = yield* stack;
+    const response = yield* HttpClient.get(new URL("/url", effectWorker));
+    expect(response.status).toBe(200);
+    const body = (yield* response.json) as { url: string };
+    expect(body.url).toBe(effectWorker.replace(/\/$/, ""));
+  }),
+);
+
 test(
   "AsyncWorker sends and receives messages on the queue",
   Effect.gen(function* () {
@@ -131,7 +200,10 @@ test(
       ),
       Effect.retry({
         while: (error) => error._tag === "MessageNotFound",
-        schedule: Schedule.max([Schedule.spaced("250 millis"), Schedule.recurs(25)]),
+        schedule: Schedule.max([
+          Schedule.spaced("250 millis"),
+          Schedule.recurs(25),
+        ]),
       }),
     );
     expect(message).toMatchObject({
@@ -188,7 +260,10 @@ test(
       ),
       Effect.retry({
         while: (error) => error._tag === "MessageNotFound",
-        schedule: Schedule.max([Schedule.spaced("250 millis"), Schedule.recurs(25)]),
+        schedule: Schedule.max([
+          Schedule.spaced("250 millis"),
+          Schedule.recurs(25),
+        ]),
       }),
     );
     expect(message).toMatchObject({

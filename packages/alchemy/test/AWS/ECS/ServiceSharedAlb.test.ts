@@ -175,7 +175,9 @@ test.provider.skipIf(!!process.env.FAST)(
             ),
           );
       // Bounded route poll: ALB provisioning (~2 min) + Fargate task start +
-      // fast-converge health checks (~20s).
+      // fast-converge health checks (~20s). Under a saturated full-suite run
+      // ALB DNS propagation alone can eat several minutes, so the budget is
+      // generous (~7 min) — the happy path exits on the first 200.
       const awaitRoute = (dns: string, path: string, expected: string) =>
         fetchRoute(dns, path).pipe(
           Effect.flatMap(({ status, body }) =>
@@ -183,7 +185,7 @@ test.provider.skipIf(!!process.env.FAST)(
               ? Effect.void
               : Effect.fail(new RouteMismatch({ path, status, body })),
           ),
-          Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 48 }),
+          Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 84 }),
         );
 
       // ── deploy both services on the shared listener ────────────────────

@@ -15,6 +15,7 @@ export * from "./CreatePullRequest.ts";
 export * from "./CreatePullRequestHttp.ts";
 export * from "./CreatePullRequestLocal.ts";
 export * from "./Env.ts";
+export * from "./Environment.ts";
 export * from "./Events.ts";
 export * from "./GetIssue.ts";
 export * from "./GetIssueHttp.ts";

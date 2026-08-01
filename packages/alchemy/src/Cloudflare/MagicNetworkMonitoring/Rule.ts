@@ -118,11 +118,11 @@ export interface RuleAttributes {
    */
   duration: string | undefined;
   /** Zscore sensitivity, if set. */
-  zscoreSensitivity: "low" | "medium" | "high" | undefined;
+  zscoreSensitivity: "low" | "medium" | "high" | (string & {}) | undefined;
   /** Zscore target, if set. */
-  zscoreTarget: "bits" | "packets" | undefined;
+  zscoreTarget: "bits" | "packets" | (string & {}) | undefined;
   /** Prefix match type, if set. */
-  prefixMatch: "exact" | "subnet" | "supernet" | undefined;
+  prefixMatch: "exact" | "subnet" | "supernet" | (string & {}) | undefined;
 }
 
 export type Rule = Resource<

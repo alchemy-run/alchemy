@@ -116,6 +116,11 @@ export interface HttpServerFactoryOptions {
    * launched the process (e.g. `Local.Service`'s ready file).
    */
   onListen?: (address: { port: number }) => Effect.Effect<void>;
+  /**
+   * Network interface on which the Bun HTTP server listens.
+   * Omit to use Bun's default.
+   */
+  hostname?: string;
 }
 
 export const BunHttpServer = (factoryOptions?: HttpServerFactoryOptions) =>
@@ -129,7 +134,12 @@ export const BunHttpServer = (factoryOptions?: HttpServerFactoryOptions) =>
         serve: (handler, options) =>
           Effect.gen(function* () {
             const port = yield* resolvePort(options);
-            const server = yield* BunHttpServerPlatform.make({ port });
+            const server = yield* BunHttpServerPlatform.make({
+              port,
+              ...(factoryOptions?.hostname === undefined
+                ? {}
+                : { hostname: factoryOptions.hostname }),
+            });
             if (
               factoryOptions?.onListen &&
               server.address._tag === "TcpAddress"

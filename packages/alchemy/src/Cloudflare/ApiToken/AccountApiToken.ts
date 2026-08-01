@@ -53,6 +53,9 @@ export type AccountApiToken = Resource<
  * @section Creating a Token
  * @example A token for managing Workers and KV from CI
  * ```typescript
+ * // the account ID resolves from the profile you're deploying with
+ * const { accountId } = yield* yield* Cloudflare.CloudflareEnvironment;
+ *
  * const token = yield* Cloudflare.ApiToken.AccountApiToken("ci-token", {
  *   name: "my-ci-token",
  *   accountId,

@@ -56,6 +56,12 @@ export const DOCS_TABS: DocsTab[] = [
     slot: "primary",
   },
   {
+    label: "Prisma",
+    href: "/prisma",
+    prefixes: ["/prisma", "/providers/prisma"],
+    slot: "primary",
+  },
+  {
     label: "Axiom",
     href: "/axiom",
     prefixes: ["/axiom", "/providers/axiom"],
@@ -80,20 +86,12 @@ export const DOCS_TABS: DocsTab[] = [
     hint: "images · containers · networks",
   },
   {
-    label: "Kubernetes",
-    href: "/kubernetes",
-    prefixes: ["/kubernetes", "/providers/kubernetes"],
-    slot: "more",
-    category: "Containers",
-    hint: "namespaces · deployments · services",
-  },
-  {
-    label: "Drizzle",
-    href: "/drizzle",
-    prefixes: ["/drizzle", "/providers/drizzle"],
+    label: "SQL",
+    href: "/sql",
+    prefixes: ["/sql", "/drizzle", "/providers/drizzle", "/providers/sql"],
     slot: "more",
     category: "Data",
-    hint: "schema · migrations · orm",
+    hint: "effect-sql · drizzle · migrations",
   },
   {
     label: "Command",

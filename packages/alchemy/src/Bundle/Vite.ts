@@ -251,7 +251,11 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
     const relativeOutDir = path.isAbsolute(outDir)
       ? path.relative(environment.config.root, outDir)
       : outDir;
-    return `${relativeOutDir}/${name}`;
+    // `path.relative` (and user-configured outDirs) yield backslashes on
+    // Windows; worker module names are import specifiers, so a name like
+    // `dist\ssr/index.js` deploys fine but can never be resolved by the
+    // entry's `import "ssr/index.js"` — the worker 1101s at request time.
+    return `${relativeOutDir.replaceAll("\\", "/")}/${name}`;
   };
 
   // Manually read the RSC manifest chunk from the file system.

@@ -1,0 +1,10 @@
+# Shared repo config, activated by `bun i` (the prepare script runs
+# `git config include.path ../.gitconfig` once per clone — git refuses to
+# auto-load config from tracked files, so the pointer must be set locally).
+#
+# Reuse the superproject's submodule objects (.git/modules/<name>) when
+# cloning submodules into worktrees, instead of a full re-clone per worktree
+# (~12 GB for distilled). Falls back to a normal clone if unavailable.
+[submodule]
+	alternateLocation = superproject
+	alternateErrorStrategy = info
