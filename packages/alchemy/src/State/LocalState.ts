@@ -71,7 +71,9 @@ export const makeLocalState = (options?: LocalStateOptions) =>
         }),
       );
 
-    const recover = <T>(effect: Effect.Effect<T, PlatformError, never>) =>
+    const recover = <T>(
+      effect: Effect.Effect<T, PlatformError | StateStoreError, never>,
+    ) =>
       effect.pipe(
         Effect.catchTag("PlatformError", (e) =>
           e.reason._tag === "NotFound" ? Effect.void : fail(e),
