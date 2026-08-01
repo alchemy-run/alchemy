@@ -82,27 +82,56 @@ export default defineConfig({
 });
 ```
 
+Define the schema — tables plus `defineRelations` for typed
+relational queries:
+
+```typescript
+// schema.ts
+import { defineRelations } from "drizzle-orm";
+import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+
+export const users = sqliteTable("users", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+});
+
+export const posts = sqliteTable("posts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id").notNull().references(() => users.id),
+  title: text("title").notNull(),
+});
+
+export const relations = defineRelations({ users, posts }, (t) => ({
+  users: { posts: t.many.posts() },
+  posts: { author: t.one.users({ from: t.posts.userId, to: t.users.id }) },
+}));
+```
+
 `drizzle-kit generate` writes the migration directories plus a
 `migrations.js` bundle that imports each migration's `.sql` file.
 The alchemy bundler loads bare `.sql` imports as text modules (the
 same way it handles `.txt` and `.html`), so the generated bundle
 imports directly into your Durable Object. Commit it and hand it to
-`Drizzle.DurableObject`:
+`Drizzle.DurableObject`, along with the `relations`:
 
 ```typescript
 import migrations from "./drizzle/migrations.js";
-import { users } from "./schema.ts";
+import { posts, relations, users } from "./schema.ts";
 
 export class Users extends Cloudflare.DurableObject<Users>()(
   "Users",
   Effect.gen(function* () {
     return Effect.gen(function* () {
-      const db = yield* Drizzle.DurableObject({ migrations });
+      const db = yield* Drizzle.DurableObject({ migrations, relations });
 
       return {
         addUser: (name: string) =>
           Effect.sync(() => db.insert(users).values({ name }).run()),
         listUsers: () => Effect.sync(() => db.select().from(users).all()),
+        listUsersWithPosts: () =>
+          Effect.promise(() =>
+            db.query.users.findMany({ with: { posts: true } }),
+          ),
       };
     });
   }),
@@ -114,18 +143,9 @@ instance's own SQLite storage and applies the migrations before
 returning the db. Both the driver and the migrator are synchronous,
 so it lives in the object's inner Effect — the instance init, which
 runs only in the deployed object, before any request reaches its
-methods.
-
-The config also accepts the driver's `relations` (from
-`defineRelations`), enabling typed relational queries:
-
-```typescript
-const db = yield* Drizzle.DurableObject({ migrations, relations });
-
-const rows = yield* Effect.promise(() =>
-  db.query.users.findMany({ with: { posts: true } }),
-);
-```
+methods. The config passes the driver's options through — the
+`relations` make `db.query.users.findMany({ with: { posts: true } })`
+fully typed.
 
 ## The migrations table
 

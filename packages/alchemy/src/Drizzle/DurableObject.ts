@@ -23,21 +23,51 @@ export interface DurableObjectConfig<
  * generated migrations first when provided. The driver and migrator are
  * synchronous, so yield it in the object's inner (instance) Effect —
  * it runs when the instance activates, before any request reaches its
- * methods:
+ * methods.
+ *
+ * The config passes the driver's options through: `relations` (from
+ * `defineRelations`) enables typed relational queries via `db.query`.
+ *
+ * ```typescript
+ * // schema.ts
+ * import { defineRelations } from "drizzle-orm";
+ * import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+ *
+ * export const users = sqliteTable("users", {
+ *   id: integer("id").primaryKey({ autoIncrement: true }),
+ *   name: text("name").notNull(),
+ * });
+ *
+ * export const posts = sqliteTable("posts", {
+ *   id: integer("id").primaryKey({ autoIncrement: true }),
+ *   userId: integer("user_id").notNull().references(() => users.id),
+ *   title: text("title").notNull(),
+ * });
+ *
+ * export const relations = defineRelations({ users, posts }, (t) => ({
+ *   users: { posts: t.many.posts() },
+ *   posts: { author: t.one.users({ from: t.posts.userId, to: t.users.id }) },
+ * }));
+ * ```
  *
  * ```typescript
  * import migrations from "./drizzle/migrations.js";
+ * import { posts, relations, users } from "./schema.ts";
  *
  * export class Users extends Cloudflare.DurableObject<Users>()(
  *   "Users",
  *   Effect.gen(function* () {
  *     return Effect.gen(function* () {
- *       const db = yield* Drizzle.DurableObject({ migrations });
+ *       const db = yield* Drizzle.DurableObject({ migrations, relations });
  *
  *       return {
  *         addUser: (name: string) =>
  *           Effect.sync(() => db.insert(users).values({ name }).run()),
  *         listUsers: () => Effect.sync(() => db.select().from(users).all()),
+ *         listUsersWithPosts: () =>
+ *           Effect.promise(() =>
+ *             db.query.users.findMany({ with: { posts: true } }),
+ *           ),
  *       };
  *     });
  *   }),
