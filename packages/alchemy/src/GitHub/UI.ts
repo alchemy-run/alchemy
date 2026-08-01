@@ -1,5 +1,6 @@
 import * as Layer from "effect/Layer";
 import * as UIProvider from "../UI/UIProvider.ts";
+import type { Environment } from "./Environment.ts";
 import type { Comment } from "./Comment.ts";
 import type { Repository } from "./Repository.ts";
 import type { Secret } from "./Secret.ts";
@@ -181,5 +182,36 @@ export const CommentUI = UIProvider.succeed<Comment>("GitHub.Comment", {
   ],
 });
 
+export const EnvironmentUI = UIProvider.succeed<Environment>(
+  "GitHub.Environment",
+  {
+    displayName: "GitHub Environment",
+    icon: "shield-check",
+    color: GITHUB,
+    category: "config",
+    summary: (ctx) => ctx.attrs?.name,
+    link: (ctx) => ctx.attrs?.htmlUrl,
+    facts: (ctx) => [
+      { label: "environment", value: ctx.attrs?.name, copy: true },
+      { label: "repository", value: ctx.props?.repository, mono: true },
+      { label: "owner", value: ctx.props?.owner, mono: true },
+      { label: "id", value: ctx.attrs?.environmentId, mono: true },
+      {
+        label: "url",
+        value: ctx.attrs?.htmlUrl,
+        href: ctx.attrs?.htmlUrl,
+        copy: true,
+      },
+    ],
+  },
+);
+
 export const ui = () =>
-  Layer.mergeAll(RepositoryUI, SecretUI, VariableUI, WebhookUI, CommentUI);
+  Layer.mergeAll(
+    RepositoryUI,
+    SecretUI,
+    VariableUI,
+    WebhookUI,
+    CommentUI,
+    EnvironmentUI,
+  );

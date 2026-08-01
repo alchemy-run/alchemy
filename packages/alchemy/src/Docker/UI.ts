@@ -1,9 +1,11 @@
 import * as Layer from "effect/Layer";
 import * as UIProvider from "../UI/UIProvider.ts";
 import type { Container } from "./Container.ts";
+import type { Context } from "./Context.ts";
 import type { Image } from "./Image.ts";
 import type { Network } from "./Network.ts";
 import type { RemoteImage } from "./RemoteImage.ts";
+import type { Swarm } from "./Swarm.ts";
 import type { Volume } from "./Volume.ts";
 
 /**
@@ -108,5 +110,41 @@ export const VolumeUI = UIProvider.succeed<Volume>("Docker.Volume", {
   ],
 });
 
+export const ContextUI = UIProvider.succeed<Context>("Docker.Context", {
+  displayName: "Docker Context",
+  icon: "waypoints",
+  color: DOCKER_BLUE,
+  category: "config",
+  summary: (ctx) => ctx.attrs?.name,
+  facts: (ctx) => [
+    { label: "name", value: ctx.attrs?.name, copy: true },
+    { label: "endpoint", value: ctx.attrs?.docker, mono: true, copy: true },
+    { label: "description", value: ctx.attrs?.description },
+  ],
+});
+
+export const SwarmUI = UIProvider.succeed<Swarm>("Docker.Swarm", {
+  displayName: "Docker Swarm",
+  icon: "boxes",
+  color: DOCKER_BLUE,
+  category: "compute",
+  summary: (ctx) => ctx.attrs?.id,
+  facts: (ctx) => [
+    { label: "cluster", value: ctx.attrs?.id, mono: true, copy: true },
+    { label: "node", value: ctx.attrs?.nodeId, mono: true },
+    { label: "context", value: ctx.attrs?.context },
+    { label: "managers", value: ctx.attrs?.managers },
+    { label: "nodes", value: ctx.attrs?.nodes },
+  ],
+});
+
 export const ui = () =>
-  Layer.mergeAll(ContainerUI, ImageUI, RemoteImageUI, NetworkUI, VolumeUI);
+  Layer.mergeAll(
+    ContainerUI,
+    ContextUI,
+    ImageUI,
+    RemoteImageUI,
+    NetworkUI,
+    SwarmUI,
+    VolumeUI,
+  );
