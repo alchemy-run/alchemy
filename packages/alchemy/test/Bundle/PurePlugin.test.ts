@@ -786,6 +786,85 @@ describe("discarded-result calls (issue #949)", () => {
         yield* fs.remove(root, { recursive: true });
       }).pipe(Effect.provide(NodeServices.layer)),
   );
+
+  it.effect(
+    "registrations in a REACHABLE module of an unlisted sideEffects:false app survive minify: true (issue #1020 end-to-end)",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectory({
+          prefix: "alchemy-pure-1020-e2e-",
+        });
+
+        // The exact production shape from issue #1020: the app declares
+        // `sideEffects: false`, and route registrations live in a
+        // non-entry module whose EXPORT is used — so the module is
+        // reachable (rolldown's native package-sideEffects pruning does
+        // not apply) and only statement deletion could lose the routes.
+        // Note a side-effect-ONLY import (`import "./routes.ts"`) under
+        // `sideEffects: false` is legitimately pruned by rolldown itself;
+        // that is the field's documented module-level meaning and out of
+        // this plugin's hands.
+        yield* fs.writeFileString(
+          path.join(root, "package.json"),
+          JSON.stringify({
+            name: "my-app",
+            type: "module",
+            sideEffects: false,
+          }),
+        );
+        const entry = path.join(root, "entry.ts");
+        yield* fs.writeFileString(
+          entry,
+          [
+            `import { findRoute } from "./routes.ts";`,
+            `export default { fetch: (p: string) => findRoute(p) };`,
+          ].join("\n"),
+        );
+        yield* fs.writeFileString(
+          path.join(root, "routes.ts"),
+          [
+            `type Handler = () => string;`,
+            `class Router {`,
+            `  routes: Record<string, Handler> = {};`,
+            `  on(p: string, h: Handler) { this.routes[p] = h; }`,
+            `  find(p: string) { return this.routes[p]?.() ?? "404"; }`,
+            `}`,
+            `const matcher = new Router();`,
+            `matcher.on("/gw", () => "GATEWAY_ROUTE_MARKER");`,
+            `export const findRoute = (p: string) => matcher.find(p);`,
+          ].join("\n"),
+        );
+
+        const bundle = yield* Effect.tryPromise({
+          try: () =>
+            rolldown({
+              input: entry,
+              cwd: root,
+              plugins: [purePlugin()],
+              treeshake: true,
+            }),
+          catch: (cause) => cause,
+        });
+        const { output } = yield* Effect.tryPromise({
+          try: () => bundle.generate({ format: "esm", minify: true }),
+          catch: (cause) => cause,
+        });
+        yield* Effect.tryPromise({
+          try: () => bundle.close(),
+          catch: (cause) => cause,
+        });
+
+        const code = output
+          .filter((c) => c.type === "chunk")
+          .map((c) => c.code)
+          .join("\n");
+        expect(code).toContain("GATEWAY_ROUTE_MARKER");
+
+        yield* fs.remove(root, { recursive: true });
+      }).pipe(Effect.provide(NodeServices.layer)),
+  );
 });
 
 describe("Bundle.build with purePlugin", () => {
