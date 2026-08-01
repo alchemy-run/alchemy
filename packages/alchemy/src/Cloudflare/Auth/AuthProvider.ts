@@ -703,6 +703,7 @@ export const ALL_SCOPES = {
   "dns_settings:read": "Grants read level access to Cloudflare DNS Settings",
   "firstpartytags:write":
     "Can see, edit and publish Google tag gateway configuration.",
+  "flagship:write": "See and change Flagship feature flags and apps",
   "lb:edit": "Grants edit level access to lb and lb pools",
   "lb:read": "Grants read level access to lb and lb pools",
   "logpush:read": "See Cloudflare Logpush data",
@@ -777,6 +778,7 @@ export const DEFAULT_SCOPES = [
   "connectivity:admin",
   "containers:write",
   "d1:write",
+  "flagship:write",
   "pages:write",
   "pipelines:write",
   "queues:write",
