@@ -12,13 +12,17 @@ outputs.
 
 ## Configure
 
-The viewer needs the state store's endpoint and bearer token. If you
-deploy with `Cloudflare.state()`, both are cached at
-`~/.alchemy/credentials/{profile}/cloudflare-state-store` after any deploy:
+Nothing is required on a machine that has deployed with
+`Cloudflare.state()` before: the viewer reads the endpoint + bearer token
+that alchemy caches at
+`~/.alchemy/credentials/{profile}/cloudflare-state-store.json`, so a
+plain `bun run deploy` targets the same store your CLI uses. To point at
+a different store (or in CI), set them explicitly — env vars win over
+the cached credentials:
 
 ```sh
 export ALCHEMY_STATE_URL="https://alchemy-state-store.<subdomain>.workers.dev"
-export ALCHEMY_STATE_TOKEN="<authToken from the credentials file>"
+export ALCHEMY_STATE_TOKEN="<the store's bearer token>"
 ```
 
 Optional:

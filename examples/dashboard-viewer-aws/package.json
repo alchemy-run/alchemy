@@ -1,0 +1,25 @@
+{
+  "name": "dashboard-viewer-aws",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "examples/dashboard-viewer-aws"
+  },
+  "type": "module",
+  "scripts": {
+    "predeploy": "cd ../../packages/dashboard && bun run build",
+    "deploy": "alchemy deploy",
+    "dev": "alchemy dev",
+    "destroy": "alchemy destroy"
+  },
+  "dependencies": {
+    "@alchemy.run/dashboard": "workspace:*",
+    "@effect/platform-bun": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "alchemy": "workspace:*",
+    "effect": "catalog:"
+  }
+}

@@ -145,6 +145,9 @@
       "path": "./examples/dashboard-viewer/tsconfig.json"
     },
     {
+      "path": "./examples/dashboard-viewer-aws/tsconfig.json"
+    },
+    {
       "path": "./examples/prisma-compute-effect/tsconfig.json"
     },
     {

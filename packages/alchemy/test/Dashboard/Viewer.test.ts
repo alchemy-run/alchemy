@@ -176,6 +176,44 @@ describe("dashboard viewer", () => {
   );
 
   test.provider(
+    "poll mode delivers one snapshot with a retry hint and completes",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            const A = yield* TestResource("A", { string: "a" });
+            return { A };
+          }),
+        );
+        const store = yield* getStore;
+        yield* withViewer({ state: store, sse: "poll" }, (base) =>
+          Effect.tryPromise(async () => {
+            const res = await fetch(`${base}/api/v2/events`, {
+              signal: AbortSignal.timeout(15_000),
+            });
+            expect(res.status).toBe(200);
+            // the body is FINITE — buffered hosts can deliver it whole
+            const body = await res.text();
+            expect(body).toContain("retry: ");
+            const raw = body.slice(
+              body.indexOf("data: ") + 6,
+              body.indexOf("\n\n", body.indexOf("data: ")),
+            );
+            const frame = JSON.parse(raw) as {
+              kind: string;
+              snapshot: DocumentSnapshot;
+            };
+            expect(frame.kind).toBe("snapshot");
+            expect(frame.snapshot.structure.nodes.map((n) => n.fqn)).toEqual([
+              "A",
+            ]);
+          }),
+        );
+      }),
+    { timeout: 60_000 },
+  );
+
+  test.provider(
     "SSE delivers one snapshot frame to a fresh subscriber",
     (stack) =>
       Effect.gen(function* () {

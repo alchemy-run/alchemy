@@ -4,6 +4,7 @@ import { makeHttpStateStore } from "alchemy/State/HttpStateStore";
 import { Config } from "effect";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -26,6 +27,47 @@ const dashboardDist =
 /** The env key the state-store service binding is registered under. */
 const STATE_STORE_BINDING = "ALCHEMY_STATE_STORE";
 
+/**
+ * Resolve the state store's endpoint + token at DEPLOY time:
+ * `ALCHEMY_STATE_URL` / `ALCHEMY_STATE_TOKEN` env vars when set, else the
+ * credentials `Cloudflare.state()` caches after any deploy at
+ * `~/.alchemy/credentials/{profile}/cloudflare-state-store.json` — so a
+ * plain `bun run deploy` targets the same store the CLI uses.
+ */
+const resolveStateCredentials = Effect.gen(function* () {
+  const env = yield* Effect.sync(() => ({
+    url: process.env.ALCHEMY_STATE_URL || undefined,
+    token: process.env.ALCHEMY_STATE_TOKEN || undefined,
+    profile: process.env.ALCHEMY_PROFILE || "default",
+    home: process.env.HOME ?? process.env.USERPROFILE ?? "",
+  }));
+  if (env.url !== undefined && env.token !== undefined) {
+    return { url: env.url, authToken: env.token };
+  }
+  const fs = yield* FileSystem.FileSystem;
+  const file = `${env.home}/.alchemy/credentials/${env.profile}/cloudflare-state-store.json`;
+  const cached = yield* fs.readFileString(file).pipe(
+    Effect.flatMap((contents) =>
+      Effect.try(
+        () => JSON.parse(contents) as { url?: string; authToken?: string },
+      ),
+    ),
+    Effect.orElseSucceed(() => undefined),
+  );
+  const url = env.url ?? cached?.url;
+  const authToken = env.token ?? cached?.authToken;
+  if (url === undefined || authToken === undefined) {
+    return yield* Effect.die(
+      new Error(
+        "dashboard-viewer: no state store credentials found. Set " +
+          "ALCHEMY_STATE_URL and ALCHEMY_STATE_TOKEN, or run any deploy " +
+          `with Cloudflare.state() first so ${file} exists.`,
+      ),
+    );
+  }
+  return { url, authToken };
+});
+
 export default class Viewer extends Cloudflare.Worker<Viewer>()(
   "Viewer",
   {
@@ -37,11 +79,6 @@ export default class Viewer extends Cloudflare.Worker<Viewer>()(
       runWorkerFirst: ["/api/*"],
     },
     env: {
-      // Endpoint + bearer token of the deployed state store
-      // (`~/.alchemy/credentials/{profile}/cloudflare-state-store` after any
-      // deploy that used `Cloudflare.state()`).
-      ALCHEMY_STATE_URL: Config.string("ALCHEMY_STATE_URL"),
-      ALCHEMY_STATE_TOKEN: Config.redacted("ALCHEMY_STATE_TOKEN"),
       // Optional: pin the stack/stage the viewer opens with. Defaults to
       // the first stack/stage found in the store; `?stack=` / `?stage=`
       // select others per request.
@@ -54,27 +91,42 @@ export default class Viewer extends Cloudflare.Worker<Viewer>()(
     },
   },
   Effect.gen(function* () {
-    const env = yield* Cloudflare.Workers.WorkerEnvironment;
-
-    // Deploy time: service-bind the state-store Worker. Cloudflare blocks
-    // same-zone worker-to-worker `fetch` (error 1042, surfaced as a 404),
-    // so when the viewer and `alchemy-state-store` share an account the
-    // state API must ride a service binding. `ALCHEMY_STATE_SERVICE`
+    // Deploy time: resolve the state store endpoint/token (env vars or
+    // the profile's cached credentials) and register them on the Worker,
+    // plus a service binding to the state-store Worker. Cloudflare
+    // blocks same-zone worker-to-worker `fetch` (error 1042, surfaced
+    // as a 404), so when the viewer and `alchemy-state-store` share an
+    // account the state API must ride the binding. `ALCHEMY_STATE_SERVICE`
     // overrides the script name; set it to "" to skip the binding for
     // cross-zone deployments (custom domain on either side).
     if (!globalThis.__ALCHEMY_RUNTIME__) {
+      const credentials = yield* resolveStateCredentials;
       const service = yield* Effect.sync(
         () => process.env.ALCHEMY_STATE_SERVICE ?? "alchemy-state-store",
       );
-      if (service !== "") {
-        const self = yield* Cloudflare.Workers.Worker;
-        yield* self.bind`${self}`({
-          bindings: [
-            { type: "service", name: STATE_STORE_BINDING, service },
-          ],
-        });
-      }
+      const self = yield* Cloudflare.Workers.Worker;
+      yield* self.bind`${self}`({
+        bindings: [
+          { type: "plain_text", name: "ALCHEMY_STATE_URL", text: credentials.url },
+          {
+            type: "secret_text",
+            name: "ALCHEMY_STATE_TOKEN",
+            text: credentials.authToken,
+          },
+          ...(service !== ""
+            ? [
+                {
+                  type: "service" as const,
+                  name: STATE_STORE_BINDING,
+                  service,
+                },
+              ]
+            : []),
+        ],
+      });
     }
+
+    const env = yield* Cloudflare.Workers.WorkerEnvironment;
 
     // Runtime: ride the service binding when it exists, else plain fetch.
     // The URL keeps addressing/auth identical in both modes — the binding
@@ -97,8 +149,8 @@ export default class Viewer extends Cloudflare.Worker<Viewer>()(
 
     const state = yield* makeHttpStateStore({
       id: "cloudflare-http",
-      url: String(env.ALCHEMY_STATE_URL),
-      authToken: String(env.ALCHEMY_STATE_TOKEN),
+      url: String(env.ALCHEMY_STATE_URL ?? ""),
+      authToken: String(env.ALCHEMY_STATE_TOKEN ?? ""),
     }).pipe(Effect.provide(httpClient));
 
     const handle = viewer({

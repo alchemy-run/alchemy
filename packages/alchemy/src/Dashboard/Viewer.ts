@@ -69,6 +69,19 @@ export interface ViewerOptions {
    * @default 5000 (milliseconds)
    */
   pollMillis?: number;
+  /**
+   * SSE delivery mode for `/api/v2/events`:
+   *
+   * - `"stream"` (default): a long-lived response — one snapshot frame,
+   *   then live patch frames driven by the store poll. Requires a host
+   *   that streams response bodies (Workers, Bun, Node).
+   * - `"poll"`: one snapshot frame plus a `retry:` hint, then the
+   *   response CLOSES. EventSource's native auto-reconnect turns this
+   *   into snapshot polling — the mode for hosts that buffer response
+   *   bodies (Lambda Function URLs in BUFFERED invoke mode, some
+   *   proxies), where an unending stream would never flush.
+   */
+  sse?: "stream" | "poll";
 }
 
 const SSE_OPTIONS = {
@@ -188,6 +201,18 @@ export const viewer = (options: ViewerOptions) => {
     }
 
     if (route === "/api/v2/events") {
+      if (options.sse === "poll") {
+        // Buffered hosts never flush an unending stream: send one
+        // snapshot and close. EventSource reconnects after `retry:` ms,
+        // so the client converges by re-snapshotting.
+        const snapshot = yield* withHost(target, (host) =>
+          Effect.sync(() => host.snapshot()),
+        );
+        return HttpServerResponse.text(
+          `retry: ${poll}\ndata: ${JSON.stringify({ kind: "snapshot", snapshot })}\n\n`,
+          { ...SSE_OPTIONS },
+        );
+      }
       // One `snapshot` frame, then `patches` frames driven by a store
       // poll: the deployment record is re-read every tick (cheap), the
       // full states/outputs only when the record changed or a run is
