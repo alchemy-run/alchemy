@@ -49,6 +49,15 @@
       "path": "../../distilled/packages/core/tsconfig.json"
     },
     {
+      "path": "../../distilled/packages/planetscale/tsconfig.json"
+    },
+    {
+      "path": "../../distilled/packages/axiom/tsconfig.json"
+    },
+    {
+      "path": "../../distilled/packages/neon/tsconfig.json"
+    },
+    {
       "path": "../../cloudflare-tools/packages/cloudflare-rolldown-plugin/tsconfig.json"
     },
     {

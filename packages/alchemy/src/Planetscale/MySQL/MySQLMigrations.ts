@@ -1,4 +1,4 @@
-import * as ops from "@distilled.cloud/planetscale/Operations";
+import * as ps from "@distilled.cloud/planetscale";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -189,7 +189,7 @@ const withTemporaryMySQLPassword = <A, E, R>(
 ) =>
   Effect.acquireUseRelease(
     Effect.gen(function* () {
-      const created = yield* ops.createPassword({
+      const created = yield* ps.createPassword({
         organization: target.organization,
         database: target.database,
         branch: target.branch,
@@ -206,7 +206,7 @@ const withTemporaryMySQLPassword = <A, E, R>(
     }),
     use,
     (password) =>
-      ops
+      ps
         .deletePassword({
           organization: target.organization,
           database: target.database,
