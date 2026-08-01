@@ -12,21 +12,24 @@ import { users } from "./schema.ts";
 export class DrizzleUsersObject extends Cloudflare.DurableObject<DrizzleUsersObject>()(
   "DrizzleUsersObject",
   Effect.gen(function* () {
-    // Opens drizzle over this instance's SQLite storage and applies the
-    // generated migrations before the first query.
-    const db = yield* Drizzle.DurableObject({ migrations });
-
     return Effect.gen(function* () {
+      // Opens drizzle over this instance's SQLite storage and applies the
+      // generated migrations before any request touches the db.
+      const db = yield* Drizzle.DurableObject({ migrations });
+
       return {
         addUser: (name: string) =>
-          Effect.gen(function* () {
-            yield* db.insert(users).values({ name });
-          }),
+          Effect.sync(() => db.insert(users).values({ name }).run()).pipe(
+            Effect.asVoid,
+          ),
         listUsers: () =>
-          Effect.gen(function* () {
-            const rows = yield* db.select().from(users);
-            return rows.map((row) => row.name);
-          }),
+          Effect.sync(() =>
+            db
+              .select()
+              .from(users)
+              .all()
+              .map((row) => row.name),
+          ),
       };
     });
   }),

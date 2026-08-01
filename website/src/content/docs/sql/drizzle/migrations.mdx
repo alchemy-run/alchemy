@@ -96,25 +96,25 @@ import { users } from "./schema.ts";
 export class Users extends Cloudflare.DurableObject<Users>()(
   "Users",
   Effect.gen(function* () {
-    const db = yield* Drizzle.DurableObject({ migrations });
-
     return Effect.gen(function* () {
+      const db = yield* Drizzle.DurableObject({ migrations });
+
       return {
-        addUser: (name: string) => db.insert(users).values({ name }),
-        listUsers: () => db.select().from(users),
+        addUser: (name: string) =>
+          Effect.sync(() => db.insert(users).values({ name }).run()),
+        listUsers: () => Effect.sync(() => db.select().from(users).all()),
       };
     });
   }),
 ) {}
 ```
 
-`Drizzle.DurableObject` opens drizzle over the instance's own SQLite
-storage using the `drizzle-orm/effect-sqlite-do` integration — the
-same effect-native query surface as [`Drizzle.D1`](/sql/drizzle/d1)
-and [`Drizzle.Postgres`](/sql/drizzle/postgres), so queries yield
-directly as Effects. Migrations apply before the instance's first
-query, and the client build is deferred, so plan-time evaluation of
-the constructor touches no storage.
+`Drizzle.DurableObject` opens `drizzle-orm/durable-sqlite` over the
+instance's own SQLite storage and applies the migrations before
+returning the db. Both the driver and the migrator are synchronous,
+so it lives in the object's inner Effect — the instance init, which
+runs only in the deployed object, before any request reaches its
+methods.
 
 ## The migrations table
 
