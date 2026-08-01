@@ -1,11 +1,13 @@
 /**
  * Single-process test runner.
  *
- * Discovers `*.test.ts` files, imports them one at a time (registration is
- * global), then executes every collected test as an Effect — files run
- * concurrently up to a limit, tests within a file run sequentially unless
- * their suite is `describe.concurrent`. Each test gets a buffering Effect
- * Logger + Console so its output can be shown in isolation.
+ * Discovers `*.test.ts` files, imports them ALL IN PARALLEL (the per-file
+ * collector rides AsyncLocalStorage, so registration attribution survives
+ * concurrent imports — see Registry.ts), then executes every collected
+ * test as an Effect — files run concurrently up to a limit, tests within a
+ * file run sequentially unless their suite is `describe.concurrent`. Each
+ * test gets a buffering Effect Logger + Console so its output can be shown
+ * in isolation.
  */
 import * as Cause from "effect/Cause";
 import * as ConsoleModule from "effect/Console";
@@ -242,13 +244,15 @@ const collectFile = (
   relative: string,
 ): Effect.Effect<CollectedFile> =>
   Effect.promise(async (): Promise<CollectedFile> => {
-    const root = Registry.beginFile(relative);
     try {
-      await import(pathToFileURL(absolute).href);
-      // Flush microtasks + one macrotask so registrations deferred with
-      // queueMicrotask (e.g. Test.make's fallback afterAll) land in the tree.
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      return { file: relative, suite: root };
+      const suite = await Registry.collect(relative, async () => {
+        await import(pathToFileURL(absolute).href);
+        // Flush microtasks + one macrotask so registrations deferred with
+        // queueMicrotask (e.g. Test.make's fallback afterAll) land in the
+        // tree — their ALS context resolves this file's collector.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      return { file: relative, suite };
     } catch (error) {
       return {
         file: relative,
@@ -258,8 +262,6 @@ const collectFile = (
             ? (error.stack ?? error.message)
             : String(error),
       };
-    } finally {
-      Registry.endFile();
     }
   });
 
@@ -729,18 +731,32 @@ export const run = Effect.fn(function* (options: RunOptions) {
   const relative = absoluteFiles.map((f) => path.relative(options.root, f));
   yield* emit({ _tag: "CollectStart", files: relative });
 
-  // Phase 1 — import EVERY file before running anything. Imports are lazy
-  // and pure (registration only), and must be serial anyway because the
-  // registration state is global. Collecting fully up-front keeps run
-  // semantics simple: `.only` applies across the whole run, and the full
-  // test list is known before the first test starts.
-  const collected: Array<CollectedFile> = [];
-  for (let i = 0; i < absoluteFiles.length; i++) {
-    // collectFile never fails — import errors are captured on the result.
-    const c = yield* collectFile(absoluteFiles[i]!, relative[i]!);
-    collected.push(c);
-    yield* emit({ _tag: "FileCollected", file: relative[i]! });
-  }
+  // Phase 1 — import EVERY file before running anything, in parallel.
+  // The per-file collector rides AsyncLocalStorage (see Registry.ts), so
+  // registration stays correctly attributed under concurrent imports.
+  // Collecting fully up-front keeps run semantics simple: `.only` applies
+  // across the whole run, and the full test list is known before the first
+  // test starts.
+  //
+  // Concurrency is BOUNDED: kicking off every import at once floods the
+  // main thread with synchronous parse/link/evaluate work — timers and the
+  // progress line starve (a slow start becomes indistinguishable from a
+  // hang), and it maximizes exposure to loader races under concurrent
+  // dynamic imports. The shared dependency graph is deduped by the module
+  // cache, so a modest bound keeps nearly all of the speedup.
+  const collectConcurrency =
+    options.concurrency === "unbounded"
+      ? 32
+      : Math.min(options.concurrency, 32);
+  // collectFile never fails — import errors are captured on the result.
+  const collected = yield* Effect.forEach(
+    absoluteFiles.map((absolute, i) => [absolute, relative[i]!] as const),
+    ([absolute, rel]) =>
+      collectFile(absolute, rel).pipe(
+        Effect.tap(() => emit({ _tag: "FileCollected", file: rel })),
+      ),
+    { concurrency: collectConcurrency },
+  );
 
   const onlyMode = collected.some(
     (c) => c.suite !== undefined && containsOnly(c.suite),

@@ -408,27 +408,41 @@ export const VpcProvider = () =>
           }
 
           if (vpc === undefined) {
-            const createResult = yield* ec2.createVpc({
-              // TODO(sam): add all properties
-              AmazonProvidedIpv6CidrBlock: news.amazonProvidedIpv6CidrBlock,
-              InstanceTenancy: news.instanceTenancy,
-              CidrBlock: news.cidrBlock,
-              Ipv4IpamPoolId: news.ipv4IpamPoolId,
-              Ipv4NetmaskLength: news.ipv4NetmaskLength,
-              Ipv6Pool: news.ipv6Pool,
-              Ipv6CidrBlock: news.ipv6CidrBlock,
-              Ipv6IpamPoolId: news.ipv6IpamPoolId,
-              Ipv6NetmaskLength: news.ipv6NetmaskLength,
-              Ipv6CidrBlockNetworkBorderGroup:
-                news.ipv6CidrBlockNetworkBorderGroup,
-              TagSpecifications: [
-                {
-                  ResourceType: "vpc",
-                  Tags: createTagsList(desiredTags),
-                },
-              ],
-              DryRun: false,
-            });
+            const createResult = yield* ec2
+              .createVpc({
+                // TODO(sam): add all properties
+                AmazonProvidedIpv6CidrBlock: news.amazonProvidedIpv6CidrBlock,
+                InstanceTenancy: news.instanceTenancy,
+                CidrBlock: news.cidrBlock,
+                Ipv4IpamPoolId: news.ipv4IpamPoolId,
+                Ipv4NetmaskLength: news.ipv4NetmaskLength,
+                Ipv6Pool: news.ipv6Pool,
+                Ipv6CidrBlock: news.ipv6CidrBlock,
+                Ipv6IpamPoolId: news.ipv6IpamPoolId,
+                Ipv6NetmaskLength: news.ipv6NetmaskLength,
+                Ipv6CidrBlockNetworkBorderGroup:
+                  news.ipv6CidrBlockNetworkBorderGroup,
+                TagSpecifications: [
+                  {
+                    ResourceType: "vpc",
+                    Tags: createTagsList(desiredTags),
+                  },
+                ],
+                DryRun: false,
+              })
+              .pipe(
+                // The per-region VPC quota (default 5) is a shared pool;
+                // concurrent deploys transiently exhaust it while their VPCs
+                // are being torn down. Ride out the burst with a bounded
+                // spaced retry (~90s) before surfacing the quota error.
+                Effect.retry({
+                  while: (e) => e._tag === "VpcLimitExceeded",
+                  schedule: Schedule.max([
+                    Schedule.spaced("10 seconds"),
+                    Schedule.recurs(9),
+                  ]),
+                }),
+              );
             const newVpcId = createResult.Vpc!.VpcId! as VpcId;
             yield* session.note(`VPC created: ${newVpcId}`);
             vpc = yield* waitForVpcAvailable(newVpcId, session);

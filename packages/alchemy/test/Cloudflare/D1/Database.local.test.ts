@@ -1,12 +1,15 @@
 import { Action } from "@/Action";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Alchemy from "@/index.ts";
+import * as RpcProviderProxy from "@/Local/RpcProviderProxy";
+import * as RpcSpawner from "@/Local/RpcSpawner";
 import * as Test from "@/Test/Alchemy";
 import * as d1 from "@distilled.cloud/cloudflare/d1";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -14,7 +17,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as pathe from "pathe";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
 
-const { test } = Test.make({
+const { test, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
   dev: true,
 });
@@ -22,6 +25,39 @@ const { test } = Test.make({
 const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
+);
+
+/**
+ * Run local providers with the RPC proxy used by the real `alchemy dev`
+ * command. In-process provider tests do not install this proxy, so
+ * `RpcProvider.providerServicesEffect` keeps `localRuntimeServices()` in the
+ * caller and masks missing lifecycle dependencies.
+ */
+const Sidecar = Layer.unwrap(
+  Effect.map(RpcSpawner.RpcSpawner, (spawner) =>
+    RpcProviderProxy.layer(spawner.url),
+  ),
+).pipe(
+  Layer.provideMerge(
+    RpcSpawner.layerServer({
+      profile: process.env.ALCHEMY_PROFILE,
+      envFile: undefined,
+    }),
+  ),
+);
+
+const RpcMigrationStack = Alchemy.Stack(
+  "D1RpcMigrationStack",
+  {
+    providers: Cloudflare.providers(),
+    state: Alchemy.localState(),
+  },
+  Cloudflare.D1.Database("RpcMigratedDB", {
+    migrationsDir: pathe.resolve(
+      import.meta.dirname,
+      "fixtures/rpc-migrations",
+    ),
+  }),
 );
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
@@ -52,6 +88,28 @@ const getJsonReady = (url: string) =>
     );
     return yield* res.json;
   }).pipe(Effect.orDie);
+
+/**
+ * Regression test for #1007. Under the RPC proxy used by `alchemy dev`,
+ * `localRuntimeServices()` is intentionally omitted from the caller because
+ * RPC providers consume it in the sidecar. D1's local provider is not an RPC
+ * provider, so its migration lifecycle must provide the standalone gateway
+ * runtime explicitly.
+ */
+test(
+  "D1 migrations apply with the alchemy dev RPC proxy",
+  Effect.gen(function* () {
+    yield* destroy(RpcMigrationStack);
+
+    const database = yield* deploy(RpcMigrationStack);
+
+    expect(database.databaseId).toMatch(/^dev:/);
+    expect(Object.keys(database.migrationsHashes)).toEqual(["0001_notes.sql"]);
+
+    yield* destroy(RpcMigrationStack);
+  }).pipe(Effect.provide(Sidecar), logLevel),
+  { timeout: 120_000 },
+);
 
 /**
  * Under `alchemy dev` the D1 Database resource is emulated by the local

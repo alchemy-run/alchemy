@@ -264,7 +264,9 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   // closes it. We defer registration to a microtask so it runs AFTER any
   // user-registered `afterAll` (including `destroy(Stack)`); the runner
   // executes afterAll hooks in registration order, and file collection
-  // flushes microtasks before sealing the file's suite tree.
+  // flushes microtasks before sealing the file's suite tree. (Files are
+  // collected in parallel, but the microtask carries the AsyncLocalStorage
+  // context of this file's import, so the hook lands on the right suite.)
   queueMicrotask(() => {
     registerHook("afterAll", {
       body: () => closeScope,

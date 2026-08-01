@@ -14,14 +14,24 @@ New here? [Set up credentials](/prisma/setup) first.
 
 ## Resources
 
-A `Prisma.Project` is the top-level container. A `Prisma.Postgres`
-database lives inside it, and a `Prisma.Connection` materializes the
-credentials an application uses to reach that database:
+A `Prisma.Project` is the top-level container. By default it creates
+a Prisma Postgres database in `us-east-1`:
 
 ```typescript
 const project = yield* Prisma.Project("app", {
-  createDatabase: false,
+  region: "us-east-1",
 });
+```
+
+Prisma injects that database's system-managed `DATABASE_URL` and
+`DATABASE_URL_POOLED` variables into Compute deployments
+automatically.
+
+When you need a database with an independent lifecycle and explicit
+connection outputs, declare it separately:
+
+```typescript
+const project = yield* Prisma.Project("app", { createDatabase: false });
 
 const postgres = yield* Prisma.Postgres("db", {
   project,
@@ -32,17 +42,17 @@ const connection = yield* Prisma.Connection("api", {
 });
 ```
 
-Names are optional everywhere — omit them and alchemy generates
-stable physical names from the Stack, logical ID, and stage.
+Display names are optional for these resources — omit them and alchemy
+generates stable physical names from the Stack, logical ID, and stage.
 
 The connection exposes ready-to-use outputs — a conventional
 `databaseUrl`, direct and pooled connection strings, and parsed
 `origin` components for poolers like Hyperdrive. See
 [Connections](/prisma/data/connections).
 
-[Branches](/prisma/data/branches) group databases under git-style
-names — a preview branch per stage, promoted to default when it
-ships.
+[Branches](/prisma/data/branches) group databases and apps under
+git-style names. A standalone `Prisma.Branch` has Prisma's `preview`
+role even when promoted to be the project's default branch.
 
 ## Compute
 
@@ -54,21 +64,18 @@ an Effect-native app defined inline:
 const app = yield* Prisma.Compute("api", {
   project,
   path: "./app",
-  build: {
-    command: "bun run build",
-    outdir: ".output",
-    entrypoint: "server/index.mjs",
-  },
-  port: 3000,
+  build: "auto",
   healthCheck: { path: "/api/health" },
-  env: {
-    DATABASE_URL: connection.databaseUrl,
-  },
 });
 ```
 
-Deployments are verified against the health check before promotion
-and rolled back when it fails — see [Compute](/prisma/compute/apps).
+For a standalone database, pass `connection.databaseUrl` explicitly
+as shown in [Connections](/prisma/data/connections).
+
+The candidate health check gates promotion. If the stable endpoint
+fails after promotion, alchemy attempts to restore the previous
+deployment and fails closed if recovery cannot converge. See
+[Deployments](/prisma/compute/deployments).
 
 ## Runtime bindings
 
@@ -108,4 +115,6 @@ Postgres providers:
 - [Project](/providers/prisma/project)
 - [Database](/providers/prisma/database)
 - [Connection](/providers/prisma/connection)
+- [Branch](/providers/prisma/branch)
 - [Compute](/providers/prisma/compute)
+- [SourceRepository](/providers/prisma/sourcerepository)
