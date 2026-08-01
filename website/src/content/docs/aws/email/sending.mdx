@@ -141,23 +141,22 @@ it:
 ```typescript
 const policy = yield* SES.EmailIdentityPolicy("AllowPartner", {
   emailIdentity: identity.emailIdentity,
-  policy: JSON.stringify({
+  policy: {
     Version: "2012-10-17",
     Statement: [
       {
         Effect: "Allow",
         Principal: { AWS: "arn:aws:iam::111122223333:root" },
-        Action: "ses:SendEmail",
+        Action: ["ses:SendEmail"],
         Resource: identity.identityArn,
       },
     ],
-  }),
+  },
 });
 ```
 
-The document is stored verbatim; Alchemy compares the parsed JSON
-when detecting drift, so reformatting the string alone doesn't
-trigger an update.
+Alchemy serializes this typed IAM policy at the SES API boundary and
+compares normalized document content when detecting drift.
 
 ## Build a contact list
 
@@ -323,7 +322,7 @@ rest to leave them untouched:
 ```typescript
 const settings = yield* SES.AccountSettings("Account", {
   vdm: {
-    vdmEnabled: "ENABLED",
+    enabled: "ENABLED",
     dashboardEngagementMetrics: "ENABLED",
   },
   suppression: { suppressedReasons: ["BOUNCE", "COMPLAINT"] },

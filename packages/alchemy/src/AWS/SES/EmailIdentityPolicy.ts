@@ -4,6 +4,11 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import {
+  normalizePolicyDocument,
+  stringifyPolicyDocument,
+  type PolicyDocument,
+} from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface EmailIdentityPolicyProps {
@@ -21,10 +26,10 @@ export interface EmailIdentityPolicyProps {
    */
   policyName?: string;
   /**
-   * The sending-authorization policy document as a JSON string. Whitespace and
-   * formatting differences are ignored when detecting drift.
+   * The IAM policy document that grants sending authorization. Equivalent
+   * document representations are ignored when detecting drift.
    */
-  policy: string;
+  policy: PolicyDocument;
 }
 
 export interface EmailIdentityPolicy extends Resource<
@@ -45,8 +50,8 @@ export interface EmailIdentityPolicy extends Resource<
  * lets the identity owner authorize other AWS accounts or IAM principals to
  * send email using the identity.
  *
- * The policy document is an IAM-style JSON string; SES stores it verbatim, so
- * only the parsed content matters when detecting drift.
+ * SES stores the policy document as JSON; Alchemy serializes the typed IAM
+ * policy at the API boundary and compares its normalized content for drift.
  * @resource
  * @section Attaching a Policy
  * @example Authorize Another Account to Send
@@ -59,36 +64,23 @@ export interface EmailIdentityPolicy extends Resource<
  *
  * const policy = yield* SES.EmailIdentityPolicy("AllowPartner", {
  *   emailIdentity: identity.emailIdentity,
- *   policy: JSON.stringify({
+ *   policy: {
  *     Version: "2012-10-17",
  *     Statement: [
  *       {
  *         Effect: "Allow",
  *         Principal: { AWS: "arn:aws:iam::111122223333:root" },
- *         Action: "ses:SendEmail",
+ *         Action: ["ses:SendEmail"],
  *         Resource: identity.identityArn,
  *       },
  *     ],
- *   }),
+ *   },
  * });
  * ```
  */
 export const EmailIdentityPolicy = Resource<EmailIdentityPolicy>(
   "AWS.SES.EmailIdentityPolicy",
 );
-
-/**
- * Normalise a policy JSON string for drift comparison so that pretty-printed
- * input and SES's stored representation compare equal. Falls back to the raw
- * string when the value is not valid JSON.
- */
-const normalizePolicy = (policy: string): string => {
-  try {
-    return JSON.stringify(JSON.parse(policy));
-  } catch {
-    return policy;
-  }
-};
 
 export const EmailIdentityPolicyProvider = () =>
   Provider.effect(
@@ -158,6 +150,7 @@ export const EmailIdentityPolicyProvider = () =>
           // 1. OBSERVE — cloud state is authoritative.
           const policies = yield* getPolicies(emailIdentity);
           const existing = policies?.[policyName];
+          const desiredPolicy = stringifyPolicyDocument(news.policy);
 
           if (existing === undefined) {
             // 2. ENSURE — create; AlreadyExists is a race → converge via update.
@@ -165,27 +158,29 @@ export const EmailIdentityPolicyProvider = () =>
               .createEmailIdentityPolicy({
                 EmailIdentity: emailIdentity,
                 PolicyName: policyName,
-                Policy: news.policy,
+                Policy: desiredPolicy,
               })
               .pipe(
                 Effect.catchTag("AlreadyExistsException", () =>
                   sesv2.updateEmailIdentityPolicy({
                     EmailIdentity: emailIdentity,
                     PolicyName: policyName,
-                    Policy: news.policy,
+                    Policy: desiredPolicy,
                   }),
                 ),
               );
           } else {
             // 3. SYNC — update only when the stored document differs.
             const changed = yield* Effect.sync(
-              () => normalizePolicy(existing) !== normalizePolicy(news.policy),
+              () =>
+                normalizePolicyDocument(existing) !==
+                normalizePolicyDocument(news.policy),
             );
             if (changed) {
               yield* sesv2.updateEmailIdentityPolicy({
                 EmailIdentity: emailIdentity,
                 PolicyName: policyName,
-                Policy: news.policy,
+                Policy: desiredPolicy,
               });
             }
           }

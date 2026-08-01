@@ -1,4 +1,5 @@
 import * as AWS from "@/AWS";
+import type { PolicyDocument } from "@/AWS/IAM/Policy.ts";
 import { EmailIdentity, EmailIdentityPolicy } from "@/AWS/SES";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
@@ -15,19 +16,18 @@ const DOMAIN = "policy.alchemy-test.example.com";
 // SES validates the policy document on write: Resource must be the identity's
 // own ARN, not a wildcard ("BadRequestException: Invalid ARN: ARNs must start
 // with 'arn:': *").
-const allowPolicy = (sid: string, identityArn: string) =>
-  JSON.stringify({
-    Version: "2012-10-17",
-    Statement: [
-      {
-        Sid: sid,
-        Effect: "Allow",
-        Principal: { AWS: "*" },
-        Action: "ses:SendEmail",
-        Resource: identityArn,
-      },
-    ],
-  });
+const allowPolicy = (sid: string, identityArn: string): PolicyDocument => ({
+  Version: "2012-10-17",
+  Statement: [
+    {
+      Sid: sid,
+      Effect: "Allow",
+      Principal: { AWS: "*" },
+      Action: ["ses:SendEmail"],
+      Resource: identityArn,
+    },
+  ],
+});
 
 class PolicyStillExists extends Data.TaggedError("PolicyStillExists")<{
   readonly emailIdentity: string;

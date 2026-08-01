@@ -14,7 +14,7 @@ export interface AccountVdmSettings {
   /**
    * Whether Virtual Deliverability Manager (VDM) is enabled for the account.
    */
-  vdmEnabled: FeatureStatus;
+  enabled: FeatureStatus;
   /**
    * Whether the VDM dashboard's per-message engagement tracking (opens and
    * clicks) is enabled.
@@ -93,7 +93,7 @@ export interface AccountSettings extends Resource<
  *
  * const settings = yield* SES.AccountSettings("Account", {
  *   vdm: {
- *     vdmEnabled: "ENABLED",
+ *     enabled: "ENABLED",
  *     dashboardEngagementMetrics: "ENABLED",
  *   },
  * });
@@ -187,7 +187,7 @@ export const AccountSettingsProvider = () =>
 
           if (
             news.vdm !== undefined &&
-            (observed.vdmEnabled !== news.vdm.vdmEnabled ||
+            (observed.vdmEnabled !== news.vdm.enabled ||
               observed.dashboardEngagementMetrics !==
                 news.vdm.dashboardEngagementMetrics ||
               observed.guardianOptimizedSharedDelivery !==
@@ -195,7 +195,7 @@ export const AccountSettingsProvider = () =>
           ) {
             yield* sesv2.putAccountVdmAttributes({
               VdmAttributes: {
-                VdmEnabled: news.vdm.vdmEnabled,
+                VdmEnabled: news.vdm.enabled,
                 DashboardAttributes:
                   news.vdm.dashboardEngagementMetrics !== undefined
                     ? { EngagementMetrics: news.vdm.dashboardEngagementMetrics }
