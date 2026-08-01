@@ -1,5 +1,5 @@
+import { listOrganizations } from "@distilled.cloud/planetscale";
 import * as PsCredentialsModule from "@distilled.cloud/planetscale/Credentials";
-import { listOrganizations } from "@distilled.cloud/planetscale/Operations";
 import * as Console from "effect/Console";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";

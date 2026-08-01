@@ -109,7 +109,7 @@ export interface TokenConfigurationAttributes {
   /** Where the token is looked for on incoming requests. */
   tokenSources: string[];
   /** The token format. */
-  tokenType: "JWT";
+  tokenType: "JWT" | (string & {});
   /** The JWKS key set currently active on the configuration. */
   keys: JwkKey[];
   /** ISO8601 creation timestamp. */

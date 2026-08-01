@@ -23,7 +23,10 @@ export type DirectoryServiceType = "tcp" | "http";
 /**
  * Application protocol hint for `tcp` services.
  */
-export type DirectoryServiceAppProtocol = "postgresql" | "mysql";
+export type DirectoryServiceAppProtocol =
+  | "postgresql"
+  | "mysql"
+  | (string & {});
 
 export declare namespace DirectoryService {
   /**
@@ -441,19 +444,24 @@ const findByName = (accountId: string, name: string) =>
  */
 const toRequestBody = (news: DirectoryServiceProps) => {
   const host = news.host;
-  const requestHost = Predicate.hasProperty(host, "hostname")
-    ? {
-        hostname: host.hostname,
-        resolverNetwork: {
-          tunnelId: host.resolverNetwork.tunnelId as string,
-          resolverIps: host.resolverNetwork.resolverIps,
-        },
-      }
-    : {
-        ...(Predicate.hasProperty(host, "ipv4") ? { ipv4: host.ipv4 } : {}),
-        ...(Predicate.hasProperty(host, "ipv6") ? { ipv6: host.ipv6 } : {}),
-        network: { tunnelId: host.network.tunnelId as string },
-      };
+  const requestHost =
+    "hostname" in host
+      ? {
+          hostname: host.hostname,
+          resolverNetwork: {
+            tunnelId: host.resolverNetwork.tunnelId,
+            resolverIps: host.resolverNetwork.resolverIps,
+          },
+        }
+      : "ipv4" in host && "ipv6" in host
+        ? {
+            ipv4: host.ipv4,
+            ipv6: host.ipv6,
+            network: { tunnelId: host.network.tunnelId },
+          }
+        : "ipv4" in host
+          ? { ipv4: host.ipv4, network: { tunnelId: host.network.tunnelId } }
+          : { ipv6: host.ipv6, network: { tunnelId: host.network.tunnelId } };
   return {
     type: news.type,
     host: requestHost,

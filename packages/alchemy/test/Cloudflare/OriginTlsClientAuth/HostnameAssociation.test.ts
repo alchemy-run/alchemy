@@ -71,7 +71,13 @@ const voidAssociation = (zoneId: string, hostname: string) =>
     yield* originTls
       .putHostname({
         zoneId,
-        config: [{ hostname, certId: observed.certId, enabled: null }],
+        config: [
+          {
+            hostname,
+            certId: observed.certId,
+            enabled: null,
+          },
+        ],
       })
       .pipe(
         // The pinned certificate may already be gone (code 1415); the

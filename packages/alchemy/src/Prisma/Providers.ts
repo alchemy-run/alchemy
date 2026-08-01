@@ -110,10 +110,7 @@ const stackManagementApiLayer = () =>
           Layer.provide(PrismaHttpClientLive),
         ),
         scope,
-      ).pipe(
-        Effect.map((context) => Context.get(context, PrismaClient)),
-        Effect.orDie,
-      );
+      ).pipe(Effect.map((context) => Context.get(context, PrismaClient)));
       const cached = yield* Effect.cached(client);
       return proxyChain(cached) as PrismaManagementClient;
     }),

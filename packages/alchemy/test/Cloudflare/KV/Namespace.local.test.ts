@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as pathe from "pathe";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
@@ -227,11 +228,21 @@ test.provider(
       // Out-of-band: the worker's write is visible through the cloud API —
       // the remote-proxied binding really hit the live namespace.
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const value = yield* kv.getNamespaceValue({
-        accountId,
-        namespaceId: deployed.liveKv.namespaceId,
-        keyName: "key2",
-      });
+      const value = yield* kv
+        .getNamespaceValue({
+          accountId,
+          namespaceId: deployed.liveKv.namespaceId,
+          keyName: "key2",
+        })
+        .pipe(
+          Effect.flatMap((res) =>
+            Effect.tryPromise(() =>
+              new Response(
+                Stream.toReadableStream(res.body) as BodyInit,
+              ).text(),
+            ),
+          ),
+        );
       expect(value).toBe("value2");
 
       yield* stack.destroy();
