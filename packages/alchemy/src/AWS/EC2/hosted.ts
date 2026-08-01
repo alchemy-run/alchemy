@@ -348,7 +348,8 @@ export HOME=/root
 # unzip (needed below) — install if missing.
 command -v unzip >/dev/null 2>&1 || {
   (command -v dnf >/dev/null 2>&1 && dnf install -y unzip) \
-    || (command -v yum >/dev/null 2>&1 && yum install -y unzip) || true
+    || (command -v yum >/dev/null 2>&1 && yum install -y unzip) \
+    || (command -v apt-get >/dev/null 2>&1 && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y unzip) || true
 }
 
 # AWS CLI — preinstalled on Amazon Linux 2023; install v2 otherwise.
@@ -386,7 +387,10 @@ Type=simple
 WorkingDirectory=${appDir}
 ExecStartPre=/usr/local/bin/${unitName}-setup.sh
 EnvironmentFile=-${appDir}/env
-ExecStart=/root/.bun/bin/bun ${appDir}/index.mjs
+# --no-install: the uploaded bundle is self-contained; bun must never fall
+# into its auto-install path (which hangs startup on network package
+# resolution) — fail fast if the bundle is incomplete instead.
+ExecStart=/root/.bun/bin/bun --no-install ${appDir}/index.mjs
 Restart=always
 RestartSec=5
 
@@ -907,6 +911,7 @@ systemctl enable --now ${unitName}.service
   return {
     normalizeSecurityGroups,
     buildLaunchTemplateData,
+    bundleProgram,
     resolveHostedRuntime,
     cleanupHostedRuntime,
   };
