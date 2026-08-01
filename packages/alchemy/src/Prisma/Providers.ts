@@ -1,3 +1,4 @@
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Path from "effect/Path";
@@ -7,18 +8,24 @@ import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSp
 import { AlchemyContext } from "../AlchemyContext.ts";
 import { AuthProviders } from "../Auth/AuthProvider.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
-import { ProfileLive } from "../Auth/Profile.ts";
+import { AlchemyProfile, ProfileLive } from "../Auth/Profile.ts";
 import * as Provider from "../Provider.ts";
 import type { ResourceClass, ResourceLike } from "../Resource.ts";
 import { PlatformServices } from "../Util/PlatformServices.ts";
+import { proxyChain } from "../Util/proxy-chain.ts";
 import { PrismaAuth } from "./AuthProvider.ts";
 import { App, AppProvider } from "./App.ts";
 import { Branch, BranchProvider } from "./Branch.ts";
-import { Compute, ComputeDevProvider, ComputeProvider } from "./Compute.ts";
-import { Deployment, DeploymentProvider } from "./Deployment.ts";
+import {
+  PrismaClient,
+  PrismaClientLive,
+  type PrismaManagementClient,
+} from "./Client.ts";
 import { Connection, ConnectionProvider } from "./Connection.ts";
+import { Compute, ComputeDevProvider, ComputeProvider } from "./Compute.ts";
 import { CustomDomain, CustomDomainProvider } from "./CustomDomain.ts";
 import { Database, DatabaseProvider } from "./Database.ts";
+import { Deployment, DeploymentProvider } from "./Deployment.ts";
 import {
   EnvironmentVariable,
   EnvironmentVariableProvider,
@@ -28,7 +35,6 @@ import {
   closePrismaDevDatabase,
   ensurePrismaDevDatabase,
 } from "./PrismaDevDatabase.ts";
-import { PrismaClientLive } from "./Client.ts";
 import {
   PrismaHttpClientLive,
   PrismaUploadClientLive,
@@ -48,7 +54,12 @@ export class Providers extends Provider.ProviderCollection<Providers>()(
 
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 
-const managementApiLayer = () =>
+/**
+ * Standalone operation helpers own a private auth registry because they run
+ * outside a Stack. Credential resolution stays eager here so constructing
+ * `managementApi()` preserves its existing fail-fast behavior.
+ */
+const standaloneManagementApiLayer = () =>
   PrismaClientLive.pipe(
     Layer.provideMerge(fromProfile()),
     Layer.provideMerge(PrismaAuth),
@@ -72,6 +83,54 @@ const managementApiLayer = () =>
   );
 
 /**
+ * Stack provider discovery must register auth without requiring credentials.
+ * The management client is resolved on its first API operation, after
+ * `alchemy login` has had a chance to configure the registered Prisma auth
+ * provider. The nested client layer shares the provider layer's lifetime.
+ */
+const stackManagementApiLayer = () =>
+  Layer.effect(
+    PrismaClient,
+    Effect.gen(function* () {
+      const scope = yield* Effect.scope;
+      const authProviders = yield* AuthProviders;
+      const profile = yield* AlchemyProfile;
+      const client = Layer.buildWithScope(
+        PrismaClientLive.pipe(
+          Layer.provideMerge(
+            fromProfile().pipe(
+              Layer.provide(
+                Layer.mergeAll(
+                  Layer.succeed(AuthProviders, authProviders),
+                  Layer.succeed(AlchemyProfile, profile),
+                ),
+              ),
+            ),
+          ),
+          Layer.provide(PrismaHttpClientLive),
+        ),
+        scope,
+      ).pipe(
+        Effect.map((context) => Context.get(context, PrismaClient)),
+        Effect.orDie,
+      );
+      const cached = yield* Effect.cached(client);
+      return proxyChain(cached) as PrismaManagementClient;
+    }),
+  ).pipe(
+    Layer.provideMerge(PrismaAuth),
+    Layer.provideMerge(
+      Layer.mergeAll(
+        // The Prisma-scoped upload client (node transport) rides the
+        // providers' output so artifact uploads can reach it at op time.
+        PrismaUploadClientLive,
+        Layer.provide(ProfileLive, PlatformServices),
+        Layer.provide(CredentialsStoreLive, PlatformServices),
+      ),
+    ),
+  );
+
+/**
  * Build a layer for Prisma Management API operation helpers.
  *
  * Use this when calling helpers like `Prisma.listProjects()` outside an
@@ -88,7 +147,8 @@ const managementApiLayer = () =>
  * );
  * ```
  */
-export const managementApi = () => managementApiLayer().pipe(Layer.orDie);
+export const managementApi = () =>
+  standaloneManagementApiLayer().pipe(Layer.orDie);
 
 /**
  * Build a layer that registers all Prisma Management API resource providers,
@@ -408,4 +468,4 @@ const liveProviderLayer = () =>
     CustomDomainProvider(),
     EnvironmentVariableProvider(),
     SourceRepositoryProvider(),
-  ).pipe(Layer.provideMerge(managementApiLayer()), Layer.orDie);
+  ).pipe(Layer.provideMerge(stackManagementApiLayer()), Layer.orDie);

@@ -30,8 +30,9 @@ connection.pooledOrigin; //               parsed pooled connection components
 
 `databaseUrl` is the serverless-safe default for application
 traffic: it prefers the pooled endpoint, then direct, then
-Accelerate. Pass it (and the direct URL for migration tooling)
-straight into an app's env:
+Accelerate. For a standalone database under a project created with
+`createDatabase: false`, pass it (and the direct URL for migration
+tooling) straight into an app's env:
 
 ```typescript
 const app = yield* Prisma.Compute("api", {
@@ -43,6 +44,10 @@ const app = yield* Prisma.Compute("api", {
   },
 });
 ```
+
+If `Prisma.Project` created the project's default database, omit
+these env entries. Prisma injects system-managed `DATABASE_URL` and
+`DATABASE_URL_POOLED` values into Compute deployments automatically.
 
 ## The origin shape
 
@@ -101,8 +106,8 @@ them back as `Redacted` values.
 
 ## Rotation
 
-Set `rotate: true` to mint fresh credentials on the next deploy
-while keeping the connection's identity:
+Change `rotate` from `false` to `true` to mint fresh credentials on
+the next deploy while keeping the connection's identity:
 
 ```typescript
 const connection = yield* Prisma.Connection("api", {
@@ -111,8 +116,10 @@ const connection = yield* Prisma.Connection("api", {
 });
 ```
 
-Rotation revokes the previous key, so downstream consumers pick up
-the new secret on the same deploy through their bindings.
+Prisma attempts to revoke the previous credentials on a best-effort
+basis. Downstream consumers receive the new secret on the same deploy
+through their bindings. To rotate again, deploy once with
+`rotate: false`, then change it back to `true`.
 
 ## Where next
 

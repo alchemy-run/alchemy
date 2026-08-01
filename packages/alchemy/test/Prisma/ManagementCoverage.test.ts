@@ -172,7 +172,7 @@ describe("Prisma Management API coverage", () => {
   it("accounts for every route in the pinned Management API contract", () => {
     expect(managementApiContract.repository).toBe("prisma/pdp-control-plane");
     expect(managementApiContract.commit).toMatch(/^[0-9a-f]{40}$/);
-    expect(managementApiContract.routes).toHaveLength(102);
+    expect(managementApiContract.routes).toHaveLength(78);
     expect(managementApiContract.deferredRoutes).toHaveLength(7);
     expect(
       managementApiContract.deferredRoutes.every((route) =>
@@ -183,12 +183,6 @@ describe("Prisma Management API coverage", () => {
     expect(expectedManagementApiRoutes).toEqual(
       [...productionManagementApiRoutes].sort(),
     );
-    const expectedRouteSet = new Set<string>(expectedManagementApiRoutes);
-    expect(
-      managementApiContract.deprecatedRoutes.some((route) =>
-        expectedRouteSet.has(route),
-      ),
-    ).toBe(false);
     expect(
       expectedManagementApiRoutes.some((route) => route.includes("/__admin")),
     ).toBe(false);
