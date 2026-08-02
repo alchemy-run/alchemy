@@ -101,33 +101,32 @@ export interface DurableObjectConfig<
  *
  * @binding
  */
-export const DurableObject = <TRelations extends AnyRelations = EmptyRelations>(
-  config?: DurableObjectConfig<TRelations>,
-) =>
-  Effect.gen(function* () {
-    const state = yield* DurableObjectState;
-    const storage = state.raw.storage;
-    const { migrations, ...drizzleConfig } = config ?? {};
-    // Built on the ambient (instance) Scope — the client wraps the DO's
-    // local SQLite storage, so there is no disposable resource behind it.
-    const services = yield* Layer.build(SqliteDoClient.layer({ storage }));
-    const db = yield* SQLiteDoDrizzle.makeWithDefaults({
-      ...(drizzleConfig as Omit<
-        SQLiteDoDrizzle.EffectDrizzleSQLiteDoConfig<TRelations>,
-        "storage"
-      >),
-      storage,
-    }).pipe(Effect.provideContext(services));
-    if (migrations !== undefined) {
-      // A migration that cannot apply leaves the instance unusable — there
-      // is no meaningful recovery at init, so it dies rather than forcing
-      // every caller to handle (or orDie) an error channel.
-      yield* migrate(db, {
-        migrations: migrations.migrations,
-        ...(migrations.migrationsTable !== undefined
-          ? { migrationsTable: migrations.migrationsTable }
-          : {}),
-      }).pipe(Effect.orDie);
-    }
-    return db;
-  });
+export const DurableObject = Effect.fn("Drizzle.DurableObject")(function* <
+  TRelations extends AnyRelations = EmptyRelations,
+>(config?: DurableObjectConfig<TRelations>) {
+  const state = yield* DurableObjectState;
+  const storage = state.raw.storage;
+  const { migrations, ...drizzleConfig } = config ?? {};
+  // Built on the ambient (instance) Scope — the client wraps the DO's
+  // local SQLite storage, so there is no disposable resource behind it.
+  const services = yield* Layer.build(SqliteDoClient.layer({ storage }));
+  const db = yield* SQLiteDoDrizzle.makeWithDefaults({
+    ...(drizzleConfig as Omit<
+      SQLiteDoDrizzle.EffectDrizzleSQLiteDoConfig<TRelations>,
+      "storage"
+    >),
+    storage,
+  }).pipe(Effect.provideContext(services));
+  if (migrations !== undefined) {
+    // A migration that cannot apply leaves the instance unusable — there
+    // is no meaningful recovery at init, so it dies rather than forcing
+    // every caller to handle (or orDie) an error channel.
+    yield* migrate(db, {
+      migrations: migrations.migrations,
+      ...(migrations.migrationsTable !== undefined
+        ? { migrationsTable: migrations.migrationsTable }
+        : {}),
+    }).pipe(Effect.orDie);
+  }
+  return db;
+});
