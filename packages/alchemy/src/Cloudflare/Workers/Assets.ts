@@ -22,7 +22,51 @@ export const isAssets = (value: any): value is Assets =>
 export interface AssetsConfig extends Exclude<
   Exclude<workers.PutScriptRequest["metadata"]["assets"], undefined>["config"],
   undefined
-> {}
+> {
+  /**
+   * Serve the assets under a URL path prefix instead of the site root.
+   *
+   * Cloudflare matches static assets against the full request pathname,
+   * so a Worker attached to a zone route with a path (e.g.
+   * `example.com/docs*`) only serves assets whose manifest paths carry
+   * that prefix. Setting `basePath: "/docs"` nests every uploaded asset
+   * path under `/docs/...` — the files on disk stay where the build put
+   * them. For Vite-built sites the prefix is also applied as Vite's
+   * `base`, so emitted asset URLs resolve under the prefix.
+   *
+   * `_headers` and `_redirects` are unaffected: they are read from the
+   * asset directory root and applied as site-wide config.
+   *
+   * @see https://developers.cloudflare.com/workers/static-assets/routing/advanced/serving-a-subdirectory/
+   */
+  basePath?: string;
+}
+
+/**
+ * Normalize a {@link AssetsConfig.basePath} to `/prefix` shape — leading
+ * slash, no trailing slash. Empty and root (`"/"`) values normalize to
+ * `undefined` (no prefix).
+ */
+export const normalizeAssetsBasePath = (
+  basePath: string | undefined,
+): string | undefined => {
+  if (basePath === undefined) return undefined;
+  const trimmed = basePath.replace(/^\/+/, "").replace(/\/+$/, "");
+  return trimmed.length === 0 ? undefined : `/${trimmed}`;
+};
+
+/**
+ * Derive the Vite `base` (`/prefix/`, trailing slash as Vite expects) from
+ * an assets config's {@link AssetsConfig.basePath}, or `undefined` when no
+ * prefix is set.
+ */
+export const viteBaseFromAssets = (
+  assets: string | AssetsConfig | undefined,
+): string | undefined => {
+  if (assets === undefined || typeof assets === "string") return undefined;
+  const prefix = normalizeAssetsBasePath(assets.basePath);
+  return prefix === undefined ? undefined : `${prefix}/`;
+};
 
 export interface AssetReadResult {
   directory: string;
@@ -30,6 +74,8 @@ export interface AssetReadResult {
   manifest: Record<string, { hash: string; size: number }>;
   _headers: string | undefined;
   _redirects: string | undefined;
+  /** Normalized path prefix the manifest entries are nested under. */
+  basePath: string | undefined;
   hash: string;
 }
 
@@ -160,10 +206,16 @@ export const mergeAssetsConfigFiles = (
 
 export const readAssets = Effect.fn(function* ({
   directory,
+  basePath,
   ...config
 }: AssetsProps) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  // `basePath` nests the *manifest* paths (what Cloudflare matches request
+  // pathnames against) under a prefix; files stay where they are on disk.
+  // It is deliberately excluded from the `config` sent to Cloudflare — it
+  // is not part of the API's asset config shape.
+  const prefix = normalizeAssetsBasePath(basePath) ?? "";
   const resolvedDirectory = path.resolve(directory);
   const [files, ignore, _headers, _redirects] = yield* Effect.all([
     fs.readDirectory(resolvedDirectory, { recursive: true }),
@@ -214,7 +266,7 @@ export const readAssets = Effect.fn(function* ({
         });
       }
       manifest.set(
-        (name.startsWith("/") ? name : `/${name}`).replaceAll("\\", "/"),
+        `${prefix}${(name.startsWith("/") ? name : `/${name}`).replaceAll("\\", "/")}`,
         {
           hash,
           size,
@@ -249,6 +301,7 @@ export const readAssets = Effect.fn(function* ({
     manifest: sortedManifest,
     _headers,
     _redirects,
+    basePath: prefix === "" ? undefined : prefix,
     hash,
   };
 });
@@ -320,16 +373,25 @@ export const uploadAssets = Effect.fn(function* (
                 hash,
               });
             }
-            const file = yield* fs.readFile(path.join(directory, name)).pipe(
-              Effect.mapError(
-                (error) =>
-                  new FailedToReadAssetError({
-                    message: `Failed to read asset ${name}: ${error.message}`,
-                    name,
-                    cause: error,
-                  }),
-              ),
-            );
+            // Manifest paths may be nested under `basePath`; the files on
+            // disk are not — strip the prefix to locate the file.
+            const relativeName =
+              assets.basePath !== undefined &&
+              name.startsWith(`${assets.basePath}/`)
+                ? name.slice(assets.basePath.length)
+                : name;
+            const file = yield* fs
+              .readFile(path.join(directory, relativeName))
+              .pipe(
+                Effect.mapError(
+                  (error) =>
+                    new FailedToReadAssetError({
+                      message: `Failed to read asset ${name}: ${error.message}`,
+                      name,
+                      cause: error,
+                    }),
+                ),
+              );
             body[hash] = new File(
               [Buffer.from(file).toString("base64")],
               hash,

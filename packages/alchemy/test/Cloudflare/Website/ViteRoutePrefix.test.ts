@@ -1,18 +1,15 @@
 /**
- * REPRODUCTION for the "Vite site on a zone route with a path prefix" bug.
+ * Regression test for serving a Vite site on a zone route with a path
+ * prefix.
  *
  * Cloudflare matches static assets against the FULL request pathname
  * (https://developers.cloudflare.com/workers/static-assets/routing/advanced/serving-a-subdirectory/):
  * a Worker routed at `zone/prefix*` only serves an asset for
- * `/prefix/index.html` if the uploaded asset manifest contains
- * `/prefix/index.html`. The Vite resource uploads the client build rooted
- * at `/`, so a site attached via `routes: [{ pattern: "zone/prefix*" }]`
- * 404s (or, with SPA fallback, serves HTML whose root-absolute
- * `/assets/*.js` URLs fall outside the route entirely).
- *
- * This test pins the CURRENT (broken) behavior: the same deploy works on
- * workers.dev but does not serve a working page on the route. A fix should
- * flip the `routeResult` expectations.
+ * `/prefix/index.html` if the uploaded asset manifest contains that key.
+ * `assets.basePath` nests the uploaded manifest paths under the prefix and
+ * doubles as Vite's `base`, so the emitted HTML references its scripts
+ * under the prefix too — both halves are required for the site to work
+ * behind the route.
  */
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
@@ -30,7 +27,6 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
-import { expectUrlContains } from "../Utils/Http.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -48,8 +44,9 @@ const zoneName =
 
 // Deterministic per-user path prefix on the zone apex (never Date.now()).
 const routePrefix = `alchemy-vite-route-repro-${process.env.PULL_REQUEST ?? process.env.USER}`;
-const routePattern = `${zoneName}/${routePrefix}/app*`;
-const routePageUrl = `https://${zoneName}/${routePrefix}/app/`;
+const basePath = `/${routePrefix}/app`;
+const routePattern = `${zoneName}${basePath}*`;
+const routePageUrl = `https://${zoneName}${basePath}/`;
 
 const marker = "vite-route-prefix-repro";
 
@@ -140,7 +137,8 @@ interface ProbeResult {
 }
 
 // One GET with cache busting; retried below until the edge stops serving
-// 5xx / Cloudflare error pages (route + worker propagation).
+// 5xx / Cloudflare error pages / stale-deploy 404s (route + worker + asset
+// propagation).
 const probeOnce = (url: string) =>
   Effect.tryPromise({
     try: async (signal): Promise<ProbeResult> => {
@@ -167,7 +165,7 @@ const probeOnce = (url: string) =>
   });
 
 const isPropagating = (r: ProbeResult) =>
-  r.status >= 500 ||
+  r.status !== 200 ||
   r.body.includes("There is nothing here yet") ||
   /Error\s+1\d{3}/i.test(r.body);
 
@@ -206,17 +204,11 @@ const evaluateSite = Effect.fn(function* (pageUrl: string, label: string) {
       `[${label}] script ${scriptUrl} -> ${script.status} ${script.contentType ?? "-"} :: ${excerpt(script.body)}`,
     );
   }
-  const works =
-    page.status === 200 &&
-    page.body.includes(marker) &&
-    script !== undefined &&
-    script.status === 200 &&
-    (script.contentType?.includes("javascript") ?? false);
-  return { works, page, script };
+  return { page, src, script };
 });
 
 test.provider.skipIf(!zoneName)(
-  "Vite: assets do not serve on a zone route with a path prefix (repro)",
+  "Vite: assets.basePath serves the site on a zone route with a path prefix",
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -249,6 +241,7 @@ test.provider.skipIf(!zoneName)(
                 flags: ["nodejs_compat"],
               },
               memo: { include: memoInclude },
+              assets: { basePath },
               routes: [{ pattern: routePattern, zoneName }],
             });
           }),
@@ -259,25 +252,30 @@ test.provider.skipIf(!zoneName)(
         expect(site.routes).toHaveLength(1);
         expect(site.routes[0]?.pattern).toEqual(routePattern);
 
-        // Control — the very same deploy serves fine on workers.dev.
-        yield* expectUrlContains(`${site.url!}/`, marker, {
-          timeout: "120 seconds",
-          label: "workers.dev control",
-        });
-        const control = yield* evaluateSite(`${site.url!}/`, "workers.dev");
-        expect(control.works).toBe(true);
+        // Control — the same manifest serves under the prefix on
+        // workers.dev too (the manifest is nested, not the route).
+        const control = yield* evaluateSite(
+          `${site.url!}${basePath}/`,
+          "workers.dev",
+        );
+        expect(control.page.status).toBe(200);
+        expect(control.page.body).toContain(marker);
+        // Vite `base` bakes the prefix into the emitted script URL.
+        expect(control.src).toContain(`${basePath}/`);
+        expect(control.script?.status).toBe(200);
+        expect(control.script?.contentType).toContain("javascript");
 
-        // Repro — the route URL does NOT serve a working page, because the
-        // asset manifest is rooted at "/" while requests arrive under
-        // "/<prefix>/app/". A fix should make this evaluate to true.
-        const routeResult = yield* evaluateSite(routePageUrl, "zone route");
-        expect(routeResult.works).toBe(false);
-
-        // The specific failure shape today: the manifest has no
-        // `/<prefix>/app/index.html`, so the page request misses assets
-        // entirely (404 from the assets-only worker, or an SPA fallback
-        // whose root-absolute script URL escapes the route).
-        expect(routeResult.page.status).not.toBe(200);
+        // The point of the feature: the site works end-to-end behind the
+        // path-prefixed zone route — HTML serves AND the module script it
+        // references resolves under the prefix (inside the route).
+        const routed = yield* evaluateSite(routePageUrl, "zone route");
+        expect(routed.page.status).toBe(200);
+        expect(routed.page.body).toContain(marker);
+        expect(routed.script?.status).toBe(200);
+        expect(routed.script?.contentType).toContain("javascript");
+        expect(
+          routed.script?.url.startsWith(`https://${zoneName}${basePath}/`),
+        ).toBe(true);
       }).pipe(
         Effect.ensuring(
           Effect.gen(function* () {

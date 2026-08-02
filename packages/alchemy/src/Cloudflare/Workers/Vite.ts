@@ -77,11 +77,21 @@ const makeViteLogger = (console: ConsoleService.Console): vite.Logger => {
  */
 const ALCHEMY_CLOUDFLARE_VITE_INJECTED = "ALCHEMY_CLOUDFLARE_VITE_INJECTED";
 
+export interface ViteConfigOverrides {
+  /**
+   * Vite `base` — public path prefix baked into emitted asset URLs.
+   * Derived from `assets.basePath` so sites served behind a
+   * path-prefixed zone route reference their assets under the prefix.
+   */
+  base?: string;
+}
+
 export const viteDev = (
   rootDir: string = process.cwd(),
   env: Record<string, unknown>,
   pluginOptions: CloudflareVitePluginOptions,
   serverOptions: vite.ServerOptions,
+  overrides?: ViteConfigOverrides,
 ) =>
   Effect.acquireRelease(
     ConsoleService.consoleWith((console) =>
@@ -90,6 +100,7 @@ export const viteDev = (
         const vite = await loadVite(rootDir);
         const devServer = await vite.createServer({
           root: rootDir,
+          base: overrides?.base,
           define: getDefine(env),
           plugins: [cloudflare(pluginOptions)],
           server: serverOptions,
@@ -109,6 +120,7 @@ export const viteBuild = (
   rootDir: string = process.cwd(),
   env: Record<string, unknown>,
   pluginOptions: CloudflareVitePluginOptions,
+  overrides?: ViteConfigOverrides,
 ) =>
   Effect.gen(function* () {
     const outputPlugin = yield* viteBuildOutputPlugin({
@@ -121,6 +133,7 @@ export const viteBuild = (
       const builder = await vite.createBuilder(
         {
           root: rootDir,
+          base: overrides?.base,
           define: getDefine(env),
           plugins: [cloudflare(pluginOptions), outputPlugin.plugin],
           customLogger: makeViteLogger(console),

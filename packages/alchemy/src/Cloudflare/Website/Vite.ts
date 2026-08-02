@@ -139,6 +139,21 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * });
  * ```
  *
+ * @section Serving on a Zone Route with a Path Prefix
+ * Cloudflare matches static assets against the full request pathname,
+ * so a site attached to a route like `example.com/docs*` only serves
+ * assets nested under `/docs`. Set `assets.basePath` and Alchemy nests
+ * the uploaded asset paths under the prefix and applies it as Vite's
+ * `base`, so the emitted asset URLs resolve under the route.
+ *
+ * @example Vite site behind a path-prefixed route
+ * ```typescript
+ * const docs = yield* Cloudflare.Website.Vite("Docs", {
+ *   assets: { basePath: "/docs" },
+ *   routes: [{ pattern: "example.com/docs*", zoneName: "example.com" }],
+ * });
+ * ```
+ *
  * @section Custom Rebuild Scope
  * By default, every non-gitignored file is hashed to decide whether
  * a rebuild is needed. Use `memo` to narrow the scope when your
