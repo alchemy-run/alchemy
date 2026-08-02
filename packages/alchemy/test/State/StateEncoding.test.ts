@@ -74,6 +74,15 @@ describe("StateEncoding secrets", () => {
     expect(Redacted.value(revived.props.apiKey)).toBe("sk-live-super-secret");
   });
 
+  it("reviveStateRecursive revives legacy plaintext markers when a codec is active", () => {
+    // The HTTP store path: legacy state arrives pre-parsed with plaintext
+    // markers written by an older version.
+    const legacy = JSON.parse(JSON.stringify(encodeState(sampleState)));
+    const revived = reviveStateRecursive(legacy, codec) as any;
+    expect(Redacted.value(revived.props.apiKey)).toBe("sk-live-super-secret");
+    expect(Redacted.value(revived.props.nested.tokens[1])).toBe("t-2");
+  });
+
   it("fails with an actionable error when encrypted state is read without a password", () => {
     const json = JSON.stringify(encodeState(sampleState, codec));
     expect(() => JSON.parse(json, reviveState)).toThrow(/ALCHEMY_PASSWORD/);
