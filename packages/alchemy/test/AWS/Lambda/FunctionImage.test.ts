@@ -1,4 +1,7 @@
-import { hashFunctionImageBuild } from "@/AWS/Lambda/FunctionImage.ts";
+import {
+  functionImagePlatform,
+  hashFunctionImageBuild,
+} from "@/AWS/Lambda/FunctionImage.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -8,7 +11,14 @@ import * as Result from "effect/Result";
 
 const describe = layer(NodeServices.layer);
 
-describe("Lambda Function image hashing", (it) => {
+describe("Lambda Function images", (it) => {
+  it.effect("maps Lambda architectures to Docker platforms", () =>
+    Effect.sync(() => {
+      expect(functionImagePlatform("x86_64")).toBe("linux/amd64");
+      expect(functionImagePlatform("arm64")).toBe("linux/arm64");
+    }),
+  );
+
   it.effect("does not hash files excluded by .dockerignore", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;

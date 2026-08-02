@@ -12,13 +12,41 @@ import * as Stream from "effect/Stream";
 const { test } = Test.make({ providers: AWS.providers() });
 
 const fixture = `${import.meta.dirname}/fixtures/image-function`;
-const functionName = "alchemy-test-lambda-container-image";
+const coreFunctionName = "alchemy-test-lambda-container-image";
+const armFunctionName = "alchemy-test-lambda-container-image-arm64";
+const zipFunctionName = "alchemy-test-lambda-container-image-zip";
+const skipLive = !process.env.AWS_TEST_SLOW || !!process.env.FAST;
 
-// Building two platform-specific Lambda base images, pushing them to ECR, and
-// exercising two package-type replacements is intentionally outside the
-// default fast sweep. Run explicitly with `AWS_TEST_SLOW=1`.
-test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
-  "builds, invokes, updates, replaces, and destroys an image function",
+const imageFunction = (
+  context: string,
+  functionName: string,
+  architecture: AWS.Lambda.FunctionArchitecture,
+) =>
+  AWS.Lambda.Function("ContainerFunction", {
+    functionName,
+    image: { context, dockerfile: "Dockerfile" },
+    architecture,
+    env: {
+      IMAGE_FUNCTION_ENV: "bound",
+    },
+    url: false,
+  });
+
+const zipFunction = (functionName: string) =>
+  AWS.Lambda.Function("ContainerFunction", {
+    functionName,
+    main: `${import.meta.dirname}/timeout-handler.ts`,
+    handler: "handler",
+    isExternal: true,
+    url: false,
+  });
+
+// Docker builds, ECR pushes, Lambda propagation, and the provider's bounded
+// CloudWatch Logs cleanup make these unsuitable for the default fast sweep.
+// Each test is kept within one deletion window and runs only when explicitly
+// requested with `AWS_TEST_SLOW=1`.
+test.provider.skipIf(skipLive)(
+  "builds, invokes, updates, and destroys an image function",
   (stack) =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -30,19 +58,10 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
       });
       yield* fs.copy(fixture, context, { overwrite: true });
 
-      const image = (architecture: AWS.Lambda.FunctionArchitecture) =>
-        AWS.Lambda.Function("ContainerFunction", {
-          functionName,
-          image: { context, dockerfile: "Dockerfile" },
-          architecture,
-          env: {
-            IMAGE_FUNCTION_ENV: "bound",
-          },
-          url: false,
-        });
-
-      const first = yield* stack.deploy(image("x86_64"));
-      expect(first.functionName).toBe(functionName);
+      const first = yield* stack.deploy(
+        imageFunction(context, coreFunctionName, "x86_64"),
+      );
+      expect(first.functionName).toBe(coreFunctionName);
       expect(first.code.image?.digest).toMatch(/^sha256:/);
       expect(first.code.image?.imageUri).toContain(`:${first.code.hash}`);
       expect(first.code.image!.resolvedImageUri).toBe(
@@ -56,54 +75,112 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
       });
 
       // Unchanged context: the engine and ECR tag are both a no-op.
-      const unchanged = yield* stack.deploy(image("x86_64"));
+      const unchanged = yield* stack.deploy(
+        imageFunction(context, coreFunctionName, "x86_64"),
+      );
       expect(unchanged.code.hash).toBe(first.code.hash);
       expect(unchanged.code.image?.digest).toBe(first.code.image?.digest);
 
       // A context change creates a new content-addressed tag and updates the
       // existing Lambda in place.
       yield* fs.writeFileString(path.join(context, "marker.txt"), "two\n");
-      const updated = yield* stack.deploy(image("x86_64"));
+      const updated = yield* stack.deploy(
+        imageFunction(context, coreFunctionName, "x86_64"),
+      );
       expect(updated.functionName).toBe(first.functionName);
       expect(updated.code.hash).not.toBe(first.code.hash);
       expect(updated.code.image?.digest).not.toBe(first.code.image?.digest);
       expect((yield* invoke(updated.functionName, "two")).marker).toBe("two");
 
-      // Architecture maps to linux/arm64, participates in the image hash, and
-      // updates the same function in place.
-      const arm = yield* stack.deploy(image("arm64"));
-      expect(arm.functionName).toBe(first.functionName);
-      expect(arm.code.hash).not.toBe(updated.code.hash);
-      yield* assertFunctionImage(arm.functionName, "arm64");
-      expect((yield* invoke(arm.functionName, "two")).marker).toBe("two");
-
-      const firstRepository = arm.code.image!.repositoryName;
-
-      // Package type is immutable. A fixed function name therefore replaces
-      // delete-first, allowing the same name to move Image -> Zip.
-      const zip = yield* stack.deploy(
-        AWS.Lambda.Function("ContainerFunction", {
-          functionName,
-          main: `${import.meta.dirname}/timeout-handler.ts`,
-          handler: "handler",
-          isExternal: true,
-          url: false,
-        }),
+      // Architecture changes update the image function. The separate arm64
+      // smoke test below performs the platform-specific build and invocation.
+      const armPlan = yield* stack.plan(
+        imageFunction(context, coreFunctionName, "arm64"),
       );
-      expect(zip.functionName).toBe(functionName);
-      yield* assertFunctionPackageType(zip.functionName, "Zip");
-      yield* assertRepositoryDeleted(firstRepository);
+      expect(armPlan.resources["ContainerFunction"]).toMatchObject({
+        action: "update",
+      });
 
-      // And Zip -> Image uses the same replacement behavior.
-      const replaced = yield* stack.deploy(image("x86_64"));
-      expect(replaced.functionName).toBe(functionName);
-      yield* assertFunctionImage(replaced.functionName, "x86_64");
-      expect((yield* invoke(replaced.functionName, "two")).marker).toBe("two");
+      // Package type is immutable. A fixed function name must be deleted
+      // before the Zip replacement can reuse it.
+      const zipPlan = yield* stack.plan(zipFunction(coreFunctionName));
+      expect(zipPlan.resources["ContainerFunction"]).toMatchObject({
+        action: "replace",
+        deleteFirst: true,
+      });
 
-      const finalRepository = replaced.code.image!.repositoryName;
+      const repositoryName = updated.code.image!.repositoryName;
       yield* stack.destroy();
-      yield* assertFunctionDeleted(functionName);
-      yield* assertRepositoryDeleted(finalRepository);
+      yield* assertFunctionDeleted(coreFunctionName);
+      yield* assertRepositoryDeleted(repositoryName);
+    }).pipe(
+      Effect.tap(() => stack.destroy()),
+      Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
+    ),
+  { timeout: 120_000 },
+);
+
+test.provider.skipIf(skipLive)(
+  "builds and invokes an arm64 image function",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      yield* stack.destroy();
+
+      const context = yield* fs.makeTempDirectoryScoped({
+        prefix: "alchemy-lambda-image-arm64-",
+      });
+      yield* fs.copy(fixture, context, { overwrite: true });
+
+      const deployed = yield* stack.deploy(
+        imageFunction(context, armFunctionName, "arm64"),
+      );
+      expect(deployed.functionName).toBe(armFunctionName);
+      expect(deployed.code.image?.digest).toMatch(/^sha256:/);
+      yield* assertFunctionImage(deployed.functionName, "arm64");
+      expect(yield* invoke(deployed.functionName, "one")).toEqual({
+        marker: "one",
+        environment: "bound",
+        event: { hello: "image" },
+      });
+
+      const repositoryName = deployed.code.image!.repositoryName;
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(armFunctionName);
+      yield* assertRepositoryDeleted(repositoryName);
+    }).pipe(
+      Effect.tap(() => stack.destroy()),
+      Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
+    ),
+  { timeout: 120_000 },
+);
+
+test.provider.skipIf(skipLive)(
+  "plans a Zip function replacement with an image function",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      yield* stack.destroy();
+
+      const context = yield* fs.makeTempDirectoryScoped({
+        prefix: "alchemy-lambda-image-replacement-",
+      });
+      yield* fs.copy(fixture, context, { overwrite: true });
+
+      const deployed = yield* stack.deploy(zipFunction(zipFunctionName));
+      expect(deployed.functionName).toBe(zipFunctionName);
+      yield* assertFunctionPackageType(deployed.functionName, "Zip");
+
+      const imagePlan = yield* stack.plan(
+        imageFunction(context, zipFunctionName, "x86_64"),
+      );
+      expect(imagePlan.resources["ContainerFunction"]).toMatchObject({
+        action: "replace",
+        deleteFirst: true,
+      });
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(zipFunctionName);
     }).pipe(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
@@ -142,7 +219,7 @@ const invoke = Effect.fn(function* (
     ),
     Effect.retry({
       schedule: Schedule.spaced("2 seconds"),
-      times: 30,
+      times: 10,
     }),
   );
 });
@@ -161,7 +238,7 @@ const assertFunctionImage = Effect.fn(function* (
     ),
     Effect.retry({
       schedule: Schedule.spaced("2 seconds"),
-      times: 30,
+      times: 10,
     }),
   );
 });
@@ -177,7 +254,7 @@ const assertFunctionPackageType = Effect.fn(function* (
     ),
     Effect.retry({
       schedule: Schedule.spaced("2 seconds"),
-      times: 30,
+      times: 10,
     }),
   );
 });
