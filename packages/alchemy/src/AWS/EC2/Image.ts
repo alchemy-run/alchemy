@@ -1,6 +1,6 @@
-import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
+import { getAmi } from "./GetAmi.ts";
 
 /**
  * CPU architecture of the AMI to look up.
@@ -43,58 +43,11 @@ export interface FindImageOptions {
   virtualizationType?: "hvm" | "paravirtual";
 }
 
-const findLatestImage = Effect.fn(function* ({
-  owners,
-  name,
-  architecture = "x86_64",
-  // description = "public image",
-  rootDeviceType = "ebs",
-  virtualizationType = "hvm",
-}: FindImageOptions) {
-  const response = yield* ec2
-    .describeImages({
-      Owners: owners,
-      Filters: [
-        { Name: "name", Values: [...name] },
-        { Name: "architecture", Values: [architecture] },
-        { Name: "state", Values: ["available"] },
-        { Name: "root-device-type", Values: [rootDeviceType] },
-        { Name: "virtualization-type", Values: [virtualizationType] },
-      ],
-    })
-    .pipe(Effect.orDie);
-
-  const latest = (response.Images ?? [])
-    .slice()
-    .sort((a: ec2.Image, b: ec2.Image) =>
-      String(b.CreationDate ?? "").localeCompare(String(a.CreationDate ?? "")),
-    )[0];
-
-  if (!latest?.ImageId) {
-    return undefined;
-  }
-
-  return latest.ImageId;
-});
-
-const findFirstImage = Effect.fn(function* <Req = never>(
-  lookups: ReadonlyArray<Effect.Effect<string | undefined, never, Req>>,
-  errorMessage: string,
-) {
-  for (const lookup of lookups) {
-    const result = yield* lookup;
-    if (result) {
-      return result;
-    }
-  }
-  return yield* Effect.die(new Error(errorMessage));
-});
-
-const findImage = (options: FindImageOptions) =>
-  findLatestImage(options).pipe(
-    Effect.flatMap((imageId) =>
-      imageId
-        ? Effect.succeed(imageId)
+const requireImageId = (options: FindImageOptions) =>
+  getAmi(options).pipe(
+    Output.mapEffect((image) =>
+      image?.ImageId
+        ? Effect.succeed(image.ImageId)
         : Effect.die(
             new Error(
               `Could not resolve ${options.description ?? "an AMI"} matching ${options.name.join(", ")}`,
@@ -106,12 +59,12 @@ const findImage = (options: FindImageOptions) =>
 /**
  * Look up the latest available AMI ID matching the given filters.
  *
- * Returns an `Output<string>` that resolves at plan/deploy time (and dies
- * with a descriptive error when nothing matches), so it is safe to use both
- * in resource props and in composition code that is re-executed inside a
- * deployed runtime — the lookup never runs on the deployed machine. Use the
- * preset helpers ({@link amazonLinux2023}, {@link ubuntu2404}, ...) for
- * common distros.
+ * Returns an `Output<string>` resolved at plan/deploy time via the
+ * {@link getAmi} data source (and dies with a descriptive error when
+ * nothing matches), so it is safe to use both in resource props and in
+ * composition code that is re-executed inside a deployed runtime — the
+ * lookup never runs on the deployed machine. Use the preset helpers
+ * ({@link amazonLinux2023}, {@link ubuntu2404}, ...) for common distros.
  *
  * @example Find a custom AMI
  * ```typescript
@@ -126,8 +79,7 @@ const findImage = (options: FindImageOptions) =>
  * });
  * ```
  */
-export const image = (options: FindImageOptions) =>
-  Output.fromEffect(findImage(options));
+export const image = (options: FindImageOptions) => requireImageId(options);
 
 const amazonLinux2023Options = (options?: {
   architecture?: ImageArchitecture;
@@ -180,13 +132,14 @@ export const amazonLinux2 = (options?: { architecture?: ImageArchitecture }) =>
  * neither is available.
  */
 export const amazonLinux = (options?: { architecture?: ImageArchitecture }) =>
-  Output.fromEffect(
-    findFirstImage(
-      [
-        findLatestImage(amazonLinux2023Options(options)),
-        findLatestImage(amazonLinux2Options(options)),
-      ],
-      "Could not resolve a public Amazon Linux AMI",
+  getAmi(amazonLinux2023Options(options)).pipe(
+    Output.flatMap((al2023) =>
+      al2023?.ImageId
+        ? Output.literal(al2023.ImageId)
+        : requireImageId({
+            ...amazonLinux2Options(options),
+            description: "a public Amazon Linux AMI",
+          }),
     ),
   );
 

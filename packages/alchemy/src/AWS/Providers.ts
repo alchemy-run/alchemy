@@ -1669,6 +1669,10 @@ export const providers = () =>
         DockerLive,
       ),
     ),
+    // Plan-executable data-source capabilities: registering the impl layers
+    // at the stack level lets `Capability.execute(...)` Outputs (e.g.
+    // `AWS.EC2.getAmi`) resolve during plan.
+    Layer.provideMerge(EC2.GetAmiHttp),
     Layer.provideMerge(Region.fromEnvironment),
     Layer.provideMerge(Credentials.fromEnvironment),
     Layer.provideMerge(Endpoint.fromEnvironment),

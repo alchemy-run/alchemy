@@ -1,6 +1,7 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type { Input } from "./Input.ts";
+import * as Output from "./Output.ts";
 import type { ResourceLike } from "./Resource.ts";
 import { Self } from "./Self.ts";
 import { taggedFunction } from "./Util/effect.ts";
@@ -74,6 +75,33 @@ export interface Service<
     Effect.Error<ReturnType<Shape>>,
     Self | Effect.Services<ReturnType<Shape>> | Req
   >;
+  /**
+   * Invoke this capability at plan/deploy time as a **data source** — the
+   * Terraform data-source / Pulumi invoke shape — and get an
+   * {@link Output.Output} of the result.
+   *
+   * The returned Output is inert until the planner resolves it (with the
+   * stack's services provided), so `execute` is safe to call from
+   * composition code that is re-executed inside a deployed runtime bundle.
+   * The capability's implementation layer must be registered on the stack
+   * (cloud `providers()` layers include their plan-executable capabilities).
+   *
+   * The binding host is stubbed during execution, so implementations skip
+   * their `host.bind` IAM/env wiring — only the read runs. Failures die and
+   * fail the plan.
+   *
+   * Only capabilities whose runtime client is nullary (`() => Effect<A>`)
+   * are executable; parameterized clients type as `never` here.
+   */
+  execute<Req = never>(
+    ...args: BindParameters<Parameters<Shape>, Req>
+  ): Effect.Success<ReturnType<Shape>> extends () => Effect.Effect<
+    infer A,
+    infer _E,
+    infer R2
+  >
+    ? Output.ToOutput<A, Self | Effect.Services<ReturnType<Shape>> | R2 | Req>
+    : never;
 }
 
 /**
@@ -96,6 +124,21 @@ export const Service = <
         args.map((arg) => (Effect.isEffect(arg) ? arg : Effect.succeed(arg))),
         { concurrency: "unbounded" },
       ).pipe(Effect.flatMap((resolved) => f(...resolved))),
+    );
+  // Plan-time invoke (see the `execute` doc on `Service`): bind with a stub
+  // host (so impls skip their `host.bind` wiring — the isBindingHost /
+  // isInstance narrowing rejects it), run the nullary client, and lift the
+  // result into an Output the planner resolves with the stack's services.
+  (callable as any).execute = (...args: any[]) =>
+    Output.fromEffect(
+      callable(...args).pipe(
+        Effect.flatMap((client: any) => client()),
+        Effect.provideService(Self as any, {
+          Type: "Alchemy::Invoke",
+          LogicalId: id,
+        }),
+        Effect.orDie,
+      ) as Effect.Effect<any, never, any>,
     );
   return taggedFunction(tag as any, callable) as unknown as Self;
 };
