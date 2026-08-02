@@ -1091,7 +1091,12 @@ export const toRuntimeBinding = Effect.fn(function* (
     case "hyperdrive":
       return Hyperdrive.local(b.name, b.id);
     case "images":
-      return Images.remote(b.name);
+      // Local emulation runs transforms via Sharp on this machine and stores
+      // hosted images in a local KV-backed store; `dev: { remote: true }`
+      // opts into the real Images service instead.
+      return b.dev?.remote
+        ? Images.remote(b.name)
+        : Images.local({ binding: b.name });
     case "inherit":
       return yield* unsupported();
     case "json":

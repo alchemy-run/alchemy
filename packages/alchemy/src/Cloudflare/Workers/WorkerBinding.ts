@@ -108,6 +108,20 @@ export type BrowserWorkerBinding = Extract<
 };
 
 /**
+ * The `images` metadata binding extended with the alchemy-only `dev`
+ * options. `dev.remote` opts the binding out of local emulation in
+ * `alchemy dev` (the local worker proxies to the real Images service
+ * instead of the local Sharp-backed simulator). Stripped from the binding
+ * before the script upload — Cloudflare never sees it.
+ */
+export type ImagesWorkerBinding = Extract<
+  DistilledWorkerBinding,
+  { type: "images" }
+> & {
+  dev?: { remote?: boolean };
+};
+
+/**
  * The wire-shape binding union the Cloudflare API accepts — {@link WorkerBinding}
  * minus the alchemy-only members that must be lowered before upload.
  */
@@ -119,10 +133,12 @@ export type WorkerBinding =
       | { type: "durable_object_namespace" }
       | { type: "queue" }
       | { type: "browser" }
+      | { type: "images" }
     >
   | DurableObjectNamespaceWorkerBinding
   | QueueWorkerBinding
   | BrowserWorkerBinding
+  | ImagesWorkerBinding
   | SelfUrlWorkerBinding;
 
 export type WorkerSettingsBinding = Exclude<

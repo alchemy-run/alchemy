@@ -315,6 +315,8 @@ const toBinding = (
     return {
       type: "images",
       name: bindingName,
+      // Alchemy-only local-emulation opt-out (stripped before upload).
+      dev: binding.dev,
     };
   } else if (isBrowser(binding)) {
     return {
