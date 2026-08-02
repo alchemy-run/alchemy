@@ -13,7 +13,8 @@ export type DatasetKind =
   | "otel:metrics:v1"
   | "otel:traces:v1"
   | "otel:logs:v1"
-  | "axiom:events:v1";
+  | "axiom:events:v1"
+  | (string & {});
 
 export type DatasetProps = {
   /**
@@ -174,7 +175,7 @@ export const DatasetProvider = () =>
       const listDatasets = yield* Axiom.getDatasets;
       const del = yield* Axiom.deleteDataset;
 
-      const toAttrs = (dataset: Axiom.CreateDatasetOutput) => ({
+      const toAttrs = (dataset: Axiom.Dataset) => ({
         id: dataset.id,
         name: dataset.name,
         kind: dataset.kind,
@@ -239,7 +240,7 @@ export const DatasetProvider = () =>
                 retentionDays: news.retentionDays,
                 useRetentionPeriod: news.useRetentionPeriod,
               }) as Effect.Effect<
-                Axiom.CreateDatasetOutput,
+                Axiom.Dataset,
                 { readonly _tag: string },
                 never
               >

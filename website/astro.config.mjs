@@ -701,6 +701,7 @@ export default defineConfig({
                   link: "/cloudflare/frontend/react-router",
                 },
                 { label: "Vue", link: "/cloudflare/frontend/vue" },
+                { label: "Foldkit", link: "/cloudflare/frontend/foldkit" },
                 {
                   label: "SolidStart",
                   link: "/cloudflare/frontend/solidstart",

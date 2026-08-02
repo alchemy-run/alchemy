@@ -51,9 +51,9 @@ export class Ec2BindingsFunction extends AWS.Lambda.Function<AWS.Lambda.Function
 /**
  * Shared fleet for the bindings E2E: a dedicated VPC/subnet (the testing
  * account has no default VPC), a t3.micro instance, a 1 GiB volume, and an
- * empty security group. The AMI is resolved only at deploy time — at runtime
- * the resources resolve to references, so the lookup is guarded off inside
- * the deployed Lambda.
+ * empty security group. The AMI is an `Output` resolved at deploy time only,
+ * so this composition is safe to re-execute inside the deployed Lambda
+ * without runtime guards.
  */
 export class BindingsFleet extends Context.Service<
   BindingsFleet,
@@ -63,10 +63,7 @@ export class BindingsFleet extends Context.Service<
 export const BindingsFleetLive = Layer.effect(
   BindingsFleet,
   Effect.gen(function* () {
-    const isDeploy = !globalThis.__ALCHEMY_RUNTIME__;
-    const imageId = isDeploy
-      ? ((yield* amazonLinux2023()) ?? "ami-00000000000000000")
-      : "ami-00000000000000000";
+    const imageId = amazonLinux2023();
 
     const vpc = yield* Vpc("BindingsVpc", { cidrBlock: "10.61.0.0/16" });
     const subnet = yield* Subnet("BindingsSubnet", {

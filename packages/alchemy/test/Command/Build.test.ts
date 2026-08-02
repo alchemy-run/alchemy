@@ -186,13 +186,20 @@ test.provider(
       yield* fs.writeFileString(siblingFile, 'export const value = "a";\n');
 
       const outputFile = pathe.join(appDir, "dist", "output.txt");
+      // Exclude `dist` from the memo hash: build.sh stamps `dist/output.txt`
+      // with $(date) (the test's rebuild detector), and the temp fixture has
+      // no .gitignore to filter it. With dist hashed, two rebuilds straddling
+      // a wall-clock second boundary would produce different "input" hashes.
       const deploy = () =>
         stack.deploy(
           Command.Build("test-build", {
             command: "bash build.sh",
             cwd: appDir,
             outdir: "dist",
-            memo: { include: ["**/*", "../packages/env/**"] },
+            memo: {
+              include: ["**/*", "../packages/env/**"],
+              exclude: ["dist/**"],
+            },
           }),
         );
 
@@ -222,6 +229,7 @@ test.provider(
           outdir: "dist",
           memo: {
             include: ["**/*", pathe.join(siblingDir, "**")],
+            exclude: ["dist/**"],
           },
         }),
       );

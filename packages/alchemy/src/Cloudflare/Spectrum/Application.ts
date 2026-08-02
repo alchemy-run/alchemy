@@ -402,6 +402,18 @@ export const ApplicationProvider = () =>
 type ObservedApp = spectrum.GetAppResponse;
 
 /**
+ * Distilled types `getApp`/`listApps` results as a union whose second
+ * variant omits the optional configuration fields — normalize to a single
+ * partial shape.
+ */
+type FullApp = Extract<ObservedApp, { trafficType: unknown }>;
+type AnyApp =
+  | ObservedApp
+  | spectrum.CreateAppResponse
+  | spectrum.UpdateAppResponse;
+const asFull = (app: AnyApp): Partial<FullApp> & AnyApp => app;
+
+/**
  * Read an application by id, mapping "gone" (`SpectrumAppNotFound`,
  * Cloudflare error code 10006) to `undefined`.
  */
@@ -444,14 +456,6 @@ const toRequestBody = (news: ApplicationProps) => ({
   edgeIps: news.edgeIps,
   virtualNetworkId: news.virtualNetworkId as string | undefined,
 });
-
-/**
- * Distilled types `getApp`/`listApps` results as a union whose second
- * variant omits the optional configuration fields — normalize to a single
- * partial shape.
- */
-type FullApp = Extract<ObservedApp, { trafficType: unknown }>;
-const asFull = (app: ObservedApp): Partial<FullApp> & ObservedApp => app;
 
 /**
  * Compare observed cloud state against the desired props. Fields the user
@@ -502,7 +506,7 @@ const toAttributes = (
   app: ObservedApp | spectrum.CreateAppResponse | spectrum.UpdateAppResponse,
   zoneId: string,
 ): ApplicationAttributes => {
-  const a = asFull(app as ObservedApp);
+  const a = asFull(app);
   return {
     appId: a.id,
     zoneId,

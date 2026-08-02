@@ -14,6 +14,7 @@ import {
 import { asEffect } from "../../Util/types.ts";
 import type { Providers } from "../Providers.ts";
 import type { AssetsConfig } from "../Workers/Assets.ts";
+import { isContainerDecl } from "../Workers/WorkerAsyncBindings.ts";
 import {
   Worker,
   type NormalizedBindings,
@@ -318,8 +319,9 @@ const makeStaticSite = <
  * - `Output` references resolve at reconcile; the resolved value is
  *   serialized the same way inline values are (an `Output<object>` must
  *   reach the subprocess as JSON, not `[object Object]`)
- * - binding Effects (`~alchemy/Kind`-marked, e.g. a `WorkerLoader`) have no
- *   env-var representation and are dropped
+ * - binding Effects (`~alchemy/Kind`-marked, e.g. a `WorkerLoader`) and
+ *   `Cloudflare.Container` declarations have no env-var representation and
+ *   are dropped
  * - remaining plain values (`null`, numbers, JSON objects) are stringified
  */
 const serializeEnv = Effect.fn(function* (
@@ -336,6 +338,13 @@ const serializeEnv = Effect.fn(function* (
       entries.push([k, v]);
     } else if (Output.isOutput(v)) {
       entries.push([k, Output.map(v, serializeEnvValue)]);
+    } else if (isContainerDecl(v)) {
+      // A `Cloudflare.Container` declaration is Effect-shaped but is a
+      // binding (DO namespace + ContainerApplication) — yielding it would
+      // resolve the started-instance tag, which only exists inside a
+      // Durable Object (#997). Deploy-time only, nothing to expose to the
+      // build subprocess.
+      continue;
     } else if (isYieldableEffectLike(v)) {
       const resolved = serializeEnvValue(
         yield* asEffect(v as YieldableEffectLike<unknown, unknown, never>).pipe(

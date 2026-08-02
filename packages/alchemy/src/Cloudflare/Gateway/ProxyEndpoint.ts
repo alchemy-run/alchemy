@@ -189,7 +189,7 @@ export const ProxyEndpointProvider = () =>
       // 3. Sync — diff observed name/ips against desired and PATCH only
       //    the delta; skip the call entirely on a no-op. `ips` compares as
       //    an unordered set and only applies to ip-kind endpoints.
-      const observedIps = "ips" in observed ? [...observed.ips] : [];
+      const observedIps = observedIpsOf(observed);
       const dirty =
         observed.name !== name ||
         (kind === "ip" &&
@@ -268,6 +268,13 @@ const resolveName = (id: string, name: string | undefined) =>
     return yield* createPhysicalName({ id, lowercase: true });
   });
 
+/**
+ * Identity-kind endpoints report `ips: null` on the wire (previously `[]`),
+ * so a key-presence check is not enough — only a real array counts.
+ */
+const observedIpsOf = (endpoint: ObservedEndpoint): string[] =>
+  "ips" in endpoint && Array.isArray(endpoint.ips) ? [...endpoint.ips] : [];
+
 const toAttributes = (
   endpoint: ObservedEndpoint,
   accountId: string,
@@ -276,7 +283,7 @@ const toAttributes = (
   accountId,
   name: endpoint.name,
   kind: (endpoint.kind ?? "ip") as ProxyEndpointKind,
-  ips: "ips" in endpoint ? [...endpoint.ips] : [],
+  ips: observedIpsOf(endpoint),
   subdomain: endpoint.subdomain ?? undefined,
   createdAt: endpoint.createdAt ?? undefined,
   updatedAt: endpoint.updatedAt ?? undefined,

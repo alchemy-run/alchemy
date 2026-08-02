@@ -168,8 +168,12 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
  * the `~alchemy/Container/ClassName` marker (rather than importing from
  * `Containers/Container.ts`) to avoid a value-level import cycle through
  * `ContainerPlatform` → `Worker.ts` → this module.
+ *
+ * A Container declaration is Effect-shaped (yielding it resolves the
+ * *started instance* tag, which only exists inside a Durable Object), so
+ * every env-resolution site must check this before `Effect.isEffect`.
  */
-const isContainerDecl = (value: unknown): value is Container.Decl.Any =>
+export const isContainerDecl = (value: unknown): value is Container.Decl.Any =>
   (typeof value === "function" || typeof value === "object") &&
   value !== null &&
   "~alchemy/Container/ClassName" in value;

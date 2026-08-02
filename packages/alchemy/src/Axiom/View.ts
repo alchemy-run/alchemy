@@ -5,12 +5,12 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import type { Providers } from "./Providers.ts";
 
-export type ViewProps = Axiom.CreateViewInput;
+export type ViewProps = Axiom.CreateViewRequest;
 
 export type View = Resource<
   "Axiom.View",
   ViewProps,
-  Axiom.CreateViewOutput & {
+  Axiom.View & {
     /**
      * Path identifier used by `updateView` / `getView` / `deleteView`.
      * Currently derived from `name` because Axiom's view list/get responses

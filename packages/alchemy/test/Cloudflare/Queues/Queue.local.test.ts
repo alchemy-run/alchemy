@@ -11,6 +11,12 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as pathe from "pathe";
 
+// `dev: true` runs local providers behind the RPC sidecar proxy by default,
+// matching the process topology of the real `alchemy dev` command (see
+// MakeOptions.sidecar in Test/Core.ts). For Queue and Consumer this matters
+// doubly: both are RPC-backed providers, so under the proxy their entire
+// lifecycle (broker registration, consumer wiring, worker restart hooks)
+// runs in the sidecar process.
 const { test } = Test.make({
   providers: Cloudflare.providers(),
   dev: true,
@@ -81,7 +87,10 @@ test.provider(
         }),
       );
 
+      // The local provider fabricates a `dev:` id — proof no cloud call ran
+      // — and the worker serves from the local dev proxy.
       expect(deployed.queue.queueId).toMatch(/^dev:/);
+      expect(deployed.worker.url).toMatch(/^http:\/\/localhost:\d+$/);
 
       const sent = (yield* getJsonReady(
         `${deployed.worker.url}/send?text=local-hello`,
@@ -100,6 +109,66 @@ test.provider(
         }),
       );
       expect(received).toContain("local-hello");
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+/**
+ * Regression test for #988: a consumer configured with a dead-letter queue
+ * that the worker does not itself consume. The DLQ binding resolves through
+ * the local runtime's registry proxy; the worker previously failed to start
+ * with `WorkerdStartFailed` because the DLQ binding referenced the
+ * `cloudflare-runtime:registry-proxy` service before it was defined.
+ */
+test.provider(
+  "local queue consumer with an unconsumed dead-letter queue starts and delivers",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const queue = yield* Cloudflare.Queues.Queue("DlqSourceQueue");
+          const dlq = yield* Cloudflare.Queues.Queue("DlqTargetQueue");
+          const worker = yield* Cloudflare.Worker("queue-dlq-local-worker", {
+            main: pathe.resolve(
+              import.meta.dirname,
+              "fixtures/queue-local-worker.ts",
+            ),
+            env: { QUEUE: queue },
+          });
+          yield* Cloudflare.Queues.Consumer("DlqLocalConsumer", {
+            queueId: queue.queueId,
+            scriptName: worker.workerName,
+            deadLetterQueue: dlq.queueName,
+            settings: { maxRetries: 1 },
+          });
+          return { queue, dlq, worker };
+        }),
+      );
+
+      expect(deployed.queue.queueId).toMatch(/^dev:/);
+      expect(deployed.dlq.queueId).toMatch(/^dev:/);
+
+      // The worker starts (the DLQ binding resolves) and delivers normally.
+      const sent = (yield* getJsonReady(
+        `${deployed.worker.url}/send?text=dlq-hello`,
+      )) as { sent: string };
+      expect(sent.sent).toBe("dlq-hello");
+
+      const received = yield* getJsonReady(
+        `${deployed.worker.url}/received`,
+      ).pipe(
+        Effect.map((body) => (body as { received: string[] }).received),
+        Effect.repeat({
+          schedule: Schedule.spaced("500 millis"),
+          until: (received) => received.includes("dlq-hello"),
+          times: 30,
+        }),
+      );
+      expect(received).toContain("dlq-hello");
 
       yield* stack.destroy();
     }).pipe(logLevel),

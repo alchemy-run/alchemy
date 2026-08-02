@@ -111,7 +111,7 @@ export type DataCatalogAttributes = {
   /**
    * Whether a maintenance credential is registered for this catalog.
    */
-  credentialStatus: "present" | "absent";
+  credentialStatus: "present" | "absent" | (string & {});
   /**
    * Observed compaction maintenance configuration.
    */

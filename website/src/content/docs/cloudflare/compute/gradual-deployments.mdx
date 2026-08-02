@@ -183,15 +183,57 @@ the smoke test fails, re-deploy the last good ref at the default 100
 Percentages route each request independently, so one user can bounce
 between versions mid-rollout. The `Cloudflare-Workers-Version-Key`
 header pins them: Cloudflare hashes the key and assigns a version
-deterministically from the percentages.
+deterministically from the percentages. Declare the key source with
+`version.affinity`:
+
+```typescript
+yield* Cloudflare.Worker("Api", {
+  main: "./src/api.ts",
+  domain: "api.example.com",
+  version: {
+    traffic: 10,
+    // sticky by session cookie, falling back to sticky IP
+    affinity: { cookie: "session_id", ip: true },
+  },
+});
+```
+
+Alchemy provisions a transform rule on each zone the Worker serves on
+(custom domains and routes), scoped to the Worker's hostnames, that
+fills the header from the cookie — and, for requests that don't carry
+the cookie yet, from the client IP. The rule updates in place as the
+config changes and is removed when `affinity` is removed or the
+Worker is destroyed. On a [canary of another stage's
+Worker](#canary-another-stages-worker) (`version.parent`), the rule
+lands on the parent's zones, pinning users across the canary split.
+
+Besides `cookie`, the key can come from a request `header` (a tenant
+or user id your edge already stamps), the client IP alone
+(`{ ip: true }`), or — for anything else, like a JWT claim via API
+Shield — a raw
+[Rules-language](https://developers.cloudflare.com/ruleset-engine/rules-language/)
+expression:
+
+```typescript
+version: {
+  traffic: 10,
+  affinity: { key: `http.request.jwt.claims["<token-config-id>"][0]` },
+}
+```
+
+Transform rules only see zone traffic; on the bare `workers.dev` URL,
+clients send the header themselves:
 
 ```sh
 curl -s https://api.example.com -H 'Cloudflare-Workers-Version-Key: user-123'
 ```
 
-On zone traffic (custom domains and routes), declare the pinning as
-infrastructure — a transform rule that fills the header from a
-session cookie, with no Worker code changes:
+Pinned users only move forward as percentages rise, never back.
+
+For full control over the rule — custom match conditions, keys
+composed from several fields, rules spanning Workers — drop down to a
+manual `Ruleset` in the same phase, which is exactly what the sugar
+manages for you:
 
 ```typescript
 const zone = yield* Cloudflare.Zone.Zone("Zone", { name: "example.com" });
@@ -216,11 +258,6 @@ yield* Cloudflare.Ruleset.Ruleset("VersionAffinity", {
   ],
 });
 ```
-
-Any stable request property works as the key — a cookie, an auth
-claim, a tenant id. Transform rules only see zone traffic; on the bare
-`workers.dev` URL, clients send the header themselves. Pinned users
-only move forward as percentages rise, never back.
 
 ## Verify which version served a request
 

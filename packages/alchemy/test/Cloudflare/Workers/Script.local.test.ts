@@ -77,6 +77,11 @@ test.provider(
         );
 
       const v1 = yield* deploy("v1");
+
+      // The local provider serves from the dev proxy — proof no cloud call
+      // ran.
+      expect(v1.worker.url).toMatch(/^http:\/\/localhost:\d+$/);
+
       const first = (yield* getJsonReady(`${v1.worker.url}`)) as {
         version: string;
       };
