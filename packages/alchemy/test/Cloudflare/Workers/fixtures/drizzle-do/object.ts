@@ -17,9 +17,7 @@ export class DrizzleUsersObject extends Cloudflare.DurableObject<DrizzleUsersObj
       // Opens drizzle over this instance's SQLite storage — with the
       // relational schema — and applies the generated migrations before
       // any request touches the db.
-      const db = yield* Drizzle.DurableObject({ migrations, relations }).pipe(
-        Effect.orDie,
-      );
+      const db = yield* Drizzle.DurableObject({ migrations, relations });
 
       return {
         addUser: (name: string) =>

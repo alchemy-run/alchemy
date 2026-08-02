@@ -122,9 +122,7 @@ export class Users extends Cloudflare.DurableObject<Users>()(
   "Users",
   Effect.gen(function* () {
     return Effect.gen(function* () {
-      const db = yield* Drizzle.DurableObject({ migrations, relations }).pipe(
-        Effect.orDie,
-      );
+      const db = yield* Drizzle.DurableObject({ migrations, relations });
 
       return {
         addUser: (name: string) => db.insert(users).values({ name }),

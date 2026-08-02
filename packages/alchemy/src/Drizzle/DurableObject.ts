@@ -39,8 +39,9 @@ export interface DurableObjectConfig<
  * `EffectDrizzleQueryError` (query + params + cause, wrapping the
  * underlying effect-sql `SqlError`) — so failures are handled with
  * `Effect.catchTag` instead of leaking as defects. Transactions add
- * `SqlError` to the union; the migrator can additionally fail with
- * `MigratorInitError`.
+ * `SqlError` to the union. Opening the db itself never fails: a
+ * migration that cannot apply dies, since the instance is unusable
+ * without its schema.
  *
  * Yield it in the object's inner (instance) Effect — it runs when the
  * instance activates, before any request reaches its methods:
@@ -75,9 +76,7 @@ export interface DurableObjectConfig<
  *   "Users",
  *   Effect.gen(function* () {
  *     return Effect.gen(function* () {
- *       const db = yield* Drizzle.DurableObject({ migrations, relations }).pipe(
- *         Effect.orDie,
- *       );
+ *       const db = yield* Drizzle.DurableObject({ migrations, relations });
  *
  *       return {
  *         addUser: (name: string) => db.insert(users).values({ name }),
@@ -120,12 +119,15 @@ export const DurableObject = <TRelations extends AnyRelations = EmptyRelations>(
       storage,
     }).pipe(Effect.provideContext(services));
     if (migrations !== undefined) {
+      // A migration that cannot apply leaves the instance unusable — there
+      // is no meaningful recovery at init, so it dies rather than forcing
+      // every caller to handle (or orDie) an error channel.
       yield* migrate(db, {
         migrations: migrations.migrations,
         ...(migrations.migrationsTable !== undefined
           ? { migrationsTable: migrations.migrationsTable }
           : {}),
-      });
+      }).pipe(Effect.orDie);
     }
     return db;
   });
