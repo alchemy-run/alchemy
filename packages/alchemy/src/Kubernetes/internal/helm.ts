@@ -141,8 +141,17 @@ export const parseRenderedManifests = (
   rendered: string,
 ): Effect.Effect<Array<KubernetesObjectDefinition>, HelmError> =>
   Effect.gen(function* () {
+    // Helm 4 writes OCI pull metadata to stdout before the rendered YAML.
+    // Strip only that exact leading preamble; chart output remains subject to
+    // the same strict Kubernetes object validation below.
+    const manifests = chart.startsWith("oci://")
+      ? rendered.replace(
+          /^Pulled: [^\r\n]+\r?\nDigest: [^\r\n]+\r?\n(?=---(?:\r?\n|$))/,
+          "",
+        )
+      : rendered;
     const documents = yield* Effect.try({
-      try: () => YAML.parseAllDocuments(rendered),
+      try: () => YAML.parseAllDocuments(manifests),
       catch: (cause) =>
         new HelmError({
           message: `Failed to parse rendered manifests from chart '${chart}'`,
