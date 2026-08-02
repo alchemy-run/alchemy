@@ -67,8 +67,9 @@ generation is not wired through `Drizzle.Schema`.
 
 A Durable Object's SQLite database is per-instance, so its
 migrations run inside the object at runtime rather than from the
-deploy graph. Generate them with drizzle-kit's `durable-sqlite`
-driver:
+deploy graph (see drizzle's
+[Durable Objects guide](https://orm.drizzle.team/docs/connect-cloudflare-do)).
+Generate them with drizzle-kit's `durable-sqlite` driver:
 
 ```typescript
 // drizzle.config.ts
@@ -82,8 +83,9 @@ export default defineConfig({
 });
 ```
 
-Define the schema — tables plus `defineRelations` for typed
-relational queries:
+Define the schema — tables plus
+[`defineRelations`](https://orm.drizzle.team/docs/relations-v2) for
+typed relational queries:
 
 ```typescript
 // schema.ts
@@ -107,12 +109,13 @@ export const relations = defineRelations({ users, posts }, (t) => ({
 }));
 ```
 
-`drizzle-kit generate` writes the migration directories plus a
-`migrations.js` bundle that imports each migration's `.sql` file.
-The alchemy bundler loads bare `.sql` imports as text modules (the
-same way it handles `.txt` and `.html`), so the generated bundle
-imports directly into your Durable Object. Commit it and hand it to
-`Drizzle.DurableObject`, along with the `relations`:
+[`drizzle-kit generate`](https://orm.drizzle.team/docs/drizzle-kit-generate)
+writes the migration directories plus a `migrations.js` bundle that
+imports each migration's `.sql` file. The alchemy bundler loads bare
+`.sql` imports as text modules (the same way it handles `.txt` and
+`.html`), so the generated bundle imports directly into your Durable
+Object. Commit it and hand it to `Drizzle.DurableObject`, along with
+the `relations`:
 
 ```typescript
 import migrations from "./drizzle/migrations.js";
