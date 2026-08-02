@@ -2314,7 +2314,17 @@ export const LiveWorkerProvider = () =>
         assets: WorkerProps["assets"],
         output: Worker["Attributes"] | undefined,
       ) => {
-        if (!Predicate.hasProperty(assets, "hash")) return undefined;
+        // An explicitly-undefined `hash` (`{ directory, hash: maybe }`) is
+        // the hash-less shape, not a supplied hash — the same rule
+        // `assetsChanged` applies during diff. Without the `undefined` check
+        // a greenfield create (`output === undefined`) compares `undefined
+        // === undefined`, sets `skip`, and uploads a Worker with no assets.
+        if (
+          !Predicate.hasProperty(assets, "hash") ||
+          assets.hash === undefined
+        ) {
+          return undefined;
+        }
         // `base` shapes the uploaded manifest paths (see `readAssets`); it
         // is alchemy-only and must not leak into the API's asset config.
         const { directory, hash, base, ...config } = assets;
