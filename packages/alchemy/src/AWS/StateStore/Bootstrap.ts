@@ -4,6 +4,8 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
+import * as Stream from "effect/Stream";
 import { adopt } from "../../AdoptPolicy.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import { ALCHEMY_PROFILE } from "../../Auth/Profile.ts";
@@ -55,8 +57,6 @@ export interface BootstrapOptions {
   prefix?: string;
   /** @default "alias/alchemy-state" */
   kmsAlias?: `alias/${string}`;
-  /** @default false */
-  force?: boolean;
 }
 
 /**
@@ -222,7 +222,6 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
       yield* deployStateStack({
         stage: localStage,
         state: localState,
-        force: options.force,
         bucketName,
         kmsAlias,
       });
@@ -260,7 +259,6 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
         yield* deployStateStack({
           stage: remoteStage,
           state: s3State,
-          force: options.force,
           bucketName,
           kmsAlias,
         });
@@ -268,6 +266,20 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
         yield* finishWithLocalState;
       }
     }
+
+    // Converge the wrapped data key onto the stack-managed key: a store
+    // that predates the bootstrap stack wraps its data key under the
+    // old imperatively-created key, which would stay silently
+    // load-bearing forever (and brick all secrets if someone deleted
+    // the innocuous-looking unmanaged key). Best-effort — a failure
+    // leaves the store working exactly as before.
+    yield* rewrapDataKey({ bucketName, prefix: options.prefix, kmsAlias }).pipe(
+      Effect.catchCause((cause) =>
+        Clank.info(
+          `Could not re-wrap the state data key under '${kmsAlias}' — the store keeps working with its current key. Cause: ${cause}`,
+        ),
+      ),
+    );
 
     yield* Clank.success(`AWS state store '${bucketName}' is ready.`);
     return { bucketName, kmsAlias, region, accountId };
@@ -277,17 +289,102 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
     }),
   );
 
+/**
+ * If the persisted data key is wrapped under a key other than the one
+ * behind `kmsAlias` (e.g. the imperatively-created key from before the
+ * bootstrap stack existed), decrypt it and re-wrap it under the
+ * stack-managed key, so the old key stops being load-bearing and can
+ * eventually be retired.
+ */
+const rewrapDataKey = ({
+  bucketName,
+  prefix,
+  kmsAlias,
+}: {
+  bucketName: string;
+  prefix?: string;
+  kmsAlias: `alias/${string}`;
+}) =>
+  Effect.gen(function* () {
+    const normalizedPrefix = prefix ? `${prefix.replace(/\/+$/, "")}/` : "";
+    const stateKeyObjectKey = `${normalizedPrefix}__state_key__.json`;
+
+    const wrapped = yield* s3
+      .getObject({ Bucket: bucketName, Key: stateKeyObjectKey })
+      .pipe(
+        Effect.flatMap((r) =>
+          r.Body === undefined
+            ? Effect.succeed(undefined)
+            : Stream.mkString(Stream.decodeText(r.Body)).pipe(
+                Effect.map(
+                  (text) =>
+                    JSON.parse(text) as { keyId?: string; ciphertext: string },
+                ),
+              ),
+        ),
+        Effect.catchTag("NoSuchKey", () => Effect.succeed(undefined)),
+      );
+    if (wrapped === undefined) return;
+
+    const target = yield* kms.describeKey({ KeyId: kmsAlias }).pipe(
+      Effect.map((r) => r.KeyMetadata),
+      Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+    );
+    if (target?.KeyId === undefined) return;
+
+    const wrappingKey =
+      wrapped.keyId === undefined
+        ? undefined
+        : yield* kms.describeKey({ KeyId: wrapped.keyId }).pipe(
+            Effect.map((r) => r.KeyMetadata?.KeyId),
+            Effect.catchTag("NotFoundException", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+    if (wrappingKey === target.KeyId) return;
+
+    const decrypted = yield* kms.decrypt({
+      CiphertextBlob: Buffer.from(wrapped.ciphertext, "base64"),
+    });
+    const plaintext = Redacted.isRedacted(decrypted.Plaintext)
+      ? Redacted.value(decrypted.Plaintext)
+      : decrypted.Plaintext;
+    if (plaintext === undefined) return;
+
+    const rewrapped = yield* kms.encrypt({
+      KeyId: target.KeyId,
+      Plaintext: plaintext,
+    });
+    if (rewrapped.CiphertextBlob === undefined) return;
+    yield* s3.putObject({
+      Bucket: bucketName,
+      Key: stateKeyObjectKey,
+      Body: JSON.stringify(
+        {
+          keyId: rewrapped.KeyId ?? target.KeyId,
+          ciphertext: Buffer.from(rewrapped.CiphertextBlob).toString("base64"),
+        },
+        null,
+        2,
+      ),
+      ContentType: "application/json",
+    });
+    yield* Clank.info(
+      `Re-wrapped the state data key under '${kmsAlias}'${
+        wrapped.keyId === undefined ? "" : ` (was ${wrapped.keyId})`
+      }.`,
+    );
+  });
+
 /** Deploy the state-store stack against the given state service. */
 const deployStateStack = ({
   stage,
   state,
-  force,
   bucketName,
   kmsAlias,
 }: {
   stage: string;
   state: StateService;
-  force?: boolean;
   bucketName: string;
   kmsAlias: `alias/${string}`;
 }) =>
@@ -295,7 +392,14 @@ const deployStateStack = ({
     const stateLayer = Layer.succeed(State, Effect.succeed(state));
     yield* deploy({
       stage,
-      force,
+      // Always force: the whole point of re-running bootstrap is to
+      // heal drift, and the plan's prop-diff cannot see out-of-band
+      // damage (a deleted alias, a key scheduled for deletion — the
+      // persisted props are unchanged, so everything plans as noop).
+      // Forcing makes every reconciler run its observe-ensure-sync
+      // flow, which is a no-op at the API level when the cloud is
+      // already healthy.
+      force: true,
       stack: Alchemy.Stack(
         STATE_STACK_NAME,
         { providers: AWSProviders.providers(), state: stateLayer },
@@ -416,10 +520,11 @@ export const teardown = (options: TeardownOptions = {}) =>
       Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
     );
     if (target?.KeyId !== undefined) {
-      yield* Clank.info(`Deleting KMS alias '${kmsAlias}'...`);
-      yield* kms
-        .deleteAlias({ AliasName: kmsAlias })
-        .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
+      // Schedule the key deletion BEFORE removing the alias: a crash
+      // between the two then leaves an alias pointing at a
+      // pending-deletion key — a state every read path and re-run
+      // recovers from — rather than an alias-less key that no rerun of
+      // teardown can find again.
       if (target.KeyState !== "PendingDeletion") {
         yield* kms
           .scheduleKeyDeletion({
@@ -438,6 +543,10 @@ export const teardown = (options: TeardownOptions = {}) =>
             `afterwards any state secrets encrypted under it are permanently unreadable.`,
         );
       }
+      yield* Clank.info(`Deleting KMS alias '${kmsAlias}'...`);
+      yield* kms
+        .deleteAlias({ AliasName: kmsAlias })
+        .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
     }
 
     // Drop any stranded local bootstrap stack for this store.

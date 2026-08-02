@@ -258,6 +258,67 @@ export const makeS3State = (options: S3StateOptions = {}) =>
       );
 
     /**
+     * The state bucket is versioned, so an out-of-band delete of the
+     * data-key object leaves a delete marker with the real versions
+     * intact underneath. Restore the most recent real version instead
+     * of minting a fresh data key — a fresh key would permanently
+     * strand every value already encrypted under the old one.
+     */
+    const restoreWrappedKeyFromVersions = (bucketName: string) =>
+      Effect.gen(function* () {
+        const versions = yield* s3.listObjectVersions({
+          Bucket: bucketName,
+          Prefix: stateKeyObjectKey,
+        });
+        const candidates = (versions.Versions ?? [])
+          .filter(
+            (v) => v.Key === stateKeyObjectKey && v.VersionId !== undefined,
+          )
+          .sort(
+            (a, b) =>
+              new Date(b.LastModified ?? 0).getTime() -
+              new Date(a.LastModified ?? 0).getTime(),
+          );
+        const latest = candidates[0];
+        if (latest === undefined) return undefined;
+        const body = yield* s3
+          .getObject({
+            Bucket: bucketName,
+            Key: stateKeyObjectKey,
+            VersionId: latest.VersionId,
+          })
+          .pipe(
+            Effect.flatMap((r) =>
+              r.Body === undefined
+                ? Effect.succeed(undefined)
+                : Stream.mkString(Stream.decodeText(r.Body)),
+            ),
+            Effect.catchTag("NoSuchKey", () => Effect.succeed(undefined)),
+          );
+        if (body === undefined) return undefined;
+        yield* Effect.logInfo(
+          `S3 state store: restoring deleted state data key object '${stateKeyObjectKey}' from version ${latest.VersionId}`,
+        );
+        // Conditional put + read-back: a concurrent restorer (or a
+        // concurrent fresh mint) converges on whatever won.
+        yield* s3
+          .putObject({
+            Bucket: bucketName,
+            Key: stateKeyObjectKey,
+            Body: body,
+            ContentType: "application/json",
+            IfNoneMatch: "*",
+          })
+          .pipe(
+            Effect.catchTag(
+              ["PreconditionFailed", "ConditionalRequestConflict"],
+              () => Effect.void,
+            ),
+          );
+        return yield* readWrappedKey(bucketName);
+      });
+
+    /**
      * Recover the state key after an out-of-band cleanup (e.g. an
      * account nuke) scheduled it for deletion: cancel the pending
      * deletion and re-enable it. State encrypted under the key's data
@@ -380,6 +441,8 @@ export const makeS3State = (options: S3StateOptions = {}) =>
       Effect.gen(function* () {
         const existing = yield* readWrappedKey(bucketName);
         if (existing !== undefined) return yield* unwrapDataKey(existing);
+        const restored = yield* restoreWrappedKeyFromVersions(bucketName);
+        if (restored !== undefined) return yield* unwrapDataKey(restored);
         const keyId = yield* ensureKmsKey;
         const dataKey = yield* kms.generateDataKey({
           KeyId: keyId,
