@@ -257,10 +257,9 @@ export const buildViaCli = (
       timeout: "5 minutes",
     });
     if (result.exitCode !== 0) {
-      return yield* new SpacetimeCliError({
-        command: args.join(" "),
-        ...result,
-      });
+      return yield* Effect.fail(
+        new SpacetimeCliError({ command: args.join(" "), ...result }),
+      );
     }
     return result;
   });
