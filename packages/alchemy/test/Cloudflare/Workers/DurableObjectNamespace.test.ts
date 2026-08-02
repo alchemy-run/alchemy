@@ -1,6 +1,8 @@
 import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { getDurableObjectExportStateFromTags } from "@/Cloudflare/Workers/DurableObjectExportTags.ts";
+import { WorkerVersionConfigError } from "@/Cloudflare/Workers/WorkerProvider.ts";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
 import * as workers from "@distilled.cloud/cloudflare/workers";
@@ -641,8 +643,10 @@ export default { async fetch() { return new Response("v4"); } };
   // declarative transfer; worker-b's deploy commits the handoff.
   //
   //   v1 — worker-b hosts `Counter` locally; write data into the namespace
-  //   v2a — worker-a declares an expecting transfer; worker-b commits it.
-  //   v2b — the same declaration converges worker-a to a live export and
+  //   v2a — worker-a declares an expecting transfer while worker-b remains
+  //         the source. Repeating this phase must remain pending.
+  //   v2b — worker-b commits the transfer.
+  //   v2c — the same declaration converges worker-a to a live export and
   //         attaches its binding. The stored data must survive the move,
   //         reachable from both.
   //   v3 — redeploy of the converged shape is inert (no re-transfer; the
@@ -672,6 +676,63 @@ export default { async fetch() { return new Response("v4"); } };
           `${v1.b.url}/increment`,
         );
         expect(written.value).toBe(1);
+
+        const waiting = Effect.gen(function* () {
+          const a = yield* Cloudflare.Worker("worker-a", {
+            script: hostWorkerScript,
+            env: {
+              Counter: Cloudflare.DurableObject("Counter", {
+                transferredFrom: "worker-b",
+              }),
+            },
+          });
+          const b = yield* Cloudflare.Worker("worker-b", {
+            script: hostWorkerScript,
+            env: {
+              Counter: Cloudflare.DurableObject("Counter"),
+            },
+          });
+          return { a, b };
+        });
+
+        const pending = yield* scratch.deploy(waiting);
+        const retried = yield* scratch.deploy(waiting);
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const pendingTags = yield* getWorkerTags(
+          retried.a.workerName,
+          accountId,
+        );
+        expect(
+          getDurableObjectExportStateFromTags(pendingTags)?.pendingTransfers
+            .Counter,
+        ).toEqual({
+          storage: "sqlite",
+          transferFrom: pending.b.workerName,
+        });
+
+        const versionError = yield* scratch
+          .deploy(
+            Effect.gen(function* () {
+              const a = yield* Cloudflare.Worker("worker-a", {
+                script: hostWorkerScript,
+                version: { traffic: 50 },
+                env: {
+                  Counter: Cloudflare.DurableObject("Counter", {
+                    transferredFrom: "worker-b",
+                  }),
+                },
+              });
+              const b = yield* Cloudflare.Worker("worker-b", {
+                script: hostWorkerScript,
+                env: {
+                  Counter: Cloudflare.DurableObject("Counter"),
+                },
+              });
+              return { a, b };
+            }),
+          )
+          .pipe(Effect.flip);
+        expect(versionError).toBeInstanceOf(WorkerVersionConfigError);
 
         const moved = Effect.gen(function* () {
           const a = yield* Cloudflare.Worker("worker-a", {
