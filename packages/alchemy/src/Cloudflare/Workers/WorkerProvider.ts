@@ -3764,6 +3764,45 @@ export const LiveWorkerProvider = () =>
         } satisfies Worker["Attributes"];
       });
 
+      // Compare the desired assets against the deployed asset-content hash.
+      //
+      // For `AssetsWithHash` (the documented `Command.Build` contract) the
+      // upstream build already produced an authoritative hash — compare
+      // strings without touching the filesystem. Reading the directory here
+      // would crash when the prior state was written on a different machine
+      // and the path doesn't exist locally, blocking any local reapply even
+      // though the precomputed hash is right there in props.
+      //
+      // For the plain `string` / `AssetsProps` shapes there is no hash in
+      // props, so read + hash the directory exactly like the apply path does
+      // (`readAssets`) and compare against the stored content hash — an
+      // unchanged tree converges to a noop plan instead of a forever-dirty
+      // conservative update. The overall read cost is unchanged: previously
+      // every plan reported "changed" and `putWorker` read the tree during
+      // apply only to discover nothing changed (`keepAssets`); now the diff
+      // reads it and a match skips reconcile entirely. A directory that is
+      // missing or invalid at plan time (e.g. produced by an upstream build
+      // step that only runs during apply) degrades to "changed" — apply
+      // reads it once and either uploads or surfaces the real typed error.
+      const assetsChanged = Effect.fn(function* (
+        assets: WorkerProps["assets"],
+        output: Worker["Attributes"],
+      ) {
+        if (!assets) {
+          return false;
+        }
+        if (Predicate.hasProperty(assets, "hash")) {
+          return assets.hash !== output.hash?.assets;
+        }
+        const read = yield* prepareAssets(assets).pipe(
+          Effect.catchTag(
+            ["PlatformError", "AssetTooLargeError", "TooManyAssetsError"],
+            () => Effect.succeed(undefined),
+          ),
+        );
+        return read === undefined || read.hash !== output.hash?.assets;
+      });
+
       const hasChanged = Effect.fn(function* (
         id: string,
         props: WorkerProps,
@@ -3816,16 +3855,7 @@ export const LiveWorkerProvider = () =>
           if (scriptHash !== output.hash?.bundle) {
             return true;
           }
-          if (!props.assets) {
-            return false;
-          }
-          const assetsHash = Predicate.hasProperty(props.assets, "hash")
-            ? props.assets.hash
-            : undefined;
-          if (assetsHash === undefined) {
-            return true;
-          }
-          return assetsHash !== output.hash?.assets;
+          return yield* assetsChanged(props.assets, output);
         }
         if (props.vite) {
           const { hash } = yield* hashViteInput(
@@ -3842,17 +3872,12 @@ export const LiveWorkerProvider = () =>
           if (output.hash?.bundle !== undefined) {
             return true;
           }
-          const assetsHash =
-            props.assets && Predicate.hasProperty(props.assets, "hash")
-              ? props.assets.hash
-              : undefined;
-          if (assetsHash === undefined) {
-            // Same conservative rule as the directory-shaped `assets` below:
-            // don't read the directory during diff; `putWorker` reads once
-            // and keeps the existing manifest if nothing actually changed.
+          // No assets either — the config is invalid; report "changed" so
+          // the apply runs and surfaces the descriptive error.
+          if (!props.assets) {
             return true;
           }
-          return assetsHash !== output.hash?.assets;
+          return yield* assetsChanged(props.assets, output);
         }
         const bundleHash = yield* prepareBundle(id, props).pipe(
           Effect.map((b) => b.hash),
@@ -3860,32 +3885,7 @@ export const LiveWorkerProvider = () =>
         if (bundleHash !== output.hash?.bundle) {
           return true;
         }
-        if (!props.assets) {
-          return false;
-        }
-        // We deliberately don't read the assets directory during diff.
-        // For `AssetsWithHash` (the documented contract) the upstream
-        // `Command.Build` already gave us an authoritative hash — we
-        // just compare strings. Reading the directory here would
-        // (a) hash the same tree twice per apply (`putWorker` reads
-        // again when an upload is actually required), and (b) crash
-        // when the prior state was written on a different machine
-        // and `path` doesn't exist locally — blocking any local
-        // reapply even though the precomputed hash is right there
-        // in props.
-        //
-        // For the legacy `string` / `AssetsProps` shapes there's no
-        // hash in props to compare against, so we conservatively
-        // assume the assets changed; `putWorker` will read once,
-        // hash, and use `keepAssets` if it turns out nothing actually
-        // changed.
-        const assetsHash = Predicate.hasProperty(props.assets, "hash")
-          ? props.assets.hash
-          : undefined;
-        if (assetsHash === undefined) {
-          return true;
-        }
-        return assetsHash !== output.hash?.assets;
+        return yield* assetsChanged(props.assets, output);
       });
 
       return Worker.Provider.of({
