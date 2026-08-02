@@ -175,11 +175,18 @@
       "worker": "./src/Axiom/index.ts",
       "import": "./lib/Axiom/index.js"
     },
-    "./GitHub": {
-      "types": "./lib/GitHub/index.d.ts",
-      "bun": "./src/GitHub/index.ts",
-      "worker": "./src/GitHub/index.ts",
-      "import": "./lib/GitHub/index.js"
+    "./SpacetimeDB/Local": null,
+    "./SpacetimeDB": {
+      "types": "./lib/SpacetimeDB/index.d.ts",
+      "bun": "./src/SpacetimeDB/index.ts",
+      "worker": "./src/SpacetimeDB/index.ts",
+      "import": "./lib/SpacetimeDB/index.js"
+    },
+    "./SpacetimeDB/*": {
+      "types": "./lib/SpacetimeDB/*/index.d.ts",
+      "bun": "./src/SpacetimeDB/*/index.ts",
+      "worker": "./src/SpacetimeDB/*/index.ts",
+      "import": "./lib/SpacetimeDB/*/index.js"
     },
     "./Endpoint": {
       "types": "./lib/Endpoint/index.d.ts",
