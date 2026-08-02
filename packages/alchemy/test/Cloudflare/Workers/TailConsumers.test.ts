@@ -7,6 +7,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import * as pathe from "pathe";
 import { expectUrlContains } from "../Utils/Http.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
@@ -102,12 +103,22 @@ test.provider(
       expect(eventKeys.length).toBeGreaterThan(0);
 
       // The recorded batch references the producer script.
-      const batch = yield* kv.getNamespaceValue({
-        accountId,
-        namespaceId: v1.events.namespaceId,
-        keyName: eventKeys[0],
-      });
-      expect(JSON.stringify(batch)).toContain(v1.producer.workerName);
+      const batch = yield* kv
+        .getNamespaceValue({
+          accountId,
+          namespaceId: v1.events.namespaceId,
+          keyName: eventKeys[0],
+        })
+        .pipe(
+          Effect.flatMap((res) =>
+            Effect.tryPromise(() =>
+              new Response(
+                Stream.toReadableStream(res.body) as BodyInit,
+              ).text(),
+            ),
+          ),
+        );
+      expect(batch).toContain(v1.producer.workerName);
 
       // Detaching every consumer is an in-place update, never a replace.
       const v2 = yield* stack.deploy(deployStack("detached"));
