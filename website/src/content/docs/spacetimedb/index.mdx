@@ -1,0 +1,88 @@
+---
+title: SpacetimeDB
+description: Realtime database with server modules — Database, Generate, Connect, and SpacetimeAuth as Stack resources, with a local spacetime dev provider in dev mode.
+---
+
+SpacetimeDB is a realtime database with first-class **server modules**
+(written in TypeScript, Rust, C#, or C++) that own reducers, tables,
+and lifecycle. With alchemy you declare the database, generate typed
+client bindings, expose connection coordinates to a Worker, and
+inline them into a Vite SPA — all as resources in one Stack. In
+`alchemy dev` the same Stack runs against `spacetime dev
+--server-only` for hot-reload local development.
+
+New here? Start with [Getting started](/spacetimedb/getting-started)
+to ship the todo example end-to-end. Need a Maincloud token first?
+See [Auth](/spacetimedb/auth).
+
+## Resources
+
+A `SpacetimeDB.Database` publishes a module to Maincloud (or a
+self-hosted / local host). Pair it with `SpacetimeDB.Generate` for
+typed client bindings and `SpacetimeDB.Connect` to expose
+uri/databaseName/token to a Worker:
+
+```typescript
+import * as SpacetimeDB from "alchemy/spacetimeDB";
+
+const game = yield* SpacetimeDB.Database("Game", {
+  modulePath: "./spacetimedb",
+});
+
+const bindings = yield* SpacetimeDB.Generate("client", {
+  lang: "typescript",
+  outDir: "./src/module_bindings",
+  modulePath: "./spacetimedb",
+});
+
+const api = yield* Cloudflare.Worker("Api", {
+  bindings: { SPACETIMEDB: game },
+});
+```
+
+## Local dev
+
+`alchemy dev` runs `spacetime dev --server-only` on
+`127.0.0.1:3000`, watching `modulePath` for changes. The
+`SPACETIMEDB_*` env keys are wired to your Worker the same way:
+
+```bash
+alchemy dev
+# → http://localhost:1337 (api)
+# → ws://127.0.0.1:3000 (spacetimedb)
+```
+
+`alchemy deploy` publishes to Maincloud by default. Pass `host: "..."`
+to target a self-hosted SpacetimeDB instance, or `host: "local"` to
+make local-only the explicit choice during deploy.
+
+## Auth
+
+Two options:
+
+- **Token** — `spacetime login show --token` to mint one, set
+  `SPACETIMEDB_TOKEN=<token>`. `SpacetimeDB.providers()` reads it
+  automatically.
+- **alchemy login** — `SpacetimeDB.providers()` registers an
+  `AuthProvider` that stores the token under the configured profile.
+  Use `ALCHEMY_PROFILE=<name>` to switch contexts.
+
+## Removal policy
+
+`SpacetimeDB.Database` defaults to **retain** on `alchemy destroy`
+so data is not irreversibly deleted. Opt in with `destroy()`:
+
+```typescript
+import { destroy } from "alchemy/RemovalPolicy";
+
+yield* SpacetimeDB.Database("Game", {
+  modulePath: "./spacetimedb",
+}).pipe(destroy());
+```
+
+## See also
+
+- [API reference](/providers/spacetimedb/database)
+- [Getting started](/spacetimedb/getting-started)
+- [Connect runtime](/spacetimedb/connect-runtime) — typed
+  `DbConnection` lifecycle and `Connection<C>("name")` lookups
