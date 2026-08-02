@@ -26,6 +26,8 @@ export * from "./Rpc.ts";
 export * from "./RpcDurableObject.ts";
 export * from "./RpcWorker.ts";
 export * from "./ScheduledEvents.ts";
+export * from "./SecretKey.ts";
+export * from "./SecretKeyBinding.ts";
 export * from "./Subdomain.ts";
 export * from "./VersionMetadata.ts";
 export * from "./VersionMetadataBinding.ts";

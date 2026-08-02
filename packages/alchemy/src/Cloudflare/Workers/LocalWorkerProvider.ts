@@ -30,6 +30,7 @@ import {
   Queue,
   R2Bucket,
   RateLimit,
+  SecretKey,
   SendEmail,
   Service,
   Text,
@@ -607,6 +608,10 @@ export const LocalWorkerProvider = () =>
                       durableObjectNamespaces: worker.durableObjectNamespaces,
                       workflows: worker.workflows,
                       queueConsumers,
+                      // Cron triggers: the runtime starts a Node-side timer
+                      // per expression and exposes the Miniflare-compatible
+                      // manual trigger route `/cdn-cgi/handler/scheduled`.
+                      crons: worker.crons,
                       // Cache API opt-out (`dev: { cache: false }`) — matches
                       // production workers.dev, where the Cache API is a no-op.
                       cache: worker.dev.cache,
@@ -1145,7 +1150,17 @@ export const toRuntimeBinding = Effect.fn(function* (
         namespaceId: b.namespaceId,
       });
     case "secret_key":
-      return yield* unsupported();
+      // workerd imports the key natively: raw material passes through as
+      // base64, pkcs8/spki base64 DER is PEM-wrapped, and JWK objects are
+      // serialized — all handled by the hook.
+      return SecretKey.local({
+        binding: b.name,
+        format: b.format,
+        algorithm: b.algorithm,
+        usages: b.usages,
+        keyBase64: b.keyBase64,
+        keyJwk: b.keyJwk,
+      });
     case "secret_text":
       return Text.local(b.name, b.text);
     case "secrets_store_secret":

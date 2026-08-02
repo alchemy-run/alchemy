@@ -35,6 +35,7 @@ import {
   normalizeTransferredFrom,
 } from "./DurableObject.ts";
 import { isRateLimit } from "./RateLimit.ts";
+import { isSecretKey } from "./SecretKey.ts";
 import { isVersionMetadata } from "./VersionMetadata.ts";
 import type { WorkerBindingProps } from "./Worker.ts";
 import {
@@ -338,6 +339,16 @@ const toBinding = (
       name: bindingName,
       namespaceId: binding.namespaceId,
       simple: binding.simple,
+    };
+  } else if (isSecretKey(binding)) {
+    return {
+      type: "secret_key",
+      name: bindingName,
+      format: binding.format,
+      algorithm: binding.algorithm,
+      usages: binding.usages,
+      keyBase64: binding.keyBase64,
+      keyJwk: binding.keyJwk,
     };
   } else if (isSendEmail(binding)) {
     return {
