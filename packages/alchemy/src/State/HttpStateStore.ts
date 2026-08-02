@@ -13,7 +13,6 @@ import {
   type PersistedState,
   type StateService,
 } from "./State.ts";
-import { resolveSecretCodec } from "./SecretCodec.ts";
 import { encodeState, reviveStateRecursive } from "./StateEncoding.ts";
 
 /**
@@ -92,12 +91,17 @@ export const makeHttpStateStore = ({
     });
     const state = apiClient.state;
 
-    // Encrypts Redacted values before they leave the process when
-    // ALCHEMY_PASSWORD is set; decrypts them on read.
-    const codec = yield* resolveSecretCodec;
+    // The HTTP store deliberately never encrypts client-side — not even
+    // when ALCHEMY_PASSWORD is set. The store is shared by definition,
+    // and a password present in one writer's environment would silently
+    // make every record it writes unreadable to every other reader
+    // (teammates, CI, the hosted dashboard). At-rest protection is the
+    // server's job (the Cloudflare-hosted store encrypts every record
+    // server-side). ALCHEMY_PASSWORD only applies to stores that own
+    // their key material: local and S3.
     const tryRevive = <T>(s: unknown, what: string) =>
       Effect.try({
-        try: () => reviveStateRecursive(s, codec) as T,
+        try: () => reviveStateRecursive(s) as T,
         catch: stateDecodeError(what),
       });
 
@@ -154,7 +158,7 @@ export const makeHttpStateStore = ({
               stage: request.stage,
               fqn: encodeURIComponent(request.fqn),
             },
-            payload: encodeState(request.value, codec),
+            payload: encodeState(request.value),
           })
           .pipe(
             // Server echoes the stored value, but the client already
@@ -197,7 +201,7 @@ export const makeHttpStateStore = ({
         state
           .setStackOutput({
             params: { stack: request.stack, stage: request.stage },
-            payload: encodeState(request.value as any, codec),
+            payload: encodeState(request.value as any),
           })
           .pipe(
             Effect.map(() => request.value),
