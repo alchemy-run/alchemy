@@ -24,6 +24,23 @@ export class StreamError extends Data.TaggedError("StreamError")<{
 /** An Effect produced by a {@link StreamClient} operation. */
 type StreamEffect<A> = Effect.Effect<A, StreamError, RuntimeContext>;
 
+/** Extra options accepted by the {@link Stream} binding constructor. */
+export interface StreamBindingProps {
+  /**
+   * Configuration for the binding in `alchemy dev`.
+   * @default { remote: false }
+   */
+  dev?: {
+    /**
+     * Whether to proxy to the real Stream service in development. If `false`,
+     * videos are stored in a local simulator and served unmodified at
+     * `/cdn-cgi/mf/stream/<id>/watch` on the dev URL.
+     * @default false
+     */
+    remote?: boolean;
+  };
+}
+
 /**
  * A Cloudflare Stream binding for managing videos, captions, downloads and
  * watermarks from Workers — a Worker-only binding with no backing cloud
@@ -81,23 +98,6 @@ type StreamEffect<A> = Effect.Effect<A, StreamError, RuntimeContext>;
  *
  * @see https://developers.cloudflare.com/stream/
  */
-/** Extra options accepted by the {@link Stream} binding constructor. */
-export interface StreamBindingProps {
-  /**
-   * Configuration for the binding in `alchemy dev`.
-   * @default { remote: false }
-   */
-  dev?: {
-    /**
-     * Whether to proxy to the real Stream service in development. If `false`,
-     * videos are stored in a local simulator and served unmodified at
-     * `/cdn-cgi/mf/stream/<id>/watch` on the dev URL.
-     * @default false
-     */
-    remote?: boolean;
-  };
-}
-
 export interface Stream extends Binding.Service<Stream, TypeId, StreamClient> {
   /**
    * @param name Binding name (logical id) — the `env` key it resolves to.

@@ -116,6 +116,23 @@ export interface BrowserClient {
   ): BrowserEffect<BrowserMarkdownResult>;
 }
 
+/** Extra options accepted by the {@link Browser} binding constructor. */
+export interface BrowserBindingProps {
+  /**
+   * Configuration for the binding in `alchemy dev`.
+   * @default { remote: false }
+   */
+  dev?: {
+    /**
+     * Whether to proxy to the real Browser Rendering service in development.
+     * If `false`, a real headless Chrome is launched locally and driven over
+     * CDP (downloaded on first use into the shared wrangler cache).
+     * @default false
+     */
+    remote?: boolean;
+  };
+}
+
 /**
  * A Cloudflare Browser Rendering binding for launching headless browser sessions
  * from Workers — a Worker-only binding with no backing cloud resource.
@@ -163,23 +180,6 @@ export interface BrowserClient {
  *
  * @see https://developers.cloudflare.com/browser-rendering/workers-binding-api/
  */
-/** Extra options accepted by the {@link Browser} binding constructor. */
-export interface BrowserBindingProps {
-  /**
-   * Configuration for the binding in `alchemy dev`.
-   * @default { remote: false }
-   */
-  dev?: {
-    /**
-     * Whether to proxy to the real Browser Rendering service in development.
-     * If `false`, a real headless Chrome is launched locally and driven over
-     * CDP (downloaded on first use into the shared wrangler cache).
-     * @default false
-     */
-    remote?: boolean;
-  };
-}
-
 export interface Browser extends Binding.Service<
   Browser,
   TypeId,

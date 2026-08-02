@@ -15,6 +15,22 @@ export class ImagesError extends Data.TaggedError("ImagesError")<{
   cause: unknown;
 }> {}
 
+/** Extra options accepted by the {@link Images} binding constructor. */
+export interface ImagesBindingProps {
+  /**
+   * Configuration for the binding in `alchemy dev`.
+   * @default { remote: false }
+   */
+  dev?: {
+    /**
+     * Whether to proxy to the real Images service in development. If `false`,
+     * transforms run locally via Sharp and hosted images are stored on disk.
+     * @default false
+     */
+    remote?: boolean;
+  };
+}
+
 /**
  * A Cloudflare Images binding for image transformation inside Workers — a
  * Worker-only binding with no backing cloud resource.
@@ -61,22 +77,6 @@ export class ImagesError extends Data.TaggedError("ImagesError")<{
  *
  * @see https://developers.cloudflare.com/images/transform-images/bindings/
  */
-/** Extra options accepted by the {@link Images} binding constructor. */
-export interface ImagesBindingProps {
-  /**
-   * Configuration for the binding in `alchemy dev`.
-   * @default { remote: false }
-   */
-  dev?: {
-    /**
-     * Whether to proxy to the real Images service in development. If `false`,
-     * transforms run locally via Sharp and hosted images are stored on disk.
-     * @default false
-     */
-    remote?: boolean;
-  };
-}
-
 export interface Images extends Binding.Service<Images, TypeId, ImagesClient> {
   /**
    * @param name Binding name (logical id) — the `env` key it resolves to.
