@@ -1,49 +1,70 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
 
 @custom-variant dark (&:is(.dark *));
 
+/* ============================================================
+   Alchemy design system (website/src/styles/tokens.css), mapped
+   onto the shadcn token names the components consume.
+   Light = parchment / sunny forest; dark = night forest walnut.
+   ============================================================ */
+
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --radius: 0.625rem;
+  --background: #f5efe3; /* parchment */
+  --foreground: #2a2620; /* walnut */
+  --card: #fbf6ea;
+  --card-foreground: #2a2620;
+  --popover: #fffaf0;
+  --popover-foreground: #2a2620;
+  --primary: #5c7a3e; /* moss */
+  --primary-foreground: #fbf6ea;
+  --secondary: #ebe3d0;
+  --secondary-foreground: #4e402c;
+  --muted: #efe7d6;
+  --muted-foreground: #85714f; /* mushroom */
+  --accent: #ebe3d0;
+  --accent-foreground: #2a2620;
+  --destructive: #b3462e; /* brick */
+  --border: rgba(42, 38, 32, 0.12);
+  --input: rgba(42, 38, 32, 0.14);
+  --ring: color-mix(in srgb, #5c7a3e 35%, transparent);
+  --radius: 0.5rem;
+
+  /* status + accent palette (semantic, earthy) */
+  --moss: #5c7a3e;
+  --honey: #d49a2a;
+  --brick: #b3462e;
+  --mist: #4a7a8a; /* slate teal */
+  --terracotta: #c56e3c;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --background: #14110d; /* night forest page */
+  --foreground: #faf6ec; /* parchment */
+  --card: #1a1613;
+  --card-foreground: #faf6ec;
+  --popover: #221e18;
+  --popover-foreground: #faf6ec;
+  --primary: #8fb15e; /* lifted moss */
+  --primary-foreground: #14110d;
+  --secondary: #2a2620;
+  --secondary-foreground: #e2d7bc;
+  --muted: #221e18;
+  --muted-foreground: #a89572;
+  --accent: #2a2620;
+  --accent-foreground: #faf6ec;
+  --destructive: #d76a4e;
+  --border: rgba(250, 246, 236, 0.08);
+  --input: rgba(250, 246, 236, 0.12);
+  /* focus ring stays quiet — a hint of moss, not a highlighter */
+  --ring: color-mix(in srgb, #7a9a5e 35%, transparent);
+
+  --moss: #8fb15e;
+  --honey: #e8b04a;
+  --brick: #d76a4e;
+  --mist: #6da4b4;
+  --terracotta: #d8835a;
 }
 
 @theme inline {
@@ -65,10 +86,19 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-moss: var(--moss);
+  --color-honey: var(--honey);
+  --color-brick: var(--brick);
+  --color-mist: var(--mist);
+  --color-terracotta: var(--terracotta);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --font-sans:
+    "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono:
+    "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 @layer base {
@@ -76,6 +106,9 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+  ::selection {
+    background: color-mix(in srgb, var(--moss) 25%, transparent);
   }
 }

@@ -21,7 +21,10 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
+import { useAnchoredToggle } from "@/lib/anchor";
 import { cn } from "@/lib/utils";
+import { RefHoverCard } from "@/components/ref-hover-card";
+import { hasToolCard, ToolCard } from "@/components/tool-card";
 
 interface BoardThread {
   id: string;
@@ -51,16 +54,16 @@ interface Board {
 }
 
 const STATUS_COLOR: Record<BoardThread["status"], string> = {
-  running: "bg-emerald-500",
-  idle: "bg-zinc-400",
-  settled: "bg-zinc-600",
-  crashed: "bg-red-500",
+  running: "bg-moss",
+  idle: "bg-muted-foreground/70",
+  settled: "bg-muted-foreground/40",
+  crashed: "bg-brick",
 };
 
 const ISSUE_STATE: Record<BoardIssue["state"], string> = {
-  open: "text-emerald-400 border-emerald-400/40",
-  closed: "text-violet-400 border-violet-400/40",
-  unknown: "text-zinc-400 border-zinc-500/40",
+  open: "text-moss border-moss/40",
+  closed: "text-terracotta border-terracotta/40",
+  unknown: "text-muted-foreground border-border",
 };
 
 export const App = () => {
@@ -156,19 +159,42 @@ export const App = () => {
                   "bg-accent",
               )}
             >
-              <span
-                className={cn(
-                  "rounded-full border px-1.5 py-0 font-mono text-[10px] leading-4",
-                  ISSUE_STATE[issue.state],
-                )}
-              >
-                #{issue.number}
-              </span>
+              {/* channel key carries owner/repo: "IssueOwner:owner/repo#N" */}
+              {(() => {
+                const repo = issue.channel
+                  ?.slice(issue.channel.indexOf(":") + 1)
+                  .split("#")[0];
+                const badge = (
+                  <span
+                    className={cn(
+                      "rounded-full border px-1.5 py-0 font-mono text-[10px] leading-4",
+                      ISSUE_STATE[issue.state],
+                      repo && "hover:bg-accent",
+                    )}
+                  >
+                    #{issue.number}
+                  </span>
+                );
+                return repo ? (
+                  <RefHoverCard repo={repo} number={issue.number}>
+                    <a
+                      href={`https://github.com/${repo}/issues/${issue.number}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      {badge}
+                    </a>
+                  </RefHoverCard>
+                ) : (
+                  badge
+                );
+              })()}
               <span className="min-w-0 flex-1 truncate text-sm font-medium">
                 {issue.title}
               </span>
               {busy && (
-                <span className="size-2 shrink-0 animate-pulse rounded-full bg-emerald-500" />
+                <span className="size-2 shrink-0 animate-pulse rounded-full bg-moss" />
               )}
               {issue.channel === undefined && (
                 <span className="shrink-0 text-[10px] text-muted-foreground">
@@ -284,10 +310,10 @@ const ChatView = ({
 
 /** GitHub event families → badge accent. */
 const EVENT_STYLE: Array<[RegExp, string]> = [
-  [/^Issue(?!Comment)/, "text-emerald-400 border-emerald-400/40"],
-  [/^IssueComment/, "text-sky-400 border-sky-400/40"],
-  [/^PullRequest/, "text-violet-400 border-violet-400/40"],
-  [/^(CheckRun|CheckSuite|WorkflowRun|Push)/, "text-amber-400 border-amber-400/40"],
+  [/^Issue(?!Comment)/, "text-moss border-moss/40"],
+  [/^IssueComment/, "text-mist border-mist/40"],
+  [/^PullRequest/, "text-terracotta border-terracotta/40"],
+  [/^(CheckRun|CheckSuite|WorkflowRun|Push)/, "text-honey border-honey/40"],
 ];
 
 interface WorldEvent {
@@ -316,12 +342,18 @@ const parseWorldEvent = (
       : undefined;
     const subject = parsed.issue ?? parsed.pullRequest ?? parsed.pull_request;
     const comment = parsed.comment;
+    // a COMMENT event's significant text is the comment itself, not
+    // the issue it landed on — headline with its first line
+    const commentLine =
+      typeof comment?.body === "string"
+        ? comment.body.trim().split("\n")[0]
+        : undefined;
     return {
       event: {
         tag,
         repo,
         number: subject?.number,
-        title: subject?.title,
+        title: commentLine || subject?.title,
         author:
           comment?.user?.login ?? subject?.user?.login ?? parsed.sender?.login,
         body: comment?.body ?? subject?.body ?? undefined,
@@ -335,34 +367,90 @@ const parseWorldEvent = (
 };
 
 /**
- * One text part, upgraded: tagged world events render as a compact
- * card (badge + subject + author, raw JSON behind a disclosure) and
- * `<note>` inputs render as a muted aside — never a JSON dump.
+ * Linkify `#123` and `owner/repo#123` references in prose. Bare
+ * `#N` resolves against the thread's own repository (derived from
+ * the run key). GitHub's /issues/N door redirects to /pull/N, so
+ * one URL shape covers both.
  */
-const TextPart = ({ text }: { text: string }) => {
-  const [open, setOpen] = useState(false);
+const REF_SPLIT = /((?:[\w.-]+\/[\w.-]+)?#\d+\b)/g;
+const LinkifiedText = ({ text, repo }: { text: string; repo?: string }) => (
+  <>
+    {text.split(REF_SPLIT).map((chunk, index) => {
+      const match = chunk.match(/^(?:([\w.-]+\/[\w.-]+))?#(\d+)$/);
+      const targetRepo = match?.[1] ?? repo;
+      if (!match || !targetRepo) return chunk;
+      return (
+        <RefHoverCard
+          key={index}
+          repo={targetRepo}
+          number={Number(match[2])}
+        >
+          <a
+            href={`https://github.com/${targetRepo}/issues/${match[2]}`}
+            target="_blank"
+            rel="noreferrer"
+            className="underline decoration-border underline-offset-2 hover:text-foreground hover:decoration-foreground"
+          >
+            {chunk}
+          </a>
+        </RefHoverCard>
+      );
+    })}
+  </>
+);
+
+/**
+ * One text part, upgraded: tagged world events render as a compact
+ * card (badge + subject + author, raw JSON behind a disclosure),
+ * `<note>` inputs render as a muted aside — never a JSON dump — and
+ * issue/PR references link into GitHub.
+ */
+const TextPart = ({ text, repo }: { text: string; repo?: string }) => {
   const note = text.trim().match(/^<note>\n?([\s\S]*?)\n?<\/note>$/);
   if (note) {
     return (
       <div className="whitespace-pre-wrap rounded-md border border-dashed border-border/60 bg-muted/20 px-3 py-2 text-xs italic text-muted-foreground">
-        {note[1]}
+        <LinkifiedText text={note[1]!} repo={repo} />
       </div>
     );
   }
   const world = parseWorldEvent(text);
   if (world === undefined) {
-    return <div className="whitespace-pre-wrap">{text}</div>;
+    return (
+      <div className="whitespace-pre-wrap">
+        <LinkifiedText text={text} repo={repo} />
+      </div>
+    );
   }
   const { event, raw } = world;
+  return <EventCard event={event} raw={raw} />;
+};
+
+/**
+ * A world event — ONE LINE by default (badge + title + ref), click to
+ * expand for author/body/raw. The raw JSON lives in a FIXED-height
+ * scroll region so toggling it never reflows the card's width or
+ * grows with content.
+ */
+const EventCard = ({ event, raw }: { event: WorldEvent; raw: string }) => {
+  const [open, setOpen] = useState(false);
+  const [showRaw, setShowRaw] = useState(false);
+  const anchored = useAnchoredToggle();
   const style =
     EVENT_STYLE.find(([family]) => family.test(event.tag))?.[1] ??
-    "text-zinc-400 border-zinc-500/40";
+    "text-muted-foreground border-border";
   return (
-    <div className="rounded-md border border-border bg-muted/30 px-3 py-2.5 text-sm">
-      <div className="flex min-w-0 items-center gap-2">
+    <div className="w-full rounded-md border border-border/60 bg-muted/20 text-[13px]">
+      <button
+        type="button"
+        onClick={(event) =>
+          anchored(event.currentTarget, () => setOpen(!open))
+        }
+        className="flex w-full min-w-0 cursor-pointer items-center gap-2 px-2 py-1 text-left hover:bg-accent/50"
+      >
         <span
           className={cn(
-            "shrink-0 rounded border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide",
+            "shrink-0 rounded border px-1 py-px font-mono text-[9px] uppercase tracking-wide",
             style,
           )}
         >
@@ -370,45 +458,95 @@ const TextPart = ({ text }: { text: string }) => {
           {event.tag.replace(/(?<=[a-z0-9])(?=[A-Z])/g, " ")}
         </span>
         {event.title && (
-          <span className="min-w-0 truncate font-medium">{event.title}</span>
-        )}
-      </div>
-      <div className="mt-1 flex flex-wrap items-center gap-x-3 font-mono text-xs text-muted-foreground">
-        {event.repo && (
-          <span>
-            {event.repo}
-            {event.number !== undefined ? `#${event.number}` : ""}
+          <span className="min-w-0 flex-1 truncate font-medium">
+            {event.title}
           </span>
         )}
-        {event.author && <span>by {event.author}</span>}
-        {event.url && (
-          <a
-            href={event.url}
-            target="_blank"
-            rel="noreferrer"
-            className="underline hover:text-foreground"
-          >
-            open ↗
-          </a>
+        {event.repo && event.number !== undefined && (
+          <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
+            #{event.number}
+          </span>
         )}
-      </div>
-      {event.body && (
-        <div className="mt-2 line-clamp-3 whitespace-pre-wrap text-xs text-muted-foreground">
-          {event.body}
-        </div>
-      )}
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className="mt-2 cursor-pointer font-mono text-[10px] text-muted-foreground hover:text-foreground"
-      >
-        {open ? "▾ raw event" : "▸ raw event"}
+        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+          {open ? "▾" : "▸"}
+        </span>
       </button>
       {open && (
-        <pre className="mt-1 max-h-64 overflow-auto rounded bg-background/60 p-2 text-[10px]">
-          {raw}
-        </pre>
+        <div className="border-t border-border/50 px-2.5 py-2">
+          <div className="flex flex-wrap items-center gap-x-3 font-mono text-xs text-muted-foreground">
+            {event.repo &&
+              (event.url ? (
+                <a
+                  href={event.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline decoration-border underline-offset-2 hover:text-foreground"
+                >
+                  {event.repo}
+                  {event.number !== undefined ? `#${event.number}` : ""}
+                </a>
+              ) : (
+                <span>
+                  {event.repo}
+                  {event.number !== undefined ? `#${event.number}` : ""}
+                </span>
+              ))}
+            {event.author && <span>by {event.author}</span>}
+            <button
+              type="button"
+              onClick={(event) =>
+                anchored(event.currentTarget, () => setShowRaw(!showRaw))
+              }
+              className="ml-auto cursor-pointer font-mono text-[10px] hover:text-foreground"
+            >
+              {showRaw ? "▾ raw" : "▸ raw"}
+            </button>
+          </div>
+          {event.body && !showRaw && (
+            <div className="mt-2 line-clamp-3 whitespace-pre-wrap text-xs text-muted-foreground">
+              {event.body}
+            </div>
+          )}
+          {showRaw && (
+            <pre className="mt-2 h-56 overflow-auto rounded bg-background/60 p-2 text-[10px]">
+              {raw}
+            </pre>
+          )}
+        </div>
       )}
+    </div>
+  );
+};
+
+/** A thought trace — lives INSIDE the Conversation tree, where the
+ *  stick-to-bottom context (and thus anchored toggling) is available. */
+const ReasoningTrace = ({
+  text,
+  streaming,
+  open,
+  onToggle,
+}: {
+  text: string;
+  streaming: boolean;
+  open: boolean;
+  onToggle: () => void;
+}) => {
+  const anchored = useAnchoredToggle();
+  return (
+    <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+      <button
+        type="button"
+        onClick={(event) => anchored(event.currentTarget, onToggle)}
+        className="flex w-full cursor-pointer items-center gap-1.5 text-left font-medium"
+      >
+        <span className="font-mono">{open ? "▾" : "▸"}</span>
+        {streaming ? (
+          <span className="animate-pulse">Thinking…</span>
+        ) : (
+          "Thought process"
+        )}
+      </button>
+      {open && <div className="mt-2 whitespace-pre-wrap">{text}</div>}
     </div>
   );
 };
@@ -430,7 +568,7 @@ const Chat = ({
   // "live"`: the transcript hydrates from `initial` (the /messages
   // snapshot); a full replay would render every message twice.
   const agent = useAgent({ chatId: id, history: "live" });
-  const { messages, sendMessage, status, setMessages, stop } = useChat({
+  const { messages, sendMessage, status, stop } = useChat({
     agent,
     messages: initial,
     resume: active,
@@ -444,7 +582,9 @@ const Chat = ({
     if (!active) stop();
   }, [active, stop]);
 
-  const watchOnly = !id.startsWith("IssueOwner:");
+  // "IssueOwner:owner/repo#N" → "owner/repo" — the context bare `#N`
+  // references in prose resolve against
+  const threadRepo = id.slice(id.indexOf(":") + 1).split("#")[0] || undefined;
 
   // delegation tool-call → worker thread. Door calls (`AI.Dispatch`)
   // carry their identity on the part (`part.dispatch.child` is the
@@ -504,39 +644,11 @@ const Chat = ({
       return next;
     });
 
-  // IssueOwner: world door is a GitHub comment (POST /api/chat); the
-  // run socket carries the live view. Other threads steer via submit.
+  // Steer the agent DIRECTLY over the run socket — the message lands
+  // in the run's inbox as an ordinary input, never as a GitHub comment.
   const onSubmit = (message: PromptInputMessage) => {
     const text = message.text?.trim();
     if (!text) return;
-    if (watchOnly) return;
-    if (id.startsWith("IssueOwner:")) {
-      void fetch("/api/chat", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          id,
-          messages: [
-            ...messages,
-            {
-              role: "user",
-              parts: [{ type: "text", text }],
-            },
-          ],
-        }),
-      }).then(() =>
-        // optimistic user bubble — the socket restates from the run
-        setMessages([
-          ...messages,
-          {
-            id: `local-${Date.now()}`,
-            role: "user",
-            parts: [{ type: "text", text }],
-          },
-        ]),
-      );
-      return;
-    }
     void sendMessage({ text });
   };
 
@@ -557,40 +669,44 @@ const Chat = ({
       {/* initial="instant": open AT the end, no scroll animation */}
       <Conversation className="min-h-0 flex-1" initial="instant">
         <ConversationContent className="mx-auto max-w-3xl">
-          {messages.map((message) => (
+          {messages.map((message) => {
+            // world events and notes carry their own card chrome — the
+            // user-bubble around them reads as an ugly double border
+            const bare =
+              message.role === "user" &&
+              message.parts.every(
+                (part) =>
+                  part.type === "text" &&
+                  (parseWorldEvent(part.text) !== undefined ||
+                    part.text.trim().startsWith("<note>")),
+              );
+            return (
             <Message from={message.role} key={message.id}>
-              <MessageContent>
+              {/* bare cards stay RIGHT-aligned and narrower than the
+                  assistant column, so world input reads as world input */}
+              <MessageContent
+                className={cn(
+                  bare &&
+                    "w-full max-w-md group-[.is-user]:bg-transparent group-[.is-user]:px-0 group-[.is-user]:py-0",
+                )}
+              >
                 {message.parts.map((part, index) => {
                   if (part.type === "reasoning") {
                     const key = traceKey(part.text);
-                    const open = expandedTraces.has(key);
                     return (
-                      <div
+                      <ReasoningTrace
                         key={index}
-                        className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground"
-                      >
-                        <button
-                          type="button"
-                          onClick={() => toggleTrace(key)}
-                          className="flex w-full cursor-pointer items-center gap-1.5 text-left font-medium"
-                        >
-                          <span className="font-mono">{open ? "▾" : "▸"}</span>
-                          {part.state === "streaming" ? (
-                            <span className="animate-pulse">Thinking…</span>
-                          ) : (
-                            "Thought process"
-                          )}
-                        </button>
-                        {open && (
-                          <div className="mt-2 whitespace-pre-wrap">
-                            {part.text}
-                          </div>
-                        )}
-                      </div>
+                        text={part.text}
+                        streaming={part.state === "streaming"}
+                        open={expandedTraces.has(key)}
+                        onToggle={() => toggleTrace(key)}
+                      />
                     );
                   }
                   if (part.type === "text") {
-                    return <TextPart key={index} text={part.text} />;
+                    return (
+                      <TextPart key={index} text={part.text} repo={threadRepo} />
+                    );
                   }
                   if (part.type === "dynamic-tool") {
                     const tool = part;
@@ -625,10 +741,10 @@ const Chat = ({
                             className={cn(
                               "size-2.5 shrink-0 rounded-full",
                               running
-                                ? "animate-pulse bg-emerald-500"
+                                ? "animate-pulse bg-moss"
                                 : worker?.status === "crashed"
-                                  ? "bg-red-500"
-                                  : "bg-zinc-500",
+                                  ? "bg-brick"
+                                  : "bg-muted-foreground/50",
                             )}
                           />
                           <span className="min-w-0 flex-1">
@@ -648,6 +764,19 @@ const Chat = ({
                         </button>
                       );
                     }
+                    const card = (
+                      <ToolCard
+                        key={index}
+                        toolName={tool.toolName}
+                        state={tool.state}
+                        input={tool.input}
+                        output={tool.output}
+                        errorText={tool.errorText}
+                      />
+                    );
+                    // registry-rendered tools get the compact card;
+                    // unknown tools keep the generic collapsible
+                    if (hasToolCard(tool.toolName)) return card;
                     return (
                       <Tool key={index}>
                         <ToolHeader
@@ -679,26 +808,21 @@ const Chat = ({
                 })}
               </MessageContent>
             </Message>
-          ))}
+            );
+          })}
         </ConversationContent>
         <ConversationScrollButton />
       </Conversation>
       <div className="mx-auto w-full max-w-3xl p-4">
         <PromptInput onSubmit={onSubmit}>
           <PromptInputBody>
-            <PromptInputTextarea
-              placeholder={
-                watchOnly
-                  ? "Watch-only: this run has no world door"
-                  : "Message the issue owner (lands as a GitHub comment)…"
-              }
-              disabled={watchOnly}
-            />
+            {/* pr-12 keeps typed text clear of the submit button */}
+            <PromptInputTextarea placeholder="Steer this agent…" className="pr-12" />
           </PromptInputBody>
           <PromptInputSubmit
             status={status === "streaming" ? "streaming" : undefined}
-            disabled={watchOnly}
-            className="absolute right-2 bottom-2"
+            variant="ghost"
+            className="absolute right-2 bottom-2 text-muted-foreground"
           />
         </PromptInput>
       </div>

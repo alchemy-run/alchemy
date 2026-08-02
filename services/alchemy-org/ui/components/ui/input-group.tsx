@@ -15,7 +15,12 @@ function InputGroup({ className, ...props }: React.ComponentProps<"div">) {
       role="group"
       className={cn(
         "group/input-group relative flex w-full items-center rounded-md border border-input shadow-xs transition-[color,box-shadow] outline-none dark:bg-input/30",
-        "h-9 min-w-0 has-[>textarea]:h-auto",
+        // `has-[textarea]` (descendant), NOT `has-[>textarea]`: the
+        // textarea arrives wrapped in a `display: contents` body div,
+        // which layout ignores but CSS child selectors still see —
+        // with the direct-child selector the group stays h-9 and the
+        // taller textarea clips against the border.
+        "h-9 min-w-0 has-[textarea]:h-auto",
 
         // Variants based on alignment.
         "has-[>[data-align=inline-start]]:[&>input]:pl-2",
