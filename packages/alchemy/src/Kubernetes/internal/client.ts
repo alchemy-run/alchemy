@@ -1,18 +1,24 @@
 /**
- * Internal EKS Kubernetes API client: SigV4-token auth against the cluster
- * endpoint, server-side apply, and kind discovery for arbitrary (CRD)
- * manifests. Powers `AWS.EKS.Manifest`, `AWS.EKS.Deployment`, `AWS.EKS.Job`,
- * and the `AWS.EKS.Cluster` kubernetes-object binding channel. Not exported
- * from the EKS index.
+ * Internal Kubernetes API client: transport-agnostic server-side apply and
+ * kind discovery for arbitrary (CRD) manifests. Powers
+ * `Kubernetes.Manifest`, `Kubernetes.Deployment`, `Kubernetes.Job`,
+ * `Kubernetes.HelmChart`, and the `AWS.EKS.Cluster` kubernetes-object
+ * binding channel. Not exported from the Kubernetes index.
+ *
+ * Authentication is delegated to the connection's {@link ClusterAdapter}:
+ * every request mints headers through the resolved
+ * {@link ClusterTransport}, so short-lived tokens (EKS SigV4 presigns,
+ * exec-plugin credentials) stay fresh.
  */
-import { Credentials } from "@distilled.cloud/aws/Credentials";
-import { AwsClient } from "aws4fetch";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as https from "node:https";
-import { AWSEnvironment } from "../../Environment.ts";
+import {
+  findClusterAdapter,
+  type ClusterTransport,
+} from "../ClusterAdapter.ts";
+import type { Connection } from "../Connection.ts";
 import {
   buildKubernetesObjectPathWithSpec,
   chunkByApplyRank,
@@ -39,63 +45,30 @@ export class KubernetesApiError extends Data.TaggedError("KubernetesApiError")<{
   }
 }
 
-export interface KubernetesClusterConnection {
-  clusterName: string;
-  endpoint: string;
-  certificateAuthorityData: string;
-}
-
 const fieldManager = "alchemy";
 
-const createBearerToken = Effect.fn(function* (clusterName: string) {
-  const credentials = yield* yield* Credentials;
-  const { region } = yield* AWSEnvironment.current;
-
-  const client = new AwsClient({
-    accessKeyId: Redacted.value(credentials.accessKeyId),
-    secretAccessKey: Redacted.value(credentials.secretAccessKey),
-    sessionToken: credentials.sessionToken
-      ? Redacted.value(credentials.sessionToken)
-      : undefined,
-    service: "sts",
-    region,
-  });
-
-  const presigned = yield* Effect.tryPromise(() =>
-    client.sign(
-      new Request(
-        `https://sts.${region}.amazonaws.com/?Action=GetCallerIdentity&Version=2011-06-15&X-Amz-Expires=60`,
-        {
-          headers: {
-            "x-k8s-aws-id": clusterName,
-          },
-        },
-      ),
-      {
-        aws: {
-          signQuery: true,
-          allHeaders: true,
-        },
-      },
-    ),
+/**
+ * Resolve the {@link ClusterTransport} for a connection through its
+ * registered adapter.
+ */
+export const connectCluster = (connection: Connection) =>
+  findClusterAdapter(connection.auth.kind).pipe(
+    Effect.flatMap((adapter) => adapter.connect(connection)),
   );
 
-  return `k8s-aws-v1.${Buffer.from(presigned.url).toString("base64url")}`;
-});
-
 const requestJson = Effect.fn(function* ({
-  connection,
+  transport,
   method,
   path,
   body,
 }: {
-  connection: KubernetesClusterConnection;
+  transport: ClusterTransport;
   method: string;
   path: string;
   body?: Record<string, unknown>;
 }) {
-  const token = yield* createBearerToken(connection.clusterName);
-  const url = new URL(path, connection.endpoint);
+  const headers = yield* transport.headers;
+  const url = new URL(path, transport.endpoint);
   const payload = body ? JSON.stringify(body) : undefined;
 
   return yield* Effect.tryPromise({
@@ -109,7 +82,7 @@ const requestJson = Effect.fn(function* ({
             path: `${url.pathname}${url.search}`,
             method,
             headers: {
-              Authorization: `Bearer ${token}`,
+              ...headers,
               Accept: "application/json",
               ...(payload
                 ? {
@@ -118,10 +91,23 @@ const requestJson = Effect.fn(function* ({
                   }
                 : {}),
             },
-            ca: Buffer.from(
-              connection.certificateAuthorityData,
-              "base64",
-            ).toString("utf8"),
+            ...(transport.certificateAuthorityData
+              ? {
+                  ca: Buffer.from(
+                    transport.certificateAuthorityData,
+                    "base64",
+                  ).toString("utf8"),
+                }
+              : {}),
+            ...(transport.clientCert
+              ? {
+                  cert: transport.clientCert.certificate,
+                  key: transport.clientCert.key,
+                }
+              : {}),
+            ...(transport.insecureSkipTlsVerify
+              ? { rejectUnauthorized: false }
+              : {}),
           },
           (response) => {
             const chunks: Buffer[] = [];
@@ -172,10 +158,11 @@ const requestJson = Effect.fn(function* ({
           ),
   }).pipe(
     // Transport-level failures (ECONNREFUSED/ECONNRESET/ETIMEDOUT/DNS)
-    // are transient — a fresh EKS endpoint's NLB can refuse connections
-    // for a short window after the cluster reports ACTIVE. Every request
-    // here is idempotent (GET / SSA PATCH / DELETE), so retry them; HTTP
-    // errors (KubernetesApiError) are handled by the callers.
+    // are transient — a fresh managed endpoint's load balancer can refuse
+    // connections for a short window after the cluster reports ready.
+    // Every request here is idempotent (GET / SSA PATCH / DELETE), so
+    // retry them; HTTP errors (KubernetesApiError) are handled by the
+    // callers.
     Effect.retry({
       while: (e): boolean => !(e instanceof KubernetesApiError),
       schedule: Schedule.max([
@@ -203,19 +190,19 @@ const discoveredKinds = new Map<string, KubernetesObjectKindSpec>();
 /**
  * Resolve the REST mapping (plural + scope) for an arbitrary kind: static
  * table fast path, then the Kubernetes discovery API (`/apis/{g}/{v}` or
- * `/api/v1`). This is what lets `AWS.EKS.Manifest` apply any CRD.
+ * `/api/v1`). This is what lets `Kubernetes.Manifest` apply any CRD.
  */
 export const resolveKindSpec = Effect.fn(function* ({
-  connection,
+  transport,
   input,
 }: {
-  connection: KubernetesClusterConnection;
+  transport: ClusterTransport;
   input: Pick<KubernetesObjectRef, "apiVersion" | "kind">;
 }) {
   const staticSpec = lookupKubernetesKindSpec(input);
   if (staticSpec) return staticSpec;
 
-  const cacheKey = `${connection.endpoint}|${input.apiVersion}|${input.kind}`;
+  const cacheKey = `${transport.endpoint}|${input.apiVersion}|${input.kind}`;
   const cached = discoveredKinds.get(cacheKey);
   if (cached) return cached;
 
@@ -224,7 +211,7 @@ export const resolveKindSpec = Effect.fn(function* ({
     : `/api/${input.apiVersion}`;
 
   const listed = (yield* requestJson({
-    connection,
+    transport,
     method: "GET",
     path: discoveryPath,
   })) as ApiResourceList;
@@ -257,13 +244,13 @@ export const resolveKindSpec = Effect.fn(function* ({
 });
 
 const buildPath = Effect.fn(function* ({
-  connection,
+  transport,
   object,
 }: {
-  connection: KubernetesClusterConnection;
+  transport: ClusterTransport;
   object: KubernetesObjectRef;
 }) {
-  const spec = yield* resolveKindSpec({ connection, input: object });
+  const spec = yield* resolveKindSpec({ transport, input: object });
   return yield* Effect.try({
     try: () => buildKubernetesObjectPathWithSpec(object, spec),
     catch: (error) =>
@@ -274,40 +261,40 @@ const buildPath = Effect.fn(function* ({
 // ─────────────────────────────────────────────────────────── object ops ──
 
 export const readObject = Effect.fn(function* ({
-  connection,
+  transport,
   object,
 }: {
-  connection: KubernetesClusterConnection;
+  transport: ClusterTransport;
   object: KubernetesObjectRef;
 }) {
   return yield* requestJson({
-    connection,
+    transport,
     method: "GET",
-    path: yield* buildPath({ connection, object }),
+    path: yield* buildPath({ transport, object }),
   });
 });
 
 export const applyObject = Effect.fn(function* ({
-  connection,
+  transport,
   object,
 }: {
-  connection: KubernetesClusterConnection;
+  transport: ClusterTransport;
   object: KubernetesObjectDefinition;
 }) {
   const basePath = yield* buildPath({
-    connection,
+    transport,
     object: toKubernetesObjectRef(object),
   });
   const path = `${basePath}?fieldManager=${fieldManager}&force=true`;
 
   return yield* requestJson({
-    connection,
+    transport,
     method: "PATCH",
     path,
     body: object,
   }).pipe(
-    // A freshly ACTIVE cluster's API server briefly 5xxes while warming
-    // up, and the creator's bootstrap access entry propagates
+    // A freshly provisioned cluster's API server briefly 5xxes while
+    // warming up, and the creator's bootstrap access can propagate
     // asynchronously (401/403 in the first minute) — retry transient
     // failures for ~1 min.
     Effect.retry({
@@ -326,16 +313,16 @@ export const applyObject = Effect.fn(function* ({
 });
 
 export const deleteObject = Effect.fn(function* ({
-  connection,
+  transport,
   object,
 }: {
-  connection: KubernetesClusterConnection;
+  transport: ClusterTransport;
   object: KubernetesObjectRef;
 }) {
-  yield* buildPath({ connection, object }).pipe(
+  yield* buildPath({ transport, object }).pipe(
     Effect.flatMap((path) =>
       requestJson({
-        connection,
+        transport,
         method: "DELETE",
         path,
       }),
@@ -349,11 +336,11 @@ export const deleteObject = Effect.fn(function* ({
 });
 
 export const reconcileObjects = Effect.fn(function* ({
-  connection,
+  transport,
   previousObjects,
   desiredObjects,
 }: {
-  connection: KubernetesClusterConnection;
+  transport: ClusterTransport;
   previousObjects: ReadonlyArray<KubernetesObjectRef>;
   desiredObjects: ReadonlyArray<KubernetesObjectDefinition>;
 }) {
@@ -366,7 +353,7 @@ export const reconcileObjects = Effect.fn(function* ({
 
   for (const object of sortRefsForDelete(removedObjects)) {
     yield* deleteObject({
-      connection,
+      transport,
       object,
     });
   }
@@ -376,7 +363,7 @@ export const reconcileObjects = Effect.fn(function* ({
       chunk,
       (object) =>
         applyObject({
-          connection,
+          transport,
           object,
         }),
       {
@@ -389,15 +376,15 @@ export const reconcileObjects = Effect.fn(function* ({
 });
 
 export const deleteObjects = Effect.fn(function* ({
-  connection,
+  transport,
   objects,
 }: {
-  connection: KubernetesClusterConnection;
+  transport: ClusterTransport;
   objects: ReadonlyArray<KubernetesObjectRef>;
 }) {
   for (const object of sortRefsForDelete(objects)) {
     yield* deleteObject({
-      connection,
+      transport,
       object,
     });
   }

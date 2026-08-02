@@ -1,15 +1,18 @@
 import * as AWS from "@/AWS";
-import { HelmChart } from "@/AWS/EKS/HelmChart.ts";
-import { renderHelmChart } from "@/AWS/EKS/internal/helm.ts";
+import * as Kubernetes from "@/Kubernetes";
+import { renderHelmChart } from "@/Kubernetes/internal/helm.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import { spawnSync } from "node:child_process";
 
-const testOptions = { providers: AWS.providers() };
+const testOptions = {
+  providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()),
+};
 const { test } = Test.make(testOptions);
 
 // Rendering shells out to the local helm CLI (like Docker for image
@@ -89,13 +92,14 @@ describe("renderHelmChart (local fixture)", (it) => {
   );
 });
 
-// Ungated probe: chart objects live in-cluster with no AWS-side enumeration
-// attributing them to alchemy, so `list()` is intentionally empty. Proves
-// the provider is registered and its record type-checks; the live apply
-// path rides the gated Deployment E2E cluster (Deployment.test.ts).
+// Ungated probe: chart objects live in-cluster with no cloud-side
+// enumeration attributing them to alchemy, so `list()` is intentionally
+// empty. Proves the provider is registered and its record type-checks; the
+// live apply path rides the gated Deployment E2E cluster
+// (Deployment.test.ts).
 test.provider("list returns an empty array (in-cluster objects)", () =>
   Effect.gen(function* () {
-    const provider = yield* Provider.findProvider(HelmChart);
+    const provider = yield* Provider.findProvider(Kubernetes.HelmChart);
     const all = yield* provider.list();
     expect(Array.isArray(all)).toBe(true);
     expect(all).toEqual([]);

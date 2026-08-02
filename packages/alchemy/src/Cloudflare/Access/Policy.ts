@@ -370,7 +370,7 @@ const createPolicyName = (id: string, name: string | undefined) =>
 
 const findPolicyByName = (acct: string, name: string) =>
   zeroTrust.listAccessPolicies.items({ accountId: acct }).pipe(
-    Stream.filter((p): p is ObservedPolicy => p.name === name),
+    Stream.filter((p) => p.name === name),
     Stream.runHead,
     Effect.map(Option.getOrUndefined),
     Effect.catch(() => Effect.succeed(undefined)),

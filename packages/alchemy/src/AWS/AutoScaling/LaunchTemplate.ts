@@ -406,7 +406,7 @@ export const LaunchTemplateProvider = () =>
           "launchTemplateArn",
           "launchTemplateName",
         ],
-        diff: Effect.fn(function* ({ id, olds, news: _news }) {
+        diff: Effect.fn(function* ({ id, olds, news: _news, output }) {
           if (!isResolved(_news)) return undefined;
           const news = _news as typeof olds;
           const oldName = yield* toName(id, olds ?? {});
@@ -424,6 +424,25 @@ export const LaunchTemplateProvider = () =>
                 "launchTemplateName",
               ],
             } as const;
+          }
+
+          // The hosted bundle hash participates in planning: a change confined
+          // to the runtime program (or its imports) leaves every prop equal,
+          // so re-bundle and compare against the deployed hash. A mismatch
+          // plans an in-place update, whose reconcile publishes a new template
+          // version carrying the new bundle.
+          if (news.main && output?.code?.hash) {
+            const { hash } = yield* hosted.bundleProgram(id, news);
+            if (hash !== output.code.hash) {
+              return {
+                action: "update",
+                stables: [
+                  "launchTemplateId",
+                  "launchTemplateArn",
+                  "launchTemplateName",
+                ],
+              } as const;
+            }
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {

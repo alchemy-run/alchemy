@@ -103,8 +103,8 @@ export const isBindingHost = (value: any): value is Function => {
     (value.Type === "AWS.Lambda.Function" ||
       value.Type === "AWS.ECS.Task" ||
       value.Type === "AWS.ECS.Service" ||
-      value.Type === "AWS.EKS.Deployment" ||
-      value.Type === "AWS.EKS.Job")
+      value.Type === "Kubernetes.Deployment" ||
+      value.Type === "Kubernetes.Job")
   );
 };
 

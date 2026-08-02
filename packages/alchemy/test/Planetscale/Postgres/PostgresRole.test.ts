@@ -2,7 +2,7 @@ import * as Planetscale from "@/Planetscale";
 import * as Provider from "@/Provider";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import * as Test from "@/Test/Alchemy";
-import * as ops from "@distilled.cloud/planetscale/Operations";
+import * as ps from "@distilled.cloud/planetscale";
 import { describe, expect } from "alchemy-test";
 import { Redacted } from "effect";
 import * as Cause from "effect/Cause";
@@ -306,7 +306,7 @@ describe
           expect(role.id).not.toEqual(updatedRole.id);
           expect(updatedRole.ttl).toEqual(3600);
 
-          const found = yield* ops
+          const found = yield* ps
             .getRole({
               id: role.id,
               database: database.name,
@@ -320,7 +320,7 @@ describe
 
           expect(found).toBe(false);
 
-          const updatedRoleFromApi = yield* ops.getRole({
+          const updatedRoleFromApi = yield* ps.getRole({
             id: updatedRole.id,
             database: database.name,
             organization: database.organization,
@@ -440,7 +440,7 @@ describe
 
           yield* stack.destroy();
 
-          const liveRole = yield* ops
+          const liveRole = yield* ps
             .getRole({
               organization,
               database: database.name,
@@ -453,7 +453,7 @@ describe
           expect(liveRole?.id).toEqual(role.id);
 
           // deleting the db takes care of deleting the role
-          yield* ops
+          yield* ps
             .deleteDatabase({
               organization,
               database: database.name,
@@ -580,7 +580,7 @@ const waitForDatabaseToBeDeleted = Effect.fn(function* (
   database: string,
   organization: string,
 ) {
-  yield* ops
+  yield* ps
     .getDatabase({
       organization,
       database,

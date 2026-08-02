@@ -5,12 +5,12 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import type { Providers } from "./Providers.ts";
 
-export type MonitorProps = Axiom.CreateMonitorInput;
+export type MonitorProps = Axiom.CreateMonitorRequest;
 
 export type Monitor = Resource<
   "Axiom.Monitor",
   MonitorProps,
-  Axiom.CreateMonitorOutput,
+  Axiom.CreateMonitorResponse,
   never,
   Providers
 >;

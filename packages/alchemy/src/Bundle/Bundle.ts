@@ -114,8 +114,27 @@ const ALCHEMY_DEFINE: Record<string, string> = {
 };
 
 /**
- * Merge {@link ALCHEMY_DEFINE} into the caller's `transform.define`, letting
- * the framework flags win over any caller-provided keys.
+ * Default rolldown `moduleTypes` applied to every bundle, mirroring the
+ * `Text` module rules Wrangler applies to Workers (and alchemy's own
+ * {@link defaultModuleRules} for prebuilt bundles): importing a `.sql`,
+ * `.txt`, or `.html` file default-exports its contents as a string.
+ *
+ * `.sql` is what makes drizzle-kit's generated Durable Object migrations
+ * bundle (`migrations.js` does `import m0000 from './0000_x.sql'`) work
+ * without a wrangler-style rules config or a codegen step.
+ */
+const ALCHEMY_MODULE_TYPES: NonNullable<rolldown.InputOptions["moduleTypes"]> =
+  {
+    ".sql": "text",
+    ".txt": "text",
+    ".html": "text",
+  };
+
+/**
+ * Merge {@link ALCHEMY_DEFINE} into the caller's `transform.define` (the
+ * framework flags win over any caller-provided keys) and
+ * {@link ALCHEMY_MODULE_TYPES} into the caller's `moduleTypes` (caller
+ * keys win, so an extension can be remapped or disabled per bundle).
  */
 const withAlchemyDefine = (
   inputOptions: rolldown.InputOptions,
@@ -127,6 +146,10 @@ const withAlchemyDefine = (
       ...inputOptions.transform?.define,
       ...ALCHEMY_DEFINE,
     },
+  },
+  moduleTypes: {
+    ...ALCHEMY_MODULE_TYPES,
+    ...inputOptions.moduleTypes,
   },
 });
 

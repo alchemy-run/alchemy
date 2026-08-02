@@ -952,7 +952,25 @@ export const make = <A>(
                     olds: oldState.props,
                     output: oldState.attr,
                   })
-                  .pipe(providePlanScope(fqn, oldState.instanceId));
+                  .pipe(
+                    providePlanScope(fqn, oldState.instanceId),
+                    // `creating` props pass `isResolved` yet can still carry
+                    // holes where unresolved Outputs were stripped at commit
+                    // time (see stripUnresolved) — e.g. a parent reference
+                    // persisted as `{}`. A provider that dereferences one
+                    // crashes deep inside its SDK client (a SchemaError
+                    // defect), which would brick every subsequent plan on
+                    // the stage. Recovery is best-effort: degrade the defect
+                    // to "nothing recovered" and re-drive the create (#995).
+                    Effect.catchDefect((defect) =>
+                      Effect.logWarning(
+                        `Recovery read for '${fqn}' crashed; treating the ` +
+                          "interrupted create as not recoverable and " +
+                          "re-driving it.",
+                        defect,
+                      ).pipe(Effect.as(undefined)),
+                    ),
+                  );
                 if (attr !== undefined) {
                   // The recovered resource may be foreign: our interrupted
                   // create could have lost a name race, or died before

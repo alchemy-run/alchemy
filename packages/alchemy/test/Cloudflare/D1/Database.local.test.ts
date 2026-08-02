@@ -14,14 +14,42 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as pathe from "pathe";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
 
-const { test } = Test.make({
+// `dev: true` runs local providers behind the RPC sidecar proxy by default,
+// matching the process topology of the real `alchemy dev` command (see
+// MakeOptions.sidecar in Test/Core.ts).
+const { test, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
   dev: true,
+});
+
+// The in-process topology: no RpcProviderProxy, so the RPC-backed local
+// provider builds directly in this process with the un-gated
+// `localRuntimeServices()` from its dual registration. Still a real
+// production path — a programmatic `deploy({ dev: true })` without the
+// `alchemy dev` CLI has no sidecar.
+const { test: inProcessTest } = Test.make({
+  providers: Cloudflare.providers(),
+  dev: true,
+  sidecar: false,
 });
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
+);
+
+const RpcMigrationStack = Alchemy.Stack(
+  "D1RpcMigrationStack",
+  {
+    providers: Cloudflare.providers(),
+    state: Alchemy.localState(),
+  },
+  Cloudflare.D1.Database("RpcMigratedDB", {
+    migrationsDir: pathe.resolve(
+      import.meta.dirname,
+      "fixtures/rpc-migrations",
+    ),
+  }),
 );
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
@@ -52,6 +80,57 @@ const getJsonReady = (url: string) =>
     );
     return yield* res.json;
   }).pipe(Effect.orDie);
+
+/**
+ * Regression test for #1007. Under the RPC proxy used by `alchemy dev` (the
+ * default topology for `dev: true` tests), `localRuntimeServices()` is
+ * intentionally omitted from the caller because RPC providers consume it in
+ * the sidecar. D1's local provider is not an RPC provider, so its migration
+ * lifecycle must provide the standalone gateway runtime explicitly.
+ */
+test(
+  "D1 migrations apply with the alchemy dev RPC proxy",
+  Effect.gen(function* () {
+    yield* destroy(RpcMigrationStack);
+
+    const database = yield* deploy(RpcMigrationStack);
+
+    expect(database.databaseId).toMatch(/^dev:/);
+    expect(Object.keys(database.migrationsHashes)).toEqual(["0001_notes.sql"]);
+
+    yield* destroy(RpcMigrationStack);
+  }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+/**
+ * Counterpart of the #1007 regression above for the in-process topology:
+ * without the proxy, the provider's migration lifecycle runs in this
+ * process and must find the workerd runtime in its own layer (the dual
+ * registration's `localRuntimeServices()`, real when un-gated).
+ */
+inProcessTest.provider(
+  "D1 migrations apply in-process without the RPC proxy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const db = yield* stack.deploy(
+        Cloudflare.D1.Database("InProcessMigratedDB", {
+          migrationsDir: pathe.resolve(
+            import.meta.dirname,
+            "fixtures/rpc-migrations",
+          ),
+        }),
+      );
+
+      expect(db.databaseId).toMatch(/^dev:/);
+      expect(Object.keys(db.migrationsHashes)).toEqual(["0001_notes.sql"]);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
 
 /**
  * Under `alchemy dev` the D1 Database resource is emulated by the local

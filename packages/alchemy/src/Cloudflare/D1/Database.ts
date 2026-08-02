@@ -8,13 +8,18 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 
 import { isResolved } from "../../Diff.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
+import * as RpcProvider from "../../Local/RpcProvider.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
 import { listSqlFiles, readSqlFile } from "../../SQL/SqlFile.ts";
 import { recordsEqual } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import { generateLocalId, localRuntimeServices } from "../LocalRuntime.ts";
+import {
+  generateLocalId,
+  LOCAL_ENTRY_URL,
+  localRuntimeServices,
+} from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
 import { applyMigrations, applyMigrationsWith } from "./ApplyMigrations.ts";
 import { cloneDatabase } from "./CloneDatabase.ts";
@@ -567,12 +572,20 @@ export const ProviderLive = () =>
  * Migrations ARE applied locally: reconcile boots an ephemeral gateway
  * workerd (see `LocalD1Gateway.ts`) and drives the same executor-agnostic
  * migration flow the live provider uses, against the simulator's storage.
- * Imports (`importFiles`) are still cloud-only — the import flow is a
- * multi-step HTTP upload with no local counterpart.
+ *
+ * RPC-backed: under `alchemy dev` (an `RpcProviderProxy` in context) the
+ * whole lifecycle runs in the Cloudflare sidecar process — where
+ * `localRuntimeServices()` is real and shared with the Worker/Queue/
+ * Container local providers — instead of in the user's process where that
+ * layer is gated empty (the root cause of #1007). In-process runs (no
+ * proxy: `sidecar: false` tests, a plain deploy deleting a local-mode row)
+ * build the provider directly with the un-gated runtime from the `dual`
+ * registration.
  */
 export const ProviderLocal = () =>
-  Provider.effect(
+  RpcProvider.effect(
     Database,
+    LOCAL_ENTRY_URL,
     Effect.gen(function* () {
       // The local runtime services (workerd `Runtime`, binding plugins) and
       // the HTTP client are resolved once at layer build and closed over —
@@ -697,9 +710,11 @@ export const ProviderLocal = () =>
 export const DatabaseProvider = () =>
   ProviderLayer.dual(Database, {
     // The local provider's reconcile boots an ephemeral workerd gateway to
-    // apply migrations, so it needs the shared local runtime layer (the
-    // module-memoized reference — one runtime instance per stack build,
-    // shared with the Worker/Queue/Container local providers).
+    // apply migrations, so it needs the shared local runtime layer. Under
+    // `alchemy dev` the provider is an RPC stub (this gated layer is empty
+    // and unused) and the sidecar entry (`../Local.ts`) supplies the real
+    // runtime; without the proxy the provider builds in-process and this
+    // layer is real.
     local: () => ProviderLocal().pipe(Layer.provide(localRuntimeServices())),
     live: () => ProviderLive(),
   });

@@ -47,7 +47,7 @@ export interface Attributes {
    * managed it. Restored on destroy, so deleting the resource puts the
    * zone back the way it was found.
    */
-  initialValue: string;
+  initialValue: ContentScanningStatus;
 }
 
 export type ContentScanning = Resource<
@@ -233,7 +233,7 @@ const toAttributes = (
   setting:
     | contentScanning.GetContentScanningResponse
     | contentScanning.PutContentScanningResponse,
-  initialValue: string,
+  initialValue: ContentScanningStatus,
 ): Attributes => ({
   zoneId,
   enabled: statusOf(setting) === "enabled",

@@ -43,7 +43,7 @@ const run = Effect.fn(function* (
  * MANDATORY dependencies — health-monitoring agent, training operators,
  * device plugins, RBAC — that SageMaker validates before an EKS-orchestrated
  * cluster will attach) and vendors its subcharts. Returns the local chart
- * path for `AWS.EKS.HelmChart` to render.
+ * path for `Kubernetes.HelmChart` to render.
  */
 export const FetchHyperPodChart = Alchemy.Action(
   "FetchHyperPodChart",

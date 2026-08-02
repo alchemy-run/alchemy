@@ -75,6 +75,31 @@ const postJson = (path: string) =>
     Effect.flatMap((r) => r.json),
   );
 
+class IamPropagationLag extends Data.TaggedError("IamPropagationLag")<{
+  readonly path: string;
+}> {}
+
+// A freshly attached IAM policy can lag behind the Lambda's first calls —
+// DataExchange then rejects with AccessDeniedException, which the handler
+// surfaces as `{ error: "AccessDeniedException" }`. Retry the route through
+// the propagation window (bounded ~60s); any other outcome surfaces
+// immediately.
+const postJsonThroughIamPropagation = (path: string) =>
+  postJson(path).pipe(
+    Effect.flatMap((body) =>
+      (body as { error?: string }).error === "AccessDeniedException"
+        ? Effect.fail(new IamPropagationLag({ path }))
+        : Effect.succeed(body),
+    ),
+    Effect.retry({
+      while: (e) => e._tag === "IamPropagationLag",
+      schedule: Schedule.max([
+        Schedule.spaced("5 seconds"),
+        Schedule.recurs(12),
+      ]),
+    }),
+  );
+
 describe.sequential("DataExchange Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
@@ -206,7 +231,9 @@ describe.sequential("DataExchange Bindings", () => {
       "imports an S3 object into the revision via a job and reads it back",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* postJson("/import")) as {
+          const response = (yield* postJsonThroughIamPropagation(
+            "/import",
+          )) as {
             jobState?: string;
             jobErrors?: unknown[];
             assetCount?: number;
@@ -240,7 +267,9 @@ describe.sequential("DataExchange Bindings", () => {
       "rejects a data set outside a Marketplace product with a typed error",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* postJson("/notify")) as {
+          const response = (yield* postJsonThroughIamPropagation(
+            "/notify",
+          )) as {
             ok: boolean;
             error: string | undefined;
             message: string | undefined;

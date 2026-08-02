@@ -1,5 +1,5 @@
 import { Credentials } from "@distilled.cloud/planetscale/Credentials";
-import * as planetscale from "@distilled.cloud/planetscale/Operations";
+import * as planetscale from "@distilled.cloud/planetscale";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { havePropsChanged, isResolved } from "../../Diff.ts";

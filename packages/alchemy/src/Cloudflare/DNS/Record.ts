@@ -1,4 +1,5 @@
 import * as dns from "@distilled.cloud/cloudflare/dns";
+import * as zones from "@distilled.cloud/cloudflare/zones";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 
@@ -46,7 +47,9 @@ export interface RecordProps {
    */
   zoneId: string;
   /**
-   * Fully-qualified record name (e.g. `cluster-admin.microtrack.ai`).
+   * Fully-qualified or zone-relative record name (e.g.
+   * `cluster-admin.microtrack.ai`, `_dmarc`, or `@` for the zone apex).
+   * Cloudflare normalizes relative names to their fully-qualified form.
    *
    * Stable — Cloudflare treats `(name, type)` as the record's identity,
    * so a rename is a delete + create. Declared as plain `string` (not
@@ -404,10 +407,27 @@ const observeById = (zoneId: string, dnsRecordId: string) =>
     return narrowRecord(r as Parameters<typeof narrowRecord>[0]);
   });
 
-// Locate an existing record by `(zoneId, name, type)`. Used both
-// for the adoption path and to surface a conflict when the caller
-// hasn't opted into adoption.
+// Locate an existing record by `(zoneId, name, type)`. Cloudflare accepts
+// relative names on writes but returns FQDNs on reads, so check the supplied
+// name first and then its zone-qualified form. Used both for the adoption path
+// and to surface a conflict when the caller hasn't opted into adoption.
 const findByNameType = (zoneId: string, name: string, type: RecordType) =>
+  findExactByNameType(zoneId, name, type).pipe(
+    Effect.flatMap((found) => {
+      if (found) return Effect.succeed(found);
+
+      return zones.getZone({ zoneId }).pipe(
+        Effect.flatMap((zone) => {
+          const normalizedName = normalizeRecordName(name, zone.name);
+          return normalizedName === name
+            ? Effect.succeed(undefined)
+            : findExactByNameType(zoneId, normalizedName, type);
+        }),
+      );
+    }),
+  );
+
+const findExactByNameType = (zoneId: string, name: string, type: RecordType) =>
   dns.listRecords
     .items({
       zoneId,
@@ -425,6 +445,12 @@ const findByNameType = (zoneId: string, name: string, type: RecordType) =>
           : narrowRecord(found as Parameters<typeof narrowRecord>[0]),
       ),
     );
+
+const normalizeRecordName = (name: string, zoneName: string): string => {
+  if (name === "@") return zoneName;
+  if (name === zoneName || name.endsWith(`.${zoneName}`)) return name;
+  return `${name}.${zoneName}`;
+};
 
 interface ObservedRecord {
   readonly id?: string;
