@@ -26,6 +26,13 @@ export interface AssetsConfig extends Exclude<
 
 export interface AssetReadResult {
   directory: string;
+  /**
+   * The normalized `base` this manifest was keyed with (`""` when the
+   * assets are served from the origin root). Manifest keys are request
+   * paths, so `uploadAssets` strips this back off to find each file on
+   * disk.
+   */
+  pathPrefix: string;
   config: AssetsConfig | undefined;
   manifest: Record<string, { hash: string; size: number }>;
   _headers: string | undefined;
@@ -35,6 +42,29 @@ export interface AssetReadResult {
 
 export interface AssetsProps extends AssetsConfig {
   directory: string;
+  /**
+   * The path this site is served from, when it is not the origin root —
+   * e.g. `"/docs"` for a Worker on the route `example.com/docs*`. Matches
+   * Vite's `base`, and `Website.Vite` fills it in from the Vite config
+   * automatically; set it by hand when you bring your own build.
+   *
+   * The asset router matches request paths against the manifest literally
+   * and never strips a prefix, so Cloudflare's model is that the assets
+   * directory mirrors the served path. This does that at manifest time:
+   * `dist/app.js` is uploaded as `/docs/app.js`, leaving the build output
+   * on disk untouched.
+   *
+   * Bases that name no path — `"/"`, `"./"`, `"https://cdn.example.com/"` —
+   * are ignored, as an absolute base means the assets are served by a CDN
+   * rather than by this Worker.
+   *
+   * `_headers` and `_redirects` are NOT rewritten: their rules match the
+   * incoming request path, so author them with the full served path
+   * (`/docs/old /docs/new 301`).
+   *
+   * @default undefined (assets are served from the origin root)
+   */
+  base?: string;
 }
 
 export type ValidationError =
@@ -148,8 +178,19 @@ export const mergeAssetsConfigFiles = (
   };
 };
 
+/**
+ * `base` → manifest path prefix. Only a root-relative base names a path
+ * this Worker serves; `"/"`, `"./"`, protocol-relative and absolute URLs
+ * all mean "no prefix".
+ */
+const getAssetsPathPrefix = (base: string | undefined) =>
+  base?.startsWith("/") && !base.startsWith("//")
+    ? base.replace(/\/+$/, "")
+    : "";
+
 export const readAssets = Effect.fn(function* ({
   directory,
+  base,
   ...config
 }: AssetsProps) {
   const fs = yield* FileSystem.FileSystem;
@@ -170,6 +211,7 @@ export const readAssets = Effect.fn(function* ({
       .map((line) => line.trim())
       .filter((line) => line.length > 0 && !line.startsWith("#")) ?? []),
   ]);
+  const pathPrefix = getAssetsPathPrefix(base);
   const manifest = new Map<string, { hash: string; size: number }>();
   let count = 0;
   yield* Effect.forEach(
@@ -204,14 +246,21 @@ export const readAssets = Effect.fn(function* ({
         });
       }
       manifest.set(
-        (name.startsWith("/") ? name : `/${name}`).replaceAll("\\", "/"),
-        {
-          hash,
-          size,
-        },
+        `${pathPrefix}${(name.startsWith("/") ? name : `/${name}`).replaceAll("\\", "/")}`,
+        { hash, size },
       );
     }),
   );
+  // The SPA fallback is hard-coded to `/index.html` at the manifest root, so
+  // prefixing every key would 404 every client-side route under the base.
+  const indexHtml = manifest.get(`${pathPrefix}/index.html`);
+  if (
+    indexHtml &&
+    config.notFoundHandling === "single-page-application" &&
+    !manifest.has("/index.html")
+  ) {
+    manifest.set("/index.html", indexHtml);
+  }
   const sortedManifest = Object.fromEntries(
     Array.from(manifest.entries()).sort((a, b) => a[0].localeCompare(b[0])),
   );
@@ -231,10 +280,13 @@ export const readAssets = Effect.fn(function* ({
   });
   return {
     directory,
+    pathPrefix,
     // Fold the `_headers` / `_redirects` file contents into the config
     // that gets sent to Cloudflare (`metadata.assets.config`). Merged
     // *after* hashing so the hash input shape stays stable for
-    // already-deployed workers.
+    // already-deployed workers. Deliberately NOT `base`-prefixed: their
+    // rules match the incoming request path, which already carries the
+    // base, so they are authored with the full served path.
     config: mergeAssetsConfigFiles(config, { _headers, _redirects }),
     manifest: sortedManifest,
     _headers,
@@ -254,9 +306,18 @@ export const uploadAssets = Effect.fn(function* (
   const createScriptAssetUpload = yield* workers.createScriptAssetUpload;
   const createAssetUpload = yield* workers.createAssetUpload;
 
+  // Manifest keys are the paths Cloudflare *serves*, so they carry the
+  // `base` prefix. The files themselves are on disk at the un-prefixed
+  // path relative to the assets directory, so drop the prefix to get
+  // back to something `readFile` can open.
+  const toDiskPath = (name: string) =>
+    assets.pathPrefix && name.startsWith(`${assets.pathPrefix}/`)
+      ? name.slice(assets.pathPrefix.length)
+      : name;
+
   const assetsByHash = new Map<string, string>();
   for (const [name, { hash }] of Object.entries(assets.manifest)) {
-    assetsByHash.set(hash, name);
+    assetsByHash.set(hash, toDiskPath(name));
   }
   const directory = path.resolve(assets.directory);
 

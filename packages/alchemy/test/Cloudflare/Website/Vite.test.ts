@@ -178,6 +178,91 @@ test.provider(
   { timeout: 360_000 },
 );
 
+// Vite's `base` rewrites the URLs it *emits* but never the directory it
+// emits *into*. Cloudflare's asset router matches request paths against
+// manifest keys literally and strips no prefix, so a root-keyed manifest
+// disagrees with the emitted HTML by exactly the base — every asset 404s
+// and the site loads with no CSS and no JS.
+//
+// One deploy pins all three serving assumptions the fix rests on:
+// the shell resolves at the base, the hashed assets the HTML actually
+// references resolve, and the SPA fallback still fires for client routes
+// underneath it.
+test.provider(
+  "Vite: a non-root base serves assets and the SPA fallback under that path",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+
+      yield* stack.destroy();
+
+      const rootDir = yield* cloneFixture(spaFixtureDir, {
+        prefix: "alchemy-vite-base-",
+        tempRoot,
+        entries: ["index.html", "package.json", "src"],
+      });
+      yield* fs.writeFileString(
+        path.join(rootDir, "vite.config.ts"),
+        `import { defineConfig } from "vite";\n\nexport default defineConfig({ base: "/example/" });\n`,
+      );
+      const memoInclude = [
+        "index.html",
+        "src/**",
+        "package.json",
+        "vite.config.ts",
+      ];
+
+      const marker = `vite-base-${Date.now()}`;
+      yield* fs.writeFileString(
+        path.join(rootDir, "index.html"),
+        htmlPage(marker),
+      );
+
+      const site = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Website.Vite("FixViteBase", {
+            ...viteProps(rootDir, memoInclude),
+            assets: { notFoundHandling: "single-page-application" },
+          });
+        }),
+      );
+
+      expect(site.url).toBeDefined();
+      yield* expectWorkerExists(site.workerName, accountId);
+
+      const html = yield* expectUrlContains(`${site.url!}/example/`, marker, {
+        timeout: "120 seconds",
+        label: "base shell",
+      });
+
+      // Follow the reference the built HTML actually ships rather than
+      // guessing the hashed filename. `(hydrated)` is a string literal in
+      // the fixture's client module, so it proves the response is the real
+      // script — a 404 here would be answered by the SPA fallback with the
+      // shell, which contains the marker but never that literal.
+      const scriptSrc = html.match(/src="(\/example\/assets\/[^"]+\.js)"/)?.[1];
+      expect(scriptSrc).toBeDefined();
+      yield* expectUrlContains(`${site.url!}${scriptSrc}`, "(hydrated)", {
+        timeout: "60 seconds",
+        label: "hashed asset under base",
+      });
+
+      // Cloudflare's SPA fallback is hard-coded to `/index.html` at the
+      // manifest root, so prefixing every key would 404 every client-side
+      // route under the base without the alias.
+      yield* expectUrlContains(`${site.url!}/example/deep/route`, marker, {
+        timeout: "60 seconds",
+        label: "spa fallback under base",
+      });
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+    }).pipe(logLevel),
+  { timeout: 360_000 },
+);
+
 test.provider(
   "Vite: class form deploys and serves the built assets",
   (stack) =>

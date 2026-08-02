@@ -1181,7 +1181,7 @@ export const LiveWorkerProvider = () =>
         // (~0.5s), which is only needed for vite-based workers at build time —
         // not for every Worker definition at module-load time.
         const Vite = yield* Effect.promise(() => import("./Vite.ts"));
-        const { clientDirectory, serverBundle, externalWorkspaces } =
+        const { clientDirectory, serverBundle, externalWorkspaces, base } =
           yield* Vite.viteBuild(
             props.vite?.rootDir,
             Object.fromEntries(
@@ -1227,6 +1227,10 @@ export const LiveWorkerProvider = () =>
                     props.vite?.rootDir ?? process.cwd(),
                     clientDirectory,
                   ),
+                  // Vite's `base` overrides `assets.base`: it is what
+                  // rewrote the URLs in the emitted HTML, so it is the
+                  // only prefix the manifest can agree with.
+                  base,
                 })
               : Effect.undefined,
             serverBundle,
