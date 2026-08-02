@@ -303,23 +303,26 @@ const hyperpod = yield* AWS.SageMaker.Cluster("HyperPod", {
 ```
 
 `Kubernetes.Deployment` and `Kubernetes.Job` then opt onto those
-nodes by spreading `AWS.EKS.hyperpod(...)` into their props. The
-instance-group keys carry through to the
-cluster's attributes as types — `hyperpod.instanceGroups.workers`
-is typed per key and a typo'd name is a compile error — so the
-workload is connected to the fleet through the resource graph,
-and a team's `ComputeQuota` submits it through HyperPod task
-governance:
+nodes in plain Kubernetes vocabulary — the HyperPod resources
+expose the derived values as attributes. The instance-group keys
+carry through to the cluster's attributes as types —
+`hyperpod.instanceGroups.workers` is typed per key and a typo'd
+name is a compile error — so the workload is connected to the
+fleet through the resource graph, and a team's `ComputeQuota`
+materializes the governed namespace and Kueue queue:
 
 ```typescript
 const train = yield* Kubernetes.Job("Train", {
   cluster,
   main: import.meta.url,
-  ...AWS.EKS.hyperpod({
-    instanceGroup: hyperpod.instanceGroups.workers,
-    quota: researchQuota, // → hyperpod-ns-research + Kueue queue label
-    priorityClass: "training",
-  }),
+  namespace: researchQuota.namespace, // hyperpod-ns-research
+  labels: {
+    [AWS.SageMaker.KUEUE_QUEUE_NAME_LABEL]: researchQuota.queueName,
+    [AWS.SageMaker.KUEUE_PRIORITY_CLASS_LABEL]: "training-priority",
+  },
+  podTemplate: {
+    spec: { nodeSelector: hyperpod.instanceGroups.workers.nodeSelector },
+  },
 });
 ```
 

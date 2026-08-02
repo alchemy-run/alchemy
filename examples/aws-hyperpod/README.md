@@ -11,7 +11,7 @@ it depends on the orchestrator you pick at creation:
 |---|---|---|
 | Provision | [`alchemy.run.ts`](./alchemy.run.ts) | [`eks.run.ts`](./eks.run.ts) |
 | Low-level workloads | `ssm start-session` → `sbatch` | `Kubernetes.Manifest` (or `kubectl`) |
-| High-level workloads | — (no submission API) | `Kubernetes.Job` / `Kubernetes.Deployment` with `AWS.EKS.hyperpod(...)` |
+| High-level workloads | — (no submission API) | `Kubernetes.Job` / `Kubernetes.Deployment` via HyperPod attributes |
 | Governance | Slurm accounting | `ClusterSchedulerConfig` + `ComputeQuota` (Kueue) |
 
 ## The Slurm stack (`alchemy.run.ts`)
@@ -55,34 +55,36 @@ sbatch --nodes=1 train.sbatch
   and submitted through governance with the Kueue labels:
 
   ```typescript
-  nodeSelector: {
-    "sagemaker.amazonaws.com/node-health-status": "Schedulable",
-    "sagemaker.amazonaws.com/instance-group-name":
-      hyperpod.instanceGroups.workers.InstanceGroupName,
-  },
+  nodeSelector: hyperpod.instanceGroups.workers.nodeSelector,
   labels: {
-    "kueue.x-k8s.io/queue-name": Output.interpolate`hyperpod-ns-${researchQuota.teamName}-localqueue`,
-    "kueue.x-k8s.io/priority-class": "training-priority",
+    [AWS.SageMaker.KUEUE_QUEUE_NAME_LABEL]: researchQuota.queueName,
+    [AWS.SageMaker.KUEUE_PRIORITY_CLASS_LABEL]: "training-priority",
   },
   ```
 
 - **High level** ([`src/TrainJob.ts`](./src/TrainJob.ts)) — an effectful
-  `Kubernetes.Job` bundled from TypeScript. The spread `AWS.EKS.hyperpod(...)`
-  helper references
-  **resources through the graph**: the instance-group keys carry through
-  to the cluster's attributes as types (a typo'd name is a compile
-  error), and the quota resource derives the namespace, Kueue labels, and
-  ordering:
+  `Kubernetes.Job` bundled from TypeScript, written in plain Kubernetes
+  vocabulary — the HyperPod resources expose the derived values as
+  **attributes referenced through the graph**: the instance-group keys
+  carry through to the cluster's attributes as types (a typo'd name is a
+  compile error), and the quota materializes the governed namespace and
+  Kueue queue:
 
   ```typescript
   yield* Kubernetes.Job("TrainJob", {
     cluster: eks,
     main: import.meta.url,
-    ...AWS.EKS.hyperpod({
-      instanceGroup: hyperpod.instanceGroups.workers, // key-typed group ref
-      quota: researchQuota,      // → hyperpod-ns-research + Kueue queue label
-      priorityClass: "training", // → training-priority
-    }),
+    namespace: researchQuota.namespace,  // hyperpod-ns-research
+    labels: {
+      [AWS.SageMaker.KUEUE_QUEUE_NAME_LABEL]: researchQuota.queueName,
+      [AWS.SageMaker.KUEUE_PRIORITY_CLASS_LABEL]: "training-priority",
+    },
+    podTemplate: {
+      spec: {
+        // health-checked nodes of the `workers` group (key-typed)
+        nodeSelector: hyperpod.instanceGroups.workers.nodeSelector,
+      },
+    },
   });
   ```
 

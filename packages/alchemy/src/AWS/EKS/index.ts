@@ -1,7 +1,6 @@
 export * from "./AccessEntry.ts";
 export * from "./Addon.ts";
 export * from "./Cluster.ts";
-export * from "./HyperPod.ts";
 export * from "./KubernetesAdapter.ts";
 export * from "./DescribeAccessEntry.ts";
 export * from "./DescribeAccessEntryHttp.ts";

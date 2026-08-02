@@ -9,7 +9,8 @@
  *   to HyperPod nodes with the well-known node labels and submitted
  *   through task governance with the Kueue labels (below),
  * - HIGH LEVEL: `src/TrainJob.ts`, an effectful `Kubernetes.Job` bundled from
- *   TypeScript and pinned + governed via the spread `AWS.EKS.hyperpod(...)` helper.
+ *   TypeScript and pinned + governed through HyperPod resource attributes
+ *   (`quota.namespace`, `quota.queueName`, the group's `nodeSelector`).
  *
  * Deploy with `bun alchemy deploy ./eks.run.ts`. The EKS control plane
  * takes ~10-15 minutes and the HyperPod cluster another ~10-20.
@@ -17,7 +18,6 @@
 import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
 import * as Kubernetes from "alchemy/Kubernetes";
-import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HyperPodEksInfra } from "./src/eks-infra.ts";
@@ -44,21 +44,17 @@ export default Alchemy.Stack(
         kind: "Job",
         metadata: {
           name: "governed-hello",
-          namespace: Output.interpolate`hyperpod-ns-${researchQuota.teamName}`,
+          namespace: researchQuota.namespace,
           labels: {
-            "kueue.x-k8s.io/queue-name": Output.interpolate`hyperpod-ns-${researchQuota.teamName}-localqueue`,
-            "kueue.x-k8s.io/priority-class": "training-priority",
+            [AWS.SageMaker.KUEUE_QUEUE_NAME_LABEL]: researchQuota.queueName,
+            [AWS.SageMaker.KUEUE_PRIORITY_CLASS_LABEL]: "training-priority",
           },
         },
         spec: {
           backoffLimit: 1,
           template: {
             spec: {
-              nodeSelector: {
-                "sagemaker.amazonaws.com/node-health-status": "Schedulable",
-                "sagemaker.amazonaws.com/instance-group-name":
-                  hyperpod.instanceGroups.workers.InstanceGroupName,
-              },
+              nodeSelector: hyperpod.instanceGroups.workers.nodeSelector,
               containers: [
                 {
                   name: "hello",
@@ -74,7 +70,7 @@ export default Alchemy.Stack(
     });
 
     // ── HIGH LEVEL: the effectful Job (bundled TypeScript, pinned +
-    // governed via the spread `AWS.EKS.hyperpod(...)` helper). See src/TrainJob.ts.
+    // governed through the same attributes). See src/TrainJob.ts.
     const trainJob = yield* TrainJob;
 
     return {
