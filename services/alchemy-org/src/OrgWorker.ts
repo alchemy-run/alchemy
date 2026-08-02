@@ -14,16 +14,16 @@
  *                the repository checkouts, one RPC hop away
  * - approvals  → the same Ledger-backed record as local
  */
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as D1 from "alchemy/Cloudflare/D1";
 import * as Layer from "effect/Layer";
-import { ApprovalsLedger } from "./services/Approvals.ts";
-import { D1Ledger } from "./services/LedgerD1.ts";
 import { DoctrineSkills, Org } from "./Org.ts";
+import { ApprovalsLedger } from "./services/Approvals.ts";
+import { EventsWorker } from "./services/Events.ts";
+import { GitHubWorker } from "./services/GitHubWorker.ts";
+import { KernelWorker, OrgChatsWorker } from "./services/Kernel.ts";
+import { D1Ledger } from "./services/LedgerD1.ts";
 import { CodingWorker } from "./skills/Coding.ts";
 import { QualityAssuranceWorker } from "./skills/QualityAssurance.ts";
-import { EventsWorker } from "./services/Events.ts";
-import { GitHubWorker } from "./services/GitHubBindings.ts";
-import { KernelWorker, OrgChats } from "./services/Kernel.ts";
 import { OpenPullRequestSandbox } from "./tools/SandboxToolbox.ts";
 import { ApproveRecorded } from "./tools/index.ts";
 
@@ -40,11 +40,10 @@ export const OrgWorker = Org.pipe(
   Layer.provideMerge(KernelWorker),
   Layer.provide(EventsWorker),
   Layer.provideMerge(ApprovalsLedger),
-  Layer.provideMerge(
-    D1Ledger.pipe(Layer.provide(Cloudflare.D1.QueryDatabaseBinding)),
-  ),
-  // the chat projection (same const the kernel bundle observes into)
-  Layer.provideMerge(OrgChats),
+  Layer.provideMerge(D1Ledger.pipe(Layer.provide(D1.QueryDatabaseBinding))),
+  // durable chat projection (OrgChats DO) — same Layer the kernel
+  // observer RPCs into from every run DO
+  Layer.provideMerge(OrgChatsWorker),
   Layer.provideMerge(GitHubWorker),
   Layer.orDie,
 );

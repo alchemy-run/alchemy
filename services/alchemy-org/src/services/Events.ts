@@ -11,11 +11,11 @@
  *   delivery path before the Worker's own fetch. Delivery becomes
  *   PUSH; the polling latency disappears.
  */
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Workers from "alchemy/Cloudflare/Workers";
 import * as GitHub from "alchemy/GitHub";
 
 export const EventsLocal = GitHub.RepositoryEventSourcePolling({
   every: "3 seconds",
 });
 
-export const EventsWorker = Cloudflare.Workers.GitHubRepositoryEventSourceLive;
+export const EventsWorker = Workers.GitHubRepositoryEventSourceLive;

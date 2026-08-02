@@ -3,12 +3,11 @@
  * LedgerSqlite.ts): the local process never bundles Cloudflare's D1
  * client, and the Worker never bundles `bun:sqlite`.
  */
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as D1 from "alchemy/Cloudflare/D1";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { LEDGER_TABLE, Ledger, META_TABLE } from "./Ledger.ts";
-
 
 /**
  * D1 physics — the implementation OWNS its infrastructure: the
@@ -31,8 +30,8 @@ import { LEDGER_TABLE, Ledger, META_TABLE } from "./Ledger.ts";
 export const D1Ledger = Layer.effect(
   Ledger,
   Effect.gen(function* () {
-    const database = yield* Cloudflare.D1.Database("org-ledger");
-    const db = yield* Cloudflare.D1.QueryDatabase(database);
+    const database = yield* D1.Database("org-ledger");
+    const db = yield* D1.QueryDatabase(database);
 
     // The D1 client's executors are colored with RuntimeContext ("runs
     // only inside the deployed Worker"). The Ledger contract is
@@ -46,13 +45,12 @@ export const D1Ledger = Layer.effect(
 
     const ensured = yield* Effect.cached(
       inWorker(
-        Effect.asVoid(
-          db.exec(LEDGER_TABLE.trim().replaceAll(/\s+/g, " ")),
-        ).pipe(
-          Effect.andThen(
-            Effect.asVoid(db.exec(META_TABLE.trim().replaceAll(/\s+/g, " "))),
+        db
+          .exec(LEDGER_TABLE.trim().replaceAll(/\s+/g, " "))
+          .pipe(
+            Effect.andThen(db.exec(META_TABLE.trim().replaceAll(/\s+/g, " "))),
+            Effect.asVoid,
           ),
-        ),
       ),
     );
 

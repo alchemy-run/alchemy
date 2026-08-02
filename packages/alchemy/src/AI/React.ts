@@ -6,10 +6,12 @@
  * ```tsx
  * import { useAgent, useChat } from "alchemy/AI/React";
  *
- * function IssueChannel({ url }: { url: string }) {
- *   const agent = useAgent({ url }); // wss://…/attach/Scribe/issue-7
- *   const { messages, sendMessage, status } = useChat({ agent });
- *   // …render with ai-elements / your own components
+ * function IssueChannel({ chatId }: { chatId: string }) {
+ *   const agent = useAgent({ chatId }); // → wss://…/attach/IssueOwner/…
+ *   const { messages, sendMessage, status } = useChat({
+ *     agent,
+ *     resume: true, // subscribe on mount; re-subscribe after each burst
+ *   });
  * }
  * ```
  *
@@ -26,13 +28,60 @@
  * `react` into a Worker or Lambda bundle.
  */
 import { useChat as useAiChat } from "@ai-sdk/react";
-import type { UIMessage } from "ai";
-import { useMemo } from "react";
+import type { ChatInit, UIMessage } from "ai";
+import { useEffect, useMemo } from "react";
+import { chatId as makeChatId } from "./Chats.ts";
 import { RunSocketTransport } from "./RunSocket.ts";
 
+/**
+ * Build the run-socket URL for a chat id (`${term}:${key}`) or an
+ * explicit `{ term, key }`. Keys may contain `/` — each path segment
+ * is encoded so the Worker's rest-join parser recovers them.
+ */
+export const attachUrl = (
+  target: string | { readonly term: string; readonly key: string },
+  host: {
+    readonly protocol?: string;
+    readonly host?: string;
+  } = globalThis.location,
+): string => {
+  const { term, key } =
+    typeof target === "string"
+      ? (() => {
+          const at = target.indexOf(":");
+          if (at < 0) {
+            throw new Error(
+              `attachUrl: chat id must be term:key, got ${target}`,
+            );
+          }
+          return { term: target.slice(0, at), key: target.slice(at + 1) };
+        })()
+      : target;
+  const proto = (host.protocol ?? "https:").startsWith("https")
+    ? "wss:"
+    : "ws:";
+  const hostname = host.host ?? "localhost";
+  const keyPath = key
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+  return `${proto}//${hostname}/attach/${encodeURIComponent(term)}/${keyPath}`;
+};
+
 export interface UseAgentOptions {
-  /** The run's attach endpoint: `ws(s)://host/attach/{term}/{key}`. */
-  readonly url: string;
+  /** Absolute `ws(s)://` attach URL — or omit and pass {@link chatId}. */
+  readonly url?: string;
+  /** Chat id (`${term}:${key}`) — converted via {@link attachUrl}. */
+  readonly chatId?: string;
+  readonly term?: string;
+  readonly key?: string;
+  /**
+   * What the first subscribe requests: `"replay"` (default) streams
+   * the full durable history; `"live"` tails only — pass it when the
+   * transcript is hydrated from a snapshot (`/messages`), or every
+   * historical message arrives a second time over the socket.
+   */
+  readonly history?: "replay" | "live";
 }
 
 /** A connection to ONE agent run — hand it to {@link useChat}. */
@@ -43,27 +92,62 @@ export interface AgentConnection {
 
 /**
  * Connect to an agent run over its WebSocket. The connection is
- * memoized per URL and opened lazily on the first send.
+ * memoized per URL; {@link useChat} with `resume: true` opens it on
+ * mount via `reconnectToStream`.
  */
 export const useAgent = (options: UseAgentOptions): AgentConnection => {
-  const url = options.url;
+  const url = useMemo(() => {
+    if (options.url) return options.url;
+    if (options.chatId) return attachUrl(options.chatId);
+    if (options.term !== undefined && options.key !== undefined) {
+      return attachUrl({ term: options.term, key: options.key });
+    }
+    throw new Error("useAgent: pass url, chatId, or term+key");
+  }, [options.url, options.chatId, options.term, options.key]);
+  const history = options.history;
   return useMemo(
-    () => ({ url, transport: new RunSocketTransport({ url }) }),
-    [url],
+    () => ({ url, transport: new RunSocketTransport({ url, history }) }),
+    [url, history],
   );
 };
 
-export type UseChatOptions = Omit<
-  NonNullable<Parameters<typeof useAiChat<UIMessage>>[0]>,
-  "transport"
-> & {
+export type UseChatOptions = Omit<ChatInit<UIMessage>, "transport"> & {
   readonly agent: AgentConnection;
+  /**
+   * Keep the live view open across park/quiesce bursts: after each
+   * stream ends, call `resumeStream` again. Defaults to `true`.
+   */
+  readonly persist?: boolean;
+  /** Subscribe on mount (the AI SDK's `resume`). Defaults to `true`. */
+  readonly resume?: boolean;
+  readonly experimental_throttle?: number;
 };
 
 /**
  * The AI SDK's `useChat`, speaking to an agent run: submits go down
  * the run socket as inputs, and the run's observations come back as
- * `UIMessageChunk`s.
+ * `UIMessageChunk`s. With `persist` (default), the socket re-subscribes
+ * after every burst so a parked IssueOwner keeps streaming.
  */
-export const useChat = ({ agent, ...options }: UseChatOptions) =>
-  useAiChat<UIMessage>({ ...options, transport: agent.transport });
+export const useChat = ({
+  agent,
+  persist = true,
+  resume = true,
+  ...options
+}: UseChatOptions) => {
+  const chat = useAiChat<UIMessage>({
+    ...options,
+    resume,
+    transport: agent.transport,
+  });
+
+  useEffect(() => {
+    if (!persist) return;
+    if (chat.status !== "ready") return;
+    void chat.resumeStream();
+  }, [persist, chat.status, chat.resumeStream]);
+
+  return chat;
+};
+
+export { makeChatId as chatId };

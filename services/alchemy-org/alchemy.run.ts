@@ -25,10 +25,16 @@ import * as Local from "alchemy/Local";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { testAlchemy } from "./src/Repos.ts";
-import AlchemyOrg from "./src/Server.ts";
 import SandboxLive from "./src/services/Sandbox.runtime.ts";
 import AlchemyOrgWorker from "./src/Worker.ts";
 
+/**
+ * Worker-focused deploy for Cloudflare e2e. The local {@link AlchemyOrg}
+ * service (Server.ts) is intentionally not yielded — it polls the same
+ * repository and races the webhook path. `Local.providers()` stays
+ * registered so any prior local state row can still be destroyed.
+ * Re-add `yield* AlchemyOrg` (and export its url/pid) to run both.
+ */
 export default Alchemy.Stack(
   "AlchemyOrg",
   {
@@ -41,13 +47,10 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const repo = yield* testAlchemy;
-    const org = yield* AlchemyOrg;
     const worker = yield* AlchemyOrgWorker;
 
     return {
       repository: repo.fullName,
-      url: org.url,
-      pid: org.pid,
       workerUrl: worker.url,
     };
   }).pipe(Effect.provide(SandboxLive)),

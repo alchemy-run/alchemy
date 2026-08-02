@@ -12,7 +12,7 @@
  * `Sandbox.runtime.ts`, which alchemy bundles into the container
  * image.
  */
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Containers from "alchemy/Cloudflare/Containers";
 import type * as Effect from "effect/Effect";
 
 /** One toolbox invocation, addressed to a run's worktree by KEY. */
@@ -33,7 +33,7 @@ export interface SandboxPush {
   readonly message: string;
 }
 
-export class OrgSandbox extends Cloudflare.Container<
+export class OrgSandbox extends Containers.Container<
   OrgSandbox,
   {
     readonly call: (

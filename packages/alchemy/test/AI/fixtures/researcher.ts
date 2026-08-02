@@ -15,8 +15,8 @@ import * as S from "effect/Schema";
 export const query = AI.Parameter("query", S.String)`
 The search query.`;
 
-export class Search extends AI.Tool<Search>()("search")`
-Search the corpus for ${query}. Cheap — search before you answer.` {}
+export class Search extends (AI.Tool<Search>()("search")`
+Search the corpus for ${query}. Cheap — search before you answer.`) {}
 
 export class Researcher extends AI.Agent<Researcher>()("Researcher") {}
 

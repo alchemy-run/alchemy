@@ -105,11 +105,11 @@ export const spread = AI.Parameter(
   Prose reached past the argument list.`;
 
 /** The arguments keep their own colors, comments included. */
-export class Wake extends AI.Event("Wake", {
+export class Wake extends (AI.Event("Wake", {
   /** The cron fire time. */
   stamp: Schema.Int,
 })`
-A **scheduled** wake, described where the payload is declared.` {}
+A **scheduled** wake, described where the payload is declared.`) {}
 
 /** A call that only looks like a tag is handed back, arguments and all. */
 export const notATag = Parameter("not-a-tag", {

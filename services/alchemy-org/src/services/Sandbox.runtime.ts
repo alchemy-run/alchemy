@@ -19,15 +19,17 @@
  * authenticate with the bound token, never a deploy-shell ambient.
  */
 import * as AI from "alchemy/AI";
+import * as Dockerfile from "alchemy/Docker/Dockerfile";
 import * as Git from "alchemy/Git";
 import * as GitHub from "alchemy/GitHub";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { perRun } from "alchemy/Workspace";
-import * as Dockerfile from "alchemy/Docker/Dockerfile";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { runProcess } from "../lib/ProcessRunner.ts";
+import { renderError } from "../lib/RenderError.ts";
+import { ToolOutputStoreLive } from "../lib/ToolOutputStore.ts";
 import { testAlchemy } from "../Repos.ts";
 import {
   ApplyPatch,
@@ -76,8 +78,11 @@ export default OrgSandbox.make(
   },
   Effect.gen(function* () {
     // ── credentials: the PAT bound at deploy, read back at runtime ──
-    const Token = yield* GitHub.PersonalAccessToken;
-    const token = yield* Token("OrgSandboxGitHubToken", {});
+    const token = yield* GitHub.PersonalAccessToken("OrgSandboxGitHubToken");
+    // yielding the attribute HERE — above the plan guard — is what
+    // BINDS it into the container's environment at deploy; moving it
+    // below the guard ships a container with no token, whose boot
+    // then dies reading it (every RPC 500s).
     const value = yield* token.value;
 
     // PLAN stops here: the constructor also runs on the deploying
@@ -108,6 +113,10 @@ export default OrgSandbox.make(
     ).pipe(
       Layer.provide(perRun({ remote })),
       Layer.provideMerge(Workspaces),
+      // `push` runs `runProcess` OUTSIDE the tool layers (which hide
+      // their own store) — without this the git() calls die with a
+      // missing-service defect and every push RPC 500s.
+      Layer.provideMerge(ToolOutputStoreLive),
     );
     const built = yield* Layer.build(Toolbox).pipe(Effect.orDie);
 
@@ -157,6 +166,8 @@ export default OrgSandbox.make(
                 `git ${args[0]} failed (exit ${result.exitCode}): ${result.stderr.text || result.stdout.text}`,
               ),
         ),
+        // spawn/stream failures are objects — keep them readable
+        Effect.mapError(renderError),
         Effect.provide(built as never),
       );
 
@@ -170,7 +181,7 @@ export default OrgSandbox.make(
             );
           }
           return yield* callable(params).pipe(
-            Effect.mapError((error) => String(error)),
+            Effect.mapError(renderError),
             Effect.provideService(AI.Thread, threadStub(key)),
             Effect.provide(RuntimeContext.phantom),
           ) as Effect.Effect<unknown, string>;
@@ -180,7 +191,7 @@ export default OrgSandbox.make(
         Effect.gen(function* () {
           const workspace = yield* workspaces
             .checkout({ key, remote })
-            .pipe(Effect.mapError((error) => error.message));
+            .pipe(Effect.mapError(renderError));
           yield* git(workspace.root, ["checkout", "-B", branch]);
           yield* git(workspace.root, ["add", "-A"]);
           const status = yield* git(workspace.root, ["status", "--porcelain"]);

@@ -9,8 +9,8 @@
  * small positive epoch offsets (all "new activity"), and
  * `TestClock.adjust` steps the poll schedule deterministically. The
  * polling Layer wraps each whole test body in ONE `Effect.provide`
- * (owner convention) — its Scope owns the poll fibers for exactly the
- * test's duration.
+ * (owner convention) — without a Platform Host, `runOnHost` forks
+ * into that provide Scope for exactly the test's duration.
  *
  * Asserted:
  * (a) only the REQUESTED events are polled (no REST call for the rest),

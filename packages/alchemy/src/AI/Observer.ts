@@ -1,5 +1,44 @@
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import type * as Effect from "effect/Effect";
+
+/**
+ * The ENCODED form of a round failure — what a `crashed` observation
+ * carries across storage and RPC. The kernel never renders errors
+ * (spec §11b): projections, boards, and UIs own presentation.
+ * JSON-serializable by construction, like every observation.
+ */
+export interface EncodedCrash {
+  /** The error's tag — for AiErrors, the semantic REASON tag
+   *  (`InvalidRequestError`, `RateLimitError`, …), not the wrapper. */
+  readonly _tag: string | undefined;
+  /** One human-readable line — no stack, no `Cause(...)` wrapper. */
+  readonly message: string;
+  /**
+   * The error's own testimony on whether re-running could succeed
+   * (`AiError.isRetryable`). Errors carrying no testimony default to
+   * retryable — the recovery loop's bounded budget is the safety net.
+   */
+  readonly retryable: boolean;
+}
+
+/**
+ * A round exhausted its recovery budget (interrupted `attempts` times
+ * with no completed sampling) and was abandoned — the typed failure
+ * every waiter on that round receives.
+ */
+export class RoundAbandoned extends Data.TaggedError("RoundAbandoned")<{
+  readonly term: string;
+  readonly key: string;
+  readonly attempts: number;
+}> {
+  override get message() {
+    return (
+      `run '${this.term}/${this.key}': round abandoned after ` +
+      `${this.attempts} interrupted attempts`
+    );
+  }
+}
 
 /**
  * The envelope every observation carries: which run it belongs to
@@ -111,7 +150,19 @@ export type KernelObservation = ObservationEnvelope &
         readonly type: "parked";
       }
     | { readonly type: "settled" }
-    | { readonly type: "crashed"; readonly error: string }
+    | {
+        /**
+         * The current round FAILED. `fatal` distinguishes the two
+         * §11b lanes this observation covers: a non-retryable typed
+         * failure abandoned on the spot (`fatal: true`) vs a defect
+         * the bounded recovery loop will re-enter (`fatal` absent).
+         * Rows written before the EncodedCrash shape carry a plain
+         * string in `error` — renderers must tolerate both.
+         */
+        readonly type: "crashed";
+        readonly error: EncodedCrash | string;
+        readonly fatal?: boolean;
+      }
   );
 
 /**

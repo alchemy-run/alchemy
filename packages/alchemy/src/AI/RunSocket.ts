@@ -38,9 +38,11 @@ export type RunSocketClientFrame =
       /** Replay durable observations with `seq >= fromSeq`, then a
        *  {@link RunSocketServerFrame} `live` marker. Live broadcast is
        *  independent of subscription — every attached socket receives
-       *  new observations; `subscribe` only requests catch-up. */
+       *  new observations; `subscribe` only requests catch-up.
+       *  `fromSeq: "live"` skips replay entirely (a client that
+       *  hydrated its history from a snapshot wants the tail only). */
       readonly type: "subscribe";
-      readonly fromSeq?: number;
+      readonly fromSeq?: number | "live";
     }
   | {
       /** Admit one input to the run (the socket's `steer`). */
@@ -108,7 +110,10 @@ export const handleRunSocketFrame =
     switch (frame.type) {
       case "subscribe":
         return Effect.gen(function* () {
-          const from = frame.fromSeq ?? 0;
+          const from =
+            frame.fromSeq === "live"
+              ? yield* host.watermark
+              : (frame.fromSeq ?? 0);
           for (const observation of yield* host.replay(from)) {
             yield* send({ type: "observation", durable: true, observation });
           }
@@ -154,6 +159,18 @@ export interface RunSocketTransportOptions {
   readonly url: string;
   /** Override the WebSocket constructor (defaults to the global). */
   readonly webSocket?: new (url: string) => WebSocket;
+  /**
+   * What the FIRST subscribe requests:
+   *
+   * - `"replay"` (default) — the full durable history streams in; for
+   *   a client starting from an empty transcript.
+   * - `"live"` — tail only; for a client that HYDRATED its transcript
+   *   from a snapshot (`/messages`). Replaying over the socket would
+   *   duplicate every message the snapshot already delivered.
+   *
+   * Subsequent subscribes always resume from the cursor.
+   */
+  readonly history?: "replay" | "live";
 }
 
 /**
@@ -177,6 +194,7 @@ export class RunSocketTransport<
 > implements ChatTransport<M> {
   private socket: WebSocket | undefined;
   private cursor = 0;
+  private subscribed = false;
   private readonly options: RunSocketTransportOptions;
 
   constructor(options: RunSocketTransportOptions) {
@@ -211,29 +229,55 @@ export class RunSocketTransport<
    */
   private stream(socket: WebSocket): ReadableStream<UIMessageChunk> {
     const translate = makeChunkTranslator();
+    let detach: (() => void) | undefined;
     return new ReadableStream<UIMessageChunk>({
       start: (controller) => {
         const onMessage = (event: MessageEvent) => {
           const frame = JSON.parse(String(event.data)) as RunSocketServerFrame;
+          if (frame.type === "live") {
+            // replay complete — pin the cursor to the watermark so the
+            // next subscribe never re-reads rows this client (or its
+            // hydrating snapshot) has already seen
+            this.cursor = Math.max(this.cursor, frame.seq);
+            return;
+          }
           if (frame.type !== "observation") return;
-          if (frame.durable) this.cursor = frame.observation.seq + 1;
+          if (frame.durable) {
+            // DEDUPE by seq: live broadcast is independent of
+            // subscription, so a subscribe's replay can re-deliver a
+            // row the broadcast already sent (and vice versa). A
+            // duplicate row appended twice into one reasoning/text
+            // part renders glued, duplicated transcripts.
+            if (frame.observation.seq < this.cursor) return;
+            this.cursor = frame.observation.seq + 1;
+          }
           const { chunks, done } = translate(frame.observation);
           for (const chunk of chunks) controller.enqueue(chunk);
           if (done) {
-            socket.removeEventListener("message", onMessage);
+            detach?.();
             controller.close();
           }
         };
         const onClose = () => {
-          socket.removeEventListener("message", onMessage);
+          detach?.();
           try {
             controller.close();
           } catch {
             // already closed by a terminal observation
           }
         };
+        detach = () => {
+          socket.removeEventListener("message", onMessage);
+          socket.removeEventListener("close", onClose);
+        };
         socket.addEventListener("message", onMessage);
         socket.addEventListener("close", onClose, { once: true });
+      },
+      // `useChat().stop()` cancels the reader — without detaching, the
+      // orphaned listener keeps pumping a dead controller and the next
+      // stream's frames render nowhere
+      cancel: () => {
+        detach?.();
       },
     });
   }
@@ -257,14 +301,24 @@ export class RunSocketTransport<
     return stream;
   };
 
-  /** Resume: replay durable observations from the cursor, live-tail on. */
+  /**
+   * Resume: replay durable observations from the cursor, live-tail on.
+   * The FIRST subscribe honors `history` — a snapshot-hydrated client
+   * subscribes at the watermark instead of replaying rows it already
+   * rendered.
+   */
   reconnectToStream: ChatTransport<M>["reconnectToStream"] = async () => {
     const socket = await this.connect();
     const stream = this.stream(socket);
+    const fromSeq =
+      !this.subscribed && this.options.history === "live"
+        ? ("live" as const)
+        : this.cursor;
+    this.subscribed = true;
     socket.send(
       JSON.stringify({
         type: "subscribe",
-        fromSeq: this.cursor,
+        fromSeq,
       } satisfies RunSocketClientFrame),
     );
     return stream;

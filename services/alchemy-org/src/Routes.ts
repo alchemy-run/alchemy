@@ -13,6 +13,7 @@ import * as AI from "alchemy/AI";
 import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -95,6 +96,38 @@ export const orgRoutes = Effect.gen(function* () {
     }),
   );
 
+  // the RAW observation log — kernel vocabulary, crashes included.
+  // The debugging poll: `messages` shapes for the UI, this tells the
+  // truth (`?limit=N` tails the last N observations).
+  const chatLog = HttpRouter.add(
+    "GET",
+    "/api/chats/:id/log",
+    Effect.gen(function* () {
+      const request = yield* HttpServerRequest;
+      const params = yield* HttpRouter.params;
+      const id = decodeURIComponent(String(params.id ?? ""));
+      const snapshot = yield* chats.snapshot(id);
+      if (snapshot === undefined) {
+        return yield* HttpServerResponse.json(
+          { error: `unknown chat: ${id}` },
+          { status: 404 },
+        );
+      }
+      const limitRaw = new URL(request.url, "http://org").searchParams.get(
+        "limit",
+      );
+      const limit = limitRaw === null ? undefined : Number(limitRaw);
+      const log =
+        limit !== undefined && Number.isFinite(limit) && limit > 0
+          ? snapshot.log.slice(-limit)
+          : snapshot.log;
+      return yield* HttpServerResponse.json({
+        log,
+        streaming: snapshot.streaming,
+      });
+    }),
+  );
+
   const chatStream = HttpRouter.add(
     "POST",
     "/api/chat",
@@ -122,7 +155,8 @@ export const orgRoutes = Effect.gen(function* () {
 
       // deliver the text through the WORLD's door: a GitHub comment
       // on the owner's issue steers the run like any other event;
-      // chats without a world door are watch-only
+      // chats without a world door are watch-only. Live view is the
+      // run socket (`/attach` / useAgent) — not this response body.
       const threadNumber = Number(key.match(/#(\d+)$/)?.[1]);
       if (
         text.length > 0 &&
@@ -133,12 +167,12 @@ export const orgRoutes = Effect.gen(function* () {
           issue_number: threadNumber,
           body: text,
         }).pipe(Effect.orDie);
+        return yield* HttpServerResponse.json({ ok: true });
       }
 
-      // live tail from NOW: the response streams the run's next
-      // burst as ONE assistant message (steps per sampling) —
-      // designs/ai/streaming.md. Subscription lifetime is the
-      // RESPONSE BODY's (Stream.ensuring), never the request scope.
+      // Non-IssueOwner threads: legacy HTTP SSE tail (local only —
+      // ChatsCloudflare's subscribe has no live queue). Prefer
+      // useAgent/useChat over /attach for the live view.
       const { queue, unsubscribe } = yield* chats.subscribe(
         id,
         Number.MAX_SAFE_INTEGER,
@@ -237,10 +271,59 @@ export const orgRoutes = Effect.gen(function* () {
     }),
   );
 
+  /** Directory feed: SSE snapshots of the issue board as chats change. */
+  const boardStream = HttpRouter.add(
+    "GET",
+    "/api/board/stream",
+    Effect.gen(function* () {
+      const readBoard = Effect.gen(function* () {
+        const [chatList, openIssues] = yield* Effect.all(
+          [
+            chats.list(),
+            issues.list().pipe(
+              Effect.map((list) =>
+                list.map((issue) => ({
+                  number: issue.number,
+                  title: issue.title,
+                })),
+              ),
+              Effect.catch(() => Effect.succeed(undefined)),
+            ),
+          ] as const,
+          { concurrency: 2 },
+        );
+        return buildBoard(chatList, openIssues);
+      });
+
+      let previous = "";
+      const stream = Stream.fromEffectSchedule(
+        readBoard,
+        Schedule.spaced("1 second"),
+      ).pipe(
+        Stream.map((next) => {
+          const payload = JSON.stringify(next);
+          if (payload === previous) return undefined;
+          previous = payload;
+          return `data: ${payload}\n\n`;
+        }),
+        Stream.filter((line): line is string => line !== undefined),
+        Stream.interruptWhen(Effect.sleep("30 minutes")),
+        Stream.map((line) => encoder.encode(line)),
+        Stream.catch(() => Stream.empty),
+      ) as Stream.Stream<Uint8Array>;
+
+      return HttpServerResponse.stream(stream, {
+        headers: sseHeaders,
+      });
+    }),
+  );
+
   return Layer.mergeAll(
     listChats,
     board,
+    boardStream,
     chatMessages,
+    chatLog,
     chatStream,
     approvePullRequest,
     status,

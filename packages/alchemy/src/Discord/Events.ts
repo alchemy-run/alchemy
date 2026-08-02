@@ -35,7 +35,7 @@ export const Author: S.Schema<Author> = S.Struct({
  * channel id doubles as the conversation identity: Discord threads
  * ARE channels, so `channelId` names the thread a reply belongs in.
  */
-export class Mentioned extends Event("Mentioned", {
+export class Mentioned extends (Event("Mentioned", {
   serverId: S.NullOr(S.String),
   channelId: S.String,
   messageId: S.String,
@@ -45,10 +45,10 @@ export class Mentioned extends Event("Mentioned", {
 })`
 The bot was mentioned in a Discord message — the author, the message
 text, and the channel (or thread; threads are channels) the
-conversation lives in.` {}
+conversation lives in.`) {}
 
 /** Any other (non-bot-authored) message — ambient traffic. */
-export class MessageCreated extends Event("MessageCreated", {
+export class MessageCreated extends (Event("MessageCreated", {
   serverId: S.NullOr(S.String),
   channelId: S.String,
   messageId: S.String,
@@ -57,7 +57,7 @@ export class MessageCreated extends Event("MessageCreated", {
   timestamp: S.optionalKey(S.String),
 })`
 A message was posted in a channel the bot can read, without
-mentioning it — ambient traffic.` {}
+mentioning it — ambient traffic.`) {}
 
 /** Every server event the typed wire delivers. */
 export type ServerEvent = Mentioned | MessageCreated;

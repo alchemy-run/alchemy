@@ -178,6 +178,13 @@ type ServiceShape = Main<ServiceServices>;
  * })
  * ```
  *
+ * Layers that own machinery should register it with {@link runOnHost}
+ * (init-time) or {@link makeProcessScope} (post-init forks) so plain
+ * `Effect.provide(MyLive)` on the constructor keeps fibers alive —
+ * `Effect.provide`'s transient scope would otherwise tear them down
+ * when init returns.
+
+ *
  * @section External Scripts
  * @example Run a self-contained script
  * ```typescript

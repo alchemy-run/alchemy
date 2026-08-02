@@ -16,8 +16,9 @@
  * through GitHub or not at all.
  */
 import * as AI from "alchemy/AI";
-import { WorkerExecutionContext } from "alchemy/Cloudflare";
+import { WorkerExecutionContext } from "alchemy/Cloudflare/Workers";
 import * as GitHub from "alchemy/GitHub";
+import { makeProcessScope } from "alchemy/Local";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -63,7 +64,7 @@ const linkFromBody = (body: string | null | undefined): number | undefined => {
 export const IssuesLive = Layer.effect(
   Issues,
   Effect.gen(function* () {
-    const scope = yield* Effect.scope;
+    const process = yield* makeProcessScope;
     const ledger = yield* Ledger;
     const listIssues = yield* GitHub.ListIssues(testAlchemy);
     const getPullRequest = yield* GitHub.GetPullRequest(testAlchemy);
@@ -115,8 +116,8 @@ export const IssuesLive = Layer.effect(
      * stall event ingestion. Substrate-aware at the last inch: on a
      * Worker the delivery runs inside a request, whose lifetime
      * `waitUntil` extends (a fiber forked into the BUILD scope would
-     * die with the event); locally there is no request, and the
-     * process-long build scope is the right home.
+     * die with the event); locally the process Scope (Host keeper)
+     * owns the fiber so `Effect.provide(OrgLocal)` cannot tear it down.
      */
     function background<E>(work: Effect.Effect<void, E>): Effect.Effect<void> {
       return Effect.gen(function* () {
@@ -126,7 +127,7 @@ export const IssuesLive = Layer.effect(
             .waitUntil(work)
             .pipe(Effect.provide(RuntimeContext.phantom));
         } else {
-          yield* Effect.asVoid(Effect.forkIn(work, scope));
+          yield* process.fork(work.pipe(Effect.orDie, Effect.asVoid));
         }
       });
     }

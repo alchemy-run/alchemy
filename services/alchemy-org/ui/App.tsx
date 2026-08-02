@@ -1,5 +1,5 @@
-import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, type UIMessage } from "ai";
+import { useAgent, useChat } from "alchemy/AI/React";
+import type { UIMessage } from "ai";
 import { useEffect, useMemo, useState } from "react";
 import {
   Conversation,
@@ -66,7 +66,7 @@ const ISSUE_STATE: Record<BoardIssue["state"], string> = {
 export const App = () => {
   const [board, setBoard] = useState<Board>({ issues: [], other: [] });
   const [selected, setSelected] = useState<string>();
-  // every thread the user has opened STAYS MOUNTED (hidden, polling
+  // every thread the user has opened STAYS MOUNTED (hidden, socket
   // paused) — switching back restores its state and scroll position
   const [visited, setVisited] = useState<string[]>([]);
   const select = (id: string) => {
@@ -76,20 +76,37 @@ export const App = () => {
     setSelected(id);
   };
 
+  // Directory feed: SSE of board snapshots (falls back to polling).
   useEffect(() => {
     let live = true;
-    const tick = () =>
-      fetch("/api/board")
-        .then((response) => response.json() as Promise<Board>)
-        .then((data) => {
-          if (live) setBoard(data);
-        })
-        .catch(() => {});
-    tick();
-    const interval = setInterval(tick, 3000);
+    const apply = (data: Board) => {
+      if (live) setBoard(data);
+    };
+    const source = new EventSource("/api/board/stream");
+    source.onmessage = (event) => {
+      try {
+        apply(JSON.parse(event.data) as Board);
+      } catch {
+        // ignore malformed frames
+      }
+    };
+    let interval: ReturnType<typeof setInterval> | undefined;
+    source.onerror = () => {
+      // EventSource retries on its own; also poll as a backstop when
+      // the stream is unavailable (old deploys, proxy buffers, …)
+      if (interval !== undefined) return;
+      const tick = () =>
+        fetch("/api/board")
+          .then((response) => response.json() as Promise<Board>)
+          .then(apply)
+          .catch(() => {});
+      tick();
+      interval = setInterval(tick, 3000);
+    };
     return () => {
       live = false;
-      clearInterval(interval);
+      source.close();
+      if (interval !== undefined) clearInterval(interval);
     };
   }, []);
 
@@ -239,14 +256,19 @@ const ChatView = ({
 }: { id: string; active: boolean } & ChatContext) => {
   const [initial, setInitial] = useState<UIMessage[]>();
 
-  // snapshot first, then the live tail rides the poll (streaming.md)
+  // snapshot first; the live tail rides the run socket. Drop the
+  // snapshot's in-flight `live-*` sample — the socket restates that
+  // burst durably, and keeping both renders the reasoning twice (one
+  // stuck on "Thinking…" forever).
   useEffect(() => {
     fetch(`/api/chats/${encodeURIComponent(id)}/messages`)
       .then(
         (response) =>
           (response.ok ? response.json() : []) as Promise<UIMessage[]>,
       )
-      .then(setInitial)
+      .then((messages) =>
+        setInitial(messages.filter((m) => !m.id.startsWith("live-"))),
+      )
       .catch(() => setInitial([]));
   }, [id]);
 
@@ -258,6 +280,137 @@ const ChatView = ({
     );
   }
   return <Chat id={id} initial={initial} active={active} {...context} />;
+};
+
+/** GitHub event families → badge accent. */
+const EVENT_STYLE: Array<[RegExp, string]> = [
+  [/^Issue(?!Comment)/, "text-emerald-400 border-emerald-400/40"],
+  [/^IssueComment/, "text-sky-400 border-sky-400/40"],
+  [/^PullRequest/, "text-violet-400 border-violet-400/40"],
+  [/^(CheckRun|CheckSuite|WorkflowRun|Push)/, "text-amber-400 border-amber-400/40"],
+];
+
+interface WorldEvent {
+  tag: string;
+  repo?: string;
+  number?: number;
+  title?: string;
+  author?: string;
+  body?: string;
+  url?: string;
+}
+
+/** Best-effort parse of an input text as a tagged GitHub world event. */
+const parseWorldEvent = (
+  text: string,
+): { event: WorldEvent; raw: string } | undefined => {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("{")) return undefined;
+  try {
+    const parsed = JSON.parse(trimmed) as Record<string, any>;
+    if (typeof parsed !== "object" || parsed === null) return undefined;
+    const tag = parsed._tag;
+    if (typeof tag !== "string") return undefined;
+    const repo = parsed.repository
+      ? `${parsed.repository.owner?.login ?? ""}/${parsed.repository.name ?? ""}`
+      : undefined;
+    const subject = parsed.issue ?? parsed.pullRequest ?? parsed.pull_request;
+    const comment = parsed.comment;
+    return {
+      event: {
+        tag,
+        repo,
+        number: subject?.number,
+        title: subject?.title,
+        author:
+          comment?.user?.login ?? subject?.user?.login ?? parsed.sender?.login,
+        body: comment?.body ?? subject?.body ?? undefined,
+        url: comment?.html_url ?? subject?.html_url,
+      },
+      raw: JSON.stringify(parsed, null, 2),
+    };
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * One text part, upgraded: tagged world events render as a compact
+ * card (badge + subject + author, raw JSON behind a disclosure) and
+ * `<note>` inputs render as a muted aside — never a JSON dump.
+ */
+const TextPart = ({ text }: { text: string }) => {
+  const [open, setOpen] = useState(false);
+  const note = text.trim().match(/^<note>\n?([\s\S]*?)\n?<\/note>$/);
+  if (note) {
+    return (
+      <div className="whitespace-pre-wrap rounded-md border border-dashed border-border/60 bg-muted/20 px-3 py-2 text-xs italic text-muted-foreground">
+        {note[1]}
+      </div>
+    );
+  }
+  const world = parseWorldEvent(text);
+  if (world === undefined) {
+    return <div className="whitespace-pre-wrap">{text}</div>;
+  }
+  const { event, raw } = world;
+  const style =
+    EVENT_STYLE.find(([family]) => family.test(event.tag))?.[1] ??
+    "text-zinc-400 border-zinc-500/40";
+  return (
+    <div className="rounded-md border border-border bg-muted/30 px-3 py-2.5 text-sm">
+      <div className="flex min-w-0 items-center gap-2">
+        <span
+          className={cn(
+            "shrink-0 rounded border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide",
+            style,
+          )}
+        >
+          {/* PascalCase → spaced words: PullRequestOpened → PULL REQUEST OPENED */}
+          {event.tag.replace(/(?<=[a-z0-9])(?=[A-Z])/g, " ")}
+        </span>
+        {event.title && (
+          <span className="min-w-0 truncate font-medium">{event.title}</span>
+        )}
+      </div>
+      <div className="mt-1 flex flex-wrap items-center gap-x-3 font-mono text-xs text-muted-foreground">
+        {event.repo && (
+          <span>
+            {event.repo}
+            {event.number !== undefined ? `#${event.number}` : ""}
+          </span>
+        )}
+        {event.author && <span>by {event.author}</span>}
+        {event.url && (
+          <a
+            href={event.url}
+            target="_blank"
+            rel="noreferrer"
+            className="underline hover:text-foreground"
+          >
+            open ↗
+          </a>
+        )}
+      </div>
+      {event.body && (
+        <div className="mt-2 line-clamp-3 whitespace-pre-wrap text-xs text-muted-foreground">
+          {event.body}
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="mt-2 cursor-pointer font-mono text-[10px] text-muted-foreground hover:text-foreground"
+      >
+        {open ? "▾ raw event" : "▸ raw event"}
+      </button>
+      {open && (
+        <pre className="mt-1 max-h-64 overflow-auto rounded bg-background/60 p-2 text-[10px]">
+          {raw}
+        </pre>
+      )}
+    </div>
+  );
 };
 
 const Chat = ({
@@ -272,44 +425,26 @@ const Chat = ({
   initial: UIMessage[];
   active: boolean;
 } & ChatContext) => {
-  const { messages, sendMessage, status, setMessages } = useChat({
-    id,
+  // Persistent run socket — subscribe on mount, re-subscribe after
+  // each burst so a parked IssueOwner keeps streaming. `history:
+  // "live"`: the transcript hydrates from `initial` (the /messages
+  // snapshot); a full replay would render every message twice.
+  const agent = useAgent({ chatId: id, history: "live" });
+  const { messages, sendMessage, status, setMessages, stop } = useChat({
+    agent,
     messages: initial,
-    transport: new DefaultChatTransport({ api: "/api/chat" }),
+    resume: active,
+    persist: active,
   });
 
-  // the LIVE VIEW is snapshot polling: the server accumulates the
-  // in-flight sampling's text/thinking deltas and appends them as a
-  // streaming-state assistant message, so a 1s re-fetch renders
-  // tokens as they arrive. Paused while HIDDEN (the thread stays
-  // mounted; polling resumes on re-selection). The SSE stream only
-  // exists for the send-message round trip — never clobber it
-  // mid-flight.
+  // Pause the socket when the thread is hidden (visited tabs stay
+  // mounted). Stopping drops the transport stream; re-selecting with
+  // resume/persist opens it again.
   useEffect(() => {
-    if (!active) return;
-    if (status === "streaming" || status === "submitted") return;
-    let live = true;
-    const interval = setInterval(() => {
-      fetch(`/api/chats/${encodeURIComponent(id)}/messages`)
-        .then(
-          (response) =>
-            (response.ok ? response.json() : undefined) as Promise<
-              UIMessage[] | undefined
-            >,
-        )
-        .then((fresh) => {
-          if (live && fresh !== undefined) setMessages(fresh);
-        })
-        .catch(() => {});
-    }, 1000);
-    return () => {
-      live = false;
-      clearInterval(interval);
-    };
-  }, [id, status, setMessages, active]);
+    if (!active) stop();
+  }, [active, stop]);
 
-  const watchOnly =
-    !id.startsWith("IssueOwner:");
+  const watchOnly = !id.startsWith("IssueOwner:");
 
   // delegation tool-call → worker thread. Door calls (`AI.Dispatch`)
   // carry their identity on the part (`part.dispatch.child` is the
@@ -369,8 +504,40 @@ const Chat = ({
       return next;
     });
 
+  // IssueOwner: world door is a GitHub comment (POST /api/chat); the
+  // run socket carries the live view. Other threads steer via submit.
   const onSubmit = (message: PromptInputMessage) => {
-    if (message.text?.trim()) void sendMessage({ text: message.text });
+    const text = message.text?.trim();
+    if (!text) return;
+    if (watchOnly) return;
+    if (id.startsWith("IssueOwner:")) {
+      void fetch("/api/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          id,
+          messages: [
+            ...messages,
+            {
+              role: "user",
+              parts: [{ type: "text", text }],
+            },
+          ],
+        }),
+      }).then(() =>
+        // optimistic user bubble — the socket restates from the run
+        setMessages([
+          ...messages,
+          {
+            id: `local-${Date.now()}`,
+            role: "user",
+            parts: [{ type: "text", text }],
+          },
+        ]),
+      );
+      return;
+    }
+    void sendMessage({ text });
   };
 
   return (
@@ -423,11 +590,7 @@ const Chat = ({
                     );
                   }
                   if (part.type === "text") {
-                    return (
-                      <div key={index} className="whitespace-pre-wrap">
-                        {part.text}
-                      </div>
-                    );
+                    return <TextPart key={index} text={part.text} />;
                   }
                   if (part.type === "dynamic-tool") {
                     const tool = part;

@@ -55,6 +55,7 @@ import * as Schedule from "effect/Schedule";
 import * as S from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
+import { isAiError } from "effect/unstable/ai/AiError";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import type * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -81,13 +82,18 @@ import {
   compileSpawn,
   compileTool,
   dedupeByName,
+  describeCrash,
   NOTE_CODA,
   noteMessage,
   render,
   type CompiledToolRef,
   type Stance,
 } from "../../AI/KernelShared.ts";
-import { KernelObserver, type KernelObservation } from "../../AI/Observer.ts";
+import {
+  KernelObserver,
+  RoundAbandoned,
+  type KernelObservation,
+} from "../../AI/Observer.ts";
 import { isParameter } from "../../AI/Parameter.ts";
 import { dedentTemplate, isFragment, type Fragment } from "../../AI/Prose.ts";
 import {
@@ -820,11 +826,17 @@ export const KernelCloudflare: Layer.Layer<
             }
             return new LanguageModel.GenerateTextResponse<any>(parts as never);
           }).pipe(
+            // retryability is the error's own testimony (spec §11b):
+            // a deterministic failure (billing, auth, content policy)
+            // must not be re-sampled — it propagates TYPED to the
+            // burst, which abandons the round to its waiters. No
+            // `orDie`: erasing the typed error into the defect lane
+            // condemns it to the recovery loop's blind re-entries.
             Effect.retry({
+              while: (error) => (isAiError(error) ? error.isRetryable : true),
               schedule: Schedule.exponential("1 second"),
               times: 3,
             }),
-            Effect.orDie,
           );
 
         // ── the BURST: drain → tick → sample → append, until quiescent
@@ -869,17 +881,24 @@ export const KernelCloudflare: Layer.Layer<
               });
               meta = { ...(yield* readMeta), busy: undefined };
               yield* writeMeta(meta);
+              const abandoned = new RoundAbandoned({
+                term: me.term,
+                key: me.key,
+                attempts: maxAttempts,
+              });
               yield* observe({
                 type: "crashed",
-                error: `round abandoned after ${maxAttempts} interrupted attempts`,
+                error: {
+                  _tag: abandoned._tag,
+                  message: abandoned.message,
+                  retryable: false,
+                },
+                fatal: true,
               });
-              // exhaustion is the ONE crash that answers waiters — as
-              // a failure the caller can see, never a silent undefined
-              yield* failWaiters(
-                new Error(
-                  `KernelCloudflare run '${me.term}/${me.key}': round abandoned after ${maxAttempts} interrupted attempts`,
-                ),
-              );
+              // exhaustion is the ONE defect-lane crash that answers
+              // waiters — as a TYPED failure the caller can catch,
+              // never a silent undefined
+              yield* failWaiters(abandoned);
             } else {
               meta = { ...meta, busy: { attempts, since: Date.now() } };
               yield* writeMeta(meta);
@@ -1241,7 +1260,35 @@ export const KernelCloudflare: Layer.Layer<
                 `KernelCloudflare run '${me.term}/${me.key}' crashed`,
                 cause,
               );
-              yield* observe({ type: "crashed", error: String(cause) });
+              const crash = describeCrash(cause);
+              yield* observe({
+                type: "crashed",
+                error: crash.encoded,
+                fatal: !crash.encoded.retryable,
+              });
+              const meta = yield* readMeta;
+              if (!crash.encoded.retryable) {
+                // DETERMINISTIC failure (billing, auth, content policy):
+                // recovery would replay the identical error — abandon the
+                // round NOW, fail waiters with the ORIGINAL typed error
+                // (catchable by tag), and keep serving: the next event
+                // opens a fresh round.
+                const line =
+                  crash.encoded._tag !== undefined
+                    ? `${crash.encoded._tag}: ${crash.encoded.message}`
+                    : crash.encoded.message;
+                yield* appendThread([
+                  noteMessage(
+                    `The previous round failed with a non-retryable error ` +
+                      `(${line}) and was abandoned rather than retried. ` +
+                      `The messages above it may be unanswered.`,
+                  ),
+                ]);
+                yield* writeMeta({ ...meta, busy: undefined });
+                yield* failWaiters(crash.error);
+                yield* armAlarm;
+                return;
+              }
               // do NOT answer waiters: the round is still OWED —
               // recovery re-enters (the alarm, or any event) and
               // answers them at quiescence; exhaustion is the only
@@ -1249,7 +1296,6 @@ export const KernelCloudflare: Layer.Layer<
               // that the wake is coming: a crash before the drain
               // opened the round would otherwise leave no alarm armed
               // and a caller parked forever.
-              const meta = yield* readMeta;
               if (meta.busy === undefined && meta.settled === undefined) {
                 yield* writeMeta({
                   ...meta,

@@ -134,27 +134,27 @@ export const Commit: S.Schema<Commit> = S.Struct({
 
 // ─── the events ─────────────────────────────────────────────────────
 
-export class IssueOpened extends Event("IssueOpened", {
+export class IssueOpened extends (Event("IssueOpened", {
   repository: RepositoryInfo,
   issue: Issue,
 })`
 An issue was opened in the repository — number, title, body, labels,
-and author, as the wire delivers them.` {}
+and author, as the wire delivers them.`) {}
 
-export class IssueLabeled extends Event("IssueLabeled", {
+export class IssueLabeled extends (Event("IssueLabeled", {
   repository: RepositoryInfo,
   issue: Issue,
   label: Label,
 })`
-A label was added to an issue.` {}
+A label was added to an issue.`) {}
 
-export class IssueCommented extends Event("IssueCommented", {
+export class IssueCommented extends (Event("IssueCommented", {
   repository: RepositoryInfo,
   issue: Issue,
   comment: IssueComment,
 })`
 Someone commented on an issue or pull request — GitHub's one door
-for both.` {}
+for both.`) {}
 
 /**
  * Whether an {@link IssueCommented} landed on a PULL REQUEST thread
@@ -165,33 +165,33 @@ for both.` {}
 export const isPullRequestComment = (event: IssueCommented): boolean =>
   event.issue.pull_request !== undefined;
 
-export class IssueClosed extends Event("IssueClosed", {
+export class IssueClosed extends (Event("IssueClosed", {
   repository: RepositoryInfo,
   issue: Issue,
 })`
 An issue was closed, by whom and however — the world's word, not
-this org's.` {}
+this org's.`) {}
 
-export class PullRequestOpened extends Event("PullRequestOpened", {
+export class PullRequestOpened extends (Event("PullRequestOpened", {
   repository: RepositoryInfo,
   pullRequest: PullRequest,
 })`
-A pull request was opened — number, title, body, branches, author.` {}
+A pull request was opened — number, title, body, branches, author.`) {}
 
-export class PullRequestMerged extends Event("PullRequestMerged", {
+export class PullRequestMerged extends (Event("PullRequestMerged", {
   repository: RepositoryInfo,
   pullRequest: PullRequest,
 })`
-A pull request was merged.` {}
+A pull request was merged.`) {}
 
 /** A pull request closed WITHOUT merging (merges are {@link PullRequestMerged}). */
-export class PullRequestClosed extends Event("PullRequestClosed", {
+export class PullRequestClosed extends (Event("PullRequestClosed", {
   repository: RepositoryInfo,
   pullRequest: PullRequest,
 })`
-A pull request was closed without merging.` {}
+A pull request was closed without merging.`) {}
 
-export class Push extends Event("Push", {
+export class Push extends (Event("Push", {
   repository: RepositoryInfo,
   /** The full git ref (`refs/heads/main`). */
   ref: S.String,
@@ -199,7 +199,7 @@ export class Push extends Event("Push", {
   branch: S.String,
   headCommit: S.NullOr(Commit),
 })`
-Commits were pushed to a branch of the repository.` {}
+Commits were pushed to a branch of the repository.`) {}
 
 /** Every issue event (the `issues` webhook). */
 export type IssuesEvent = IssueOpened | IssueLabeled | IssueClosed;

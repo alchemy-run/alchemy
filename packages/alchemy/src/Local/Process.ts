@@ -1,7 +1,10 @@
 import * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import { FileSystem } from "effect/FileSystem";
+import * as Option from "effect/Option";
 import type { Path } from "effect/Path";
+import { Scope } from "effect/Scope";
 import type { Stdio } from "effect/Stdio";
 import type { Terminal } from "effect/Terminal";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
@@ -40,6 +43,73 @@ export interface ProcessContext extends BaseRuntimeContext {
 export class Host extends Context.Service<Host, Pick<ProcessContext, "run">>()(
   "Alchemy::Host",
 ) {}
+
+/**
+ * Register a long-running effect on {@link Host} when one is in the ambient
+ * context (Platform process constructors — Local.Service, EC2, ECS, …).
+ * `Host.run` collects runners that start with `exports.program`, so this is
+ * for work discovered during init (pollers, event sources), not work that
+ * starts later in a request.
+ *
+ * Without Host (unit tests), forks into the ambient Scope so an
+ * `Effect.provide` wrapping the test body owns the fiber for the test.
+ */
+export const runOnHost = <R>(
+  effect: Effect.Effect<void, never, R>,
+): Effect.Effect<void, never, R | Scope> =>
+  Effect.gen(function* () {
+    const host = yield* Effect.serviceOption(Host);
+    if (Option.isSome(host)) {
+      yield* host.value.run(effect as Effect.Effect<void, never, never>);
+      return;
+    }
+    const scope = yield* Effect.scope;
+    yield* Effect.forkIn(effect, scope);
+  }).pipe(Effect.asVoid);
+
+/**
+ * A Scope that outlives an `Effect.provide` of the constructing layer —
+ * for fibers that start AFTER init (kernel run loops, socket serves,
+ * deferred reviews).
+ *
+ * When {@link Host} is present, registers a keeper on the host at build
+ * time; the Scope opens when `exports.program` runs and stays open for
+ * the process. {@link ProcessScope.fork} awaits that Scope, so the first
+ * post-init fork races cleanly with the keeper.
+ *
+ * Without Host (unit tests), forks into the ambient Scope so the
+ * `Effect.provide` wrapping the test body owns the fibers.
+ */
+export interface ProcessScope {
+  readonly fork: (effect: Effect.Effect<void, never>) => Effect.Effect<void>;
+}
+
+export const makeProcessScope: Effect.Effect<ProcessScope, never, Scope> =
+  Effect.gen(function* () {
+    const host = yield* Effect.serviceOption(Host);
+    if (Option.isNone(host)) {
+      const scope = yield* Effect.scope;
+      return {
+        fork: (effect) => Effect.asVoid(Effect.forkIn(effect, scope)),
+      } satisfies ProcessScope;
+    }
+    // Capture the process root Scope when exports.program starts (the
+    // entry's Effect.scoped region). No forever-park needed — that
+    // Scope outlives every runner.
+    const ready = yield* Deferred.make<Scope>();
+    yield* host.value.run(
+      Effect.gen(function* () {
+        yield* Deferred.succeed(ready, yield* Effect.scope);
+      }).pipe(Effect.orDie),
+    );
+    return {
+      fork: (effect) =>
+        Effect.gen(function* () {
+          const scope = yield* Deferred.await(ready);
+          yield* Effect.forkIn(effect, scope);
+        }).pipe(Effect.asVoid),
+    } satisfies ProcessScope;
+  });
 
 /**
  * Deploy-time / plan-time host context for platforms that bundle a long-lived

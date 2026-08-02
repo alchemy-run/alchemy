@@ -49,6 +49,14 @@
       "worker": "./src/AI/index.ts",
       "import": "./lib/AI/index.js"
     },
+    "./AI/React": {
+      "types": "./lib/AI/React.d.ts",
+      "bun": "./src/AI/React.ts",
+      "worker": "./src/AI/React.ts",
+      "import": "./lib/AI/React.js",
+      "react-server": "./src/AI/React.ts",
+      "default": "./src/AI/React.ts"
+    },
     "./Auth": {
       "types": "./lib/Auth/index.d.ts",
       "bun": "./src/Auth/index.ts",
@@ -410,7 +418,6 @@
   "devDependencies": {
     "@ai-sdk/react": "^3.0.0",
     "@aws/durable-execution-sdk-js": "^2.1.0",
-    "@clack/prompts": "^0.11.0",
     "@cloudflare/containers": "catalog:",
     "@cloudflare/puppeteer": "^1.1.0",
     "@cloudflare/workers-types": "catalog:",

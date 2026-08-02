@@ -191,9 +191,9 @@ const streamed = (
 export const line = AI.Parameter("line", S.String)`
 The line to write into the record.`;
 
-export class Write extends AI.Tool<Write>()("write")`
+export class Write extends (AI.Tool<Write>()("write")`
 Write ${line} into the record, and hand the record back to whoever
-asked for it.` {}
+asked for it.`) {}
 
 /**
  * The `AI.reply` seam: the ANSWER to the round is the artifact this
@@ -209,8 +209,8 @@ export const WriteLive = Layer.succeed(Write, ((input: { line: string }) =>
 export const seconds = AI.Parameter("seconds", S.Int)`
 How long to wait, in seconds.`;
 
-export class Remind extends AI.Tool<Remind>()("remind")`
-Come back to this in ${seconds} — you will be woken with a note.` {}
+export class Remind extends (AI.Tool<Remind>()("remind")`
+Come back to this in ${seconds} — you will be woken with a note.`) {}
 
 export const RemindLive = Layer.succeed(Remind, ((input: { seconds: number }) =>
   Effect.gen(function* () {

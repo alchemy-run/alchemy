@@ -5,7 +5,6 @@ import {
   GetPullRequest,
   type GetPullRequestRequest,
 } from "./GetPullRequest.ts";
-import { PersonalAccessToken } from "./PersonalAccessToken.ts";
 
 export const getPullRequestOperation = BindingHttp.operation(
   "pulls.get",
@@ -28,11 +27,8 @@ export const getPullRequestOperation = BindingHttp.operation(
  * host. (Annotated: the contract's format-conditional client type is
  * wider than the operation scaffolding can infer.)
  */
-export const GetPullRequestHttp: Layer.Layer<
-  GetPullRequest,
-  never,
-  PersonalAccessToken | Self
-> = Layer.effect(
-  GetPullRequest,
-  BindingHttp.make(getPullRequestOperation) as never,
-);
+export const GetPullRequestHttp: Layer.Layer<GetPullRequest, never, Self> =
+  Layer.effect(
+    GetPullRequest,
+    BindingHttp.make(getPullRequestOperation) as never,
+  );

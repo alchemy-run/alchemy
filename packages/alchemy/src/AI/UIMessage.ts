@@ -16,6 +16,7 @@
  */
 import type { UIMessage, UIMessageChunk, UIMessagePart } from "ai";
 import type { StreamingSample } from "./Chats.ts";
+import { renderCrash } from "./KernelShared.ts";
 import type { KernelObservation } from "./Observer.ts";
 
 /**
@@ -123,6 +124,22 @@ export const toUIMessages = (
             part.output = observation.output;
           }
         }
+        break;
+      }
+      case "crashed": {
+        // a crash must be VISIBLE to pollers — dropping it leaves the
+        // client staring at recovery notes with no cause in sight
+        assistant = undefined;
+        messages.push({
+          id: `crash-${observation.seq}`,
+          role: "assistant",
+          parts: [
+            {
+              type: "text",
+              text: `Run crashed: ${renderCrash(observation.error)}`,
+            },
+          ],
+        });
         break;
       }
       default:
@@ -268,7 +285,10 @@ export const makeChunkTranslator = () => {
       case "crashed": {
         closeStep();
         if (!started) chunks.push({ type: "start" });
-        chunks.push({ type: "error", errorText: observation.error });
+        chunks.push({
+          type: "error",
+          errorText: renderCrash(observation.error),
+        });
         chunks.push({ type: "finish" });
         done = true;
         break;

@@ -5,15 +5,12 @@
  * worktree, exactly like the local workspace root, so the engineer
  * and reviewer keyed by the same issue share one checkout.
  */
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Containers from "alchemy/Cloudflare/Containers";
+import * as Workers from "alchemy/Cloudflare/Workers";
 import * as Effect from "effect/Effect";
-import {
-  OrgSandbox,
-  type SandboxCall,
-  type SandboxPush,
-} from "./Sandbox.ts";
+import { OrgSandbox, type SandboxCall, type SandboxPush } from "./Sandbox.ts";
 
-export default class SandboxHost extends Cloudflare.DurableObject<SandboxHost>()(
+export default class SandboxHost extends Workers.DurableObject<SandboxHost>()(
   "SandboxHost",
   Effect.gen(function* () {
     const container = yield* OrgSandbox;
@@ -24,9 +21,6 @@ export default class SandboxHost extends Cloudflare.DurableObject<SandboxHost>()
       };
     });
   }).pipe(
-    Effect.provide(
-      // the container clones from and pushes to github.com
-      Cloudflare.Containers.layer(OrgSandbox, { enableInternet: true }),
-    ),
+    Effect.provide(Containers.layer(OrgSandbox, { enableInternet: true })),
   ),
 ) {}

@@ -57,8 +57,9 @@ never name them:
 | `Fragment` | the render IS the system prompt, verbatim → build toolkit → sample |
 | an `Effect` | **loud defect** — you forgot `yield*` on an `AI.prose` |
 | any other value | **loud defect** — turns return prose; answer callers with `AI.reply` |
-| failure (`E`) | retried with backoff; persistent failure fails the run |
-| `AI.Refused` failure | typed give-up, rides the error channel to waiters |
+| failure (`E`), retryable | bounded recovery (backoff, honoring `retryAfter`); exhaustion abandons the ROUND, typed, to waiters |
+| failure (`E`), non-retryable | the round abandons immediately — the typed error rides the error channel to waiters; the run keeps serving |
+| `AI.Refused` failure | typed give-up, rides the error channel to waiters (a special case of the row above) |
 
 Three tiers, static-first — climb only when the lower tier can't say it:
 
@@ -882,7 +883,10 @@ returns → consume). The kernel rules now:
 4. **The supervision cascade.** The kernel remembers each run's
    session workers (the dispatch parentage edge, now load-bearing):
    when a run settles OR crashes, its children settle with it. Parked
-   workers never outlive the conversation that owns them.
+   workers never outlive the conversation that owns them. A crash's
+   typed cause propagates to every waiter in the cascade — a
+   supervisor's dispatch fails with the reason, not a stringly `Error`
+   (§11b).
 
 **Communication doctrine: workers speak PROSE (or a typed artifact)
 to their supervisor, never to each other.** The supervising agent is
@@ -1021,10 +1025,48 @@ Match.tag("CheckRunFailed", (e) =>
   without sampling (matters once resync/reminder wakes exist).
 - **Steer to an unknown key admits** (crash-recovery: a re-polled event
   must never be silently dropped).
-- **Sampling and turn failures retry** with capped backoff before failing
-  the run (transient provider errors never poison a key). Full supervision
+- **Round failures are typed, and retryability is honored** — see §11b.
+  Transient provider errors recover with capped backoff and never poison
+  a key; deterministic ones (billing, auth, content policy) abandon the
+  round immediately with the typed error to waiters. Full supervision
   (quarantine, escalation, intensity) is an interpret option — deferred.
 - **Quiescence parks; the world settles.** Unchanged.
+
+## 11b. The error model: errors sort by who can act
+
+An error's destination is decided by its AUDIENCE, never by where it
+was thrown. Three lanes:
+
+| lane | audience | mechanism |
+|---|---|---|
+| tool / door-policy failure | **the model** | `failureMode: "return"` — a model-visible tool result; the agent is the error handler. Never touches the kernel's error channel. |
+| round failure (sampling `AiError`, turn `E`, `AI.Refused`) | **the caller** | the round fails TYPED on the error channel — waiters (`dispatch`, doors, HTTP edges) receive the tagged error and `catchTag` it. The run keeps serving; the next event opens a fresh round. |
+| infra defect (storage, RPC, kernel bugs) | **the operator** | crash-and-recover: the busy-marker budget re-enters the round; exhaustion abandons it VISIBLY and fails waiters. |
+
+Retryability is the error's own testimony, never the kernel's guess:
+effect AI's `AiError.isRetryable` (rate limit → yes; billing, auth,
+content policy → no) decides whether a round failure enters recovery
+or abandons on the spot. The kernel adds NO retry the error itself
+doesn't justify — `Effect.orDie` on a sampling is a spec violation:
+it erases the typed error into the defect lane and condemns a
+deterministic failure to pointless recovery. (This is exactly how the
+org burned ~15 identical Anthropic calls on one billing error: a blind
+3× retry inside the sampling step, times a 5-attempt recovery loop,
+with the reason visible only in worker logs.)
+
+"Fatal" always means fatal to the ROUND, never the run: the run parks
+with its thread intact and the next event opens a fresh round. Account-
+level conditions (billing) are handled emergently — every run fails its
+round fast and typed, no retry storm; a global circuit breaker, if ever
+wanted, is a `Models`-seam Layer concern, not a kernel primitive.
+
+The kernel never RENDERS an error. The `crashed` observation carries
+the ENCODED tagged error (`_tag`, `message`, retryability — stacks and
+`Cause` wrappers stripped); projections, boards, and UIs own
+presentation (userspace). The agent's own view of a failed round is
+thread content: a note on the next wake ("the previous round failed:
+<error> — it was not retried"), the same channel every other kernel
+fact uses.
 
 ## 12. Per-tick configuration (model, sampling params)
 

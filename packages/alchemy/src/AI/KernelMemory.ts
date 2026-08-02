@@ -8,11 +8,13 @@ import * as Queue from "effect/Queue";
 import * as Schedule from "effect/Schedule";
 import * as S from "effect/Schema";
 import * as Stream from "effect/Stream";
+import { isAiError } from "effect/unstable/ai/AiError";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import * as Prompt from "effect/unstable/ai/Prompt";
 import * as Response from "effect/unstable/ai/Response";
 import * as AiTool from "effect/unstable/ai/Tool";
 import * as Toolkit from "effect/unstable/ai/Toolkit";
+import { makeProcessScope } from "../Local/Process.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
 import type { Actor } from "./Actor.ts";
 import { isAgent, type Agent } from "./Agent.ts";
@@ -47,6 +49,7 @@ import {
   compileTool,
   type CompiledToolRef,
   dedupeByName,
+  describeCrash,
   noteMessage,
   NOTE_CODA,
   render,
@@ -192,10 +195,13 @@ export const KernelMemory: Layer.Layer<
       }
     >();
     const model = yield* LanguageModel.LanguageModel;
+    // Process-lifetime forks (run loops, remind, sockets): under a
+    // Platform Host these survive `Effect.provide` of OrgLocal; in
+    // unit tests they ride the ambient Scope wrapping the test body.
+    const process = yield* makeProcessScope;
 
     const interpret = (term: Interpretable, charter: Charter) =>
       Effect.gen(function* () {
-        const scope = yield* Effect.scope;
         const context = yield* Effect.context<never>();
         const termName = term["~alchemy/Name"];
 
@@ -265,12 +271,12 @@ export const KernelMemory: Layer.Layer<
             }),
           // the kernel's CLOCK, fused to the run's lifetime: on this
           // in-memory kernel runs live as long as the process, so a
-          // kernel-scoped fiber is exactly as durable as the run —
+          // process-scoped fiber is exactly as durable as the run —
           // a DO-backed kernel implements the same contract with an
           // alarm. Delivery is an ordinary inbox message: a wake if
           // parked, queued if busy, dropped if settled.
           remind: (delay, note) =>
-            Effect.forkIn(
+            process.fork(
               Effect.sleep(delay).pipe(
                 Effect.andThen(
                   Effect.gen(function* () {
@@ -280,9 +286,9 @@ export const KernelMemory: Layer.Layer<
                     });
                   }),
                 ),
+                Effect.asVoid,
               ),
-              scope,
-            ).pipe(Effect.asVoid),
+            ),
         });
 
         const makeTickService = (run: RunState): TickService => ({
@@ -666,11 +672,15 @@ export const KernelMemory: Layer.Layer<
             }
             return new LanguageModel.GenerateTextResponse<any>(parts as never);
           }).pipe(
+            // retryability is the error's own testimony (spec §11b):
+            // a deterministic failure (billing, auth, content policy)
+            // must not be re-sampled — it propagates TYPED to the
+            // loop, whose exit fails every waiter with the real cause.
             Effect.retry({
+              while: (error) => (isAiError(error) ? error.isRetryable : true),
               schedule: Schedule.exponential("1 second"),
               times: 3,
             }),
-            Effect.orDie,
           );
 
         const runs = new Map<string, RunState>();
@@ -1225,7 +1235,7 @@ export const KernelMemory: Layer.Layer<
             { discard: true },
           ).pipe(Effect.andThen(Effect.sync(() => run.children.clear())));
 
-        /** Fork a run's loop into the interpret Scope. */
+        /** Fork a run's loop onto the process Scope. */
         const startLoop = (
           run: RunState,
           prepare: (
@@ -1233,7 +1243,7 @@ export const KernelMemory: Layer.Layer<
             inputs: ReadonlyArray<unknown>,
           ) => Effect.Effect<TickResult>,
         ) =>
-          Effect.forkIn(
+          process.fork(
             loop(run, prepare).pipe(
               // a crashed loop must never strand its callers: the
               // failure exit propagates to every waiter (dispatch
@@ -1247,9 +1257,11 @@ export const KernelMemory: Layer.Layer<
                         `Kernel run '${run.key}' of '${termName}' crashed`,
                         exit.cause,
                       );
+                      const crash = describeCrash(exit.cause);
                       yield* observe(run, {
                         type: "crashed",
-                        error: String(exit.cause),
+                        error: crash.encoded,
+                        fatal: !crash.encoded.retryable,
                       });
                       for (const waiter of run.waiters.splice(0)) {
                         yield* Deferred.done(waiter, exit as Exit.Exit<never>);
@@ -1264,8 +1276,12 @@ export const KernelMemory: Layer.Layer<
                     })
                   : Effect.void,
               ),
+              // the typed failure has been DELIVERED (waiters, settled,
+              // observation) — the fiber itself dies as before, keeping
+              // the process supervisor's crashed-loop semantics
+              Effect.orDie,
+              Effect.asVoid,
             ),
-            scope,
           );
 
         /**
@@ -1394,12 +1410,10 @@ export const KernelMemory: Layer.Layer<
      * WebSocket upgrade on the host's own HTTP server, replay from
      * the run's in-memory log, live broadcast from `observe`.
      */
-    // socket-serving fibers live HERE — the kernel's own lifetime —
-    // never on the HTTP request that carried the upgrade: Bun counts
-    // an unresolved upgraded request as in-flight, and the server's
-    // graceful stop would wait its whole 20s budget on it
-    const kernelScope = yield* Effect.scope;
-
+    // socket-serving fibers live on the process Scope — never on the
+    // HTTP request that carried the upgrade: Bun counts an unresolved
+    // upgraded request as in-flight, and the server's graceful stop
+    // would wait its whole 20s budget on it
     const attach = (
       term: string,
       key: string,
@@ -1445,7 +1459,7 @@ export const KernelMemory: Layer.Layer<
               Effect.ensuring(Effect.sync(() => run.sockets.delete(send))),
             );
         });
-        yield* Effect.forkIn(Effect.scoped(serve), kernelScope);
+        yield* process.fork(Effect.scoped(serve).pipe(Effect.asVoid));
         return HttpServerResponse.empty();
       });
 

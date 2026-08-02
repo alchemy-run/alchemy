@@ -14,6 +14,7 @@ import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Ledger } from "../services/Ledger.ts";
+import { renderError } from "../lib/RenderError.ts";
 import { prLinkKey, testAlchemy } from "../Repos.ts";
 import SandboxHost from "../services/SandboxHost.ts";
 import {
@@ -44,7 +45,7 @@ const forward = (tag: { readonly "~alchemy/Name": string }) =>
           return yield* hosts
             .getByName("org")
             .call({ tool, key, params })
-            .pipe(Effect.mapError((error) => String(error)));
+            .pipe(Effect.mapError(renderError));
         })) as never;
     }),
   ) as Layer.Layer<never>;
@@ -104,7 +105,7 @@ export const OpenPullRequestSandbox = Layer.effect(
                 ? `${input.title} (#${input.issue.number})`
                 : input.title,
           })
-          .pipe(Effect.mapError((error) => String(error)));
+          .pipe(Effect.mapError(renderError));
 
         const pull = yield* createPullRequest({
           title: input.title,

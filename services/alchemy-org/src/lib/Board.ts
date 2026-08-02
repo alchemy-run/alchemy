@@ -145,6 +145,8 @@ export const buildBoard = (
       });
   };
 
+  // Stable order: newest issue number first — activity never reshuffles
+  // the sidebar, so a row stays where the user last saw it.
   const boardIssues = [...issues.entries()]
     .map(([number, issue]) => ({
       number,
@@ -154,7 +156,7 @@ export const buildBoard = (
       channel: issue.channel,
       agents: present(issue.agents),
     }))
-    .sort((a, b) => b.updatedAt - a.updatedAt);
+    .sort((a, b) => b.number - a.number);
   return {
     issues: boardIssues,
     other: present(other).reverse(),

@@ -12,17 +12,87 @@
  * concurrency and the run's persistence — never in how a stance
  * becomes a toolkit. See designs/ai/kernel-cloudflare.md.
  */
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as S from "effect/Schema";
+import { isAiError } from "effect/unstable/ai/AiError";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import * as AiTool from "effect/unstable/ai/Tool";
 import { isAgent, type Agent } from "./Agent.ts";
 import type { DispatchTool } from "./Dispatch.ts";
 import { isEvent } from "./Event.ts";
+import type { EncodedCrash } from "./Observer.ts";
 import { isParameter } from "./Parameter.ts";
 import { dedentTemplate } from "./Prose.ts";
 import { isSkill, type Skill } from "./Skill.ts";
 import { isTool, isToolImpl, type Tool } from "./Tool.ts";
+
+/**
+ * A burst failure, described for the kernel's two consumers (spec
+ * §11b): `error` is the ORIGINAL value — waiters fail with it, typed
+ * and catchable — and `encoded` is the serializable summary the
+ * `crashed` observation carries.
+ */
+export interface CrashInfo {
+  readonly error: unknown;
+  readonly encoded: EncodedCrash;
+}
+
+/** Extract {@link CrashInfo} from a burst's failure Cause. */
+export const describeCrash = (cause: Cause.Cause<unknown>): CrashInfo => {
+  for (const reason of cause.reasons) {
+    const error = Cause.isFailReason(reason)
+      ? reason.error
+      : Cause.isDieReason(reason)
+        ? reason.defect
+        : undefined;
+    if (error === null || error === undefined) continue;
+    if (isAiError(error)) {
+      return {
+        error,
+        encoded: {
+          _tag: error.reason._tag,
+          message: error.message,
+          retryable: error.isRetryable,
+        },
+      };
+    }
+    if (typeof error === "object") {
+      const obj = error as { _tag?: unknown; message?: unknown };
+      return {
+        error,
+        encoded: {
+          _tag: typeof obj._tag === "string" ? obj._tag : undefined,
+          message:
+            typeof obj.message === "string" && obj.message.length > 0
+              ? obj.message
+              : String(error),
+          retryable: true,
+        },
+      };
+    }
+    return {
+      error,
+      encoded: { _tag: undefined, message: String(error), retryable: true },
+    };
+  }
+  return {
+    error: cause,
+    encoded: { _tag: undefined, message: String(cause), retryable: true },
+  };
+};
+
+/**
+ * Render an {@link EncodedCrash} (or a legacy string row) into one
+ * line — a convenience for PROJECTIONS; the kernel itself never calls
+ * this.
+ */
+export const renderCrash = (error: EncodedCrash | string): string =>
+  typeof error === "string"
+    ? error
+    : error._tag !== undefined
+      ? `${error._tag}: ${error.message}`
+      : error.message;
 
 /**
  * Render a capability term's own tagged template into prose (a tool's

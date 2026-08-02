@@ -1,10 +1,7 @@
 /**
  * The QualityAssurance skill — verifying a change against the real
- * checkout: search, read, and run. The Reviewer's craft: it shares
- * the Engineer's checkout (both are keyed by the issue), so it can
- * open the changed files in context and run the test suite itself —
- * but it holds NO edit tools, so the separation of duties (judge,
- * don't author) is a type-level fact, not prose discipline.
+ * checkout: search, read, and run. Substrate compositions live in
+ * QualityAssuranceLocal.ts / QualityAssuranceWorker.ts.
  */
 import * as AI from "alchemy/AI";
 import * as Layer from "effect/Layer";
@@ -24,9 +21,7 @@ export class QualityAssurance extends AI.Skill<QualityAssurance>()(
 ) {}
 
 /**
- * The teaching — read-and-run only:
- * `Layer<QualityAssurance, never, Grep | Glob | ListDirectory |
- * ReadFile | Bash | ReadOutput>`.
+ * The teaching — read-and-run only.
  */
 export const QualityAssuranceLive = QualityAssurance.make`
   # Verifying a change in the repository checkout
@@ -41,21 +36,10 @@ export const QualityAssuranceLive = QualityAssurance.make`
   - Claims are checked by RUNNING: the test suite through ${Bash} is
     evidence; the diff's say-so is not.`;
 
-/**
- * Local composition — READ + RUN only (tools/LocalToolbox.ts): the
- * write group is simply never provided, so judge-not-author is the
- * composition, not a promise.
- */
 export const QualityAssuranceLocal = QualityAssuranceLive.pipe(
   Layer.provide([ReadToolsLocal, RunToolsLocal]),
 );
 
-
-/**
- * Cloudflare composition — the SAME teaching, read + run forwarded to
- * the sandbox container: the reviewer explores and tests in the exact
- * worktree the engineer built in, one RPC hop away.
- */
 export const QualityAssuranceWorker = QualityAssuranceLive.pipe(
   Layer.provide([ReadToolsSandbox, RunToolsSandbox]),
 );

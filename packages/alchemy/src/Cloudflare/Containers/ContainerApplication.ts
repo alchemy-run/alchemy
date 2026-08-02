@@ -14,8 +14,6 @@ import { ContainerTypeId } from "./Container.ts";
 import { LiveContainerProvider } from "./ContainerProvider.ts";
 import { LocalContainerProvider } from "./LocalContainerProvider.ts";
 
-export { Credentials } from "@distilled.cloud/cloudflare/Credentials";
-
 export namespace ContainerApplication {
   export type InstanceType = NonNullable<
     Containers.CreateContainerApplicationRequest["configuration"]["instanceType"]

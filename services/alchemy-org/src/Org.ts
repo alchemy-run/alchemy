@@ -4,7 +4,7 @@
  * OPEN as a requirement:
  *
  * - the kernel (`AI.Kernel` + observer)   → services/Kernel.ts
- * - GitHub bindings (the API tags)        → services/GitHubBindings.ts
+ * - GitHub bindings (the API tags)        → GitHubBindings{Local,Worker}.ts
  * - event delivery (poll vs webhook)      → services/Events.ts
  * - the Ledger (sqlite vs D1)             → LedgerSqlite.ts / LedgerD1.ts
  * - the coding physics (Coding, QA,

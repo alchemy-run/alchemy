@@ -6,11 +6,14 @@
  * on a laptop unchanged: the environment is chosen entirely at Layer
  * composition.
  *
- * Each `consume` registration forks a scoped poll loop (owned by the
- * Layer's Scope — closing the Scope stops all polling) that polls ONLY
- * the events the registration requested and synthesizes
- * `WebhookEvent`-shaped `{ id, name, payload }` deliveries from the
- * GitHub REST API:
+ * Each `consume` registration registers a poll loop on {@link Host}
+ * (the Platform process runner — same seam as
+ * `Local.SQSQueueEventSource`). Under a Local.Service / EC2 / ECS host
+ * the loop starts with `exports.program` and lives for the process;
+ * unit tests without Host fall back to the ambient Scope via
+ * {@link runOnHost}. The loop polls ONLY the events the registration
+ * requested and synthesizes `WebhookEvent`-shaped
+ * `{ id, name, payload }` deliveries from the GitHub REST API:
  *
  * - `issues` — issues updated since the cursor → `issues.opened`
  *   (created in the window) and `issues.closed` (closed in the window).
@@ -64,6 +67,7 @@ import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
+import { runOnHost } from "../Local/Process.ts";
 import type { GitHubCredentials } from "./Credentials.ts";
 import { Octokit } from "./Octokit.ts";
 import {
@@ -105,8 +109,6 @@ export const RepositoryEventSourcePolling = (
     RepositoryEventSource,
     Effect.gen(function* () {
       const octokit = yield* Octokit;
-      // the Layer's Scope owns every registration's poll loop
-      const scope = yield* Effect.scope;
       const every = options?.every ?? "30 seconds";
 
       return ((
@@ -192,7 +194,9 @@ export const RepositoryEventSourcePolling = (
             ),
           );
 
-          yield* Effect.forkIn(
+          // Host.run (process lifetime) when under a Platform host;
+          // ambient Scope otherwise (unit tests).
+          yield* runOnHost(
             pollOnce.pipe(
               Effect.repeat(Schedule.spaced(every)),
               // a dead poll loop must be LOUD: a defect in a delivery
@@ -209,8 +213,8 @@ export const RepositoryEventSourcePolling = (
                       )
                   : Effect.void,
               ),
+              Effect.asVoid,
             ),
-            scope,
           );
         })) as RepositoryEventSourceService;
     }),

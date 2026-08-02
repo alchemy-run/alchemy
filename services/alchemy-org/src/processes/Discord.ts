@@ -23,10 +23,7 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import {
-  FrontDesk,
-  FrontDeskLive,
-} from "../agents/FrontDesk.ts";
+import { FrontDesk, FrontDeskLive } from "../agents/FrontDesk.ts";
 import { Ledger } from "../services/Ledger.ts";
 
 /**
@@ -79,4 +76,4 @@ export const DiscordDeskLive = Layer.effect(
 
     return { mention: mention };
   }),
-).pipe(Layer.provide(Layer.suspend(() => FrontDeskLive)));
+).pipe(Layer.provide(FrontDeskLive));

@@ -1,3 +1,4 @@
+export * from "./ChatsCloudflare.ts";
 export * from "./CustomTopics.ts";
 export * from "./Dataset.ts";
 export * from "./DurableObjectChatPersistence.ts";

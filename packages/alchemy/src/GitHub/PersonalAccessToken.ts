@@ -169,7 +169,8 @@ export const PersonalAccessTokenProvider = () =>
     reconcile: Effect.fn(function* ({ news }) {
       // ONE flow: resolve the desired token (explicit prop, else the
       // provider's ambient credential), validate it, capture it.
-      const token = news.token ?? (yield* yield* GitHubCredentials).token;
+      // `news` is undefined when constructed without props (all optional).
+      const token = news?.token ?? (yield* yield* GitHubCredentials).token;
       const { login, scopes } = yield* validate(token).pipe(Effect.orDie);
       return { value: token, login, scopes };
     }),
