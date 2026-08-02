@@ -31,6 +31,7 @@ import { localRuntimeServices } from "../LocalRuntime.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import { resolveZoneId } from "../Zone/lookup.ts";
 import {
+  getAssetsPathPrefix,
   mergeAssetsConfigFiles,
   readAssets,
   readAssetsConfigFiles,
@@ -2316,8 +2317,20 @@ export const LiveWorkerProvider = () =>
         if (!Predicate.hasProperty(assets, "hash")) return undefined;
         // `base` shapes the uploaded manifest paths (see `readAssets`); it
         // is alchemy-only and must not leak into the API's asset config.
-        const { directory, hash, base: _base, ...config } = assets;
-        return { directory, config, hash, skip: hash === output?.hash?.assets };
+        const { directory, hash, base, ...config } = assets;
+        // `base` re-keys the manifest without changing the build output, so
+        // a caller-supplied hash alone would let the skip path carry a
+        // stale root-keyed manifest forward across a `base` change. Salt
+        // the stored/compared hash with the prefix; unprefixed deploys keep
+        // their existing hashes.
+        const pathPrefix = getAssetsPathPrefix(base);
+        const effectiveHash = pathPrefix ? `${hash}#base=${pathPrefix}` : hash;
+        return {
+          directory,
+          config,
+          hash: effectiveHash,
+          skip: effectiveHash === output?.hash?.assets,
+        };
       };
 
       /**

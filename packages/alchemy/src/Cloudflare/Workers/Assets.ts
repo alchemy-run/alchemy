@@ -73,7 +73,7 @@ export interface AssetsProps extends AssetsConfig {
  * this Worker serves; `"/"`, `"./"`, protocol-relative and absolute URLs
  * all mean "no prefix".
  */
-const getAssetsPathPrefix = (base: string | undefined) =>
+export const getAssetsPathPrefix = (base: string | undefined) =>
   base?.startsWith("/") && !base.startsWith("//")
     ? base.replace(/\/+$/, "")
     : "";
