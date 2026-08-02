@@ -4,6 +4,7 @@ import type { NodeServices } from "@effect/platform-node/NodeServices";
 import * as ConfigError from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Effectable from "effect/Effectable";
 import * as Layer from "effect/Layer";
@@ -42,6 +43,50 @@ export interface PlatformProps {
    */
   isExternal?: boolean;
 }
+
+/**
+ * A tagged platform resource declared with neither props nor an inline
+ * implementation was `yield*`ed while its `.make(props, impl)` Layer was
+ * absent from the context.
+ *
+ * Such a tag carries no configuration on its own — props AND impl both live
+ * on the Layer — so without it the underlying resource would be registered
+ * with `undefined` props and the failure would only surface later, deep
+ * inside whichever provider first reads a prop (e.g. `TypeError: undefined
+ * is not an object (evaluating 'news.name')` in the Cloudflare Worker
+ * pre-create).
+ */
+export class MissingImplementationError extends Data.TaggedError(
+  "MissingImplementationError",
+)<{
+  message: string;
+  /** Resource type of the platform, e.g. `Cloudflare.Worker`. */
+  type: string;
+  /** Logical id of the tagged resource (its class name by convention). */
+  id: string;
+}> {}
+
+const missingImplementation = (type: string, id: string) =>
+  new MissingImplementationError({
+    type,
+    id,
+    message: [
+      `${type}<${id}> was yielded without its implementation.`,
+      "",
+      `\`${id}\` is declared as a bare tag — no props, no inline implementation — so both come from its \`.make(...)\` Layer:`,
+      "",
+      `  export class ${id} extends ${type}<${id}>()("${id}") {}`,
+      `  export const ${id}Live = ${id}.make({ /* props */ }, Effect.gen(function* () { /* ... */ }));`,
+      "",
+      `That Layer is not in scope where \`${id}\` is yielded. Provide it:`,
+      "",
+      "  Effect.gen(function* () {",
+      `    const instance = yield* ${id};`,
+      `  }).pipe(Effect.provide([${id}Live]))`,
+      "",
+      `If \`${id}\` is not Effect-native, declare it with props instead: \`()("${id}", { /* props */ })\`.`,
+    ].join("\n"),
+  });
 
 /**
  * Provide the platform class's layer (`cls.make(props, impl)`) with a
@@ -393,12 +438,21 @@ export const Platform = <
                 // — same isExternal marking; without props, this is a bare
                 // tag whose props/impl arrive later via `.make`.
                 onNone: () =>
-                  resource(
-                    id,
-                    props === undefined
-                      ? applyTransformProps(id, props)
-                      : externalProps(),
-                  ),
+                  // No props AND no impl means every scrap of configuration
+                  // lives on the missing `.make(...)` Layer — registering the
+                  // resource with `undefined` props just defers the failure
+                  // to whichever provider first reads one. Name the class and
+                  // its Layer instead. Guarded to plan/deploy so the runtime
+                  // bridges keep their current behaviour (and the branch is
+                  // folded out of deployed bundles).
+                  props === undefined && !globalThis.__ALCHEMY_RUNTIME__
+                    ? Effect.die(missingImplementation(type, id))
+                    : resource(
+                        id,
+                        props === undefined
+                          ? applyTransformProps(id, props)
+                          : externalProps(),
+                      ),
                 onSome: Effect.succeed,
               }),
             )
