@@ -1,5 +1,13 @@
 import { useAgent, useChat } from "alchemy/AI/React";
 import type { UIMessage } from "ai";
+import {
+  CircleDot,
+  GitMerge,
+  GitPullRequestArrow,
+  MessageSquare,
+  Zap,
+  type LucideIcon,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   Conversation,
@@ -240,28 +248,36 @@ export const App = () => {
         )}
       </aside>
       <main className="flex min-w-0 flex-1 flex-col">
-        {visited.map((id) => (
-          <div
-            key={id}
-            className={cn(
-              "min-h-0 flex-1 flex-col",
-              id === selected ? "flex" : "hidden",
-            )}
-          >
-            <ChatView
-              id={id}
-              active={id === selected}
-              agents={agentsFor(id)}
-              breadcrumb={breadcrumbFor(id)}
-              onOpenThread={select}
-            />
-          </div>
-        ))}
-        {selected === undefined && (
-          <div className="flex flex-1 items-center justify-center text-muted-foreground">
-            Select an issue
-          </div>
-        )}
+        {/* every visited thread stays STACKED with live layout —
+            `visibility` (not `display: none`) hides the others, so
+            scroll positions survive switches: display:none discards
+            scrollTop, and re-showing fires a resize that snaps the
+            stick-to-bottom container. Visibility toggles do neither. */}
+        <div className="relative min-h-0 flex-1">
+          {visited.map((id) => (
+            <div
+              key={id}
+              className={cn(
+                "absolute inset-0 flex flex-col",
+                id !== selected && "invisible pointer-events-none",
+              )}
+              aria-hidden={id !== selected}
+            >
+              <ChatView
+                id={id}
+                active={id === selected}
+                agents={agentsFor(id)}
+                breadcrumb={breadcrumbFor(id)}
+                onOpenThread={select}
+              />
+            </div>
+          ))}
+          {selected === undefined && (
+            <div className="flex h-full items-center justify-center text-muted-foreground">
+              Select an issue
+            </div>
+          )}
+        </div>
       </main>
     </div>
   );
@@ -308,13 +324,36 @@ const ChatView = ({
   return <Chat id={id} initial={initial} active={active} {...context} />;
 };
 
-/** GitHub event families → badge accent. */
-const EVENT_STYLE: Array<[RegExp, string]> = [
-  [/^Issue(?!Comment)/, "text-moss border-moss/40"],
-  [/^IssueComment/, "text-mist border-mist/40"],
-  [/^PullRequest/, "text-terracotta border-terracotta/40"],
-  [/^(CheckRun|CheckSuite|WorkflowRun|Push)/, "text-honey border-honey/40"],
+/** GitHub event families → timeline icon + accent. */
+const EVENT_FAMILY: Array<
+  [RegExp, { icon: LucideIcon; className: string }]
+> = [
+  [/^PullRequestMerged/, { icon: GitMerge, className: "text-terracotta" }],
+  [/^PullRequest/, { icon: GitPullRequestArrow, className: "text-terracotta" }],
+  [/^IssueComment/, { icon: MessageSquare, className: "text-mist" }],
+  [/^Issue/, { icon: CircleDot, className: "text-moss" }],
+  [
+    /^(CheckRun|CheckSuite|WorkflowRun|Push)/,
+    { icon: Zap, className: "text-honey" },
+  ],
 ];
+
+/** Humanized verb phrases for the common tags; the fallback spaces
+ *  out the PascalCase (`ReviewRequested` → "review requested"). */
+const EVENT_VERB: Record<string, string> = {
+  IssueOpened: "opened issue",
+  IssueClosed: "closed issue",
+  IssueReopened: "reopened issue",
+  IssueCommentCreated: "commented on",
+  PullRequestOpened: "opened pull request",
+  PullRequestMerged: "merged pull request",
+  PullRequestClosed: "closed pull request",
+  PullRequestReviewSubmitted: "reviewed",
+};
+
+const eventVerb = (tag: string): string =>
+  EVENT_VERB[tag] ??
+  tag.replace(/(?<=[a-z0-9])(?=[A-Z])/g, " ").toLowerCase();
 
 interface WorldEvent {
   tag: string;
@@ -427,52 +466,47 @@ const TextPart = ({ text, repo }: { text: string; repo?: string }) => {
 };
 
 /**
- * A world event — ONE LINE by default (badge + title + ref), click to
- * expand for author/body/raw. The raw JSON lives in a FIXED-height
- * scroll region so toggling it never reflows the card's width or
- * grows with content.
+ * A world event as a TIMELINE ROW (GitHub-issue-timeline style): a
+ * family-colored icon, a humanized verb, the subject, and the ref —
+ * full-width and left-anchored, clearly the world's log rather than
+ * anyone's speech bubble. Click to expand author/body/raw; the raw
+ * JSON lives in a FIXED-height scroll region so toggling it never
+ * reflows the layout.
  */
 const EventCard = ({ event, raw }: { event: WorldEvent; raw: string }) => {
   const [open, setOpen] = useState(false);
   const [showRaw, setShowRaw] = useState(false);
   const anchored = useAnchoredToggle();
-  const style =
-    EVENT_STYLE.find(([family]) => family.test(event.tag))?.[1] ??
-    "text-muted-foreground border-border";
+  const family = EVENT_FAMILY.find(([test]) => test.test(event.tag))?.[1] ?? {
+    icon: Zap,
+    className: "text-muted-foreground",
+  };
+  const FamilyIcon = family.icon;
   return (
-    <div className="w-full rounded-md border border-border/60 bg-muted/20 text-[13px]">
+    <div className="w-full text-[13px]">
       <button
         type="button"
-        onClick={(event) =>
-          anchored(event.currentTarget, () => setOpen(!open))
-        }
-        className="flex w-full min-w-0 cursor-pointer items-center gap-2 px-2 py-1 text-left hover:bg-accent/50"
+        onClick={(click) => anchored(click.currentTarget, () => setOpen(!open))}
+        className="group flex w-full min-w-0 cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-left hover:bg-accent/40"
       >
-        <span
-          className={cn(
-            "shrink-0 rounded border px-1 py-px font-mono text-[9px] uppercase tracking-wide",
-            style,
-          )}
-        >
-          {/* PascalCase → spaced words: PullRequestOpened → PULL REQUEST OPENED */}
-          {event.tag.replace(/(?<=[a-z0-9])(?=[A-Z])/g, " ")}
+        <FamilyIcon className={cn("size-3.5 shrink-0", family.className)} />
+        <span className="shrink-0 text-muted-foreground">
+          {event.author ?? "world"} {eventVerb(event.tag)}
         </span>
         {event.title && (
-          <span className="min-w-0 flex-1 truncate font-medium">
-            {event.title}
-          </span>
+          <span className="min-w-0 flex-1 truncate">{event.title}</span>
         )}
         {event.repo && event.number !== undefined && (
           <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
             #{event.number}
           </span>
         )}
-        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+        <span className="shrink-0 font-mono text-[10px] text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
           {open ? "▾" : "▸"}
         </span>
       </button>
       {open && (
-        <div className="border-t border-border/50 px-2.5 py-2">
+        <div className="ml-[7px] border-l border-border/60 py-1 pl-4">
           <div className="flex flex-wrap items-center gap-x-3 font-mono text-xs text-muted-foreground">
             {event.repo &&
               (event.url ? (
@@ -491,11 +525,10 @@ const EventCard = ({ event, raw }: { event: WorldEvent; raw: string }) => {
                   {event.number !== undefined ? `#${event.number}` : ""}
                 </span>
               ))}
-            {event.author && <span>by {event.author}</span>}
             <button
               type="button"
-              onClick={(event) =>
-                anchored(event.currentTarget, () => setShowRaw(!showRaw))
+              onClick={(click) =>
+                anchored(click.currentTarget, () => setShowRaw(!showRaw))
               }
               className="ml-auto cursor-pointer font-mono text-[10px] hover:text-foreground"
             >
@@ -503,12 +536,12 @@ const EventCard = ({ event, raw }: { event: WorldEvent; raw: string }) => {
             </button>
           </div>
           {event.body && !showRaw && (
-            <div className="mt-2 line-clamp-3 whitespace-pre-wrap text-xs text-muted-foreground">
+            <div className="mt-1.5 line-clamp-3 whitespace-pre-wrap text-xs text-muted-foreground">
               {event.body}
             </div>
           )}
           {showRaw && (
-            <pre className="mt-2 h-56 overflow-auto rounded bg-background/60 p-2 text-[10px]">
+            <pre className="mt-1.5 h-56 overflow-auto rounded bg-background/60 p-2 text-[10px]">
               {raw}
             </pre>
           )}
@@ -681,13 +714,18 @@ const Chat = ({
                     part.text.trim().startsWith("<note>")),
               );
             return (
-            <Message from={message.role} key={message.id}>
-              {/* bare cards stay RIGHT-aligned and narrower than the
-                  assistant column, so world input reads as world input */}
+            <Message
+              from={message.role}
+              key={message.id}
+              className={cn(bare && "max-w-full")}
+            >
+              {/* world events are TIMELINE ROWS — full-width and
+                  left-anchored like the rest of the log, never a
+                  speech bubble */}
               <MessageContent
                 className={cn(
                   bare &&
-                    "w-full max-w-md group-[.is-user]:bg-transparent group-[.is-user]:px-0 group-[.is-user]:py-0",
+                    "w-full max-w-full group-[.is-user]:bg-transparent group-[.is-user]:px-0 group-[.is-user]:py-0",
                 )}
               >
                 {message.parts.map((part, index) => {
