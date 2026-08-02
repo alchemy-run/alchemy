@@ -39,9 +39,17 @@ import {
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
 import {
-  buildDurableObjectExports,
+  encodeDurableObjectExportTags,
+  getDurableObjectExportStateFromTags,
+  isDurableObjectExportTag,
+} from "./DurableObjectExportTags.ts";
+import {
   nextDurableObjectExportState,
-  type DurableObjectExportClass,
+  observeDurableObjectExports,
+  observeLegacyDurableObjectStorage,
+  planDurableObjectExports,
+  type DurableObjectClassObservation,
+  type DurableObjectRetirement,
 } from "./DurableObjectExports.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
 import {
@@ -582,9 +590,8 @@ export const stateWorkerDomain = (
 
 /**
  * Read a script's combined settings, routing to the dispatch-namespace
- * endpoint when `dispatchNamespace` is set. The two response shapes are
- * structurally identical for the fields the provider consumes (`bindings`,
- * `tags`, `logpush`), so the WFP response is surfaced as the workers shape.
+ * endpoint when `dispatchNamespace` is set. Both typed response shapes expose
+ * the settings this provider consumes, including live Durable Object exports.
  *
  * @internal
  */
@@ -603,15 +610,15 @@ const getScriptSettings = (
         dispatchNamespace,
         scriptName,
       });
-      // The dispatch-namespace settings response is structurally identical to
-      // the account-level one for the fields the provider reads.
-      return settings as unknown as workers.GetScriptScriptAndVersionSettingResponse;
+      return settings;
     }
     return yield* workers.getScriptScriptAndVersionSetting({
       accountId,
       scriptName,
     });
   });
+
+type ScriptSettings = Effect.Success<ReturnType<typeof getScriptSettings>>;
 
 /**
  * Deploy-time binding validation rejects an upload whose bindings
@@ -2842,7 +2849,7 @@ export const LiveWorkerProvider = () =>
         olds: WorkerProps | undefined,
         output: Worker["Attributes"] | undefined,
         session: ScopedPlanStatusSession,
-        existingSettings?: workers.GetScriptScriptAndVersionSettingResponse,
+        existingSettings?: ScriptSettings,
       ) {
         const { accountId } = yield* yield* CloudflareEnvironment;
         // Prefer the deployed name: regenerating would target a different
@@ -3027,6 +3034,15 @@ export const LiveWorkerProvider = () =>
 
         const oldTags = Array.from(new Set(oldSettings?.tags ?? []));
         const oldBindings = oldSettings?.bindings ?? [];
+        const taggedExportState = getDurableObjectExportStateFromTags(oldTags);
+        const observedExports = observeDurableObjectExports(
+          oldSettings?.exports,
+        );
+        const observedStorageByClass = {
+          ...observeLegacyDurableObjectStorage(oldSettings?.migrations),
+          ...taggedExportState?.storageByClass,
+          ...observedExports.storageByClass,
+        };
 
         // Parse the DO logical-id→class mapping from script tags (packed
         // `alchemy:dos:` and legacy per-DO `alchemy:do:` formats)
@@ -3120,14 +3136,10 @@ export const LiveWorkerProvider = () =>
         const scriptHostsClass = (scriptName: string, className: string) =>
           hosts(observedNamespaces, scriptName, className);
 
-        const deletedClasses: string[] = [];
-        const transferredOut: Array<{
-          className: string;
-          transferredTo: string;
-        }> = [];
+        const retirements: Record<string, DurableObjectRetirement> = {};
         for (const className of deletedClassCandidates) {
           if (dispatchNamespace) {
-            deletedClasses.push(className);
+            retirements[className] = { kind: "deleted" };
             continue;
           }
           const targetScriptName = crossScriptClassTargets.get(className);
@@ -3138,7 +3150,7 @@ export const LiveWorkerProvider = () =>
             // alchemy:do tag drops out either way because tags are recomputed
             // from current bindings.
             if (scriptHostsClass(name, className)) {
-              deletedClasses.push(className);
+              retirements[className] = { kind: "deleted" };
             }
             continue;
           }
@@ -3166,10 +3178,10 @@ export const LiveWorkerProvider = () =>
             // The destination has declared an expecting-transfer export. It
             // does not own the namespace until this source-side tombstone
             // commits the transfer.
-            transferredOut.push({
-              className,
+            retirements[className] = {
+              kind: "transferred",
               transferredTo: targetScriptName,
-            });
+            };
             continue;
           }
           // local → cross-script transition without a transfer. Fail before
@@ -3193,10 +3205,9 @@ export const LiveWorkerProvider = () =>
           ),
         );
 
-        // Derive the complete live export set plus lifecycle intent from the
-        // existing Durable Object declarations. Users do not maintain a
-        // second exports configuration alongside their bindings.
-        const exportClasses: DurableObjectExportClass[] = [];
+        // Resolve class identity and declared transfer sources. The dedicated
+        // planner below owns lifecycle classification and export serialization.
+        const classObservations: DurableObjectClassObservation[] = [];
         for (const binding of currentDoBindings) {
           let previousClassName: string | undefined =
             oldDoClassNameByLogicalId[binding.logicalId];
@@ -3239,7 +3250,7 @@ export const LiveWorkerProvider = () =>
             // declared source must be observed to still host the namespace;
             // otherwise (fresh stage, transfer already completed) fall
             // through to a plain create.
-            const fromScript = dispatchNamespace
+            const transferFrom = dispatchNamespace
               ? undefined
               : yield* resolveTransferSource({
                   accountId,
@@ -3252,50 +3263,43 @@ export const LiveWorkerProvider = () =>
                   ),
                   observedNamespaces,
                 });
-            if (fromScript !== undefined) {
-              const sourceNamespace = observedNamespaces.find(
-                (namespace) =>
-                  namespace.script === fromScript &&
-                  namespace.class === binding.className,
-              );
-              exportClasses.push({
-                className: binding.className,
-                transferFrom: fromScript,
-                storage:
-                  sourceNamespace?.useSqlite === false ? "legacy-kv" : "sqlite",
-              });
-              continue;
-            }
+            classObservations.push({
+              className: binding.className,
+              transferFrom,
+            });
+            continue;
           }
-          exportClasses.push({
+          classObservations.push({
             className: binding.className,
             previousClassName,
           });
         }
 
-        const durableObjectExportPlan = buildDurableObjectExports({
+        const durableObjectPlanResult = planDurableObjectExports({
           scriptName: name,
-          classes: exportClasses,
-          deletedClasses,
-          transferredClasses: transferredOut,
+          classes: classObservations,
+          retirements,
           containerClassNames,
           namespaces: observedNamespaces.map((namespace) => ({
             script: namespace.script,
             className: namespace.class,
             storage: namespace.useSqlite === false ? "legacy-kv" : "sqlite",
           })),
-          previousState: output?.durableObjectExportState,
+          observedStorageByClass,
+          observedPendingTransfers: {
+            ...taggedExportState?.pendingTransfers,
+            ...observedExports.pendingTransfers,
+          },
+          previousState: taggedExportState ?? output?.durableObjectExportState,
         });
-        const pendingTransferClasses = new Set(
-          exportClasses.flatMap((entry) =>
-            entry.transferFrom === undefined ? [] : [entry.className],
-          ),
-        );
+        if (durableObjectPlanResult._tag === "Failure") {
+          return yield* Effect.fail(durableObjectPlanResult.error);
+        }
+        const durableObjectExportPlan = durableObjectPlanResult.plan;
         // Cloudflare cannot provision a pending transfer and attach a local
-        // namespace binding in the same upload. The first deploy records the
-        // expectation without that binding. Reconciliation state forces the
-        // next deploy, which sends the normal live export and binding after
-        // the source has committed the transfer.
+        // namespace binding in the same upload. Keep omitting that binding on
+        // retries until observed cloud state confirms that the source no
+        // longer owns the namespace.
         const uploadMetadataBindings = metadataBindings.filter(
           (binding) =>
             !(
@@ -3303,7 +3307,9 @@ export const LiveWorkerProvider = () =>
               binding.className !== undefined &&
               (binding.scriptName === undefined ||
                 binding.scriptName === name) &&
-              pendingTransferClasses.has(binding.className)
+              durableObjectExportPlan.omittedBindingClassNames.has(
+                binding.className,
+              )
             ),
         );
         const expectedDurableObjectClassNames =
@@ -3314,7 +3320,7 @@ export const LiveWorkerProvider = () =>
             {
               oldDoClassNameByLogicalId,
               currentDoClassNameByLogicalId,
-              deletedClasses,
+              retirements,
               exports: durableObjectExportPlan.exports,
             },
           )}`,
@@ -3324,8 +3330,15 @@ export const LiveWorkerProvider = () =>
         // tags as possible — one tag per DO blows Cloudflare's 10-tag limit
         // at 7+ bindings (#811).
         const alchemyDoTags = encodeDurableObjectTags(currentDoBindings);
+        const alchemyExportTags = encodeDurableObjectExportTags(
+          durableObjectExportPlan.exports,
+        );
 
-        const alchemyTags = [...createAlchemyWorkerTags(id), ...alchemyDoTags];
+        const alchemyTags = [
+          ...createAlchemyWorkerTags(id),
+          ...alchemyDoTags,
+          ...alchemyExportTags,
+        ];
         const metadataTags = Array.from(
           new Set([...alchemyTags, ...(news.tags ?? [])]),
         );
@@ -3759,7 +3772,8 @@ export const LiveWorkerProvider = () =>
         accountId: string,
       ) {
         if (
-          (output.durableObjectExportState?.pendingTransfers.length ?? 0) > 0
+          Object.keys(output.durableObjectExportState?.pendingTransfers ?? {})
+            .length > 0
         ) {
           return true;
         }
@@ -5153,7 +5167,9 @@ export function getDurableObjectTagMap(tags: ReadonlyArray<string>) {
 }
 
 const isDurableObjectTag = (tag: string) =>
-  tag.startsWith(LEGACY_DO_TAG_PREFIX) || tag.startsWith(PACKED_DO_TAG_PREFIX);
+  tag.startsWith(LEGACY_DO_TAG_PREFIX) ||
+  tag.startsWith(PACKED_DO_TAG_PREFIX) ||
+  isDurableObjectExportTag(tag);
 
 /**
  * Fail fast — before the script upload — when a worker's tag set violates
