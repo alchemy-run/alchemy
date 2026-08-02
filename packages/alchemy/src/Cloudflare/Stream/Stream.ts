@@ -106,17 +106,16 @@ export interface Stream extends Binding.Service<Stream, TypeId, StreamClient> {
   (name?: string, props?: StreamBindingProps): StreamBinding;
 }
 
-export const Stream = Binding.Service<Stream, StreamBindingProps>({
+export const Stream = Binding.Service<Stream, { devRemote?: boolean }>({
   id: TypeId,
   defaultName: "STREAM",
   parse: (name?: string, props?: StreamBindingProps) => ({
     name,
-    dev: props?.dev,
+    devRemote: props?.dev?.remote,
   }),
   toWorkerBinding: (binding) => ({
     type: "stream",
     name: binding.name,
-    dev: binding.dev,
   }),
 });
 

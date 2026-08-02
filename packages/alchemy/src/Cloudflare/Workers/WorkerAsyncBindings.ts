@@ -30,6 +30,7 @@ import { isWorkflowLike, WorkflowResource } from "../Workflows/Workflow.ts";
 import { makeWorkflowName } from "../Workflows/WorkflowName.ts";
 import { isAI } from "./AI.ts";
 import { isAssets } from "./Assets.ts";
+import { isBinding as isWorkerOnlyBinding } from "./Binding.ts";
 import { isBrowser } from "./Browser.ts";
 import {
   isDurableObjectLike,
@@ -154,6 +155,15 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
           hyperdrives: isHyperdriveConnection(binding)
             ? getHyperdriveDevOrigin(binding)
             : undefined,
+          // Dev-only local-emulation opt-out channel (like `hyperdrives`):
+          // capabilities constructed with `dev: { remote: true }` carry the
+          // internal `devRemote` flag on their binding value; contribute it
+          // as binding data so the wire binding stays pure.
+          devRemote:
+            (isWorkerOnlyBinding(binding) || isSendEmail(binding)) &&
+            binding.devRemote
+              ? { [bindingName]: true }
+              : undefined,
         });
       } else {
         // Defensive catch-all: `toBinding` currently always classifies
@@ -316,22 +326,16 @@ const toBinding = (
     return {
       type: "images",
       name: bindingName,
-      // Alchemy-only local-emulation opt-out (stripped before upload).
-      dev: binding.dev,
     };
   } else if (isBrowser(binding)) {
     return {
       type: "browser",
       name: bindingName,
-      // Alchemy-only local-emulation opt-out (stripped before upload).
-      dev: binding.dev,
     };
   } else if (isStream(binding)) {
     return {
       type: "stream",
       name: bindingName,
-      // Alchemy-only local-emulation opt-out (stripped before upload).
-      dev: binding.dev,
     };
   } else if (isApp(binding)) {
     return {
@@ -369,8 +373,6 @@ const toBinding = (
       destinationAddress: binding.destinationAddress,
       allowedDestinationAddresses: binding.allowedDestinationAddresses,
       allowedSenderAddresses: binding.allowedSenderAddresses,
-      // Alchemy-only local-emulation opt-out (stripped before upload).
-      dev: binding.dev,
     };
   } else if (isDurableObjectLike(binding)) {
     return {

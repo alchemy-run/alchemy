@@ -85,17 +85,16 @@ export interface Images extends Binding.Service<Images, TypeId, ImagesClient> {
   (name?: string, props?: ImagesBindingProps): ImagesBinding;
 }
 
-export const Images = Binding.Service<Images, ImagesBindingProps>({
+export const Images = Binding.Service<Images, { devRemote?: boolean }>({
   id: TypeId,
   defaultName: "IMAGES",
   parse: (name?: string, props?: ImagesBindingProps) => ({
     name,
-    dev: props?.dev,
+    devRemote: props?.dev?.remote,
   }),
   toWorkerBinding: (binding) => ({
     type: "images",
     name: binding.name,
-    dev: binding.dev,
   }),
 });
 

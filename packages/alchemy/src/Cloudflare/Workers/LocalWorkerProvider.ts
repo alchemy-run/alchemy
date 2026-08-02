@@ -329,6 +329,12 @@ export const LocalWorkerProvider = () =>
         > = {};
         const workflows: Record<string, RuntimeWorkflow> = {};
         const hyperdrives: Record<string, Required<HyperdriveOrigin>> = {};
+        // Dev-only channel (like `hyperdrives`): binding name → opt-out of
+        // local emulation (`dev: { remote: true }` on the capability). Read
+        // by `toRuntimeBinding` when lowering browser/images/stream/
+        // send_email descriptors. Part of the hashed config: flipping the
+        // opt-out restarts the instance.
+        const devRemote: Record<string, boolean> = {};
         const containers: Record<string, ContainerImage> = {};
         for (const { data } of bindings) {
           for (const binding of data.bindings ?? []) {
@@ -363,6 +369,11 @@ export const LocalWorkerProvider = () =>
                 };
               }
               bindingDescriptors.push(binding);
+            }
+          }
+          if (data.devRemote) {
+            for (const [name, remote] of Object.entries(data.devRemote)) {
+              devRemote[name] = remote;
             }
           }
           if (data.hyperdrives) {
@@ -438,6 +449,7 @@ export const LocalWorkerProvider = () =>
           durableObjectNamespaces: Object.values(durableObjectNamespaces),
           workflows: Object.values(workflows),
           hyperdrives,
+          devRemote,
           vite: !!props.vite,
           // Relative `vite.main` resolves from the Vite root (see the
           // matching normalization in WorkerProvider's `viteBuild`).
@@ -523,7 +535,9 @@ export const LocalWorkerProvider = () =>
             workerBindings.push(Text.local(descriptor.name, selfUrl!));
             continue;
           }
-          workerBindings.push(yield* toRuntimeBinding(descriptor));
+          workerBindings.push(
+            yield* toRuntimeBinding(descriptor, config.devRemote),
+          );
         }
         return workerBindings;
       });
@@ -1049,7 +1063,16 @@ export const LocalWorkerProvider = () =>
     }),
   );
 
-export const toRuntimeBinding = Effect.fn(function* (b: WorkerBinding) {
+export const toRuntimeBinding = Effect.fn(function* (
+  b: WorkerBinding,
+  /**
+   * Dev-only channel from the Worker's binding data (see the `devRemote`
+   * member of the Worker binding contract): binding name → opt-out of local
+   * emulation for the capabilities that support it (browser / images /
+   * stream / send_email).
+   */
+  devRemote?: Record<string, boolean>,
+) {
   const unsupported = () =>
     new WorkerValidationError({
       message: `${b.type} bindings are not supported in local mode`,
@@ -1072,7 +1095,7 @@ export const toRuntimeBinding = Effect.fn(function* (b: WorkerBinding) {
       // Local emulation launches a real headless Chrome on this machine and
       // proxies the Browser Rendering session protocol to its CDP endpoint;
       // `dev: { remote: true }` opts into the real service instead.
-      return b.dev?.remote
+      return devRemote?.[b.name]
         ? Browser.remote(b.name)
         : Browser.local({ binding: b.name });
     case "d1":
@@ -1106,7 +1129,7 @@ export const toRuntimeBinding = Effect.fn(function* (b: WorkerBinding) {
       // Local emulation runs transforms via Sharp on this machine and stores
       // hosted images in a local KV-backed store; `dev: { remote: true }`
       // opts into the real Images service instead.
-      return b.dev?.remote
+      return devRemote?.[b.name]
         ? Images.remote(b.name)
         : Images.local({ binding: b.name });
     case "inherit":
@@ -1201,7 +1224,7 @@ export const toRuntimeBinding = Effect.fn(function* (b: WorkerBinding) {
       // Local emulation validates and persists sent mail as `.eml` files
       // under the local storage's `email/` dir; `dev: { remote: true }`
       // opts into the real Email service instead.
-      return SendEmail[b.dev?.remote ? "remote" : "local"]({
+      return SendEmail[devRemote?.[b.name] ? "remote" : "local"]({
         binding: b.name,
         destinationAddress: b.destinationAddress,
         allowedDestinationAddresses: b.allowedDestinationAddresses,
@@ -1218,7 +1241,7 @@ export const toRuntimeBinding = Effect.fn(function* (b: WorkerBinding) {
       // no signed URLs) and serves each video's `preview` URL at
       // /cdn-cgi/mf/stream/<id>/watch on the dev URL; `dev: { remote: true }`
       // opts into the real Stream service instead.
-      return b.dev?.remote
+      return devRemote?.[b.name]
         ? StreamSim.remote(b.name)
         : StreamSim.local({ binding: b.name });
     case "text_blob":

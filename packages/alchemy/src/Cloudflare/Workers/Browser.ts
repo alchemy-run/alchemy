@@ -192,17 +192,16 @@ export interface Browser extends Binding.Service<
   (name?: string, props?: BrowserBindingProps): BrowserBinding;
 }
 
-export const Browser = Binding.Service<Browser, BrowserBindingProps>({
+export const Browser = Binding.Service<Browser, { devRemote?: boolean }>({
   id: TypeId,
   defaultName: "BROWSER",
   parse: (name?: string, props?: BrowserBindingProps) => ({
     name,
-    dev: props?.dev,
+    devRemote: props?.dev?.remote,
   }),
   toWorkerBinding: (binding) => ({
     type: "browser",
     name: binding.name,
-    dev: binding.dev,
   }),
 });
 

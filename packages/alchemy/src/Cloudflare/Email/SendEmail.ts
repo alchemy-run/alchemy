@@ -71,9 +71,16 @@ export type SendEmailProps = {
  * });
  * ```
  */
-export type SendEmail = SendEmailProps & {
+export type SendEmail = Omit<SendEmailProps, "dev"> & {
   kind: SendEmailTypeId;
   name: string;
+  /**
+   * Alchemy-internal: opt-out of local emulation in `alchemy dev`
+   * (`dev: { remote: true }` on the constructor). Registered on the host
+   * Worker via the binding-data `devRemote` channel, never on the wire
+   * binding itself.
+   */
+  devRemote?: boolean;
 };
 
 export const isSendEmail = (value: unknown): value is SendEmail =>
@@ -95,6 +102,6 @@ export const SendEmail: (
     destinationAddress: props?.destinationAddress,
     allowedDestinationAddresses: props?.allowedDestinationAddresses,
     allowedSenderAddresses: props?.allowedSenderAddresses,
-    dev: props?.dev,
+    devRemote: props?.dev?.remote,
   } satisfies SendEmail;
 });

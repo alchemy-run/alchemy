@@ -1057,6 +1057,17 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
     containers?: { className: string; dev: DevContainerImage | undefined }[];
     crons?: string[];
     hyperdrives?: Record<string, Required<DevOrigin>>;
+    /**
+     * Dev-only channel (like `hyperdrives`): binding name → opt-out of local
+     * emulation in `alchemy dev` (`dev: { remote: true }` on the capability
+     * constructor). Contributed alongside the pure wire binding instead of
+     * being embedded in it — wire descriptors stay exactly what Cloudflare
+     * accepts. Records from multiple bind calls merge by key; the local
+     * worker provider reads it when lowering `browser` / `images` / `stream`
+     * / `send_email` bindings to their local or remote runtime hooks. The
+     * live provider ignores it.
+     */
+    devRemote?: Record<string, boolean>;
   },
   Providers
 >;

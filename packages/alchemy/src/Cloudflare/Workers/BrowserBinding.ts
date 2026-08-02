@@ -16,10 +16,7 @@ export type BrowserBinding = Binding.Binding<
   Browser["key"],
   BrowserClient,
   Browser
-> & {
-  /** Alchemy-only dev options (`dev.remote` opts out of local emulation). */
-  dev?: { remote?: boolean };
-};
+>;
 
 /**
  * The layer that provides the Effect-native interface for the Cloudflare
