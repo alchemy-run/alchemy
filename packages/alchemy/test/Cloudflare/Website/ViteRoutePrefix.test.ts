@@ -6,10 +6,12 @@
  * (https://developers.cloudflare.com/workers/static-assets/routing/advanced/serving-a-subdirectory/):
  * a Worker routed at `zone/prefix*` only serves an asset for
  * `/prefix/index.html` if the uploaded asset manifest contains that key.
- * `assets.basePath` nests the uploaded manifest paths under the prefix and
- * doubles as Vite's `base`, so the emitted HTML references its scripts
- * under the prefix too — both halves are required for the site to work
- * behind the route.
+ * Vite's `base` (from the app's own vite.config.ts) rewrites the URLs the
+ * build emits, and Alchemy keys the uploaded manifest with the same
+ * resolved base — both halves are required for the site to work behind
+ * the route. The SPA fallback shell is aliased back to `/index.html`
+ * (Cloudflare resolves it at the manifest root, hard-coded), pinned here
+ * by the deep-link probe.
  */
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
@@ -208,7 +210,7 @@ const evaluateSite = Effect.fn(function* (pageUrl: string, label: string) {
 });
 
 test.provider.skipIf(!zoneName)(
-  "Vite: assets.basePath serves the site on a zone route with a path prefix",
+  "Vite: base from vite.config.ts serves the site on a path-prefixed zone route",
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -226,7 +228,18 @@ test.provider.skipIf(!zoneName)(
         entries: ["index.html", "package.json", "src"],
       });
       yield* fs.writeFileString(path.join(rootDir, "index.html"), htmlPage);
-      const memoInclude = ["index.html", "src/**", "package.json"];
+      // The base lives in the app's own Vite config — the deploy adopts
+      // the resolved value; nothing is configured on the alchemy side.
+      yield* fs.writeFileString(
+        path.join(rootDir, "vite.config.ts"),
+        `import { defineConfig } from "vite";\n\nexport default defineConfig({ base: "${basePath}/" });\n`,
+      );
+      const memoInclude = [
+        "index.html",
+        "src/**",
+        "package.json",
+        "vite.config.ts",
+      ];
 
       let workerName: string | undefined;
 
@@ -241,7 +254,7 @@ test.provider.skipIf(!zoneName)(
                 flags: ["nodejs_compat"],
               },
               memo: { include: memoInclude },
-              assets: { basePath },
+              assets: { notFoundHandling: "single-page-application" },
               routes: [{ pattern: routePattern, zoneName }],
             });
           }),
@@ -273,9 +286,26 @@ test.provider.skipIf(!zoneName)(
         expect(routed.page.body).toContain(marker);
         expect(routed.script?.status).toBe(200);
         expect(routed.script?.contentType).toContain("javascript");
+        // `(hydrated)` is a string literal in the fixture's client module,
+        // so it proves the response is the real script — a 404 here would
+        // be answered by the SPA fallback with the shell, which contains
+        // the marker but never that literal.
+        expect(routed.script?.body).toContain("(hydrated)");
         expect(
           routed.script?.url.startsWith(`https://${zoneName}${basePath}/`),
         ).toBe(true);
+
+        // Cloudflare's SPA fallback resolves `/index.html` at the manifest
+        // root, hard-coded — the shell is aliased back there so client-side
+        // routes under the base still boot the app.
+        const deep = yield* probeStable(
+          `https://${zoneName}${basePath}/deep/route`,
+        );
+        yield* Effect.log(
+          `[spa deep link] ${deep.status} ${deep.contentType ?? "-"} :: ${excerpt(deep.body)}`,
+        );
+        expect(deep.status).toBe(200);
+        expect(deep.body).toContain(marker);
       }).pipe(
         Effect.ensuring(
           Effect.gen(function* () {

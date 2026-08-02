@@ -69,7 +69,7 @@ import {
   LocalRuntimeState,
 } from "../LocalRuntime.ts";
 import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
-import { readAssetsConfigFiles, viteBaseFromAssets } from "./Assets.ts";
+import { readAssetsConfigFiles } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import { isPythonMain, watchPythonWorkerBundle } from "./PythonWorkerBundle.ts";
 import { isSelfUrl, Worker } from "./Worker.ts";
@@ -854,14 +854,6 @@ export const LocalWorkerProvider = () =>
             context,
           },
           { port: 0 },
-          {
-            // Match the deploy path: `assets.basePath` becomes Vite's
-            // `base` so the dev server serves the app under the same
-            // prefix a path-scoped zone route would.
-            base: viteBaseFromAssets(
-              typeof worker.assets === "string" ? undefined : worker.assets,
-            ),
-          },
         );
         yield* proxy.set(new URL(devServer.resolvedUrls!.local[0]));
         return proxy.url;

@@ -35,7 +35,6 @@ import {
   readAssets,
   readAssetsConfigFiles,
   uploadAssets,
-  viteBaseFromAssets,
 } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
@@ -2081,7 +2080,7 @@ export const LiveWorkerProvider = () =>
         // (~0.5s), which is only needed for vite-based workers at build time —
         // not for every Worker definition at module-load time.
         const Vite = yield* Effect.promise(() => import("./Vite.ts"));
-        const { clientDirectory, serverBundle, externalWorkspaces } =
+        const { clientDirectory, base, serverBundle, externalWorkspaces } =
           yield* Vite.viteBuild(
             props.vite?.rootDir,
             Object.fromEntries(
@@ -2137,13 +2136,6 @@ export const LiveWorkerProvider = () =>
               compatibilityFlags: compatibility.flags,
               viteEnvironments: props.vite?.viteEnvironments,
             },
-            {
-              // `assets.basePath` doubles as Vite's `base` so the emitted
-              // HTML references assets under the prefix the route serves —
-              // manifest nesting alone would leave root-absolute URLs that
-              // fall outside a path-prefixed zone route.
-              base: viteBaseFromAssets(props.assets),
-            },
           );
         const [assets, bundle, input] = yield* Effect.all(
           [
@@ -2156,6 +2148,10 @@ export const LiveWorkerProvider = () =>
                     props.vite?.rootDir ?? process.cwd(),
                     clientDirectory,
                   ),
+                  // The resolved Vite `base` is what rewrote the URLs in
+                  // the emitted HTML, so it is the only prefix the
+                  // manifest can agree with.
+                  base,
                 })
               : Effect.undefined,
             serverBundle,
@@ -2318,9 +2314,9 @@ export const LiveWorkerProvider = () =>
         output: Worker["Attributes"] | undefined,
       ) => {
         if (!Predicate.hasProperty(assets, "hash")) return undefined;
-        // `basePath` shapes the uploaded manifest paths (see `readAssets`);
-        // it is alchemy-only and must not leak into the API's asset config.
-        const { directory, hash, basePath: _basePath, ...config } = assets;
+        // `base` shapes the uploaded manifest paths (see `readAssets`); it
+        // is alchemy-only and must not leak into the API's asset config.
+        const { directory, hash, base: _base, ...config } = assets;
         return { directory, config, hash, skip: hash === output?.hash?.assets };
       };
 

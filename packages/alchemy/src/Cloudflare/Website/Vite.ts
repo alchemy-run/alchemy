@@ -142,14 +142,15 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * @section Serving on a Zone Route with a Path Prefix
  * Cloudflare matches static assets against the full request pathname,
  * so a site attached to a route like `example.com/docs*` only serves
- * assets nested under `/docs`. Set `assets.basePath` and Alchemy nests
- * the uploaded asset paths under the prefix and applies it as Vite's
- * `base`, so the emitted asset URLs resolve under the route.
+ * assets whose uploaded paths carry the `/docs` prefix. Set Vite's
+ * `base` in your `vite.config.ts` — the emitted HTML references its
+ * assets under the prefix, and Alchemy keys the uploaded asset manifest
+ * with the same resolved `base` so the two always agree.
  *
  * @example Vite site behind a path-prefixed route
  * ```typescript
+ * // vite.config.ts: export default defineConfig({ base: "/docs/" })
  * const docs = yield* Cloudflare.Website.Vite("Docs", {
- *   assets: { basePath: "/docs" },
  *   routes: [{ pattern: "example.com/docs*", zoneName: "example.com" }],
  * });
  * ```
