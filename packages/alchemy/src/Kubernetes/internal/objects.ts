@@ -1,8 +1,8 @@
 /**
  * Internal Kubernetes object model + ordering/path helpers powering
- * `AWS.EKS.Manifest` and the EKS platforms (`Deployment`, `Job`). Not part of
- * the public surface — the public manifest shape is the literal
- * `KubernetesManifest` on `AWS.EKS.Manifest`.
+ * `Kubernetes.Manifest` and the workload platforms (`Deployment`, `Job`).
+ * Not part of the public surface — the public manifest shape is the literal
+ * `KubernetesManifest` on `Kubernetes.Manifest`.
  */
 
 export interface KubernetesObjectMetadata {

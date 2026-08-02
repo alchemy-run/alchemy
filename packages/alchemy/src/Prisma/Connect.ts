@@ -184,13 +184,13 @@ type ConnectWorkerBindingHost = Resource<
 >;
 
 const supportsConnectEnvBinding = (
-  host: ResourceLike,
+  host: ResourceLike | undefined,
 ): host is ConnectEnvBindingHost =>
-  host.Type === "Prisma.Compute" || host.Type === "AWS.Lambda.Function";
+  host?.Type === "Prisma.Compute" || host?.Type === "AWS.Lambda.Function";
 
 const supportsConnectWorkerBinding = (
-  host: ResourceLike,
-): host is ConnectWorkerBindingHost => host.Type === "Cloudflare.Worker";
+  host: ResourceLike | undefined,
+): host is ConnectWorkerBindingHost => host?.Type === "Cloudflare.Worker";
 
 // Compute env sync omits undefined and treats null as deletion. Connection
 // bindings need both values to round-trip into the typed runtime client.
@@ -376,7 +376,7 @@ export const ConnectBinding = Layer.effect(
         } else {
           return yield* Effect.die(
             new Error(
-              `Prisma.Connect supports Prisma.Compute, AWS.Lambda.Function, and Cloudflare.Worker runtimes, got '${host.Type}'`,
+              `Prisma.Connect supports Prisma.Compute, AWS.Lambda.Function, and Cloudflare.Worker runtimes, got '${host?.Type ?? "no host"}'`,
             ),
           );
         }

@@ -51,7 +51,7 @@
     },
     "cloudflare-tools/packages/cloudflare-rolldown-plugin": {
       "name": "@distilled.cloud/cloudflare-rolldown-plugin",
-      "version": "0.15.0",
+      "version": "0.14.0",
       "dependencies": {
         "@cloudflare/unenv-preset": "^2.16.0",
         "magic-string": "^0.30.21",
@@ -76,7 +76,7 @@
     },
     "cloudflare-tools/packages/cloudflare-runtime": {
       "name": "@distilled.cloud/cloudflare-runtime",
-      "version": "0.15.0",
+      "version": "0.14.0",
       "dependencies": {
         "@alchemy.run/node-utils": "catalog:",
         "workerd": "catalog:workers",
@@ -111,7 +111,7 @@
     },
     "cloudflare-tools/packages/cloudflare-vite-plugin": {
       "name": "@distilled.cloud/cloudflare-vite-plugin",
-      "version": "0.15.0",
+      "version": "0.14.0",
       "dependencies": {
         "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:*",
       },
@@ -1046,6 +1046,7 @@
         "@distilled.cloud/neon": "workspace:*",
         "@distilled.cloud/planetscale": "workspace:*",
         "@effect/sql-d1": "catalog:",
+        "@effect/sql-sqlite-do": "catalog:",
         "@effect/vitest": "catalog:",
         "@libsql/client": "catalog:",
         "@octokit/rest": "^22.0.1",
@@ -1231,6 +1232,7 @@
     "@effect/platform-node-shared": ">=4.0.0-beta.102 || >=4.0.0",
     "@effect/sql-d1": ">=4.0.0-beta.102 || >=4.0.0",
     "@effect/sql-pg": ">=4.0.0-beta.102 || >=4.0.0",
+    "@effect/sql-sqlite-do": ">=4.0.0-beta.102 || >=4.0.0",
     "@effect/vitest": ">=4.0.0-beta.102 || >=4.0.0",
     "@libsql/client": "^0.17.0",
     "@opentui/core": "latest",
@@ -1275,6 +1277,7 @@
       "@effect/platform-node": ">=4.0.0-beta.102 || >=4.0.0",
       "@effect/sql-d1": ">=4.0.0-beta.102 || >=4.0.0",
       "@effect/sql-pg": ">=4.0.0-beta.102 || >=4.0.0",
+      "@effect/sql-sqlite-do": ">=4.0.0-beta.102 || >=4.0.0",
       "@effect/vitest": ">=4.0.0-beta.102 || >=4.0.0",
       "effect": ">=4.0.0-beta.102 || >=4.0.0",
     },
@@ -1640,6 +1643,8 @@
     "@effect/sql-d1": ["@effect/sql-d1@4.0.0-beta.102", "", { "dependencies": { "@cloudflare/workers-types": "^5.20260708.1" }, "peerDependencies": { "effect": "^4.0.0-beta.102" } }, "sha512-p6V1BqXEKF/EVH1JkWjjslPtg5Knl2TWopMnDdgto2jGfRpCHfhEaI8fA2OmR5J5H/TIH9ihYBiUA6Awru2Kvg=="],
 
     "@effect/sql-pg": ["@effect/sql-pg@4.0.0-beta.102", "", { "dependencies": { "pg": "^8.22.0", "pg-connection-string": "2.14.0", "pg-cursor": "^2.21.0", "pg-pool": "^3.14.0", "pg-types": "^4.1.0" }, "peerDependencies": { "effect": "^4.0.0-beta.102" } }, "sha512-02a+fNfECWCZIZcgHl7OLQN2jZj42gq90EdwdnvR3KA6GLGypY02swABS4zFtaW9H80rTa0ukqVnTdcO/DT5GQ=="],
+
+    "@effect/sql-sqlite-do": ["@effect/sql-sqlite-do@4.0.0-beta.102", "", { "peerDependencies": { "effect": "^4.0.0-beta.102" } }, "sha512-akZzkZjVUwXyMGV/EF7O1N8Lgcl3EW1TQOjA+NDebzmlGQYohlU4959sV2XnMrWXdXF240w3rr4UH43H/lCfJA=="],
 
     "@effect/tsgo": ["@effect/tsgo@0.16.0", "", { "optionalDependencies": { "@effect/tsgo-darwin-arm64": "0.16.0", "@effect/tsgo-darwin-x64": "0.16.0", "@effect/tsgo-linux-arm": "0.16.0", "@effect/tsgo-linux-arm64": "0.16.0", "@effect/tsgo-linux-x64": "0.16.0", "@effect/tsgo-win32-arm64": "0.16.0", "@effect/tsgo-win32-x64": "0.16.0" }, "bin": { "effect-tsgo": "dist/effect-tsgo.js" } }, "sha512-UrSx8nNZyMKAODLAV8iTYUAr1IvviLdPRjBop+Xw8G+gtV2VQOAEIxo5R4/YZWtyugt8GyxgGy57/VvzCNCOdg=="],
 

@@ -1,4 +1,5 @@
 import * as AWS from "alchemy/AWS";
+import * as Kubernetes from "alchemy/Kubernetes";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -6,7 +7,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { EntriesTable, GuestbookCluster, GuestbookNamespace } from "./infra.ts";
 
 /**
- * The guestbook API: an `AWS.EKS.Deployment` in the TAGGED form — the class
+ * The guestbook API: a `Kubernetes.Deployment` in the TAGGED form — the class
  * declares the deployment identity, and the default export is
  * `Api.make(props, impl)`: a Layer pairing the props with an init Effect
  * whose impl returns `{ fetch }`, bundled into a generated image
@@ -35,7 +36,7 @@ import { EntriesTable, GuestbookCluster, GuestbookNamespace } from "./infra.ts";
  * template merged into the synthesized one (objects merge recursively;
  * arrays and primitives replace).
  */
-export class Api extends AWS.EKS.Deployment<Api>()("Api") {}
+export class Api extends Kubernetes.Deployment<Api>()("Api") {}
 
 export default Api.make(
   // Props are themselves an Effect so they can reference shared resources.

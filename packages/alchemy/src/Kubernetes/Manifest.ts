@@ -1,31 +1,29 @@
-import * as eks from "@distilled.cloud/aws/eks";
 import * as Effect from "effect/Effect";
-import { isResolved } from "../../Diff.ts";
-import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
-import type { Cluster } from "./Cluster.ts";
+import { isResolved } from "../Diff.ts";
+import * as Provider from "../Provider.ts";
+import { Resource } from "../Resource.ts";
+import {
+  toConnection,
+  type ClusterLike,
+  type Connection,
+} from "./Connection.ts";
 import {
   applyObject,
+  connectCluster,
   deleteObject,
   readObject,
   KubernetesApiError,
-  type KubernetesClusterConnection,
 } from "./internal/client.ts";
 import type {
   KubernetesObjectDefinition,
   KubernetesObjectRef,
 } from "./internal/objects.ts";
-
-/**
- * The subset of an `AWS.EKS.Cluster`'s Attributes the Manifest needs to
- * connect to the Kubernetes API. Pass the whole cluster resource — the engine
- * resolves it to bare attributes at reconcile.
- */
-type ClusterConnectionProps = Pick<
-  Cluster["Attributes"],
-  "clusterName" | "endpoint" | "certificateAuthorityData"
->;
+import {
+  connectionIdentity,
+  connectionOfOutput,
+  tryConnectionOf,
+} from "./internal/workload.ts";
+import type { Providers } from "./Providers.ts";
 
 /**
  * A literal Kubernetes object: `apiVersion` + `kind` + `metadata`, with the
@@ -48,11 +46,11 @@ export interface KubernetesManifest {
 
 export interface ManifestProps {
   /**
-   * Target EKS cluster the manifest is applied onto. Pass the
-   * `AWS.EKS.Cluster` resource; the Manifest reads its `endpoint` /
-   * `certificateAuthorityData` to reach the Kubernetes API.
+   * Target cluster the manifest is applied onto. Pass a managed cluster
+   * resource (e.g. `AWS.EKS.Cluster`), a `Kubernetes.KubeConfig(...)`, or
+   * a raw `Kubernetes.Connection`.
    */
-  cluster: ClusterConnectionProps;
+  cluster: ClusterLike;
   /**
    * The Kubernetes object to apply (server-side apply, field manager
    * `alchemy`) — a literal object with `apiVersion`, `kind`, `metadata`, and
@@ -62,11 +60,11 @@ export interface ManifestProps {
 }
 
 export interface Manifest extends Resource<
-  "AWS.EKS.Manifest",
+  "Kubernetes.Manifest",
   ManifestProps,
   {
-    /** The name of the EKS cluster the object is applied to. */
-    clusterName: string;
+    /** The connection of the cluster the object is applied to. */
+    connection: Connection;
     /** The Kubernetes API version of the applied object. */
     apiVersion: string;
     /** The Kubernetes kind of the applied object. */
@@ -85,17 +83,19 @@ export interface Manifest extends Resource<
 > {}
 
 /**
- * Applies a raw Kubernetes manifest onto an `AWS.EKS.Cluster` via
- * server-side apply.
+ * Applies a raw Kubernetes manifest onto any cluster via server-side
+ * apply.
  *
  * Any literal object is accepted — built-in kinds and custom resources
  * alike; unknown kinds are resolved through the Kubernetes API discovery
- * endpoint, so CRDs work without any registration.
+ * endpoint, so CRDs work without any registration. The target `cluster`
+ * can be a managed cluster resource (e.g. `AWS.EKS.Cluster`) or any
+ * cluster your kubeconfig can reach (`Kubernetes.KubeConfig(...)`).
  * @resource
  * @section Applying Manifests
  * @example StatefulSet
  * ```typescript
- * const sts = yield* AWS.EKS.Manifest("Cache", {
+ * const sts = yield* Kubernetes.Manifest("Cache", {
  *   cluster,
  *   manifest: {
  *     apiVersion: "apps/v1",
@@ -116,7 +116,7 @@ export interface Manifest extends Resource<
  *
  * @example Custom resource (CRD)
  * ```typescript
- * const widget = yield* AWS.EKS.Manifest("Widget", {
+ * const widget = yield* Kubernetes.Manifest("Widget", {
  *   cluster,
  *   manifest: {
  *     apiVersion: "acme.io/v1",
@@ -130,7 +130,7 @@ export interface Manifest extends Resource<
  * @section Namespaces
  * @example Create a Namespace
  * ```typescript
- * const ns = yield* AWS.EKS.Manifest("AppsNamespace", {
+ * const ns = yield* Kubernetes.Manifest("AppsNamespace", {
  *   cluster,
  *   manifest: {
  *     apiVersion: "v1",
@@ -139,23 +139,26 @@ export interface Manifest extends Resource<
  *   },
  * });
  * ```
+ *
+ * @section Any Cluster
+ * @example Apply onto a kubeconfig context
+ * ```typescript
+ * const local = Kubernetes.KubeConfig({ context: "kind-dev" });
+ *
+ * const config = yield* Kubernetes.Manifest("AppConfig", {
+ *   cluster: local,
+ *   manifest: {
+ *     apiVersion: "v1",
+ *     kind: "ConfigMap",
+ *     metadata: { name: "app-config", namespace: "default" },
+ *     data: { LOG_LEVEL: "info" },
+ *   },
+ * });
+ * ```
  */
-export const Manifest = Resource<Manifest>("AWS.EKS.Manifest");
-
-const toConnection = (
-  cluster: ClusterConnectionProps,
-): KubernetesClusterConnection => {
-  if (!cluster.endpoint || !cluster.certificateAuthorityData) {
-    throw new Error(
-      `EKS cluster '${cluster.clusterName}' is missing endpoint or certificate authority data`,
-    );
-  }
-  return {
-    clusterName: cluster.clusterName,
-    endpoint: cluster.endpoint,
-    certificateAuthorityData: cluster.certificateAuthorityData,
-  };
-};
+export const Manifest = Resource<Manifest>("Kubernetes.Manifest", {
+  aliases: ["AWS.EKS.Manifest"],
+});
 
 const toObjectDefinition = (
   manifest: KubernetesManifest,
@@ -164,33 +167,12 @@ const toObjectDefinition = (
   if (!name) {
     return Effect.fail(
       new Error(
-        `AWS.EKS.Manifest requires manifest.metadata.name (got ${manifest.apiVersion}/${manifest.kind})`,
+        `Kubernetes.Manifest requires manifest.metadata.name (got ${manifest.apiVersion}/${manifest.kind})`,
       ),
     );
   }
   return Effect.succeed(manifest as KubernetesObjectDefinition);
 };
-
-// Re-resolve a Kubernetes connection from the cluster name alone (used by
-// read/delete, whose persisted attributes don't cache the endpoint/CA).
-const describeConnection = Effect.fn(function* (clusterName: string) {
-  const described = yield* eks
-    .describeCluster({ name: clusterName })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
-  const cluster = described?.cluster;
-  if (!cluster?.endpoint || !cluster.certificateAuthority?.data) {
-    return undefined;
-  }
-  return {
-    clusterName,
-    endpoint: cluster.endpoint,
-    certificateAuthorityData: cluster.certificateAuthority.data,
-  } satisfies KubernetesClusterConnection;
-});
 
 const isNotFound = (error: unknown): error is KubernetesApiError =>
   error instanceof KubernetesApiError && error.statusCode === 404;
@@ -200,19 +182,23 @@ export const ManifestProvider = () =>
     Manifest,
     Effect.gen(function* () {
       return {
-        stables: ["clusterName", "apiVersion", "kind", "name", "namespace"],
-        // In-cluster objects have no AWS-side enumeration that attributes
+        stables: ["connection", "apiVersion", "kind", "name", "namespace"],
+        // In-cluster objects have no cloud-side enumeration that attributes
         // them to alchemy; refresh happens per-instance through `read`.
         list: () => Effect.succeed([] as Manifest["Attributes"][]),
         diff: Effect.fn(function* ({ olds = {} as ManifestProps, news }) {
           if (!isResolved(news)) return;
           const oldManifest = olds.manifest as KubernetesManifest | undefined;
           const newManifest = news.manifest as KubernetesManifest;
+          const oldCluster = connectionIdentity(tryConnectionOf(olds.cluster));
+          const newCluster = connectionIdentity(tryConnectionOf(news.cluster));
           // Object identity (cluster, group/version/kind, name, namespace) is
           // immutable — changing any of it is a replacement.
           if (
             oldManifest &&
-            (olds.cluster?.clusterName !== news.cluster?.clusterName ||
+            ((oldCluster !== undefined &&
+              newCluster !== undefined &&
+              oldCluster !== newCluster) ||
               oldManifest.apiVersion !== newManifest.apiVersion ||
               oldManifest.kind !== newManifest.kind ||
               oldManifest.metadata?.name !== newManifest.metadata?.name ||
@@ -224,11 +210,17 @@ export const ManifestProvider = () =>
         }),
         read: Effect.fn(function* ({ output }) {
           if (!output) return undefined;
-          const connection = yield* describeConnection(output.clusterName);
-          // Cluster gone — its objects went with it.
+          const connection = connectionOfOutput(output);
           if (!connection) return undefined;
+          const transport = yield* connectCluster(connection).pipe(
+            // Cluster gone — its objects went with it.
+            Effect.catchTag("Kubernetes.ClusterNotFoundError", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+          if (!transport) return undefined;
           const observed = yield* readObject({
-            connection,
+            transport,
             object: output.ref,
           }).pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
           if (!observed) return undefined;
@@ -238,6 +230,7 @@ export const ManifestProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ news, output, session }) {
           const connection = toConnection(news.cluster);
+          const transport = yield* connectCluster(connection);
           const object = yield* toObjectDefinition(news.manifest);
           const ref: KubernetesObjectRef = {
             apiVersion: object.apiVersion,
@@ -249,7 +242,7 @@ export const ManifestProvider = () =>
           // Server-side apply is a true upsert: create-if-missing and
           // converge-if-present in one call, `force: true` so alchemy owns
           // the fields it manages regardless of prior managers.
-          const applied = yield* applyObject({ connection, object });
+          const applied = yield* applyObject({ transport, object });
 
           yield* session.note(
             `Applied ${ref.apiVersion}/${ref.kind} ${ref.namespace ? `${ref.namespace}/` : ""}${ref.name}`,
@@ -260,7 +253,7 @@ export const ManifestProvider = () =>
             output?.uid;
 
           return {
-            clusterName: connection.clusterName,
+            connection,
             apiVersion: ref.apiVersion,
             kind: ref.kind,
             name: ref.name,
@@ -270,10 +263,16 @@ export const ManifestProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
-          const connection = yield* describeConnection(output.clusterName);
-          // Cluster already destroyed — nothing left to delete.
+          const connection = connectionOfOutput(output);
           if (!connection) return;
-          yield* deleteObject({ connection, object: output.ref }).pipe(
+          const transport = yield* connectCluster(connection).pipe(
+            // Cluster already destroyed — nothing left to delete.
+            Effect.catchTag("Kubernetes.ClusterNotFoundError", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+          if (!transport) return;
+          yield* deleteObject({ transport, object: output.ref }).pipe(
             // Tolerate any residual API failure so delete stays idempotent
             // (e.g. the CRD backing an object was removed before the object).
             Effect.catch(() => Effect.void),
