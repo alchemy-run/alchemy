@@ -1,5 +1,6 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import type { Input } from "./Input.ts";
 import * as Output from "./Output.ts";
 import type { ResourceLike } from "./Resource.ts";
@@ -86,9 +87,9 @@ export interface Service<
    * The capability's implementation layer must be registered on the stack
    * (cloud `providers()` layers include their plan-executable capabilities).
    *
-   * The binding host is stubbed during execution, so implementations skip
-   * their `host.bind` IAM/env wiring — only the read runs. Failures die and
-   * fail the plan.
+   * Execution is hostless — {@link Host} resolves `undefined`, so
+   * implementations skip their `host.bind` IAM/env wiring and only the read
+   * runs. Failures die and fail the plan.
    *
    * Only capabilities whose runtime client is nullary (`() => Effect<A>`)
    * are executable; parameterized clients type as `never` here.
@@ -125,18 +126,14 @@ export const Service = <
         { concurrency: "unbounded" },
       ).pipe(Effect.flatMap((resolved) => f(...resolved))),
     );
-  // Plan-time invoke (see the `execute` doc on `Service`): bind with a stub
-  // host (so impls skip their `host.bind` wiring — the isBindingHost /
-  // isInstance narrowing rejects it), run the nullary client, and lift the
-  // result into an Output the planner resolves with the stack's services.
+  // Plan-time invoke (see the `execute` doc on `Service`): bind hostless —
+  // `Binding.Host` is total and resolves `undefined`, so impls skip their
+  // `host.bind` wiring — run the nullary client, and lift the result into an
+  // Output the planner resolves with the stack's services.
   (callable as any).execute = (...args: any[]) =>
     Output.fromEffect(
       callable(...args).pipe(
         Effect.flatMap((client: any) => client()),
-        Effect.provideService(Self as any, {
-          Type: "Alchemy::Invoke",
-          LogicalId: id,
-        }),
         Effect.orDie,
       ) as Effect.Effect<any, never, any>,
     );
@@ -149,6 +146,14 @@ export const Service = <
  * is only ever read at DEPLOY time, inside the `if (!globalThis.__ALCHEMY_RUNTIME__)`
  * guard of a binding's impl layer — at runtime the host is absent and the guard
  * skips it, so leaking a `Self` requirement onto the runtime client would be
- * wrong. Narrow it with `isWorker`/`isFunction` before calling `host.bind`.
+ * wrong.
+ *
+ * Total: resolves to `undefined` when no host is ambient — a plan-time
+ * {@link Service.execute} invoke, or a binding client provided directly in a
+ * script/test outside any Function. Narrow it with `isWorker`/`isFunction`/
+ * `isBindingHost` before calling `host.bind`; the guards reject `undefined`.
  */
-export const Host = Self as unknown as Effect.Effect<ResourceLike>;
+export const Host: Effect.Effect<ResourceLike | undefined> =
+  Effect.serviceOption(
+    Self as unknown as Context.Service<ResourceLike, ResourceLike>,
+  ).pipe(Effect.map(Option.getOrUndefined));
