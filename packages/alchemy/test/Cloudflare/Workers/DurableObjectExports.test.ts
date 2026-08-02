@@ -3,6 +3,7 @@ import {
   observeDurableObjectExports,
   observeLegacyDurableObjectStorage,
   planDurableObjectExports,
+  recoverDurableObjectExportState,
   type DurableObjectExportPlan,
   type DurableObjectExportPlanResult,
 } from "@/Cloudflare/Workers/DurableObjectExports";
@@ -25,9 +26,17 @@ describe("DurableObjectExports", () => {
       planDurableObjectExports({
         scriptName: "worker-a",
         classes: [
-          { className: "CounterV2", previousClassName: "Counter" },
-          { className: "Incoming", transferFrom: "worker-b" },
-          { className: "Sandbox" },
+          {
+            kind: "existing",
+            className: "CounterV2",
+            previousClassName: "Counter",
+          },
+          {
+            kind: "incoming-transfer",
+            className: "Incoming",
+            transferFrom: "worker-b",
+          },
+          { kind: "new", className: "Sandbox" },
         ],
         retirements: {
           Removed: { kind: "deleted" },
@@ -115,6 +124,7 @@ describe("DurableObjectExports", () => {
       },
       pendingTransfers: {},
       storageByClass: { Room: "sqlite" },
+      cleanupClassNames: [],
     });
 
     expect(
@@ -133,6 +143,7 @@ describe("DurableObjectExports", () => {
       tombstones: {},
       pendingTransfers: {},
       storageByClass: { Room: "sqlite" },
+      cleanupClassNames: ["Counter"],
     });
   });
 
@@ -156,6 +167,7 @@ describe("DurableObjectExports", () => {
           },
           pendingTransfers: {},
           storageByClass: { CounterV2: "sqlite" },
+          cleanupClassNames: [],
         },
       }),
     );
@@ -163,6 +175,44 @@ describe("DurableObjectExports", () => {
     expect(plan.exports).toEqual({
       CounterV2: { type: "durable-object", state: "deleted" },
     });
+  });
+
+  test("does not restore a tombstone already marked for cleanup", () => {
+    const recovered = recoverDurableObjectExportState(
+      {
+        tombstones: {
+          Counter: { type: "durable-object", state: "deleted" },
+        },
+        pendingTransfers: {},
+        storageByClass: {},
+        cleanupClassNames: [],
+      },
+      {
+        tombstones: {},
+        pendingTransfers: {},
+        storageByClass: {},
+        cleanupClassNames: ["Counter"],
+      },
+    );
+    expect(recovered).toEqual({
+      tombstones: {},
+      pendingTransfers: {},
+      storageByClass: {},
+      cleanupClassNames: ["Counter"],
+    });
+    const plan = unwrapPlan(
+      planDurableObjectExports({
+        scriptName: "worker",
+        classes: [],
+        retirements: {},
+        containerClassNames: new Set(),
+        namespaces: [],
+        observedStorageByClass: {},
+        observedPendingTransfers: {},
+        previousState: recovered,
+      }),
+    );
+    expect(plan.changedClasses).toEqual(["Counter"]);
   });
 
   test("retains submitted pending transfers even without reconciliation", () => {
@@ -187,6 +237,7 @@ describe("DurableObjectExports", () => {
         },
       },
       storageByClass: { Counter: "legacy-kv" },
+      cleanupClassNames: [],
     });
   });
 
@@ -200,11 +251,18 @@ describe("DurableObjectExports", () => {
         },
       },
       storageByClass: { Counter: "sqlite" as const },
+      cleanupClassNames: [],
     };
     const waiting = unwrapPlan(
       planDurableObjectExports({
         scriptName: "target-worker",
-        classes: [{ className: "Counter", previousClassName: "Counter" }],
+        classes: [
+          {
+            kind: "existing",
+            className: "Counter",
+            previousClassName: "Counter",
+          },
+        ],
         retirements: {},
         containerClassNames: new Set(),
         namespaces: [
@@ -231,7 +289,13 @@ describe("DurableObjectExports", () => {
     const activated = unwrapPlan(
       planDurableObjectExports({
         scriptName: "target-worker",
-        classes: [{ className: "Counter", previousClassName: "Counter" }],
+        classes: [
+          {
+            kind: "existing",
+            className: "Counter",
+            previousClassName: "Counter",
+          },
+        ],
         retirements: {},
         containerClassNames: new Set(),
         namespaces: [
@@ -252,6 +316,46 @@ describe("DurableObjectExports", () => {
     });
     expect([...activated.omittedBindingClassNames]).toEqual([]);
     expect(activated.changedClasses).toEqual(["Counter"]);
+  });
+
+  test("rejects renaming a destination while its transfer is pending", () => {
+    const result = planDurableObjectExports({
+      scriptName: "target-worker",
+      classes: [
+        {
+          kind: "existing",
+          className: "CounterV2",
+          previousClassName: "Counter",
+        },
+      ],
+      retirements: {},
+      containerClassNames: new Set(),
+      namespaces: [
+        {
+          script: "source-worker",
+          className: "Counter",
+          storage: "sqlite",
+        },
+      ],
+      observedStorageByClass: {},
+      observedPendingTransfers: {},
+      previousState: {
+        tombstones: {},
+        pendingTransfers: {
+          Counter: {
+            transferFrom: "source-worker",
+            storage: "sqlite",
+          },
+        },
+        storageByClass: { Counter: "sqlite" },
+        cleanupClassNames: [],
+      },
+    });
+
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") {
+      expect(result.error._tag).toBe("DurableObjectPendingTransferRename");
+    }
   });
 
   test("recovers storage and pending transfers from settings exports", () => {
@@ -291,7 +395,13 @@ describe("DurableObjectExports", () => {
   test("fails instead of guessing storage for an existing class", () => {
     const result = planDurableObjectExports({
       scriptName: "dispatch-worker",
-      classes: [{ className: "Counter", previousClassName: "Counter" }],
+      classes: [
+        {
+          kind: "existing",
+          className: "Counter",
+          previousClassName: "Counter",
+        },
+      ],
       retirements: {},
       containerClassNames: new Set(),
       namespaces: [],
@@ -355,6 +465,7 @@ describe("DurableObjectExports", () => {
         Incoming: "legacy-kv",
         Room: "sqlite",
       },
+      cleanupClassNames: [],
     });
   });
 

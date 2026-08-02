@@ -1,4 +1,5 @@
 import type * as workers from "@distilled.cloud/cloudflare/workers";
+import type * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
 import * as Data from "effect/Data";
 import * as Predicate from "effect/Predicate";
 
@@ -30,6 +31,7 @@ export interface DurableObjectExportState {
   tombstones: Record<string, DurableObjectTombstone>;
   pendingTransfers: Record<string, DurableObjectPendingTransfer>;
   storageByClass: Record<string, DurableObjectStorage>;
+  cleanupClassNames: string[];
 }
 
 export interface DurableObjectNamespace {
@@ -38,11 +40,18 @@ export interface DurableObjectNamespace {
   storage: DurableObjectStorage;
 }
 
-export interface DurableObjectClassObservation {
-  className: string;
-  previousClassName?: string;
-  transferFrom?: string;
-}
+export type DurableObjectClassObservation =
+  | { kind: "new"; className: string }
+  | {
+      kind: "existing";
+      className: string;
+      previousClassName: string;
+    }
+  | {
+      kind: "incoming-transfer";
+      className: string;
+      transferFrom: string;
+    };
 
 export type DurableObjectRetirement =
   | { kind: "deleted" }
@@ -116,17 +125,51 @@ export class ConflictingDurableObjectExports extends Data.TaggedError(
   }
 }
 
+export class DurableObjectPendingTransferRename extends Data.TaggedError(
+  "DurableObjectPendingTransferRename",
+)<{
+  scriptName: string;
+  previousClassName: string;
+  className: string;
+}> {
+  override get message() {
+    return `Durable Object class '${this.previousClassName}' on Worker '${this.scriptName}' is still waiting for a namespace transfer and cannot be renamed to '${this.className}' yet. Deploy the transfer with class '${this.previousClassName}' until it completes, then rename it in a later deploy.`;
+  }
+}
+
 export type DurableObjectExportPlanResult =
   | { _tag: "Success"; plan: DurableObjectExportPlan }
   | {
       _tag: "Failure";
-      error: DurableObjectStorageUnknown | ConflictingDurableObjectExports;
+      error:
+        | DurableObjectStorageUnknown
+        | ConflictingDurableObjectExports
+        | DurableObjectPendingTransferRename;
     };
 
 export interface ObservedDurableObjectExports {
   storageByClass: Record<string, DurableObjectStorage>;
   pendingTransfers: Record<string, DurableObjectPendingTransfer>;
 }
+
+export const recoverDurableObjectExportState = (
+  tagged: DurableObjectExportState | undefined,
+  persisted: DurableObjectExportState | undefined,
+): DurableObjectExportState | undefined => {
+  if (tagged === undefined) return persisted;
+  const cleanupClassNames = persisted?.cleanupClassNames ?? [];
+  const cleanup = new Set(cleanupClassNames);
+  return {
+    tombstones: Object.fromEntries(
+      Object.entries(tagged.tombstones).filter(
+        ([className]) => !cleanup.has(className),
+      ),
+    ),
+    pendingTransfers: tagged.pendingTransfers,
+    storageByClass: tagged.storageByClass,
+    cleanupClassNames,
+  };
+};
 
 const isStorage = (value: unknown): value is DurableObjectStorage =>
   value === "sqlite" || value === "legacy-kv";
@@ -141,33 +184,32 @@ const stringArrayMember = (value: unknown, key: string): string[] =>
     ? value[key].filter((item): item is string => typeof item === "string")
     : [];
 
-const objectEntries = (value: unknown): Array<[string, unknown]> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
-    ? Object.entries(value)
-    : [];
+type SettingsExports =
+  | workers.ScriptsScriptAndVersionSettingsGetResponseExportsMap
+  | wfp.DispatchNamespacesScriptsSettingsGetResponseExportsMap
+  | null
+  | undefined;
 
 /**
  * Read the live export state returned by either the regular Worker settings
  * endpoint or the Workers for Platforms settings endpoint.
  */
 export const observeDurableObjectExports = (
-  value: unknown,
+  value: SettingsExports,
 ): ObservedDurableObjectExports => {
   const storageByClass: Record<string, DurableObjectStorage> = {};
   const pendingTransfers: Record<string, DurableObjectPendingTransfer> = {};
 
-  for (const [className, entry] of objectEntries(value)) {
-    if (stringMember(entry, "type") !== "durable-object") continue;
-    const storage = Predicate.hasProperty(entry, "storage")
-      ? entry.storage
-      : undefined;
+  for (const [className, entry] of Object.entries(value ?? {})) {
+    if (entry?.type !== "durable-object") continue;
+    const storage = entry.storage;
     if (!isStorage(storage)) continue;
     storageByClass[className] = storage;
 
-    if (stringMember(entry, "state") !== "expecting-transfer") continue;
-    const transferFrom = stringMember(entry, "transferFrom");
+    if (entry.state !== "expecting-transfer") continue;
+    const transferFrom = entry.transferFrom ?? undefined;
     if (transferFrom === undefined) continue;
-    const container = stringMember(entry, "container");
+    const container = entry.container ?? undefined;
     pendingTransfers[className] = {
       transferFrom,
       storage,
@@ -335,8 +377,22 @@ export const planDurableObjectExports = ({
     const container = containerClassNames.has(current.className)
       ? current.className
       : undefined;
-    const pending = pendingTransfers[current.className];
+    const pendingClassName =
+      current.kind === "existing"
+        ? current.previousClassName
+        : current.className;
+    const pending = pendingTransfers[pendingClassName];
     if (pending !== undefined) {
+      if (pendingClassName !== current.className) {
+        return {
+          _tag: "Failure",
+          error: new DurableObjectPendingTransferRename({
+            scriptName,
+            previousClassName: pendingClassName,
+            className: current.className,
+          }),
+        };
+      }
       const sourceStillHosts = namespaces.some(
         (namespace) =>
           namespace.script === pending.transferFrom &&
@@ -362,27 +418,7 @@ export const planDurableObjectExports = ({
       continue;
     }
 
-    if (
-      current.previousClassName !== undefined &&
-      current.transferFrom !== undefined
-    ) {
-      return {
-        _tag: "Failure",
-        error: new ConflictingDurableObjectExports({
-          scriptName,
-          className: current.className,
-          current: { kind: "renamed", renamedTo: current.className },
-          next: {
-            kind: "expecting-transfer",
-            transferFrom: current.transferFrom,
-            storage: "sqlite",
-            container,
-          },
-        }),
-      };
-    }
-
-    if (current.previousClassName !== undefined) {
+    if (current.kind === "existing") {
       const storage = storageFor(
         namespaces,
         scriptName,
@@ -420,7 +456,7 @@ export const planDurableObjectExports = ({
       continue;
     }
 
-    if (current.transferFrom !== undefined) {
+    if (current.kind === "incoming-transfer") {
       const storage = storageFor(
         namespaces,
         current.transferFrom,
@@ -461,7 +497,7 @@ export const planDurableObjectExports = ({
       return directives[tombstone.renamedTo]?.kind === "live";
     }),
   );
-  const changedClasses = new Set<string>();
+  const changedClasses = new Set(previousState?.cleanupClassNames ?? []);
   const omittedBindingClassNames = new Set<string>();
 
   for (const [className, directive] of Object.entries(directives)) {
@@ -563,7 +599,13 @@ export const nextDurableObjectExportState = (
 
   return Object.keys(tombstones).length > 0 ||
     Object.keys(pendingTransfers).length > 0 ||
-    Object.keys(storageByClass).length > 0
-    ? { tombstones, pendingTransfers, storageByClass }
+    Object.keys(storageByClass).length > 0 ||
+    removable.size > 0
+    ? {
+        tombstones,
+        pendingTransfers,
+        storageByClass,
+        cleanupClassNames: [...removable],
+      }
     : undefined;
 };

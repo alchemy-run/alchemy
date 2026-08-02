@@ -1,8 +1,12 @@
 import type { DurableObjectExportState } from "@/Cloudflare/Workers/DurableObjectExports";
 import type * as workers from "@distilled.cloud/cloudflare/workers";
 
+const LEGACY_MAPPING_TAG_PREFIX = "alchemy:do:";
+const MAPPING_TAG_PREFIX = "alchemy:dos:";
 const EXPORT_TAG_PREFIX = "alchemy:doe:";
-const MAX_TAG_BYTES = 1024;
+
+/** Cloudflare rejects Worker tags larger than 1,024 bytes. */
+export const MAX_WORKER_TAG_BYTES = 1024;
 
 const encode = encodeURIComponent;
 
@@ -23,23 +27,69 @@ const isStorage = (value: unknown): value is "sqlite" | "legacy-kv" =>
 const decodeStorage = (value: string) =>
   value === "s" ? "sqlite" : value === "k" ? "legacy-kv" : undefined;
 
-const packRecords = (records: readonly string[]): string[] => {
+const packRecords = (prefix: string, records: readonly string[]): string[] => {
   const tags: string[] = [];
   let payload = "";
   for (const record of records) {
     const appended = payload === "" ? record : `${payload};${record}`;
     if (
-      EXPORT_TAG_PREFIX.length + appended.length > MAX_TAG_BYTES &&
+      prefix.length + appended.length > MAX_WORKER_TAG_BYTES &&
       payload !== ""
     ) {
-      tags.push(`${EXPORT_TAG_PREFIX}${payload}`);
+      tags.push(`${prefix}${payload}`);
       payload = record;
     } else {
       payload = appended;
     }
   }
-  if (payload !== "") tags.push(`${EXPORT_TAG_PREFIX}${payload}`);
+  if (payload !== "") tags.push(`${prefix}${payload}`);
   return tags;
+};
+
+/** Pack logical-id to class mappings into bounded Worker tags. */
+export const encodeDurableObjectTags = (
+  durableObjects: ReadonlyArray<{ logicalId: string; className: string }>,
+): string[] =>
+  packRecords(
+    MAPPING_TAG_PREFIX,
+    [...durableObjects]
+      .sort((left, right) => left.logicalId.localeCompare(right.logicalId))
+      .map(({ logicalId, className }) =>
+        logicalId === className
+          ? encode(className)
+          : `${encode(logicalId)}=${encode(className)}`,
+      ),
+  );
+
+/** Parse both current packed mappings and the legacy per-object format. */
+export const getDurableObjectTagMap = (
+  tags: readonly string[],
+): Record<string, string> => {
+  const mapping: Record<string, string> = {};
+  for (const tag of tags) {
+    if (!tag.startsWith(LEGACY_MAPPING_TAG_PREFIX)) continue;
+    const parts = tag.split(":");
+    const logicalId = parts[2];
+    const className = parts.slice(3).join(":");
+    if (logicalId && className && !(logicalId in mapping)) {
+      mapping[logicalId] = className;
+    }
+  }
+  for (const tag of tags) {
+    if (!tag.startsWith(MAPPING_TAG_PREFIX)) continue;
+    for (const pair of tag.slice(MAPPING_TAG_PREFIX.length).split(";")) {
+      if (pair === "") continue;
+      const separator = pair.indexOf("=");
+      const logicalId = decode(
+        separator === -1 ? pair : pair.slice(0, separator),
+      );
+      const className = decode(
+        separator === -1 ? pair : pair.slice(separator + 1),
+      );
+      if (logicalId && className) mapping[logicalId] = className;
+    }
+  }
+  return mapping;
 };
 
 /**
@@ -85,7 +135,7 @@ export const encodeDurableObjectExportTags = (
     records.push(`l:${encodedClassName}:${storageCode(storage)}${container}`);
   }
 
-  return packRecords(records);
+  return packRecords(EXPORT_TAG_PREFIX, records);
 };
 
 /** Read a previously submitted export contract from live Worker tags. */
@@ -151,9 +201,16 @@ export const getDurableObjectExportStateFromTags = (
   return Object.keys(tombstones).length > 0 ||
     Object.keys(pendingTransfers).length > 0 ||
     Object.keys(storageByClass).length > 0
-    ? { tombstones, pendingTransfers, storageByClass }
+    ? {
+        tombstones,
+        pendingTransfers,
+        storageByClass,
+        cleanupClassNames: [],
+      }
     : undefined;
 };
 
-export const isDurableObjectExportTag = (tag: string): boolean =>
+export const isDurableObjectTag = (tag: string): boolean =>
+  tag.startsWith(LEGACY_MAPPING_TAG_PREFIX) ||
+  tag.startsWith(MAPPING_TAG_PREFIX) ||
   tag.startsWith(EXPORT_TAG_PREFIX);

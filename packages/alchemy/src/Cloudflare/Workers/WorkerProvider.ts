@@ -40,14 +40,18 @@ import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
 import {
   encodeDurableObjectExportTags,
+  encodeDurableObjectTags,
   getDurableObjectExportStateFromTags,
-  isDurableObjectExportTag,
+  getDurableObjectTagMap,
+  isDurableObjectTag,
+  MAX_WORKER_TAG_BYTES,
 } from "./DurableObjectExportTags.ts";
 import {
   nextDurableObjectExportState,
   observeDurableObjectExports,
   observeLegacyDurableObjectStorage,
   planDurableObjectExports,
+  recoverDurableObjectExportState,
   type DurableObjectClassObservation,
   type DurableObjectRetirement,
 } from "./DurableObjectExports.ts";
@@ -3263,13 +3267,19 @@ export const LiveWorkerProvider = () =>
                   ),
                   observedNamespaces,
                 });
-            classObservations.push({
-              className: binding.className,
-              transferFrom,
-            });
+            classObservations.push(
+              transferFrom === undefined
+                ? { kind: "new", className: binding.className }
+                : {
+                    kind: "incoming-transfer",
+                    className: binding.className,
+                    transferFrom,
+                  },
+            );
             continue;
           }
           classObservations.push({
+            kind: "existing",
             className: binding.className,
             previousClassName,
           });
@@ -3290,7 +3300,10 @@ export const LiveWorkerProvider = () =>
             ...taggedExportState?.pendingTransfers,
             ...observedExports.pendingTransfers,
           },
-          previousState: taggedExportState ?? output?.durableObjectExportState,
+          previousState: recoverDurableObjectExportState(
+            taggedExportState,
+            output?.durableObjectExportState,
+          ),
         });
         if (durableObjectPlanResult._tag === "Failure") {
           return yield* Effect.fail(durableObjectPlanResult.error);
@@ -3773,7 +3786,8 @@ export const LiveWorkerProvider = () =>
       ) {
         if (
           Object.keys(output.durableObjectExportState?.pendingTransfers ?? {})
-            .length > 0
+            .length > 0 ||
+          (output.durableObjectExportState?.cleanupClassNames?.length ?? 0) > 0
         ) {
           return true;
         }
@@ -5051,125 +5065,12 @@ function getDurableObjectBindings(
   );
 }
 
-/**
- * Cloudflare Worker script-tag limits, verified empirically against the live
- * API (2026-07):
- *
- * - at most **10 tags** per Worker (the 11th is rejected with `Forbidden`)
- * - each tag is at most **1024 bytes** (`BadRequest: Tag is too large`)
- * - tags may not contain `,` or `&`; everything else (`:`, `;`, `=`, `/`,
- *   spaces, unicode) is accepted and round-trips intact
- *
- * Alchemy reserves 3 ownership tags (`alchemy:stack/stage/id`), so the
- * Durable Object logical-id→class mapping must not spend one tag per DO
- * (#811). Instead all mappings are packed into as few `alchemy:dos:` tags as
- * possible.
- */
 const MAX_TAGS_PER_WORKER = 10;
-const MAX_TAG_BYTES = 1024;
-const LEGACY_DO_TAG_PREFIX = "alchemy:do:";
-const PACKED_DO_TAG_PREFIX = "alchemy:dos:";
 
 class InvalidWorkerTags extends Data.TaggedError("InvalidWorkerTags")<{
   scriptName: string;
   reason: string;
 }> {}
-
-/**
- * Pack Durable Object logical-id→class mappings into `alchemy:dos:` tags.
- *
- * Each mapping is encoded as `logicalId=className` — elided to just
- * `className` when the two are equal (the common case for export-derived
- * classes) — with both components `encodeURIComponent`-escaped so the `;`
- * pair separator, the `=` delimiter, and Cloudflare's forbidden tag
- * characters (`,`, `&`) can never collide with user identifiers. Pairs are
- * sorted for deterministic output and greedily packed so each tag stays
- * within Cloudflare's 1024-byte tag limit; workers with more DOs than fit in
- * one tag spill into additional `alchemy:dos:` tags.
- *
- * `encodeURIComponent` output is pure ASCII, so `String.length` equals the
- * tag's byte length.
- *
- * @internal exported for unit testing.
- */
-export function encodeDurableObjectTags(
-  durableObjects: ReadonlyArray<{ logicalId: string; className: string }>,
-): string[] {
-  const pairs = [...durableObjects]
-    .sort((a, b) => a.logicalId.localeCompare(b.logicalId))
-    .map(({ logicalId, className }) =>
-      logicalId === className
-        ? encodeURIComponent(className)
-        : `${encodeURIComponent(logicalId)}=${encodeURIComponent(className)}`,
-    );
-  const tags: string[] = [];
-  let payload = "";
-  for (const pair of pairs) {
-    const appended = payload === "" ? pair : `${payload};${pair}`;
-    if (
-      PACKED_DO_TAG_PREFIX.length + appended.length > MAX_TAG_BYTES &&
-      payload !== ""
-    ) {
-      tags.push(`${PACKED_DO_TAG_PREFIX}${payload}`);
-      payload = pair;
-    } else {
-      payload = appended;
-    }
-  }
-  if (payload !== "") {
-    tags.push(`${PACKED_DO_TAG_PREFIX}${payload}`);
-  }
-  return tags;
-}
-
-/**
- * Parse the Durable Object logical-id→class mapping from a worker's script
- * tags. Reads both formats so workers deployed before the packed format roll
- * forward transparently:
- *
- * - legacy: one `alchemy:do:{logicalId}:{className}` tag per DO
- * - packed: `alchemy:dos:{pair};{pair};…` (see {@link encodeDurableObjectTags})
- *
- * A packed entry wins over a legacy entry for the same logical id.
- *
- * @internal exported for unit testing.
- */
-export function getDurableObjectTagMap(tags: ReadonlyArray<string>) {
-  const map: Record<string, string> = {};
-  for (const tag of tags) {
-    if (tag.startsWith(LEGACY_DO_TAG_PREFIX)) {
-      const parts = tag.split(":");
-      const logicalId = parts[2];
-      const className = parts.slice(3).join(":");
-      if (logicalId && className && !(logicalId in map)) {
-        map[logicalId] = className;
-      }
-    }
-  }
-  for (const tag of tags) {
-    if (tag.startsWith(PACKED_DO_TAG_PREFIX)) {
-      for (const pair of tag.slice(PACKED_DO_TAG_PREFIX.length).split(";")) {
-        if (pair === "") continue;
-        const eq = pair.indexOf("=");
-        const logicalId = decodeURIComponent(
-          eq === -1 ? pair : pair.slice(0, eq),
-        );
-        const className = decodeURIComponent(
-          eq === -1 ? pair : pair.slice(eq + 1),
-        );
-        if (logicalId && className) {
-          map[logicalId] = className;
-        }
-      }
-    }
-  }
-  return map;
-}
-
-const isDurableObjectTag = (tag: string) =>
-  tag.startsWith(LEGACY_DO_TAG_PREFIX) ||
-  tag.startsWith(PACKED_DO_TAG_PREFIX) ||
-  isDurableObjectExportTag(tag);
 
 /**
  * Fail fast — before the script upload — when a worker's tag set violates
@@ -5206,11 +5107,11 @@ const validateWorkerTags = (
         );
       }
       const bytes = yield* Effect.sync(() => encoder.encode(tag).length);
-      if (bytes > MAX_TAG_BYTES) {
+      if (bytes > MAX_WORKER_TAG_BYTES) {
         return yield* Effect.fail(
           new InvalidWorkerTags({
             scriptName,
-            reason: `worker "${scriptName}" tag ${JSON.stringify(tag.slice(0, 64))}… is ${bytes} bytes; Cloudflare allows at most ${MAX_TAG_BYTES}.`,
+            reason: `worker "${scriptName}" tag ${JSON.stringify(tag.slice(0, 64))}… is ${bytes} bytes; Cloudflare allows at most ${MAX_WORKER_TAG_BYTES}.`,
           }),
         );
       }
