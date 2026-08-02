@@ -231,6 +231,8 @@ const assertFunctionImage = Effect.fn(function* (
   yield* Lambda.getFunction({ FunctionName: deployedFunctionName }).pipe(
     Effect.filterOrFail(
       (response) =>
+        response.Configuration?.State === "Active" &&
+        response.Configuration.LastUpdateStatus === "Successful" &&
         response.Configuration?.PackageType === "Image" &&
         response.Configuration.Architectures?.[0] === architecture &&
         response.Code?.ResolvedImageUri?.includes("@sha256:") === true,
