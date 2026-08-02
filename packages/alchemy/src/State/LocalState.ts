@@ -32,6 +32,14 @@ export const localState = () =>
     }),
   );
 
+/**
+ * Construct the local file-based state store (`.alchemy/state/`).
+ *
+ * `Redacted` values are encrypted at rest with an auto-generated
+ * machine key at `~/.alchemy/state.key` (created on first use). Set
+ * `ALCHEMY_PASSWORD` to use a shared password-derived key instead —
+ * e.g. to share one state tree across machines.
+ */
 export const makeLocalState = () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
