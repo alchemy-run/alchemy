@@ -143,6 +143,38 @@ export const resolveNamespaceName = (
 };
 
 /**
+ * Resolve a Worker's `tailConsumers` prop into the wire-shape consumer list
+ * (`[{ service }]`). The engine resolves a passed {@link Worker} to its
+ * Attributes object — possibly stables-only during planning, but
+ * `workerName` is always a stable — so each entry is either a script-name
+ * string or that attributes object. Whole-resource entries are reduced to
+ * the script name alone so hashing/diffing never sees the consumer's
+ * per-deploy fields (`hash`, `url`, ...), mirroring
+ * {@link resolveVersionParentName}.
+ *
+ * An empty array resolves to `[]` (explicitly detach every consumer);
+ * `undefined`/absent resolves to `undefined`.
+ *
+ * This is also the seam for local emulation: the local provider lowers this
+ * same resolved list into workerd's `Worker.tails` service designators
+ * (`RuntimeWorker.tails`).
+ *
+ * @internal
+ */
+export const resolveTailConsumers = (
+  tailConsumers: WorkerProps["tailConsumers"],
+): { service: string }[] | undefined => {
+  if (tailConsumers == null) return undefined;
+  return tailConsumers.flatMap((consumer) => {
+    const service =
+      typeof consumer === "string"
+        ? consumer
+        : (consumer as { workerName?: unknown }).workerName;
+    return typeof service === "string" ? [{ service }] : [];
+  });
+};
+
+/**
  * A Worker's `version` configuration is invalid — a prop that can't be
  * combined with `version.parent` (script-level settings belong to the
  * parent), a locally-hosted Durable Object / Workflow class on a version
@@ -962,6 +994,10 @@ const resolveWorkerMetadataHash = ({
     observability: props.observability,
     placement: props.placement,
     tags: props.tags,
+    // Reduce each consumer to its script name: a referenced Worker's other
+    // attributes (hash, url, ...) change on every consumer deploy, which
+    // would spuriously re-deploy this producer.
+    tailConsumers: resolveTailConsumers(props.tailConsumers),
     workersDev: resolveWorkersDev(props.workersDev),
     // Reduce `version.parent` to the parent's script name: the resolved
     // parent is a full attributes object whose *other* fields (hash, url,
@@ -2539,6 +2575,7 @@ export const LiveWorkerProvider = () =>
             ["assets", news.assets],
             ["namespace", news.namespace],
             ["crons", news.crons],
+            ["tailConsumers", news.tailConsumers],
             ["domain", news.domain],
             ["routes", news.routes],
             ["tags", news.tags],
@@ -2932,6 +2969,12 @@ export const LiveWorkerProvider = () =>
               const { queueId: _, shim: __, ...rest } = item;
               return rest;
             }
+            // `dev` (local-emulation opt-out) is alchemy-only metadata on
+            // browser bindings — strip it from the wire shape.
+            if (item.type === "browser" && item.dev !== undefined) {
+              const { dev: _, ...rest } = item;
+              return rest;
+            }
             return item;
           }),
         );
@@ -3316,6 +3359,7 @@ export const LiveWorkerProvider = () =>
         );
 
         const compatibility = getCompatibility(news);
+        const tailConsumers = resolveTailConsumers(news.tailConsumers);
         const metadata: workers.PutScriptRequest["metadata"] = {
           assets: metadataAssets,
           bindings: metadataBindings,
@@ -3340,7 +3384,7 @@ export const LiveWorkerProvider = () =>
           },
           placement: news.placement,
           tags: metadataTags,
-          tailConsumers: undefined,
+          tailConsumers,
           usageModel: undefined,
         };
         const rolloutTraffic = getSelfRolloutTraffic(news);
@@ -3515,6 +3559,9 @@ export const LiveWorkerProvider = () =>
             domain: undefined,
             routes: [],
             crons: [],
+            tailConsumers:
+              settings.tailConsumers?.map((c) => ({ service: c.service })) ??
+              tailConsumers,
             hash,
           } satisfies Worker["Attributes"];
         }
@@ -3756,6 +3803,13 @@ export const LiveWorkerProvider = () =>
           accountId,
           routes,
           crons,
+          // Observed post-upload settings are authoritative: the gradual
+          // rollout branch above deploys via the versions API, which leaves
+          // script-level settings (tail consumers included) at their live
+          // values until the next full deploy.
+          tailConsumers:
+            settings.tailConsumers?.map((c) => ({ service: c.service })) ??
+            tailConsumers,
           versionOf: undefined,
           versionId,
           deploymentId,
@@ -4451,6 +4505,9 @@ export const LiveWorkerProvider = () =>
                 domain: undefined,
                 routes: [],
                 crons: [],
+                tailConsumers: settings.tailConsumers?.map((c) => ({
+                  service: c.service,
+                })),
               } satisfies Worker["Attributes"];
               return hasAlchemyWorkerTags(id, settings.tags ?? [])
                 ? attrs
@@ -4571,6 +4628,9 @@ export const LiveWorkerProvider = () =>
               durableObjectNamespaces: getDurableObjects(settings.bindings),
               routes: routesList,
               crons,
+              tailConsumers: settings.tailConsumers?.map((c) => ({
+                service: c.service,
+              })),
               // Rule placement is provider-managed state, not observed here
               // (a getPhas call per known zone on every read); carry the
               // cleanup list forward like any other stable cache.

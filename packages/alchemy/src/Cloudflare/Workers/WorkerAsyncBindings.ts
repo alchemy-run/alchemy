@@ -320,6 +320,8 @@ const toBinding = (
     return {
       type: "browser",
       name: bindingName,
+      // Alchemy-only local-emulation opt-out (stripped before upload).
+      dev: binding.dev,
     };
   } else if (isApp(binding)) {
     return {

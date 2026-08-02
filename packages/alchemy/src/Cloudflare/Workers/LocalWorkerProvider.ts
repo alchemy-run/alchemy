@@ -31,6 +31,7 @@ import {
   R2Bucket,
   RateLimit,
   SecretKey,
+  SecretsStore,
   SendEmail,
   Service,
   Text,
@@ -1056,7 +1057,12 @@ export const toRuntimeBinding = Effect.fn(function* (
     case "assets":
       return Assets.local(b.name);
     case "browser":
-      return Browser.remote(b.name);
+      // Local emulation launches a real headless Chrome on this machine and
+      // proxies the Browser Rendering session protocol to its CDP endpoint;
+      // `dev: { remote: true }` opts into the real service instead.
+      return b.dev?.remote
+        ? Browser.remote(b.name)
+        : Browser.local({ binding: b.name });
     case "d1":
       // A `dev:` id belongs to a locally-emulated database (local D1
       // provider); a real id is a live database the dev worker proxies to
@@ -1164,7 +1170,16 @@ export const toRuntimeBinding = Effect.fn(function* (
     case "secret_text":
       return Text.local(b.name, b.text);
     case "secrets_store_secret":
-      return yield* unsupported();
+      // A `dev:` store id belongs to a locally-emulated Secrets Store
+      // (local Store/Secret providers seed the simulator); a real id is a
+      // live secret the dev worker proxies to (`Alchemy.remote()`).
+      return isLocalId(b.storeId)
+        ? SecretsStore.local({
+            binding: b.name,
+            storeId: b.storeId,
+            secretName: b.secretName,
+          })
+        : SecretsStore.remote(b.name, b.storeId, b.secretName);
     case "send_email":
       return SendEmail[dev?.remote ? "remote" : "local"]({
         binding: b.name,

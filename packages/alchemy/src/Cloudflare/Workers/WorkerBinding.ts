@@ -94,6 +94,20 @@ export type QueueWorkerBinding = Extract<
 };
 
 /**
+ * The `browser` metadata binding extended with the alchemy-only `dev`
+ * options. `dev.remote` opts the binding out of local emulation in
+ * `alchemy dev` (the local worker proxies to the real Browser Rendering
+ * service instead of a locally-launched Chrome). Stripped from the binding
+ * before the script upload — Cloudflare never sees it.
+ */
+export type BrowserWorkerBinding = Extract<
+  DistilledWorkerBinding,
+  { type: "browser" }
+> & {
+  dev?: { remote?: boolean };
+};
+
+/**
  * The wire-shape binding union the Cloudflare API accepts — {@link WorkerBinding}
  * minus the alchemy-only members that must be lowered before upload.
  */
@@ -102,10 +116,13 @@ export type WireWorkerBinding = Exclude<WorkerBinding, SelfUrlWorkerBinding>;
 export type WorkerBinding =
   | Exclude<
       DistilledWorkerBinding,
-      { type: "durable_object_namespace" } | { type: "queue" }
+      | { type: "durable_object_namespace" }
+      | { type: "queue" }
+      | { type: "browser" }
     >
   | DurableObjectNamespaceWorkerBinding
   | QueueWorkerBinding
+  | BrowserWorkerBinding
   | SelfUrlWorkerBinding;
 
 export type WorkerSettingsBinding = Exclude<
