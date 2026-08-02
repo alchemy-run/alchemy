@@ -8,7 +8,6 @@ import { StateApi } from "./HttpStateApi.ts";
 
 import type { ReplacedResourceState, ResourceState } from "./ResourceState.ts";
 import {
-  stateDecodeError,
   StateStoreError,
   type PersistedState,
   type StateService,
@@ -91,20 +90,6 @@ export const makeHttpStateStore = ({
     });
     const state = apiClient.state;
 
-    // The HTTP store deliberately never encrypts client-side — not even
-    // when ALCHEMY_PASSWORD is set. The store is shared by definition,
-    // and a password present in one writer's environment would silently
-    // make every record it writes unreadable to every other reader
-    // (teammates, CI, the hosted dashboard). At-rest protection is the
-    // server's job (the Cloudflare-hosted store encrypts every record
-    // server-side). ALCHEMY_PASSWORD only applies to stores that own
-    // their key material: local and S3.
-    const tryRevive = <T>(s: unknown, what: string) =>
-      Effect.try({
-        try: () => reviveStateRecursive(s) as T,
-        catch: stateDecodeError(what),
-      });
-
     const service: StateService = {
       id,
       getVersion: () =>
@@ -131,17 +116,19 @@ export const makeHttpStateStore = ({
             },
           })
           .pipe(
-            Effect.flatMap((s) =>
+            Effect.map((s) =>
               s == null
-                ? Effect.succeed(undefined)
-                : tryRevive<ResourceState>(s, request.fqn),
+                ? undefined
+                : (reviveStateRecursive(s) as ResourceState),
             ),
             mapStateStoreError,
           ),
       getReplacedResources: (request) =>
         state.getReplacedResources({ params: request }).pipe(
-          Effect.flatMap((resources) =>
-            tryRevive<ReplacedResourceState[]>(resources, "replaced resources"),
+          Effect.map((resources) =>
+            resources.map(
+              (s) => reviveStateRecursive(s) as ReplacedResourceState,
+            ),
           ),
           mapStateStoreError,
         ),
@@ -190,10 +177,8 @@ export const makeHttpStateStore = ({
             params: { stack: request.stack, stage: request.stage },
           })
           .pipe(
-            Effect.flatMap((s) =>
-              s == null
-                ? Effect.succeed(undefined)
-                : tryRevive(s, "__stack_output__"),
+            Effect.map((s) =>
+              s == null ? undefined : reviveStateRecursive(s),
             ),
             mapStateStoreError,
           ),
