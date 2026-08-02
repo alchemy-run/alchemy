@@ -118,6 +118,33 @@ export const encodeState = (value: unknown, codec?: SecretCodec): unknown => {
 };
 
 /**
+ * Whether a state value contains any `Redacted<T>` — i.e. whether
+ * {@link encodeState} would need a {@link SecretCodec} at all. Lets
+ * stores with expensive codec resolution (S3/KMS) skip it entirely for
+ * secret-free values.
+ */
+export const containsRedacted = (value: unknown): boolean => {
+  if (value === null || typeof value !== "object") return false;
+  if (Redacted.isRedacted(value)) return true;
+  if (Duration.isDuration(value)) return false;
+  if (isResource(value)) {
+    return containsRedacted(value.Props) || containsRedacted(value.Attributes);
+  }
+  if (Array.isArray(value)) return value.some(containsRedacted);
+  return Object.values(value).some(containsRedacted);
+};
+
+/**
+ * Cheap pre-parse check for encrypted envelopes in raw state JSON. A
+ * plain string value containing the marker text can false-positive —
+ * harmless, the reviver only decrypts actual single-key envelope
+ * objects — but a real `{ "__secret__": ... }` key always matches, so
+ * a `false` result guarantees the codec is not needed.
+ */
+export const hasSecretMarker = (json: string): boolean =>
+  json.includes(`"${SECRET_MARKER}"`);
+
+/**
  * Rebuild a `Redacted<T>` from a `{ [SECRET_MARKER]: <ciphertext> }`
  * envelope. Throws with an actionable message when no codec is available
  * (state was encrypted but `ALCHEMY_PASSWORD` is not set) — the state

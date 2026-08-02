@@ -25,7 +25,12 @@ import {
   resolveSecretPassword,
   type SecretCodec,
 } from "../../State/SecretCodec.ts";
-import { encodeState, makeStateReviver } from "../../State/StateEncoding.ts";
+import {
+  containsRedacted,
+  encodeState,
+  hasSecretMarker,
+  makeStateReviver,
+} from "../../State/StateEncoding.ts";
 import { recordStateStoreInit } from "../../Telemetry/Metrics.ts";
 import { AwsAuth } from "../AuthProvider.ts";
 import * as AwsCredentials from "../Credentials.ts";
@@ -232,6 +237,12 @@ export const makeS3State = (options: S3StateOptions = {}) =>
     // the wrapped data key, so it cannot run before `bucket`):
     // ALCHEMY_PASSWORD → password codec; `secretEncryption: "off"` →
     // plaintext markers; otherwise KMS envelope encryption (below).
+    //
+    // Resolution is deferred further still by the read/write paths: it
+    // only runs when a value actually holds a secret. A stack with no
+    // `Redacted` values never touches KMS — no key is minted and no
+    // `kms:*` permission is required, exactly as before encryption
+    // existed.
     const codecCached = yield* Effect.cached(
       Effect.gen(function* () {
         const password = yield* resolveSecretPassword;
@@ -479,28 +490,34 @@ export const makeS3State = (options: S3StateOptions = {}) =>
           Effect.map((names) => Array.from(names)),
         );
 
+    /** Resolve the codec only when the value at hand actually needs it. */
+    const noCodec = Effect.succeed<SecretCodec | undefined>(undefined);
+
     /** Read and revive a JSON object; `undefined` when the key is absent. */
     const readJson = <T>(bucket: string, key: string) =>
-      Effect.flatMap(codecCached, (codec: SecretCodec | undefined) =>
-        s3.getObject({ Bucket: bucket, Key: key }).pipe(
-          Effect.flatMap((result) =>
-            result.Body === undefined
-              ? Effect.succeed(undefined)
-              : Stream.mkString(Stream.decodeText(result.Body)).pipe(
-                  Effect.flatMap((text) =>
-                    Effect.try({
-                      try: () => JSON.parse(text, makeStateReviver(codec)) as T,
-                      catch: stateDecodeError(key),
-                    }),
+      s3.getObject({ Bucket: bucket, Key: key }).pipe(
+        Effect.flatMap((result) =>
+          result.Body === undefined
+            ? Effect.succeed(undefined)
+            : Stream.mkString(Stream.decodeText(result.Body)).pipe(
+                Effect.flatMap((text) =>
+                  Effect.flatMap(
+                    hasSecretMarker(text) ? codecCached : noCodec,
+                    (codec) =>
+                      Effect.try({
+                        try: () =>
+                          JSON.parse(text, makeStateReviver(codec)) as T,
+                        catch: stateDecodeError(key),
+                      }),
                   ),
                 ),
-          ),
-          Effect.catchTag("NoSuchKey", () => Effect.succeed(undefined)),
+              ),
         ),
+        Effect.catchTag("NoSuchKey", () => Effect.succeed(undefined)),
       );
 
     const writeJson = (bucket: string, key: string, value: unknown) =>
-      Effect.flatMap(codecCached, (codec: SecretCodec | undefined) =>
+      Effect.flatMap(containsRedacted(value) ? codecCached : noCodec, (codec) =>
         s3.putObject({
           Bucket: bucket,
           Key: key,

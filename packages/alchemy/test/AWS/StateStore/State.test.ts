@@ -251,6 +251,42 @@ test.provider(
 );
 
 test.provider(
+  "secret-free state never engages KMS",
+  () =>
+    Effect.gen(function* () {
+      // Distinct prefix: the KMS-wrapped data key object is per-prefix,
+      // so its absence proves the codec was never resolved for this
+      // store — no KMS permission or key is needed without secrets.
+      const prefix = "test-state-plain";
+      const state = yield* makeS3State({ prefix });
+      const stage = "no-secrets";
+
+      yield* state.deleteStack({ stack: STACK, stage });
+
+      yield* Effect.gen(function* () {
+        const value = resource("PlainResource", { url: "https://example.com" });
+        yield* state.set({ stack: STACK, stage, fqn: value.fqn, value });
+        expect(
+          yield* state.get({ stack: STACK, stage, fqn: value.fqn }),
+        ).toEqual(value);
+
+        const { accountId, region } = yield* AWS.AWSEnvironment.current;
+        const wrappedKey = yield* s3
+          .getObject({
+            Bucket: createStateBucketName(accountId, region),
+            Key: `${prefix}/__state_key__.json`,
+          })
+          .pipe(
+            Effect.map(() => "exists"),
+            Effect.catchTag("NoSuchKey", () => Effect.succeed("absent")),
+          );
+        expect(wrappedKey).toBe("absent");
+      }).pipe(Effect.ensuring(cleanStage(state, stage)));
+    }),
+  { timeout: 120_000 },
+);
+
+test.provider(
   "recovers the KMS state key from a pending deletion",
   () =>
     Effect.gen(function* () {
