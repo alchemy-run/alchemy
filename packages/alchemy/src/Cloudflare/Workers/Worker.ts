@@ -463,9 +463,9 @@ export interface WorkerVersionAffinity {
  * A gradual rollout carries only what a version can: code, bindings,
  * compatibility settings, and cache configuration. Workers with static
  * assets cannot roll out gradually (the versions API cannot carry assets),
- * a deploy that changes Durable Object class migrations must go out at
- * 100% (migrations cannot ride a rollout), and script-level settings
- * (tags, observability, limits, placement, logpush) keep their live
+ * a deploy that changes Durable Object class lifecycle must go out at
+ * 100% (export reconciliation cannot ride a rollout), and script-level
+ * settings (tags, observability, limits, placement, logpush) keep their live
  * values until the next full deploy.
  */
 export interface WorkerVersionOptions {
@@ -482,7 +482,7 @@ export interface WorkerVersionOptions {
    * `name`, `assets`, `namespace`, `crons`, `domain`, `routes`, `tags`,
    * `logpush`, `observability`, `placement`, `limits`, and `subdomain` are
    * rejected, as are locally-hosted Durable Object or Workflow classes
-   * (their migrations would mutate the parent).
+   * (their lifecycle changes would mutate the parent).
    *
    * Changing the parent replaces the resource (a version belongs to
    * exactly one script).
@@ -968,6 +968,13 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
       | undefined;
     tags: string[] | undefined;
     durableObjectNamespaces: Record<string, string>;
+    /**
+     * Provider-managed declarative export tombstones and pending transfers.
+     * Tombstones are retained until Cloudflare reports them as removable.
+     *
+     * @internal
+     */
+    durableObjectExportState?: import("./DurableObjectExports.ts").DurableObjectExportState;
     accountId: string;
     routes: { id: string; pattern: string; zoneId: string }[];
     crons: string[];
