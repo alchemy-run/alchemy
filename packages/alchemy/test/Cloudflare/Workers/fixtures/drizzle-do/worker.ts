@@ -43,6 +43,11 @@ export default class DrizzleDurableObjectWorker extends Cloudflare.Worker<Drizzl
           return yield* HttpServerResponse.json({ users: rows });
         }
 
+        if (request.method === "GET" && url.pathname === "/missing-table") {
+          const result = yield* object.queryMissingTable().pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({ result });
+        }
+
         return HttpServerResponse.text("Not Found", { status: 404 });
       }),
     };

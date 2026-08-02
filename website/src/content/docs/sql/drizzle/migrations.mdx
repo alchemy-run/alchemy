@@ -122,30 +122,44 @@ export class Users extends Cloudflare.DurableObject<Users>()(
   "Users",
   Effect.gen(function* () {
     return Effect.gen(function* () {
-      const db = yield* Drizzle.DurableObject({ migrations, relations });
+      const db = yield* Drizzle.DurableObject({ migrations, relations }).pipe(
+        Effect.orDie,
+      );
 
       return {
-        addUser: (name: string) =>
-          Effect.sync(() => db.insert(users).values({ name }).run()),
-        listUsers: () => Effect.sync(() => db.select().from(users).all()),
+        addUser: (name: string) => db.insert(users).values({ name }),
+        listUsers: () => db.select().from(users),
         listUsersWithPosts: () =>
-          Effect.sync(() =>
-            db.query.users.findMany({ with: { posts: true } }).sync(),
-          ),
+          db.query.users.findMany({ with: { posts: true } }),
       };
     });
   }),
 ) {}
 ```
 
-`Drizzle.DurableObject` opens `drizzle-orm/durable-sqlite` over the
-instance's own SQLite storage and applies the migrations before
-returning the db. Both the driver and the migrator are synchronous,
-so it lives in the object's inner Effect — the instance init, which
-runs only in the deployed object, before any request reaches its
-methods. The config passes the driver's options through — the
-`relations` make `db.query.users.findMany({ with: { posts: true } })`
-fully typed.
+`Drizzle.DurableObject` opens drizzle over the instance's own SQLite
+storage using the `drizzle-orm/effect-sqlite-do` integration — the
+same effect-native query surface as [`Drizzle.D1`](/sql/drizzle/d1)
+and [`Drizzle.Postgres`](/sql/drizzle/postgres). It lives in the
+object's inner Effect — the instance init, which runs only in the
+deployed object, before any request reaches its methods. The config
+passes the driver's options through — the `relations` make
+`db.query.users.findMany({ with: { posts: true } })` fully typed.
+
+Every query carries a typed error channel, so failures are handled
+per operation with `Effect.catchTag`:
+
+```typescript
+db.insert(users).values({ name }).pipe(
+  Effect.catchTag("EffectDrizzleQueryError", (error) =>
+    Effect.succeed(undefined),
+  ),
+);
+```
+
+`EffectDrizzleQueryError` carries the query, its params, and the
+underlying cause. Transactions add the effect-sql `SqlError` to the
+union, and the migrator can fail with `MigratorInitError`.
 
 ## The migrations table
 

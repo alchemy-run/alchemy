@@ -82,6 +82,15 @@ test(
       { name: "gimli", posts: ["axes"] },
       { name: "legolas", posts: [] },
     ]);
+
+    // Typed error handling: a failing query is caught inside the DO with
+    // Effect.catchTag rather than escaping as a defect.
+    const missing = yield* client.get(`${url}/missing-table?do=${instance}`);
+    expect(missing.status).toBe(200);
+    const caught = (yield* missing.json) as { result: string };
+    expect(caught.result).toMatch(
+      /^caught:(SqlError|EffectDrizzleQueryError)$/,
+    );
   }),
   { timeout: 120_000 },
 );

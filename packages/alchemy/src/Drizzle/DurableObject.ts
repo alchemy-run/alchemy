@@ -1,32 +1,49 @@
+import * as SqliteDoClient from "@effect/sql-sqlite-do/SqliteClient";
 import type { AnyRelations, EmptyRelations } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/durable-sqlite";
-import { migrate } from "drizzle-orm/durable-sqlite/migrator";
-import type { DrizzleSQLiteConfig } from "drizzle-orm/sqlite-core/utils";
+import * as SQLiteDoDrizzle from "drizzle-orm/effect-sqlite-do";
+import { migrate } from "drizzle-orm/effect-sqlite-do/migrator";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { DurableObjectState } from "../Cloudflare/Workers/DurableObjectState.ts";
+
+/**
+ * Migrations for {@link DurableObject} — the shape of the `migrations.js`
+ * bundle `drizzle-kit generate` emits for `driver: "durable-sqlite"`
+ * (each migration's `.sql` file imported as a text module).
+ */
+export interface DurableObjectMigrations {
+  readonly migrations: Record<string, string>;
+  readonly migrationsTable?: string | undefined;
+}
 
 export interface DurableObjectConfig<
   TRelations extends AnyRelations = EmptyRelations,
-> extends Omit<DrizzleSQLiteConfig<TRelations>, "jit"> {
+> extends Omit<
+  SQLiteDoDrizzle.EffectDrizzleSQLiteDoConfig<TRelations>,
+  "storage"
+> {
   /**
    * Migrations to apply before the db is returned — pass the default
    * export of drizzle-kit's generated `migrations.js` directly.
    */
-  readonly migrations?:
-    | { readonly migrations: Record<string, string> }
-    | undefined;
+  readonly migrations?: DurableObjectMigrations | undefined;
 }
 
 /**
  * Open a Drizzle database over the current Durable Object's SQLite
- * storage (`drizzle-orm/durable-sqlite`), applying drizzle-kit's
- * generated migrations first when provided. The driver and migrator are
- * synchronous, so yield it in the object's inner (instance) Effect —
- * it runs when the instance activates, before any request reaches its
- * methods.
+ * storage using the `drizzle-orm/effect-sqlite-do` integration (driven by
+ * `@effect/sql-sqlite-do`'s `SqliteClient`), applying drizzle-kit's
+ * generated migrations first when provided.
  *
- * The config passes the driver's options through: `relations` (from
- * `defineRelations`) enables typed relational queries via `db.query`.
+ * Every query is an Effect with a typed error channel — drizzle's
+ * `EffectDrizzleQueryError` (query + params + cause, wrapping the
+ * underlying effect-sql `SqlError`) — so failures are handled with
+ * `Effect.catchTag` instead of leaking as defects. Transactions add
+ * `SqlError` to the union; the migrator can additionally fail with
+ * `MigratorInitError`.
+ *
+ * Yield it in the object's inner (instance) Effect — it runs when the
+ * instance activates, before any request reaches its methods:
  *
  * ```typescript
  * // schema.ts
@@ -58,16 +75,25 @@ export interface DurableObjectConfig<
  *   "Users",
  *   Effect.gen(function* () {
  *     return Effect.gen(function* () {
- *       const db = yield* Drizzle.DurableObject({ migrations, relations });
+ *       const db = yield* Drizzle.DurableObject({ migrations, relations }).pipe(
+ *         Effect.orDie,
+ *       );
  *
  *       return {
- *         addUser: (name: string) =>
- *           Effect.sync(() => db.insert(users).values({ name }).run()),
- *         listUsers: () => Effect.sync(() => db.select().from(users).all()),
+ *         addUser: (name: string) => db.insert(users).values({ name }),
+ *         listUsers: () => db.select().from(users),
  *         listUsersWithPosts: () =>
- *           Effect.sync(() =>
- *             db.query.users.findMany({ with: { posts: true } }).sync(),
- *           ),
+ *           db.query.users.findMany({ with: { posts: true } }),
+ *         // typed error handling per operation:
+ *         tryAddUser: (name: string) =>
+ *           db
+ *             .insert(users)
+ *             .values({ name })
+ *             .pipe(
+ *               Effect.catchTag("EffectDrizzleQueryError", () =>
+ *                 Effect.succeed(undefined),
+ *               ),
+ *             ),
  *       };
  *     });
  *   }),
@@ -81,12 +107,25 @@ export const DurableObject = <TRelations extends AnyRelations = EmptyRelations>(
 ) =>
   Effect.gen(function* () {
     const state = yield* DurableObjectState;
+    const storage = state.raw.storage;
     const { migrations, ...drizzleConfig } = config ?? {};
-    return yield* Effect.sync(() => {
-      const db = drizzle<TRelations>(state.raw.storage, drizzleConfig);
-      if (migrations !== undefined) {
-        migrate(db, migrations);
-      }
-      return db;
-    });
+    // Built on the ambient (instance) Scope — the client wraps the DO's
+    // local SQLite storage, so there is no disposable resource behind it.
+    const services = yield* Layer.build(SqliteDoClient.layer({ storage }));
+    const db = yield* SQLiteDoDrizzle.makeWithDefaults({
+      ...(drizzleConfig as Omit<
+        SQLiteDoDrizzle.EffectDrizzleSQLiteDoConfig<TRelations>,
+        "storage"
+      >),
+      storage,
+    }).pipe(Effect.provideContext(services));
+    if (migrations !== undefined) {
+      yield* migrate(db, {
+        migrations: migrations.migrations,
+        ...(migrations.migrationsTable !== undefined
+          ? { migrationsTable: migrations.migrationsTable }
+          : {}),
+      });
+    }
+    return db;
   });
