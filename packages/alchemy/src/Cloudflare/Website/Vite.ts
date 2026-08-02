@@ -147,9 +147,17 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * assets under the prefix, and Alchemy keys the uploaded asset manifest
  * with the same resolved `base` so the two always agree.
  *
- * @example Vite site behind a path-prefixed route
+ * @example vite.config.ts
  * ```typescript
- * // vite.config.ts: export default defineConfig({ base: "/docs/" })
+ * import { defineConfig } from "vite";
+ *
+ * export default defineConfig({
+ *   base: "/docs/",
+ * });
+ * ```
+ *
+ * @example alchemy.run.ts
+ * ```typescript
  * const docs = yield* Cloudflare.Website.Vite("Docs", {
  *   routes: [{ pattern: "example.com/docs*", zoneName: "example.com" }],
  * });
