@@ -19,7 +19,7 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import * as Artifacts from "../../Artifacts.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { hashDirectory, type MemoOptions } from "../../Command/Memo.ts";
-import { isResolved, stripEffects } from "../../Diff.ts";
+import { havePropsChanged, isResolved, stripEffects } from "../../Diff.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as Provider from "../../Provider.ts";
 import { type ResourceBinding } from "../../Resource.ts";
@@ -3791,7 +3791,13 @@ export const LiveWorkerProvider = () =>
         if (!assets) {
           return false;
         }
-        if (Predicate.hasProperty(assets, "hash")) {
+        // An explicitly-undefined `hash` (`{ directory, hash: maybe }`) is
+        // the hash-less shape, not a supplied hash — fall through to the
+        // directory read instead of comparing undefined forever-dirty.
+        if (
+          Predicate.hasProperty(assets, "hash") &&
+          assets.hash !== undefined
+        ) {
           return assets.hash !== output.hash?.assets;
         }
         const read = yield* prepareAssets(assets).pipe(
@@ -4132,6 +4138,47 @@ export const LiveWorkerProvider = () =>
               action: "update",
               stables: stables.length > 0 ? stables : undefined,
             };
+          }
+          // Machine-local source locations (`main`, `assets.directory`,
+          // `vite.rootDir`) name WHERE the source lives; their deploy-relevant
+          // effect is fully captured by the content hashes `hasChanged` just
+          // compared (bundle, asset content, vite input — all deliberately
+          // path-independent). Left alone, the engine's raw-props fallback
+          // would still flag a relocated checkout (CI runner ↔ laptop, temp
+          // build dirs) as changed forever. When the ONLY residual raw-prop
+          // difference is such a path, suppress the fallback with an explicit
+          // noop; any other residual difference still falls through to the
+          // engine's conservative comparison, so props outside the hashed
+          // metadata surface keep deploying (#745). Guarded on resolved
+          // bindings — without them the metadata hash was skipped above and
+          // the raw-props fallback is the only net for metadata edits.
+          if (Array.isArray(newBindings)) {
+            const normalizeSourcePaths = (props: WorkerProps) => ({
+              ...props,
+              ...(props.main !== undefined ? { main: "<source>" } : undefined),
+              ...(props.assets
+                ? {
+                    assets: {
+                      ...(typeof props.assets === "string"
+                        ? undefined
+                        : props.assets),
+                      directory: "<source>",
+                    },
+                  }
+                : undefined),
+              ...(props.vite
+                ? { vite: { ...props.vite, rootDir: "<source>" } }
+                : undefined),
+            });
+            if (
+              olds !== undefined &&
+              !havePropsChanged(
+                normalizeSourcePaths(olds),
+                normalizeSourcePaths(news),
+              )
+            ) {
+              return { action: "noop" };
+            }
           }
         }),
         precreate: Effect.fn(function* ({ id, news, session, bindings }) {
