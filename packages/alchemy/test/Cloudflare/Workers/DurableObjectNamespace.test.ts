@@ -358,13 +358,13 @@ describe.concurrent("scratch", () => {
 
   // Walk an async worker through four redeploys against the same scratch state,
   // each one swapping in a new script + bindings shape so we exercise the
-  // migration paths `putWorker` relies on:
+  // lifecycle paths `putWorker` relies on:
   //   v1 — create with a single DO class `DO_A`
   //   v2 — rename `DO_A` → `DO_A_v2` (className change, same binding id)
   //   v3 — add a brand-new DO class `DO_B` alongside `DO_A_v2`
   //   v4 — delete `DO_A`, keep only `DO_B`
   test.provider(
-    "durable object class migrations across redeploys",
+    "durable object class lifecycle across redeploys",
     (scratch) =>
       Effect.gen(function* () {
         const v1 = yield* scratch.deploy(
@@ -549,7 +549,7 @@ export default { async fetch() { return new Response("v4"); } };
   // `alchemy:do:` logical-id→class mapping, so `read` returns `Unowned` and the
   // takeover requires `adopt(true)`. The matching `Counter` class must be reused
   // — if `putWorker` instead asked Cloudflare to create it as a *new* class the
-  // migration would fail with "class already exists". This is the documented
+  // reconciliation would fail with "class already exists". This is the documented
   // limitation: on the first (adopting) deploy the binding's class name must
   // match the existing class; renames only work once Alchemy owns the worker.
   test.provider(
@@ -562,7 +562,7 @@ export default { async fetch() { return new Response("v4"); } };
         // Cloudflare API — no Alchemy involvement, so none of our tags. The
         // name is deterministic (never Date.now()/random); a crashed run can
         // leave the worker behind, and `putScript` would then reject the
-        // `newSqliteClasses` migration ("class already exists"), so purge any
+        // legacy seed migration ("class already exists"), so purge any
         // leftover first.
         const physicalName = "alchemy-test-do-adopt";
 
@@ -638,14 +638,14 @@ export default { async fetch() { return new Response("v4"); } };
   // here by Worker *logical id*, resolved to the actual script via alchemy's
   // ownership tags (`alchemy:id:` + stack + stage) among scripts observed to
   // host the class. Worker-a's deploy ships Cloudflare's data-preserving
-  // `transferred_classes` migration; worker-b's deploy converges on its own
-  // (no `deleted_classes` for a class that moved away).
+  // declarative transfer; worker-b's deploy commits the handoff.
   //
   //   v1 — worker-b hosts `Counter` locally; write data into the namespace
-  //   v2 — worker-a hosts `Counter` with `transferredFrom: "worker-b"`;
-  //        worker-b re-binds it cross-script. The stored data must survive
-  //        the move, reachable from both.
-  //   v3 — redeploy of the same shape is inert (no re-transfer; the
+  //   v2a — worker-a declares an expecting transfer; worker-b commits it.
+  //   v2b — the same declaration converges worker-a to a live export and
+  //         attaches its binding. The stored data must survive the move,
+  //         reachable from both.
+  //   v3 — redeploy of the converged shape is inert (no re-transfer; the
   //        declaration stays in the code).
   test.provider(
     "durable object host move declared by worker logical id preserves data",
@@ -695,6 +695,7 @@ export default { async fetch() { return new Response("v4"); } };
           return { a, b };
         });
 
+        yield* scratch.deploy(moved);
         const v2 = yield* scratch.deploy(moved);
 
         // The namespace moved to worker-a with its data intact...
@@ -712,7 +713,7 @@ export default { async fetch() { return new Response("v4"); } };
 
         // Redeploying the same shape is inert: the class now lives on
         // worker-a (tracked by its alchemy:do tag), so the standing
-        // declaration must not re-emit a transfer migration. Data intact.
+        // declaration must not restart the transfer. Data intact.
         const v3 = yield* scratch.deploy(moved);
         const afterRedeploy = yield* fetchJsonReady<{ value: number }>(
           `${v3.a.url}/get`,
@@ -721,7 +722,7 @@ export default { async fetch() { return new Response("v4"); } };
 
         // ...and once the move has landed everywhere, the declaration can be
         // removed entirely: the class is anchored by its alchemy:do tag, so
-        // dropping `transferredFrom` emits no migration and touches no data.
+        // dropping `transferredFrom` changes no lifecycle state or data.
         const v4 = yield* scratch.deploy(
           Effect.gen(function* () {
             const a = yield* Cloudflare.Worker("worker-a", {
@@ -789,32 +790,33 @@ export default { async fetch() { return new Response("v4"); } };
         const aScriptName = v1.a.workerName;
         const bScriptName = v1.b.workerName;
 
-        const v2 = yield* scratch.deploy(
-          Effect.gen(function* () {
-            const a = yield* Cloudflare.Worker("worker-a", {
-              script: hostWorkerScript,
-              env: {
-                Counter: Cloudflare.DurableObject("Counter", {
-                  // Thunk form — evaluated lazily at plan time and
-                  // normalized to the plain script name.
-                  transferredFrom: () => bScriptName,
-                }),
-              },
-            });
-            const b = yield* Cloudflare.Worker("worker-b", {
-              script: consumerWorkerScript,
-              env: {
-                // Service binding orders worker-b after worker-a (the raw
-                // string scriptName below carries no dependency edge).
-                A: a,
-                Counter: Cloudflare.DurableObject("Counter", {
-                  scriptName: aScriptName,
-                }),
-              },
-            });
-            return { a, b };
-          }),
-        );
+        const moved = Effect.gen(function* () {
+          const a = yield* Cloudflare.Worker("worker-a", {
+            script: hostWorkerScript,
+            env: {
+              Counter: Cloudflare.DurableObject("Counter", {
+                // Thunk form — evaluated lazily at plan time and
+                // normalized to the plain script name.
+                transferredFrom: () => bScriptName,
+              }),
+            },
+          });
+          const b = yield* Cloudflare.Worker("worker-b", {
+            script: consumerWorkerScript,
+            env: {
+              // Service binding orders worker-b after worker-a (the raw
+              // string scriptName below carries no dependency edge).
+              A: a,
+              Counter: Cloudflare.DurableObject("Counter", {
+                scriptName: aScriptName,
+              }),
+            },
+          });
+          return { a, b };
+        });
+
+        yield* scratch.deploy(moved);
+        const v2 = yield* scratch.deploy(moved);
 
         const viaA = yield* fetchJsonReady<{ value: number }>(
           `${v2.a.url}/get`,
@@ -891,15 +893,12 @@ export default { async fetch() { return new Response("v4"); } };
     { timeout: 240_000 },
   );
 
-  // #799: the documented *pure move* — the former host drops the DO entirely,
-  // keeping no cross-script reference — done as two deploys. Phase 1 adds the
-  // class to worker-a, declaring the former host by **Worker resource
-  // reference** (`transferredFrom: b`, normalized at plan time to worker-b's
-  // logical id — no dependency edge on b); worker-b is untouched. Phase 2
-  // removes the DO from worker-b, whose deploy observes the class already
-  // transferred away and skips the delete.
+  // #799: the documented *pure move* ends with the former host dropping the
+  // DO entirely. The transfer first converges over two deploys while worker-b
+  // keeps a cross-script reference, then a final deploy removes worker-b's
+  // binding. `transferredFrom: b` uses the Worker resource-reference form.
   test.provider(
-    "two-deploy pure move with a Worker resource reference",
+    "pure move with a Worker resource reference",
     (scratch) =>
       Effect.gen(function* () {
         yield* scratch.destroy();
@@ -923,27 +922,33 @@ export default { async fetch() { return new Response("v4"); } };
         );
         expect(written.value).toBe(1);
 
-        // Phase 1: worker-a takes the class, naming the former host by
-        // resource reference. worker-b's declaration is unchanged (noop).
-        const v2 = yield* scratch.deploy(
-          Effect.gen(function* () {
-            const b = yield* Cloudflare.Worker("worker-b", {
-              script: hostWorkerScript,
-              env: {
-                Counter: Cloudflare.DurableObject("Counter"),
+        const moving = Effect.gen(function* () {
+          const b = yield* Cloudflare.Worker("worker-b", {
+            script: consumerWorkerScript,
+          });
+          const a = yield* Cloudflare.Worker("worker-a", {
+            script: hostWorkerScript,
+            env: {
+              Counter: Cloudflare.DurableObject("Counter", {
+                transferredFrom: b,
+              }),
+            },
+          });
+          yield* b.bind("counter", {
+            bindings: [
+              {
+                type: "durable_object_namespace",
+                name: "Counter",
+                className: "Counter",
+                scriptName: a.workerName,
               },
-            });
-            const a = yield* Cloudflare.Worker("worker-a", {
-              script: hostWorkerScript,
-              env: {
-                Counter: Cloudflare.DurableObject("Counter", {
-                  transferredFrom: b,
-                }),
-              },
-            });
-            return { a, b };
-          }),
-        );
+            ],
+          });
+          return { a, b };
+        });
+
+        yield* scratch.deploy(moving);
+        const v2 = yield* scratch.deploy(moving);
 
         // The namespace moved to worker-a with its data intact.
         const viaA = yield* fetchJsonReady<{ value: number }>(
@@ -951,8 +956,8 @@ export default { async fetch() { return new Response("v4"); } };
         );
         expect(viaA.value).toBe(1);
 
-        // Phase 2: worker-b drops the DO entirely. Its deploy observes the
-        // class already lives on worker-a and emits no delete migration.
+        // Final phase: worker-b drops the DO entirely. Its deploy observes the
+        // class already lives on worker-a and emits no delete tombstone.
         const v3 = yield* scratch.deploy(
           Effect.gen(function* () {
             const b = yield* Cloudflare.Worker("worker-b", {
@@ -981,12 +986,12 @@ export default { async fetch() { return new Response("v4"); } };
   );
 
   // Reproduces #811: one script tag per DO binding blew Cloudflare's 10-tag
-  // limit at 7+ Durable Objects (3 ownership tags + 1 migration tag + N DO
-  // tags). The logical-id→class mapping is now packed into `alchemy:dos:`
+  // limit at 8+ Durable Objects (3 ownership tags + N DO tags). The
+  // logical-id→class mapping is now packed into `alchemy:dos:`
   // tags, so a worker with 20 DOs — double the count that used to consume the
   // entire tag budget — deploys fine and the whole tag set stays within the
   // limit. The second deploy renames a class and drops another to prove
-  // migrations are still driven by the packed mapping.
+  // lifecycle changes are still driven by the packed mapping.
   test.provider(
     "worker with 20 durable objects deploys within the 10-tag limit",
     (scratch) =>
@@ -1027,7 +1032,7 @@ export default { async fetch() { return new Response("${version}"); } };
         expect(tags.filter((t) => t.startsWith("alchemy:do:"))).toHaveLength(0);
 
         // Rename Class0 → Class0V2 (same binding id) and delete DO_19 — both
-        // migrations resolve their previous class through the packed tag.
+        // lifecycle changes resolve their previous class through the packed tag.
         const v2 = yield* scratch.deploy(
           Effect.gen(function* () {
             return {
@@ -1101,6 +1106,18 @@ export default { async fetch() { return new Response("v1"); } };
           accountId,
           scriptName,
           settings: {
+            // Settings PATCHes also reconcile the complete export map. Keep
+            // both live classes declared while this test rewrites only tags.
+            exports: {
+              CounterClass: {
+                type: "durable-object",
+                storage: "sqlite",
+              },
+              MeterClass: {
+                type: "durable-object",
+                storage: "sqlite",
+              },
+            },
             tags: [
               ...deployedTags.filter((t) => !t.startsWith("alchemy:dos:")),
               "alchemy:do:Counter:CounterClass",
@@ -1110,7 +1127,7 @@ export default { async fetch() { return new Response("v1"); } };
         });
 
         // Redeploy with a rename; the previous class must be resolved from the
-        // legacy tags for the migration to succeed.
+        // legacy tags for the rename to succeed.
         const v2 = yield* scratch.deploy(
           Effect.gen(function* () {
             return {
@@ -1161,7 +1178,7 @@ export default { async fetch() { return new Response("v2"); } };
   //        while that same-name namespace exists on worker-b: the class is
   //        already anchored to worker-a by its DO tag, so the stale
   //        declaration must not steal worker-b's namespace or emit any
-  //        migration. Distinct counter values prove both namespaces survive
+  //        lifecycle change. Distinct counter values prove both namespaces survive
   //        untouched.
   test.provider(
     "standing transferredFrom is inert on fresh stages and never steals a same-name namespace",
@@ -1243,7 +1260,7 @@ export default { async fetch() { return new Response("v2"); } };
 
         // Force a real reconcile of worker-a with the stale declaration while
         // the twin exists. The class is tag-anchored to worker-a, so no
-        // migration may be emitted and neither namespace may change.
+        // lifecycle change may be emitted and neither namespace may change.
         const v3 = yield* scratch.deploy(
           Effect.gen(function* () {
             const a = yield* Cloudflare.Worker("worker-a", {
