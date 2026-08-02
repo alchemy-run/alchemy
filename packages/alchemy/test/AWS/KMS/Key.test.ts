@@ -25,8 +25,11 @@ describe("AWS.KMS.Key", () => {
           Effect.gen(function* () {
             const key = yield* Key("ManagedKey", {
               description: "alchemy kms smoke v1",
-              deletionWindowInDays: 7,
+              // Duration.Input props: the provider converts these to whole
+              // wire days (7 and 90) — asserted out-of-band below.
+              deletionWindow: "7 days",
               enableKeyRotation: true,
+              rotationPeriod: "90 days",
               tags: {
                 Environment: "test",
                 Owner: "alice",
@@ -50,6 +53,10 @@ describe("AWS.KMS.Key", () => {
           KeyId: initial.key.keyId,
         });
         expect(rotation.KeyRotationEnabled).toEqual(true);
+        // `rotationPeriod: "90 days"` (Duration.Input) must reach the
+        // wire as the whole number 90.
+        expect(rotation.RotationPeriodInDays).toEqual(90);
+        expect(initial.key.rotationPeriodInDays).toEqual(90);
 
         const initialTags = yield* listTags(initial.key.keyId);
         expect(initialTags.Environment).toEqual("test");
@@ -67,24 +74,25 @@ describe("AWS.KMS.Key", () => {
           keyProvider,
         });
 
-        const policy = JSON.stringify({
+        // Typed PolicyDocument (not a JSON string) — proves the structured
+        // form deploys and, below, re-deploys as a no-op.
+        const policy: AWS.IAM.PolicyDocument = {
           Version: "2012-10-17",
-          Id: "alchemy-test-policy",
           Statement: [
             {
               Sid: "EnableRootPermissions",
               Effect: "Allow",
               Principal: { AWS: `arn:aws:iam::${accountId}:root` },
-              Action: "kms:*",
+              Action: ["kms:*"],
               Resource: "*",
             },
           ],
-        });
+        };
 
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
             const key = yield* Key("ManagedKey", {
-              deletionWindowInDays: 7,
+              deletionWindow: "7 days",
               description: "alchemy kms smoke v2",
               enableKeyRotation: false,
               enabled: false,
@@ -128,19 +136,50 @@ describe("AWS.KMS.Key", () => {
         });
         expect(updatedRotation.KeyRotationEnabled).toEqual(false);
 
-        // The inline policy must have been applied.
+        // The inline (PolicyDocument-valued) policy must have been applied.
         const appliedPolicy = yield* KMS.getKeyPolicy({
           KeyId: updated.key.keyId,
           PolicyName: "default",
         });
-        expect(appliedPolicy.Policy).toContain("alchemy-test-policy");
+        expect(appliedPolicy.Policy).toContain("EnableRootPermissions");
+
+        // Re-deploying the identical PolicyDocument is a clean no-op: same
+        // physical key, policy still in place (the provider's normalized
+        // drift comparison must treat AWS's pretty-printed policy JSON as
+        // equal to the synthesized document).
+        const noop = yield* stack.deploy(
+          Effect.gen(function* () {
+            const key = yield* Key("ManagedKey", {
+              deletionWindow: "7 days",
+              description: "alchemy kms smoke v2",
+              enableKeyRotation: false,
+              enabled: false,
+              bypassPolicyLockoutSafetyCheck: true,
+              policy,
+              tags: {
+                Environment: "prod",
+                Team: "platform",
+              },
+            });
+            const alias = yield* Alias("ManagedAlias", {
+              targetKeyId: key.keyId,
+            });
+            return { alias, key };
+          }),
+        );
+        expect(noop.key.keyId).toEqual(updated.key.keyId);
+        const noopPolicy = yield* KMS.getKeyPolicy({
+          KeyId: noop.key.keyId,
+          PolicyName: "default",
+        });
+        expect(noopPolicy.Policy).toContain("EnableRootPermissions");
 
         yield* stack.destroy();
 
         yield* assertAliasDeleted(updated.alias.aliasName);
         yield* assertKeyPendingDeletion(updated.key.keyId);
       }),
-    { timeout: 180_000 },
+    { timeout: 120_000 },
   );
 
   test.provider(
@@ -157,7 +196,7 @@ describe("AWS.KMS.Key", () => {
           Effect.gen(function* () {
             const key = yield* Key("ReplaceKey", {
               description: "alchemy kms replace v1",
-              deletionWindowInDays: 7,
+              deletionWindow: "7 days",
               keySpec: "SYMMETRIC_DEFAULT",
               keyUsage: "ENCRYPT_DECRYPT",
             });
@@ -169,7 +208,7 @@ describe("AWS.KMS.Key", () => {
           Effect.gen(function* () {
             const key = yield* Key("ReplaceKey", {
               description: "alchemy kms replace v2",
-              deletionWindowInDays: 7,
+              deletionWindow: "7 days",
               keySpec: "RSA_2048",
               keyUsage: "ENCRYPT_DECRYPT",
             });
@@ -192,7 +231,7 @@ describe("AWS.KMS.Key", () => {
 
         yield* assertKeyPendingDeletion(replaced.key.keyId);
       }),
-    { timeout: 180_000 },
+    { timeout: 120_000 },
   );
 
   const aliasNameA = "alias/alchemy-test-kms-rename-a" as const;
@@ -208,11 +247,11 @@ describe("AWS.KMS.Key", () => {
           Effect.gen(function* () {
             const keyA = yield* Key("AliasKeyA", {
               description: "alchemy kms alias target A",
-              deletionWindowInDays: 7,
+              deletionWindow: "7 days",
             });
             const keyB = yield* Key("AliasKeyB", {
               description: "alchemy kms alias target B",
-              deletionWindowInDays: 7,
+              deletionWindow: "7 days",
             });
             const alias = yield* Alias("RenamableAlias", {
               aliasName: aliasNameA,
@@ -233,11 +272,11 @@ describe("AWS.KMS.Key", () => {
           Effect.gen(function* () {
             const keyA = yield* Key("AliasKeyA", {
               description: "alchemy kms alias target A",
-              deletionWindowInDays: 7,
+              deletionWindow: "7 days",
             });
             const keyB = yield* Key("AliasKeyB", {
               description: "alchemy kms alias target B",
-              deletionWindowInDays: 7,
+              deletionWindow: "7 days",
             });
             const alias = yield* Alias("RenamableAlias", {
               aliasName: aliasNameA,
@@ -259,11 +298,11 @@ describe("AWS.KMS.Key", () => {
           Effect.gen(function* () {
             const keyA = yield* Key("AliasKeyA", {
               description: "alchemy kms alias target A",
-              deletionWindowInDays: 7,
+              deletionWindow: "7 days",
             });
             const keyB = yield* Key("AliasKeyB", {
               description: "alchemy kms alias target B",
-              deletionWindowInDays: 7,
+              deletionWindow: "7 days",
             });
             const alias = yield* Alias("RenamableAlias", {
               aliasName: aliasNameB,
@@ -284,7 +323,7 @@ describe("AWS.KMS.Key", () => {
 
         yield* assertAliasDeleted(aliasNameB);
       }),
-    { timeout: 180_000 },
+    { timeout: 120_000 },
   );
 
   class AliasStillExists extends Data.TaggedError("AliasStillExists") {}
@@ -414,10 +453,10 @@ describe("AWS.KMS.Key", () => {
   });
 
   const assertKeyPendingDeletion = Effect.fn(function* (keyId: string) {
-    yield* KMS.describeKey({ KeyId: keyId }).pipe(
+    const metadata = yield* KMS.describeKey({ KeyId: keyId }).pipe(
       Effect.flatMap((response) =>
         response.KeyMetadata!.KeyState === "PendingDeletion"
-          ? Effect.void
+          ? Effect.succeed(response.KeyMetadata!)
           : Effect.fail(new KeyNotPendingDeletion()),
       ),
       Effect.retry({
@@ -425,6 +464,15 @@ describe("AWS.KMS.Key", () => {
         schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(8)]),
       }),
     );
+    // Every key in this suite uses `deletionWindow: "7 days"`
+    // (Duration.Input) — the scheduled DeletionDate must land ~7 wire days
+    // out, proving the Duration→days conversion round-trips through
+    // scheduleKeyDeletion.
+    const now = yield* Effect.sync(() => Date.now());
+    const windowDays =
+      (metadata.DeletionDate!.getTime() - now) / (24 * 60 * 60 * 1000);
+    expect(windowDays).toBeGreaterThan(6);
+    expect(windowDays).toBeLessThanOrEqual(7.1);
   });
 
   const getAlias = Effect.fn(function* (aliasName: string) {

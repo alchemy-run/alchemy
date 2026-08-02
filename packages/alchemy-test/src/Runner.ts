@@ -1,11 +1,13 @@
 /**
  * Single-process test runner.
  *
- * Discovers `*.test.ts` files, imports them one at a time (registration is
- * global), then executes every collected test as an Effect — files run
- * concurrently up to a limit, tests within a file run concurrently unless
- * their suite is `describe.sequential`. Each test gets a buffering Effect
- * Logger + Console so its output can be shown in isolation.
+ * Discovers `*.test.ts` files, imports them ALL IN PARALLEL (the per-file
+ * collector rides AsyncLocalStorage, so registration attribution survives
+ * concurrent imports — see Registry.ts), then executes every collected
+ * test as an Effect — files run concurrently up to a limit, tests within a
+ * file run sequentially unless their suite is `describe.concurrent`. Each
+ * test gets a buffering Effect Logger + Console so its output can be shown
+ * in isolation.
  */
 import * as Cause from "effect/Cause";
 import * as ConsoleModule from "effect/Console";
@@ -15,6 +17,7 @@ import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Logger from "effect/Logger";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Semaphore from "effect/Semaphore";
 import { inspect } from "node:util";
@@ -241,13 +244,15 @@ const collectFile = (
   relative: string,
 ): Effect.Effect<CollectedFile> =>
   Effect.promise(async (): Promise<CollectedFile> => {
-    const root = Registry.beginFile(relative);
     try {
-      await import(pathToFileURL(absolute).href);
-      // Flush microtasks + one macrotask so registrations deferred with
-      // queueMicrotask (e.g. Test.make's fallback afterAll) land in the tree.
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      return { file: relative, suite: root };
+      const suite = await Registry.collect(relative, async () => {
+        await import(pathToFileURL(absolute).href);
+        // Flush microtasks + one macrotask so registrations deferred with
+        // queueMicrotask (e.g. Test.make's fallback afterAll) land in the
+        // tree — their ALS context resolves this file's collector.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      return { file: relative, suite };
     } catch (error) {
       return {
         file: relative,
@@ -257,8 +262,6 @@ const collectFile = (
             ? (error.stack ?? error.message)
             : String(error),
       };
-    } finally {
-      Registry.endFile();
     }
   });
 
@@ -279,11 +282,13 @@ interface ExecContext {
   readonly onlyMode: boolean;
   readonly emit: (event: TestEvent) => Effect.Effect<void>;
   readonly fileLogs: Array<LogEntry>;
+  /** File-level hook failures, counted once for the file in the run summary. */
+  readonly fileErrors: Array<string>;
   readonly results: Array<{ meta: TestMeta; result: TestResult }>;
   readonly file: string;
   readonly lock: Semaphore.Semaphore;
   /** Run-global registry of currently-executing test fibers (for kill). */
-  readonly running: Map<string, Fiber.Fiber<Exit.Exit<unknown, unknown>>>;
+  readonly running: Map<string, Fiber.Fiber<unknown, unknown>>;
   /** Run-global set of tests that have finished at least once (for retry). */
   readonly completed: Set<string>;
 }
@@ -370,6 +375,90 @@ const wasInterrupted = (exit: Exit.Exit<unknown, unknown>): boolean =>
   Exit.isFailure(exit) &&
   exit.cause.reasons.some((reason) => reason._tag === "Interrupt");
 
+interface TestAttempt {
+  readonly beforeEach: Exit.Exit<void, unknown>;
+  readonly body: Exit.Exit<unknown, unknown> | undefined;
+  readonly afterEach: Exit.Exit<void, unknown>;
+}
+
+const attemptNeedsRetry = (
+  exit: Exit.Exit<TestAttempt, unknown>,
+  expectsFailure: boolean | undefined,
+): boolean => {
+  if (Exit.isFailure(exit)) return !wasInterrupted(exit);
+  if (
+    Exit.isFailure(exit.value.beforeEach) ||
+    Exit.isFailure(exit.value.afterEach)
+  ) {
+    return true;
+  }
+  return (
+    !expectsFailure &&
+    exit.value.body !== undefined &&
+    Exit.isFailure(exit.value.body)
+  );
+};
+
+const hookError = (attempt: TestAttempt): string | undefined => {
+  const errors: Array<string> = [];
+  if (Exit.isFailure(attempt.beforeEach)) {
+    errors.push(
+      `beforeEach hook failed:\n${prettyCause(attempt.beforeEach.cause)}`,
+    );
+  }
+  if (Exit.isFailure(attempt.afterEach)) {
+    errors.push(
+      `afterEach hook failed:\n${prettyCause(attempt.afterEach.cause)}`,
+    );
+  }
+  return errors.length === 0 ? undefined : errors.join("\n\n");
+};
+
+/**
+ * How long a timed-out test body's interruption (finalizers included) may
+ * run before the runner abandons the fiber and reports the timeout anyway.
+ * Without this bound, a finalizer blocked on the same wedged machinery the
+ * timeout just interrupted (e.g. a `test.provider` scratch destroy against
+ * a hung dev deploy) swallows the report entirely — the test never finishes
+ * and the run dies at the wall clock with no error attribution.
+ */
+const INTERRUPT_GRACE_MS = 10_000;
+
+/**
+ * Run a test body with a timeout that cannot be swallowed by hung
+ * finalizers: on timeout the body fiber is interrupted, its finalizers get
+ * {@link INTERRUPT_GRACE_MS} to settle, and then the fiber is abandoned
+ * (it dies with the run) and the timeout is reported.
+ */
+const runBodyWithTimeout = Effect.fn(function* (
+  body: () => Effect.Effect<unknown, unknown>,
+  timeoutMs: number,
+) {
+  // Detached: a timed-out body whose teardown never settles must not block
+  // the attempt fiber's own completion (a supervised child would).
+  const fiber = yield* Effect.forkDetach(Effect.suspend(body), {
+    startImmediately: true,
+  });
+  const awaited = yield* Fiber.await(fiber).pipe(
+    Effect.timeoutOption(Duration.millis(timeoutMs)),
+  );
+  if (Option.isSome(awaited)) return awaited.value;
+  // Fire-and-forget interrupt: `Fiber.interrupt` AWAITS settlement, which a
+  // hung finalizer never provides. Fire it, then give teardown a bounded
+  // grace before abandoning the fiber (it dies with the process).
+  yield* Effect.sync(() => fiber.interruptUnsafe());
+  const settled = yield* Fiber.await(fiber).pipe(
+    Effect.timeoutOption(Duration.millis(INTERRUPT_GRACE_MS)),
+  );
+  return Exit.fail(
+    new Error(
+      Option.isNone(settled)
+        ? `test timed out after ${timeoutMs}ms (teardown did not settle within ${INTERRUPT_GRACE_MS}ms and was abandoned)`
+        : `test timed out after ${timeoutMs}ms`,
+    ),
+  ) as Exit.Exit<unknown, unknown>;
+});
+
 const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
   const meta = metaOf(ctx.file, test);
   const skipped = isSkipped(test);
@@ -395,18 +484,38 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
   const before = hookChain(test, "beforeEach");
   const after = hookChain(test, "afterEach");
 
-  const attempt = (): Effect.Effect<Exit.Exit<unknown, unknown>> =>
-    runHooks(before, timeoutMs).pipe(
-      Effect.andThen(Effect.suspend(test.body!)),
-      Effect.timeout(Duration.millis(timeoutMs)),
-      // afterEach must run on success, failure and interruption alike.
-      (body) =>
-        Effect.onExit(body, () =>
-          runHooks(after, timeoutMs).pipe(Effect.ignore),
+  const attempt = (): Effect.Effect<TestAttempt> => {
+    // Store the finalizer's Exit separately so a teardown failure cannot be
+    // swallowed or mistaken for an expected (`test.fails`) body failure.
+    let afterExit: Exit.Exit<void, unknown> = Exit.succeed(undefined);
+    return Effect.gen(function* () {
+      const beforeExit = yield* runHooks(before, timeoutMs).pipe(Effect.exit);
+      const bodyExit = Exit.isSuccess(beforeExit)
+        ? yield* runBodyWithTimeout(test.body!, timeoutMs)
+        : undefined;
+      return { beforeEach: beforeExit, body: bodyExit };
+    }).pipe(
+      // afterEach must run on success, failure and interruption alike. Its
+      // own Exit is recorded without making the finalizer itself fail.
+      Effect.onExit(() =>
+        runHooks(after, timeoutMs).pipe(
+          Effect.exit,
+          Effect.tap((exit) =>
+            Effect.sync(() => {
+              afterExit = exit;
+            }),
+          ),
+          Effect.asVoid,
         ),
+      ),
+      Effect.map(({ beforeEach, body }) => ({
+        beforeEach,
+        body,
+        afterEach: afterExit,
+      })),
       withCapture(logs),
-      Effect.exit,
-    ) as Effect.Effect<Exit.Exit<unknown, unknown>>;
+    );
+  };
 
   const start = Date.now();
   let retries = 0;
@@ -416,26 +525,21 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
   // kill command can interrupt it.
   const runAttempt = Effect.fn(function* (): Generator<
     Effect.Effect<any>,
-    Exit.Exit<unknown, unknown>
+    Exit.Exit<TestAttempt, unknown>
   > {
     const fiber = yield* Effect.forkChild(withLock(attempt()), {
       startImmediately: true,
     });
     ctx.running.set(meta.id, fiber);
-    const exit: Exit.Exit<Exit.Exit<unknown, unknown>> =
-      yield* Fiber.await(fiber);
+    const exit: Exit.Exit<TestAttempt, unknown> = yield* Fiber.await(fiber);
     ctx.running.delete(meta.id);
-    // The forked attempt captures its own exit (Effect.exit); an interrupt
-    // arrives as the OUTER exit failing.
-    return Exit.isSuccess(exit) ? exit.value : exit;
+    return exit;
   });
 
   let exit = yield* runAttempt();
   while (
-    Exit.isFailure(exit) &&
-    !wasInterrupted(exit) &&
-    !test.fails &&
-    retries < ctx.options.retry
+    attemptNeedsRetry(exit, test.fails) &&
+    retries < (test.retry ?? ctx.options.retry)
   ) {
     retries++;
     // Clear IN PLACE — TestStart handed this array's reference out.
@@ -449,18 +553,31 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
   if (wasInterrupted(exit)) {
     status = "fail";
     error = "killed (interrupted by user)";
-  } else if (test.fails) {
-    if (Exit.isFailure(exit)) {
+  } else if (Exit.isFailure(exit)) {
+    status = "fail";
+    error = prettyCause(exit.cause);
+  } else {
+    const failedHook = hookError(exit.value);
+    const bodyExit = exit.value.body;
+    if (failedHook !== undefined) {
+      status = "fail";
+      error = failedHook;
+    } else if (test.fails && bodyExit !== undefined) {
+      if (Exit.isFailure(bodyExit)) {
+        status = "pass";
+      } else {
+        status = "fail";
+        error = "expected test to fail, but it passed";
+      }
+    } else if (bodyExit !== undefined && Exit.isSuccess(bodyExit)) {
       status = "pass";
     } else {
       status = "fail";
-      error = "expected test to fail, but it passed";
+      error =
+        bodyExit === undefined
+          ? "test body did not run"
+          : prettyCause(bodyExit.cause);
     }
-  } else if (Exit.isSuccess(exit)) {
-    status = "pass";
-  } else {
-    status = "fail";
-    error = prettyCause(exit.cause);
   }
 
   ctx.completed.add(meta.id);
@@ -559,11 +676,8 @@ const runAfterAll = Effect.fn(function* (suite: Suite, ctx: ExecContext) {
   );
   yield* ctx.emit({ _tag: "HookEnd", file: ctx.file, hook: "afterAll" });
   if (Exit.isFailure(exit)) {
-    ctx.fileLogs.push({
-      level: "error",
-      message: `afterAll hook failed:\n${prettyCause(exit.cause)}`,
-      time: new Date(),
-    });
+    const error = `afterAll hook failed:\n${prettyCause(exit.cause)}`;
+    ctx.fileErrors.push(error);
   }
 });
 
@@ -617,18 +731,32 @@ export const run = Effect.fn(function* (options: RunOptions) {
   const relative = absoluteFiles.map((f) => path.relative(options.root, f));
   yield* emit({ _tag: "CollectStart", files: relative });
 
-  // Phase 1 — import EVERY file before running anything. Imports are lazy
-  // and pure (registration only), and must be serial anyway because the
-  // registration state is global. Collecting fully up-front keeps run
-  // semantics simple: `.only` applies across the whole run, and the full
-  // test list is known before the first test starts.
-  const collected: Array<CollectedFile> = [];
-  for (let i = 0; i < absoluteFiles.length; i++) {
-    // collectFile never fails — import errors are captured on the result.
-    const c = yield* collectFile(absoluteFiles[i]!, relative[i]!);
-    collected.push(c);
-    yield* emit({ _tag: "FileCollected", file: relative[i]! });
-  }
+  // Phase 1 — import EVERY file before running anything, in parallel.
+  // The per-file collector rides AsyncLocalStorage (see Registry.ts), so
+  // registration stays correctly attributed under concurrent imports.
+  // Collecting fully up-front keeps run semantics simple: `.only` applies
+  // across the whole run, and the full test list is known before the first
+  // test starts.
+  //
+  // Concurrency is BOUNDED: kicking off every import at once floods the
+  // main thread with synchronous parse/link/evaluate work — timers and the
+  // progress line starve (a slow start becomes indistinguishable from a
+  // hang), and it maximizes exposure to loader races under concurrent
+  // dynamic imports. The shared dependency graph is deduped by the module
+  // cache, so a modest bound keeps nearly all of the speedup.
+  const collectConcurrency =
+    options.concurrency === "unbounded"
+      ? 32
+      : Math.min(options.concurrency, 32);
+  // collectFile never fails — import errors are captured on the result.
+  const collected = yield* Effect.forEach(
+    absoluteFiles.map((absolute, i) => [absolute, relative[i]!] as const),
+    ([absolute, rel]) =>
+      collectFile(absolute, rel).pipe(
+        Effect.tap(() => emit({ _tag: "FileCollected", file: rel })),
+      ),
+    { concurrency: collectConcurrency },
+  );
 
   const onlyMode = collected.some(
     (c) => c.suite !== undefined && containsOnly(c.suite),
@@ -659,8 +787,9 @@ export const run = Effect.fn(function* (options: RunOptions) {
 
   // Phase 2 — run files concurrently.
   const allResults: Array<{ meta: TestMeta; result: TestResult }> = [];
+  const fileFailures: Array<{ file: string; error: string }> = [];
   const lock = yield* Semaphore.make(EXCLUSIVE_PERMITS);
-  const running = new Map<string, Fiber.Fiber<Exit.Exit<unknown, unknown>>>();
+  const running = new Map<string, Fiber.Fiber<unknown, unknown>>();
   const completed = new Set<string>();
   const testIndex = new Map<string, { test: TestCase; ctx: ExecContext }>();
 
@@ -688,8 +817,27 @@ export const run = Effect.fn(function* (options: RunOptions) {
     yield* reporter.attachController(controller);
   }
 
+  // Array whose pushes are teed to `tee` as they happen. File-hook output is
+  // captured into this buffer over the (potentially very long) life of a
+  // deploy/destroy hook; teeing each entry into the run log keeps the log
+  // live instead of silent-until-FileEnd (which reads as a deadlocked run).
+  const liveHookLogBuffer = (
+    tee: (entry: LogEntry) => void,
+  ): Array<LogEntry> => {
+    const buffer: Array<LogEntry> = [];
+    const push = Array.prototype.push.bind(buffer);
+    buffer.push = (...entries: Array<LogEntry>) => {
+      for (const entry of entries) tee(entry);
+      return push(...entries);
+    };
+    return buffer;
+  };
+
   const runFile = Effect.fn(function* (c: CollectedFile) {
-    const fileLogs: Array<LogEntry> = [];
+    const fileLogs = liveHookLogBuffer((entry) =>
+      fileLog.appendHookLine(c.file, entry),
+    );
+    const fileErrors: Array<string> = [];
     // Shares the LIVE hook-log buffer so the TUI can tail deploys.
     yield* emit({ _tag: "FileStart", file: c.file, logs: fileLogs });
     let fileError = c.error;
@@ -699,6 +847,7 @@ export const run = Effect.fn(function* (options: RunOptions) {
         onlyMode,
         emit,
         fileLogs,
+        fileErrors,
         results: allResults,
         file: c.file,
         lock,
@@ -713,7 +862,12 @@ export const run = Effect.fn(function* (options: RunOptions) {
       const exit = yield* runSuite(c.suite, ctx).pipe(Effect.exit);
       if (Exit.isFailure(exit)) {
         fileError = prettyCause(exit.cause);
+      } else if (fileErrors.length > 0) {
+        fileError = fileErrors.join("\n\n");
       }
+    }
+    if (fileError !== undefined) {
+      fileFailures.push({ file: c.file, error: fileError });
     }
     yield* emit({
       _tag: "FileEnd",
@@ -729,16 +883,19 @@ export const run = Effect.fn(function* (options: RunOptions) {
   });
 
   const failures = allResults.filter((r) => r.result.status === "fail");
-  const importFailures = collected.filter((c) => c.error !== undefined);
   const summary: RunSummary = {
     files: collected.length,
     passed: allResults.filter((r) => r.result.status === "pass").length,
-    failed: failures.length + importFailures.length,
+    failed: failures.length + fileFailures.length,
     skipped: allResults.filter((r) => r.result.status === "skip").length,
     todo: allResults.filter((r) => r.result.status === "todo").length,
     durationMs: Date.now() - startedAt,
     failures,
+    fileFailures,
   };
   yield* emit({ _tag: "RunEnd", summary });
+  // Drain the live hook-line queue so tail lines from the final file's
+  // hooks are on disk before the process exits.
+  yield* fileLog.close;
   return summary;
 });

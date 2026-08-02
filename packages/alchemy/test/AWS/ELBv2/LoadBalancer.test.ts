@@ -4,6 +4,7 @@ import { LoadBalancer } from "@/AWS/ELBv2";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
+import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -69,6 +70,19 @@ test.provider(
       ).toBe(true);
 
       yield* stack.destroy();
+
+      // Out-of-band: the load balancer is gone after destroy.
+      const after = yield* elbv2
+        .describeLoadBalancers({
+          LoadBalancerArns: [deployed.loadBalancer.loadBalancerArn],
+        })
+        .pipe(
+          Effect.map((r) => r.LoadBalancers?.length ?? 0),
+          Effect.catchTag("LoadBalancerNotFoundException", () =>
+            Effect.succeed(0),
+          ),
+        );
+      expect(after).toBe(0);
     }).pipe(logLevel),
   { timeout: 600_000 },
 );

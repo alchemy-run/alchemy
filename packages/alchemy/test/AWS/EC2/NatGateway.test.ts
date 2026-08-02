@@ -1,11 +1,12 @@
 import * as AWS from "@/AWS";
 import { EIP, InternetGateway, NatGateway, Subnet, Vpc } from "@/AWS/EC2";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
+import * as Test from "./VpcTest.ts";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { assertEipGone, assertVpcGone } from "./Gone.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -79,7 +80,7 @@ test.provider.skipIf(!process.env.AWS_TEST_NAT_GATEWAY)(
             allocationId: eip.allocationId,
           });
 
-          return { igw, natGateway };
+          return { vpc, eip, igw, natGateway };
         }),
       );
 
@@ -91,6 +92,11 @@ test.provider.skipIf(!process.env.AWS_TEST_NAT_GATEWAY)(
       ).toBe(true);
 
       yield* stack.destroy();
+
+      // Zero-orphan proof: the EIP is released and the VPC (which cannot
+      // delete while the NAT gateway/subnet/IGW exist) is gone.
+      yield* assertEipGone(deployed.eip.allocationId);
+      yield* assertVpcGone(deployed.vpc.vpcId);
     }).pipe(logLevel),
   { timeout: 900_000 },
 );

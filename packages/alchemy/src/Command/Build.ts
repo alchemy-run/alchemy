@@ -8,14 +8,14 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { sha256Object } from "../Util/sha256.ts";
 import {
-  CommandError,
   CommandExecutor,
   OutputNotFound,
-  type CommandProps,
+  makeCommandError,
+  type CommandRunProps,
 } from "./Command.ts";
 import { hashDirectory, type MemoOptions } from "./Memo.ts";
 
-export interface BuildProps extends CommandProps {
+export interface BuildProps extends CommandRunProps {
   /**
    * The output path (file or directory) produced by the build.
    * This path is relative to the working directory.
@@ -116,7 +116,7 @@ export const Build = Resource<Build>("Command.Build");
  * secret's value still busts the memo hash (the hash is one-way, so the secret
  * itself is never recoverable from state).
  */
-const resolveEnv = (env: CommandProps["env"]) =>
+const resolveEnv = (env: CommandRunProps["env"]) =>
   env
     ? Object.fromEntries(
         Object.entries(env).map(([key, value]) => [
@@ -138,12 +138,12 @@ export const BuildProvider = () =>
         const cwd = path.resolve(props.cwd ?? process.cwd());
         const outdir = path.resolve(cwd, props.outdir);
         if (!(yield* fs.exists(outdir))) {
-          return yield* new CommandError({
-            command: props.command,
-            reason: new OutputNotFound({
+          return yield* makeCommandError(
+            props,
+            new OutputNotFound({
               outdir: props.outdir,
             }),
-          });
+          );
         }
         return {
           outdir: path.relative(process.cwd(), outdir),

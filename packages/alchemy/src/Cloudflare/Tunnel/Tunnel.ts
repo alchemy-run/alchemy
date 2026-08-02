@@ -2,6 +2,7 @@ import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
@@ -209,10 +210,12 @@ export const TunnelProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      const name = yield* createTunnelName(id, news.name);
-      const oldName = output?.tunnelName
-        ? output.tunnelName
-        : yield* createTunnelName(id, olds.name);
+      const oldName =
+        output?.tunnelName ?? (yield* createTunnelName(id, olds.name));
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a replace.
+      const name = news.name ?? oldName;
       if (name !== oldName) {
         return { action: "replace" } as const;
       }
@@ -233,7 +236,9 @@ export const TunnelProvider = () =>
     }),
     reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createTunnelName(id, news.name);
+      // Prefer the deployed name: regenerating would target a different
+      // resource if the generator's output for this id ever drifts.
+      const name = yield* createTunnelName(id, news.name ?? output?.tunnelName);
       const configSrc = news.configSrc ?? output?.configSrc ?? "cloudflare";
       const tunnelSecret = news.tunnelSecret
         ? Redacted.value(news.tunnelSecret)
@@ -318,12 +323,33 @@ export const TunnelProvider = () =>
       };
     }),
     delete: Effect.fn(function* ({ output }) {
+      // Observe — an already-(soft-)deleted tunnel means nothing to do.
+      const observed = yield* zeroTrust
+        .getTunnelCloudflared({
+          accountId: output.accountId,
+          tunnelId: output.tunnelId,
+        })
+        .pipe(
+          Effect.catchTag("TunnelNotFound", () => Effect.succeed(undefined)),
+        );
+      if (observed === undefined || observed.deletedAt != null) return;
+      // Delete — sibling route/config deletions propagate asynchronously and
+      // Cloudflare transiently rejects the tunnel delete while they drain.
+      // Retry bounded and let a persistent failure surface: a swallowed
+      // failure silently leaks the tunnel.
       yield* zeroTrust
         .deleteTunnelCloudflared({
           accountId: output.accountId,
           tunnelId: output.tunnelId,
         })
-        .pipe(Effect.catch(() => Effect.void));
+        .pipe(
+          Effect.retry({
+            schedule: Schedule.max([
+              Schedule.spaced("3 seconds"),
+              Schedule.recurs(10),
+            ]),
+          }),
+        );
     }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

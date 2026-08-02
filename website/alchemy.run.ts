@@ -20,10 +20,11 @@ const Website = Cloudflare.Website.StaticSite(
         : undefined,
     main: "./src/worker.ts",
     outdir: "dist",
-    // `alchemy.run` first: the Worker's `url` output is `domains[0]`.
-    // `v2.alchemy.run` stays attached (DNS + cert) but is 301-redirected
-    // to `alchemy.run` by the redirect Ruleset below.
-    domain:
+    // `alchemy.run` first: with workers.dev off, the Worker's `url` is
+    // `domains[0]`. `v2.alchemy.run` stays attached (DNS + cert) but is
+    // 301-redirected to `alchemy.run` by the redirect Ruleset below.
+    workersDev: stack.stage === "prod" ? false : undefined,
+    domains:
       stack.stage === "prod" ? ["alchemy.run", "v2.alchemy.run"] : undefined,
     memo: {
       include: [

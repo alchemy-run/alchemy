@@ -16,6 +16,7 @@ export interface AccountAlias extends Resource<
   "AWS.IAM.AccountAlias",
   AccountAliasProps,
   {
+    /** The alias assigned to the AWS account. */
     accountAlias: string;
   },
   never,

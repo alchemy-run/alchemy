@@ -2,6 +2,7 @@ import * as AWS from "@/AWS";
 import * as Kinesis from "@distilled.cloud/aws/kinesis";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
@@ -50,6 +51,9 @@ export const KinesisApiFunctionLive = KinesisApiFunction.make(
   {
     main: import.meta.url,
     url: true,
+    // The sink's bounded partial-failure retry can sleep up to ~6s, which
+    // exceeds Lambda's 3s default timeout (see PATTERNS §7).
+    timeout: Duration.seconds(30),
   },
   Effect.gen(function* () {
     const { stream, consumer } = yield* StreamAndConsumer;
@@ -73,6 +77,8 @@ export const KinesisApiFunctionLive = KinesisApiFunction.make(
     const putRecord = yield* AWS.Kinesis.PutRecord(stream);
     const putRecords = yield* AWS.Kinesis.PutRecords(stream);
     const sink = yield* AWS.Kinesis.StreamSink(stream);
+    const splitShard = yield* AWS.Kinesis.SplitShard(stream);
+    const mergeShards = yield* AWS.Kinesis.MergeShards(stream);
 
     return {
       fetch: Effect.gen(function* () {
@@ -256,6 +262,30 @@ export const KinesisApiFunctionLive = KinesisApiFunction.make(
           });
         }
 
+        if (request.method === "POST" && pathname === "/split-shard") {
+          const body = (yield* request.json) as {
+            shardToSplit: string;
+            newStartingHashKey: string;
+          };
+          yield* splitShard({
+            ShardToSplit: body.shardToSplit,
+            NewStartingHashKey: body.newStartingHashKey,
+          });
+          return yield* HttpServerResponse.json({ ok: true });
+        }
+
+        if (request.method === "POST" && pathname === "/merge-shards") {
+          const body = (yield* request.json) as {
+            shardToMerge: string;
+            adjacentShardToMerge: string;
+          };
+          yield* mergeShards({
+            ShardToMerge: body.shardToMerge,
+            AdjacentShardToMerge: body.adjacentShardToMerge,
+          });
+          return yield* HttpServerResponse.json({ ok: true });
+        }
+
         if (request.method === "POST" && pathname === "/subscribe") {
           const body = (yield* request.json) as { shardId: string };
           const result = yield* subscribeToShard({
@@ -292,8 +322,10 @@ export const KinesisApiFunctionLive = KinesisApiFunction.make(
           AWS.Kinesis.ListStreamConsumersHttp,
           AWS.Kinesis.ListStreamsHttp,
           AWS.Kinesis.ListTagsForResourceHttp,
+          AWS.Kinesis.MergeShardsHttp,
           AWS.Kinesis.PutRecordHttp,
           AWS.Kinesis.PutRecordsHttp,
+          AWS.Kinesis.SplitShardHttp,
           AWS.Kinesis.SubscribeToShardHttp,
           StreamAndConsumerLive,
         ),

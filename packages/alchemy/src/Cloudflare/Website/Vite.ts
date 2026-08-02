@@ -47,25 +47,31 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * ```
  *
  * @section SSR Frameworks
- * For SSR frameworks like TanStack Start or SolidStart, enable
- * `nodejs_compat` so the server bundle can use Node.js APIs.
+ * SSR frameworks like TanStack Start or SolidStart work with a single
+ * call — the `nodejs_compat` compatibility flag is enabled by default
+ * so the server bundle can use Node.js APIs.
  *
  * @example TanStack Start
  * ```typescript
- * const app = yield* Cloudflare.Website.Vite("TanStackStart", {
- *   compatibility: {
- *     flags: ["nodejs_compat"],
- *   },
- * });
+ * const app = yield* Cloudflare.Website.Vite("TanStackStart");
  * ```
  *
  * @example SolidStart with worker-first routing
  * ```typescript
  * const app = yield* Cloudflare.Website.Vite("SolidStart", {
- *   compatibility: {
- *     flags: ["nodejs_compat"],
- *   },
  *   assets: { runWorkerFirst: true },
+ * });
+ * ```
+ *
+ * @example React Router
+ * React Router's server build (`virtual:react-router/server-build`) is a
+ * build manifest with no default export, so it cannot be deployed as the
+ * Worker entry directly. Point `main` at a module that wraps it with
+ * `createRequestHandler` (React Router's Cloudflare template ships this
+ * as `workers/app.ts`):
+ * ```typescript
+ * const app = yield* Cloudflare.Website.Vite("ReactRouter", {
+ *   main: "workers/app.ts",
  * });
  * ```
  *
@@ -80,9 +86,6 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * @example React Router with RSC
  * ```typescript
  * const app = yield* Cloudflare.Website.Vite("ReactRouterRSC", {
- *   compatibility: {
- *     flags: ["nodejs_compat"],
- *   },
  *   viteEnvironments: {
  *     entry: "rsc",
  *     children: ["ssr"],
@@ -116,11 +119,21 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * @example Vue SPA
  * ```typescript
  * const app = yield* Cloudflare.Website.Vite("Vue", {
- *   compatibility: {
- *     flags: ["nodejs_compat"],
- *   },
  *   assets: {
  *     htmlHandling: "auto-trailing-slash",
+ *     notFoundHandling: "single-page-application",
+ *   },
+ * });
+ * ```
+ *
+ * @example Foldkit
+ * [Foldkit](https://foldkit.dev) apps are client-only Vite projects, so a
+ * single call deploys them — the Foldkit Vite plugin in the app's own
+ * `vite.config.ts` composes with the injected Cloudflare plugin. Enable
+ * `single-page-application` not-found handling so deep links boot the app:
+ * ```typescript
+ * const app = yield* Cloudflare.Website.Vite("Foldkit", {
+ *   assets: {
  *     notFoundHandling: "single-page-application",
  *   },
  * });
@@ -140,6 +153,22 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * });
  * ```
  *
+ * @example Rebuilding when a sibling workspace package changes
+ * The default scope only hashes files under the project root (plus the
+ * nearest lockfile), so edits to a sibling workspace package the app
+ * imports do not retrigger the build on their own. Add the sibling's
+ * sources with a `../` include glob — and keep `lockfile: true`, since
+ * providing `include` otherwise drops the lockfile from the hash:
+ * ```typescript
+ * const site = yield* Cloudflare.Website.Vite("Web", {
+ *   rootDir: "apps/web",
+ *   memo: {
+ *     include: ["**\/*", "../../packages/env/src/**"],
+ *     lockfile: true,
+ *   },
+ * });
+ * ```
+ *
  * @section Class Form
  * Calling `Vite` with no arguments returns a constructor you can
  * `extend` to declare the Worker as a named class. The class is both
@@ -148,9 +177,7 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  *
  * @example Declaring a Worker class
  * ```typescript
- * class Website extends Cloudflare.Website.Vite<Website>()("Website", {
- *   compatibility: { flags: ["nodejs_compat"] },
- * }) {}
+ * class Website extends Cloudflare.Website.Vite<Website>()("Website") {}
  *
  * const site = yield* Website;
  * ```

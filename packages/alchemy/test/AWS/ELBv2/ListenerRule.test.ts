@@ -45,12 +45,15 @@ test.provider(
           Effect.gen(function* () {
             const subnet1 = yield* Subnet("RSubnet1", {
               vpcId: defaultVpc.vpcId,
-              cidrBlock: defaultVpc.subnetCidrBlock(226),
+              // ListenerActions runs in another file and owns 226/227.
+              // Keep a distinct deterministic pair so file concurrency
+              // cannot turn subnet CIDR conflicts into whole-test retries.
+              cidrBlock: defaultVpc.subnetCidrBlock(228),
               availabilityZone: az1,
             });
             const subnet2 = yield* Subnet("RSubnet2", {
               vpcId: defaultVpc.vpcId,
-              cidrBlock: defaultVpc.subnetCidrBlock(227),
+              cidrBlock: defaultVpc.subnetCidrBlock(229),
               availabilityZone: az2,
             });
             const lb = yield* LoadBalancer("RLb", {

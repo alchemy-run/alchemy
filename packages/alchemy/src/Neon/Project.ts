@@ -1,5 +1,5 @@
 import {
-  type CreateProjectOutput,
+  type CreateProjectResponse,
   deleteProject,
   getConnectionURI,
   getProject,
@@ -7,7 +7,7 @@ import {
   listProjectBranchDatabases,
   listProjectBranches,
   listProjects,
-  type ListProjectsOutput,
+  type ListProjectsResponse,
   createProject as sdkCreateProject,
   updateProject,
 } from "@distilled.cloud/neon";
@@ -26,7 +26,7 @@ import {
   hashMigrations,
   listSqlFiles,
   readSqlFile,
-} from "../Sql/SqlFile.ts";
+} from "../SQL/SqlFile.ts";
 import { recordsEqual } from "../Util/equal.ts";
 import { applyMigrations, runSql } from "./Migrations.ts";
 import { parsePostgresOrigin, type PostgresOrigin } from "./PostgresOrigin.ts";
@@ -235,10 +235,12 @@ export const ProjectProvider = () =>
     }),
     diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
       if (!isResolved(news)) return undefined;
-      const name = yield* createProjectName(id, news.name);
-      const oldName = output?.projectName
-        ? output.projectName
-        : yield* createProjectName(id, olds.name);
+      const oldName =
+        output?.projectName ?? (yield* createProjectName(id, olds.name));
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a replace.
+      const name = news.name ?? oldName;
       if (
         oldName !== name ||
         (news.region ?? output?.region ?? DEFAULT_REGION) !==
@@ -444,10 +446,10 @@ const createProjectName = (id: string, name: string | undefined) =>
     return name ?? (yield* createPhysicalName({ id }));
   });
 
-const getRoleName = (creation: CreateProjectOutput) =>
+const getRoleName = (creation: CreateProjectResponse) =>
   creation.roles.find((r) => !r.protected)?.name ?? creation.roles[0]?.name;
 
-const getDatabaseName = (creation: CreateProjectOutput) =>
+const getDatabaseName = (creation: CreateProjectResponse) =>
   creation.databases[0]?.name ?? "neondb";
 
 const resolveConnection = (
@@ -493,7 +495,8 @@ type NeonOperationStatus =
   | "error"
   | "cancelling"
   | "cancelled"
-  | "skipped";
+  | "skipped"
+  | (string & {});
 
 const isOperationComplete = (status: NeonOperationStatus): boolean =>
   status === "finished" ||
@@ -577,7 +580,7 @@ export const waitForOperations = (
 
 const findProjectByName = (name: string) =>
   Effect.gen(function* () {
-    const matches: ListProjectsOutput["projects"][number][] = [];
+    const matches: ListProjectsResponse["projects"][number][] = [];
     let cursor: string | undefined;
     while (true) {
       const page = yield* listProjects({
@@ -612,7 +615,7 @@ const findProjectByName = (name: string) =>
  * "has next page" flag), so we'd otherwise loop forever re-fetching.
  */
 const listAllProjects = Effect.gen(function* () {
-  const projects: ListProjectsOutput["projects"][number][] = [];
+  const projects: ListProjectsResponse["projects"][number][] = [];
   let cursor: string | undefined;
   while (true) {
     const page = yield* listProjects(cursor !== undefined ? { cursor } : {});
@@ -637,7 +640,7 @@ const listAllProjects = Effect.gen(function* () {
  * has no branch or database yet (mirrors `read`).
  */
 const hydrateProjectAttributes = (
-  project: ListProjectsOutput["projects"][number],
+  project: ListProjectsResponse["projects"][number],
   opts: {
     defaultBranchName?: string;
     migrationsDir?: string;

@@ -39,6 +39,26 @@ lyGGetkNMmdhGRV6AlY=
 -----END CERTIFICATE-----
 `;
 
+// Idempotent out-of-band delete for the probe trust store below. The probe
+// create is EXPECTED to fail, but if it ever unexpectedly succeeded the store
+// would live outside the stack — so cleanup must be guaranteed. Not-found is
+// success; any other error is a defect, so the error channel is `never` and
+// this is a valid `Effect.ensuring` finalizer.
+const deleteTrustStoreByNameIdempotent = (name: string) =>
+  elbv2.describeTrustStores({ Names: [name] }).pipe(
+    Effect.flatMap((r) =>
+      Effect.forEach(
+        (r.TrustStores ?? []).flatMap((t) =>
+          t.TrustStoreArn ? [t.TrustStoreArn] : [],
+        ),
+        (arn) => elbv2.deleteTrustStore({ TrustStoreArn: arn }),
+      ),
+    ),
+    Effect.catchTag("TrustStoreNotFoundException", () => Effect.void),
+    Effect.orDie,
+    Effect.asVoid,
+  );
+
 // Fast unconditional probe: createTrustStore against a non-existent bundle
 // must surface a typed error (not an untyped catch-all). Proves both the
 // resource wiring and the distilled typed-error path.
@@ -48,34 +68,46 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const result = yield* elbv2
-        .createTrustStore({
-          Name: `alchemy-mtls-probe-${stack.name.replace(/[^a-zA-Z0-9]/g, "")}`.slice(
-            0,
-            32,
-          ),
-          CaCertificatesBundleS3Bucket: "alchemy-no-such-bucket-elbv2-probe",
-          CaCertificatesBundleS3Key: "missing.pem",
-        })
-        .pipe(Effect.flip);
+      const probeName =
+        `alchemy-mtls-probe-${stack.name.replace(/[^a-zA-Z0-9]/g, "")}`.slice(
+          0,
+          32,
+        );
 
-      // AWS rejects a missing/inaccessible bundle with one of these typed tags.
-      expect(
-        [
-          "CaCertificatesBundleNotFoundException",
-          "InvalidCaCertificatesBundleException",
-        ].includes(result._tag),
-      ).toBe(true);
+      // Pre-clean: reclaim a probe trust store leaked by a prior crashed run
+      // (a leftover would turn the expected error into DuplicateTrustStoreName).
+      yield* deleteTrustStoreByNameIdempotent(probeName);
+
+      yield* Effect.gen(function* () {
+        const result = yield* elbv2
+          .createTrustStore({
+            Name: probeName,
+            CaCertificatesBundleS3Bucket: "alchemy-no-such-bucket-elbv2-probe",
+            CaCertificatesBundleS3Key: "missing.pem",
+          })
+          .pipe(Effect.flip);
+
+        // AWS rejects a missing/inaccessible bundle with one of these typed tags.
+        expect(
+          [
+            "CaCertificatesBundleNotFoundException",
+            "InvalidCaCertificatesBundleException",
+          ].includes(result._tag),
+        ).toBe(true);
+      }).pipe(
+        // Guaranteed cleanup if the create ever unexpectedly succeeds.
+        Effect.ensuring(deleteTrustStoreByNameIdempotent(probeName)),
+      );
 
       yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );
 
-// Full mTLS-verify lifecycle: upload a CA bundle to a stack-owned bucket, create
-// an ACTIVE trust store, then destroy. Gated — requires an account that can
-// create trust stores and an S3 bucket.
-test.provider.skipIf(!process.env.ELBV2_TEST_MTLS)(
+// Full mTLS-verify lifecycle: upload a CA bundle to a stack-owned bucket,
+// create an ACTIVE trust store, then destroy. Runs ungated — verified live on
+// the standard testing account (completes in a few seconds).
+test.provider(
   "trust store full lifecycle from an uploaded CA bundle",
   (stack) =>
     Effect.gen(function* () {

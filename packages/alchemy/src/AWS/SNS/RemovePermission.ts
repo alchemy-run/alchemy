@@ -8,7 +8,25 @@ export interface RemovePermissionRequest extends Omit<
   "TopicArn"
 > {}
 
-/** @binding */
+/**
+ * Runtime binding for `sns:RemovePermission`.
+ *
+ * Bind this operation to a {@link Topic} inside a function runtime to remove
+ * a policy statement previously added with {@link AddPermission} by its
+ * label. The binding grants the host function `sns:RemovePermission` on the
+ * topic. Provide the `RemovePermissionHttp` layer on the Function to
+ * implement the binding.
+ * @binding
+ * @section Managing Topic Permissions
+ * @example Remove a Permission by Label
+ * ```typescript
+ * // init (provide SNS.RemovePermissionHttp on the Function)
+ * const removePermission = yield* SNS.RemovePermission(topic);
+ *
+ * // runtime
+ * yield* removePermission({ Label: "PartnerPublish" });
+ * ```
+ */
 export interface RemovePermission extends Binding.Service<
   RemovePermission,
   "AWS.SNS.RemovePermission",

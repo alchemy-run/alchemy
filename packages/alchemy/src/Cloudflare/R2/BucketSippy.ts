@@ -209,7 +209,7 @@ export declare namespace BucketSippy {
    * ID is returned, never the secret.
    */
   export type DestinationAttributes = {
-    provider: "r2" | undefined;
+    provider: "r2" | (string & {}) | undefined;
     account: string | undefined;
     bucket: string | undefined;
     accessKeyId: string | undefined;

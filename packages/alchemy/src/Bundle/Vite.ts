@@ -31,6 +31,20 @@ const RSC_MANIFEST = {
 type RscManifestId = keyof typeof RSC_MANIFEST;
 
 /**
+ * Structural subset of `vite.Environment` used by the bundling helpers.
+ * Typed structurally rather than as `vite.Environment` so plugin hooks whose
+ * `this` context is typed against a different vite copy in the install graph
+ * (bun peer-variant duplication) still assign.
+ */
+interface EnvironmentLike {
+  readonly name: string;
+  readonly config: {
+    readonly root: string;
+    readonly build: { readonly outDir: string };
+  };
+}
+
+/**
  * A Vite plugin that collects the output of the build and makes it available as an Effect.
  * @param entryEnvironment - The environment to use as the entry point for the server bundle. Defaults to "ssr".
  */
@@ -172,19 +186,23 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
   // worker module names and produce non-portable, leading-`/` specifiers that
   // Cloudflare rejects. Normalize it back to a path relative to the project root
   // so module names match the single-environment case (`dist/ssr/worker.js`).
-  const fileName = (name: string, environment: vite.Environment) => {
+  const fileName = (name: string, environment: EnvironmentLike) => {
     const outDir = environment.config.build.outDir;
     const relativeOutDir = path.isAbsolute(outDir)
       ? path.relative(environment.config.root, outDir)
       : outDir;
-    return `${relativeOutDir}/${name}`;
+    // `path.relative` (and user-configured outDirs) yield backslashes on
+    // Windows; worker module names are import specifiers, so a name like
+    // `dist\ssr/index.js` deploys fine but can never be resolved by the
+    // entry's `import "ssr/index.js"` — the worker 1101s at request time.
+    return `${relativeOutDir.replaceAll("\\", "/")}/${name}`;
   };
 
   // Manually read the RSC manifest chunk from the file system.
   // This is only safe to run *after* the build has completed.
   const readRscManifestChunk = (
     id: RscManifestId,
-    environment: vite.Environment,
+    environment: EnvironmentLike,
   ) => {
     const name = RSC_MANIFEST[id];
     return fs

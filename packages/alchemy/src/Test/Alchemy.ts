@@ -9,8 +9,10 @@
  * concurrency + timeouts itself.
  */
 import {
+  exclusiveOf,
   registerHook,
   registerTest,
+  retryOf,
   timeoutOf,
   type TestOptions,
 } from "alchemy-test";
@@ -122,14 +124,19 @@ const DEFAULT_TIMEOUT = 120_000;
  */
 export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   // Single scope shared across `beforeAll`, every `test`, and `afterAll`.
-  // Scoped resources in dev mode (the Cloudflare sidecar process and its
-  // workerd children) must outlive a single test boundary, otherwise the
-  // proxy is killed the moment `beforeAll(deploy(Stack))` resolves and every
-  // later `HttpClient.get(workerUrl)` hits a dead port. The scope is closed
-  // by `destroy(...)` (or by the fallback afterAll below).
+  // Scoped resources in dev mode (the Cloudflare dev proxy and its workerd
+  // children) must outlive a single test boundary, otherwise the proxy is
+  // killed the moment `beforeAll(deploy(Stack))` resolves and every later
+  // `HttpClient.get(workerUrl)` hits a dead port. The scope is closed by
+  // `destroy(...)` (or by the fallback afterAll below).
   const sharedScope = Scope.makeUnsafe("sequential");
+  // In dev mode, run local providers behind one file-scoped RPC sidecar
+  // (the `alchemy dev` topology). Lives in its own scope — NOT sharedScope,
+  // which `destroy(Stack)` closes mid-file in self-contained tests — and is
+  // closed by the fallback afterAll below.
+  const sidecar = Core.makeSidecarHandle(options);
   const wrap = <A>(eff: TestEffect<A>) =>
-    Core.toEffect(eff, options, sharedScope);
+    Core.toEffect(eff, options, sharedScope, sidecar);
 
   const addTest = (
     name: string,
@@ -140,6 +147,8 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     registerTest({
       name,
       mode,
+      exclusive: exclusiveOf(opts),
+      retry: retryOf(opts),
       timeout: timeoutOf(opts),
       body: mode === "skip" || mode === "todo" ? undefined : () => wrap(eff),
     });
@@ -175,6 +184,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
       body,
       { ...options, state: scratch.state },
       sharedScope,
+      sidecar,
     );
   };
 
@@ -187,6 +197,8 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     registerTest({
       name,
       mode,
+      exclusive: exclusiveOf(opts),
+      retry: retryOf(opts),
       timeout: timeoutOf(opts),
       body: mode === "skip" ? undefined : () => wrapProvider(name, fn),
     });
@@ -255,13 +267,20 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   // Fallback cleanup: if the user never calls `destroy(Stack)` (e.g.
   // `NO_DESTROY=1`), nothing else closes the shared scope and the sidecar
   // child process leaks past the test run. Register an `afterAll` that
-  // closes it. We defer registration to a microtask so it runs AFTER any
-  // user-registered `afterAll` (including `destroy(Stack)`); the runner
-  // executes afterAll hooks in registration order, and file collection
-  // flushes microtasks before sealing the file's suite tree.
+  // closes it (and the RPC sidecar, which lives in its own scope so that
+  // mid-file `destroy(Stack)` calls can't kill it for later tests). We defer
+  // registration to a microtask so it runs AFTER any user-registered
+  // `afterAll` (including `destroy(Stack)`); the runner executes afterAll
+  // hooks in registration order, and file collection flushes microtasks
+  // before sealing the file's suite tree. (Files are collected in parallel,
+  // but the microtask carries the AsyncLocalStorage context of this file's
+  // import, so the hook lands on the right suite.)
+  const closeAll = sidecar
+    ? Effect.andThen(closeScope, sidecar.close)
+    : closeScope;
   queueMicrotask(() => {
     registerHook("afterAll", {
-      body: () => closeScope,
+      body: () => closeAll,
       timeout: DEFAULT_TIMEOUT,
     });
   });

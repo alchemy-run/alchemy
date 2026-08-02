@@ -205,11 +205,11 @@ sink into one expression.
 ## Batching and failure semantics
 
 Batching is configured on the `consume*` call and forwarded to the
-platform. On AWS, `batchSize` and `maximumBatchingWindowInSeconds`
+platform. On AWS, `batchSize` and `maximumBatchingWindow`
 shape each invocation's batch; the stream sources (Kinesis,
 DynamoDB) add `startingPosition`, `parallelizationFactor`,
 `bisectBatchOnFunctionError`, `maximumRetryAttempts`,
-`maximumRecordAgeInSeconds`, and `destinationConfig` to bound a
+`maximumRecordAge`, and `destinationConfig` to bound a
 poison-pill record's blast radius. If your handler fails, the
 invocation fails and the source redelivers the batch according to
 those settings.

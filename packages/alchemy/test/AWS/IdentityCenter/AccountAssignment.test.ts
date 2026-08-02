@@ -11,8 +11,12 @@ const { test } = Test.make({ providers: AWS.providers() });
 // Identity Center requires an enabled SSO instance / identity store in the
 // testing account. If unavailable, `resolveInstance` fails with:
 //   Error: "Unable to resolve a single visible Identity Center instance; pass instanceArn explicitly"
-// Gate the live list test behind ALCHEMY_TEST_IDENTITY_CENTER=1 so an
-// entitled account runs it unchanged.
+// The testing account is an organization management account where
+// `CreateInstance` fails with a typed ValidationException ("Organization
+// management account is not allowed to perform the operation."), so an
+// instance cannot be provisioned programmatically. Gate the live list test
+// behind ALCHEMY_TEST_IDENTITY_CENTER=1 so an entitled account runs it
+// unchanged.
 const SKIP_IDENTITY_CENTER = !process.env.ALCHEMY_TEST_IDENTITY_CENTER;
 
 // Canonical `list()` test for an account assignment (a fan-out collection:
@@ -33,7 +37,7 @@ test.provider.skipIf(SKIP_IDENTITY_CENTER)(
           const permissionSet = yield* PermissionSet("ListPermissionSet", {
             name: "alchemy-list-test-permission-set",
             description: "Permission set used to verify list() enumeration",
-            sessionDuration: "PT1H",
+            sessionDuration: "1 hour",
           });
 
           const group = yield* Group("ListGroup", {

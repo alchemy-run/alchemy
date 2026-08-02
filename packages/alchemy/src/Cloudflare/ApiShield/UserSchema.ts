@@ -55,7 +55,7 @@ export interface UserSchemaAttributes {
   /** Name of the schema. */
   name: string;
   /** Kind of schema. Always `openapi_v3`. */
-  kind: "openapi_v3";
+  kind: "openapi_v3" | (string & {});
   /** The schema source as stored by Cloudflare. */
   source: string;
   /** Whether the schema is enabled for validation. */
@@ -130,7 +130,10 @@ export const UserSchemaProvider = () =>
       // The name is part of the schema's identity — compare the resolved
       // physical names (an omitted name resolves deterministically).
       const oldName = output?.name ?? (yield* createSchemaName(id, o.name));
-      const newName = yield* createSchemaName(id, n.name);
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a replace.
+      const newName = n.name ?? oldName;
       if (oldName !== newName) {
         return { action: "replace" } as const;
       }
