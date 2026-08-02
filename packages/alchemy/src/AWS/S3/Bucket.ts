@@ -123,6 +123,17 @@ export interface BucketProps {
    */
   bucketName?: string;
   /**
+   * Bucket namespace. `"account-regional"` buckets only need a unique name
+   * within the account and region (names must follow the
+   * `<prefix>-<accountId>-<region>-an` convention); `"global"` is the
+   * classic globally-unique namespace. Fixed at creation time — changing
+   * it replaces the bucket.
+   *
+   * @see https://docs.aws.amazon.com/AmazonS3/latest/userguide/gpbucketnamespaces.html#account-regional-gp-buckets
+   * @default "global"
+   */
+  bucketNamespace?: "global" | "account-regional";
+  /**
    * Indicates whether this bucket has Object Lock enabled.
    * Once enabled, cannot be disabled.
    */
@@ -532,6 +543,7 @@ export const BucketProvider = () =>
             yield* s3
               .createBucket({
                 Bucket: bucketName,
+                BucketNamespace: news.bucketNamespace,
                 ObjectLockEnabledForBucket: news.objectLockEnabled ?? false,
               })
               .pipe(
@@ -551,6 +563,7 @@ export const BucketProvider = () =>
           yield* s3
             .createBucket({
               Bucket: bucketName,
+              BucketNamespace: news.bucketNamespace,
               CreateBucketConfiguration: {
                 LocationConstraint: region as BucketLocationConstraint,
               },
@@ -1399,6 +1412,13 @@ export const BucketProvider = () =>
             yield* Effect.logInfo(
               `S3 Bucket diff: replacing bucket because name changed from ${oldBucketName} to ${newBucketName}`,
             );
+            return { action: "replace" } as const;
+          }
+          // The namespace is fixed at creation time
+          if (
+            (olds.bucketNamespace ?? "global") !==
+            (news.bucketNamespace ?? "global")
+          ) {
             return { action: "replace" } as const;
           }
           // Object lock can only be enabled at creation time
