@@ -34,6 +34,7 @@ import {
   SecretsStore,
   SendEmail,
   Service,
+  Stream as StreamSim,
   Text,
   Vectorize,
   VersionMetadata,
@@ -79,6 +80,7 @@ import { getCronBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
 import { WorkerBundle, type WorkerBundleOptions } from "./WorkerBundle.ts";
 import { createWorkerName } from "./WorkerName.ts";
+import { resolveTailConsumers } from "./WorkerProvider.ts";
 
 /** Local dev-server options (the worker-mode arm of `WorkerProps["dev"]`). */
 type DevServerOptions = Extract<WorkerProps["dev"], { mode?: "worker" }> & {
@@ -462,6 +464,11 @@ export const LocalWorkerProvider = () =>
           crons: Array.from(
             new Set([...getCronBindings(bindings), ...(props.crons ?? [])]),
           ),
+          // Tail consumers, resolved to plain `{ service }` records exactly
+          // like the live provider hashes/uploads them (script names only,
+          // deliberately hash-safe). Restart-relevant: serve lowers the list
+          // into workerd's native `tails` service designators.
+          tailConsumers: resolveTailConsumers(props.tailConsumers),
         };
       });
 
@@ -613,6 +620,12 @@ export const LocalWorkerProvider = () =>
                       // per expression and exposes the Miniflare-compatible
                       // manual trigger route `/cdn-cgi/handler/scheduled`.
                       crons: worker.crons,
+                      // Tail consumers by script name — each resolves through
+                      // the dev registry proxy exactly like cross-worker
+                      // service bindings; a consumer that isn't running yet
+                      // drops events with a `[registry]` warning until it
+                      // registers (wrangler dev-registry semantics).
+                      tails: worker.tailConsumers?.map((c) => c.service),
                       // Cache API opt-out (`dev: { cache: false }`) — matches
                       // production workers.dev, where the Cache API is a no-op.
                       cache: worker.dev.cache,
@@ -946,6 +959,7 @@ export const LocalWorkerProvider = () =>
               accountId,
               routes: [],
               crons: config.crons,
+              tailConsumers: config.tailConsumers,
             } satisfies Worker["Attributes"];
           }
 
@@ -1007,6 +1021,7 @@ export const LocalWorkerProvider = () =>
             ),
             routes: [],
             crons: config.crons,
+            tailConsumers: config.tailConsumers,
             accountId,
           } satisfies Worker["Attributes"];
         }),
@@ -1034,10 +1049,7 @@ export const LocalWorkerProvider = () =>
     }),
   );
 
-export const toRuntimeBinding = Effect.fn(function* (
-  b: WorkerBinding,
-  dev?: { remote?: boolean },
-) {
+export const toRuntimeBinding = Effect.fn(function* (b: WorkerBinding) {
   const unsupported = () =>
     new WorkerValidationError({
       message: `${b.type} bindings are not supported in local mode`,
@@ -1186,7 +1198,10 @@ export const toRuntimeBinding = Effect.fn(function* (
           })
         : SecretsStore.remote(b.name, b.storeId, b.secretName);
     case "send_email":
-      return SendEmail[dev?.remote ? "remote" : "local"]({
+      // Local emulation validates and persists sent mail as `.eml` files
+      // under the local storage's `email/` dir; `dev: { remote: true }`
+      // opts into the real Email service instead.
+      return SendEmail[b.dev?.remote ? "remote" : "local"]({
         binding: b.name,
         destinationAddress: b.destinationAddress,
         allowedDestinationAddresses: b.allowedDestinationAddresses,
@@ -1198,6 +1213,14 @@ export const toRuntimeBinding = Effect.fn(function* (
         scriptName: b.service,
         entrypoint: b.entrypoint,
       });
+    case "stream":
+      // Local emulation stores videos in a local simulator (no transcoding,
+      // no signed URLs) and serves each video's `preview` URL at
+      // /cdn-cgi/mf/stream/<id>/watch on the dev URL; `dev: { remote: true }`
+      // opts into the real Stream service instead.
+      return b.dev?.remote
+        ? StreamSim.remote(b.name)
+        : StreamSim.local({ binding: b.name });
     case "text_blob":
       return Data.local(b.name, Buffer.from(b.part));
     case "vectorize":

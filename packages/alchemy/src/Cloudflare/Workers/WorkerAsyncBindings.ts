@@ -23,6 +23,7 @@ import { isQueue } from "../Queues/Queue.ts";
 import { maybeQueueShim } from "../Queues/QueueShim.ts";
 import { isBucket } from "../R2/Bucket.ts";
 import { isSecret } from "../SecretsStore/Secret.ts";
+import { isStream } from "../Stream/Stream.ts";
 import { isIndex } from "../Vectorize/VectorizeIndex.ts";
 import { isDispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
 import { isWorkflowLike, WorkflowResource } from "../Workflows/Workflow.ts";
@@ -325,6 +326,13 @@ const toBinding = (
       // Alchemy-only local-emulation opt-out (stripped before upload).
       dev: binding.dev,
     };
+  } else if (isStream(binding)) {
+    return {
+      type: "stream",
+      name: bindingName,
+      // Alchemy-only local-emulation opt-out (stripped before upload).
+      dev: binding.dev,
+    };
   } else if (isApp(binding)) {
     return {
       type: "flagship",
@@ -361,6 +369,8 @@ const toBinding = (
       destinationAddress: binding.destinationAddress,
       allowedDestinationAddresses: binding.allowedDestinationAddresses,
       allowedSenderAddresses: binding.allowedSenderAddresses,
+      // Alchemy-only local-emulation opt-out (stripped before upload).
+      dev: binding.dev,
     };
   } else if (isDurableObjectLike(binding)) {
     return {

@@ -113,7 +113,7 @@ test.provider(
         `${deployed.url}/info`,
         PNG_RED_8X4,
       );
-      const info = (yield* infoRes.json) as InfoResponse;
+      const info = (yield* infoRes.json) as unknown as InfoResponse;
       expect(info.format).toBe("image/png");
       expect(info.width).toBe(8);
       expect(info.height).toBe(4);
@@ -136,7 +136,7 @@ test.provider(
         `${deployed.url}/info`,
         outputBytes,
       );
-      const outputInfo = (yield* outputInfoRes.json) as InfoResponse;
+      const outputInfo = (yield* outputInfoRes.json) as unknown as InfoResponse;
       expect(outputInfo.format).toBe("image/png");
       expect(outputInfo.width).toBe(4);
       expect(outputInfo.height).toBe(2);
@@ -196,7 +196,7 @@ test.provider(
         `${deployed.url}/info`,
         PNG_RED_8X4,
       );
-      const info = (yield* infoRes.json) as InfoResponse;
+      const info = (yield* infoRes.json) as unknown as InfoResponse;
       expect(info.format).toBe("image/png");
       expect(info.width).toBe(8);
       expect(info.height).toBe(4);

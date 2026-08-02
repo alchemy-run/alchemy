@@ -2970,9 +2970,13 @@ export const LiveWorkerProvider = () =>
               return rest;
             }
             // `dev` (local-emulation opt-out) is alchemy-only metadata on
-            // browser and images bindings — strip it from the wire shape.
+            // browser, images, stream and send_email bindings — strip it
+            // from the wire shape.
             if (
-              (item.type === "browser" || item.type === "images") &&
+              (item.type === "browser" ||
+                item.type === "images" ||
+                item.type === "stream" ||
+                item.type === "send_email") &&
               item.dev !== undefined
             ) {
               const { dev: _, ...rest } = item;

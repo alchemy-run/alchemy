@@ -21,6 +21,7 @@ import type { Namespace } from "../KV/Namespace.ts";
 import type { Queue } from "../Queues/Queue.ts";
 import type { Bucket } from "../R2/Bucket.ts";
 import type { Secret } from "../SecretsStore/Secret.ts";
+import type { StreamBinding } from "../Stream/StreamBinding.ts";
 import type { Index as VectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
 import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
 import type { WorkflowLike } from "../Workflows/Workflow.ts";
@@ -122,6 +123,35 @@ export type ImagesWorkerBinding = Extract<
 };
 
 /**
+ * The `stream` metadata binding extended with the alchemy-only `dev`
+ * options. `dev.remote` opts the binding out of local emulation in
+ * `alchemy dev` (the local worker proxies to the real Stream service
+ * instead of the local video-store simulator). Stripped from the binding
+ * before the script upload — Cloudflare never sees it.
+ */
+export type StreamWorkerBinding = Extract<
+  DistilledWorkerBinding,
+  { type: "stream" }
+> & {
+  dev?: { remote?: boolean };
+};
+
+/**
+ * The `send_email` metadata binding extended with the alchemy-only `dev`
+ * options. `dev.remote` opts the binding out of local emulation in
+ * `alchemy dev` (the local worker proxies `send()` through the
+ * remote-bindings preview session to the real Email service instead of the
+ * local `.eml`-persisting simulator). Stripped from the binding before the
+ * script upload — Cloudflare never sees it.
+ */
+export type SendEmailWorkerBinding = Extract<
+  DistilledWorkerBinding,
+  { type: "send_email" }
+> & {
+  dev?: { remote?: boolean };
+};
+
+/**
  * The wire-shape binding union the Cloudflare API accepts — {@link WorkerBinding}
  * minus the alchemy-only members that must be lowered before upload.
  */
@@ -134,11 +164,15 @@ export type WorkerBinding =
       | { type: "queue" }
       | { type: "browser" }
       | { type: "images" }
+      | { type: "stream" }
+      | { type: "send_email" }
     >
   | DurableObjectNamespaceWorkerBinding
   | QueueWorkerBinding
   | BrowserWorkerBinding
   | ImagesWorkerBinding
+  | StreamWorkerBinding
+  | SendEmailWorkerBinding
   | SelfUrlWorkerBinding;
 
 export type WorkerSettingsBinding = Exclude<
@@ -177,6 +211,7 @@ export type WorkerBindingResource =
   | BrowserBinding
   | FlagshipApp
   | ImagesBinding
+  | StreamBinding
   | Hyperdrive
   | VectorizeIndex
   | Secret

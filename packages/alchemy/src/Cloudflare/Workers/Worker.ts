@@ -1057,7 +1057,6 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
     containers?: { className: string; dev: DevContainerImage | undefined }[];
     crons?: string[];
     hyperdrives?: Record<string, Required<DevOrigin>>;
-    dev?: { remote?: boolean };
   },
   Providers
 >;
