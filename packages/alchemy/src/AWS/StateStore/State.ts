@@ -99,74 +99,41 @@ export interface S3StateOptions {
    * @default "kms"
    */
   secretEncryption?: "kms" | "off";
+  /**
+   * KMS alias of the key that wraps state data keys.
+   *
+   * @default "alias/alchemy-state"
+   */
+  kmsAlias?: `alias/${string}`;
+  /**
+   * Consent hook invoked before the store creates missing state
+   * infrastructure (the state bucket, or the KMS key on first secret).
+   * When absent, missing infrastructure is created automatically.
+   * `AWS.state()` wires this to the interactive bootstrap flow
+   * (prompt in a TTY, actionable error in CI, auto under `--yes`).
+   *
+   * @internal
+   */
+  onMissingInfra?: (
+    which: "bucket" | "kms",
+  ) => Effect.Effect<void, StateStoreError>;
 }
 
 /** Alias of the auto-managed KMS key that wraps state data keys. */
-const STATE_KMS_ALIAS = "alias/alchemy-state";
+export const STATE_KMS_ALIAS = "alias/alchemy-state";
 
 /** Context required by the distilled S3 operations. */
 type S3Deps = Credentials | HttpClient | Region;
 
 /**
- * State store backed by an AWS S3 bucket.
+ * The plain (bootstrap-unaware) state layer: missing infrastructure is
+ * created automatically with no consent flow. The user-facing
+ * `AWS.state()` (in `Bootstrap.ts`) builds on this by wiring
+ * {@link S3StateOptions.onMissingInfra} to the interactive bootstrap.
  *
- * Stack state is persisted as JSON objects in an account-regional S3
- * bucket, laid out exactly like the local state store's file tree with
- * the bucket (plus optional `prefix`) taking the place of the
- * `.alchemy/state` directory:
- *
- * ```
- * s3://{bucket}/{prefix}{stack}/{stage}/{fqn}.json
- * s3://{bucket}/{prefix}{stack}/{stage}/__stack_output__.json
- * ```
- *
- * The bucket is created lazily on the first state operation if it does
- * not already exist — nothing touches AWS credentials at layer
- * construction time.
- *
- * @resource
- *
- * @section Using the S3 State Store
- * Pass `AWS.state()` as the `state` option of a Stack. By default the
- * state is stored in an account-regional bucket named
- * `alchemy-state-{accountId}-{region}-an`.
- *
- * @example Default bucket
- * ```typescript
- * import * as Alchemy from "alchemy";
- * import * as AWS from "alchemy/AWS";
- *
- * const Stack = Alchemy.Stack(
- *   "my-stack",
- *   { providers: AWS.providers(), state: AWS.state() },
- *   Effect.gen(function* () {
- *     // ...
- *   }),
- * );
- * ```
- *
- * @example Custom bucket and key prefix
- * ```typescript
- * const Stack = Alchemy.Stack(
- *   "my-stack",
- *   {
- *     providers: AWS.providers(),
- *     state: AWS.state({
- *       bucketName: "my-company-state",
- *       prefix: "alchemy",
- *       encryption: {
- *         sseAlgorithm: "aws:kms",
- *         kmsMasterKeyId: "alias/alchemy-state",
- *       },
- *     }),
- *   },
- *   Effect.gen(function* () {
- *     // ...
- *   }),
- * );
- * ```
+ * @internal
  */
-export const state = (options: S3StateOptions = {}) =>
+export const stateLayer = (options: S3StateOptions = {}) =>
   Layer.effect(
     State,
     Effect.gen(function* () {
@@ -228,6 +195,18 @@ export const makeS3State = (options: S3StateOptions = {}) =>
         const { accountId, region } = yield* AWSEnvironment.current;
         const bucketName =
           options.bucketName ?? createStateBucketName(accountId, region);
+        if (options.onMissingInfra) {
+          const exists = yield* s3.headBucket({ Bucket: bucketName }).pipe(
+            Effect.map(() => true),
+            Effect.catchTag(["NotFound", "NoSuchBucket"], () =>
+              Effect.succeed(false),
+            ),
+          );
+          // The consent flow deploys the bootstrap stack (bucket + KMS
+          // key); ensureStateBucket below then finds the bucket and only
+          // converges settings.
+          if (!exists) yield* options.onMissingInfra("bucket");
+        }
         yield* ensureStateBucket(bucketName, region, options);
         return bucketName;
       }).pipe(Effect.provideContext(context), Effect.mapError(toError)),
@@ -279,6 +258,67 @@ export const makeS3State = (options: S3StateOptions = {}) =>
       );
 
     /**
+     * The state bucket is versioned, so an out-of-band delete of the
+     * data-key object leaves a delete marker with the real versions
+     * intact underneath. Restore the most recent real version instead
+     * of minting a fresh data key — a fresh key would permanently
+     * strand every value already encrypted under the old one.
+     */
+    const restoreWrappedKeyFromVersions = (bucketName: string) =>
+      Effect.gen(function* () {
+        const versions = yield* s3.listObjectVersions({
+          Bucket: bucketName,
+          Prefix: stateKeyObjectKey,
+        });
+        const candidates = (versions.Versions ?? [])
+          .filter(
+            (v) => v.Key === stateKeyObjectKey && v.VersionId !== undefined,
+          )
+          .sort(
+            (a, b) =>
+              new Date(b.LastModified ?? 0).getTime() -
+              new Date(a.LastModified ?? 0).getTime(),
+          );
+        const latest = candidates[0];
+        if (latest === undefined) return undefined;
+        const body = yield* s3
+          .getObject({
+            Bucket: bucketName,
+            Key: stateKeyObjectKey,
+            VersionId: latest.VersionId,
+          })
+          .pipe(
+            Effect.flatMap((r) =>
+              r.Body === undefined
+                ? Effect.succeed(undefined)
+                : Stream.mkString(Stream.decodeText(r.Body)),
+            ),
+            Effect.catchTag("NoSuchKey", () => Effect.succeed(undefined)),
+          );
+        if (body === undefined) return undefined;
+        yield* Effect.logInfo(
+          `S3 state store: restoring deleted state data key object '${stateKeyObjectKey}' from version ${latest.VersionId}`,
+        );
+        // Conditional put + read-back: a concurrent restorer (or a
+        // concurrent fresh mint) converges on whatever won.
+        yield* s3
+          .putObject({
+            Bucket: bucketName,
+            Key: stateKeyObjectKey,
+            Body: body,
+            ContentType: "application/json",
+            IfNoneMatch: "*",
+          })
+          .pipe(
+            Effect.catchTag(
+              ["PreconditionFailed", "ConditionalRequestConflict"],
+              () => Effect.void,
+            ),
+          );
+        return yield* readWrappedKey(bucketName);
+      });
+
+    /**
      * Recover the state key after an out-of-band cleanup (e.g. an
      * account nuke) scheduled it for deletion: cancel the pending
      * deletion and re-enable it. State encrypted under the key's data
@@ -328,12 +368,22 @@ export const makeS3State = (options: S3StateOptions = {}) =>
       );
     };
 
-    /** Resolve the KeyId behind `alias/alchemy-state`, creating key + alias on first use. */
+    const kmsAlias = options.kmsAlias ?? STATE_KMS_ALIAS;
+
+    /** Resolve the KeyId behind the state alias, creating key + alias on first use. */
     const ensureKmsKey = Effect.gen(function* () {
-      const existing = yield* kms.describeKey({ KeyId: STATE_KMS_ALIAS }).pipe(
+      const describeAlias = kms.describeKey({ KeyId: kmsAlias }).pipe(
         Effect.map((r) => r.KeyMetadata),
         Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
       );
+      let existing = yield* describeAlias;
+      if (existing?.KeyId === undefined && options.onMissingInfra) {
+        // The consent flow deploys the bootstrap stack (which includes
+        // the key + alias); re-observe and fall through to the
+        // automatic create only if it still doesn't exist.
+        yield* options.onMissingInfra("kms");
+        existing = yield* describeAlias;
+      }
       if (existing?.KeyId !== undefined) {
         if (
           existing.KeyState === "PendingDeletion" ||
@@ -353,7 +403,7 @@ export const makeS3State = (options: S3StateOptions = {}) =>
         );
       }
       return yield* kms
-        .createAlias({ AliasName: STATE_KMS_ALIAS, TargetKeyId: keyId })
+        .createAlias({ AliasName: kmsAlias, TargetKeyId: keyId })
         .pipe(
           Effect.map(() => keyId),
           // Lost the alias-creation race: schedule our now-orphaned key
@@ -363,14 +413,12 @@ export const makeS3State = (options: S3StateOptions = {}) =>
               .scheduleKeyDeletion({ KeyId: keyId, PendingWindowInDays: 7 })
               .pipe(
                 Effect.ignore,
-                Effect.flatMap(() =>
-                  kms.describeKey({ KeyId: STATE_KMS_ALIAS }),
-                ),
+                Effect.flatMap(() => kms.describeKey({ KeyId: kmsAlias })),
                 Effect.flatMap((r) =>
                   r.KeyMetadata?.KeyId === undefined
                     ? Effect.fail(
                         new StateStoreError({
-                          message: `KMS alias ${STATE_KMS_ALIAS} exists but has no target key`,
+                          message: `KMS alias ${kmsAlias} exists but has no target key`,
                         }),
                       )
                     : Effect.succeed(r.KeyMetadata.KeyId),
@@ -393,6 +441,8 @@ export const makeS3State = (options: S3StateOptions = {}) =>
       Effect.gen(function* () {
         const existing = yield* readWrappedKey(bucketName);
         if (existing !== undefined) return yield* unwrapDataKey(existing);
+        const restored = yield* restoreWrappedKeyFromVersions(bucketName);
+        if (restored !== undefined) return yield* unwrapDataKey(restored);
         const keyId = yield* ensureKmsKey;
         const dataKey = yield* kms.generateDataKey({
           KeyId: keyId,

@@ -15,6 +15,10 @@ import {
   bootstrap as bootstrapAws,
   destroyBootstrap as destroyBootstrapAws,
 } from "../../AWS/Bootstrap.ts";
+import {
+  bootstrap as bootstrapStateStore,
+  teardown as teardownStateStore,
+} from "../../AWS/StateStore/Bootstrap.ts";
 import * as AWSCredentials from "../../AWS/Credentials.ts";
 import { AWSEnvironment } from "../../AWS/Environment.ts";
 import * as AWSRegion from "../../AWS/Region.ts";
@@ -38,7 +42,16 @@ const awsRegion = Flag.string("region").pipe(
 );
 
 const bootstrapDestroy = Flag.boolean("destroy").pipe(
-  Flag.withDescription("Destroy all bootstrap buckets in the selected region"),
+  Flag.withDescription(
+    "Destroy the bootstrap resources in the selected region: assets buckets, the state bucket, and the state KMS key (scheduled for deletion with a 7-day recovery window)",
+  ),
+  Flag.withDefault(false),
+);
+
+const bootstrapForce = Flag.boolean("force").pipe(
+  Flag.withDescription(
+    "With --destroy: delete the state bucket even when it still holds state for other stacks",
+  ),
   Flag.withDefault(false),
 );
 
@@ -49,6 +62,7 @@ const bootstrapCommand = Command.make(
     profile: awsProfile,
     region: awsRegion,
     destroy: bootstrapDestroy,
+    force: bootstrapForce,
   },
   instrumentCommand(
     "aws.bootstrap",
@@ -58,7 +72,7 @@ const bootstrapCommand = Command.make(
       "alchemy.destroy": a.destroy,
     }),
   )(
-    Effect.fn(function* ({ envFile, profile, region, destroy }) {
+    Effect.fn(function* ({ envFile, profile, region, destroy, force }) {
       const logger = Logger.layer([fileLogger("bootstrap.txt")], {
         mergeWithExisting: true,
       });
@@ -109,6 +123,9 @@ const bootstrapCommand = Command.make(
               ),
               Effect.provide(bootstrapLayer),
             );
+            yield* teardownStateStore({ force }).pipe(
+              Effect.provide(bootstrapLayer),
+            );
             return;
           }
           yield* bootstrapAws().pipe(
@@ -119,6 +136,7 @@ const bootstrapCommand = Command.make(
             ),
             Effect.provide(bootstrapLayer),
           );
+          yield* bootstrapStateStore().pipe(Effect.provide(bootstrapLayer));
         });
       }).pipe(Effect.provide(logger));
     }),

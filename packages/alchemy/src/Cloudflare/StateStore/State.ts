@@ -29,6 +29,10 @@ import {
   makeHttpStateStore,
   type HttpStateStoreCredentials,
 } from "../../State/HttpStateStore.ts";
+import {
+  hasLocalBootstrapStack,
+  hoistBootstrapStack,
+} from "../../State/Bootstrap.ts";
 import { makeLocalState } from "../../State/LocalState.ts";
 import { State, type StateService } from "../../State/State.ts";
 import {
@@ -571,6 +575,7 @@ const deployWithLocalState = ({
     const httpState = yield* makeCloudflareStateStore({ url, authToken });
 
     yield* hoistBootstrapStack({
+      stack: "CloudflareStateStore",
       source: {
         state: localState,
         stage: localStage,
@@ -578,6 +583,14 @@ const deployWithLocalState = ({
       destination: {
         state: httpState,
         stage: remoteStage,
+      },
+      retry: {
+        while: isTransientBootstrapWriteError,
+        // Bounded at ~30s: the freshly deployed worker (and its
+        // Secrets Store bindings) can take a while to serve
+        // consistently; anything persisting past that is a real
+        // failure to surface, not to spin on.
+        schedule: Schedule.max([Schedule.fixed(500), Schedule.recurs(60)]),
       },
     });
 
@@ -626,79 +639,7 @@ export const isTransientBootstrapWriteError = (error: {
 
 // check if there's a local stack that wasn't properly hoisted
 const hasLocalStack = (stage: string) =>
-  Effect.gen(function* () {
-    const localState = yield* makeLocalState();
-    return yield* Effect.map(
-      localState.listStages("CloudflareStateStore"),
-      // key off the profile name to avoid conflicts with other profiles
-      (stages) => stages.includes(stage),
-    );
-  });
-
-/**
- * Non-destructively copy every resource in the
- * `CloudflareStateStore/<scriptName>` stack from `source` into
- * `destination`, leaving every other stack in `destination` untouched.
- *
- * This intentionally does not delete anything from `destination`: at
- * bootstrap time the destination is the user's live remote state
- * store, and removing entries that happen to be missing locally would
- * be catastrophic.
- */
-const hoistBootstrapStack = Effect.fn(function* ({
-  source,
-  destination,
-}: {
-  source: {
-    state: StateService;
-    stage: string;
-  };
-  destination: {
-    state: StateService;
-    stage: string;
-  };
-}) {
-  const stack = "CloudflareStateStore";
-  const fqns = yield* source.state.list({ stack, stage: source.stage });
-  yield* Effect.annotateCurrentSpan({
-    "alchemy.state_store.stack": stack,
-    "alchemy.state_store.stage": source.stage,
-    "alchemy.state_store.resources.count": fqns.length,
-  });
-  yield* Effect.forEach(
-    fqns,
-    Effect.fn(function* (fqn) {
-      const value = yield* source.state.get({
-        stack,
-        stage: source.stage,
-        fqn,
-      });
-      if (value) {
-        yield* destination.state
-          .set({
-            stack,
-            stage: destination.stage,
-            fqn,
-            value,
-          })
-          .pipe(
-            Effect.retry({
-              while: isTransientBootstrapWriteError,
-              // Bounded at ~30s: the freshly deployed worker (and its
-              // Secrets Store bindings) can take a while to serve
-              // consistently; anything persisting past that is a real
-              // failure to surface, not to spin on.
-              schedule: Schedule.max([
-                Schedule.fixed(500),
-                Schedule.recurs(60),
-              ]),
-            }),
-          );
-      }
-    }),
-    { concurrency: "unbounded" },
-  );
-}, Effect.withSpan("state_store.hoist_bootstrap_stack"));
+  hasLocalBootstrapStack("CloudflareStateStore", stage);
 
 /**
  * Log in to a Cloudflare-deployed HTTP state-store.
