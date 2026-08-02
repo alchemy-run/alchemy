@@ -1,8 +1,28 @@
-import type { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 import * as d1 from "@distilled.cloud/cloudflare/d1";
 import * as Effect from "effect/Effect";
-import type * as HttpClient from "effect/unstable/http/HttpClient";
-import type { SqlFile } from "../../Sql/SqlFile.ts";
+import type { SqlFile } from "../../SQL/SqlFile.ts";
+
+/**
+ * The minimal query surface the migration flow needs: run (possibly
+ * multi-statement) SQL and return the D1 HTTP API's result envelope. Two
+ * implementations exist:
+ *
+ * - the cloud executor ({@link applyMigrations}), backed by distilled's
+ *   `d1.queryDatabase`;
+ * - the local executor (`LocalD1Gateway.ts`), which tunnels the same
+ *   protocol into the local workerd D1 simulator.
+ */
+export interface D1QueryResult {
+  result: Array<{
+    results?: unknown;
+    success?: boolean | null;
+    meta?: unknown;
+  }>;
+}
+
+export type D1SqlExecutor<E = unknown, R = never> = (
+  sql: string,
+) => Effect.Effect<D1QueryResult, E, R>;
 
 export interface ApplyMigrationsOptions {
   accountId: string;
@@ -12,19 +32,38 @@ export interface ApplyMigrationsOptions {
 }
 
 /**
- * Apply pending D1 migrations in order. Uses the wrangler-compatible
- * 3-column schema `(id TEXT PK, name TEXT, applied_at TEXT)`.
+ * Apply pending D1 migrations in order against the live cloud API. Uses the
+ * wrangler-compatible 3-column schema `(id TEXT PK, name TEXT, applied_at
+ * TEXT)`.
  */
 export const applyMigrations = (options: ApplyMigrationsOptions) =>
   Effect.gen(function* () {
-    const { accountId, databaseId, migrationsTable, migrationsFiles } = options;
-    yield* ensureMigrationsTable(accountId, databaseId, migrationsTable);
-    const applied = yield* getAppliedMigrations(
-      accountId,
-      databaseId,
-      migrationsTable,
-    );
-    let nextSeq = yield* getNextSeq(accountId, databaseId, migrationsTable);
+    const queryDb = yield* d1.queryDatabase;
+    const executor: D1SqlExecutor<d1.QueryDatabaseError> = (sql) =>
+      queryDb({
+        accountId: options.accountId,
+        databaseId: options.databaseId,
+        sql,
+      });
+    yield* applyMigrationsWith(executor, options);
+  });
+
+/**
+ * Apply pending D1 migrations in order through the given SQL executor —
+ * the executor-agnostic core shared by the cloud and local flows.
+ */
+export const applyMigrationsWith = <E, R>(
+  executor: D1SqlExecutor<E, R>,
+  options: {
+    migrationsTable: string;
+    migrationsFiles: ReadonlyArray<SqlFile>;
+  },
+): Effect.Effect<void, E, R> =>
+  Effect.gen(function* () {
+    const { migrationsTable, migrationsFiles } = options;
+    yield* ensureMigrationsTable(executor, migrationsTable);
+    const applied = yield* getAppliedMigrations(executor, migrationsTable);
+    let nextSeq = yield* getNextSeq(executor, migrationsTable);
 
     for (const migration of migrationsFiles) {
       if (applied.has(migration.id)) continue;
@@ -32,9 +71,7 @@ export const applyMigrations = (options: ApplyMigrationsOptions) =>
       nextSeq += 1;
       // D1 over HTTP doesn't support transactions; run migration + record
       // in a single batched query.
-      yield* executeSQL(
-        accountId,
-        databaseId,
+      yield* executor(
         [
           migration.sql,
           `INSERT INTO ${migrationsTable} (id, name, applied_at) VALUES ('${migrationId}', '${migration.id}', datetime('now'));`,
@@ -57,29 +94,12 @@ interface SchemaInfo {
   columns: TableColumn[];
 }
 
-const executeSQL = (
-  accountId: string,
-  databaseId: string,
-  sql: string,
-): Effect.Effect<
-  d1.QueryDatabaseResponse,
-  d1.QueryDatabaseError,
-  Credentials | HttpClient.HttpClient
-> =>
-  Effect.gen(function* () {
-    const queryDb = yield* d1.queryDatabase;
-    return yield* queryDb({ accountId, databaseId, sql });
-  });
-
-const detectSchema = (
-  accountId: string,
-  databaseId: string,
+const detectSchema = <E, R>(
+  executor: D1SqlExecutor<E, R>,
   migrationsTable: string,
 ) =>
   Effect.gen(function* () {
-    const result = yield* executeSQL(
-      accountId,
-      databaseId,
+    const result = yield* executor(
       `PRAGMA table_info(${migrationsTable});`,
     ).pipe(Effect.option);
 
@@ -120,9 +140,8 @@ const detectSchema = (
     } satisfies SchemaInfo;
   });
 
-const migrateLegacySchema = (
-  accountId: string,
-  databaseId: string,
+const migrateLegacySchema = <E, R>(
+  executor: D1SqlExecutor<E, R>,
   migrationsTable: string,
   schema: SchemaInfo,
 ) =>
@@ -135,18 +154,14 @@ const migrateLegacySchema = (
       );
     }
     const tempTable = `${migrationsTable}_temp_migration`;
-    yield* executeSQL(
-      accountId,
-      databaseId,
+    yield* executor(
       `CREATE TABLE ${tempTable} (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         applied_at TEXT NOT NULL
       );`,
     );
-    yield* executeSQL(
-      accountId,
-      databaseId,
+    yield* executor(
       `INSERT INTO ${tempTable} (id, name, applied_at)
        SELECT
          printf('%05d', row_number() OVER (ORDER BY applied_at)) as id,
@@ -155,25 +170,18 @@ const migrateLegacySchema = (
        FROM ${migrationsTable}
        ORDER BY applied_at;`,
     );
-    yield* executeSQL(accountId, databaseId, `DROP TABLE ${migrationsTable};`);
-    yield* executeSQL(
-      accountId,
-      databaseId,
-      `ALTER TABLE ${tempTable} RENAME TO ${migrationsTable};`,
-    );
+    yield* executor(`DROP TABLE ${migrationsTable};`);
+    yield* executor(`ALTER TABLE ${tempTable} RENAME TO ${migrationsTable};`);
   });
 
-const ensureMigrationsTable = (
-  accountId: string,
-  databaseId: string,
+const ensureMigrationsTable = <E, R>(
+  executor: D1SqlExecutor<E, R>,
   migrationsTable: string,
 ) =>
   Effect.gen(function* () {
-    const schema = yield* detectSchema(accountId, databaseId, migrationsTable);
+    const schema = yield* detectSchema(executor, migrationsTable);
     if (!schema.exists) {
-      yield* executeSQL(
-        accountId,
-        databaseId,
+      yield* executor(
         `CREATE TABLE ${migrationsTable} (
           id TEXT PRIMARY KEY,
           name TEXT NOT NULL,
@@ -183,39 +191,26 @@ const ensureMigrationsTable = (
       return;
     }
     if (schema.isLegacySchema || !schema.hasIdColumn || !schema.hasNameColumn) {
-      yield* migrateLegacySchema(
-        accountId,
-        databaseId,
-        migrationsTable,
-        schema,
-      );
+      yield* migrateLegacySchema(executor, migrationsTable, schema);
     }
   });
 
-const getAppliedMigrations = (
-  accountId: string,
-  databaseId: string,
+const getAppliedMigrations = <E, R>(
+  executor: D1SqlExecutor<E, R>,
   migrationsTable: string,
 ) =>
   Effect.gen(function* () {
-    const result = yield* executeSQL(
-      accountId,
-      databaseId,
-      `SELECT name FROM ${migrationsTable};`,
-    );
+    const result = yield* executor(`SELECT name FROM ${migrationsTable};`);
     const rows = (result.result[0]?.results ?? []) as Array<{ name: string }>;
     return new Set(rows.map((r) => r.name));
   });
 
-const getNextSeq = (
-  accountId: string,
-  databaseId: string,
+const getNextSeq = <E, R>(
+  executor: D1SqlExecutor<E, R>,
   migrationsTable: string,
 ) =>
   Effect.gen(function* () {
-    const result = yield* executeSQL(
-      accountId,
-      databaseId,
+    const result = yield* executor(
       `SELECT id FROM ${migrationsTable} ORDER BY id;`,
     );
     const rows = (result.result[0]?.results ?? []) as Array<{ id: string }>;

@@ -344,10 +344,11 @@ const getWidget = (accountId: string, sitekey: string) =>
  * the same name, pick the oldest for determinism.
  */
 const findByName = (accountId: string, name: string) =>
-  turnstile.listWidgets({ accountId, filter: `name:${name}` }).pipe(
-    Effect.map((list) =>
-      list.result
-        .filter((w) => w.name === name)
+  turnstile.listWidgets.items({ accountId, filter: `name:${name}` }).pipe(
+    Stream.filter((w) => w.name === name),
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk)
         .sort((a, b) => a.createdOn.localeCompare(b.createdOn))
         .at(0),
     ),

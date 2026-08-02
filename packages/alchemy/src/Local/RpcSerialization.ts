@@ -101,8 +101,10 @@ const wrapRpcEffectHandler = <Args extends Array<any>, Success, Error>(
     Effect.exit,
     Effect.map((exit): RpcSerializedExit<Success, Error> => {
       if (exit._tag === "Success") {
-        // Success values cross the same capnweb wire as args — raw Redacted/Output
-        // instances are not serializable and crash the session.
+        // Success values need the same marker treatment as args: provider
+        // attributes can legitimately carry `Redacted` secrets (e.g. a local
+        // container's bound env), and a raw Redacted reaching capnweb dies
+        // with `TypeError: Cannot serialize value: <redacted>`.
         return {
           _tag: "Success",
           value: serializeRpcArgs(exit.value) as Success,
@@ -145,6 +147,9 @@ const unwrapRpcEffectHandler = <Args extends Array<any>, Success, Error>(
     (args) => Effect.promise(() => handler(args)),
     Effect.flatMap((exit): Exit.Exit<Success, Error> => {
       if (exit._tag === "Success") {
+        // Mirror of the wrap side: rebuild `Redacted` wrappers from their
+        // wire markers so callers get the same shape an in-process provider
+        // returns.
         return Exit.succeed(deserializeRpcArgs(exit.value) as Success);
       }
       return Exit.failCause(

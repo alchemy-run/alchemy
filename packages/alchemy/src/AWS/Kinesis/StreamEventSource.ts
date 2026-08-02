@@ -1,4 +1,5 @@
 import type * as Lambda from "@distilled.cloud/aws/lambda";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import * as Binding from "../../Binding.ts";
@@ -13,10 +14,12 @@ export interface StreamEventSourceProps {
    */
   batchSize?: number;
   /**
-   * The maximum amount of time, in seconds, that Lambda spends gathering records before invoking the function.
+   * The maximum amount of time that Lambda spends gathering records before
+   * invoking the function, e.g. `"5 seconds"` or `Duration.seconds(5)`.
+   * Rounded to whole seconds on the wire.
    * @default 0
    */
-  maximumBatchingWindowInSeconds?: number;
+  maximumBatchingWindow?: Duration.Input;
   /**
    * The position in the stream from which Lambda starts reading.
    * @default "LATEST"
@@ -37,19 +40,22 @@ export interface StreamEventSourceProps {
    */
   bisectBatchOnFunctionError?: boolean;
   /**
-   * Discard records older than the specified age in seconds.
-   * @default -1
+   * Discard records older than the specified age, e.g. `"1 hour"` or
+   * `Duration.hours(1)`. Rounded to whole seconds on the wire. Omit to never
+   * discard records by age.
    */
-  maximumRecordAgeInSeconds?: number;
+  maximumRecordAge?: Duration.Input;
   /**
    * Discard records after the specified number of retries.
    * @default -1
    */
   maximumRetryAttempts?: number;
   /**
-   * The duration in seconds of a processing window for tumbling windows.
+   * The duration of a processing window for tumbling windows, e.g.
+   * `"30 seconds"` or `Duration.seconds(30)`. Rounded to whole seconds on
+   * the wire (0–900 seconds).
    */
-  tumblingWindowInSeconds?: number;
+  tumblingWindow?: Duration.Input;
   /**
    * A list of current response type enums applied to the event source mapping.
    */
@@ -72,7 +78,42 @@ export interface StreamEventSourceProps {
   metricsConfig?: Lambda.EventSourceMappingMetricsConfig;
 }
 
-/** @binding */
+/**
+ * Event source connecting a Kinesis `Stream` to the hosting compute.
+ *
+ * The contract is a `Binding.Service`; the Lambda implementation layer
+ * (`AWS.Lambda.StreamEventSource`) creates an event source mapping on the
+ * stream, grants the read IAM actions, and forwards `aws:kinesis` records
+ * into the handler's `Stream`. Use the {@link consumeStreamRecords} helper
+ * rather than calling the service directly.
+ * @binding
+ * @section Consuming Records
+ * @example Process Stream Records in a Lambda Function
+ * ```typescript
+ * export default MyFunction.make(
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const stream = yield* AWS.Kinesis.Stream("OrdersStream");
+ *
+ *     // init — registers the event source mapping and the record handler
+ *     yield* AWS.Kinesis.consumeStreamRecords(
+ *       stream,
+ *       { startingPosition: "LATEST", batchSize: 10 },
+ *       (records) =>
+ *         records.pipe(
+ *           Stream.runForEach((record) =>
+ *             Effect.log(
+ *               Buffer.from(record.kinesis.data, "base64").toString("utf8"),
+ *             ),
+ *           ),
+ *         ),
+ *     );
+ *
+ *     return {};
+ *   }).pipe(Effect.provide(AWS.Lambda.StreamEventSource)),
+ * );
+ * ```
+ */
 export interface StreamEventSource extends Binding.Service<
   StreamEventSource,
   "AWS.Kinesis.StreamEventSource",
@@ -96,6 +137,24 @@ export type StreamEventSourceService = <StreamReq = never, Req = never>(
  *
  * The Lambda runtime implementation creates an event source mapping and forwards
  * matching `aws:kinesis` records into the supplied `Stream`.
+ *
+ * @example Forward stream records into an SQS queue
+ * ```typescript
+ * const sink = yield* AWS.SQS.QueueSink(queue);
+ *
+ * yield* AWS.Kinesis.consumeStreamRecords(
+ *   stream,
+ *   { startingPosition: "LATEST" },
+ *   (records) =>
+ *     records.pipe(
+ *       Stream.map((record) => ({
+ *         MessageBody: Buffer.from(record.kinesis.data, "base64").toString("utf8"),
+ *       })),
+ *       Stream.run(sink),
+ *       Effect.orDie,
+ *     ),
+ * );
+ * ```
  */
 export const consumeStreamRecords = <
   S extends KinesisStream,

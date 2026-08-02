@@ -20,7 +20,7 @@ TanStack Start worker            src/routes/rpc.ts  (server route)
   │  env.BACKEND.fetch(...)      (private service binding)
   ▼
 Backend RpcWorker                src/backend/api.ts
-  │  Drizzle.postgres over Hyperdrive
+  │  Drizzle.Postgres over Hyperdrive
   ▼
 Neon Postgres branch
 ```

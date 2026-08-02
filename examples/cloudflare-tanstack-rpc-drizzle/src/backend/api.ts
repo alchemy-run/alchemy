@@ -19,12 +19,12 @@ export default class Backend extends Cloudflare.Workers.RpcWorker<Backend>()(
   "Backend",
   {
     main: import.meta.filename,
-    url: false, // disable workers.dev URL; we use the service binding instead
+    workersDev: false, // no workers.dev URL; we use the service binding instead
     schema: TodoRpcs,
   },
   Effect.gen(function* () {
     const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
-    const db = yield* Drizzle.postgres(conn.connectionString, { relations });
+    const db = yield* Drizzle.Postgres(conn.connectionString, { relations });
 
     // DB failures are unexpected here, so we `orDie` them into defects. That
     // keeps each handler's typed error channel aligned with its RPC schema

@@ -22,6 +22,9 @@ your first [Lambda](/aws/compute/lambda).
 - **[ECS](/aws/compute/ecs)** — long-running containers on Fargate.
   Alchemy bundles your Effect program into a Docker image and
   runs it as a Cluster + Service + Task.
+- **[EKS](/aws/compute/eks)** — managed Kubernetes (Auto Mode).
+  Deployments, Jobs, raw manifests, and Helm charts in the same
+  TypeScript program as the cluster — no YAML, no kubectl.
 - **[EC2](/aws/compute/ec2)** — full-control virtual machines, with the
   complete VPC networking toolkit around them.
 
@@ -50,6 +53,13 @@ Not sure which? See
   with a `PutRecord` binding and the same `Stream` consumer
   surface.
 
+## Email
+
+- **[Receiving inbound email](/aws/email/receiving)** — SES receipt
+  rule sets and rules that store mail in S3, fan out to SNS, invoke
+  a Lambda, or bounce it. Region-limited to `us-east-1`,
+  `us-west-2`, and `eu-west-1`.
+
 ## Security & secrets
 
 - **[Secrets & env](/aws/security/secrets-env)** — .env values via
@@ -68,8 +78,8 @@ Not sure which? See
   sites and built Vite apps on S3 + CloudFront as a single
   `StaticSite` resource.
 - **[VPC & networking](/aws/networking)** — the `Network` helper
-  and the VPC primitives, for when ECS or EC2 needs explicit
-  networking.
+  and the VPC primitives, for when ECS, EKS, or EC2 needs
+  explicit networking.
 
 ## What are you building?
 
@@ -79,6 +89,7 @@ Not sure which? See
 | A typed HTTP API                      | [Effect HTTP API on Lambda](/aws/apis/effect-http-api)                      |
 | A typed API for external clients      | [Effect RPC on Lambda](/aws/apis/effect-rpc)                                |
 | Drive a MicroVM from a Lambda (internal RPC) | [MicroVMs](/aws/compute/microvms) + [Schemaless RPC](/apis/schemaless)   |
+| An ML training fleet                  | [HyperPod](/aws/compute/hyperpod) — Slurm or EKS orchestrated, with task governance |
 | A REST API with stages/custom domains | [API Gateway](/aws/apis/api-gateway)                                        |
 | Your own domain on a site or API      | [Custom domains with Route53 + ACM](/aws/networking/custom-domains)               |
 | A static site                         | [Deploy a static site](/aws/frontend/static-site) on S3 + CloudFront            |
@@ -86,7 +97,9 @@ Not sure which? See
 | Background jobs                       | [SQS](/aws/messaging/sqs) + Lambda                                                      |
 | Scheduled jobs                        | [EventBridge Scheduler](/aws/messaging/eventbridge) → Lambda                            |
 | A Postgres database                   | [RDS & Aurora](/aws/data/rds)                                                      |
+| Kubernetes workloads or Helm charts   | [EKS](/aws/compute/eks)                                                            |
 | Object processing                     | [S3 events](/aws/messaging/s3-events)                                            |
+| Inbound email pipelines               | [SES email receiving](/aws/email/receiving) → S3 / SNS / Lambda                  |
 | Change data capture                   | [DynamoDB Streams](/aws/messaging/dynamodb-streams)                              |
 | API keys or credentials for a function | [Secrets & env](/aws/security/secrets-env)                                            |
 

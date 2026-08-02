@@ -1,10 +1,11 @@
 import * as AWS from "@/AWS";
 import { SecurityGroup, SecurityGroupRule, Vpc } from "@/AWS/EC2";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
+import * as Test from "./VpcTest.ts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { assertSecurityGroupGone, assertVpcGone } from "./Gone.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -17,7 +18,7 @@ test.provider("list enumerates the deployed Security Group Rule", (stack) =>
   Effect.gen(function* () {
     yield* stack.destroy();
 
-    const { rule } = yield* stack.deploy(
+    const { vpc, sg, rule } = yield* stack.deploy(
       Effect.gen(function* () {
         const vpc = yield* Vpc("ListSgrVpc", {
           cidrBlock: "10.0.0.0/16",
@@ -45,5 +46,10 @@ test.provider("list enumerates the deployed Security Group Rule", (stack) =>
     ).toBe(true);
 
     yield* stack.destroy();
+
+    // The rule dies with its security group; group + VPC gone proves full
+    // teardown.
+    yield* assertSecurityGroupGone(sg.groupId);
+    yield* assertVpcGone(vpc.vpcId);
   }).pipe(logLevel),
 );

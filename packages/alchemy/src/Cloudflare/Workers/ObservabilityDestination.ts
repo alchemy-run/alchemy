@@ -193,7 +193,10 @@ export const ObservabilityDestinationProvider = () =>
       // cannot rename — a name change is a replacement.
       const oldName =
         output?.name ?? olds?.name ?? (yield* createDestinationName(id));
-      const newName = news.name ?? (yield* createDestinationName(id));
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a replace.
+      const newName = news.name ?? oldName;
       if (oldName !== newName) {
         return { action: "replace" } as const;
       }
@@ -226,7 +229,10 @@ export const ObservabilityDestinationProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = news.name ?? (yield* createDestinationName(id));
+      // Prefer the deployed name: regenerating would target a different
+      // resource if the generator's output for this id ever drifts.
+      const name =
+        news.name ?? output?.name ?? (yield* createDestinationName(id));
       // Inputs have been resolved to concrete strings by Plan.
       const url = news.url as string;
       const headers = (news.headers ?? {}) as Record<string, string>;

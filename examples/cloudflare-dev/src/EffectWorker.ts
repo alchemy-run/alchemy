@@ -28,8 +28,12 @@ export default class EffectWorker extends Cloudflare.Worker<EffectWorker>()(
     dev: {
       port: Config.number("PORT").pipe(Config.withDefault(1338)),
     },
+    build: {
+      bundleAnalyzer: true,
+    },
   },
   Effect.gen(function* () {
+    const publicUrl = yield* Cloudflare.Worker.URL;
     const kv = yield* Cloudflare.KV.ReadWriteNamespace(KV);
     const queue = yield* Cloudflare.Queues.Queue("EffectWorkerQueue");
     const queueBinding = yield* Cloudflare.Queues.WriteQueue(queue);
@@ -97,6 +101,8 @@ export default class EffectWorker extends Cloudflare.Worker<EffectWorker>()(
         } else if (url.pathname.startsWith("/queue/messages")) {
           const messages = yield* queueMessages.getByName("global").list();
           return yield* HttpServerResponse.json(messages);
+        } else if (url.pathname.startsWith("/url")) {
+          return yield* HttpServerResponse.json({ url: yield* publicUrl });
         }
         const value = yield* kv.list().pipe(Effect.orDie);
         return yield* HttpServerResponse.json(value);

@@ -38,7 +38,7 @@ export default Alchemy.Stack(
     });
     const asyncWorker = yield* Cloudflare.Worker("AiSearchBindingsWorker", {
       main: path.resolve(import.meta.dirname, "bindings-worker.ts"),
-      url: true,
+      workersDev: true,
       env: { SEARCH: search, NS: namespace },
     });
     const effectWorker = yield* AiSearchEffectBindingsWorker;

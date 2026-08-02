@@ -2,15 +2,20 @@ import * as Effect from "effect/Effect";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { Octokit } from "./Octokit.ts";
+import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface RepositoryProps {
   /**
    * Repository owner — a user or organization login.
    *
-   * Changing the owner replaces the repository (the old one is deleted and a
-   * new one created under the new owner).
+   * Changing the owner replaces the repository: a NEW, EMPTY repository is
+   * created under the new owner — history, issues, and pull requests are
+   * not carried over. The old repository is retained on GitHub under the
+   * default `retain` removal policy; it is only deleted when the resource
+   * opted into deletion via `destroy()`. To actually move a repository
+   * between owners with its history, transfer it in the GitHub UI/API
+   * first, then update `owner` here and deploy with `--adopt`.
    */
   owner: string;
 
@@ -135,6 +140,15 @@ export interface RepositoryProps {
    * Only used at create time.
    */
   licenseTemplate?: string;
+
+  /**
+   * Override the GitHub host or API base URL for this resource only (e.g.
+   * `github.example.com` for GitHub Enterprise). Falls back to
+   * `GitHub.providers({ baseUrl })`, then to the host resolved by the auth
+   * provider. Changing it replaces the resource — the same name on a
+   * different GitHub instance is a different physical resource.
+   */
+  baseUrl?: string;
 }
 
 export interface Repository extends Resource<
@@ -351,18 +365,29 @@ export const RepositoryProvider = () =>
   Provider.succeed(Repository, {
     stables: ["repoId", "nodeId"],
 
-    // The only structural change is the owner: a repository cannot be moved
-    // between owners by an update, so changing it replaces the resource.
-    // A `name` change is a rename, handled in `reconcile`, not a replacement.
+    // Structural changes are the owner (we deliberately do NOT call GitHub's
+    // transfer API — user-to-user transfers require out-of-band acceptance
+    // and cannot converge deterministically) and the host (the same repo
+    // name on a different GitHub instance is a different repository). A
+    // `name` change is a rename, handled in `reconcile`, not a replacement.
+    //
+    // Replacement is guarded by the resource's default `retain` removal
+    // policy: the engine creates the new repository and RETAINS the old one
+    // on GitHub (Apply honors `retain` for the replaced old generation), so
+    // history is never destroyed unless the user opted into `destroy()`.
     diff: Effect.fn(function* ({ news, olds }) {
       if (!isResolved(news)) return;
-      if (olds !== undefined && news.owner !== olds.owner) {
+      if (olds === undefined) return;
+      if (
+        news.owner !== olds.owner ||
+        (yield* gitHubBaseUrlChanged(olds, news))
+      ) {
         return { action: "replace" };
       }
     }),
 
     reconcile: Effect.fn(function* ({ news, olds }) {
-      const octokit = yield* Octokit;
+      const octokit = yield* octokitFor(news.baseUrl);
 
       const getRepo = (repo: string) =>
         Effect.tryPromise({
@@ -597,12 +622,12 @@ export const RepositoryProvider = () =>
     // refreshes the output attributes (including the current name) so that a
     // subsequent delete targets the live repository even when a prior rename's
     // state persistence failed.
-    read: Effect.fn(function* ({ output }) {
+    read: Effect.fn(function* ({ olds, output }) {
       if (output === undefined) {
         return undefined;
       }
 
-      const octokit = yield* Octokit;
+      const octokit = yield* octokitFor(olds.baseUrl);
 
       return yield* Effect.tryPromise({
         try: async () => {
@@ -621,7 +646,7 @@ export const RepositoryProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ olds, output }) {
-      const octokit = yield* Octokit;
+      const octokit = yield* octokitFor(olds.baseUrl);
 
       // Resolve the current repository name via the stable numeric ID. A rename
       // whose state persistence failed leaves `olds.name` stale; deleting by

@@ -126,7 +126,10 @@ export const RulesetProvider = () =>
       }
 
       const oldName = output?.name ?? (yield* createRulesetName(id, olds.name));
-      const name = yield* createRulesetName(id, news.name);
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a rename.
+      const name = news.name ?? oldName;
       if (
         oldName !== name ||
         olds.description !== news.description ||
@@ -153,13 +156,23 @@ export const RulesetProvider = () =>
       return toRulesetAttributes(zoneId, ruleset);
     }),
     delete: Effect.fn(function* ({ olds, output }) {
-      yield* rulesets
-        .putPhasForZone({
+      // This resource owns the entire phase entrypoint, so destroy removes
+      // the entrypoint ruleset itself (emptying the rules would leave an
+      // inert-but-listed entrypoint behind on the zone forever). Observe
+      // first so the delete is idempotent and never acts on a stale id.
+      const entrypoint = yield* rulesets
+        .getPhasForZone({
           zoneId: output.zoneId,
-          rulesetPhase: olds.phase,
-          name: output.name,
-          description: output.description,
-          rules: [],
+          rulesetPhase: output.phase ?? olds.phase,
+        })
+        .pipe(
+          Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)),
+        );
+      if (entrypoint === undefined) return;
+      yield* rulesets
+        .deleteRulesetForZone({
+          zoneId: output.zoneId,
+          rulesetId: entrypoint.id,
         })
         .pipe(Effect.catchTag("RulesetNotFound", () => Effect.void));
     }),
@@ -218,7 +231,11 @@ export const RulesetProvider = () =>
             ),
             Effect.map((items) =>
               items.filter(
-                (item): item is Ruleset["Attributes"] => item !== undefined,
+                (item): item is Ruleset["Attributes"] =>
+                  // An entrypoint with zero rules is inert — it's what other
+                  // owners (e.g. Worker redirect cleanup) leave behind after
+                  // removing their rules. Don't surface it as a resource.
+                  item !== undefined && item.rules.length > 0,
               ),
             ),
             // Plan-gated / partially-provisioned zones reject the route.

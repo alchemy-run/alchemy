@@ -27,13 +27,21 @@ export interface DeploymentProps {
    * explicitly only when not using `restApi`.
    */
   restApiId?: Input<string>;
+  /** Description of the deployment. */
   description?: string;
+  /** Name of a stage API Gateway creates alongside the deployment (legacy pattern — prefer a separate `Stage`). */
   stageName?: string;
+  /** Description of the stage created via `stageName`. */
   stageDescription?: string;
+  /** Enable a cache cluster on the stage created via `stageName`. */
   cacheClusterEnabled?: boolean;
+  /** Cache cluster size for the stage created via `stageName`. */
   cacheClusterSize?: ag.CacheClusterSize;
+  /** Stage variables for the stage created via `stageName`. */
   variables?: { [key: string]: string | undefined };
+  /** Canary settings applied to the deployment. */
   canarySettings?: ag.DeploymentCanarySettings;
+  /** Enable X-Ray tracing on the stage created via `stageName`. */
   tracingEnabled?: boolean;
   /**
    * Opaque key/value map; when any value changes, a replacement deployment

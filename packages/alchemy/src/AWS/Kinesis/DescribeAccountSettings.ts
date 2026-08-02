@@ -5,7 +5,23 @@ import * as Binding from "../../Binding.ts";
 export interface DescribeAccountSettingsRequest
   extends Kinesis.DescribeAccountSettingsInput {}
 
-/** @binding */
+/**
+ * Runtime binding for `kinesis:DescribeAccountSettings`.
+ *
+ * An account-level operation (no stream argument) that reports the account's
+ * Kinesis settings, such as on-demand stream count quotas. Provide the
+ * implementation with `Effect.provide(AWS.Kinesis.DescribeAccountSettingsHttp)`.
+ * @binding
+ * @section Account Settings
+ * @example Read the Account's Kinesis Settings
+ * ```typescript
+ * // init — account-level binding takes no resource
+ * const describeAccountSettings = yield* AWS.Kinesis.DescribeAccountSettings();
+ *
+ * // runtime
+ * const settings = yield* describeAccountSettings();
+ * ```
+ */
 export interface DescribeAccountSettings extends Binding.Service<
   DescribeAccountSettings,
   "AWS.Kinesis.DescribeAccountSettings",

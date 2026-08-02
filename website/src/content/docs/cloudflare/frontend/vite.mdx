@@ -152,6 +152,27 @@ the build runs, so the client reads a concrete
 when `VITE_`-prefixed — the prefix means you are opting the value
 into the public bundle, so don't prefix secrets with `VITE_`.
 
+### The site's own URL
+
+`backend.url` works for *another* Worker's URL, but a site can't
+reference its own `url` Output. `Worker.URL` closes the loop:
+Alchemy resolves the URL the Worker will be served at — its first
+custom domain, otherwise its `workers.dev` URL — before the build
+and injects it:
+
+```typescript
+const web = yield* Cloudflare.Website.Vite("Website", {
+  env: {
+    VITE_PUBLIC_URL: Cloudflare.Worker.URL,
+  },
+});
+```
+
+The client bundle reads a concrete
+`import.meta.env.VITE_PUBLIC_URL`, and server code sees the same
+value on `env.VITE_PUBLIC_URL` (typed `string` by `InferEnv`).
+Under `alchemy dev` it resolves to the local dev server's URL.
+
 ### Runtime bindings
 
 Non-`VITE_` values become native Worker bindings, available to SSR

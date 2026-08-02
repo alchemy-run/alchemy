@@ -706,6 +706,153 @@ describe("DynamoDB Bindings", () => {
       }),
     );
   });
+
+  describe("Backups", () => {
+    test.provider(
+      "creates, describes, lists, restore-conflicts, and deletes a backup",
+      (_stack) =>
+        Effect.gen(function* () {
+          const created = (yield* send(
+            HttpClientRequest.bodyJsonUnsafe(
+              HttpClientRequest.post(`${baseUrl}/create-backup`),
+              { name: "bindings-test-backup" },
+            ),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            backupArn?: string;
+            status?: string;
+          };
+          expect(created.backupArn).toBeTruthy();
+          const backupArn = created.backupArn!;
+
+          yield* Effect.gen(function* () {
+            // Wait for the on-demand backup to become AVAILABLE (it is
+            // CREATING for a few seconds on an empty table).
+            const described = yield* fetchUntil<{ status?: string }>(
+              HttpClient.get(
+                `${baseUrl}/describe-backup?arn=${encodeURIComponent(backupArn)}`,
+              ).pipe(Effect.flatMap((r) => r.json)),
+              (body) => body?.status === "AVAILABLE",
+            );
+            expect(described.status).toBe("AVAILABLE");
+
+            const listed = (yield* HttpClient.get(
+              `${baseUrl}/list-backups`,
+            ).pipe(Effect.flatMap((r) => r.json))) as {
+              backupArns: string[];
+            };
+            expect(listed.backupArns).toContain(backupArn);
+
+            // Restoring into the already-deployed target table conflicts —
+            // proves the RestoreTableFromBackup binding round-trips with a
+            // typed error and never creates an unmanaged table.
+            const restored = (yield* send(
+              HttpClientRequest.bodyJsonUnsafe(
+                HttpClientRequest.post(`${baseUrl}/restore-from-backup`),
+                { arn: backupArn },
+              ),
+            ).pipe(Effect.flatMap((r) => r.json))) as {
+              ok: boolean;
+              error?: string;
+            };
+            expect(restored.ok).toBe(false);
+            expect(restored.error).toBe("TableAlreadyExistsException");
+          }).pipe(
+            // Always delete the backup, even if an assertion above failed —
+            // zero orphans.
+            Effect.ensuring(
+              send(
+                HttpClientRequest.bodyJsonUnsafe(
+                  HttpClientRequest.delete(`${baseUrl}/delete-backup`),
+                  { arn: backupArn },
+                ),
+              ).pipe(Effect.ignore),
+            ),
+          );
+
+          // The delete in `ensuring` already ran; verify it took effect (the
+          // backup drops out of ListBackups, allowing for eventual
+          // consistency).
+          const afterDelete = yield* fetchUntil<{ backupArns: string[] }>(
+            HttpClient.get(`${baseUrl}/list-backups`).pipe(
+              Effect.flatMap((r) => r.json),
+            ),
+            (body) =>
+              Array.isArray(body?.backupArns) &&
+              !body.backupArns.includes(backupArn),
+          );
+          expect(afterDelete.backupArns).not.toContain(backupArn);
+        }),
+      { timeout: 120_000 },
+    );
+  });
+
+  describe("DescribeContinuousBackups", () => {
+    test.provider("reads the continuous backups / PITR status", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* HttpClient.get(
+          `${baseUrl}/describe-continuous-backups`,
+        ).pipe(Effect.flatMap((r) => r.json))) as {
+          continuousBackupsStatus?: string;
+          pitrStatus?: string;
+        };
+
+        expect(response.continuousBackupsStatus).toBe("ENABLED");
+        // The fixture table does not enable PITR.
+        expect(response.pitrStatus).toBe("DISABLED");
+      }),
+    );
+  });
+
+  describe("Exports", () => {
+    test.provider(
+      "surfaces a typed error when PITR is unavailable and lists exports",
+      (_stack) =>
+        Effect.gen(function* () {
+          // PITR is disabled on the fixture table, so starting an export
+          // fails fast with the typed tag (and never writes to the bucket).
+          const exported = (yield* send(
+            HttpClientRequest.bodyJsonUnsafe(
+              HttpClientRequest.post(`${baseUrl}/export-table`),
+              {},
+            ),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            ok: boolean;
+            error?: string;
+          };
+          expect(exported.ok).toBe(false);
+          expect(exported.error).toBe(
+            "PointInTimeRecoveryUnavailableException",
+          );
+
+          const listed = (yield* HttpClient.get(`${baseUrl}/list-exports`).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as { exportArns: string[] };
+          expect(Array.isArray(listed.exportArns)).toBe(true);
+          expect(listed.exportArns).toHaveLength(0);
+        }),
+      { timeout: 120_000 },
+    );
+
+    test.provider("DescribeExport returns a typed not-found error", (_stack) =>
+      Effect.gen(function* () {
+        const described = (yield* HttpClient.get(
+          `${baseUrl}/describe-table`,
+        ).pipe(Effect.flatMap((r) => r.json))) as {
+          table: { TableArn: string };
+        };
+        const exportArn = `${described.table.TableArn}/export/01700000000000-00000000`;
+
+        const response = (yield* HttpClient.get(
+          `${baseUrl}/describe-export?arn=${encodeURIComponent(exportArn)}`,
+        ).pipe(Effect.flatMap((r) => r.json))) as {
+          ok: boolean;
+          error?: string;
+        };
+        expect(response.ok).toBe(false);
+        expect(response.error).toBe("ExportNotFoundException");
+      }),
+    );
+  });
 });
 
 class QueryNotConsistent extends Data.TaggedError("QueryNotConsistent") {}

@@ -3,6 +3,7 @@ import { MetricStream } from "@/AWS/CloudWatch";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import { AWSEnvironment } from "@/AWS/Environment";
+import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as firehose from "@distilled.cloud/aws/firehose";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as s3 from "@distilled.cloud/aws/s3";
@@ -49,34 +50,66 @@ test.provider.skipIf(!process.env.AWS_TEST_METRICSTREAM)(
     Effect.gen(function* () {
       const { region } = yield* AWSEnvironment.current;
 
+      // Idempotent cleanup: every delete tolerates ONLY its typed not-found
+      // tag, so a real failure (e.g. a dependency violation) surfaces and
+      // fails the test instead of silently orphaning the resource.
+      const emptyBucket = Effect.gen(function* () {
+        const listed = yield* s3.listObjectsV2({ Bucket: bucketName });
+        const objects = (listed.Contents ?? []).flatMap((o) =>
+          o.Key ? [{ Key: o.Key }] : [],
+        );
+        if (objects.length > 0) {
+          yield* s3.deleteObjects({
+            Bucket: bucketName,
+            Delete: { Objects: objects },
+          });
+        }
+        return listed.IsTruncated === true;
+      }).pipe(Effect.repeat({ until: (truncated) => !truncated, times: 8 }));
+
       const cleanup = Effect.gen(function* () {
         yield* firehose
           .deleteDeliveryStream({
             DeliveryStreamName: firehoseName,
             AllowForceDelete: true,
           })
-          .pipe(Effect.catch(() => Effect.void));
+          .pipe(
+            Effect.retry({
+              while: (e) => e._tag === "ResourceInUseException",
+              schedule: Schedule.spaced("5 seconds"),
+              times: 8,
+            }),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
         yield* iam
           .deleteRolePolicy({
             RoleName: firehoseRoleName,
             PolicyName: "s3",
           })
-          .pipe(Effect.catch(() => Effect.void));
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
         yield* iam
           .deleteRole({ RoleName: firehoseRoleName })
-          .pipe(Effect.catch(() => Effect.void));
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
         yield* iam
           .deleteRolePolicy({
             RoleName: streamRoleName,
             PolicyName: "firehose",
           })
-          .pipe(Effect.catch(() => Effect.void));
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
         yield* iam
           .deleteRole({ RoleName: streamRoleName })
-          .pipe(Effect.catch(() => Effect.void));
-        yield* s3
-          .deleteBucket({ Bucket: bucketName })
-          .pipe(Effect.catch(() => Effect.void));
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+        // The Firehose may have delivered objects into the bucket — empty it
+        // first, and retry once more if a late delivery races the delete.
+        yield* emptyBucket.pipe(
+          Effect.andThen(s3.deleteBucket({ Bucket: bucketName })),
+          Effect.retry({
+            while: (e) => e._tag === "BucketNotEmpty",
+            schedule: Schedule.spaced("2 seconds"),
+            times: 3,
+          }),
+          Effect.catchTag("NoSuchBucket", () => Effect.void),
+        );
       });
 
       yield* stack.destroy();
@@ -228,7 +261,19 @@ test.provider.skipIf(!process.env.AWS_TEST_METRICSTREAM)(
         ).toBe(true);
 
         yield* stack.destroy();
-      }).pipe(Effect.ensuring(cleanup));
+
+        // Out-of-band assert-gone: getMetricStream returns the typed
+        // ResourceNotFoundException once the stream is deleted.
+        const gone = yield* cloudwatch
+          .getMetricStream({ Name: deployed.metricStreamName })
+          .pipe(
+            Effect.map(() => false),
+            Effect.catchTag("ResourceNotFoundException", () =>
+              Effect.succeed(true),
+            ),
+          );
+        expect(gone).toBe(true);
+      }).pipe(Effect.ensuring(cleanup.pipe(Effect.orDie)));
     }),
   { timeout: 240_000 },
 );

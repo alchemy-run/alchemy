@@ -5,9 +5,9 @@ import {
   getProjectBranch,
   listProjectBranchDatabases,
   listProjectBranches,
-  type ListProjectBranchesOutput,
+  type ListProjectBranchesResponse,
   listProjects,
-  type ListProjectsOutput,
+  type ListProjectsResponse,
   updateProjectBranch,
 } from "@distilled.cloud/neon";
 import * as Effect from "effect/Effect";
@@ -16,7 +16,7 @@ import { isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { listSqlFiles, readSqlFile } from "../Sql/SqlFile.ts";
+import { listSqlFiles, readSqlFile } from "../SQL/SqlFile.ts";
 import { recordsEqual } from "../Util/equal.ts";
 import { applyMigrations, runSql } from "./Migrations.ts";
 import { parsePostgresOrigin, type PostgresOrigin } from "./PostgresOrigin.ts";
@@ -239,10 +239,12 @@ export const BranchProvider = () =>
       ) {
         return { action: "replace" } as const;
       }
-      const newName = yield* createBranchName(id, news.name);
-      const oldName = output?.branchName
-        ? output.branchName
-        : yield* createBranchName(id, olds.name);
+      const oldName =
+        output?.branchName ?? (yield* createBranchName(id, olds.name));
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a rename.
+      const newName = news.name ?? oldName;
       if (
         newName !== oldName ||
         (news.protected ?? false) !== (output?.protected ?? false) ||
@@ -339,7 +341,13 @@ export const BranchProvider = () =>
       };
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
-      const newName = yield* createBranchName(id, news.name);
+      // Prefer the deployed name: regenerating would target a different
+      // resource if the generator's output for this id ever drifts. An
+      // explicit `news.name` still renames the branch in place.
+      const newName =
+        news.name ??
+        output?.branchName ??
+        (yield* createBranchName(id, news.name));
 
       // Ensure — when no prior output exists we create the branch;
       // otherwise sync the mutable scalar fields on the existing
@@ -495,7 +503,7 @@ export const BranchProvider = () =>
   });
 
 const listAllProjects = Effect.gen(function* () {
-  const projects: ListProjectsOutput["projects"][number][] = [];
+  const projects: ListProjectsResponse["projects"][number][] = [];
   let cursor: string | undefined;
   while (true) {
     const page = yield* listProjects(cursor !== undefined ? { cursor } : {});
@@ -518,7 +526,7 @@ const listAllProjects = Effect.gen(function* () {
 
 const listAllBranches = (projectId: string) =>
   Effect.gen(function* () {
-    const branches: ListProjectBranchesOutput["branches"][number][] = [];
+    const branches: ListProjectBranchesResponse["branches"][number][] = [];
     let cursor: string | undefined;
     do {
       const page = yield* listProjectBranches({
@@ -533,7 +541,7 @@ const listAllBranches = (projectId: string) =>
 
 const hydrateBranch = (
   projectId: string,
-  branch: ListProjectBranchesOutput["branches"][number],
+  branch: ListProjectBranchesResponse["branches"][number],
 ) =>
   Effect.gen(function* () {
     const dbs = yield* listProjectBranchDatabases({
@@ -587,7 +595,7 @@ const createBranchName = (id: string, name: string | undefined) =>
 
 const findBranchByName = (projectId: string, name: string) =>
   Effect.gen(function* () {
-    const matches: ListProjectBranchesOutput["branches"][number][] = [];
+    const matches: ListProjectBranchesResponse["branches"][number][] = [];
     let cursor: string | undefined;
     do {
       const page = yield* listProjectBranches({

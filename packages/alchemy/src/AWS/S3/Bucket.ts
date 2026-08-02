@@ -2,6 +2,7 @@ import { Region } from "@distilled.cloud/aws/Region";
 import type { BucketLocationConstraint } from "@distilled.cloud/aws/s3";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as Arr from "effect/Array";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Order from "effect/Order";
 import * as Schedule from "effect/Schedule";
@@ -15,6 +16,7 @@ import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { diffTags } from "../../Tags.ts";
 import type { Credentials } from "../Credentials.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { durationToDays } from "../IAM/common.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
@@ -104,8 +106,12 @@ export interface BucketReplication {
 export interface BucketObjectLockConfiguration {
   /** Retention mode. */
   mode: "GOVERNANCE" | "COMPLIANCE";
-  /** Retention period in days (mutually exclusive with `years`). */
-  days?: number;
+  /**
+   * Retention period (e.g. `"30 days"` or `Duration.days(30)`; a bare number
+   * is milliseconds). Rounded to whole days on the wire. Mutually exclusive
+   * with `years`.
+   */
+  days?: Duration.Input;
   /** Retention period in years (mutually exclusive with `days`). */
   years?: number;
 }
@@ -405,48 +411,30 @@ export const BucketProvider = () =>
         yield* Effect.logInfo(
           `S3 Bucket delete: deleting all objects from ${bucketName}`,
         );
-        // List and delete all objects (including versions and delete markers)
-        let continuationToken: string | undefined;
-        do {
-          const listResponse = yield* s3.listObjectsV2({
-            Bucket: bucketName,
-            ContinuationToken: continuationToken,
-          });
-
-          if (listResponse.Contents && listResponse.Contents.length > 0) {
-            yield* Effect.logInfo(
-              `S3 Bucket delete: deleting ${listResponse.Contents.length} object(s) from ${bucketName}`,
-            );
-            yield* s3.deleteObjects({
-              Bucket: bucketName,
-              Delete: {
-                Objects: listResponse.Contents.map((obj) => ({
-                  Key: obj.Key!,
-                })),
-                Quiet: true,
-              },
-            });
-          }
-
-          continuationToken = listResponse.NextContinuationToken;
-        } while (continuationToken);
-
-        // Also delete all object versions and delete markers
+        // Delete every object VERSION and DELETE MARKER, by Key+VersionId.
+        // `DeleteBucket` fails with BucketNotEmpty until all of them are
+        // gone — deleting only current objects (listObjectsV2) leaves
+        // versions/markers behind in versioned buckets. listObjectVersions
+        // also covers unversioned buckets (plain objects surface as
+        // Versions with VersionId "null"), so this single loop empties
+        // both. Pagination is gated on IsTruncated — never on NextKeyMarker,
+        // which S3 may omit even mid-listing.
+        let isTruncated = true;
         let keyMarker: string | undefined;
         let versionIdMarker: string | undefined;
-        do {
-          const listVersionsResponse = yield* s3.listObjectVersions({
+        while (isTruncated) {
+          const page = yield* s3.listObjectVersions({
             Bucket: bucketName,
             KeyMarker: keyMarker,
             VersionIdMarker: versionIdMarker,
           });
 
           const objectsToDelete = [
-            ...(listVersionsResponse.Versions ?? []).map((v) => ({
+            ...(page.Versions ?? []).map((v) => ({
               Key: v.Key!,
               VersionId: v.VersionId,
             })),
-            ...(listVersionsResponse.DeleteMarkers ?? []).map((dm) => ({
+            ...(page.DeleteMarkers ?? []).map((dm) => ({
               Key: dm.Key!,
               VersionId: dm.VersionId,
             })),
@@ -454,7 +442,7 @@ export const BucketProvider = () =>
 
           if (objectsToDelete.length > 0) {
             yield* Effect.logInfo(
-              `S3 Bucket delete: deleting ${objectsToDelete.length} versioned object(s) from ${bucketName}`,
+              `S3 Bucket delete: deleting ${objectsToDelete.length} object version(s)/delete marker(s) from ${bucketName}`,
             );
             yield* s3.deleteObjects({
               Bucket: bucketName,
@@ -465,9 +453,48 @@ export const BucketProvider = () =>
             });
           }
 
-          keyMarker = listVersionsResponse.NextKeyMarker;
-          versionIdMarker = listVersionsResponse.NextVersionIdMarker;
-        } while (keyMarker);
+          isTruncated = page.IsTruncated === true;
+          keyMarker = page.NextKeyMarker;
+          versionIdMarker = page.NextVersionIdMarker;
+        }
+
+        // Abort any in-progress multipart uploads — their stored parts also
+        // keep DeleteBucket failing with BucketNotEmpty.
+        let uploadsTruncated = true;
+        let uploadKeyMarker: string | undefined;
+        let uploadIdMarker: string | undefined;
+        while (uploadsTruncated) {
+          const uploads = yield* s3.listMultipartUploads({
+            Bucket: bucketName,
+            KeyMarker: uploadKeyMarker,
+            UploadIdMarker: uploadIdMarker,
+          });
+          const inProgress = (uploads.Uploads ?? []).filter(
+            (u) => u.Key != null && u.UploadId != null,
+          );
+          if (inProgress.length > 0) {
+            yield* Effect.logInfo(
+              `S3 Bucket delete: aborting ${inProgress.length} in-progress multipart upload(s) in ${bucketName}`,
+            );
+            yield* Effect.all(
+              inProgress.map((u) =>
+                s3
+                  .abortMultipartUpload({
+                    Bucket: bucketName,
+                    Key: u.Key!,
+                    UploadId: u.UploadId!,
+                  })
+                  // Already aborted/completed concurrently — a race, not a
+                  // failure.
+                  .pipe(Effect.catchTag("NoSuchUpload", () => Effect.void)),
+              ),
+              { concurrency: 8 },
+            );
+          }
+          uploadsTruncated = uploads.IsTruncated === true;
+          uploadKeyMarker = uploads.NextKeyMarker;
+          uploadIdMarker = uploads.NextUploadIdMarker;
+        }
       });
 
       const ensureBucketExists = Effect.fn(function* ({
@@ -1283,7 +1310,7 @@ export const BucketProvider = () =>
           );
         const desired: s3.DefaultRetention = {
           Mode: objectLockConfiguration.mode,
-          Days: objectLockConfiguration.days,
+          Days: durationToDays(objectLockConfiguration.days),
           Years: objectLockConfiguration.years,
         };
         const canon = (r: s3.DefaultRetention | undefined) =>
@@ -1518,16 +1545,31 @@ export const BucketProvider = () =>
 
           return resolved;
         }),
-        delete: Effect.fn(function* ({ olds = {}, output, session }) {
+        delete: Effect.fn(function* ({ olds = {}, output, session, force }) {
+          // Whether we are allowed to destroy the bucket's contents.
+          // - `olds.forceDestroy` — the user opted in on the resource props.
+          // - `force` — set only by `alchemy unsafe nuke`, an explicit
+          //   operator-confirmed account teardown. Nuke enumerates buckets
+          //   straight from the cloud (its `olds` is Attributes, not Props),
+          //   so `forceDestroy` is never present there. S3 ownership is
+          //   account-level (see `list`/`read`: buckets are globally unique
+          //   and only enumerable/headable in our own account; this provider
+          //   deliberately does not stamp alchemy tags on buckets), so every
+          //   bucket nuke hands us is one this account owns.
+          // A normal destroy without `forceDestroy` must NOT empty the
+          // bucket — a non-empty bucket fails with BucketNotEmpty, which is
+          // the data-protection behavior users rely on.
+          const mayEmpty = olds.forceDestroy === true || force === true;
           yield* Effect.logInfo(
-            `S3 Bucket delete: bucket=${output.bucketName} forceDestroy=${olds.forceDestroy ?? false} region=${output.region}`,
+            `S3 Bucket delete: bucket=${output.bucketName} forceDestroy=${olds.forceDestroy ?? false} force=${force ?? false} region=${output.region}`,
           );
           const run = Effect.gen(function* () {
-            // If forceDestroy is enabled, delete all objects first. The bucket
-            // may already be gone (deleted out-of-band, or a previous destroy
-            // partially succeeded) — treat NoSuchBucket as a no-op so the
-            // overall delete still converges.
-            if (olds.forceDestroy) {
+            // If we may destroy contents, delete all object versions and
+            // delete markers first. The bucket may already be gone (deleted
+            // out-of-band, or a previous destroy partially succeeded) —
+            // treat NoSuchBucket as a no-op so the overall delete still
+            // converges.
+            if (mayEmpty) {
               yield* session.note(
                 `Force destroying bucket: ${output.bucketName} - deleting all objects...`,
               );
@@ -1542,11 +1584,34 @@ export const BucketProvider = () =>
               })
               .pipe(
                 Effect.catchTag("NoSuchBucket", () => Effect.void),
+                // BucketNotEmpty after an empty is eventual consistency (or
+                // a concurrent writer landing new versions between the empty
+                // and the DeleteBucket): re-empty so the bounded retry below
+                // has a chance to succeed instead of spinning on a bucket
+                // that still has content.
+                Effect.catchTag("BucketNotEmpty", (e) =>
+                  Effect.gen(function* () {
+                    if (!mayEmpty) return yield* Effect.fail(e);
+                    yield* deleteAllObjects(output.bucketName).pipe(
+                      Effect.catchTag("NoSuchBucket", () => Effect.void),
+                    );
+                    // Re-fail with the original error so the retry policy
+                    // drives the next DeleteBucket attempt.
+                    return yield* Effect.fail(e);
+                  }),
+                ),
                 Effect.retry({
-                  while: (e) => e._tag === "BucketNotEmpty",
+                  // BucketHasAccessPointsAttached: S3's access-point
+                  // attachment view is eventually consistent — deleting a
+                  // bucket immediately after its access points were deleted
+                  // can transiently report attachments. Retry until the view
+                  // converges (bounded).
+                  while: (e): boolean =>
+                    e._tag === "BucketNotEmpty" ||
+                    e._tag === "BucketHasAccessPointsAttached",
                   schedule: Schedule.max([
-                    Schedule.exponential(100),
-                    Schedule.recurs(5),
+                    Schedule.exponential(250),
+                    Schedule.recurs(7),
                   ]),
                 }),
               );

@@ -1,4 +1,5 @@
 import * as route53 from "@distilled.cloud/aws/route-53";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -6,6 +7,7 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
+import { durationToSeconds } from "../IAM/common.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface HealthCheckProps {
@@ -36,11 +38,12 @@ export interface HealthCheckProps {
    */
   searchString?: string;
   /**
-   * Seconds between checks (10 or 30). Immutable — changing it forces
-   * replacement.
-   * @default 30
+   * Time between checks, e.g. `"30 seconds"` or `Duration.seconds(10)` (a
+   * bare number is milliseconds). Rounded to whole seconds on the wire
+   * (10 or 30). Immutable — changing it forces replacement.
+   * @default 30 seconds
    */
-  requestInterval?: number;
+  requestInterval?: Duration.Input;
   /**
    * Number of consecutive failures before the endpoint is considered unhealthy.
    * @default 3
@@ -116,12 +119,47 @@ export interface HealthCheck extends Resource<
  *   fullyQualifiedDomainName: "api.example.com",
  *   resourcePath: "/health",
  *   port: 80,
- *   requestInterval: 30,
+ *   requestInterval: "30 seconds",
  *   failureThreshold: 3,
+ * });
+ * ```
+ *
+ * @section Gating DNS Failover
+ * @example Fail Over a Record When the Check Fails
+ * ```typescript
+ * const check = yield* HealthCheck("PrimaryHealth", {
+ *   type: "HTTPS",
+ *   fullyQualifiedDomainName: "primary.example.com",
+ *   resourcePath: "/health",
+ *   port: 443,
+ * });
+ * // Route 53 answers with the PRIMARY record only while the check passes;
+ * // see `Record` for the matching SECONDARY record.
+ * const primary = yield* Record("Primary", {
+ *   hostedZoneId: zone.id,
+ *   name: "app.example.com",
+ *   type: "A",
+ *   ttl: "60 seconds",
+ *   records: ["1.2.3.4"],
+ *   setIdentifier: "primary",
+ *   failover: "PRIMARY",
+ *   healthCheckId: check.id,
  * });
  * ```
  */
 export const HealthCheck = Resource<HealthCheck>("AWS.Route53.HealthCheck");
+
+/**
+ * Whether a Route 53 health check can be managed directly through Route 53.
+ *
+ * Health checks with `LinkedService` are owned by another AWS service (for
+ * example, Cloud Map). Route 53 refuses direct deletion of those checks, and
+ * the owning service may retain them as tombstones after its resource is
+ * deleted. They therefore must not be returned to account-wide nuke inventory.
+ */
+export const isNukeableHealthCheck = (check: {
+  LinkedService?: route53.LinkedService;
+}): boolean => check.LinkedService === undefined;
 
 const toConfig = (props: HealthCheckProps): route53.HealthCheckConfig => ({
   Type: props.type,
@@ -130,7 +168,7 @@ const toConfig = (props: HealthCheckProps): route53.HealthCheckConfig => ({
   ResourcePath: props.resourcePath,
   FullyQualifiedDomainName: props.fullyQualifiedDomainName,
   SearchString: props.searchString,
-  RequestInterval: props.requestInterval,
+  RequestInterval: durationToSeconds(props.requestInterval),
   FailureThreshold: props.failureThreshold,
   MeasureLatency: props.measureLatency,
   Inverted: props.inverted,
@@ -229,11 +267,13 @@ export const HealthCheckProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.HealthChecks ?? []).map((check) => ({
-                  id: check.Id,
-                  healthCheckId: check.Id,
-                  type: check.HealthCheckConfig.Type,
-                })),
+                (page.HealthChecks ?? [])
+                  .filter(isNukeableHealthCheck)
+                  .map((check) => ({
+                    id: check.Id,
+                    healthCheckId: check.Id,
+                    type: check.HealthCheckConfig.Type,
+                  })),
               ),
             ),
           ),
@@ -241,7 +281,8 @@ export const HealthCheckProvider = () =>
           if (!isResolved(news)) return undefined;
           if (
             olds.type !== news.type ||
-            (olds.requestInterval ?? 30) !== (news.requestInterval ?? 30) ||
+            (durationToSeconds(olds.requestInterval) ?? 30) !==
+              (durationToSeconds(news.requestInterval) ?? 30) ||
             (olds.measureLatency ?? false) !== (news.measureLatency ?? false)
           ) {
             return { action: "replace" } as const;

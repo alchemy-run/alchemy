@@ -21,11 +21,29 @@ export interface DelegatedAdministrator extends Resource<
   "AWS.Organizations.DelegatedAdministrator",
   DelegatedAdministratorProps,
   {
+    /**
+     * 12-digit ID of the delegated administrator account.
+     */
     accountId: string;
+    /**
+     * ARN of the delegated administrator account.
+     */
     accountArn: string | undefined;
+    /**
+     * Friendly name of the delegated administrator account.
+     */
     accountName: organizations.DelegatedAdministrator["Name"] | undefined;
+    /**
+     * Email address of the delegated administrator account.
+     */
     accountEmail: organizations.DelegatedAdministrator["Email"] | undefined;
+    /**
+     * Service principal delegated to the account.
+     */
     servicePrincipal: string;
+    /**
+     * When the delegation was enabled.
+     */
     delegationEnabledDate: Date | undefined;
   },
   never,
@@ -33,8 +51,32 @@ export interface DelegatedAdministrator extends Resource<
 > {}
 
 /**
- * Registers a delegated administrator account for a trusted AWS service.
+ * Registers a member {@link Account} as the delegated administrator for a
+ * trusted AWS service, letting that account manage the service org-wide
+ * instead of the management account.
+ *
+ * Requires trusted access for the same service principal (see
+ * {@link TrustedServiceAccess}). Existence-only resource: changing
+ * `accountId` or `servicePrincipal` replaces the registration.
  * @resource
+ * @section Delegating Administration
+ * @example Delegate GuardDuty to a Security Account
+ * ```typescript
+ * const security = yield* Account("Security", {
+ *   name: "security",
+ *   email: "aws-security@example.com",
+ *   parentId: root.rootId,
+ * });
+ *
+ * const guardDutyAccess = yield* TrustedServiceAccess("GuardDutyAccess", {
+ *   servicePrincipal: "guardduty.amazonaws.com",
+ * });
+ *
+ * yield* DelegatedAdministrator("GuardDutyAdmin", {
+ *   accountId: security.accountId,
+ *   servicePrincipal: guardDutyAccess.servicePrincipal,
+ * });
+ * ```
  */
 export const DelegatedAdministrator = Resource<DelegatedAdministrator>(
   "AWS.Organizations.DelegatedAdministrator",

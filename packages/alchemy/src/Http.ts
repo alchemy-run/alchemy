@@ -36,7 +36,18 @@ export const serve = <Req = never>(
 ) =>
   Effect.serviceOption(HttpServer).pipe(
     Effect.map(Option.getOrUndefined),
-    Effect.flatMap((http) => (http ? http.serve(handler) : Effect.void)),
+    Effect.flatMap((http) =>
+      http
+        ? // `HttpServer.serve` registers the server on the ambient Scope and
+          // RETURNS; the server lives until that scope closes. A host program
+          // (ECS task/service, EC2 instance) must therefore park forever after
+          // a successful registration — otherwise a pure `{ fetch }` program
+          // completes immediately, `Effect.scoped` closes the scope, and the
+          // container exits 0 in a crash-loop. (One-shot `{ run }` programs
+          // never call `serve`, so they still exit when `run` completes.)
+          Effect.andThen(http.serve(handler), Effect.never)
+        : Effect.void,
+    ),
   );
 
 export class HttpServer extends Context.Service<
@@ -97,7 +108,15 @@ export const resolvePort = (options: { port?: number } | undefined) =>
     ? Effect.succeed(options.port)
     : Config.number("PORT").pipe(Config.withDefault(3000));
 
-export const BunHttpServer = () =>
+export interface BunHttpServerOptions {
+  /**
+   * Network interface on which the Bun HTTP server listens.
+   * Omit to use Bun's default.
+   */
+  hostname?: string;
+}
+
+export const BunHttpServer = (serverOptions?: BunHttpServerOptions) =>
   Layer.effect(
     HttpServer,
     Effect.gen(function* () {
@@ -108,7 +127,12 @@ export const BunHttpServer = () =>
         serve: (handler, options) =>
           Effect.gen(function* () {
             const port = yield* resolvePort(options);
-            const server = yield* BunHttpServerPlatform.make({ port });
+            const server = yield* BunHttpServerPlatform.make({
+              port,
+              ...(serverOptions?.hostname === undefined
+                ? {}
+                : { hostname: serverOptions.hostname }),
+            });
             yield* server.serve(safeHttpEffect(handler));
           }).pipe(Effect.orDie),
       };

@@ -5,6 +5,7 @@ import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { assertInternetGatewayGone } from "./Gone.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -31,5 +32,7 @@ test.provider("list enumerates the deployed InternetGateway", (stack) =>
     ).toBe(true);
 
     yield* stack.destroy();
+
+    yield* assertInternetGatewayGone(deployed.internetGatewayId);
   }).pipe(logLevel),
 );

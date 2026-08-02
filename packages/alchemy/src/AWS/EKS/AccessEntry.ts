@@ -55,13 +55,21 @@ export interface AccessEntry extends Resource<
   "AWS.EKS.AccessEntry",
   AccessEntryProps,
   {
+    /** The ARN of the access entry. */
     accessEntryArn: string;
+    /** The name of the EKS cluster the entry grants access to. */
     clusterName: string;
+    /** The IAM principal ARN the entry maps into the cluster. */
     principalArn: string;
+    /** The Kubernetes groups the principal is mapped to. */
     kubernetesGroups: string[];
+    /** The Kubernetes username the principal is mapped to. */
     username: string | undefined;
+    /** The access entry type (e.g. `STANDARD`, `EC2_LINUX`, `FARGATE_LINUX`). */
     type: string | undefined;
+    /** The EKS access policies associated with the entry. */
     accessPolicies: AccessPolicyAssociation[];
+    /** The tags applied to the access entry. */
     tags: Record<string, string>;
   },
   never,

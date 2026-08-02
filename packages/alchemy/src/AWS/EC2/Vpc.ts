@@ -408,27 +408,41 @@ export const VpcProvider = () =>
           }
 
           if (vpc === undefined) {
-            const createResult = yield* ec2.createVpc({
-              // TODO(sam): add all properties
-              AmazonProvidedIpv6CidrBlock: news.amazonProvidedIpv6CidrBlock,
-              InstanceTenancy: news.instanceTenancy,
-              CidrBlock: news.cidrBlock,
-              Ipv4IpamPoolId: news.ipv4IpamPoolId,
-              Ipv4NetmaskLength: news.ipv4NetmaskLength,
-              Ipv6Pool: news.ipv6Pool,
-              Ipv6CidrBlock: news.ipv6CidrBlock,
-              Ipv6IpamPoolId: news.ipv6IpamPoolId,
-              Ipv6NetmaskLength: news.ipv6NetmaskLength,
-              Ipv6CidrBlockNetworkBorderGroup:
-                news.ipv6CidrBlockNetworkBorderGroup,
-              TagSpecifications: [
-                {
-                  ResourceType: "vpc",
-                  Tags: createTagsList(desiredTags),
-                },
-              ],
-              DryRun: false,
-            });
+            const createResult = yield* ec2
+              .createVpc({
+                // TODO(sam): add all properties
+                AmazonProvidedIpv6CidrBlock: news.amazonProvidedIpv6CidrBlock,
+                InstanceTenancy: news.instanceTenancy,
+                CidrBlock: news.cidrBlock,
+                Ipv4IpamPoolId: news.ipv4IpamPoolId,
+                Ipv4NetmaskLength: news.ipv4NetmaskLength,
+                Ipv6Pool: news.ipv6Pool,
+                Ipv6CidrBlock: news.ipv6CidrBlock,
+                Ipv6IpamPoolId: news.ipv6IpamPoolId,
+                Ipv6NetmaskLength: news.ipv6NetmaskLength,
+                Ipv6CidrBlockNetworkBorderGroup:
+                  news.ipv6CidrBlockNetworkBorderGroup,
+                TagSpecifications: [
+                  {
+                    ResourceType: "vpc",
+                    Tags: createTagsList(desiredTags),
+                  },
+                ],
+                DryRun: false,
+              })
+              .pipe(
+                // The per-region VPC quota (default 5) is a shared pool;
+                // concurrent deploys transiently exhaust it while their VPCs
+                // are being torn down. Ride out the burst with a bounded
+                // spaced retry (~90s) before surfacing the quota error.
+                Effect.retry({
+                  while: (e) => e._tag === "VpcLimitExceeded",
+                  schedule: Schedule.max([
+                    Schedule.spaced("10 seconds"),
+                    Schedule.recurs(9),
+                  ]),
+                }),
+              );
             const newVpcId = createResult.Vpc!.VpcId! as VpcId;
             yield* session.note(`VPC created: ${newVpcId}`);
             vpc = yield* waitForVpcAvailable(newVpcId, session);
@@ -516,9 +530,13 @@ export const VpcProvider = () =>
               Stream.runCollect,
               Effect.map((chunk) =>
                 Array.from(chunk).flatMap((page) =>
-                  (page.Vpcs ?? []).map((vpc) =>
-                    vpcToAttributes(vpc, region, accountId, tagsFromVpc(vpc)),
-                  ),
+                  (page.Vpcs ?? [])
+                    // The default VPC is account furniture AWS provisions (and
+                    // test/AWS/DefaultVpc.ts recreates); never census/nuke it.
+                    .filter((vpc) => !vpc.IsDefault)
+                    .map((vpc) =>
+                      vpcToAttributes(vpc, region, accountId, tagsFromVpc(vpc)),
+                    ),
                 ),
               ),
             );
@@ -552,7 +570,11 @@ export const VpcProvider = () =>
                 // Use fixed 5s delay instead of exponential to avoid very long waits
                 schedule: Schedule.max([
                   Schedule.fixed(5000),
-                  Schedule.recurs(60),
+                  // A dependency that has not drained within ~50s is a real
+                  // cleanup defect. Preserve state and fail promptly so a
+                  // subsequent destroy/nuke can retry after fixing the child,
+                  // rather than hanging this resource for five minutes.
+                  Schedule.recurs(10),
                 ]).pipe(
                   Schedule.tap(({ attempt }) =>
                     session.note(

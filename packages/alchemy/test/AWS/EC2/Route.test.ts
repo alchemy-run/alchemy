@@ -1,10 +1,11 @@
 import * as AWS from "@/AWS";
 import { InternetGateway, Route, RouteTable, Vpc } from "@/AWS/EC2";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
+import * as Test from "./VpcTest.ts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { assertRouteTableGone, assertVpcGone } from "./Gone.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -33,7 +34,7 @@ test.provider("list enumerates the deployed Route", (stack) =>
           destinationCidrBlock: "0.0.0.0/0",
           gatewayId: igw.internetGatewayId,
         });
-        return { route };
+        return { vpc, routeTable, route };
       }),
     );
 
@@ -50,5 +51,10 @@ test.provider("list enumerates the deployed Route", (stack) =>
     ).toBe(true);
 
     yield* stack.destroy();
+
+    // A route has no standalone id — its route table (and the whole VPC)
+    // being gone proves the route was torn down.
+    yield* assertRouteTableGone(deployed.routeTable.routeTableId);
+    yield* assertVpcGone(deployed.vpc.vpcId);
   }).pipe(logLevel),
 );

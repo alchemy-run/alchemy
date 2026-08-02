@@ -51,7 +51,7 @@ const getCatchAll = (zoneId: string) =>
 // behind: Email Routing enabled, catch-all back at the Cloudflare default
 // (disabled, drop, no name).
 const setBaseline = (zoneId: string) =>
-  emailRouting.enableEmailRouting({ zoneId, body: {} }).pipe(
+  emailRouting.enableEmailRouting({ zoneId }).pipe(
     Effect.andThen(
       emailRouting.putRuleCatchAll({
         zoneId,
