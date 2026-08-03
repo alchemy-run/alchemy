@@ -2,6 +2,13 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
+import {
+  attrOrRedactedString,
+  attrOrString,
+  devId,
+  devProvider,
+} from "./Internal/DevStub.ts";
+import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
 import type { Bucket } from "./Bucket.ts";
 import {
@@ -174,7 +181,7 @@ const uniqueKeyNamed = (
     }),
   );
 
-export const BucketKeyProvider = () =>
+const ProviderLive = () =>
   Provider.effect(
     BucketKey,
     Effect.gen(function* () {
@@ -275,3 +282,23 @@ export const BucketKeyProvider = () =>
       };
     }),
   );
+
+const ProviderLocal = () =>
+  devProvider(BucketKey, BUCKET_KEY_STABLES, ({ id, news, output }) => ({
+    bucketKeyId: devId("bucket-key", id),
+    bucketId: attrOrString(news.bucket, "bucketId") ?? devId("bucket", id),
+    accessKeyId: devId("access-key", id),
+    // Keep the fabricated secret stable across dev reconciles, mirroring
+    // the reveal-once live behavior where persisted state is authoritative.
+    secretAccessKey:
+      attrOrRedactedString(output, "secretAccessKey") ??
+      Redacted.make(devId("secret-access-key", id)),
+    endpoint: "http://localhost",
+    bucketName: `dev-${id}`,
+  }));
+
+export const BucketKeyProvider = () =>
+  ProviderLayer.dual(BucketKey, {
+    local: () => ProviderLocal(),
+    live: () => ProviderLive(),
+  });

@@ -3,6 +3,13 @@ import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
+import {
+  DEV_TIMESTAMP,
+  attrOrString,
+  devId,
+  devProvider,
+} from "./Internal/DevStub.ts";
+import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
 import { sha256Object } from "../Util/sha256.ts";
 import {
@@ -336,7 +343,7 @@ export const uploadArtifact = (
     yield* executeArtifactUpload(uploadUrl, artifact, contentType);
   });
 
-export const DeploymentProvider = () =>
+const ProviderLive = () =>
   Provider.effect(
     Deployment,
     Effect.gen(function* () {
@@ -659,3 +666,21 @@ export const DeploymentProvider = () =>
       };
     }),
   );
+
+const ProviderLocal = () =>
+  devProvider(Deployment, ["deploymentId"], ({ id, news }) => ({
+    deploymentId: devId("deployment", id),
+    appId: attrOrString(news.app, "appId"),
+    foundryVersionId: devId("foundry-version", id),
+    status: "new",
+    previewDomain: undefined,
+    artifactHash: undefined,
+    appEndpointDomain: undefined,
+    createdAt: DEV_TIMESTAMP,
+  }));
+
+export const DeploymentProvider = () =>
+  ProviderLayer.dual(Deployment, {
+    local: () => ProviderLocal(),
+    live: () => ProviderLive(),
+  });

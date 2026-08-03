@@ -34,6 +34,7 @@ import {
   type Server as NodeHttpServer,
 } from "node:http";
 import { WebSocketServer } from "ws";
+import { AlchemyContext } from "@/AlchemyContext";
 
 const currentClient = <T extends object>(client: T): PrismaManagementClient => {
   return client as unknown as PrismaManagementClient;
@@ -41,6 +42,15 @@ const currentClient = <T extends object>(client: T): PrismaManagementClient => {
 
 const fixtureArtifactPath = `${import.meta.dirname}/fixtures/artifact-archive.bin`;
 const sameArtifactPath = `${import.meta.dirname}/fixtures/artifact-same-version.bin`;
+
+const liveProviderContext = Layer.succeed(AlchemyContext, {
+  dotAlchemy: ".alchemy-test",
+  dev: false,
+  adopt: false,
+});
+
+const deploymentProviderLive = () =>
+  DeploymentProvider().pipe(Layer.provide(liveProviderContext));
 
 describe("Prisma Deployment", () => {
   it.effect("redacts signed upload URLs from transport failures", () => {
@@ -258,7 +268,7 @@ describe("Prisma Deployment", () => {
         );
         expect(calls).toContainEqual(["deleteDeployment", "version-1"]);
       }).pipe(
-        Effect.provide(DeploymentProvider()),
+        Effect.provide(deploymentProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
         Effect.provide(FetchHttpClient.layer),
         Effect.provide(PlatformServices),
@@ -332,7 +342,7 @@ describe("Prisma Deployment", () => {
       );
       expect(calls).toContainEqual(["deleteDeployment", "version-1"]);
     }).pipe(
-      Effect.provide(DeploymentProvider()),
+      Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
@@ -407,7 +417,7 @@ describe("Prisma Deployment", () => {
           ((error as AggregateError).errors[1] as Error).message,
         ).toContain("cleanup failed");
       }).pipe(
-        Effect.provide(DeploymentProvider()),
+        Effect.provide(deploymentProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
         Effect.provide(FetchHttpClient.layer),
         Effect.provide(PlatformServices),
@@ -480,7 +490,7 @@ describe("Prisma Deployment", () => {
       expect((error as PrismaApiError).message).toBe("start failed");
       expect(calls).toContainEqual(["deleteDeployment", "version-1"]);
     }).pipe(
-      Effect.provide(DeploymentProvider()),
+      Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
@@ -603,7 +613,7 @@ describe("Prisma Deployment", () => {
         expect((error as AggregateError).message).toContain("commit state");
         expect(calls).not.toContainEqual(["deleteDeployment", "version-1"]);
       }).pipe(
-        Effect.provide(DeploymentProvider()),
+        Effect.provide(deploymentProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
         Effect.provide(FetchHttpClient.layer),
         Effect.provide(PlatformServices),
@@ -703,7 +713,7 @@ describe("Prisma Deployment", () => {
       expect(uploaded?.contentType).toBe("application/octet-stream");
       expect(new TextDecoder().decode(uploaded?.bytes)).toBe("version-archive");
     }).pipe(
-      Effect.provide(DeploymentProvider()),
+      Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
@@ -769,7 +779,7 @@ describe("Prisma Deployment", () => {
         ["listAppDeployments", "service-1"],
       ]);
     }).pipe(
-      Effect.provide(DeploymentProvider()),
+      Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
@@ -798,7 +808,7 @@ describe("Prisma Deployment", () => {
 
         expect(output).toBeUndefined();
       }).pipe(
-        Effect.provide(DeploymentProvider()),
+        Effect.provide(deploymentProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, client)),
         Effect.provide(FetchHttpClient.layer),
         Effect.provide(PlatformServices),
@@ -865,7 +875,7 @@ describe("Prisma Deployment", () => {
         ["listAppDeployments", "service-from-output"],
       ]);
     }).pipe(
-      Effect.provide(DeploymentProvider()),
+      Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
@@ -947,7 +957,7 @@ describe("Prisma Deployment", () => {
           ["getDeployment", "version-new"],
         ]);
       }).pipe(
-        Effect.provide(DeploymentProvider()),
+        Effect.provide(deploymentProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
         Effect.provide(FetchHttpClient.layer),
         Effect.provide(PlatformServices),
@@ -1005,7 +1015,7 @@ describe("Prisma Deployment", () => {
 
       expect((error as Error).message).toContain("ambiguous recovery match");
     }).pipe(
-      Effect.provide(DeploymentProvider()),
+      Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
@@ -1053,7 +1063,7 @@ describe("Prisma Deployment", () => {
 
       expect(diff).toEqual({ action: "replace" });
     }).pipe(
-      Effect.provide(DeploymentProvider()),
+      Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
@@ -1101,7 +1111,7 @@ describe("Prisma Deployment", () => {
 
       expect(diff).toEqual({ action: "replace" });
     }).pipe(
-      Effect.provide(DeploymentProvider()),
+      Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
@@ -1148,7 +1158,7 @@ describe("Prisma Deployment", () => {
 
         expect(diff).toEqual({ action: "replace" });
       }).pipe(
-        Effect.provide(DeploymentProvider()),
+        Effect.provide(deploymentProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
         Effect.provide(FetchHttpClient.layer),
         Effect.provide(PlatformServices),
@@ -1195,7 +1205,7 @@ describe("Prisma Deployment", () => {
 
       expect(diff).toBeUndefined();
     }).pipe(
-      Effect.provide(DeploymentProvider()),
+      Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
@@ -1320,7 +1330,7 @@ describe("Prisma Deployment", () => {
         calls.filter(([name]) => name === "createAppDeployment"),
       ).toHaveLength(1);
     }).pipe(
-      Effect.provide(DeploymentProvider()),
+      Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
@@ -1509,7 +1519,7 @@ describe("Prisma Deployment", () => {
         expect(deployments.get("version-replacement")?.status).toBe("running");
         expect(calls).not.toContainEqual(["startDeployment", "version-failed"]);
       }).pipe(
-        Effect.provide(DeploymentProvider()),
+        Effect.provide(deploymentProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
         Effect.provide(FetchHttpClient.layer),
         Effect.provide(PlatformServices),
@@ -1545,7 +1555,7 @@ describe("Prisma Deployment", () => {
         "promote cannot be combined with start: false",
       );
     }).pipe(
-      Effect.provide(DeploymentProvider()),
+      Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
@@ -1579,7 +1589,7 @@ describe("Prisma Deployment", () => {
         );
       }
     }).pipe(
-      Effect.provide(DeploymentProvider()),
+      Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
@@ -1640,7 +1650,7 @@ describe("Prisma Deployment", () => {
         ],
       ]);
     }).pipe(
-      Effect.provide(DeploymentProvider()),
+      Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
@@ -1682,7 +1692,7 @@ describe("Prisma Deployment", () => {
       expect(start).toEqual({ action: "update" });
       expect(promote).toEqual({ action: "update" });
     }).pipe(
-      Effect.provide(DeploymentProvider()),
+      Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
@@ -1711,7 +1721,7 @@ describe("Prisma Deployment", () => {
         "requires artifactPath or skipCodeUpload: true",
       );
     }).pipe(
-      Effect.provide(DeploymentProvider()),
+      Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
@@ -1783,7 +1793,7 @@ describe("Prisma Deployment", () => {
         ["getDeployment", "version-1"],
       ]);
     }).pipe(
-      Effect.provide(DeploymentProvider()),
+      Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
@@ -1833,7 +1843,7 @@ describe("Prisma Deployment", () => {
         } as unknown as PrismaManagementClient;
 
         const provider = yield* PrismaDeployment.Provider.pipe(
-          Effect.provide(DeploymentProvider()),
+          Effect.provide(deploymentProviderLive()),
           Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
           Effect.provide(PlatformServices),
         );

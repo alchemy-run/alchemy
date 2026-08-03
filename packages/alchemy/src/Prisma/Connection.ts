@@ -4,6 +4,15 @@ import * as Schedule from "effect/Schedule";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
+import {
+  DEV_TIMESTAMP,
+  attrOrNullableString,
+  attrOrRedactedString,
+  attrOrString,
+  devId,
+  devProvider,
+} from "./Internal/DevStub.ts";
+import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
 import {
   PrismaClient,
@@ -390,7 +399,7 @@ const attrsFrom = (
   ...deriveConnectionAttrs(secrets),
 });
 
-export const ConnectionProvider = () =>
+const ProviderLive = () =>
   Provider.effect(
     Connection,
     Effect.gen(function* () {
@@ -641,3 +650,39 @@ export const ConnectionProvider = () =>
       };
     }),
   );
+
+const ProviderLocal = () =>
+  devProvider(Connection, ["connectionId"], ({ id, news }) => {
+    const secrets = {
+      directConnectionString: attrOrRedactedString(
+        news.database,
+        "directConnectionString",
+      ),
+      pooledConnectionString: attrOrRedactedString(
+        news.database,
+        "pooledConnectionString",
+      ),
+      accelerateConnectionString: attrOrRedactedString(
+        news.database,
+        "accelerateConnectionString",
+      ),
+    };
+    return {
+      connectionId: devId("connection", id),
+      connectionName: news.name ?? id,
+      databaseId: attrOrString(news.database, "databaseId"),
+      kind: "postgres",
+      createdAt: DEV_TIMESTAMP,
+      ...secrets,
+      host: attrOrNullableString(news.database, "host"),
+      user: attrOrNullableString(news.database, "user"),
+      password: attrOrRedactedString(news.database, "password"),
+      ...deriveConnectionAttrs(secrets),
+    };
+  });
+
+export const ConnectionProvider = () =>
+  ProviderLayer.dual(Connection, {
+    local: () => ProviderLocal(),
+    live: () => ProviderLive(),
+  });

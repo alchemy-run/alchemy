@@ -18,6 +18,7 @@ import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import { AlchemyContext } from "@/AlchemyContext";
 
 const createdAt = "2026-01-01T00:00:00.000Z";
 const instanceId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -81,11 +82,23 @@ const notFound = (path: string) =>
     message: "HTTP 404",
   });
 
+const liveProviderContext = Layer.succeed(AlchemyContext, {
+  dotAlchemy: ".alchemy-test",
+  dev: false,
+  adopt: false,
+});
+
 const bucketLayer = (client: PrismaManagementClient) =>
-  BucketProvider().pipe(Layer.provide(Layer.succeed(PrismaClient, client)));
+  BucketProvider().pipe(
+    Layer.provide(Layer.succeed(PrismaClient, client)),
+    Layer.provide(liveProviderContext),
+  );
 
 const bucketKeyLayer = (client: PrismaManagementClient) =>
-  BucketKeyProvider().pipe(Layer.provide(Layer.succeed(PrismaClient, client)));
+  BucketKeyProvider().pipe(
+    Layer.provide(Layer.succeed(PrismaClient, client)),
+    Layer.provide(liveProviderContext),
+  );
 
 const reconcileInput = <Props, Attributes>(
   id: string,

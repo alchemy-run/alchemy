@@ -26,6 +26,7 @@ import type { InputProps } from "../Input.ts";
 import * as Output from "../Output.ts";
 import { Platform, type Main, type PlatformProps } from "../Platform.ts";
 import * as Provider from "../Provider.ts";
+import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource, type ResourceBinding } from "../Resource.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
 import type * as Server from "../Server/index.ts";
@@ -2088,7 +2089,7 @@ const activeBindingEnv = (
       >,
     );
 
-export const ComputeProvider = () =>
+const ProviderLive = () =>
   Provider.effect(
     Compute,
     Effect.gen(function* () {
@@ -2876,3 +2877,9 @@ export const ComputeDevProvider = () =>
       };
     }),
   );
+
+export const ComputeProvider = () =>
+  ProviderLayer.dual(Compute, {
+    local: () => ComputeDevProvider(),
+    live: () => ProviderLive(),
+  });

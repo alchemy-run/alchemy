@@ -3,6 +3,13 @@ import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
+import {
+  DEV_TIMESTAMP,
+  attrOrString,
+  devId,
+  devProvider,
+} from "./Internal/DevStub.ts";
+import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
 import {
   PrismaClient,
@@ -167,7 +174,7 @@ const ensureBranchIdentity = (
         ),
       );
 
-export const BranchProvider = () =>
+const ProviderLive = () =>
   Provider.effect(
     Branch,
     Effect.gen(function* () {
@@ -415,3 +422,20 @@ export const BranchProvider = () =>
       };
     }),
   );
+
+const ProviderLocal = () =>
+  devProvider(Branch, ["branchId"], ({ id, news }) => ({
+    branchId: devId("branch", id),
+    gitName: news.gitName ?? id,
+    projectId: attrOrString(news.project, "projectId"),
+    isDefault: news.isDefault ?? false,
+    role: news.isDefault ? "production" : "preview",
+    createdAt: DEV_TIMESTAMP,
+    updatedAt: DEV_TIMESTAMP,
+  }));
+
+export const BranchProvider = () =>
+  ProviderLayer.dual(Branch, {
+    local: () => ProviderLocal(),
+    live: () => ProviderLive(),
+  });

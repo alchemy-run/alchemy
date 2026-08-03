@@ -1,6 +1,4 @@
 import { AlchemyContext } from "@/AlchemyContext";
-import type { Platform } from "@/Platform";
-import type { ResourceClass, ResourceLike } from "@/Resource";
 import { AuthProviders } from "@/Auth/AuthProvider";
 import * as Provider from "@/Provider";
 import * as Prisma from "@/Prisma";
@@ -18,38 +16,14 @@ const devAlchemyContext = Layer.succeed(AlchemyContext, {
 
 const providePrismaDev = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
-    Effect.provide(Prisma.providers()),
+    Effect.provide(
+      Prisma.providers().pipe(
+        // The dual registration always carries the (lazy) management-api
+        // layer; it registers auth at build without resolving credentials.
+        Layer.provideMerge(Layer.succeed(AuthProviders, {})),
+      ),
+    ),
     Effect.provide(devAlchemyContext),
-  );
-
-const stubLocalProvider = <R extends ResourceLike>(
-  cls: ResourceClass<R> | Platform<R, any, any, any, any>,
-) =>
-  Provider.succeed(cls, {
-    list: () => Effect.succeed([]),
-    reconcile: () =>
-      Effect.succeed({ marker: "custom-local" } as unknown as R["Attributes"]),
-    delete: () => Effect.void,
-  });
-
-// Builds a full replacement dev layer the way an embedder would — from
-// `Provider.succeed` per resource. Passing it to `Prisma.providers` below
-// without a cast is the compile-time proof that `PrismaLocalProviders`
-// accepts embedder-built layers.
-const stubLocalProviders = (): Prisma.PrismaLocalProviders =>
-  Layer.mergeAll(
-    stubLocalProvider(Prisma.Project),
-    stubLocalProvider(Prisma.Database),
-    stubLocalProvider(Prisma.Connection),
-    stubLocalProvider(Prisma.Branch),
-    stubLocalProvider(Prisma.Bucket),
-    stubLocalProvider(Prisma.BucketKey),
-    stubLocalProvider(Prisma.Compute),
-    stubLocalProvider(Prisma.App),
-    stubLocalProvider(Prisma.Deployment),
-    stubLocalProvider(Prisma.CustomDomain),
-    stubLocalProvider(Prisma.EnvironmentVariable),
-    stubLocalProvider(Prisma.SourceRepository),
   );
 
 const reconcileInput = (id: string, news: unknown, output?: unknown) =>
@@ -147,6 +121,11 @@ describe("Prisma providers", () => {
       for (const provider of providers) {
         expect(typeof provider.reconcile).toBe("function");
         expect(typeof provider.delete).toBe("function");
+        // ProviderLayer.dual registration: dev resolves the local variant
+        // and exposes both variants for per-resource mode resolution.
+        expect(provider.mode).toBe("local");
+        expect(typeof provider.modes?.live).toBe("object");
+        expect(typeof provider.modes?.local).toBe("object");
       }
       for (let i = 0; i < resourceTypes.length; i += 1) {
         expect(providers[i]?.stables).toEqual(
@@ -228,23 +207,6 @@ describe("Prisma providers", () => {
       expect(bucketKey.bucketId).toBe(bucket.bucketId);
       expect(Redacted.isRedacted(bucketKey.secretAccessKey)).toBe(true);
     }).pipe(providePrismaDev),
-  );
-
-  it.effect("uses a supplied local provider layer in dev mode", () =>
-    Effect.gen(function* () {
-      const provider = yield* Provider.findProviderByType(
-        Prisma.Project.Type as any,
-      );
-
-      const attrs = yield* provider.reconcile(
-        reconcileInput("Project", { name: "local-project" }),
-      );
-
-      expect(attrs).toEqual({ marker: "custom-local" });
-    }).pipe(
-      Effect.provide(Prisma.providers({ dev: stubLocalProviders() })),
-      Effect.provide(devAlchemyContext),
-    ),
   );
 
   it.effect(

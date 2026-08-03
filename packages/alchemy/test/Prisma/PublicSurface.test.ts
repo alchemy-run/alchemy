@@ -8,7 +8,6 @@ import * as Path from "effect/Path";
 
 const publicExports = [
   "providers",
-  "liveProviders",
   "managementApi",
   "Providers",
   "PrismaEnvironment",

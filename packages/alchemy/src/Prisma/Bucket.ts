@@ -1,6 +1,13 @@
 import * as Effect from "effect/Effect";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
+import {
+  DEV_TIMESTAMP,
+  attrOrString,
+  devId,
+  devProvider,
+} from "./Internal/DevStub.ts";
+import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
 import { PrismaClient, isNotFound } from "./Client.ts";
 import type { Project } from "./Project.ts";
@@ -93,7 +100,7 @@ const attrsFrom = (bucket: ApiBucket): Bucket["Attributes"] => ({
   createdAt: bucket.createdAt,
 });
 
-export const BucketProvider = () =>
+const ProviderLive = () =>
   Provider.effect(
     Bucket,
     Effect.gen(function* () {
@@ -195,3 +202,17 @@ export const BucketProvider = () =>
       };
     }),
   );
+
+const ProviderLocal = () =>
+  devProvider(Bucket, ["bucketId"], ({ id, news }) => ({
+    bucketId: devId("bucket", id),
+    name: news.name ?? id,
+    projectId: attrOrString(news.project, "projectId") ?? devId("project", id),
+    createdAt: DEV_TIMESTAMP,
+  }));
+
+export const BucketProvider = () =>
+  ProviderLayer.dual(Bucket, {
+    local: () => ProviderLocal(),
+    live: () => ProviderLive(),
+  });
