@@ -334,16 +334,16 @@ const readSeenStages = (stack: string): string[] => {
   }
 };
 
-/** Union the given stages into the persisted + in-memory seen set. */
+/**
+ * Union the given stages into the stack's persisted seen set.
+ *
+ * Deliberately does NOT fold in `layout.stagesSeen`: that slice belongs to
+ * whichever stack is currently loaded, and folding it here would write one
+ * stack's stages into another's persisted set the moment you switch.
+ */
 const rememberStages = (stack: string, stages: readonly string[]): void => {
   const state = dashboardStore.getState();
-  const merged = [
-    ...new Set([
-      ...readSeenStages(stack),
-      ...state.layout.stagesSeen,
-      ...stages,
-    ]),
-  ].sort();
+  const merged = [...new Set([...readSeenStages(stack), ...stages])].sort();
   try {
     localStorage.setItem(stagesKey(stack), JSON.stringify(merged));
   } catch {
@@ -553,9 +553,14 @@ export const resetForTarget = (target: {
 }): void => {
   const state = dashboardStore.getState();
   clearSliceCaches();
+  const stack = target.stack ?? state.document.meta.stack;
+  // Stage names are per-stack, so a stack switch must drop the previous
+  // stack's remembered stages and load this stack's own — otherwise the
+  // picker offers stages that do not exist here.
+  const stackChanged = stack !== state.document.meta.stack;
   dashboardStore.setState({
     document: makeDocument({
-      stack: target.stack ?? state.document.meta.stack,
+      stack,
       stage: target.stage ?? "",
     }),
     revision: 0,
@@ -572,7 +577,12 @@ export const resetForTarget = (target: {
     },
     history: initialHistory(),
     ui: { ...state.ui, selectedFqn: undefined, dismissedSession: undefined },
-    layout: { ...state.layout, viewport: undefined, userPanned: false },
+    layout: {
+      ...state.layout,
+      viewport: undefined,
+      userPanned: false,
+      ...(stackChanged ? { stagesSeen: readSeenStages(stack) } : {}),
+    },
   });
 };
 
