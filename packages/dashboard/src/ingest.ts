@@ -20,18 +20,21 @@ import {
   DocumentSnapshotSchema,
 } from "alchemy/Dashboard/DocumentPatch";
 import * as S from "effect/Schema";
+import { writeTargetToLocation } from "./target.ts";
 import {
   applySnapshot,
   dashboardStore,
   ingestPatches,
-  resetForStage,
+  resetForTarget,
   setConnectionStatus,
   setDeployments,
   setHistoryError,
   setHistoryLoading,
   setSelectedDeployment,
+  setStacks,
   type DeploymentRecord,
   type HistoricalProjections,
+  type StackEntry,
 } from "./store.ts";
 
 /** The SSE `data:` payload union (mirrors the server's DocumentFrame). */
@@ -50,8 +53,33 @@ const DocumentFrameSchema = S.Union([
 const decodeFrame = S.decodeUnknownSync(DocumentFrameSchema);
 const decodeSnapshot = S.decodeUnknownSync(DocumentSnapshotSchema);
 
-const stageQuery = (stage: string | undefined): string =>
-  stage === undefined ? "" : `?stage=${encodeURIComponent(stage)}`;
+/**
+ * The `(stack, stage)` a view is pointed at. `undefined` on either side
+ * means "whatever the server picks by default" — the CLI dashboard never
+ * sends either, the hosted viewer sends both once a target is chosen.
+ */
+export interface Target {
+  stack: string | undefined;
+  stage: string | undefined;
+}
+
+const targetQuery = (target: Target): string => {
+  const params = new URLSearchParams();
+  if (target.stack !== undefined) {
+    params.set("stack", target.stack);
+  }
+  if (target.stage !== undefined) {
+    params.set("stage", target.stage);
+  }
+  const query = params.toString();
+  return query === "" ? "" : `?${query}`;
+};
+
+/** The target the store is currently pointed at. */
+const currentTarget = (): Target => {
+  const { stack, stage } = dashboardStore.getState().connection;
+  return { stack, stage };
+};
 
 // ─────────────────────────────────────────────────────── connection state
 
@@ -72,7 +100,9 @@ const RESNAPSHOT_SPACING_MS = 1_000;
  * Open (or re-open) the live SSE stream for a stage. `undefined` stage =
  * the server's default stage.
  */
-export const connect = (stage?: string): void => {
+export const connect = (
+  target: Target = { stack: undefined, stage: undefined },
+): void => {
   generation += 1;
   if (reconnectTimer !== undefined) {
     clearTimeout(reconnectTimer);
@@ -82,7 +112,7 @@ export const connect = (stage?: string): void => {
   source = undefined;
   reconnectAttempt = 0;
   setConnectionStatus("connecting");
-  open(generation, stage);
+  open(generation, target);
 };
 
 export const disconnect = (): void => {
@@ -95,8 +125,8 @@ export const disconnect = (): void => {
   source = undefined;
 };
 
-const open = (gen: number, stage: string | undefined): void => {
-  const es = new EventSource(`/api/v2/events${stageQuery(stage)}`);
+const open = (gen: number, target: Target): void => {
+  const es = new EventSource(`/api/v2/events${targetQuery(target)}`);
   source = es;
   es.onmessage = (message) => {
     if (gen !== generation) {
@@ -109,7 +139,7 @@ const open = (gen: number, stage: string | undefined): void => {
       // a frame we can't decode means client/server version skew — a
       // fresh snapshot is the only safe recovery
       console.warn("dashboard: undecodable frame, re-snapshotting", error);
-      void resnapshot(gen, stage);
+      void resnapshot(gen, target);
       return;
     }
     reconnectAttempt = 0;
@@ -120,7 +150,7 @@ const open = (gen: number, stage: string | undefined): void => {
     }
     const result = ingestPatches(frame.patches);
     if (result.gap) {
-      void resnapshot(gen, stage);
+      void resnapshot(gen, target);
     }
   };
   es.onerror = () => {
@@ -142,7 +172,7 @@ const open = (gen: number, stage: string | undefined): void => {
         return;
       }
       setConnectionStatus("connecting");
-      open(gen, stage);
+      open(gen, target);
     }, delay);
   };
 };
@@ -152,10 +182,7 @@ const open = (gen: number, stage: string | undefined): void => {
  * RESNAPSHOT_SPACING_MS so a misbehaving stream can't loop us into a
  * snapshot storm.
  */
-const resnapshot = async (
-  gen: number,
-  stage: string | undefined,
-): Promise<void> => {
+const resnapshot = async (gen: number, target: Target): Promise<void> => {
   if (resnapshotting) {
     return;
   }
@@ -172,7 +199,7 @@ const resnapshot = async (
       return;
     }
     lastResnapshotAt = Date.now();
-    const res = await fetch(`/api/v2/document${stageQuery(stage)}`);
+    const res = await fetch(`/api/v2/document${targetQuery(target)}`);
     if (!res.ok) {
       throw new Error(`/api/v2/document -> ${res.status}`);
     }
@@ -199,20 +226,52 @@ const resnapshot = async (
  * survives — it's keyed by structuralHash), reconnect the SSE stream, and
  * refresh the deployment history for the new stage.
  */
-export const setStage = (stage: string | undefined): void => {
-  resetForStage(stage);
-  connect(stage);
-  void loadDeployments(stage);
+export const setTarget = (target: Target): void => {
+  writeTargetToLocation(target);
+  resetForTarget(target);
+  connect(target);
+  void loadDeployments(target);
+};
+
+/** Switch stage within the current stack. */
+export const setStage = (stage: string | undefined): void =>
+  setTarget({ stack: currentTarget().stack, stage });
+
+/**
+ * Switch stack. The stage resets to the server's default for that stack
+ * rather than carrying over — stage names are per-stack, so keeping the
+ * old one usually lands on a stage that does not exist there.
+ */
+export const setStack = (stack: string | undefined): void =>
+  setTarget({ stack, stage: undefined });
+
+// ────────────────────────────────────────────────────────── stack catalog
+
+/**
+ * GET /api/stacks → every `(stack, stages)` in the state store. Only the
+ * hosted viewer serves this; the CLI dashboard 404s it and simply keeps
+ * an empty catalog, which hides the stack picker.
+ */
+export const loadStacks = async (): Promise<void> => {
+  try {
+    const res = await fetch("/api/stacks");
+    if (!res.ok) {
+      return;
+    }
+    setStacks((await res.json()) as StackEntry[]);
+  } catch {
+    // no catalog — the picker stays hidden, everything else still works
+  }
 };
 
 // ───────────────────────────────────────────────────── deployment history
 
 /** GET /api/v2/deployments → the history slice (newest first). */
-export const loadDeployments = async (stage?: string): Promise<void> => {
-  const stg = stage ?? dashboardStore.getState().connection.stage;
+export const loadDeployments = async (target?: Target): Promise<void> => {
+  const tgt = target ?? currentTarget();
   setHistoryLoading(true);
   try {
-    const res = await fetch(`/api/v2/deployments${stageQuery(stg)}`);
+    const res = await fetch(`/api/v2/deployments${targetQuery(tgt)}`);
     if (res.status === 404) {
       // the state store has no deployment-history support
       setDeployments([]);
@@ -239,10 +298,12 @@ export const selectDeployment = async (
     setSelectedDeployment("live");
     return;
   }
-  const stg = dashboardStore.getState().connection.stage;
+  const tgt = currentTarget();
   setHistoryLoading(true);
   try {
-    const res = await fetch(`/api/v2/deployments/${version}${stageQuery(stg)}`);
+    const res = await fetch(
+      `/api/v2/deployments/${version}${targetQuery(tgt)}`,
+    );
     if (!res.ok) {
       throw new Error(`/api/v2/deployments/${version} -> ${res.status}`);
     }
@@ -267,9 +328,9 @@ export const selectDeployment = async (
  * approval-clear patch arrives over the live stream.
  */
 export const decideApproval = async (approved: boolean): Promise<void> => {
-  const stg = dashboardStore.getState().connection.stage;
+  const tgt = currentTarget();
   try {
-    const res = await fetch(`/api/scene${stageQuery(stg)}`);
+    const res = await fetch(`/api/scene${targetQuery(tgt)}`);
     if (!res.ok) {
       throw new Error(`/api/scene -> ${res.status}`);
     }

@@ -1,6 +1,6 @@
 import { Maximize, Moon, Search, Sun } from "lucide-react";
 import { memo, useMemo } from "react";
-import { setStage } from "../ingest.ts";
+import { setStack, setStage } from "../ingest.ts";
 import {
   requestFit,
   setPaletteOpen,
@@ -9,6 +9,7 @@ import {
   useMeta,
   useProjection,
   useSeenStages,
+  useStacks,
   useView,
 } from "../store.ts";
 import {
@@ -21,6 +22,7 @@ import {
 import { useThemeMode } from "../themeMode.ts";
 import { Yantra } from "./Brand.tsx";
 import { DeploymentPicker, HistoricalPill } from "./DeploymentPicker.tsx";
+import { StackSelect } from "./StackSelect.tsx";
 import { StageSelect } from "./StageSelect.tsx";
 import { VIEW_LABELS, VIEW_ORDER } from "./views.ts";
 
@@ -51,23 +53,37 @@ export const TopBar = memo(function TopBar() {
 
 function StackName() {
   const meta = useMeta();
+  const stacks = useStacks();
+  // The CLI dashboard drives exactly one stack (and 404s /api/stacks), so
+  // it keeps the plain label; the hosted viewer gets a picker.
+  if (stacks.length < 2) {
+    return (
+      <span className="font-serif text-[15px] font-medium tracking-[-0.01em] text-[var(--alc-fg-1)]">
+        {meta.stack}
+      </span>
+    );
+  }
   return (
-    <span className="font-serif text-[15px] font-medium tracking-[-0.01em] text-[var(--alc-fg-1)]">
-      {meta.stack}
-    </span>
+    <StackSelect
+      stack={meta.stack}
+      stacks={stacks}
+      onSelect={(stack) => setStack(stack)}
+    />
   );
 }
 
 function StageArea() {
   const meta = useMeta();
-  // union of the server's list and every stage this client has ever seen
-  // (persisted per stack) — switching to a new stage never hides the ones
-  // you came from
+  // union of the server's list, the catalog's stages for this stack, and
+  // every stage this client has ever seen (persisted per stack) —
+  // switching to a new stage never hides the ones you came from
   const seen = useSeenStages();
-  const stages = useMemo(
-    () => [...new Set([...(meta.stages ?? []), ...seen])].sort(),
-    [meta.stages, seen],
-  );
+  const stacks = useStacks();
+  const stages = useMemo(() => {
+    const catalog =
+      stacks.find((s) => s.stack === meta.stack)?.stages ?? ([] as const);
+    return [...new Set([...(meta.stages ?? []), ...catalog, ...seen])].sort();
+  }, [meta.stages, meta.stack, stacks, seen]);
   return (
     <StageSelect
       stage={meta.stage}

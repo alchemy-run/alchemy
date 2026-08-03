@@ -23,7 +23,7 @@ import {
   getPositions,
   ingestPatches,
   isDimmed,
-  resetForStage,
+  resetForTarget,
   selectFeed,
   selectFilterCounts,
   selectMeta,
@@ -383,7 +383,7 @@ applySnapshot(snapshot);
   assert(getPositions("hash-0") === undefined, "oldest hash evicted");
   // positions survive a stage switch
   setSelectedFqn("bucket");
-  resetForStage("prod");
+  resetForTarget({ stack: undefined, stage: "prod" });
   const switched = dashboardStore.getState();
   assert(!switched.hydrated, "stage switch drops the document");
   assert(

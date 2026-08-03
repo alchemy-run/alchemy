@@ -95,10 +95,18 @@ export interface DocVersions {
 
 export interface ConnectionSlice {
   status: ConnectionStatus;
+  /** undefined = the server's default stack */
+  stack: string | undefined;
   /** undefined = the server's default stage */
   stage: string | undefined;
   /** last document revision accepted from the wire */
   revision: number;
+}
+
+/** One `(stack, stages)` pair as reported by `GET /api/stacks`. */
+export interface StackEntry {
+  stack: string;
+  stages: readonly string[];
 }
 
 export interface HistorySlice {
@@ -173,6 +181,8 @@ export interface DashboardState {
   timelineVersions: Readonly<Record<string, number>>;
   opSpanVersions: Readonly<Record<string, number>>;
   connection: ConnectionSlice;
+  /** Every `(stack, stages)` the state store knows — drives the picker. */
+  stacks: readonly StackEntry[];
   history: HistorySlice;
   ui: UiSlice;
   layout: LayoutSlice;
@@ -220,7 +230,13 @@ const initialState = (): DashboardState => ({
   versions: ZERO_VERSIONS,
   timelineVersions: {},
   opSpanVersions: {},
-  connection: { status: "connecting", stage: undefined, revision: 0 },
+  connection: {
+    status: "connecting",
+    stack: undefined,
+    stage: undefined,
+    revision: 0,
+  },
+  stacks: [],
   history: initialHistory(),
   // feedExpanded starts false: the ActivityFeed opens as a one-line pill
   // list is the default view: it reads instantly (no layout pass) and
@@ -531,13 +547,16 @@ export const applySnapshot = (snapshot: DocumentSnapshot): void => {
  * returning to a stage restores its layout instantly) and the user's
  * view/filter preferences.
  */
-export const resetForStage = (stage: string | undefined): void => {
+export const resetForTarget = (target: {
+  stack: string | undefined;
+  stage: string | undefined;
+}): void => {
   const state = dashboardStore.getState();
   clearSliceCaches();
   dashboardStore.setState({
     document: makeDocument({
-      stack: state.document.meta.stack,
-      stage: stage ?? "",
+      stack: target.stack ?? state.document.meta.stack,
+      stage: target.stage ?? "",
     }),
     revision: 0,
     baselineRevision: 0,
@@ -545,7 +564,12 @@ export const resetForStage = (stage: string | undefined): void => {
     versions: bumpAll(state.versions),
     timelineVersions: {},
     opSpanVersions: {},
-    connection: { status: "connecting", stage, revision: 0 },
+    connection: {
+      status: "connecting",
+      stack: target.stack,
+      stage: target.stage,
+      revision: 0,
+    },
     history: initialHistory(),
     ui: { ...state.ui, selectedFqn: undefined, dismissedSession: undefined },
     layout: { ...state.layout, viewport: undefined, userPanned: false },
@@ -553,6 +577,30 @@ export const resetForStage = (stage: string | undefined): void => {
 };
 
 // ─────────────────────────────────────────────────────── connection actions
+
+/** Replace the `(stack, stages)` catalog behind the target picker. */
+export const setStacks = (stacks: readonly StackEntry[]): void => {
+  dashboardStore.setState({ stacks });
+};
+
+/**
+ * Seed the connection slice with the boot target (from the URL) BEFORE
+ * the first snapshot lands, so the picker renders the pinned target
+ * instead of flashing the server default.
+ */
+export const setTargetSlice = (target: {
+  stack: string | undefined;
+  stage: string | undefined;
+}): void => {
+  const state = dashboardStore.getState();
+  dashboardStore.setState({
+    connection: {
+      ...state.connection,
+      stack: target.stack,
+      stage: target.stage,
+    },
+  });
+};
 
 export const setConnectionStatus = (status: ConnectionStatus): void => {
   const state = dashboardStore.getState();
@@ -1191,6 +1239,9 @@ export const useConnection = (): ConnectionSlice =>
 
 export const useHistory = (): HistorySlice =>
   useStore(dashboardStore, (s) => s.history);
+
+export const useStacks = (): readonly StackEntry[] =>
+  useStore(dashboardStore, (s) => s.stacks);
 
 export const useIsSelected = (fqn: string): boolean =>
   useStore(dashboardStore, (s) => isSelected(s, fqn));
