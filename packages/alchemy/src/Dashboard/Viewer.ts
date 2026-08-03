@@ -100,7 +100,7 @@ export interface ViewerOptions {
  */
 type ResolvedTarget =
   | { kind: "target"; stack: string; stage: string }
-  | { kind: "empty" }
+  | { kind: "empty"; message: string }
   | { kind: "unreachable"; message: string };
 
 const SSE_OPTIONS = {
@@ -132,7 +132,10 @@ export const viewer = (options: ViewerOptions) => {
         }
         stack = [...stacks.success].sort()[0];
         if (stack === undefined) {
-          return { kind: "empty" as const };
+          return {
+            kind: "empty" as const,
+            message: "the state store has no stacks — deploy something first",
+          };
         }
       }
       let stage = url.searchParams.get("stage") ?? options.stage;
@@ -146,20 +149,22 @@ export const viewer = (options: ViewerOptions) => {
         }
         stage = [...stages.success].sort()[0];
         if (stage === undefined) {
-          return { kind: "empty" as const };
+          // A pinned stack that no longer has any stage is the confusing
+          // case: name it rather than implying the whole store is empty.
+          return {
+            kind: "empty" as const,
+            message: `stack "${stack}" has no stages in the state store`,
+          };
         }
       }
       return { kind: "target" as const, stack, stage };
     });
 
-  const noTarget = HttpServerResponse.jsonUnsafe(
-    {
-      error:
-        "no stack/stage found in the state store — deploy something first, " +
-        "or pass ?stack= and ?stage=",
-    },
-    { status: 404 },
-  );
+  const noTarget = (message: string) =>
+    HttpServerResponse.jsonUnsafe(
+      { error: `${message} — or pass ?stack= and ?stage=` },
+      { status: 404 },
+    );
 
   const storeUnreachable = (message: string) =>
     HttpServerResponse.jsonUnsafe(
@@ -238,7 +243,7 @@ export const viewer = (options: ViewerOptions) => {
       return storeUnreachable(resolved.message);
     }
     if (resolved.kind === "empty") {
-      return noTarget;
+      return noTarget(resolved.message);
     }
     const { stack, stage } = resolved;
     const target = { stack, stage };
