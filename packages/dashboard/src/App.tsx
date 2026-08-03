@@ -1,4 +1,5 @@
-import { memo, type CSSProperties } from "react";
+import { memo, useEffect, useState, type CSSProperties } from "react";
+import { currentRoute, subscribeRoute, type Route } from "./route.ts";
 import {
   useApproval,
   useConnection,
@@ -6,6 +7,7 @@ import {
   useFilterCounts,
   useHydrated,
   useMeta,
+  useStacks,
   useView,
 } from "./store.ts";
 import { SERIF_HEADING } from "./theme.ts";
@@ -17,6 +19,7 @@ import { Inspector } from "./ui/Inspector.tsx";
 import { ListView } from "./ui/ListView.tsx";
 import { TopBar } from "./ui/TopBar.tsx";
 import { CommandPalette } from "./ui/CommandPalette.tsx";
+import { StackIndex } from "./ui/StackIndex.tsx";
 import { SummaryView } from "./views/Summary.tsx";
 
 /**
@@ -29,8 +32,16 @@ import { SummaryView } from "./views/Summary.tsx";
 export function App() {
   const hydrated = useHydrated();
   const connection = useConnection();
+  const route = useRoute();
+  const stacks = useStacks();
   if (connection.status === "superseded") {
     return <SupersededScreen />;
+  }
+  // `/` with a catalog to choose from is the stack index. With one stack
+  // (or none — the CLI dashboard) boot has already redirected/connected,
+  // so fall through to the graph.
+  if (route.kind === "index" && stacks.length > 1) {
+    return <StackIndex stacks={stacks} />;
   }
   if (!hydrated) {
     return <BootScreen />;
@@ -47,6 +58,13 @@ export function App() {
       <CommandPalette />
     </div>
   );
+}
+
+/** The current route, re-read on pushState/popstate. */
+function useRoute(): Route {
+  const [route, setRoute] = useState(currentRoute);
+  useEffect(() => subscribeRoute(() => setRoute(currentRoute())), []);
+  return route;
 }
 
 /**

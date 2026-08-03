@@ -1,6 +1,6 @@
 import { Maximize, Moon, Search, Sun } from "lucide-react";
 import { memo, useMemo } from "react";
-import { setStack, setStage } from "../ingest.ts";
+import { navigate, pathOf } from "../route.ts";
 import {
   requestFit,
   setPaletteOpen,
@@ -67,7 +67,7 @@ function StackName() {
     <StackSelect
       stack={meta.stack}
       stacks={stacks}
-      onSelect={(stack) => setStack(stack)}
+      onSelect={(stack) => navigate(pathOf({ stack }))}
     />
   );
 }
@@ -88,7 +88,7 @@ function StageArea() {
     <StageSelect
       stage={meta.stage}
       stages={stages}
-      onSelect={(stage) => setStage(stage)}
+      onSelect={(stage) => navigate(pathOf({ stack: meta.stack, stage }))}
     />
   );
 }

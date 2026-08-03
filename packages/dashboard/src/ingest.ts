@@ -8,8 +8,10 @@
  *   dropped connection reconnects with capped exponential backoff and
  *   naturally re-snapshots (every SSE connection starts snapshot-first).
  * - `loadDeployments` / `selectDeployment` drive the history overlay.
- * - `setStage` reconnects with the new stage, clearing per-stage slices
- *   but KEEPING the position cache.
+ * - `setTarget` reconnects with a new `(stack, stage)`, clearing that
+ *   target's slices but KEEPING the position cache. The URL is the
+ *   source of truth for the target (see route.ts); navigation drives
+ *   this, not the other way round.
  */
 import type {
   DocumentPatch,
@@ -20,7 +22,6 @@ import {
   DocumentSnapshotSchema,
 } from "alchemy/Dashboard/DocumentPatch";
 import * as S from "effect/Schema";
-import { writeTargetToLocation } from "./target.ts";
 import {
   applySnapshot,
   dashboardStore,
@@ -227,23 +228,10 @@ const resnapshot = async (gen: number, target: Target): Promise<void> => {
  * refresh the deployment history for the new stage.
  */
 export const setTarget = (target: Target): void => {
-  writeTargetToLocation(target);
   resetForTarget(target);
   connect(target);
   void loadDeployments(target);
 };
-
-/** Switch stage within the current stack. */
-export const setStage = (stage: string | undefined): void =>
-  setTarget({ stack: currentTarget().stack, stage });
-
-/**
- * Switch stack. The stage resets to the server's default for that stack
- * rather than carrying over — stage names are per-stack, so keeping the
- * old one usually lands on a stage that does not exist there.
- */
-export const setStack = (stack: string | undefined): void =>
-  setTarget({ stack, stage: undefined });
 
 // ────────────────────────────────────────────────────────── stack catalog
 
@@ -252,15 +240,18 @@ export const setStack = (stack: string | undefined): void =>
  * hosted viewer serves this; the CLI dashboard 404s it and simply keeps
  * an empty catalog, which hides the stack picker.
  */
-export const loadStacks = async (): Promise<void> => {
+export const loadStacks = async (): Promise<readonly StackEntry[]> => {
   try {
     const res = await fetch("/api/stacks");
     if (!res.ok) {
-      return;
+      return [];
     }
-    setStacks((await res.json()) as StackEntry[]);
+    const stacks = (await res.json()) as StackEntry[];
+    setStacks(stacks);
+    return stacks;
   } catch {
     // no catalog — the picker stays hidden, everything else still works
+    return [];
   }
 };
 

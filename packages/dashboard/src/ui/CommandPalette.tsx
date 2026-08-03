@@ -1,5 +1,4 @@
 import { Check, CornerDownLeft, Layers, Search } from "lucide-react";
-import { setStage } from "../ingest.ts";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   dashboardStore,
@@ -10,6 +9,7 @@ import {
   useStructuralHash,
   type ViewKind,
 } from "../store.ts";
+import { navigate, pathOf } from "../route.ts";
 import { PANEL, typeName } from "../theme.ts";
 import { safeUI, useRegistry } from "../uiRegistry.ts";
 import { ResourceIcon } from "./Icon.tsx";
@@ -202,7 +202,14 @@ const Palette = memo(function Palette() {
         setSelectedFqn(item.fqn);
         break;
       case "stage":
-        setStage(item.stage);
+        // navigate, don't just re-point the transport: the URL is the
+        // target, so a palette switch must be reloadable/shareable too
+        navigate(
+          pathOf({
+            stack: dashboardStore.getState().document.meta.stack,
+            stage: item.stage,
+          }),
+        );
         break;
       case "stage-command":
         // flip into the stage prompt instead of closing
