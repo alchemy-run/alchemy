@@ -4,6 +4,7 @@ import * as Schema from "effect/Schema";
 import * as Command from "effect/unstable/cli/Command";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { fileURLToPath } from "node:url";
+import { transformTypesFlags } from "../../Util/Node.ts";
 import { SPAWNER_URL_ENV_KEY } from "../../Local/RpcProviderProxy.ts";
 import * as RpcSpawner from "../../Local/RpcSpawner.ts";
 import { envFile, force, profile, script, stage } from "./_shared.ts";
@@ -40,12 +41,7 @@ export const devCommand = Command.make(
           : [
               "node",
               ...process.execArgv,
-              ...(isTransformTypesSupported()
-                ? [
-                    "--experimental-transform-types",
-                    "--no-warnings=ExperimentalWarning",
-                  ]
-                : []),
+              ...transformTypesFlags(),
               "--watch",
               "--watch-preserve-output",
               fileURLToPath(import.meta.resolve("alchemy/bin/exec.js")),
@@ -73,10 +69,3 @@ export const devCommand = Command.make(
       )(effect),
   ),
 );
-
-const isTransformTypesSupported = (
-  version = process.versions.node,
-): boolean => {
-  const [major, minor] = version.split(".").map(Number);
-  return (major === 22 && minor >= 7) || (major >= 23 && major < 26);
-};

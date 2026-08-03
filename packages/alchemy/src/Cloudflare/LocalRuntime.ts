@@ -60,12 +60,21 @@ const LocalRuntimeStateLive = Layer.succeed(
   }),
 );
 
+/**
+ * Directory under `.alchemy` holding local-provider persistent state
+ * (workerd storage). Shared so every consumer — the local runtime layer and
+ * Vite child processes — points at the same storage.
+ */
+export const localStorageDirectory = Effect.gen(function* () {
+  const { dotAlchemy } = yield* AlchemyContext;
+  const path = yield* Path.Path;
+  return path.join(dotAlchemy, "local");
+});
+
 const makeLocalRuntimeServices = () =>
   RpcProvider.providerServicesEffect(
     Effect.gen(function* () {
       const getEnv = yield* CloudflareEnvironment;
-      const { dotAlchemy } = yield* AlchemyContext;
-      const path = yield* Path.Path;
       return Layer.merge(
         LocalRuntimeStateLive,
         layerRuntime({
@@ -73,7 +82,7 @@ const makeLocalRuntimeServices = () =>
             accountId: getEnv.pipe(Effect.map((env) => env.accountId)),
           },
           storage: {
-            directory: path.join(dotAlchemy, "local"),
+            directory: yield* localStorageDirectory,
           },
         }),
       );
