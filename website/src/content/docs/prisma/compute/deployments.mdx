@@ -64,6 +64,34 @@ const app = yield* Prisma.Compute("api", {
 });
 ```
 
+## Redeploying for changed inputs
+
+The low-level `Prisma.Deployment` resource owns no environment
+variables, so it cannot see an env-value change on its own. Prisma
+also snapshots environment variables into a deployment when the
+deployment is created, so changing only a value updates the
+platform's variable record but never reaches the running app.
+
+Declare the values the deployment must be recreated for with
+`redeployOn`. When the resolved value changes, the next deploy
+replaces the deployment (create-before-delete) even though the
+artifact is unchanged:
+
+```typescript
+const deployment = yield* Prisma.Deployment("web", {
+  app,
+  artifactPath: "./dist/app.tar.gz",
+  redeployOn: { DATABASE_URL: Redacted.make(databaseUrl) },
+  start: true,
+  promote: true,
+});
+```
+
+The values are folded into the deployment fingerprint as a salted
+hash and persisted `Redacted`; the plaintext never lands in state.
+`Prisma.Compute` needs no equivalent — it owns `env` and already
+folds those values into its own fingerprint.
+
 ## No-op convergence
 
 Deploys are hash-driven: when the built artifact and configuration

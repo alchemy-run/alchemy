@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
@@ -89,6 +90,43 @@ export interface DeploymentProps {
    * @default false
    */
   promote?: boolean;
+  /**
+   * Inputs the deployment is recreated for. When the resolved value changes,
+   * the next deploy replaces the deployment (create-before-delete) even if the
+   * artifact is unchanged. Values are folded into the deployment fingerprint
+   * as a salted hash and persisted `Redacted`; plaintext never lands in state.
+   *
+   * Prisma snapshots environment variables into a deployment when the
+   * deployment is created, so changing only an environment variable's value
+   * updates the platform's variable record but never reaches the running app.
+   * Pass those values here to make such a change take effect.
+   *
+   * Members may be wrapped in `Redacted.make(secret)`; they are unwrapped only
+   * to compute the fingerprint.
+   *
+   * If the value cannot be resolved while the deploy is being planned —
+   * because it reads an attribute of another resource that the same deploy is
+   * changing — the diff cannot prove the fingerprint is unchanged, and the
+   * engine offers no later opportunity to plan a replacement. The deployment
+   * is then replaced conservatively, but only once a fingerprint has already
+   * been recorded: adding `redeployOn` to an existing deployment records its
+   * fingerprint through a plain update rather than forcing a replacement.
+   *
+   * Leaving `redeployOn` unset tracks nothing, so removing it from a
+   * deployment that had it does not trigger a replacement on its own.
+   *
+   * @example
+   * ```typescript
+   * const deployment = yield* Prisma.Deployment("web", {
+   *   app,
+   *   artifactPath: "./dist/app.tar.gz",
+   *   redeployOn: { DATABASE_URL: Redacted.make(databaseUrl) },
+   *   start: true,
+   *   promote: true,
+   * });
+   * ```
+   */
+  redeployOn?: unknown;
 }
 
 export interface Deployment extends Resource<
@@ -120,6 +158,12 @@ export interface Deployment extends Resource<
      * uploaded an artifact.
      */
     artifactHash?: string;
+    /**
+     * Salted fingerprint of the resolved `redeployOn` inputs this deployment
+     * was created for. Held `Redacted` so the inputs stay out of plaintext
+     * state; absent when `redeployOn` is unset.
+     */
+    redeployHash?: Redacted.Redacted<string>;
     /**
      * Stable App endpoint domain after promotion.
      */
@@ -201,6 +245,7 @@ const attrsFrom = (
   appId: string,
   extra?: {
     artifactHash?: string;
+    redeployHash?: Redacted.Redacted<string>;
     appEndpointDomain?: string;
   },
 ): Deployment["Attributes"] => ({
@@ -210,6 +255,7 @@ const attrsFrom = (
   status: deployment.status,
   previewDomain: deployment.previewDomain,
   artifactHash: extra?.artifactHash,
+  redeployHash: extra?.redeployHash,
   appEndpointDomain: extra?.appEndpointDomain,
   createdAt: deployment.createdAt,
 });
@@ -308,6 +354,57 @@ const artifactHashOf = Effect.fn(function* (props: DeploymentProps) {
   });
 });
 
+/**
+ * Domain separator so a `redeployOn` fingerprint is never the bare SHA-256 of
+ * a secret value, which would otherwise be comparable against a precomputed
+ * digest of a guessed value.
+ */
+const REDEPLOY_HASH_SALT = "alchemy/Prisma.Deployment/redeployOn/v1";
+
+const unwrapRedacted = (value: unknown): unknown => {
+  if (Redacted.isRedacted(value)) return unwrapRedacted(Redacted.value(value));
+  if (Array.isArray(value)) return value.map(unwrapRedacted);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, unwrapRedacted(item)]),
+    );
+  }
+  return value;
+};
+
+const redeployHashOf = (redeployOn: unknown) =>
+  sha256Object({
+    salt: REDEPLOY_HASH_SALT,
+    redeployOn: unwrapRedacted(redeployOn) ?? null,
+  });
+
+const persistedRedeployHash = (
+  value: Redacted.Redacted<string> | string | undefined,
+) => (Redacted.isRedacted(value) ? Redacted.value(value) : value);
+
+/**
+ * Whether the declared `redeployOn` inputs differ from the fingerprint the
+ * running deployment was created for.
+ *
+ * Only `diff` can plan a replacement — `reconcile` has no way to ask for one —
+ * so an input that is still unresolved while planning is treated as changed.
+ * That is only reached when another resource in the same deploy owns the
+ * value and is itself changing, in which case the value most likely changed
+ * too; the cost of being wrong is one extra create-before-delete replacement.
+ * Without a recorded fingerprint there is nothing to compare against, so the
+ * first deploy that declares `redeployOn` records it through the engine's
+ * default update instead of replacing the deployment.
+ */
+const redeployOnChanged = Effect.fn(function* (
+  redeployOn: unknown,
+  persisted: Redacted.Redacted<string> | string | undefined,
+) {
+  const recorded = persistedRedeployHash(persisted);
+  if (redeployOn === undefined || recorded === undefined) return false;
+  if (!isResolved({ redeployOn })) return true;
+  return (yield* redeployHashOf(redeployOn)) !== recorded;
+});
+
 export const uploadArtifact = (
   uploadUrl: string,
   artifact: Uint8Array | ArtifactFile,
@@ -363,6 +460,12 @@ const ProviderLive = () =>
           // replacement lifecycle instead of trying to restart the failed
           // generation or changing a stable ID during an update.
           if (output?.status === "failed") {
+            return { action: "replace" } as const;
+          }
+          // Checked before the resolved-content early return below: a
+          // deferred diff falls back to an update, which reuses the running
+          // deployment and would never apply the changed inputs.
+          if (yield* redeployOnChanged(news.redeployOn, output?.redeployHash)) {
             return { action: "replace" } as const;
           }
           const replacementContent = {
@@ -501,6 +604,10 @@ const ProviderLive = () =>
                   contentType:
                     news.artifactContentType ?? "application/octet-stream",
                 });
+          const redeployHash =
+            news.redeployOn === undefined
+              ? undefined
+              : Redacted.make(yield* redeployHashOf(news.redeployOn));
           const appId = yield* resolveAppId(news.app);
           const deploymentId = isPrismaDevId(output?.deploymentId)
             ? undefined
@@ -646,6 +753,7 @@ const ProviderLive = () =>
 
           return attrsFrom(deployment, appId, {
             artifactHash,
+            redeployHash,
             appEndpointDomain,
           });
         }),
@@ -675,6 +783,7 @@ const ProviderLocal = () =>
     status: "new",
     previewDomain: undefined,
     artifactHash: undefined,
+    redeployHash: undefined,
     appEndpointDomain: undefined,
     createdAt: DEV_TIMESTAMP,
   }));

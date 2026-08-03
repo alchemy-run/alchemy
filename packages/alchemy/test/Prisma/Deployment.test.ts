@@ -35,6 +35,7 @@ import {
 } from "node:http";
 import { WebSocketServer } from "ws";
 import { AlchemyContext } from "@/AlchemyContext";
+import { encodeState } from "@/State/StateEncoding";
 
 const currentClient = <T extends object>(client: T): PrismaManagementClient => {
   return client as unknown as PrismaManagementClient;
@@ -1878,6 +1879,219 @@ describe("Prisma Deployment", () => {
       }).pipe(Effect.provide(FetchHttpClient.layer)),
     ),
   );
+  it.effect(
+    "records a redacted redeployOn fingerprint and replaces when a value changes",
+    () => {
+      const secret = "REDEPLOY_SECRET_SENTINEL";
+      const client = redeployClient();
+
+      return Effect.gen(function* () {
+        const provider = yield* PrismaDeployment.Provider;
+        const output = yield* provider.reconcile({
+          id: "Deployment",
+          fqn: "Deployment",
+          instanceId: "00000000000000000000000000000000",
+          news: {
+            app: "app-1",
+            skipCodeUpload: true,
+            redeployOn: { DATABASE_URL: Redacted.make(secret) },
+          },
+          olds: undefined,
+          output: undefined,
+          session: undefined as never,
+          bindings: [],
+        });
+
+        expect(Redacted.isRedacted(output.redeployHash!)).toBe(true);
+        const fingerprint = Redacted.value(output.redeployHash!);
+        expect(fingerprint).not.toBe(secret);
+        expect(fingerprint).not.toContain(secret);
+        // encodeState unwraps Redacted, so this is what a state store writes.
+        expect(JSON.stringify(encodeState(output))).not.toContain(secret);
+
+        const unchanged = yield* provider.diff!({
+          ...redeployDiffBase(output.redeployHash),
+          olds: {
+            app: "app-1",
+            skipCodeUpload: true,
+            redeployOn: { DATABASE_URL: Redacted.make(secret) },
+          },
+          news: {
+            app: "app-1",
+            skipCodeUpload: true,
+            redeployOn: { DATABASE_URL: Redacted.make(secret) },
+          },
+        } as never);
+        const changed = yield* provider.diff!({
+          ...redeployDiffBase(output.redeployHash),
+          olds: {
+            app: "app-1",
+            skipCodeUpload: true,
+            redeployOn: { DATABASE_URL: Redacted.make(secret) },
+          },
+          news: {
+            app: "app-1",
+            skipCodeUpload: true,
+            redeployOn: { DATABASE_URL: Redacted.make(`${secret}-rotated`) },
+          },
+        } as never);
+
+        expect(unchanged).toBeUndefined();
+        expect(changed).toEqual({ action: "replace" });
+      }).pipe(
+        Effect.provide(deploymentProviderLive()),
+        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
+        Effect.provide(FetchHttpClient.layer),
+        Effect.provide(PlatformServices),
+      );
+    },
+  );
+
+  it.effect("replaces when a plain redeployOn value changes", () => {
+    const client = {} as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const provider = yield* PrismaDeployment.Provider;
+      const diff = yield* provider.diff!({
+        ...redeployDiffBase(Redacted.make("recorded-fingerprint")),
+        olds: {
+          app: "app-1",
+          skipCodeUpload: true,
+          redeployOn: { FEATURE_FLAG: "off" },
+        },
+        news: {
+          app: "app-1",
+          skipCodeUpload: true,
+          redeployOn: { FEATURE_FLAG: "on" },
+        },
+      } as never);
+
+      expect(diff).toEqual({ action: "replace" });
+    }).pipe(
+      Effect.provide(deploymentProviderLive()),
+      Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
+      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(PlatformServices),
+    );
+  });
+
+  it.effect(
+    "keeps a deployment recorded before redeployOn existed when nothing changed",
+    () => {
+      const client = {} as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const provider = yield* PrismaDeployment.Provider;
+        const diff = yield* provider.diff!({
+          ...redeployDiffBase(undefined),
+          olds: {
+            app: "app-1",
+            skipCodeUpload: true,
+            redeployOn: { FEATURE_FLAG: "on" },
+          },
+          news: {
+            app: "app-1",
+            skipCodeUpload: true,
+            redeployOn: { FEATURE_FLAG: "on" },
+          },
+        } as never);
+
+        expect(diff).toBeUndefined();
+      }).pipe(
+        Effect.provide(deploymentProviderLive()),
+        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
+        Effect.provide(FetchHttpClient.layer),
+        Effect.provide(PlatformServices),
+      );
+    },
+  );
+
+  it.effect(
+    "replaces when redeployOn cannot be resolved while planning",
+    () => {
+      const client = {} as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const provider = yield* PrismaDeployment.Provider;
+        const recorded = yield* provider.diff!({
+          ...redeployDiffBase(Redacted.make("recorded-fingerprint")),
+          olds: {
+            app: "app-1",
+            skipCodeUpload: true,
+            redeployOn: { DATABASE_URL: "postgres://old" },
+          },
+          news: {
+            app: "app-1",
+            skipCodeUpload: true,
+            redeployOn: { DATABASE_URL: Output.asOutput("postgres://new") },
+          },
+        } as never);
+        const neverRecorded = yield* provider.diff!({
+          ...redeployDiffBase(undefined),
+          olds: {
+            app: "app-1",
+            skipCodeUpload: true,
+            redeployOn: { DATABASE_URL: "postgres://old" },
+          },
+          news: {
+            app: "app-1",
+            skipCodeUpload: true,
+            redeployOn: { DATABASE_URL: Output.asOutput("postgres://new") },
+          },
+        } as never);
+
+        expect(recorded).toEqual({ action: "replace" });
+        expect(neverRecorded).toBeUndefined();
+      }).pipe(
+        Effect.provide(deploymentProviderLive()),
+        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
+        Effect.provide(FetchHttpClient.layer),
+        Effect.provide(PlatformServices),
+      );
+    },
+  );
+});
+
+const redeployClient = () =>
+  ({
+    createAppDeployment: () =>
+      Effect.succeed({
+        id: "deployment-1",
+        type: "deployment" as const,
+        url: "https://api.prisma.test/v1/deployments/deployment-1",
+        foundryVersionId: "foundry-1",
+      }),
+    getDeployment: (id: string) =>
+      Effect.succeed({
+        id,
+        type: "deployment" as const,
+        url: "https://api.prisma.test/v1/deployments/deployment-1",
+        foundryVersionId: "foundry-1",
+        status: "new",
+        previewDomain: null,
+        createdAt: "2026-01-01T00:00:00Z",
+      }),
+  }) as unknown as PrismaManagementClient;
+
+const redeployDiffBase = (
+  redeployHash: Redacted.Redacted<string> | undefined,
+) => ({
+  id: "Deployment",
+  fqn: "Deployment",
+  instanceId: "00000000000000000000000000000000",
+  oldBindings: [],
+  newBindings: [],
+  output: {
+    deploymentId: "deployment-1",
+    appId: "app-1",
+    foundryVersionId: "foundry-1",
+    status: "new",
+    previewDomain: null,
+    artifactHash: undefined,
+    redeployHash,
+    appEndpointDomain: undefined,
+    createdAt: "2026-01-01T00:00:00Z",
+  },
 });
 
 const withWebSocketServer = <A, E, R>(
