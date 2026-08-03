@@ -230,9 +230,9 @@ export interface DurableObjectProps {
   scriptName?: Input<string> | undefined;
   /**
    * The Worker(s) that previously hosted this Durable Object class. When one
-   * of them still holds the namespace, the deploy performs Cloudflare's
-   * data-preserving `transferred_classes` migration, moving the namespace —
-   * including all stored objects — from that script to this Worker.
+   * of them still holds the namespace, Alchemy coordinates Cloudflare's
+   * declarative transfer flow, moving the namespace, including all stored
+   * objects, from that script to this Worker.
    *
    * Each entry names a former host — see
    * {@link DurableObjectTransferSource} for the accepted forms: a string
@@ -913,7 +913,7 @@ export class DurableObjectScope extends Context.Service<
  * set to the host Worker's script name.
  *
  * Cross-script async bindings are references only: the consumer uploads
- * the binding metadata, but Alchemy does not drive class migrations for
+ * the binding metadata, but Alchemy does not manage class lifecycle for
  * the foreign class. Deploy the host first so Cloudflare can verify that
  * the target script exports the requested class.
  *
@@ -981,10 +981,9 @@ export class DurableObjectScope extends Context.Service<
  * "transfer the data" and "delete it, start fresh", so Alchemy never
  * guesses (removing a DO deletes it; that is the default). Declare
  * `transferredFrom` on the Durable Object at its **new host**, naming the
- * former host, and the new host's deploy ships Cloudflare's
- * data-preserving `transferred_classes` migration. The former host's
- * deploy converges on its own — no delete migration is emitted for a
- * class that moved away.
+ * former host. Cloudflare coordinates this through declarative exports: the
+ * target records an expected transfer and the source commits it. Deploy the
+ * same desired stack a second time to activate the target's local binding.
  *
  * Each `transferredFrom` entry is either the former host's Worker
  * **logical id** (same stack + stage, resolved via alchemy's ownership
@@ -1042,13 +1041,11 @@ export class DurableObjectScope extends Context.Service<
  * })
  * ```
  *
- * Two rules for multi-worker migrations:
+ * Two rules for multi-worker transfers:
  *
- * - **Pure moves (the former host drops the DO entirely, keeping no
- *   cross-script reference) must be two deploys**: first add the class to
- *   the new host with `transferredFrom` and deploy; then remove it from
- *   the former host and deploy. In a single deploy nothing orders the
- *   transfer before the former host's delete.
+ * - **Moves converge over two deploys**: the first coordinates the target
+ *   expectation and source commit. The second activates the target binding.
+ *   For a pure move, remove the former host only after that second deploy.
  * - **Cross-stack moves deploy the new host's stack first**, naming the
  *   former host by physical script name; the former host's stack deploys
  *   after and converges.
@@ -1067,7 +1064,7 @@ export class DurableObjectScope extends Context.Service<
  * foreign worker has no such tag, so on the **adopting deploy** Alchemy
  * falls back to matching your binding to the live class **by binding
  * name**. The class is then reused in place — not recreated — so
- * Cloudflare's migration engine doesn't reject the upload for creating a
+ * Cloudflare's export reconciler doesn't reject the upload for creating a
  * class that already exists.
  *
  * The consequence is a one-time constraint: **on the adopting deploy the
@@ -1209,7 +1206,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
 
     // Class-form declarations (`DurableObject<Self>()("Name", props?)`) can
     // carry `transferredFrom` so the host's local binding drives a
-    // data-preserving transfer migration.
+    // data-preserving declarative transfer.
     const classProps =
       isClassForm && !Effect.isEffect(propsOrImpl)
         ? (propsOrImpl as
@@ -1310,9 +1307,9 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           //   1) Track WorkerB → WorkerA as a binding-level upstream
           //      dependency (so WorkerA reconciles first).
           //   2) Persist `scriptName` as a real value (not `undefined`)
-          //      on the cross-script binding so the migration code in
+          //      on the cross-script binding so the lifecycle code in
           //      Worker.ts can detect it and skip emitting class
-          //      migrations for the foreign class.
+          //      changes for the foreign class.
           // Plain Effects and string literals are passed through as-is.
           const resolved: Effect.Effect<Worker | string, any, any> =
             typeof worker === "string"
