@@ -71,7 +71,7 @@ export interface ResolveFunctionImageOptions {
  * Increment when the Lambda image build behavior changes in a way that must
  * invalidate already-pushed content-addressed images.
  */
-const functionImageBuilderVersion = 1;
+const functionImageBuilderVersion = 2;
 
 export const functionImagePlatform = (architecture: "x86_64" | "arm64") => {
   if (architecture === "x86_64") {
@@ -140,6 +140,26 @@ export const makeFunctionImage = Effect.gen(function* () {
       lowercase: true,
     });
 
+  const desiredRepositoryPolicy = Effect.fn(function* () {
+    const { accountId, region } = yield* AWSEnvironment.current;
+    return JSON.stringify({
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Sid: "LambdaECRImageRetrievalPolicy",
+          Effect: "Allow",
+          Principal: { Service: "lambda.amazonaws.com" },
+          Action: ["ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"],
+          Condition: {
+            StringLike: {
+              "aws:sourceArn": `arn:aws:lambda:${region}:${accountId}:function:*`,
+            },
+          },
+        },
+      ],
+    });
+  });
+
   const ensureRepository = Effect.fn(function* (
     id: string,
     repositoryName: string,
@@ -158,7 +178,7 @@ export const makeFunctionImage = Effect.gen(function* () {
       repository = yield* ecr
         .createRepository({
           repositoryName,
-          imageTagMutability: "MUTABLE",
+          imageTagMutability: "IMMUTABLE",
           imageScanningConfiguration: { scanOnPush: true },
           tags: createTagsList(tags),
         })
@@ -191,23 +211,17 @@ export const makeFunctionImage = Effect.gen(function* () {
       );
     }
 
-    const { accountId, region } = yield* AWSEnvironment.current;
-    const desiredPolicy = JSON.stringify({
-      Version: "2012-10-17",
-      Statement: [
-        {
-          Sid: "LambdaECRImageRetrievalPolicy",
-          Effect: "Allow",
-          Principal: { Service: "lambda.amazonaws.com" },
-          Action: ["ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"],
-          Condition: {
-            StringLike: {
-              "aws:sourceArn": `arn:aws:lambda:${region}:${accountId}:function:*`,
-            },
-          },
-        },
-      ],
-    });
+    // Tags are content hashes, so changing what an existing tag references
+    // would violate the identity contract used by Lambda deployment state.
+    // Verify ownership before migrating repositories created by older versions.
+    if (repository.imageTagMutability !== "IMMUTABLE") {
+      yield* ecr.putImageTagMutability({
+        repositoryName,
+        imageTagMutability: "IMMUTABLE",
+      });
+    }
+
+    const desiredPolicy = yield* desiredRepositoryPolicy();
     const observedPolicy = yield* ecr
       .getRepositoryPolicy({ repositoryName })
       .pipe(
@@ -277,14 +291,28 @@ export const makeFunctionImage = Effect.gen(function* () {
     if (!detail?.imageDigest) {
       const build = yield* resolveDockerBuildPaths(source);
       yield* options.session.note(`Building Lambda image ${imageUri}...`);
-      yield* buildAndPushEcrImage(docker, {
+      const pushed = yield* buildAndPushEcrImage(docker, {
         imageUri,
         context: build.context,
         dockerfile: build.dockerfile,
         platform: functionImagePlatform(options.architecture),
         buildArgs: source.buildArgs,
         args: ["--provenance=false"],
-      });
+      }).pipe(
+        Effect.as(true),
+        Effect.catch((buildError) =>
+          // Two reconcilers can both observe a missing tag and build it. With
+          // immutable tags, the second push loses the race. Accept that failure
+          // only when ECR proves the desired content-addressed tag now exists.
+          describeImage(repositoryName, imageTag).pipe(
+            Effect.flatMap((image) =>
+              image?.imageDigest !== undefined
+                ? Effect.succeed(false)
+                : Effect.fail(buildError),
+            ),
+          ),
+        ),
+      );
       detail = yield* describeImage(repositoryName, imageTag).pipe(
         Effect.filterOrFail(
           (image) => image?.imageDigest !== undefined,
@@ -295,7 +323,11 @@ export const makeFunctionImage = Effect.gen(function* () {
           times: 8,
         }),
       );
-      yield* options.session.note(`Pushed ${imageUri}`);
+      yield* options.session.note(
+        pushed
+          ? `Pushed ${imageUri}`
+          : `Reused concurrently pushed ${imageUri}`,
+      );
     }
 
     const digest = detail?.imageDigest;
@@ -319,17 +351,64 @@ export const makeFunctionImage = Effect.gen(function* () {
       .deleteRepository({ repositoryName, force: true })
       .pipe(Effect.catchTag("RepositoryNotFoundException", () => Effect.void));
 
-  const exists = Effect.fn(function* (
+  const isReady = Effect.fn(function* (
+    id: string,
     repositoryName: string,
     imageTag: string,
   ) {
+    const repository = yield* ecr
+      .describeRepositories({ repositoryNames: [repositoryName] })
+      .pipe(
+        Effect.map((response) => response.repositories?.[0]),
+        Effect.catchTag("RepositoryNotFoundException", () =>
+          Effect.succeed(undefined),
+        ),
+      );
+    if (
+      repository?.repositoryArn === undefined ||
+      repository.repositoryUri === undefined ||
+      repository.imageTagMutability !== "IMMUTABLE"
+    ) {
+      return false;
+    }
+
+    const [tags, observedPolicy, image] = yield* Effect.all(
+      [
+        ecr
+          .listTagsForResource({ resourceArn: repository.repositoryArn })
+          .pipe(
+            Effect.catchTag("RepositoryNotFoundException", () =>
+              Effect.succeed(undefined),
+            ),
+          ),
+        ecr.getRepositoryPolicy({ repositoryName }).pipe(
+          Effect.map((response) => response.policyText),
+          Effect.catchTag(
+            [
+              "RepositoryNotFoundException",
+              "RepositoryPolicyNotFoundException",
+            ],
+            () => Effect.succeed(undefined),
+          ),
+        ),
+        describeImage(repositoryName, imageTag),
+      ] as const,
+      { concurrency: 3 },
+    );
+    if (tags === undefined || !(yield* hasAlchemyTags(id, tags.tags))) {
+      return false;
+    }
+
+    const desiredPolicy = yield* desiredRepositoryPolicy();
     return (
-      (yield* describeImage(repositoryName, imageTag))?.imageDigest !==
-      undefined
+      observedPolicy !== undefined &&
+      normalizePolicyDocument(observedPolicy) ===
+        normalizePolicyDocument(desiredPolicy) &&
+      image?.imageDigest !== undefined
     );
   });
 
-  return { hash, resolve, exists, deleteRepository };
+  return { hash, resolve, isReady, deleteRepository };
 });
 
 export interface FunctionImage extends Effect.Success<

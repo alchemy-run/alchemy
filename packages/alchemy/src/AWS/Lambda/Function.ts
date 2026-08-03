@@ -1992,9 +1992,15 @@ export default handler;
               ResolvedImageUri?: string;
             }
           | undefined;
-      }): Function["Attributes"]["code"] | undefined => {
-        if (packageType !== "Image" || output?.code.image === undefined) {
-          return output?.code;
+      }): Function["Attributes"]["code"] => {
+        if (output?.code === undefined) {
+          // Cold adoption has no persisted source hash. Return a complete
+          // Attributes shape and let the forced post-adoption reconcile write
+          // the desired code and replace this placeholder.
+          return { hash: "" };
+        }
+        if (packageType !== "Image" || output.code.image === undefined) {
+          return output.code;
         }
 
         // Lambda can refresh the deployed URI and digest, but it cannot
@@ -2030,10 +2036,11 @@ export default handler;
           // can force a replace.
           const newFunctionName = news.functionName ?? output.functionName;
           if (output.functionName !== newFunctionName) {
-            return {
-              action: "replace",
-              deleteFirst: news.functionName !== undefined,
-            };
+            // The new physical name differs from the deployed name, so it can
+            // be created before dependents switch over and the old function is
+            // deleted. delete-first is only needed by replacements that reuse
+            // the same explicit name below.
+            return { action: "replace" };
           }
           if (isFunctionImageProps(olds) !== isFunctionImageProps(news)) {
             return {
@@ -2074,7 +2081,11 @@ export default handler;
             if (
               image === undefined ||
               image.imageUri !== `${image.repositoryUri}:${codeHash}` ||
-              !(yield* functionImage.exists(image.repositoryName, codeHash))
+              !(yield* functionImage.isReady(
+                id,
+                image.repositoryName,
+                codeHash,
+              ))
             ) {
               return { action: "update" };
             }
@@ -2147,7 +2158,7 @@ export default handler;
               observed: result?.Code,
             }),
             reservedConcurrentExecutions,
-          } as any;
+          } satisfies Function["Attributes"];
           return (yield* hasAlchemyTags(id, tagsResult))
             ? attrs
             : Unowned(attrs);

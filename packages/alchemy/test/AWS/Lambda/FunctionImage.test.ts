@@ -152,6 +152,35 @@ describe("Lambda Function images", (it) => {
       }),
   );
 
+  it.effect("hashes copied filesystem metadata", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const context = yield* fs.makeTempDirectoryScoped({
+        prefix: "alchemy-lambda-image-metadata-",
+      });
+      const bootstrap = path.join(context, "bootstrap");
+      yield* fs.writeFileString(
+        path.join(context, "Dockerfile"),
+        "FROM scratch\nCOPY . /app\n",
+      );
+      yield* fs.writeFileString(bootstrap, "#!/bin/sh\n");
+      yield* fs.chmod(bootstrap, 0o644);
+
+      const source = { context, dockerfile: "Dockerfile" };
+      const initial = yield* hashFunctionImageBuild(source, "x86_64");
+
+      yield* fs.chmod(bootstrap, 0o755);
+      const executable = yield* hashFunctionImageBuild(source, "x86_64");
+      expect(executable).not.toBe(initial);
+
+      yield* fs.makeDirectory(path.join(context, "empty"));
+      expect(yield* hashFunctionImageBuild(source, "x86_64")).not.toBe(
+        executable,
+      );
+    }),
+  );
+
   it.effect(
     "uses a Dockerfile-specific ignore file instead of the context root",
     () =>

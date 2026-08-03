@@ -67,6 +67,7 @@ test.provider.skipIf(skipLive)(
       expect(first.code.image!.resolvedImageUri).toBe(
         `${first.code.image!.repositoryUri}@${first.code.image!.digest}`,
       );
+      yield* assertRepositoryImmutable(first.code.image!.repositoryName);
       yield* assertFunctionImage(first.functionName, "x86_64");
       expect(yield* invoke(first.functionName, "one")).toEqual({
         marker: "one",
@@ -81,6 +82,27 @@ test.provider.skipIf(skipLive)(
       expect(unchanged.code.hash).toBe(first.code.hash);
       expect(unchanged.code.image?.digest).toBe(first.code.image?.digest);
 
+      // Repository drift alone must plan an update so reconcile can restore
+      // the content-addressing and Lambda pull contracts.
+      yield* ecr.putImageTagMutability({
+        repositoryName: unchanged.code.image!.repositoryName,
+        imageTagMutability: "MUTABLE",
+      });
+      yield* ecr.deleteRepositoryPolicy({
+        repositoryName: unchanged.code.image!.repositoryName,
+      });
+      const repositoryDriftPlan = yield* stack.plan(
+        imageFunction(context, coreFunctionName, "x86_64"),
+      );
+      expect(repositoryDriftPlan.resources["ContainerFunction"]).toMatchObject({
+        action: "update",
+      });
+      const repaired = yield* stack.deploy(
+        imageFunction(context, coreFunctionName, "x86_64"),
+      );
+      yield* assertRepositoryImmutable(repaired.code.image!.repositoryName);
+      yield* assertRepositoryPolicy(repaired.code.image!.repositoryName);
+
       // A context change creates a new content-addressed tag and updates the
       // existing Lambda in place.
       yield* fs.writeFileString(path.join(context, "marker.txt"), "two\n");
@@ -90,6 +112,7 @@ test.provider.skipIf(skipLive)(
       expect(updated.functionName).toBe(first.functionName);
       expect(updated.code.hash).not.toBe(first.code.hash);
       expect(updated.code.image?.digest).not.toBe(first.code.image?.digest);
+      yield* assertRepositoryImmutable(updated.code.image!.repositoryName);
       expect((yield* invoke(updated.functionName, "two")).marker).toBe("two");
 
       // Architecture changes update the image function. The separate arm64
@@ -137,6 +160,7 @@ test.provider.skipIf(skipLive)(
       );
       expect(deployed.functionName).toBe(armFunctionName);
       expect(deployed.code.image?.digest).toMatch(/^sha256:/);
+      yield* assertRepositoryImmutable(deployed.code.image!.repositoryName);
       yield* assertFunctionImage(deployed.functionName, "arm64");
       expect(yield* invoke(deployed.functionName, "one")).toEqual({
         marker: "one",
@@ -170,6 +194,14 @@ test.provider.skipIf(skipLive)(
       const deployed = yield* stack.deploy(zipFunction(zipFunctionName));
       expect(deployed.functionName).toBe(zipFunctionName);
       yield* assertFunctionPackageType(deployed.functionName, "Zip");
+
+      const renamedPlan = yield* stack.plan(
+        zipFunction(`${zipFunctionName}-renamed`),
+      );
+      expect(renamedPlan.resources["ContainerFunction"]).toMatchObject({
+        action: "replace",
+        deleteFirst: false,
+      });
 
       const imagePlan = yield* stack.plan(
         imageFunction(context, zipFunctionName, "x86_64"),
@@ -286,5 +318,25 @@ const assertRepositoryDeleted = Effect.fn(function* (repositoryName: string) {
       schedule: Schedule.spaced("1 second"),
       times: 8,
     }),
+  );
+});
+
+const assertRepositoryImmutable = Effect.fn(function* (repositoryName: string) {
+  yield* ecr.describeRepositories({ repositoryNames: [repositoryName] }).pipe(
+    Effect.filterOrFail(
+      (response) =>
+        response.repositories?.[0]?.imageTagMutability === "IMMUTABLE",
+      () => new Error(`Repository ${repositoryName} is not immutable`),
+    ),
+  );
+});
+
+const assertRepositoryPolicy = Effect.fn(function* (repositoryName: string) {
+  yield* ecr.getRepositoryPolicy({ repositoryName }).pipe(
+    Effect.filterOrFail(
+      (response) =>
+        response.policyText?.includes("LambdaECRImageRetrievalPolicy") === true,
+      () => new Error(`Repository ${repositoryName} has no Lambda pull policy`),
+    ),
   );
 });

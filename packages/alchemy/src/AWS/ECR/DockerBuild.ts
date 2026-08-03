@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Stream from "effect/Stream";
 import * as crypto from "node:crypto";
 
 export interface DockerBuildSource {
@@ -238,38 +239,47 @@ export const hashDockerBuildInputs = Effect.fn(function* (
   });
 
   const entries = yield* fs.readDirectory(context, { recursive: true });
-  const files = yield* Effect.forEach(
-    entries.sort(),
-    Effect.fn(function* (entry) {
-      const normalizedEntry = normalizeRelativePath(entry);
-      if (
-        dockerignore !== undefined &&
-        (normalizedEntry === dockerignore.path ||
-          isDockerIgnored(normalizedEntry, dockerignore.rules))
-      ) {
-        return undefined;
-      }
-      const fullPath = path.join(context, entry);
-      const info = yield* fs.stat(fullPath);
-      if (info.type !== "File") {
-        return undefined;
-      }
-      return {
-        entry: mode === "effective" ? normalizedEntry : entry,
-        content: yield* fs.readFile(fullPath),
-      };
-    }),
-  );
-
-  yield* Effect.sync(() => {
-    for (const file of files) {
-      if (file === undefined) {
-        continue;
-      }
-      hasher.update(`${file.entry}\0`);
-      hasher.update(file.content);
+  for (const entry of entries.sort()) {
+    const normalizedEntry = normalizeRelativePath(entry);
+    if (
+      dockerignore !== undefined &&
+      (normalizedEntry === dockerignore.path ||
+        isDockerIgnored(normalizedEntry, dockerignore.rules))
+    ) {
+      continue;
     }
-  });
+
+    const fullPath = path.join(context, entry);
+    const info = yield* fs.stat(fullPath);
+    const hashedEntry = mode === "effective" ? normalizedEntry : entry;
+
+    // Docker COPY preserves entry types and permission bits, including empty
+    // directories. Include that metadata before any file bytes so changes such
+    // as making a Lambda bootstrap executable invalidate the image tag.
+    yield* Effect.sync(() =>
+      hasher.update(
+        `${JSON.stringify({
+          path: hashedEntry,
+          type: info.type,
+          mode: info.mode & 0o7777,
+          size: info.type === "File" ? String(info.size) : undefined,
+        })}\0`,
+      ),
+    );
+
+    if (info.type === "File") {
+      yield* fs.stream(fullPath).pipe(
+        Stream.runForEach((chunk) =>
+          Effect.sync(() => {
+            hasher.update(chunk);
+          }),
+        ),
+      );
+    } else if (info.type === "SymbolicLink") {
+      const target = yield* fs.readLink(fullPath);
+      yield* Effect.sync(() => hasher.update(target));
+    }
+  }
 
   return (yield* Effect.sync(() => hasher.digest("hex"))).slice(0, 32);
 });
