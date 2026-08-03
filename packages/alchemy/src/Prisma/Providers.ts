@@ -16,6 +16,8 @@ import { proxyChain } from "../Util/proxy-chain.ts";
 import { PrismaAuth } from "./AuthProvider.ts";
 import { App, AppProvider } from "./App.ts";
 import { Branch, BranchProvider } from "./Branch.ts";
+import { Bucket, BucketProvider } from "./Bucket.ts";
+import { BucketKey, BucketKeyProvider } from "./BucketKey.ts";
 import {
   PrismaClient,
   PrismaClientLive,
@@ -148,6 +150,43 @@ export const managementApi = () =>
   standaloneManagementApiLayer().pipe(Layer.orDie);
 
 /**
+ * Layer shape of the dev-mode providers: one provider implementation per
+ * Prisma resource. A custom `dev` layer passed to {@link providers} must
+ * provide exactly this set, like the built-in dev layer does. Spelled
+ * structurally (not as the built-in layer's inferred type) so embedder
+ * layers built from `Provider.succeed`/`Provider.effect` are assignable
+ * without casts.
+ */
+export type PrismaLocalProviders = Layer.Layer<
+  | Provider.Provider<Project>
+  | Provider.Provider<Database>
+  | Provider.Provider<Connection>
+  | Provider.Provider<Branch>
+  | Provider.Provider<Bucket>
+  | Provider.Provider<BucketKey>
+  | Provider.Provider<Compute>
+  | Provider.Provider<App>
+  | Provider.Provider<Deployment>
+  | Provider.Provider<CustomDomain>
+  | Provider.Provider<EnvironmentVariable>
+  | Provider.Provider<SourceRepository>,
+  never,
+  PrismaDevDatabaseRequirements
+>;
+
+export interface ProvidersOptions {
+  /**
+   * Replacement provider layer used in `alchemy dev` mode instead of the
+   * built-in dev stubs. This lets an embedding framework supply its own
+   * emulator implementations (e.g. a local Postgres or object-storage
+   * emulator) while keeping the live Management API providers untouched.
+   * The layer must register a provider for every Prisma resource. Live
+   * (non-dev) deployments are unaffected.
+   */
+  dev?: PrismaLocalProviders;
+}
+
+/**
  * Build a layer that registers all Prisma Management API resource providers,
  * the Prisma auth provider, resolved credentials, and an HTTP client.
  *
@@ -169,8 +208,15 @@ export const managementApi = () =>
  *   }),
  * );
  * ```
+ *
+ * @example Embedder-supplied dev providers
+ * ```typescript
+ * // A framework embedding Alchemy can point dev mode at its own emulators
+ * // while live deployments keep using the Prisma Management API.
+ * const providers = Prisma.providers({ dev: myEmulatorProviders() });
+ * ```
  */
-export const providers = () =>
+export const providers = (options?: ProvidersOptions) =>
   Layer.effect(
     Providers,
     Provider.collection([
@@ -178,6 +224,8 @@ export const providers = () =>
       Database,
       Connection,
       Branch,
+      Bucket,
+      BucketKey,
       Compute,
       App,
       Deployment,
@@ -185,12 +233,14 @@ export const providers = () =>
       EnvironmentVariable,
       SourceRepository,
     ]),
-  ).pipe(Layer.provideMerge(implementationLayer()));
+  ).pipe(Layer.provideMerge(implementationLayer(options?.dev)));
 
-const implementationLayer = () =>
+const implementationLayer = (dev?: PrismaLocalProviders) =>
   Layer.unwrap(
     AlchemyContext.pipe(
-      Effect.map((ctx) => (ctx.dev ? devProviderLayer() : liveProviderLayer())),
+      Effect.map((ctx) =>
+        ctx.dev ? (dev ?? devProviderLayer()) : liveProviders(),
+      ),
     ),
   );
 
@@ -200,6 +250,8 @@ const devProviderLayer = () =>
     databaseDevProvider(),
     connectionDevProvider(),
     branchDevProvider(),
+    bucketDevProvider(),
+    bucketKeyDevProvider(),
     ComputeDevProvider(),
     appDevProvider(),
     deploymentDevProvider(),
@@ -374,6 +426,39 @@ const branchDevProvider = () =>
     updatedAt: DEV_TIMESTAMP,
   }));
 
+const bucketDevProvider = () =>
+  devProvider(Bucket, ["bucketId"], ({ id, news }) => ({
+    bucketId: devId("bucket", id),
+    name: news.name ?? id,
+    projectId: attrOrString(news.project, "projectId") ?? devId("project", id),
+    createdAt: DEV_TIMESTAMP,
+  }));
+
+const bucketKeyDevProvider = () =>
+  devProvider(
+    BucketKey,
+    [
+      "bucketKeyId",
+      "bucketId",
+      "accessKeyId",
+      "secretAccessKey",
+      "endpoint",
+      "bucketName",
+    ],
+    ({ id, news, output }) => ({
+      bucketKeyId: devId("bucket-key", id),
+      bucketId: attrOrString(news.bucket, "bucketId") ?? devId("bucket", id),
+      accessKeyId: devId("access-key", id),
+      // Keep the fabricated secret stable across dev reconciles, mirroring
+      // the reveal-once live behavior where persisted state is authoritative.
+      secretAccessKey:
+        attrOrRedactedString(output, "secretAccessKey") ??
+        Redacted.make(devId("secret-access-key", id)),
+      endpoint: "http://localhost",
+      bucketName: `dev-${id}`,
+    }),
+  );
+
 const appDevProvider = () =>
   devProvider(App, ["appId"], ({ id, news }) => ({
     appId: devId("app", id),
@@ -453,12 +538,21 @@ const sourceRepositoryDevProvider = () =>
     updatedAt: DEV_TIMESTAMP,
   }));
 
-const liveProviderLayer = () =>
+/**
+ * Build the live Prisma Management API provider implementations, without the
+ * dev-mode switch {@link providers} applies. Embedders that assemble their
+ * own provider stack — e.g. a framework that supplies its own emulator
+ * providers in dev mode and composes these live providers for deploys — can
+ * use this layer directly.
+ */
+export const liveProviders = () =>
   Layer.mergeAll(
     ProjectProvider(),
     DatabaseProvider(),
     ConnectionProvider(),
     BranchProvider(),
+    BucketProvider(),
+    BucketKeyProvider(),
     ComputeProvider(),
     AppProvider(),
     DeploymentProvider(),

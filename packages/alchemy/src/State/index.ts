@@ -1,3 +1,6 @@
+// PostgresState is intentionally NOT re-exported here: this barrel is pulled
+// into worker bundles via the core engine, and PostgresState imports "pg"
+// (Node-only). Deep-import it instead: `alchemy/State/PostgresState`.
 export * from "./HttpStateApi.ts";
 export * from "./HttpStateStore.ts";
 export * from "./InMemoryState.ts";

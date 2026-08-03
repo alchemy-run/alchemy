@@ -1,4 +1,6 @@
 import { AlchemyContext } from "@/AlchemyContext";
+import type { Platform } from "@/Platform";
+import type { ResourceClass, ResourceLike } from "@/Resource";
 import { AuthProviders } from "@/Auth/AuthProvider";
 import * as Provider from "@/Provider";
 import * as Prisma from "@/Prisma";
@@ -18,6 +20,36 @@ const providePrismaDev = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.provide(Prisma.providers()),
     Effect.provide(devAlchemyContext),
+  );
+
+const stubLocalProvider = <R extends ResourceLike>(
+  cls: ResourceClass<R> | Platform<R, any, any, any, any>,
+) =>
+  Provider.succeed(cls, {
+    list: () => Effect.succeed([]),
+    reconcile: () =>
+      Effect.succeed({ marker: "custom-local" } as unknown as R["Attributes"]),
+    delete: () => Effect.void,
+  });
+
+// Builds a full replacement dev layer the way an embedder would — from
+// `Provider.succeed` per resource. Passing it to `Prisma.providers` below
+// without a cast is the compile-time proof that `PrismaLocalProviders`
+// accepts embedder-built layers.
+const stubLocalProviders = (): Prisma.PrismaLocalProviders =>
+  Layer.mergeAll(
+    stubLocalProvider(Prisma.Project),
+    stubLocalProvider(Prisma.Database),
+    stubLocalProvider(Prisma.Connection),
+    stubLocalProvider(Prisma.Branch),
+    stubLocalProvider(Prisma.Bucket),
+    stubLocalProvider(Prisma.BucketKey),
+    stubLocalProvider(Prisma.Compute),
+    stubLocalProvider(Prisma.App),
+    stubLocalProvider(Prisma.Deployment),
+    stubLocalProvider(Prisma.CustomDomain),
+    stubLocalProvider(Prisma.EnvironmentVariable),
+    stubLocalProvider(Prisma.SourceRepository),
   );
 
 const reconcileInput = (id: string, news: unknown, output?: unknown) =>
@@ -72,6 +104,8 @@ describe("Prisma providers", () => {
         Prisma.Database.Type,
         Prisma.Connection.Type,
         Prisma.Branch.Type,
+        Prisma.Bucket.Type,
+        Prisma.BucketKey.Type,
         Prisma.Compute.Type,
         Prisma.App.Type,
         Prisma.Deployment.Type,
@@ -84,6 +118,18 @@ describe("Prisma providers", () => {
         [Prisma.Database.Type, ["databaseId"]],
         [Prisma.Connection.Type, ["connectionId"]],
         [Prisma.Branch.Type, ["branchId"]],
+        [Prisma.Bucket.Type, ["bucketId"]],
+        [
+          Prisma.BucketKey.Type,
+          [
+            "bucketKeyId",
+            "bucketId",
+            "accessKeyId",
+            "secretAccessKey",
+            "endpoint",
+            "bucketName",
+          ],
+        ],
         [Prisma.Compute.Type, ["appId"]],
         [Prisma.App.Type, ["appId"]],
         [Prisma.Deployment.Type, ["deploymentId"]],
@@ -124,6 +170,12 @@ describe("Prisma providers", () => {
       const branchProvider = yield* Provider.findProviderByType(
         Prisma.Branch.Type as any,
       );
+      const bucketProvider = yield* Provider.findProviderByType(
+        Prisma.Bucket.Type as any,
+      );
+      const bucketKeyProvider = yield* Provider.findProviderByType(
+        Prisma.BucketKey.Type as any,
+      );
 
       const project = (yield* projectProvider.reconcile(
         reconcileInput("Project", {
@@ -155,6 +207,13 @@ describe("Prisma providers", () => {
         }),
       )) as Prisma.Branch["Attributes"];
 
+      const bucket = (yield* bucketProvider.reconcile(
+        reconcileInput("Bucket", { project, name: "uploads" }),
+      )) as Prisma.Bucket["Attributes"];
+      const bucketKey = (yield* bucketKeyProvider.reconcile(
+        reconcileInput("BucketKey", { bucket, role: "read_write" }),
+      )) as Prisma.BucketKey["Attributes"];
+
       expect(project.projectId).toBe("dev:project:Project");
       expect(app.projectId).toBe(project.projectId);
       expect(app.appId).toBe("dev:app:App");
@@ -162,7 +221,30 @@ describe("Prisma providers", () => {
       expect(env.branchId).toBe("branch-preview");
       expect(Redacted.value(env.value)).toBe("secret");
       expect(branch.role).toBe("production");
+      expect(bucket.bucketId).toBe("dev:bucket:Bucket");
+      expect(bucket.name).toBe("uploads");
+      expect(bucket.projectId).toBe(project.projectId);
+      expect(bucketKey.bucketKeyId).toBe("dev:bucket-key:BucketKey");
+      expect(bucketKey.bucketId).toBe(bucket.bucketId);
+      expect(Redacted.isRedacted(bucketKey.secretAccessKey)).toBe(true);
     }).pipe(providePrismaDev),
+  );
+
+  it.effect("uses a supplied local provider layer in dev mode", () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.findProviderByType(
+        Prisma.Project.Type as any,
+      );
+
+      const attrs = yield* provider.reconcile(
+        reconcileInput("Project", { name: "local-project" }),
+      );
+
+      expect(attrs).toEqual({ marker: "custom-local" });
+    }).pipe(
+      Effect.provide(Prisma.providers({ dev: stubLocalProviders() })),
+      Effect.provide(devAlchemyContext),
+    ),
   );
 
   it.effect(

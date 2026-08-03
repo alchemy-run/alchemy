@@ -75,6 +75,25 @@ const lifecycleResources = [
     ],
   },
   {
+    name: "Bucket",
+    resource: Prisma.Bucket,
+    routes: [
+      "GET /v1/buckets",
+      "POST /v1/buckets",
+      "GET /v1/buckets/{bucketId}",
+      "DELETE /v1/buckets/{bucketId}",
+    ],
+  },
+  {
+    name: "BucketKey",
+    resource: Prisma.BucketKey,
+    routes: [
+      "GET /v1/buckets/{bucketId}/keys",
+      "POST /v1/buckets/{bucketId}/keys",
+      "DELETE /v1/buckets/{bucketId}/keys/{keyId}",
+    ],
+  },
+  {
     name: "App",
     resource: Prisma.App,
     routes: [
@@ -173,13 +192,13 @@ describe("Prisma Management API coverage", () => {
     expect(managementApiContract.repository).toBe("prisma/pdp-control-plane");
     expect(managementApiContract.commit).toMatch(/^[0-9a-f]{40}$/);
     expect(managementApiContract.routes).toHaveLength(78);
-    expect(managementApiContract.deferredRoutes).toHaveLength(7);
+    expect(managementApiContract.deferredRoutes).toHaveLength(0);
     expect(
       managementApiContract.deferredRoutes.every((route) =>
         managementApiContract.routes.includes(route),
       ),
     ).toBe(true);
-    expect(expectedManagementApiRoutes).toHaveLength(71);
+    expect(expectedManagementApiRoutes).toHaveLength(78);
     expect(expectedManagementApiRoutes).toEqual(
       [...productionManagementApiRoutes].sort(),
     );

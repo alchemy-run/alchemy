@@ -49,8 +49,12 @@ export interface ResourceClassLike<R extends ResourceLike> {
    * (see {@link ResourceOptions.aliases}). Copied onto the
    * `ProviderService` by `Provider.succeed`/`Provider.effect` so provider
    * lookup can resolve state persisted under a pre-rename type.
+   *
+   * `undefined` is accepted explicitly so `ResourceClass` (whose `Aliases`
+   * is `readonly string[] | undefined`) stays assignable to
+   * `ResourceClassLike` under `exactOptionalPropertyTypes`.
    */
-  Aliases?: readonly string[];
+  Aliases?: readonly string[] | undefined;
 }
 
 export type ResourceClass<R extends ResourceLike> = ResourceConstructor<
