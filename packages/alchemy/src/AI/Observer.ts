@@ -73,6 +73,15 @@ export type KernelObservation = ObservationEnvelope &
         /** A message appended to the run's thread: work item, steer, or note. */
         readonly type: "input";
         readonly text: string;
+        /**
+         * PROVENANCE, structural: `note` = kernel-authored aside
+         * (`AI.say`, recovery notes); `reminder` = a `Thread.remind`
+         * delivery (the run's own past self). Absent = an ordinary
+         * message (world event or steer). The in-band text markers
+         * (`<note>`, `[reminder]`) remain — they are MODEL-facing;
+         * this field is for projections, which must never parse them.
+         */
+        readonly kind?: "note" | "reminder";
       }
     | {
         /**

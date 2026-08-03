@@ -62,6 +62,14 @@ export const toUIMessages = (
           id: `u-${observation.seq}`,
           role: "user",
           parts: [{ type: "text", text: observation.text }],
+          // structural provenance (note/reminder) + wall-clock time —
+          // clients read these, never the in-band text markers
+          metadata: {
+            at: observation.at,
+            ...(observation.kind !== undefined
+              ? { kind: observation.kind }
+              : {}),
+          },
         });
         break;
       }
@@ -72,6 +80,7 @@ export const toUIMessages = (
             id: `a-${observation.seq}`,
             role: "assistant",
             parts,
+            metadata: { at: observation.at },
           };
           assistant = { message, parts };
           messages.push(message);
@@ -139,6 +148,7 @@ export const toUIMessages = (
               text: `Run crashed: ${renderCrash(observation.error)}`,
             },
           ],
+          metadata: { at: observation.at },
         });
         break;
       }
@@ -192,6 +202,10 @@ export const toUIMessages = (
 export const makeChunkTranslator = () => {
   let started = false;
   let openStep = false;
+  // calls THIS stream has announced — an output for an unseen call
+  // (a subscribe that opened mid-burst) must be dropped, or the AI
+  // SDK fabricates an orphan tool part with no name and no input
+  const knownCalls = new Set<string>();
 
   return (
     observation: KernelObservation,
@@ -239,6 +253,7 @@ export const makeChunkTranslator = () => {
           chunks.push({ type: "text-end", id: textId });
         }
         for (const call of observation.toolCalls) {
+          knownCalls.add(call.id);
           chunks.push({
             type: "tool-input-available",
             toolCallId: call.id,
@@ -256,6 +271,9 @@ export const makeChunkTranslator = () => {
         break;
       }
       case "tool-result": {
+        // orphaned result (call announced before this stream opened):
+        // drop it — the durable snapshot restates the full pair
+        if (!knownCalls.has(observation.toolCallId)) break;
         chunks.push(
           observation.isFailure
             ? {

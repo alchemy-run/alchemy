@@ -50,8 +50,10 @@ import {
   type CompiledToolRef,
   dedupeByName,
   describeCrash,
+  inputProvenance,
   noteMessage,
   NOTE_CODA,
+  reminderInput,
   render,
   type Stance,
 } from "./KernelShared.ts";
@@ -282,7 +284,7 @@ export const KernelMemory: Layer.Layer<
                   Effect.gen(function* () {
                     if (yield* Deferred.isDone(run.settled)) return;
                     yield* Queue.offer(run.inbox, {
-                      input: `[reminder] ${note}`,
+                      input: reminderInput(note),
                     });
                   }),
                 ),
@@ -1109,17 +1111,22 @@ export const KernelMemory: Layer.Layer<
               applyCompaction(run);
               // drained waiters JOIN THE ROUND: only now are they
               // answerable — by AI.reply, or by quiescence as fallback
-              const inputs: Array<unknown> = [];
+              const drained: Array<{
+                readonly value: unknown;
+                readonly kind?: "reminder";
+              }> = [];
               for (const item of items) {
-                inputs.push(item.input);
+                drained.push(inputProvenance(item.input));
                 if (item.waiter !== undefined) run.waiters.push(item.waiter);
               }
-              for (const input of inputs) {
-                run.prompt = Prompt.concat(run.prompt, [asUserMessage(input)]);
+              const inputs = drained.map((item) => item.value);
+              for (const { value, kind } of drained) {
+                run.prompt = Prompt.concat(run.prompt, [asUserMessage(value)]);
                 yield* observe(run, {
                   type: "input",
                   text:
-                    typeof input === "string" ? input : JSON.stringify(input),
+                    typeof value === "string" ? value : JSON.stringify(value),
+                  kind,
                 });
               }
               // TICK: re-evaluate the stance before every sampling —
@@ -1138,6 +1145,7 @@ export const KernelMemory: Layer.Layer<
                 yield* observe(run, {
                   type: "input",
                   text: `<note>\n${text}\n</note>`,
+                  kind: "note",
                 });
               }
               const startedAt = yield* Effect.sync(() => Date.now());

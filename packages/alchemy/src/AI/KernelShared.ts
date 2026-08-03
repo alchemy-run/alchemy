@@ -95,6 +95,34 @@ export const renderCrash = (error: EncodedCrash | string): string =>
       : error.message;
 
 /**
+ * Inbox ENVELOPE for kernel-minted inputs that carry provenance (a
+ * `Thread.remind` delivery). Unwrapped at drain: the thread and the
+ * turn's `inputs` see only `text` — the in-band `[reminder]` marker
+ * stays model-facing — while the `input` observation gets a
+ * structural `kind` (spec: projections never parse text markers).
+ */
+export interface ReminderInput {
+  readonly "~alchemy/input": "reminder";
+  readonly text: string;
+}
+
+export const reminderInput = (note: string): ReminderInput => ({
+  "~alchemy/input": "reminder",
+  text: `[reminder] ${note}`,
+});
+
+/** Unwrap an inbox row into its thread value + observation kind. */
+export const inputProvenance = (
+  input: unknown,
+): { readonly value: unknown; readonly kind?: "reminder" } =>
+  typeof input === "object" &&
+  input !== null &&
+  "~alchemy/input" in input &&
+  (input as ReminderInput)["~alchemy/input"] === "reminder"
+    ? { value: (input as ReminderInput).text, kind: "reminder" }
+    : { value: input };
+
+/**
  * Render a capability term's own tagged template into prose (a tool's
  * description, a skill's teaching, a parameter's field description).
  * Capability terms render as their NAME (backticked, so the model sees

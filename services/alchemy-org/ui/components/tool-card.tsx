@@ -209,6 +209,42 @@ const outputText = (output: unknown): string | undefined =>
       ? output
       : JSON.stringify(output, null, 2);
 
+/** Shared by `openPullRequest` and the Engineer's snake_cased inline
+ *  wrapper — one renderer, two registry keys. */
+const renderOpenPullRequest: Renderer = (input, output) => {
+  let pr: { number?: number; url?: string } | undefined;
+  try {
+    const parsed =
+      typeof output === "string" ? JSON.parse(output) : (output as any);
+    pr = parsed?.pr;
+  } catch {
+    // output not JSON — fall through to plain rendering
+  }
+  return {
+    icon: GitPullRequestArrow,
+    title: (
+      <>
+        Open PR{pr?.number !== undefined ? ` #${pr.number}` : ""}:{" "}
+        <span className="font-medium">
+          {clamp(String(input.title ?? ""), 80)}
+        </span>
+      </>
+    ),
+    badge: pr?.url ? (
+      <a
+        href={pr.url}
+        target="_blank"
+        rel="noreferrer"
+        className="shrink-0 text-[11px] text-muted-foreground underline hover:text-foreground"
+        onClick={(event) => event.stopPropagation()}
+      >
+        open ↗
+      </a>
+    ) : undefined,
+    body: input.body ? <Mono>{clamp(String(input.body), 2000)}</Mono> : undefined,
+  };
+};
+
 const RENDERERS: Record<string, Renderer> = {
   bash: (input, output, running) => {
     const parsed = output === undefined ? undefined : parseBashOutput(output);
@@ -428,39 +464,10 @@ const RENDERERS: Record<string, Renderer> = {
 
   /* ── GitHub verbs ──────────────────────────────────────────── */
 
-  openPullRequest: (input, output) => {
-    let pr: { number?: number; url?: string } | undefined;
-    try {
-      const parsed =
-        typeof output === "string" ? JSON.parse(output) : (output as any);
-      pr = parsed?.pr;
-    } catch {
-      // output not JSON — fall through to plain rendering
-    }
-    return {
-      icon: GitPullRequestArrow,
-      title: (
-        <>
-          Open PR{pr?.number !== undefined ? ` #${pr.number}` : ""}:{" "}
-          <span className="font-medium">{clamp(String(input.title ?? ""), 80)}</span>
-        </>
-      ),
-      badge: pr?.url ? (
-        <a
-          href={pr.url}
-          target="_blank"
-          rel="noreferrer"
-          className="shrink-0 text-[11px] text-muted-foreground underline hover:text-foreground"
-          onClick={(event) => event.stopPropagation()}
-        >
-          open ↗
-        </a>
-      ) : undefined,
-      body: input.body ? (
-        <Mono>{clamp(String(input.body), 2000)}</Mono>
-      ) : undefined,
-    };
-  },
+  openPullRequest: renderOpenPullRequest,
+  // the Engineer's inline wrapper over the same PR physics — identical
+  // input/output shape, snake_cased on the wire (see processes/Issues.ts)
+  open_pull_request: renderOpenPullRequest,
 
   mergePullRequest: (input) => ({
     icon: GitMerge,
