@@ -2,8 +2,9 @@ import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Command from "@/Command/index.ts";
 import * as Output from "@/Output.ts";
+import type * as Plan from "@/Plan.ts";
 import { Stack } from "@/Stack";
-import { type ResourceState, State } from "@/State";
+import { encodeState, type ResourceState, reviveState, State } from "@/State";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Config from "effect/Config";
@@ -382,6 +383,148 @@ test.provider(
 
       yield* stack.destroy();
       yield* waitForWorkerToBeDeleted(v1.workerName, accountId);
+    }).pipe(logLevel),
+  { timeout: 360_000 },
+);
+
+// ─────────────────────────────────────────────────────────────────────
+// #1056: the assets hash must be a string
+//
+// `Command.Build.hash` is a `{ input, output }` pair; `AssetsWithHash.hash`
+// is a single `string` that the Worker compares with `!==` against the value
+// it persisted. Handing the pair through made every redeploy dirty and
+// re-uploaded the whole asset directory, because state round-trips through
+// JSON and a freshly built object is never `===` its deserialized self.
+// ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Round-trip every state row through JSON, exactly like a real state store.
+ *
+ * `test.provider`'s scratch store keeps rows in memory *by reference*, so an
+ * object-valued hash compares `===` against itself and this bug is invisible.
+ * `localState` (and R2, and the HTTP store) serialize on write and revive on
+ * read — that is what production plans diff against, so reproduce it here.
+ */
+const roundTripState = Effect.gen(function* () {
+  const state = yield* yield* State;
+  const stk = yield* Stack;
+  const fqns = yield* state.list({ stack: stk.name, stage: stk.stage });
+  yield* Effect.forEach(fqns, (fqn) =>
+    Effect.gen(function* () {
+      const row = yield* state.get({ stack: stk.name, stage: stk.stage, fqn });
+      if (row === undefined) return;
+      yield* state.set({
+        stack: stk.name,
+        stage: stk.stage,
+        fqn,
+        value: JSON.parse(
+          JSON.stringify(encodeState(row)),
+          reviveState,
+        ) as ResourceState,
+      });
+    }),
+  );
+});
+
+const actionOf = (plan: Plan.Plan, fqn: string) => plan.resources[fqn]?.action;
+
+test.provider(
+  "StaticSite: redeploying an unchanged site is a noop (#1056)",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+
+      yield* stack.destroy();
+
+      // `.gitignore` keeps `dist/` out of the build's input hash, so the
+      // second pass sees byte-identical inputs.
+      const cwd = yield* cloneFixture(fixtureDir, {
+        prefix: "alchemy-staticsite-noop-",
+        entries: ["src", "build.sh", ".gitignore"],
+      });
+      const marker = `staticsite-noop-${Date.now()}`;
+      yield* fs.writeFileString(
+        path.join(cwd, "src", "index.html"),
+        htmlPage(marker),
+      );
+
+      const program = () =>
+        Effect.gen(function* () {
+          return yield* Cloudflare.Website.StaticSite(
+            "NoopSite",
+            staticSiteProps(cwd),
+          );
+        });
+
+      const site = yield* stack.deploy(program());
+      yield* expectWorkerExists(site.workerName, accountId);
+
+      yield* roundTripState;
+
+      // Zero source changes between the two passes, so nothing may plan as
+      // changed. This is the user-visible defect: before the fix the Worker
+      // planned `update` on every single deploy and re-uploaded the whole
+      // asset directory, forever.
+      const settled = yield* stack.plan(program());
+      expect(actionOf(settled, "NoopSite/Build")).toBe("noop");
+      expect(actionOf(settled, "NoopSite/Worker")).toBe("noop");
+
+      // ...because the persisted hash is the build's `output` hash — the
+      // content hash of the uploaded bytes — and not the `{ input, output }`
+      // pair, which never compares equal to its own deserialized self.
+      expect(typeof site.hash?.assets).toBe("string");
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+    }).pipe(logLevel),
+  { timeout: 360_000 },
+);
+
+test.provider(
+  "StaticSite: a memo:false build has no hash and still uploads the assets",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+
+      yield* stack.destroy();
+
+      const cwd = yield* cloneFixture(fixtureDir, {
+        prefix: "alchemy-staticsite-no-memo-",
+        entries: ["src", "build.sh", ".gitignore"],
+      });
+      const marker = `staticsite-no-memo-${Date.now()}`;
+      yield* fs.writeFileString(
+        path.join(cwd, "src", "index.html"),
+        htmlPage(marker),
+      );
+
+      const site = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Website.StaticSite("NoMemoSite", {
+            ...staticSiteProps(cwd),
+            memo: false,
+          });
+        }),
+      );
+
+      // `memo: false` computes no hashes, so the site hands the Worker
+      // `hash: undefined` — the hash-*less* shape, which must make the
+      // Worker hash `outdir` itself. Reading an explicit `undefined` as a
+      // supplied hash instead makes a greenfield create compare `undefined
+      // === undefined`, set `skip`, and publish a Worker with no assets.
+      expect(site.hash?.assets).toBeDefined();
+      yield* expectWorkerExists(site.workerName, accountId);
+      yield* expectUrlContains(`${site.url!}/index.html`, marker, {
+        timeout: "120 seconds",
+        label: "memo:false marker",
+      });
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(site.workerName, accountId);
     }).pipe(logLevel),
   { timeout: 360_000 },
 );
