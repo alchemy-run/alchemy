@@ -481,6 +481,12 @@ export const LocalWorkerProvider = () =>
           // deliberately hash-safe). Restart-relevant: serve lowers the list
           // into workerd's native `tails` service designators.
           tailConsumers: resolveTailConsumers(props.tailConsumers),
+          // Streaming tail consumers, same resolution — serve lowers the
+          // list into workerd's `streamingTails` designators, which deliver
+          // the producer's events live via the consumer's `tailStream()`.
+          streamingTailConsumers: resolveTailConsumers(
+            props.streamingTailConsumers,
+          ),
         };
       });
 
@@ -640,6 +646,14 @@ export const LocalWorkerProvider = () =>
                       // drops events with a `[registry]` warning until it
                       // registers (wrangler dev-registry semantics).
                       tails: worker.tailConsumers?.map((c) => c.service),
+                      // Streaming tail consumers by script name — resolved
+                      // through the same registry proxy; the consumer's
+                      // `tailStream()` receives the onset while the producer
+                      // is still executing (dropped with a `[registry]`
+                      // warning until the consumer registers).
+                      streamingTails: worker.streamingTailConsumers?.map(
+                        (c) => c.service,
+                      ),
                       // Cache API opt-out (`dev: { cache: false }`) — matches
                       // production workers.dev, where the Cache API is a no-op.
                       cache: worker.dev.cache,
@@ -974,6 +988,7 @@ export const LocalWorkerProvider = () =>
               routes: [],
               crons: config.crons,
               tailConsumers: config.tailConsumers,
+              streamingTailConsumers: config.streamingTailConsumers,
             } satisfies Worker["Attributes"];
           }
 
@@ -1036,6 +1051,7 @@ export const LocalWorkerProvider = () =>
             routes: [],
             crons: config.crons,
             tailConsumers: config.tailConsumers,
+            streamingTailConsumers: config.streamingTailConsumers,
             accountId,
           } satisfies Worker["Attributes"];
         }),
