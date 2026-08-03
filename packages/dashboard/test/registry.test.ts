@@ -53,6 +53,7 @@ const REGISTERED_CLOUDS = [
   "Cloudflare",
   "Docker",
   "GitHub",
+  "Kubernetes",
   "Neon",
   "Planetscale",
 ] as const;

@@ -4,8 +4,6 @@ import type { AccessEntry } from "./AccessEntry.ts";
 import type { Addon } from "./Addon.ts";
 import type { Cluster } from "./Cluster.ts";
 import type { FargateProfile } from "./FargateProfile.ts";
-import type { HelmChart } from "./HelmChart.ts";
-import type { Manifest } from "./Manifest.ts";
 import type { Nodegroup } from "./Nodegroup.ts";
 import type { PodIdentityAssociation } from "./PodIdentityAssociation.ts";
 
@@ -156,41 +154,6 @@ export const FargateProfileUI = UIProvider.succeed<FargateProfile>(
   },
 );
 
-export const HelmChartUI = UIProvider.succeed<HelmChart>("AWS.EKS.HelmChart", {
-  displayName: "EKS Helm Chart",
-  icon: "package",
-  color: "#ED7100",
-  category: "config",
-  summary: (ctx) => ctx.attrs?.releaseName,
-  facts: (ctx) => [
-    { label: "release", value: ctx.attrs?.releaseName, copy: true },
-    { label: "cluster", value: ctx.attrs?.clusterName },
-    { label: "namespace", value: ctx.attrs?.namespace },
-    { label: "chart", value: ctx.attrs?.chart, mono: true },
-    { label: "version", value: ctx.attrs?.version },
-    { label: "code hash", value: ctx.attrs?.code?.hash, mono: true },
-  ],
-});
-
-export const ManifestUI = UIProvider.succeed<Manifest>("AWS.EKS.Manifest", {
-  displayName: "EKS Manifest",
-  icon: "file-text",
-  color: "#ED7100",
-  category: "config",
-  summary: (ctx) =>
-    ctx.attrs?.kind === undefined
-      ? ctx.attrs?.name
-      : `${ctx.attrs.kind}/${ctx.attrs.name}`,
-  facts: (ctx) => [
-    { label: "name", value: ctx.attrs?.name, copy: true },
-    { label: "cluster", value: ctx.attrs?.clusterName },
-    { label: "kind", value: ctx.attrs?.kind },
-    { label: "api version", value: ctx.attrs?.apiVersion, mono: true },
-    { label: "namespace", value: ctx.attrs?.namespace },
-    { label: "uid", value: ctx.attrs?.uid, mono: true, copy: true },
-  ],
-});
-
 export const NodegroupUI = UIProvider.succeed<Nodegroup>("AWS.EKS.Nodegroup", {
   displayName: "EKS Node Group",
   icon: "cpu",
@@ -225,7 +188,5 @@ export const ui = () =>
     PodIdentityAssociationUI,
     AccessEntryUI,
     FargateProfileUI,
-    HelmChartUI,
-    ManifestUI,
     NodegroupUI,
   );

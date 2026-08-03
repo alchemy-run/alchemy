@@ -3,6 +3,7 @@ import * as AxiomUI from "alchemy/Axiom/UI";
 import * as CloudflareUI from "alchemy/Cloudflare/UI";
 import * as DockerUI from "alchemy/Docker/UI";
 import * as GitHubUI from "alchemy/GitHub/UI";
+import * as KubernetesUI from "alchemy/Kubernetes/UI";
 import * as NeonUI from "alchemy/Neon/UI";
 import * as PlanetscaleUI from "alchemy/Planetscale/UI";
 import {
@@ -27,6 +28,7 @@ export const loadRegistry = (): Promise<UIRegistry> =>
         CloudflareUI.ui(),
         DockerUI.ui(),
         GitHubUI.ui(),
+        KubernetesUI.ui(),
         NeonUI.ui(),
         PlanetscaleUI.ui(),
       ),
