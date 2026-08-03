@@ -1,16 +1,9 @@
 /**
- * The URL contract. A viewer link must survive a reload and a paste into
- * someone else's browser, and links minted before paths existed
- * (`?stack=&stage=`) must keep resolving.
+ * The URL contract: a viewer link must survive a reload and a paste into
+ * someone else's browser.
  */
 import { afterEach, expect, test } from "bun:test";
-import {
-  navigate,
-  parseRoute,
-  pathOf,
-  replaceRoute,
-  subscribeRoute,
-} from "../src/route.ts";
+import { navigate, parseRoute, pathOf, subscribeRoute } from "../src/route.ts";
 
 /** Minimal `window` — route.ts only touches `location` and `history`. */
 const stubWindow = (url: string): { href: () => string } => {
@@ -40,7 +33,7 @@ const stubWindow = (url: string): { href: () => string } => {
     addEventListener: () => {},
     removeEventListener: () => {},
   };
-  return { href: () => `${parsed.pathname}${parsed.search}` };
+  return { href: () => parsed.pathname };
 };
 
 afterEach(() => {
@@ -77,18 +70,6 @@ test("segments are decoded, so names with reserved characters survive", () => {
   });
 });
 
-test("legacy ?stack=&stage= links still resolve to a target", () => {
-  expect(parseRoute("/", "?stack=f311x&stage=prod")).toEqual({
-    kind: "target",
-    stack: "f311x",
-    stage: "prod",
-  });
-});
-
-test("a blank legacy stack is not a target", () => {
-  expect(parseRoute("/", "?stack=")).toEqual({ kind: "index" });
-});
-
 test("trailing slashes and extra segments do not confuse the match", () => {
   expect(parseRoute("/stacks/f311x/")).toEqual({
     kind: "target",
@@ -118,18 +99,4 @@ test("navigating to where you already are is a no-op", () => {
   navigate("/stacks/github/dev");
   expect(notified).toBe(0);
   unsubscribe();
-});
-
-test("replaceRoute canonicalizes a legacy link in place", () => {
-  const win = stubWindow("https://viewer.example/?stack=f311x&stage=prod");
-  const route = parseRoute(
-    (globalThis as { window: { location: { pathname: string } } }).window
-      .location.pathname,
-    "?stack=f311x&stage=prod",
-  );
-  expect(route.kind).toBe("target");
-  if (route.kind === "target") {
-    replaceRoute(pathOf(route));
-  }
-  expect(win.href()).toBe("/stacks/f311x/prod");
 });

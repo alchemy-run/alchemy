@@ -13,7 +13,7 @@
  * `notFoundHandling: "single-page-application"`), so deep links load.
  *
  * The API stays query-shaped (`?stack=&stage=`) — that is the right shape
- * for an API, and only browser URLs move.
+ * for an API, and only browser URLs are paths.
  *
  * Hand-rolled rather than a router dependency: two routes do not justify
  * one, and this package ships with no runtime dependencies.
@@ -32,14 +32,8 @@ export const pathOf = (target: {
     ? `/stacks/${encodeURIComponent(target.stack)}`
     : `/stacks/${encodeURIComponent(target.stack)}/${encodeURIComponent(target.stage)}`;
 
-/**
- * Parse a path (plus optional query) into a route.
- *
- * `?stack=`/`?stage=` are still honoured so links minted before paths
- * existed keep working; `parse` reports them as a normal target and the
- * caller rewrites the URL to the path form.
- */
-export const parseRoute = (pathname: string, search = ""): Route => {
+/** Parse a path into a route. */
+export const parseRoute = (pathname: string): Route => {
   const segments = pathname.split("/").filter((s) => s.length > 0);
   if (segments[0] === "stacks" && segments[1] !== undefined) {
     return {
@@ -49,23 +43,11 @@ export const parseRoute = (pathname: string, search = ""): Route => {
         segments[2] === undefined ? undefined : decodeURIComponent(segments[2]),
     };
   }
-  // legacy query form
-  const params = new URLSearchParams(search);
-  const stack = params.get("stack");
-  if (stack !== null && stack !== "") {
-    const stage = params.get("stage");
-    return {
-      kind: "target",
-      stack,
-      stage: stage === null || stage === "" ? undefined : stage,
-    };
-  }
   return { kind: "index" };
 };
 
 /** The route the browser is currently on. */
-export const currentRoute = (): Route =>
-  parseRoute(window.location.pathname, window.location.search);
+export const currentRoute = (): Route => parseRoute(window.location.pathname);
 
 const LISTENERS = new Set<() => void>();
 
@@ -81,14 +63,14 @@ const notify = (): void => {
  * here, unlike a filter.
  */
 export const navigate = (path: string): void => {
-  if (path === `${window.location.pathname}${window.location.search}`) {
+  if (path === window.location.pathname) {
     return;
   }
   window.history.pushState(null, "", path);
   notify();
 };
 
-/** Rewrite the current URL in place (legacy-query → path canonicalization). */
+/** Rewrite the current URL in place, without a history entry. */
 export const replaceRoute = (path: string): void => {
   window.history.replaceState(null, "", path);
   notify();

@@ -41,12 +41,7 @@ const start = (target: Target): void => {
 
 const route = currentRoute();
 if (route.kind === "target") {
-  // A pinned target connects immediately — no need to wait on the
-  // catalog. Canonicalize a legacy `?stack=` link to its path form.
-  const canonical = pathOf(route);
-  if (window.location.pathname !== canonical) {
-    replaceRoute(canonical);
-  }
+  // A pinned target connects immediately — no need to wait on the catalog.
   start({ stack: route.stack, stage: route.stage });
   void loadStacks();
 } else {
@@ -80,7 +75,7 @@ createRoot(document.getElementById("root")!).render(<App />);
 // target actually differing, so the boot canonicalization and any
 // same-target navigation stay no-ops.
 subscribeRoute(() => {
-  const next = parseRoute(window.location.pathname, window.location.search);
+  const next = parseRoute(window.location.pathname);
   const live = dashboardStore.getState().connection;
   if (next.kind !== "target") {
     disconnect();
