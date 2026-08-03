@@ -809,7 +809,9 @@ export const Function: Platform<
   Function,
   FunctionServices,
   FunctionShape,
-  Serverless.FunctionContext
+  Serverless.FunctionContext,
+  {},
+  FunctionZipProps
 > = Platform(FunctionTypeId, {
   createRuntimeContext: (id: string): Serverless.FunctionContext => {
     const listeners: Effect.Effect<Serverless.FunctionListener>[] = [];
@@ -2066,6 +2068,16 @@ export default handler;
           if (output.code.hash !== codeHash) {
             // code changed
             return { action: "update" };
+          }
+          if (isFunctionImageProps(news)) {
+            const image = output.code.image;
+            if (
+              image === undefined ||
+              image.imageUri !== `${image.repositoryUri}:${codeHash}` ||
+              !(yield* functionImage.exists(image.repositoryName, codeHash))
+            ) {
+              return { action: "update" };
+            }
           }
           if (
             toTimeoutSeconds(olds.timeout) !== toTimeoutSeconds(news.timeout)

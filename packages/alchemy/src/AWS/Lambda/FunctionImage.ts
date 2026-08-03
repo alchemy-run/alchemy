@@ -319,7 +319,17 @@ export const makeFunctionImage = Effect.gen(function* () {
       .deleteRepository({ repositoryName, force: true })
       .pipe(Effect.catchTag("RepositoryNotFoundException", () => Effect.void));
 
-  return { hash, resolve, deleteRepository };
+  const exists = Effect.fn(function* (
+    repositoryName: string,
+    imageTag: string,
+  ) {
+    return (
+      (yield* describeImage(repositoryName, imageTag))?.imageDigest !==
+      undefined
+    );
+  });
+
+  return { hash, resolve, exists, deleteRepository };
 });
 
 export interface FunctionImage extends Effect.Success<

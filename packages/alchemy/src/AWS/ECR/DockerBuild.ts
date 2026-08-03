@@ -19,7 +19,7 @@ interface DockerIgnoreRule {
 
 interface DockerIgnore {
   content: string;
-  path: string;
+  path?: string;
   rules: ReadonlyArray<DockerIgnoreRule>;
 }
 
@@ -53,7 +53,8 @@ const compileDockerIgnoreRule = (raw: string): DockerIgnoreRule | undefined => {
     pattern = pattern.slice(1).trim();
   }
 
-  pattern = normalizeRelativePath(pattern)
+  pattern = pattern
+    .replace(/^\.\/+/, "")
     .replace(/^\/+/, "")
     .replace(/\/+$/, "");
   if (pattern.length === 0 || pattern === ".") {
@@ -63,6 +64,10 @@ const compileDockerIgnoreRule = (raw: string): DockerIgnoreRule | undefined => {
   let body = "";
   for (let index = 0; index < pattern.length; index++) {
     const char = pattern[index];
+    if (char === "\\" && pattern[index + 1] !== undefined) {
+      body += escapeRegExp(pattern[++index]);
+      continue;
+    }
     if (char === "*") {
       if (pattern[index + 1] === "*") {
         while (pattern[index + 1] === "*") {
@@ -176,9 +181,12 @@ const resolveDockerIgnore = Effect.fn(function* ({
   );
   return {
     content,
-    path: relativePath.startsWith("../")
-      ? path.basename(ignoreFile)
-      : relativePath,
+    path:
+      relativePath === ".." ||
+      relativePath.startsWith("../") ||
+      path.isAbsolute(relativePath)
+        ? undefined
+        : relativePath,
     rules: content.split(/\r?\n/).flatMap((line) => {
       const rule = compileDockerIgnoreRule(line);
       return rule === undefined ? [] : [rule];

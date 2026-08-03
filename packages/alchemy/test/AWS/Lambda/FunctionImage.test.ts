@@ -62,6 +62,35 @@ describe("Lambda Function images", (it) => {
     }),
   );
 
+  it.effect("preserves escaped Docker ignore wildcards", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const context = yield* fs.makeTempDirectoryScoped({
+        prefix: "alchemy-lambda-image-ignore-escape-",
+      });
+      yield* fs.writeFileString(
+        path.join(context, "Dockerfile"),
+        "FROM scratch\nCOPY . /app\n",
+      );
+      yield* fs.writeFileString(
+        path.join(context, ".dockerignore"),
+        "file\\?.txt\n",
+      );
+      yield* fs.writeFileString(path.join(context, "file?.txt"), "one");
+      yield* fs.makeDirectory(path.join(context, "file"));
+      yield* fs.writeFileString(path.join(context, "file", "a.txt"), "one");
+
+      const source = { context, dockerfile: "Dockerfile" };
+      const initial = yield* hashFunctionImageBuild(source, "x86_64");
+      yield* fs.writeFileString(path.join(context, "file?.txt"), "two");
+      expect(yield* hashFunctionImageBuild(source, "x86_64")).toBe(initial);
+
+      yield* fs.writeFileString(path.join(context, "file", "a.txt"), "two");
+      expect(yield* hashFunctionImageBuild(source, "x86_64")).not.toBe(initial);
+    }),
+  );
+
   it.effect(
     "hashes Dockerfile, build args, architecture, and relative context contents",
     () =>
@@ -159,6 +188,44 @@ describe("Lambda Function images", (it) => {
         expect(yield* hashFunctionImageBuild(source, "x86_64")).toBe(initial);
 
         yield* fs.writeFileString(path.join(context, "root-only.txt"), "two");
+        expect(yield* hashFunctionImageBuild(source, "x86_64")).not.toBe(
+          initial,
+        );
+      }),
+  );
+
+  it.effect(
+    "does not alias an external Docker ignore file into the context",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectoryScoped({
+          prefix: "alchemy-lambda-image-external-ignore-",
+        });
+        const context = path.join(root, "context");
+        const dockerfile = path.join(root, "Lambda.Dockerfile");
+        yield* fs.makeDirectory(context);
+        yield* fs.writeFileString(dockerfile, "FROM scratch\nCOPY . /app\n");
+        yield* fs.writeFileString(
+          `${dockerfile}.dockerignore`,
+          "ignored.txt\n",
+        );
+        yield* fs.writeFileString(path.join(context, "ignored.txt"), "one");
+        yield* fs.writeFileString(
+          path.join(context, "Lambda.Dockerfile.dockerignore"),
+          "one",
+        );
+
+        const source = { context, dockerfile };
+        const initial = yield* hashFunctionImageBuild(source, "x86_64");
+        yield* fs.writeFileString(path.join(context, "ignored.txt"), "two");
+        expect(yield* hashFunctionImageBuild(source, "x86_64")).toBe(initial);
+
+        yield* fs.writeFileString(
+          path.join(context, "Lambda.Dockerfile.dockerignore"),
+          "two",
+        );
         expect(yield* hashFunctionImageBuild(source, "x86_64")).not.toBe(
           initial,
         );

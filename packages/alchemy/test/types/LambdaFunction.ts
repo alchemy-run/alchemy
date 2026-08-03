@@ -1,7 +1,10 @@
 import type {
   DurableFunctionProps,
+  FunctionImageProps,
   FunctionProps,
 } from "@/AWS/Lambda/index.ts";
+import { Function as LambdaFunction } from "@/AWS/Lambda/index.ts";
+import * as Effect from "effect/Effect";
 
 type Assert<T extends true> = T;
 
@@ -67,3 +70,13 @@ export type _DurableFunctionIsZipOnly = Assert<
     ? false
     : true
 >;
+
+LambdaFunction("zip-inline-accepted", { main: "./handler.ts" }, Effect.void);
+
+const imageProps: FunctionImageProps = {
+  image: { context: "./lambda", dockerfile: "Dockerfile" },
+  architecture: "x86_64",
+};
+
+// @ts-expect-error Image functions use the Dockerfile's handler.
+LambdaFunction("image-inline-rejected", imageProps, Effect.void);
