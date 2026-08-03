@@ -6,8 +6,41 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientError from "effect/unstable/http/HttpClientError";
+import type * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+/** `HttpClientRequest` body -> the `BodyInit` a Fetcher accepts. */
+const toRequestBody = (
+  request: HttpClientRequest.HttpClientRequest,
+): Effect.Effect<BodyInit | undefined, HttpClientError.HttpClientError> => {
+  switch (request.body._tag) {
+    case "Raw":
+      return Effect.succeed(request.body.body as BodyInit);
+    case "Uint8Array":
+      return Effect.succeed(request.body.body as BodyInit);
+    case "FormData":
+      return Effect.succeed(request.body.formData);
+    case "Stream":
+      return Effect.mapError(
+        Stream.toReadableStreamEffect(request.body.stream),
+        (cause) =>
+          new HttpClientError.HttpClientError({
+            reason: new HttpClientError.EncodeError({
+              request,
+              cause,
+              description: "failed to encode stream body",
+            }),
+          }),
+      );
+    default:
+      return Effect.succeed(undefined);
+  }
+};
 
 /**
  * Hosted alchemy dashboard: the `@alchemy.run/dashboard` SPA served as
@@ -136,16 +169,45 @@ export default class Viewer extends Cloudflare.Worker<Viewer>()(
     const stateStore = (env as Record<string, unknown>)[
       STATE_STORE_BINDING
     ] as { fetch: typeof globalThis.fetch } | undefined;
+    // Build the client DIRECTLY on `binding.fetch` rather than swapping
+    // `FetchHttpClient.Fetch` underneath the stock layer: the binding is
+    // the whole point (Cloudflare blocks same-zone worker-to-worker global
+    // fetch — 1042, surfaced as a 404), so the transport must not depend
+    // on a context Reference resolving the way we expect inside workerd.
     const httpClient =
       stateStore === undefined
         ? FetchHttpClient.layer
-        : FetchHttpClient.layer.pipe(
-            Layer.provide(
-              Layer.succeed(FetchHttpClient.Fetch, ((input, init) =>
-                stateStore.fetch(
-                  input as never,
-                  init as never,
-                )) as typeof globalThis.fetch),
+        : Layer.succeed(
+            HttpClient.HttpClient,
+            HttpClient.make((request, url, signal) =>
+              Effect.flatMap(
+                toRequestBody(request),
+                (body): Effect.Effect<
+                  HttpClientResponse.HttpClientResponse,
+                  HttpClientError.HttpClientError
+                > =>
+                  Effect.map(
+                    Effect.tryPromise({
+                      try: () =>
+                        stateStore.fetch(url.toString(), {
+                          method: request.method,
+                          headers: request.headers as HeadersInit,
+                          body,
+                          signal,
+                        }),
+                      catch: (cause) =>
+                        new HttpClientError.HttpClientError({
+                          reason: new HttpClientError.TransportError({
+                            request,
+                            cause,
+                            description: "state-store service binding fetch",
+                          }),
+                        }),
+                    }),
+                    (response) =>
+                      HttpClientResponse.fromWeb(request, response),
+                  ),
+              ),
             ),
           );
 
