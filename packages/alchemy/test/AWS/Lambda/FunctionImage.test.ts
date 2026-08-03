@@ -181,6 +181,31 @@ describe("Lambda Function images", (it) => {
     }),
   );
 
+  it.effect("hashes symbolic link targets without following them", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const context = yield* fs.makeTempDirectoryScoped({
+        prefix: "alchemy-lambda-image-symlink-",
+      });
+      yield* fs.writeFileString(
+        path.join(context, "Dockerfile"),
+        "FROM scratch\nCOPY . /app\n",
+      );
+      yield* fs.writeFileString(path.join(context, "target-a"), "same");
+      yield* fs.writeFileString(path.join(context, "target-b"), "same");
+      const link = path.join(context, "current");
+      yield* fs.symlink("target-a", link);
+
+      const source = { context, dockerfile: "Dockerfile" };
+      const initial = yield* hashFunctionImageBuild(source, "x86_64");
+
+      yield* fs.remove(link);
+      yield* fs.symlink("target-b", link);
+      expect(yield* hashFunctionImageBuild(source, "x86_64")).not.toBe(initial);
+    }),
+  );
+
   it.effect(
     "uses a Dockerfile-specific ignore file instead of the context root",
     () =>

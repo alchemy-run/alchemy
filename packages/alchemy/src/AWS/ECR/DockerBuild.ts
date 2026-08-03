@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import * as crypto from "node:crypto";
 
@@ -250,8 +251,25 @@ export const hashDockerBuildInputs = Effect.fn(function* (
     }
 
     const fullPath = path.join(context, entry);
-    const info = yield* fs.stat(fullPath);
     const hashedEntry = mode === "effective" ? normalizedEntry : entry;
+    // FileSystem.stat follows symbolic links, so probe the link itself first.
+    // Docker preserves the link in the build context; hashing the target file
+    // would miss retargets between files with identical contents and metadata.
+    const link = yield* Effect.result(fs.readLink(fullPath));
+    if (Result.isSuccess(link)) {
+      yield* Effect.sync(() =>
+        hasher.update(
+          `${JSON.stringify({
+            path: hashedEntry,
+            type: "SymbolicLink",
+            target: link.success,
+          })}\0`,
+        ),
+      );
+      continue;
+    }
+
+    const info = yield* fs.stat(fullPath);
 
     // Docker COPY preserves entry types and permission bits, including empty
     // directories. Include that metadata before any file bytes so changes such
@@ -275,9 +293,6 @@ export const hashDockerBuildInputs = Effect.fn(function* (
           }),
         ),
       );
-    } else if (info.type === "SymbolicLink") {
-      const target = yield* fs.readLink(fullPath);
-      yield* Effect.sync(() => hasher.update(target));
     }
   }
 
