@@ -9,13 +9,14 @@ import { isResolved } from "../../Diff.ts";
 import {
   deleteObjects,
   reconcileObjects,
-  type KubernetesClusterConnection,
-} from "./internal/client.ts";
+} from "../../Kubernetes/internal/client.ts";
 import {
   type KubernetesObjectBinding,
   type KubernetesObjectDefinition,
   type KubernetesObjectRef,
-} from "./internal/objects.ts";
+} from "../../Kubernetes/internal/objects.ts";
+import type { Connection } from "../../Kubernetes/Connection.ts";
+import { eksConnectionOf, makeEksTransport } from "./KubernetesAdapter.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
@@ -139,6 +140,13 @@ export interface Cluster extends Resource<
     tags: Record<string, string>;
     /** References to Kubernetes objects applied via `kubernetes` props. */
     kubernetesObjects: KubernetesObjectRef[];
+    /**
+     * The cluster-agnostic `Kubernetes.Connection` for this cluster.
+     * Passing the whole cluster resource as a `Kubernetes.*` workload's
+     * `cluster` prop resolves through this — auth uses SigV4 tokens
+     * minted from the ambient AWS credentials.
+     */
+    connection: Connection;
     /** The name of the cluster IAM role created for `compute: "auto"`, if managed by alchemy. */
     managedClusterRoleName: string | undefined;
     /** The name of the node IAM role created for `compute: "auto"`, if managed by alchemy. */
@@ -244,24 +252,29 @@ const updateRetrySchedule = Schedule.max([
   Schedule.recurs(180),
 ]);
 
-const getKubernetesConnection = (
+const getKubernetesTransport = (
   state: Pick<
     Cluster["Attributes"],
-    "clusterName" | "endpoint" | "certificateAuthorityData"
+    "clusterArn" | "clusterName" | "endpoint" | "certificateAuthorityData"
   >,
-): KubernetesClusterConnection => {
-  if (!state.endpoint || !state.certificateAuthorityData) {
-    throw new Error(
-      `EKS cluster '${state.clusterName}' is missing endpoint or certificate authority data`,
-    );
-  }
+) =>
+  Effect.suspend(() => {
+    if (!state.endpoint || !state.certificateAuthorityData) {
+      throw new Error(
+        `EKS cluster '${state.clusterName}' is missing endpoint or certificate authority data`,
+      );
+    }
+    return makeEksTransport({
+      clusterName: state.clusterName,
+      region: regionOfClusterArn(state.clusterArn),
+      endpoint: state.endpoint,
+      certificateAuthorityData: state.certificateAuthorityData,
+    });
+  });
 
-  return {
-    clusterName: state.clusterName,
-    endpoint: state.endpoint,
-    certificateAuthorityData: state.certificateAuthorityData,
-  };
-};
+/** The region segment of a cluster ARN (`arn:aws:eks:REGION:...`). */
+const regionOfClusterArn = (arn: string | undefined): string | undefined =>
+  arn?.split(":")[3] || undefined;
 
 const getDesiredKubernetesObjects = (
   bindings: ReadonlyArray<ResourceBinding<KubernetesObjectBinding>>,
@@ -545,6 +558,12 @@ const mapClusterState = (
   status: cluster.status ?? "CREATING",
   endpoint: cluster.endpoint,
   certificateAuthorityData: cluster.certificateAuthority?.data,
+  connection: eksConnectionOf({
+    clusterName: cluster.name!,
+    region: regionOfClusterArn(cluster.arn) ?? "",
+    endpoint: cluster.endpoint,
+    certificateAuthorityData: cluster.certificateAuthority?.data,
+  }),
   version: cluster.version,
   platformVersion: cluster.platformVersion,
   roleArn: cluster.roleArn!,
@@ -838,7 +857,7 @@ export const ClusterProvider = () =>
           );
 
       return {
-        stables: ["clusterArn", "clusterName"],
+        stables: ["clusterArn", "clusterName", "connection"],
         // Enumerate every cluster in the ambient account/region. `listClusters`
         // returns only names, so we paginate it exhaustively then hydrate each
         // name through `readCluster` (describe + tags) to produce the full
@@ -1105,7 +1124,7 @@ export const ClusterProvider = () =>
           }
 
           const kubernetesObjects = yield* reconcileObjects({
-            connection: getKubernetesConnection(final),
+            transport: yield* getKubernetesTransport(final),
             previousObjects: output?.kubernetesObjects ?? [],
             desiredObjects,
           });
@@ -1118,7 +1137,7 @@ export const ClusterProvider = () =>
         delete: Effect.fn(function* ({ id, output }) {
           if ((output.kubernetesObjects ?? []).length > 0) {
             yield* deleteObjects({
-              connection: getKubernetesConnection(output),
+              transport: yield* getKubernetesTransport(output),
               objects: output.kubernetesObjects ?? [],
             });
           }

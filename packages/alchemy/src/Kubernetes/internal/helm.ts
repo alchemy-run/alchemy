@@ -1,10 +1,10 @@
 /**
- * Internal Helm rendering for `AWS.EKS.HelmChart`.
+ * Internal Helm rendering for `Kubernetes.HelmChart`.
  *
  * Renders a chart to plain Kubernetes objects with the local `helm` CLI
  * (`helm template` — pure local templating, no cluster connection, no
  * in-cluster release records), so the rendered objects flow through the same
- * server-side-apply machinery as `AWS.EKS.Manifest` and the platforms.
+ * server-side-apply machinery as `Kubernetes.Manifest` and the workload platforms.
  * Mirrors the `Docker` service's local-CLI dependency: the `helm` binary
  * must be installed on the deploying machine (`HELM_BIN` overrides the
  * binary path).
@@ -116,7 +116,7 @@ export const renderHelmChart = Effect.fn(function* (
     Effect.catchCause((cause) =>
       Effect.die(
         new Error(
-          `Failed to run '${bin}': ${String(cause)}. AWS.EKS.HelmChart renders charts with the local helm CLI — install it (https://helm.sh/docs/intro/install/) or point HELM_BIN at the binary.`,
+          `Failed to run '${bin}': ${String(cause)}. Kubernetes.HelmChart renders charts with the local helm CLI — install it (https://helm.sh/docs/intro/install/) or point HELM_BIN at the binary.`,
         ),
       ),
     ),
@@ -141,8 +141,17 @@ export const parseRenderedManifests = (
   rendered: string,
 ): Effect.Effect<Array<KubernetesObjectDefinition>, HelmError> =>
   Effect.gen(function* () {
+    // Helm 4 writes OCI pull metadata to stdout before the rendered YAML.
+    // Strip only that exact leading preamble; chart output remains subject to
+    // the same strict Kubernetes object validation below.
+    const manifests = chart.startsWith("oci://")
+      ? rendered.replace(
+          /^Pulled: [^\r\n]+\r?\nDigest: [^\r\n]+\r?\n(?=---(?:\r?\n|$))/,
+          "",
+        )
+      : rendered;
     const documents = yield* Effect.try({
-      try: () => YAML.parseAllDocuments(rendered),
+      try: () => YAML.parseAllDocuments(manifests),
       catch: (cause) =>
         new HelmError({
           message: `Failed to parse rendered manifests from chart '${chart}'`,

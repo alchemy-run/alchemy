@@ -1,33 +1,37 @@
 import * as AWS from "@/AWS";
 import { Network } from "@/AWS/EC2/Network.ts";
 import { Cluster } from "@/AWS/EKS/Cluster.ts";
-import { Deployment } from "@/AWS/EKS/Deployment.ts";
-import { HelmChart } from "@/AWS/EKS/HelmChart.ts";
-import { readObject } from "@/AWS/EKS/internal/client.ts";
+import { makeEksTransport } from "@/AWS/EKS/KubernetesAdapter.ts";
+import * as Kubernetes from "@/Kubernetes";
+import { readObject } from "@/Kubernetes/internal/client.ts";
 import * as Core from "@/Test/Core";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import * as dynamodb from "@distilled.cloud/aws/dynamodb";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import EksHostApi from "./fixtures/deployment.ts";
 
-const testOptions = { providers: AWS.providers() };
+const testOptions = {
+  providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()),
+};
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 
-// Ungated probe: `Deployment` is a composite host (ECR repo + pod-identity
-// role + PodIdentityAssociation + in-cluster Deployment/Service). It has no
-// faithful single-API enumeration, so `list()` is intentionally empty. This
-// probe proves the provider is registered, its record type-checks (a missing /
-// mistyped `list` collapses Provider.of inference), and it runs live — without
-// paying the ~15-minute EKS control-plane create.
+// Ungated probe: `Deployment` is a composite host (in-cluster
+// Deployment/Service plus adapter-owned cloud resources — ECR repo,
+// pod-identity role, PodIdentityAssociation on EKS). It has no faithful
+// single-API enumeration, so `list()` is intentionally empty. This probe
+// proves the provider is registered, its record type-checks (a missing /
+// mistyped `list` collapses Provider.of inference), and it runs live —
+// without paying the ~15-minute EKS control-plane create.
 test.provider(
   "list returns an empty array (composite host, not enumerable)",
   () =>
     Effect.gen(function* () {
-      const provider = yield* Provider.findProvider(Deployment);
+      const provider = yield* Provider.findProvider(Kubernetes.Deployment);
       const all = yield* provider.list();
       expect(Array.isArray(all)).toBe(true);
       expect(all).toEqual([]);
@@ -77,14 +81,10 @@ const infra = Effect.gen(function* () {
 
 const sharedStack = Core.scratchStack(testOptions, "EksServerHost");
 
-describe.skipIf(!process.env.AWS_TEST_SLOW)("EKS Deployment E2E", () => {
+describe.skipIf(!process.env.AWS_TEST_SLOW)("Kubernetes Deployment E2E", () => {
   let baseUrl: string;
-  let helmRelease: HelmChart["Attributes"];
-  let helmConnection: {
-    clusterName: string;
-    endpoint: string;
-    certificateAuthorityData: string;
-  };
+  let helmRelease: Kubernetes.HelmChart["Attributes"];
+  let helmCluster: Cluster["Attributes"];
 
   beforeAll(
     Effect.gen(function* () {
@@ -96,7 +96,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW)("EKS Deployment E2E", () => {
       const { host, cluster, release } = yield* sharedStack.deploy(
         Effect.gen(function* () {
           const { cluster } = yield* infra;
-          const release = yield* HelmChart("E2EHelmChart", {
+          const release = yield* Kubernetes.HelmChart("E2EHelmChart", {
             cluster,
             chart: `${import.meta.dirname}/fixtures/chart`,
             values: { message: "helm-e2e", secondConfigMap: { enabled: true } },
@@ -106,11 +106,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW)("EKS Deployment E2E", () => {
         }),
       );
       helmRelease = release;
-      helmConnection = {
-        clusterName: cluster.clusterName,
-        endpoint: cluster.endpoint!,
-        certificateAuthorityData: cluster.certificateAuthorityData!,
-      };
+      helmCluster = cluster;
       // `url` is a full URL (`http://<nlb-hostname>:<port>` — the NLB
       // listener is the Service port, not 80).
       expect(host.url).toBeTruthy();
@@ -129,8 +125,7 @@ describe.skipIf(!process.env.AWS_TEST_SLOW)("EKS Deployment E2E", () => {
     }),
     // Cluster create (~18 min) + image build/push + Auto Mode node launch +
     // NLB provisioning/DNS + URL readiness poll (~5–10 min) routinely total
-    // 35+ min end-to-end (observed 2026-07-20: deploy completed at ~33 min
-    // and the readiness poll ran out a 35-min budget).
+    // 35+ min end-to-end.
     { timeout: 2_700_000 },
   );
 
@@ -173,6 +168,9 @@ describe.skipIf(!process.env.AWS_TEST_SLOW)("EKS Deployment E2E", () => {
         // toggled on via values) into the default namespace.
         expect(helmRelease.objects).toHaveLength(2);
         expect(helmRelease.namespace).toBe("default");
+        // The generic attributes persist the cluster connection for
+        // adapter-based delete.
+        expect(helmRelease.connection.auth.kind).toBe("aws-eks");
 
         // Read the primary ConfigMap back out-of-band through the
         // Kubernetes API and prove the values reached the cluster.
@@ -180,8 +178,13 @@ describe.skipIf(!process.env.AWS_TEST_SLOW)("EKS Deployment E2E", () => {
           object.name.endsWith("-config"),
         )!;
         expect(configRef).toBeDefined();
+        const transport = yield* makeEksTransport({
+          clusterName: helmCluster.clusterName,
+          endpoint: helmCluster.endpoint!,
+          certificateAuthorityData: helmCluster.certificateAuthorityData!,
+        });
         const applied = (yield* readObject({
-          connection: helmConnection,
+          transport,
           object: configRef,
         })) as { data?: Record<string, string> } | undefined;
         expect(applied?.data?.message).toBe("helm-e2e");

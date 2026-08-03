@@ -59,7 +59,7 @@ test.provider(
 
       // Launch templates do not validate the AMI at creation time; fall back to
       // a syntactically valid id if the lookup returns nothing.
-      const imageId = (yield* amazonLinux2023()) ?? "ami-00000000000000000";
+      const imageId = amazonLinux2023();
 
       const policy = yield* stack.deploy(
         Effect.gen(function* () {
@@ -150,7 +150,7 @@ test.provider(
 
       // Launch templates do not validate the AMI at creation time; fall back
       // to a syntactically valid id if the lookup returns nothing.
-      const imageId = (yield* amazonLinux2023()) ?? "ami-00000000000000000";
+      const imageId = amazonLinux2023();
       yield* ec2.createLaunchTemplate({
         LaunchTemplateName: recoveryLtName,
         LaunchTemplateData: { ImageId: imageId, InstanceType: "t3.micro" },

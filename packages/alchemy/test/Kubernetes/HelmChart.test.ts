@@ -1,15 +1,21 @@
 import * as AWS from "@/AWS";
-import { HelmChart } from "@/AWS/EKS/HelmChart.ts";
-import { renderHelmChart } from "@/AWS/EKS/internal/helm.ts";
+import * as Kubernetes from "@/Kubernetes";
+import {
+  parseRenderedManifests,
+  renderHelmChart,
+} from "@/Kubernetes/internal/helm.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import { spawnSync } from "node:child_process";
 
-const testOptions = { providers: AWS.providers() };
+const testOptions = {
+  providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()),
+};
 const { test } = Test.make(testOptions);
 
 // Rendering shells out to the local helm CLI (like Docker for image
@@ -89,13 +95,77 @@ describe("renderHelmChart (local fixture)", (it) => {
   );
 });
 
-// Ungated probe: chart objects live in-cluster with no AWS-side enumeration
-// attributing them to alchemy, so `list()` is intentionally empty. Proves
-// the provider is registered and its record type-checks; the live apply
-// path rides the gated Deployment E2E cluster (Deployment.test.ts).
+describe("parseRenderedManifests", (it) => {
+  it.effect("ignores Helm OCI pull metadata", () =>
+    Effect.gen(function* () {
+      const objects = yield* parseRenderedManifests(
+        "oci://registry.example.test/charts/example",
+        `Pulled: registry.example.test/charts/example:1.2.3
+Digest: sha256:0123456789abcdef
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: example
+`,
+      );
+
+      expect(objects).toHaveLength(1);
+      expect(objects[0]?.kind).toBe("ConfigMap");
+      expect(objects[0]?.metadata.name).toBe("example");
+    }),
+  );
+
+  it.effect("rejects pull-shaped metadata for non-OCI charts", () =>
+    Effect.gen(function* () {
+      const result = yield* Effect.result(
+        parseRenderedManifests(
+          "example",
+          `Pulled: registry.example.test/charts/example:1.2.3
+Digest: sha256:0123456789abcdef
+`,
+        ),
+      );
+
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure._tag).toBe("HelmError");
+      }
+    }),
+  );
+
+  it.effect("rejects pull metadata that is not the leading OCI preamble", () =>
+    Effect.gen(function* () {
+      const result = yield* Effect.result(
+        parseRenderedManifests(
+          "oci://registry.example.test/charts/example",
+          `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: example
+---
+Pulled: registry.example.test/charts/example:1.2.3
+Digest: sha256:0123456789abcdef
+`,
+        ),
+      );
+
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure._tag).toBe("HelmError");
+      }
+    }),
+  );
+});
+
+// Ungated probe: chart objects live in-cluster with no cloud-side
+// enumeration attributing them to alchemy, so `list()` is intentionally
+// empty. Proves the provider is registered and its record type-checks; the
+// live apply path rides the gated Deployment E2E cluster
+// (Deployment.test.ts).
 test.provider("list returns an empty array (in-cluster objects)", () =>
   Effect.gen(function* () {
-    const provider = yield* Provider.findProvider(HelmChart);
+    const provider = yield* Provider.findProvider(Kubernetes.HelmChart);
     const all = yield* provider.list();
     expect(Array.isArray(all)).toBe(true);
     expect(all).toEqual([]);

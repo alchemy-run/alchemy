@@ -34,6 +34,8 @@ pnpm-workspace.yaml
 *.d.ts
 !examples/prisma-tanstack-start/migrations/**/start-contract.d.ts
 !examples/prisma-tanstack-start/migrations/**/end-contract.d.ts
+# drizzle-kit's generated durable-sqlite migrations bundle (checked-in test fixture)
+!packages/alchemy/test/Cloudflare/Workers/fixtures/drizzle-do/drizzle/migrations.js
 *.map
 
 .attest

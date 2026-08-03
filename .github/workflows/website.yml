@@ -1,15 +1,15 @@
 name: website
 
 on:
+  # Manual override — deploys unconditionally on whatever branch it's run
+  # from (use this to force a prod deploy from main without a release).
   workflow_dispatch:
+  # No `paths` filter on push: prod deploys are gated on the release
+  # commit title (see the `if` below), and a release commit must always
+  # deploy regardless of which files it touches.
   push:
     branches:
       - main
-    paths:
-      - "website/**"
-      - "packages/alchemy/**"
-      - "bun.lock"
-      - ".github/workflows/deploy.yml"
   pull_request:
     # `labeled` so adding `deploy-website` on an open PR triggers a
     # deploy without needing another push.
@@ -36,14 +36,17 @@ env:
 
 jobs:
   deploy:
-    # Deploy on push-to-main and `workflow_dispatch` always. On PRs,
-    # require BOTH:
+    # Deploy on `workflow_dispatch` always. On push-to-main, only deploy
+    # release commits (`chore(release): x.y.z`) so the website updates in
+    # lockstep with releases. On PRs, require BOTH:
     #   - the PR is internal (forks can't access bot/Cloudflare secrets
     #     so `create-github-app-token` would error immediately), AND
     #   - the PR carries the `deploy-website` label (opt-in — most PRs
     #     don't need a website preview, so default to skipping).
     if: >-
       github.event.action != 'closed' &&
+      (github.event_name != 'push' ||
+       startsWith(github.event.head_commit.message, 'chore(release):')) &&
       (github.event_name != 'pull_request' ||
        (github.event.pull_request.head.repo.full_name == github.repository &&
         contains(github.event.pull_request.labels.*.name, 'deploy-website')))

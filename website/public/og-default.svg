@@ -4,7 +4,7 @@
     <rect x="24" y="24" width="1152" height="582" fill="none" stroke="#3f5a2a" stroke-opacity="0.18" stroke-width="1"/>
     <!-- yantra centered, slightly above midline so wordmark sits below -->
     <g transform="translate(490 75)" viewBox="0 0 24 24">
-      <svg width="220" height="220" viewBox="0 0 24 24" fill="none" stroke="#3f5a2a" stroke-width="0.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M12 21.5 L3.7272 7.25 L20.2728 7.25 Z"/><circle cx="12" cy="12" r="1.1" fill="#3f5a2a" stroke="none"/></svg>
+      <svg width="220" height="220" viewBox="0 0 24 24" fill="none" stroke="#3f5a2a" stroke-width="0.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M12 21.325 L3.9243000000000006 7.3375 L20.075699999999998 7.3375 Z"/><circle cx="12" cy="12" r="1.1" fill="#9a4f27" stroke="none"/></svg>
     </g>
     <!-- wordmark -->
     <text x="600" y="375" text-anchor="middle"
