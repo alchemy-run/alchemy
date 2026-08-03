@@ -1,15 +1,15 @@
-import { splitMySQLStatements } from "@/Planetscale/MySQL/MySQLMigrations";
+import { splitSqlStatements } from "@/SQL/SqlFile";
 import { describe, expect, test } from "alchemy-test";
 
-describe("MySQLMigrations", () => {
-  describe("splitMySQLStatements", () => {
+describe("SqlFile", () => {
+  describe("splitSqlStatements", () => {
     test("splits statements separated by breakpoints on their own line", () => {
       const sql = [
         "CREATE TABLE `users` (\n\t`id` int NOT NULL\n);",
         "--> statement-breakpoint",
         "CREATE TABLE `sessions` (\n\t`id` int NOT NULL\n);",
       ].join("\n");
-      expect(splitMySQLStatements(sql)).toEqual([
+      expect(splitSqlStatements(sql)).toEqual([
         "CREATE TABLE `users` (\n\t`id` int NOT NULL\n);",
         "CREATE TABLE `sessions` (\n\t`id` int NOT NULL\n);",
       ]);
@@ -26,7 +26,7 @@ describe("MySQLMigrations", () => {
         "CREATE INDEX `users_email` ON `users` (`email`);--> statement-breakpoint",
         "CREATE INDEX `users_name` ON `users` (`name`);",
       ].join("\n");
-      expect(splitMySQLStatements(sql)).toEqual([
+      expect(splitSqlStatements(sql)).toEqual([
         "CREATE TABLE `users` (\n\t`id` int NOT NULL\n);",
         "CREATE INDEX `users_email` ON `users` (`email`);",
         "CREATE INDEX `users_name` ON `users` (`name`);",
@@ -36,15 +36,15 @@ describe("MySQLMigrations", () => {
     test("splits CRLF-separated breakpoints", () => {
       const sql =
         "CREATE TABLE `users` (`id` int);\r\n--> statement-breakpoint\r\nCREATE TABLE `sessions` (`id` int);";
-      expect(splitMySQLStatements(sql)).toEqual([
+      expect(splitSqlStatements(sql)).toEqual([
         "CREATE TABLE `users` (`id` int);",
         "CREATE TABLE `sessions` (`id` int);",
       ]);
     });
 
     test("drops empty segments and keeps sql without markers intact", () => {
-      expect(splitMySQLStatements("--> statement-breakpoint\n")).toEqual([]);
-      expect(splitMySQLStatements("SELECT 1;")).toEqual(["SELECT 1;"]);
+      expect(splitSqlStatements("--> statement-breakpoint\n")).toEqual([]);
+      expect(splitSqlStatements("SELECT 1;")).toEqual(["SELECT 1;"]);
     });
   });
 });

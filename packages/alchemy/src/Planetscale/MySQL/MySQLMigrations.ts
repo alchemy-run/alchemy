@@ -4,7 +4,12 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { createConnection, type Connection } from "mysql2/promise";
-import { listSqlFiles, readSqlFile, type SqlFile } from "../../SQL/SqlFile.ts";
+import {
+  listSqlFiles,
+  readSqlFile,
+  splitSqlStatements,
+  type SqlFile,
+} from "../../SQL/SqlFile.ts";
 
 const MIGRATION_PASSWORD_TTL_SECONDS = 600;
 
@@ -95,7 +100,7 @@ const applyMySQLMigrations = (options: ApplyMigrationsOptions) =>
         nextSeq += 1;
         yield* Effect.gen(function* () {
           yield* mysqlQuery(connection, "START TRANSACTION");
-          for (const statement of splitMySQLStatements(file.sql)) {
+          for (const statement of splitSqlStatements(file.sql)) {
             yield* mysqlQuery(connection, statement);
           }
           yield* mysqlExecute(
@@ -119,28 +124,11 @@ const applyMySQLMigrations = (options: ApplyMigrationsOptions) =>
 const runMySQLSql = (target: MySQLMigrationTarget, sql: string) =>
   withMySQLConnection(target, (connection) =>
     Effect.gen(function* () {
-      for (const statement of splitMySQLStatements(sql)) {
+      for (const statement of splitSqlStatements(sql)) {
         yield* mysqlQuery(connection, statement);
       }
     }),
   );
-
-// Drizzle (and other migration tools) emit `--> statement-breakpoint` as a
-// separator between statements. PlanetScale's Vitess parser rejects the `-->`
-// token ("syntax error at position 2") because MySQL line comments require
-// whitespace after `--`. Split on the marker and run each statement
-// individually so the connector never sees the breakpoint comment.
-// drizzle-kit puts the marker directly after single-line statements
-// (`...;--> statement-breakpoint`), so the split can't anchor on a
-// preceding newline.
-const STATEMENT_BREAKPOINT = /\s*-->\s*statement-breakpoint\s*/g;
-
-/** @internal exported for unit testing. */
-export const splitMySQLStatements = (sql: string): string[] =>
-  sql
-    .split(STATEMENT_BREAKPOINT)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
 
 const getNextMySQLSeq = (connection: Connection, table: string) =>
   mysqlQueryRows<{ id: string }>(connection, `SELECT id FROM ${table};`).pipe(
