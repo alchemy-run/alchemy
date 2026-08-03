@@ -130,7 +130,10 @@ const runMySQLSql = (target: MySQLMigrationTarget, sql: string) =>
 // token ("syntax error at position 2") because MySQL line comments require
 // whitespace after `--`. Split on the marker and run each statement
 // individually so the connector never sees the breakpoint comment.
-const STATEMENT_BREAKPOINT = /\r?\n\s*-->\s*statement-breakpoint\s*\r?\n?/g;
+// The marker is not always preceded by a newline: drizzle-kit appends it on
+// the same line for single-line statements (`...;--> statement-breakpoint`),
+// so split on the bare marker; the trailing `;` stays with its statement.
+const STATEMENT_BREAKPOINT = /\s*-->\s*statement-breakpoint\s*/g;
 
 const splitMySQLStatements = (sql: string): string[] =>
   sql
