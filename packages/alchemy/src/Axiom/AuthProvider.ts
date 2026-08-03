@@ -7,7 +7,7 @@ import {
   AuthError,
   AuthProviderLayer,
   type ConfigureContext,
-  reconfigureHint,
+  refreshHint,
 } from "../Auth/AuthProvider.ts";
 import { CredentialsStore, displayRedacted } from "../Auth/Credentials.ts";
 import { getEnv, getEnvRedacted, retryOnce } from "../Auth/Env.ts";
@@ -238,7 +238,7 @@ export const AxiomAuth = AuthProviderLayer<
               creds == null
                 ? Effect.fail(
                     new AuthError({
-                      message: `Axiom stored credentials not found. ${reconfigureHint("Axiom", profileName)}`,
+                      message: `Axiom stored credentials not found. ${refreshHint("Axiom", profileName)}`,
                     }),
                   )
                 : Effect.succeed(

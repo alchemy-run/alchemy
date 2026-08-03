@@ -199,7 +199,7 @@ describe("Prisma auth provider", () => {
       expect(exit._tag).toBe("Failure");
       if (exit._tag === "Failure") {
         expect(String(exit.cause)).toContain(
-          "Run: alchemy profile edit default --re-configure Prisma",
+          "Run: alchemy profile refresh default --provider Prisma",
         );
       }
     }).pipe(Effect.provide(testLayer())),

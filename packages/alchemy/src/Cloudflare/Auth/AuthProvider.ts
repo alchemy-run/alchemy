@@ -12,7 +12,7 @@ import {
   AuthError,
   AuthProviderLayer,
   type ConfigureContext,
-  reconfigureHint,
+  refreshHint,
 } from "../../Auth/AuthProvider.ts";
 import { CredentialsStore, displayRedacted } from "../../Auth/Credentials.ts";
 import {
@@ -429,7 +429,7 @@ export const CloudflareAuth = AuthProviderLayer<
                 creds == null
                   ? Effect.fail(
                       new AuthError({
-                        message: `Cloudflare stored credentials not found. ${reconfigureHint("Cloudflare", profileName)}`,
+                        message: `Cloudflare stored credentials not found. ${refreshHint("Cloudflare", profileName)}`,
                       }),
                     )
                   : Effect.gen(function* () {
@@ -476,7 +476,7 @@ export const CloudflareAuth = AuthProviderLayer<
             if (creds == null || creds.type !== "oauth") {
               return yield* Effect.fail(
                 new AuthError({
-                  message: `Cloudflare OAuth credentials not found. ${reconfigureHint("Cloudflare", profileName)}`,
+                  message: `Cloudflare OAuth credentials not found. ${refreshHint("Cloudflare", profileName)}`,
                 }),
               );
             }
@@ -493,7 +493,7 @@ export const CloudflareAuth = AuthProviderLayer<
                     Effect.mapError(
                       (e) =>
                         new AuthError({
-                          message: `Cloudflare OAuth refresh failed. ${reconfigureHint("Cloudflare", profileName)}`,
+                          message: `Cloudflare OAuth refresh failed. ${refreshHint("Cloudflare", profileName)}`,
                           cause: e,
                         }),
                     ),

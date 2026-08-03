@@ -54,8 +54,8 @@ export class AuthError extends Schema.TaggedErrorClass<AuthError>()(
  * found", "refresh failed", ...). Centralized so the command phrasing lives
  * in one place when the CLI surface changes.
  */
-export const reconfigureHint = (provider: string, profileName: string) =>
-  `Run: alchemy profile edit ${profileName} --re-configure ${provider}`;
+export const refreshHint = (provider: string, profileName: string) =>
+  `Run: alchemy profile refresh ${profileName} --provider ${provider}`;
 
 export class AuthProviders extends Context.Service<
   AuthProviders,

@@ -61,8 +61,29 @@ alchemy profile create prod
 alchemy profile edit prod
 ```
 
-`profile edit` imports your stack file to discover which providers are
-available, so the menu matches the providers you actually use. Each
+Refreshing credentials is separate from reconfiguration. Refresh preserves the
+selected authentication method, account, and scopes:
+
+```sh
+# Refresh every connected provider
+alchemy profile refresh
+
+# Refresh only AWS SSO
+alchemy profile refresh default --provider AWS
+```
+
+Alchemy also refreshes credentials lazily when the provider supports it, such
+as Cloudflare OAuth access tokens and AWS SSO role credentials. If stored
+credentials are missing, an OAuth refresh fails, or the AWS SSO session has
+expired, the command fails with the exact `alchemy profile refresh` invocation
+to run. Deploy does not unexpectedly open a browser or start an interactive
+login after configuration; refresh authentication explicitly and retry.
+
+Profile commands include Alchemy's built-in providers even outside a project.
+They also import `alchemy.run.ts`, when present, to discover custom providers.
+Use `--config <path>` for another entrypoint. A missing conventional
+`alchemy.run.ts` is ignored, but errors in an existing entrypoint or an explicit
+custom path are surfaced instead of silently hiding its providers. Each
 provider's prompts and credential resolution are implemented by its
 [Auth Provider](/environments/auth-providers).
 

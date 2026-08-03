@@ -540,11 +540,10 @@ export interface BuildStackProvidersOptions {
  * registry and the built context holds every resource provider plus the
  * cloud-environment services their operations need.
  *
- * Shared by `alchemy profile show` and `alchemy unsafe nuke`. The caller
- * decides what to do with the result — use `authProviders` (profile show) or
- * `context` (nuke) — and whether a missing/invalid entrypoint is fatal (nuke
- * lets it propagate) or best-effort (profile show wraps the call in
- * `Effect.catchCause`).
+ * Shared by profile commands and `alchemy unsafe nuke`. The caller decides
+ * what to do with the result — use `authProviders` or the built `context` —
+ * and whether a missing conventional entrypoint should be skipped before
+ * calling this function.
  */
 export const buildStackProviders = Effect.fn("buildStackProviders")(function* (
   options: BuildStackProvidersOptions,

@@ -191,7 +191,7 @@ const fresh =
         Effect.mapError(
           (e) =>
             new AuthError({
-              message: "Cloudflare OAuth refresh failed. Run: alchemy profile edit --re-configure Cloudflare",
+              message: "Cloudflare OAuth refresh failed. Run: alchemy profile refresh default --provider Cloudflare",
               cause: e,
             }),
         ),
@@ -200,6 +200,11 @@ const fresh =
 
 Because `read` runs under the cross-process file lock, two
 concurrent deploys can't double-spend the single-use refresh token.
+Users can force the same provider-specific login/refresh operation without
+changing configuration by running `alchemy profile refresh`, optionally with a
+named profile and repeatable `--provider` filters. `profile edit
+--re-configure` is reserved for changing the method, account, scopes, or other
+provider configuration.
 One caveat for precision: the `fromProfile` Layers above pipe
 resolution through `Effect.cached`, so the Profile-level `read` runs
 once per process — ongoing refresh happens inside the credential

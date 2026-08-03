@@ -1,5 +1,9 @@
 import * as DistilledAuth from "@distilled.cloud/aws/Auth";
-import { Credentials } from "@distilled.cloud/aws/Credentials";
+import {
+  AwsCredentialProviderError,
+  Credentials,
+} from "@distilled.cloud/aws/Credentials";
+import type { CredentialsError } from "@distilled.cloud/aws/Credentials";
 import * as STS from "@distilled.cloud/aws/sts";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
@@ -15,7 +19,7 @@ import {
   AuthError,
   AuthProviderLayer,
   type ConfigureContext,
-  reconfigureHint,
+  refreshHint,
 } from "../Auth/AuthProvider.ts";
 import { CredentialsStore, displayRedacted } from "../Auth/Credentials.ts";
 import {
@@ -67,11 +71,14 @@ export interface AwsStoredCredentials {
 
 export interface AwsResolvedCredentials {
   accountId: string;
-  credentials: Effect.Effect<{
-    accessKeyId: Redacted.Redacted<string>;
-    secretAccessKey: Redacted.Redacted<string>;
-    sessionToken: Redacted.Redacted<string> | undefined;
-  }>;
+  credentials: Effect.Effect<
+    {
+      accessKeyId: Redacted.Redacted<string>;
+      secretAccessKey: Redacted.Redacted<string>;
+      sessionToken: Redacted.Redacted<string> | undefined;
+    },
+    CredentialsError
+  >;
   region: string;
   source: {
     type: AwsAuthConfig["method"];
@@ -287,7 +294,7 @@ export const AwsAuth = AuthProviderLayer<
                 creds == null
                   ? Effect.fail(
                       new AuthError({
-                        message: `AWS stored credentials not found. ${reconfigureHint("AWS", profileName)}`,
+                        message: `AWS stored credentials not found. ${refreshHint("AWS", profileName)}`,
                       }),
                     )
                   : Effect.succeed({
@@ -360,14 +367,19 @@ export const AwsAuth = AuthProviderLayer<
                 credentials: auth
                   .loadProfileCredentials(config.ssoProfile)
                   .pipe(
-                    Effect.mapError(
-                      (e) =>
-                        new AuthError({
-                          message: "failed to load credentials",
-                          cause: e,
-                        }),
-                    ),
-                    Effect.orDie,
+                    Effect.mapError((error) => {
+                      if (
+                        error._tag === "Alchemy::AWS::ExpiredSSOToken" ||
+                        error._tag === "Alchemy::AWS::InvalidSSOToken"
+                      ) {
+                        return new AwsCredentialProviderError({
+                          provider: "sso",
+                          message: `AWS SSO credentials need to be refreshed. ${refreshHint("AWS", profileName)}`,
+                          cause: error,
+                        });
+                      }
+                      return error;
+                    }),
                   ),
                 region: profile?.region!,
                 source: { type: "sso" as const, details: config.ssoProfile },
@@ -408,6 +420,13 @@ export const AwsAuth = AuthProviderLayer<
               `  source: ${creds.source.details ? `${creds.source.type} - ${creds.source.details}` : creds.source.type}`,
             );
           }),
+        ),
+        Effect.mapError(
+          (error) =>
+            new AuthError({
+              message: "failed to load AWS credentials",
+              cause: error,
+            }),
         ),
       );
 
@@ -494,10 +513,7 @@ const loginSSO = (config: Extract<AwsAuthConfig, { method: "sso" }>) =>
     `AWS SSO: running 'aws sso login --profile ${config.ssoProfile}'...`,
   ).pipe(
     Effect.andThen(runSsoCommand("login", config.ssoProfile)),
-    Effect.matchEffect({
-      onSuccess: () => Clank.success("AWS SSO: login complete"),
-      onFailure: (e) => Clank.warn(`AWS SSO: login faield: \`${e.message}\``),
-    }),
+    Effect.tap(() => Clank.success("AWS SSO: login complete")),
   );
 
 /**

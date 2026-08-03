@@ -6,7 +6,7 @@ import {
   AuthError,
   AuthProviderLayer,
   type ConfigureContext,
-  reconfigureHint,
+  refreshHint,
 } from "../Auth/AuthProvider.ts";
 import { CredentialsStore, displayRedacted } from "../Auth/Credentials.ts";
 import { getEnvRedacted, retryOnce } from "../Auth/Env.ts";
@@ -170,8 +170,8 @@ export const PrismaAuth = AuthProviderLayer<
                       new AuthError({
                         message:
                           creds == null
-                            ? `Prisma stored credentials not found. ${reconfigureHint("Prisma", profileName)}`
-                            : `Prisma stored credentials are invalid. ${reconfigureHint("Prisma", profileName)}`,
+                            ? `Prisma stored credentials not found. ${refreshHint("Prisma", profileName)}`
+                            : `Prisma stored credentials are invalid. ${refreshHint("Prisma", profileName)}`,
                       }),
                     )
                   : Effect.succeed({

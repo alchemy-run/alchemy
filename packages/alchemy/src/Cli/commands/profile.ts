@@ -3,6 +3,7 @@ import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import { Command, Flag } from "effect/unstable/cli";
 import * as Argument from "effect/unstable/cli/Argument";
@@ -40,8 +41,8 @@ import {
 
 /**
  * Entrypoint whose `providers()` layer contributes the user's own auth
- * providers. Optional and best-effort — if it's missing or fails to load,
- * `profile show` still renders the built-in providers.
+ * providers. The missing conventional entrypoint is optional; errors from an
+ * existing or custom entrypoint are surfaced.
  */
 const configFile = Flag.string("config").pipe(
   Flag.withDescription(
@@ -72,17 +73,29 @@ const editProfileName = Argument.string("profile").pipe(
   Argument.optional,
 );
 
+const refreshProfileName = Argument.string("profile").pipe(
+  Argument.withDescription("Profile whose credentials should be refreshed"),
+  Argument.optional,
+);
+
 const json = Flag.boolean("json").pipe(
   Flag.withDescription("Output machine-readable JSON instead of a table"),
   Flag.withDefault(false),
 );
 
+const refreshProviders = Flag.string("provider").pipe(
+  Flag.withDescription(
+    "Refresh only this connected provider (repeatable; defaults to all)",
+  ),
+  Flag.atLeast(0),
+);
+
 /**
  * Populate an {@link AuthProviders} registry for display: the built-in
  * providers first, then the user's stack `providers()` layer on top so a
- * customized provider (same name) overrides the built-in one. Loading the
- * user's stack is best-effort — a missing or invalid entrypoint leaves the
- * built-ins in place.
+ * customized provider (same name) overrides the built-in one. A missing
+ * conventional entrypoint leaves the built-ins in place; other import/build
+ * failures are surfaced with their original diagnostics.
  *
  * Registration happens as a side effect of building each layer (see
  * `AuthProviderLayer`), and later builds overwrite earlier entries by name,
@@ -104,16 +117,33 @@ export const collectAuthProviders = Effect.fn("collectAuthProviders")(
     });
 
     // 2. The user's own providers() layer on top — building into the same
-    //    registry overrides the built-ins by name. Best-effort: swallow
-    //    load/build failures (including a missing entrypoint) so display
-    //    still works with just the built-ins.
-    yield* buildStackProviders({ ...options, registry: authProviders }).pipe(
-      Effect.catchCause((cause) =>
-        Effect.logDebug("profile show: could not load user stack providers", {
-          cause,
+    //    registry overrides the built-ins by name. The conventional entrypoint
+    //    is optional so built-ins work from any folder. If an entrypoint exists
+    //    (or a different path was requested), loading errors are actionable and
+    //    must surface instead of masquerading as a missing custom provider.
+    const fs = yield* FileSystem.FileSystem;
+    const entrypointExists = yield* fs.exists(options.main);
+    const isMissingDefaultEntrypoint =
+      options.main === "alchemy.run.ts" && !entrypointExists;
+    if (!entrypointExists && !isMissingDefaultEntrypoint) {
+      return yield* Effect.fail(
+        new AuthError({
+          message: `Stack entrypoint '${options.main}' does not exist.`,
         }),
-      ),
-    );
+      );
+    }
+    if (!isMissingDefaultEntrypoint) {
+      yield* buildStackProviders({ ...options, registry: authProviders }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.fail(
+            new AuthError({
+              message: `Could not load auth providers from '${options.main}'.`,
+              cause,
+            }),
+          ),
+        ),
+      );
+    }
 
     return authProviders;
   },
@@ -740,6 +770,113 @@ const editProfileFlow = Effect.fn(function* (options: {
   );
 });
 
+const refreshProfileFlow = Effect.fn(function* (options: {
+  selectedProfile: string;
+  providers: ReadonlyArray<string>;
+  envFile: Option.Option<string>;
+  main: string;
+}) {
+  const { selectedProfile, providers, envFile, main } = options;
+  const profiles = yield* ProfileStore;
+  const stored = yield* profiles.ensureProfile(selectedProfile);
+  const authProviders = yield* collectAuthProviders({
+    main,
+    envFile,
+    profile: selectedProfile,
+  });
+  const connected = Object.keys(stored);
+
+  const requested =
+    providers.length === 0
+      ? connected.sort()
+      : providers.map(
+          (input) =>
+            connected.find(
+              (provider) => provider.toLowerCase() === input.toLowerCase(),
+            ) ?? input,
+        );
+
+  if (requested.length === 0) {
+    yield* Console.log(
+      `Profile '${selectedProfile}' has no connected providers to refresh.`,
+    );
+    return;
+  }
+
+  const seen = new Set<string>();
+  for (const provider of requested) {
+    if (seen.has(provider)) {
+      return yield* Effect.fail(
+        new AuthError({
+          message: `Provider '${provider}' is listed more than once.`,
+        }),
+      );
+    }
+    seen.add(provider);
+    if (!(provider in stored)) {
+      return yield* Effect.fail(
+        new AuthError({
+          message: `Provider '${provider}' is not connected in profile '${selectedProfile}'.`,
+        }),
+      );
+    }
+    if (authProviders[provider] == null) {
+      return yield* Effect.fail(
+        new AuthError({
+          message:
+            `Auth provider '${provider}' is not registered. ` +
+            "If it is a custom provider, pass its stack entrypoint with --config.",
+        }),
+      );
+    }
+  }
+
+  for (const provider of requested) {
+    yield* authProviders[provider]!.login(selectedProfile, stored[provider]!);
+  }
+  yield* Console.log(
+    `Refreshed ${requested.length} provider${requested.length === 1 ? "" : "s"} in profile '${selectedProfile}'.`,
+  );
+});
+
+const refreshCommand = Command.make(
+  "refresh",
+  {
+    name: refreshProfileName,
+    profile,
+    providers: refreshProviders,
+    envFile,
+    main: configFile,
+  },
+  instrumentCommand(
+    "profile.refresh",
+    (a: {
+      name: Option.Option<string>;
+      profile: string | undefined;
+      providers: ReadonlyArray<string>;
+    }) => ({
+      "alchemy.profile": Option.getOrUndefined(a.name) ?? a.profile ?? "",
+      "alchemy.providers": a.providers.join(","),
+    }),
+  )(
+    Effect.fn(function* ({ name, profile, providers, envFile, main }) {
+      const selectedProfile =
+        Option.getOrUndefined(name) ??
+        (yield* resolveProfileName(envFile, profile));
+      yield* refreshProfileFlow({
+        selectedProfile,
+        providers,
+        envFile,
+        main,
+      });
+    }),
+  ),
+).pipe(
+  Command.withDescription(
+    "Refresh credentials for connected providers without reconfiguring them",
+  ),
+);
+
 const setDefaultCommand = Command.make(
   "set-default",
   { name: profileName },
@@ -881,6 +1018,7 @@ const profileHub = Effect.fn(function* (options: {
       type Action =
         | "show"
         | "edit"
+        | "refresh"
         | "rename"
         | "set-default"
         | "delete"
@@ -891,6 +1029,7 @@ const profileHub = Effect.fn(function* (options: {
         options: [
           { value: "show", label: "Show details" },
           { value: "edit", label: "Edit accounts" },
+          { value: "refresh", label: "Refresh credentials" },
           { value: "rename", label: "Rename" },
           ...(isDefault
             ? []
@@ -925,6 +1064,18 @@ const profileHub = Effect.fn(function* (options: {
               add: [],
               reconfigure: [],
               remove: [],
+              envFile,
+              main,
+            }),
+          );
+          break;
+        }
+        case "refresh": {
+          yield* attempt(
+            undefined,
+            refreshProfileFlow({
+              selectedProfile: selected,
+              providers: [],
               envFile,
               main,
             }),
@@ -990,6 +1141,7 @@ export const profileCommand = Command.make(
     createCommand,
     renameCommand,
     editCommand,
+    refreshCommand,
     listCommand,
     showCommand,
     currentCommand,

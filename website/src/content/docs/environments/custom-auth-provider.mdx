@@ -211,7 +211,7 @@ const resolveCredentials = (
             ? Effect.fail(
                 new AuthError({
                   message:
-                    "Stripe stored credentials not found. Run: alchemy profile edit --re-configure Stripe",
+                    "Stripe stored credentials not found. Run: alchemy profile refresh default --provider Stripe",
                 }),
               )
             : Effect.succeed({
@@ -400,6 +400,7 @@ demanded exactly when an operation runs, never at Layer construction.
 
 ```sh
 alchemy deploy             # first run: prompts for a method, saves it to the profile
+alchemy profile refresh --provider Stripe   # re-authenticate without changing the method
 alchemy profile edit --re-configure Stripe   # re-run the method picker
 alchemy profile show       # renders your prettyPrint
 ```

@@ -6,7 +6,7 @@ import {
   AuthError,
   AuthProviderLayer,
   type ConfigureContext,
-  reconfigureHint,
+  refreshHint,
 } from "../Auth/AuthProvider.ts";
 import { CredentialsStore, displayRedacted } from "../Auth/Credentials.ts";
 import { getEnvRedacted, retryOnce } from "../Auth/Env.ts";
@@ -129,7 +129,7 @@ export const NeonAuth = AuthProviderLayer<
               creds == null
                 ? Effect.fail(
                     new AuthError({
-                      message: `Neon stored credentials not found. ${reconfigureHint("Neon", profileName)}`,
+                      message: `Neon stored credentials not found. ${refreshHint("Neon", profileName)}`,
                     }),
                   )
                 : Effect.succeed({

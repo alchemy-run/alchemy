@@ -1,6 +1,6 @@
 ---
 title: profile
-description: Create, rename, edit, select, inspect, or delete Alchemy authentication profiles.
+description: Create, refresh, rename, edit, select, inspect, or delete Alchemy authentication profiles.
 ---
 
 import Terminal from "../../../components/Terminal.astro";
@@ -145,6 +145,36 @@ alchemy profile edit --delete cloudflare
 
 # Several changes at once
 alchemy profile edit --delete cloudflare --add github
+```
+
+## profile refresh
+
+```sh
+alchemy profile refresh [profile] [options]
+```
+
+Refresh authentication for every connected provider without changing its
+configured method, account, or scopes. This runs the provider's login flow:
+for example, AWS SSO invokes `aws sso login`, while Cloudflare OAuth refreshes
+its token and falls back to browser authorization when necessary.
+
+Use `--provider` one or more times to refresh only selected providers. Provider
+names are matched case-insensitively.
+
+| Option                | Description                                                |
+| --------------------- | ---------------------------------------------------------- |
+| `[profile]`           | Profile to refresh; defaults to the effective current one  |
+| `--profile <name>`    | Profile to refresh when no argument is given               |
+| `--provider <name>`   | Refresh only this connected provider; may be repeated      |
+| `--env-file <path>`   | Load environment variables and current-profile selection  |
+| `--config <path>`     | Stack entrypoint used to discover custom auth providers    |
+
+```sh
+# Refresh every connected provider in the current profile
+alchemy profile refresh
+
+# Refresh AWS in a named profile
+alchemy profile refresh production --provider AWS
 ```
 
 ## profile set-default

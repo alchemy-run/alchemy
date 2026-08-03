@@ -9,7 +9,7 @@ import {
   AuthError,
   AuthProviderLayer,
   type ConfigureContext,
-  reconfigureHint,
+  refreshHint,
 } from "../Auth/AuthProvider.ts";
 import { CredentialsStore, displayRedacted } from "../Auth/Credentials.ts";
 import { getEnvRedacted, retryOnce } from "../Auth/Env.ts";
@@ -343,7 +343,7 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
               );
               if (creds == null) {
                 return yield* new AuthError({
-                  message: `GitHub stored credentials not found. ${reconfigureHint("GitHub", profileName)}`,
+                  message: `GitHub stored credentials not found. ${refreshHint("GitHub", profileName)}`,
                 });
               }
               return {

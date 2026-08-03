@@ -12,7 +12,7 @@ import {
   AuthError,
   AuthProviderLayer,
   type ConfigureContext,
-  reconfigureHint,
+  refreshHint,
 } from "../Auth/AuthProvider.ts";
 import { CredentialsStore, displayRedacted } from "../Auth/Credentials.ts";
 import {
@@ -349,7 +349,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
                 creds == null
                   ? Effect.fail(
                       new AuthError({
-                        message: `Planetscale stored credentials not found. ${reconfigureHint("Planetscale", profileName)}`,
+                        message: `Planetscale stored credentials not found. ${refreshHint("Planetscale", profileName)}`,
                       }),
                     )
                   : Effect.succeed({
@@ -374,7 +374,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
             if (creds == null || creds.type !== "oauth") {
               return yield* Effect.fail(
                 new AuthError({
-                  message: `Planetscale OAuth credentials not found. ${reconfigureHint("Planetscale", profileName)}`,
+                  message: `Planetscale OAuth credentials not found. ${refreshHint("Planetscale", profileName)}`,
                 }),
               );
             }
@@ -391,7 +391,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
                     Effect.mapError(
                       (e) =>
                         new AuthError({
-                          message: `Planetscale OAuth refresh failed. ${reconfigureHint("Planetscale", profileName)}`,
+                          message: `Planetscale OAuth refresh failed. ${refreshHint("Planetscale", profileName)}`,
                           cause: e,
                         }),
                     ),

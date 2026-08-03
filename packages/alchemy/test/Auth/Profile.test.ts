@@ -2,7 +2,7 @@ import {
   AuthProviderLayer,
   AuthProviders,
   getAuthProvider,
-  reconfigureHint,
+  refreshHint,
 } from "@/Auth/AuthProvider.ts";
 import {
   ProfileError,
@@ -79,9 +79,9 @@ it.effect("accepts portable profile names", () =>
   }),
 );
 
-it("includes the selected profile in reconfiguration hints", () => {
-  expect(reconfigureHint("Cloudflare", "production")).toBe(
-    "Run: alchemy profile edit production --re-configure Cloudflare",
+it("includes the selected profile in refresh hints", () => {
+  expect(refreshHint("Cloudflare", "production")).toBe(
+    "Run: alchemy profile refresh production --provider Cloudflare",
   );
 });
 
