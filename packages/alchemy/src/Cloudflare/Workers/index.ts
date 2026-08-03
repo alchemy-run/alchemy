@@ -25,6 +25,7 @@ export * from "./Route.ts";
 export * from "./Rpc.ts";
 export * from "./RpcDurableObject.ts";
 export * from "./RpcWorker.ts";
+export * from "./RuntimeBindings.ts";
 export * from "./ScheduledEvents.ts";
 export * from "./SecretKey.ts";
 export * from "./SecretKeyBinding.ts";
