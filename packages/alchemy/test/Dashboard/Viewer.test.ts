@@ -8,7 +8,7 @@
 import type { DocumentSnapshot } from "@/Dashboard/Document.ts";
 import { viewer } from "@/Dashboard/Viewer.ts";
 import { State } from "@/State";
-import type { StateService } from "@/State/State.ts";
+import { StateStoreError, type StateService } from "@/State/State.ts";
 import * as Test from "@/Test/Alchemy";
 import { httpServer } from "@/Util/PlatformServices.ts";
 import { describe, expect } from "alchemy-test";
@@ -169,6 +169,69 @@ describe("dashboard viewer", () => {
               );
               expect(empty.status).toBe(200);
               expect(empty.body.structure.nodes).toEqual([]);
+            }),
+        );
+      }),
+    { timeout: 60_000 },
+  );
+
+  test.provider(
+    "a failing store reports unreachable (502) — never 'empty' (404)",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            const A = yield* TestResource("A", { string: "a" });
+            return { A };
+          }),
+        );
+        const store = yield* getStore;
+        // Same store, but every list call fails the way a broken
+        // transport does (bad URL, blocked fetch, expired token).
+        const broken: StateService = {
+          ...store,
+          listStacks: () =>
+            Effect.fail(new StateStoreError({ message: "boom transport" })),
+          listStages: () =>
+            Effect.fail(new StateStoreError({ message: "boom transport" })),
+        };
+        yield* withViewer(
+          { state: broken, diagnostics: { transport: "test-transport" } },
+          (base) =>
+            Effect.gen(function* () {
+              const health = yield* getJson(`${base}/api/health`);
+              expect(health.status).toBe(200);
+              expect(health.body).toMatchObject({
+                ok: false,
+                mode: "viewer",
+                store: { ok: false, error: "boom transport" },
+                diagnostics: { transport: "test-transport" },
+              });
+
+              const get502 = (path: string) =>
+                Effect.tryPromise(async () => {
+                  const res = await fetch(`${base}${path}`, {
+                    signal: AbortSignal.timeout(15_000),
+                  });
+                  return {
+                    status: res.status,
+                    body: (await res.json()) as { error: string },
+                  };
+                });
+
+              const stacks = yield* get502("/api/stacks");
+              expect(stacks.status).toBe(502);
+              expect(stacks.body.error).toContain("state store unreachable");
+
+              const doc = yield* get502("/api/v2/document");
+              expect(doc.status).toBe(502);
+              expect(doc.body.error).toContain("boom transport");
+
+              // pinning the target skips the failing list calls entirely
+              const pinned = yield* getJson<DocumentSnapshot>(
+                `${base}/api/v2/document?stack=${encodeURIComponent(stack.name)}&stage=test`,
+              );
+              expect(pinned.status).toBe(200);
             }),
         );
       }),

@@ -1,5 +1,6 @@
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -39,7 +40,7 @@ import {
  *
  * Endpoints (all read-only; `?stack=` / `?stage=` select the target):
  *
- * - `GET /api/health`                  — liveness + resolved target
+ * - `GET /api/health`                  — liveness + store probe + resolved target
  * - `GET /api/stacks`                  — every `(stack, stages)` in the store
  * - `GET /api/scene`                   — `{ approval: null }` (approvals are CLI-local)
  * - `GET /api/v2/document`             — {@link DocumentSnapshot}
@@ -82,7 +83,25 @@ export interface ViewerOptions {
    *   proxies), where an unending stream would never flush.
    */
   sse?: "stream" | "poll";
+  /**
+   * Host-provided fields surfaced verbatim on `/api/health` — e.g. which
+   * transport the state client rides (service binding vs plain fetch) or
+   * which store backend is configured. Diagnostic only; never include
+   * secrets.
+   */
+  diagnostics?: Record<string, unknown>;
 }
+
+/**
+ * Outcome of resolving the `(stack, stage)` a request targets. The three
+ * kinds keep two very different failure modes distinguishable: a store
+ * that ERRORS (bad transport, bad auth, wrong URL) must never present as
+ * a store that is merely EMPTY.
+ */
+type ResolvedTarget =
+  | { kind: "target"; stack: string; stage: string }
+  | { kind: "empty" }
+  | { kind: "unreachable"; message: string };
 
 const SSE_OPTIONS = {
   contentType: "text/event-stream",
@@ -100,29 +119,37 @@ export const viewer = (options: ViewerOptions) => {
   const { state } = options;
   const poll = options.pollMillis ?? 5000;
 
-  const resolveTarget = (url: URL) =>
+  const resolveTarget = (url: URL): Effect.Effect<ResolvedTarget> =>
     Effect.gen(function* () {
-      const stack =
-        url.searchParams.get("stack") ??
-        options.stack ??
-        (yield* state.listStacks().pipe(
-          Effect.map((stacks) => [...stacks].sort()[0]),
-          Effect.orElseSucceed(() => undefined),
-        ));
+      let stack = url.searchParams.get("stack") ?? options.stack;
       if (stack === undefined) {
-        return undefined;
+        const stacks = yield* Effect.result(state.listStacks());
+        if (Result.isFailure(stacks)) {
+          return {
+            kind: "unreachable" as const,
+            message: stacks.failure.message,
+          };
+        }
+        stack = [...stacks.success].sort()[0];
+        if (stack === undefined) {
+          return { kind: "empty" as const };
+        }
       }
-      const stage =
-        url.searchParams.get("stage") ??
-        options.stage ??
-        (yield* state.listStages(stack).pipe(
-          Effect.map((stages) => [...stages].sort()[0]),
-          Effect.orElseSucceed(() => undefined),
-        ));
+      let stage = url.searchParams.get("stage") ?? options.stage;
       if (stage === undefined) {
-        return undefined;
+        const stages = yield* Effect.result(state.listStages(stack));
+        if (Result.isFailure(stages)) {
+          return {
+            kind: "unreachable" as const,
+            message: stages.failure.message,
+          };
+        }
+        stage = [...stages.success].sort()[0];
+        if (stage === undefined) {
+          return { kind: "empty" as const };
+        }
       }
-      return { stack, stage };
+      return { kind: "target" as const, stack, stage };
     });
 
   const noTarget = HttpServerResponse.jsonUnsafe(
@@ -133,6 +160,12 @@ export const viewer = (options: ViewerOptions) => {
     },
     { status: 404 },
   );
+
+  const storeUnreachable = (message: string) =>
+    HttpServerResponse.jsonUnsafe(
+      { error: `state store unreachable: ${message}` },
+      { status: 502 },
+    );
 
   /** One request-scoped host: hydrate, use, tear down with the scope. */
   const withHost = <A, E>(
@@ -156,21 +189,34 @@ export const viewer = (options: ViewerOptions) => {
     const route = url.pathname;
 
     if (route === "/api/health") {
-      const target = yield* resolveTarget(url);
+      // Probe the store explicitly (even when stack/stage are pinned) so
+      // health always reflects connectivity, and skip target resolution
+      // when the probe fails — it would only re-run the failing call.
+      const probe = yield* Effect.result(state.listStacks());
+      const resolved = Result.isSuccess(probe)
+        ? yield* resolveTarget(url)
+        : undefined;
       return HttpServerResponse.jsonUnsafe({
-        ok: true,
+        ok: Result.isSuccess(probe),
         mode: "viewer",
-        stack: target?.stack,
-        stage: target?.stage,
+        store: Result.isSuccess(probe)
+          ? { ok: true, stacks: probe.success.length }
+          : { ok: false, error: probe.failure.message },
+        stack: resolved?.kind === "target" ? resolved.stack : undefined,
+        stage: resolved?.kind === "target" ? resolved.stage : undefined,
+        ...(options.diagnostics !== undefined
+          ? { diagnostics: options.diagnostics }
+          : {}),
       });
     }
 
     if (route === "/api/stacks") {
-      const stacks = yield* state
-        .listStacks()
-        .pipe(Effect.orElseSucceed(() => [] as readonly string[]));
+      const stacks = yield* Effect.result(state.listStacks());
+      if (Result.isFailure(stacks)) {
+        return storeUnreachable(stacks.failure.message);
+      }
       const withStages = yield* Effect.forEach(
-        [...stacks].sort(),
+        [...stacks.success].sort(),
         (stack) =>
           state.listStages(stack).pipe(
             Effect.orElseSucceed(() => [] as readonly string[]),
@@ -187,11 +233,15 @@ export const viewer = (options: ViewerOptions) => {
       return HttpServerResponse.jsonUnsafe({ approval: null });
     }
 
-    const target = yield* resolveTarget(url);
-    if (target === undefined) {
+    const resolved = yield* resolveTarget(url);
+    if (resolved.kind === "unreachable") {
+      return storeUnreachable(resolved.message);
+    }
+    if (resolved.kind === "empty") {
       return noTarget;
     }
-    const { stack, stage } = target;
+    const { stack, stage } = resolved;
+    const target = { stack, stage };
 
     if (route === "/api/v2/document") {
       const snapshot = yield* withHost(target, (host) =>

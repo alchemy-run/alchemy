@@ -105,7 +105,9 @@ export default class Viewer extends Cloudflare.Worker<Viewer>()(
         () => process.env.ALCHEMY_STATE_SERVICE ?? "alchemy-state-store",
       );
       const self = yield* Cloudflare.Workers.Worker;
-      yield* self.bind`${self}`({
+      // The `/state-store` suffix keeps this bind's sid distinct from any
+      // other self-bind on the worker (bindings dedupe by sid).
+      yield* self.bind`${self}/state-store`({
         bindings: [
           { type: "plain_text", name: "ALCHEMY_STATE_URL", text: credentials.url },
           {
@@ -147,16 +149,35 @@ export default class Viewer extends Cloudflare.Worker<Viewer>()(
             ),
           );
 
+    const stateUrl = String(env.ALCHEMY_STATE_URL ?? "");
     const state = yield* makeHttpStateStore({
       id: "cloudflare-http",
-      url: String(env.ALCHEMY_STATE_URL ?? ""),
+      url: stateUrl,
       authToken: String(env.ALCHEMY_STATE_TOKEN ?? ""),
     }).pipe(Effect.provide(httpClient));
+
+    // Surfaced on `/api/health` so a broken deployment names itself:
+    // `transport: "fetch"` when the service binding is missing (same-zone
+    // worker-to-worker fetch is blocked by Cloudflare, so that config only
+    // works cross-zone), `stateUrl: "(unset)"` when the URL binding never
+    // attached. Host only — never the token.
+    const diagnostics = {
+      transport: stateStore === undefined ? "fetch" : "service-binding",
+      stateUrl: (() => {
+        if (stateUrl === "") return "(unset)";
+        try {
+          return new URL(stateUrl).host;
+        } catch {
+          return "(invalid)";
+        }
+      })(),
+    };
 
     const handle = viewer({
       state,
       stack: String(env.ALCHEMY_VIEWER_STACK ?? "") || undefined,
       stage: String(env.ALCHEMY_VIEWER_STAGE ?? "") || undefined,
+      diagnostics,
     });
     return {
       fetch: handle.pipe(
