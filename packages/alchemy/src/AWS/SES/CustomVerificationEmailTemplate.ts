@@ -1,10 +1,18 @@
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import {
+  createInternalTags,
+  createTagsList,
+  diffTags,
+  hasAlchemyTags,
+} from "../../Tags.ts";
+import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface CustomVerificationEmailTemplateProps {
@@ -37,6 +45,10 @@ export interface CustomVerificationEmailTemplateProps {
    * The URL the recipient is redirected to if verification fails.
    */
   failureRedirectionURL: string;
+  /**
+   * Tags to apply to the template. Merged with internal Alchemy tags.
+   */
+  tags?: Record<string, string>;
 }
 
 export interface CustomVerificationEmailTemplate extends Resource<
@@ -107,6 +119,16 @@ export const CustomVerificationEmailTemplate =
     "AWS.SES.CustomVerificationEmailTemplate",
   );
 
+const toTagRecord = (
+  tags: ReadonlyArray<{ Key: string; Value: string }> | undefined,
+): Record<string, string> =>
+  Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
+
+// getCustomVerificationEmailTemplate returns no ARN, so the ARN
+// listTagsForResource needs is derived — verified live against SES.
+const templateArnOf = (region: string, accountId: string, name: string) =>
+  `arn:aws:ses:${region}:${accountId}:custom-verification-email-template/${name}`;
+
 export const CustomVerificationEmailTemplateProvider = () =>
   Provider.effect(
     CustomVerificationEmailTemplate,
@@ -127,6 +149,22 @@ export const CustomVerificationEmailTemplateProvider = () =>
           .pipe(
             Effect.catchTag("NotFoundException", () =>
               Effect.succeed(undefined),
+            ),
+          );
+      });
+
+      // The get returns no tags, so ownership costs a second API call. Only
+      // `read` pays it — `list` deletes by name.
+      const getTemplateTags = Effect.fn(function* (name: string) {
+        const { accountId, region } = yield* AWSEnvironment.current;
+        return yield* sesv2
+          .listTagsForResource({
+            ResourceArn: templateArnOf(region, accountId, name),
+          })
+          .pipe(
+            Effect.map((response) => toTagRecord(response.Tags)),
+            Effect.catchTag("NotFoundException", () =>
+              Effect.succeed({} as Record<string, string>),
             ),
           );
       });
@@ -152,7 +190,13 @@ export const CustomVerificationEmailTemplateProvider = () =>
           const name =
             output?.templateName ?? (yield* createName(id, olds ?? {}));
           const found = yield* getTemplate(name);
-          return found ? { templateName: name } : undefined;
+          if (!found) return undefined;
+          // Templates are taggable and reconcile brands the ones it creates,
+          // so existence at our deterministic name is not proof of ownership.
+          const tags = yield* getTemplateTags(name);
+          return (yield* hasAlchemyTags(id, tags))
+            ? { templateName: name }
+            : Unowned({ templateName: name });
         }),
 
         diff: Effect.fn(function* ({ id, news, olds }) {
@@ -166,6 +210,8 @@ export const CustomVerificationEmailTemplateProvider = () =>
 
         reconcile: Effect.fn(function* ({ id, news, output }) {
           const name = output?.templateName ?? (yield* createName(id, news));
+          const internalTags = yield* createInternalTags(id);
+          const desiredTags = { ...news.tags, ...internalTags };
 
           // 1. OBSERVE — cloud state is authoritative.
           const observed = yield* getTemplate(name);
@@ -180,6 +226,7 @@ export const CustomVerificationEmailTemplateProvider = () =>
                 TemplateContent: news.templateContent,
                 SuccessRedirectionURL: news.successRedirectionURL,
                 FailureRedirectionURL: news.failureRedirectionURL,
+                Tags: createTagsList(desiredTags),
               })
               .pipe(
                 Effect.catchTag("AlreadyExistsException", () =>
@@ -209,6 +256,24 @@ export const CustomVerificationEmailTemplateProvider = () =>
               SuccessRedirectionURL: news.successRedirectionURL,
               FailureRedirectionURL: news.failureRedirectionURL,
             });
+          }
+
+          // 4. SYNC TAGS — diff against OBSERVED cloud tags so an adopted
+          //    template gets branded and stops reading as Unowned.
+          const observedTags = yield* getTemplateTags(name);
+          const { upsert, removed } = diffTags(observedTags, desiredTags);
+          if (upsert.length > 0 || removed.length > 0) {
+            const { accountId, region } = yield* AWSEnvironment.current;
+            const arn = templateArnOf(region, accountId, name);
+            if (upsert.length > 0) {
+              yield* sesv2.tagResource({ ResourceArn: arn, Tags: upsert });
+            }
+            if (removed.length > 0) {
+              yield* sesv2.untagResource({
+                ResourceArn: arn,
+                TagKeys: removed,
+              });
+            }
           }
 
           return { templateName: name };

@@ -2,10 +2,18 @@ import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import {
+  createInternalTags,
+  createTagsList,
+  diffTags,
+  hasAlchemyTags,
+} from "../../Tags.ts";
+import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -29,6 +37,10 @@ export interface MultiRegionEndpointProps {
    * There is no update API, so any change to this list replaces the endpoint.
    */
   regions: string[];
+  /**
+   * Tags to apply to the endpoint. Merged with internal Alchemy tags.
+   */
+  tags?: Record<string, string>;
 }
 
 export interface MultiRegionEndpoint extends Resource<
@@ -101,6 +113,7 @@ export interface MultiRegionEndpoint extends Resource<
  * @example Poll Until the Endpoint Is Usable
  * ```typescript
  * import * as sesv2 from "@distilled.cloud/aws/sesv2";
+ * import * as Effect from "effect/Effect";
  * import * as Schedule from "effect/Schedule";
  *
  * const endpoint = yield* SES.MultiRegionEndpoint("Global", {
@@ -123,6 +136,16 @@ export interface MultiRegionEndpoint extends Resource<
 export const MultiRegionEndpoint = Resource<MultiRegionEndpoint>(
   "AWS.SES.MultiRegionEndpoint",
 );
+
+const toTagRecord = (
+  tags: ReadonlyArray<{ Key: string; Value: string }> | undefined,
+): Record<string, string> =>
+  Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
+
+// getMultiRegionEndpoint returns no ARN, so the ARN listTagsForResource needs
+// is derived from the endpoint NAME (not its id) — verified live.
+const endpointArnOf = (region: string, accountId: string, name: string) =>
+  `arn:aws:ses:${region}:${accountId}:multi-region-endpoint/${name}`;
 
 const sameRegions = (
   a: ReadonlyArray<string> | undefined,
@@ -157,6 +180,22 @@ export const MultiRegionEndpointProvider = () =>
           );
       });
 
+      // getMultiRegionEndpoint does not return tags, so ownership costs a
+      // second API call. Only `read` pays it — `list` deletes by name.
+      const getEndpointTags = Effect.fn(function* (name: string) {
+        const { accountId, region } = yield* AWSEnvironment.current;
+        return yield* sesv2
+          .listTagsForResource({
+            ResourceArn: endpointArnOf(region, accountId, name),
+          })
+          .pipe(
+            Effect.map((response) => toTagRecord(response.Tags)),
+            Effect.catchTag("NotFoundException", () =>
+              Effect.succeed({} as Record<string, string>),
+            ),
+          );
+      });
+
       return MultiRegionEndpoint.Provider.of({
         stables: ["endpointName", "endpointId"],
 
@@ -186,11 +225,15 @@ export const MultiRegionEndpointProvider = () =>
             output?.endpointName ?? (yield* createName(id, olds ?? {}));
           const found = yield* getEndpoint(name);
           if (!found || !found.EndpointId) return undefined;
-          return {
+          const attrs = {
             endpointName: name,
             endpointId: found.EndpointId,
             status: found.Status ?? "CREATING",
           };
+          // Endpoints are taggable and reconcile brands the ones it creates,
+          // so existence at our deterministic name is not proof of ownership.
+          const tags = yield* getEndpointTags(name);
+          return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
         diff: Effect.fn(function* ({ id, news, olds }) {
@@ -209,6 +252,8 @@ export const MultiRegionEndpointProvider = () =>
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = output?.endpointName ?? (yield* createName(id, news));
+          const internalTags = yield* createInternalTags(id);
+          const desiredTags = { ...news.tags, ...internalTags };
 
           // 1. OBSERVE — cloud state is authoritative.
           let observed = yield* getEndpoint(name);
@@ -226,13 +271,23 @@ export const MultiRegionEndpointProvider = () =>
                     Region: region,
                   })),
                 },
+                Tags: createTagsList(desiredTags),
               })
               .pipe(
                 Effect.catchTag("AlreadyExistsException", () =>
                   Effect.succeed({}),
                 ),
               );
-            observed = yield* getEndpoint(name);
+            // The endpoint is not always readable the instant create returns
+            // (and on the AlreadyExists race another writer may still be
+            // mid-create), so poll briefly rather than failing outright.
+            observed = yield* getEndpoint(name).pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("1 second"),
+                until: (endpoint) => endpoint !== undefined,
+                times: 8,
+              }),
+            );
           }
 
           if (observed === undefined || !observed.EndpointId) {
@@ -241,6 +296,27 @@ export const MultiRegionEndpointProvider = () =>
                 `SES multi-region endpoint ${name} was not found after create`,
               ),
             );
+          }
+
+          // 3. SYNC TAGS — diff against OBSERVED cloud tags so an adopted
+          //    endpoint gets branded and stops reading as Unowned.
+          const observedTags = yield* getEndpointTags(name);
+          const { upsert, removed } = diffTags(observedTags, desiredTags);
+          if (upsert.length > 0 || removed.length > 0) {
+            const { accountId, region } = yield* AWSEnvironment.current;
+            const endpointArn = endpointArnOf(region, accountId, name);
+            if (upsert.length > 0) {
+              yield* sesv2.tagResource({
+                ResourceArn: endpointArn,
+                Tags: upsert,
+              });
+            }
+            if (removed.length > 0) {
+              yield* sesv2.untagResource({
+                ResourceArn: endpointArn,
+                TagKeys: removed,
+              });
+            }
           }
 
           yield* session.note(observed.EndpointId);

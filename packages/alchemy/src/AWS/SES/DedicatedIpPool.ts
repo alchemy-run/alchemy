@@ -1,5 +1,6 @@
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -37,6 +38,10 @@ export interface DedicatedIpPoolProps {
    * @default "STANDARD"
    */
   scalingMode?: DedicatedIpPoolScalingMode;
+  /**
+   * Tags to apply to the pool. Merged with internal Alchemy tags.
+   */
+  tags?: Record<string, string>;
 }
 
 export interface DedicatedIpPool extends Resource<
@@ -242,6 +247,8 @@ export const DedicatedIpPoolProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output }) {
           const name = output?.poolName ?? (yield* createName(id, news));
           const desiredMode = news.scalingMode ?? DEFAULT_SCALING_MODE;
+          const internalTags = yield* createInternalTags(id);
+          const desiredTags = { ...news.tags, ...internalTags };
 
           // 1. OBSERVE — cloud state is authoritative.
           let observed = yield* getPool(name);
@@ -250,19 +257,26 @@ export const DedicatedIpPoolProvider = () =>
             // 2. ENSURE — create with the desired scaling mode, branding the
             //    pool with internal tags. AlreadyExists is a race, not a
             //    failure.
-            const internalTags = yield* createInternalTags(id);
             yield* sesv2
               .createDedicatedIpPool({
                 PoolName: name,
                 ScalingMode: desiredMode,
-                Tags: createTagsList(internalTags),
+                Tags: createTagsList(desiredTags),
               })
               .pipe(
                 Effect.catchTag("AlreadyExistsException", () =>
                   Effect.succeed({}),
                 ),
               );
-            observed = yield* getPool(name);
+            // Not always readable the instant create returns, and on the
+            // AlreadyExists race another writer may still be mid-create.
+            observed = yield* getPool(name).pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("1 second"),
+                until: (pool) => pool !== undefined,
+                times: 8,
+              }),
+            );
           }
 
           // 3. SYNC — the only in-place scaling change AWS supports is
@@ -280,15 +294,20 @@ export const DedicatedIpPoolProvider = () =>
           //     the create above, so without this it would stay unbranded and
           //     `read` would keep reporting it Unowned on every later deploy.
           //     Diffed against OBSERVED cloud tags, never against olds.
-          const internalTags = yield* createInternalTags(id);
           const observedTags = yield* getPoolTags(name);
-          const { upsert } = diffTags(observedTags, internalTags);
-          if (upsert.length > 0) {
+          const { upsert, removed } = diffTags(observedTags, desiredTags);
+          if (upsert.length > 0 || removed.length > 0) {
             const { accountId, region } = yield* AWSEnvironment.current;
-            yield* sesv2.tagResource({
-              ResourceArn: dedicatedIpPoolArnOf(region, accountId, name),
-              Tags: upsert,
-            });
+            const poolArn = dedicatedIpPoolArnOf(region, accountId, name);
+            if (upsert.length > 0) {
+              yield* sesv2.tagResource({ ResourceArn: poolArn, Tags: upsert });
+            }
+            if (removed.length > 0) {
+              yield* sesv2.untagResource({
+                ResourceArn: poolArn,
+                TagKeys: removed,
+              });
+            }
           }
 
           return { poolName: name, scalingMode: desiredMode };
