@@ -45,7 +45,7 @@ export interface SettingsAttributes {
   /** The default mitigation action for non-conforming requests. */
   validationDefaultMitigationAction: MitigationAction;
   /** The zone-wide override (`"none"` = validation disabled), if set. */
-  validationOverrideMitigationAction: "none" | null;
+  validationOverrideMitigationAction: "none" | (string & {}) | null;
   /**
    * The default action the zone had before Alchemy first managed these
    * settings. Restored on destroy.
@@ -55,7 +55,7 @@ export interface SettingsAttributes {
    * The override the zone had before Alchemy first managed these settings.
    * Restored on destroy.
    */
-  initialOverrideMitigationAction: "none" | null;
+  initialOverrideMitigationAction: "none" | (string & {}) | null;
 }
 
 export type Settings = Resource<
@@ -264,7 +264,7 @@ const toAttributes = (
   setting: SettingResponse,
   initial: {
     defaultAction: MitigationAction;
-    overrideAction: "none" | null;
+    overrideAction: "none" | (string & {}) | null;
   },
 ): SettingsAttributes => {
   const current = observedState(setting);

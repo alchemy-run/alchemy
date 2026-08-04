@@ -47,8 +47,8 @@ const getEmailRouting = (zoneId: string) =>
 
 const setEnabled = (zoneId: string, enabled: boolean) =>
   (enabled
-    ? emailRouting.enableEmailRouting({ zoneId, body: {} })
-    : emailRouting.disableEmailRouting({ zoneId, body: {} })
+    ? emailRouting.enableEmailRouting({ zoneId })
+    : emailRouting.disableEmailRouting({ zoneId })
   ).pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",

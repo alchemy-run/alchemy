@@ -215,7 +215,7 @@ type ObservedNetwork = {
   config?: { tlsSockaddr: string; sha256?: string | null } | null;
   name?: string | null;
   networkId?: string | null;
-  type?: "tls" | null;
+  type?: "tls" | (string & {}) | null;
 };
 
 /**

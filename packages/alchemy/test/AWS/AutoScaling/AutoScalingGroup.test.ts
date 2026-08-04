@@ -52,7 +52,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const imageId = (yield* amazonLinux2023()) ?? "ami-00000000000000000";
+      const imageId = amazonLinux2023();
 
       yield* cleanupLaunchTemplate;
       yield* ec2.createLaunchTemplate({
@@ -121,7 +121,7 @@ test.provider(
 
       // Launch templates do not validate the AMI at creation time; fall back
       // to a syntactically valid id if the lookup returns nothing.
-      const imageId = (yield* amazonLinux2023()) ?? "ami-00000000000000000";
+      const imageId = amazonLinux2023();
 
       const subnetId = yield* getAutoScalingTestSubnetId;
 

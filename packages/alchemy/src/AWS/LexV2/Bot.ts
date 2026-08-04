@@ -1,6 +1,7 @@
 import * as lexm from "@distilled.cloud/aws/lex-models-v2";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -215,9 +216,7 @@ export const BotProvider = () =>
                 ),
               { concurrency: 5 },
             );
-            return hydrated.filter(
-              (attrs): attrs is Bot["Attributes"] => attrs !== undefined,
-            );
+            return hydrated.filter(Predicate.isNotUndefined);
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

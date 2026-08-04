@@ -6,6 +6,12 @@ sidebar:
   order: 4
 ---
 
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+export const deps = `react react-dom`;
+export const devDeps = `@types/react @types/react-dom @vitejs/plugin-react`;
+export const typesDep = `@cloudflare/workers-types`;
+
 This is the walkthrough for a plain React single-page app on
 [`Cloudflare.Website.Vite`](/cloudflare/frontend/vite): build the
 client assets, ship them to Cloudflare, and serve them through a
@@ -43,10 +49,20 @@ A minimal React SPA looks like:
 
 ### Install React
 
-```sh
-bun add react react-dom
-bun add -d @types/react @types/react-dom @vitejs/plugin-react
-```
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun add ${deps}\nbun add -d ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm install ${deps}\nnpm install -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm add ${deps}\npnpm add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn add ${deps}\nyarn add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+</Tabs>
 
 ### Create vite.config.ts
 
@@ -447,9 +463,20 @@ the resource. `env.BUCKET` is now typed as `Bucket` end to end.
 `@cloudflare/workers-types`. Add it to your `tsconfig.json` so the
 TypeScript checker can find them:
 
-```sh
-bun add -d @cloudflare/workers-types
-```
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun add -d ${typesDep}`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm install -D ${typesDep}`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm add -D ${typesDep}`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn add -D ${typesDep}`} lang="sh" />
+  </TabItem>
+</Tabs>
 
 ```diff lang="json"
 // tsconfig.json

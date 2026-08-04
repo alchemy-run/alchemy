@@ -6,7 +6,6 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import type * as rolldown from "rolldown";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
@@ -123,12 +122,14 @@ export interface InstanceProps extends PlatformProps {
    */
   env?: Record<string, any>;
   /**
-   * Bundler configuration for the hosted process entrypoint.
+   * Bundler configuration for the hosted process entrypoint: rolldown
+   * `input`/`output` overrides plus pure-annotation options (`pure`).
+   * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
+   * `@distilled.cloud/*` are annotated as pure by default so unused code
+   * from those packages is tree-shaken; list additional packages via
+   * `pure.packages`, or disable with `pure: false`.
    */
-  build?: {
-    input?: Partial<rolldown.InputOptions>;
-    output?: Partial<rolldown.OutputOptions>;
-  };
+  build?: Bundle.BundleConfig;
   /**
    * Additional managed policy ARNs for the managed instance role.
    * This can only be used when Alchemy manages the instance profile.
@@ -278,7 +279,7 @@ export type InstanceRuntimeContext = Ec2HostRuntimeContext;
  * @example Basic Instance
  * ```typescript
  * const instance = yield* AWS.EC2.Instance("AppInstance", {
- *   imageId,
+ *   imageId: AWS.EC2.amazonLinux2023(),
  *   instanceType: "t3.micro",
  *   subnetId: subnet.subnetId,
  * });
@@ -294,7 +295,7 @@ export type InstanceRuntimeContext = Ec2HostRuntimeContext;
  *
  *   return {
  *     main: import.meta.url,
- *     imageId,
+ *     imageId: AWS.EC2.amazonLinux2023(),
  *     instanceType: "t3.small",
  *     subnetId: subnet.subnetId,
  *     securityGroupIds: [securityGroup.groupId],
@@ -477,8 +478,21 @@ export const InstanceProvider = () =>
             ),
           );
 
-      const findInstanceByTags = Effect.fn(function* (id: string) {
-        const filters = yield* createAlchemyTagFilters(id);
+      // Generation-scoped recovery lookup: instances are branded with the
+      // engine's per-generation instance id (`alchemy::instance`) on top of
+      // the stack/stage/id ownership tags. An interrupted create resumes with
+      // the same generation id, so it still recovers its own orphan — while a
+      // replacement's create phase runs under a freshly minted generation id
+      // and can never re-adopt the old generation's live instance that the
+      // cleanup phase is about to terminate.
+      const findInstanceByTags = Effect.fn(function* (
+        id: string,
+        generation: string,
+      ) {
+        const filters = [
+          ...(yield* createAlchemyTagFilters(id)),
+          { Name: "tag:alchemy::instance", Values: [generation] },
+        ];
         return yield* ec2.describeInstances
           .items({
             Filters: filters,
@@ -638,7 +652,7 @@ export const InstanceProvider = () =>
               (instance) => toAttributes(instance),
             );
           }),
-        diff: Effect.fn(function* ({ news, olds }) {
+        diff: Effect.fn(function* ({ id, news, olds, output }) {
           if (!isResolved(news)) return;
           const hostModeChanged = Boolean(olds.main) !== Boolean(news.main);
           if (
@@ -678,8 +692,23 @@ export const InstanceProvider = () =>
               stables: ["instanceId", "instanceArn", "vpcId", "subnetId"],
             } as const;
           }
+
+          // The hosted bundle hash participates in planning: a change confined
+          // to the runtime program (or its imports) leaves every prop equal, so
+          // re-bundle and compare against the deployed hash. A mismatch plans
+          // an in-place update, whose reconcile re-uploads the bundle and
+          // reboots the instance.
+          if (news.main && output?.code?.hash) {
+            const { hash } = yield* hosted.bundleProgram(id, news);
+            if (hash !== output.code.hash) {
+              return {
+                action: "update",
+                stables: ["instanceId", "instanceArn", "vpcId", "subnetId"],
+              } as const;
+            }
+          }
         }),
-        read: Effect.fn(function* ({ id, output }) {
+        read: Effect.fn(function* ({ id, instanceId, output }) {
           const instance = output?.instanceId
             ? yield* describeInstance(output.instanceId).pipe(
                 Effect.catchTag("InvalidInstanceID.NotFound", () =>
@@ -689,7 +718,7 @@ export const InstanceProvider = () =>
                   Effect.succeed(undefined),
                 ),
               )
-            : yield* findInstanceByTags(id);
+            : yield* findInstanceByTags(id, instanceId);
           return instance
             ? {
                 ...(yield* toAttributes(instance)),
@@ -706,6 +735,7 @@ export const InstanceProvider = () =>
         }),
         reconcile: Effect.fn(function* ({
           id,
+          instanceId: generation,
           news,
           output,
           bindings,
@@ -713,6 +743,8 @@ export const InstanceProvider = () =>
         }) {
           const desiredTags = {
             ...(yield* createInternalTags(id)),
+            // Generation brand consumed by the recovery lookup above.
+            "alchemy::instance": generation,
             ...news.tags,
           };
           const runtime = yield* hosted.resolveHostedRuntime({
@@ -735,7 +767,7 @@ export const InstanceProvider = () =>
                   Effect.succeed(undefined),
                 ),
               )
-            : yield* findInstanceByTags(id);
+            : yield* findInstanceByTags(id, generation);
 
           // A terminated instance is a tombstone; treat as missing so we
           // launch a fresh one.
