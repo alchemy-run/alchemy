@@ -1,0 +1,198 @@
+---
+title: Next.js
+description: Deploy a Next.js app to Cloudflare Workers with Cloudflare.Website.Nextjs — the OpenNext pipeline, writable ISR, and wrangler-free local dev.
+sidebar:
+  order: 9.5
+---
+
+`Cloudflare.Website.Nextjs` deploys a Next.js app as a Cloudflare
+Worker. It runs `next build` through the OpenNext pipeline
+(`@opennextjs/cloudflare`), bundles the resulting server into a
+self-contained Worker, and deploys client assets plus prerendered
+pages as Worker static assets. There is no adapter to configure and
+no Wrangler file.
+
+App Router and Pages Router both work — server components, API
+routes, middleware, server actions, dynamic segments, streaming SSR,
+and `getServerSideProps` pages all run in the Worker.
+
+## Install
+
+The build integration and OpenNext are loaded from your project at
+deploy time:
+
+```sh
+bun add -d @distilled.cloud/nextjs @opennextjs/cloudflare
+```
+
+## Add `open-next.config.ts`
+
+OpenNext needs a config next to `next.config.*`. The static-assets
+incremental cache is the zero-infrastructure default — prerendered
+ISR pages serve their build-time payloads:
+
+```typescript
+// open-next.config.ts
+import { defineCloudflareConfig } from "@opennextjs/cloudflare";
+import staticAssetsIncrementalCache from "@opennextjs/cloudflare/overrides/incremental-cache/static-assets-incremental-cache";
+
+export default defineCloudflareConfig({
+  incrementalCache: staticAssetsIncrementalCache,
+});
+```
+
+## Add it to the Stack
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyNextjsSite",
+  {
+    providers: Cloudflare.providers(),
+    state: Cloudflare.state(),
+  },
+  Effect.gen(function* () {
+    const site = yield* Cloudflare.Website.Nextjs("Website");
+    return { url: site.url };
+  }),
+);
+```
+
+The OpenNext server runs under Node compatibility, so the
+`nodejs_compat` compatibility flag is added automatically.
+
+See
+[examples/cloudflare-website-nextjs](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-website-nextjs)
+for the checked-in example.
+
+## Bindings
+
+The resource returns a plain `Worker`, so `env` accepts the full
+binding vocabulary — KV namespaces, R2 buckets, Durable Objects,
+secrets:
+
+```typescript
+const bucket = yield* Cloudflare.R2.Bucket("Uploads");
+
+const site = yield* Cloudflare.Website.Nextjs("Website", {
+  env: {
+    UPLOADS: bucket,
+    API_KEY: Alchemy.secret("API_KEY"),
+  },
+});
+```
+
+Route handlers, server components, and server actions read them
+through OpenNext's `getCloudflareContext()`:
+
+```typescript
+// app/api/upload/route.ts
+import { getCloudflareContext } from "@opennextjs/cloudflare";
+
+export async function PUT(request: Request) {
+  const { env } = getCloudflareContext();
+  await env.UPLOADS.put("hello.txt", await request.text());
+  return Response.json({ ok: true });
+}
+```
+
+## Writable ISR
+
+Switch the incremental cache to KV and revalidation actually writes:
+`revalidatePath` / `revalidateTag` purge entries, and time-based
+`revalidate` windows regenerate pages in the background through a
+Durable Object queue hosted on the same Worker.
+
+```typescript
+// open-next.config.ts
+import { defineCloudflareConfig } from "@opennextjs/cloudflare";
+import kvIncrementalCache from "@opennextjs/cloudflare/overrides/incremental-cache/kv-incremental-cache";
+import doQueue from "@opennextjs/cloudflare/overrides/queue/do-queue";
+import kvNextTagCache from "@opennextjs/cloudflare/overrides/tag-cache/kv-next-tag-cache";
+
+export default defineCloudflareConfig({
+  incrementalCache: kvIncrementalCache,
+  queue: doQueue,
+  tagCache: kvNextTagCache,
+});
+```
+
+Bind the pieces — the `WORKER_SELF_REFERENCE` self service binding
+OpenNext uses to re-render pages is wired automatically:
+
+```typescript
+const incCache = yield* Cloudflare.KV.Namespace("NextIncCache");
+const tagCache = yield* Cloudflare.KV.Namespace("NextTagCache");
+
+const site = yield* Cloudflare.Website.Nextjs("Website", {
+  env: {
+    NEXT_INC_CACHE_KV: incCache,
+    NEXT_TAG_CACHE_KV: tagCache,
+    NEXT_CACHE_DO_QUEUE: Cloudflare.DurableObject("NEXT_CACHE_DO_QUEUE", {
+      className: "DOQueueHandler",
+    }),
+  },
+});
+```
+
+`DOQueueHandler` ships inside the OpenNext worker bundle — the
+binding declaration is all it takes.
+
+## Rebuilds and memo
+
+Input files are content-hashed, so an unchanged project skips both
+the build and the deploy. Narrow the scope with `memo` when the
+project lives in a large repository:
+
+```typescript
+const site = yield* Cloudflare.Website.Nextjs("Website", {
+  memo: {
+    include: ["app/**", "public/**", "package.json", "next.config.mjs", "open-next.config.ts"],
+  },
+});
+```
+
+## Local dev
+
+```sh
+bun alchemy dev
+```
+
+`alchemy dev` defaults to **preview parity**: the OpenNext worker is
+built and served under workerd locally, with the Worker's bindings
+emulated — the same runtime behavior, asset routing, and ISR/cache
+semantics as production.
+
+For an edit-refresh loop, switch to the real `next dev` (Turbopack
+HMR):
+
+```typescript
+const site = yield* Cloudflare.Website.Nextjs("Website", {
+  nextjs: { devMode: "hmr" },
+});
+```
+
+In hmr mode your app code runs in Node with the Worker's bindings
+proxied onto `getCloudflareContext()` — no
+`initOpenNextCloudflareForDev()` call needed. Cloudflare-specific
+runtime behavior (workerd APIs, ISR semantics) still needs preview
+mode.
+
+## Limitations
+
+These come from upstream `@opennextjs/cloudflare`:
+
+- **Edge-runtime routes and pages** (`export const runtime = "edge"`)
+  are unsupported and would fail at runtime, so the build fails early
+  with the offending route list. Remove the directive — the node
+  runtime runs on Workers. Middleware is fully supported.
+- **`next/image` optimization** requires a zone with Cloudflare
+  Images. On `workers.dev`, pass `unoptimized` and images serve as
+  raw static assets.
+- **Partial Prerendering / `"use cache"`** and Pages-Router `i18n`
+  config are out of scope for now. App Router i18n via middleware
+  works.
