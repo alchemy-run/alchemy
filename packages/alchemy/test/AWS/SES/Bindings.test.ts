@@ -197,6 +197,33 @@ describe("SES Bindings", () => {
         }),
     );
 
+    test.provider(
+      "a binding declared without a configuration set is granted the same send",
+      (_stack) =>
+        Effect.gen(function* () {
+          // The fixture binds SendEmail twice: once with a configuration set
+          // and once without (`SES.SendEmail(identity)`). The no-config-set
+          // grant is a separate IAM policy, so it needs its own proof that it
+          // reaches SES — otherwise a regression in the one-argument overload
+          // would go unnoticed.
+          const response = (yield* send(
+            HttpClientRequest.post(
+              `${baseUrl}/send-plain?from=${encodeURIComponent(UNVERIFIED_FROM)}`,
+            ),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            messageId?: string;
+            error?: string;
+            message?: string;
+          };
+
+          // Same sandbox rejection as the config-set path — crucially NOT
+          // AccessDenied, which is what a missing/misscoped policy looks like.
+          expect(response.error).not.toBe("AccessDeniedException");
+          expect(response.error).toBe("MessageRejected");
+          expect(response.message).toContain("not verified");
+        }),
+    );
+
     // `SendEmail` is identity-scoped: the binding grants ses:SendEmail only on
     // the ARN of the identity it was bound to (plus that domain's addresses,
     // its templates, and the configuration set). A sender outside that

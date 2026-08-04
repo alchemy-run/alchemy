@@ -44,17 +44,17 @@ test.provider(
         }),
       );
 
-      // out-of-band verification via distilled
+      // out-of-band verification via distilled. The association is eventually
+      // consistent, so poll the SUCCESS value — `Effect.retry`'s `while` reads
+      // the error channel and would never see the boolean.
       const found = yield* isAssociated(
         tenant.tenantName,
         configSet.configurationSetArn,
       ).pipe(
-        Effect.retry({
-          while: (associated) => !associated,
-          schedule: Schedule.max([
-            Schedule.exponential(500),
-            Schedule.recurs(8),
-          ]),
+        Effect.repeat({
+          schedule: Schedule.spaced("1 second"),
+          until: (associated) => associated,
+          times: 10,
         }),
       );
       expect(found).toBe(true);
@@ -120,7 +120,9 @@ test.provider(
       // that bug — see #979.
       yield* stack.deploy(
         Effect.gen(function* () {
-          yield* Tenant("AssocTenant", {});
+          // Same logical id as the deploys above — renaming it here would
+          // replace the tenant instead of only dropping the association.
+          yield* Tenant("Customer", {});
           yield* ConfigurationSet("ConfigA", {});
           yield* ConfigurationSet("ConfigB", {});
         }),

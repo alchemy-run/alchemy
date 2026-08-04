@@ -85,7 +85,17 @@ export interface EmailIdentityPolicy extends Resource<
  * const policy = yield* SES.EmailIdentityPolicy("AllowPartner", {
  *   emailIdentity: identity.emailIdentity,
  *   policyName: "partner-send",
- *   policy: { Version: "2012-10-17", Statement: [] },
+ *   policy: {
+ *     Version: "2012-10-17",
+ *     Statement: [
+ *       {
+ *         Effect: "Allow",
+ *         Principal: { AWS: "arn:aws:iam::111122223333:root" },
+ *         Action: ["ses:SendEmail"],
+ *         Resource: identity.identityArn,
+ *       },
+ *     ],
+ *   },
  * });
  * ```
  *

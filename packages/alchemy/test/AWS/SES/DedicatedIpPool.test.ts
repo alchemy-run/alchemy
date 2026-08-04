@@ -1,14 +1,12 @@
-import { adopt } from "@/AdoptPolicy";
+import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy.ts";
 import * as AWS from "@/AWS";
 import { AWSEnvironment } from "@/AWS/Environment";
 import { DedicatedIpPool } from "@/AWS/SES";
 import * as Test from "@/Test/Alchemy";
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import { expect } from "alchemy-test";
-import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -160,7 +158,7 @@ test.provider(
         ScalingMode: "STANDARD",
       });
 
-      const exit = yield* stack
+      const error = yield* stack
         .deploy(
           Effect.gen(function* () {
             return yield* DedicatedIpPool("Foreign", {
@@ -168,13 +166,8 @@ test.provider(
             });
           }),
         )
-        .pipe(Effect.exit);
-
-      expect(Exit.isFailure(exit)).toBe(true);
-      if (Exit.isFailure(exit)) {
-        const reason = exit.cause.reasons.find(Cause.isFailReason);
-        expect((reason?.error as any)?._tag).toBe("OwnedBySomeoneElse");
-      }
+        .pipe(Effect.flip);
+      expect(error).toBeInstanceOf(OwnedBySomeoneElse);
 
       // The pool is still there and still untagged — the refusal touched
       // nothing.
