@@ -45,14 +45,17 @@ export const BrowserLocal = Layer.effect(
   Effect.gen(function* () {
     // Account + credentials are ambient during stack-eval (the stack's
     // providers layer). Capture the full context so the REST ops run with the
-    // current credentials — no `host.bind`, no minted token.
-    const { accountId } = yield* yield* CloudflareEnvironment;
+    // current credentials — no `host.bind`, no minted token. The accountId
+    // stays a DEFERRED effect: it only resolves when a browser action
+    // actually runs, so an all-local dev run never forces credential
+    // resolution just by building this layer.
+    const getEnv = yield* CloudflareEnvironment;
     const context = yield* Effect.context<
       Credentials | HttpClient.HttpClient
     >();
     const auth: BrowserAuth = {
       authorize: (eff) => eff.pipe(Effect.provideContext(context)),
-      accountId,
+      accountId: getEnv.pipe(Effect.map((env) => env.accountId)),
     };
 
     return Effect.fn(function* (_binding: BrowserBinding) {

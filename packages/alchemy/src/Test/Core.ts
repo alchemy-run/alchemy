@@ -229,12 +229,16 @@ export const toEffect = <A>(
     );
   }).pipe(
     Effect.provideService(AdoptPolicy, options.adopt ?? false),
-    Effect.provide(overrideAlchemyContext({ dev: resolveDev(options) })),
     // `options.state` (e.g. `Cloudflare.state()`) itself requires
     // `AuthProviders` to read credentials, so AuthProviders must be provided
     // AFTER the state layer or the state layer's requirement is never
     // satisfied — which surfaces as `Service not found: AuthProviders`.
     Effect.provide(options.state ?? State.localState()),
+    // AFTER (outside) the state layer, so the state layer builds with the
+    // dev-overridden AlchemyContext — `Cloudflare.state()` resolves to the
+    // local file store when `dev: true`, exactly like the CLI, where
+    // `execStack` provides the override outside `stack.services`.
+    Effect.provide(overrideAlchemyContext({ dev: resolveDev(options) })),
     Effect.provideService(AuthProviders, {}),
     Effect.provide(Layer.provideMerge(alchemyLayer, platformLayer)),
   );

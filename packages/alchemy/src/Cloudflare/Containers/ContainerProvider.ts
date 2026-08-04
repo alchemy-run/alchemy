@@ -4,6 +4,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import { getStableContextDir } from "../../Bundle/TempRoot.ts";
@@ -885,7 +886,7 @@ export const LiveContainerProvider = () =>
           // so we promote the local resource to a real application.
           if (output?.applicationId && isLiveId(output.applicationId)) {
             existing = yield* Containers.getContainerApplication({
-              accountId: output.accountId,
+              accountId: output.accountId ?? accountId,
               applicationId: output.applicationId,
             }).pipe(
               Effect.map((app) => ({
@@ -946,7 +947,7 @@ export const LiveContainerProvider = () =>
               `Recreating container application ${name} with durable object binding...`,
             );
             yield* Containers.deleteContainerApplication({
-              accountId: existing.accountId,
+              accountId: existing.accountId ?? accountId,
               applicationId: existing.applicationId,
             }).pipe(
               Effect.catchTag(
@@ -1017,8 +1018,9 @@ export const LiveContainerProvider = () =>
           yield* Effect.logInfo(
             `Cloudflare Container delete: deleting ${output.applicationName}`,
           );
+          const { accountId } = yield* yield* CloudflareEnvironment;
           yield* Containers.deleteContainerApplication({
-            accountId: output.accountId,
+            accountId: output.accountId ?? accountId,
             applicationId: output.applicationId,
           }).pipe(
             Effect.catchTag("ContainerApplicationNotFound", () => Effect.void),
@@ -1058,8 +1060,9 @@ export const LiveContainerProvider = () =>
             yield* Effect.logInfo(
               `Cloudflare Container read: checking ${output.applicationName}`,
             );
+            const { accountId } = yield* yield* CloudflareEnvironment;
             attrs = yield* Containers.getContainerApplication({
-              accountId: output.accountId,
+              accountId: output.accountId ?? accountId,
               applicationId: output.applicationId,
             }).pipe(
               Effect.map((app) => ({
@@ -1102,15 +1105,27 @@ export const LiveContainerProvider = () =>
             );
           }),
         tail: ({ output }) =>
-          telemetry.tailStream({
-            accountId: output.accountId,
-            filters: containerFilters(output.applicationId),
-          }),
+          Stream.unwrap(
+            Effect.gen(function* () {
+              const accountId =
+                output.accountId ??
+                (yield* yield* CloudflareEnvironment).accountId;
+              return telemetry.tailStream({
+                accountId,
+                filters: containerFilters(output.applicationId),
+              });
+            }),
+          ),
         logs: ({ output, options }) =>
-          telemetry.queryLogs({
-            accountId: output.accountId,
-            filters: containerFilters(output.applicationId),
-            options,
+          Effect.gen(function* () {
+            const accountId =
+              output.accountId ??
+              (yield* yield* CloudflareEnvironment).accountId;
+            return yield* telemetry.queryLogs({
+              accountId,
+              filters: containerFilters(output.applicationId),
+              options,
+            });
           }),
       });
     }),

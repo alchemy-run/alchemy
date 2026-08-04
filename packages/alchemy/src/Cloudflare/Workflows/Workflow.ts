@@ -13,7 +13,11 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
-import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import {
+  CloudflareEnvironment,
+  currentAccountId,
+  isAccountDrift,
+} from "../CloudflareEnvironment.ts";
 import { generateLocalId } from "../LocalRuntime.ts";
 import {
   Worker,
@@ -871,7 +875,12 @@ export interface WorkflowResourceAttrs {
   workflowName: string;
   className: string;
   scriptName: string;
-  accountId: string;
+  /**
+   * Always stamped by the live provider; the local (dev) provider stamps
+   * it opportunistically and leaves it `undefined` when no credentials
+   * are configured (credential-free `alchemy dev`).
+   */
+  accountId: string | undefined;
 }
 
 const WorkflowResourceTypeId = "Cloudflare.Workflow";
@@ -969,9 +978,10 @@ export const ProviderLive = () =>
       yield* Effect.logInfo(
         `Cloudflare Workflow delete: ${output.workflowName}`,
       );
+      const { accountId } = yield* yield* CloudflareEnvironment;
       yield* workflows
         .deleteWorkflow({
-          accountId: output.accountId,
+          accountId: output.accountId ?? accountId,
           workflowName: output.workflowName,
         })
         .pipe(Effect.catchTag("WorkflowNotFound", () => Effect.void));
@@ -989,10 +999,11 @@ export const ProviderLocal = () =>
   Provider.succeed(WorkflowResource, {
     stables: ["accountId"],
     diff: Effect.fn(function* ({ news, output }) {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Non-forcing probe: local diffs must never demand credentials.
+      const accountId = yield* currentAccountId;
       if (!output?.workflowId) return { action: "update" } as const;
       if (!isResolved(news)) return undefined;
-      if (output.accountId !== accountId) {
+      if (isAccountDrift(output.accountId, accountId)) {
         return { action: "replace" } as const;
       }
       // Fall through to the engine's default prop diff (className /
@@ -1003,13 +1014,14 @@ export const ProviderLocal = () =>
       return output ?? undefined;
     }),
     reconcile: Effect.fn(function* ({ news, output }) {
-      const { accountId } = yield* yield* CloudflareEnvironment;
       return {
         workflowId: output?.workflowId ?? generateLocalId(),
         workflowName: news.workflowName,
         className: news.className,
         scriptName: news.scriptName,
-        accountId: output?.accountId ?? accountId,
+        // Stamped opportunistically — `undefined` in a credential-free dev
+        // session; matches any account in the local diff.
+        accountId: output?.accountId ?? (yield* currentAccountId),
       };
     }),
     delete: Effect.fn(function* () {

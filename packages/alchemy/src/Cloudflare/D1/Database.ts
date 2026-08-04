@@ -14,7 +14,11 @@ import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
 import { listSqlFiles, readSqlFile } from "../../SQL/SqlFile.ts";
 import { recordsEqual } from "../../Util/equal.ts";
-import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import {
+  CloudflareEnvironment,
+  currentAccountId,
+  isAccountDrift,
+} from "../CloudflareEnvironment.ts";
 import {
   generateLocalId,
   LOCAL_ENTRY_URL,
@@ -125,7 +129,12 @@ export type Database = Resource<
     databaseName: string;
     jurisdiction: Jurisdiction;
     readReplication: { mode: "auto" | "disabled" } | undefined;
-    accountId: string;
+    /**
+     * Always stamped by the live provider; the local (dev) provider stamps
+     * it opportunistically and leaves it `undefined` when no credentials
+     * are configured (credential-free `alchemy dev`).
+     */
+    accountId: string | undefined;
     migrationsDir: string | undefined;
     migrationsTable: string | undefined;
     migrationsHashes: Record<string, string>;
@@ -353,9 +362,10 @@ export const ProviderLive = () =>
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (output?.databaseId) {
+        const acct = output.accountId ?? accountId;
         return yield* d1
           .getDatabase({
-            accountId: output.accountId,
+            accountId: acct,
             databaseId: output.databaseId,
           })
           .pipe(
@@ -367,7 +377,7 @@ export const ProviderLive = () =>
               readReplication: (db.readReplication ?? undefined) as
                 | { mode: "auto" | "disabled" }
                 | undefined,
-              accountId: output.accountId,
+              accountId: acct,
               migrationsDir: output.migrationsDir,
               migrationsTable: output.migrationsTable,
               migrationsHashes: output.migrationsHashes,
@@ -554,9 +564,10 @@ export const ProviderLive = () =>
       };
     }),
     delete: Effect.fn(function* ({ output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
       yield* d1
         .deleteDatabase({
-          accountId: output.accountId,
+          accountId: output.accountId ?? accountId,
           databaseId: output.databaseId,
         })
         .pipe(Effect.catchTag("DatabaseNotFound", () => Effect.void));
@@ -598,10 +609,11 @@ export const ProviderLocal = () =>
       return {
         stables: ["accountId"],
         diff: Effect.fn(function* ({ news = {}, output }) {
-          const { accountId } = yield* yield* CloudflareEnvironment;
+          // Non-forcing probe: local diffs must never demand credentials.
+          const accountId = yield* currentAccountId;
           if (!output?.databaseId) return { action: "update" } as const;
           if (!isResolved(news)) return undefined;
-          if (output.accountId !== accountId) {
+          if (isAccountDrift(output.accountId, accountId)) {
             return { action: "replace" } as const;
           }
           // Detect migration/import file drift — same rules as the live
@@ -634,7 +646,6 @@ export const ProviderLocal = () =>
           return output ?? undefined;
         }),
         reconcile: Effect.fn(function* ({ id, news = {}, output }) {
-          const { accountId } = yield* yield* CloudflareEnvironment;
           const databaseId = output?.databaseId ?? generateLocalId();
 
           // Sync migrations — the shared flow is idempotent (skips applied
@@ -691,7 +702,9 @@ export const ProviderLocal = () =>
             databaseName: yield* createDatabaseName(id, news.name),
             jurisdiction: (news.jurisdiction ?? "default") as Jurisdiction,
             readReplication: news.readReplication,
-            accountId: output?.accountId ?? accountId,
+            // Stamped opportunistically — `undefined` in a credential-free
+            // dev session; matches any account in the local diff.
+            accountId: output?.accountId ?? (yield* currentAccountId),
             migrationsDir: news.migrationsDir,
             migrationsTable: news.migrationsDir ? migrationsTable : undefined,
             migrationsHashes,

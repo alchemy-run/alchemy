@@ -14,6 +14,7 @@ import { AlchemyContext } from "../../AlchemyContext.ts";
 import { apply } from "../../Apply.ts";
 import { ArtifactStore, createArtifactStore } from "../../Artifacts.ts";
 import { AuthProviders } from "../../Auth/AuthProvider.ts";
+import { demandPlanCredentials } from "../../Auth/Demand.ts";
 import { withProfileOverride } from "../../Auth/Profile.ts";
 import * as CLI from "../../Cli/Cli.ts";
 import * as Plan from "../../Plan.ts";
@@ -127,6 +128,15 @@ export const execStack = Effect.fn(function* ({
       if (dryRun) {
         yield* cli.displayPlan(updatePlan);
       } else {
+        // Credential-free dev: a dev plan that is entirely local must never
+        // touch cloud credentials. When the plan DOES need the cloud
+        // (remote() rows, devRemote bindings, live-stamped deletes), demand
+        // credentials exactly once, here in the exec process (which owns
+        // the tty), BEFORE apply begins — the RPC sidecar never prompts.
+        // Non-dev runs keep the pre-existing lazy credential flow.
+        if (dev) {
+          yield* demandPlanCredentials(updatePlan);
+        }
         const hasChanges =
           Object.keys(updatePlan.deletions).length > 0 ||
           Object.values(updatePlan.resources).some(

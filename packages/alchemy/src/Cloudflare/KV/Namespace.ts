@@ -7,7 +7,11 @@ import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
-import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import {
+  CloudflareEnvironment,
+  currentAccountId,
+  isAccountDrift,
+} from "../CloudflareEnvironment.ts";
 import { generateLocalId } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -30,7 +34,12 @@ export type Namespace = Resource<
     title: string;
     namespaceId: string;
     supportsUrlEncoding: boolean | undefined;
-    accountId: string;
+    /**
+     * Always stamped by the live provider; the local (dev) provider stamps
+     * it opportunistically and leaves it `undefined` when no credentials
+     * are configured (credential-free `alchemy dev`).
+     */
+    accountId: string | undefined;
   },
   never,
   Providers
@@ -168,9 +177,10 @@ export const ProviderLive = () =>
       };
     }),
     delete: Effect.fn(function* ({ output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
       yield* kv
         .deleteNamespace({
-          accountId: output.accountId,
+          accountId: output.accountId ?? accountId,
           namespaceId: output.namespaceId,
         })
         .pipe(Effect.catchTag("NamespaceNotFound", () => Effect.void));
@@ -194,9 +204,10 @@ export const ProviderLive = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (output?.namespaceId) {
+        const acct = output.accountId ?? accountId;
         return yield* kv
           .getNamespace({
-            accountId: output.accountId,
+            accountId: acct,
             namespaceId: output.namespaceId,
           })
           .pipe(
@@ -204,7 +215,7 @@ export const ProviderLive = () =>
               title: namespace.title,
               namespaceId: namespace.id,
               supportsUrlEncoding: namespace.supportsUrlEncoding ?? undefined,
-              accountId: output.accountId,
+              accountId: acct,
             })),
             Effect.catchTag("NamespaceNotFound", () =>
               Effect.succeed(undefined),
@@ -235,10 +246,11 @@ export const ProviderLocal = () =>
   Provider.succeed(Namespace, {
     stables: ["accountId"],
     diff: Effect.fn(function* ({ news = {}, output }) {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Non-forcing probe: local diffs must never demand credentials.
+      const accountId = yield* currentAccountId;
       if (!output?.namespaceId) return { action: "update" } as const;
       if (!isResolved(news)) return undefined;
-      if (output.accountId !== accountId) {
+      if (isAccountDrift(output.accountId, accountId)) {
         return { action: "replace" } as const;
       }
       // Fall through to the engine's default prop diff (title renames
@@ -249,12 +261,13 @@ export const ProviderLocal = () =>
       return output ?? undefined;
     }),
     reconcile: Effect.fn(function* ({ id, news = {}, output }) {
-      const { accountId } = yield* yield* CloudflareEnvironment;
       return {
         title: yield* createTitle(id, news.title),
         namespaceId: output?.namespaceId ?? generateLocalId(),
         supportsUrlEncoding: true,
-        accountId: output?.accountId ?? accountId,
+        // Stamped opportunistically — `undefined` in a credential-free dev
+        // session; matches any account in the local diff.
+        accountId: output?.accountId ?? (yield* currentAccountId),
       };
     }),
     delete: Effect.fn(function* () {

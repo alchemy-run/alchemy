@@ -29,7 +29,11 @@ export interface D1Auth {
   authorize: <A, E>(
     eff: Effect.Effect<A, E, Credentials | HttpClient.HttpClient>,
   ) => Effect.Effect<A, E>;
-  accountId: string;
+  /**
+   * Deferred so building a client never demands credential resolution — the
+   * account id resolves only when an HTTP query op actually runs.
+   */
+  accountId: Effect.Effect<string>;
 }
 
 /**
@@ -79,11 +83,13 @@ const runQuery = (
 ): Promise<d1.QueryDatabaseResponse> =>
   auth
     .authorize(
-      d1.queryDatabase({
-        accountId: auth.accountId,
-        databaseId,
-        ...(body as any),
-      }),
+      Effect.flatMap(auth.accountId, (accountId) =>
+        d1.queryDatabase({
+          accountId,
+          databaseId,
+          ...(body as any),
+        }),
+      ),
     )
     .pipe(Effect.runPromise);
 

@@ -72,9 +72,23 @@ already running on Cloudflare. It persists state in a Worker backed
 by a Durable Object with embedded SQLite, with the auth token and
 encryption key kept in your account's Secrets Store.
 
+### Local state during `alchemy dev`
+
+During `alchemy dev`, `Cloudflare.state()` resolves to the local
+file store (`.alchemy/state/`) instead of the cloud store. This is
+always the case in dev, whether or not Cloudflare credentials are
+configured. Dev state describes emulator instances on your machine —
+`dev:` ids, localhost URLs — so it belongs on your machine, and
+`alchemy dev` starts without any Cloudflare credentials for state.
+
+One consequence: dev and deploy state are disjoint. A deploy after a
+dev session reads the cloud store and creates fresh live resources,
+and a dev session never sees deploy rows. This matches the split
+`Alchemy.localState()` users already have between machines.
+
 ### First-run bootstrap
 
-The first time you run `alchemy deploy`, `plan`, or `dev` against a
+The first time you run `alchemy deploy` or `plan` against a
 stack configured with `Cloudflare.state()`, Alchemy can't find the
 state-store Worker on your account and pauses to ask permission
 before deploying it. Confirming kicks off a one-time deploy of the

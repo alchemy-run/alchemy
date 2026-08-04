@@ -5,7 +5,11 @@ import * as Stream from "effect/Stream";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import {
+  CloudflareEnvironment,
+  currentAccountId,
+  isAccountDrift,
+} from "../CloudflareEnvironment.ts";
 import { generateLocalId } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -15,7 +19,12 @@ export type Store = Resource<
   {
     storeId: string;
     storeName: string;
-    accountId: string;
+    /**
+     * Always stamped by the live provider; the local (dev) provider stamps
+     * it opportunistically and leaves it `undefined` when no credentials
+     * are configured (credential-free `alchemy dev`).
+     */
+    accountId: string | undefined;
   },
   never,
   Providers
@@ -172,9 +181,10 @@ export const StoreProviderLocal = () =>
   Provider.succeed(Store, {
     stables: ["accountId"],
     diff: Effect.fn(function* ({ output }) {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Non-forcing probe: local diffs must never demand credentials.
+      const accountId = yield* currentAccountId;
       if (!output?.storeId) return { action: "update" } as const;
-      if (output.accountId !== accountId) {
+      if (isAccountDrift(output.accountId, accountId)) {
         return { action: "replace" } as const;
       }
       // Fall through to the engine's default prop diff.
@@ -184,12 +194,13 @@ export const StoreProviderLocal = () =>
       return output ?? undefined;
     }),
     reconcile: Effect.fn(function* ({ output }) {
-      const { accountId } = yield* yield* CloudflareEnvironment;
       return {
         storeId: output?.storeId ?? generateLocalId(),
         // Mirror the name Cloudflare uses for an account's default store.
         storeName: output?.storeName ?? "default_secrets_store",
-        accountId: output?.accountId ?? accountId,
+        // Stamped opportunistically — `undefined` in a credential-free dev
+        // session; matches any account in the local diff.
+        accountId: output?.accountId ?? (yield* currentAccountId),
       };
     }),
     delete: Effect.fn(function* () {

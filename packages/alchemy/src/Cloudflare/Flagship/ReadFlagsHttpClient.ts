@@ -27,7 +27,11 @@ export interface FlagshipAuth {
   authorize: <A, E>(
     eff: Effect.Effect<A, E, Credentials | HttpClient.HttpClient>,
   ) => Effect.Effect<A, E>;
-  accountId: string;
+  /**
+   * Deferred so building a client never demands credential resolution — the
+   * account id resolves only when an evaluate op actually runs.
+   */
+  accountId: Effect.Effect<string>;
 }
 
 /**
@@ -60,12 +64,14 @@ export const makeHttpFlagshipClient = (
     appId.pipe(
       Effect.flatMap((id) =>
         auth.authorize(
-          flagship.getAppEvaluate({
-            accountId: auth.accountId,
-            appId: id,
-            flagKey,
-            targetingKey: targetingKeyOf(context),
-          }),
+          Effect.flatMap(auth.accountId, (accountId) =>
+            flagship.getAppEvaluate({
+              accountId,
+              appId: id,
+              flagKey,
+              targetingKey: targetingKeyOf(context),
+            }),
+          ),
         ),
       ),
     );

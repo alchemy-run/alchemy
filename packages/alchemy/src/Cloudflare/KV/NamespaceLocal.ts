@@ -38,8 +38,11 @@ export const makeLocalKVNamespaceBinding = <Client extends object>(options: {
   Effect.gen(function* () {
     // Account + credentials are ambient during stack-eval (the stack's
     // providers layer). Capture the full context so KV HTTP ops can run with
-    // the current credentials — no `host.bind`, no minted token.
-    const { accountId } = yield* yield* CloudflareEnvironment;
+    // the current credentials — no `host.bind`, no minted token. The
+    // accountId stays a DEFERRED effect: it only resolves if the HTTP branch
+    // is actually taken (a real id), so an all-local dev run never forces
+    // credential resolution.
+    const getEnv = yield* CloudflareEnvironment;
     const context = yield* Effect.context<
       Credentials | HttpClient.HttpClient
     >();
@@ -55,7 +58,7 @@ export const makeLocalKVNamespaceBinding = <Client extends object>(options: {
       const namespaceId = yield* namespace.namespaceId;
       const auth: KVAuth = {
         authorize: (eff) => eff.pipe(Effect.provideContext(context)),
-        accountId: Effect.succeed(accountId),
+        accountId: getEnv.pipe(Effect.map((env) => env.accountId)),
       };
       const httpClient = options.makeHttpClient(auth, namespaceId);
       return dispatchByMode(namespaceId, httpClient, (id) =>

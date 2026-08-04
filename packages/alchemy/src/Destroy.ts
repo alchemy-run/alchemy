@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import type * as Scope from "effect/Scope";
 import type { AlchemyContext } from "./AlchemyContext.ts";
 import * as Apply from "./Apply.ts";
+import { demandPlanCredentials } from "./Auth/Demand.ts";
 import * as Plan from "./Plan.ts";
 import type { CompiledStack, StackEffect } from "./Stack.ts";
 import { evalStack } from "./Stack.ts";
@@ -22,6 +23,13 @@ export const destroy = ({
 }) =>
   evalStack(
     stack,
-    (stack) => Plan.destroy(stack).pipe(Effect.flatMap(Apply.apply)),
+    (stack) =>
+      Plan.destroy(stack).pipe(
+        // Credential-free dev: a dev destroy of a purely-local stack must
+        // never touch cloud credentials; rows stamped `providerMode:
+        // "live"` demand them up front. See `Auth/Demand.ts`.
+        Effect.tap((plan) => (dev ? demandPlanCredentials(plan) : Effect.void)),
+        Effect.flatMap(Apply.apply),
+      ),
     { stage, dev, scope },
   );

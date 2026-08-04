@@ -21,9 +21,12 @@ export const makeLocalTunnelClient = <Client>(
 ) =>
   Effect.gen(function* () {
     // Account + credentials are ambient during stack-eval (the stack's
-    // providers layer). Capture the full context so cfd_tunnel HTTP ops can run
-    // with the current credentials — no `host.bind`, no minted token.
-    const { accountId } = yield* yield* CloudflareEnvironment;
+    // providers layer). Capture the full context so cfd_tunnel HTTP ops can
+    // run with the current credentials — no `host.bind`, no minted token. The
+    // accountId stays a DEFERRED effect: it only resolves when a tunnel HTTP
+    // op actually runs, so an all-local dev run never forces credential
+    // resolution just by building this layer.
+    const getEnv = yield* CloudflareEnvironment;
     const context = yield* Effect.context<
       Credentials | HttpClient.HttpClient
     >();
@@ -31,7 +34,7 @@ export const makeLocalTunnelClient = <Client>(
     return Effect.fn(function* () {
       const auth: TunnelAuth = {
         authorize: (eff) => eff.pipe(Effect.provideContext(context)),
-        accountId: Effect.succeed(accountId),
+        accountId: getEnv.pipe(Effect.map((env) => env.accountId)),
       };
       return makeClient(auth);
     });

@@ -8,7 +8,11 @@ import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
-import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import {
+  CloudflareEnvironment,
+  currentAccountId,
+  isAccountDrift,
+} from "../CloudflareEnvironment.ts";
 import { generateLocalId } from "../LocalRuntime.ts";
 import type * as Cloudflare from "../Providers.ts";
 import * as Zone from "../Zone/index.ts";
@@ -182,7 +186,12 @@ export type Bucket = Resource<
     storageClass: Bucket.StorageClass;
     jurisdiction: Bucket.Jurisdiction;
     location: Bucket.Location | undefined;
-    accountId: string;
+    /**
+     * Always stamped by the live provider; the local (dev) provider stamps
+     * it opportunistically and leaves it `undefined` when no credentials
+     * are configured (credential-free `alchemy dev`).
+     */
+    accountId: string | undefined;
     domains: Bucket.CustomDomain[];
     lifecycleRules: Bucket.LifecycleRule[];
     cors: Bucket.CorsRule[];
@@ -1101,11 +1110,13 @@ export const ProviderLive = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const acct = output.accountId ?? accountId;
           yield* Effect.all(
             (output.domains ?? []).map((domain) =>
               r2
                 .deleteBucketDomainCustom({
-                  accountId: output.accountId,
+                  accountId: acct,
                   bucketName: output.bucketName,
                   domain: domain.domain,
                   jurisdiction: output.jurisdiction,
@@ -1123,7 +1134,7 @@ export const ProviderLive = () =>
           yield* emptyBucket(output.bucketName, output.jurisdiction);
           yield* r2
             .deleteBucket({
-              accountId: output.accountId,
+              accountId: acct,
               bucketName: output.bucketName,
               jurisdiction: output.jurisdiction,
             })
@@ -1176,10 +1187,11 @@ export const ProviderLocal = () =>
   Provider.succeed(Bucket, {
     stables: ["accountId"],
     diff: Effect.fn(function* ({ news = {}, output }) {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Non-forcing probe: local diffs must never demand credentials.
+      const accountId = yield* currentAccountId;
       if (!output?.bucketName) return { action: "update" } as const;
       if (!isResolved(news)) return undefined;
-      if (output.accountId !== accountId) {
+      if (isAccountDrift(output.accountId, accountId)) {
         return { action: "replace" } as const;
       }
       // Fall through to the engine's default prop diff.
@@ -1189,13 +1201,14 @@ export const ProviderLocal = () =>
       return output ?? undefined;
     }),
     reconcile: Effect.fn(function* ({ news = {}, output }) {
-      const { accountId } = yield* yield* CloudflareEnvironment;
       return {
         bucketName: output?.bucketName ?? generateLocalId(),
         storageClass: (news.storageClass ?? "Standard") as Bucket.StorageClass,
         jurisdiction: (news.jurisdiction ?? "default") as Bucket.Jurisdiction,
         location: undefined,
-        accountId: output?.accountId ?? accountId,
+        // Stamped opportunistically — `undefined` in a credential-free dev
+        // session; matches any account in the local diff.
+        accountId: output?.accountId ?? (yield* currentAccountId),
         domains: [],
         lifecycleRules: [],
         cors: [],

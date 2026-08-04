@@ -24,7 +24,12 @@ export interface ProviderKeyProps {
    */
   store: {
     storeId: string;
-    accountId: string;
+    /**
+     * Undefined when the store is a local (dev) row created without
+     * configured credentials — the provider falls back to the current
+     * environment's account.
+     */
+    accountId: string | undefined;
   };
   /**
    * The provider API key. Stored in Cloudflare Secrets Store and never bound

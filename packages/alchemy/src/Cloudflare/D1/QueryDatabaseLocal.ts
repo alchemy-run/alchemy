@@ -50,14 +50,17 @@ export const QueryDatabaseLocal = Layer.effect(
   Effect.gen(function* () {
     // Account + credentials are ambient during stack-eval (the stack's
     // providers layer). Capture the full context so the HTTP query ops run
-    // with the current credentials — no `host.bind`, no minted token.
-    const { accountId } = yield* yield* CloudflareEnvironment;
+    // with the current credentials — no `host.bind`, no minted token. The
+    // accountId stays a DEFERRED effect: it only resolves if the HTTP branch
+    // is actually taken (a real database id), so an all-local dev run never
+    // forces credential resolution.
+    const getEnv = yield* CloudflareEnvironment;
     const context = yield* Effect.context<
       Credentials | HttpClient.HttpClient
     >();
     const auth: D1Auth = {
       authorize: (eff) => eff.pipe(Effect.provideContext(context)),
-      accountId,
+      accountId: getEnv.pipe(Effect.map((env) => env.accountId)),
     };
     // The FULL ambient context, for the dev-mode gateway: booting an
     // ephemeral workerd needs the platform services (FileSystem, Path,

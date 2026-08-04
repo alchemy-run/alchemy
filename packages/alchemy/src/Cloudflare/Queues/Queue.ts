@@ -11,7 +11,11 @@ import * as RpcProvider from "../../Local/RpcProvider.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
-import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import {
+  CloudflareEnvironment,
+  currentAccountId,
+  isAccountDrift,
+} from "../CloudflareEnvironment.ts";
 import {
   generateLocalId,
   LOCAL_ENTRY_URL,
@@ -37,7 +41,12 @@ export type Queue = Resource<
   {
     queueId: string;
     queueName: string;
-    accountId: string;
+    /**
+     * Always stamped by the live provider; the local (dev) provider stamps
+     * it opportunistically and leaves it `undefined` when no credentials
+     * are configured (credential-free `alchemy dev`).
+     */
+    accountId: string | undefined;
   },
   never,
   Providers
@@ -189,13 +198,14 @@ export const ProviderLive = () =>
       };
     }),
     delete: Effect.fn(function* ({ output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
       // Dependents (e.g. R2 event notification configs targeting this
       // queue) may still be tearing down concurrently — ride out the
       // dependency violation briefly, then fail loudly instead of
       // silently leaking the queue.
       yield* queues
         .deleteQueue({
-          accountId: output.accountId,
+          accountId: output.accountId ?? accountId,
           queueId: output.queueId,
         })
         .pipe(
@@ -232,16 +242,17 @@ export const ProviderLive = () =>
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (output?.queueId) {
+        const acct = output.accountId ?? accountId;
         return yield* queues
           .getQueue({
-            accountId: output.accountId,
+            accountId: acct,
             queueId: output.queueId,
           })
           .pipe(
             Effect.map((queue) => ({
               queueId: queue.queueId!,
               queueName: queue.queueName!,
-              accountId: output.accountId,
+              accountId: acct,
             })),
             Effect.catchTag(["QueueNotFound", "InvalidRoute"], () =>
               Effect.succeed(undefined),
@@ -291,14 +302,15 @@ export const ProviderLocal = () =>
       return {
         stables: ["accountId"],
         diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
-          const { accountId } = yield* yield* CloudflareEnvironment;
+          // Non-forcing probe: local diffs must never demand credentials.
+          const accountId = yield* currentAccountId;
           if (!output?.queueId) return { action: "update" };
           if (!isResolved(news)) return undefined;
           const name = yield* createQueueName(id, news.name);
           const oldName = output?.queueName
             ? yield* createQueueName(id, olds.name)
             : yield* createQueueName(id, olds.name);
-          if (name !== oldName || output.accountId !== accountId) {
+          if (name !== oldName || isAccountDrift(output.accountId, accountId)) {
             return { action: "replace" };
           }
           // If the resource is a noop, add it to the local runtime state so it's available downstream.
@@ -314,11 +326,12 @@ export const ProviderLocal = () =>
           ).pipe(Option.getOrUndefined);
         }),
         reconcile: Effect.fn(function* ({ id, news = {}, output }) {
-          const { accountId } = yield* yield* CloudflareEnvironment;
           const queue: Queue["Attributes"] = {
             queueId: output?.queueId ?? generateLocalId(),
             queueName: yield* createQueueName(id, news.name),
-            accountId: output?.accountId ?? accountId,
+            // Stamped opportunistically — `undefined` in a credential-free
+            // dev session; matches any account in the local diff.
+            accountId: output?.accountId ?? (yield* currentAccountId),
           };
           MutableHashMap.set(localRuntimeState.queues, queue.queueId, queue);
           return queue;

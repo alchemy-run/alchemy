@@ -10,7 +10,11 @@ import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import {
+  CloudflareEnvironment,
+  currentAccountId,
+  isAccountDrift,
+} from "../CloudflareEnvironment.ts";
 import {
   isLiveId,
   LOCAL_ENTRY_URL,
@@ -71,7 +75,13 @@ export type Consumer = Resource<
     consumerId: string;
     queueId: string;
     scriptName: string;
-    accountId: string;
+    /**
+     * Always stamped by the live provider; the local (dev) provider stamps
+     * it opportunistically and leaves it `undefined` when no credentials
+     * are configured (credential-free `alchemy dev`; a consumer of a LIVE
+     * queue always stamps it — the pull path demands credentials).
+     */
+    accountId: string | undefined;
     deadLetterQueue?: string;
     settings?: ConsumerSettings;
     /**
@@ -478,9 +488,11 @@ export const ConsumerProviderLive = () =>
       // If the consumerId is a `dev:` ID, the resource only exists locally, so we don't need to delete it from Cloudflare.
       if (!isLiveId(output.consumerId)) return;
 
+      const acct =
+        output.accountId ?? (yield* yield* CloudflareEnvironment).accountId;
       yield* queues
         .deleteConsumer({
-          accountId: output.accountId,
+          accountId: acct,
           queueId: output.queueId,
           consumerId: output.consumerId,
         })
@@ -493,7 +505,7 @@ export const ConsumerProviderLive = () =>
       // queue subsystem before the script-side view propagates.
       yield* queues
         .getConsumer({
-          accountId: output.accountId,
+          accountId: acct,
           queueId: output.queueId,
           consumerId: output.consumerId,
         })
@@ -512,9 +524,11 @@ export const ConsumerProviderLive = () =>
     }),
     read: Effect.fn(function* ({ output }) {
       if (output?.consumerId) {
+        const acct =
+          output.accountId ?? (yield* yield* CloudflareEnvironment).accountId;
         const fetched = yield* queues
           .getConsumer({
-            accountId: output.accountId,
+            accountId: acct,
             queueId: output.queueId,
             consumerId: output.consumerId,
           })
@@ -528,7 +542,7 @@ export const ConsumerProviderLive = () =>
             consumerId: fetched.consumerId!,
             queueId: output.queueId,
             scriptName: toObserved(fetched)?.scriptName ?? output.scriptName,
-            accountId: output.accountId,
+            accountId: acct,
             deadLetterQueue: output.deadLetterQueue,
             settings: output.settings,
           };
@@ -612,12 +626,13 @@ export const ConsumerProviderLocal = () =>
             Array.from(MutableHashMap.values(localRuntimeState.queueConsumers)),
           ),
         diff: Effect.fn(function* ({ news, output }) {
-          const { accountId } = yield* yield* CloudflareEnvironment;
+          // Non-forcing probe: local diffs must never demand credentials.
+          const accountId = yield* currentAccountId;
           if (!output) return { action: "update" };
           if (!isResolved(news)) return undefined;
           if (
             output.queueId !== news.queueId ||
-            output.accountId !== accountId
+            isAccountDrift(output.accountId, accountId)
           ) {
             return { action: "replace" };
           }
@@ -646,7 +661,11 @@ export const ConsumerProviderLocal = () =>
           ).pipe(Option.getOrUndefined);
         }),
         reconcile: Effect.fn(function* ({ news, output }) {
-          const { accountId } = yield* yield* CloudflareEnvironment;
+          // Non-forcing probe — a consumer of a LOCAL queue must reconcile
+          // without credentials. The live-queue pull path below upgrades
+          // this to a real (forcing) resolution: that path talks to the
+          // cloud, so demanding credentials there is legitimate.
+          let accountId = yield* currentAccountId;
           // A LIVE queue (`Alchemy.remote()`) consumed by a LOCAL worker:
           // Cloudflare only pushes to deployed consumers, so the local
           // runtime drains the real queue via the HTTP pull API instead.
@@ -655,6 +674,7 @@ export const ConsumerProviderLocal = () =>
           let queueName: string | undefined;
           let pullConsumerId: string | undefined;
           if (isLiveId(news.queueId)) {
+            accountId = (yield* yield* CloudflareEnvironment).accountId;
             const queue = yield* queues.getQueue({
               accountId,
               queueId: news.queueId,
@@ -719,9 +739,14 @@ export const ConsumerProviderLocal = () =>
           // queue. Idempotent: gone-already (or queue deleted first) is
           // success.
           if (output.pullConsumerId && isLiveId(output.queueId)) {
+            // Live-demand path: the pull consumer lives on the real queue,
+            // so credentials are legitimately required to remove it.
+            const accountId =
+              output.accountId ??
+              (yield* yield* CloudflareEnvironment).accountId;
             yield* queues
               .deleteConsumer({
-                accountId: output.accountId,
+                accountId,
                 queueId: output.queueId,
                 consumerId: output.pullConsumerId,
               })

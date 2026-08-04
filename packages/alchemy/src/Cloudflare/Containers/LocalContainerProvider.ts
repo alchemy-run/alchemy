@@ -8,7 +8,7 @@ import { isResolved } from "../../Diff.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { normalizeNulls } from "../../Util/stable.ts";
-import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { currentAccountId } from "../CloudflareEnvironment.ts";
 import { generateLocalId, LOCAL_ENTRY_URL } from "../LocalRuntime.ts";
 import type {
   AnyContainerApplicationProps,
@@ -173,7 +173,10 @@ export const LocalContainerProvider = () =>
         news: AnyContainerApplicationProps;
         output: ContainerApplication["Attributes"] | undefined;
       }) {
-        const { accountId } = yield* yield* CloudflareEnvironment;
+        // Non-forcing probe: the local container must build and run without
+        // configured credentials. Stamped opportunistically — `undefined`
+        // in a credential-free dev session.
+        const accountId = yield* currentAccountId;
         const env = makeContainerEnv(news, accountId);
         const { dev, hash } = yield* prepareImage(id, news);
         return {

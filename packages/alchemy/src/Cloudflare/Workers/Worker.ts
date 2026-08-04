@@ -1014,7 +1014,12 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
       | undefined;
     tags: string[] | undefined;
     durableObjectNamespaces: Record<string, string>;
-    accountId: string;
+    /**
+     * Always stamped by the live provider; the local (dev) provider stamps
+     * it opportunistically and leaves it `undefined` when no credentials
+     * are configured (credential-free `alchemy dev`).
+     */
+    accountId: string | undefined;
     routes: { id: string; pattern: string; zoneId: string }[];
     crons: string[];
     /**

@@ -31,7 +31,11 @@ export interface BrowserAuth {
   authorize: <A, E>(
     eff: Effect.Effect<A, E, Credentials | HttpClient.HttpClient>,
   ) => Effect.Effect<A, E>;
-  accountId: string;
+  /**
+   * Deferred so building a client never demands credential resolution — the
+   * account id resolves only when a browser action actually runs.
+   */
+  accountId: Effect.Effect<string>;
 }
 
 /** A byte stream produced by a binary {@link BrowserClient} action. */
@@ -60,11 +64,15 @@ type BrowserByteStream = Stream.Stream<
 export const makeHttpBrowserClient = (auth: BrowserAuth): BrowserClient => {
   // Run a distilled Browser Rendering op with the injected auth and surface
   // transport/API failures as {@link BrowserError} (matching the native
-  // binding's declared error channel).
+  // binding's declared error channel). The account id resolves per action —
+  // never at client construction — so building the client stays free of
+  // credential resolution.
   const run = <A, E>(
-    eff: Effect.Effect<A, E, Credentials | HttpClient.HttpClient>,
+    make: (
+      accountId: string,
+    ) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>,
   ): Effect.Effect<A, BrowserError, RuntimeContext> =>
-    auth.authorize(eff).pipe(
+    auth.authorize(Effect.flatMap(auth.accountId, make)).pipe(
       Effect.mapError(
         (cause) =>
           new BrowserError({
@@ -77,11 +85,11 @@ export const makeHttpBrowserClient = (auth: BrowserAuth): BrowserClient => {
   // The cf option types (`url`/`html` + puppeteer options) are structurally the
   // REST request body; add the account id and let distilled's encoder drop any
   // fields it doesn't model.
-  const req = (options: unknown) =>
-    ({ accountId: auth.accountId, ...(options as object) }) as never;
+  const req = (accountId: string, options: unknown) =>
+    ({ accountId, ...(options as object) }) as never;
 
   const content = (options: unknown) =>
-    run(browser.createContent(req(options))).pipe(
+    run((accountId) => browser.createContent(req(accountId, options))).pipe(
       Effect.map(
         (result): BrowserContentResult => ({
           success: true,
@@ -92,14 +100,14 @@ export const makeHttpBrowserClient = (auth: BrowserAuth): BrowserClient => {
     );
 
   const markdown = (options: unknown) =>
-    run(browser.createMarkdown(req(options))).pipe(
+    run((accountId) => browser.createMarkdown(req(accountId, options))).pipe(
       Effect.map(
         (result): BrowserMarkdownResult => ({ success: true, result }),
       ),
     );
 
   const links = (options: unknown) =>
-    run(browser.createLink(req(options))).pipe(
+    run((accountId) => browser.createLink(req(accountId, options))).pipe(
       Effect.map(
         (result): BrowserLinksResult => ({
           success: true,
@@ -109,12 +117,12 @@ export const makeHttpBrowserClient = (auth: BrowserAuth): BrowserClient => {
     );
 
   const json = (options: unknown) =>
-    run(browser.createJson(req(options))).pipe(
+    run((accountId) => browser.createJson(req(accountId, options))).pipe(
       Effect.map((result): BrowserJsonResult => ({ success: true, result })),
     );
 
   const scrape = (options: unknown) =>
-    run(browser.createScrape(req(options))).pipe(
+    run((accountId) => browser.createScrape(req(accountId, options))).pipe(
       Effect.map(
         (result): BrowserScrapeResult => ({
           success: true,
@@ -133,7 +141,7 @@ export const makeHttpBrowserClient = (auth: BrowserAuth): BrowserClient => {
     );
 
   const snapshot = (options: unknown) =>
-    run(browser.createSnapshot(req(options))).pipe(
+    run((accountId) => browser.createSnapshot(req(accountId, options))).pipe(
       Effect.map(
         (result): BrowserSnapshotResult => ({
           success: true,

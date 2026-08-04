@@ -637,9 +637,12 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
      */
     applicationName: string;
     /**
-     * The Cloudflare account ID that owns the application.
+     * The Cloudflare account ID that owns the application. Always stamped
+     * by the live provider; the local (dev) provider stamps it
+     * opportunistically and leaves it `undefined` when no credentials are
+     * configured (credential-free `alchemy dev`).
      */
-    accountId: string;
+    accountId: string | undefined;
     /**
      * The scheduling policy in effect for the application's deployments.
      */

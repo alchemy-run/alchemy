@@ -165,7 +165,7 @@ test.provider(
       // The replaced secret is reclaimed — no orphan left in the store.
       const oldSecret = yield* secretsStore
         .getStoreSecret({
-          accountId: initial.secret.accountId,
+          accountId: initial.secret.accountId!,
           storeId: initial.secret.storeId,
           secretId: initial.secret.secretId,
         })
@@ -214,7 +214,7 @@ test.provider(
       // `SecretNotFound`, not `StoreNotFound`.
       const secretAfter = yield* secretsStore
         .getStoreSecret({
-          accountId: deployed.secret.accountId,
+          accountId: deployed.secret.accountId!,
           storeId: deployed.secret.storeId,
           secretId: deployed.secret.secretId,
         })

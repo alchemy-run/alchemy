@@ -32,7 +32,12 @@ export type StoreSecretProps = {
    */
   store: {
     storeId: string;
-    accountId: string;
+    /**
+     * Undefined when the store is a local (dev) row created without
+     * configured credentials — the live provider falls back to the
+     * current environment's account.
+     */
+    accountId: string | undefined;
   };
   /**
    * The name of the secret within the store.
@@ -61,7 +66,12 @@ export type Secret = Resource<
     secretId: string;
     secretName: string;
     storeId: string;
-    accountId: string;
+    /**
+     * Always stamped by the live provider; the local (dev) provider stamps
+     * it opportunistically and leaves it `undefined` when no credentials
+     * are configured (credential-free `alchemy dev`).
+     */
+    accountId: string | undefined;
     status: SecretStatus;
     scopes: string[];
     comment: string | undefined;
@@ -131,7 +141,11 @@ export const SecretProviderLive = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const name = resolveName(id, news.name);
       const scopes = resolveScopes(news.scopes);
-      const accountId = news.store.accountId;
+      // A store row created by the LOCAL provider without credentials has
+      // no stamped account — the live path is a credential demand anyway,
+      // so fall back to the current environment's account.
+      const accountId =
+        news.store.accountId ?? (yield* yield* CloudflareEnvironment).accountId;
       const storeId = news.store.storeId;
 
       // Observe — re-fetch the cached secret; fall back to a name
@@ -149,7 +163,7 @@ export const SecretProviderLive = () =>
       if (output?.secretId) {
         observed = yield* secretsStore
           .getStoreSecret({
-            accountId: output.accountId,
+            accountId: output.accountId ?? accountId,
             storeId: output.storeId,
             secretId: output.secretId,
           })
@@ -254,9 +268,10 @@ export const SecretProviderLive = () =>
       };
     }),
     delete: Effect.fn(function* ({ output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
       yield* secretsStore
         .deleteStoreSecret({
-          accountId: output.accountId,
+          accountId: output.accountId ?? accountId,
           storeId: output.storeId,
           secretId: output.secretId,
         })
@@ -270,9 +285,11 @@ export const SecretProviderLive = () =>
     }),
     read: Effect.fn(function* ({ id, olds, output }) {
       if (output?.secretId) {
+        const acct =
+          output.accountId ?? (yield* yield* CloudflareEnvironment).accountId;
         return yield* secretsStore
           .getStoreSecret({
-            accountId: output.accountId,
+            accountId: acct,
             storeId: output.storeId,
             secretId: output.secretId,
           })
@@ -281,7 +298,7 @@ export const SecretProviderLive = () =>
               secretId: secret.id,
               secretName: secret.name,
               storeId: secret.storeId,
-              accountId: output.accountId,
+              accountId: acct,
               status: asSecretStatus(secret.status),
               scopes: output.scopes,
               comment: secret.comment ?? undefined,

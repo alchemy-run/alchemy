@@ -41,8 +41,11 @@ export const WriteQueueLocal = Layer.effect(
   Effect.gen(function* () {
     // Account + credentials are ambient during stack-eval (the stack's
     // providers layer). Capture the full context so the bulk-push effect can
-    // run with the current credentials instead of a scoped token.
-    const { accountId } = yield* yield* CloudflareEnvironment;
+    // run with the current credentials instead of a scoped token. The
+    // accountId stays a DEFERRED effect: it only resolves when an HTTP op
+    // actually runs against a real queue, so an all-local dev run never
+    // forces credential resolution.
+    const getEnv = yield* CloudflareEnvironment;
     const context = yield* Effect.context<
       Credentials | HttpClient.HttpClient
     >();
@@ -55,7 +58,7 @@ export const WriteQueueLocal = Layer.effect(
       return makeWriteQueueHttpClient(
         {
           authorize: (eff) => eff.pipe(Effect.provideContext(context)),
-          accountId: Effect.succeed(accountId),
+          accountId: getEnv.pipe(Effect.map((env) => env.accountId)),
         },
         queueId,
       );

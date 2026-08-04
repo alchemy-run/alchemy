@@ -4833,6 +4833,11 @@ export const LiveWorkerProvider = () =>
           );
         }),
         delete: Effect.fn(function* ({ output }) {
+          // Rows stamped by the local provider in a credential-free dev
+          // session have no accountId — deleting them live is a credential
+          // demand anyway, so fall back to the environment's account.
+          const acct =
+            output.accountId ?? (yield* yield* CloudflareEnvironment).accountId;
           // Version workers own a version, not the script — `workerName` is
           // the *parent's* script and must never be deleted here. Versions
           // can't be deleted through the API (they age out of Cloudflare's
@@ -4857,7 +4862,7 @@ export const LiveWorkerProvider = () =>
             );
             const { deployments } = yield* workers
               .listScriptDeployments({
-                accountId: output.accountId,
+                accountId: acct,
                 scriptName: output.versionOf,
               })
               .pipe(
@@ -4889,7 +4894,7 @@ export const LiveWorkerProvider = () =>
             }
             yield* workers
               .createScriptDeployment({
-                accountId: output.accountId,
+                accountId: acct,
                 scriptName: output.versionOf,
                 strategy: "percentage",
                 versions: [{ versionId: stable.versionId, percentage: 100 }],
@@ -4904,7 +4909,7 @@ export const LiveWorkerProvider = () =>
           // the script straight out of its dispatch namespace.
           if (output.namespace) {
             yield* deleteWorkerScript(
-              output.accountId,
+              acct,
               output.workerName,
               output.namespace,
             ).pipe(
@@ -4924,7 +4929,7 @@ export const LiveWorkerProvider = () =>
           // adopted workers whose domains we never recorded.
           const liveDomains = yield* workers
             .listDomains({
-              accountId: output.accountId,
+              accountId: acct,
               service: output.workerName,
             })
             .pipe(
@@ -4968,7 +4973,7 @@ export const LiveWorkerProvider = () =>
                   ? [
                       workers
                         .deleteDomain({
-                          accountId: output.accountId,
+                          accountId: acct,
                           domainId: d.id,
                         })
                         .pipe(
@@ -4996,29 +5001,39 @@ export const LiveWorkerProvider = () =>
               { concurrency: "unbounded" },
             );
           }
-          yield* deleteWorkerScript(
-            output.accountId,
-            output.workerName,
-            undefined,
-          ).pipe(Effect.catchTag("WorkerNotFound", () => Effect.void));
+          yield* deleteWorkerScript(acct, output.workerName, undefined).pipe(
+            Effect.catchTag("WorkerNotFound", () => Effect.void),
+          );
         }),
         tail: ({ output }) =>
-          telemetry.tailScript({
-            accountId: output.accountId,
-            scriptName: output.workerName,
-          }),
+          Stream.unwrap(
+            Effect.gen(function* () {
+              const accountId =
+                output.accountId ??
+                (yield* yield* CloudflareEnvironment).accountId;
+              return telemetry.tailScript({
+                accountId,
+                scriptName: output.workerName,
+              });
+            }),
+          ),
         logs: ({ output, options }) =>
-          telemetry.queryLogs({
-            accountId: output.accountId,
-            filters: [
-              {
-                key: "$workers.scriptName",
-                operation: "eq",
-                type: "string",
-                value: output.workerName,
-              },
-            ],
-            options,
+          Effect.gen(function* () {
+            const accountId =
+              output.accountId ??
+              (yield* yield* CloudflareEnvironment).accountId;
+            return yield* telemetry.queryLogs({
+              accountId,
+              filters: [
+                {
+                  key: "$workers.scriptName",
+                  operation: "eq",
+                  type: "string",
+                  value: output.workerName,
+                },
+              ],
+              options,
+            });
           }),
       });
     }),

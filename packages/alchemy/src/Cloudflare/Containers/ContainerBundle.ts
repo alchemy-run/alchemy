@@ -44,7 +44,10 @@ import type { AnyContainerApplicationProps } from "./ContainerApplication.ts";
  */
 export const makeContainerEnv = (
   props: AnyContainerApplicationProps,
-  accountId: string,
+  // Undefined only on the local (dev) path when no credentials are
+  // configured — the account-id env var is then simply not injected
+  // (HTTP capability fallbacks need it only against real resources).
+  accountId: string | undefined,
 ) => {
   const env: Record<string, string | Redacted.Redacted<string>> = {};
   for (const [name, value] of Object.entries(props.env ?? {})) {
@@ -56,7 +59,7 @@ export const makeContainerEnv = (
   for (const value of props.environmentVariables ?? []) {
     env[value.name] = value.value;
   }
-  if (!env.ALCHEMY_CLOUDFLARE_ACCOUNT_ID) {
+  if (!env.ALCHEMY_CLOUDFLARE_ACCOUNT_ID && accountId !== undefined) {
     env.ALCHEMY_CLOUDFLARE_ACCOUNT_ID = accountId;
   }
   return env;

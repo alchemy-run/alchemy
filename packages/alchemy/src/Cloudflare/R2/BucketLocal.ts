@@ -34,9 +34,11 @@ export const makeLocalBucketBinding = <Client extends object>(options: {
 }) =>
   Effect.gen(function* () {
     // Account + credentials are ambient during stack-eval (the stack's
-    // providers layer). Capture the full context so each op can be run with the
-    // current credentials.
-    const { accountId } = yield* yield* CloudflareEnvironment;
+    // providers layer). Capture the full context so each op can be run with
+    // the current credentials. The accountId stays a DEFERRED effect: it only
+    // resolves if the HTTP branch is actually taken (a real bucket name), so
+    // an all-local dev run never forces credential resolution.
+    const getEnv = yield* CloudflareEnvironment;
     const context = yield* Effect.context<
       Credentials | HttpClient.HttpClient
     >();
@@ -48,7 +50,7 @@ export const makeLocalBucketBinding = <Client extends object>(options: {
 
     const auth: R2Auth = {
       authorize: (eff) => eff.pipe(Effect.provideContext(context)),
-      accountId: Effect.succeed(accountId),
+      accountId: getEnv.pipe(Effect.map((env) => env.accountId)),
     };
 
     return Effect.fn(function* (bucket: Bucket) {

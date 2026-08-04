@@ -340,26 +340,30 @@ export const CloudflareAuth = AuthProviderLayer<
       };
     });
 
-    const configureInteractive = (profileName: string) =>
-      Clank.select({
-        message: "Cloudflare authentication method",
-        options,
-      }).pipe(
-        Effect.flatMap((method) =>
-          Match.value(method).pipe(
-            Match.when("env", () => Effect.succeed({ method: "env" as const })),
-            Match.when("oauth", () => configureOAuth(profileName)),
-            Match.when("stored", () => loginStored(profileName)),
-            Match.exhaustive,
-          ),
-        ),
-      );
+    const configureInteractive = (profileName: string, ctx: ConfigureContext) =>
+      Effect.gen(function* () {
+        // Explain WHY credentials are being demanded (e.g. which dev-plan
+        // resources require the real cloud) before the first prompt.
+        if (ctx.reason !== undefined) {
+          yield* Clank.info(ctx.reason);
+        }
+        const method = yield* Clank.select({
+          message: "Cloudflare authentication method",
+          options,
+        });
+        return yield* Match.value(method).pipe(
+          Match.when("env", () => Effect.succeed({ method: "env" as const })),
+          Match.when("oauth", () => configureOAuth(profileName)),
+          Match.when("stored", () => loginStored(profileName)),
+          Match.exhaustive,
+        );
+      });
 
     const configureCredentials = (profileName: string, ctx: ConfigureContext) =>
       Effect.gen(function* () {
         const config = ctx.ci
           ? { method: "env" as const }
-          : yield* configureInteractive(profileName);
+          : yield* configureInteractive(profileName, ctx);
         // Re-configuring auth may point this profile at a different
         // Cloudflare account. The cached state-store credentials
         // (`~/.alchemy/credentials/{profile}/cloudflare-state-store.json`)

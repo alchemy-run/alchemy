@@ -11,7 +11,8 @@
  * under the harness) is the class of bug this suite exists to catch.
  *
  * Coverage per binding, all against the local simulators (no cloud
- * resources beyond the state store):
+ * resources at all — `Cloudflare.state()` resolves to the local file store
+ * during dev, so even state stays on this machine):
  *   - assets            → `/` serves the static index
  *   - vars + secrets    → `/env` echoes MY_VARIABLE / MY_SECRET
  *   - self_url          → `/env`.PUBLIC_URL and EffectWorker `/url`

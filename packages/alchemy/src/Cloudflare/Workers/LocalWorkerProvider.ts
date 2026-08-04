@@ -64,7 +64,10 @@ import type * as Bundle from "../../Bundle/Bundle.ts";
 import * as LocalProvider from "../../Local/LocalProvider.ts";
 import { Stack } from "../../Stack.ts";
 import { unwrapRedacted } from "../../Util/index.ts";
-import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import {
+  CloudflareEnvironment,
+  probeAccountId,
+} from "../CloudflareEnvironment.ts";
 import {
   isLiveId,
   isLocalId,
@@ -141,6 +144,11 @@ export const LocalWorkerProvider = () =>
       const localRuntimeState = yield* LocalRuntimeState;
       const workerProxy = yield* WorkerProxy.WorkerProxy;
       const cloudflareEnv = yield* CloudflareEnvironment;
+      // Non-forcing accountId probe: the local worker must build, bundle,
+      // and serve without configured credentials (credential-free
+      // `alchemy dev`). Resolves only when stored config proves resolution
+      // is non-interactive; otherwise `undefined`.
+      const probeCurrentAccountId = probeAccountId(cloudflareEnv);
       const context = yield* Effect.context<RuntimeServices>();
       const rootScope = yield* Effect.scope;
 
@@ -171,6 +179,14 @@ export const LocalWorkerProvider = () =>
               if (!consumer.queueName) {
                 return yield* Effect.die(
                   `Consumer of live queue ${consumer.queueId} is missing its resolved queueName — re-deploy the consumer`,
+                );
+              }
+              // A live-queue consumer always reconciles through the pull
+              // path, which forces credential resolution and stamps the
+              // account — a missing accountId means a stale/corrupt row.
+              if (consumer.accountId === undefined) {
+                return yield* Effect.die(
+                  `Consumer of live queue ${consumer.queueId} is missing its accountId — re-deploy the consumer`,
                 );
               }
               consumers.push({
@@ -506,7 +522,7 @@ export const LocalWorkerProvider = () =>
         config: WorkerConfig,
         selfUrl: string | undefined,
       ) {
-        const { accountId } = yield* cloudflareEnv;
+        const accountId = yield* probeCurrentAccountId;
         // Resource-backed env entries (e.g. `env: { KV: namespace }`) are
         // represented by their binding descriptor (same name) — don't ALSO
         // serialize the resolved attributes as a duplicate json binding.
@@ -518,7 +534,12 @@ export const LocalWorkerProvider = () =>
           Text.local("ALCHEMY_WORKER_NAME", config.name),
           Text.local("ALCHEMY_STACK_NAME", stack.name),
           Text.local("ALCHEMY_STAGE", stack.stage),
-          Text.local("ALCHEMY_CLOUDFLARE_ACCOUNT_ID", accountId),
+          // Injected only when the account is known — in-worker HTTP
+          // capability fallbacks need it only against real (remote)
+          // resources, which require credentials anyway.
+          ...(accountId !== undefined
+            ? [Text.local("ALCHEMY_CLOUDFLARE_ACCOUNT_ID", accountId)]
+            : []),
           ...Object.entries(config.env ?? {})
             .filter(([key]) => !descriptorNames.has(key))
             .map(([key, value]) => {
@@ -931,7 +952,7 @@ export const LocalWorkerProvider = () =>
               }
             }
           }
-          const { accountId } = yield* cloudflareEnv;
+          const accountId = yield* probeCurrentAccountId;
           const urls =
             news.dev?.mode === "external"
               ? // news.dev.url may be an unresolved output; avoid trying to resolve it here.
@@ -960,7 +981,7 @@ export const LocalWorkerProvider = () =>
         }),
 
         start: Effect.fn(function* ({ id, config }) {
-          const { accountId } = yield* cloudflareEnv;
+          const accountId = yield* probeCurrentAccountId;
 
           // `dev: { mode: "external" }` opts out of running a local Worker
           // entirely — typically because an external dev process

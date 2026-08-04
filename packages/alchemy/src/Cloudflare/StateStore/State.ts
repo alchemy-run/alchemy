@@ -11,7 +11,9 @@ import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 import crypto from "node:crypto";
 
 import * as Config from "effect/Config";
+import type * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
+import type * as Path from "effect/Path";
 import { isHttpClientError } from "effect/unstable/http/HttpClientError";
 import { adopt } from "../../AdoptPolicy.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
@@ -54,10 +56,88 @@ import {
 
 const CI = Config.boolean("CI").pipe(Config.withDefault(false));
 
+/**
+ * `StateService.id` reported on `state_store.init` telemetry
+ * (`alchemy.state_store.id`) when {@link state} resolves to the local file
+ * store during `alchemy dev`. Distinct from `"local"` (an explicit
+ * `Alchemy.localState()`) and `"cloudflare-http"` (the deployed cloud store)
+ * so dashboards can see the dev-resolved-local path honestly.
+ */
+export const DEV_LOCAL_STATE_ID = "cloudflare-dev-local";
+
+/**
+ * The branch selector behind {@link state}: dev runs ALWAYS resolve to the
+ * machine-local file store; everything else uses the Cloudflare-deployed
+ * HTTP store. Deterministic — the decision depends only on the run mode,
+ * never on whether Cloudflare credentials happen to be present.
+ *
+ * @internal exported for unit testing
+ */
+export const resolveStateStoreMode = (
+  context: { dev: boolean } | undefined,
+): "dev-local" | "cloud" => (context?.dev ? "dev-local" : "cloud");
+
+/**
+ * Init effect for the dev-local branch of {@link state}: the same
+ * machine-local file store as `Alchemy.localState()`
+ * (`.alchemy/state/<stack>/<stage>/`), re-labeled with
+ * {@link DEV_LOCAL_STATE_ID} for telemetry. Requires only `FileSystem` and
+ * `Path` — by construction it can never demand Cloudflare credentials.
+ *
+ * @internal exported for unit testing
+ */
+export const makeDevLocalState: Effect.Effect<
+  StateService,
+  never,
+  FileSystem.FileSystem | Path.Path
+> = Effect.gen(function* () {
+  yield* Clank.info(
+    "dev: Cloudflare.state() using local state at .alchemy/state",
+  );
+  const local = yield* makeLocalState();
+  return { ...local, id: DEV_LOCAL_STATE_ID };
+});
+
+/**
+ * State store layer backed by the Cloudflare-deployed HTTP state store (the
+ * `alchemy-state-store` Worker + Durable Object), bootstrapped/upgraded on
+ * first use.
+ *
+ * During `alchemy dev` (`AlchemyContext.dev`), the layer resolves to the
+ * machine-local file store at `.alchemy/state/<stack>/<stage>/` instead —
+ * always, regardless of whether Cloudflare credentials are available. Dev
+ * state describes machine-local emulator instances (`dev:` ids, localhost
+ * URLs, sidecar processes) that are meaningless on any other machine, so a
+ * cloud store holding those rows is wrong-shaped — and keeping dev state
+ * local means `alchemy dev` demands no Cloudflare credentials for state.
+ *
+ * Consequence: with `Cloudflare.state()`, dev and deploy state are disjoint.
+ * A deploy after a dev session starts from the cloud store and creates fresh
+ * live resources (no local→live mode-switch replacement), and a dev session
+ * never sees deploy rows — the same split `Alchemy.localState()` users
+ * already have between machines.
+ */
 export const state = () =>
   Layer.effect(
     State,
     Effect.gen(function* () {
+      // Resolve the run context FIRST: dev runs never touch the cloud store,
+      // so the branch must be decided before anything can demand credentials
+      // or prompt.
+      const alchemyContext = Option.getOrUndefined(
+        yield* Effect.serviceOption(AlchemyContext),
+      );
+      if (resolveStateStoreMode(alchemyContext) === "dev-local") {
+        const localContext = yield* Effect.context<
+          FileSystem.FileSystem | Path.Path
+        >();
+        return yield* Effect.cached(
+          makeDevLocalState.pipe(
+            recordStateStoreInit,
+            Effect.provideContext(localContext),
+          ),
+        );
+      }
       const isCI = yield* CI;
       const scriptName = STATE_STORE_SCRIPT_NAME;
       const profileName = yield* ALCHEMY_PROFILE;
@@ -66,9 +146,7 @@ export const state = () =>
       // `deploy --yes` flows in here (via AlchemyContext.updateStateStore) to
       // auto-accept an out-of-date state store upgrade instead of prompting.
       // Optional so callers that don't provide AlchemyContext keep the prompt.
-      const autoUpdateStateStore =
-        Option.getOrUndefined(yield* Effect.serviceOption(AlchemyContext))
-          ?.updateStateStore ?? false;
+      const autoUpdateStateStore = alchemyContext?.updateStateStore ?? false;
       const context = yield* Effect.context<Effect.Services<typeof init>>();
 
       const init = Effect.gen(function* () {
