@@ -9,6 +9,7 @@ import { describe, expect, it } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -1022,6 +1023,88 @@ describe("Output.upstream / hasOutputs / resolveUpstream", () => {
     });
     expect(Object.keys(result).sort()).toEqual(["RA", "RB"]);
   });
+});
+
+// effect ≥4.0.0-beta.103's Context is self-referential (cacheRoot points back
+// at itself), which sent the prop walkers into unbounded recursion during
+// `Plan.make` of the Cloudflare state-store bootstrap stack (#1082). These
+// tests pin (a) cycle-safety for arbitrary cyclic props and (b) opacity of
+// Effect/Layer/Context values in every walker.
+describe("upstream walkers: cycles and opaque effect values (#1082)", () => {
+  it("upstreamAny terminates on a cyclic plain object and still finds resources", () => {
+    const a = fakeResource("Test.A", "CY-A");
+    const cyclic: any = { name: "cycle" };
+    cyclic.self = cyclic;
+    const props = { config: cyclic, dep: Output.of(a) };
+    expect(Object.keys(Output.upstreamAny(props))).toEqual(["CY-A"]);
+  });
+
+  it("resolveUpstream terminates on mutually-cyclic objects and arrays", () => {
+    const x: any = { tag: "x" };
+    const y: any = { tag: "y", x };
+    x.y = y;
+    const arr: any[] = [x];
+    x.arr = arr;
+    expect(Output.resolveUpstream({ x, y, arr })).toEqual({});
+  });
+
+  it("a shared (diamond) sub-object still contributes its resources", () => {
+    const a = fakeResource("Test.A", "DI-A");
+    const shared = { dep: Output.of(a) };
+    const result = Output.upstreamAny({ left: shared, right: shared });
+    expect(Object.keys(result)).toEqual(["DI-A"]);
+  });
+
+  it("treats Effect, Layer, and Context values as leaves", () => {
+    const effect = Effect.succeed(1);
+    const layer = Layer.succeed(Stage, "test");
+    const context = Context.empty();
+    expect(Output.upstreamAny({ effect, layer, context })).toEqual({});
+    expect(Output.resolveUpstream({ effect, layer, context })).toEqual({});
+    expect(Output.hasOutputs({ effect, layer, context })).toBe(false);
+  });
+
+  it("mimics a Worker `exports` entry (constructor Effect + services Context)", () => {
+    const a = fakeResource("Test.A", "EX-A");
+    const props = {
+      name: "worker",
+      exports: {
+        Store: {
+          kind: "durableObject",
+          constructor: Effect.void,
+          services: Context.empty(),
+        },
+      },
+      dep: Output.of(a),
+    };
+    expect(Object.keys(Output.upstreamAny(props))).toEqual(["EX-A"]);
+  });
+
+  it.effect("evaluate passes Effect/Layer/Context through by identity", () =>
+    provideState(
+      Effect.gen(function* () {
+        const effect = Effect.succeed(1);
+        const layer = Layer.succeed(Stage, "test");
+        const context = Context.empty();
+        const result = yield* Output.evaluate({ effect, layer, context }, {});
+        expect(result.effect).toBe(effect);
+        expect(result.layer).toBe(layer);
+        expect(result.context).toBe(context);
+      }),
+    ),
+  );
+
+  it.effect("evaluate still resolves Config values (Configs are Effects)", () =>
+    provideState(
+      Effect.gen(function* () {
+        const result = yield* Output.evaluate(
+          { value: Config.succeed("resolved") },
+          {},
+        );
+        expect(result.value).toBe("resolved");
+      }),
+    ),
+  );
 });
 
 describe("Output.toEnvKey / toUpper", () => {

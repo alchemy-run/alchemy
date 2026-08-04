@@ -44,12 +44,27 @@ export const hasUnresolvedInputs = <T>(value: Input<NoInfer<T>>): value is T =>
 export const isResolved = <T>(value: Input<T>): value is T =>
   !_hasUnresolved(value);
 
-const _hasUnresolved = (value: unknown): boolean => {
+const _hasUnresolved = (
+  value: unknown,
+  seen: WeakSet<object> = new WeakSet(),
+): boolean => {
   if (value == null || isPrimitive(value)) return false;
   if (Output.isExpr(value) || Effect.isEffect(value)) return true;
-  if (Array.isArray(value)) return value.some(_hasUnresolved);
+  // Layer/Context leaves (Effects are caught above): runtime-only values
+  // whose internals must not be walked — cyclic on effect ≥4.0.0-beta.103
+  // (#1082).
+  if (Output.isOpaqueRuntimeValue(value)) return false;
+  if (Array.isArray(value)) {
+    if (seen.has(value)) return false;
+    seen.add(value);
+    return value.some((v) => _hasUnresolved(v, seen));
+  }
   if (typeof value === "object") {
-    return Object.values(value as Record<string, unknown>).some(_hasUnresolved);
+    if (seen.has(value)) return false;
+    seen.add(value);
+    return Object.values(value as Record<string, unknown>).some((v) =>
+      _hasUnresolved(v, seen),
+    );
   }
   return false;
 };
@@ -73,7 +88,16 @@ export const stripUnresolved = <T>(value: T): T => _stripUnresolved(value) as T;
 
 const _stripUnresolved = (value: unknown): unknown => {
   if (value == null || isPrimitive(value)) return value;
-  if (Output.isExpr(value) || Effect.isEffect(value)) return undefined;
+  // Layer/Context are dropped like Effects: runtime-only wiring that can't
+  // be persisted (a Context is cyclic on effect ≥4.0.0-beta.103, so it
+  // can't even round-trip through JSON — #1082).
+  if (
+    Output.isExpr(value) ||
+    Effect.isEffect(value) ||
+    Output.isOpaqueRuntimeValue(value)
+  ) {
+    return undefined;
+  }
   // Opaque resolved values — rebuilding them structurally would strip
   // their prototype (see resolveInput in Plan.ts for the same rule).
   if (Redacted.isRedacted(value) || Duration.isDuration(value)) return value;
@@ -106,7 +130,11 @@ const _stripEffects = (value: unknown): unknown => {
   // must be tested BEFORE `Effect.isEffect` because Output exprs are
   // yieldable and would otherwise be misclassified as plain Effects.
   if (Output.isExpr(value)) return value;
-  if (Effect.isEffect(value)) return undefined;
+  // Layer/Context are dropped with Effects — same runtime-only rationale,
+  // and their internals are cyclic on effect ≥4.0.0-beta.103 (#1082).
+  if (Effect.isEffect(value) || Output.isOpaqueRuntimeValue(value)) {
+    return undefined;
+  }
   if (Redacted.isRedacted(value) || Duration.isDuration(value)) return value;
   if (Array.isArray(value)) return value.map(_stripEffects);
   if (typeof value === "object") {
@@ -193,6 +221,9 @@ export const deepEqual = (
 
 const canonicalize = (value: unknown, stripNullish: boolean): unknown => {
   if (stripNullish && value == null) return undefined;
+  // Effect/Layer/Context can reach here through provider-supplied values;
+  // never walk them (cyclic on effect ≥4.0.0-beta.103 — #1082).
+  if (Output.isOpaqueRuntimeValue(value)) return undefined;
   if (Redacted.isRedacted(value)) {
     return {
       _tag: "Redacted",

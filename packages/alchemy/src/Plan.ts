@@ -499,11 +499,19 @@ export const make = <A>(
           // `Config.redacted` resolves to a `Redacted`, which stays opaque via
           // the branch below.
           return yield* resolveInput(yield* input);
-        } else if (Duration.isDuration(input) || Redacted.isRedacted(input)) {
+        } else if (
+          Duration.isDuration(input) ||
+          Redacted.isRedacted(input) ||
+          Output.isOpaqueRuntimeValue(input)
+        ) {
           // Opaque values that are resolved downstream. We don't walk them
           // because it would strip their prototype, resulting in a plain object
           // that downstream consumers can't interpret. Redacted additionally
-          // stays wrapped to preserve the secrecy boundary.
+          // stays wrapped to preserve the secrecy boundary. Effect/Layer/
+          // Context values (e.g. a Worker's `exports`) are also leaves — their
+          // internals are cyclic on effect ≥4.0.0-beta.103 (#1082). This
+          // branch must come after `Config.isConfig`: Configs are Effects but
+          // still resolve.
           return input;
         } else if (Array.isArray(input)) {
           return yield* Effect.all(input.map(resolveInput), {
@@ -560,7 +568,11 @@ export const make = <A>(
         return input;
       } else if (!input || typeof input !== "object") {
         return input;
-      } else if (Duration.isDuration(input) || Redacted.isRedacted(input)) {
+      } else if (
+        Duration.isDuration(input) ||
+        Redacted.isRedacted(input) ||
+        Output.isOpaqueRuntimeValue(input)
+      ) {
         return input;
       } else if (Array.isArray(input)) {
         return input.map(materializeStableRefs);

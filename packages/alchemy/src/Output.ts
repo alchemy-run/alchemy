@@ -1,8 +1,10 @@
 import * as Config from "effect/Config";
+import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
+import * as Layer from "effect/Layer";
 import type { Pipeable } from "effect/Pipeable";
 import * as Redacted from "effect/Redacted";
 import { SingleShotGen } from "effect/Utils";
@@ -705,8 +707,17 @@ export const evaluate: <A, Req = never>(
       // Plan.ts for rationale. `Config.redacted` resolves to a `Redacted`,
       // which stays opaque via the branch below.
       return yield* evaluate(yield* expr, upstream);
-    } else if (Duration.isDuration(expr) || Redacted.isRedacted(expr)) {
+    } else if (
+      Duration.isDuration(expr) ||
+      Redacted.isRedacted(expr) ||
+      isOpaqueRuntimeValue(expr)
+    ) {
       // Opaque value — see resolveInput in Plan.ts for rationale.
+      // Effect/Layer/Context values (e.g. a Worker's `exports`) pass through
+      // untouched: rebuilding them entry-by-entry would strip their
+      // prototype, and their internals are cyclic on effect ≥4.0.0-beta.103
+      // (#1082). This branch sits after `Config.isConfig` on purpose —
+      // Configs are Effects but must still resolve.
       return expr;
     } else if (typeof expr === "object" && expr !== null) {
       return Object.fromEntries(
@@ -723,31 +734,87 @@ export const evaluate: <A, Req = never>(
 export const hasOutputs = (value: any): value is Output<any, any> =>
   Object.keys(upstreamAny(value)).length > 0;
 
+/**
+ * Is `value` a runtime-only effect-library construct (an `Effect`, `Layer`,
+ * or `Context`)?
+ *
+ * These appear as data inside resource Props — e.g. an Effect-native
+ * Worker's `exports` carries each Durable Object's `constructor` Effect and
+ * its captured `services` Context — but they can never hold resource
+ * references reachable by plain enumeration, and their internals are not
+ * safe to walk structurally: effect ≥ 4.0.0-beta.103's Context is
+ * self-referential (`cacheRoot` points back at itself), so a structural walk
+ * recurses until the stack overflows (#1082). Every deep walker in the
+ * engine must treat these values as leaves.
+ *
+ * NOTE: Output exprs are yieldable (`Effect.isEffect` reports true for
+ * them), so callers must check `isExpr`/`isOutput` BEFORE this predicate.
+ */
+export const isOpaqueRuntimeValue = (value: unknown): boolean =>
+  Effect.isEffect(value) || Layer.isLayer(value) || Context.isContext(value);
+
+/**
+ * Opaque leaves for the upstream walkers: effect-library runtime values plus
+ * resolved `Duration`/`Redacted` instances — none of them can contain
+ * resource references, so walking their internals is at best wasted work and
+ * at worst (cyclic internals) unbounded recursion.
+ */
+const isUpstreamLeaf = (value: unknown): boolean =>
+  isOpaqueRuntimeValue(value) ||
+  Duration.isDuration(value) ||
+  Redacted.isRedacted(value);
+
+/**
+ * Cycle guard shared by the upstream walkers. Marks `value` as visited in
+ * `seen`; returns true when it was already visited (the caller returns `{}`
+ * — the first visit already contributed the subtree's resources to the
+ * FQN-keyed union, so skipping repeats is lossless).
+ */
+const alreadySeen = (value: object, seen: WeakSet<object>): boolean => {
+  if (seen.has(value)) {
+    return true;
+  }
+  seen.add(value);
+  return false;
+};
+
 export const upstreamAny = (
   value: any,
+  seen: WeakSet<object> = new WeakSet(),
 ): {
   [ID in string]: Resource;
 } => {
   if (isResource(value)) {
     return { [value.FQN]: value as Resource };
   } else if (isExpr(value)) {
-    return upstream(value);
+    return upstream(value, seen);
+  } else if (isUpstreamLeaf(value)) {
+    return {};
   } else if (Array.isArray(value)) {
-    return Object.assign({}, ...value.map(resolveUpstream));
+    if (alreadySeen(value, seen)) {
+      return {};
+    }
+    return Object.assign({}, ...value.map((v) => resolveUpstream(v, seen)));
   } else if (
     value &&
     (typeof value === "object" || typeof value === "function")
   ) {
+    if (alreadySeen(value, seen)) {
+      return {};
+    }
     return Object.assign(
       {},
-      ...Object.values(value).map((value) => resolveUpstream(value)),
+      ...Object.values(value).map((value) => resolveUpstream(value, seen)),
     );
   }
   return {};
 };
 
 // TODO(sam): add a type
-export const upstream = <E extends Output<any, any>>(expr: E): any => {
+export const upstream = <E extends Output<any, any>>(
+  expr: E,
+  seen: WeakSet<object> = new WeakSet(),
+): any => {
   if (isResource(expr)) {
     return {
       [(expr as unknown as Resource).FQN]: expr,
@@ -757,42 +824,61 @@ export const upstream = <E extends Output<any, any>>(expr: E): any => {
       [expr.src.FQN]: expr.src,
     };
   } else if (isPropExpr(expr)) {
-    return upstream(expr.expr);
+    return upstream(expr.expr, seen);
   } else if (isAllExpr(expr)) {
-    return Object.assign({}, ...expr.outs.map((out) => upstream(out)));
+    return Object.assign({}, ...expr.outs.map((out) => upstream(out, seen)));
   } else if (
     isEffectExpr(expr) ||
     isApplyExpr(expr) ||
     isFlatMapExpr(expr) ||
     isNamedExpr(expr)
   ) {
-    return upstream(expr.expr);
+    return upstream(expr.expr, seen);
+  } else if (isUpstreamLeaf(expr)) {
+    return {};
   } else if (Array.isArray(expr)) {
-    return expr.map(upstream).reduce(toObject, {});
+    if (alreadySeen(expr, seen)) {
+      return {};
+    }
+    return expr.map((e) => upstream(e, seen)).reduce(toObject, {});
   } else if (typeof expr === "object" && expr !== null) {
+    if (alreadySeen(expr, seen)) {
+      return {};
+    }
     return Object.values(expr)
-      .map((v) => upstream(v))
+      .map((v) => upstream(v, seen))
       .reduce(toObject, {});
   }
   return {};
 };
 
 // TODO(sam): add a type
-export const resolveUpstream = <const A>(value: A): any => {
+export const resolveUpstream = <const A>(
+  value: A,
+  seen: WeakSet<object> = new WeakSet(),
+): any => {
   if (isPrimitive(value)) {
     return {} as any;
   } else if (isResource(value)) {
     return { [(value as unknown as Resource).FQN]: value } as any;
   } else if (isOutput(value)) {
-    return upstream(value) as any;
+    return upstream(value, seen) as any;
+  } else if (isUpstreamLeaf(value)) {
+    return {} as any;
   } else if (Array.isArray(value)) {
+    if (alreadySeen(value, seen)) {
+      return {} as any;
+    }
     return Object.fromEntries(
-      value.map((v) => resolveUpstream(v)).flatMap(Object.entries),
+      value.map((v) => resolveUpstream(v, seen)).flatMap(Object.entries),
     ) as any;
   } else if (typeof value === "object" || typeof value === "function") {
+    if (alreadySeen(value as object, seen)) {
+      return {} as any;
+    }
     return Object.fromEntries(
       Object.values(value as any)
-        .map(resolveUpstream)
+        .map((v) => resolveUpstream(v, seen))
         .flatMap(Object.entries),
     ) as any;
   }
