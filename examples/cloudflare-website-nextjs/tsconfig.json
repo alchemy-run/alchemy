@@ -3,6 +3,7 @@
     "target": "ESNext",
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
+    "types": ["bun", "react", "react-dom"],
     "skipLibCheck": true,
     "strict": true,
     "noEmit": true,
