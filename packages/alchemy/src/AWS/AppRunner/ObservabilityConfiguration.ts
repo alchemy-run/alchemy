@@ -176,17 +176,21 @@ export const ObservabilityConfigurationProvider = () =>
        * with InvalidRequestException — retry through that window (bounded).
        */
       const deleteAllRevisions = Effect.fn(function* (name: string) {
-        const page = yield* apprunner.listObservabilityConfigurations({
-          ObservabilityConfigurationName: name,
-          LatestOnly: false,
-        });
-        const arns = (page.ObservabilityConfigurationSummaryList ?? [])
-          .filter((s) => s.ObservabilityConfigurationName === name)
-          .flatMap((s) =>
-            s.ObservabilityConfigurationArn !== undefined
-              ? [s.ObservabilityConfigurationArn]
-              : [],
-          );
+        const pages = yield* apprunner.listObservabilityConfigurations
+          .pages({
+            ObservabilityConfigurationName: name,
+            LatestOnly: false,
+          })
+          .pipe(Stream.runCollect);
+        const arns = Array.from(pages).flatMap((page) =>
+          (page.ObservabilityConfigurationSummaryList ?? [])
+            .filter((s) => s.ObservabilityConfigurationName === name)
+            .flatMap((s) =>
+              s.ObservabilityConfigurationArn !== undefined
+                ? [s.ObservabilityConfigurationArn]
+                : [],
+            ),
+        );
         for (const arn of arns) {
           yield* apprunner
             .deleteObservabilityConfiguration({

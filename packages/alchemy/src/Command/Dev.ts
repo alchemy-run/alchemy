@@ -1,19 +1,17 @@
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
-import * as FiberMap from "effect/FiberMap";
-import * as Hash from "effect/Hash";
 import * as Stream from "effect/Stream";
-import { isResolved } from "../Diff.ts";
+import * as LocalProvider from "../Local/LocalProvider.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
-import * as RpcProvider from "../Local/RpcProvider.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import {
-  CommandError,
   CommandExecutor,
   UnexpectedExit,
+  makeCommandError,
   type CommandProps,
 } from "./Command.ts";
+import { makeCommandRedactor } from "./Redaction.ts";
 
 export interface DevProps extends CommandProps {}
 
@@ -90,7 +88,7 @@ export interface Dev extends Resource<
 export const Dev = Resource<Dev>("Command.Dev");
 
 export const DevProvider = () =>
-  ProviderLayer.select({
+  ProviderLayer.dual(Dev, {
     live: DevProviderLive,
     local: DevProviderLocal,
   });
@@ -104,7 +102,7 @@ export const DevProviderLive = () =>
   });
 
 export const DevProviderLocal = () =>
-  RpcProvider.effect(
+  LocalProvider.make(
     Dev,
     import.meta.resolve(
       import.meta.url.endsWith(".ts") ? "./Local.ts" : "./Local.js",
@@ -112,112 +110,86 @@ export const DevProviderLocal = () =>
     ),
     Effect.gen(function* () {
       const { spawn } = yield* CommandExecutor;
-      const map = yield* FiberMap.make();
-      const hashes = new Map<string, number>();
 
-      const spawnAndExtractResult = Effect.fn(function* (
-        props: DevProps,
-        urlDeferred: Deferred.Deferred<string | undefined, CommandError>,
-      ) {
-        const child = yield* spawn(props);
+      return {
+        // The dev process is spawned into the instance scope the helper
+        // provides: it keeps running after `start` returns (readiness) and
+        // is killed when the helper closes the scope on restart/delete.
+        start: Effect.fn(function* ({ news: props, invalidate }) {
+          const child = yield* spawn(props);
+          const redactor = makeCommandRedactor(props.env);
 
-        let buffer = "";
-        // A non-local URL seen so far (docs link, error page, update notice,
-        // …). Held as a fallback so that if the dev server never prints a
-        // localhost/IP URL we still surface something, but a localhost URL
-        // always wins if one shows up. See issue #695.
-        let fallbackUrl: string | undefined;
-        const deferred = yield* Deferred.make<string>();
+          let buffer = "";
+          // A non-local URL seen so far (docs link, error page, update notice,
+          // …). Held as a fallback so that if the dev server never prints a
+          // localhost/IP URL we still surface something, but a localhost URL
+          // always wins if one shows up. See issue #695.
+          let fallbackUrl: string | undefined;
+          const deferred = yield* Deferred.make<string>();
 
-        const mirror = (sink: "stdout" | "stderr") =>
-          child[sink].pipe(
-            Stream.tap((chunk) =>
-              Effect.sync(() => process[sink].write(chunk)),
-            ),
-            Stream.decodeText,
-            Stream.tap((text) =>
-              Effect.sync(() => {
-                if (Deferred.isDoneUnsafe(deferred)) return;
-                buffer += text;
-                const url = extractUrl(buffer);
-                if (!url) return;
-                if (isLocalUrl(url)) {
-                  // The dev server's own address — resolve immediately.
-                  Deferred.doneUnsafe(deferred, Effect.succeed(url));
-                } else {
-                  // Keep scanning: a localhost/IP URL may still appear.
-                  fallbackUrl = url;
-                }
+          const mirror = (sink: "stdout" | "stderr") =>
+            child[sink].pipe(
+              Stream.decodeText,
+              redactor.stream,
+              Stream.tap((text) =>
+                Effect.sync(() => process[sink].write(text)),
+              ),
+              Stream.tap((text) =>
+                Effect.sync(() => {
+                  if (Deferred.isDoneUnsafe(deferred)) return;
+                  buffer += text;
+                  const url = extractUrl(buffer);
+                  if (!url) return;
+                  if (isLocalUrl(url)) {
+                    // The dev server's own address — resolve immediately.
+                    Deferred.doneUnsafe(deferred, Effect.succeed(url));
+                  } else {
+                    // Keep scanning: a localhost/IP URL may still appear.
+                    fallbackUrl = url;
+                  }
+                }),
+              ),
+              Stream.runDrain,
+              Effect.forkScoped,
+            );
+
+          yield* mirror("stdout");
+          yield* mirror("stderr");
+
+          // Readiness: a URL appears (or the 5s budget elapses), unless the
+          // process exits first — an exit before readiness is a failure.
+          const url = yield* Effect.raceAllFirst([
+            Deferred.await(deferred).pipe(
+              Effect.timeoutOrElse({
+                duration: "5 seconds",
+                // No localhost/IP URL appeared in time — fall back to any
+                // other URL we saw (or `undefined` if it stayed silent).
+                orElse: () => Effect.succeed(fallbackUrl),
               }),
             ),
-            Stream.runDrain,
+            child.exitCode.pipe(
+              Effect.mapError((error) => makeCommandError(props, error.reason)),
+              Effect.flatMap((exitCode) =>
+                makeCommandError(
+                  props,
+                  new UnexpectedExit({ exitCode, stderr: buffer }),
+                ),
+              ),
+            ),
+          ]);
+
+          // The process may die on its own after readiness (crash, manual
+          // kill). Drop it from the running registry so the next plan
+          // reports `update` and restarts it.
+          yield* child.exitCode.pipe(
+            Effect.exit,
+            Effect.flatMap(() => invalidate),
             Effect.forkScoped,
           );
 
-        yield* mirror("stdout");
-        yield* mirror("stderr");
-        yield* Effect.raceAllFirst([
-          Deferred.await(deferred).pipe(
-            Effect.timeoutOrElse({
-              duration: "5 seconds",
-              // No localhost/IP URL appeared in time — fall back to any other
-              // URL we saw (or `undefined` if the process stayed silent).
-              orElse: () => Effect.succeed(fallbackUrl),
-            }),
-          ),
-          child.exitCode.pipe(
-            Effect.mapError(
-              (error) =>
-                new CommandError({
-                  command: props.command,
-                  reason: error.reason,
-                }),
-            ),
-            Effect.flatMap(
-              (exitCode) =>
-                new CommandError({
-                  command: props.command,
-                  reason: new UnexpectedExit({ exitCode, stderr: buffer }),
-                }),
-            ),
-          ),
-        ]).pipe(Deferred.into(urlDeferred));
-        return yield* child.exitCode;
-      }, Effect.scoped);
-
-      return {
-        list: () => Effect.succeed([]),
-        diff: Effect.fn(function* ({ instanceId, news }) {
-          if (!isResolved(news)) return undefined;
-          const hash = Hash.structure(news);
-          if (
-            hashes.get(instanceId) === hash &&
-            (yield* FiberMap.has(map, instanceId))
-          ) {
-            return { action: "noop" };
-          }
-          return { action: "update" };
+          return { url };
         }),
-        reconcile: Effect.fn(function* ({ instanceId, news }) {
-          const hash = Hash.structure(news);
-          hashes.set(instanceId, hash);
-          const deferred = yield* Deferred.make<
-            string | undefined,
-            CommandError
-          >();
-          yield* FiberMap.run(
-            map,
-            instanceId,
-            spawnAndExtractResult(news, deferred),
-            { propagateInterruption: true },
-          );
-          return { url: yield* Deferred.await(deferred) };
-        }),
-        delete: Effect.fn(function* ({ instanceId }) {
-          yield* FiberMap.remove(map, instanceId);
-          hashes.delete(instanceId);
-        }),
-      };
+      } satisfies LocalProvider.LocalProviderSpec<Dev>;
     }),
   );
 

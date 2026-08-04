@@ -238,9 +238,14 @@ export const GatewayProviderProvider = () =>
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // Prefer the deployed alias: regenerating would target a different
-      // resource if the generator's output for this id ever drifts.
-      const alias = output?.alias ?? (yield* createAlias(id, news.alias));
+      // An explicit user-provided alias always wins (an alias change can
+      // reach reconcile as an update when diff saw unresolved inputs, e.g.
+      // a secretId still pending from a same-deploy secret replacement).
+      // Absent that, prefer the deployed alias: regenerating would target a
+      // different resource if the generator's output for this id ever
+      // drifts.
+      const alias =
+        news.alias ?? output?.alias ?? (yield* createAlias(id, undefined));
       return yield* reconcileProviderConfig({
         accountId,
         gatewayId: news.gatewayId as string,
@@ -344,6 +349,8 @@ const reconcileProviderConfig = (desired: {
   } = desired;
 
   const matchesDesired = (attrs: GatewayProviderAttributes) =>
+    attrs.alias === alias &&
+    attrs.providerSlug === providerSlug &&
     attrs.secretId === secretId &&
     attrs.defaultConfig === defaultConfig &&
     attrs.rateLimit === rateLimit &&

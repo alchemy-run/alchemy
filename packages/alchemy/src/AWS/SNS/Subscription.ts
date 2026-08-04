@@ -1,5 +1,6 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
@@ -337,30 +338,20 @@ const findSubscription = Effect.fn(function* ({
     return undefined;
   }
 
-  let nextToken: string | undefined;
-
-  while (true) {
-    const response = yield* sns.listSubscriptionsByTopic({
-      TopicArn: topicArn,
-      NextToken: nextToken,
-    });
-
-    const match = response.Subscriptions?.find(
-      (subscription) =>
-        subscription.Protocol === protocol &&
-        subscription.Endpoint === endpoint,
+  const match = yield* sns.listSubscriptionsByTopic
+    .items({ TopicArn: topicArn })
+    .pipe(
+      Stream.filter(
+        (subscription) =>
+          subscription.Protocol === protocol &&
+          subscription.Endpoint === endpoint &&
+          !!subscription.SubscriptionArn,
+      ),
+      Stream.runHead,
+      Effect.map(Option.getOrUndefined),
     );
 
-    if (match?.SubscriptionArn) {
-      return match.SubscriptionArn;
-    }
-
-    if (!response.NextToken) {
-      return undefined;
-    }
-
-    nextToken = response.NextToken;
-  }
+  return match?.SubscriptionArn;
 });
 
 const readSubscription = Effect.fn(function* ({

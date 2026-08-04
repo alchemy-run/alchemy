@@ -97,22 +97,22 @@ expected to return `Effect.Effect<void>`.
 +  sentAt: number;
 +}
 
-  Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
-    const queueResource = yield* Queue;
-    const queue = yield* Cloudflare.Queues.WriteQueue(queueResource);
+ Effect.gen(function* () {
+   const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
+   const queueResource = yield* Queue;
+   const queue = yield* Cloudflare.Queues.WriteQueue(queueResource);
 
-+   yield* Cloudflare.Queues.consumeQueueMessages<QueueMessageBody>(
-+     queueResource,
-+     (stream) =>
-+       Stream.runForEach(stream, (msg) =>
-+         bucket
-+           .put(`/queue/${msg.body.id}`, JSON.stringify(msg.body), {
-+             httpMetadata: { contentType: "application/json" },
-+           })
-+           .pipe(Effect.asVoid),
-+       ),
-+   );
++  yield* Cloudflare.Queues.consumeQueueMessages<QueueMessageBody>(
++    queueResource,
++    (stream) =>
++      Stream.runForEach(stream, (msg) =>
++        bucket
++          .put(`/queue/${msg.body.id}`, JSON.stringify(msg.body), {
++            httpMetadata: { contentType: "application/json" },
++          })
++          .pipe(Effect.asVoid),
++      ),
++  );
 ```
 
 Acking is automatic: if the handler succeeds, every message in the
@@ -136,16 +136,16 @@ retryDelay: "1 second"             // singular and plural units both work
 ```diff lang="typescript"
 +import * as Duration from "effect/Duration";
 
-- Cloudflare.Queues.consumeQueueMessages<QueueMessageBody>(queueResource, (stream) =>
-+ Cloudflare.Queues.consumeQueueMessages<QueueMessageBody>(
-+   queueResource,
-+   {
-+     batchSize: 25,
-+     maxRetries: 3,
-+     maxWaitTime: "5 seconds",
-+     retryDelay: Duration.seconds(30),
-+   },
-+   (stream) =>
+-  Cloudflare.Queues.consumeQueueMessages<QueueMessageBody>(queueResource, (stream) =>
++  Cloudflare.Queues.consumeQueueMessages<QueueMessageBody>(
++    queueResource,
++    {
++      batchSize: 25,
++      maxRetries: 3,
++      maxWaitTime: "5 seconds",
++      retryDelay: Duration.seconds(30),
++    },
++    (stream) =>
 ```
 
 `maxWaitTime` is rounded up to whole milliseconds and `retryDelay`

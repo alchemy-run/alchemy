@@ -69,6 +69,7 @@ export const bundleMicrovmProgram = Effect.fn(function* ({
   isExternal = false,
   external = [],
   port,
+  build,
 }: {
   main: string;
   runtime: "bun" | "node";
@@ -76,6 +77,7 @@ export const bundleMicrovmProgram = Effect.fn(function* ({
   isExternal?: boolean;
   external?: string[];
   port: number;
+  build?: Bundle.BundleConfig;
 }) {
   const fs = yield* FileSystem.FileSystem;
   const stack = yield* Stack;
@@ -90,12 +92,14 @@ export const bundleMicrovmProgram = Effect.fn(function* ({
   ) {
     return yield* Bundle.build(
       {
+        ...build?.input,
         input: entry,
         cwd,
         external: [
           "@aws-sdk/*",
           ...(runtime === "bun" ? ["bun", "bun:*"] : []),
           ...external,
+          ...((build?.input?.external as string[] | undefined) ?? []),
         ],
         platform: "node",
         resolve: {
@@ -103,19 +107,22 @@ export const bundleMicrovmProgram = Effect.fn(function* ({
             runtime === "bun"
               ? ["bun", "import", "module", "default"]
               : ["node", "import", "module", "default"],
+          ...build?.input?.resolve,
         },
-        plugins,
+        plugins: [build?.input?.plugins, plugins],
         treeshake: true,
       },
       {
+        ...build?.output,
         format: "esm",
-        sourcemap: false,
-        minify: false,
+        sourcemap: build?.output?.sourcemap ?? false,
+        minify: build?.output?.minify ?? false,
         entryFileNames: "index.mjs",
         // Emit chunks as `.mjs` too so Node treats them as ESM unconditionally
         // (no `package.json` `"type":"module"` needed in the image).
         chunkFileNames: "[name]-[hash].mjs",
       },
+      build,
     );
   });
 
@@ -136,6 +143,7 @@ const HttpServer = NodeHttpServer;`
 }
 import { Stack } from "alchemy/Stack";
 import { makeEntrypointLayer } from "alchemy/Runtime";
+import { provideProcessTelemetry } from "alchemy/Telemetry";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -162,8 +170,15 @@ const stack = Layer.succeed(Stack, {
 });
 
 const serverEffect = tag.pipe(
-  Effect.flatMap(func => func.RuntimeContext.exports),
-  Effect.flatMap(exports => exports.default),
+  // Process-lifetime telemetry: built once into the root scope; exporters
+  // batch on their intervals and flush when the scope closes on graceful
+  // shutdown.
+  Effect.flatMap((func) =>
+    func.RuntimeContext.exports.pipe(
+      Effect.flatMap((exports) => exports.default),
+      provideProcessTelemetry(func.RuntimeContext),
+    ),
+  ),
   Effect.provide(
     layer.pipe(
       Layer.provideMerge(stack),

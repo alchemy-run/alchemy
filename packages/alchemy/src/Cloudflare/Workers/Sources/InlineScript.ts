@@ -2,7 +2,8 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import * as crypto from "node:crypto";
 import type * as Bundle from "../../../Bundle/Bundle.ts";
-import type { SourceDevHandle, SourceProvider } from "../Source.ts";
+import type { SourceProvider } from "../Source.ts";
+import { bundleSource } from "./shared.ts";
 
 /**
  * Source provider for `props.script` workers: the raw module source is
@@ -22,35 +23,15 @@ export const makeInlineScriptSource = (script: string): SourceProvider => {
       }),
     ),
   );
-  return {
-    ownsAssets: false,
-    build: () =>
-      bundle.pipe(
-        Effect.map((output) => ({
-          bundle: output,
-          assets: undefined,
-          hash: {
-            bundle: output.hash,
-            assets: undefined,
-            input: undefined,
-            additionalWorkspaces: undefined,
-          },
-        })),
-      ),
-    hash: () => bundle.pipe(Effect.map((output) => ({ bundle: output.hash }))),
+  return bundleSource({
+    build: () => bundle,
     // Local dev: a single-element stream — script changes arrive as new
     // props, which restart the instance via `structuralSignature`.
-    dev: () =>
+    watch: () =>
       bundle.pipe(
-        Effect.map(
-          (output): SourceDevHandle => ({
-            mode: "bundle",
-            bundles: Stream.make({
-              _tag: "Success",
-              output,
-            } as Bundle.BundleWatchEvent),
-          }),
+        Effect.map((output) =>
+          Stream.make({ _tag: "Success", output } as Bundle.BundleWatchEvent),
         ),
       ),
-  };
+  });
 };

@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import type { MemoOptions } from "../../Command/Memo.ts";
 import type { InputProps } from "../../Input.ts";
 import { effectClass } from "../../Util/effect.ts";
 import type { Providers } from "../Providers.ts";
@@ -20,7 +21,30 @@ const WAKU_SOURCE_PROVIDER = "@distilled.cloud/waku/source";
 
 export interface WakuProps<
   Bindings extends WorkerBindingProps = {},
-> extends Omit<WorkerProps<Bindings>, "vite" | "main" | "assets"> {
+> extends Omit<
+  WorkerProps<Bindings>,
+  "vite" | "main" | "assets" | "source" | "script" | "bundle"
+> {
+  /**
+   * Overrides the module that becomes the deployed Worker entry. Relative
+   * paths resolve from {@link rootDir}.
+   *
+   * By default Waku's own RSC server entry is deployed. Point `main` at a
+   * custom module when the deployed Worker must export more than Waku's
+   * fetch handler — e.g. Durable Object classes or additional handlers.
+   * The custom entry wraps Waku's handler by importing it from
+   * `virtual:waku/server-entry` and re-exports the extras:
+   *
+   * ```typescript
+   * // src/worker-entry.ts
+   * import wakuHandler from "virtual:waku/server-entry";
+   * export class Counter extends DurableObject {}
+   * export default {
+   *   fetch: (request, env, ctx) => wakuHandler.fetch(request, env, ctx),
+   * };
+   * ```
+   */
+  main?: string;
   /**
    * Root directory of the Waku project. Defaults to the process working
    * directory.
@@ -49,17 +73,17 @@ export interface WakuProps<
    * {@link rootDir} is hashed, plus the nearest package-manager lockfile.
    * Provide `include`/`exclude` globs to narrow the scope.
    */
-  memo?: {
-    /** Glob patterns of files to hash, relative to {@link rootDir}. */
-    include?: string[];
-    /** Glob patterns to exclude from hashing. */
-    exclude?: string[];
-    /** Whether to include the nearest package-manager lockfile in the hash. */
-    lockfile?: boolean;
-  };
+  memo?: MemoOptions;
   /**
    * Optional configuration for static asset routing behavior.
    * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
+   *
+   * Waku links SSG pages without trailing slashes (`/about`), so
+   * `htmlHandling` defaults to `"drop-trailing-slash"` — the prerendered
+   * `about/index.html` serves directly at `/about` instead of 307-redirecting
+   * to `/about/`. Set `htmlHandling` explicitly to override.
+   *
+   * @default { htmlHandling: "drop-trailing-slash" }
    */
   assets?: AssetsConfig;
 }
@@ -77,8 +101,11 @@ export interface WakuProps<
  * (respecting `.gitignore` by default) so unchanged projects skip the
  * build and deploy entirely.
  *
- * Waku's server runtime uses `AsyncLocalStorage`, so enable the
- * `nodejs_als` (or `nodejs_compat`) compatibility flag.
+ * Waku's server runtime uses `AsyncLocalStorage`, so the `nodejs_als`
+ * compatibility flag is enabled automatically when your compatibility
+ * flags include neither `nodejs_als` nor `nodejs_compat`. SSG pages are
+ * served at their extensionless URLs (`/about`) via the default
+ * `drop-trailing-slash` asset handling.
  *
  * @resource
  * @product Website
@@ -86,24 +113,17 @@ export interface WakuProps<
  *
  * @section Deploying a Waku Site
  * A single call builds the project and deploys the RSC server bundle plus
- * the client assets.
+ * the client assets — no configuration required.
  *
  * @example Waku site
  * ```typescript
- * const site = yield* Cloudflare.Website.Waku("Site", {
- *   compatibility: {
- *     flags: ["nodejs_als"],
- *   },
- * });
+ * const site = yield* Cloudflare.Website.Waku("Site");
  * ```
  *
  * @example Waku project in a subdirectory
  * ```typescript
  * const site = yield* Cloudflare.Website.Waku("Site", {
  *   rootDir: "apps/web",
- *   compatibility: {
- *     flags: ["nodejs_als"],
- *   },
  * });
  * ```
  *
@@ -119,11 +139,32 @@ export interface WakuProps<
  * const bucket = yield* Cloudflare.R2.Bucket("Uploads");
  *
  * const site = yield* Cloudflare.Website.Waku("Site", {
- *   compatibility: {
- *     flags: ["nodejs_als"],
- *   },
  *   env: {
  *     UPLOADS: bucket,
+ *   },
+ * });
+ * ```
+ *
+ * @section Custom Worker Entry
+ * By default the deployed Worker entry is Waku's own RSC server entry.
+ * When the Worker must export more than Waku's fetch handler — Durable
+ * Object classes, additional handlers — point `main` at your own module
+ * that wraps Waku's handler (imported from `virtual:waku/server-entry`)
+ * and re-exports the extras.
+ *
+ * @example Custom entry hosting a Durable Object
+ * ```typescript
+ * // src/worker-entry.ts
+ * // import wakuHandler from "virtual:waku/server-entry";
+ * // export class Counter extends DurableObject { ... }
+ * // export default { fetch: (req, env, ctx) => wakuHandler.fetch(req, env, ctx) };
+ *
+ * const site = yield* Cloudflare.Website.Waku("Site", {
+ *   main: "src/worker-entry.ts",
+ *   env: {
+ *     COUNTER: Cloudflare.DurableObject("Counter", {
+ *       className: "Counter",
+ *     }),
  *   },
  * });
  * ```
@@ -136,9 +177,6 @@ export interface WakuProps<
  * @example Narrowing the memo scope
  * ```typescript
  * const site = yield* Cloudflare.Website.Waku("Site", {
- *   compatibility: {
- *     flags: ["nodejs_als"],
- *   },
  *   memo: {
  *     include: ["src/**", "public/**", "package.json"],
  *   },
@@ -153,9 +191,7 @@ export interface WakuProps<
  *
  * @example Declaring a Waku Worker class
  * ```typescript
- * class Site extends Cloudflare.Website.Waku<Site>()("Site", {
- *   compatibility: { flags: ["nodejs_als"] },
- * }) {}
+ * class Site extends Cloudflare.Website.Waku<Site>()("Site") {}
  *
  * const site = yield* Site;
  * ```
@@ -200,11 +236,33 @@ export const Waku: {
           Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
           (props) => ({
             ...props,
+            compatibility: {
+              ...props?.compatibility,
+              // Waku's server runtime needs AsyncLocalStorage — default to
+              // nodejs_als when the user hasn't enabled it (or the broader
+              // nodejs_compat) themselves.
+              flags:
+                props?.compatibility?.flags?.includes("nodejs_als") ||
+                props?.compatibility?.flags?.includes("nodejs_compat")
+                  ? props.compatibility!.flags
+                  : [...(props?.compatibility?.flags ?? []), "nodejs_als"],
+            },
+            // Waku links SSG pages without trailing slashes; serve
+            // `about/index.html` at `/about` directly instead of redirecting.
+            assets: {
+              htmlHandling: "drop-trailing-slash" as const,
+              ...props?.assets,
+            },
             main: undefined!,
             source: {
               provider: WAKU_SOURCE_PROVIDER,
+              devMode: "server",
               options: {
                 rootDir: props?.rootDir,
+                // Custom worker entry (wraps waku's handler via
+                // `virtual:waku/server-entry`); resolved against `rootDir`
+                // by the source provider.
+                main: props?.main,
                 srcDir: props?.srcDir,
                 distDir: props?.distDir,
                 basePath: props?.basePath,

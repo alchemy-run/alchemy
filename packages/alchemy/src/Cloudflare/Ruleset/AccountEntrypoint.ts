@@ -194,7 +194,11 @@ export const AccountEntrypointProvider = () =>
         { concurrency: 10 },
       );
       return rows.filter(
-        (row): row is AccountEntrypointAttributes => row !== undefined,
+        (row): row is AccountEntrypointAttributes =>
+          // An entrypoint with zero rules is inert — it's what destroy
+          // leaves behind after emptying the rules we own. Don't surface
+          // it as a resource.
+          row !== undefined && row.rules.length > 0,
       );
     }),
 

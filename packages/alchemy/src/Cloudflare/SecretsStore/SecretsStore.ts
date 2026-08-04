@@ -1,9 +1,12 @@
 import * as secretsStore from "@distilled.cloud/cloudflare/secrets-store";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
+import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { generateLocalId } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
 
 export type Store = Resource<
@@ -49,7 +52,7 @@ export type Store = Resource<
  */
 export const Store = Resource<Store>("Cloudflare.SecretsStore");
 
-export const SecretsStoreProvider = () =>
+export const StoreProviderLive = () =>
   Provider.succeed(Store, {
     stables: ["storeId", "storeName", "accountId"],
     // The engine calls `read` whenever there's no prior state. Cloudflare
@@ -59,17 +62,15 @@ export const SecretsStoreProvider = () =>
     // ever invoked when no store exists yet.
     read: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const stores = yield* secretsStore.listStores({
-        accountId: output?.accountId ?? accountId,
-      });
+      const acct = output?.accountId ?? accountId;
       const match = output?.storeId
-        ? stores.result.find((s) => s.id === output.storeId)
-        : stores.result[0];
+        ? yield* findStoreById(acct, output.storeId)
+        : yield* firstStore(acct);
       if (!match) return undefined;
       return {
         storeId: match.id,
         storeName: match.name,
-        accountId: output?.accountId ?? accountId,
+        accountId: acct,
       };
     }),
     reconcile: Effect.fn(function* ({ output }) {
@@ -77,13 +78,12 @@ export const SecretsStoreProvider = () =>
       const acct = output?.accountId ?? accountId;
 
       // Observe — Cloudflare permits exactly one Secrets Store per
-      // account. List the account's stores; reuse the cached one if
-      // it still exists, otherwise reuse the first one.
-      const stores = yield* secretsStore.listStores({ accountId: acct });
-      const observed = output?.storeId
-        ? (stores.result.find((s) => s.id === output.storeId) ??
-          stores.result[0])
-        : stores.result[0];
+      // account. Reuse the cached store if it still exists, otherwise
+      // reuse the first one listed.
+      const cached = output?.storeId
+        ? yield* findStoreById(acct, output.storeId)
+        : undefined;
+      const observed = cached ?? (yield* firstStore(acct));
 
       if (observed) {
         return {
@@ -117,8 +117,7 @@ export const SecretsStoreProvider = () =>
         };
       }
 
-      const after = yield* secretsStore.listStores({ accountId: acct });
-      const first = after.result[0];
+      const first = yield* firstStore(acct);
       if (first) {
         return {
           storeId: first.id,
@@ -160,3 +159,61 @@ export const SecretsStoreProvider = () =>
       // should never be torn down by a single stack.
     }),
   });
+
+/**
+ * Local (dev) provider — the store is purely virtual: a `dev:` id keyed
+ * into the local workerd Secrets Store simulator. The local `Secret`
+ * provider seeds values into it and `toRuntimeBinding` lowers a
+ * `secrets_store_secret` binding whose store id is `dev:`-prefixed onto the
+ * local secrets-store service; data persists under
+ * `.alchemy/local/secrets-store`.
+ */
+export const StoreProviderLocal = () =>
+  Provider.succeed(Store, {
+    stables: ["accountId"],
+    diff: Effect.fn(function* ({ output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (!output?.storeId) return { action: "update" } as const;
+      if (output.accountId !== accountId) {
+        return { action: "replace" } as const;
+      }
+      // Fall through to the engine's default prop diff.
+    }),
+    read: Effect.fn(function* ({ output }) {
+      // Purely virtual — the persisted state row is the source of truth.
+      return output ?? undefined;
+    }),
+    reconcile: Effect.fn(function* ({ output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return {
+        storeId: output?.storeId ?? generateLocalId(),
+        // Mirror the name Cloudflare uses for an account's default store.
+        storeName: output?.storeName ?? "default_secrets_store",
+        accountId: output?.accountId ?? accountId,
+      };
+    }),
+    delete: Effect.fn(function* () {
+      // The simulator's on-disk data is keyed by the dev id; dropping the
+      // state row is enough — orphaned data is reclaimed with `.alchemy`.
+    }),
+  });
+
+export const SecretsStoreProvider = () =>
+  ProviderLayer.dual(Store, {
+    local: () => StoreProviderLocal(),
+    live: () => StoreProviderLive(),
+  });
+
+/** First store on the account (Cloudflare permits at most one). */
+const firstStore = (accountId: string) =>
+  secretsStore.listStores
+    .items({ accountId })
+    .pipe(Stream.runHead, Effect.map(Option.getOrUndefined));
+
+/** Look a store up by id, terminating pagination on the first match. */
+const findStoreById = (accountId: string, storeId: string) =>
+  secretsStore.listStores.items({ accountId }).pipe(
+    Stream.filter((s) => s.id === storeId),
+    Stream.runHead,
+    Effect.map(Option.getOrUndefined),
+  );

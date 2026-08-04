@@ -1,6 +1,7 @@
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
@@ -163,6 +164,15 @@ export const LogGroupProvider = () =>
       // phantom drift and interpolated IAM ARNs (`${arn}:*`) stay correct.
       const normalizeLogGroupArn = (arn: string): LogGroupArn =>
         (arn.endsWith(":*") ? arn.slice(0, -2) : arn) as LogGroupArn;
+      const observe = Effect.fn(function* (logGroupName: string) {
+        return yield* logs.describeLogGroups
+          .items({ logGroupNamePrefix: logGroupName })
+          .pipe(
+            Stream.filter((group) => group.logGroupName === logGroupName),
+            Stream.runHead,
+            Effect.map(Option.getOrUndefined),
+          );
+      });
 
       return {
         stables: ["logGroupArn", "logGroupName"],
@@ -238,13 +248,7 @@ export const LogGroupProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const logGroupName =
             output?.logGroupName ?? (yield* toLogGroupName(id, olds ?? {}));
-          const described = yield* logs.describeLogGroups({
-            logGroupNamePrefix: logGroupName,
-            limit: 1,
-          });
-          const match = (described.logGroups ?? []).find(
-            (group) => group.logGroupName === logGroupName,
-          );
+          const match = yield* observe(logGroupName);
           if (!match?.arn) {
             return undefined;
           }
@@ -272,13 +276,7 @@ export const LogGroupProvider = () =>
           // Observe - fetch live state. `describeLogGroups` returns
           // retention/kms info so we can diff against desired without
           // trusting `olds` or `output`.
-          const described = yield* logs.describeLogGroups({
-            logGroupNamePrefix: logGroupName,
-            limit: 1,
-          });
-          let observed = (described.logGroups ?? []).find(
-            (group) => group.logGroupName === logGroupName,
-          );
+          let observed = yield* observe(logGroupName);
 
           // Ensure - create if missing. `createLogGroup` accepts tags and
           // kmsKeyId on first create; tolerate `ResourceAlreadyExistsException`
@@ -298,13 +296,7 @@ export const LogGroupProvider = () =>
                   () => Effect.void,
                 ),
               );
-            const reread = yield* logs.describeLogGroups({
-              logGroupNamePrefix: logGroupName,
-              limit: 1,
-            });
-            observed = (reread.logGroups ?? []).find(
-              (group) => group.logGroupName === logGroupName,
-            );
+            observed = yield* observe(logGroupName);
           }
 
           // Sync KMS key - create accepts kmsKeyId, but updates require the
@@ -441,17 +433,14 @@ export const LogGroupProvider = () =>
             );
 
           const remaining = yield* Effect.repeat(
-            logs
-              .describeLogGroups({
-                logGroupNamePrefix: output.logGroupName,
-                limit: 1,
-              })
+            logs.describeLogGroups
+              .items({ logGroupNamePrefix: output.logGroupName })
               .pipe(
-                Effect.map((response) =>
-                  (response.logGroups ?? []).some(
-                    (group) => group.logGroupName === output.logGroupName,
-                  ),
+                Stream.filter(
+                  (group) => group.logGroupName === output.logGroupName,
                 ),
+                Stream.runHead,
+                Effect.map(Option.isSome),
               ),
             {
               schedule: Schedule.fixed("250 millis"),

@@ -1,6 +1,7 @@
 import * as repostspace from "@distilled.cloud/aws/repostspace";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -366,9 +367,7 @@ export const SpaceProvider = () =>
                 ),
               { concurrency: 4 },
             );
-            return items.filter(
-              (item): item is Space["Attributes"] => item !== undefined,
-            );
+            return items.filter(Predicate.isNotUndefined);
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

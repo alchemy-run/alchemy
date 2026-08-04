@@ -1,5 +1,6 @@
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
@@ -115,12 +116,15 @@ export const DestinationProvider = () =>
             : JSON.stringify(policy);
 
       const observe = Effect.fn(function* (destinationName: string) {
-        const described = yield* logs.describeDestinations({
-          DestinationNamePrefix: destinationName,
-        });
-        return (described.destinations ?? []).find(
-          (destination) => destination.destinationName === destinationName,
-        );
+        return yield* logs.describeDestinations
+          .items({ DestinationNamePrefix: destinationName })
+          .pipe(
+            Stream.filter(
+              (destination) => destination.destinationName === destinationName,
+            ),
+            Stream.runHead,
+            Effect.map(Option.getOrUndefined),
+          );
       });
 
       return {

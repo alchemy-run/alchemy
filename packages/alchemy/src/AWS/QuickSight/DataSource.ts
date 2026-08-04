@@ -160,11 +160,11 @@ export const DataSourceProvider = () =>
       });
 
       const toAttrs = (source: quicksight.DataSource) => ({
-        dataSourceId: source.DataSourceId!,
-        arn: source.Arn!,
-        name: source.Name ?? "",
-        type: source.Type ?? "",
-        status: source.Status ?? "",
+        dataSourceId: source.DataSourceId,
+        arn: source.Arn,
+        name: source.Name,
+        type: source.Type,
+        status: source.Status,
       });
 
       return DataSource.Provider.of({
@@ -261,7 +261,7 @@ export const DataSourceProvider = () =>
           }
 
           // 3b. Sync tags — diff against OBSERVED cloud tags.
-          yield* syncQuickSightTags(observed.Arn!, desiredTags);
+          yield* syncQuickSightTags(observed.Arn, desiredTags);
 
           yield* session.note(dataSourceId);
           return toAttrs(observed);
@@ -297,9 +297,9 @@ export const DataSourceProvider = () =>
                             {
                               dataSourceId: s.DataSourceId,
                               arn: s.Arn,
-                              name: s.Name ?? "",
-                              type: s.Type ?? "",
-                              status: s.Status ?? "",
+                              name: s.Name,
+                              type: s.Type,
+                              status: s.Status,
                             },
                           ]
                         : [],

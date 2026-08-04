@@ -262,7 +262,7 @@ test.provider(
 // A web-crawler source crawls a seed URL and needs no service token (unlike
 // an R2 source). Cloudflare only crawls a domain the account owns, so the
 // crawl is seeded at a Worker we deploy (its `workers.dev` URL is owned by the
-// account); `parseType: "crawl"` walks pages instead of requiring a sitemap.
+// account); the fixture serves a sitemap so discovery always finds content.
 test.provider(
   "creates a web-crawler instance (no service token)",
   (stack) =>
@@ -300,12 +300,10 @@ test.provider(
             source: target.url.as<string>(),
             sourceParams: {
               webCrawler: {
-                parseType: "crawl",
-                // Discover URLs by following links only. Without this,
-                // crawl link-discovery defaults to also reading the seed's
-                // sitemap, and a freshly-deployed `workers.dev` URL serves
-                // none — Cloudflare rejects the create with `missing_sitemap`.
-                crawlOptions: { source: "links" },
+                // Cloudflare renamed `crawl` → `discover` and removed
+                // `crawlOptions` from the API. The fixture serves a
+                // sitemap, so discovery always finds content.
+                parseType: "discover",
               },
             },
           });

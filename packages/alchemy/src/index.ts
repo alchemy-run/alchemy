@@ -25,6 +25,8 @@ export { ALCHEMY_DEV, ALCHEMY_PHASE, type AlchemyPhase } from "./Phase.ts";
 export * from "./PhysicalName.ts";
 export * as Plan from "./Plan.ts";
 export { Provider, ProviderCollection } from "./Provider.ts";
+export * as ProviderMode from "./ProviderMode.ts";
+export { remote } from "./ProviderMode.ts";
 export * from "./Random.ts";
 export * from "./Ref.ts";
 export * as RemovalPolicy from "./RemovalPolicy.ts";
@@ -36,6 +38,7 @@ export { Stack } from "./Stack.ts";
 export * from "./Stage.ts";
 export { inMemoryState, localState } from "./State/index.ts";
 export * as Sync from "./Sync.ts";
+export * as Telemetry from "./Telemetry.ts";
 
 // Re-export internal types so they can be portably named in
 // downstream `.d.ts` emissions (fixes TS2883 in user files).

@@ -1,12 +1,27 @@
-import * as ops from "@distilled.cloud/planetscale/Operations";
+import * as ps from "@distilled.cloud/planetscale";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import { createConnection, type Connection } from "mysql2/promise";
-import { listSqlFiles, readSqlFile, type SqlFile } from "../../Sql/SqlFile.ts";
+import type { Connection } from "mysql2/promise";
+import {
+  listSqlFiles,
+  readSqlFile,
+  splitSqlStatements,
+  type SqlFile,
+} from "../../SQL/SqlFile.ts";
 
 const MIGRATION_PASSWORD_TTL_SECONDS = 600;
+
+// `mysql2` is an optional peer dependency — loaded lazily so importing the
+// Planetscale provider never requires the driver unless migrations run.
+const importMysql = () =>
+  import("mysql2/promise").catch((cause) => {
+    throw new Error(
+      "Failed to load the 'mysql2' driver. Install the optional peer dependency 'mysql2' to run Planetscale MySQL migrations.",
+      { cause },
+    );
+  });
 
 export class MySQLMigrationError extends Data.TaggedError(
   "Planetscale::MySQLMigrationError",
@@ -95,7 +110,7 @@ const applyMySQLMigrations = (options: ApplyMigrationsOptions) =>
         nextSeq += 1;
         yield* Effect.gen(function* () {
           yield* mysqlQuery(connection, "START TRANSACTION");
-          for (const statement of splitMySQLStatements(file.sql)) {
+          for (const statement of splitSqlStatements(file.sql)) {
             yield* mysqlQuery(connection, statement);
           }
           yield* mysqlExecute(
@@ -119,24 +134,11 @@ const applyMySQLMigrations = (options: ApplyMigrationsOptions) =>
 const runMySQLSql = (target: MySQLMigrationTarget, sql: string) =>
   withMySQLConnection(target, (connection) =>
     Effect.gen(function* () {
-      for (const statement of splitMySQLStatements(sql)) {
+      for (const statement of splitSqlStatements(sql)) {
         yield* mysqlQuery(connection, statement);
       }
     }),
   );
-
-// Drizzle (and other migration tools) emit `--> statement-breakpoint` as a
-// separator between statements. PlanetScale's Vitess parser rejects the `-->`
-// token ("syntax error at position 2") because MySQL line comments require
-// whitespace after `--`. Split on the marker and run each statement
-// individually so the connector never sees the breakpoint comment.
-const STATEMENT_BREAKPOINT = /\r?\n\s*-->\s*statement-breakpoint\s*\r?\n?/g;
-
-const splitMySQLStatements = (sql: string): string[] =>
-  sql
-    .split(STATEMENT_BREAKPOINT)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
 
 const getNextMySQLSeq = (connection: Connection, table: string) =>
   mysqlQueryRows<{ id: string }>(connection, `SELECT id FROM ${table};`).pipe(
@@ -158,15 +160,17 @@ const withMySQLConnection = <A, E, R>(
   withTemporaryMySQLPassword(target, (password) =>
     Effect.acquireUseRelease(
       Effect.tryPromise({
-        try: () =>
-          createConnection({
+        try: async () => {
+          const { createConnection } = await importMysql();
+          return createConnection({
             host: password.host,
             user: password.username,
             password: Redacted.value(password.password),
             database: target.database,
             multipleStatements: true,
             ssl: { rejectUnauthorized: true },
-          }),
+          });
+        },
         catch: toMigrationError,
       }),
       use,
@@ -189,7 +193,7 @@ const withTemporaryMySQLPassword = <A, E, R>(
 ) =>
   Effect.acquireUseRelease(
     Effect.gen(function* () {
-      const created = yield* ops.createPassword({
+      const created = yield* ps.createPassword({
         organization: target.organization,
         database: target.database,
         branch: target.branch,
@@ -206,7 +210,7 @@ const withTemporaryMySQLPassword = <A, E, R>(
     }),
     use,
     (password) =>
-      ops
+      ps
         .deletePassword({
           organization: target.organization,
           database: target.database,

@@ -88,7 +88,7 @@ const runToCompletion = (baseUrl: string) =>
 /**
  * End-to-end regression guard for the ExecutionContext-in-Workflow fix
  * (PR #515): deploy a Neon project + branch, point a Cloudflare Hyperdrive
- * at it, host a Workflow that runs `Drizzle.postgres` queries inside `task`
+ * at it, host a Workflow that runs `Drizzle.Postgres` queries inside `task`
  * steps, fire an instance over HTTP, and assert the run completes with the
  * row it wrote.
  *
@@ -96,7 +96,7 @@ const runToCompletion = (baseUrl: string) =>
  * `ExecutionContext` service and the run reports `errored` with no output.
  */
 test(
-  "Drizzle.postgres query runs inside a Workflow task (per-run scope provided by the bridge)",
+  "Drizzle.Postgres query runs inside a Workflow task (per-run scope provided by the bridge)",
   Effect.gen(function* () {
     const { url } = yield* stack;
     expect(url).toBeTypeOf("string");
@@ -125,7 +125,7 @@ test(
  * perform I/O on behalf of a different request").
  */
 test(
-  "Drizzle.postgres queries survive sequential and concurrent fetch events",
+  "Drizzle.Postgres queries survive sequential and concurrent fetch events",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const baseUrl = url.replace(/\/+$/, "");

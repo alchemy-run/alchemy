@@ -11,6 +11,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
+import { sha256 } from "../../Util/sha256.ts";
 
 export interface DBInstanceProps {
   /**
@@ -204,6 +205,20 @@ export interface DBInstanceProps {
    * User-defined tags.
    */
   tags?: Record<string, string>;
+  /**
+   * Skip the final snapshot when the instance is deleted. Set `false` to
+   * have RDS take a final snapshot on teardown — belt-and-suspenders beyond
+   * `deletionProtection` for databases whose data must survive a deliberate
+   * destroy. Persisted into state so `delete` honors it without props.
+   * @default true
+   */
+  skipFinalSnapshot?: boolean;
+  /**
+   * Identifier for the final snapshot taken when `skipFinalSnapshot` is
+   * `false`. Defaults to `<instance-identifier>-final-<timestamp>` so
+   * repeated destroy/create cycles never collide on snapshot names.
+   */
+  finalDBSnapshotIdentifier?: string;
 }
 
 export interface DBInstance extends Resource<
@@ -351,6 +366,35 @@ export interface DBInstance extends Resource<
      */
     masterUsername: string | undefined;
     /**
+     * Whether the final snapshot is skipped on delete, persisted from the
+     * prop of the same name. `delete` receives only the stored attributes,
+     * never live props, so the snapshot decision must ride in state;
+     * `undefined` (older state without this attr) is treated as skip.
+     */
+    skipFinalSnapshot: boolean | undefined;
+    /**
+     * Identifier used for the final snapshot when `skipFinalSnapshot` is
+     * `false`, persisted from props so `delete` can name the snapshot without
+     * live props. `undefined` means `delete` falls back to the default
+     * `<instance-identifier>-final-<timestamp>` naming scheme.
+     */
+    finalDBSnapshotIdentifier: string | undefined;
+    /**
+     * Salted SHA-256 fingerprint of the last `masterUserPassword` this
+     * provider sent to RDS — `sha256(`${dbInstanceIdentifier}:${password}`)`,
+     * never the secret itself. Lets reconcile skip the `MasterUserPassword`
+     * modify (and the `resetting-master-credentials` cycle it triggers) when
+     * the configured password has not changed.
+     *
+     * Persisted `Redacted` because a password hash is still sensitive: an
+     * unsalted digest is vulnerable to rainbow-table lookup, so the state
+     * store must not surface it in plaintext (logs, `stringify`, dumps). The
+     * per-resource identifier salt additionally defeats precomputed tables;
+     * it is stable across a resource's life, so the fingerprint stays
+     * comparable across reconciles.
+     */
+    masterUserPasswordFingerprint: Redacted.Redacted<string> | undefined;
+    /**
      * ARN of the Secrets Manager secret holding master credentials.
      */
     masterUserSecretArn: string | undefined;
@@ -443,13 +487,34 @@ const toTagRecord = (
       .map((tag) => [tag.Key, tag.Value]),
   );
 
+/**
+ * Whether two optional master-password fingerprints match, compared by their
+ * underlying (`Redacted`-unwrapped) digest. A missing stored fingerprint
+ * counts as "does not match" so a pre-existing instance sends its password
+ * once, then records the fingerprint for subsequent reconciles.
+ */
+const sameFingerprint = (
+  a: Redacted.Redacted<string> | undefined,
+  b: Redacted.Redacted<string> | undefined,
+): boolean =>
+  a !== undefined && b !== undefined && Redacted.value(a) === Redacted.value(b);
+
 const toAttrs = ({
   instance,
   tags,
+  skipFinalSnapshot,
+  finalDBSnapshotIdentifier,
+  masterUserPasswordFingerprint,
 }: {
   instance: rds.DBInstance;
   tags: Record<string, string>;
+  skipFinalSnapshot?: boolean | undefined;
+  finalDBSnapshotIdentifier?: string | undefined;
+  masterUserPasswordFingerprint?: Redacted.Redacted<string> | undefined;
 }): DBInstance["Attributes"] => ({
+  skipFinalSnapshot,
+  finalDBSnapshotIdentifier,
+  masterUserPasswordFingerprint,
   dbInstanceIdentifier: instance.DBInstanceIdentifier ?? "",
   dbInstanceArn: instance.DBInstanceArn ?? "",
   dbClusterIdentifier: instance.DBClusterIdentifier,
@@ -649,11 +714,36 @@ export const DBInstanceProvider = () =>
           if (!instance?.DBInstanceArn) {
             return undefined;
           }
-          return toAttrs({ instance, tags: toTagRecord(instance.TagList) });
+          return toAttrs({
+            instance,
+            tags: toTagRecord(instance.TagList),
+            // Not observable from AWS — carry the stored deletion behavior
+            // and last-sent fingerprint forward so a refresh drops neither.
+            skipFinalSnapshot: output?.skipFinalSnapshot,
+            finalDBSnapshotIdentifier: output?.finalDBSnapshotIdentifier,
+            masterUserPasswordFingerprint:
+              output?.masterUserPasswordFingerprint,
+          });
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const identifier =
             output?.dbInstanceIdentifier ?? (yield* toIdentifier(id, news));
+          // AWS never returns the master password, so there is nothing to
+          // observe-and-diff — fingerprint the configured value instead and
+          // only send `MasterUserPassword` when the fingerprint changed.
+          // Without this, every reconcile of an instance whose props carry a
+          // password triggers a live `resetting-master-credentials` modify.
+          // The hash is salted with the (stable) instance identifier so the
+          // persisted digest is not rainbow-table-lookupable, and kept
+          // `Redacted` so it never leaks in plaintext through state/logs.
+          const passwordFingerprint =
+            news.masterUserPassword !== undefined
+              ? Redacted.make(
+                  yield* sha256(
+                    `${identifier}:${Redacted.value(news.masterUserPassword)}`,
+                  ),
+                )
+              : undefined;
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           // Duration props → the exact wire units the RDS API expects.
@@ -800,14 +890,23 @@ export const DBInstanceProvider = () =>
             if (news.allowMajorVersionUpgrade) {
               core.AllowMajorVersionUpgrade = true;
             }
-            // syncMasterPassword — rotation or explicit password update.
+            // syncMasterPassword — rotation or explicit password update. The
+            // explicit branch is fingerprint-guarded: send only when the
+            // configured password actually changed (or was never
+            // fingerprinted — pre-existing state sends once, then records).
             if (
               news.manageMasterUserPassword &&
               news.rotateMasterUserPassword
             ) {
               core.RotateMasterUserPassword = true;
               coreDirty = true;
-            } else if (news.masterUserPassword !== undefined) {
+            } else if (
+              news.masterUserPassword !== undefined &&
+              !sameFingerprint(
+                passwordFingerprint,
+                output?.masterUserPasswordFingerprint,
+              )
+            ) {
               core.MasterUserPassword = news.masterUserPassword;
               coreDirty = true;
             }
@@ -851,13 +950,32 @@ export const DBInstanceProvider = () =>
           }
 
           yield* session.note(dbInstanceArn || identifier);
-          return toAttrs({ instance: observed, tags: desiredTags });
+          return toAttrs({
+            instance: observed,
+            tags: desiredTags,
+            skipFinalSnapshot: news.skipFinalSnapshot,
+            finalDBSnapshotIdentifier: news.finalDBSnapshotIdentifier,
+            masterUserPasswordFingerprint: passwordFingerprint,
+          });
         }),
         delete: Effect.fn(function* ({ output }) {
+          // Default preserves the existing behavior (no final snapshot). When
+          // the resource was declared with `skipFinalSnapshot: false`, take
+          // one — timestamped by default so repeated destroy/create cycles
+          // never collide on snapshot names.
+          const skipFinalSnapshot = output.skipFinalSnapshot ?? true;
+          const finalDBSnapshotIdentifier = skipFinalSnapshot
+            ? undefined
+            : (output.finalDBSnapshotIdentifier ??
+              `${output.dbInstanceIdentifier}-final-${new Date()
+                .toISOString()
+                .replaceAll(/[:.]/g, "-")
+                .toLowerCase()}`);
           yield* rds
             .deleteDBInstance({
               DBInstanceIdentifier: output.dbInstanceIdentifier,
-              SkipFinalSnapshot: true,
+              SkipFinalSnapshot: skipFinalSnapshot,
+              FinalDBSnapshotIdentifier: finalDBSnapshotIdentifier,
             })
             .pipe(
               Effect.catchTag("DBInstanceNotFoundFault", () => Effect.void),
@@ -880,7 +998,9 @@ export const DBInstanceProvider = () =>
             {
               schedule: Schedule.max([
                 Schedule.fixed("15 seconds"),
-                Schedule.recurs(40),
+                // A final snapshot serializes before the delete, so give
+                // that path a larger budget than the plain-delete wait.
+                Schedule.recurs(skipFinalSnapshot ? 40 : 80),
               ]),
               until: (exists) => exists === false,
             },

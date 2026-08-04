@@ -14,7 +14,10 @@ import {
 
 export interface SvelteKitProps<
   Bindings extends WorkerBindingProps = {},
-> extends Omit<WorkerProps<Bindings>, "vite" | "main" | "assets" | "source"> {
+> extends Omit<
+  WorkerProps<Bindings>,
+  "vite" | "main" | "assets" | "source" | "script" | "bundle"
+> {
   /**
    * SvelteKit project root (the directory containing `package.json` and
    * `src/routes`). Relative paths resolve from the process working
@@ -90,11 +93,10 @@ export interface SvelteKitProps<
  * compatibility flags.
  *
  * Note on local dev: `alchemy dev` runs SvelteKit's own Vite dev server
- * (Node SSR with full HMR). `platform.env` is a stub populated from the
- * Worker's literal `env` values (strings and secrets) — real Cloudflare
- * bindings (KV, R2, D1, ...) inside dev's `platform.env` arrive with the
- * cloudflare-runtime Node-side bindings proxy, which is a tracked
- * follow-up.
+ * (Node SSR with full HMR). `platform.env` carries the Worker's real
+ * Cloudflare bindings (KV, R2, D1, ...) served by the cloudflare-runtime
+ * platform proxy, with literal `env` values (strings and secrets)
+ * overlaid.
  *
  * @resource
  * @product Website
@@ -210,16 +212,28 @@ export const SvelteKit: {
           Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
           (props) => ({
             ...props,
-            compatibility: {
-              ...props?.compatibility,
-              // SvelteKit's server graph is built for Node — nodejs_compat
-              // is effectively required for the workerd re-bundle to run.
-              flags: props?.compatibility?.flags?.includes("nodejs_compat")
-                ? props.compatibility.flags
-                : [...(props?.compatibility?.flags ?? []), "nodejs_compat"],
-            },
+            // SvelteKit's server graph is built for Node and needs
+            // `nodejs_compat` — `getCompatibility` already adds it to every
+            // non-python Worker.
+            // The adapter's `notFoundHandling` generates the fallback pages
+            // and the worker shim's 404 deferral, but the Workers assets
+            // layer has its own `not_found_handling` knob — if they
+            // disagree, unknown routes come back as empty-body 404s (the
+            // shim defers to an assets layer still on "none"). Default the
+            // assets-layer knob from the adapter so one prop configures the
+            // whole story; an explicit `assets.notFoundHandling` wins.
+            assets:
+              props?.adapter?.notFoundHandling !== undefined &&
+              props.adapter.notFoundHandling !== "none" &&
+              props.assets?.notFoundHandling === undefined
+                ? {
+                    ...props.assets,
+                    notFoundHandling: props.adapter.notFoundHandling,
+                  }
+                : props?.assets,
             source: {
               provider: "@distilled.cloud/sveltekit/source",
+              devMode: "server",
               options: {
                 rootDir: props?.rootDir,
                 memo: props?.memo,

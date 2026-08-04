@@ -240,7 +240,7 @@ export const ResourceGroupProvider = () =>
 type ObservedResourceGroup = {
   id: string;
   name?: string | null;
-  scope: unknown;
+  scope: iam.ResourceGroupsListResultItemScopeList;
 };
 
 /**

@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
@@ -15,23 +16,47 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-// Ride out 403 blips (`Forbidden`) while the harness-minted token
-// propagates across Cloudflare's edge.
-const getIdp = (accountId: string, identityProviderId: string) =>
-  zeroTrust
-    .getIdentityProviderForAccount({ accountId, identityProviderId })
-    .pipe(
-      Effect.retry({
-        while: (e) => e._tag === "Forbidden",
-        schedule: Schedule.exponential("500 millis"),
-        times: 8,
-      }),
+const zoneName =
+  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+
+const resolveZoneId = Effect.gen(function* () {
+  const { accountId } = yield* yield* CloudflareEnvironment;
+  const zone = yield* findZoneByName({ accountId, name: zoneName });
+  if (!zone) {
+    return yield* Effect.die(
+      new Error(`zone "${zoneName}" not found in account`),
     );
+  }
+  return zone.id;
+});
+
+// Ride out 403 blips (`Forbidden`) while the harness-minted token
+// propagates across Cloudflare's edge. Zone-level when `zoneId` is set,
+// account-level otherwise — mirroring the provider's own scoping.
+const getIdp = (
+  zoneId: string | undefined,
+  accountId: string,
+  identityProviderId: string,
+) =>
+  (zoneId !== undefined
+    ? zeroTrust.getIdentityProviderForZone({ zoneId, identityProviderId })
+    : zeroTrust.getIdentityProviderForAccount({ accountId, identityProviderId })
+  ).pipe(
+    Effect.retry({
+      while: (e) => e._tag === "Forbidden",
+      schedule: Schedule.exponential("500 millis"),
+      times: 8,
+    }),
+  );
 
 // A deleted IdP surfaces as `AccessIdentityProviderNotFound` (Cloudflare
 // code 12135, `access.api.error.not_found`).
-const expectGone = (accountId: string, identityProviderId: string) =>
-  getIdp(accountId, identityProviderId).pipe(
+const expectGone = (
+  zoneId: string | undefined,
+  accountId: string,
+  identityProviderId: string,
+) =>
+  getIdp(zoneId, accountId, identityProviderId).pipe(
     Effect.flatMap(() => Effect.fail({ _tag: "IdpNotDeleted" } as const)),
     Effect.catchTag("AccessIdentityProviderNotFound", () => Effect.void),
     Effect.retry({
@@ -73,7 +98,7 @@ test.provider("create, verify, and destroy an OIDC IdP", (stack) =>
     expect(idp.name).toEqual("alchemy-zt-idp-basic");
     expect(idp.type).toEqual("oidc");
 
-    const live = yield* getIdp(accountId, idp.identityProviderId);
+    const live = yield* getIdp(undefined, accountId, idp.identityProviderId);
     expect(live.name).toEqual("alchemy-zt-idp-basic");
     expect(live.type).toEqual("oidc");
     // Cloudflare masks the client secret on read.
@@ -82,7 +107,7 @@ test.provider("create, verify, and destroy an OIDC IdP", (stack) =>
     ).toBeNull();
 
     yield* stack.destroy();
-    yield* expectGone(accountId, idp.identityProviderId);
+    yield* expectGone(undefined, accountId, idp.identityProviderId);
   }).pipe(logLevel),
 );
 
@@ -120,7 +145,11 @@ test.provider("update name and config in place (same id)", (stack) =>
     expect(updated.identityProviderId).toEqual(initial.identityProviderId);
     expect(updated.name).toEqual("alchemy-zt-idp-update-v2");
 
-    const live = yield* getIdp(accountId, updated.identityProviderId);
+    const live = yield* getIdp(
+      undefined,
+      accountId,
+      updated.identityProviderId,
+    );
     expect(live.name).toEqual("alchemy-zt-idp-update-v2");
     expect(
       [...((live.config as { claims?: string[] | null }).claims ?? [])].sort(),
@@ -140,7 +169,7 @@ test.provider("update name and config in place (same id)", (stack) =>
     expect(noop.identityProviderId).toEqual(initial.identityProviderId);
 
     yield* stack.destroy();
-    yield* expectGone(accountId, initial.identityProviderId);
+    yield* expectGone(undefined, accountId, initial.identityProviderId);
   }).pipe(logLevel),
 );
 
@@ -166,7 +195,11 @@ test.provider("list enumerates the deployed IdP", (stack) =>
     ).toBe(true);
 
     yield* stack.destroy();
-    yield* expectGone(deployed.accountId, deployed.identityProviderId);
+    yield* expectGone(
+      undefined,
+      deployed.accountId,
+      deployed.identityProviderId,
+    );
   }).pipe(logLevel),
 );
 
@@ -202,12 +235,144 @@ test.provider("changing the type replaces the IdP", (stack) =>
     expect(github.identityProviderId).not.toEqual(oidc.identityProviderId);
     expect(github.type).toEqual("github");
 
-    const live = yield* getIdp(accountId, github.identityProviderId);
+    const live = yield* getIdp(undefined, accountId, github.identityProviderId);
     expect(live.type).toEqual("github");
     // The old IdP was deleted by the replacement.
-    yield* expectGone(accountId, oidc.identityProviderId);
+    yield* expectGone(undefined, accountId, oidc.identityProviderId);
 
     yield* stack.destroy();
-    yield* expectGone(accountId, github.identityProviderId);
+    yield* expectGone(undefined, accountId, github.identityProviderId);
   }).pipe(logLevel),
 );
+
+test.provider("zone-scoped IdP lifecycle (create, rename, destroy)", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+    const zoneId = yield* resolveZoneId;
+
+    yield* stack.destroy();
+
+    const idp = yield* stack.deploy(
+      Cloudflare.Access.IdentityProvider("ZoneOidc", {
+        zoneId,
+        name: "alchemy-zt-idp-zone",
+        type: "oidc",
+        config: oidcConfig,
+      }),
+    );
+
+    expect(idp.identityProviderId).toBeTruthy();
+    expect(idp.zoneId).toEqual(zoneId);
+
+    // Out-of-band via the zone-scoped route.
+    const live = yield* getIdp(zoneId, accountId, idp.identityProviderId);
+    expect(live.name).toEqual("alchemy-zt-idp-zone");
+    expect(live.type).toEqual("oidc");
+
+    // Rename converges in place — same IdP, same scope.
+    const renamed = yield* stack.deploy(
+      Cloudflare.Access.IdentityProvider("ZoneOidc", {
+        zoneId,
+        name: "alchemy-zt-idp-zone-v2",
+        type: "oidc",
+        config: oidcConfig,
+      }),
+    );
+    expect(renamed.identityProviderId).toEqual(idp.identityProviderId);
+    expect(renamed.name).toEqual("alchemy-zt-idp-zone-v2");
+
+    yield* stack.destroy();
+    yield* expectGone(zoneId, accountId, idp.identityProviderId);
+  }).pipe(logLevel),
+);
+
+test.provider("moving an IdP between scopes replaces it", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+    const zoneId = yield* resolveZoneId;
+
+    yield* stack.destroy();
+
+    const accountScoped = yield* stack.deploy(
+      Cloudflare.Access.IdentityProvider("ScopeMove", {
+        name: "alchemy-zt-idp-scope-move",
+        type: "oidc",
+        config: oidcConfig,
+      }),
+    );
+    expect(accountScoped.zoneId).toBeUndefined();
+
+    // Adding zoneId is a scope change — a replacement, paired with a
+    // rename so the doomed sibling isn't found by the cold-read scan.
+    const zoneScoped = yield* stack.deploy(
+      Cloudflare.Access.IdentityProvider("ScopeMove", {
+        zoneId,
+        name: "alchemy-zt-idp-scope-move-zone",
+        type: "oidc",
+        config: oidcConfig,
+      }),
+    );
+    expect(zoneScoped.identityProviderId).not.toEqual(
+      accountScoped.identityProviderId,
+    );
+    expect(zoneScoped.zoneId).toEqual(zoneId);
+
+    // The old account-scoped IdP was deleted by the replacement.
+    yield* expectGone(undefined, accountId, accountScoped.identityProviderId);
+
+    yield* stack.destroy();
+    yield* expectGone(zoneId, accountId, zoneScoped.identityProviderId);
+  }).pipe(logLevel),
+);
+
+// Compile-time contract of the per-type configs — never executed. The
+// discriminated Props union must reject a config from the wrong provider
+// type and enforce each type's required fields. Type-level assertions
+// (not @ts-expect-error) so the checks don't depend on where tsc anchors
+// a multi-line object-literal diagnostic.
+type IdpProps = Cloudflare.Access.IdentityProviderProps;
+type Extends<A, B> = [A] extends [B] ? true : false;
+type Not<T extends boolean> = T extends true ? false : true;
+type Assert<T extends true> = T;
+
+// Valid shapes are accepted.
+type _OkOidc = Assert<
+  Extends<{ type: "oidc"; config: typeof oidcConfig }, IdpProps>
+>;
+type _OkPin = Assert<Extends<{ type: "onetimepin" }, IdpProps>>;
+type _OkSaml = Assert<
+  Extends<
+    {
+      type: "saml";
+      config: {
+        issuerUrl: string;
+        ssoTargetUrl: string;
+        idpPublicCerts: string[];
+      };
+      samlCertificateSetId: string;
+    },
+    IdpProps
+  >
+>;
+// An OAuth-only config is rejected on an oidc IdP (missing endpoints).
+type _BadOidc = Assert<
+  Not<
+    Extends<
+      { type: "oidc"; config: { clientId: string; clientSecret: string } },
+      IdpProps
+    >
+  >
+>;
+// azureAD requires directoryId.
+type _BadAzure = Assert<
+  Not<
+    Extends<
+      { type: "azureAD"; config: { clientId: string; clientSecret: string } },
+      IdpProps
+    >
+  >
+>;
+// saml requires issuerUrl/ssoTargetUrl/idpPublicCerts.
+type _BadSaml = Assert<
+  Not<Extends<{ type: "saml"; config: { issuerUrl: string } }, IdpProps>>
+>;

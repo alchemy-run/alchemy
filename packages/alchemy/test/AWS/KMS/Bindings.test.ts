@@ -298,7 +298,17 @@ const ensureStandingKey = Effect.fn(function* (
         .pipe(Effect.ignore),
     ),
   );
-  const described = yield* kms.describeKey({ KeyId: spec.alias });
+  // CreateAlias is eventually consistent: the immediate read-back can 404
+  // under load. Retry the alias lookup for a bounded window.
+  const described = yield* kms.describeKey({ KeyId: spec.alias }).pipe(
+    Effect.retry({
+      while: (error) => error._tag === "NotFoundException",
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(8),
+      ]),
+    }),
+  );
   return described.KeyMetadata!.KeyId;
 });
 

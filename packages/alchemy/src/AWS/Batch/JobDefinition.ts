@@ -170,12 +170,14 @@ export interface JobDefinitionProps extends PlatformProps {
    */
   propagateTags?: boolean;
   /**
-   * Bundler configuration for the Effect-native entrypoint.
+   * Bundler configuration for the Effect-native entrypoint: rolldown
+   * `input`/`output` overrides plus pure-annotation options (`pure`).
+   * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
+   * `@distilled.cloud/*` are annotated as pure by default so unused code
+   * from those packages is tree-shaken; list additional packages via
+   * `pure.packages`, or disable with `pure: false`.
    */
-  build?: {
-    input?: Partial<rolldown.InputOptions>;
-    output?: Partial<rolldown.OutputOptions>;
-  };
+  build?: Bundle.BundleConfig;
   /**
    * Docker image build for the Effect-native form: optional full
    * `dockerfile`. When omitted, Alchemy generates a Dockerfile for the
@@ -354,6 +356,45 @@ const createJobDefinitionRuntimeContext = (
  * const jobDef = yield* Batch.JobDefinition("Script", {
  *   main: path.join(import.meta.dirname, "job.ts"),
  * });
+ * ```
+ *
+ * @section Bundling & Tree-shaking
+ * `main` is bundled with rolldown at deploy time. Top-level calls in the
+ * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
+ * `@distilled.cloud/*` packages receive `#__PURE__` annotations by
+ * default, so anything the job doesn't use from those packages is
+ * tree-shaken out of the bundle. Any other package — including your own
+ * app — is left untouched unless you list it explicitly.
+ *
+ * @example Treat additional packages as pure
+ * Pass package names (or picomatch globs) via `build.pure.packages` to
+ * annotate them in addition to the defaults.
+ * ```typescript
+ * {
+ *   main: import.meta.url,
+ *   build: {
+ *     pure: { packages: ["my-lib", "@my-scope/*"] },
+ *   },
+ * }
+ * ```
+ *
+ * Listing a package annotates calls whose result is bound (variable
+ * initializers, exports) — safe anywhere. If a listed package also
+ * declares `"sideEffects": false` (or `[]`) in its `package.json`, that
+ * combination opts it into full annotation: top-level calls whose result
+ * is discarded (e.g. `router.on("/path", handler)` registrations) are
+ * also marked pure and deleted under minification when unused. Only list
+ * a `sideEffects: false` package if its modules really are free of
+ * meaningful top-level side effects. The `effect`, `alchemy`, and
+ * `@distilled.cloud` defaults declare exactly that, on purpose — their
+ * modules are designed to be fully tree-shakeable.
+ *
+ * @example Disable pure annotations
+ * ```typescript
+ * {
+ *   main: import.meta.url,
+ *   build: { pure: false },
+ * }
  * ```
  */
 export const JobDefinition: Platform<
@@ -535,7 +576,10 @@ export const JobDefinitionProvider = () =>
         ALCHEMY_PHASE: "runtime",
       };
 
-      const toName = (id: string, props: { jobDefinitionName?: string } = {}) =>
+      const toName = (
+        id: string,
+        props: { jobDefinitionName?: string } = {},
+      ) =>
         props.jobDefinitionName
           ? Effect.succeed(props.jobDefinitionName)
           : createPhysicalName({ id, maxLength: 128 });
@@ -594,13 +638,13 @@ export const JobDefinitionProvider = () =>
         family: string,
         status: "ACTIVE" | "INACTIVE",
       ) =>
-        ecs.listTaskDefinitions({ familyPrefix: family, status }).pipe(
-          Effect.map((response) =>
-            (response.taskDefinitionArns ?? []).filter((arn) => {
-              const suffix = arn.split("/").at(-1);
-              return suffix?.slice(0, suffix.lastIndexOf(":")) === family;
-            }),
-          ),
+        ecs.listTaskDefinitions.items({ familyPrefix: family, status }).pipe(
+          Stream.filter((arn) => {
+            const suffix = arn.split("/").at(-1);
+            return suffix?.slice(0, suffix.lastIndexOf(":")) === family;
+          }),
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
         );
 
       const waitUntilBackingRevisionDeletionStarted = (
@@ -884,6 +928,7 @@ export const JobDefinitionProvider = () =>
               minify: props.build?.output?.minify ?? false,
               entryFileNames: "index.mjs",
             },
+            props.build,
           );
         });
 
@@ -1060,29 +1105,24 @@ await Effect.runPromise(program).then(
           platform.executionRoleName,
         ]) {
           if (!roleName) continue;
-          yield* iam.listRolePolicies({ RoleName: roleName }).pipe(
-            Effect.catchTag("NoSuchEntityException", () =>
-              Effect.succeed({ PolicyNames: [] as string[] }),
+          yield* iam.listRolePolicies.items({ RoleName: roleName }).pipe(
+            Stream.mapEffect((policyName) =>
+              iam
+                .deleteRolePolicy({
+                  RoleName: roleName,
+                  PolicyName: policyName,
+                })
+                .pipe(
+                  Effect.catchTag("NoSuchEntityException", () => Effect.void),
+                ),
             ),
-            Effect.flatMap((policies) =>
-              Effect.forEach(policies.PolicyNames ?? [], (policyName) =>
-                iam
-                  .deleteRolePolicy({
-                    RoleName: roleName,
-                    PolicyName: policyName,
-                  })
-                  .pipe(
-                    Effect.catchTag("NoSuchEntityException", () => Effect.void),
-                  ),
-              ),
-            ),
+            Stream.runDrain,
+            Effect.catchTag("NoSuchEntityException", () => Effect.void),
           );
-          yield* iam.listAttachedRolePolicies({ RoleName: roleName }).pipe(
-            Effect.catchTag("NoSuchEntityException", () =>
-              Effect.succeed({ AttachedPolicies: [] }),
-            ),
-            Effect.flatMap((policies) =>
-              Effect.forEach(policies.AttachedPolicies ?? [], (policy) =>
+          yield* iam.listAttachedRolePolicies
+            .items({ RoleName: roleName })
+            .pipe(
+              Stream.mapEffect((policy) =>
                 iam
                   .detachRolePolicy({
                     RoleName: roleName,
@@ -1092,8 +1132,9 @@ await Effect.runPromise(program).then(
                     Effect.catchTag("NoSuchEntityException", () => Effect.void),
                   ),
               ),
-            ),
-          );
+              Stream.runDrain,
+              Effect.catchTag("NoSuchEntityException", () => Effect.void),
+            );
           yield* iam
             .deleteRole({ RoleName: roleName })
             .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));

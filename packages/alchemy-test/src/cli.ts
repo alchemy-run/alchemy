@@ -56,9 +56,9 @@ const retry = Flag.integer("retry").pipe(
 const concurrency = Flag.string("concurrency").pipe(
   Flag.withAlias("c"),
   Flag.withDescription(
-    'Maximum number of files running concurrently: a number or "unbounded" (default)',
+    'Maximum number of files running concurrently: a number (default 32) or "unbounded". Unbounded runs of large suites saturate the event loop and drown real failures in spurious 0ms beforeAll timeouts.',
   ),
-  Flag.withDefault("unbounded"),
+  Flag.withDefault("32"),
 );
 
 const toConcurrency = (value: string): number | "unbounded" => {

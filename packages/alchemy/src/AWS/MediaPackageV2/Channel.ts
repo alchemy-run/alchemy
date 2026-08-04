@@ -1,5 +1,6 @@
 import * as mediapackagev2 from "@distilled.cloud/aws/mediapackagev2";
 import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -348,10 +349,7 @@ export const ChannelProvider = () =>
                 ),
               { concurrency: 5 },
             );
-            return channels.filter(
-              (channel): channel is Channel["Attributes"] =>
-                channel !== undefined,
-            );
+            return channels.filter(Predicate.isNotUndefined);
           }),
       };
     }),

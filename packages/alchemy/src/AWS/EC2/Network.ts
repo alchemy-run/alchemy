@@ -164,6 +164,9 @@ export const Network = (id: string, props: NetworkProps) =>
           availabilityZone,
           mapPublicIpOnLaunch: true,
           tags: {
+            // Kubernetes load-balancer subnet discovery (EKS Auto Mode and the
+            // AWS Load Balancer Controller both select subnets by this tag).
+            "kubernetes.io/role/elb": "1",
             ...tags,
             Tier: "public",
           },
@@ -175,6 +178,9 @@ export const Network = (id: string, props: NetworkProps) =>
           cidrBlock: subnetCidrs.private[index],
           availabilityZone,
           tags: {
+            // Internal load-balancer subnet discovery (see the public-subnet
+            // `kubernetes.io/role/elb` note above).
+            "kubernetes.io/role/internal-elb": "1",
             ...tags,
             Tier: "private",
           },

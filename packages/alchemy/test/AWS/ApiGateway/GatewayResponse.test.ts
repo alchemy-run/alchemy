@@ -92,6 +92,9 @@ test.provider.skipIf(!!process.env.FAST)(
       yield* stack.destroy();
       yield* assertRestApiDeleted(api.restApiId);
     }),
+  // Three sequential deploy/destroy cycles against API Gateway's account-wide
+  // throttle: ~95s alone, >120s under a saturated full-suite run.
+  { timeout: 240_000 },
 );
 
 test.provider.skipIf(!!process.env.FAST)(

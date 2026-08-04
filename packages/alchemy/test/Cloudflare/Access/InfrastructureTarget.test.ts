@@ -1,3 +1,4 @@
+import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Provider from "@/Provider";
@@ -5,6 +6,7 @@ import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 
@@ -68,16 +70,17 @@ test.provider(
           .pipe(Effect.catchTag("TargetNotFound", () => Effect.void)),
       );
 
-      const deployTarget = () =>
+      const deployTarget = (adoptIt?: boolean) =>
         stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Access.InfrastructureTarget(
+            const target = Cloudflare.Access.InfrastructureTarget(
               "WedgedTarget",
               {
                 hostname,
                 ip: { ipv4: { ipAddr: "10.7.0.99" } },
               },
             );
+            return yield* adoptIt ? target.pipe(adopt(true)) : target;
           }),
         );
 
@@ -119,12 +122,22 @@ test.provider(
         },
       });
 
-      // Before the fix, `read` crashed here with
+      // Before the #736 fix, `read` crashed here with
       // `TypeError: undefined is not an object (evaluating 'ip.ipv4')`
       // (resolvedIp(olds.ip) with olds.ip === undefined). After the fix,
-      // read falls back to the output hint, matches by hostname, and the
-      // engine converges onto the same target — no duplicate created.
-      const recovered = yield* deployTarget();
+      // read falls back to the output hint and matches by hostname —
+      // but targets carry no ownership markers, so the match surfaces as
+      // `Unowned`. Since #862, resuming an interrupted create onto an
+      // Unowned resource fails loudly instead of silently taking over.
+      const error = yield* deployTarget().pipe(
+        Effect.as(undefined),
+        Effect.catchCause((cause) => Effect.succeed(findOwnedError(cause))),
+      );
+      expect(error).toBeInstanceOf(OwnedBySomeoneElse);
+
+      // adopt(true) opts in: the engine converges onto the same target —
+      // no duplicate created.
+      const recovered = yield* deployTarget(true);
       expect(recovered.targetId).toEqual(created.targetId);
       expect(recovered.hostname).toEqual(created.hostname);
       expect(recovered.ip.ipv4?.ipAddr).toEqual("10.7.0.99");
@@ -133,3 +146,19 @@ test.provider(
     }),
   { timeout: 240_000 },
 );
+
+const findOwnedError = (
+  cause: Cause.Cause<unknown>,
+): OwnedBySomeoneElse | undefined =>
+  cause.reasons
+    .map((reason) =>
+      Cause.isFailReason(reason)
+        ? reason.error
+        : Cause.isDieReason(reason)
+          ? reason.defect
+          : undefined,
+    )
+    .find(
+      (value): value is OwnedBySomeoneElse =>
+        value instanceof OwnedBySomeoneElse,
+    );

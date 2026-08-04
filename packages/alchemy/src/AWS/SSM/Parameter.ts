@@ -1,6 +1,7 @@
 import * as kms from "@distilled.cloud/aws/kms";
 import * as ssm from "@distilled.cloud/aws/ssm";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -235,10 +236,18 @@ export const ParameterProvider = () =>
       // allowedPattern, and the KMS key id. It is eventually consistent, so
       // treat an absent result as "no metadata yet" rather than "missing".
       const describeByName = Effect.fn(function* (name: string) {
-        const result = yield* ssm.describeParameters({
-          ParameterFilters: [{ Key: "Name", Option: "Equals", Values: [name] }],
-        });
-        return result.Parameters?.[0];
+        return yield* ssm.describeParameters
+          .pages({
+            ParameterFilters: [
+              { Key: "Name", Option: "Equals", Values: [name] },
+            ],
+          })
+          .pipe(
+            Stream.map((page) => page.Parameters ?? []),
+            Stream.flattenIterable,
+            Stream.runHead,
+            Effect.map(Option.getOrUndefined),
+          );
       });
 
       // Resolve a key id/alias/ARN to the key ARN for the `keyArn` attribute.

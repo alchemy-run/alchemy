@@ -82,7 +82,11 @@ describe("resolveSource", () => {
     provide(
       Effect.gen(function* () {
         const props: WorkerProps = {
-          source: { provider: providerModule, options: { marker: "abc-123" } },
+          source: {
+            provider: providerModule,
+            devMode: "bundle",
+            options: { marker: "abc-123" },
+          },
         };
         const source = yield* resolveSource(props);
         const out = yield* source.build(ctx(props));
@@ -100,7 +104,10 @@ describe("resolveSource", () => {
         Effect.gen(function* () {
           const result = yield* Effect.result(
             resolveSource({
-              source: { provider: "@alchemy.run/does-not-exist-fixture" },
+              source: {
+                provider: "@alchemy.run/does-not-exist-fixture",
+                devMode: "bundle",
+              },
             }),
           );
           expect(result._tag).toBe("Failure");
@@ -120,7 +127,9 @@ describe("resolveSource", () => {
       provide(
         Effect.gen(function* () {
           const result = yield* Effect.result(
-            resolveSource({ source: { provider: invalidModule } }),
+            resolveSource({
+              source: { provider: invalidModule, devMode: "bundle" },
+            }),
           );
           expect(result._tag).toBe("Failure");
           if (result._tag === "Failure") {
@@ -138,7 +147,7 @@ describe("resolveSource", () => {
       Effect.gen(function* () {
         const result = yield* Effect.result(
           resolveSource({
-            source: { provider: providerModule },
+            source: { provider: providerModule, devMode: "bundle" },
             main: "./worker.ts",
           }),
         );

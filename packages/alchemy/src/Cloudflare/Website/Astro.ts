@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import type { MemoOptions } from "../../Command/Memo.ts";
 import type { InputProps } from "../../Input.ts";
 import { effectClass } from "../../Util/effect.ts";
+import { Namespace } from "../KV/Namespace.ts";
 import type { Providers } from "../Providers.ts";
 import type { AssetsConfig } from "../Workers/Assets.ts";
 import {
@@ -39,12 +40,16 @@ export interface AstroProps<
     workspaces?: "auto" | Array<MemoOptions & { cwd: string }>;
   };
   /**
-   * The name of the KV binding injected into Astro's session config when
-   * present on the Worker env. Bind a KV namespace under this name to
-   * enable Astro sessions.
+   * The name of the KV binding backing Astro's session API.
+   *
+   * A KV namespace is auto-provisioned and bound under this name on
+   * deploy, so `Astro.session` works with zero configuration. Bind your
+   * own KV namespace under this name in `env` to use it instead of the
+   * auto-provisioned one, or set this to `false` to disable session
+   * provisioning entirely.
    * @default "SESSION"
    */
-  sessionKVBindingName?: string;
+  sessionKVBindingName?: string | false;
   /**
    * Serializable Astro config merged into the in-memory configuration.
    * The project's `astro.config.*` file is NOT read — the integration is
@@ -106,14 +111,28 @@ export interface AstroProps<
  * @section Deploying an Astro Site
  * A single call builds the project and deploys the server bundle plus
  * static assets. Pages are server-rendered by default; pages that
- * `export const prerender = true` are served as static assets.
+ * `export const prerender = true` are served as static assets. Astro's
+ * server runtime is built against Node APIs, so `nodejs_compat` is
+ * always included in the Worker's compatibility flags.
  *
  * @example Astro site
  * ```typescript
- * const site = yield* Cloudflare.Website.Astro("Website", {
- *   compatibility: {
- *     flags: ["nodejs_compat"],
- *   },
+ * const site = yield* Cloudflare.Website.Astro("Website");
+ * ```
+ *
+ * @section Static Sites
+ * With `astro: { output: "static" }` every page is prerendered at build
+ * time and the deploy is **assets-only**: no server bundle is uploaded —
+ * Cloudflare's asset layer answers every request (including the built
+ * `404.html` via `assets.notFoundHandling: "404-page"`). Session
+ * provisioning is skipped for declared-static sites since no Worker code
+ * runs at request time.
+ *
+ * @example Fully static Astro site
+ * ```typescript
+ * const site = yield* Cloudflare.Website.Astro("Docs", {
+ *   astro: { output: "static" },
+ *   assets: { notFoundHandling: "404-page" },
  * });
  * ```
  *
@@ -128,9 +147,6 @@ export interface AstroProps<
  * const bucket = yield* Cloudflare.R2.Bucket("Uploads");
  *
  * const site = yield* Cloudflare.Website.Astro("Website", {
- *   compatibility: {
- *     flags: ["nodejs_compat"],
- *   },
  *   env: {
  *     CACHE: kv,
  *     UPLOADS: bucket,
@@ -139,21 +155,27 @@ export interface AstroProps<
  * ```
  *
  * @section Sessions
- * Astro's session API is backed by a KV namespace. Bind one under the
- * session binding name (`SESSION` by default) and Astro sessions work
- * out of the box.
+ * Astro's session API is backed by a KV namespace. One is provisioned
+ * and bound under the session binding name (`SESSION` by default)
+ * automatically, so `Astro.session` works with zero configuration.
+ * Bind your own namespace under that name to use it instead, or set
+ * `sessionKVBindingName: false` to opt out of session provisioning.
  *
- * @example Enabling Astro sessions
+ * @example Bringing your own session namespace
  * ```typescript
  * const sessions = yield* Cloudflare.KV.Namespace("Sessions");
  *
  * const site = yield* Cloudflare.Website.Astro("Website", {
- *   compatibility: {
- *     flags: ["nodejs_compat"],
- *   },
  *   env: {
  *     SESSION: sessions,
  *   },
+ * });
+ * ```
+ *
+ * @example Opting out of session provisioning
+ * ```typescript
+ * const site = yield* Cloudflare.Website.Astro("Website", {
+ *   sessionKVBindingName: false,
  * });
  * ```
  *
@@ -193,9 +215,7 @@ export interface AstroProps<
  *
  * @example Declaring a Worker class
  * ```typescript
- * class Website extends Cloudflare.Website.Astro<Website>()("Website", {
- *   compatibility: { flags: ["nodejs_compat"] },
- * }) {}
+ * class Website extends Cloudflare.Website.Astro<Website>()("Website") {}
  *
  * const site = yield* Website;
  * ```
@@ -236,20 +256,56 @@ export const Astro: {
     ? (id: string, propsEff: any) => effectClass(Astro(id, propsEff))
     : Worker(
         id,
-        Effect.map(
-          Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
-          (props) => ({
+        Effect.gen(function* () {
+          const props: any =
+            (Effect.isEffect(propsEff) ? yield* propsEff : propsEff) ?? {};
+          const session = props.sessionKVBindingName;
+          const sessionBindingName =
+            typeof session === "string" ? session : "SESSION";
+          let env = props.env;
+          // Auto-provision the KV namespace backing Astro's session API
+          // unless the user opted out (`sessionKVBindingName: false`) or
+          // already bound their own namespace under the session name.
+          // A declared `output: "static"` site is assets-only — no Worker
+          // script runs at request time, so a session namespace could never
+          // be read; skip provisioning it. Resource creation is deduped by
+          // logical id, so re-evaluating this props effect is safe.
+          if (
+            session !== false &&
+            props.astro?.output !== "static" &&
+            env?.[sessionBindingName] === undefined
+          ) {
+            const sessions = yield* Namespace(`${id}Session`);
+            env = { ...env, [sessionBindingName]: sessions };
+          }
+          return {
             ...props,
+            env,
+            // Astro's vendored server runtime is built against Node APIs
+            // and needs `nodejs_compat`; `getCompatibility` already adds it
+            // to every non-python Worker (honoring an explicit
+            // `no_nodejs_compat` opt-out and the v2-mode date guard).
             main: undefined!,
             source: {
               provider: "@distilled.cloud/astro/source",
+              devMode: "server",
               options: {
-                rootDir: props?.rootDir,
-                memo: props?.memo,
-                sessionKVBindingName: props?.sessionKVBindingName,
-                astro: props?.astro,
+                rootDir: props.rootDir,
+                memo: props.memo,
+                // Passed through verbatim (including `false`) so the
+                // source provider can skip its session-driver wiring on
+                // opt-out.
+                sessionKVBindingName: props.sessionKVBindingName,
+                // Server output is the documented default: astro's own
+                // zero-config default is `"static"`, which would prerender
+                // every page at build time inside workerd — where the
+                // Worker's bindings don't exist. The inline config merges
+                // OVER a project's `astro.config.*`, so an explicit
+                // file-level `output` is superseded; opt into a fully
+                // prerendered site with `astro: { output: "static" }`.
+                astro: { output: "server", ...props.astro },
               },
             },
-          }),
-        ),
+          };
+        }),
       )) as any;

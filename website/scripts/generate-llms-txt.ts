@@ -233,7 +233,7 @@ const SECTIONS: Section[] = [
   {
     heading: "AWS — start here",
     intro:
-      "The AWS hub: overview (runtimes + resources + recipes), setup (credentials, profiles, region), and the Lambda vs ECS vs EC2 decision page.",
+      "The AWS hub: overview (runtimes + resources + recipes), setup (credentials, profiles, region), and the Lambda vs ECS vs EKS vs EC2 decision page.",
     pages: {
       slugs: ["aws/index", "aws/setup", "aws/compute/choosing-a-runtime"],
     },
@@ -361,23 +361,20 @@ const SECTIONS: Section[] = [
     },
   },
   {
-    heading: "Kubernetes",
+    heading: "SQL",
     intro:
-      "Kubernetes objects (Namespace, Deployment, Service, ConfigMap, Job, ServiceAccount) defined in TypeScript and converged onto an EKS cluster via server-side apply; cluster provisioning and workload guides live under AWS → EKS.",
+      "One home for SQL in alchemy — low-level effect-sql clients (alchemy/SQL), Drizzle ORM, the migrationsDir contract, and the per-execution connection lifecycle; Worker runtime wiring lives under Cloudflare → Data.",
     pages: {
       slugs: [
-        "kubernetes/index",
-        "kubernetes/setup",
-        "kubernetes/objects-as-bindings",
+        "sql/index",
+        "sql/effect-sql/postgres",
+        "sql/effect-sql/d1",
+        "sql/effect-sql/migrations",
+        "sql/effect-sql/lifecycle",
+        "sql/drizzle/postgres",
+        "sql/drizzle/d1",
+        "sql/drizzle/migrations",
       ],
-    },
-  },
-  {
-    heading: "Drizzle",
-    intro:
-      "Drizzle schemas as Stack resources — migration SQL regenerated on deploy and applied by whichever database resource consumes it; Worker runtime wiring lives under Cloudflare → Data.",
-    pages: {
-      slugs: ["drizzle/index", "drizzle/migrations"],
     },
   },
   {

@@ -102,7 +102,7 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).sequential("Hyperdrive", () => {
    *
    * Validates that:
    *   - migrations applied from the fixtures dir produce the expected table
-   *   - `Cloudflare.Hyperdrive.Connect(...) + Drizzle.postgres(...)` produces
+   *   - `Cloudflare.Hyperdrive.Connect(...) + Drizzle.Postgres(...)` produces
    *     a working Effect-native client at runtime
    *   - INSERT / SELECT / DELETE round-trip through Hyperdrive to Planetscale
    */

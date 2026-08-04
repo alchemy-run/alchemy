@@ -4,12 +4,12 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import type { Providers } from "./Providers.ts";
 
-export type NotifierProps = Axiom.CreateNotifierInput;
+export type NotifierProps = Axiom.CreateNotifierRequest;
 
 export type Notifier = Resource<
   "Axiom.Notifier",
   NotifierProps,
-  Axiom.CreateNotifierOutput & { id: string },
+  Axiom.CreateNotifierResponse & { id: string },
   never,
   Providers
 >;

@@ -1,5 +1,6 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -373,27 +374,12 @@ const toAttributeMap = (
   );
 
 const findTopicArnByName = Effect.fn(function* (topicName: string) {
-  let nextToken: string | undefined;
-
-  while (true) {
-    const response = yield* sns.listTopics({
-      NextToken: nextToken,
-    });
-
-    const match = response.Topics?.find(
-      (topic) => topic.TopicArn?.split(":").at(-1) === topicName,
-    )?.TopicArn;
-
-    if (match) {
-      return match;
-    }
-
-    if (!response.NextToken) {
-      return undefined;
-    }
-
-    nextToken = response.NextToken;
-  }
+  const match = yield* sns.listTopics.items({}).pipe(
+    Stream.filter((topic) => topic.TopicArn?.split(":").at(-1) === topicName),
+    Stream.runHead,
+    Effect.map(Option.getOrUndefined),
+  );
+  return match?.TopicArn;
 });
 
 const readTopic = Effect.fn(function* ({

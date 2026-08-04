@@ -844,12 +844,18 @@ const waitForEndpointEnisReleased = (
   session: ScopedPlanStatusSession,
 ) =>
   Effect.gen(function* () {
-    const result = yield* ec2.describeNetworkInterfaces({
-      Filters: [{ Name: "network-interface-id", Values: networkInterfaceIds }],
-    });
-    const remaining = (result.NetworkInterfaces ?? [])
-      .map((eni) => eni.NetworkInterfaceId)
-      .filter((id): id is string => Boolean(id));
+    const remaining = yield* ec2.describeNetworkInterfaces
+      .items({
+        Filters: [
+          { Name: "network-interface-id", Values: networkInterfaceIds },
+        ],
+      })
+      .pipe(
+        Stream.map((eni) => eni.NetworkInterfaceId),
+        Stream.filter((id): id is string => Boolean(id)),
+        Stream.runCollect,
+        Effect.map((chunk) => Array.from(chunk)),
+      );
     if (remaining.length > 0) {
       return yield* new VpcEndpointEnisLingering({
         networkInterfaceIds: remaining,

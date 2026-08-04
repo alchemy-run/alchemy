@@ -19,7 +19,7 @@ export class DsqlDrizzleFunction extends Lambda.Function<Lambda.Function>()(
 /**
  * Lambda fixture proving the full-stack Drizzle-over-DSQL path: the
  * `DSQL.Connect` binding mints an IAM auth token per execution, and
- * `Drizzle.postgres` builds its execution-scoped pool from the resulting
+ * `Drizzle.Postgres` builds its execution-scoped pool from the resulting
  * connection URL. No VPC — DSQL's endpoint is public and IAM-gated.
  */
 export default DsqlDrizzleFunction.make(
@@ -38,7 +38,7 @@ export default DsqlDrizzleFunction.make(
     // `proxyChain` defers the connect to the first query, so the pool (and
     // the IAM token backing it) is built inside the invocation, per
     // execution — a fresh token can never outlive its pool.
-    const db = yield* Drizzle.postgres(
+    const db = yield* Drizzle.Postgres(
       conn.pipe(Effect.map((info) => info.url)),
     );
 
