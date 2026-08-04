@@ -1,1 +1,0 @@
-export { handler } from "./examples/cloudflare-website-nextjs/handler.mjs";
