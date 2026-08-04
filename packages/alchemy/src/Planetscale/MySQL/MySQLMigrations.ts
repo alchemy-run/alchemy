@@ -3,7 +3,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import { createConnection, type Connection } from "mysql2/promise";
+import type { Connection } from "mysql2/promise";
 import {
   listSqlFiles,
   readSqlFile,
@@ -12,6 +12,16 @@ import {
 } from "../../SQL/SqlFile.ts";
 
 const MIGRATION_PASSWORD_TTL_SECONDS = 600;
+
+// `mysql2` is an optional peer dependency — loaded lazily so importing the
+// Planetscale provider never requires the driver unless migrations run.
+const importMysql = () =>
+  import("mysql2/promise").catch((cause) => {
+    throw new Error(
+      "Failed to load the 'mysql2' driver. Install the optional peer dependency 'mysql2' to run Planetscale MySQL migrations.",
+      { cause },
+    );
+  });
 
 export class MySQLMigrationError extends Data.TaggedError(
   "Planetscale::MySQLMigrationError",
@@ -150,15 +160,17 @@ const withMySQLConnection = <A, E, R>(
   withTemporaryMySQLPassword(target, (password) =>
     Effect.acquireUseRelease(
       Effect.tryPromise({
-        try: () =>
-          createConnection({
+        try: async () => {
+          const { createConnection } = await importMysql();
+          return createConnection({
             host: password.host,
             user: password.username,
             password: Redacted.value(password.password),
             database: target.database,
             multipleStatements: true,
             ssl: { rejectUnauthorized: true },
-          }),
+          });
+        },
         catch: toMigrationError,
       }),
       use,

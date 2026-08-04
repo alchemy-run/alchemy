@@ -378,10 +378,7 @@
     "ink": "^6.3.1",
     "jszip": "^3.10.1",
     "libsodium-wrappers": "^0.8.3",
-    "mongodb": "^6.10.0",
-    "mysql2": "^3.15.3",
     "pathe": "^2.0.3",
-    "pg": "^8.13.0",
     "picomatch": "^4.0.4",
     "react": "^19.2.0",
     "rolldown": "catalog:",
@@ -415,6 +412,9 @@
     "effect": "catalog:",
     "foldkit": "catalog:fixtures",
     "iovalkey": "^0.3.3",
+    "mongodb": "^6.10.0",
+    "mysql2": "^3.15.3",
+    "pg": "^8.13.0",
     "react-devtools-core": "^7.0.1",
     "react-dom": "catalog:fixtures",
     "react-router": "catalog:fixtures",
@@ -437,6 +437,9 @@
     "drizzle-kit": "catalog:",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
+    "mongodb": "^6.10.0",
+    "mysql2": "^3.15.3",
+    "pg": "^8.13.0",
     "vite": "catalog:",
     "ws": "catalog:"
   },
@@ -460,6 +463,15 @@
       "optional": true
     },
     "drizzle-orm": {
+      "optional": true
+    },
+    "mongodb": {
+      "optional": true
+    },
+    "mysql2": {
+      "optional": true
+    },
+    "pg": {
       "optional": true
     },
     "vite": {
