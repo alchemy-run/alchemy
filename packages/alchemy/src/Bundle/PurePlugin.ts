@@ -48,6 +48,10 @@ export interface PurePluginOptions {
    * Extra package names or globs to annotate, in addition to
    * {@link DEFAULT_PURE_PACKAGES}. Globs are matched with picomatch
    * against the package name (e.g. `effect`, `@effect/cluster`).
+   *
+   * Listing a package that declares `"sideEffects": false` (or `[]`)
+   * in its `package.json` opts it into full annotation, including
+   * top-level calls whose result is discarded — see {@link purePlugin}.
    */
   readonly packages?: ReadonlyArray<string>;
   /**

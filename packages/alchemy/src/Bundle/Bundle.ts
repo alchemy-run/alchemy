@@ -31,9 +31,12 @@ export interface BundleExtraOptions {
    * call/new expressions in matching packages with `/*#__PURE__*\/`
    * so rolldown can tree-shake them.
    *
-   * - `undefined` (default): plugin is enabled with default packages
-   *   (`effect`, `@effect/*`).
+   * - `undefined` (default): plugin is enabled with the default packages
+   *   (`effect`, `@effect/*`, `alchemy`, `@alchemy.run/*` — see
+   *   `DEFAULT_PURE_PACKAGES`).
    * - `PurePluginOptions`: plugin is enabled with the provided options.
+   *   `packages` extends the defaults; set `replaceDefaults: true` to
+   *   replace them instead.
    * - `false`: plugin is disabled.
    */
   readonly pure?: PurePluginOptions | false;

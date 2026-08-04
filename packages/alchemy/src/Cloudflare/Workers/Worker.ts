@@ -1400,6 +1400,45 @@ export const isSelfUrl = (value: unknown): value is URLEffect =>
  * }
  * ```
  *
+ * @section Bundling & Tree-shaking
+ * `main` is bundled with rolldown at deploy time. Top-level calls in the
+ * `effect`, `@effect/*`, `alchemy`, and `@alchemy.run/*` packages receive
+ * `#__PURE__` annotations by default, so anything the Worker doesn't use
+ * from those packages is tree-shaken out of the bundle. Any other
+ * package — including your own app — is left untouched unless you list
+ * it explicitly.
+ *
+ * @example Treat additional packages as pure
+ * Pass package names (or picomatch globs) via `build.pure.packages` to
+ * annotate them in addition to the defaults.
+ * ```typescript
+ * {
+ *   main: "./src/worker.ts",
+ *   build: {
+ *     pure: { packages: ["my-lib", "@my-scope/*"] },
+ *   },
+ * }
+ * ```
+ *
+ * Listing a package annotates calls whose result is bound (variable
+ * initializers, exports) — safe anywhere. If a listed package also
+ * declares `"sideEffects": false` (or `[]`) in its `package.json`, that
+ * combination opts it into full annotation: top-level calls whose result
+ * is discarded (e.g. `router.on("/path", handler)` registrations) are
+ * also marked pure and deleted under minification when unused. Only list
+ * a `sideEffects: false` package if its modules really are free of
+ * meaningful top-level side effects. The `effect` and `alchemy` defaults
+ * declare exactly that, on purpose — their modules are designed to be
+ * fully tree-shakeable.
+ *
+ * @example Disable pure annotations
+ * ```typescript
+ * {
+ *   main: "./src/worker.ts",
+ *   build: { pure: false },
+ * }
+ * ```
+ *
  * @section URLs & Domains
  * Every URL that serves the Worker is collected in `worker.urls`, most
  * significant first, and `worker.url` is always `urls[0]`. The ranking:
