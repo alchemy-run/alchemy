@@ -365,7 +365,9 @@ export const make = <A>(
 
               const { provider, mode } =
                 yield* resolveProviderAndMode(resource);
-              const props = yield* resolveInput(resource.Props);
+              const props = materializeStableRefs(
+                yield* resolveInput(resource.Props),
+              );
               const persisted = yield* state.get({
                 stack: stackName,
                 stage: stage,
@@ -473,25 +475,17 @@ export const make = <A>(
           ));
       });
 
-    const resolveInput = (
-      input: any,
-      options?: {
-        /**
-         * Keep a whole-resource reference to an *updating* upstream as its
-         * (evaluable) `ResourceExpr` instead of materializing the stable
-         * attributes into a plain object.
-         *
-         * The diff-facing resolution materializes so stable identifiers flow
-         * into the consumer's `diff` (see the comment at the `isResource`
-         * branch). But a plan node's `props` must stay evaluable: Apply
-         * re-resolves them via `Output.evaluate` against the upstream's FRESH
-         * post-reconcile attributes. Baking the stables-only snapshot into
-         * `node.props` would hand `reconcile` an object whose non-stable
-         * attributes (e.g. a Lambda Version's `version` number) are missing.
-         */
-        readonly preserveWholeResourceRefs?: boolean;
-      },
-    ): Effect.Effect<any, Config.ConfigError> =>
+    /**
+     * Resolve an input value as far as *truth* permits, keeping everything
+     * else evaluable. A whole-resource reference to an updating upstream
+     * stays a `ResourceExpr` (its stable attributes riding along): the
+     * non-stable attributes are unknown at plan time and MUST be
+     * re-evaluated — Apply runs `Output.evaluate(node.props, outputs)`
+     * against the upstream's fresh post-reconcile attributes right before
+     * `reconcile`. This is the value plan nodes carry; the diff-facing view
+     * is derived from it by {@link materializeStableRefs}.
+     */
+    const resolveInput = (input: any): Effect.Effect<any, Config.ConfigError> =>
       Effect.gen(function* () {
         if (!input) {
           return input;
@@ -504,7 +498,7 @@ export const make = <A>(
           // providers receive a resolved value instead of a Config object.
           // `Config.redacted` resolves to a `Redacted`, which stays opaque via
           // the branch below.
-          return yield* resolveInput(yield* input, options);
+          return yield* resolveInput(yield* input);
         } else if (Duration.isDuration(input) || Redacted.isRedacted(input)) {
           // Opaque values that are resolved downstream. We don't walk them
           // because it would strip their prototype, resulting in a plain object
@@ -512,12 +506,9 @@ export const make = <A>(
           // stays wrapped to preserve the secrecy boundary.
           return input;
         } else if (Array.isArray(input)) {
-          return yield* Effect.all(
-            input.map((item) => resolveInput(item, options)),
-            {
-              concurrency: "unbounded",
-            },
-          );
+          return yield* Effect.all(input.map(resolveInput), {
+            concurrency: "unbounded",
+          });
         } else if (isResource(input)) {
           // Resource objects have dynamic properties (path, hash, etc.) that are
           // created on-demand by a Proxy getter and aren't enumerable via Object.entries.
@@ -525,33 +516,17 @@ export const make = <A>(
           // resolving any nested outputs in the result.
           const resourceExpr = Output.of(input);
           const resolved = yield* resolveOutput(resourceExpr);
-          // An upstream being updated in place resolves to a `ResourceExpr`
-          // carrying only its *stable* attributes (see `withStables` in
-          // `resolveResource`). When the resource is referenced *whole*
-          // (rather than via a single prop like `upstream.id`), materialize
-          // those stable attributes into a plain object so the known, stable
-          // values flow into the consumer's `diff`. Otherwise the consumer
-          // sees the whole reference as an unresolved `Expr`, `isResolved`
-          // short-circuits, and a stable identifier that should have been
-          // available is missing — forcing consumers to hand-extract it.
-          //
-          // Apply-facing resolutions (`preserveWholeResourceRefs`) keep the
-          // expression instead: the non-stable attributes are unknown at plan
-          // time and MUST be re-evaluated against the upstream's fresh
-          // attributes after its reconcile.
-          if (Output.isResourceExpr(resolved) && resolved.stables) {
-            return options?.preserveWholeResourceRefs
-              ? resolved
-              : yield* resolveInput(resolved.stables, options);
+          if (Output.isResourceExpr(resolved)) {
+            // Still-unresolved reference (creating, replacing, or updating
+            // upstream) — keep it evaluable for Apply.
+            return resolved;
           }
-          return yield* resolveInput(resolved, options);
+          return yield* resolveInput(resolved);
         } else if (typeof input === "object") {
           return Object.fromEntries(
             yield* Effect.all(
               Object.entries(input).map(([key, value]) =>
-                resolveInput(value, options).pipe(
-                  Effect.map((value) => [key, value]),
-                ),
+                resolveInput(value).pipe(Effect.map((value) => [key, value])),
               ),
               { concurrency: "unbounded" },
             ),
@@ -559,6 +534,44 @@ export const make = <A>(
         }
         return input;
       });
+
+    /**
+     * Project a {@link resolveInput} resolution into the DIFF-facing view:
+     * replace each whole-resource `ResourceExpr` that carries stable
+     * attributes (an upstream being *updated* in place — see `withStables` in
+     * `resolveResource`) with a plain object of those stables, so the known
+     * values flow into the consumer's `diff` and `havePropsChanged` instead
+     * of the whole reference looking unresolved and `isResolved`
+     * short-circuiting (#670 — this forced the Neon `Branch` to hand-extract
+     * `project.projectId`).
+     *
+     * The projection is deliberately lossy — diffs compare VALUES. Plan nodes
+     * never carry it: they keep the evaluable resolution so `reconcile` sees
+     * the upstream's fresh non-stable attributes (e.g. a Lambda Version's
+     * `version` number — #993's alias promotion bug).
+     */
+    const materializeStableRefs = (input: any): any => {
+      // Expr checks come first: Output proxies are callable, so a plain
+      // `typeof input === "object"` guard would let them slip through.
+      if (Output.isResourceExpr(input) && input.stables) {
+        return materializeStableRefs(input.stables);
+      } else if (Output.isExpr(input)) {
+        // Genuinely unknown (e.g. a creating upstream) — nothing to show diff.
+        return input;
+      } else if (!input || typeof input !== "object") {
+        return input;
+      } else if (Duration.isDuration(input) || Redacted.isRedacted(input)) {
+        return input;
+      } else if (Array.isArray(input)) {
+        return input.map(materializeStableRefs);
+      }
+      return Object.fromEntries(
+        Object.entries(input).map(([key, value]) => [
+          key,
+          materializeStableRefs(value),
+        ]),
+      );
+    };
 
     const resolveOutput = (expr: Output.Expr<any>): Effect.Effect<any> =>
       Effect.gen(function* () {
@@ -805,23 +818,28 @@ export const make = <A>(
             const { provider, mode } = yield* resolveProviderAndMode(resource);
             const id = resource.LogicalId;
             const fqn = resource.FQN;
-            const news = yield* resolveInput(resource.Props);
-            // Apply-facing props: identical to `news` except whole-resource
+            // Apply-facing props (stored on the plan node): whole-resource
             // references to updating upstreams stay evaluable `ResourceExpr`s.
             // Apply runs `Output.evaluate(node.props, outputs)` right before
             // `reconcile`, so these references resolve to the upstream's
-            // fresh post-reconcile attributes — materialized stables-only
-            // snapshots (which `news` carries for `diff` visibility) would
-            // permanently hide every non-stable attribute from `reconcile`.
-            const applyProps = yield* resolveInput(resource.Props, {
-              preserveWholeResourceRefs: true,
-            });
+            // fresh post-reconcile attributes.
+            const applyProps = yield* resolveInput(resource.Props);
+            // Diff-facing view of the same resolution: stable attributes
+            // materialized so their known values flow into `diff` /
+            // `havePropsChanged`.
+            const news = materializeStableRefs(applyProps);
             const downstream = newDownstreamDependencies[fqn] ?? [];
 
             // Collapse duplicate bindings by sid so the binding set handed to
             // `diff` matches what `reconcile` receives (see `dedupeBindings`).
+            // Bindings keep the diff-facing (materialized) shape for both the
+            // diff AND the node payload — the terminal commit must persist the
+            // exact payload `diffBindings` compared (#874). Re-resolving
+            // binding payloads freshly at apply is a separate change.
             const newBindings: ResourceBinding[] = dedupeBindings(
-              yield* resolveInput(stack.bindings[fqn] ?? []),
+              materializeStableRefs(
+                yield* resolveInput(stack.bindings[fqn] ?? []),
+              ),
             );
             const persisted = yield* state.get({
               stack: stackName,
@@ -1277,7 +1295,12 @@ export const make = <A>(
           Effect.fn("plan.diff.action")(function* (action) {
             const fqn = action.FQN;
             const downstream = newDownstreamDependencies[fqn] ?? [];
-            const resolvedInput = yield* resolveInput(action.Input);
+            // The node carries the RAW input expression (evaluated at apply);
+            // the drift hash uses the diff-facing view so stable upstream
+            // attributes hash as their known values.
+            const resolvedInput = materializeStableRefs(
+              yield* resolveInput(action.Input),
+            );
             const inputHash = yield* hashInput(resolvedInput);
             const oldState = yield* state.get({
               stack: stackName,
