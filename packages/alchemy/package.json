@@ -371,6 +371,7 @@
     "@smithy/types": "catalog:",
     "@types/aws-lambda": "catalog:",
     "@vercel/nft": "^1.10.2",
+    "@yarnpkg/parsers": "^3.0.3",
     "aws4fetch": "catalog:",
     "capnweb": "^0.6.1",
     "fast-glob": "^3.3.2",

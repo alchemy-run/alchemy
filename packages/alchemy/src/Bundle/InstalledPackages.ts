@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import { parseSyml } from "@yarnpkg/parsers";
 import { builtinModules } from "node:module";
 import { parse as parseYaml } from "yaml";
 import { ChildProcess } from "effect/unstable/process";
@@ -13,6 +14,8 @@ export interface InstalledPackageFile {
   readonly path: string;
   readonly content: Uint8Array<ArrayBufferLike>;
 }
+
+type JsonRecord = Record<string, unknown>;
 
 export type PackageInstall =
   | ReadonlyArray<string>
@@ -29,8 +32,20 @@ export interface ResolveInstallTargetsOptions {
   readonly requested: Readonly<Record<string, string>>;
 }
 
-export interface PackageInstallIdentity {
+export type PackageOverride = string | PackageOverrideMap;
+
+export interface PackageOverrideMap {
+  readonly [dependencyName: string]: PackageOverride;
+}
+
+export type PackageOverrides = Readonly<Record<string, PackageOverride>>;
+
+export interface PackageInstallPlan {
   readonly resolved: Readonly<Record<string, string>>;
+  readonly overrides: PackageOverrides;
+}
+
+export interface PackageInstallIdentity extends PackageInstallPlan {
   readonly lockfile?: {
     readonly name: string;
     readonly hash: string;
@@ -46,6 +61,8 @@ export interface HashPackageInstallIdentityOptions {
 export interface InstallResolvedPackagesOptions {
   /** Package-root → concrete npm version map (from {@link resolveInstallTargets}). */
   readonly resolved: Readonly<Record<string, string>>;
+  /** Locked parent-package → child-package versions used to pin transitives. */
+  readonly overrides?: PackageOverrides;
   readonly architecture: "x86_64" | "arm64";
   readonly runNpmInstall?: NpmInstallRunner;
 }
@@ -135,11 +152,27 @@ export function matchesPackageRoot(moduleId: string, root: string): boolean {
 
 export function npmInstallArgs(
   architecture: "x86_64" | "arm64",
-  _packageNames: ReadonlyArray<string>,
 ): ReadonlyArray<string> {
+  return npmCommandArgs("ci", architecture);
+}
+
+export function npmLockfileArgs(
+  architecture: "x86_64" | "arm64",
+): ReadonlyArray<string> {
+  return [
+    ...npmCommandArgs("install", architecture),
+    "--package-lock-only",
+    "--ignore-scripts",
+  ];
+}
+
+const npmCommandArgs = (
+  command: "ci" | "install",
+  architecture: "x86_64" | "arm64",
+): ReadonlyArray<string> => {
   const npmArchitecture = architecture === "arm64" ? "arm64" : "x64";
   return [
-    "install",
+    command,
     "--force",
     "--platform=linux",
     "--os=linux",
@@ -147,7 +180,7 @@ export function npmInstallArgs(
     `--cpu=${npmArchitecture}`,
     "--libc=glibc",
   ];
-}
+};
 
 /**
  * Normalizes and validates a `build.install` declaration to a
@@ -187,10 +220,24 @@ export function resolveInstallTargets(
 ): Effect.Effect<
   Record<string, string>,
   BundleError,
-  FileSystem.FileSystem | Path.Path
+  FileSystem.FileSystem | Path.Path | ChildProcessSpawner
+> {
+  return resolvePackageInstallPlan(options).pipe(
+    Effect.map((plan) => ({ ...plan.resolved })),
+  );
+}
+
+export function resolvePackageInstallPlan(
+  options: ResolveInstallTargetsOptions,
+): Effect.Effect<
+  PackageInstallPlan,
+  BundleError,
+  FileSystem.FileSystem | Path.Path | ChildProcessSpawner
 > {
   const packageNames = Object.keys(options.requested).sort();
-  if (packageNames.length === 0) return Effect.succeed({});
+  if (packageNames.length === 0) {
+    return Effect.succeed({ resolved: {}, overrides: {} });
+  }
 
   return Effect.gen(function* () {
     const sourcePackageJson = yield* readSourcePackageJson(options.cwd);
@@ -203,7 +250,17 @@ export function resolveInstallTargets(
         options.requested[packageName],
       );
     }
-    return resolved;
+    const lockfilePath = yield* findUp(options.cwd, lockfileNames);
+    if (lockfilePath === undefined) {
+      return { resolved, overrides: {} };
+    }
+    return yield* pinInstallVersionsFromLockfile({
+      cwd: options.cwd,
+      lockfilePath,
+      packageJson: sourcePackageJson,
+      requested: options.requested,
+      resolved,
+    });
   }).pipe(Effect.mapError(toBundleError));
 }
 
@@ -216,15 +273,15 @@ export function resolvePackageInstallIdentity(
 ): Effect.Effect<
   PackageInstallIdentity,
   BundleError,
-  FileSystem.FileSystem | Path.Path
+  FileSystem.FileSystem | Path.Path | ChildProcessSpawner
 > {
   return Effect.gen(function* () {
-    const resolved = yield* resolveInstallTargets(options);
-    if (Object.keys(resolved).length === 0) {
-      return { resolved };
+    const plan = yield* resolvePackageInstallPlan(options);
+    if (Object.keys(plan.resolved).length === 0) {
+      return plan;
     }
     const lockfile = yield* readNearestLockfileFingerprint(options.cwd);
-    return { resolved, lockfile };
+    return { ...plan, lockfile };
   });
 }
 
@@ -234,6 +291,7 @@ export function hashPackageInstallIdentity(
   return sha256Object({
     bundle: options.bundleHash,
     install: options.identity.resolved,
+    overrides: options.identity.overrides,
     lockfile: options.identity.lockfile,
     architecture: options.architecture,
   });
@@ -271,18 +329,24 @@ export function installResolvedPackages(
       fileSystem.makeTempDirectory({ prefix: "alchemy-lambda-packages-" }),
       (directory) =>
         Effect.gen(function* () {
+          const manifest = JSON.stringify(
+            {
+              private: true,
+              dependencies: options.resolved,
+              ...(options.overrides !== undefined &&
+              Object.keys(options.overrides).length > 0
+                ? { overrides: options.overrides }
+                : {}),
+            },
+            null,
+            2,
+          );
           yield* fileSystem.writeFileString(
             pathService.join(directory, "package.json"),
-            `${JSON.stringify(
-              { private: true, dependencies: options.resolved },
-              null,
-              2,
-            )}\n`,
+            `${manifest}\n`,
           );
-          yield* runInstall(
-            directory,
-            npmInstallArgs(options.architecture, packageNames),
-          );
+          yield* runInstall(directory, npmLockfileArgs(options.architecture));
+          yield* runInstall(directory, npmInstallArgs(options.architecture));
           return yield* readArtifactFiles(directory);
         }),
       (directory) =>
@@ -303,12 +367,12 @@ export function installPackages(
 > {
   return Effect.gen(function* () {
     const requested = yield* normalizeInstallTargets(options.install);
-    const resolved = yield* resolveInstallTargets({
+    const plan = yield* resolvePackageInstallPlan({
       cwd: options.cwd,
       requested,
     });
     return yield* installResolvedPackages({
-      resolved,
+      ...plan,
       architecture: options.architecture,
       runNpmInstall: options.runNpmInstall,
     });
@@ -350,12 +414,48 @@ const runNpmInstall = (
     ),
   );
 
+const printBunBinaryLockfile = (
+  lockfilePath: string,
+): Effect.Effect<string, BundleError, ChildProcessSpawner> =>
+  Effect.sync(() =>
+    ChildProcess.make("bun", [lockfilePath], {
+      shell: false,
+      env: { ...process.env },
+    }),
+  ).pipe(
+    Effect.flatMap(exec),
+    Effect.scoped,
+    Effect.mapError(
+      (cause) =>
+        new BundleError({
+          message: `Failed to inspect legacy Bun lockfile '${lockfilePath}'`,
+          cause,
+        }),
+    ),
+    Effect.flatMap(({ exitCode, stdout, stderr }) =>
+      exitCode === 0
+        ? Effect.succeed(stdout)
+        : Effect.fail(
+            new BundleError({
+              message: `Failed to inspect legacy Bun lockfile '${lockfilePath}': bun exited with code ${exitCode}: ${stderr}`,
+            }),
+          ),
+    ),
+  );
+
 const readSourcePackageJson = (cwd: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const content = yield* fs.readFileString(path.join(cwd, "package.json"));
-    return JSON.parse(content) as PackageJson;
+    return yield* Effect.try({
+      try: () => JSON.parse(content) as PackageJson,
+      catch: (cause) =>
+        new BundleError({
+          message: `Failed to parse package.json for Lambda externals from '${cwd}'`,
+          cause,
+        }),
+    });
   }).pipe(
     Effect.mapError(
       (cause) =>
@@ -398,6 +498,877 @@ const resolveInstallVersion = (
 
     return version;
   });
+
+const pinInstallVersionsFromLockfile = (options: {
+  readonly cwd: string;
+  readonly lockfilePath: string;
+  readonly packageJson: PackageJson;
+  readonly requested: Readonly<Record<string, string>>;
+  readonly resolved: Readonly<Record<string, string>>;
+}): Effect.Effect<
+  PackageInstallPlan,
+  BundleError,
+  FileSystem.FileSystem | Path.Path | ChildProcessSpawner
+> =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const lockfileName = path.basename(options.lockfilePath);
+    const lockfileDirectory = path.dirname(options.lockfilePath);
+    const importer = path
+      .relative(lockfileDirectory, options.cwd)
+      .replaceAll("\\", "/");
+    const candidates = Object.keys(options.resolved).filter((packageName) => {
+      const requested = options.requested[packageName];
+      const declared = declaredPackageVersion(options.packageJson, packageName);
+      return (
+        declared !== undefined &&
+        (requested === undefined ||
+          requested === "" ||
+          requested === "*" ||
+          requested === declared)
+      );
+    });
+    if (candidates.length === 0) {
+      return { resolved: { ...options.resolved }, overrides: {} };
+    }
+
+    const content =
+      lockfileName === "bun.lockb"
+        ? yield* printBunBinaryLockfile(options.lockfilePath)
+        : yield* fs.readFileString(options.lockfilePath).pipe(
+            Effect.mapError(
+              (cause) =>
+                new BundleError({
+                  message: `Failed to read package-manager lockfile for Lambda externals from '${options.cwd}'`,
+                  cause,
+                }),
+            ),
+          );
+    const plan = yield* Effect.try({
+      try: () =>
+        parseLockedInstallPlan({
+          name: lockfileName === "bun.lockb" ? "yarn.lock" : lockfileName,
+          content,
+          importer,
+          candidates,
+          packageJson: options.packageJson,
+          resolved: Object.fromEntries(
+            Object.entries(options.resolved).filter(
+              ([packageName]) => !candidates.includes(packageName),
+            ),
+          ),
+        }),
+      catch: (cause) =>
+        new BundleError({
+          message: `Failed to resolve locked Lambda package versions from '${options.lockfilePath}'`,
+          cause,
+        }),
+    });
+
+    for (const packageName of candidates) {
+      if (plan.resolved[packageName] === undefined) {
+        return yield* Effect.fail(
+          new BundleError({
+            message: `Could not resolve a locked version for '${packageName}' from '${options.lockfilePath}'. Pin an exact npm-compatible version in build.install or refresh the package-manager lockfile.`,
+          }),
+        );
+      }
+    }
+
+    return plan;
+  });
+
+interface LockParseOptions {
+  readonly name: string;
+  readonly content: string;
+  readonly importer: string;
+  readonly candidates: ReadonlyArray<string>;
+  readonly packageJson: PackageJson;
+  readonly resolved: Readonly<Record<string, string>>;
+}
+
+type MutablePackageOverride = string | MutablePackageOverrideMap;
+interface MutablePackageOverrideMap {
+  [dependencyName: string]: MutablePackageOverride;
+}
+type MutablePackageOverrides = Record<string, MutablePackageOverride>;
+
+interface OverrideContext {
+  readonly rootSelector: string;
+  readonly ancestry: ReadonlyArray<{
+    readonly dependencyName: string;
+    readonly installSpec: string;
+  }>;
+}
+
+interface LockedGraphRoot<Node> {
+  readonly node: Node;
+  readonly rootSelector: string;
+}
+
+interface LockedGraphDependency<Node> {
+  readonly dependencyName: string;
+  readonly installSpec: string;
+  readonly node?: Node;
+}
+
+const addLockedGraphOverrides = <Node>(
+  overrides: MutablePackageOverrides,
+  roots: ReadonlyArray<LockedGraphRoot<Node>>,
+  nodeId: (node: Node) => unknown,
+  dependencies: (node: Node) => ReadonlyArray<LockedGraphDependency<Node>>,
+): void => {
+  const queue: Array<{
+    readonly node: Node;
+    readonly context: OverrideContext;
+    readonly pathIds: ReadonlySet<unknown>;
+  }> = roots.map(({ node, rootSelector }) => ({
+    node,
+    context: { rootSelector, ancestry: [] },
+    pathIds: new Set([nodeId(node)]),
+  }));
+  while (queue.length > 0) {
+    const { node, context, pathIds } = queue.shift()!;
+    for (const dependency of dependencies(node)) {
+      addPackageOverride(
+        overrides,
+        context,
+        dependency.dependencyName,
+        dependency.installSpec,
+      );
+      if (dependency.node === undefined) continue;
+      const childId = nodeId(dependency.node);
+      if (pathIds.has(childId)) continue;
+      queue.push({
+        node: dependency.node,
+        context: {
+          ...context,
+          ancestry: [
+            ...context.ancestry,
+            {
+              dependencyName: dependency.dependencyName,
+              installSpec: dependency.installSpec,
+            },
+          ],
+        },
+        pathIds: new Set([...pathIds, childId]),
+      });
+    }
+  }
+};
+
+const parseLockedInstallPlan = (
+  options: LockParseOptions,
+): PackageInstallPlan => {
+  switch (options.name) {
+    case "package-lock.json":
+      return parsePackageLock(options);
+    case "pnpm-lock.yaml":
+      return parsePnpmLock(options);
+    case "bun.lock":
+      return parseBunLock(options);
+    case "yarn.lock":
+      return parseYarnLock(options);
+    default:
+      return { resolved: { ...options.resolved }, overrides: {} };
+  }
+};
+
+const parsePackageLock = (options: {
+  readonly content: string;
+  readonly importer: string;
+  readonly candidates: ReadonlyArray<string>;
+  readonly packageJson: PackageJson;
+  readonly resolved: Readonly<Record<string, string>>;
+}): PackageInstallPlan => {
+  const lockfile = asRecord(JSON.parse(options.content));
+  const packages = asRecord(lockfile?.packages);
+  const dependencies = asRecord(lockfile?.dependencies);
+  const importerKey = options.importer === "." ? "" : options.importer;
+  const importer = asRecord(packages?.[importerKey]);
+  const resolved = { ...options.resolved };
+  const overrides: MutablePackageOverrides = {};
+  const roots: Array<LockedGraphRoot<string>> = [];
+
+  for (const packageName of options.candidates) {
+    const importerSpec = dependencyValue(importer, packageName);
+    const declared = declaredPackageVersion(options.packageJson, packageName);
+    if (
+      importerSpec !== undefined &&
+      declared !== undefined &&
+      importerSpec !== declared
+    ) {
+      continue;
+    }
+
+    for (const packagePath of nodeModulesLookupPaths(
+      importerKey,
+      packageName,
+    )) {
+      const version = stringValue(asRecord(packages?.[packagePath])?.version);
+      if (version !== undefined) {
+        const entry = asRecord(packages?.[packagePath]);
+        resolved[packageName] = npmLockedInstallSpec(
+          packageName,
+          entry,
+          version,
+        );
+        roots.push({
+          node: packagePath,
+          rootSelector: `${stringValue(entry?.name) ?? packageName}@${version}`,
+        });
+        break;
+      }
+    }
+
+    if (
+      resolved[packageName] === options.resolved[packageName] &&
+      importerKey === ""
+    ) {
+      const entry = asRecord(dependencies?.[packageName]);
+      const version = stringValue(entry?.version);
+      if (version !== undefined) {
+        resolved[packageName] = npmLockedInstallSpec(
+          packageName,
+          entry,
+          version,
+        );
+      }
+    }
+  }
+
+  if (packages !== undefined) {
+    addLockedGraphOverrides(
+      overrides,
+      roots,
+      (packagePath) => packagePath,
+      (packagePath) => {
+        const value = packages[packagePath];
+        const entry = asRecord(value);
+        if (entry === undefined) return [];
+        return Object.keys(dependencySpecifiers(entry)).flatMap(
+          (dependencyName): ReadonlyArray<LockedGraphDependency<string>> => {
+            const childPath = resolvePackageLockDependencyPath(
+              packages,
+              packagePath,
+              dependencyName,
+            );
+            if (childPath === undefined) return [];
+            const child = asRecord(packages[childPath]);
+            const childVersion = stringValue(child?.version);
+            if (childVersion === undefined) return [];
+            return [
+              {
+                dependencyName,
+                installSpec: npmLockedInstallSpec(
+                  dependencyName,
+                  child,
+                  childVersion,
+                ),
+                node: childPath,
+              },
+            ];
+          },
+        );
+      },
+    );
+  } else if (dependencies !== undefined) {
+    addPackageLockV1Overrides(dependencies, overrides, options.candidates);
+  }
+  return { resolved, overrides };
+};
+
+const parsePnpmLock = (options: {
+  readonly content: string;
+  readonly importer: string;
+  readonly candidates: ReadonlyArray<string>;
+  readonly packageJson: PackageJson;
+  readonly resolved: Readonly<Record<string, string>>;
+}): PackageInstallPlan => {
+  const lockfile = asRecord(parseYaml(options.content));
+  const importers = asRecord(lockfile?.importers);
+  const importerKey = options.importer === "" ? "." : options.importer;
+  const importer =
+    asRecord(importers?.[importerKey]) ??
+    (importerKey === "." ? lockfile : undefined);
+  const resolved = { ...options.resolved };
+  const overrides: MutablePackageOverrides = {};
+  const packages =
+    asRecord(lockfile?.snapshots) ?? asRecord(lockfile?.packages) ?? {};
+  const roots: Array<LockedGraphRoot<string>> = [];
+
+  for (const packageName of options.candidates) {
+    const entry = dependencyEntry(importer, packageName);
+    const record = asRecord(entry);
+    const specifier = stringValue(record?.specifier);
+    const declared = declaredPackageVersion(options.packageJson, packageName);
+    if (
+      specifier !== undefined &&
+      declared !== undefined &&
+      specifier !== declared
+    ) {
+      continue;
+    }
+    const rawVersion =
+      typeof entry === "string" ? entry : stringValue(record?.version);
+    const installSpec = pnpmInstallSpec(packageName, rawVersion);
+    if (installSpec !== undefined) {
+      resolved[packageName] = installSpec;
+      const packageKey = findPnpmPackageKey(packages, packageName, rawVersion);
+      const root =
+        packageKey === undefined ? undefined : parsePnpmPackageKey(packageKey);
+      if (packageKey !== undefined && root !== undefined) {
+        roots.push({
+          node: packageKey,
+          rootSelector: `${root.name}@${root.version}`,
+        });
+      }
+    }
+  }
+
+  addLockedGraphOverrides(
+    overrides,
+    roots,
+    (packageKey) => packageKey,
+    (packageKey) => {
+      const value = packages[packageKey];
+      const parent = parsePnpmPackageKey(packageKey);
+      const entry = asRecord(value);
+      if (parent === undefined || entry === undefined) return [];
+      return Object.entries(dependencySpecifiers(entry)).flatMap(
+        ([dependencyName, dependencyEntryValue]): ReadonlyArray<
+          LockedGraphDependency<string>
+        > => {
+          const rawVersion =
+            typeof dependencyEntryValue === "string"
+              ? dependencyEntryValue
+              : stringValue(asRecord(dependencyEntryValue)?.version);
+          const installSpec = pnpmInstallSpec(dependencyName, rawVersion);
+          if (installSpec === undefined) return [];
+          const childKey = findPnpmPackageKey(
+            packages,
+            dependencyName,
+            rawVersion,
+          );
+          return [{ dependencyName, installSpec, node: childKey }];
+        },
+      );
+    },
+  );
+  return { resolved, overrides };
+};
+
+const parseBunLock = (options: {
+  readonly content: string;
+  readonly importer: string;
+  readonly candidates: ReadonlyArray<string>;
+  readonly packageJson: PackageJson;
+  readonly resolved: Readonly<Record<string, string>>;
+}): PackageInstallPlan => {
+  const lockfile = asRecord(parseJsonc(options.content));
+  const packages = asRecord(lockfile?.packages);
+  const workspaces = asRecord(lockfile?.workspaces);
+  const importerKey = options.importer === "." ? "" : options.importer;
+  const workspace = asRecord(workspaces?.[importerKey]);
+  const workspaceName = stringValue(workspace?.name);
+  const resolved = { ...options.resolved };
+  const overrides: MutablePackageOverrides = {};
+  const roots: Array<LockedGraphRoot<string>> = [];
+  if (packages === undefined) return { resolved, overrides };
+
+  for (const packageName of options.candidates) {
+    const declared = declaredPackageVersion(options.packageJson, packageName);
+    const workspaceSpecifier = dependencyValue(workspace, packageName);
+    if (
+      declared === undefined ||
+      workspaceSpecifier === undefined ||
+      workspaceSpecifier !== declared
+    )
+      continue;
+    const expectedName = npmAliasName(packageName, declared);
+    const direct = findBunPackageDescriptor(
+      packages,
+      [
+        ...(workspaceName === undefined
+          ? []
+          : [`${workspaceName}/${packageName}`]),
+        packageName,
+      ],
+      expectedName,
+    );
+    if (direct !== undefined) {
+      resolved[packageName] = lockedInstallSpec(
+        packageName,
+        direct.name,
+        direct.version,
+      );
+      roots.push({
+        node: direct.key,
+        rootSelector: `${direct.name}@${direct.version}`,
+      });
+    }
+  }
+
+  addLockedGraphOverrides(
+    overrides,
+    roots,
+    (packageKey) => packageKey,
+    (packageKey) => {
+      const value = packages[packageKey];
+      const parent = parseBunPackageDescriptor(value);
+      const metadata = Array.isArray(value) ? asRecord(value[2]) : undefined;
+      if (parent === undefined || metadata === undefined) return [];
+      return Object.entries(dependencySpecifiers(metadata)).flatMap(
+        ([dependencyName, dependencySpecifier]): ReadonlyArray<
+          LockedGraphDependency<string>
+        > => {
+          if (typeof dependencySpecifier !== "string") return [];
+          const expectedName = npmAliasName(
+            dependencyName,
+            dependencySpecifier,
+          );
+          const child = findBunPackageDescriptor(
+            packages,
+            [`${packageKey}/${dependencyName}`, dependencyName],
+            expectedName,
+          );
+          if (child === undefined) return [];
+          return [
+            {
+              dependencyName,
+              installSpec: lockedInstallSpec(
+                dependencyName,
+                child.name,
+                child.version,
+              ),
+              node: child.key,
+            },
+          ];
+        },
+      );
+    },
+  );
+  return { resolved, overrides };
+};
+
+const parseYarnLock = (options: {
+  readonly content: string;
+  readonly candidates: ReadonlyArray<string>;
+  readonly packageJson: PackageJson;
+  readonly resolved: Readonly<Record<string, string>>;
+}): PackageInstallPlan => {
+  const entries = parseYarnEntries(options.content);
+  const resolved = { ...options.resolved };
+  const overrides: MutablePackageOverrides = {};
+  const roots: Array<LockedGraphRoot<YarnLockEntry>> = [];
+  for (const packageName of options.candidates) {
+    const specifier = declaredPackageVersion(options.packageJson, packageName);
+    if (specifier === undefined) continue;
+    const entry = findYarnEntry(entries, packageName, specifier);
+    if (entry !== undefined) {
+      const actualName = yarnResolutionName(entry.resolution) ?? packageName;
+      resolved[packageName] = lockedInstallSpec(
+        packageName,
+        actualName,
+        entry.version,
+      );
+      roots.push({
+        node: entry,
+        rootSelector: `${actualName}@${entry.version}`,
+      });
+    }
+  }
+
+  addLockedGraphOverrides(
+    overrides,
+    roots,
+    (entry) => entry,
+    (entry) =>
+      Object.entries(entry.dependencies).flatMap(
+        ([dependencyName, dependencySpecifier]): ReadonlyArray<
+          LockedGraphDependency<YarnLockEntry>
+        > => {
+          const child = findYarnEntry(
+            entries,
+            dependencyName,
+            dependencySpecifier,
+          );
+          if (child === undefined) return [];
+          const actualName =
+            yarnResolutionName(child.resolution) ?? dependencyName;
+          return [
+            {
+              dependencyName,
+              installSpec: lockedInstallSpec(
+                dependencyName,
+                actualName,
+                child.version,
+              ),
+              node: child,
+            },
+          ];
+        },
+      ),
+  );
+  return { resolved, overrides };
+};
+
+const dependencySpecifiers = (entry: JsonRecord): JsonRecord => ({
+  ...asRecord(entry.dependencies),
+  ...asRecord(entry.optionalDependencies),
+  ...asRecord(entry.peerDependencies),
+});
+
+const addPackageOverride = (
+  overrides: MutablePackageOverrides,
+  context: OverrideContext,
+  dependencyName: string,
+  installSpec: string,
+): void => {
+  let current = asMutableOverrideRecord(
+    overrides,
+    context.rootSelector,
+    undefined,
+  );
+  for (const ancestor of context.ancestry) {
+    current = asMutableOverrideRecord(
+      current,
+      ancestor.dependencyName,
+      ancestor.installSpec,
+    );
+  }
+  const previous = current[dependencyName];
+  const previousSpec =
+    typeof previous === "string"
+      ? previous
+      : typeof previous?.["."] === "string"
+        ? previous["."]
+        : undefined;
+  if (previousSpec !== undefined && previousSpec !== installSpec) {
+    throw new Error(
+      `Lockfile resolves '${context.rootSelector} > ${context.ancestry.map((part) => part.dependencyName).join(" > ")} > ${dependencyName}' to both '${previousSpec}' and '${installSpec}'.`,
+    );
+  }
+  if (previous === undefined) current[dependencyName] = installSpec;
+};
+
+const asMutableOverrideRecord = (
+  parent: Record<string, MutablePackageOverride>,
+  dependencyName: string,
+  installSpec: string | undefined,
+): Record<string, MutablePackageOverride> => {
+  const existing = parent[dependencyName];
+  if (typeof existing === "object") return existing;
+  const record: Record<string, MutablePackageOverride> = {};
+  const self = existing ?? installSpec;
+  if (self !== undefined) record["."] = self;
+  parent[dependencyName] = record;
+  return record;
+};
+
+const lockedInstallSpec = (
+  dependencyName: string,
+  actualName: string,
+  version: string,
+): string =>
+  actualName === dependencyName ? version : `npm:${actualName}@${version}`;
+
+const npmLockedInstallSpec = (
+  dependencyName: string,
+  entry: JsonRecord | undefined,
+  version: string,
+): string =>
+  lockedInstallSpec(
+    dependencyName,
+    stringValue(entry?.name) ?? dependencyName,
+    version,
+  );
+
+const resolvePackageLockDependencyPath = (
+  packages: JsonRecord,
+  packagePath: string,
+  dependencyName: string,
+): string | undefined => {
+  let current = packagePath;
+  while (true) {
+    const candidate = `${current}/node_modules/${dependencyName}`;
+    if (packages[candidate] !== undefined) return candidate;
+    const marker = current.lastIndexOf("/node_modules/");
+    if (marker === -1) break;
+    current = current.slice(0, marker);
+  }
+  const rootCandidate = `node_modules/${dependencyName}`;
+  return packages[rootCandidate] === undefined ? undefined : rootCandidate;
+};
+
+const addPackageLockV1Overrides = (
+  dependencies: JsonRecord,
+  overrides: MutablePackageOverrides,
+  rootNames: ReadonlyArray<string>,
+): void => {
+  type Node = {
+    readonly entry: JsonRecord;
+    readonly scopes: ReadonlyArray<JsonRecord>;
+  };
+  const roots = rootNames.flatMap(
+    (rootName): ReadonlyArray<LockedGraphRoot<Node>> => {
+      const entry = asRecord(dependencies[rootName]);
+      const version = stringValue(entry?.version);
+      return entry === undefined || version === undefined
+        ? []
+        : [
+            {
+              node: { entry, scopes: [dependencies] },
+              rootSelector: `${stringValue(entry.name) ?? rootName}@${version}`,
+            },
+          ];
+    },
+  );
+  addLockedGraphOverrides(
+    overrides,
+    roots,
+    ({ entry }) => entry,
+    ({ entry, scopes }) => {
+      const nested = asRecord(entry.dependencies) ?? {};
+      const requires = asRecord(entry.requires) ?? {};
+      return Object.keys(requires).flatMap(
+        (dependencyName): ReadonlyArray<LockedGraphDependency<Node>> => {
+          const child = [nested, ...scopes]
+            .map((scope) => asRecord(scope[dependencyName]))
+            .find((candidate) => candidate !== undefined);
+          const version = stringValue(child?.version);
+          if (child === undefined || version === undefined) return [];
+          return [
+            {
+              dependencyName,
+              installSpec: npmLockedInstallSpec(dependencyName, child, version),
+              node: { entry: child, scopes: [nested, ...scopes] },
+            },
+          ];
+        },
+      );
+    },
+  );
+};
+
+const pnpmInstallSpec = (
+  dependencyName: string,
+  rawVersion: string | undefined,
+): string | undefined => {
+  if (
+    rawVersion === undefined ||
+    rawVersion.startsWith("link:") ||
+    rawVersion.startsWith("workspace:") ||
+    rawVersion.startsWith("file:")
+  ) {
+    return undefined;
+  }
+  let version = rawVersion.startsWith("/") ? rawVersion.slice(1) : rawVersion;
+  const peerSuffix = version.indexOf("(");
+  if (peerSuffix !== -1) version = version.slice(0, peerSuffix);
+  if (version.startsWith("npm:")) {
+    const descriptor = parsePackageDescriptor(version.slice("npm:".length));
+    return descriptor === undefined
+      ? undefined
+      : lockedInstallSpec(dependencyName, descriptor.name, descriptor.version);
+  }
+  if (version.startsWith(`${dependencyName}@`)) {
+    version = version.slice(dependencyName.length + 1);
+  }
+  return version;
+};
+
+const findPnpmPackageKey = (
+  packages: JsonRecord,
+  dependencyName: string,
+  rawVersion: string | undefined,
+): string | undefined => {
+  if (rawVersion === undefined) return undefined;
+  let version = rawVersion.startsWith("/") ? rawVersion.slice(1) : rawVersion;
+  let actualName = dependencyName;
+  if (version.startsWith("npm:")) {
+    const descriptor = parsePackageDescriptor(version.slice("npm:".length));
+    if (descriptor === undefined) return undefined;
+    actualName = descriptor.name;
+    version = descriptor.version;
+  } else if (version.startsWith(`${dependencyName}@`)) {
+    version = version.slice(dependencyName.length + 1);
+  }
+  const candidate = `${actualName}@${version}`;
+  if (packages[candidate] !== undefined) return candidate;
+  const legacyCandidate = `/${candidate}`;
+  return packages[legacyCandidate] === undefined ? undefined : legacyCandidate;
+};
+
+const parsePnpmPackageKey = (
+  packageKey: string,
+): { name: string; version: string } | undefined => {
+  let descriptor = packageKey.startsWith("/")
+    ? packageKey.slice(1)
+    : packageKey;
+  const peerSuffix = descriptor.indexOf("(");
+  if (peerSuffix !== -1) descriptor = descriptor.slice(0, peerSuffix);
+  return parsePackageDescriptor(descriptor);
+};
+
+const parsePackageDescriptor = (
+  descriptor: string,
+): { name: string; version: string } | undefined => {
+  const separator = descriptor.lastIndexOf("@");
+  if (separator <= 0 || separator === descriptor.length - 1) return undefined;
+  return {
+    name: descriptor.slice(0, separator),
+    version: descriptor.slice(separator + 1),
+  };
+};
+
+const npmAliasName = (dependencyName: string, specifier: string): string => {
+  if (!specifier.startsWith("npm:")) return dependencyName;
+  return (
+    parsePackageDescriptor(specifier.slice("npm:".length))?.name ??
+    dependencyName
+  );
+};
+
+const findBunPackageDescriptor = (
+  packages: JsonRecord,
+  candidateKeys: ReadonlyArray<string>,
+  expectedName: string,
+): { key: string; name: string; version: string } | undefined => {
+  for (const candidateKey of candidateKeys) {
+    const descriptor = parseBunPackageDescriptor(packages[candidateKey]);
+    if (descriptor?.name === expectedName)
+      return { key: candidateKey, ...descriptor };
+  }
+  const matches = Object.entries(packages)
+    .map(([key, value]) => {
+      const descriptor = parseBunPackageDescriptor(value);
+      return descriptor === undefined ? undefined : { key, ...descriptor };
+    })
+    .filter(
+      (entry): entry is { key: string; name: string; version: string } =>
+        entry?.name === expectedName,
+    );
+  return matches.length === 1 ? matches[0] : undefined;
+};
+
+interface YarnLockEntry {
+  readonly selectors: ReadonlyArray<string>;
+  readonly version: string;
+  readonly resolution?: string;
+  readonly dependencies: Readonly<Record<string, string>>;
+}
+
+const parseYarnEntries = (content: string): ReadonlyArray<YarnLockEntry> => {
+  return Object.entries(parseSyml(content)).flatMap(
+    ([selectorList, value]): ReadonlyArray<YarnLockEntry> => {
+      if (selectorList === "__metadata") return [];
+      const entry = asRecord(value);
+      const version = stringValue(entry?.version);
+      if (version === undefined) return [];
+      const dependencies = Object.fromEntries(
+        Object.entries({
+          ...asRecord(entry?.dependencies),
+          ...asRecord(entry?.optionalDependencies),
+        }).filter(
+          (item): item is [string, string] => typeof item[1] === "string",
+        ),
+      );
+      return [
+        {
+          selectors: selectorList.split(",").map((selector) => selector.trim()),
+          version,
+          resolution: stringValue(entry?.resolution),
+          dependencies,
+        },
+      ];
+    },
+  );
+};
+
+const findYarnEntry = (
+  entries: ReadonlyArray<YarnLockEntry>,
+  dependencyName: string,
+  specifier: string,
+): YarnLockEntry | undefined => {
+  const expected = `${dependencyName}@${specifier}`;
+  const berryExpected = specifier.startsWith("npm:")
+    ? expected
+    : `${dependencyName}@npm:${specifier}`;
+  return entries.find((entry) =>
+    entry.selectors.some(
+      (selector) => selector === expected || selector === berryExpected,
+    ),
+  );
+};
+
+const yarnResolutionName = (
+  resolution: string | undefined,
+): string | undefined => {
+  if (resolution === undefined) return undefined;
+  const npmMarker = resolution.indexOf("@npm:");
+  return npmMarker === -1 ? undefined : resolution.slice(0, npmMarker);
+};
+
+const dependencyEntry = (
+  importer: JsonRecord | undefined,
+  packageName: string,
+): unknown =>
+  asRecord(importer?.dependencies)?.[packageName] ??
+  asRecord(importer?.optionalDependencies)?.[packageName] ??
+  asRecord(importer?.devDependencies)?.[packageName];
+
+const dependencyValue = (
+  importer: JsonRecord | undefined,
+  packageName: string,
+): string | undefined => stringValue(dependencyEntry(importer, packageName));
+
+const declaredPackageVersion = (
+  packageJson: PackageJson,
+  packageName: string,
+): string | undefined =>
+  packageJson.dependencies?.[packageName] ??
+  packageJson.optionalDependencies?.[packageName] ??
+  packageJson.devDependencies?.[packageName];
+
+const nodeModulesLookupPaths = (
+  importer: string,
+  packageName: string,
+): ReadonlyArray<string> => {
+  const paths: string[] = [];
+  let current = importer;
+  while (true) {
+    paths.push(
+      current === ""
+        ? `node_modules/${packageName}`
+        : `${current}/node_modules/${packageName}`,
+    );
+    if (current === "") break;
+    const separator = current.lastIndexOf("/");
+    current = separator === -1 ? "" : current.slice(0, separator);
+  }
+  return paths;
+};
+
+const parseBunPackageDescriptor = (
+  value: unknown,
+): { name: string; version: string } | undefined => {
+  if (!Array.isArray(value) || typeof value[0] !== "string") {
+    return undefined;
+  }
+  return parsePackageDescriptor(value[0]);
+};
+
+const parseJsonc = (content: string): unknown => Bun.JSONC.parse(content);
+
+const asRecord = (value: unknown): JsonRecord | undefined =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as JsonRecord)
+    : undefined;
+
+const stringValue = (value: unknown): string | undefined =>
+  typeof value === "string" ? value : undefined;
 
 const resolveCatalogVersion = (
   cwd: string,
