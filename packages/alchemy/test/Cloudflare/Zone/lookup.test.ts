@@ -3,6 +3,7 @@ import {
   inferZoneIdForHostname,
   isId,
   resolveZoneId,
+  type ZoneCache,
   zoneNameCandidates,
 } from "@/Cloudflare/Zone/lookup.ts";
 import {
@@ -102,7 +103,10 @@ describe("inferZoneIdForHostname", () => {
    * filter (i.e. a plain zone listing) throws: that is the bug this suite
    * guards, and no amount of stubbed zones can paper over it.
    */
-  const stubZonesApi = (zonesOnAccount: { id: string; name: string }[]) => {
+  const stubZonesApi = (
+    zonesOnAccount: { id: string; name: string }[],
+    delayMs = 0,
+  ) => {
     const original = globalThis.fetch;
     const queried: string[] = [];
     globalThis.fetch = ((input: string | URL | Request) => {
@@ -120,14 +124,16 @@ describe("inferZoneIdForHostname", () => {
         url.searchParams.get("account.id") === ACCOUNT_ID
           ? zonesOnAccount.find((zone) => zone.name === name)
           : undefined;
-      return Promise.resolve(
+      const response = () =>
         new Response(
           JSON.stringify({
             success: true,
             result: match ? [{ ...match, account: { id: ACCOUNT_ID } }] : [],
           }),
           { headers: { "content-type": "application/json" } },
-        ),
+        );
+      return new Promise<Response>((resolve) =>
+        setTimeout(() => resolve(response()), delayMs),
       );
     }) as typeof globalThis.fetch;
     return {
@@ -143,9 +149,10 @@ describe("inferZoneIdForHostname", () => {
     body: (stub: {
       queried: string[];
     }) => Effect.Effect<A, E, Credentials | CloudflareEnvironment>,
+    delayMs = 0,
   ) =>
     Effect.acquireUseRelease(
-      Effect.sync(() => stubZonesApi(zonesOnAccount)),
+      Effect.sync(() => stubZonesApi(zonesOnAccount, delayMs)),
       body,
       (stub) => Effect.sync(stub.restore),
     ).pipe(Effect.provide(TestContext));
@@ -230,7 +237,7 @@ describe("inferZoneIdForHostname", () => {
         [{ id: zoneId("example"), name: "example.com" }],
         (stub) =>
           Effect.gen(function* () {
-            const zoneCache = new Map<string, string>();
+            const zoneCache: ZoneCache = new Map();
             const first = yield* inferZoneIdForHostname(
               "app.example.com",
               zoneCache,
@@ -243,6 +250,33 @@ describe("inferZoneIdForHostname", () => {
             expect(second).toBe(first);
             expect(stub.queried).toEqual(afterFirst);
           }),
+      ),
+    { exclusive: true },
+  );
+
+  test.live(
+    "collapses concurrent lookups of the same hostname into one",
+    () =>
+      withStubbedZonesApi(
+        [{ id: zoneId("example"), name: "example.com" }],
+        (stub) =>
+          Effect.gen(function* () {
+            const zoneCache: ZoneCache = new Map();
+            const resolved = yield* Effect.all(
+              Array.from({ length: 8 }, () =>
+                inferZoneIdForHostname("app.example.com", zoneCache),
+              ),
+              { concurrency: "unbounded" },
+            );
+            expect(resolved).toEqual(Array(8).fill(zoneId("example")));
+            // The map holds the lookup *effect*, installed inside
+            // `Effect.suspend` with no yield point between get and set, so
+            // eight fibers share one in-flight walk rather than each
+            // starting their own.
+            expect(stub.queried).toEqual(["app.example.com", "example.com"]);
+          }),
+        // Real latency on every request, so the fibers genuinely overlap.
+        10,
       ),
     { exclusive: true },
   );

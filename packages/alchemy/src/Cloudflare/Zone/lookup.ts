@@ -48,9 +48,20 @@ export const resolveZoneId = ({
   });
 
 /**
+ * The caller's memo for {@link inferZoneIdForHostname} — one map per reconcile
+ * pass. It holds the *lookup effect* rather than the resolved id so that
+ * concurrent inferences of the same hostname share one in-flight lookup
+ * instead of racing to populate the entry.
+ */
+export type ZoneCache = Map<
+  string,
+  Effect.Effect<string, never, CloudflareEnvironment | Credentials>
+>;
+
+/**
  * {@link resolveZoneId} against the ambient account, for callers that only
- * have a hostname: no explicit zone reference, a per-run memo, and an
- * unresolvable hostname as a defect rather than a typed failure.
+ * have a hostname: no explicit zone reference, a memo, and an unresolvable
+ * hostname as a defect rather than a typed failure.
  *
  * Listing the account's zones and matching locally is a trap: the list
  * endpoint paginates (20 zones per page), so a hostname whose zone sits on a
@@ -58,32 +69,43 @@ export const resolveZoneId = ({
  * hierarchy with exact `?name=` lookups instead, which makes the account's
  * zone count irrelevant.
  *
- * `zoneCache` is the caller's memo — one map per reconcile pass, so a Worker
- * with several domains or routes in the same zone looks it up once.
+ * A hostname is looked up at most once per {@link ZoneCache}, however many
+ * fibers ask for it and whenever they ask. `Effect.cached` gives the
+ * single-flight guarantee (concurrent runs await the same result); installing
+ * it inside `Effect.suspend` gives the once-only guarantee, since the
+ * get/construct/set runs to completion with no yield point for another fiber
+ * to interleave on. Building the cached effect is construction, not
+ * execution — hence `Effect.runSync`, as in `Action.ts`.
  */
 export const inferZoneIdForHostname = (
   hostname: string,
-  zoneCache: Map<string, string>,
-) =>
-  Effect.gen(function* () {
-    const cached = zoneCache.get(hostname);
-    if (cached) return cached;
-
-    const { accountId } = yield* yield* CloudflareEnvironment;
-    const zoneId = yield* resolveZoneId({
-      accountId,
-      zone: undefined,
-      hostname,
-    }).pipe(
-      Effect.catch(() =>
-        Effect.die(
-          `Could not infer Cloudflare Zone for hostname "${hostname}". ` +
-            "Ensure the parent zone exists in this account.",
+  zoneCache: ZoneCache,
+): Effect.Effect<string, never, CloudflareEnvironment | Credentials> =>
+  Effect.suspend(() => {
+    let lookup = zoneCache.get(hostname);
+    if (!lookup) {
+      lookup = Effect.runSync(
+        Effect.cached(
+          Effect.gen(function* () {
+            const { accountId } = yield* yield* CloudflareEnvironment;
+            return yield* resolveZoneId({
+              accountId,
+              zone: undefined,
+              hostname,
+            }).pipe(
+              Effect.catch(() =>
+                Effect.die(
+                  `Could not infer Cloudflare Zone for hostname "${hostname}". ` +
+                    "Ensure the parent zone exists in this account.",
+                ),
+              ),
+            );
+          }),
         ),
-      ),
-    );
-    zoneCache.set(hostname, zoneId);
-    return zoneId;
+      );
+      zoneCache.set(hostname, lookup);
+    }
+    return lookup;
   });
 
 type ZoneListItem = {

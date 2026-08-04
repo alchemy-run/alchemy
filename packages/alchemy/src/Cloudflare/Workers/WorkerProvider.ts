@@ -34,6 +34,7 @@ import {
   inferZoneIdForHostname,
   resolveZoneId,
   type Reference as ZoneReference,
+  type ZoneCache,
 } from "../Zone/lookup.ts";
 import {
   getAssetsPathPrefix,
@@ -1387,7 +1388,7 @@ export const LiveWorkerProvider = () =>
 
           if (desired.length === 0) return [];
 
-          const zoneCache = new Map<string, string>();
+          const zoneCache: ZoneCache = new Map();
 
           // Attach `hostname` to this Worker. Skip the PUT entirely if
           // the hostname is already attached to *this* Worker — that's a
@@ -1823,7 +1824,7 @@ export const LiveWorkerProvider = () =>
         Effect.gen(function* () {
           if (!routes?.length) return [] as NormalizedWorkerRoute[];
           const { accountId } = yield* yield* CloudflareEnvironment;
-          const zoneCache = new Map<string, string>();
+          const zoneCache: ZoneCache = new Map();
           const normalized: NormalizedWorkerRoute[] = [];
           const seen = new Set<string>();
           for (const route of routes) {
