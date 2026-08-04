@@ -17,9 +17,11 @@
  * instanceId-guarded delete, invalidate, stop hook) by driving the generated
  * provider service directly.
  */
+import { Cli } from "@/Cli/Cli.ts";
+import type { StatusChangeEvent } from "@/Cli/Event.ts";
 import * as LocalProvider from "@/Local/LocalProvider.ts";
 import * as Provider from "@/Provider.ts";
-import { remote } from "@/ProviderMode.ts";
+import { remote, type ProviderMode } from "@/ProviderMode.ts";
 import { Resource } from "@/Resource";
 import { Stack } from "@/Stack";
 import { State, type ResourceState } from "@/State";
@@ -359,6 +361,72 @@ describe("provider modes", () => {
         expect(output.runtime).toEqual("live");
 
         yield* stack.destroy();
+      }),
+  );
+
+  test.provider(
+    "status events carry the resolved mode, the plan carries the run default, and mode switches carry the transition",
+    (stack) =>
+      Effect.gen(function* () {
+        const events: StatusChangeEvent[] = [];
+        let planDefaultMode: ProviderMode | undefined;
+        const cli = Cli.of({
+          approvePlan: () => Effect.succeed(true),
+          displayPlan: () => Effect.void,
+          startApplySession: (plan) =>
+            Effect.sync(() => {
+              planDefaultMode = plan.defaultMode;
+              return {
+                done: () => Effect.void,
+                emit: (event) =>
+                  Effect.sync(() => {
+                    if (event.kind === "status-change") events.push(event);
+                  }),
+              };
+            }),
+        });
+        const withCli = Effect.provide(Layer.succeed(Cli, cli));
+
+        // 1. live deploy: the plan's default mode is "live" and every
+        //    status event for the dual-mode resource is stamped with it.
+        yield* modal("A", "v1").pipe(stack.deploy, withCli);
+        expect(planDefaultMode).toEqual("live");
+        const liveEvents = events.filter((e) => e.id === "A");
+        expect(liveEvents.length).toBeGreaterThan(0);
+        expect(liveEvents.every((e) => e.providerMode === "live")).toBe(true);
+        expect(liveEvents.every((e) => e.fromProviderMode === undefined)).toBe(
+          true,
+        );
+
+        // 2. dev run: default flips to "local"; the mode switch is planned
+        //    as a replacement whose events carry the transition
+        //    (fromProviderMode "live" → providerMode "local"). The old
+        //    generation's GC is deliberately silent (progress stays anchored
+        //    on the live replacement), so no delete-status assertions here.
+        events.length = 0;
+        yield* inDev(modal("A", "v1").pipe(stack.deploy, withCli));
+        expect(planDefaultMode).toEqual("local");
+        const transitions = events.filter(
+          (e) => e.id === "A" && e.fromProviderMode !== undefined,
+        );
+        expect(transitions.length).toBeGreaterThan(0);
+        expect(
+          transitions.every(
+            (e) => e.providerMode === "local" && e.fromProviderMode === "live",
+          ),
+        ).toBe(true);
+
+        // 3. destroy while stamped local: delete events carry the row's
+        //    stamped mode even though the run default is live.
+        events.length = 0;
+        yield* stack.destroy().pipe(withCli);
+        const destroyDeletes = events.filter(
+          (e) => e.id === "A" && e.status === "deleted",
+        );
+        expect(destroyDeletes.length).toBeGreaterThan(0);
+        expect(destroyDeletes.every((e) => e.providerMode === "local")).toBe(
+          true,
+        );
       }),
   );
 });

@@ -153,7 +153,7 @@ const teardownCommand = Command.make(
 type CreateTokenPolicy = {
   effect: "allow";
   permissionGroups: { id: string }[];
-  resources: Record<string, unknown>;
+  resources: Record<string, string>;
 };
 
 /**

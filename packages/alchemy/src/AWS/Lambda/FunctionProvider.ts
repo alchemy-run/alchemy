@@ -149,10 +149,13 @@ export const LocalFunctionProvider = () =>
         let startedAt = Date.now();
         let firstBuild = true;
 
-        yield* Bundle.watch(config.inputOptions, {
-          ...config.outputOptions,
-          dir: bundleDir,
-        }).pipe(
+        yield* Bundle.watch(
+          config.inputOptions,
+          { ...config.outputOptions, dir: bundleDir },
+          // Same built-in plugin configuration the deploy build uses, so the
+          // locally-served bundle tree-shakes identically to the artifact.
+          config.extra,
+        ).pipe(
           Stream.tap((event) => {
             if (event._tag === "Start") {
               startedAt = Date.now();

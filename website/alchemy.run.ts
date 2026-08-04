@@ -25,7 +25,11 @@ const Website = Cloudflare.Website.StaticSite(
     // 301-redirected to `alchemy.run` by the redirect Ruleset below.
     workersDev: stack.stage === "prod" ? false : undefined,
     domains:
-      stack.stage === "prod" ? ["alchemy.run", "v2.alchemy.run"] : undefined,
+      stack.stage === "prod"
+        ? ["alchemy.run", "v2.alchemy.run"]
+        : stack.stage === "staging"
+          ? ["main.alchemy.run"]
+          : undefined,
     memo: {
       include: [
         "src/**",

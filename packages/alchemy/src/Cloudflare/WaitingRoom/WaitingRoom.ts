@@ -23,7 +23,7 @@ export type QueueingMethod = "fifo" | "random" | "passthrough" | "reject";
 /**
  * HTTP status code returned to a user while in the queue.
  */
-export type QueueingStatusCode = "200" | "202" | "429";
+export type QueueingStatusCode = 200 | 202 | 429;
 
 /**
  * Which Turnstile widget type the waiting room uses for detecting bot
@@ -269,7 +269,7 @@ export type WaitingRoom = Resource<TypeId, Props, Attributes, never, Providers>;
  *   totalActiveUsers: 500,
  *   newUsersPerMinute: 200,
  *   queueAll: true,
- *   queueingStatusCode: "429",
+ *   queueingStatusCode: 429,
  * });
  * ```
  *
@@ -502,7 +502,7 @@ const DEFAULTS = {
   disableSessionRenewal: false,
   queueAll: false,
   queueingMethod: "fifo",
-  queueingStatusCode: "200",
+  queueingStatusCode: 200,
   suspended: false,
   jsonResponseEnabled: false,
   defaultTemplateLanguage: "en-US",
@@ -621,7 +621,7 @@ const toAttributes = (
   sessionDuration: room.sessionDuration ?? 5,
   queueAll: room.queueAll ?? false,
   queueingMethod: (room.queueingMethod ?? "fifo") as QueueingMethod,
-  queueingStatusCode: (room.queueingStatusCode ?? "200") as QueueingStatusCode,
+  queueingStatusCode: room.queueingStatusCode ?? 200,
   suspended: room.suspended ?? false,
   createdOn: room.createdOn ?? undefined,
   modifiedOn: room.modifiedOn ?? undefined,

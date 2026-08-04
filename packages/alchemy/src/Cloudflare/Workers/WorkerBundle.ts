@@ -57,6 +57,43 @@ export interface WorkerBundleOptions {
   extraOptions: WorkerBuildOptions | undefined;
 }
 
+/**
+ * Rebuild any `builtin:esm-external-require` plugin instance with OUR copy of
+ * rolldown.
+ *
+ * cloudflare-tools is its own bun workspace with its own dependency store, so
+ * under bun's `bun` export condition `@distilled.cloud/cloudflare-rolldown-plugin`
+ * can resolve a physically different copy of rolldown than the one Alchemy
+ * bundles with. Builtin plugins — here `builtin:esm-external-require`, which
+ * rewrites CJS `require`s of Node builtins into ESM imports under
+ * `nodejs_compat` — are `BuiltinPlugin` class instances that rolldown
+ * recognizes with an `instanceof` check. An instance constructed by the
+ * foreign rolldown copy fails that check and is silently treated as a
+ * hookless JS plugin, so CJS requires keep rolldown's throwing `require`
+ * shim and the Worker fails Cloudflare startup validation (#880).
+ * Reconstructing the builtin from its `_options` with the rolldown copy we
+ * actually invoke makes the identity check pass regardless of which copy the
+ * plugin package resolved.
+ */
+const rebindEsmExternalRequirePlugin = (
+  plugins: Array<rolldown.Plugin | null>,
+  esmExternalRequirePlugin: (typeof import("rolldown/plugins"))["esmExternalRequirePlugin"],
+): Array<rolldown.Plugin | null> =>
+  plugins.map((plugin) => {
+    if (
+      typeof plugin === "object" &&
+      plugin !== null &&
+      "name" in plugin &&
+      plugin.name === "builtin:esm-external-require" &&
+      "_options" in plugin
+    ) {
+      return esmExternalRequirePlugin(
+        plugin._options as Parameters<typeof esmExternalRequirePlugin>[0],
+      ) as rolldown.Plugin;
+    }
+    return plugin;
+  });
+
 export const WorkerBundle = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const context = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
@@ -66,9 +103,13 @@ export const WorkerBundle = Effect.gen(function* () {
     // Loaded lazily so importing the Cloudflare provider (or the CLI, whose
     // command tree reaches this module) never loads rolldown's native
     // binding — only actually bundling a Worker does (#562).
-    const { default: cloudflareRolldown } = yield* Effect.promise(
-      () => import("@distilled.cloud/cloudflare-rolldown-plugin"),
-    );
+    const [{ default: cloudflareRolldown }, { esmExternalRequirePlugin }] =
+      yield* Effect.promise(() =>
+        Promise.all([
+          import("@distilled.cloud/cloudflare-rolldown-plugin"),
+          import("rolldown/plugins"),
+        ]),
+      );
     const realMain = yield* sanitizeMain(options.main);
     const inputOptions: rolldown.InputOptions = {
       input: realMain,
@@ -90,10 +131,13 @@ export const WorkerBundle = Effect.gen(function* () {
         Effect.provide(context),
       ),
       plugins: [
-        cloudflareRolldown({
-          compatibilityDate: options.compatibility.date,
-          compatibilityFlags: options.compatibility.flags,
-        }),
+        rebindEsmExternalRequirePlugin(
+          cloudflareRolldown({
+            compatibilityDate: options.compatibility.date,
+            compatibilityFlags: options.compatibility.flags,
+          }),
+          esmExternalRequirePlugin,
+        ),
         options.entry.kind === "effect"
           ? [
               virtualEntryPlugin(

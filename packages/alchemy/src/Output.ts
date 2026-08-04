@@ -48,6 +48,23 @@ export const asOutput = <T>(t: T | Output<T> | Effect.Effect<T>): Output<T> =>
       ? new EffectExpr(VoidExpr, () => t)
       : new LiteralExpr(t);
 
+/**
+ * Lift a plan-time Effect into an {@link Output}.
+ *
+ * The effect runs when the stack resolves the Output during plan/deploy —
+ * with the stack's services (cloud credentials, region, ...) provided — and
+ * never inside a deployed runtime: constructing the Output is inert, so
+ * helpers built on `fromEffect` (e.g. AMI lookups) are safe to call from
+ * composition code that is re-executed inside a Function/Worker/Instance
+ * bundle.
+ *
+ * The effect must not fail (`E = never`) — die with a descriptive error for
+ * unresolvable lookups.
+ */
+export const fromEffect = <A, Req = never>(
+  effect: Effect.Effect<A, never, Req>,
+): ToOutput<A, Req> => new EffectExpr(VoidExpr, () => effect) as any;
+
 export const isOutput = (value: any): value is Output<any> =>
   value &&
   (typeof value === "object" || typeof value === "function") &&

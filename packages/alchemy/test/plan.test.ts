@@ -2249,9 +2249,17 @@ describe("whole-resource refs resolve to the upstream's stable attributes", () =
   // that `ResourceExpr` to the downstream verbatim, so its `news` looked
   // unresolved (`isResolved(news) === false`) and the stable values never
   // reached the downstream `diff`. This forced the Neon `Branch` to manually
-  // extract `project.projectId` as a workaround. The engine must instead
-  // materialize the known stable attributes into a plain object so the
-  // stable values flow into the diff and the downstream can no-op.
+  // extract `project.projectId` as a workaround. The engine materializes the
+  // known stable attributes into a plain object for the DIFF-facing `news`
+  // so the stable values flow into the diff and the downstream can no-op.
+  //
+  // The plan node's `props`, however, must keep the reference as an
+  // evaluable `ResourceExpr`: Apply re-resolves `node.props` against the
+  // upstream's fresh post-reconcile attributes, and a materialized
+  // stables-only snapshot would permanently hide every non-stable attribute
+  // from the downstream's `reconcile` (e.g. a Lambda Alias promoting a
+  // freshly-published Lambda Version would never see the new version
+  // number — #993's alias promotion bug).
   const seedUpdatingUpstream = () =>
     seed({
       A: {
@@ -2276,7 +2284,7 @@ describe("whole-resource refs resolve to the upstream's stable attributes", () =
     });
 
   test(
-    "the whole-resource ref resolves to the upstream's stable attributes (not an Expr)",
+    "the node's whole-resource ref stays an evaluable Expr carrying the stable attributes",
     Effect.gen(function* () {
       yield* seedUpdatingUpstream();
 
@@ -2293,10 +2301,15 @@ describe("whole-resource refs resolve to the upstream's stable attributes", () =
       expect(plan.resources.A!.action).toBe("update");
 
       const bProps = (plan.resources.B as any).props as TestResourceProps;
-      // The whole-resource ref must resolve to a fully-resolved plain object
-      // of the upstream's stable attributes — NOT an unresolved Expr.
-      expect(Output.isExpr(bProps.object)).toBe(false);
-      expect(bProps.object).toEqual({
+      // The node's props keep the whole-resource ref as an evaluable
+      // `ResourceExpr` (so Apply resolves the upstream's FRESH attributes
+      // after its reconcile), with the stable attributes riding along for
+      // plan-time consumers.
+      expect(Output.isExpr(bProps.object)).toBe(true);
+      expect(Output.isResourceExpr(bProps.object)).toBe(true);
+      expect(
+        (bProps.object as any as Output.ResourceExpr<any>).stables,
+      ).toEqual({
         stableString: "A",
         stableArray: ["A"],
       });
@@ -2341,6 +2354,121 @@ describe("whole-resource refs resolve to the upstream's stable attributes", () =
       // Only stable attributes flow in and they are unchanged, so the
       // downstream no-ops instead of being dragged into a needless update.
       expect(plan.resources.B!.action).toBe("noop");
+    }),
+  );
+
+  // The binding path mirrors the props split: `diffBindings` compares the
+  // materialized (stables-only) view, but the node's binding rows carry the
+  // apply-faithful payload so `Output.evaluate(node.bindings, outputs)`
+  // re-resolves the upstream's fresh post-reconcile attributes.
+  const seedHostWithFullPayload = () =>
+    seed({
+      Host: {
+        instanceId,
+        providerVersion: 0,
+        logicalId: "Host",
+        fqn: "Host",
+        namespace: undefined,
+        resourceType: "Test.BindingTarget",
+        status: "created",
+        props: { name: "host" },
+        attr: {
+          name: "host",
+          string: "Host",
+          env: {},
+          replaceString: undefined,
+        },
+        downstream: [],
+        // Terminal commits persist the payload the provider reconciled
+        // with — the upstream's FULL attributes (#874), not the plan-time
+        // stables-only projection.
+        bindings: [
+          {
+            sid: "FromA",
+            data: {
+              env: {
+                A: {
+                  string: "old-value",
+                  stableString: "A",
+                  stableArray: ["A"],
+                },
+              },
+            },
+          },
+        ],
+      },
+    });
+
+  const hostProgram = (upstreamString: string) =>
+    Effect.gen(function* () {
+      const A = yield* TestResource("A", { string: upstreamString });
+      const host = yield* BindingTarget("Host", { name: "host" });
+      // The binding data embeds the WHOLE upstream resource.
+      yield* host.bind("FromA", { env: { A } } as any);
+    });
+
+  test(
+    "the node's binding payload keeps the whole-resource ref as an evaluable Expr carrying the stable attributes",
+    Effect.gen(function* () {
+      yield* seedUpdatingUpstream();
+
+      const plan = yield* hostProgram("new-value").pipe(makePlan);
+
+      expect(plan.resources.A!.action).toBe("update");
+
+      const rows = (plan.resources.Host as any).bindings;
+      expect(rows).toHaveLength(1);
+      expect(rows[0].sid).toBe("FromA");
+      const payload = rows[0].data.env.A;
+      expect(Output.isResourceExpr(payload)).toBe(true);
+      expect((payload as Output.ResourceExpr<any>).stables).toEqual({
+        stableString: "A",
+        stableArray: ["A"],
+      });
+    }),
+  );
+
+  test(
+    "an updating upstream marks the binding row 'update' from the materialized comparison while the payload stays evaluable",
+    Effect.gen(function* () {
+      yield* seedUpdatingUpstream();
+      yield* seedHostWithFullPayload();
+
+      const plan = yield* hostProgram("new-value").pipe(makePlan);
+
+      expect(plan.resources.A!.action).toBe("update");
+      // The host's own props are unchanged; the binding drift alone drags
+      // it into the update that re-delivers A's fresh attributes.
+      expect(plan.resources.Host!.action).toBe("update");
+
+      const rows = (plan.resources.Host as any).bindings;
+      expect(rows).toHaveLength(1);
+      // Action from the materialized comparison (persisted full attrs vs
+      // stables-only projection)...
+      expect(rows[0].action).toBe("update");
+      // ...payload from the apply-faithful resolution.
+      expect(Output.isResourceExpr(rows[0].data.env.A)).toBe(true);
+    }),
+  );
+
+  test(
+    "an unchanged upstream's full persisted binding payload no-ops instead of churning",
+    Effect.gen(function* () {
+      yield* seedUpdatingUpstream();
+      yield* seedHostWithFullPayload();
+
+      // Same props as seeded — A no-ops, so it resolves to its full
+      // persisted attrs and the materialized binding payload matches the
+      // persisted row exactly.
+      const plan = yield* hostProgram("old-value").pipe(makePlan);
+
+      expect(plan.resources.A!.action).toBe("noop");
+      expect(plan.resources.Host!.action).toBe("noop");
+      const rows = (plan.resources.Host as any).bindings;
+      expect(rows[0].action).toBe("noop");
+      // Nothing left to re-evaluate — the payload is the plain full attrs.
+      expect(Output.isExpr(rows[0].data.env.A)).toBe(false);
+      expect(rows[0].data.env.A.string).toBe("old-value");
     }),
   );
 });
@@ -3696,6 +3824,34 @@ describe("read is never handed unresolved persisted props", () => {
       expect(reads).not.toContain("Zombie");
       expect(plan.deletions.Zombie).toMatchObject({ action: "delete" });
       expect((plan.deletions.Zombie as any).state.attr).toBeUndefined();
+    }),
+  );
+
+  test(
+    "a recovery read that crashes degrades to re-driving the create instead of killing the plan",
+    Effect.gen(function* () {
+      // Stripped-at-commit props: an unresolved Output persisted as a hole
+      // still passes `isResolved`, so the read probe DOES run — and a
+      // provider that dereferences the hole crashes with a defect (e.g. a
+      // SchemaError deep in its SDK client, see #995). The plan must
+      // contain the defect to this resource's probe and fall through to
+      // re-driving the create.
+      yield* seed({
+        Half: {
+          ...creatingWithUnresolvedProps("Half"),
+          props: { string: undefined } as any,
+        },
+      });
+      const layer = Layer.succeed(TestResourceHooks, {
+        read: () =>
+          Effect.die(new Error("SchemaError: Expected string, got undefined")),
+      });
+      const plan = yield* makePlan(
+        Effect.gen(function* () {
+          yield* TestResource("Half", { string: "resolved-now" });
+        }),
+      ).pipe(Effect.provide(layer));
+      expect(plan.resources.Half!.action).toBe("create");
     }),
   );
 

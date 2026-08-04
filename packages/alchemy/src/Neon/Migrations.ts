@@ -1,8 +1,18 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import { Client } from "pg";
+import type { Client } from "pg";
 import type { SqlFile } from "../SQL/SqlFile.ts";
+
+// `pg` is an optional peer dependency — loaded lazily so importing the Neon
+// provider never requires the driver unless migrations actually run.
+const importPg = () =>
+  import("pg").catch((cause) => {
+    throw new Error(
+      "Failed to load the 'pg' driver. Install the optional peer dependency 'pg' to run Neon migrations.",
+      { cause },
+    );
+  });
 
 export class PgError extends Data.TaggedError("PgError")<{
   message: string;
@@ -44,6 +54,7 @@ const withClient = <A, E>(
 ): Effect.Effect<A, PgError | E> =>
   Effect.tryPromise({
     try: async () => {
+      const { Client } = await importPg();
       const client = new Client({
         connectionString: stripSslQueryParams(Redacted.value(connectionUri)),
         ssl: { rejectUnauthorized: false },

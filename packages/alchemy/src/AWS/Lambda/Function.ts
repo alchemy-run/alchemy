@@ -101,12 +101,13 @@ export const isBindingHost = (value: any): value is Function => {
     (value.Type === "AWS.Lambda.Function" ||
       value.Type === "AWS.ECS.Task" ||
       value.Type === "AWS.ECS.Service" ||
-      value.Type === "AWS.EKS.Deployment" ||
-      value.Type === "AWS.EKS.Job")
+      value.Type === "Kubernetes.Deployment" ||
+      value.Type === "Kubernetes.Job")
   );
 };
 
-export interface FunctionBuildOptions extends Partial<rolldown.InputOptions> {
+export interface FunctionBuildOptions
+  extends Partial<rolldown.InputOptions>, Bundle.BundleExtraOptions {
   /**
    * Native or Node-only packages to install into the Lambda artifact with npm,
    * targeting Linux and the function's architecture.
@@ -212,6 +213,15 @@ export interface FunctionProps extends PlatformProps {
    * every layer.
    */
   layers?: LayerRef[];
+  /**
+   * Bundler configuration for {@link main}: rolldown input options (flat),
+   * `output` overrides, `install` for native packages, plus pure-annotation
+   * options (`pure`) and the bundle analyzer. Top-level calls in `effect`,
+   * `@effect/*`, `alchemy`, `@alchemy.run/*`, and `@distilled.cloud/*` are
+   * annotated as pure by default so unused code from those packages is
+   * tree-shaken; list additional packages via `pure.packages`, or disable
+   * with `pure: false`.
+   */
   build?: FunctionBuildOptions;
   uploadSourceMap?: boolean;
   env?: Record<string, any>;
@@ -573,6 +583,38 @@ const matchesConfiguredExternal = (
  * });
  * ```
  *
+ * @section Bundling & Tree-shaking
+ * `main` is bundled with rolldown at deploy time. Top-level calls in the
+ * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
+ * `@distilled.cloud/*` packages receive `#__PURE__` annotations by
+ * default, so anything the function doesn't use from those packages is
+ * tree-shaken out of the bundle. Any other package — including your own
+ * app — is left untouched unless you list it explicitly.
+ *
+ * @example Treat additional packages as pure
+ * Pass package names (or picomatch globs) via `build.pure.packages` to
+ * annotate them in addition to the defaults. Listing a package that also
+ * declares `"sideEffects": false` (or `[]`) in its `package.json` opts it
+ * into full annotation — top-level calls whose result is discarded are
+ * deleted under minification when unused — so only list packages whose
+ * modules really are free of meaningful top-level side effects.
+ * ```typescript
+ * const func = yield* AWS.Lambda.Function("ApiFunction", {
+ *   main: "./src/handler.ts",
+ *   build: {
+ *     pure: { packages: ["my-lib", "@my-scope/*"] },
+ *   },
+ * });
+ * ```
+ *
+ * @example Disable pure annotations
+ * ```typescript
+ * const func = yield* AWS.Lambda.Function("ApiFunction", {
+ *   main: "./src/handler.ts",
+ *   build: { pure: false },
+ * });
+ * ```
+ *
  * @section EFS File Systems
  * Mount an EFS access point into the function's `/mnt/…` file system. The
  * function must be attached to a VPC that can reach an EFS mount target for
@@ -890,9 +932,14 @@ export const resolveFunctionBundleConfig = Effect.fn(function* (
   },
 ) {
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
+  // `pure` and `bundleAnalyzer` configure Alchemy's built-in rolldown plugins
+  // (`Bundle.BundleExtraOptions`), not rolldown itself — they are threaded
+  // through as `extra` and must not leak into `rolldown.InputOptions`.
   const {
     output: buildOutput,
     install,
+    pure: _pure,
+    bundleAnalyzer: _bundleAnalyzer,
     ...userInputOptions
   } = props.build ?? {};
   const sourcemap = buildOutput?.sourcemap ?? true;
@@ -1042,6 +1089,11 @@ export default handler;
   return {
     inputOptions,
     outputOptions,
+    // Built-in plugin configuration (`pure`, `bundleAnalyzer`). Every caller
+    // — the deploy build and the Live Lambda watcher — must pass this as the
+    // third argument to `Bundle.build`/`Bundle.watch`, otherwise local dev
+    // tree-shakes differently from the deployed artifact.
+    extra: props.build,
     cwd,
     architecture,
     requested,
@@ -1311,13 +1363,18 @@ export const makeFunctionProvider = (options?: FunctionProviderOptions) =>
       const {
         inputOptions,
         outputOptions,
+        extra,
         cwd,
         architecture,
         requested,
         sourcemap,
         uploadSourceMap,
       } = yield* resolveFunctionBundleConfig(props);
-      const bundleOutput = yield* Bundle.build(inputOptions, outputOptions);
+      const bundleOutput = yield* Bundle.build(
+        inputOptions,
+        outputOptions,
+        extra,
+      );
 
       const mainFile = bundleOutput.files[0];
       const code =
@@ -1362,7 +1419,11 @@ export const makeFunctionProvider = (options?: FunctionProviderOptions) =>
 
       const buildArchive = Effect.gen(function* () {
         const installedPackageFiles = hasInstalledPackages
-          ? yield* installResolvedPackages({ resolved, architecture })
+          ? yield* installResolvedPackages({
+              resolved,
+              overrides: installIdentity.overrides,
+              architecture,
+            })
           : [];
         const archiveFiles = [...extraFiles, ...installedPackageFiles];
         const archive = yield* zipCode(

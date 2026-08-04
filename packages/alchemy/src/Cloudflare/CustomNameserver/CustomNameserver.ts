@@ -249,7 +249,7 @@ export const CustomNameserverProvider = () =>
       yield* customNameservers
         .deleteCustomNameserver({
           accountId: output.accountId,
-          customNSId: output.nsName,
+          customNsId: output.nsName,
         })
         .pipe(Effect.catchTag("CustomNameserverNotFound", () => Effect.void));
     }),

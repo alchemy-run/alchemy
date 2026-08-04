@@ -85,11 +85,11 @@ export class ConflictingProviderModeError extends Data.TaggedError(
  * live in dev; `remote()` on them is a no-op.
  */
 export const remote: {
+  // Identity-typed so branded effect interfaces (e.g. a Worker-only
+  // binding's `BindingEffect`) survive the pipe with their brand intact.
   (
     enabled?: boolean,
-  ): <A, E, R = never>(
-    effect: Effect.Effect<A, E, R>,
-  ) => Effect.Effect<A, E, R>;
+  ): <Eff extends Effect.Effect<any, any, any>>(effect: Eff) => Eff;
   <R1 = never>(
     enabled: Effect.Effect<boolean, never, R1>,
   ): <A, E, R2 = never>(

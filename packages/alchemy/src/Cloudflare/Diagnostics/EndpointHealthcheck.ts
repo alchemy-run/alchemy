@@ -47,7 +47,7 @@ export interface EndpointHealthcheckAttributes {
   /** The Cloudflare account the healthcheck belongs to. */
   accountId: string;
   /** Type of check performed. */
-  checkType: "icmp";
+  checkType: "icmp" | (string & {});
   /** The IP address of the host checks are performed against. */
   endpoint: string;
   /** Name associated with this check. */

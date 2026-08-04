@@ -31,10 +31,14 @@ export interface BundledServiceSource {
   image?: string;
   handler?: string;
   port?: number;
-  build?: {
-    input?: Partial<rolldown.InputOptions>;
-    output?: Partial<rolldown.OutputOptions>;
-  };
+  /**
+   * Bundler configuration for `main`: rolldown `input`/`output` overrides
+   * plus pure-annotation options (`pure`). `effect`, `@effect/*`,
+   * `alchemy`, `@alchemy.run/*`, and `@distilled.cloud/*` are annotated as
+   * pure by default so unused code from those packages is tree-shaken; list
+   * additional packages via `pure.packages`, or disable with `pure: false`.
+   */
+  build?: Bundle.BundleConfig;
 }
 
 /** The resolved (built) local image. */
@@ -180,6 +184,7 @@ export const makeServiceImage = Effect.gen(function* () {
           minify: source.build?.output?.minify ?? false,
           entryFileNames: "index.mjs",
         },
+        source.build,
       );
     });
 

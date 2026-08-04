@@ -6,12 +6,12 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import type { Providers } from "./Providers.ts";
 
-export type ApiTokenProps = Omit<Axiom.CreateAPITokenInput, never>;
+export type ApiTokenProps = Omit<Axiom.CreateAPITokenRequest, never>;
 
 export type ApiToken = Resource<
   "Axiom.ApiToken",
   ApiTokenProps,
-  Omit<Axiom.CreateAPITokenOutput, "token"> & {
+  Omit<Axiom.CreateAPITokenResponse, "token"> & {
     /**
      * The bearer token. Returned only by `create` (and `regenerate`); Axiom
      * does not return it on subsequent reads. Persisted in resource state via
