@@ -11,34 +11,41 @@ import * as RpcProviderProxy from "../Local/RpcProviderProxy.ts";
 import { forwardSidecarLogs } from "../Local/RpcSpawner.ts";
 import { PlatformServices } from "../Util/PlatformServices.ts";
 import { execStack, ExecStackOptions } from "./commands/deploy.ts";
+import { LoggingCli } from "./LoggingCli.ts";
 import { selectCli } from "./selectCli.ts";
 
-const services = Layer.merge(selectCli(), RpcProviderProxy.fromEnv()).pipe(
-  Layer.provideMerge(
-    Layer.mergeAll(AlchemyContextLive, ProfileLive, CredentialsStoreLive),
-  ),
-  Layer.provideMerge(
-    Layer.mergeAll(
-      PlatformServices,
-      FetchHttpClient.layer,
-      ConfigProvider.layer(ConfigProvider.fromEnv()),
+// `alchemy dev` is a long-running session whose primary output is the log
+// stream (worker starts, cron fires, request logs) interleaved with
+// re-applies on file change. Ink's insertion model stacks inserted lines
+// ABOVE the animated region, so runtime logs end up above the plan/apply
+// output in scrollback. Append-only chronological rendering is the correct
+// model for a dev server (plan → status → logs, strictly in order), so dev
+// always takes the line renderer; deploy/destroy keep the interactive TUI.
+const makeServices = (dev: boolean | undefined) =>
+  Layer.merge(dev ? LoggingCli : selectCli(), RpcProviderProxy.fromEnv()).pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(AlchemyContextLive, ProfileLive, CredentialsStoreLive),
     ),
-  ),
-);
-
-export const exec = () =>
-  // Subscribe to the spawner's sidecar log stream BEFORE the stack runs:
-  // this process owns the terminal renderer (Ink patches `console`), so
-  // sidecar output printed here lands cleanly above the repainting progress
-  // region instead of racing it on the shared tty. No-op outside dev.
-  forwardSidecarLogs.pipe(
-    Effect.andThen(
-      execStack(
-        Schema.decodeSync(ExecStackOptions)(
-          JSON.parse(process.env.ALCHEMY_EXEC_OPTIONS!),
-        ),
+    Layer.provideMerge(
+      Layer.mergeAll(
+        PlatformServices,
+        FetchHttpClient.layer,
+        ConfigProvider.layer(ConfigProvider.fromEnv()),
       ),
     ),
-    Effect.provide(services),
+  );
+
+export const exec = () => {
+  const options = Schema.decodeSync(ExecStackOptions)(
+    JSON.parse(process.env.ALCHEMY_EXEC_OPTIONS!),
+  );
+  // Subscribe to the spawner's sidecar log stream BEFORE the stack runs:
+  // this process owns the terminal renderer, so sidecar output printed here
+  // lands in chronological order with the run's own lines instead of racing
+  // the shared tty. No-op outside dev.
+  return forwardSidecarLogs.pipe(
+    Effect.andThen(execStack(options)),
+    Effect.provide(makeServices(options.dev)),
     Effect.scoped,
   );
+};
