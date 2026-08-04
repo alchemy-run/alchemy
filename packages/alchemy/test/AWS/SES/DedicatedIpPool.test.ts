@@ -1,10 +1,14 @@
+import { adopt } from "@/AdoptPolicy";
 import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment";
 import { DedicatedIpPool } from "@/AWS/SES";
 import * as Test from "@/Test/Alchemy";
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import { expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -128,6 +132,100 @@ test.provider.skipIf(!process.env.AWS_TEST_SES_DEDICATED_IP)(
 
       yield* stack.destroy();
       yield* assertPoolDeleted(second.poolName);
+    }),
+  { timeout: 120_000 },
+);
+
+// A pool the account already pays for must not be silently taken over just
+// because its name matches ours. Free to exercise: a STANDARD pool holding no
+// dedicated IPs costs nothing, and create/delete are both fast.
+const FOREIGN_POOL = "alchemy-test-foreign-pool";
+
+const deletePoolIfExists = (name: string) =>
+  sesv2
+    .deleteDedicatedIpPool({ PoolName: name })
+    .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
+
+test.provider(
+  "a pool without alchemy tags is not adopted without --adopt",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      // Idempotent pre-clean: reclaim a leftover from an interrupted run.
+      yield* deletePoolIfExists(FOREIGN_POOL);
+
+      // Someone else's pool: same name, no alchemy tags.
+      yield* sesv2.createDedicatedIpPool({
+        PoolName: FOREIGN_POOL,
+        ScalingMode: "STANDARD",
+      });
+
+      const exit = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            return yield* DedicatedIpPool("Foreign", {
+              poolName: FOREIGN_POOL,
+            });
+          }),
+        )
+        .pipe(Effect.exit);
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const reason = exit.cause.reasons.find(Cause.isFailReason);
+        expect((reason?.error as any)?._tag).toBe("OwnedBySomeoneElse");
+      }
+
+      // The pool is still there and still untagged — the refusal touched
+      // nothing.
+      const untouched = yield* getPool(FOREIGN_POOL);
+      expect(untouched?.PoolName).toBe(FOREIGN_POOL);
+
+      yield* deletePoolIfExists(FOREIGN_POOL);
+      yield* assertPoolDeleted(FOREIGN_POOL);
+    }),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "adopt(true) takes over the pool and brands it",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      yield* deletePoolIfExists(FOREIGN_POOL);
+
+      yield* sesv2.createDedicatedIpPool({
+        PoolName: FOREIGN_POOL,
+        ScalingMode: "STANDARD",
+      });
+
+      const pool = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* DedicatedIpPool("Foreign", {
+            poolName: FOREIGN_POOL,
+          }).pipe(adopt(true));
+        }),
+      );
+      expect(pool.poolName).toBe(FOREIGN_POOL);
+
+      // Reconcile brands an adopted pool, so a later read owns it outright —
+      // without this the resource would need --adopt on every deploy.
+      const { accountId, region } = yield* AWSEnvironment.current;
+      const { Tags } = yield* sesv2.listTagsForResource({
+        ResourceArn: `arn:aws:ses:${region}:${accountId}:dedicated-ip-pool/${FOREIGN_POOL}`,
+      });
+      const tags = Object.fromEntries(Tags.map((t) => [t.Key, t.Value]));
+      expect(tags["alchemy::id"]).toBe("Foreign");
+
+      // Now owned: a plain re-deploy converges with no adopt decoration.
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* DedicatedIpPool("Foreign", { poolName: FOREIGN_POOL });
+        }),
+      );
+
+      yield* stack.destroy();
+      yield* assertPoolDeleted(FOREIGN_POOL);
     }),
   { timeout: 120_000 },
 );

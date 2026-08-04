@@ -1,11 +1,18 @@
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { createInternalTags, createTagsList } from "../../Tags.ts";
+import {
+  createInternalTags,
+  createTagsList,
+  diffTags,
+  hasAlchemyTags,
+} from "../../Tags.ts";
+import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -118,6 +125,20 @@ export const DedicatedIpPool = Resource<DedicatedIpPool>(
 
 const DEFAULT_SCALING_MODE = "STANDARD" as const;
 
+const toTagRecord = (
+  tags: ReadonlyArray<{ Key: string; Value: string }> | undefined,
+): Record<string, string> =>
+  Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
+
+// Dedicated IP pools are taggable but their API never returns an ARN — not
+// from getDedicatedIpPool, not from listDedicatedIpPools — so the ARN that
+// listTagsForResource requires has to be derived.
+const dedicatedIpPoolArnOf = (
+  region: string,
+  accountId: string,
+  name: string,
+) => `arn:aws:ses:${region}:${accountId}:dedicated-ip-pool/${name}`;
+
 export const DedicatedIpPoolProvider = () =>
   Provider.effect(
     DedicatedIpPool,
@@ -137,6 +158,24 @@ export const DedicatedIpPoolProvider = () =>
           Effect.map((response) => response.DedicatedIpPool),
           Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
         );
+      });
+
+      // getDedicatedIpPool does not return tags, so ownership costs a second
+      // API call. Only `read` pays it — `list` deletes by name and does not
+      // need to know who owns a pool.
+      const getPoolTags = Effect.fn(function* (name: string) {
+        const { accountId, region } = yield* AWSEnvironment.current;
+        return yield* sesv2
+          .listTagsForResource({
+            ResourceArn: dedicatedIpPoolArnOf(region, accountId, name),
+          })
+          .pipe(
+            Effect.map((response) => toTagRecord(response.Tags)),
+            // The pool went away between the two calls.
+            Effect.catchTag("NotFoundException", () =>
+              Effect.succeed({} as Record<string, string>),
+            ),
+          );
       });
 
       return DedicatedIpPool.Provider.of({
@@ -172,9 +211,15 @@ export const DedicatedIpPoolProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.poolName ?? (yield* createName(id, olds ?? {}));
           const found = yield* getPool(name);
-          return found
-            ? { poolName: name, scalingMode: found.ScalingMode }
-            : undefined;
+          if (!found) return undefined;
+          const attrs = { poolName: name, scalingMode: found.ScalingMode };
+          // A pool provisions billable dedicated IP capacity, and reconcile
+          // brands the ones it creates with internal tags. So existence at our
+          // deterministic name is NOT proof of ownership — a pre-existing pool
+          // someone else pays for must be adopted deliberately (`--adopt` /
+          // `adopt(true)`) rather than silently taken over.
+          const tags = yield* getPoolTags(name);
+          return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
         diff: Effect.fn(function* ({ id, news, olds }) {
@@ -227,6 +272,22 @@ export const DedicatedIpPoolProvider = () =>
             yield* sesv2.putDedicatedIpPoolScalingAttributes({
               PoolName: name,
               ScalingMode: desiredMode,
+            });
+          }
+
+          // 3b. SYNC TAGS — brand the pool if it is not already ours. An
+          //     adopted pool reaches this point without ever passing through
+          //     the create above, so without this it would stay unbranded and
+          //     `read` would keep reporting it Unowned on every later deploy.
+          //     Diffed against OBSERVED cloud tags, never against olds.
+          const internalTags = yield* createInternalTags(id);
+          const observedTags = yield* getPoolTags(name);
+          const { upsert } = diffTags(observedTags, internalTags);
+          if (upsert.length > 0) {
+            const { accountId, region } = yield* AWSEnvironment.current;
+            yield* sesv2.tagResource({
+              ResourceArn: dedicatedIpPoolArnOf(region, accountId, name),
+              Tags: upsert,
             });
           }
 
