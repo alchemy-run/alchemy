@@ -381,8 +381,8 @@ describe("makeLocalState", () => {
 
       // whichever write won, the file must parse as one complete state —
       // never a truncated interleaving (the writeAtomic guarantee)
-      const final = yield* state.get({ stack, stage, fqn });
-      expect(rounds).toContain((final?.attr as { round: number }).round);
+      const final = (yield* state.get({ stack, stage, fqn })) as ResourceState;
+      expect(rounds).toContain((final.attr as { round: number }).round);
 
       yield* state.deleteStack({ stack });
     }).pipe(Effect.provide(PlatformServices)),
