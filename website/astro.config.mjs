@@ -1080,6 +1080,7 @@ export default defineConfig({
               label: "Effect SQL",
               items: [
                 { label: "Postgres", link: "/sql/effect-sql/postgres" },
+                { label: "MySQL", link: "/sql/effect-sql/mysql" },
                 { label: "D1", link: "/sql/effect-sql/d1" },
                 { label: "Migrations", link: "/sql/effect-sql/migrations" },
                 {
@@ -1092,6 +1093,7 @@ export default defineConfig({
               label: "Drizzle",
               items: [
                 { label: "Postgres", link: "/sql/drizzle/postgres" },
+                { label: "MySQL", link: "/sql/drizzle/mysql" },
                 { label: "D1", link: "/sql/drizzle/d1" },
                 { label: "Migrations", link: "/sql/drizzle/migrations" },
               ],

@@ -60,9 +60,6 @@ const db = yield* Cloudflare.D1.Database("app-db", {
 });
 ```
 
-This is also the working path for MySQL today, where schema
-generation is not wired through `Drizzle.Schema`.
-
 ## Durable Object migrations
 
 A Durable Object's SQLite database is per-instance, so its
@@ -181,13 +178,15 @@ state to tear down.
 
 `dialect` selects drizzle-kit's target: `"postgres"` (the default)
 for [Neon / PlanetScale / Hyperdrive-fronted
-Postgres](/sql/drizzle/postgres), `"sqlite"` for
-[D1](/sql/drizzle/d1). `mysql` uses the run-it-yourself flow above.
+Postgres](/sql/drizzle/postgres), `"mysql"` for
+[PlanetScale MySQL](/sql/drizzle/mysql), `"sqlite"` for
+[D1](/sql/drizzle/d1).
 
 ## Where next
 
-- [Postgres](/sql/drizzle/postgres) / [D1](/sql/drizzle/d1) — the
-  full schema-to-queries flow per database.
+- [Postgres](/sql/drizzle/postgres) / [MySQL](/sql/drizzle/mysql) /
+  [D1](/sql/drizzle/d1) — the full schema-to-queries flow per
+  database.
 - [Effect SQL migrations](/sql/effect-sql/migrations) — the same
   `migrationsDir` application without an ORM.
 - [Schema API reference](/providers/drizzle/schema)

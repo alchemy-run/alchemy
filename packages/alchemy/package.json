@@ -432,6 +432,7 @@
     "@aws/durable-execution-sdk-js": "^2.1.0",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
+    "@effect/sql-mysql2": "catalog:",
     "@effect/sql-pg": "catalog:",
     "drizzle-kit": "catalog:",
     "drizzle-orm": "catalog:",
@@ -447,6 +448,9 @@
       "optional": true
     },
     "@effect/platform-node": {
+      "optional": true
+    },
+    "@effect/sql-mysql2": {
       "optional": true
     },
     "@effect/sql-pg": {
