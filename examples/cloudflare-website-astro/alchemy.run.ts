@@ -10,9 +10,6 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const site = yield* Cloudflare.Website.Astro("Astro", {
-      compatibility: {
-        flags: ["nodejs_compat"],
-      },
       // Only hash the files that affect the build, so unchanged sources
       // skip the Astro build (and the deploy) entirely.
       memo: {

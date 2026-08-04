@@ -131,10 +131,9 @@ test.provider(
             const site = yield* Cloudflare.Website.Astro("AstroSite", {
               rootDir,
               workersDev: { enabled: true, previewsEnabled: true },
-              compatibility: {
-                date: "2026-03-10",
-                flags: ["nodejs_compat"],
-              },
+              // `nodejs_compat` deliberately omitted — the resource
+              // auto-injects it, and this deploy proves that path.
+              compatibility: { date: "2026-03-10" },
               memo,
               env: { TEST_MARKER: marker },
               assets: {

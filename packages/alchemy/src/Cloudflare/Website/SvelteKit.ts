@@ -14,7 +14,10 @@ import {
 
 export interface SvelteKitProps<
   Bindings extends WorkerBindingProps = {},
-> extends Omit<WorkerProps<Bindings>, "vite" | "main" | "assets" | "source"> {
+> extends Omit<
+  WorkerProps<Bindings>,
+  "vite" | "main" | "assets" | "source" | "script" | "bundle"
+> {
   /**
    * SvelteKit project root (the directory containing `package.json` and
    * `src/routes`). Relative paths resolve from the process working
@@ -90,11 +93,10 @@ export interface SvelteKitProps<
  * compatibility flags.
  *
  * Note on local dev: `alchemy dev` runs SvelteKit's own Vite dev server
- * (Node SSR with full HMR). `platform.env` is a stub populated from the
- * Worker's literal `env` values (strings and secrets) — real Cloudflare
- * bindings (KV, R2, D1, ...) inside dev's `platform.env` arrive with the
- * cloudflare-runtime Node-side bindings proxy, which is a tracked
- * follow-up.
+ * (Node SSR with full HMR). `platform.env` carries the Worker's real
+ * Cloudflare bindings (KV, R2, D1, ...) served by the cloudflare-runtime
+ * platform proxy, with literal `env` values (strings and secrets)
+ * overlaid.
  *
  * @resource
  * @product Website

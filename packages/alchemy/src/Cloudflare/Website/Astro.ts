@@ -111,15 +111,13 @@ export interface AstroProps<
  * @section Deploying an Astro Site
  * A single call builds the project and deploys the server bundle plus
  * static assets. Pages are server-rendered by default; pages that
- * `export const prerender = true` are served as static assets.
+ * `export const prerender = true` are served as static assets. Astro's
+ * server runtime is built against Node APIs, so `nodejs_compat` is
+ * always included in the Worker's compatibility flags.
  *
  * @example Astro site
  * ```typescript
- * const site = yield* Cloudflare.Website.Astro("Website", {
- *   compatibility: {
- *     flags: ["nodejs_compat"],
- *   },
- * });
+ * const site = yield* Cloudflare.Website.Astro("Website");
  * ```
  *
  * @section Static Sites
@@ -149,9 +147,6 @@ export interface AstroProps<
  * const bucket = yield* Cloudflare.R2.Bucket("Uploads");
  *
  * const site = yield* Cloudflare.Website.Astro("Website", {
- *   compatibility: {
- *     flags: ["nodejs_compat"],
- *   },
  *   env: {
  *     CACHE: kv,
  *     UPLOADS: bucket,
@@ -171,9 +166,6 @@ export interface AstroProps<
  * const sessions = yield* Cloudflare.KV.Namespace("Sessions");
  *
  * const site = yield* Cloudflare.Website.Astro("Website", {
- *   compatibility: {
- *     flags: ["nodejs_compat"],
- *   },
  *   env: {
  *     SESSION: sessions,
  *   },
@@ -223,9 +215,7 @@ export interface AstroProps<
  *
  * @example Declaring a Worker class
  * ```typescript
- * class Website extends Cloudflare.Website.Astro<Website>()("Website", {
- *   compatibility: { flags: ["nodejs_compat"] },
- * }) {}
+ * class Website extends Cloudflare.Website.Astro<Website>()("Website") {}
  *
  * const site = yield* Website;
  * ```
@@ -291,6 +281,14 @@ export const Astro: {
           return {
             ...props,
             env,
+            compatibility: {
+              ...props.compatibility,
+              // Astro's vendored server runtime is built against Node
+              // APIs — nodejs_compat is effectively required in workerd.
+              flags: props.compatibility?.flags?.includes("nodejs_compat")
+                ? props.compatibility.flags
+                : [...(props.compatibility?.flags ?? []), "nodejs_compat"],
+            },
             main: undefined!,
             source: {
               provider: "@distilled.cloud/astro/source",

@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import type { MemoOptions } from "../../Command/Memo.ts";
 import type { InputProps } from "../../Input.ts";
 import { effectClass } from "../../Util/effect.ts";
 import type { Providers } from "../Providers.ts";
@@ -20,7 +21,10 @@ const WAKU_SOURCE_PROVIDER = "@distilled.cloud/waku/source";
 
 export interface WakuProps<
   Bindings extends WorkerBindingProps = {},
-> extends Omit<WorkerProps<Bindings>, "vite" | "main" | "assets"> {
+> extends Omit<
+  WorkerProps<Bindings>,
+  "vite" | "main" | "assets" | "source" | "script" | "bundle"
+> {
   /**
    * Overrides the module that becomes the deployed Worker entry. Relative
    * paths resolve from {@link rootDir}.
@@ -69,14 +73,7 @@ export interface WakuProps<
    * {@link rootDir} is hashed, plus the nearest package-manager lockfile.
    * Provide `include`/`exclude` globs to narrow the scope.
    */
-  memo?: {
-    /** Glob patterns of files to hash, relative to {@link rootDir}. */
-    include?: string[];
-    /** Glob patterns to exclude from hashing. */
-    exclude?: string[];
-    /** Whether to include the nearest package-manager lockfile in the hash. */
-    lockfile?: boolean;
-  };
+  memo?: MemoOptions;
   /**
    * Optional configuration for static asset routing behavior.
    * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.

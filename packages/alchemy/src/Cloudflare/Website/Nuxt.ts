@@ -21,7 +21,10 @@ const NUXT_SOURCE_PROVIDER = "@distilled.cloud/nuxt/source";
 
 export interface NuxtProps<
   Bindings extends WorkerBindingProps = {},
-> extends Omit<WorkerProps<Bindings>, "vite" | "main" | "assets" | "source"> {
+> extends Omit<
+  WorkerProps<Bindings>,
+  "vite" | "main" | "assets" | "source" | "script" | "bundle"
+> {
   /**
    * Nuxt project root (the directory containing `nuxt.config.ts`).
    * Relative paths resolve from the process working directory.
