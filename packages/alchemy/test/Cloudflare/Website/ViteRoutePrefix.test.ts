@@ -209,7 +209,7 @@ const evaluateSite = Effect.fn(function* (pageUrl: string, label: string) {
   return { page, src, script };
 });
 
-test.provider.skipIf(!zoneName)(
+test.provider(
   "Vite: base from vite.config.ts serves the site on a path-prefixed zone route",
   (stack) =>
     Effect.gen(function* () {
