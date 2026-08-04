@@ -130,25 +130,24 @@ export const TenantProvider = () =>
 
         // Account-scoped: enumerate every tenant so leaked test resources are
         // cleaned by nuke.
-        list: () =>
-          Effect.gen(function* () {
-            const pages = yield* sesv2.listTenants
-              .pages({})
-              .pipe(Stream.runCollect);
-            return Array.from(pages)
-              .flatMap((page) => page.Tenants ?? [])
-              .flatMap((entry) =>
-                entry.TenantName && entry.TenantId && entry.TenantArn
-                  ? [
-                      {
-                        tenantName: entry.TenantName,
-                        tenantId: entry.TenantId,
-                        tenantArn: entry.TenantArn,
-                      },
-                    ]
-                  : [],
-              );
-          }),
+        list: Effect.fn(function* () {
+          const pages = yield* sesv2.listTenants
+            .pages({})
+            .pipe(Stream.runCollect);
+          return Array.from(pages)
+            .flatMap((page) => page.Tenants ?? [])
+            .flatMap((entry) =>
+              entry.TenantName && entry.TenantId && entry.TenantArn
+                ? [
+                    {
+                      tenantName: entry.TenantName,
+                      tenantId: entry.TenantId,
+                      tenantArn: entry.TenantArn,
+                    },
+                  ]
+                : [],
+            );
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =

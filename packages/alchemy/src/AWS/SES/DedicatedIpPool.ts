@@ -109,18 +109,17 @@ export const DedicatedIpPoolProvider = () =>
 
         // Account/region-scoped: enumerate every pool so leaked test resources
         // are cleaned by nuke.
-        list: () =>
-          Effect.gen(function* () {
-            const pages = yield* sesv2.listDedicatedIpPools
-              .pages({})
-              .pipe(Stream.runCollect);
-            return Array.from(pages)
-              .flatMap((page) => page.DedicatedIpPools ?? [])
-              .map((poolName) => ({
-                poolName,
-                scalingMode: DEFAULT_SCALING_MODE as DedicatedIpPoolScalingMode,
-              }));
-          }),
+        list: Effect.fn(function* () {
+          const pages = yield* sesv2.listDedicatedIpPools
+            .pages({})
+            .pipe(Stream.runCollect);
+          return Array.from(pages)
+            .flatMap((page) => page.DedicatedIpPools ?? [])
+            .map((poolName) => ({
+              poolName,
+              scalingMode: DEFAULT_SCALING_MODE as DedicatedIpPoolScalingMode,
+            }));
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.poolName ?? (yield* createName(id, olds ?? {}));

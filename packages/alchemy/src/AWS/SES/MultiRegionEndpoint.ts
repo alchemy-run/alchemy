@@ -137,25 +137,24 @@ export const MultiRegionEndpointProvider = () =>
 
         // Account/region-scoped: enumerate every endpoint so leaked test
         // resources are cleaned by nuke.
-        list: () =>
-          Effect.gen(function* () {
-            const pages = yield* sesv2.listMultiRegionEndpoints
-              .pages({})
-              .pipe(Stream.runCollect);
-            return Array.from(pages)
-              .flatMap((page) => page.MultiRegionEndpoints ?? [])
-              .flatMap((entry) =>
-                entry.EndpointName && entry.EndpointId
-                  ? [
-                      {
-                        endpointName: entry.EndpointName,
-                        endpointId: entry.EndpointId,
-                        status: entry.Status ?? "CREATING",
-                      },
-                    ]
-                  : [],
-              );
-          }),
+        list: Effect.fn(function* () {
+          const pages = yield* sesv2.listMultiRegionEndpoints
+            .pages({})
+            .pipe(Stream.runCollect);
+          return Array.from(pages)
+            .flatMap((page) => page.MultiRegionEndpoints ?? [])
+            .flatMap((entry) =>
+              entry.EndpointName && entry.EndpointId
+                ? [
+                    {
+                      endpointName: entry.EndpointName,
+                      endpointId: entry.EndpointId,
+                      status: entry.Status ?? "CREATING",
+                    },
+                  ]
+                : [],
+            );
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =

@@ -109,17 +109,16 @@ export const CustomVerificationEmailTemplateProvider = () =>
         // Account/region-scoped: enumerate every template so leaked test
         // resources are cleaned by nuke. Custom verification email templates
         // carry no ownership signal, so existence is treated as ownership.
-        list: () =>
-          Effect.gen(function* () {
-            const pages = yield* sesv2.listCustomVerificationEmailTemplates
-              .pages({})
-              .pipe(Stream.runCollect);
-            return Array.from(pages)
-              .flatMap((page) => page.CustomVerificationEmailTemplates ?? [])
-              .flatMap((meta) =>
-                meta.TemplateName ? [{ templateName: meta.TemplateName }] : [],
-              );
-          }),
+        list: Effect.fn(function* () {
+          const pages = yield* sesv2.listCustomVerificationEmailTemplates
+            .pages({})
+            .pipe(Stream.runCollect);
+          return Array.from(pages)
+            .flatMap((page) => page.CustomVerificationEmailTemplates ?? [])
+            .flatMap((meta) =>
+              meta.TemplateName ? [{ templateName: meta.TemplateName }] : [],
+            );
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =

@@ -153,29 +153,28 @@ export const ContactListProvider = () =>
       return ContactList.Provider.of({
         stables: ["contactListName", "contactListArn"],
 
-        list: () =>
-          Effect.gen(function* () {
-            const { accountId, region } = yield* AWSEnvironment.current;
-            const pages = yield* sesv2.listContactLists
-              .pages({})
-              .pipe(Stream.runCollect);
-            return Array.from(pages)
-              .flatMap((page) => page.ContactLists ?? [])
-              .flatMap((entry) =>
-                entry.ContactListName
-                  ? [
-                      {
-                        contactListName: entry.ContactListName,
-                        contactListArn: contactListArnOf(
-                          region,
-                          accountId,
-                          entry.ContactListName,
-                        ),
-                      },
-                    ]
-                  : [],
-              );
-          }),
+        list: Effect.fn(function* () {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const pages = yield* sesv2.listContactLists
+            .pages({})
+            .pipe(Stream.runCollect);
+          return Array.from(pages)
+            .flatMap((page) => page.ContactLists ?? [])
+            .flatMap((entry) =>
+              entry.ContactListName
+                ? [
+                    {
+                      contactListName: entry.ContactListName,
+                      contactListArn: contactListArnOf(
+                        region,
+                        accountId,
+                        entry.ContactListName,
+                      ),
+                    },
+                  ]
+                : [],
+            );
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;

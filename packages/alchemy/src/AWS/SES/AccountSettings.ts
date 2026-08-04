@@ -153,7 +153,9 @@ export const AccountSettingsProvider = () =>
         stables: [],
 
         // The account settings always exist.
-        list: () => observe.pipe(Effect.map((observed) => [toAttrs(observed)])),
+        list: Effect.fn(function* () {
+          return [toAttrs(yield* observe)];
+        }),
 
         read: Effect.fn(function* () {
           return toAttrs(yield* observe);
