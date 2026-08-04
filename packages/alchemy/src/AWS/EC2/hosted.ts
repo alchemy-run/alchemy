@@ -67,13 +67,14 @@ export interface Ec2HostedProps extends PlatformProps {
   port?: number;
   /** Environment variables injected into the hosted runtime. */
   env?: Record<string, any>;
-  /** Overrides for the rolldown bundling of `main`. */
-  build?: {
-    /** Rolldown input options overrides. */
-    input?: Partial<rolldown.InputOptions>;
-    /** Rolldown output options overrides. */
-    output?: Partial<rolldown.OutputOptions>;
-  };
+  /**
+   * Overrides for the rolldown bundling of `main`: `input`/`output`
+   * overrides plus pure-annotation options (`pure`). `effect`, `@effect/*`,
+   * `alchemy`, `@alchemy.run/*`, and `@distilled.cloud/*` are annotated as
+   * pure by default so unused code from those packages is tree-shaken; list
+   * additional packages via `pure.packages`, or disable with `pure: false`.
+   */
+  build?: Bundle.BundleConfig;
   /** Managed policy ARNs attached to the instance role. */
   roleManagedPolicyArns?: string[];
 }
@@ -205,6 +206,7 @@ export const createEc2HostedSupport = ({
           minify: props.build?.output?.minify ?? false,
           entryFileNames: "index.mjs",
         },
+        props.build,
       );
     });
 
@@ -264,7 +266,10 @@ const program = handler.pipe(
         }))
       )
     ).pipe(
-      Layer.provideMerge(Credentials.fromEnv()),
+      // The instance authenticates via its instance profile (IMDS), which
+      // only the full provider chain resolves — env-only credentials never
+      // exist on a hosted EC2 box.
+      Layer.provideMerge(Credentials.fromChain()),
       Layer.provideMerge(Region.fromEnv()),
       Layer.provideMerge(BunHttpServer()),
       Layer.provideMerge(platform),
@@ -348,7 +353,8 @@ export HOME=/root
 # unzip (needed below) — install if missing.
 command -v unzip >/dev/null 2>&1 || {
   (command -v dnf >/dev/null 2>&1 && dnf install -y unzip) \
-    || (command -v yum >/dev/null 2>&1 && yum install -y unzip) || true
+    || (command -v yum >/dev/null 2>&1 && yum install -y unzip) \
+    || (command -v apt-get >/dev/null 2>&1 && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y unzip) || true
 }
 
 # AWS CLI — preinstalled on Amazon Linux 2023; install v2 otherwise.
@@ -386,7 +392,10 @@ Type=simple
 WorkingDirectory=${appDir}
 ExecStartPre=/usr/local/bin/${unitName}-setup.sh
 EnvironmentFile=-${appDir}/env
-ExecStart=/root/.bun/bin/bun ${appDir}/index.mjs
+# --no-install: the uploaded bundle is self-contained; bun must never fall
+# into its auto-install path (which hangs startup on network package
+# resolution) — fail fast if the bundle is incomplete instead.
+ExecStart=/root/.bun/bin/bun --no-install ${appDir}/index.mjs
 Restart=always
 RestartSec=5
 
@@ -708,6 +717,11 @@ systemctl enable --now ${unitName}.service
     const env = {
       ...bindingEnv,
       ...alchemyEnv,
+      // Lambda injects AWS_REGION natively; an EC2 systemd service does not
+      // get one, and the runtime's `Region.fromEnv()` (and any composition
+      // code that reads the region, e.g. EC2.Network's runtime AZ branch)
+      // dies without it.
+      AWS_REGION: region,
       ...(news.port !== undefined ? { PORT: news.port } : {}),
       ...news.env,
     };
@@ -907,6 +921,7 @@ systemctl enable --now ${unitName}.service
   return {
     normalizeSecurityGroups,
     buildLaunchTemplateData,
+    bundleProgram,
     resolveHostedRuntime,
     cleanupHostedRuntime,
   };

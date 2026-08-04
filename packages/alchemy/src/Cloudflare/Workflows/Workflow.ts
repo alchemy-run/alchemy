@@ -4,8 +4,9 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type { Scope } from "effect/Scope";
 import * as Stream from "effect/Stream";
-import { AlchemyContext } from "../../AlchemyContext.ts";
+import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
+import * as ProviderLayer from "../../Dev/ProviderLayer.ts";
 import { ALCHEMY_PHASE } from "../../Phase.ts";
 import type { PlatformServices } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
@@ -13,6 +14,7 @@ import { Resource } from "../../Resource.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { generateLocalId } from "../LocalRuntime.ts";
 import {
   Worker,
   WorkerEnvironment,
@@ -884,121 +886,144 @@ export const WorkflowResource = Resource<WorkflowResource>(
   WorkflowResourceTypeId,
 );
 
-export const WorkflowProvider = () =>
-  Provider.effect(
-    WorkflowResource,
-    Effect.gen(function* () {
-      const ctx = yield* AlchemyContext;
-
-      return WorkflowResource.Provider.of({
-        // The `workflowId` is no longer marked as stable because if you start in dev mode, the ID will change on first deploy.
-        stables: ["accountId", "workflowName"],
-        // Workflows are account-scoped. Enumerate every workflow in the account
-        // via the paginated list API and hydrate each into the same Attributes
-        // shape `reconcile` returns (id/name/className/scriptName are all on the
-        // list item, so no per-item get is needed).
-        list: () =>
-          Effect.gen(function* () {
-            const { accountId } = yield* yield* CloudflareEnvironment;
-            return yield* workflows.listWorkflows.pages({ accountId }).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? []).map((wf) => ({
-                    workflowId: wf.id,
-                    workflowName: wf.name,
-                    // `className`/`scriptName` can be null/absent in the list
-                    // payload on some accounts — fall back so listing succeeds.
-                    className: wf.className ?? "",
-                    scriptName: wf.scriptName ?? "",
-                    accountId,
-                  })),
-                ),
-              ),
-            );
-          }),
-        diff: Effect.fn(function* ({ output }) {
-          // If the workflowId starts with "dev:", and we're not in dev mode, trigger an update so the workflow is created.
-          if (output?.workflowId.startsWith("dev:") && !ctx.dev) {
-            return { action: "update" };
-          }
-        }),
-        read: Effect.fn(function* ({ output, olds }) {
-          // Dev workflows only exist in local state; there is no account-level
-          // Workflow API resource to observe until the first real deploy.
-          if (ctx.dev) return output;
-
-          const { accountId } = yield* yield* CloudflareEnvironment;
-          const workflowName = output?.workflowName ?? olds?.workflowName;
-          if (workflowName === undefined) return undefined;
-
-          const acct = output?.accountId ?? accountId;
-          return yield* workflows
-            .getWorkflow({
-              accountId: acct,
-              workflowName,
-            })
-            .pipe(
-              Effect.map((workflow) => ({
-                workflowId: workflow.id,
-                workflowName: workflow.name,
-                className: workflow.className,
-                scriptName: workflow.scriptName,
-                accountId: acct,
+export const ProviderLive = () =>
+  Provider.succeed(WorkflowResource, {
+    // `workflowId` is stable across live updates: `putWorkflow` is a
+    // PUT-as-upsert keyed by the account-global `workflowName`, so re-putting
+    // the same name (className/scriptName changes) preserves the workflow's
+    // id. The dev→deploy id change that used to force `workflowId` out of
+    // this list is now an engine-orchestrated mode-switch REPLACEMENT (the
+    // persisted `providerMode` stamp differs), so the live provider never
+    // sees a `dev:` id.
+    stables: ["workflowId", "accountId", "workflowName"],
+    // Workflows are account-scoped. Enumerate every workflow in the account
+    // via the paginated list API and hydrate each into the same Attributes
+    // shape `reconcile` returns (id/name/className/scriptName are all on the
+    // list item, so no per-item get is needed).
+    list: () =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        return yield* workflows.listWorkflows.pages({ accountId }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((wf) => ({
+                workflowId: wf.id,
+                workflowName: wf.name,
+                // `className`/`scriptName` can be null/absent in the list
+                // payload on some accounts — fall back so listing succeeds.
+                className: wf.className ?? "",
+                scriptName: wf.scriptName ?? "",
+                accountId,
               })),
-              Effect.catchTag("WorkflowNotFound", () =>
-                Effect.succeed(undefined),
-              ),
-            );
-        }),
-        reconcile: Effect.fn(function* ({ news, output }) {
-          const { accountId } = yield* yield* CloudflareEnvironment;
-          const acct = output?.accountId ?? accountId;
-          const workflowName = news.workflowName;
-          yield* Effect.logInfo(
-            `Cloudflare Workflow reconcile: ${workflowName}`,
-          );
-          if (ctx.dev) {
-            return {
-              workflowId: output?.workflowId ?? `dev:${crypto.randomUUID()}`,
-              accountId,
-              workflowName,
-              className: news.className,
-              scriptName: news.scriptName,
-            };
-          }
-          // Cloudflare's `putWorkflow` is a true PUT-as-upsert: identical
-          // payloads converge to the same state and a missing workflow is
-          // created on the spot. There is no separate observe step needed
-          // — the API is naturally reconciler-shaped.
-          const result = yield* workflows.putWorkflow({
+            ),
+          ),
+        );
+      }),
+    read: Effect.fn(function* ({ output, olds }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const workflowName = output?.workflowName ?? olds?.workflowName;
+      if (workflowName === undefined) return undefined;
+
+      const acct = output?.accountId ?? accountId;
+      return yield* workflows
+        .getWorkflow({
+          accountId: acct,
+          workflowName,
+        })
+        .pipe(
+          Effect.map((workflow) => ({
+            workflowId: workflow.id,
+            workflowName: workflow.name,
+            className: workflow.className,
+            scriptName: workflow.scriptName,
             accountId: acct,
-            workflowName,
-            className: news.className,
-            scriptName: news.scriptName,
-          });
-          return {
-            workflowId: result.id,
-            workflowName: result.name,
-            className: result.className,
-            scriptName: result.scriptName,
-            accountId: acct,
-          };
-        }),
-        delete: Effect.fn(function* ({ output }) {
-          yield* Effect.logInfo(
-            `Cloudflare Workflow delete: ${output.workflowName}`,
-          );
-          yield* workflows
-            .deleteWorkflow({
-              accountId: output.accountId,
-              workflowName: output.workflowName,
-            })
-            .pipe(Effect.catchTag("WorkflowNotFound", () => Effect.void));
-        }),
-      });
+          })),
+          Effect.catchTag("WorkflowNotFound", () => Effect.succeed(undefined)),
+        );
     }),
-  );
+    reconcile: Effect.fn(function* ({ news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const acct = output?.accountId ?? accountId;
+      const workflowName = news.workflowName;
+      yield* Effect.logInfo(`Cloudflare Workflow reconcile: ${workflowName}`);
+      // Cloudflare's `putWorkflow` is a true PUT-as-upsert: identical
+      // payloads converge to the same state and a missing workflow is
+      // created on the spot. There is no separate observe step needed
+      // — the API is naturally reconciler-shaped.
+      const result = yield* workflows.putWorkflow({
+        accountId: acct,
+        workflowName,
+        className: news.className,
+        scriptName: news.scriptName,
+      });
+      return {
+        workflowId: result.id,
+        workflowName: result.name,
+        className: result.className,
+        scriptName: result.scriptName,
+        accountId: acct,
+      };
+    }),
+    delete: Effect.fn(function* ({ output }) {
+      yield* Effect.logInfo(
+        `Cloudflare Workflow delete: ${output.workflowName}`,
+      );
+      yield* workflows
+        .deleteWorkflow({
+          accountId: output.accountId,
+          workflowName: output.workflowName,
+        })
+        .pipe(Effect.catchTag("WorkflowNotFound", () => Effect.void));
+    }),
+  });
+
+/**
+ * Local (dev) provider — the workflow is purely virtual: a `dev:` id keyed
+ * into the local workerd workflow engine. The host worker's `workflow`
+ * binding is lowered onto the local runtime's Workflow Engine DO by
+ * `LocalWorkerProvider` (`Workflows.local(...)`), so no runtime layer is
+ * needed here; instance state persists under the worker's local storage.
+ */
+export const ProviderLocal = () =>
+  Provider.succeed(WorkflowResource, {
+    stables: ["accountId"],
+    diff: Effect.fn(function* ({ news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (!output?.workflowId) return { action: "update" } as const;
+      if (!isResolved(news)) return undefined;
+      if (output.accountId !== accountId) {
+        return { action: "replace" } as const;
+      }
+      // Fall through to the engine's default prop diff (className /
+      // scriptName changes update in place).
+    }),
+    read: Effect.fn(function* ({ output }) {
+      // Purely virtual — the persisted state row is the source of truth.
+      return output ?? undefined;
+    }),
+    reconcile: Effect.fn(function* ({ news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return {
+        workflowId: output?.workflowId ?? generateLocalId(),
+        workflowName: news.workflowName,
+        className: news.className,
+        scriptName: news.scriptName,
+        accountId: output?.accountId ?? accountId,
+      };
+    }),
+    delete: Effect.fn(function* () {
+      // The simulator's on-disk instance state lives under the local worker's
+      // storage; dropping the state row is enough — orphaned data is
+      // reclaimed with `.alchemy`.
+    }),
+  });
+
+export const WorkflowProvider = () =>
+  ProviderLayer.dual(WorkflowResource, {
+    local: () => ProviderLocal(),
+    live: () => ProviderLive(),
+  });
 
 // ---------------------------------------------------------------------------
 // Helpers

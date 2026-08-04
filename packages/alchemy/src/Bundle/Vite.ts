@@ -77,6 +77,12 @@ export async function loadVite(
 
 export interface ViteBuildOutput {
   readonly clientDirectory: string | undefined;
+  /**
+   * The client environment's resolved Vite `base`. The build rewrites
+   * every emitted asset URL with it, so the uploaded asset manifest must
+   * be keyed with the same prefix to agree with the HTML.
+   */
+  readonly base: string | undefined;
   // This is emitted as an Effect instead of a value so we can process it in parallel with reading the client assets.
   readonly serverBundle: Effect.Effect<BundleOutput | undefined, BundleError>;
   readonly externalWorkspaces: Effect.Effect<Set<string>, PlatformError>;
@@ -99,6 +105,7 @@ type RscManifestId = keyof typeof RSC_MANIFEST;
 interface EnvironmentLike {
   readonly name: string;
   readonly config: {
+    readonly base: string;
     readonly root: string;
     readonly build: { readonly outDir: string };
   };
@@ -116,6 +123,7 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   let clientDirectory: string | undefined;
+  let base: string | undefined;
   let serverEntry: string | undefined;
   const serverChunks = new Map<
     string,
@@ -185,6 +193,7 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
           root,
           this.environment.config.build.outDir,
         );
+        base = this.environment.config.base;
         return;
       }
       const files = Object.values(bundle);
@@ -325,6 +334,7 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
     output: Effect.sync(
       (): ViteBuildOutput => ({
         clientDirectory,
+        base,
         serverBundle: makeServerBundle(),
         externalWorkspaces: collectExternalWorkspaces(),
       }),

@@ -2,9 +2,11 @@ import * as secretsStore from "@distilled.cloud/cloudflare/secrets-store";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
+import * as ProviderLayer from "../../Dev/ProviderLayer.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { generateLocalId } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
 
 export type Store = Resource<
@@ -50,7 +52,7 @@ export type Store = Resource<
  */
 export const Store = Resource<Store>("Cloudflare.SecretsStore");
 
-export const SecretsStoreProvider = () =>
+export const StoreProviderLive = () =>
   Provider.succeed(Store, {
     stables: ["storeId", "storeName", "accountId"],
     // The engine calls `read` whenever there's no prior state. Cloudflare
@@ -156,6 +158,50 @@ export const SecretsStoreProvider = () =>
       // The store is treated as shared, account-level infrastructure that
       // should never be torn down by a single stack.
     }),
+  });
+
+/**
+ * Local (dev) provider — the store is purely virtual: a `dev:` id keyed
+ * into the local workerd Secrets Store simulator. The local `Secret`
+ * provider seeds values into it and `toRuntimeBinding` lowers a
+ * `secrets_store_secret` binding whose store id is `dev:`-prefixed onto the
+ * local secrets-store service; data persists under
+ * `.alchemy/local/secrets-store`.
+ */
+export const StoreProviderLocal = () =>
+  Provider.succeed(Store, {
+    stables: ["accountId"],
+    diff: Effect.fn(function* ({ output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (!output?.storeId) return { action: "update" } as const;
+      if (output.accountId !== accountId) {
+        return { action: "replace" } as const;
+      }
+      // Fall through to the engine's default prop diff.
+    }),
+    read: Effect.fn(function* ({ output }) {
+      // Purely virtual — the persisted state row is the source of truth.
+      return output ?? undefined;
+    }),
+    reconcile: Effect.fn(function* ({ output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return {
+        storeId: output?.storeId ?? generateLocalId(),
+        // Mirror the name Cloudflare uses for an account's default store.
+        storeName: output?.storeName ?? "default_secrets_store",
+        accountId: output?.accountId ?? accountId,
+      };
+    }),
+    delete: Effect.fn(function* () {
+      // The simulator's on-disk data is keyed by the dev id; dropping the
+      // state row is enough — orphaned data is reclaimed with `.alchemy`.
+    }),
+  });
+
+export const SecretsStoreProvider = () =>
+  ProviderLayer.dual(Store, {
+    local: () => StoreProviderLocal(),
+    live: () => StoreProviderLive(),
   });
 
 /** First store on the account (Cloudflare permits at most one). */

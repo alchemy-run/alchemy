@@ -2,6 +2,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import type { Input } from "./Input.ts";
+import * as Output from "./Output.ts";
 import { deferredResourceMeta, type ResourceLike } from "./Resource.ts";
 import { Self } from "./Self.ts";
 import { Stack } from "./Stack.ts";
@@ -75,6 +76,33 @@ export interface Service<
     Effect.Error<ReturnType<Shape>>,
     Self | Effect.Services<ReturnType<Shape>> | Req
   >;
+  /**
+   * Invoke this capability at plan/deploy time as a **data source** — the
+   * Terraform data-source / Pulumi invoke shape — and get an
+   * {@link Output.Output} of the result.
+   *
+   * The returned Output is inert until the planner resolves it (with the
+   * stack's services provided), so `execute` is safe to call from
+   * composition code that is re-executed inside a deployed runtime bundle.
+   * The capability's implementation layer must be registered on the stack
+   * (cloud `providers()` layers include their plan-executable capabilities).
+   *
+   * Execution is hostless — {@link Host} resolves `undefined`, so
+   * implementations skip their `host.bind` IAM/env wiring and only the read
+   * runs. Failures die and fail the plan.
+   *
+   * Only capabilities whose runtime client is nullary (`() => Effect<A>`)
+   * are executable; parameterized clients type as `never` here.
+   */
+  execute<Req = never>(
+    ...args: BindParameters<Parameters<Shape>, Req>
+  ): Effect.Success<ReturnType<Shape>> extends () => Effect.Effect<
+    infer A,
+    infer _E,
+    infer R2
+  >
+    ? Output.ToOutput<A, Self | Effect.Services<ReturnType<Shape>> | R2 | Req>
+    : never;
 }
 
 /**
@@ -115,6 +143,17 @@ export const Service = <
         Effect.flatMap((resolved) => f(...resolved)),
       ),
     );
+  // Plan-time invoke (see the `execute` doc on `Service`): bind hostless —
+  // `Binding.Host` is total and resolves `undefined`, so impls skip their
+  // `host.bind` wiring — run the nullary client, and lift the result into an
+  // Output the planner resolves with the stack's services.
+  (callable as any).execute = (...args: any[]) =>
+    Output.fromEffect(
+      callable(...args).pipe(
+        Effect.flatMap((client: any) => client()),
+        Effect.orDie,
+      ) as Effect.Effect<any, never, any>,
+    );
   return taggedFunction(tag as any, callable) as unknown as Self;
 };
 
@@ -124,6 +163,14 @@ export const Service = <
  * is only ever read at DEPLOY time, inside the `if (!globalThis.__ALCHEMY_RUNTIME__)`
  * guard of a binding's impl layer — at runtime the host is absent and the guard
  * skips it, so leaking a `Self` requirement onto the runtime client would be
- * wrong. Narrow it with `isWorker`/`isFunction` before calling `host.bind`.
+ * wrong.
+ *
+ * Total: resolves to `undefined` when no host is ambient — a plan-time
+ * {@link Service.execute} invoke, or a binding client provided directly in a
+ * script/test outside any Function. Narrow it with `isWorker`/`isFunction`/
+ * `isBindingHost` before calling `host.bind`; the guards reject `undefined`.
  */
-export const Host = Self as unknown as Effect.Effect<ResourceLike>;
+export const Host: Effect.Effect<ResourceLike | undefined> =
+  Effect.serviceOption(
+    Self as unknown as Context.Service<ResourceLike, ResourceLike>,
+  ).pipe(Effect.map(Option.getOrUndefined));

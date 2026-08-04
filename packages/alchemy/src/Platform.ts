@@ -319,6 +319,13 @@ export const Platform = <
   type: R["Type"],
   hooks: {
     createRuntimeContext: (id: string) => BaseRuntimeContext;
+    /**
+     * Legacy type names this platform's resource was previously registered
+     * under (see `ResourceOptions.aliases`) — threaded to the underlying
+     * `Resource` so state persisted under a pre-rename type keeps
+     * resolving.
+     */
+    aliases?: string[];
     // `onCreate` runs inside the resource-construction context, which already
     // carries the Stack's providers — so the hook may yield child resources
     // (e.g. an async Worker registering a `WorkflowResource` for a bound
@@ -341,7 +348,10 @@ export const Platform = <
   type Props = any;
   type Impl = Effect.Effect<any>;
 
-  const resource = Resource(type);
+  const resource = Resource(
+    type,
+    hooks.aliases !== undefined ? { aliases: hooks.aliases } : undefined,
+  );
   const PlatformContext = RuntimeContext;
 
   // Apply the optional `transformProps` hook to a (possibly Effect-valued)

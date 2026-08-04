@@ -32,12 +32,18 @@ const loadParseAst = () => import("rolldown/parseAst");
  * of `Effect.fn(...)`, `Context.Service(...)(...)`, `Layer.effect(...)` and
  * `Data.TaggedError(...)` top-level calls) become tree-shakeable. The
  * package already declares `"sideEffects": false`, so it is safe.
+ *
+ * `@distilled.cloud/*` is included so the generated SDK service modules
+ * (large files of top-level `const op = make(...)` operation definitions)
+ * tree-shake down to the operations a Worker actually calls. Every
+ * distilled package declares `"sideEffects": false`.
  */
 export const DEFAULT_PURE_PACKAGES: ReadonlyArray<string> = [
   "effect",
   "@effect/*",
   "alchemy",
   "@alchemy.run/*",
+  "@distilled.cloud/*",
 ];
 
 /**
@@ -48,6 +54,10 @@ export interface PurePluginOptions {
    * Extra package names or globs to annotate, in addition to
    * {@link DEFAULT_PURE_PACKAGES}. Globs are matched with picomatch
    * against the package name (e.g. `effect`, `@effect/cluster`).
+   *
+   * Listing a package that declares `"sideEffects": false` (or `[]`)
+   * in its `package.json` opts it into full annotation, including
+   * top-level calls whose result is discarded — see {@link purePlugin}.
    */
   readonly packages?: ReadonlyArray<string>;
   /**
@@ -63,21 +73,6 @@ export interface PurePluginOptions {
    * @default true
    */
   readonly markSideEffectFree?: boolean;
-  /**
-   * If true, automatically detect the npm package that owns the bundle
-   * entry (by walking up to the nearest `package.json`) and annotate it
-   * too. This makes the user's own source tree-shakeable without any
-   * configuration.
-   *
-   * Only calls whose result is used (variable initializers, exports) are
-   * annotated in the auto-detected package. Top-level calls whose result
-   * is discarded (e.g. Hono/Express-style `app.get("/", handler)` route
-   * registrations) are preserved unless the package explicitly declares
-   * `"sideEffects": false` (or `[]`) in its `package.json`.
-   *
-   * @default true
-   */
-  readonly autoDetectEntryPackage?: boolean;
 }
 
 const PURE_COMMENT = "/*#__PURE__*/ ";
@@ -88,6 +83,13 @@ const SUPPORTED_FILE_RE = /\.(?:m?[jt]sx?|cjs|cts)$/;
  * call/new expressions of modules belonging to the configured packages,
  * enabling tree-shaking of `effect`, `@effect/*`, and any user-listed
  * packages without requiring a babel post-build pass.
+ *
+ * Annotation is strictly explicit: only {@link DEFAULT_PURE_PACKAGES} and
+ * packages listed via `packages` are touched. Listing a package that
+ * declares `sideEffects: false` / `[]` is a deliberate opt-in to full
+ * annotation, including discarded-result statement calls (#949). The
+ * package owning the bundle entry gets no special treatment — apps that
+ * want their own bound calls tree-shaken list themselves explicitly.
  */
 export const purePlugin = (
   options: PurePluginOptions = {},
@@ -96,10 +98,7 @@ export const purePlugin = (
     ? [...(options.packages ?? DEFAULT_PURE_PACKAGES)]
     : [...DEFAULT_PURE_PACKAGES, ...(options.packages ?? [])];
   const markSideEffectFreeOpt = options.markSideEffectFree ?? true;
-  const autoDetect = options.autoDetectEntryPackage ?? true;
-  // Mutable so the `options` hook can append the auto-detected entry
-  // package without rebuilding the plugin instance.
-  let isMatch = picomatch(patterns);
+  const isMatch = picomatch(patterns);
   // Per-bundle cache of directory -> owning package metadata.
   // Avoids walking the filesystem for every module of a large package.
   const pkgInfoCache = new Map<string, PackageInfo | null>();
@@ -112,23 +111,8 @@ export const purePlugin = (
 
   return {
     name: "alchemy:annotate-pure",
-    async options(opts) {
-      const inputs = inputFilePaths(opts);
-      for (const input of inputs) entryPaths.add(input);
-      if (!autoDetect) return null;
-      const candidates = [
-        ...inputs.map((input) => path.dirname(input)),
-        opts.cwd ?? process.cwd(),
-      ];
-      for (const dir of candidates) {
-        const info = await resolvePackageInfo(dir, pkgInfoCache);
-        if (info === null || info.name === null) continue;
-        if (!patterns.includes(info.name)) {
-          patterns.push(info.name);
-          isMatch = picomatch(patterns);
-        }
-        break;
-      }
+    options(opts) {
+      for (const input of inputFilePaths(opts)) entryPaths.add(input);
       return null;
     },
     transform: {

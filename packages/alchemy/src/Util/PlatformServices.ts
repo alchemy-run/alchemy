@@ -104,7 +104,11 @@ export const httpServer = (
   platformLayer({
     bun: async () => {
       const BunHttpServer = await import("@effect/platform-bun/BunHttpServer");
-      return BunHttpServer.layer({ hostname: host, port });
+      // `idleTimeout: 0` disables Bun's default 10s request idle timeout.
+      // The RPC spawner serves a long-lived `/logs` stream (sidecar output
+      // forwarded to the exec child's renderer) that can legitimately sit
+      // idle between lines; Bun would otherwise sever it mid-session.
+      return BunHttpServer.layer({ hostname: host, port, idleTimeout: 0 });
     },
     node: async () => {
       const [NodeHttpServer, Http] = await Promise.all([

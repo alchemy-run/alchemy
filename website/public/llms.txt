@@ -75,7 +75,7 @@ Stages, credential profiles, auth providers, secrets and config, local developme
 - [Auth Providers](https://alchemy.run/environments/auth-providers) — An Auth Provider produces the credentials for a cloud's API calls — resolved lazily as Effects, so tokens and role sessions can refresh instead of pinning one static key.
 - [Custom Auth Provider](https://alchemy.run/environments/custom-auth-provider) — Plug a third-party API into alchemy login — a lazy credentials service backed by an AuthProvider that resolves keys from a Profile, env vars, or a refreshable session.
 - [Secrets & Config](https://alchemy.run/environments/secrets) — Use effect/Config to read env vars at init time and have Alchemy automatically bind them onto the deploy target.
-- [Local development](https://alchemy.run/environments/local-development) — How alchemy dev provides hot reloading, local workerd execution, and cloud-backed resources for fast iteration.
+- [Local development](https://alchemy.run/environments/local-development) — How alchemy dev provides hot reloading, local workerd execution, and local emulation with per-resource opt-in to real cloud services.
 - [CI](https://alchemy.run/environments/ci) — Set up CI/CD pipelines for alchemy projects with GitHub Actions, automated deployments, and PR previews — with provider credentials managed as code.
 
 ## State Store
@@ -354,4 +354,4 @@ Cloud-agnostic local process primitives — memoized builds, one-off commands, a
 
 Per-resource API reference, generated from JSDoc on the source `.ts` files via `bun generate:api-reference`. Each page documents the resource's input properties (with types, defaults, and constraints), output attributes, and Quick Reference / Examples sections derived from `@section` / `@example` JSDoc tags.
 
-The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~847 KB) — only fetch it when you need to locate a specific resource's reference page.
+The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~849 KB) — only fetch it when you need to locate a specific resource's reference page.

@@ -90,12 +90,13 @@ export interface BundledImageSource {
    */
   handler?: string;
   /**
-   * Bundler configuration for the entrypoint.
+   * Bundler configuration for the entrypoint: rolldown `input`/`output`
+   * overrides plus pure-annotation options (`pure`). `effect`, `@effect/*`,
+   * `alchemy`, `@alchemy.run/*`, and `@distilled.cloud/*` are annotated as
+   * pure by default so unused code from those packages is tree-shaken; list
+   * additional packages via `pure.packages`, or disable with `pure: false`.
    */
-  build?: {
-    input?: Partial<rolldown.InputOptions>;
-    output?: Partial<rolldown.OutputOptions>;
-  };
+  build?: Bundle.BundleConfig;
 }
 
 /**
@@ -488,6 +489,7 @@ export const makeImageSource = Effect.gen(function* () {
           minify: source.build?.output?.minify ?? false,
           entryFileNames: "index.mjs",
         },
+        source.build,
       );
     });
 
