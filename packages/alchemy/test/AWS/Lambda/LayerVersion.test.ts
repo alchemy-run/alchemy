@@ -271,6 +271,65 @@ test.provider(
   { timeout: 360_000 },
 );
 
+test.provider(
+  "content publishes an inline file tree, attaches, and republishes only on change",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const program = (body: string) =>
+        Effect.gen(function* () {
+          const layer = yield* AWS.Lambda.LayerVersion("Inline", {
+            content: { "collector.yaml": body, "nested/extra.txt": "extra" },
+            compatibleRuntimes: ["nodejs22.x"],
+          });
+          const fn = yield* AWS.Lambda.Function("InlineLayeredFn", {
+            main: timeoutHandlerPath,
+            handler: "handler",
+            isExternal: true,
+            url: false,
+            layers: [layer],
+          });
+          return { layer, fn };
+        });
+
+      // --- publish from a virtual file tree, with no directory on disk ---
+      const v1 = yield* stack.deploy(program("receivers: {}\n"));
+      expect(v1.layer.version).toBe(1);
+      expect(v1.layer.layerVersionArn).toBe(
+        `${v1.layer.layerArn}:${v1.layer.version}`,
+      );
+      expect(
+        (yield* getFunctionLayers(v1.fn.functionName)).map((l) => l.Arn),
+      ).toEqual([v1.layer.layerVersionArn]);
+
+      // --- identical content must NOT republish ---
+      // The archive is hashed, and `zipFiles` pins every entry's date, so two
+      // runs over the same bytes have to agree. A drifting mtime here would
+      // republish an immutable layer version on every single deploy.
+      const unchanged = yield* stack.deploy(program("receivers: {}\n"));
+      expect(unchanged.layer.layerVersionArn).toBe(v1.layer.layerVersionArn);
+      expect(unchanged.layer.version).toBe(v1.layer.version);
+
+      // --- changed content publishes a new immutable version ---
+      const v2 = yield* stack.deploy(program("receivers: { otlp: {} }\n"));
+      expect(v2.layer.version).toBe(v1.layer.version + 1);
+      expect(v2.layer.layerName).toBe(v1.layer.layerName);
+      expect(
+        (yield* getFunctionLayers(v2.fn.functionName)).map((l) => l.Arn),
+      ).toEqual([v2.layer.layerVersionArn]);
+
+      yield* stack.destroy();
+      expect(
+        yield* getLayerVersionOrUndefined(v2.layer.layerName, v2.layer.version),
+      ).toBeUndefined();
+    }).pipe(
+      Effect.tap(() => stack.destroy()),
+      Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
+    ),
+  { timeout: 240_000 },
+);
+
 const LAYER_KEY = "layers/from-s3.zip";
 
 const getLayerVersionOrUndefined = Effect.fn(function* (
