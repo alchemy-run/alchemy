@@ -7,6 +7,7 @@ import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
 export const drizzleDeps = `drizzle-orm@^1.0.0-rc.4 @effect/sql-pg pg`;
 export const drizzleDevDeps = `drizzle-kit@^1.0.0-rc.4 @types/pg`;
+export const mysqlDeps = `@effect/sql-mysql2 mysql2`;
 
 The previous tutorial wired your Worker to Neon Postgres through
 Hyperdrive. Now we'll layer **Drizzle ORM** on top: typed schemas,
@@ -419,9 +420,20 @@ the Postgres version.)
 Swap the runtime driver dependency — `@effect/sql-mysql2` and
 `mysql2` in place of `@effect/sql-pg` and `pg`:
 
-```sh
-bun add @effect/sql-mysql2 mysql2
-```
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun add ${mysqlDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm install ${mysqlDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm add ${mysqlDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn add ${mysqlDeps}`} lang="sh" />
+  </TabItem>
+</Tabs>
 
 `src/Db.ts` keeps `Drizzle.Schema` (with `dialect: "mysql"`) and
 uses the MySQL resource trio — database, branch, and a

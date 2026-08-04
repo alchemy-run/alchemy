@@ -3,6 +3,10 @@ title: Postgres
 description: SQL.Postgres turns a connection string into an @effect/sql-pg client — tagged-template queries with typed errors, one pool per execution.
 ---
 
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+export const deps = `@effect/sql-pg pg`;
+
 `SQL.Postgres` opens an `@effect/sql-pg` client (a connection pool)
 from a connection URL. Queries are Effects: they carry `SqlError` in
 the error channel, participate in interruption, and trace like
@@ -10,9 +14,20 @@ everything else in your program.
 
 Install the driver — both are optional peers of alchemy:
 
-```sh
-bun add @effect/sql-pg pg
-```
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun add ${deps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm install ${deps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm add ${deps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn add ${deps}`} lang="sh" />
+  </TabItem>
+</Tabs>
 
 ## Connect
 
