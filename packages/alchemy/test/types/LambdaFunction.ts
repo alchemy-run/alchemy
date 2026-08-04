@@ -21,6 +21,35 @@ export type _ImageFunctionAccepted = Assert<
     : false
 >;
 
+export type _EcrImageFunctionAccepted = Assert<
+  {
+    image: {
+      uri: "123456789012.dkr.ecr.us-east-1.amazonaws.com/worker:latest";
+    };
+    architecture: "x86_64";
+    imageConfig: {
+      command: ["index.handler"];
+      entryPoint: ["/lambda-entrypoint.sh"];
+      workingDirectory: "/var/task";
+    };
+  } extends FunctionProps
+    ? true
+    : false
+>;
+
+export type _MixedImageSourcesRejected = Assert<
+  {
+    image: {
+      uri: "123456789012.dkr.ecr.us-east-1.amazonaws.com/worker:latest";
+      context: "./lambda";
+      dockerfile: "Dockerfile";
+    };
+    architecture: "x86_64";
+  } extends FunctionProps
+    ? false
+    : true
+>;
+
 export type _ImageDockerfileRequired = Assert<
   {
     image: { context: "./lambda" };
@@ -53,6 +82,15 @@ export type _ImageRuntimeOptionsRejected = Assert<
     image: { context: "./lambda"; dockerfile: "Dockerfile" };
     architecture: "x86_64";
     runtime: "nodejs22.x";
+  } extends FunctionProps
+    ? false
+    : true
+>;
+
+export type _ZipImageConfigRejected = Assert<
+  {
+    main: "./handler.ts";
+    imageConfig: { command: ["index.handler"] };
   } extends FunctionProps
     ? false
     : true

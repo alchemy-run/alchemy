@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -15,6 +16,8 @@ const fixture = `${import.meta.dirname}/fixtures/image-function`;
 const coreFunctionName = "alchemy-test-lambda-container-image";
 const armFunctionName = "alchemy-test-lambda-container-image-arm64";
 const zipFunctionName = "alchemy-test-lambda-container-image-zip";
+const externalFunctionName = "alchemy-test-lambda-container-image-external";
+const externalRepositoryName = "alchemy-test-lambda-external-image";
 const skipLive = !process.env.AWS_TEST_SLOW || !!process.env.FAST;
 
 const imageFunction = (
@@ -144,6 +147,147 @@ test.provider.skipIf(skipLive)(
 );
 
 test.provider.skipIf(skipLive)(
+  "deploys an existing ECR tag, detects retagging, and applies image overrides",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      yield* stack.destroy();
+
+      const context = yield* fs.makeTempDirectoryScoped({
+        prefix: "alchemy-lambda-external-image-",
+      });
+      yield* fs.copy(fixture, context, { overwrite: true });
+
+      const program = (
+        uri?: string,
+        imageConfig?: AWS.Lambda.FunctionImageConfig,
+      ) =>
+        Effect.gen(function* () {
+          const repository = yield* AWS.ECR.Repository("ExternalRepository", {
+            repositoryName: externalRepositoryName,
+          });
+          const image = yield* AWS.ECR.Image("ExternalImage", {
+            repositoryUri: repository.repositoryUri,
+            context,
+            platform: "linux/amd64",
+          });
+          const func =
+            uri === undefined
+              ? undefined
+              : yield* AWS.Lambda.Function("ExternalFunction", {
+                  functionName: externalFunctionName,
+                  image: { uri },
+                  imageConfig,
+                  architecture: "x86_64",
+                  env: { IMAGE_FUNCTION_ENV: "external" },
+                  url: false,
+                });
+          return { image, func };
+        });
+
+      const aliasTag = "lambda";
+      const pointAliasAt = Effect.fn(function* (
+        repositoryName: string,
+        imageTag: string,
+      ) {
+        const response = yield* ecr.batchGetImage({
+          repositoryName,
+          imageIds: [{ imageTag }],
+        });
+        const image = response.images?.[0];
+        if (image?.imageManifest === undefined) {
+          return yield* Effect.fail(
+            new Error(
+              `ECR image ${repositoryName}:${imageTag} has no manifest`,
+            ),
+          );
+        }
+        yield* ecr.putImage({
+          repositoryName,
+          imageManifest: image.imageManifest,
+          imageManifestMediaType: image.imageManifestMediaType,
+          imageTag: aliasTag,
+        });
+      });
+
+      // Materialize a private ECR image independently of the Lambda function,
+      // then pass its now-literal URI through the external-image create path.
+      const source = yield* stack.deploy(program());
+      yield* pointAliasAt(source.image.repositoryName, source.image.imageTag);
+      const aliasUri = `${source.image.repositoryUri}:${aliasTag}`;
+      const tagged = yield* stack.deploy(
+        program(aliasUri, {
+          command: ["index.alternate"],
+          entryPoint: ["/lambda-entrypoint.sh"],
+          workingDirectory: "/var/task",
+        }),
+      );
+      if (tagged.func === undefined) {
+        return yield* Effect.fail(
+          new Error("External function was not created"),
+        );
+      }
+      expect(tagged.func.code.image).toMatchObject({
+        source: "uri",
+        imageUri: aliasUri,
+        ownsRepository: false,
+      });
+      yield* assertFunctionImage(tagged.func.functionName, "x86_64");
+      yield* assertFunctionImageConfig(tagged.func.functionName, {
+        Command: ["index.alternate"],
+        EntryPoint: ["/lambda-entrypoint.sh"],
+        WorkingDirectory: "/var/task",
+      });
+      expect(yield* invokeAlternate(tagged.func.functionName)).toBe(
+        "alternate",
+      );
+
+      // Rebuild an independently-managed image, then repoint the same alias.
+      // The URI string is unchanged, so only digest resolution can detect this.
+      yield* fs.writeFileString(path.join(context, "marker.txt"), "two\n");
+      const rebuilt = yield* stack.deploy(
+        program(aliasUri, {
+          command: ["index.alternate"],
+          entryPoint: ["/lambda-entrypoint.sh"],
+          workingDirectory: "/var/task",
+        }),
+      );
+      yield* pointAliasAt(rebuilt.image.repositoryName, rebuilt.image.imageTag);
+
+      // Omitting imageConfig while updating the digest clears every override.
+      const retaggedPlan = yield* stack.plan(program(aliasUri));
+      expect(retaggedPlan.resources.ExternalFunction).toMatchObject({
+        action: "update",
+      });
+      const retagged = yield* stack.deploy(program(aliasUri));
+      if (retagged.func === undefined) {
+        return yield* Effect.fail(
+          new Error("External function was not updated"),
+        );
+      }
+      expect(retagged.func.code.image).toMatchObject({
+        source: "uri",
+        imageUri: aliasUri,
+        digest: rebuilt.image.digest,
+        ownsRepository: false,
+      });
+      yield* assertFunctionImageConfig(retagged.func.functionName, undefined);
+      expect((yield* invoke(retagged.func.functionName, "two")).marker).toBe(
+        "two",
+      );
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(externalFunctionName);
+      yield* assertRepositoryDeleted(externalRepositoryName);
+    }).pipe(
+      Effect.tap(() => stack.destroy()),
+      Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
+    ),
+  { timeout: 120_000 },
+);
+
+test.provider.skipIf(skipLive)(
   "builds and invokes an arm64 image function",
   (stack) =>
     Effect.gen(function* () {
@@ -220,10 +364,14 @@ test.provider.skipIf(skipLive)(
   { timeout: 120_000 },
 );
 
-const invoke = Effect.fn(function* (
-  deployedFunctionName: string,
-  expectedMarker: string,
-) {
+const ImageInvocationResponse = Schema.Struct({
+  marker: Schema.optionalKey(Schema.String),
+  environment: Schema.optionalKey(Schema.String),
+  event: Schema.Struct({ hello: Schema.String }),
+  handler: Schema.optionalKey(Schema.String),
+});
+
+const invokePayload = Effect.fn(function* (deployedFunctionName: string) {
   return yield* Lambda.invoke({
     FunctionName: deployedFunctionName,
     Payload: JSON.stringify({ hello: "image" }),
@@ -238,17 +386,40 @@ const invoke = Effect.fn(function* (
         const payload = response.Payload
           ? yield* response.Payload.pipe(Stream.decodeText(), Stream.mkString)
           : "";
-        return JSON.parse(payload) as {
-          marker: string;
-          environment: string;
-          event: { hello: string };
-        };
+        const json = yield* Effect.try({
+          try: () => JSON.parse(payload) as unknown,
+          catch: (cause) =>
+            new Error("Lambda returned an invalid JSON payload", { cause }),
+        });
+        return yield* Schema.decodeUnknownEffect(ImageInvocationResponse)(json);
       }),
     ),
+  );
+});
+
+const invoke = Effect.fn(function* (
+  deployedFunctionName: string,
+  expectedMarker: string,
+) {
+  return yield* invokePayload(deployedFunctionName).pipe(
     Effect.filterOrFail(
       (response) => response.marker === expectedMarker,
       () => new Error(`Lambda is not serving marker ${expectedMarker} yet`),
     ),
+    Effect.retry({
+      schedule: Schedule.spaced("2 seconds"),
+      times: 10,
+    }),
+  );
+});
+
+const invokeAlternate = Effect.fn(function* (deployedFunctionName: string) {
+  return yield* invokePayload(deployedFunctionName).pipe(
+    Effect.filterOrFail(
+      (response) => response.handler === "alternate",
+      () => new Error("Lambda is not serving the alternate image command yet"),
+    ),
+    Effect.map((response) => response.handler),
     Effect.retry({
       schedule: Schedule.spaced("2 seconds"),
       times: 10,
@@ -269,6 +440,39 @@ const assertFunctionImage = Effect.fn(function* (
         response.Configuration.Architectures?.[0] === architecture &&
         response.Code?.ResolvedImageUri?.includes("@sha256:") === true,
       () => new Error("Lambda image configuration has not propagated yet"),
+    ),
+    Effect.retry({
+      schedule: Schedule.spaced("2 seconds"),
+      times: 10,
+    }),
+  );
+});
+
+const assertFunctionImageConfig = Effect.fn(function* (
+  deployedFunctionName: string,
+  expected: Lambda.ImageConfig | undefined,
+) {
+  yield* Lambda.getFunction({ FunctionName: deployedFunctionName }).pipe(
+    Effect.filterOrFail(
+      (response) => {
+        const observed =
+          response.Configuration?.ImageConfigResponse?.ImageConfig;
+        if (expected === undefined) {
+          return (
+            observed?.Command === undefined &&
+            observed?.EntryPoint === undefined &&
+            observed?.WorkingDirectory === undefined
+          );
+        }
+        return (
+          JSON.stringify(observed?.Command) ===
+            JSON.stringify(expected.Command) &&
+          JSON.stringify(observed?.EntryPoint) ===
+            JSON.stringify(expected.EntryPoint) &&
+          observed?.WorkingDirectory === expected.WorkingDirectory
+        );
+      },
+      () => new Error("Lambda image overrides have not propagated yet"),
     ),
     Effect.retry({
       schedule: Schedule.spaced("2 seconds"),

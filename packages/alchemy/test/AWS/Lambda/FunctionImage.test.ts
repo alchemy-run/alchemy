@@ -1,7 +1,10 @@
 import {
+  decodeFunctionImageSource,
   functionImagePlatform,
   hashFunctionImageBuild,
+  parseFunctionImageUri,
 } from "@/AWS/Lambda/FunctionImage.ts";
+import { validateFunctionPackageProps } from "@/AWS/Lambda/Function.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -16,6 +19,102 @@ describe("Lambda Function images", (it) => {
     Effect.sync(() => {
       expect(functionImagePlatform("x86_64")).toBe("linux/amd64");
       expect(functionImagePlatform("arm64")).toBe("linux/arm64");
+    }),
+  );
+
+  it.effect("parses tagged and digest-pinned private ECR image URIs", () =>
+    Effect.gen(function* () {
+      const tagged = yield* parseFunctionImageUri(
+        "Tagged",
+        "123456789012.dkr.ecr.eu-west-3.amazonaws.com/team/worker:release",
+      );
+      expect(tagged).toMatchObject({
+        registryId: "123456789012",
+        region: "eu-west-3",
+        repositoryName: "team/worker",
+        imageId: { imageTag: "release" },
+      });
+
+      const digest = `sha256:${"a".repeat(64)}`;
+      const pinned = yield* parseFunctionImageUri(
+        "Pinned",
+        `123456789012.dkr.ecr.us-east-1.amazonaws.com/worker@${digest}`,
+      );
+      expect(pinned.imageId).toEqual({ imageDigest: digest });
+      expect(pinned.repositoryUri).toBe(
+        "123456789012.dkr.ecr.us-east-1.amazonaws.com/worker",
+      );
+    }),
+  );
+
+  it.effect("rejects unsupported or incomplete ECR image URIs", () =>
+    Effect.gen(function* () {
+      const fips = yield* Effect.result(
+        parseFunctionImageUri(
+          "Fips",
+          "123456789012.dkr.ecr-fips.us-east-1.amazonaws.com/worker:latest",
+        ),
+      );
+      expect(Result.isFailure(fips)).toBe(true);
+      if (Result.isFailure(fips)) {
+        expect(fips.failure.message).toContain("do not support ECR FIPS");
+      }
+
+      const untagged = yield* Effect.result(
+        parseFunctionImageUri(
+          "Untagged",
+          "123456789012.dkr.ecr.us-east-1.amazonaws.com/worker",
+        ),
+      );
+      expect(Result.isFailure(untagged)).toBe(true);
+      if (Result.isFailure(untagged)) {
+        expect(untagged.failure.message).toContain(
+          "explicit ECR tag or digest",
+        );
+      }
+    }),
+  );
+
+  it.effect("rejects mixed image sources and ZIP-only image options", () =>
+    Effect.gen(function* () {
+      const mixedSource = yield* Effect.result(
+        decodeFunctionImageSource("MixedSource", {
+          uri: "123456789012.dkr.ecr.us-east-1.amazonaws.com/worker:latest",
+          context: "./lambda",
+          dockerfile: "Dockerfile",
+        }),
+      );
+      expect(Result.isFailure(mixedSource)).toBe(true);
+      if (Result.isFailure(mixedSource)) {
+        expect(mixedSource.failure.message).toContain(
+          "exactly one image source",
+        );
+      }
+
+      const mixedPackage = yield* Effect.result(
+        validateFunctionPackageProps("MixedPackage", {
+          image: { uri: "example" },
+          main: "./handler.ts",
+          runtime: "nodejs22.x",
+        }),
+      );
+      expect(Result.isFailure(mixedPackage)).toBe(true);
+      if (Result.isFailure(mixedPackage)) {
+        expect(mixedPackage.failure.message).toContain("main, runtime");
+      }
+
+      const zipConfig = yield* Effect.result(
+        validateFunctionPackageProps("ZipConfig", {
+          main: "./handler.ts",
+          imageConfig: { command: ["index.handler"] },
+        }),
+      );
+      expect(Result.isFailure(zipConfig)).toBe(true);
+      if (Result.isFailure(zipConfig)) {
+        expect(zipConfig.failure.message).toContain(
+          "imageConfig requires an image function",
+        );
+      }
     }),
   );
 
@@ -286,14 +385,14 @@ describe("Lambda Function images", (it) => {
       }),
   );
 
-  it.effect("requires an explicit Dockerfile", () =>
+  it.effect("requires an explicit Dockerfile for local image sources", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const context = yield* fs.makeTempDirectoryScoped({
         prefix: "alchemy-lambda-image-schema-",
       });
       const result = yield* Effect.result(
-        hashFunctionImageBuild({ context } as any, "x86_64"),
+        decodeFunctionImageSource("MissingDockerfile", { context }),
       );
       expect(Result.isFailure(result)).toBe(true);
     }),

@@ -7,6 +7,7 @@ import { Region } from "@distilled.cloud/aws/Region";
 import type * as lambda from "aws-lambda";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -61,7 +62,9 @@ import {
   type EventInvokeConfig,
 } from "./EventInvokeConfig.ts";
 import {
+  decodeFunctionImageSource,
   type FunctionImageAttributes,
+  type FunctionImageIdentity,
   type FunctionImageSource,
   makeFunctionImage,
 } from "./FunctionImage.ts";
@@ -71,6 +74,15 @@ export type { FunctionImageSource } from "./FunctionImage.ts";
 
 export const FunctionTypeId = "AWS.Lambda.Function" as const;
 export type FunctionTypeId = typeof FunctionTypeId;
+
+class FunctionUpdatePending extends Data.TaggedError("FunctionUpdatePending")<{
+  functionName: string;
+}> {}
+
+class FunctionUpdateFailed extends Data.TaggedError("FunctionUpdateFailed")<{
+  functionName: string;
+  reason?: string;
+}> {}
 
 export class HandlerContext extends Context.Service<
   HandlerContext,
@@ -134,6 +146,16 @@ export interface FunctionBuildOptions extends Partial<rolldown.InputOptions> {
 }
 
 export type FunctionArchitecture = "x86_64" | "arm64";
+
+/** Overrides for instructions declared by a Lambda container image. */
+export interface FunctionImageConfig {
+  /** Parameters passed to the image entry point, overriding Dockerfile `CMD`. */
+  command?: string[];
+  /** Runtime executable, overriding Dockerfile `ENTRYPOINT`. */
+  entryPoint?: string[];
+  /** Working directory, overriding Dockerfile `WORKDIR`. */
+  workingDirectory?: string;
+}
 
 /**
  * Reference to an EFS access point: a raw access point ARN or anything
@@ -269,6 +291,7 @@ export interface FunctionZipProps extends FunctionCommonProps {
    */
   main: string;
   image?: never;
+  imageConfig?: never;
   /**
    * Exported handler symbol inside the bundled module.
    * @default "handler"
@@ -299,15 +322,16 @@ export interface FunctionImageProps extends FunctionCommonProps {
    */
   architecture: FunctionArchitecture;
   /**
-   * Build a Lambda-compatible container image from a user-authored
-   * Dockerfile. Alchemy creates a managed private ECR repository, applies
-   * Lambda's pull policy, and pushes a content-addressed image.
-   *
-   * The Dockerfile owns the runtime and entrypoint completely. It may use a
-   * Node.js, Java, Python, custom-runtime, or other Lambda-compatible base
-   * image.
+   * Deploy an existing private ECR image, or build a Lambda-compatible image
+   * from a local Docker context. Local builds use a managed private ECR
+   * repository with content-addressed tags.
    */
   image: FunctionImageSource;
+  /**
+   * Optional overrides for the image's Dockerfile instructions. Omit to use
+   * the image defaults; removing this property clears existing overrides.
+   */
+  imageConfig?: FunctionImageConfig;
   handler?: never;
   runtime?: never;
   build?: never;
@@ -321,6 +345,81 @@ export type FunctionProps = FunctionZipProps | FunctionImageProps;
 const isFunctionImageProps = (
   props: FunctionProps,
 ): props is FunctionImageProps => props.image !== undefined;
+
+interface FunctionPackageValidationProps {
+  image?: unknown;
+  imageConfig?: unknown;
+  main?: unknown;
+  handler?: unknown;
+  runtime?: unknown;
+  build?: unknown;
+  uploadSourceMap?: unknown;
+  exports?: unknown;
+  durableConfig?: unknown;
+}
+
+/**
+ * Validate package-mode exclusivity before any Lambda or ECR mutation.
+ * @internal
+ */
+export const validateFunctionPackageProps = Effect.fn(
+  "AWS.Lambda.validateFunctionPackageProps",
+)(function* (id: string, props: FunctionPackageValidationProps) {
+  if (props.image === undefined) {
+    if (props.imageConfig !== undefined) {
+      return yield* Effect.fail(
+        new Error(
+          `Function(${id}): imageConfig requires an image function and cannot be used with a ZIP function`,
+        ),
+      );
+    }
+    if (props.main === undefined) {
+      return yield* Effect.fail(
+        new Error(`Function(${id}): declare exactly one of main or image`),
+      );
+    }
+    return;
+  }
+
+  const incompatible = [
+    ["main", props.main],
+    ["handler", props.handler],
+    ["runtime", props.runtime],
+    ["build", props.build],
+    ["uploadSourceMap", props.uploadSourceMap],
+    ["exports", props.exports],
+    ["durableConfig", props.durableConfig],
+  ].flatMap(([name, value]) => (value === undefined ? [] : [name]));
+  if (incompatible.length > 0) {
+    return yield* Effect.fail(
+      new Error(
+        `Function(${id}): image functions cannot use ZIP/runtime options: ${incompatible.join(", ")}`,
+      ),
+    );
+  }
+});
+
+const toLambdaImageConfig = (
+  config: FunctionImageConfig | undefined,
+): Lambda.ImageConfig | undefined =>
+  config === undefined
+    ? undefined
+    : {
+        Command: config.command,
+        EntryPoint: config.entryPoint,
+        WorkingDirectory: config.workingDirectory,
+      };
+
+/**
+ * `UpdateFunctionConfiguration` preserves old image overrides when the field
+ * is omitted. An empty object therefore means "clear overrides" on update.
+ */
+const imageConfigForUpdate = (
+  props: FunctionProps,
+): Lambda.ImageConfig | undefined =>
+  isFunctionImageProps(props)
+    ? (toLambdaImageConfig(props.imageConfig) ?? {})
+    : undefined;
 
 /**
  * Normalize a {@link FunctionProps.timeout} to whole seconds.
@@ -525,13 +624,31 @@ const matchesConfiguredExternal = (
  * ```
  *
  * @section Container Image Functions
- * Set `image` instead of `main` to build and deploy the Dockerfile verbatim.
- * The Dockerfile is responsible for choosing a Lambda-compatible runtime and
- * handler; Alchemy does not generate a Node.js adapter or otherwise impose a
- * language. The context, Dockerfile path, and build arguments must be literal
- * because the image is built during Lambda's pre-create phase.
+ * Set `image` instead of `main` to deploy an existing private ECR image or to
+ * build and publish a local Docker context. Image sources must be literal
+ * because Lambda's pre-create phase needs the deployable image before normal
+ * Output resolution.
  *
- * @example Lambda container image
+ * @example Existing ECR image with runtime overrides
+ * ```typescript
+ * const func = yield* AWS.Lambda.Function("Worker", {
+ *   image: {
+ *     uri: "123456789012.dkr.ecr.us-east-1.amazonaws.com/worker@sha256:...",
+ *   },
+ *   architecture: "x86_64",
+ *   imageConfig: {
+ *     command: ["app.handler"],
+ *     entryPoint: ["/lambda-entrypoint.sh"],
+ *     workingDirectory: "/var/task",
+ *   },
+ * });
+ * ```
+ *
+ * Tagged URIs are resolved through ECR on each plan. If a tag is repointed to
+ * a new digest, Alchemy updates the Lambda function even though the URI string
+ * is unchanged. External repositories are never modified or deleted.
+ *
+ * @example Build a Lambda container image
  * ```typescript
  * const func = yield* AWS.Lambda.Function("JavaFunction", {
  *   image: {
@@ -546,8 +663,9 @@ const matchesConfiguredExternal = (
  * });
  * ```
  *
- * For example, `./lambda/Dockerfile` can use AWS's Java base image and set its
- * own handler:
+ * The Dockerfile owns the runtime and handler. Alchemy does not generate a
+ * Node.js adapter or otherwise impose a language. For example,
+ * `./lambda/Dockerfile` can use AWS's Java base image:
  *
  * ```dockerfile
  * FROM public.ecr.aws/lambda/java:21
@@ -1439,6 +1557,48 @@ export default handler;
         self: Effect.Effect<A, Err, R>,
       ) => Effect.Effect<A, Err, R>;
 
+      const waitForFunctionUpdate = Effect.fn(function* (
+        functionName: string,
+        session: { note: (note: string) => Effect.Effect<void> },
+      ) {
+        return yield* Effect.gen(function* () {
+          const configuration = (yield* Lambda.getFunction({
+            FunctionName: functionName,
+          })).Configuration;
+          if (
+            configuration?.State === "Failed" ||
+            configuration?.LastUpdateStatus === "Failed"
+          ) {
+            return yield* new FunctionUpdateFailed({
+              functionName,
+              reason:
+                configuration.LastUpdateStatusReason ??
+                configuration.StateReason,
+            });
+          }
+          if (
+            configuration?.State === "Active" &&
+            (configuration.LastUpdateStatus === undefined ||
+              configuration.LastUpdateStatus === "Successful")
+          ) {
+            return;
+          }
+          return yield* new FunctionUpdatePending({ functionName });
+        }).pipe(
+          Effect.retry({
+            while: (error) => error._tag === "FunctionUpdatePending",
+            schedule: Schedule.spaced("2 seconds").pipe(
+              Schedule.tap(({ attempt }) =>
+                session.note(
+                  `Waiting for Lambda image update before repository cleanup: ${functionName} (${attempt * 2}s)`,
+                ),
+              ),
+            ),
+            times: 30,
+          }),
+        );
+      });
+
       const getReservedConcurrentExecutions = Effect.fn(function* (
         functionName: string,
       ) {
@@ -1503,19 +1663,19 @@ export default handler;
       const prepareImageFunctionCode = Effect.fn(function* ({
         id,
         props,
-        repositoryName,
+        previousImage,
         session,
       }: {
         id: string;
         props: FunctionImageProps;
-        repositoryName?: string;
+        previousImage?: Omit<FunctionImageAttributes, "hash">;
         session: { note: (note: string) => Effect.Effect<void> };
       }) {
         const { hash, ...image } = yield* functionImage.resolve({
           id,
           source: props.image,
           architecture: props.architecture,
-          repositoryName,
+          previousImage,
           session,
         });
         return {
@@ -1538,13 +1698,6 @@ export default handler;
         session: { note: (note: string) => Effect.Effect<void> };
       }) {
         if (isFunctionImageProps(props)) {
-          if (props.exports !== undefined) {
-            return yield* Effect.die(
-              new Error(
-                `Function(${id}): image functions use the Dockerfile's handler and cannot have an inline Alchemy implementation`,
-              ),
-            );
-          }
           return yield* prepareImageFunctionCode({ id, props, session });
         }
 
@@ -1572,19 +1725,19 @@ export default handler;
       const prepareFunctionCode = Effect.fn(function* ({
         id,
         props,
-        repositoryName,
+        previousImage,
         session,
       }: {
         id: string;
         props: FunctionProps;
-        repositoryName?: string;
+        previousImage?: Omit<FunctionImageAttributes, "hash">;
         session: { note: (note: string) => Effect.Effect<void> };
       }) {
         if (isFunctionImageProps(props)) {
           return yield* prepareImageFunctionCode({
             id,
             props,
-            repositoryName,
+            previousImage,
             session,
           });
         }
@@ -1701,6 +1854,7 @@ export default handler;
           ...(isFunctionImageProps(news)
             ? {
                 PackageType: "Image" as const,
+                ImageConfig: toLambdaImageConfig(news.imageConfig),
               }
             : {
                 // Effect-mode functions are wrapped in a generated entry whose
@@ -1783,6 +1937,7 @@ export default handler;
                 EphemeralStorage: createFunctionRequest.EphemeralStorage,
                 FileSystemConfigs: createFunctionRequest.FileSystemConfigs,
                 Handler: createFunctionRequest.Handler,
+                ImageConfig: imageConfigForUpdate(news),
                 KMSKeyArn: createFunctionRequest.KMSKeyArn,
                 Layers: createFunctionRequest.Layers,
                 LoggingConfig: createFunctionRequest.LoggingConfig,
@@ -2026,6 +2181,10 @@ export default handler;
         stables: ["functionArn", "functionName", "roleName"],
         diff: Effect.fn(function* ({ id, olds, news, output }) {
           if (!isResolved(news)) return;
+          yield* validateFunctionPackageProps(id, news);
+          if (isFunctionImageProps(news)) {
+            yield* decodeFunctionImageSource(id, news.image);
+          }
           // If output is undefined (resource in creating state), defer to default diff
           if (!output) {
             return undefined;
@@ -2069,9 +2228,18 @@ export default handler;
           ) {
             return { action: "update" };
           }
-          const codeHash = isFunctionImageProps(news)
-            ? yield* functionImage.hash(id, news.image, news.architecture)
-            : (yield* bundleCode(id, news)).identityHash;
+          let imageIdentity: FunctionImageIdentity | undefined;
+          let codeHash: string;
+          if (isFunctionImageProps(news)) {
+            imageIdentity = yield* functionImage.identity(
+              id,
+              news.image,
+              news.architecture,
+            );
+            codeHash = imageIdentity.hash;
+          } else {
+            codeHash = (yield* bundleCode(id, news)).identityHash;
+          }
           if (output.code.hash !== codeHash) {
             // code changed
             return { action: "update" };
@@ -2080,12 +2248,25 @@ export default handler;
             const image = output.code.image;
             if (
               image === undefined ||
-              image.imageUri !== `${image.repositoryUri}:${codeHash}` ||
-              !(yield* functionImage.isReady(
-                id,
-                image.repositoryName,
-                codeHash,
-              ))
+              image.source !== imageIdentity?.source ||
+              (imageIdentity?.source === "uri"
+                ? image.imageUri !== imageIdentity.imageUri ||
+                  image.resolvedImageUri !== imageIdentity.resolvedImageUri
+                : image.imageUri !== `${image.repositoryUri}:${codeHash}` ||
+                  !(yield* functionImage.isReady(
+                    id,
+                    image.repositoryName,
+                    codeHash,
+                  )))
+            ) {
+              return { action: "update" };
+            }
+            if (
+              isFunctionImageProps(olds) &&
+              !deepEqual(
+                toLambdaImageConfig(olds.imageConfig),
+                toLambdaImageConfig(news.imageConfig),
+              )
             ) {
               return { action: "update" };
             }
@@ -2216,6 +2397,15 @@ export default handler;
           }),
 
         precreate: Effect.fn(function* ({ id, news, session }) {
+          yield* validateFunctionPackageProps(id, news);
+          if (isFunctionImageProps(news)) {
+            // Resolve and validate the image before creating the execution
+            // role. External references perform only ECR reads here; local
+            // sources only hash their build inputs. A bad URI, wrong region,
+            // inaccessible image, or invalid build source therefore cannot
+            // strand an IAM role when pre-create fails before persisting state.
+            yield* functionImage.identity(id, news.image, news.architecture);
+          }
           const { accountId, region } = yield* AWSEnvironment.current;
           const { roleName, functionName, roleArn } = yield* createNames(
             id,
@@ -2261,6 +2451,10 @@ export default handler;
           output,
           session,
         }) {
+          yield* validateFunctionPackageProps(id, news);
+          if (isFunctionImageProps(news)) {
+            yield* decodeFunctionImageSource(id, news.image);
+          }
           const generated = yield* createNames(id, news.functionName);
           // Prefer the deployed identifiers: regenerating would target
           // different physical resources if the generator's output for this
@@ -2377,7 +2571,7 @@ export default handler;
           const prepared = yield* prepareFunctionCode({
             id,
             props: news,
-            repositoryName: output?.code?.image?.repositoryName,
+            previousImage: output?.code?.image,
             session,
           });
 
@@ -2404,6 +2598,22 @@ export default handler;
                   : undefined,
             session,
           });
+
+          const previousImage = output?.code.image;
+          const nextImage =
+            "image" in prepared.attributes
+              ? prepared.attributes.image
+              : undefined;
+          if (
+            previousImage?.ownsRepository === true &&
+            previousImage.repositoryUri !== nextImage?.repositoryUri
+          ) {
+            // The function has moved from an Alchemy-owned local image to a
+            // different source. Wait until Lambda has adopted the new digest
+            // before deleting the now-unreferenced managed repository.
+            yield* waitForFunctionUpdate(functionName, session);
+            yield* functionImage.deleteRepository(previousImage.repositoryName);
+          }
 
           const reservedConcurrentExecutions =
             yield* syncReservedConcurrentExecutions({
@@ -2495,7 +2705,7 @@ export default handler;
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );
 
-          if (output.code.image) {
+          if (output.code.image?.ownsRepository) {
             // Lambda must release its image before the owned repository is
             // force-deleted. Both operations are idempotent, so an interrupted
             // destroy converges on the next run.

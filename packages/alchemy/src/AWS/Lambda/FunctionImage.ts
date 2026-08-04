@@ -18,13 +18,9 @@ import { buildAndPushEcrImage } from "../ECR/Image.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import { normalizePolicyDocument } from "../IAM/Policy.ts";
 
-/**
- * Docker build input for an image-packaged Lambda function.
- *
- * These values must be literal because Lambda's circular-dependency
- * pre-create phase builds the image before normal Output resolution.
- */
-export interface FunctionImageSource {
+/** A Lambda container image built from a local Docker context. */
+export interface FunctionDockerImageSource {
+  uri?: never;
   /** Docker build context directory. */
   context: string;
   /** Dockerfile path, relative to {@link context} unless absolute. */
@@ -38,33 +34,176 @@ export interface FunctionImageSource {
   buildArgs?: Record<string, string>;
 }
 
-const FunctionImageSourceSchema = Schema.Struct({
+/** An existing private ECR image, addressed by tag or immutable digest. */
+export interface FunctionEcrImageSource {
+  /**
+   * Full private ECR image URI, including a tag or digest.
+   *
+   * The repository must be in the same AWS Region as the Lambda function.
+   * Alchemy observes the current ECR digest on every plan, so repointing a
+   * tag updates the function even when the URI string itself is unchanged.
+   */
+  uri: string;
+  context?: never;
+  dockerfile?: never;
+  buildArgs?: never;
+}
+
+/**
+ * Image input for an image-packaged Lambda function.
+ *
+ * Source values must be literal because Lambda's circular-dependency
+ * pre-create phase needs the deployable image before normal Output resolution.
+ */
+export type FunctionImageSource =
+  | FunctionDockerImageSource
+  | FunctionEcrImageSource;
+
+const FunctionDockerImageSourceSchema = Schema.Struct({
   context: Schema.String,
   dockerfile: Schema.String,
   buildArgs: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
-}) satisfies Schema.Schema<FunctionImageSource>;
+}) satisfies Schema.Schema<FunctionDockerImageSource>;
+
+const FunctionEcrImageSourceSchema = Schema.Struct({
+  uri: Schema.String,
+}) satisfies Schema.Schema<FunctionEcrImageSource>;
+
+const FunctionImageSourceRecordSchema = Schema.Record(
+  Schema.String,
+  Schema.Unknown,
+);
+
+export interface ParsedFunctionImageUri {
+  uri: string;
+  registryId: string;
+  registryHost: string;
+  region: string;
+  repositoryName: string;
+  repositoryUri: string;
+  imageId: { imageTag: string } | { imageDigest: string };
+}
+
+/** Parse and validate a tagged or digest-pinned private ECR image URI. */
+export const parseFunctionImageUri = Effect.fn("AWS.Lambda.parseImageUri")(
+  function* (id: string, uri: string) {
+    const slash = uri.indexOf("/");
+    if (slash <= 0 || slash === uri.length - 1) {
+      return yield* Effect.fail(
+        new Error(
+          `Function(${id}): image.uri must be a private ECR image URI including a tag or digest`,
+        ),
+      );
+    }
+
+    const registryHost = uri.slice(0, slash);
+    const registry = /^(\d{12})\.dkr\.ecr(-fips)?\.([a-z0-9-]+)\.(.+)$/.exec(
+      registryHost,
+    );
+    if (registry === null) {
+      return yield* Effect.fail(
+        new Error(
+          `Function(${id}): image.uri must use a private ECR registry such as 123456789012.dkr.ecr.us-east-1.amazonaws.com/repository:tag`,
+        ),
+      );
+    }
+    if (registry[2] !== undefined) {
+      return yield* Effect.fail(
+        new Error(
+          `Function(${id}): Lambda container images do not support ECR FIPS endpoints`,
+        ),
+      );
+    }
+
+    const reference = uri.slice(slash + 1);
+    const digestSeparator = reference.lastIndexOf("@");
+    const tagSeparator = reference.lastIndexOf(
+      ":",
+      digestSeparator >= 0 ? digestSeparator : reference.length,
+    );
+    if (digestSeparator >= 0 && tagSeparator >= 0) {
+      return yield* Effect.fail(
+        new Error(
+          `Function(${id}): image.uri must identify the image by either tag or digest, not both`,
+        ),
+      );
+    }
+    const repositoryName = reference.slice(
+      0,
+      digestSeparator >= 0 ? digestSeparator : tagSeparator,
+    );
+    if (repositoryName.length === 0) {
+      return yield* Effect.fail(
+        new Error(`Function(${id}): image.uri has no ECR repository name`),
+      );
+    }
+
+    const imageId = yield* Effect.gen(function* () {
+      if (digestSeparator >= 0) {
+        const imageDigest = reference.slice(digestSeparator + 1);
+        if (!/^sha256:[0-9a-f]{64}$/.test(imageDigest)) {
+          return yield* Effect.fail(
+            new Error(
+              `Function(${id}): image.uri digest must be sha256 followed by 64 lowercase hexadecimal characters`,
+            ),
+          );
+        }
+        return { imageDigest } as const;
+      }
+      if (tagSeparator <= 0 || tagSeparator === reference.length - 1) {
+        return yield* Effect.fail(
+          new Error(
+            `Function(${id}): image.uri must include an explicit ECR tag or digest`,
+          ),
+        );
+      }
+      return { imageTag: reference.slice(tagSeparator + 1) } as const;
+    });
+
+    return {
+      uri,
+      registryId: registry[1],
+      registryHost,
+      region: registry[3],
+      repositoryName,
+      repositoryUri: `${registryHost}/${repositoryName}`,
+      imageId,
+    } satisfies ParsedFunctionImageUri;
+  },
+);
 
 export interface FunctionImageAttributes {
-  /** Content hash used as the ECR image tag. */
+  /** Image source kind used by the Function. */
+  source: "build" | "uri";
+  /** Stable identity hash for the requested URI and resolved image digest. */
   hash: string;
-  /** Tag-based URI passed to Lambda. */
+  /** Tag- or digest-based URI passed to Lambda. */
   imageUri: string;
   /** Digest-pinned URI resolved from ECR. */
   resolvedImageUri: string;
   /** Registry manifest digest. */
   digest: string;
-  /** Managed ECR repository name. */
+  /** Backing ECR repository name. */
   repositoryName: string;
-  /** Managed ECR repository URI. */
+  /** Backing ECR repository URI. */
   repositoryUri: string;
+  /** Whether the Function owns and may delete the backing repository. */
+  ownsRepository: boolean;
 }
 
 export interface ResolveFunctionImageOptions {
   id: string;
   source: FunctionImageSource;
   architecture: "x86_64" | "arm64";
-  repositoryName?: string;
+  previousImage?: Omit<FunctionImageAttributes, "hash">;
   session: { note: (message: string) => Effect.Effect<void> };
+}
+
+export interface FunctionImageIdentity {
+  source: "build" | "uri";
+  hash: string;
+  imageUri?: string;
+  resolvedImageUri?: string;
 }
 
 /**
@@ -84,7 +223,7 @@ export const functionImagePlatform = (architecture: "x86_64" | "arm64") => {
 };
 
 const hashDecodedFunctionImageBuild = Effect.fn(function* (
-  source: FunctionImageSource,
+  source: FunctionDockerImageSource,
   architecture: "x86_64" | "arm64",
 ) {
   const buildHash = yield* hashDockerBuildInputs(
@@ -105,30 +244,74 @@ const hashDecodedFunctionImageBuild = Effect.fn(function* (
  * Lambda image-builder version without including absolute paths.
  */
 export const hashFunctionImageBuild = Effect.fn(function* (
-  source: FunctionImageSource,
+  source: FunctionDockerImageSource,
   architecture: "x86_64" | "arm64",
 ) {
-  const decoded = yield* Schema.decodeUnknownEffect(FunctionImageSourceSchema)(
-    source,
-  );
+  const decoded = yield* Schema.decodeUnknownEffect(
+    FunctionDockerImageSourceSchema,
+  )(source);
   return yield* hashDecodedFunctionImageBuild(decoded, architecture);
 });
 
-const decodeFunctionImageSource = (id: string, source: unknown) =>
-  Schema.decodeUnknownEffect(FunctionImageSourceSchema)(source).pipe(
+export const decodeFunctionImageSource = Effect.fn(
+  "AWS.Lambda.decodeFunctionImageSource",
+)(function* (id: string, source: unknown) {
+  const record = yield* Schema.decodeUnknownEffect(
+    FunctionImageSourceRecordSchema,
+  )(source).pipe(
     Effect.mapError(
       (error) =>
-        new Error(
-          `Function(${id}): image.context, image.dockerfile, and image.buildArgs must be literal values because the image is built during pre-create`,
-          { cause: error },
-        ),
+        new Error(`Function(${id}): image must be an object`, { cause: error }),
     ),
   );
+  const hasUri = record.uri !== undefined;
+  const hasBuildSource =
+    record.context !== undefined ||
+    record.dockerfile !== undefined ||
+    record.buildArgs !== undefined;
+  if (hasUri && hasBuildSource) {
+    return yield* Effect.fail(
+      new Error(
+        `Function(${id}): image.uri cannot be combined with image.context, image.dockerfile, or image.buildArgs; declare exactly one image source`,
+      ),
+    );
+  }
+  if (!hasUri && !hasBuildSource) {
+    return yield* Effect.fail(
+      new Error(
+        `Function(${id}): image must declare either image.uri or both image.context and image.dockerfile`,
+      ),
+    );
+  }
+  const decodeError = (error: unknown) =>
+    new Error(
+      `Function(${id}): image source values must be literal and valid before Lambda pre-create`,
+      { cause: error },
+    );
+  if (hasUri) {
+    return yield* Schema.decodeUnknownEffect(FunctionEcrImageSourceSchema)(
+      source,
+    ).pipe(
+      Effect.map((decoded): FunctionEcrImageSource => decoded),
+      Effect.mapError(decodeError),
+    );
+  }
+  return yield* Schema.decodeUnknownEffect(FunctionDockerImageSourceSchema)(
+    source,
+  ).pipe(
+    Effect.map((decoded): FunctionDockerImageSource => decoded),
+    Effect.mapError(decodeError),
+  );
+});
+
+const isFunctionEcrImageSource = (
+  source: FunctionImageSource,
+): source is FunctionEcrImageSource => source.uri !== undefined;
 
 /**
- * Lambda-specific managed image builder. It deliberately stays separate from
- * the ECS/EKS image-source abstraction: Lambda owns a repository policy and
- * accepts only a user-authored Dockerfile/context in this first slice.
+ * Lambda-specific image resolver. It deliberately stays separate from the
+ * ECS/EKS image-source abstraction because Lambda deploys private ECR images
+ * directly and its managed local-build path owns a repository pull policy.
  */
 export const makeFunctionImage = Effect.gen(function* () {
   const docker = yield* Docker;
@@ -265,23 +448,116 @@ export const makeFunctionImage = Effect.gen(function* () {
     return response?.imageDetails?.[0];
   });
 
-  const hash = Effect.fn(function* (
+  const resolveExternalImage = Effect.fn("AWS.Lambda.resolveExternalImage")(
+    function* (
+      id: string,
+      source: FunctionEcrImageSource,
+      previousImage?: Omit<FunctionImageAttributes, "hash">,
+    ) {
+      const parsed = yield* parseFunctionImageUri(id, source.uri);
+      const { region } = yield* AWSEnvironment.current;
+      if (parsed.region !== region) {
+        return yield* Effect.fail(
+          new Error(
+            `Function(${id}): ECR image region '${parsed.region}' must match Lambda region '${region}'`,
+          ),
+        );
+      }
+
+      const detail = yield* ecr
+        .describeImages({
+          registryId: parsed.registryId,
+          repositoryName: parsed.repositoryName,
+          imageIds: [parsed.imageId],
+        })
+        .pipe(
+          Effect.catchTag(
+            ["ImageNotFoundException", "RepositoryNotFoundException"],
+            () =>
+              Effect.fail(
+                new Error(
+                  `Function(${id}): ECR image '${source.uri}' does not exist or is not accessible`,
+                ),
+              ),
+          ),
+          Effect.map((response) => response.imageDetails?.[0]),
+        );
+      const digest = detail?.imageDigest;
+      if (digest === undefined) {
+        return yield* Effect.fail(
+          new Error(
+            `Function(${id}): ECR image '${source.uri}' did not resolve to a registry digest`,
+          ),
+        );
+      }
+
+      const hash = (yield* sha256Object({ uri: source.uri, digest })).slice(
+        0,
+        32,
+      );
+      return {
+        source: "uri",
+        hash,
+        imageUri: source.uri,
+        resolvedImageUri: `${parsed.repositoryUri}@${digest}`,
+        digest,
+        repositoryName: parsed.repositoryName,
+        repositoryUri: parsed.repositoryUri,
+        ownsRepository:
+          previousImage?.ownsRepository === true &&
+          previousImage.repositoryUri === parsed.repositoryUri,
+      } satisfies FunctionImageAttributes;
+    },
+  );
+
+  const identity = Effect.fn(function* (
     id: string,
     source: FunctionImageSource,
     architecture: "x86_64" | "arm64",
   ) {
     const decoded = yield* decodeFunctionImageSource(id, source);
-    return yield* hashDecodedFunctionImageBuild(decoded, architecture);
+    if (isFunctionEcrImageSource(decoded)) {
+      const external = yield* resolveExternalImage(id, decoded);
+      return {
+        source: external.source,
+        hash: external.hash,
+        imageUri: external.imageUri,
+        resolvedImageUri: external.resolvedImageUri,
+      } satisfies FunctionImageIdentity;
+    }
+    return {
+      source: "build",
+      hash: yield* hashDecodedFunctionImageBuild(decoded, architecture),
+    } satisfies FunctionImageIdentity;
+  });
+
+  const hash = Effect.fn(function* (
+    id: string,
+    source: FunctionImageSource,
+    architecture: "x86_64" | "arm64",
+  ) {
+    return (yield* identity(id, source, architecture)).hash;
   });
 
   const resolve = Effect.fn(function* (options: ResolveFunctionImageOptions) {
     const source = yield* decodeFunctionImageSource(options.id, options.source);
+    if (isFunctionEcrImageSource(source)) {
+      const image = yield* resolveExternalImage(
+        options.id,
+        source,
+        options.previousImage,
+      );
+      yield* options.session.note(image.imageUri);
+      return image;
+    }
     const imageTag = yield* hashDecodedFunctionImageBuild(
       source,
       options.architecture,
     );
     const repositoryName =
-      options.repositoryName ?? (yield* createRepositoryName(options.id));
+      options.previousImage?.ownsRepository === true
+        ? options.previousImage.repositoryName
+        : yield* createRepositoryName(options.id);
     // Re-ensure even with persisted metadata: the repository or its Lambda
     // pull policy may have drifted out-of-band.
     const ensured = yield* ensureRepository(options.id, repositoryName);
@@ -337,12 +613,14 @@ export const makeFunctionImage = Effect.gen(function* () {
       );
     }
     return {
+      source: "build",
       hash: imageTag,
       imageUri,
       resolvedImageUri: `${ensured.repositoryUri}@${digest}`,
       digest,
       repositoryName,
       repositoryUri: ensured.repositoryUri,
+      ownsRepository: true,
     } satisfies FunctionImageAttributes;
   });
 
@@ -408,7 +686,7 @@ export const makeFunctionImage = Effect.gen(function* () {
     );
   });
 
-  return { hash, resolve, isReady, deleteRepository };
+  return { hash, identity, resolve, isReady, deleteRepository };
 });
 
 export interface FunctionImage extends Effect.Success<
