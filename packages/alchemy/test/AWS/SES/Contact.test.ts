@@ -55,7 +55,7 @@ test.provider(
             topicPreferences: [
               { TopicName: "product-updates", SubscriptionStatus: "OPT_IN" },
             ],
-            attributesData: JSON.stringify({ plan: "free" }),
+            attributes: { plan: "free" },
           });
           return { list, contact };
         }),

@@ -39,8 +39,7 @@ test.provider(
       const tenant = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Tenant("CustomerA", {
-            suppressedReasons: ["BOUNCE"],
-            suppressionScope: "TENANT",
+            suppression: { reasons: ["BOUNCE"], scope: "TENANT" },
             tags: { Environment: "test" },
           });
         }),
@@ -65,8 +64,7 @@ test.provider(
       yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Tenant("CustomerA", {
-            suppressedReasons: ["BOUNCE", "COMPLAINT"],
-            suppressionScope: "TENANT",
+            suppression: { reasons: ["BOUNCE", "COMPLAINT"], scope: "TENANT" },
             tags: { Environment: "test", Extra: "1" },
           });
         }),

@@ -22,6 +22,19 @@ import type { SuppressionListReason } from "./ConfigurationSet.ts";
  */
 export type SuppressionListScope = sesv2.SuppressionListScope;
 
+export interface TenantSuppressionSettings {
+  /**
+   * The bounce/complaint reasons for which SES adds destinations to the
+   * tenant's suppression list.
+   */
+  reasons: SuppressionListReason[];
+  /**
+   * Whether the tenant uses the account-level suppression list (`ACCOUNT`) or
+   * maintains its own tenant-scoped list (`TENANT`).
+   */
+  scope: SuppressionListScope;
+}
+
 export interface TenantProps {
   /**
    * Name of the tenant. If omitted, a deterministic physical name is generated
@@ -30,16 +43,16 @@ export interface TenantProps {
    */
   tenantName?: string;
   /**
-   * The bounce/complaint reasons for which SES adds destinations to the
-   * tenant's suppression list. Synced in place via
-   * `putTenantSuppressionAttributes`.
+   * The tenant's suppression list configuration, synced in place via
+   * `putTenantSuppressionAttributes`. Leave undefined to keep SES's current
+   * setting.
+   *
+   * `reasons` and `scope` are both required together: SES rejects a
+   * suppression update carrying only one of them
+   * (`BadRequestException: SuppressedReasons cannot be specified without
+   * SuppressionScope`, and vice versa).
    */
-  suppressedReasons?: SuppressionListReason[];
-  /**
-   * Whether the tenant uses the account-level suppression list (`ACCOUNT`) or
-   * maintains its own tenant-scoped list (`TENANT`).
-   */
-  suppressionScope?: SuppressionListScope;
+  suppression?: TenantSuppressionSettings;
   /**
    * Tags to apply to the tenant. Merged with internal Alchemy tags.
    */
@@ -82,9 +95,10 @@ export interface Tenant extends Resource<
  *
  * @example Tenant with a Scoped Suppression List
  * ```typescript
+ * // SES requires the reasons and the scope together, so they travel as one
+ * // prop rather than two independently-optional ones.
  * const tenant = yield* SES.Tenant("CustomerA", {
- *   suppressedReasons: ["BOUNCE", "COMPLAINT"],
- *   suppressionScope: "TENANT",
+ *   suppression: { reasons: ["BOUNCE", "COMPLAINT"], scope: "TENANT" },
  * });
  * ```
  *
@@ -118,10 +132,9 @@ export interface Tenant extends Resource<
  * @section Tenant Suppression Lists
  * @example Read and Write the Tenant's Own Suppression List
  * ```typescript
- * // With suppressionScope: "TENANT" the list is separate from the account's.
+ * // With scope "TENANT" the list is separate from the account's.
  * const tenant = yield* SES.Tenant("CustomerA", {
- *   suppressedReasons: ["BOUNCE", "COMPLAINT"],
- *   suppressionScope: "TENANT",
+ *   suppression: { reasons: ["BOUNCE", "COMPLAINT"], scope: "TENANT" },
  * });
  *
  * // init — account-level bindings, scoped per call via TenantName
@@ -238,13 +251,12 @@ export const TenantProvider = () =>
               .createTenant({
                 TenantName: name,
                 Tags: createTagsList(desiredTags),
-                SuppressionAttributes:
-                  news.suppressedReasons || news.suppressionScope
-                    ? {
-                        SuppressedReasons: news.suppressedReasons,
-                        SuppressionScope: news.suppressionScope,
-                      }
-                    : undefined,
+                SuppressionAttributes: news.suppression
+                  ? {
+                      SuppressedReasons: news.suppression.reasons,
+                      SuppressionScope: news.suppression.scope,
+                    }
+                  : undefined,
               })
               .pipe(
                 Effect.catchTag("AlreadyExistsException", () =>
@@ -267,20 +279,25 @@ export const TenantProvider = () =>
 
           // 3. SYNC SUPPRESSION — diff observed suppression against desired and
           //    apply only on a real delta.
+          //
+          //    SES requires both members together — a put carrying only one
+          //    fails with BadRequestException ("SuppressedReasons cannot be
+          //    specified without SuppressionScope", and the mirror image). The
+          //    prop nests them so that invalid state is unrepresentable and
+          //    the put below always carries both.
           const observedReasons =
             observed.SuppressionAttributes?.SuppressedReasons;
           const observedScope =
             observed.SuppressionAttributes?.SuppressionScope;
           if (
-            (news.suppressedReasons !== undefined &&
-              !sameReasons(observedReasons, news.suppressedReasons)) ||
-            (news.suppressionScope !== undefined &&
-              observedScope !== news.suppressionScope)
+            news.suppression !== undefined &&
+            (!sameReasons(observedReasons, news.suppression.reasons) ||
+              observedScope !== news.suppression.scope)
           ) {
             yield* sesv2.putTenantSuppressionAttributes({
               TenantName: name,
-              SuppressedReasons: news.suppressedReasons,
-              SuppressionScope: news.suppressionScope,
+              SuppressedReasons: news.suppression.reasons,
+              SuppressionScope: news.suppression.scope,
             });
           }
 

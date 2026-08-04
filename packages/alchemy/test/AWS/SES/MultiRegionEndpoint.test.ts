@@ -46,7 +46,7 @@ test.provider(
       const endpoint = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* MultiRegionEndpoint("Global", {
-            details: { routesDetails: [{ region: "eu-west-1" }] },
+            regions: ["eu-west-1"],
           });
         }),
       );
@@ -64,5 +64,10 @@ test.provider(
       yield* stack.destroy();
       yield* assertEndpointDeleted(endpoint.endpointName);
     }),
-  { timeout: 120_000 },
+  // Measured ~113s: create returns immediately at CREATING, but the delete
+  // cannot land until SES finishes provisioning (it answers
+  // ConcurrentModificationException until then), so the wall-clock floor is
+  // AWS-side provisioning time. 120s left no headroom and flaked; the wait is
+  // bounded by the provider's retry schedule, not by this timeout.
+  { timeout: 180_000 },
 );

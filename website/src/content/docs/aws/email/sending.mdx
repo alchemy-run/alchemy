@@ -271,8 +271,7 @@ suppression list — inside one SES account:
 
 ```typescript
 const tenant = yield* SES.Tenant("CustomerA", {
-  suppressedReasons: ["BOUNCE", "COMPLAINT"],
-  suppressionScope: "TENANT",
+  suppression: { reasons: ["BOUNCE", "COMPLAINT"], scope: "TENANT" },
 });
 ```
 
@@ -298,7 +297,7 @@ or more secondary regions:
 
 ```typescript
 const endpoint = yield* SES.MultiRegionEndpoint("Global", {
-  details: { routesDetails: [{ region: "eu-west-1" }] },
+  regions: ["eu-west-1"],
 });
 ```
 

@@ -36,9 +36,11 @@ export interface ContactProps {
    */
   unsubscribeAll?: boolean;
   /**
-   * Arbitrary application metadata attached to the contact, as a JSON string.
+   * Arbitrary application metadata attached to the contact. Serialized to the
+   * JSON string SES stores; equivalent representations (key order, whitespace)
+   * are ignored when detecting drift.
    */
-  attributesData?: string;
+  attributes?: Record<string, unknown>;
 }
 
 export interface Contact extends Resource<
@@ -95,15 +97,50 @@ export interface Contact extends Resource<
  * @section Application Metadata
  * @example Attach Your Own Data to a Contact
  * ```typescript
- * // attributesData is an opaque JSON string SES stores and returns verbatim.
+ * // Serialized to the JSON string SES stores; re-ordering the keys is not a
+ * // change, so this does not churn on every deploy.
  * const contact = yield* SES.Contact("Subscriber", {
  *   contactListName: list.contactListName,
  *   emailAddress: "reader@example.com",
- *   attributesData: JSON.stringify({ plan: "pro", signupSource: "docs" }),
+ *   attributes: { plan: "pro", signupSource: "docs" },
  * });
  * ```
  */
 export const Contact = Resource<Contact>("AWS.SES.Contact");
+
+// SES stores contact metadata as an opaque JSON string. Serialize only at the
+// API boundary, and compare on a canonical (sorted-key) form so a re-ordered
+// object is not mistaken for a change.
+const stringifyAttributes = (
+  attributes: Record<string, unknown> | undefined,
+): string | undefined =>
+  attributes === undefined ? undefined : JSON.stringify(attributes);
+
+const normalizeAttributes = (
+  attributes: Record<string, unknown> | string | undefined,
+): string | undefined => {
+  if (attributes === undefined) return undefined;
+  let value: unknown = attributes;
+  if (typeof attributes === "string") {
+    try {
+      value = JSON.parse(attributes) as unknown;
+    } catch {
+      // Not JSON (a hand-written contact, say) — compare the raw string.
+      return attributes;
+    }
+  }
+  const canonical = (input: unknown): unknown =>
+    Array.isArray(input)
+      ? input.map(canonical)
+      : input !== null && typeof input === "object"
+        ? Object.fromEntries(
+            Object.entries(input as Record<string, unknown>)
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([key, val]) => [key, canonical(val)]),
+          )
+        : input;
+  return JSON.stringify(canonical(value));
+};
 
 const samePreferences = (
   a: ReadonlyArray<ContactTopicPreference> | undefined,
@@ -222,6 +259,9 @@ export const ContactProvider = () =>
           const contactListName =
             output?.contactListName ?? news.contactListName;
           const emailAddress = output?.emailAddress ?? news.emailAddress;
+          const attributesData = yield* Effect.sync(() =>
+            stringifyAttributes(news.attributes),
+          );
 
           // 1. OBSERVE — cloud state is authoritative.
           const observed = yield* getContact(contactListName, emailAddress);
@@ -234,7 +274,7 @@ export const ContactProvider = () =>
                 EmailAddress: emailAddress,
                 TopicPreferences: news.topicPreferences,
                 UnsubscribeAll: news.unsubscribeAll,
-                AttributesData: news.attributesData,
+                AttributesData: attributesData,
               })
               .pipe(
                 Effect.catchTag("AlreadyExistsException", () =>
@@ -243,14 +283,18 @@ export const ContactProvider = () =>
                     EmailAddress: emailAddress,
                     TopicPreferences: news.topicPreferences,
                     UnsubscribeAll: news.unsubscribeAll,
-                    AttributesData: news.attributesData,
+                    AttributesData: attributesData,
                   }),
                 ),
               );
           } else if (
             (observed.UnsubscribeAll ?? false) !==
               (news.unsubscribeAll ?? false) ||
-            observed.AttributesData !== news.attributesData ||
+            (yield* Effect.sync(
+              () =>
+                normalizeAttributes(observed.AttributesData) !==
+                normalizeAttributes(news.attributes),
+            )) ||
             !samePreferences(observed.TopicPreferences, news.topicPreferences)
           ) {
             // 3. SYNC — updateContact is a complete replacement of the
@@ -260,7 +304,7 @@ export const ContactProvider = () =>
               EmailAddress: emailAddress,
               TopicPreferences: news.topicPreferences,
               UnsubscribeAll: news.unsubscribeAll,
-              AttributesData: news.attributesData,
+              AttributesData: attributesData,
             });
           }
 

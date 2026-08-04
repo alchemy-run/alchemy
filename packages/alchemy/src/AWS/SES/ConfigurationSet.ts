@@ -29,6 +29,37 @@ export type TlsPolicy = "REQUIRE" | "OPTIONAL";
  */
 export type SuppressionListReason = "BOUNCE" | "COMPLAINT";
 
+export interface ConfigurationSetTrackingSettings {
+  /**
+   * A custom domain — a verified subdomain you own, with a valid certificate —
+   * that SES uses to host open- and click-tracking links for email sent
+   * through this configuration set.
+   *
+   * Required: SES has no way to set an HTTPS policy for the default tracking
+   * domain, so `httpsPolicy` is only meaningful alongside a custom domain.
+   */
+  customRedirectDomain: string;
+  /**
+   * Whether tracking links use HTTPS (`REQUIRE`), plain HTTP (`OPTIONAL`), or
+   * HTTPS only for the open pixel (`REQUIRE_OPEN_ONLY`).
+   */
+  httpsPolicy?: sesv2.HttpsPolicy;
+}
+
+export interface ConfigurationSetVdmSettings {
+  /**
+   * Whether SES collects engagement (open/click) metrics for the Virtual
+   * Deliverability Manager dashboard for email sent through this configuration
+   * set.
+   */
+  dashboardEngagementMetrics?: sesv2.FeatureStatus;
+  /**
+   * Whether SES applies Guardian optimized shared delivery to email sent
+   * through this configuration set.
+   */
+  guardianOptimizedSharedDelivery?: sesv2.FeatureStatus;
+}
+
 export interface ConfigurationSetProps {
   /**
    * The name of the configuration set. May contain letters, numbers, hyphens
@@ -69,29 +100,16 @@ export interface ConfigurationSetProps {
    */
   suppressedReasons?: SuppressionListReason[];
   /**
-   * A custom domain (a verified subdomain you own with a valid certificate)
-   * SES uses to host open- and click-tracking links for email sent through
-   * this configuration set. Leave undefined to use the default SES tracking
-   * domain.
+   * Open- and click-tracking configuration. Leave undefined to keep whatever
+   * SES currently has — there is no API to remove a custom redirect domain
+   * once set, so clearing this prop does not restore the SES default.
    */
-  customRedirectDomain?: string;
+  tracking?: ConfigurationSetTrackingSettings;
   /**
-   * Whether open/click tracking links use HTTPS (`REQUIRE`), plain HTTP
-   * (`OPTIONAL`), or HTTPS only for the open pixel (`REQUIRE_OPEN_ONLY`). Only
-   * synced when `customRedirectDomain` is set.
+   * Virtual Deliverability Manager configuration for this configuration set.
+   * Requires account-level VDM to be enabled — see `SES.AccountSettings`.
    */
-  trackingHttpsPolicy?: sesv2.HttpsPolicy;
-  /**
-   * Whether SES collects engagement (open/click) metrics for the Virtual
-   * Deliverability Manager dashboard for email sent through this configuration
-   * set. Requires account-level VDM to be enabled.
-   */
-  vdmDashboardEngagementMetrics?: sesv2.FeatureStatus;
-  /**
-   * Whether SES applies Guardian optimized shared delivery to email sent
-   * through this configuration set. Requires account-level VDM to be enabled.
-   */
-  vdmGuardianOptimizedSharedDelivery?: sesv2.FeatureStatus;
+  vdm?: ConfigurationSetVdmSettings;
   /**
    * Tags to apply to the configuration set. Merged with internal Alchemy
    * tags.
@@ -146,10 +164,12 @@ export interface ConfigurationSet extends Resource<
  * @example Host Tracking Links on Your Own Domain
  * ```typescript
  * // The redirect domain must be a verified subdomain you own with a valid
- * // certificate. Without it SES uses its own tracking domain.
+ * // certificate. Omit `tracking` entirely to keep SES's current setting.
  * const configSet = yield* SES.ConfigurationSet("Tracked", {
- *   customRedirectDomain: "links.example.com",
- *   trackingHttpsPolicy: "REQUIRE",
+ *   tracking: {
+ *     customRedirectDomain: "links.example.com",
+ *     httpsPolicy: "REQUIRE",
+ *   },
  * });
  * ```
  *
@@ -158,8 +178,10 @@ export interface ConfigurationSet extends Resource<
  * ```typescript
  * // Requires account-level VDM — see SES.AccountSettings.
  * const configSet = yield* SES.ConfigurationSet("Measured", {
- *   vdmDashboardEngagementMetrics: "ENABLED",
- *   vdmGuardianOptimizedSharedDelivery: "ENABLED",
+ *   vdm: {
+ *     dashboardEngagementMetrics: "ENABLED",
+ *     guardianOptimizedSharedDelivery: "ENABLED",
+ *   },
  * });
  * ```
  *
@@ -378,32 +400,44 @@ export const ConfigurationSetProvider = () =>
             });
           }
 
-          // Tracking is only synced when a custom redirect domain is
-          // configured so an unset prop keeps the default SES tracking domain.
+          // Tracking is only synced when the caller manages it; leaving the
+          // prop undefined keeps whatever SES currently has. `httpsPolicy`
+          // cannot drift on its own — the type requires a custom domain
+          // alongside it, because SES has no way to set an HTTPS policy for
+          // the default tracking domain.
           if (
-            news.customRedirectDomain !== undefined &&
+            news.tracking !== undefined &&
             (observed.TrackingOptions?.CustomRedirectDomain !==
-              news.customRedirectDomain ||
-              (news.trackingHttpsPolicy !== undefined &&
+              news.tracking.customRedirectDomain ||
+              (news.tracking.httpsPolicy !== undefined &&
                 observed.TrackingOptions?.HttpsPolicy !==
-                  news.trackingHttpsPolicy))
+                  news.tracking.httpsPolicy))
           ) {
             yield* sesv2.putConfigurationSetTrackingOptions({
               ConfigurationSetName: name,
-              CustomRedirectDomain: news.customRedirectDomain,
-              HttpsPolicy: news.trackingHttpsPolicy,
+              CustomRedirectDomain: news.tracking.customRedirectDomain,
+              HttpsPolicy: news.tracking.httpsPolicy,
             });
           }
 
           // VDM is only synced when explicitly configured; it requires
           // account-level VDM to be enabled.
-          const desiredDashboard = news.vdmDashboardEngagementMetrics;
-          const desiredGuardian = news.vdmGuardianOptimizedSharedDelivery;
+          //
+          // putConfigurationSetVdmOptions REPLACES VdmOptions wholesale: an
+          // omitted DashboardOptions/GuardianOptions is dropped, not left
+          // alone (verified against the live API). So a caller who manages
+          // only one of the two would silently wipe the other on every
+          // deploy. Backfill the unmanaged member from observed state.
+          const desiredDashboard =
+            news.vdm?.dashboardEngagementMetrics ??
+            observed.VdmOptions?.DashboardOptions?.EngagementMetrics;
+          const desiredGuardian =
+            news.vdm?.guardianOptimizedSharedDelivery ??
+            observed.VdmOptions?.GuardianOptions?.OptimizedSharedDelivery;
           if (
-            (desiredDashboard !== undefined &&
-              observed.VdmOptions?.DashboardOptions?.EngagementMetrics !==
-                desiredDashboard) ||
-            (desiredGuardian !== undefined &&
+            news.vdm !== undefined &&
+            (observed.VdmOptions?.DashboardOptions?.EngagementMetrics !==
+              desiredDashboard ||
               observed.VdmOptions?.GuardianOptions?.OptimizedSharedDelivery !==
                 desiredGuardian)
           ) {

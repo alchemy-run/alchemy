@@ -1,5 +1,6 @@
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -13,24 +14,6 @@ import type { Providers } from "../Providers.ts";
  */
 export type MultiRegionEndpointStatus = sesv2.Status;
 
-/**
- * A single route in a multi-region endpoint — a secondary AWS region across
- * which the endpoint splits sending traffic.
- */
-export interface MultiRegionEndpointRoute {
-  /** The AWS region this route sends from (e.g. `"eu-west-1"`). */
-  region: string;
-}
-
-export interface MultiRegionEndpointDetails {
-  /**
-   * The regions the endpoint routes traffic across. The primary region is the
-   * region where the resource is created; the routes provide the secondary
-   * regions. Sending traffic is split across all of them.
-   */
-  routesDetails: MultiRegionEndpointRoute[];
-}
-
 export interface MultiRegionEndpointProps {
   /**
    * Name of the multi-region endpoint. If omitted, a deterministic physical
@@ -39,10 +22,13 @@ export interface MultiRegionEndpointProps {
    */
   endpointName?: string;
   /**
-   * The endpoint's routing configuration. There is no update API, so any
-   * change to the routes replaces the endpoint.
+   * The secondary AWS regions the endpoint routes traffic across, e.g.
+   * `["eu-west-1"]`. The primary region is wherever the resource is created;
+   * sending traffic is split across it and every region listed here.
+   *
+   * There is no update API, so any change to this list replaces the endpoint.
    */
-  details: MultiRegionEndpointDetails;
+  regions: string[];
 }
 
 export interface MultiRegionEndpoint extends Resource<
@@ -91,7 +77,7 @@ export interface MultiRegionEndpoint extends Resource<
  * // The primary region is wherever the stack deploys; the route adds a
  * // secondary region.
  * const endpoint = yield* SES.MultiRegionEndpoint("Global", {
- *   details: { routesDetails: [{ region: "eu-west-1" }] },
+ *   regions: ["eu-west-1"],
  * });
  * ```
  *
@@ -99,12 +85,7 @@ export interface MultiRegionEndpoint extends Resource<
  * ```typescript
  * // Traffic is split across the primary region plus every listed route.
  * const endpoint = yield* SES.MultiRegionEndpoint("Global", {
- *   details: {
- *     routesDetails: [
- *       { region: "eu-west-1" },
- *       { region: "ap-southeast-2" },
- *     ],
- *   },
+ *   regions: ["eu-west-1", "ap-southeast-2"],
  * });
  * ```
  *
@@ -112,7 +93,7 @@ export interface MultiRegionEndpoint extends Resource<
  * ```typescript
  * const endpoint = yield* SES.MultiRegionEndpoint("Global", {
  *   endpointName: "acme-global",
- *   details: { routesDetails: [{ region: "eu-west-1" }] },
+ *   regions: ["eu-west-1"],
  * });
  * ```
  *
@@ -123,7 +104,7 @@ export interface MultiRegionEndpoint extends Resource<
  * import * as Schedule from "effect/Schedule";
  *
  * const endpoint = yield* SES.MultiRegionEndpoint("Global", {
- *   details: { routesDetails: [{ region: "eu-west-1" }] },
+ *   regions: ["eu-west-1"],
  * });
  *
  * // Reconcile returns as soon as SES accepts the create, so status is
@@ -143,12 +124,12 @@ export const MultiRegionEndpoint = Resource<MultiRegionEndpoint>(
   "AWS.SES.MultiRegionEndpoint",
 );
 
-const sameRoutes = (
-  a: ReadonlyArray<MultiRegionEndpointRoute> | undefined,
-  b: ReadonlyArray<MultiRegionEndpointRoute> | undefined,
+const sameRegions = (
+  a: ReadonlyArray<string> | undefined,
+  b: ReadonlyArray<string> | undefined,
 ): boolean => {
-  const key = (routes: ReadonlyArray<MultiRegionEndpointRoute> | undefined) =>
-    JSON.stringify([...(routes ?? [])].map((r) => r.region).sort());
+  const key = (regions: ReadonlyArray<string> | undefined) =>
+    JSON.stringify([...(regions ?? [])].sort());
   return key(a) === key(b);
 };
 
@@ -220,10 +201,7 @@ export const MultiRegionEndpointProvider = () =>
           // endpoint.
           if (
             oldName !== newName ||
-            !sameRoutes(
-              olds?.details?.routesDetails,
-              news.details.routesDetails,
-            )
+            !sameRegions(olds?.regions, news.regions)
           ) {
             return { action: "replace" } as const;
           }
@@ -244,8 +222,8 @@ export const MultiRegionEndpointProvider = () =>
               .createMultiRegionEndpoint({
                 EndpointName: name,
                 Details: {
-                  RoutesDetails: news.details.routesDetails.map((route) => ({
-                    Region: route.region,
+                  RoutesDetails: news.regions.map((region) => ({
+                    Region: region,
                   })),
                 },
               })
@@ -275,9 +253,25 @@ export const MultiRegionEndpointProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // deleteMultiRegionEndpoint is idempotent for a missing endpoint.
+          //
+          // Provisioning is asynchronous and reconcile deliberately returns at
+          // CREATING, so a destroy that follows closely enough hits an endpoint
+          // still coming up: SES answers ConcurrentModificationException
+          // ("Unable to delete resource in PROVISIONING status"). That is
+          // eventual consistency, not a failure — retry on a bounded schedule
+          // until the endpoint settles and the delete takes.
           yield* sesv2
             .deleteMultiRegionEndpoint({ EndpointName: output.endpointName })
-            .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
+            .pipe(
+              Effect.retry({
+                while: (e) => e._tag === "ConcurrentModificationException",
+                schedule: Schedule.max([
+                  Schedule.spaced("5 seconds"),
+                  Schedule.recurs(12),
+                ]),
+              }),
+              Effect.catchTag("NotFoundException", () => Effect.void),
+            );
         }),
       });
     }),

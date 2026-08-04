@@ -215,8 +215,10 @@ test.provider(
       const configSet = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* ConfigurationSet("VdmConfigSet", {
-            vdmDashboardEngagementMetrics: "ENABLED",
-            vdmGuardianOptimizedSharedDelivery: "ENABLED",
+            vdm: {
+              dashboardEngagementMetrics: "ENABLED",
+              guardianOptimizedSharedDelivery: "ENABLED",
+            },
           });
         }),
       );
@@ -236,8 +238,10 @@ test.provider(
       yield* stack.deploy(
         Effect.gen(function* () {
           return yield* ConfigurationSet("VdmConfigSet", {
-            vdmDashboardEngagementMetrics: "DISABLED",
-            vdmGuardianOptimizedSharedDelivery: "DISABLED",
+            vdm: {
+              dashboardEngagementMetrics: "DISABLED",
+              guardianOptimizedSharedDelivery: "DISABLED",
+            },
           });
         }),
       );
@@ -268,8 +272,10 @@ test.provider.skipIf(!TRACKING_REDIRECT_DOMAIN)(
       const configSet = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* ConfigurationSet("TrackingConfigSet", {
-            customRedirectDomain: TRACKING_REDIRECT_DOMAIN,
-            trackingHttpsPolicy: "REQUIRE",
+            tracking: {
+              customRedirectDomain: TRACKING_REDIRECT_DOMAIN!,
+              httpsPolicy: "REQUIRE",
+            },
           });
         }),
       );
@@ -286,8 +292,10 @@ test.provider.skipIf(!TRACKING_REDIRECT_DOMAIN)(
       yield* stack.deploy(
         Effect.gen(function* () {
           return yield* ConfigurationSet("TrackingConfigSet", {
-            customRedirectDomain: TRACKING_REDIRECT_DOMAIN,
-            trackingHttpsPolicy: "OPTIONAL",
+            tracking: {
+              customRedirectDomain: TRACKING_REDIRECT_DOMAIN!,
+              httpsPolicy: "OPTIONAL",
+            },
           });
         }),
       );
