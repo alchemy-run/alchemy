@@ -995,6 +995,21 @@ describe("Lambda external packages", () => {
               '  resolution: "semver@npm:7.7.3"',
             ].join("\n"),
           },
+          {
+            // v1 with quoted multi-selector entry keys and quoted pair keys.
+            name: "yarn.lock",
+            content: [
+              "# yarn lockfile v1",
+              "",
+              '"sharp@^0.34.0", "sharp@~0.34.5":',
+              '  version "0.34.5"',
+              '  resolved "https://registry.yarnpkg.com/sharp/-/sharp-0.34.5.tgz#abc123"',
+              "  dependencies:",
+              '    "semver" "^7.0.0"',
+              '"semver@^7.0.0", semver@^7.5.0:',
+              '  version "7.7.3"',
+            ].join("\n"),
+          },
         ] as const;
 
         for (const fixture of fixtures) {

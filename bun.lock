@@ -1063,7 +1063,6 @@
         "@smithy/types": "catalog:",
         "@types/aws-lambda": "catalog:",
         "@vercel/nft": "^1.10.2",
-        "@yarnpkg/parsers": "^3.0.3",
         "aws4fetch": "catalog:",
         "capnweb": "^0.6.1",
         "fast-glob": "^3.3.2",
@@ -2686,8 +2685,6 @@
     "@vue/shared": ["@vue/shared@3.6.0-beta.17", "", {}, "sha512-iuDH2UPBc8nzqgL4dcLiqpAJoJfQe70RcPM34+p+dVk0ThJD9jjpLPjzouP+RoRrXkAPOC7jmMncafdv69BGaA=="],
 
     "@vue/tsconfig": ["@vue/tsconfig@0.9.1", "", { "peerDependencies": { "typescript": ">= 5.8", "vue": "^3.4.0" }, "optionalPeers": ["typescript", "vue"] }, "sha512-buvjm+9NzLCJL29KY1j1991YYJ5e6275OiK+G4jtmfIb+z4POywbdm0wXusT9adVWqe0xqg70TbI7+mRx4uU9w=="],
-
-    "@yarnpkg/parsers": ["@yarnpkg/parsers@3.1.0", "", { "dependencies": { "js-yaml": "^4.3.0", "tslib": "^2.4.0" } }, "sha512-WoxUM/Be4hfsX06FxsvpGgfYqwgivMV7/Ol7aFuSfSmY6rRaiju4QxOEe9RUS0iYcSHWl5i9AhB1cMoE0p+XiA=="],
 
     "@yuku-codegen/binding-darwin-arm64": ["@yuku-codegen/binding-darwin-arm64@0.8.1", "", { "os": "darwin", "cpu": "arm64" }, "sha512-Ck0RmDBLc+R0dZpfTXmJFAvcuPf+npbJF1T/VhC9pPDGjNEOGwn4DwFcjhg//DfNIO+xgktsLSt5S4v0MFrToA=="],
 

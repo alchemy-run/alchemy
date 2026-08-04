@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { parseSyml } from "@yarnpkg/parsers";
 import { builtinModules } from "node:module";
 import { parse as parseYaml } from "yaml";
 import { ChildProcess } from "effect/unstable/process";
@@ -1312,8 +1311,76 @@ interface YarnLockEntry {
   readonly dependencies: Readonly<Record<string, string>>;
 }
 
+/**
+ * Parses a yarn lockfile into a top-level record. Yarn berry lockfiles are
+ * valid YAML; the frozen v1 format (`key "value"` pairs without colons) gets
+ * a small dedicated parser so no yarn dependency is required.
+ */
+const parseYarnLockfile = (content: string): JsonRecord => {
+  if (!content.includes("# yarn lockfile v1")) {
+    try {
+      const parsed = asRecord(parseYaml(content));
+      if (parsed !== undefined) return parsed;
+    } catch {
+      // Fall through to the v1 parser for YAML-incompatible files.
+    }
+  }
+  return parseYarnV1Lockfile(content);
+};
+
+const parseYarnV1Lockfile = (content: string): JsonRecord => {
+  const root: JsonRecord = {};
+  const stack: Array<{ indent: number; node: JsonRecord }> = [
+    { indent: -1, node: root },
+  ];
+  for (const rawLine of content.split("\n")) {
+    const line = rawLine.replace(/\r$/, "");
+    const text = line.trim();
+    if (text === "" || text.startsWith("#")) continue;
+    const indent = line.length - line.trimStart().length;
+    while (stack.length > 1 && indent <= stack[stack.length - 1]!.indent) {
+      stack.pop();
+    }
+    const parent = stack[stack.length - 1]!.node;
+    if (text.endsWith(":")) {
+      // Block header: an entry selector list or a nested map like
+      // `dependencies:`. Individual selectors may be quoted.
+      const key = text
+        .slice(0, -1)
+        .split(",")
+        .map((selector) => stripYarnQuotes(selector.trim()))
+        .join(", ");
+      const child: JsonRecord = {};
+      parent[key] = child;
+      stack.push({ indent, node: child });
+    } else {
+      // `key "value"` pair; the key itself may be quoted (scoped packages).
+      let key: string;
+      let rest: string;
+      if (text.startsWith('"')) {
+        const end = text.indexOf('"', 1);
+        if (end === -1) continue;
+        key = text.slice(1, end);
+        rest = text.slice(end + 1).trim();
+      } else {
+        const separator = text.indexOf(" ");
+        if (separator === -1) continue;
+        key = text.slice(0, separator);
+        rest = text.slice(separator + 1).trim();
+      }
+      parent[key] = stripYarnQuotes(rest);
+    }
+  }
+  return root;
+};
+
+const stripYarnQuotes = (value: string): string =>
+  value.startsWith('"') && value.endsWith('"') && value.length >= 2
+    ? value.slice(1, -1)
+    : value;
+
 const parseYarnEntries = (content: string): ReadonlyArray<YarnLockEntry> => {
-  return Object.entries(parseSyml(content)).flatMap(
+  return Object.entries(parseYarnLockfile(content)).flatMap(
     ([selectorList, value]): ReadonlyArray<YarnLockEntry> => {
       if (selectorList === "__metadata") return [];
       const entry = asRecord(value);
