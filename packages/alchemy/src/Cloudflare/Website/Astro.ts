@@ -299,7 +299,14 @@ export const Astro: {
                 // source provider can skip its session-driver wiring on
                 // opt-out.
                 sessionKVBindingName: props.sessionKVBindingName,
-                astro: props.astro,
+                // Server output is the documented default: astro's own
+                // zero-config default is `"static"`, which would prerender
+                // every page at build time inside workerd — where the
+                // Worker's bindings don't exist. The inline config merges
+                // OVER a project's `astro.config.*`, so an explicit
+                // file-level `output` is superseded; opt into a fully
+                // prerendered site with `astro: { output: "static" }`.
+                astro: { output: "server", ...props.astro },
               },
             },
           };
