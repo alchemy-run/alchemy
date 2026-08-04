@@ -33,7 +33,7 @@ env:
   STAGE: ${{ github.event_name == 'pull_request' && format('pr-{0}',
     github.event.number) || (github.event_name == 'workflow_dispatch' ||
     startsWith(github.event.head_commit.message, 'chore(release):')) && 'prod' ||
-    (github.ref == 'refs/heads/main' && 'staging' || github.ref_name) }}
+    (github.ref == 'refs/heads/main' && 'main' || github.ref_name) }}
 
 jobs:
   deploy:
@@ -85,8 +85,8 @@ jobs:
         run: bun alchemy deploy --stage "$STAGE" --yes
         env:
           PULL_REQUEST: ${{ github.event.number }}
-          CLOUDFLARE_API_TOKEN: ${{ startsWith(env.STAGE, 'prod') && secrets.PROD_CLOUDFLARE_API_TOKEN || secrets.TEST_CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ startsWith(env.STAGE, 'prod') && secrets.PROD_CLOUDFLARE_ACCOUNT_ID || secrets.TEST_CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ (env.STAGE == 'main' || env.STAGE == 'prod') && secrets.PROD_CLOUDFLARE_API_TOKEN || secrets.TEST_CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ (env.STAGE == 'main' || env.STAGE == 'prod') && secrets.PROD_CLOUDFLARE_ACCOUNT_ID || secrets.TEST_CLOUDFLARE_ACCOUNT_ID }}
           BUILD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
 

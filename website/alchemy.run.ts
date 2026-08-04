@@ -24,7 +24,7 @@ const Website = Cloudflare.Website.StaticSite(
         domain:
           stack.stage === "prod"
             ? { name: "alchemy.run", redirects: ["v2.alchemy.run"] }
-            : stack.stage === "staging"
+            : stack.stage === "main"
               ? { name: "main.alchemy.run" }
               : undefined,
         memo: {
