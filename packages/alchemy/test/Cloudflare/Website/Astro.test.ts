@@ -77,7 +77,11 @@ const fetchSession = (url: string, cookie?: string) =>
 class AstroResponseMismatch extends Data.TaggedError("AstroResponseMismatch")<{
   url: string;
   detail: string;
-}> {}
+}> {
+  override get message() {
+    return `${this.url} :: ${this.detail}`;
+  }
+}
 
 const responseRetry = Effect.retry({
   schedule: Schedule.min([
@@ -126,6 +130,47 @@ const expectMiddlewareLocals = (url: string) =>
         new AstroResponseMismatch({
           url,
           detail: `${r.status} x-middleware=${r.middleware} x-request-id=${r.requestId} body=${r.body.slice(0, 200)}`,
+        }),
+    ),
+    responseRetry,
+  );
+
+/**
+ * Fetch a hashed asset and assert it serves 200 with the immutable
+ * Cache-Control from the adapter-emitted `_headers`. Without the
+ * provider folding `_headers` into the PUT asset config the asset
+ * serves Cloudflare's default `public, max-age=0, must-revalidate`.
+ */
+const expectImmutableAsset = (assetUrl: string) =>
+  Effect.tryPromise({
+    try: async (signal) => {
+      const u = new URL(assetUrl);
+      u.searchParams.set("__alchemy_cb", String(Date.now()));
+      const res = await fetch(u, {
+        signal,
+        cache: "no-store",
+        headers: { "cache-control": "no-cache", accept: "*/*" },
+      });
+      await res.arrayBuffer();
+      return {
+        status: res.status,
+        cacheControl: res.headers.get("cache-control"),
+      };
+    },
+    catch: (e) =>
+      new AstroResponseMismatch({
+        url: assetUrl,
+        detail: e instanceof Error ? e.message : String(e),
+      }),
+  }).pipe(
+    Effect.filterOrFail(
+      (r) =>
+        r.status === 200 &&
+        r.cacheControl === "public, max-age=31536000, immutable",
+      (r) =>
+        new AstroResponseMismatch({
+          url: assetUrl,
+          detail: `${r.status} cache-control: ${r.cacheControl}`,
         }),
     ),
     responseRetry,
@@ -430,46 +475,6 @@ test.provider(
         label: "config redirect via _redirects",
       });
 
-      // ── hashed `/_astro/*` asset serves with the immutable Cache-Control
-      // from the adapter-emitted `_headers` — pins alchemy's asset uploader
-      // honoring `_headers` ──────────────────────────────────────────────
-      const assetHref = aboutBody.match(/\/_astro\/[^"']+\.css/)?.[0];
-      expect(assetHref).toBeDefined();
-      const assetUrl = `${site1.url!}${assetHref!}`;
-      yield* Effect.tryPromise({
-        try: async (signal) => {
-          const u = new URL(assetUrl);
-          u.searchParams.set("__alchemy_cb", String(Date.now()));
-          const res = await fetch(u, {
-            signal,
-            cache: "no-store",
-            headers: { "cache-control": "no-cache", accept: "*/*" },
-          });
-          await res.arrayBuffer();
-          return {
-            status: res.status,
-            cacheControl: res.headers.get("cache-control"),
-          };
-        },
-        catch: (e) =>
-          new AstroResponseMismatch({
-            url: assetUrl,
-            detail: e instanceof Error ? e.message : String(e),
-          }),
-      }).pipe(
-        Effect.filterOrFail(
-          (r) =>
-            r.status === 200 &&
-            r.cacheControl === "public, max-age=31536000, immutable",
-          (r) =>
-            new AstroResponseMismatch({
-              url: assetUrl,
-              detail: `${r.status} cache-control: ${r.cacheControl}`,
-            }),
-        ),
-        responseRetry,
-      );
-
       // ── binary endpoint returns the exact bytes ────────────────────────
       yield* expectBinaryEndpoint(`${site1.url!}/api/binary`);
 
@@ -503,11 +508,34 @@ test.provider(
         );
       expect(observed).toBe(marker);
 
+      // ── hashed `/_astro/*` asset serves with the immutable Cache-Control
+      // from the adapter-emitted `_headers` — pins the WorkerProvider
+      // folding a source build's `_headers`/`_redirects` into the PUT
+      // asset config (source providers hash the files but don't pre-merge
+      // them into `config`; only alchemy's own `readAssets` does). Without
+      // that merge the asset serves Cloudflare's default
+      // `public, max-age=0, must-revalidate`. ───────────────────────────
+      const assetHref = aboutBody.match(/\/_astro\/[^"']+\.css/)?.[0];
+      expect(assetHref).toBeDefined();
+      const assetUrl = `${site1.url!}${assetHref!}`;
+      yield* expectImmutableAsset(assetUrl);
+
       // ── deploy 2: nothing changed ⇒ memo hit (no rebuild) ──────────────
       const { site: site2 } = yield* deploy();
       expect(site2.hash?.input).toEqual(site1.hash?.input);
       expect(site2.hash?.bundle).toEqual(site1.hash?.bundle);
       expect(site2.hash?.assets).toEqual(site1.hash?.assets);
+
+      // The no-op redeploy takes the provider's hash-matched KEEP path,
+      // which rebuilds the asset config wholesale (no upload jwt). A
+      // regression there would silently wipe the `_headers`/`_redirects`
+      // rules on every no-op deploy — re-assert both still serve.
+      yield* expectImmutableAsset(assetUrl);
+      yield* expectUrlRedirect(`${site1.url!}/old-about`, "/about/", {
+        status: 301,
+        timeout: "60 seconds",
+        label: "redirect after no-op keep-assets deploy",
+      });
 
       // ── deploy 3: edit a page ⇒ memo busts, new content serves ─────────
       const indexPath = path.join(rootDir, "src/pages/index.astro");

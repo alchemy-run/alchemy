@@ -215,6 +215,22 @@ export const SvelteKit: {
             // SvelteKit's server graph is built for Node and needs
             // `nodejs_compat` — `getCompatibility` already adds it to every
             // non-python Worker.
+            // The adapter's `notFoundHandling` generates the fallback pages
+            // and the worker shim's 404 deferral, but the Workers assets
+            // layer has its own `not_found_handling` knob — if they
+            // disagree, unknown routes come back as empty-body 404s (the
+            // shim defers to an assets layer still on "none"). Default the
+            // assets-layer knob from the adapter so one prop configures the
+            // whole story; an explicit `assets.notFoundHandling` wins.
+            assets:
+              props?.adapter?.notFoundHandling !== undefined &&
+              props.adapter.notFoundHandling !== "none" &&
+              props.assets?.notFoundHandling === undefined
+                ? {
+                    ...props.assets,
+                    notFoundHandling: props.adapter.notFoundHandling,
+                  }
+                : props?.assets,
             source: {
               provider: "@distilled.cloud/sveltekit/source",
               devMode: "server",

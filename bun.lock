@@ -1229,6 +1229,7 @@
       "dependencies": {
         "@alchemy.run/node-utils": "catalog:",
         "@aws-sdk/credential-providers": "catalog:",
+        "@clack/prompts": "^1.7.0",
         "@distilled.cloud/aws": "workspace:*",
         "@distilled.cloud/axiom": "workspace:*",
         "@distilled.cloud/cloudflare": "workspace:*",
@@ -1422,12 +1423,6 @@
         "zod": "^3",
       },
     },
-  },
-  "overrides": {
-    "@effect/atom-react": ">=4.0.0-beta.102 || >=4.0.0",
-    "@effect/sql-d1": ">=4.0.0-beta.102 || >=4.0.0",
-    "@effect/vitest": ">=4.0.0-beta.102 || >=4.0.0",
-    "effect": ">=4.0.0-beta.102 || >=4.0.0",
   },
   "catalog": {
     "@alchemy.run/node-utils": "0.0.5",

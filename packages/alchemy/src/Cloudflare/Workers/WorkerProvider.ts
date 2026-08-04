@@ -3039,7 +3039,15 @@ export const LiveWorkerProvider = () =>
               `Cloudflare Worker update: assets unchanged for ${name}, keeping existing`,
             );
             keepAssets = true;
-            metadataAssets = { config: assets.config };
+            // Fold the build-emitted `_headers`/`_redirects` into the PUT
+            // config: source providers (Astro/SvelteKit/Waku/Nuxt) hash the
+            // files and carry them on the read result, but only `readAssets`
+            // pre-merges them — without this, framework header/redirect
+            // rules never reach Cloudflare. Idempotent for pre-merged
+            // configs (explicit config wins).
+            metadataAssets = {
+              config: mergeAssetsConfigFiles(assets.config, assets),
+            };
           } else {
             yield* Effect.logInfo(
               `Cloudflare Worker ${olds ? "update" : "create"}: uploading assets for ${name}`,
@@ -3052,7 +3060,8 @@ export const LiveWorkerProvider = () =>
             );
             metadataAssets = {
               jwt,
-              config: assets.config,
+              // Same `_headers`/`_redirects` fold as the keep path above.
+              config: mergeAssetsConfigFiles(assets.config, assets),
             };
           }
           metadataBindings.push({

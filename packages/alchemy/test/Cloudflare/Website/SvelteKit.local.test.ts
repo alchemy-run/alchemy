@@ -31,13 +31,19 @@ const fixtureDir = pathe.resolve(
 );
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
-/** PUT a text body to `url`, retrying until the dev server serves 200. */
+/**
+ * PUT a text body to `url`, retrying until the dev server serves 200.
+ * Kit's CSRF protection 403s form-like content types (`text/plain`
+ * included) on non-GET requests unless the `origin` header matches the
+ * site, so the site origin is sent explicitly.
+ */
 const putTextReady = (url: string, body: string) =>
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
     yield* client
       .execute(
         HttpClientRequest.put(url).pipe(
+          HttpClientRequest.setHeaders({ origin: new URL(url).origin }),
           HttpClientRequest.bodyText(body, "text/plain"),
         ),
       )

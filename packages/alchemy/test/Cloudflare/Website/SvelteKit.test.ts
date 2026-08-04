@@ -246,6 +246,11 @@ test.provider(
             rootDir,
             workersDev: { enabled: true, previewsEnabled: true },
             memo: { include: ["src/**", "package.json"] },
+            // `assets.notFoundHandling` deliberately NOT set: the resource
+            // defaults the assets-layer knob from the adapter's, so this
+            // one prop configures both the app-shell fallback generation
+            // and the assets layer that serves it. This deploy pins that
+            // default — without it, unknown routes 404 with an empty body.
             adapter: { notFoundHandling: "single-page-application" },
             env: {
               TEST_BINDING: bindingMarker,
@@ -318,7 +323,11 @@ const waitForNamespaceToBeDeleted = Effect.fn(function* (
 class SpaShellMismatch extends Data.TaggedError("SpaShellMismatch")<{
   url: string;
   actual: string;
-}> {}
+}> {
+  override get message() {
+    return `${this.url} :: ${this.actual}`;
+  }
+}
 
 /**
  * Assert `url` answers 200 with the SPA app-shell body (contains the
@@ -403,13 +412,19 @@ const postFormReady = (
       );
   });
 
-/** PUT a text body to `url`, retrying until the route serves 200. */
+/**
+ * PUT a text body to `url`, retrying until the route serves 200. Kit's
+ * CSRF protection 403s form-like content types (`text/plain` included)
+ * on non-GET requests unless the `origin` header matches the site, so
+ * the site origin is sent explicitly.
+ */
 const putTextReady = (url: string, body: string) =>
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
     yield* client
       .execute(
         HttpClientRequest.put(url).pipe(
+          HttpClientRequest.setHeaders({ origin: new URL(url).origin }),
           HttpClientRequest.bodyText(body, "text/plain"),
         ),
       )

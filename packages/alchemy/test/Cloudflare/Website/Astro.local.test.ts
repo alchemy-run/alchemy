@@ -35,7 +35,11 @@ const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 class DevResponseMismatch extends Data.TaggedError("DevResponseMismatch")<{
   url: string;
   detail: string;
-}> {}
+}> {
+  override get message() {
+    return `${this.url} :: ${this.detail}`;
+  }
+}
 
 const devRetry = Effect.retry({
   schedule: Schedule.min([
