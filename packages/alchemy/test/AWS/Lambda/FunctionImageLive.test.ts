@@ -19,6 +19,7 @@ const zipFunctionName = "alchemy-test-lambda-container-image-zip";
 const externalFunctionName = "alchemy-test-lambda-container-image-external";
 const externalRepositoryName = "alchemy-test-lambda-external-image";
 const skipLive = !process.env.AWS_TEST_SLOW || !!process.env.FAST;
+const liveTestTimeout = 240_000;
 
 const imageFunction = (
   context: string,
@@ -143,7 +144,7 @@ test.provider.skipIf(skipLive)(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
     ),
-  { timeout: 120_000 },
+  { timeout: liveTestTimeout },
 );
 
 test.provider.skipIf(skipLive)(
@@ -203,12 +204,16 @@ test.provider.skipIf(skipLive)(
             ),
           );
         }
-        yield* ecr.putImage({
-          repositoryName,
-          imageManifest: image.imageManifest,
-          imageManifestMediaType: image.imageManifestMediaType,
-          imageTag: aliasTag,
-        });
+        yield* ecr
+          .putImage({
+            repositoryName,
+            imageManifest: image.imageManifest,
+            imageManifestMediaType: image.imageManifestMediaType,
+            imageTag: aliasTag,
+          })
+          .pipe(
+            Effect.catchTag("ImageAlreadyExistsException", () => Effect.void),
+          );
       });
 
       // Materialize a private ECR image independently of the Lambda function,
@@ -284,7 +289,7 @@ test.provider.skipIf(skipLive)(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
     ),
-  { timeout: 120_000 },
+  { timeout: liveTestTimeout },
 );
 
 test.provider.skipIf(skipLive)(
@@ -320,7 +325,7 @@ test.provider.skipIf(skipLive)(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
     ),
-  { timeout: 120_000 },
+  { timeout: liveTestTimeout },
 );
 
 test.provider.skipIf(skipLive)(
@@ -361,7 +366,7 @@ test.provider.skipIf(skipLive)(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
     ),
-  { timeout: 120_000 },
+  { timeout: liveTestTimeout },
 );
 
 const ImageInvocationResponse = Schema.Struct({

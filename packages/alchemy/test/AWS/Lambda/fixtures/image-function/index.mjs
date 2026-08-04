@@ -5,3 +5,8 @@ export const handler = async (event) => ({
   environment: process.env.IMAGE_FUNCTION_ENV,
   event,
 });
+
+export const alternate = async (event) => ({
+  handler: "alternate",
+  event,
+});
