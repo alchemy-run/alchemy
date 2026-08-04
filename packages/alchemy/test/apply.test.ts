@@ -4705,6 +4705,63 @@ describe("resource identity (fqn) threading", () => {
 });
 
 // =============================================================================
+// WHOLE-RESOURCE REFS RE-RESOLVE FRESH ATTRS AT APPLY
+// The plan materializes a whole-resource reference to an *updating* upstream
+// into its stable attributes for the downstream's `diff` — but the node's
+// props keep the evaluable reference, so `reconcile` receives the upstream's
+// fresh post-reconcile attributes, non-stable ones included. Baking the
+// stables-only snapshot into node.props left e.g. a Lambda Alias pointing at
+// the previous Lambda Version forever (#993's alias promotion bug).
+// =============================================================================
+
+describe("whole-resource refs re-resolve fresh attrs at apply", () => {
+  test.provider(
+    "downstream reconcile sees the upstream's fresh non-stable attributes",
+    (stack) =>
+      Effect.gen(function* () {
+        const observed: TestResourceProps[] = [];
+        const capture = hook({
+          create: () => Effect.void,
+          update: (id, props) =>
+            Effect.sync(() => {
+              if (id === "B") {
+                observed.push(props);
+              }
+            }),
+          delete: () => Effect.void,
+        });
+
+        const program = (version: string) =>
+          Effect.gen(function* () {
+            const A = yield* TestResource("A", { string: version });
+            // B references the WHOLE upstream resource, not a single prop.
+            return yield* TestResource("B", { object: A as any });
+          });
+
+        yield* program("v1").pipe(stack.deploy, capture);
+
+        // A updates in place: the non-stable `string` changes while
+        // `stableString` / `stableArray` stay put. B must re-reconcile
+        // against A's FRESH attributes — not the stables-only snapshot the
+        // plan hands B's diff.
+        yield* program("v2").pipe(stack.deploy, capture);
+
+        expect(observed).toHaveLength(1);
+        const object = observed[0]!.object as any;
+        expect(object.string).toBe("v2");
+        expect(object.stableString).toBe("A");
+
+        // The persisted props captured the fully-resolved attrs, so the next
+        // no-op deploy diffs full-against-full instead of churning.
+        const persisted = yield* getState("B");
+        expect((persisted?.props as any).object.string).toBe("v2");
+
+        yield* stack.destroy().pipe(capture);
+      }),
+  );
+});
+
+// =============================================================================
 // STATIC STABLE PROPERTIES (provider.stables defined on provider, not in diff)
 // This tests the bug where diff returns undefined but downstream resources
 // depend on stable properties that should be preserved

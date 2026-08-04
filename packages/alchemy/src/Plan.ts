@@ -473,7 +473,25 @@ export const make = <A>(
           ));
       });
 
-    const resolveInput = (input: any): Effect.Effect<any, Config.ConfigError> =>
+    const resolveInput = (
+      input: any,
+      options?: {
+        /**
+         * Keep a whole-resource reference to an *updating* upstream as its
+         * (evaluable) `ResourceExpr` instead of materializing the stable
+         * attributes into a plain object.
+         *
+         * The diff-facing resolution materializes so stable identifiers flow
+         * into the consumer's `diff` (see the comment at the `isResource`
+         * branch). But a plan node's `props` must stay evaluable: Apply
+         * re-resolves them via `Output.evaluate` against the upstream's FRESH
+         * post-reconcile attributes. Baking the stables-only snapshot into
+         * `node.props` would hand `reconcile` an object whose non-stable
+         * attributes (e.g. a Lambda Version's `version` number) are missing.
+         */
+        readonly preserveWholeResourceRefs?: boolean;
+      },
+    ): Effect.Effect<any, Config.ConfigError> =>
       Effect.gen(function* () {
         if (!input) {
           return input;
@@ -486,7 +504,7 @@ export const make = <A>(
           // providers receive a resolved value instead of a Config object.
           // `Config.redacted` resolves to a `Redacted`, which stays opaque via
           // the branch below.
-          return yield* resolveInput(yield* input);
+          return yield* resolveInput(yield* input, options);
         } else if (Duration.isDuration(input) || Redacted.isRedacted(input)) {
           // Opaque values that are resolved downstream. We don't walk them
           // because it would strip their prototype, resulting in a plain object
@@ -494,9 +512,12 @@ export const make = <A>(
           // stays wrapped to preserve the secrecy boundary.
           return input;
         } else if (Array.isArray(input)) {
-          return yield* Effect.all(input.map(resolveInput), {
-            concurrency: "unbounded",
-          });
+          return yield* Effect.all(
+            input.map((item) => resolveInput(item, options)),
+            {
+              concurrency: "unbounded",
+            },
+          );
         } else if (isResource(input)) {
           // Resource objects have dynamic properties (path, hash, etc.) that are
           // created on-demand by a Proxy getter and aren't enumerable via Object.entries.
@@ -513,15 +534,24 @@ export const make = <A>(
           // sees the whole reference as an unresolved `Expr`, `isResolved`
           // short-circuits, and a stable identifier that should have been
           // available is missing — forcing consumers to hand-extract it.
+          //
+          // Apply-facing resolutions (`preserveWholeResourceRefs`) keep the
+          // expression instead: the non-stable attributes are unknown at plan
+          // time and MUST be re-evaluated against the upstream's fresh
+          // attributes after its reconcile.
           if (Output.isResourceExpr(resolved) && resolved.stables) {
-            return yield* resolveInput(resolved.stables);
+            return options?.preserveWholeResourceRefs
+              ? resolved
+              : yield* resolveInput(resolved.stables, options);
           }
-          return yield* resolveInput(resolved);
+          return yield* resolveInput(resolved, options);
         } else if (typeof input === "object") {
           return Object.fromEntries(
             yield* Effect.all(
               Object.entries(input).map(([key, value]) =>
-                resolveInput(value).pipe(Effect.map((value) => [key, value])),
+                resolveInput(value, options).pipe(
+                  Effect.map((value) => [key, value]),
+                ),
               ),
               { concurrency: "unbounded" },
             ),
@@ -776,6 +806,16 @@ export const make = <A>(
             const id = resource.LogicalId;
             const fqn = resource.FQN;
             const news = yield* resolveInput(resource.Props);
+            // Apply-facing props: identical to `news` except whole-resource
+            // references to updating upstreams stay evaluable `ResourceExpr`s.
+            // Apply runs `Output.evaluate(node.props, outputs)` right before
+            // `reconcile`, so these references resolve to the upstream's
+            // fresh post-reconcile attributes — materialized stables-only
+            // snapshots (which `news` carries for `diff` visibility) would
+            // permanently hide every non-stable attribute from `reconcile`.
+            const applyProps = yield* resolveInput(resource.Props, {
+              preserveWholeResourceRefs: true,
+            });
             const downstream = newDownstreamDependencies[fqn] ?? [];
 
             // Collapse duplicate bindings by sid so the binding set handed to
@@ -932,7 +972,7 @@ export const make = <A>(
             if (oldState === undefined) {
               return Node<Create>({
                 action: "create",
-                props: news,
+                props: applyProps,
                 state: oldState,
               });
             } else if (
@@ -1077,7 +1117,7 @@ export const make = <A>(
                 // let's just continue where we left off
                 return Node<Create>({
                   action: "create",
-                  props: news,
+                  props: applyProps,
                   state: oldState,
                 });
               } else if (diff.action === "update") {
@@ -1086,7 +1126,7 @@ export const make = <A>(
                 // TODO(sam): should we maybe try an update instead?
                 return Node<Create>({
                   action: "create",
-                  props: news,
+                  props: applyProps,
                   state: oldState,
                 });
               } else {
@@ -1095,7 +1135,7 @@ export const make = <A>(
                 // we must use a replace step to create a new one and delete the potential old one
                 return Node<Replace>({
                   action: "replace",
-                  props: news,
+                  props: applyProps,
                   deleteFirst: diff.deleteFirst ?? false,
                   state: oldState,
                 });
@@ -1108,7 +1148,7 @@ export const make = <A>(
                 // we can continue where we left off
                 return Node<Update>({
                   action: "update",
-                  props: news,
+                  props: applyProps,
                   state: oldState,
                 });
               } else {
@@ -1116,7 +1156,7 @@ export const make = <A>(
                 return Node<Replace>({
                   action: "replace",
                   deleteFirst: diff.deleteFirst ?? false,
-                  props: news,
+                  props: applyProps,
                   // TODO(sam): can Apply handle replacements when the oldState is UpdatingResourceState?
                   // -> or should we do a provider.read to try and reconcile back to UpdatedResourceState?
                   state: oldState,
@@ -1131,7 +1171,7 @@ export const make = <A>(
                 return Node<Replace>({
                   action: "replace",
                   deleteFirst: oldState.deleteFirst,
-                  props: news,
+                  props: applyProps,
                   state: oldState,
                 });
               } else if (diff.action === "update") {
@@ -1142,7 +1182,7 @@ export const make = <A>(
                 return Node<Replace>({
                   action: "replace",
                   deleteFirst: oldState.deleteFirst,
-                  props: news,
+                  props: applyProps,
                   state: oldState,
                 });
               } else {
@@ -1153,7 +1193,7 @@ export const make = <A>(
                   restart: true,
                   action: "replace",
                   deleteFirst: diff.deleteFirst ?? oldState.deleteFirst,
-                  props: news,
+                  props: applyProps,
                   state: oldState,
                 });
               }
@@ -1166,7 +1206,7 @@ export const make = <A>(
                 return Node<Replace>({
                   action: "replace",
                   deleteFirst: oldState.deleteFirst,
-                  props: news,
+                  props: applyProps,
                   state: oldState,
                 });
               } else if (diff.action === "update") {
@@ -1176,7 +1216,7 @@ export const make = <A>(
                 // 2. Then proceed as normal to delete the replaced resources (after all downstream references are updated)
                 return Node<Update>({
                   action: "update",
-                  props: news,
+                  props: applyProps,
                   state: oldState,
                 });
               } else {
@@ -1187,7 +1227,7 @@ export const make = <A>(
                   restart: true,
                   action: "replace",
                   deleteFirst: diff.deleteFirst ?? oldState.deleteFirst,
-                  props: news,
+                  props: applyProps,
                   state: oldState,
                 });
               }
@@ -1196,7 +1236,7 @@ export const make = <A>(
               // so continue by re-creating it with the same instanceId and desired props
               return Node<Create>({
                 action: "create",
-                props: news,
+                props: applyProps,
                 state: {
                   ...oldState,
                   status: "creating",
@@ -1208,13 +1248,13 @@ export const make = <A>(
               return Node<Update>({
                 action: "update",
                 adopting: forceUpdateAfterAdoption,
-                props: news,
+                props: applyProps,
                 state: oldState,
               });
             } else if (diff.action === "replace") {
               return Node<Replace>({
                 action: "replace",
-                props: news,
+                props: applyProps,
                 state: oldState,
                 deleteFirst: diff?.deleteFirst ?? false,
               });

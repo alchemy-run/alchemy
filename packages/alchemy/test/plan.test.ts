@@ -2249,9 +2249,17 @@ describe("whole-resource refs resolve to the upstream's stable attributes", () =
   // that `ResourceExpr` to the downstream verbatim, so its `news` looked
   // unresolved (`isResolved(news) === false`) and the stable values never
   // reached the downstream `diff`. This forced the Neon `Branch` to manually
-  // extract `project.projectId` as a workaround. The engine must instead
-  // materialize the known stable attributes into a plain object so the
-  // stable values flow into the diff and the downstream can no-op.
+  // extract `project.projectId` as a workaround. The engine materializes the
+  // known stable attributes into a plain object for the DIFF-facing `news`
+  // so the stable values flow into the diff and the downstream can no-op.
+  //
+  // The plan node's `props`, however, must keep the reference as an
+  // evaluable `ResourceExpr`: Apply re-resolves `node.props` against the
+  // upstream's fresh post-reconcile attributes, and a materialized
+  // stables-only snapshot would permanently hide every non-stable attribute
+  // from the downstream's `reconcile` (e.g. a Lambda Alias promoting a
+  // freshly-published Lambda Version would never see the new version
+  // number — #993's alias promotion bug).
   const seedUpdatingUpstream = () =>
     seed({
       A: {
@@ -2276,7 +2284,7 @@ describe("whole-resource refs resolve to the upstream's stable attributes", () =
     });
 
   test(
-    "the whole-resource ref resolves to the upstream's stable attributes (not an Expr)",
+    "the node's whole-resource ref stays an evaluable Expr carrying the stable attributes",
     Effect.gen(function* () {
       yield* seedUpdatingUpstream();
 
@@ -2293,10 +2301,15 @@ describe("whole-resource refs resolve to the upstream's stable attributes", () =
       expect(plan.resources.A!.action).toBe("update");
 
       const bProps = (plan.resources.B as any).props as TestResourceProps;
-      // The whole-resource ref must resolve to a fully-resolved plain object
-      // of the upstream's stable attributes — NOT an unresolved Expr.
-      expect(Output.isExpr(bProps.object)).toBe(false);
-      expect(bProps.object).toEqual({
+      // The node's props keep the whole-resource ref as an evaluable
+      // `ResourceExpr` (so Apply resolves the upstream's FRESH attributes
+      // after its reconcile), with the stable attributes riding along for
+      // plan-time consumers.
+      expect(Output.isExpr(bProps.object)).toBe(true);
+      expect(Output.isResourceExpr(bProps.object)).toBe(true);
+      expect(
+        (bProps.object as any as Output.ResourceExpr<any>).stables,
+      ).toEqual({
         stableString: "A",
         stableArray: ["A"],
       });
