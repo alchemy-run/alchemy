@@ -144,16 +144,29 @@ export const DedicatedIpPoolProvider = () =>
 
         // Account/region-scoped: enumerate every pool so leaked test resources
         // are cleaned by nuke.
+        //
+        // listDedicatedIpPools returns names only, so the real ScalingMode
+        // needs a read per pool — `list` must produce the same Attributes
+        // shape as `read`, and reporting every pool as STANDARD would
+        // misdescribe a MANAGED one. Pools that vanish mid-walk drop out.
         list: Effect.fn(function* () {
           const pages = yield* sesv2.listDedicatedIpPools
             .pages({})
             .pipe(Stream.runCollect);
-          return Array.from(pages)
-            .flatMap((page) => page.DedicatedIpPools ?? [])
-            .map((poolName) => ({
-              poolName,
-              scalingMode: DEFAULT_SCALING_MODE as DedicatedIpPoolScalingMode,
-            }));
+          const poolNames = Array.from(pages).flatMap(
+            (page) => page.DedicatedIpPools ?? [],
+          );
+          const pools = yield* Effect.forEach(
+            poolNames,
+            (poolName) =>
+              getPool(poolName).pipe(
+                Effect.map((pool) =>
+                  pool ? [{ poolName, scalingMode: pool.ScalingMode }] : [],
+                ),
+              ),
+            { concurrency: 2 },
+          );
+          return pools.flat();
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
