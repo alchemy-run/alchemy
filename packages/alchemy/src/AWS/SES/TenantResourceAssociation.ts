@@ -65,32 +65,66 @@ export const TenantResourceAssociationProvider = () =>
   Provider.effect(
     TenantResourceAssociation,
     Effect.gen(function* () {
-      const isAssociated = Effect.fn(function* (
-        tenantName: string,
-        resourceArn: string,
-      ) {
+      // Every resource associated with the tenant, or undefined when the
+      // tenant itself is gone.
+      const listResources = Effect.fn(function* (tenantName: string) {
         const pages = yield* sesv2.listTenantResources
           .pages({ TenantName: tenantName })
           .pipe(
             Stream.runCollect,
-            // A missing tenant means the association cannot exist.
             Effect.catchTag("NotFoundException", () =>
               Effect.succeed(undefined),
             ),
           );
-        if (pages === undefined) return false;
-        return Array.from(pages)
-          .flatMap((page) => page.TenantResources ?? [])
-          .some((resource) => resource.ResourceArn === resourceArn);
+        if (pages === undefined) return undefined;
+        return Array.from(pages).flatMap((page) => page.TenantResources ?? []);
+      });
+
+      const isAssociated = Effect.fn(function* (
+        tenantName: string,
+        resourceArn: string,
+      ) {
+        // A missing tenant means the association cannot exist.
+        const resources = yield* listResources(tenantName);
+        return (resources ?? []).some(
+          (resource) => resource.ResourceArn === resourceArn,
+        );
       });
 
       return TenantResourceAssociation.Provider.of({
+        // Deleting an association requires its parent tenant to still exist,
+        // so the tenant must outlive every association nuke tears down.
+        nuke: { dependsOn: ["AWS.SES.Tenant"] },
         stables: ["tenantName", "resourceArn"],
 
-        // Associations are keyed by their parent tenant; there is no flat
-        // account-level enumeration, and deleting the tenant removes its
-        // associations, so nuke handles them via the parent tenant.
-        list: () => Effect.succeed([]),
+        // Associations are keyed by their parent tenant, so enumeration walks
+        // every tenant and pages through its resources. listResources already
+        // treats a vanished tenant as "no associations".
+        list: Effect.fn(function* () {
+          const pages = yield* sesv2.listTenants
+            .pages({})
+            .pipe(Stream.runCollect);
+          const tenantNames = Array.from(pages)
+            .flatMap((page) => page.Tenants ?? [])
+            .flatMap((tenant) =>
+              tenant.TenantName ? [tenant.TenantName] : [],
+            );
+          const nested = yield* Effect.forEach(
+            tenantNames,
+            (tenantName) =>
+              listResources(tenantName).pipe(
+                Effect.map((resources) =>
+                  (resources ?? []).flatMap((resource) =>
+                    resource.ResourceArn
+                      ? [{ tenantName, resourceArn: resource.ResourceArn }]
+                      : [],
+                  ),
+                ),
+              ),
+            { concurrency: 2 },
+          );
+          return nested.flat();
+        }),
 
         read: Effect.fn(function* ({ olds, output }) {
           const tenantName = output?.tenantName ?? olds?.tenantName;

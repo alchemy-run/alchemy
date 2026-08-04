@@ -1,5 +1,6 @@
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -120,12 +121,58 @@ export const ContactProvider = () =>
       });
 
       return Contact.Provider.of({
+        // Deleting a contact requires its parent list to still exist, so the
+        // list must outlive every contact nuke tears down.
+        nuke: { dependsOn: ["AWS.SES.ContactList"] },
         stables: ["contactListName", "emailAddress"],
 
-        // Contacts are keyed by their parent list; there is no flat
-        // account-level enumeration, and deleting the list removes its
-        // contacts, so nuke handles them via the parent contact list.
-        list: () => Effect.succeed([]),
+        // Contacts are keyed by their parent list, so enumeration walks every
+        // contact list and pages through its contacts. SES allows one contact
+        // list per account, so the outer page is at most one entry.
+        list: Effect.fn(function* () {
+          const listPages = yield* sesv2.listContactLists
+            .pages({})
+            .pipe(Stream.runCollect);
+          const contactListNames = Array.from(listPages)
+            .flatMap((page) => page.ContactLists ?? [])
+            .flatMap((entry) =>
+              entry.ContactListName ? [entry.ContactListName] : [],
+            );
+          const nested = yield* Effect.forEach(
+            contactListNames,
+            (contactListName) =>
+              sesv2.listContacts
+                .pages({ ContactListName: contactListName })
+                .pipe(
+                  Stream.runCollect,
+                  Effect.map((pages) =>
+                    Array.from(pages)
+                      .flatMap((page) => page.Contacts ?? [])
+                      .flatMap((contact) =>
+                        contact.EmailAddress
+                          ? [
+                              {
+                                contactListName,
+                                emailAddress: contact.EmailAddress,
+                              },
+                            ]
+                          : [],
+                      ),
+                  ),
+                  // The list can be deleted between the two calls.
+                  Effect.catchTag("NotFoundException", () =>
+                    Effect.succeed(
+                      [] as {
+                        contactListName: string;
+                        emailAddress: string;
+                      }[],
+                    ),
+                  ),
+                ),
+            { concurrency: 2 },
+          );
+          return nested.flat();
+        }),
 
         read: Effect.fn(function* ({ olds, output }) {
           const contactListName =

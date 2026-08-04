@@ -1,5 +1,6 @@
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -109,12 +110,36 @@ export const EmailIdentityPolicyProvider = () =>
       });
 
       return EmailIdentityPolicy.Provider.of({
+        // Deleting a policy requires its parent identity to still exist, so
+        // the identity must outlive every policy nuke tears down.
+        nuke: { dependsOn: ["AWS.SES.EmailIdentity"] },
         stables: ["emailIdentity", "policyName"],
 
-        // Policies are keyed entirely by their parent identity; there is no
-        // flat account-level enumeration, and deleting the identity removes
-        // its policies, so nuke handles them via the parent identity.
-        list: () => Effect.succeed([]),
+        // Policies are keyed by their parent identity, so enumeration walks
+        // every identity and reads its policy map. getPolicies already treats
+        // a vanished identity as "no policies".
+        list: Effect.fn(function* () {
+          const pages = yield* sesv2.listEmailIdentities
+            .pages({})
+            .pipe(Stream.runCollect);
+          const identities = Array.from(pages)
+            .flatMap((page) => page.EmailIdentities ?? [])
+            .flatMap((info) => (info.IdentityName ? [info.IdentityName] : []));
+          const nested = yield* Effect.forEach(
+            identities,
+            (emailIdentity) =>
+              getPolicies(emailIdentity).pipe(
+                Effect.map((policies) =>
+                  Object.keys(policies ?? {}).map((policyName) => ({
+                    emailIdentity,
+                    policyName,
+                  })),
+                ),
+              ),
+            { concurrency: 2 },
+          );
+          return nested.flat();
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const emailIdentity = output?.emailIdentity ?? olds?.emailIdentity;
