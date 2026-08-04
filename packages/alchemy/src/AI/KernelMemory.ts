@@ -15,6 +15,7 @@ import * as Response from "effect/unstable/ai/Response";
 import * as AiTool from "effect/unstable/ai/Tool";
 import * as Toolkit from "effect/unstable/ai/Toolkit";
 import { makeProcessScope } from "../Local/Process.ts";
+import * as PersistentRef from "../PersistentRef.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
 import type { Actor } from "./Actor.ts";
 import { isAgent, type Agent } from "./Agent.ts";
@@ -127,6 +128,13 @@ interface RunState {
     string,
     { readonly key: string; readonly actor: Actor }
   >;
+  /**
+   * The run's `PersistentRef.Store` — on this in-memory kernel a
+   * plain Map, exactly as durable as the run itself (the substrate's
+   * durability IS its lifetime). The durable kernel implements the
+   * same contract over DO storage.
+   */
+  readonly stateStore: PersistentRef.StoreService;
 }
 
 /** What one tick hands the loop. */
@@ -314,6 +322,7 @@ export const KernelMemory: Layer.Layer<
             effect.pipe(
               Effect.provideService(Thread, makeThreadService(run)),
               Effect.provideService(Tick, makeTickService(run)),
+              Effect.provideService(PersistentRef.Store, run.stateStore),
               Effect.provide(RuntimeContext.phantom),
               Effect.provide(context),
             ) as Effect.Effect<A, E>;
@@ -334,6 +343,7 @@ export const KernelMemory: Layer.Layer<
           <A, E>(effect: Effect.Effect<A, E, any>): Effect.Effect<A, E> =>
             effect.pipe(
               Effect.provideService(Thread, makeThreadService(run)),
+              Effect.provideService(PersistentRef.Store, run.stateStore),
               Effect.provide(RuntimeContext.phantom),
               Effect.provide(context),
             ) as Effect.Effect<A, E>;
@@ -710,6 +720,7 @@ export const KernelMemory: Layer.Layer<
               log: [],
               sockets: new Set(),
               children: new Map(),
+              stateStore: PersistentRef.makeMemoryStore(),
             };
           });
 

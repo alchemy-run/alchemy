@@ -83,8 +83,10 @@ import {
   compileTool,
   dedupeByName,
   describeCrash,
+  inputProvenance,
   NOTE_CODA,
   noteMessage,
+  reminderInput,
   render,
   type CompiledToolRef,
   type Stance,
@@ -95,6 +97,8 @@ import {
   type KernelObservation,
 } from "../../AI/Observer.ts";
 import { isParameter } from "../../AI/Parameter.ts";
+import * as PersistentRef from "../../PersistentRef.ts";
+import { makeDurableObjectStore } from "../Workers/PersistentRefStore.ts";
 import { dedentTemplate, isFragment, type Fragment } from "../../AI/Prose.ts";
 import {
   AgentGateway,
@@ -519,6 +523,17 @@ export const KernelCloudflare: Layer.Layer<
             ),
         };
 
+        /**
+         * The run's `PersistentRef.Store`: DO storage rows under the
+         * run's own prefix, written through the synchronous KV API —
+         * write coalescing + the output gate make the Ref's infallible
+         * setter honest. ONE instance per activation: `PersistentRef`
+         * memoizes refs per store instance, so every `make` of a name
+         * within this activation shares one in-memory cache. Building
+         * the object only captures `state`; storage is touched lazily.
+         */
+        const stateStore = makeDurableObjectStore(state);
+
         const provideRun = <A, E>(
           effect: Effect.Effect<A, E, any>,
           registration: RegisteredCharter,
@@ -527,6 +542,7 @@ export const KernelCloudflare: Layer.Layer<
           effect.pipe(
             Effect.provideService(Thread, threadService),
             Effect.provideService(Tick, tick),
+            Effect.provideService(PersistentRef.Store, stateStore),
             Effect.provide(RuntimeContext.phantom),
             Effect.provide(registration.context),
           ) as Effect.Effect<A, E>;
@@ -878,6 +894,7 @@ export const KernelCloudflare: Layer.Layer<
               yield* observe({
                 type: "input",
                 text: `<note>\nround abandoned after ${maxAttempts} interrupted attempts\n</note>`,
+                kind: "note",
               });
               meta = { ...(yield* readMeta), busy: undefined };
               yield* writeMeta(meta);
@@ -918,6 +935,7 @@ export const KernelCloudflare: Layer.Layer<
               yield* observe({
                 type: "input",
                 text: `<note>\nrecovering an interrupted round (attempt ${attempts}/${maxAttempts})\n</note>`,
+                kind: "note",
               });
               yield* Effect.logInfo(
                 `KernelCloudflare run '${me.term}/${me.key}': recovering an interrupted round (attempt ${attempts}/${maxAttempts})`,
@@ -969,7 +987,10 @@ export const KernelCloudflare: Layer.Layer<
               yield* observe({ type: "parked" });
               break;
             }
-            const inputs = fresh.map(([, input]) => input);
+            // unwrap provenance envelopes: the thread and the turn's
+            // `inputs` see plain values; the observation gets `kind`
+            const drained = fresh.map(([, raw]) => inputProvenance(raw));
+            const inputs = drained.map((item) => item.value);
 
             // append the inputs, advance the watermark, and OPEN the
             // round in ONE atomic write — only then delete the inbox
@@ -995,10 +1016,11 @@ export const KernelCloudflare: Layer.Layer<
             if (rows.length > 0) {
               yield* storage.delete(rows.map(([k]) => k)).pipe(Effect.orDie);
             }
-            for (const input of inputs) {
+            for (const { value, kind } of drained) {
               yield* observe({
                 type: "input",
-                text: typeof input === "string" ? input : JSON.stringify(input),
+                text: typeof value === "string" ? value : JSON.stringify(value),
+                kind,
               });
             }
 
@@ -1038,6 +1060,7 @@ export const KernelCloudflare: Layer.Layer<
               yield* observe({
                 type: "input",
                 text: `<note>\n${text}\n</note>`,
+                kind: "note",
               });
             }
             yield* appendThread(notes);
@@ -1454,7 +1477,7 @@ export const KernelCloudflare: Layer.Layer<
               const rows = yield* listRows<string>(REMIND);
               const due = rows.filter(([k]) => seqOf(REMIND, k) <= now);
               for (const [, note] of due) {
-                yield* enqueue(`[reminder] ${note}`);
+                yield* enqueue(reminderInput(note));
               }
               if (due.length > 0) {
                 yield* storage.delete(due.map(([k]) => k)).pipe(Effect.orDie);
