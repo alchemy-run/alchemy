@@ -10,14 +10,31 @@ Effect handler
   -> remote OTLP backend
 ```
 
-The Collector extension is delivered by the pinned upstream managed Lambda
-layer. A separate Alchemy `LayerVersion` packages `collector.yaml` at
-`/opt/collector.yaml`.
+All of that wiring is one call inside the Function's Effect:
 
-The managed layer ARN is derived from the active AWS Region and the Function
-architecture. Lambda's `x86_64` maps to the upstream layer's `amd64` name;
-`arm64` remains `arm64`. Keep the release and layer version pinned in
-`src/Collector.ts`.
+```ts
+Effect.provide(
+  AWS.Lambda.Collector({
+    config: collectorConfigPath,
+    env: { COLLECTOR_EXPORTER_OTLP_ENDPOINT: otlpEndpoint },
+  }),
+)
+```
+
+`AWS.Lambda.Collector` derives and attaches the pinned managed extension
+layer (Region- and architecture-scoped: Lambda's `x86_64` maps to the
+upstream layer's `amd64` name), packages `layers/collector-config` into a
+`LayerVersion` at `/opt/collector.yaml`, binds the extension's environment,
+and points the in-process exporter at the loopback receiver. Override the
+pinning with `extension: { release, layerVersion }`, or bypass derivation
+entirely with `extension: { layerVersionArn }`.
+
+Exporting to Axiom needs no configuration at all — `Axiom.LambdaCollector`
+ships its own `collector.yaml` and wires the ingest token and datasets:
+
+```ts
+Effect.provide(Axiom.LambdaCollector({ token: Ingest, traces: Traces, logs: Logs }))
+```
 
 Set `COLLECTOR_EXPORTER_OTLP_ENDPOINT` to an OTLP/HTTP backend and deploy:
 
@@ -49,12 +66,6 @@ IAM role, CPU, and memory.
 
 ## Tests
 
-The example's unit test checks Region and architecture mapping:
-
-```sh
-bun test
-```
-
 Alchemy's AWS provider test deploys the same pattern with the real managed
 extension, a bounded OTLP receiver, and a four-second receiver delay:
 
@@ -67,7 +78,9 @@ timeout 240 bun alchemy-test \
 
 It asserts trace and log delivery, warm sandbox reuse, and that the delayed
 remote receiver does not delay the handler response. The receiver, Function,
-config layer, and S3 sink are destroyed on success or failure.
+config layer, and S3 sink are destroyed on success or failure. ARN derivation
+and the packaged Axiom configuration are covered by
+`test/AWS/Lambda/Collector.test.ts`, which needs no cloud access.
 
 References:
 
