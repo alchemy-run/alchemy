@@ -126,6 +126,43 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * });
  * ```
  *
+ * @example Foldkit
+ * [Foldkit](https://foldkit.dev) apps are client-only Vite projects, so a
+ * single call deploys them — the Foldkit Vite plugin in the app's own
+ * `vite.config.ts` composes with the injected Cloudflare plugin. Enable
+ * `single-page-application` not-found handling so deep links boot the app:
+ * ```typescript
+ * const app = yield* Cloudflare.Website.Vite("Foldkit", {
+ *   assets: {
+ *     notFoundHandling: "single-page-application",
+ *   },
+ * });
+ * ```
+ *
+ * @section Serving on a Zone Route with a Path Prefix
+ * Cloudflare matches static assets against the full request pathname,
+ * so a site attached to a route like `example.com/docs*` only serves
+ * assets whose uploaded paths carry the `/docs` prefix. Set Vite's
+ * `base` in your `vite.config.ts` — the emitted HTML references its
+ * assets under the prefix, and Alchemy keys the uploaded asset manifest
+ * with the same resolved `base` so the two always agree.
+ *
+ * @example vite.config.ts
+ * ```typescript
+ * import { defineConfig } from "vite";
+ *
+ * export default defineConfig({
+ *   base: "/docs/",
+ * });
+ * ```
+ *
+ * @example alchemy.run.ts
+ * ```typescript
+ * const docs = yield* Cloudflare.Website.Vite("Docs", {
+ *   routes: [{ pattern: "example.com/docs*", zoneName: "example.com" }],
+ * });
+ * ```
+ *
  * @section Custom Rebuild Scope
  * By default, every non-gitignored file is hashed to decide whether
  * a rebuild is needed. Use `memo` to narrow the scope when your

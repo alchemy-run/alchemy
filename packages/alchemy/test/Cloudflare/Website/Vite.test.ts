@@ -1,5 +1,6 @@
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
+import { isLocalId } from "@/Cloudflare/LocalRuntime";
 import * as Test from "@/Test/Alchemy";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
 import { expect } from "alchemy-test";
@@ -34,7 +35,12 @@ const logLevel = Effect.provideService(
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "vite-fixture");
 const spaFixtureDir = pathe.resolve(import.meta.dirname, "vite-spa-fixture");
+const foldkitFixtureDir = pathe.resolve(import.meta.dirname, "foldkit-fixture");
 const doFixtureDir = pathe.resolve(import.meta.dirname, "vite-do-fixture");
+const containerFixtureDir = pathe.resolve(
+  import.meta.dirname,
+  "vite-container-fixture",
+);
 const reactRouterRscFixtureDir = pathe.resolve(
   import.meta.dirname,
   "react-router-rsc-fixture",
@@ -170,6 +176,62 @@ test.provider(
       yield* expectUrlContains(`${site.url!}/`, marker, {
         timeout: "120 seconds",
         label: "spa marker",
+      });
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+    }).pipe(logLevel),
+  { timeout: 360_000 },
+);
+
+// Foldkit (foldkit.dev) is an Effect-native Elm-architecture frontend
+// framework. Its apps are plain client-only Vite projects (the Foldkit Vite
+// plugin only adds HMR/devtools wiring), so `Cloudflare.Website.Vite` deploys
+// them as-is. This pins that the Foldkit plugin composes with the injected
+// Cloudflare Vite plugin and that deep links fall back to `index.html` via
+// `single-page-application` not-found handling.
+test.provider(
+  "Vite: Foldkit SPA deploys and serves with SPA fallback",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const rootDir = yield* cloneFixture(foldkitFixtureDir, {
+        prefix: "alchemy-vite-foldkit-",
+        tempRoot,
+        entries: ["index.html", "package.json", "vite.config.ts", "src"],
+      });
+      const memoInclude = [
+        "index.html",
+        "src/**",
+        "package.json",
+        "vite.config.ts",
+      ];
+
+      const site = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Website.Vite("FixViteFoldkit", {
+            ...viteProps(rootDir, memoInclude),
+            assets: {
+              notFoundHandling: "single-page-application",
+            },
+          });
+        }),
+      );
+
+      expect(site.url).toBeDefined();
+      expect(site.hash?.input).toBeDefined();
+      yield* expectWorkerExists(site.workerName, accountId);
+      yield* expectUrlContains(`${site.url!}/`, "Foldkit Fixture", {
+        timeout: "120 seconds",
+        label: "foldkit index",
+      });
+      // Deep link falls back to index.html so client-side routing can boot.
+      yield* expectUrlContains(`${site.url!}/counter/42`, "Foldkit Fixture", {
+        timeout: "60 seconds",
+        label: "foldkit spa fallback",
       });
 
       yield* stack.destroy();
@@ -628,6 +690,75 @@ test.provider(
 );
 
 test.provider(
+  "Vite: Container binding on env deploys a container-backed DO class",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const rootDir = yield* cloneFixture(containerFixtureDir, {
+        prefix: "alchemy-vite-container-",
+        tempRoot,
+        entries: ["index.html", "package.json", "vite.config.ts", "src"],
+      });
+      const memoInclude = [
+        "index.html",
+        "src/**",
+        "package.json",
+        "vite.config.ts",
+      ];
+
+      // A `Cloudflare.Container` declaration on `env` is Effect-shaped —
+      // before #997 the Vite build's env resolution ran it as an inlined
+      // env Effect and the deploy died before the build started.
+      const site = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Website.Vite("ViteContainer", {
+            ...viteProps(rootDir, memoInclude),
+            compatibility: {
+              date: "2026-03-17",
+              flags: ["nodejs_compat"],
+            },
+            assets: {
+              runWorkerFirst: ["/api/*"],
+            },
+            env: {
+              ECHO: Cloudflare.Container("ViteEchoContainer", {
+                className: "EchoObject",
+                image: "mendhak/http-https-echo:latest",
+                observability: { logs: { enabled: true } },
+              }),
+            },
+          });
+        }),
+      );
+
+      expect(site.url).toBeDefined();
+      yield* expectWorkerExists(site.workerName, accountId);
+      yield* expectUrlContains(`${site.url!}/`, "Vite Container fixture", {
+        timeout: "120 seconds",
+        label: "vite container fixture assets",
+      });
+
+      // The echo image reflects the request as JSON ("method" only appears
+      // in a real echo response, never in an error page) — proof the request
+      // went Worker → DO class → container port 8080 and back.
+      const echo = yield* fetchContainerReady(
+        `${site.url!}/api/echo`,
+        "method",
+      );
+      expect(echo).toContain("method");
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+    }).pipe(logLevel),
+  // Container image pull + push + rollout comfortably exceeds the plain
+  // Vite deploy budget (mirrors AsyncContainer.test.ts).
+  { timeout: 600_000 },
+);
+
+test.provider(
   "Vite: main overrides the worker entry from the Vite config",
   (stack) =>
     Effect.gen(function* () {
@@ -967,6 +1098,40 @@ const fetchJsonReady = <T>(url: string) =>
     );
   });
 
+// Retry a container-backed route until it answers 200 with a body containing
+// `expected` — the container's first request rides through image provisioning
+// and instance cold start, which comfortably outlasts fetchJsonReady's budget
+// (mirrors AsyncContainer.test.ts's readiness poll).
+const fetchContainerReady = (url: string, expected: string) =>
+  Effect.gen(function* () {
+    const client = freshConn(yield* HttpClient.HttpClient);
+    return yield* client.get(url).pipe(
+      Effect.flatMap((res) =>
+        res.text.pipe(
+          Effect.flatMap((body) =>
+            res.status === 200 && body.includes(expected)
+              ? Effect.succeed(body)
+              : Effect.fail(
+                  new Error(
+                    `container not ready: ${res.status} ${body.slice(0, 200)}`,
+                  ),
+                ),
+          ),
+        ),
+      ),
+      Effect.timeout("10 seconds"),
+      Effect.retry({
+        // Cap exponential backoff at 3s — snappy fast path without the
+        // geometric blow-up dominating wall time on a slow rollout.
+        schedule: Schedule.min([
+          Schedule.exponential("500 millis"),
+          Schedule.spaced("3 seconds"),
+        ]),
+        times: 60,
+      }),
+    );
+  });
+
 const putTextJsonReady = <T>(url: string, body: string) =>
   Effect.gen(function* () {
     return yield* HttpClient.execute(
@@ -1104,12 +1269,9 @@ const waitForBucketToBeDeleted = Effect.fn(function* (
   bucketName: string,
   accountId: string,
 ) {
-  // Dev-mode buckets are purely virtual (`dev:`-prefixed names keyed into
-  // the local R2 simulator) — there is no cloud bucket to wait on, and the
-  // real API rejects the name outright.
-  if (bucketName.startsWith("dev:")) {
-    return;
-  }
+  // Dev-mode buckets are purely virtual (`dev:`-prefixed identity) — there
+  // is no cloud bucket to wait on, and the real API rejects the name.
+  if (isLocalId(bucketName)) return;
   yield* r2
     .getBucket({
       accountId,

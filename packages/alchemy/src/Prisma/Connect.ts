@@ -85,6 +85,29 @@ export interface ConnectClient {
  * Context tag, its type, and the callable —
  * `yield* Prisma.Connect(connection)`.
  *
+ * Provide `Prisma.ConnectBinding` on the host implementation so Alchemy can
+ * register the deploy-time binding and resolve the client at runtime.
+ *
+ * @section Binding a Connection
+ * @example Use a connection inside Prisma Compute
+ * ```typescript
+ * export default Prisma.Compute(
+ *   "api",
+ *   { project, main: import.meta.filename },
+ *   Effect.gen(function* () {
+ *     const db = yield* Prisma.Connect(connection);
+ *     const sql = yield* SQL.Postgres({ url: db.databaseUrl });
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const users = yield* sql`SELECT * FROM users`;
+ *         return yield* HttpServerResponse.json(users);
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(Prisma.ConnectBinding)),
+ * );
+ * ```
+ *
  * @binding
  */
 export interface Connect extends Binding.Service<
@@ -161,13 +184,13 @@ type ConnectWorkerBindingHost = Resource<
 >;
 
 const supportsConnectEnvBinding = (
-  host: ResourceLike,
+  host: ResourceLike | undefined,
 ): host is ConnectEnvBindingHost =>
-  host.Type === "Prisma.Compute" || host.Type === "AWS.Lambda.Function";
+  host?.Type === "Prisma.Compute" || host?.Type === "AWS.Lambda.Function";
 
 const supportsConnectWorkerBinding = (
-  host: ResourceLike,
-): host is ConnectWorkerBindingHost => host.Type === "Cloudflare.Worker";
+  host: ResourceLike | undefined,
+): host is ConnectWorkerBindingHost => host?.Type === "Cloudflare.Worker";
 
 // Compute env sync omits undefined and treats null as deletion. Connection
 // bindings need both values to round-trip into the typed runtime client.
@@ -353,7 +376,7 @@ export const ConnectBinding = Layer.effect(
         } else {
           return yield* Effect.die(
             new Error(
-              `Prisma.Connect supports Prisma.Compute, AWS.Lambda.Function, and Cloudflare.Worker runtimes, got '${host.Type}'`,
+              `Prisma.Connect supports Prisma.Compute, AWS.Lambda.Function, and Cloudflare.Worker runtimes, got '${host?.Type ?? "no host"}'`,
             ),
           );
         }

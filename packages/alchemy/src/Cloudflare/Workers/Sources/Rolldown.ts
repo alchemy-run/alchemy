@@ -3,7 +3,6 @@ import * as FileSystem from "effect/FileSystem";
 import { flow } from "effect/Function";
 import type * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
-import { builtinModules } from "node:module";
 import path from "pathe";
 import type * as rolldown from "rolldown";
 import * as Artifacts from "../../../Artifacts.ts";
@@ -23,15 +22,6 @@ import type {
   SourceProvider,
 } from "../Source.ts";
 import { mainToPath } from "./shared.ts";
-
-/**
- * Node builtin specifiers, prefixed or not — the same shape the cloudflare
- * rolldown plugin matches (its vite half uses an identical regex for the
- * deps-optimizer `esmExternalRequirePlugin` registration).
- */
-const NODE_BUILTIN_MODULES_REGEXP = new RegExp(
-  `^(${builtinModules.filter((name) => !name.startsWith("node:")).join("|")}|node:.+)$`,
-);
 
 /**
  * Bundler options for a Worker: the generic {@link Bundle.BundleExtraOptions}
@@ -71,6 +61,43 @@ export interface WorkerBundleOptions {
   extraOptions: WorkerBuildOptions | undefined;
 }
 
+/**
+ * Rebuild any `builtin:esm-external-require` plugin instance with OUR copy of
+ * rolldown.
+ *
+ * cloudflare-tools is its own bun workspace with its own dependency store, so
+ * under bun's `bun` export condition `@distilled.cloud/cloudflare-rolldown-plugin`
+ * can resolve a physically different copy of rolldown than the one Alchemy
+ * bundles with. Builtin plugins — here `builtin:esm-external-require`, which
+ * rewrites CJS `require`s of Node builtins into ESM imports under
+ * `nodejs_compat` — are `BuiltinPlugin` class instances that rolldown
+ * recognizes with an `instanceof` check. An instance constructed by the
+ * foreign rolldown copy fails that check and is silently treated as a
+ * hookless JS plugin, so CJS requires keep rolldown's throwing `require`
+ * shim and the Worker fails Cloudflare startup validation (#880).
+ * Reconstructing the builtin from its `_options` with the rolldown copy we
+ * actually invoke makes the identity check pass regardless of which copy the
+ * plugin package resolved.
+ */
+const rebindEsmExternalRequirePlugin = (
+  plugins: Array<rolldown.Plugin | null>,
+  esmExternalRequirePlugin: (typeof import("rolldown/plugins"))["esmExternalRequirePlugin"],
+): Array<rolldown.Plugin | null> =>
+  plugins.map((plugin) => {
+    if (
+      typeof plugin === "object" &&
+      plugin !== null &&
+      "name" in plugin &&
+      plugin.name === "builtin:esm-external-require" &&
+      "_options" in plugin
+    ) {
+      return esmExternalRequirePlugin(
+        plugin._options as Parameters<typeof esmExternalRequirePlugin>[0],
+      ) as rolldown.Plugin;
+    }
+    return plugin;
+  });
+
 export const WorkerBundle = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const context = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
@@ -108,29 +135,13 @@ export const WorkerBundle = Effect.gen(function* () {
         Effect.provide(context),
       ),
       plugins: [
-        // The cloudflare plugin injects this builtin conversion itself, but
-        // constructs it from ITS OWN rolldown package instance. Rolldown
-        // recognizes builtin plugins via `instanceof BuiltinPlugin`, so
-        // when the plugin's `rolldown` resolves to a different install
-        // than ours (dual-workspace/dual-store node_modules), its instance
-        // is silently treated as a hookless JS plugin and CJS `require`s
-        // of Node builtins survive into the ESM output — throwing
-        // "Calling `require` for ..." at Worker startup. Inject the
-        // builtin from OUR rolldown instance so the conversion always
-        // applies under nodejs_compat (`skipDuplicateCheck` keeps the two
-        // registrations compatible when the instances do coincide).
-        options.compatibility.flags.some(
-          (flag) => flag === "nodejs_compat" || flag === "nodejs_compat_v2",
-        )
-          ? esmExternalRequirePlugin({
-              external: [NODE_BUILTIN_MODULES_REGEXP],
-              skipDuplicateCheck: true,
-            })
-          : undefined,
-        cloudflareRolldown({
-          compatibilityDate: options.compatibility.date,
-          compatibilityFlags: options.compatibility.flags,
-        }),
+        rebindEsmExternalRequirePlugin(
+          cloudflareRolldown({
+            compatibilityDate: options.compatibility.date,
+            compatibilityFlags: options.compatibility.flags,
+          }),
+          esmExternalRequirePlugin,
+        ),
         options.entry.kind === "effect"
           ? [
               virtualEntryPlugin(

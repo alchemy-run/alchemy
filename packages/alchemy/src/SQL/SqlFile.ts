@@ -75,3 +75,23 @@ const getPrefix = (name: string): number | null => {
   const num = Number.parseInt(prefix, 10);
   return Number.isNaN(num) ? null : num;
 };
+
+// Drizzle (and other migration tools) emit `--> statement-breakpoint` between
+// statements. drizzle-kit puts the marker directly after single-line
+// statements (`...;--> statement-breakpoint`), so the split can't anchor on a
+// preceding newline.
+const STATEMENT_BREAKPOINT = /\s*-->\s*statement-breakpoint\s*/g;
+
+/**
+ * Split a migration file into individual statements on its
+ * `--> statement-breakpoint` markers. MySQL engines need this: they only
+ * treat `--` as a comment when followed by whitespace, so the `-->` token is
+ * a syntax error ("syntax error at position 2" on Vitess). Postgres and
+ * sqlite comment on `--` regardless of the next character, so their runners
+ * send files whole.
+ */
+export const splitSqlStatements = (sql: string): string[] =>
+  sql
+    .split(STATEMENT_BREAKPOINT)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);

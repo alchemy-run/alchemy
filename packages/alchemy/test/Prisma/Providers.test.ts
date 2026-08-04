@@ -1,4 +1,5 @@
 import { AlchemyContext } from "@/AlchemyContext";
+import { AuthProviders } from "@/Auth/AuthProvider";
 import * as Provider from "@/Provider";
 import * as Prisma from "@/Prisma";
 import { describe, expect, it } from "alchemy-test";
@@ -31,6 +32,39 @@ const reconcileInput = (id: string, news: unknown, output?: unknown) =>
   }) as never;
 
 describe("Prisma providers", () => {
+  it.effect(
+    "registers Prisma auth without resolving credentials",
+    () =>
+      Effect.gen(function* () {
+        const authProviders: AuthProviders["Service"] = {};
+
+        yield* Layer.build(
+          Prisma.providers().pipe(
+            Layer.provideMerge(Layer.succeed(AuthProviders, authProviders)),
+          ),
+        );
+
+        expect(authProviders.Prisma?.name).toBe("Prisma");
+      }).pipe(
+        Effect.provide(
+          ConfigProvider.layer(
+            ConfigProvider.fromUnknown({
+              CI: true,
+            }),
+          ),
+        ),
+        Effect.provide(
+          Layer.succeed(AlchemyContext, {
+            dotAlchemy: ".alchemy-test",
+            dev: false,
+            adopt: false,
+          }),
+        ),
+        Effect.scoped,
+      ),
+    { timeout: 30_000 },
+  );
+
   it.effect("registers every Prisma resource provider", () =>
     Effect.gen(function* () {
       const resourceTypes = [

@@ -30,11 +30,15 @@ import {
   Queue,
   R2Bucket,
   RateLimit,
+  SecretKey,
+  SecretsStore,
   SendEmail,
   Service,
+  Stream as StreamSim,
   Text,
   Vectorize,
   VersionMetadata,
+  VpcService,
   WasmModule,
   WorkerLoader,
   Workflows,
@@ -83,6 +87,7 @@ import { getCronBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
 import { WorkerBundle, type WorkerBundleOptions } from "./Sources/Rolldown.ts";
 import { createWorkerName } from "./WorkerName.ts";
+import { resolveTailConsumers } from "./WorkerProvider.ts";
 
 /** Local dev-server options (the worker-mode arm of `WorkerProps["dev"]`). */
 type DevServerOptions = Extract<WorkerProps["dev"], { mode?: "worker" }> & {
@@ -332,6 +337,12 @@ export const LocalWorkerProvider = () =>
         > = {};
         const workflows: Record<string, RuntimeWorkflow> = {};
         const hyperdrives: Record<string, Required<HyperdriveOrigin>> = {};
+        // Dev-only channel (like `hyperdrives`): binding name → opt-out of
+        // local emulation (the binding was piped through `Alchemy.remote()`). Read
+        // by `toRuntimeBinding` when lowering browser/images/stream/
+        // send_email descriptors. Part of the hashed config: flipping the
+        // opt-out restarts the instance.
+        const devRemote: Record<string, boolean> = {};
         const containers: Record<string, ContainerImage> = {};
         for (const { data } of bindings) {
           for (const binding of data.bindings ?? []) {
@@ -366,6 +377,11 @@ export const LocalWorkerProvider = () =>
                 };
               }
               bindingDescriptors.push(binding);
+            }
+          }
+          if (data.devRemote) {
+            for (const [name, remote] of Object.entries(data.devRemote)) {
+              devRemote[name] = remote;
             }
           }
           if (data.hyperdrives) {
@@ -454,6 +470,7 @@ export const LocalWorkerProvider = () =>
            */
           prebuilt: props.bundle === false,
           rules: props.rules,
+          devRemote,
           vite: !!props.vite,
           // Relative `vite.main` resolves from the Vite root (see the
           // matching normalization in WorkerProvider's `viteBuild`).
@@ -479,6 +496,17 @@ export const LocalWorkerProvider = () =>
           dev,
           crons: Array.from(
             new Set([...getCronBindings(bindings), ...(props.crons ?? [])]),
+          ),
+          // Tail consumers, resolved to plain `{ service }` records exactly
+          // like the live provider hashes/uploads them (script names only,
+          // deliberately hash-safe). Restart-relevant: serve lowers the list
+          // into workerd's native `tails` service designators.
+          tailConsumers: resolveTailConsumers(props.tailConsumers),
+          // Streaming tail consumers, same resolution — serve lowers the
+          // list into workerd's `streamingTails` designators, which deliver
+          // the producer's events live via the consumer's `tailStream()`.
+          streamingTailConsumers: resolveTailConsumers(
+            props.streamingTailConsumers,
           ),
         };
       });
@@ -534,7 +562,9 @@ export const LocalWorkerProvider = () =>
             workerBindings.push(Text.local(descriptor.name, selfUrl!));
             continue;
           }
-          workerBindings.push(yield* toRuntimeBinding(descriptor));
+          workerBindings.push(
+            yield* toRuntimeBinding(descriptor, config.devRemote),
+          );
         }
         return workerBindings;
       });
@@ -627,6 +657,24 @@ export const LocalWorkerProvider = () =>
                       durableObjectNamespaces: worker.durableObjectNamespaces,
                       workflows: worker.workflows,
                       queueConsumers,
+                      // Cron triggers: the runtime starts a Node-side timer
+                      // per expression and exposes the Miniflare-compatible
+                      // manual trigger route `/cdn-cgi/handler/scheduled`.
+                      crons: worker.crons,
+                      // Tail consumers by script name — each resolves through
+                      // the dev registry proxy exactly like cross-worker
+                      // service bindings; a consumer that isn't running yet
+                      // drops events with a `[registry]` warning until it
+                      // registers (wrangler dev-registry semantics).
+                      tails: worker.tailConsumers?.map((c) => c.service),
+                      // Streaming tail consumers by script name — resolved
+                      // through the same registry proxy; the consumer's
+                      // `tailStream()` receives the onset while the producer
+                      // is still executing (dropped with a `[registry]`
+                      // warning until the consumer registers).
+                      streamingTails: worker.streamingTailConsumers?.map(
+                        (c) => c.service,
+                      ),
                       // Cache API opt-out (`dev: { cache: false }`) — matches
                       // production workers.dev, where the Cache API is a no-op.
                       cache: worker.dev.cache,
@@ -1068,6 +1116,8 @@ export const LocalWorkerProvider = () =>
               accountId,
               routes: [],
               crons: config.crons,
+              tailConsumers: config.tailConsumers,
+              streamingTailConsumers: config.streamingTailConsumers,
             } satisfies Worker["Attributes"];
           }
 
@@ -1131,6 +1181,8 @@ export const LocalWorkerProvider = () =>
             ),
             routes: [],
             crons: config.crons,
+            tailConsumers: config.tailConsumers,
+            streamingTailConsumers: config.streamingTailConsumers,
             accountId,
           } satisfies Worker["Attributes"];
         }),
@@ -1160,7 +1212,13 @@ export const LocalWorkerProvider = () =>
 
 export const toRuntimeBinding = Effect.fn(function* (
   b: WorkerBinding,
-  dev?: { remote?: boolean },
+  /**
+   * Dev-only channel from the Worker's binding data (see the `devRemote`
+   * member of the Worker binding contract): binding name → opt-out of local
+   * emulation for the capabilities that support it (browser / images /
+   * stream / send_email).
+   */
+  devRemote?: Record<string, boolean>,
 ) {
   const unsupported = () =>
     new WorkerValidationError({
@@ -1181,7 +1239,12 @@ export const toRuntimeBinding = Effect.fn(function* (
     case "assets":
       return Assets.local(b.name);
     case "browser":
-      return Browser.remote(b.name);
+      // Local emulation launches a real headless Chrome on this machine and
+      // proxies the Browser Rendering session protocol to its CDP endpoint;
+      // `Alchemy.remote()` opts into the real service instead.
+      return devRemote?.[b.name]
+        ? Browser.remote(b.name)
+        : Browser.local({ binding: b.name });
     case "d1":
       // A `dev:` id belongs to a locally-emulated database (local D1
       // provider); a real id is a live database the dev worker proxies to
@@ -1210,7 +1273,12 @@ export const toRuntimeBinding = Effect.fn(function* (
     case "hyperdrive":
       return Hyperdrive.local(b.name, b.id);
     case "images":
-      return Images.remote(b.name);
+      // Local emulation runs transforms via Sharp on this machine and stores
+      // hosted images in a local KV-backed store; `Alchemy.remote()`
+      // opts into the real Images service instead.
+      return devRemote?.[b.name]
+        ? Images.remote(b.name)
+        : Images.local({ binding: b.name });
     case "inherit":
       return yield* unsupported();
     case "json":
@@ -1275,13 +1343,35 @@ export const toRuntimeBinding = Effect.fn(function* (
         namespaceId: b.namespaceId,
       });
     case "secret_key":
-      return yield* unsupported();
+      // workerd imports the key natively: raw material passes through as
+      // base64, pkcs8/spki base64 DER is PEM-wrapped, and JWK objects are
+      // serialized — all handled by the hook.
+      return SecretKey.local({
+        binding: b.name,
+        format: b.format,
+        algorithm: b.algorithm,
+        usages: b.usages,
+        keyBase64: b.keyBase64,
+        keyJwk: b.keyJwk,
+      });
     case "secret_text":
       return Text.local(b.name, b.text);
     case "secrets_store_secret":
-      return yield* unsupported();
+      // A `dev:` store id belongs to a locally-emulated Secrets Store
+      // (local Store/Secret providers seed the simulator); a real id is a
+      // live secret the dev worker proxies to (`Alchemy.remote()`).
+      return isLocalId(b.storeId)
+        ? SecretsStore.local({
+            binding: b.name,
+            storeId: b.storeId,
+            secretName: b.secretName,
+          })
+        : SecretsStore.remote(b.name, b.storeId, b.secretName);
     case "send_email":
-      return SendEmail[dev?.remote ? "remote" : "local"]({
+      // Local emulation validates and persists sent mail as `.eml` files
+      // under the local storage's `email/` dir; `Alchemy.remote()` on the
+      // descriptor opts into the real Email service instead.
+      return SendEmail[devRemote?.[b.name] ? "remote" : "local"]({
         binding: b.name,
         destinationAddress: b.destinationAddress,
         allowedDestinationAddresses: b.allowedDestinationAddresses,
@@ -1293,12 +1383,25 @@ export const toRuntimeBinding = Effect.fn(function* (
         scriptName: b.service,
         entrypoint: b.entrypoint,
       });
+    case "stream":
+      // Local emulation stores videos in a local simulator (no transcoding,
+      // no signed URLs) and serves each video's `preview` URL at
+      // /cdn-cgi/mf/stream/<id>/watch on the dev URL; `Alchemy.remote()`
+      // opts into the real Stream service instead.
+      return devRemote?.[b.name]
+        ? StreamSim.remote(b.name)
+        : StreamSim.local({ binding: b.name });
     case "text_blob":
       return Data.local(b.name, Buffer.from(b.part));
     case "vectorize":
       return Vectorize.remote(b.name, b.indexName);
     case "version_metadata":
       return VersionMetadata.local(b.name);
+    case "vpc_service":
+      // A VPC service tunnels into a private network — nothing to emulate
+      // locally, so the dev worker always proxies to the real service
+      // through the remote-binding bridge.
+      return VpcService.remote(b.name, b.serviceId);
     case "wasm_module":
       return WasmModule.local(b.name, Buffer.from(b.part));
     case "worker_loader":

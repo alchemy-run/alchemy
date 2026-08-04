@@ -1,15 +1,15 @@
 name: website
 
 on:
+  # Manual override — deploys unconditionally on whatever branch it's run
+  # from (use this to force a prod deploy from main without a release).
   workflow_dispatch:
+  # No `paths` filter on push: every main commit updates main.alchemy.run,
+  # while release commits update production regardless of which files they
+  # touch.
   push:
     branches:
       - main
-    paths:
-      - "website/**"
-      - "packages/alchemy/**"
-      - "bun.lock"
-      - ".github/workflows/deploy.yml"
   pull_request:
     # `labeled` so adding `deploy-website` on an open PR triggers a
     # deploy without needing another push.
@@ -23,7 +23,7 @@ on:
       - "website/**"
       - "packages/alchemy/**"
       - "bun.lock"
-      - ".github/workflows/deploy.yml"
+      - ".github/workflows/website.yml"
 
 concurrency:
   group: deploy-website-${{ github.ref }}
@@ -31,13 +31,15 @@ concurrency:
 
 env:
   STAGE: ${{ github.event_name == 'pull_request' && format('pr-{0}',
-    github.event.number) || (github.ref == 'refs/heads/main' && 'prod' ||
-    github.ref_name) }}
+    github.event.number) || (github.event_name == 'workflow_dispatch' ||
+    startsWith(github.event.head_commit.message, 'chore(release):')) && 'prod' ||
+    (github.ref == 'refs/heads/main' && 'staging' || github.ref_name) }}
 
 jobs:
   deploy:
-    # Deploy on push-to-main and `workflow_dispatch` always. On PRs,
-    # require BOTH:
+    # Deploy every push to main. Release commits (`chore(release): x.y.z`)
+    # and manual dispatches deploy production; other main commits deploy to
+    # main.alchemy.run. On PRs, require BOTH:
     #   - the PR is internal (forks can't access bot/Cloudflare secrets
     #     so `create-github-app-token` would error immediately), AND
     #   - the PR carries the `deploy-website` label (opt-in — most PRs

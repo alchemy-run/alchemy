@@ -1,19 +1,20 @@
 ---
 title: Deployments
-description: The fail-closed Compute deployment lifecycle — health-checked promotion, automatic rollback, old-generation cleanup, and env-only redeploys.
+description: The fail-closed Compute deployment lifecycle — health-checked promotion, rollback recovery, old-generation cleanup, and env-only redeploys.
 ---
 
-Every `Prisma.Compute` update creates a new deployment and walks it
-through a fail-closed sequence: upload the artifact, start the
-candidate, verify its preview health endpoint, promote it, confirm
-the app reports it as latest, verify the stable endpoint — and only
-then touch the previous deployment.
+When the artifact or deployment configuration changes,
+`Prisma.Compute` creates a new generation and walks it through a
+fail-closed sequence: upload the artifact, start the candidate, verify
+its preview health endpoint, promote it, confirm the app reports it as
+latest, verify the stable endpoint — and only then touch the previous
+deployment.
 
 ## Health checks and promotion
 
-`healthCheck.path` gates promotion. A candidate that never answers
-is destroyed and the previous deployment keeps serving — a failed
-deploy never takes the app down:
+`healthCheck.path` gates promotion. If the candidate never becomes
+healthy, alchemy attempts to destroy it without changing the stable
+deployment. When a previous deployment exists, it keeps serving:
 
 ```typescript
 const app = yield* Prisma.Compute("api", {
@@ -25,9 +26,12 @@ const app = yield* Prisma.Compute("api", {
 ```
 
 When promotion succeeds but the stable endpoint fails verification,
-alchemy rolls the app back to the previous deployment and destroys
-the failed candidate. Terminally failed deployments are never
-restarted or selected as rollback targets.
+alchemy attempts to restore the previous deployment. If recovery
+converges, it cleans up the failed candidate. If recovery cannot
+converge—or no safe rollback target exists—alchemy fails the deploy,
+preserves the generations needed for recovery, and retries recovery
+before making further cloud changes. Terminally failed deployments
+are never restarted or selected as rollback targets.
 
 ## Old-generation cleanup
 
@@ -43,19 +47,18 @@ const app = yield* Prisma.Compute("api", {
 });
 ```
 
-If cleanup fails (e.g. a transient API error), the pending cleanup
-is persisted and retried on the next deploy — nothing is orphaned.
+If cleanup fails, alchemy records the pending action in state and
+retries it before creating another generation.
 
 ## Env-only redeploys
 
-`skipCodeUpload: true` creates the next deployment from the previous
-code artifact — useful when only environment variables changed and
-rebuilding/uploading would be wasted work:
+`skipCodeUpload: true` creates the next deployment from the currently
+promoted artifact. It requires an existing promoted deployment and is
+useful when only environment variables changed:
 
 ```typescript
 const app = yield* Prisma.Compute("api", {
   project,
-  path: "./app",
   skipCodeUpload: true,
   env: { FEATURE_FLAG: "on" },
 });

@@ -13,6 +13,9 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as pathe from "pathe";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
 
+// `dev: true` runs local providers behind the RPC sidecar proxy by default,
+// matching the process topology of the real `alchemy dev` command (see
+// MakeOptions.sidecar in Test/Core.ts).
 const { test } = Test.make({
   providers: Cloudflare.providers(),
   dev: true,
@@ -79,8 +82,10 @@ test.provider(
         }),
       );
 
-      // The local provider fabricates a `dev:` name — proof no cloud call ran.
+      // The local provider fabricates a `dev:` name — proof no cloud call
+      // ran — and the worker serves from the local dev proxy.
       expect(deployed.bucket.bucketName).toMatch(/^dev:/);
+      expect(deployed.worker.url).toMatch(/^http:\/\/localhost:\d+$/);
 
       const body = (yield* getJsonReady(
         `${deployed.worker.url}/roundtrip`,

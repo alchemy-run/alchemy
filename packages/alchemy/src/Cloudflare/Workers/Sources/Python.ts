@@ -20,9 +20,20 @@ import { resolveMainPath } from "./shared.ts";
  * skip the rolldown pipeline entirely — Cloudflare interprets `.py` sources
  * directly with Pyodide, so the "bundle" is just the source files plus the
  * vendored `python_modules/` directory.
+ *
+ * The parameter is `unknown` on purpose. `getCompatibility` reaches this from
+ * `WorkerProvider.precreate`, which is handed *raw, unresolved* props so
+ * resources in a dependency cycle can signal early — and `main` is an
+ * `Input`, so it can legitimately be an `Output` there (e.g. an entry path
+ * derived from a `Command.Build` output). An unresolved Output is a callable
+ * Proxy: it passes a `!== undefined` guard, `.split` yields another proxy,
+ * and calling it returns `undefined` — so a value-shaped check explodes with
+ * a bare `TypeError`. Narrowing on `typeof === "string"` keeps the predicate
+ * total: an unresolved `main` is simply not Python yet, and `reconcile`
+ * re-derives compatibility from fully resolved props.
  */
-export const isPythonMain = (main: string | undefined): main is string =>
-  main !== undefined && main.split("?")[0].endsWith(".py");
+export const isPythonMain = (main: unknown): main is string =>
+  typeof main === "string" && main.split("?")[0].endsWith(".py");
 
 /**
  * The Pyodide cross-compilation targets uv understands, keyed by the Python

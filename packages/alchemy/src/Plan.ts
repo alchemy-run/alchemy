@@ -243,6 +243,14 @@ export type Plan<Output = any> = {
    */
   cycleMembers: ReadonlySet<string>;
   /**
+   * The run-level default {@link ProviderMode} this plan was built with
+   * (`alchemy dev` → `"local"`, `alchemy deploy` → `"live"`). Renderers use
+   * it to tag only the EXCEPTIONS — rows whose resolved mode differs from
+   * the run default. `undefined` (plans built by older/auxiliary builders)
+   * is treated as `"live"`.
+   */
+  defaultMode?: ProviderMode;
+  /**
    * Marks a plan built by {@link destroy}. `apply` finishes a destroy plan
    * by deleting the stage's remaining persisted state — notably the stack
    * output record written by the last deploy — instead of persisting a new
@@ -952,7 +960,25 @@ export const make = <A>(
                     olds: oldState.props,
                     output: oldState.attr,
                   })
-                  .pipe(providePlanScope(fqn, oldState.instanceId));
+                  .pipe(
+                    providePlanScope(fqn, oldState.instanceId),
+                    // `creating` props pass `isResolved` yet can still carry
+                    // holes where unresolved Outputs were stripped at commit
+                    // time (see stripUnresolved) — e.g. a parent reference
+                    // persisted as `{}`. A provider that dereferences one
+                    // crashes deep inside its SDK client (a SchemaError
+                    // defect), which would brick every subsequent plan on
+                    // the stage. Recovery is best-effort: degrade the defect
+                    // to "nothing recovered" and re-drive the create (#995).
+                    Effect.catchDefect((defect) =>
+                      Effect.logWarning(
+                        `Recovery read for '${fqn}' crashed; treating the ` +
+                          "interrupted create as not recoverable and " +
+                          "re-driving it.",
+                        defect,
+                      ).pipe(Effect.as(undefined)),
+                    ),
+                  );
                 if (attr !== undefined) {
                   // The recovered resource may be foreign: our interrupted
                   // create could have lost a name race, or died before
@@ -1481,6 +1507,7 @@ export const make = <A>(
       actionDeletions,
       output: stack.output,
       cycleMembers,
+      defaultMode: runDefaultMode,
     } satisfies Plan<A> as Plan<A>;
   }).pipe(
     ensureArtifactStore,

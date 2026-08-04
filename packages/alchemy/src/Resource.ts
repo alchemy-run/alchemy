@@ -5,7 +5,7 @@ import * as Option from "effect/Option";
 import type { Pipeable } from "effect/Pipeable";
 import { AdoptPolicy } from "./AdoptPolicy.ts";
 import { toFqn } from "./FQN.ts";
-import type { Input, InputProps } from "./Input.ts";
+import type { Input, InputProps, PropsInput } from "./Input.ts";
 import { CurrentNamespace, type NamespaceNode } from "./Namespace.ts";
 import * as Output from "./Output.ts";
 import { Provider } from "./Provider.ts";
@@ -27,17 +27,11 @@ export type ResourceConstructor<R extends ResourceLike, Req = never> = {
   ): ResourceClassWithMethods<R, Methods>;
   (
     id: string,
+    // PropsInput distributes over union Props so discriminated-union
+    // resources keep the correlation between discriminant and payload.
     ...args: {} extends R["Props"]
-      ? [
-          props?: {
-            [prop in keyof R["Props"]]: Input<R["Props"][prop]>;
-          },
-        ]
-      : [
-          props: {
-            [prop in keyof R["Props"]]: Input<R["Props"][prop]>;
-          },
-        ]
+      ? [props?: PropsInput<R["Props"]>]
+      : [props: PropsInput<R["Props"]>]
   ): Effect.Effect<R, never, Req>;
   <PropsReq = never>(
     id: string,
