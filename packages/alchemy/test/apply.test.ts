@@ -6199,3 +6199,157 @@ describe("provider modes (local ⇄ live)", () => {
       }),
   );
 });
+
+// Apply must honor dependency ORDER and resolve values for references at ANY
+// nesting depth of plain data — objects in arrays, arrays in objects, arrays
+// of arrays, whole-resource refs (#1082 hardened the walkers with a
+// plain-data gate + cycle guards; these pin end-to-end that no nesting shape
+// lost its edge or its resolution).
+describe("deeply nested dependencies (order + resolution)", () => {
+  test.provider(
+    "creates upstream first and resolves refs at every nesting depth",
+    (stack) =>
+      Effect.gen(function* () {
+        const createOrder: string[] = [];
+        let bCreateProps: any;
+        const createHooks = {
+          create: (id: string, props: any) =>
+            Effect.sync(() => {
+              createOrder.push(id);
+              if (id === "B") bCreateProps = props;
+            }),
+          update: () => Effect.succeed(undefined),
+          delete: () => Effect.succeed(undefined),
+          read: () => Effect.succeed(undefined),
+        };
+
+        const nestedProps = (a: any) =>
+          ({
+            layers: [{ config: { hosts: [{ url: a.string }] } }],
+            matrix: [[a.string]],
+            whole: { list: [a] },
+            mixed: [1, "x", { deep: [a.string] }, null],
+          }) as any;
+
+        yield* Effect.gen(function* () {
+          const A = yield* TestResource("A", { string: "deep-a" });
+          const B = yield* TestResource("B", nestedProps(A));
+          return { A, B };
+        }).pipe(stack.deploy, hook(createHooks));
+
+        // Order: the ONLY references to A are deeply nested — A must still
+        // be created before B.
+        expect(createOrder).toEqual(["A", "B"]);
+
+        // Resolution: every nested position received the concrete value.
+        expect(bCreateProps.layers[0].config.hosts[0].url).toBe("deep-a");
+        expect(bCreateProps.matrix[0][0]).toBe("deep-a");
+        expect(bCreateProps.mixed[2].deep[0]).toBe("deep-a");
+        // A whole-resource reference resolves to the upstream's attributes.
+        expect(bCreateProps.whole.list[0].string).toBe("deep-a");
+
+        // Second deploy: the upstream value changes; the change must
+        // propagate through every nested position, again upstream-first.
+        const updateOrder: string[] = [];
+        let bUpdateProps: any;
+        const updateHooks = {
+          create: () => Effect.succeed(undefined),
+          update: (id: string, props: any) =>
+            Effect.sync(() => {
+              updateOrder.push(id);
+              if (id === "B") bUpdateProps = props;
+            }),
+          delete: () => Effect.succeed(undefined),
+          read: () => Effect.succeed(undefined),
+        };
+
+        yield* Effect.gen(function* () {
+          const A = yield* TestResource("A", { string: "deep-a2" });
+          const B = yield* TestResource("B", nestedProps(A));
+          return { A, B };
+        }).pipe(stack.deploy, hook(updateHooks));
+
+        expect(updateOrder).toEqual(["A", "B"]);
+        expect(bUpdateProps.layers[0].config.hosts[0].url).toBe("deep-a2");
+        expect(bUpdateProps.matrix[0][0]).toBe("deep-a2");
+        expect(bUpdateProps.mixed[2].deep[0]).toBe("deep-a2");
+        expect(bUpdateProps.whole.list[0].string).toBe("deep-a2");
+
+        yield* stack.destroy();
+        expect(yield* listState()).toEqual([]);
+      }),
+  );
+
+  test.provider(
+    "a fan-in of deeply nested deps creates ALL upstreams before the dependent",
+    (stack) =>
+      Effect.gen(function* () {
+        const order: string[] = [];
+        let cProps: any;
+        const hooks = {
+          create: (id: string, props: any) =>
+            Effect.sync(() => {
+              order.push(id);
+              if (id === "C") cProps = props;
+            }),
+          update: () => Effect.succeed(undefined),
+          delete: () => Effect.succeed(undefined),
+          read: () => Effect.succeed(undefined),
+        };
+
+        yield* Effect.gen(function* () {
+          const A = yield* TestResource("A", { string: "fan-a" });
+          const B = yield* TestResource("B", { string: "fan-b" });
+          const C = yield* TestResource("C", {
+            fromA: { arr: [{ v: A.string }] },
+            fromB: [[{ v: B.string }]],
+          } as any);
+          return { A, B, C };
+        }).pipe(stack.deploy, hook(hooks));
+
+        // A and B may create in either order (they're independent), but C
+        // must come last.
+        expect(order).toHaveLength(3);
+        expect(order[2]).toBe("C");
+        expect(order.slice(0, 2).sort()).toEqual(["A", "B"]);
+        expect(cProps.fromA.arr[0].v).toBe("fan-a");
+        expect(cProps.fromB[0][0].v).toBe("fan-b");
+
+        yield* stack.destroy();
+        expect(yield* listState()).toEqual([]);
+      }),
+  );
+
+  test.provider(
+    "a dependency chain through nested containers applies in topological order",
+    (stack) =>
+      Effect.gen(function* () {
+        const order: string[] = [];
+        const hooks = {
+          create: (id: string) =>
+            Effect.sync(() => {
+              order.push(id);
+            }),
+          update: () => Effect.succeed(undefined),
+          delete: () => Effect.succeed(undefined),
+          read: () => Effect.succeed(undefined),
+        };
+
+        yield* Effect.gen(function* () {
+          const A = yield* TestResource("A", { string: "chain-a" });
+          const B = yield* TestResource("B", {
+            nested: [{ from: A.string }],
+          } as any);
+          const C = yield* TestResource("C", {
+            nested: { deep: [[B.string]] },
+          } as any);
+          return { A, B, C };
+        }).pipe(stack.deploy, hook(hooks));
+
+        expect(order).toEqual(["A", "B", "C"]);
+
+        yield* stack.destroy();
+        expect(yield* listState()).toEqual([]);
+      }),
+  );
+});

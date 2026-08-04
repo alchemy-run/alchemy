@@ -28,6 +28,29 @@ export const isPlainObject = (
   return Object.getPrototypeOf(value) === Object.prototype;
 };
 
+/**
+ * Is `value` plain data the engine's deep walkers may traverse — an array,
+ * or an object whose prototype is `Object.prototype`/`null`?
+ *
+ * Everything else (class instances: effect's Effect/Layer/Context, Dates,
+ * SDK config objects, functions, ...) is a LEAF for every deep walker in
+ * the engine. The engine cannot meaningfully evaluate, diff, or persist
+ * *through* a foreign class instance — rebuilding one entry-by-entry strips
+ * its prototype — and walking one is not safe: effect ≥4.0.0-beta.103's
+ * Context is self-referential (`cacheRoot` points back at itself), which
+ * sent the naive walk-everything traversal into unbounded recursion
+ * (#1082). Resources and Outputs are detected structurally *before* this
+ * gate, so dependencies declared in plain props are unaffected.
+ */
+export const isPlainData = (
+  value: unknown,
+): value is Record<string, unknown> | unknown[] => {
+  if (Array.isArray(value)) return true;
+  if (typeof value !== "object" || value === null) return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+};
+
 export const stripFields = <T>(value: T, empty: null | undefined): T => {
   if (Array.isArray(value)) {
     return value.map((item) => stripFields(item, empty)) as T;

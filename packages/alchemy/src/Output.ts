@@ -1,12 +1,8 @@
 import * as Config from "effect/Config";
-import * as Context from "effect/Context";
 import * as Data from "effect/Data";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
-import * as Layer from "effect/Layer";
 import type { Pipeable } from "effect/Pipeable";
-import * as Redacted from "effect/Redacted";
 import { SingleShotGen } from "effect/Utils";
 import { getRefMetadata, isRef, type Ref } from "./Ref.ts";
 import { isResource, type Resource, type ResourceLike } from "./Resource.ts";
@@ -14,7 +10,7 @@ import { RuntimeContext, sanitizeKey } from "./RuntimeContext.ts";
 import { Stack } from "./Stack.ts";
 import { Stage } from "./Stage.ts";
 import * as State from "./State/State.ts";
-import { isPrimitive, type Primitive } from "./Util/data.ts";
+import { isPlainData, isPrimitive, type Primitive } from "./Util/data.ts";
 
 const inspect = Symbol.for("nodejs.util.inspect.custom");
 
@@ -610,11 +606,16 @@ export const evaluate: <A, Req = never>(
   upstream: {
     [Id in string]: any;
   },
+  // Ancestor-path cycle guard — a plain-data value that appears on its own
+  // ancestor chain is cut to `undefined` (it could never serialize anyway).
+  // Immutable per-level so legitimately-shared diamond references survive
+  // (#1082).
+  ancestors?: ReadonlySet<object>,
 ) => Effect.Effect<
   A,
   InvalidReferenceError | MissingSourceError | Config.ConfigError,
   State.State | Req
-> = (expr, upstream) =>
+> = (expr, upstream, ancestors = new Set()) =>
   Effect.gen(function* () {
     if (isResource(expr)) {
       const srcId = expr.FQN;
@@ -701,68 +702,44 @@ export const evaluate: <A, Req = never>(
       }
     }
     if (Array.isArray(expr)) {
-      return yield* Effect.all(expr.map((item) => evaluate(item, upstream)));
+      if (ancestors.has(expr)) {
+        return undefined;
+      }
+      const nested = new Set(ancestors).add(expr);
+      return yield* Effect.all(
+        expr.map((item) => evaluate(item, upstream, nested)),
+      );
     } else if (Config.isConfig(expr)) {
       // Resolve Config against the deploy environment — see resolveInput in
       // Plan.ts for rationale. `Config.redacted` resolves to a `Redacted`,
       // which stays opaque via the branch below.
-      return yield* evaluate(yield* expr, upstream);
-    } else if (
-      Duration.isDuration(expr) ||
-      Redacted.isRedacted(expr) ||
-      isOpaqueRuntimeValue(expr)
-    ) {
-      // Opaque value — see resolveInput in Plan.ts for rationale.
-      // Effect/Layer/Context values (e.g. a Worker's `exports`) pass through
-      // untouched: rebuilding them entry-by-entry would strip their
-      // prototype, and their internals are cyclic on effect ≥4.0.0-beta.103
-      // (#1082). This branch sits after `Config.isConfig` on purpose —
-      // Configs are Effects but must still resolve.
-      return expr;
-    } else if (typeof expr === "object" && expr !== null) {
+      return yield* evaluate(yield* expr, upstream, ancestors);
+    } else if (isPlainData(expr)) {
+      if (ancestors.has(expr)) {
+        return undefined;
+      }
+      const nested = new Set(ancestors).add(expr);
       return Object.fromEntries(
         yield* Effect.all(
           Object.entries(expr).map(([key, value]) =>
-            evaluate(value, upstream).pipe(Effect.map((value) => [key, value])),
+            evaluate(value, upstream, nested).pipe(
+              Effect.map((value) => [key, value]),
+            ),
           ),
         ),
       );
     }
+    // Everything else is a leaf returned by identity: Duration, Redacted,
+    // Date, and effect runtime values (a Worker's `exports` carries each
+    // DO's `constructor` Effect and captured `services` Context). Rebuilding
+    // a class instance entry-by-entry strips its prototype, and effect
+    // ≥4.0.0-beta.103's Context is cyclic (#1082). This sits after
+    // `Config.isConfig` on purpose — Configs are Effects but must resolve.
     return expr;
   }) as Effect.Effect<any>;
 
 export const hasOutputs = (value: any): value is Output<any, any> =>
   Object.keys(upstreamAny(value)).length > 0;
-
-/**
- * Is `value` a runtime-only effect-library construct (an `Effect`, `Layer`,
- * or `Context`)?
- *
- * These appear as data inside resource Props — e.g. an Effect-native
- * Worker's `exports` carries each Durable Object's `constructor` Effect and
- * its captured `services` Context — but they can never hold resource
- * references reachable by plain enumeration, and their internals are not
- * safe to walk structurally: effect ≥ 4.0.0-beta.103's Context is
- * self-referential (`cacheRoot` points back at itself), so a structural walk
- * recurses until the stack overflows (#1082). Every deep walker in the
- * engine must treat these values as leaves.
- *
- * NOTE: Output exprs are yieldable (`Effect.isEffect` reports true for
- * them), so callers must check `isExpr`/`isOutput` BEFORE this predicate.
- */
-export const isOpaqueRuntimeValue = (value: unknown): boolean =>
-  Effect.isEffect(value) || Layer.isLayer(value) || Context.isContext(value);
-
-/**
- * Opaque leaves for the upstream walkers: effect-library runtime values plus
- * resolved `Duration`/`Redacted` instances — none of them can contain
- * resource references, so walking their internals is at best wasted work and
- * at worst (cyclic internals) unbounded recursion.
- */
-const isUpstreamLeaf = (value: unknown): boolean =>
-  isOpaqueRuntimeValue(value) ||
-  Duration.isDuration(value) ||
-  Redacted.isRedacted(value);
 
 /**
  * Cycle guard shared by the upstream walkers. Marks `value` as visited in
@@ -778,6 +755,12 @@ const alreadySeen = (value: object, seen: WeakSet<object>): boolean => {
   return false;
 };
 
+// The dependency rule (#1082): a Resource or Output IS a dependency; plain
+// data (arrays, plain objects) is traversed to find them; every other value
+// — class instances like effect's Effect/Layer/Context, Dates, SDK objects,
+// functions — is a leaf. See `isPlainData` in Util/data.ts for why leaves
+// must never be walked.
+
 export const upstreamAny = (
   value: any,
   seen: WeakSet<object> = new WeakSet(),
@@ -788,17 +771,7 @@ export const upstreamAny = (
     return { [value.FQN]: value as Resource };
   } else if (isExpr(value)) {
     return upstream(value, seen);
-  } else if (isUpstreamLeaf(value)) {
-    return {};
-  } else if (Array.isArray(value)) {
-    if (alreadySeen(value, seen)) {
-      return {};
-    }
-    return Object.assign({}, ...value.map((v) => resolveUpstream(v, seen)));
-  } else if (
-    value &&
-    (typeof value === "object" || typeof value === "function")
-  ) {
+  } else if (isPlainData(value)) {
     if (alreadySeen(value, seen)) {
       return {};
     }
@@ -834,19 +807,12 @@ export const upstream = <E extends Output<any, any>>(
     isNamedExpr(expr)
   ) {
     return upstream(expr.expr, seen);
-  } else if (isUpstreamLeaf(expr)) {
-    return {};
-  } else if (Array.isArray(expr)) {
-    if (alreadySeen(expr, seen)) {
-      return {};
-    }
-    return expr.map((e) => upstream(e, seen)).reduce(toObject, {});
-  } else if (typeof expr === "object" && expr !== null) {
+  } else if (isPlainData(expr)) {
     if (alreadySeen(expr, seen)) {
       return {};
     }
     return Object.values(expr)
-      .map((v) => upstream(v, seen))
+      .map((v) => upstream(v as any, seen))
       .reduce(toObject, {});
   }
   return {};
@@ -863,21 +829,12 @@ export const resolveUpstream = <const A>(
     return { [(value as unknown as Resource).FQN]: value } as any;
   } else if (isOutput(value)) {
     return upstream(value, seen) as any;
-  } else if (isUpstreamLeaf(value)) {
-    return {} as any;
-  } else if (Array.isArray(value)) {
+  } else if (isPlainData(value)) {
     if (alreadySeen(value, seen)) {
       return {} as any;
     }
     return Object.fromEntries(
-      value.map((v) => resolveUpstream(v, seen)).flatMap(Object.entries),
-    ) as any;
-  } else if (typeof value === "object" || typeof value === "function") {
-    if (alreadySeen(value as object, seen)) {
-      return {} as any;
-    }
-    return Object.fromEntries(
-      Object.values(value as any)
+      Object.values(value)
         .map((v) => resolveUpstream(v, seen))
         .flatMap(Object.entries),
     ) as any;

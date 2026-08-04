@@ -1027,10 +1027,12 @@ describe("Output.upstream / hasOutputs / resolveUpstream", () => {
 
 // effect ≥4.0.0-beta.103's Context is self-referential (cacheRoot points back
 // at itself), which sent the prop walkers into unbounded recursion during
-// `Plan.make` of the Cloudflare state-store bootstrap stack (#1082). These
-// tests pin (a) cycle-safety for arbitrary cyclic props and (b) opacity of
-// Effect/Layer/Context values in every walker.
-describe("upstream walkers: cycles and opaque effect values (#1082)", () => {
+// `Plan.make` of the Cloudflare state-store bootstrap stack (#1082). The rule
+// pinned here: Resources/Outputs are dependencies, plain data (arrays, plain
+// objects) is traversed to find them, and every other value — ANY class
+// instance, effect's or otherwise — is a leaf. Plus WeakSet cycle guards so
+// cyclic plain data terminates.
+describe("upstream walkers: cycles and non-plain leaves (#1082)", () => {
   it("upstreamAny terminates on a cyclic plain object and still finds resources", () => {
     const a = fakeResource("Test.A", "CY-A");
     const cyclic: any = { name: "cycle" };
@@ -1064,6 +1066,23 @@ describe("upstream walkers: cycles and opaque effect values (#1082)", () => {
     expect(Output.hasOutputs({ effect, layer, context })).toBe(false);
   });
 
+  it("treats any class instance as a leaf (never walks its internals)", () => {
+    const a = fakeResource("Test.A", "CL-A");
+    class SdkConfig {
+      // A dependency smuggled inside a foreign class instance is invisible
+      // by design — the engine can't evaluate or persist through it.
+      dep = Output.of(a);
+      date = new Date(0);
+    }
+    expect(Output.upstreamAny({ config: new SdkConfig() })).toEqual({});
+    // ...but the same dependency in plain data right next to it is found.
+    expect(
+      Object.keys(
+        Output.upstreamAny({ config: new SdkConfig(), dep: Output.of(a) }),
+      ),
+    ).toEqual(["CL-A"]);
+  });
+
   it("mimics a Worker `exports` entry (constructor Effect + services Context)", () => {
     const a = fakeResource("Test.A", "EX-A");
     const props = {
@@ -1092,6 +1111,20 @@ describe("upstream walkers: cycles and opaque effect values (#1082)", () => {
         expect(result.context).toBe(context);
       }),
     ),
+  );
+
+  it.effect(
+    "evaluate passes Date/Redacted through by identity (prototype intact)",
+    () =>
+      provideState(
+        Effect.gen(function* () {
+          const date = new Date(0);
+          const secret = Redacted.make("hunter2");
+          const result = yield* Output.evaluate({ date, secret }, {});
+          expect(result.date).toBe(date);
+          expect(result.secret).toBe(secret);
+        }),
+      ),
   );
 
   it.effect("evaluate still resolves Config values (Configs are Effects)", () =>
