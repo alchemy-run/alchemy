@@ -1,3 +1,4 @@
+import { STATE_STORE_VERSION } from "@/State/HttpStateApi.ts";
 import { makeLocalState } from "@/State/LocalState.ts";
 import type { ResourceState } from "@/State/ResourceState.ts";
 import { PlatformServices } from "@/Util/PlatformServices";
@@ -337,4 +338,148 @@ describe("makeLocalState", () => {
       yield* state.deleteStack({ stack });
     }).pipe(Effect.provide(PlatformServices)),
   );
+
+  it.effect("getVersion returns the state store version", () =>
+    Effect.gen(function* () {
+      const state = yield* makeLocalState();
+      expect(yield* state.getVersion()).toBe(STATE_STORE_VERSION);
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect("deleteStack removes the stack from listings", () =>
+    Effect.gen(function* () {
+      const state = yield* makeLocalState();
+      const stack = "local-state-test-delete-listing";
+      yield* state.set({
+        stack,
+        stage: "test",
+        fqn: "resource-a",
+        value: resource("resource-a", {}),
+      });
+
+      yield* state.deleteStack({ stack });
+
+      expect(yield* state.listStacks()).not.toContain(stack);
+      expect(yield* state.listStages(stack)).toEqual([]);
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect("concurrent writes to the same resource never corrupt it", () =>
+    Effect.gen(function* () {
+      const state = yield* makeLocalState();
+      const stack = "local-state-test-concurrent";
+      const stage = "test";
+      const fqn = "resource-a";
+
+      const rounds = Array.from({ length: 20 }, (_, i) => i + 1);
+      yield* Effect.all(
+        rounds.map((round) =>
+          state.set({ stack, stage, fqn, value: resource(fqn, { round }) }),
+        ),
+        { concurrency: "unbounded" },
+      );
+
+      // whichever write won, the file must parse as one complete state —
+      // never a truncated interleaving (the writeAtomic guarantee)
+      const final = yield* state.get({ stack, stage, fqn });
+      expect(rounds).toContain((final?.attr as { round: number }).round);
+
+      yield* state.deleteStack({ stack });
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  describe("weird names", () => {
+    it.effect("unicode, spaces and punctuation in every name position", () =>
+      Effect.gen(function* () {
+        const state = yield* makeLocalState();
+        const stack = "local wéird 🚀..stack";
+        const stage = "stage v1.2.3 ünïcode";
+        const fqn = "my resource (α) #1 100%";
+        const value = resource(fqn, { value: "weird" });
+
+        yield* state.set({ stack, stage, fqn, value });
+        expect(yield* state.get({ stack, stage, fqn })).toEqual(value);
+        expect(yield* state.list({ stack, stage })).toEqual([fqn]);
+        expect(yield* state.listStages(stack)).toEqual([stage]);
+
+        yield* state.delete({ stack, stage, fqn });
+        expect(yield* state.get({ stack, stage, fqn })).toBeUndefined();
+
+        yield* state.deleteStack({ stack });
+      }).pipe(Effect.provide(PlatformServices)),
+    );
+
+    it.effect("empty-string fqn roundtrips", () =>
+      Effect.gen(function* () {
+        const state = yield* makeLocalState();
+        const stack = "local-state-test-empty-fqn";
+        const stage = "test";
+        const value = resource("", { empty: true });
+
+        yield* state.set({ stack, stage, fqn: "", value });
+        expect(yield* state.get({ stack, stage, fqn: "" })).toEqual(value);
+        expect(yield* state.list({ stack, stage })).toEqual([""]);
+
+        yield* state.deleteStack({ stack });
+      }).pipe(Effect.provide(PlatformServices)),
+    );
+
+    it.effect("literal __ in a logical id: get roundtrips, list decodes", () =>
+      Effect.gen(function* () {
+        const state = yield* makeLocalState();
+        const stack = "local-state-test-underscores";
+        const stage = "test";
+        const value = resource("foo__bar", { value: "u" });
+
+        yield* state.set({ stack, stage, fqn: "foo__bar", value });
+        expect(yield* state.get({ stack, stage, fqn: "foo__bar" })).toEqual(
+          value,
+        );
+        // Known encoding collision: `/` is stored as `__`, so decodeFqn
+        // cannot distinguish a literal `__` in a logical id from a
+        // namespace separator. `list` reports this resource as "foo/bar".
+        expect(yield* state.list({ stack, stage })).toEqual(["foo/bar"]);
+
+        yield* state.deleteStack({ stack });
+      }).pipe(Effect.provide(PlatformServices)),
+    );
+
+    it.effect("a resource named __stack_output__ never surfaces in list", () =>
+      Effect.gen(function* () {
+        const state = yield* makeLocalState();
+        const stack = "local-state-test-output-clash";
+        const stage = "test";
+        const value = resource("__stack_output__", { value: "clash" });
+
+        yield* state.set({ stack, stage, fqn: "__stack_output__", value });
+        expect(yield* state.list({ stack, stage })).toEqual([]);
+
+        yield* state.deleteStack({ stack });
+      }).pipe(Effect.provide(PlatformServices)),
+    );
+
+    it.effect("overlong names fail with a typed StateStoreError", () =>
+      Effect.gen(function* () {
+        const state = yield* makeLocalState();
+        const stack = "local-state-test-overlong";
+        const stage = "test";
+        // > 255 bytes exceeds the filename limit; only NotFound recovers,
+        // so the platform error must surface as a typed StateStoreError
+        // (never a silent no-op).
+        const fqn = "x".repeat(300);
+
+        const setError = yield* state
+          .set({ stack, stage, fqn, value: resource(fqn, {}) })
+          .pipe(Effect.flip);
+        expect(setError._tag).toBe("StateStoreError");
+
+        const getError = yield* state
+          .get({ stack, stage, fqn })
+          .pipe(Effect.flip);
+        expect(getError._tag).toBe("StateStoreError");
+
+        yield* state.deleteStack({ stack });
+      }).pipe(Effect.provide(PlatformServices)),
+    );
+  });
 });
