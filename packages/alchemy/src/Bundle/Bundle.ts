@@ -32,8 +32,8 @@ export interface BundleExtraOptions {
    * so rolldown can tree-shake them.
    *
    * - `undefined` (default): plugin is enabled with the default packages
-   *   (`effect`, `@effect/*`, `alchemy`, `@alchemy.run/*` — see
-   *   `DEFAULT_PURE_PACKAGES`).
+   *   (`effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`,
+   *   `@distilled.cloud/*` — see `DEFAULT_PURE_PACKAGES`).
    * - `PurePluginOptions`: plugin is enabled with the provided options.
    *   `packages` extends the defaults; set `replaceDefaults: true` to
    *   replace them instead.
@@ -50,6 +50,31 @@ export interface BundleExtraOptions {
    * - `BundleAnalyzerPluginOptions`: plugin is enabled with the provided options.
    */
   readonly bundleAnalyzer?: BundleAnalyzerPluginOptions | boolean;
+}
+
+/**
+ * The user-facing bundler configuration shared by every resource that
+ * bundles an entrypoint with rolldown (AWS Lambda Function, Batch
+ * JobDefinition, App Runner Service, ECR image sources, EC2 hosted
+ * instances, Docker service images, Cloudflare container images, …):
+ * rolldown input/output overrides plus the {@link BundleExtraOptions}
+ * (pure-annotation packages via `pure`, bundle analyzer).
+ *
+ * Top-level calls in `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`,
+ * and `@distilled.cloud/*` are annotated as pure by default so unused
+ * code from those packages is tree-shaken out of the bundle; list
+ * additional packages via `pure.packages`, or disable annotation with
+ * `pure: false`.
+ */
+export interface BundleConfig extends BundleExtraOptions {
+  /**
+   * Rolldown input options overrides.
+   */
+  readonly input?: Partial<rolldown.InputOptions>;
+  /**
+   * Rolldown output options overrides.
+   */
+  readonly output?: Partial<rolldown.OutputOptions>;
 }
 
 export interface BundleOutput {

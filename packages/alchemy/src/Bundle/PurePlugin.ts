@@ -32,12 +32,18 @@ const loadParseAst = () => import("rolldown/parseAst");
  * of `Effect.fn(...)`, `Context.Service(...)(...)`, `Layer.effect(...)` and
  * `Data.TaggedError(...)` top-level calls) become tree-shakeable. The
  * package already declares `"sideEffects": false`, so it is safe.
+ *
+ * `@distilled.cloud/*` is included so the generated SDK service modules
+ * (large files of top-level `const op = make(...)` operation definitions)
+ * tree-shake down to the operations a Worker actually calls. Every
+ * distilled package declares `"sideEffects": false`.
  */
 export const DEFAULT_PURE_PACKAGES: ReadonlyArray<string> = [
   "effect",
   "@effect/*",
   "alchemy",
   "@alchemy.run/*",
+  "@distilled.cloud/*",
 ];
 
 /**
