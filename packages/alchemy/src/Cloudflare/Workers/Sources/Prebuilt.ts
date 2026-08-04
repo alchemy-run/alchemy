@@ -1,13 +1,16 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Stream from "effect/Stream";
 import fg from "fast-glob";
 import path from "pathe";
 import * as Artifacts from "../../../Artifacts.ts";
 import * as Bundle from "../../../Bundle/Bundle.ts";
 import { sha256 } from "../../../Util/sha256.ts";
-import type { SourceDevHandle, SourceProvider } from "../Source.ts";
-import { resolveMainPath } from "./shared.ts";
+import type { SourceProvider } from "../Source.ts";
+import {
+  bundleSource,
+  resolveMainPath,
+  watchBundleDirectory,
+} from "./shared.ts";
 
 /**
  * A rule selecting additional module files to upload alongside the entry
@@ -134,31 +137,10 @@ export const readPrebuiltWorkerBundle = Effect.fn(function* (
 export const watchPrebuiltWorkerBundle = (
   options: PrebuiltWorkerBundleOptions,
 ) =>
-  Stream.unwrap(
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const main = yield* resolveMainPath(options.main);
-      const root = path.dirname(main);
-      const read = readPrebuiltWorkerBundle(options).pipe(
-        Effect.map(
-          (output): Bundle.BundleWatchEvent => ({ _tag: "Success", output }),
-        ),
-        Effect.catch((error) =>
-          Effect.succeed<Bundle.BundleWatchEvent>({ _tag: "Error", error }),
-        ),
-      );
-      const rebuilds = fs.watch(root).pipe(
-        Stream.debounce("200 millis"),
-        Stream.flatMap(() =>
-          Stream.make({ _tag: "Start" } as Bundle.BundleWatchEvent).pipe(
-            Stream.concat(Stream.fromEffect(read)),
-          ),
-        ),
-        Stream.catchCause(() => Stream.empty),
-      );
-      return Stream.fromEffect(read).pipe(Stream.concat(rebuilds));
-    }),
-  );
+  watchBundleDirectory({
+    main: options.main,
+    read: readPrebuiltWorkerBundle(options),
+  });
 
 /**
  * Source provider for prebuilt workers (`bundle: false`): the entry and
@@ -179,29 +161,14 @@ export const makePrebuiltSource = (options: {
     main: options.main,
     rules: options.rules,
   }).pipe(Artifacts.cached("build"));
-  return {
-    ownsAssets: false,
-    build: () =>
-      build.pipe(
-        Effect.map((output) => ({
-          bundle: output,
-          assets: undefined,
-          hash: {
-            bundle: output.hash,
-            assets: undefined,
-            input: undefined,
-            additionalWorkspaces: undefined,
-          },
-        })),
-      ),
-    hash: () => build.pipe(Effect.map((output) => ({ bundle: output.hash }))),
-    dev: () =>
-      Effect.succeed({
-        mode: "bundle",
-        bundles: watchPrebuiltWorkerBundle({
+  return bundleSource({
+    build: () => build,
+    watch: () =>
+      Effect.succeed(
+        watchPrebuiltWorkerBundle({
           main: options.main,
           rules: options.rules,
         }),
-      } satisfies SourceDevHandle),
-  };
+      ),
+  });
 };

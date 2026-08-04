@@ -281,14 +281,10 @@ export const Astro: {
           return {
             ...props,
             env,
-            compatibility: {
-              ...props.compatibility,
-              // Astro's vendored server runtime is built against Node
-              // APIs — nodejs_compat is effectively required in workerd.
-              flags: props.compatibility?.flags?.includes("nodejs_compat")
-                ? props.compatibility.flags
-                : [...(props.compatibility?.flags ?? []), "nodejs_compat"],
-            },
+            // Astro's vendored server runtime is built against Node APIs
+            // and needs `nodejs_compat`; `getCompatibility` already adds it
+            // to every non-python Worker (honoring an explicit
+            // `no_nodejs_compat` opt-out and the v2-mode date guard).
             main: undefined!,
             source: {
               provider: "@distilled.cloud/astro/source",

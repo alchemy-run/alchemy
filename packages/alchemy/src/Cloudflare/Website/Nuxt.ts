@@ -288,16 +288,10 @@ export const Nuxt: {
           Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
           (props) => ({
             ...props,
-            compatibility: {
-              ...props?.compatibility,
-              // The server build uses nitro's hybrid workerd node-compat
-              // (`cloudflare.nodeCompat: true`), which relies on workerd's
-              // native `node:*` modules — nodejs_compat is effectively
-              // required for the deployed Worker to run.
-              flags: props?.compatibility?.flags?.includes("nodejs_compat")
-                ? props.compatibility.flags
-                : [...(props?.compatibility?.flags ?? []), "nodejs_compat"],
-            },
+            // The server build uses nitro's hybrid workerd node-compat
+            // (`cloudflare.nodeCompat: true`), which relies on workerd's
+            // native `node:*` modules — `getCompatibility` already adds
+            // `nodejs_compat` to every non-python Worker.
             // `main` is the source provider's user-entry seam (nitro's
             // entry), not the Worker's own bundling entry.
             main: undefined!,

@@ -43,6 +43,7 @@ import { watchPrebuiltWorkerBundle } from "./Sources/Prebuilt.ts";
 import { isPythonMain, watchPythonWorkerBundle } from "./Sources/Python.ts";
 import {
   Artifacts as AlchemyArtifacts,
+  createArtifactStore,
   makeScopedArtifacts,
 } from "../../Artifacts.ts";
 import { loadSource, SourceProviderError, type DevContext } from "./Source.ts";
@@ -714,53 +715,32 @@ export const LocalWorkerProvider = () =>
         }
       };
 
-      const runWorker = Effect.fn(function* (worker: RunnableWorkerConfig) {
+      /**
+       * Drain a stream of bundle-watch events into the make-before-break
+       * `serveWith` path, forked into the instance scope: queue requests
+       * while a rebuild is in flight, serve every successful bundle, and
+       * log build/serve errors without tearing the instance down.
+       *
+       * Shared by the built-in bundler (`runWorker`) and bundle-mode
+       * external source providers (`runSource`) — both speak the same
+       * {@link Bundle.BundleWatchEvent} protocol.
+       */
+      const serveBundleStream = Effect.fn(function* <E, R>(
+        worker: RunnableWorkerConfig,
+        proxy: WorkerProxy.WorkerProxyInstance,
+        bundles: Stream.Stream<Bundle.BundleWatchEvent, E, R>,
+      ) {
         let start = Date.now();
         let status: "start" | "update" = "start";
-        const proxy = yield* maybeStartProxy(worker.id, worker.dev);
-        // Inline `script` workers bypass the bundler entirely — the string
-        // IS the module (mirroring the deploy path, which uploads it as a
-        // single `main.js`). There is nothing to watch: script changes flow
-        // through the hashed config and restart the instance.
-        if (worker.script !== undefined) {
-          yield* serveWith(
-            worker,
-            {
-              files: [{ path: "main.js", content: worker.script, hash: "" }],
-              hash: "",
-            },
-            proxy,
-          );
-          yield* Effect.log(
-            `[${worker.id}] Started in ${Math.round(Date.now() - start)}ms`,
-          );
-          return proxy.url;
-        }
-        yield* (
-          isPythonMain(worker.bundleOptions.main)
-            ? watchPythonWorkerBundle({
-                id: worker.bundleOptions.id,
-                main: worker.bundleOptions.main,
-                compatibility: worker.compatibility,
-              })
-            : worker.prebuilt
-              ? // Prebuilt (`bundle: false`): fs-watch the entry directory
-                // and re-read the module graph byte-for-byte — running the
-                // rolldown watcher would re-bundle the prebuilt artifact
-                // and violate the deploy path's byte-for-byte contract.
-                watchPrebuiltWorkerBundle({
-                  main: worker.bundleOptions.main,
-                  rules: worker.rules,
-                })
-              : bundler.watch(worker.bundleOptions)
-        ).pipe(
+        yield* bundles.pipe(
           Stream.tap((event) => {
             if (event._tag === "Start") {
               start = Date.now();
               if (status === "update") {
                 return Effect.all([
                   Effect.log(`[${worker.id}] Rebuilding`),
-                  // This tells the proxy to queue requests until the updated worker is ready.
+                  // Tells the proxy to queue requests until the updated
+                  // worker is ready.
                   Effect.forkChild(proxy.unset()),
                 ]);
               }
@@ -799,6 +779,53 @@ export const LocalWorkerProvider = () =>
           Stream.runDrain,
           Effect.forkScoped,
         );
+      });
+
+      const runWorker = Effect.fn(function* (worker: RunnableWorkerConfig) {
+        const start = Date.now();
+        const proxy = yield* maybeStartProxy(worker.id, worker.dev);
+        // Inline `script` workers bypass the bundler entirely — the string
+        // IS the module (mirroring the deploy path, which uploads it as a
+        // single `main.js`). There is nothing to watch: script changes flow
+        // through the hashed config and restart the instance.
+        if (worker.script !== undefined) {
+          yield* serveWith(
+            worker,
+            {
+              files: [{ path: "main.js", content: worker.script, hash: "" }],
+              hash: "",
+            },
+            proxy,
+          );
+          yield* Effect.log(
+            `[${worker.id}] Started in ${Math.round(Date.now() - start)}ms → ${proxy.url}`,
+          );
+          return proxy.url;
+        }
+        const bundles: Stream.Stream<
+          Bundle.BundleWatchEvent,
+          Bundle.BundleError,
+          | ChildProcessSpawner.ChildProcessSpawner
+          | FileSystem.FileSystem
+          | Path.Path
+          | Scope.Scope
+        > = isPythonMain(worker.bundleOptions.main)
+          ? watchPythonWorkerBundle({
+              id: worker.bundleOptions.id,
+              main: worker.bundleOptions.main,
+              compatibility: worker.compatibility,
+            })
+          : worker.prebuilt
+            ? // Prebuilt (`bundle: false`): fs-watch the entry directory
+              // and re-read the module graph byte-for-byte — running the
+              // rolldown watcher would re-bundle the prebuilt artifact
+              // and violate the deploy path's byte-for-byte contract.
+              watchPrebuiltWorkerBundle({
+                main: worker.bundleOptions.main,
+                rules: worker.rules,
+              })
+            : bundler.watch(worker.bundleOptions);
+        yield* serveBundleStream(worker, proxy, bundles);
         return proxy.url;
       });
 
@@ -895,8 +922,6 @@ export const LocalWorkerProvider = () =>
       //   bundle is served through the same make-before-break `serveWith`
       //   path the built-in bundler uses.
       const runSource = Effect.fn(function* (worker: RunnableWorkerConfig) {
-        let start = Date.now();
-        let status: "start" | "update" = "start";
         const proxy = yield* maybeStartProxy(worker.id, worker.dev);
         // Queue requests until the source's first output is served —
         // whether that's the first workerd serve (bundle mode) or the dev
@@ -909,7 +934,7 @@ export const LocalWorkerProvider = () =>
         const source = yield* loadSource(worker.source!).pipe(
           Effect.provideService(
             AlchemyArtifacts,
-            makeScopedArtifacts(new Map(), worker.id),
+            makeScopedArtifacts(createArtifactStore(), worker.id),
           ),
         );
         const devCtx: DevContext = {
@@ -922,7 +947,6 @@ export const LocalWorkerProvider = () =>
           extraOptions: worker.bundleOptions.extraOptions,
           assets: worker.assets,
           worker: {
-            name: worker.name,
             bindings: worker.workerBindings,
             durableObjectNamespaces: worker.durableObjectNamespaces,
             hyperdrives: worker.hyperdrives,
@@ -941,52 +965,7 @@ export const LocalWorkerProvider = () =>
             }),
           );
         }
-        yield* handle.bundles.pipe(
-          Stream.tap((event) => {
-            if (event._tag === "Start") {
-              start = Date.now();
-              if (status === "update") {
-                return Effect.all([
-                  Effect.log(`[${worker.id}] Rebuilding`),
-                  // Queue requests until the updated worker is ready.
-                  Effect.forkChild(proxy.unset()),
-                ]);
-              }
-            } else if (event._tag === "Error") {
-              return Effect.logError(
-                `[${worker.id}] Bundle error`,
-                event.error,
-              );
-            }
-            return Effect.void;
-          }),
-          Stream.filterMap((event) =>
-            event._tag === "Success"
-              ? Result.succeed(event.output)
-              : Result.failVoid,
-          ),
-          Stream.mapEffect((bundle) =>
-            serveWith(worker, bundle, proxy).pipe(
-              Effect.exit,
-              Effect.tap((exit) => {
-                if (exit._tag === "Success") {
-                  const message = Effect.log(
-                    `[${worker.id}] ${status === "update" ? "Updated" : "Started"} in ${Math.round(Date.now() - start)}ms`,
-                  );
-                  status = "update";
-                  return message;
-                } else {
-                  return Effect.logError(
-                    `[${worker.id}] Error`,
-                    Cause.squash(exit.cause),
-                  );
-                }
-              }),
-            ),
-          ),
-          Stream.runDrain,
-          Effect.forkScoped,
-        );
+        yield* serveBundleStream(worker, proxy, handle.bundles);
         return proxy.url;
       });
 

@@ -5,7 +5,11 @@ import * as Stdio from "effect/Stdio";
 import * as Stream from "effect/Stream";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as NodeV8 from "node:v8";
-import { Artifacts, makeScopedArtifacts } from "../../Artifacts.ts";
+import {
+  Artifacts,
+  createArtifactStore,
+  makeScopedArtifacts,
+} from "../../Artifacts.ts";
 import { CloudflareAuth } from "../Auth/AuthProvider.ts";
 import * as Credentials from "../Credentials.ts";
 import * as RpcServerEnvironment from "../../Local/RpcServerEnvironment.ts";
@@ -65,24 +69,28 @@ const program = Effect.scoped(
         stack: config.stack,
       },
     );
-    const url = config.source
-      ? yield* loadSource(config.source.descriptor).pipe(
+    const source = config.source;
+    const url = source
+      ? yield* loadSource(source.descriptor).pipe(
+          // `loadSource` is typed against the full `SourceServices` union
+          // (which includes the per-run Artifacts cache the live provider
+          // supplies); the dev child has no run-scoped cache, so hand the
+          // module a fresh one.
           Effect.provideService(
             Artifacts,
-            makeScopedArtifacts(new Map(), config.source.id),
+            makeScopedArtifacts(createArtifactStore(), source.id),
           ),
-          Effect.flatMap((source) =>
-            source.dev({
-              id: config.source!.id,
+          Effect.flatMap((provider) =>
+            provider.dev({
+              id: source.id,
               workerName: config.worker.name,
               compatibility,
               entry: { kind: "external" },
               stack: config.stack,
               env: config.env,
               extraOptions: undefined,
-              assets: config.source!.assets,
+              assets: source.assets,
               worker: {
-                name: config.worker.name,
                 bindings,
                 durableObjectNamespaces: config.worker.durableObjectNamespaces,
                 hyperdrives: config.worker.hyperdrives,
@@ -97,7 +105,7 @@ const program = Effect.scoped(
               ? Effect.succeed(handle.url.toString())
               : Effect.fail(
                   new SourceProviderError({
-                    provider: config.source!.descriptor.provider,
+                    provider: source.descriptor.provider,
                     message:
                       "A source declared devMode 'server' but returned a bundle-mode dev handle.",
                   }),

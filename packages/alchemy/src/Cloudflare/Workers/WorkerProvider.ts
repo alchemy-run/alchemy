@@ -2121,11 +2121,7 @@ export const LiveWorkerProvider = () =>
         selfUrl?: string,
       ) {
         const compatibility = getCompatibility(props);
-        // Loaded lazily: `./Sources/Vite.ts` pulls in
-        // `@distilled.cloud/cloudflare-vite-plugin` (~0.5s), which is only
-        // needed for vite-based workers at build time — not for every Worker
-        // definition at module-load time.
-        const Vite = yield* Effect.promise(() => import("./Sources/Vite.ts"));
+        const Vite = yield* loadVite;
         const { clientDirectory, base, serverBundle, externalWorkspaces } =
           yield* Vite.viteBuild(
             props.vite?.rootDir,
@@ -2201,7 +2197,7 @@ export const LiveWorkerProvider = () =>
                 })
               : Effect.undefined,
             serverBundle,
-            hashViteInput(
+            Vite.hashViteInput(
               props.vite?.rootDir,
               props.vite?.memo,
               externalWorkspaces,
@@ -2222,61 +2218,11 @@ export const LiveWorkerProvider = () =>
         };
       });
 
-      const hashViteInput = Effect.fn(function* <E>(
-        rootDir: string = process.cwd(),
-        options: ViteOptions["memo"],
-        additionalWorkspaces: Effect.Effect<Iterable<string>, E>,
-      ) {
-        // Resolved once: every workspace cwd is relative to the Vite root, so
-        // the root must be an absolute base. Resolving it per call and passing
-        // `rootDir` as its own cwd would apply a relative root twice
-        // (`path.resolve("app", "app")` → `<cwd>/app/app`), hashing a
-        // directory that doesn't exist — a constant hash that never registers
-        // an edit, so the deploy no-ops forever. See issue #1016.
-        const resolvedRoot = path.resolve(rootDir);
-        // Relative paths participate in memo hashes and surface in outputs;
-        // keep them POSIX so Windows and CI agree.
-        const relativeToRoot = (cwd: string) =>
-          path
-            .relative(resolvedRoot, path.resolve(resolvedRoot, cwd))
-            .replaceAll("\\", "/");
-        const hashWorkspaceDirectory = (cwd: string, memo?: MemoOptions) =>
-          hashDirectory({ cwd: path.resolve(resolvedRoot, cwd), memo }).pipe(
-            Effect.map((hash) => `${relativeToRoot(cwd)}:${hash}`),
-          );
-        // `"."` — the root itself, never re-applied on top of itself.
-        const hashRoot = hashWorkspaceDirectory(".", options);
-        if (Array.isArray(options?.workspaces)) {
-          return yield* Effect.all(
-            [
-              hashRoot,
-              ...options.workspaces.map(({ cwd, ...options }) =>
-                hashWorkspaceDirectory(cwd, options),
-              ),
-            ],
-            { concurrency: "unbounded" },
-          ).pipe(
-            Effect.flatMap(([root, ...workspaces]) =>
-              sha256Object([root, ...workspaces.sort()]),
-            ),
-            Effect.map((hash) => ({ hash, workspaces: undefined })),
-          );
-        }
-        const [root, workspaces] = yield* Effect.all(
-          [hashRoot, additionalWorkspaces],
-          { concurrency: "unbounded" },
-        );
-        const workspaceHashes = yield* Effect.forEach(
-          workspaces,
-          (cwd) => hashWorkspaceDirectory(cwd),
-          { concurrency: "unbounded" },
-        );
-        const hash = yield* sha256Object([root, ...workspaceHashes.sort()]);
-        return {
-          hash,
-          workspaces: Array.from(workspaces).map(relativeToRoot),
-        };
-      });
+      // Loaded lazily: `./Sources/Vite.ts` pulls in
+      // `@distilled.cloud/cloudflare-vite-plugin` (~0.5s), which is only
+      // needed for vite-based workers at build time — not for every Worker
+      // definition at module-load time.
+      const loadVite = Effect.promise(() => import("./Sources/Vite.ts"));
 
       const prepareAssetsAndBundle = (
         id: string,
@@ -4014,20 +3960,13 @@ export const LiveWorkerProvider = () =>
             }),
             output.hash,
           );
-          if (
-            slots.bundle !== undefined &&
-            slots.bundle !== output.hash?.bundle
-          ) {
-            return true;
-          }
-          if (slots.input !== undefined && slots.input !== output.hash?.input) {
-            return true;
-          }
-          if (
-            slots.assets !== undefined &&
-            slots.assets !== output.hash?.assets
-          ) {
-            return true;
+          for (const slot of ["bundle", "input", "assets"] as const) {
+            if (
+              slots[slot] !== undefined &&
+              slots[slot] !== output.hash?.[slot]
+            ) {
+              return true;
+            }
           }
           if (source.ownsAssets) {
             // Source-owned assets are covered by the `input` hash.
@@ -4052,7 +3991,8 @@ export const LiveWorkerProvider = () =>
           return yield* assetsChanged(props.assets, output);
         }
         if (props.vite) {
-          const { hash } = yield* hashViteInput(
+          const Vite = yield* loadVite;
+          const { hash } = yield* Vite.hashViteInput(
             props.vite.rootDir,
             props.vite.memo,
             Effect.succeed(output.hash?.additionalWorkspaces ?? []),

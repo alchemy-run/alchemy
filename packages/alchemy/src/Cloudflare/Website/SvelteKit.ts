@@ -212,14 +212,9 @@ export const SvelteKit: {
           Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
           (props) => ({
             ...props,
-            compatibility: {
-              ...props?.compatibility,
-              // SvelteKit's server graph is built for Node — nodejs_compat
-              // is effectively required for the workerd re-bundle to run.
-              flags: props?.compatibility?.flags?.includes("nodejs_compat")
-                ? props.compatibility.flags
-                : [...(props?.compatibility?.flags ?? []), "nodejs_compat"],
-            },
+            // SvelteKit's server graph is built for Node and needs
+            // `nodejs_compat` — `getCompatibility` already adds it to every
+            // non-python Worker.
             source: {
               provider: "@distilled.cloud/sveltekit/source",
               devMode: "server",

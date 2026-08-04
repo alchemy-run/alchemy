@@ -7,7 +7,7 @@ import path from "pathe";
 import type * as rolldown from "rolldown";
 import * as Artifacts from "../../../Artifacts.ts";
 import * as Bundle from "../../../Bundle/Bundle.ts";
-import { findCwdForBundle } from "../../../Bundle/TempRoot.ts";
+import { findCwdForBundle, resolveMainPath } from "../../../Bundle/TempRoot.ts";
 import {
   isWorkflowExport,
   type WorkflowExport,
@@ -16,12 +16,8 @@ import {
   isDurableObjectExport,
   type DurableObjectExport,
 } from "../DurableObject.ts";
-import type {
-  SourceContext,
-  SourceDevHandle,
-  SourceProvider,
-} from "../Source.ts";
-import { mainToPath } from "./shared.ts";
+import type { SourceContext, SourceProvider } from "../Source.ts";
+import { bundleSource } from "./shared.ts";
 
 /**
  * Bundler options for a Worker: the generic {@link Bundle.BundleExtraOptions}
@@ -99,7 +95,6 @@ const rebindEsmExternalRequirePlugin = (
   });
 
 export const WorkerBundle = Effect.gen(function* () {
-  const fs = yield* FileSystem.FileSystem;
   const context = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
 
@@ -178,10 +173,7 @@ export const WorkerBundle = Effect.gen(function* () {
   });
 
   const sanitizeMain = (main: string) =>
-    mainToPath(main).pipe(
-      Effect.flatMap((p) => fs.realPath(p)),
-      //* fix windows paths
-      Effect.map((p) => path.resolve(p)),
+    resolveMainPath(main).pipe(
       Effect.mapError(
         (cause) =>
           new Bundle.BundleError({
@@ -189,6 +181,7 @@ export const WorkerBundle = Effect.gen(function* () {
             cause,
           }),
       ),
+      Effect.provide(context),
     );
 
   return {
@@ -292,35 +285,16 @@ export const makeRolldownSource = (options: {
     stack: ctx.stack,
     extraOptions: ctx.extraOptions,
   });
-  const build = (ctx: SourceContext) =>
-    Effect.gen(function* () {
-      const bundler = yield* WorkerBundle;
-      return yield* bundler.build(bundleOptions(ctx));
-    }).pipe(Artifacts.cached("build"));
-  return {
-    ownsAssets: false,
+  return bundleSource({
     build: (ctx) =>
-      build(ctx).pipe(
-        Effect.map((output) => ({
-          bundle: output,
-          assets: undefined,
-          hash: {
-            bundle: output.hash,
-            assets: undefined,
-            input: undefined,
-            additionalWorkspaces: undefined,
-          },
-        })),
-      ),
-    hash: (ctx) =>
-      build(ctx).pipe(Effect.map((output) => ({ bundle: output.hash }))),
-    dev: (ctx) =>
       Effect.gen(function* () {
         const bundler = yield* WorkerBundle;
-        return {
-          mode: "bundle",
-          bundles: bundler.watch(bundleOptions(ctx)),
-        } satisfies SourceDevHandle;
+        return yield* bundler.build(bundleOptions(ctx));
+      }).pipe(Artifacts.cached("build")),
+    watch: (ctx) =>
+      Effect.gen(function* () {
+        const bundler = yield* WorkerBundle;
+        return bundler.watch(bundleOptions(ctx));
       }),
-  };
+  });
 };

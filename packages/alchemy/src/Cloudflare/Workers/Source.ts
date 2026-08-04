@@ -64,8 +64,8 @@ export interface SourceBuildOutput {
    * {@link SourceProvider.ownsAssets}).
    */
   readonly assets: AssetReadResult | undefined;
-  /** Source-owned hash slots. Slots the source doesn't use are `undefined`. */
-  readonly hash: SourceHash;
+  /** Source-owned hash slots. Slots the source doesn't use are omitted. */
+  readonly hash: Partial<SourceHash>;
 }
 
 /**
@@ -118,7 +118,6 @@ export interface SourceContext {
  */
 export interface DevContext extends SourceContext {
   readonly worker: {
-    readonly name: string;
     readonly bindings: BindingHook<BindingServices>[];
     readonly durableObjectNamespaces: (RuntimeDurableObject & {
       uniqueKey: string;
@@ -265,52 +264,50 @@ export interface WorkerSourceModule {
 }
 
 /**
- * Module imports memoized per specifier for the process lifetime.
- * `make(options)` still runs per Worker — a stack can host several
- * Workers of the same provider with different options.
+ * Validated provider modules memoized per specifier for the process
+ * lifetime — a Worker resolves its source at least twice per deploy
+ * (diff, then reconcile). `make(options)` still runs per resolution: a
+ * stack can host several Workers of the same provider with different
+ * options.
  */
-const sourceModules = new Map<
-  string,
-  Effect.Effect<WorkerSourceModule, SourceProviderError>
->();
+const sourceModules = new Map<string, WorkerSourceModule>();
 
 const importSourceModule = (
   specifier: string,
-): Effect.Effect<WorkerSourceModule, SourceProviderError> => {
-  const cached = sourceModules.get(specifier);
-  if (cached) {
-    return cached;
-  }
-  const load = Effect.tryPromise({
-    try: () => import(/* @vite-ignore */ specifier),
-    catch: (cause) =>
-      new SourceProviderError({
-        provider: specifier,
-        message:
-          `Failed to import Worker source provider "${specifier}". ` +
-          `Is the package installed in your project? Install it and re-run.`,
-        cause,
+): Effect.Effect<WorkerSourceModule, SourceProviderError> =>
+  Effect.suspend(() => {
+    const cached = sourceModules.get(specifier);
+    if (cached) {
+      return Effect.succeed(cached);
+    }
+    return Effect.tryPromise({
+      try: () => import(/* @vite-ignore */ specifier),
+      catch: (cause) =>
+        new SourceProviderError({
+          provider: specifier,
+          message:
+            `Failed to import Worker source provider "${specifier}". ` +
+            `Is the package installed in your project? Install it and re-run.`,
+          cause,
+        }),
+    }).pipe(
+      Effect.flatMap((mod: { default?: Partial<WorkerSourceModule> }) => {
+        if (typeof mod.default?.make !== "function") {
+          return Effect.fail(
+            new SourceProviderError({
+              provider: specifier,
+              message:
+                `Module "${specifier}" is not a Worker source provider: ` +
+                `its default export must satisfy WorkerSourceModule ({ make(options) }).`,
+            }),
+          );
+        }
+        const module = mod.default as WorkerSourceModule;
+        sourceModules.set(specifier, module);
+        return Effect.succeed(module);
       }),
-  }).pipe(
-    Effect.flatMap((mod: { default?: Partial<WorkerSourceModule> }) => {
-      if (typeof mod.default?.make !== "function") {
-        return Effect.fail(
-          new SourceProviderError({
-            provider: specifier,
-            message:
-              `Module "${specifier}" is not a Worker source provider: ` +
-              `its default export must satisfy WorkerSourceModule ({ make(options) }).`,
-          }),
-        );
-      }
-      return Effect.succeed(mod.default as WorkerSourceModule);
-    }),
-  );
-  // The underlying `import()` is memoized by the JS module registry;
-  // caching the composed effect just skips rebuilding it per resolution.
-  sourceModules.set(specifier, load);
-  return load;
-};
+    );
+  });
 
 /**
  * Load an external source provider from its serializable descriptor:

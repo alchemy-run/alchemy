@@ -239,19 +239,25 @@ export const hashViteInput = Effect.fn(function* <E, R>(
   additionalWorkspaces: Effect.Effect<Iterable<string>, E, R>,
 ) {
   const path = yield* Path.Path;
-  // Workspace paths arrive in two spellings: absolute (build-time module
-  // graph discovery) and rootDir-relative (persisted state fed back at
-  // diff time). Normalize against `rootDir` BEFORE relativizing for the
-  // hash label — `path.relative(rootDir, "../lib")` would resolve
-  // "../lib" against `process.cwd()`, so the diff-time hash could never
-  // match the build-time hash whenever the vite root isn't the cwd.
-  const hashWorkspaceDirectory = (cwd: string, memo?: MemoOptions) => {
-    const resolved = path.resolve(rootDir, cwd);
-    return hashDirectory({ cwd: resolved, memo }).pipe(
-      Effect.map((hash) => `${path.relative(rootDir, resolved)}:${hash}`),
+  // Resolved once: every workspace cwd is relative to the Vite root, so
+  // the root must be an absolute base. Resolving it per call and passing
+  // `rootDir` as its own cwd would apply a relative root twice
+  // (`path.resolve("app", "app")` → `<cwd>/app/app`), hashing a
+  // directory that doesn't exist — a constant hash that never registers
+  // an edit, so the deploy no-ops forever. See issue #1016.
+  const resolvedRoot = path.resolve(rootDir);
+  // Relative paths participate in memo hashes and surface in outputs;
+  // keep them POSIX so Windows and CI agree.
+  const relativeToRoot = (cwd: string) =>
+    path
+      .relative(resolvedRoot, path.resolve(resolvedRoot, cwd))
+      .replaceAll("\\", "/");
+  const hashWorkspaceDirectory = (cwd: string, memo?: MemoOptions) =>
+    hashDirectory({ cwd: path.resolve(resolvedRoot, cwd), memo }).pipe(
+      Effect.map((hash) => `${relativeToRoot(cwd)}:${hash}`),
     );
-  };
-  const hashRoot = hashWorkspaceDirectory(rootDir, options);
+  // `"."` — the root itself, never re-applied on top of itself.
+  const hashRoot = hashWorkspaceDirectory(".", options);
   if (Array.isArray(options?.workspaces)) {
     return yield* Effect.all(
       [
@@ -278,12 +284,7 @@ export const hashViteInput = Effect.fn(function* <E, R>(
     { concurrency: "unbounded" },
   );
   const hash = yield* sha256Object([root, ...workspaceHashes.sort()]);
-  return {
-    hash,
-    workspaces: Array.from(workspaces).map((cwd) =>
-      path.relative(rootDir, path.resolve(rootDir, cwd)),
-    ),
-  };
+  return { hash, workspaces: Array.from(workspaces).map(relativeToRoot) };
 });
 
 /**
@@ -361,7 +362,7 @@ export const makeViteSource = (vite: ViteOptions): SourceProvider => ({
         compatibilityFlags: ctx.compatibility.flags,
         viteEnvironments: vite.viteEnvironments,
         worker: {
-          name: ctx.worker.name,
+          name: ctx.workerName,
           bindings: ctx.worker.bindings,
           durableObjectNamespaces: ctx.worker.durableObjectNamespaces,
           hyperdrives: ctx.worker.hyperdrives,

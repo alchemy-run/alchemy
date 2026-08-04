@@ -318,9 +318,7 @@ export const materializeRuntimeBindings = Effect.fn(function* (
       workerBindings.push(Text.local(descriptor.name, options.selfUrl!));
       continue;
     }
-    workerBindings.push(
-      yield* toRuntimeBinding(descriptor, config.devRemote),
-    );
+    workerBindings.push(yield* toRuntimeBinding(descriptor, config.devRemote));
   }
   return workerBindings;
 });

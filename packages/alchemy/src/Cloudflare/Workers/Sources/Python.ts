@@ -8,12 +8,12 @@ import * as Artifacts from "../../../Artifacts.ts";
 import * as Bundle from "../../../Bundle/Bundle.ts";
 import { exec } from "../../../Util/exec.ts";
 import { sha256 } from "../../../Util/sha256.ts";
-import type {
-  SourceContext,
-  SourceDevHandle,
-  SourceProvider,
-} from "../Source.ts";
-import { resolveMainPath } from "./shared.ts";
+import type { SourceContext, SourceProvider } from "../Source.ts";
+import {
+  bundleSource,
+  resolveMainPath,
+  watchBundleDirectory,
+} from "./shared.ts";
 
 /**
  * Whether a Worker `main` entry points at a Python module. Python Workers
@@ -394,36 +394,12 @@ export const readPythonWorkerBundle = Effect.fn(function* (
  * watcher so local dev can consume either stream interchangeably.
  */
 export const watchPythonWorkerBundle = (options: PythonWorkerBundleOptions) =>
-  Stream.unwrap(
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const main = yield* resolveMainPath(options.main);
-      const root = path.dirname(main);
-      const build = readPythonWorkerBundle(options).pipe(
-        Effect.map(
-          (output): Bundle.BundleWatchEvent => ({ _tag: "Success", output }),
-        ),
-        Effect.catch((error) =>
-          Effect.succeed<Bundle.BundleWatchEvent>({ _tag: "Error", error }),
-        ),
-      );
-      const rebuilds = fs.watch(root).pipe(
-        Stream.filter(
-          (event) =>
-            !event.path.includes("__pycache__") &&
-            !event.path.includes("/python_modules/"),
-        ),
-        Stream.debounce("200 millis"),
-        Stream.flatMap(() =>
-          Stream.make({ _tag: "Start" } as Bundle.BundleWatchEvent).pipe(
-            Stream.concat(Stream.fromEffect(build)),
-          ),
-        ),
-        Stream.catchCause(() => Stream.empty),
-      );
-      return Stream.fromEffect(build).pipe(Stream.concat(rebuilds));
-    }),
-  );
+  watchBundleDirectory({
+    main: options.main,
+    read: readPythonWorkerBundle(options),
+    ignore: (path) =>
+      path.includes("__pycache__") || path.includes("/python_modules/"),
+  });
 
 /**
  * Source provider for Python workers (`.py` entry): no bundling — the
@@ -437,29 +413,11 @@ export const makePythonSource = (main: string): SourceProvider => {
     main,
     compatibility: ctx.compatibility,
   });
-  const build = (ctx: SourceContext) =>
-    readPythonWorkerBundle(pythonOptions(ctx)).pipe(Artifacts.cached("build"));
-  return {
-    ownsAssets: false,
+  return bundleSource({
     build: (ctx) =>
-      build(ctx).pipe(
-        Effect.map((output) => ({
-          bundle: output,
-          assets: undefined,
-          hash: {
-            bundle: output.hash,
-            assets: undefined,
-            input: undefined,
-            additionalWorkspaces: undefined,
-          },
-        })),
+      readPythonWorkerBundle(pythonOptions(ctx)).pipe(
+        Artifacts.cached("build"),
       ),
-    hash: (ctx) =>
-      build(ctx).pipe(Effect.map((output) => ({ bundle: output.hash }))),
-    dev: (ctx) =>
-      Effect.succeed({
-        mode: "bundle",
-        bundles: watchPythonWorkerBundle(pythonOptions(ctx)),
-      } satisfies SourceDevHandle),
-  };
+    watch: (ctx) => Effect.succeed(watchPythonWorkerBundle(pythonOptions(ctx))),
+  });
 };
