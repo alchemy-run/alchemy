@@ -775,6 +775,11 @@ export interface WorkerProps<
    * Changing the list is an in-place update. Omitting the prop (or passing
    * `[]`) deploys this Worker with no streaming tail consumers attached.
    *
+   * Streaming tail workers are experimental on Cloudflare's cloud: deployed
+   * Workers accept the configuration, but event delivery is not yet
+   * generally available. Under `alchemy dev`, local delivery is fully
+   * emulated.
+   *
    * @see https://developers.cloudflare.com/workers/observability/logs/tail-workers/
    */
   streamingTailConsumers?: (string | Worker)[];
