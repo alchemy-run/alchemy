@@ -37,7 +37,6 @@ import { proxyChain } from "../Util/proxy-chain.ts";
  *
  * @binding
  */
-
 export const MySQL = <
   TRelations extends AnyRelations = EmptyRelations,
   E = never,
