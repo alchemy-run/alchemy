@@ -396,6 +396,14 @@ export interface Function extends Resource<
       securityGroupIds: string[];
     };
     /**
+     * Lambda layers requested through the binding channel (e.g. the
+     * OpenTelemetry Collector extension attached by
+     * `AWS.Lambda.Collector`). Appended after the Function's own `layers`
+     * prop and deduped by resolved layer version ARN, so the prop always
+     * wins on ordering.
+     */
+    layers?: LayerRef[];
+    /**
      * EFS mounts requested through the binding channel (e.g. `EFS.Mount`).
      * Merged (deduped by `localMountPath`) with the Function's own
      * `fileSystemConfigs` prop.
@@ -1015,6 +1023,17 @@ export const FunctionProvider = () =>
                 ],
               }
             : undefined;
+        // Lambda layers requested through the binding channel (e.g. the OTel
+        // Collector extension) — deduped by resolved layer version ARN,
+        // declaration order preserved; appended after the `layers` prop in
+        // `reconcile`.
+        const layers = [
+          ...new Map(
+            activeBindings
+              .flatMap((binding) => binding?.data?.layers ?? [])
+              .map((layer) => [layerVersionArnOf(layer), layer] as const),
+          ).values(),
+        ];
         // EFS mounts requested through the binding channel (`EFS.Mount`) —
         // deduped by mount path; merged with the `fileSystemConfigs` prop in
         // `reconcile`.
@@ -1044,7 +1063,7 @@ export const FunctionProvider = () =>
             .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
         }
 
-        return { env, vpc, fileSystemConfigs };
+        return { env, vpc, fileSystemConfigs, layers };
       });
 
       const xrayWriteAccessPolicyArn =
@@ -1258,6 +1277,15 @@ export const FunctionProvider = () =>
         // and the stub doesn't need connectivity — `reconcile` attaches the
         // resolved VPC config afterwards.
         vpc?: FunctionProps["vpc"];
+        // Effective layer attachment (prop ∪ binding-channel requests).
+        // Omitted for the precreate stub for the same reason as `vpc`, and
+        // one more: a `LayerVersion` resource — whether passed as a prop or
+        // bound by a capability like `AWS.Lambda.Collector` — exposes its
+        // ARN as an unresolved Output at precreate, so attaching here would
+        // send the Output object to AWS instead of a string. Binding-supplied
+        // layers resolve strictly later than prop layers, which is what makes
+        // deferring load-bearing rather than merely tidy.
+        layers?: LayerRef[];
         session: { note: (note: string) => Effect.Effect<void> };
       }) => Effect.Effect<
         void,
@@ -1274,6 +1302,7 @@ export const FunctionProvider = () =>
         preferUpdate,
         fileSystemConfigs,
         vpc,
+        layers,
         session,
       }: {
         id: string;
@@ -1286,6 +1315,7 @@ export const FunctionProvider = () =>
         preferUpdate?: boolean;
         fileSystemConfigs?: Lambda.FileSystemConfig[];
         vpc?: FunctionProps["vpc"];
+        layers?: LayerRef[];
         session: { note: (note: string) => Effect.Effect<void> };
       }) {
         yield* Effect.logDebug(`creating function ${id}`);
@@ -1353,7 +1383,7 @@ export const FunctionProvider = () =>
           // Always explicit: `UpdateFunctionConfiguration` treats an omitted
           // `Layers` as "leave as-is", so removing the prop would strand the
           // previously-attached layers.
-          Layers: (news.layers ?? []).map(layerVersionArnOf),
+          Layers: (layers ?? []).map(layerVersionArnOf),
           Environment: runtimeEnv
             ? {
                 Variables: {
@@ -1830,12 +1860,12 @@ export const FunctionProvider = () =>
           const hash = yield* hashBundle(code);
           yield* createOrUpdateFunction({
             id,
-            // `news` is unresolved during precreate. A LayerVersion resource
-            // exposes its ARN as an Output, so attaching it here would send
-            // the Output object to AWS instead of a string. The stub does not
-            // need layers; reconcile runs after dependencies resolve and
-            // attaches the desired list.
-            news: { ...news, layers: [] },
+            news,
+            // `layers` is deliberately omitted (see the param's doc): `news`
+            // is unresolved here, so a `LayerVersion`'s ARN is still an
+            // Output, and layers bound through the binding channel are not
+            // even collected until `reconcile` runs `attachBindings`. The
+            // stub needs no layers; reconcile attaches the merged list.
             roleArn: role.Role.Arn,
             archive,
             hash,
@@ -1890,6 +1920,7 @@ export const FunctionProvider = () =>
             env,
             vpc: bindingVpc,
             fileSystemConfigs: bindingFileSystemConfigs,
+            layers: bindingLayers,
           } = yield* attachBindings({
             roleName,
             policyName,
@@ -1918,6 +1949,18 @@ export const FunctionProvider = () =>
                   ],
                 }
               : undefined;
+
+          // Both layer paths converge on one ordered `Layers` list: the
+          // `layers` prop first (the author's explicit order), then
+          // binding-channel requests, deduped by resolved ARN so a layer
+          // named in both appears once, at its prop position.
+          const desiredLayers = [
+            ...new Map(
+              [...(news.layers ?? []), ...bindingLayers].map(
+                (layer) => [layerVersionArnOf(layer), layer] as const,
+              ),
+            ).values(),
+          ];
 
           // The role may predate the VPC request (precreate stub, or a
           // binding newly asking for attachment) — the ENI permissions must
@@ -1991,6 +2034,7 @@ export const FunctionProvider = () =>
             },
             functionName,
             vpc,
+            layers: desiredLayers,
             preferUpdate: output !== undefined,
             // `[]` (when the prop/bindings were removed on a function that
             // previously had mounts) explicitly clears the file-system
