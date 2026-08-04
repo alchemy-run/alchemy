@@ -10,10 +10,10 @@ export interface MySQLDefaultOptions {
 }
 
 /**
- * `Context.Reference` read by `resolveMySQLConfig`. The default is empty —
- * plain mysql2 behavior — and each runtime layers in what its platform
- * needs; the Cloudflare Worker bridge provides
- * `{ disablePreparedStatements: true, poolConfig: { disableEval: true } }`:
+ * `Context.Reference` read at init by the MySQL clients. The default is
+ * empty — plain mysql2 behavior — and a platform binding layers in what its
+ * runtime needs; on Workers, provide `Cloudflare.MySQLBinding`. A custom
+ * platform (or another text-protocol proxy) supplies its own:
  *
  * ```typescript
  * Layer.succeed(MySQLDefaults, { disablePreparedStatements: true })

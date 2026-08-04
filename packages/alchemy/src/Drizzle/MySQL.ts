@@ -8,6 +8,7 @@ import * as Layer from "effect/Layer";
 import type * as Redacted from "effect/Redacted";
 import { makeExecutionMemo } from "../Runtime/ExecutionMemo.ts";
 import { resolveMySQLConfig, type MySQLConfig } from "../SQL/MySQL.ts";
+import { MySQLDefaults } from "../SQL/MySQLDefaults.ts";
 import { proxyChain } from "../Util/proxy-chain.ts";
 
 /**
@@ -23,10 +24,11 @@ import { proxyChain } from "../Util/proxy-chain.ts";
  * });
  * ```
  *
- * The pool opens on the first query of an execution, is reused for every
- * query in it, and closes when the event settles (see
- * {@link makeExecutionMemo}); plan/deploy never connect. Workers defaults
- * ({@link resolveMySQLConfig}) are overridden via `config.client`:
+ * On Workers, provide `Cloudflare.MySQLBinding` alongside the Hyperdrive
+ * binding — it supplies the {@link MySQLDefaults} workerd needs. The pool
+ * opens on the first query of an execution, is reused for every query in
+ * it, and closes when the event settles (see {@link makeExecutionMemo});
+ * plan/deploy never connect. Defaults are overridden via `config.client`:
  *
  * ```typescript
  * const db = yield* Drizzle.MySQL(connectionString, {
@@ -53,30 +55,35 @@ export const MySQL = <
     readonly client?: Omit<MySQLConfig, "url">;
   },
 ) =>
-  Effect.map(
-    makeExecutionMemo(
+  Effect.gen(function* () {
+    // Read at init, where binding layers (e.g. Cloudflare.MySQLBinding) are
+    // in context — handler executions don't see init-provided layers.
+    const defaults = yield* MySQLDefaults;
+    const db = yield* makeExecutionMemo(
       Effect.gen(function* () {
         const { client, ...drizzleConfig } = config ?? {};
         const mysqlCtx = yield* Layer.build(
           MysqlClient.layer(
-            yield* resolveMySQLConfig({ ...client, url: connectionString }),
+            yield* resolveMySQLConfig(
+              { ...client, url: connectionString },
+              defaults,
+            ),
           ),
         );
         return yield* MySqlDrizzle.makeWithDefaults(
           drizzleConfig as EffectDrizzleMySqlConfig<TRelations>,
         ).pipe(Effect.provideContext(mysqlCtx));
       }),
-    ),
-    (db) =>
-      proxyChain<
+    );
+    return proxyChain<
+      EffectMysql2Database<TRelations> & {
+        $client: MysqlClient.MysqlClient;
+      }
+    >(
+      db as Effect.Effect<
         EffectMysql2Database<TRelations> & {
           $client: MysqlClient.MysqlClient;
         }
-      >(
-        db as Effect.Effect<
-          EffectMysql2Database<TRelations> & {
-            $client: MysqlClient.MysqlClient;
-          }
-        >,
-      ),
-  );
+      >,
+    );
+  });

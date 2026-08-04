@@ -19,9 +19,6 @@ export default class Api extends Cloudflare.Worker<Api>()(
   },
   Effect.gen(function* () {
     const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
-    // On Workers the client defaults to mysql2's eval-free row parsers
-    // (workerd forbids runtime code generation) and the text protocol
-    // (Hyperdrive's MySQL proxy has no COM_STMT_PREPARE).
     const db = yield* Drizzle.MySQL(conn.connectionString, {
       relations,
     });
@@ -102,5 +99,13 @@ export default class Api extends Cloudflare.Worker<Api>()(
         }),
       ),
     };
-  }).pipe(Effect.provide(Layer.mergeAll(Cloudflare.Hyperdrive.ConnectBinding))),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Cloudflare.Hyperdrive.ConnectBinding,
+        // MySQL on Workers: text protocol + eval-free row parsers.
+        Cloudflare.MySQLBinding,
+      ),
+    ),
+  ),
 ) {}

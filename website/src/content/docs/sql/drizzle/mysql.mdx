@@ -109,6 +109,7 @@ connection string:
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Drizzle from "alchemy/Drizzle";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Hyperdrive } from "./db.ts";
 import { relations, Users } from "./schema.ts";
@@ -126,14 +127,20 @@ export default class Api extends Cloudflare.Worker<Api>()(
         return yield* HttpServerResponse.json({ users });
       }),
     };
-  }).pipe(Effect.provide(Cloudflare.Hyperdrive.ConnectBinding)),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Cloudflare.Hyperdrive.ConnectBinding,
+        Cloudflare.MySQLBinding,
+      ),
+    ),
+  ),
 ) {}
 ```
 
-On Workers the underlying `@effect/sql-mysql2` client defaults to
-the text protocol (Hyperdrive's MySQL proxy has no
-`COM_STMT_PREPARE`) and eval-free row parsers (the isolate forbids
-runtime code generation) — see
+`Cloudflare.MySQLBinding` switches the client to the text protocol
+(Hyperdrive's MySQL proxy has no `COM_STMT_PREPARE`) and eval-free
+row parsers (the isolate forbids runtime code generation) — see
 [Workers defaults](/sql/effect-sql/mysql#workers-defaults). Pool
 options like TLS for a direct connection go through
 `config.client`:

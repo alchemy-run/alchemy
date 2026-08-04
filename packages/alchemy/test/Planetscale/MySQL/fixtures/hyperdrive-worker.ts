@@ -77,5 +77,12 @@ export default class MySQLHyperdriveWorker extends Cloudflare.Worker<MySQLHyperd
         ),
       ),
     };
-  }).pipe(Effect.provide(Layer.mergeAll(Cloudflare.Hyperdrive.ConnectBinding))),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Cloudflare.Hyperdrive.ConnectBinding,
+        Cloudflare.MySQLBinding,
+      ),
+    ),
+  ),
 ) {}
