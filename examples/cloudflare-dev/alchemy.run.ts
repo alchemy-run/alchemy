@@ -105,8 +105,9 @@ const AsyncWorker = (deps: {
  * Media & messaging worker: Browser Rendering, Images, Stream, Secrets
  * Store, and Email (send + inbound handler) — all served by local
  * simulators under `alchemy dev`. `IMAGES_REMOTE` demonstrates the per-
- * binding hybrid escape hatch: `dev: { remote: true }` proxies just that
- * binding to the real Images service while the worker stays local.
+ * binding hybrid escape hatch: piping the binding through
+ * `Alchemy.remote()` proxies just that binding to the real Images service
+ * while the worker stays local.
  */
 const MediaWorker = Effect.gen(function* () {
   const store = yield* Cloudflare.SecretsStore.Store("Secrets");
@@ -123,9 +124,9 @@ const MediaWorker = Effect.gen(function* () {
     env: {
       BROWSER: Cloudflare.Browser("BROWSER"),
       IMAGES: Cloudflare.Images.Images("IMAGES"),
-      IMAGES_REMOTE: Cloudflare.Images.Images("IMAGES_REMOTE", {
-        dev: { remote: true },
-      }),
+      IMAGES_REMOTE: Cloudflare.Images.Images("IMAGES_REMOTE").pipe(
+        Alchemy.remote(),
+      ),
       STREAM: Cloudflare.Stream.Stream("STREAM"),
       EMAIL: email,
       API_KEY: apiKey,

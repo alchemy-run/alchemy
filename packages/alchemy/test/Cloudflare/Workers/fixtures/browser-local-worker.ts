@@ -1,7 +1,7 @@
 // Async (non-Effect) Worker that drives a Browser Rendering binding the way
 // real users do — through `@cloudflare/puppeteer` (acquire a session, open a
 // page, inspect it). Used by Browser.local.test.ts both against the local
-// Chrome-backed simulator and (with `dev: { remote: true }`) against the real
+// Chrome-backed simulator and (piped through `Alchemy.remote()`) against the real
 // Browser Rendering service via the remote-bindings proxy.
 import puppeteer from "@cloudflare/puppeteer";
 

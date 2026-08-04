@@ -26,6 +26,7 @@ import type { Index as VectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
 import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
 import type { WorkflowLike } from "../Workflows/Workflow.ts";
 import type { AIBinding } from "./AIBinding.ts";
+import type { AnyBindingEffect } from "./Binding.ts";
 import type { Assets } from "./Assets.ts";
 import type { URLEffect } from "./Worker.ts";
 import type { BrowserBinding } from "./BrowserBinding.ts";
@@ -154,6 +155,8 @@ export type WorkerBindingResource =
   | VersionMetadataBinding
   // The Worker's own URL (`Worker.URL`).
   | URLEffect
+  // A Worker-only binding lifted by `.pipe(Alchemy.remote())`.
+  | AnyBindingEffect
   | DispatchNamespace
   | DurableObjectLike<any>
   | WorkflowLike<any>

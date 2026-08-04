@@ -116,23 +116,6 @@ export interface BrowserClient {
   ): BrowserEffect<BrowserMarkdownResult>;
 }
 
-/** Extra options accepted by the {@link Browser} binding constructor. */
-export interface BrowserBindingProps {
-  /**
-   * Configuration for the binding in `alchemy dev`.
-   * @default { remote: false }
-   */
-  dev?: {
-    /**
-     * Whether to proxy to the real Browser Rendering service in development.
-     * If `false`, a real headless Chrome is launched locally and driven over
-     * CDP (downloaded on first use into the shared wrangler cache).
-     * @default false
-     */
-    remote?: boolean;
-  };
-}
-
 /**
  * A Cloudflare Browser Rendering binding for launching headless browser sessions
  * from Workers — a Worker-only binding with no backing cloud resource.
@@ -178,6 +161,18 @@ export interface BrowserBindingProps {
  * //   { BROWSER: BrowserRun }
  * ```
  *
+ * @section Local development
+ * @example Proxy to the real Browser Rendering service in dev
+ * ```typescript
+ * // Default: a real headless Chrome is launched locally and driven over
+ * // CDP under `alchemy dev`. Alchemy.remote() opts the binding into the
+ * // real Browser Rendering service instead — in an Effect-native Worker:
+ * const browser = yield* Cloudflare.Browser("BROWSER").pipe(Alchemy.remote());
+ *
+ * // or declared on an async Worker's env:
+ * env: { BROWSER: Cloudflare.Browser("BROWSER").pipe(Alchemy.remote()) }
+ * ```
+ *
  * @see https://developers.cloudflare.com/browser-rendering/workers-binding-api/
  */
 export interface Browser extends Binding.Service<
@@ -189,16 +184,12 @@ export interface Browser extends Binding.Service<
    * @param name Binding name (logical id) — the `env` key it resolves to.
    * @default "BROWSER"
    */
-  (name?: string, props?: BrowserBindingProps): BrowserBinding;
+  (name?: string): BrowserBinding;
 }
 
-export const Browser = Binding.Service<Browser, { devRemote?: boolean }>({
+export const Browser = Binding.Service<Browser>({
   id: TypeId,
   defaultName: "BROWSER",
-  parse: (name?: string, props?: BrowserBindingProps) => ({
-    name,
-    devRemote: props?.dev?.remote,
-  }),
   toWorkerBinding: (binding) => ({
     type: "browser",
     name: binding.name,

@@ -1,4 +1,5 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -111,15 +112,14 @@ test.provider(
 );
 
 /**
- * `dev: { remote: true }` opts the binding OUT of local emulation (the
- * Worker-only-binding analogue of `Alchemy.remote()`): the locally-served
- * worker drives the real Browser Rendering service through the
- * remote-bindings preview session. The live suite
+ * `Alchemy.remote()` opts the binding OUT of local emulation: the
+ * locally-served worker drives the real Browser Rendering service through
+ * the remote-bindings preview session. The live suite
  * (test/Cloudflare/Browser/Browser.test.ts) covers deployed-binding
  * behavior; this leg pins the dev-mode remote lowering path.
  */
 test.provider(
-  "dev remote: true proxies the binding to the real Browser Rendering service",
+  "Alchemy.remote() proxies the binding to the real Browser Rendering service",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -130,9 +130,7 @@ test.provider(
             main: fixtureMain,
             compatibility: { flags: ["nodejs_compat"] },
             env: {
-              BROWSER: Cloudflare.Browser("BROWSER", {
-                dev: { remote: true },
-              }),
+              BROWSER: Cloudflare.Browser("BROWSER").pipe(Alchemy.remote()),
             },
           });
           return { url: worker.url.as<string>() };

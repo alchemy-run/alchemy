@@ -330,7 +330,7 @@ export const LocalWorkerProvider = () =>
         const workflows: Record<string, RuntimeWorkflow> = {};
         const hyperdrives: Record<string, Required<HyperdriveOrigin>> = {};
         // Dev-only channel (like `hyperdrives`): binding name → opt-out of
-        // local emulation (`dev: { remote: true }` on the capability). Read
+        // local emulation (the binding was piped through `Alchemy.remote()`). Read
         // by `toRuntimeBinding` when lowering browser/images/stream/
         // send_email descriptors. Part of the hashed config: flipping the
         // opt-out restarts the instance.
@@ -1110,7 +1110,7 @@ export const toRuntimeBinding = Effect.fn(function* (
     case "browser":
       // Local emulation launches a real headless Chrome on this machine and
       // proxies the Browser Rendering session protocol to its CDP endpoint;
-      // `dev: { remote: true }` opts into the real service instead.
+      // `Alchemy.remote()` opts into the real service instead.
       return devRemote?.[b.name]
         ? Browser.remote(b.name)
         : Browser.local({ binding: b.name });
@@ -1143,7 +1143,7 @@ export const toRuntimeBinding = Effect.fn(function* (
       return Hyperdrive.local(b.name, b.id);
     case "images":
       // Local emulation runs transforms via Sharp on this machine and stores
-      // hosted images in a local KV-backed store; `dev: { remote: true }`
+      // hosted images in a local KV-backed store; `Alchemy.remote()`
       // opts into the real Images service instead.
       return devRemote?.[b.name]
         ? Images.remote(b.name)
@@ -1255,7 +1255,7 @@ export const toRuntimeBinding = Effect.fn(function* (
     case "stream":
       // Local emulation stores videos in a local simulator (no transcoding,
       // no signed URLs) and serves each video's `preview` URL at
-      // /cdn-cgi/mf/stream/<id>/watch on the dev URL; `dev: { remote: true }`
+      // /cdn-cgi/mf/stream/<id>/watch on the dev URL; `Alchemy.remote()`
       // opts into the real Stream service instead.
       return devRemote?.[b.name]
         ? StreamSim.remote(b.name)

@@ -24,23 +24,6 @@ export class StreamError extends Data.TaggedError("StreamError")<{
 /** An Effect produced by a {@link StreamClient} operation. */
 type StreamEffect<A> = Effect.Effect<A, StreamError, RuntimeContext>;
 
-/** Extra options accepted by the {@link Stream} binding constructor. */
-export interface StreamBindingProps {
-  /**
-   * Configuration for the binding in `alchemy dev`.
-   * @default { remote: false }
-   */
-  dev?: {
-    /**
-     * Whether to proxy to the real Stream service in development. If `false`,
-     * videos are stored in a local simulator and served unmodified at
-     * `/cdn-cgi/mf/stream/<id>/watch` on the dev URL.
-     * @default false
-     */
-    remote?: boolean;
-  };
-}
-
 /**
  * A Cloudflare Stream binding for managing videos, captions, downloads and
  * watermarks from Workers — a Worker-only binding with no backing cloud
@@ -56,8 +39,9 @@ export interface StreamBindingProps {
  * video store and each video's `preview` URL is served unmodified at
  * `{devUrl}/cdn-cgi/mf/stream/<id>/watch`. The local store performs no
  * transcoding (the `hlsPlaybackUrl`/`dashPlaybackUrl` point at a placeholder
- * host), no signed URLs, and `createDirectUpload` is unsupported. Pass
- * `dev: { remote: true }` to proxy to the real Stream service instead.
+ * host), no signed URLs, and `createDirectUpload` is unsupported. Pipe the
+ * binding through `Alchemy.remote()` to proxy to the real Stream service
+ * instead.
  *
  * @binding
  * @product Stream
@@ -96,6 +80,18 @@ export interface StreamBindingProps {
  * //   { STREAM: StreamBinding }
  * ```
  *
+ * @section Local development
+ * @example Proxy to the real Stream service in dev
+ * ```typescript
+ * // Default: videos land in the local video store under `alchemy dev`.
+ * // Alchemy.remote() opts the binding into the real Stream service
+ * // instead — in an Effect-native Worker:
+ * const stream = yield* Cloudflare.Stream.Stream("STREAM").pipe(Alchemy.remote());
+ *
+ * // or declared on an async Worker's env:
+ * env: { STREAM: Cloudflare.Stream.Stream("STREAM").pipe(Alchemy.remote()) }
+ * ```
+ *
  * @see https://developers.cloudflare.com/stream/
  */
 export interface Stream extends Binding.Service<Stream, TypeId, StreamClient> {
@@ -103,16 +99,12 @@ export interface Stream extends Binding.Service<Stream, TypeId, StreamClient> {
    * @param name Binding name (logical id) — the `env` key it resolves to.
    * @default "STREAM"
    */
-  (name?: string, props?: StreamBindingProps): StreamBinding;
+  (name?: string): StreamBinding;
 }
 
-export const Stream = Binding.Service<Stream, { devRemote?: boolean }>({
+export const Stream = Binding.Service<Stream>({
   id: TypeId,
   defaultName: "STREAM",
-  parse: (name?: string, props?: StreamBindingProps) => ({
-    name,
-    devRemote: props?.dev?.remote,
-  }),
   toWorkerBinding: (binding) => ({
     type: "stream",
     name: binding.name,

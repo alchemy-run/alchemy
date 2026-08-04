@@ -1,4 +1,5 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -163,14 +164,14 @@ test.provider(
 );
 
 /**
- * `dev: { remote: true }` opts the binding OUT of local emulation (the
- * Worker-only-binding analogue of `Alchemy.remote()`): the locally-served
- * worker drives the real Images service through the remote-bindings preview
- * session. The live suite (test/Cloudflare/Images/Images.test.ts) covers
- * deployed-binding behavior; this leg pins the dev-mode remote lowering path.
+ * `Alchemy.remote()` opts the binding OUT of local emulation: the
+ * locally-served worker drives the real Images service through the
+ * remote-bindings preview session. The live suite
+ * (test/Cloudflare/Images/Images.test.ts) covers deployed-binding behavior;
+ * this leg pins the dev-mode remote lowering path.
  */
 test.provider(
-  "dev remote: true proxies the binding to the real Images service",
+  "Alchemy.remote() proxies the binding to the real Images service",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -180,9 +181,7 @@ test.provider(
           const worker = yield* Cloudflare.Worker("images-remote-worker", {
             main: fixtureMain,
             env: {
-              IMAGES: Cloudflare.Images.Images("IMAGES", {
-                dev: { remote: true },
-              }),
+              IMAGES: Cloudflare.Images.Images("IMAGES").pipe(Alchemy.remote()),
             },
           });
           return { url: worker.url.as<string>() };

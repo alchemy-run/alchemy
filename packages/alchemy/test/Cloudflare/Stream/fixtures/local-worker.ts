@@ -1,7 +1,7 @@
 // Async (non-Effect) Worker that drives a Stream binding the way real users
 // do — upload / details / list / delete over simple routes. Used by
 // Stream.local.test.ts both against the local video-store simulator and
-// (with `dev: { remote: true }`) against the real Stream service via the
+// (piped through `Alchemy.remote()`) against the real Stream service via the
 // remote-bindings proxy.
 import type * as cf from "@cloudflare/workers-types";
 

@@ -62,7 +62,7 @@ export default {
         case "/images/info":
           return imagesInfo(env.IMAGES, request);
         case "/images/info-remote":
-          // Same call, but through the `dev: { remote: true }` binding —
+          // Same call, but through the `Alchemy.remote()`-piped binding —
           // served by the REAL Images service even during `alchemy dev`.
           return imagesInfo(env.IMAGES_REMOTE, request);
         case "/images/transform": {

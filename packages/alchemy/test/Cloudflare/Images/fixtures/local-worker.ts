@@ -1,7 +1,7 @@
 // Async (non-Effect) Worker that drives an Images binding the way real users
 // do — `info(...)` and `input(...).transform(...).output(...)` over the
 // request body. Used by Images.local.test.ts both against the local
-// Sharp-backed simulator and (with `dev: { remote: true }`) against the real
+// Sharp-backed simulator and (piped through `Alchemy.remote()`) against the real
 // Images service via the remote-bindings proxy.
 import type * as cf from "@cloudflare/workers-types";
 

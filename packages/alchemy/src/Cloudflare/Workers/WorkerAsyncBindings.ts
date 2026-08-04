@@ -156,10 +156,10 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
             ? getHyperdriveDevOrigin(binding)
             : undefined,
           // Dev-only local-emulation opt-out channel (like `hyperdrives`):
-          // worker-only capabilities constructed with `dev: { remote: true }`
-          // and `SendEmail` descriptors piped through `Alchemy.remote()`
-          // carry the internal `devRemote` flag on their binding value;
-          // contribute it as binding data so the wire binding stays pure.
+          // worker-only bindings and `SendEmail` descriptors piped through
+          // `Alchemy.remote()` carry the internal `devRemote` flag on their
+          // binding value; contribute it as binding data so the wire binding
+          // stays pure.
           devRemote:
             (isWorkerOnlyBinding(binding) || isSendEmail(binding)) &&
             binding.devRemote

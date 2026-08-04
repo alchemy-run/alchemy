@@ -1098,7 +1098,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
     hyperdrives?: Record<string, Required<DevOrigin>>;
     /**
      * Dev-only channel (like `hyperdrives`): binding name → opt-out of local
-     * emulation in `alchemy dev` (`dev: { remote: true }` on the capability
+     * emulation in `alchemy dev` (the binding was piped through `Alchemy.remote()`
      * constructor). Contributed alongside the pure wire binding instead of
      * being embedded in it — wire descriptors stay exactly what Cloudflare
      * accepts. Records from multiple bind calls merge by key; the local

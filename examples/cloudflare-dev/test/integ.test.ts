@@ -795,13 +795,13 @@ test(
 );
 
 /**
- * HYBRID — per-binding `dev: { remote: true }`: `IMAGES_REMOTE` proxies to
+ * HYBRID — per-binding `Alchemy.remote()`: `IMAGES_REMOTE` proxies to
  * the REAL Images service while the worker (and every other binding) stays
  * local. Requires real Cloudflare credentials, which this suite already has
  * (the state store is remote).
  */
 test(
-  "MediaWorker images binding with dev remote: true hits the real service",
+  "MediaWorker images binding with Alchemy.remote() hits the real service",
   Effect.gen(function* () {
     const { mediaWorker } = yield* stack;
     const info = (yield* Effect.gen(function* () {
