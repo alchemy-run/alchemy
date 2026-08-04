@@ -38,6 +38,7 @@ import {
   Text,
   Vectorize,
   VersionMetadata,
+  VpcService,
   WasmModule,
   WorkerLoader,
   Workflows,
@@ -1267,7 +1268,10 @@ export const toRuntimeBinding = Effect.fn(function* (
     case "version_metadata":
       return VersionMetadata.local(b.name);
     case "vpc_service":
-      return yield* unsupported();
+      // A VPC service tunnels into a private network — nothing to emulate
+      // locally, so the dev worker always proxies to the real service
+      // through the remote-binding bridge.
+      return VpcService.remote(b.name, b.serviceId);
     case "wasm_module":
       return WasmModule.local(b.name, Buffer.from(b.part));
     case "worker_loader":

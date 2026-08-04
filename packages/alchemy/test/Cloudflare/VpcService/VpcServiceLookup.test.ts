@@ -54,49 +54,47 @@ const readVpcBindings = (scriptName: string) =>
   });
 
 test.provider(
-  "references a vpc service by id/name and binds it to a worker",
+  "looks up a vpc service by id/name and binds it to a worker",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      // Create a real VPC service to reference.
+      // Create a real VPC service to look up.
       const svc = yield* stack.deploy(vpcService);
 
-      // Look it up by name and by id — returns the service's attributes.
-      const byName = yield* Cloudflare.Lookup.VpcService({
-        name: svc.serviceName,
-      });
-      expect(byName.serviceId).toEqual(svc.serviceId);
-      expect(byName.serviceName).toEqual(svc.serviceName);
-      expect(byName.httpPort).toEqual(svc.httpPort);
-
-      const byId = yield* Cloudflare.Lookup.VpcService({
-        serviceId: svc.serviceId,
-      });
-      expect(byId.serviceId).toEqual(svc.serviceId);
-
-      // Bind the service to a worker three ways — the managed resource directly,
-      // and lookups by id and by name. All emit a `vpc_service` binding. The
-      // service and its tunnel are re-declared so they stay deployed.
-      const worker = yield* stack.deploy(
+      // Bind the service to a worker three ways — the managed resource
+      // directly, and `lookup` data sources by id and by name. All emit a
+      // `vpc_service` binding. The lookups are also returned as stack
+      // outputs, pinning plan-time Output resolution. The service and its
+      // tunnel are re-declared so they stay deployed.
+      const { byId, byName, worker } = yield* stack.deploy(
         Effect.gen(function* () {
           const managed = yield* vpcService;
-          const refById = yield* Cloudflare.Lookup.VpcService({
-            serviceId: svc.serviceId,
-          });
-          const refByName = yield* Cloudflare.Lookup.VpcService({
-            name: svc.serviceName,
-          });
-          return yield* Cloudflare.Worker("vpc-binding-worker", {
+          const worker = yield* Cloudflare.Worker("vpc-binding-worker", {
             script: asyncWorkerScript,
             env: {
               SVC_MANAGED: managed,
-              SVC_BY_ID: refById,
-              SVC_BY_NAME: refByName,
+              SVC_BY_ID: Cloudflare.VpcService.lookup({
+                serviceId: svc.serviceId,
+              }),
+              SVC_BY_NAME: Cloudflare.VpcService.lookup({
+                name: svc.serviceName,
+              }),
             },
           });
+          return {
+            byId: Cloudflare.VpcService.lookup({ serviceId: svc.serviceId }),
+            byName: Cloudflare.VpcService.lookup({ name: svc.serviceName }),
+            worker,
+          };
         }),
       );
+
+      // The data source resolves to the service's attributes.
+      expect(byId.serviceId).toEqual(svc.serviceId);
+      expect(byName.serviceId).toEqual(svc.serviceId);
+      expect(byName.serviceName).toEqual(svc.serviceName);
+      expect(byName.httpPort).toEqual(svc.httpPort);
 
       const vpc = yield* readVpcBindings(worker.workerName);
       expect(vpc.find((b) => b.name === "SVC_MANAGED")?.serviceId).toEqual(

@@ -26,7 +26,7 @@ import { isSecret } from "../SecretsStore/Secret.ts";
 import { isStream } from "../Stream/Stream.ts";
 import { isIndex } from "../Vectorize/VectorizeIndex.ts";
 import { isVpcService } from "../VpcService/VpcService.ts";
-import { isVpcServiceLookup } from "../VpcService/VpcServiceLookup.ts";
+import type { VpcServiceLookup } from "../VpcService/VpcServiceLookup.ts";
 import { isDispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
 import { isWorkflowLike, WorkflowResource } from "../Workflows/Workflow.ts";
 import { makeWorkflowName } from "../Workflows/WorkflowName.ts";
@@ -393,7 +393,7 @@ const toBinding = (
       className: binding.className ?? binding.name,
       scriptName: binding.scriptName,
     };
-  } else if (isVpcService(binding) || isVpcServiceLookup(binding)) {
+  } else if (isVpcService(binding)) {
     return {
       type: "vpc_service",
       name: bindingName,
@@ -507,8 +507,22 @@ const toBinding = (
       name: bindingName,
     };
   } else if (Output.isOutput(binding)) {
-    return Output.map(binding, (value: Json | Redacted.Redacted<Json>) =>
-      toValueBinding(bindingName, value),
+    return Output.map(
+      binding,
+      (value: Json | Redacted.Redacted<Json> | VpcServiceLookup) =>
+        // A `VpcService.lookup(...)` data source resolves to the service's
+        // attributes branded with the resource `Type`; classify it like the
+        // managed resource instead of a plain json env value.
+        isVpcService(value)
+          ? {
+              type: "vpc_service" as const,
+              name: bindingName,
+              serviceId: (value as VpcServiceLookup).serviceId,
+            }
+          : toValueBinding(
+              bindingName,
+              value as Json | Redacted.Redacted<Json>,
+            ),
     );
   } else {
     return {
