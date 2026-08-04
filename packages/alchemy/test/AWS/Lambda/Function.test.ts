@@ -17,9 +17,13 @@ const timeoutHandlerPath = fileURLToPath(
 const externalPackageHandlerPath = fileURLToPath(
   new URL("./external-package-handler.ts", import.meta.url),
 );
-const lockfilePinnedHandlerPath = fileURLToPath(
-  new URL("./fixtures/lockfile-pinning/handler.ts", import.meta.url),
-);
+const lockfilePinnedHandlerPath = (format: "npm" | "bun" | "pnpm" | "yarn") =>
+  fileURLToPath(
+    new URL(
+      `./fixtures/lockfile-pinning/${format}/handler.ts`,
+      import.meta.url,
+    ),
+  );
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -180,53 +184,66 @@ test.provider(
 );
 
 test.provider(
-  "installs external packages at the versions pinned by the project lockfile",
+  "installs external packages at the versions pinned by each lockfile format",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      // The fixture project declares make-dir@^3.0.0 but its package-lock.json
-      // pins make-dir@3.0.0 and its transitive semver@6.3.0 — both below the
-      // latest versions satisfying their ranges (3.1.0 / 6.3.1). Free npm
-      // resolution installs the newer versions, so the assertions below fail
-      // without lockfile pinning.
-      const { functionName, functionUrl } = yield* stack.deploy(
-        AWS.Lambda.Function("LockfilePinnedFn", {
-          main: lockfilePinnedHandlerPath,
+      // Each fixture project declares make-dir@^3.0.0 but its lockfile pins
+      // make-dir@3.0.0 and its transitive semver@6.3.0 — both below the latest
+      // versions satisfying their ranges (3.1.0 / 6.3.1). Free npm resolution
+      // installs the newer versions, so the assertions below fail without
+      // lockfile pinning. Legacy binary bun.lockb has no live fixture because
+      // current Bun can only write the text format; its print-and-parse path
+      // is covered by the yarn-v1 unit fixtures.
+      const formats = ["npm", "bun", "pnpm", "yarn"] as const;
+      const pinnedFunction = (format: (typeof formats)[number]) =>
+        AWS.Lambda.Function(`LockfilePinnedFn-${format}`, {
+          main: lockfilePinnedHandlerPath(format),
           handler: "handler",
           isExternal: true,
           url: true,
           build: {
             install: ["make-dir"],
           },
+        });
+      const deployed = yield* stack.deploy(
+        Effect.all({
+          npm: pinnedFunction("npm"),
+          bun: pinnedFunction("bun"),
+          pnpm: pinnedFunction("pnpm"),
+          yarn: pinnedFunction("yarn"),
         }),
       );
 
-      const response = yield* HttpClient.get(functionUrl!).pipe(
-        Effect.flatMap((response) =>
-          response.status === 200
-            ? Effect.succeed(response)
-            : Effect.fail(
-                new Error(`Function URL returned ${response.status}`),
-              ),
-        ),
-        Effect.retry({
-          schedule: Schedule.max([
-            Schedule.exponential(500),
-            Schedule.recurs(10),
-          ]),
-        }),
-      );
+      for (const format of formats) {
+        const { functionUrl } = deployed[format];
+        const response = yield* HttpClient.get(functionUrl!).pipe(
+          Effect.flatMap((response) =>
+            response.status === 200
+              ? Effect.succeed(response)
+              : Effect.fail(
+                  new Error(`Function URL returned ${response.status}`),
+                ),
+          ),
+          Effect.retry({
+            schedule: Schedule.max([
+              Schedule.exponential(500),
+              Schedule.recurs(10),
+            ]),
+          }),
+        );
 
-      const body = JSON.parse(yield* response.text) as {
-        makeDir: string;
-        semver: string;
-      };
-      expect(body.makeDir).toBe("3.0.0");
-      expect(body.semver).toBe("6.3.0");
+        const body = JSON.parse(yield* response.text) as {
+          makeDir: string;
+          semver: string;
+        };
+        expect(body.makeDir, format).toBe("3.0.0");
+        expect(body.semver, format).toBe("6.3.0");
+      }
 
       yield* stack.destroy();
-      yield* assertFunctionDeleted(functionName);
+      yield* assertFunctionDeleted(deployed.npm.functionName);
     }).pipe(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
