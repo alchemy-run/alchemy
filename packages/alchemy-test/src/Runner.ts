@@ -744,8 +744,19 @@ export const run = Effect.fn(function* (options: RunOptions) {
   // hang), and it maximizes exposure to loader races under concurrent
   // dynamic imports. The shared dependency graph is deduped by the module
   // cache, so a modest bound keeps nearly all of the speedup.
-  const collectConcurrency =
-    options.concurrency === "unbounded"
+  //
+  // …unless the runtime doesn't propagate AsyncLocalStorage into module
+  // evaluation (Bun >= 1.3.14), in which case attribution is only sound
+  // when exactly one file is being collected at a time. Detected by probe,
+  // never by version sniffing: the behaviour first shipped in a Bun 1.4
+  // preview and was then back-ported into the 1.3 line, so a version test
+  // silently mis-classifies.
+  const concurrentCollectionSafe = yield* Effect.promise(
+    Registry.probeAsyncContext,
+  );
+  const collectConcurrency = !concurrentCollectionSafe
+    ? 1
+    : options.concurrency === "unbounded"
       ? 32
       : Math.min(options.concurrency, 32);
   // collectFile never fails — import errors are captured on the result.
