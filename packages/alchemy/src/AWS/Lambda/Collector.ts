@@ -302,87 +302,101 @@ const instance = (
  * // during `alchemy dev` by default.
  * AWS.Lambda.Collector({ config: collectorConfig, disabled: false })
  * ```
+ *
+ * @section Sharing the layer between Functions
+ * The returned layer is `Layer.fresh`: attaching is a build-time side effect
+ * against the ambient `Binding.Host`, so one value provided to several
+ * Functions must build once per host. Without `fresh`, layer memoization
+ * hands every host after the first the original build — a Function that
+ * silently deploys with no telemetry at all. The configuration LayerVersion
+ * is unaffected: resources memoize by logical id, so a shared config
+ * declaration still registers exactly one resource. Freshness does not
+ * propagate upward — an application layer that wraps this one and is itself
+ * shared as a module constant reintroduces the hazard, so mark such wrappers
+ * `Layer.fresh` too.
  */
 export const Collector = (props: CollectorProps): Layer.Layer<never> =>
-  Layer.unwrap(
-    Effect.gen(function* () {
-      // `AlchemyContext.dev` is the engine's single source of truth for dev
-      // mode — the same flag the local providers and `Alchemy.remote()`
-      // resolve against — never a raw env var, which is not set for
-      // programmatic runs. Read optionally: this same Effect is re-executed
-      // inside the deployed bundle, where the engine's context is absent.
-      const dev = Option.match(yield* Effect.serviceOption(AlchemyContext), {
-        onNone: () => false,
-        onSome: (context) => context.dev,
-      });
-      if (props.disabled ?? dev) {
-        // Nothing bound means nothing to read back, so the runtime half of
-        // `layerOtlp` resolves zero destinations and exports nothing — the
-        // decision made here at deploy time holds at runtime for free.
-        return Layer.empty;
-      }
-
-      if (!globalThis.__ALCHEMY_RUNTIME__) {
-        // Resolve the host BEFORE declaring the configuration layer: a wrong
-        // host should fail without having registered a resource for a
-        // Function that can never use it.
-        const host = yield* Binding.Host;
-        if (!isLambdaFunction(host)) {
-          return yield* Effect.die(
-            new Error(
-              `AWS.Lambda.Collector: unsupported host ${host?.Type ?? "(none)"} — the Collector runs as a Lambda extension layer, so it is only attachable to an AWS.Lambda.Function`,
-            ),
-          );
+  Layer.fresh(
+    Layer.unwrap(
+      Effect.gen(function* () {
+        // `AlchemyContext.dev` is the engine's single source of truth for dev
+        // mode — the same flag the local providers and `Alchemy.remote()`
+        // resolve against — never a raw env var, which is not set for
+        // programmatic runs. Read optionally: this same Effect is re-executed
+        // inside the deployed bundle, where the engine's context is absent.
+        const dev = Option.match(yield* Effect.serviceOption(AlchemyContext), {
+          onNone: () => false,
+          onSome: (context) => context.dev,
+        });
+        if (props.disabled ?? dev) {
+          // Nothing bound means nothing to read back, so the runtime half of
+          // `layerOtlp` resolves zero destinations and exports nothing — the
+          // decision made here at deploy time holds at runtime for free.
+          return Layer.empty;
         }
 
-        const configLayer = yield* instance(
-          typeof props.config === "string"
-            ? LayerVersion("CollectorConfig", {
-                path: props.config,
-                description: "OpenTelemetry Collector configuration",
-              })
-            : props.config,
-        );
+        if (!globalThis.__ALCHEMY_RUNTIME__) {
+          // Resolve the host BEFORE declaring the configuration layer: a wrong
+          // host should fail without having registered a resource for a
+          // Function that can never use it.
+          const host = yield* Binding.Host;
+          if (!isLambdaFunction(host)) {
+            return yield* Effect.die(
+              new Error(
+                `AWS.Lambda.Collector: unsupported host ${host?.Type ?? "(none)"} — the Collector runs as a Lambda extension layer, so it is only attachable to an AWS.Lambda.Function`,
+              ),
+            );
+          }
 
-        const extension = props.extension;
-        const extensionArn = isArnOverride(extension)
-          ? extension.layerVersionArn
-          : collectorExtensionLayerArn({
-              // Cast per the AWS binding-layer idiom: the deploy environment
-              // is provided by the stack, and erasing the requirement keeps
-              // this a `Layer<never>` for the caller.
-              region:
-                extension?.region ??
-                (yield* AWSEnvironment.current as unknown as Effect.Effect<{
-                  region: string;
-                }>).region,
-              architecture: extension?.architecture ?? architectureOf(host),
-              release: extension?.release,
-              layerVersion: extension?.layerVersion,
-              publisherAccountId: extension?.publisherAccountId,
-              partition: extension?.partition,
-            });
+          const configLayer = yield* instance(
+            typeof props.config === "string"
+              ? LayerVersion("CollectorConfig", {
+                  path: props.config,
+                  description: "OpenTelemetry Collector configuration",
+                })
+              : props.config,
+          );
 
-        yield* host.bind`AWS.Lambda.Collector(${configLayer})`({
-          // The managed extension first: `/opt` is populated in layer order,
-          // so the extension binary lands before the config beside it.
-          layers: [extensionArn, configLayer],
-          env: {
-            OPENTELEMETRY_COLLECTOR_CONFIG_URI: CONFIG_URI,
-            ...props.env,
-          },
+          const extension = props.extension;
+          const extensionArn = isArnOverride(extension)
+            ? extension.layerVersionArn
+            : collectorExtensionLayerArn({
+                // Cast per the AWS binding-layer idiom: the deploy environment
+                // is provided by the stack, and erasing the requirement keeps
+                // this a `Layer<never>` for the caller.
+                region:
+                  extension?.region ??
+                  (yield* AWSEnvironment.current as unknown as Effect.Effect<{
+                    region: string;
+                  }>).region,
+                architecture: extension?.architecture ?? architectureOf(host),
+                release: extension?.release,
+                layerVersion: extension?.layerVersion,
+                publisherAccountId: extension?.publisherAccountId,
+                partition: extension?.partition,
+              });
+
+          yield* host.bind`AWS.Lambda.Collector(${configLayer})`({
+            // The managed extension first: `/opt` is populated in layer order,
+            // so the extension binary lands before the config beside it.
+            layers: [extensionArn, configLayer],
+            env: {
+              OPENTELEMETRY_COLLECTOR_CONFIG_URI: CONFIG_URI,
+              ...props.env,
+            },
+          });
+        }
+
+        // The app exports to loopback only; the extension owns remote export.
+        return layerOtlp({
+          url: props.endpoint ?? LOOPBACK_ENDPOINT,
+          serviceName: props.serviceName,
         });
-      }
-
-      // The app exports to loopback only; the extension owns remote export.
-      return layerOtlp({
-        url: props.endpoint ?? LOOPBACK_ENDPOINT,
-        serviceName: props.serviceName,
-      });
-      // Named so publishing the config layer and binding the extension are
-      // attributable in a deploy trace rather than anonymous work under
-      // whichever Function happened to build this layer.
-    }).pipe(Effect.withSpan("AWS.Lambda.Collector")),
+        // Named so publishing the config layer and binding the extension are
+        // attributable in a deploy trace rather than anonymous work under
+        // whichever Function happened to build this layer.
+      }).pipe(Effect.withSpan("AWS.Lambda.Collector")),
+    ),
   ) as Layer.Layer<never>;
 
 /**

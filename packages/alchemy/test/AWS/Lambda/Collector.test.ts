@@ -117,6 +117,55 @@ describe("AWS.Lambda.Collector dev gating", () => {
   );
 });
 
+describe("AWS.Lambda.Collector shared across hosts", () => {
+  // One layer VALUE provided at two NESTED sites. `Effect.provide` builds a
+  // layer in a fork of the fiber's `CurrentMemoMap` and then runs the inner
+  // effect with that fork in context, and forks inherit the parent's entries
+  // — so a host declared inside another host's implementation (an app whose
+  // durable Function is yielded from its API Function's init) inherits the
+  // outer build of a shared layer constant instead of building its own.
+  it.effect(
+    "rebuilds at every provide site instead of reusing the outer host's build",
+    () =>
+      Effect.gen(function* () {
+        const shared = Collector({ config: "/nonexistent" });
+
+        // Inner site: enabled (`dev: false`) — a real build must reach the
+        // host check and die. Reusing the outer site's disabled (empty) build
+        // succeeds instead: the silent no-telemetry deployment this guards
+        // against.
+        const inner = Effect.void.pipe(
+          Effect.provide(shared),
+          Effect.provideService(AlchemyContext, {
+            dotAlchemy: "/nonexistent/.alchemy",
+            dev: false,
+            adopt: false,
+          }),
+          Effect.scoped,
+          Effect.map(() => ({ attached: false, reason: "" })),
+          Effect.catchCause((cause) =>
+            Effect.succeed({ attached: true, reason: Cause.pretty(cause) }),
+          ),
+        );
+
+        // Outer site: disabled (dev) — builds `shared` to an empty layer, then
+        // runs the inner site under the memo map that holds that build.
+        const result = yield* inner.pipe(
+          Effect.provide(shared),
+          Effect.provideService(AlchemyContext, {
+            dotAlchemy: "/nonexistent/.alchemy",
+            dev: true,
+            adopt: false,
+          }),
+          Effect.scoped,
+        );
+
+        expect(result.attached).toBe(true);
+        expect(result.reason).toContain("unsupported host");
+      }),
+  );
+});
+
 describe("Axiom.LambdaCollector packaged configuration", () => {
   it("receives on loopback only", () => {
     expect(axiomCollectorYaml).toContain("endpoint: 127.0.0.1:4318");

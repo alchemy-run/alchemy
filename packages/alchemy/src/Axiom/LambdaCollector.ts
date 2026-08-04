@@ -219,37 +219,43 @@ const datasetName = (
 export const LambdaCollector = (
   props: AxiomLambdaCollectorProps,
 ): Layer.Layer<never> =>
-  Layer.unwrap(
-    Effect.gen(function* () {
-      // Declarations are yielded to instances (registering them on the Stack
-      // if this host is the first to reference them) so the accessors below
-      // produce real Outputs.
-      const token = yield* instance(props.token);
-      const traces = yield* datasetName(props.traces);
-      const logs = yield* datasetName(props.logs);
-      return Collector({
-        config: LayerVersion(props.configId ?? "AxiomCollectorConfig", {
-          content: { "collector.yaml": COLLECTOR_YAML },
-          description: "Axiom OpenTelemetry Collector configuration",
-        }),
-        extension: props.extension,
-        disabled: props.disabled,
-        serviceName: props.serviceName,
-        env: {
-          AXIOM_OTLP_ENDPOINT: props.endpoint ?? DEFAULT_OTLP_ENDPOINT,
-          // The token binds as a secret: `ApiToken.token` is `Redacted`, and
-          // the binding channel routes Redacted values away from plaintext
-          // state. `Bearer ` is prepended in the collector config rather than
-          // here so the redaction survives interpolation.
-          AXIOM_INGEST_TOKEN: token.token,
-          AXIOM_TRACES_DATASET: traces,
-          AXIOM_LOGS_DATASET: logs,
-        },
-      });
-      // Its own span, nesting the `AWS.Lambda.Collector` one: a deploy trace
-      // then shows whether the token/dataset resolution or the extension
-      // attachment is the slow half.
-    }).pipe(Effect.withSpan("Axiom.LambdaCollector")),
+  // `Layer.fresh` for the same reason as `AWS.Lambda.Collector`: attaching is
+  // a build-time side effect against the ambient host, so one preset value
+  // shared by several Functions must rebuild per host instead of memoizing
+  // the first host's build.
+  Layer.fresh(
+    Layer.unwrap(
+      Effect.gen(function* () {
+        // Declarations are yielded to instances (registering them on the Stack
+        // if this host is the first to reference them) so the accessors below
+        // produce real Outputs.
+        const token = yield* instance(props.token);
+        const traces = yield* datasetName(props.traces);
+        const logs = yield* datasetName(props.logs);
+        return Collector({
+          config: LayerVersion(props.configId ?? "AxiomCollectorConfig", {
+            content: { "collector.yaml": COLLECTOR_YAML },
+            description: "Axiom OpenTelemetry Collector configuration",
+          }),
+          extension: props.extension,
+          disabled: props.disabled,
+          serviceName: props.serviceName,
+          env: {
+            AXIOM_OTLP_ENDPOINT: props.endpoint ?? DEFAULT_OTLP_ENDPOINT,
+            // The token binds as a secret: `ApiToken.token` is `Redacted`, and
+            // the binding channel routes Redacted values away from plaintext
+            // state. `Bearer ` is prepended in the collector config rather than
+            // here so the redaction survives interpolation.
+            AXIOM_INGEST_TOKEN: token.token,
+            AXIOM_TRACES_DATASET: traces,
+            AXIOM_LOGS_DATASET: logs,
+          },
+        });
+        // Its own span, nesting the `AWS.Lambda.Collector` one: a deploy trace
+        // then shows whether the token/dataset resolution or the extension
+        // attachment is the slow half.
+      }).pipe(Effect.withSpan("Axiom.LambdaCollector")),
+    ),
   ) as Layer.Layer<never>;
 
 /** The Collector configuration this preset packages. Exported for tests. */
