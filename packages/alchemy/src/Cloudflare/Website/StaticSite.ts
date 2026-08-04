@@ -14,7 +14,6 @@ import {
 import { asEffect } from "../../Util/types.ts";
 import type { Providers } from "../Providers.ts";
 import type { AssetsConfig } from "../Workers/Assets.ts";
-import { isContainerDecl } from "../Workers/WorkerAsyncBindings.ts";
 import {
   Worker,
   type NormalizedBindings,
@@ -22,6 +21,7 @@ import {
   type WorkerBindingProps,
   type WorkerProps,
 } from "../Workers/Worker.ts";
+import { isContainerDecl } from "../Workers/WorkerAsyncBindings.ts";
 
 export interface StaticSiteProps<Bindings extends WorkerBindingProps = {}>
   extends
@@ -285,23 +285,6 @@ const makeStaticSite = <
           env: yield* serializeEnv(props.env),
         });
 
-    // `AssetsWithHash.hash` is a single `string` that the Worker's assets
-    // diff compares with `!==` against the hash persisted in state, while
-    // `Command.Build` exposes a `{ input, output }` pair. Passing the pair
-    // through made every plan dirty — state round-trips through JSON, so a
-    // freshly built object is never `===` the deserialized one — and the
-    // Worker re-uploaded the whole asset directory on every deploy.
-    //
-    // `output` is the hash of the build's `outdir` contents, i.e. exactly
-    // the bytes being uploaded. It is `undefined` only under `memo: false`,
-    // where an absent hash makes the Worker hash the directory itself.
-    //
-    // The annotation is deliberate: the `cast` below erases the shape of the
-    // whole object literal, so this is what keeps the mapping type-checked.
-    const assetsHash: Output.Output<string | undefined> | undefined = build
-      ? Output.map(build.hash, (hash) => hash.output)
-      : undefined;
-
     // Pure-static sites (neither `main` nor `script`) deploy as
     // assets-only Workers: no script is uploaded and Cloudflare's asset
     // layer serves every request itself.
@@ -310,7 +293,7 @@ const makeStaticSite = <
       assets: build
         ? cast({
             directory: build.outdir,
-            hash: assetsHash,
+            hash: build.hash.output,
             ...props.assets,
           })
         : undefined,
