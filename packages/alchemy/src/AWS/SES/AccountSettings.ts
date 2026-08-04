@@ -30,8 +30,12 @@ export interface AccountSuppressionSettings {
   /**
    * The bounce/complaint reasons for which SES adds destinations to the
    * account-level suppression list.
+   *
+   * Required: SES treats `putAccountSuppressionAttributes` with no reasons as
+   * "suppress nothing", so an optional member would let `suppression: {}`
+   * silently clear the account-wide list.
    */
-  suppressedReasons?: SuppressionListReason[];
+  reasons: SuppressionListReason[];
 }
 
 export interface AccountSettingsProps {
@@ -66,7 +70,7 @@ export interface AccountSettings extends Resource<
     /** Whether VDM is enabled for the account. */
     vdmEnabled: FeatureStatus;
     /** The account-level suppression reasons currently configured. */
-    suppressedReasons: sesv2.SuppressionListReason[];
+    suppressedReasons: SuppressionListReason[];
   },
   never,
   Providers
@@ -102,7 +106,7 @@ export interface AccountSettings extends Resource<
  * @example Configure the Suppression List
  * ```typescript
  * const settings = yield* SES.AccountSettings("Account", {
- *   suppression: { suppressedReasons: ["BOUNCE", "COMPLAINT"] },
+ *   suppression: { reasons: ["BOUNCE", "COMPLAINT"] },
  * });
  * ```
  *
@@ -141,12 +145,11 @@ export const AccountSettings = Resource<AccountSettings>(
 );
 
 const sameReasons = (
-  a: ReadonlyArray<sesv2.SuppressionListReason> | undefined,
-  b: ReadonlyArray<sesv2.SuppressionListReason> | undefined,
+  a: ReadonlyArray<SuppressionListReason> | undefined,
+  b: ReadonlyArray<SuppressionListReason> | undefined,
 ): boolean => {
-  const key = (
-    reasons: ReadonlyArray<sesv2.SuppressionListReason> | undefined,
-  ) => JSON.stringify([...(reasons ?? [])].sort());
+  const key = (reasons: ReadonlyArray<SuppressionListReason> | undefined) =>
+    JSON.stringify([...(reasons ?? [])].sort());
   return key(a) === key(b);
 };
 
@@ -158,8 +161,16 @@ export const AccountSettingsProvider = () =>
         Effect.map((response) => ({
           sendingEnabled: response.SendingEnabled ?? false,
           vdmEnabled: response.VdmAttributes?.VdmEnabled ?? "DISABLED",
-          suppressedReasons:
-            response.SuppressionAttributes?.SuppressedReasons ?? [],
+          // distilled types SuppressedReasons open (`| (string & {})`) so the
+          // SDK survives new SES reasons. Narrow to the closed union the props
+          // use, dropping anything we do not model, so attributes assign back
+          // into props.
+          suppressedReasons: (
+            response.SuppressionAttributes?.SuppressedReasons ?? []
+          ).filter(
+            (reason): reason is SuppressionListReason =>
+              reason === "BOUNCE" || reason === "COMPLAINT",
+          ),
           dashboardEngagementMetrics:
             response.VdmAttributes?.DashboardAttributes?.EngagementMetrics,
           guardianOptimizedSharedDelivery:
@@ -170,7 +181,7 @@ export const AccountSettingsProvider = () =>
       const toAttrs = (observed: {
         sendingEnabled: boolean;
         vdmEnabled: FeatureStatus;
-        suppressedReasons: sesv2.SuppressionListReason[];
+        suppressedReasons: SuppressionListReason[];
       }) => ({
         sendingEnabled: observed.sendingEnabled,
         vdmEnabled: observed.vdmEnabled,
@@ -207,13 +218,10 @@ export const AccountSettingsProvider = () =>
 
           if (
             news.suppression !== undefined &&
-            !sameReasons(
-              observed.suppressedReasons,
-              news.suppression.suppressedReasons,
-            )
+            !sameReasons(observed.suppressedReasons, news.suppression.reasons)
           ) {
             yield* sesv2.putAccountSuppressionAttributes({
-              SuppressedReasons: news.suppression.suppressedReasons,
+              SuppressedReasons: news.suppression.reasons,
             });
           }
 

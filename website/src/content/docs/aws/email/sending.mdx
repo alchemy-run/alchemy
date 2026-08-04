@@ -324,7 +324,7 @@ const settings = yield* SES.AccountSettings("Account", {
     enabled: "ENABLED",
     dashboardEngagementMetrics: "ENABLED",
   },
-  suppression: { suppressedReasons: ["BOUNCE", "COMPLAINT"] },
+  suppression: { reasons: ["BOUNCE", "COMPLAINT"] },
 });
 ```
 

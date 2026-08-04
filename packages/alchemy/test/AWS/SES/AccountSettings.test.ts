@@ -38,7 +38,7 @@ test.provider(
       // Create — converge the account suppression list onto both reasons.
       const created = yield* stack.deploy(
         AccountSettings("Account", {
-          suppression: { suppressedReasons: ["BOUNCE", "COMPLAINT"] },
+          suppression: { reasons: ["BOUNCE", "COMPLAINT"] },
         }),
       );
       expect([...created.suppressedReasons].sort()).toEqual([
@@ -53,7 +53,7 @@ test.provider(
       // Update in place — narrow the suppression list to a single reason.
       const updated = yield* stack.deploy(
         AccountSettings("Account", {
-          suppression: { suppressedReasons: ["BOUNCE"] },
+          suppression: { reasons: ["BOUNCE"] },
         }),
       );
       expect(updated.suppressedReasons).toEqual(["BOUNCE"]);
