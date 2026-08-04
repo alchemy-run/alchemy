@@ -93,6 +93,21 @@ export type QueueWorkerBinding = Extract<
 };
 
 /**
+ * The `send_email` metadata binding extended with the alchemy-only `remote`
+ * flag — the `Alchemy.remote()` decoration captured on the {@link SendEmail}
+ * descriptor. The local worker provider uses it to pick the live Cloudflare
+ * Email service over the local console-logging stub during `alchemy dev`.
+ * Stripped from the binding before the script upload — Cloudflare never
+ * sees it.
+ */
+export type SendEmailWorkerBinding = Extract<
+  DistilledWorkerBinding,
+  { type: "send_email" }
+> & {
+  remote?: boolean;
+};
+
+/**
  * The wire-shape binding union the Cloudflare API accepts — {@link WorkerBinding}
  * minus the alchemy-only members that must be lowered before upload.
  */
@@ -101,10 +116,13 @@ export type WireWorkerBinding = Exclude<WorkerBinding, SelfUrlWorkerBinding>;
 export type WorkerBinding =
   | Exclude<
       DistilledWorkerBinding,
-      { type: "durable_object_namespace" } | { type: "queue" }
+      | { type: "durable_object_namespace" }
+      | { type: "queue" }
+      | { type: "send_email" }
     >
   | DurableObjectNamespaceWorkerBinding
   | QueueWorkerBinding
+  | SendEmailWorkerBinding
   | SelfUrlWorkerBinding;
 
 export type WorkerSettingsBinding = Exclude<

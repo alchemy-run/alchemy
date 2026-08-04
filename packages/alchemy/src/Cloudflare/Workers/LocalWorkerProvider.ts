@@ -1028,10 +1028,7 @@ export const LocalWorkerProvider = () =>
     }),
   );
 
-export const toRuntimeBinding = Effect.fn(function* (
-  b: WorkerBinding,
-  dev?: { remote?: boolean },
-) {
+export const toRuntimeBinding = Effect.fn(function* (b: WorkerBinding) {
   const unsupported = () =>
     new WorkerValidationError({
       message: `${b.type} bindings are not supported in local mode`,
@@ -1151,7 +1148,10 @@ export const toRuntimeBinding = Effect.fn(function* (
     case "secrets_store_secret":
       return yield* unsupported();
     case "send_email":
-      return SendEmail[dev?.remote ? "remote" : "local"]({
+      // `b.remote` is the `Alchemy.remote()` decoration captured on the
+      // descriptor — send through the live Cloudflare Email service in dev;
+      // otherwise the local stub logs the message to the console.
+      return SendEmail[b.remote ? "remote" : "local"]({
         binding: b.name,
         destinationAddress: b.destinationAddress,
         allowedDestinationAddresses: b.allowedDestinationAddresses,

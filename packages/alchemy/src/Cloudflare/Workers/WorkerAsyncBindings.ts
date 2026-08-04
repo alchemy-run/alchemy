@@ -346,6 +346,9 @@ const toBinding = (
       destinationAddress: binding.destinationAddress,
       allowedDestinationAddresses: binding.allowedDestinationAddresses,
       allowedSenderAddresses: binding.allowedSenderAddresses,
+      // Alchemy-only: the captured `Alchemy.remote()` decoration (stripped
+      // before upload).
+      remote: binding.remote,
     };
   } else if (isDurableObjectLike(binding)) {
     return {

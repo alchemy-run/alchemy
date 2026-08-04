@@ -2951,6 +2951,13 @@ export const LiveWorkerProvider = () =>
               const { queueId: _, shim: __, ...rest } = item;
               return rest;
             }
+            // `remote` (the captured `Alchemy.remote()` decoration) is
+            // alchemy-only metadata on send_email bindings — strip it from
+            // the wire shape.
+            if (item.type === "send_email" && item.remote !== undefined) {
+              const { remote: _, ...rest } = item;
+              return rest;
+            }
             return item;
           }),
         );

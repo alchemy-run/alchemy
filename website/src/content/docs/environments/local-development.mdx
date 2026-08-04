@@ -83,8 +83,8 @@ real cloud when local fidelity isn't enough.
 Bindings whose only job is a side effect stay stubbed: a
 [`send_email` binding](/cloudflare/email/send-and-receive) defaults
 to a local stub in dev, so `send()` logs the message to the dev
-console instead of delivering mail. Set `dev: { remote: true }` on
-the binding to send real mail from the dev loop.
+console instead of delivering mail. Pipe the binding through
+`Alchemy.remote()` (below) to send real mail from the dev loop.
 
 ## Debugging
 
