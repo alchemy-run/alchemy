@@ -211,14 +211,61 @@ test.provider(
       expect(tags["alchemy::id"]).toBe("Foreign");
 
       // Now owned: a plain re-deploy converges with no adopt decoration.
-      yield* stack.deploy(
+      // Deploying at all proves read no longer returns Unowned — an Unowned
+      // read without adopt fails with OwnedBySomeoneElse, as the test above
+      // shows — and the brand must still be intact afterwards.
+      const readopted = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* DedicatedIpPool("Foreign", { poolName: FOREIGN_POOL });
         }),
       );
+      expect(readopted.poolName).toBe(FOREIGN_POOL);
+      const { Tags: afterTags } = yield* sesv2.listTagsForResource({
+        ResourceArn: `arn:aws:ses:${region}:${accountId}:dedicated-ip-pool/${FOREIGN_POOL}`,
+      });
+      expect(
+        Object.fromEntries(afterTags.map((t) => [t.Key, t.Value]))[
+          "alchemy::id"
+        ],
+      ).toBe("Foreign");
 
       yield* stack.destroy();
       yield* assertPoolDeleted(FOREIGN_POOL);
+    }),
+  { timeout: 120_000 },
+);
+
+// A STANDARD pool holding no dedicated IPs is free, so the rename path runs
+// ungated. Renaming is a replacement — there is no rename API.
+test.provider(
+  "renaming the pool replaces it",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const first = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* DedicatedIpPool("Renamed", {
+            poolName: "alchemy-test-pool-a",
+          });
+        }),
+      );
+      expect(first.poolName).toBe("alchemy-test-pool-a");
+
+      const second = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* DedicatedIpPool("Renamed", {
+            poolName: "alchemy-test-pool-b",
+          });
+        }),
+      );
+      expect(second.poolName).toBe("alchemy-test-pool-b");
+
+      // The old pool is gone, not orphaned.
+      yield* assertPoolDeleted("alchemy-test-pool-a");
+
+      yield* stack.destroy();
+      yield* assertPoolDeleted("alchemy-test-pool-b");
     }),
   { timeout: 120_000 },
 );

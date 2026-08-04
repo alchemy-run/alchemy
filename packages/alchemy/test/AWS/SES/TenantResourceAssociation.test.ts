@@ -78,7 +78,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const { tenant, second } = yield* stack.deploy(
+      const { tenant, first, second } = yield* stack.deploy(
         Effect.gen(function* () {
           const tenant = yield* Tenant("Customer", {});
           const first = yield* ConfigurationSet("ConfigA", {});
@@ -87,7 +87,7 @@ test.provider(
             tenantName: tenant.tenantName,
             resourceArn: first.configurationSetArn,
           });
-          return { tenant, second };
+          return { tenant, first, second };
         }),
       );
 
@@ -109,6 +109,8 @@ test.provider(
 
       const arns = yield* associatedArns(tenant.tenantName);
       expect(arns).toContain(second.configurationSetArn);
+      // A replacement must DROP the old link, not leave both associated.
+      expect(arns).not.toContain(first.configurationSetArn);
 
       // Drop the association in its own step before tearing the stack down.
       // The replacement leaves both configuration sets `noop`, and a `noop`

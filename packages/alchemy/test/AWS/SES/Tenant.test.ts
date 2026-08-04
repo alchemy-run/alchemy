@@ -1,3 +1,4 @@
+import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy.ts";
 import * as AWS from "@/AWS";
 import { Tenant } from "@/AWS/SES";
 import * as Test from "@/Test/Alchemy";
@@ -111,6 +112,65 @@ test.provider(
 
       yield* stack.destroy();
       yield* assertTenantDeleted("alchemy-test-tenant-b");
+    }),
+  { timeout: 120_000 },
+);
+
+// Second adoption-gate proof, on a different taggable resource than the
+// dedicated IP pool. Tenants are free and create/delete in seconds, and
+// unlike ContactList they are not an account singleton, so a foreign tenant
+// can coexist with the other tests in this file.
+const FOREIGN_TENANT = "alchemy-test-foreign-tenant";
+
+const deleteTenantIfExists = (name: string) =>
+  sesv2
+    .deleteTenant({ TenantName: name })
+    .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
+
+test.provider(
+  "a tenant without alchemy tags is not adopted without --adopt",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      // Idempotent pre-clean: reclaim a leftover from an interrupted run.
+      yield* deleteTenantIfExists(FOREIGN_TENANT);
+
+      // Someone else's tenant: same name, no alchemy tags.
+      yield* sesv2.createTenant({ TenantName: FOREIGN_TENANT });
+
+      const error = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            return yield* Tenant("ForeignTenant", {
+              tenantName: FOREIGN_TENANT,
+            });
+          }),
+        )
+        .pipe(Effect.flip);
+      expect(error).toBeInstanceOf(OwnedBySomeoneElse);
+
+      // The refusal touched nothing.
+      const untouched = yield* getTenant(FOREIGN_TENANT);
+      expect(untouched?.TenantName).toBe(FOREIGN_TENANT);
+
+      // adopt(true) takes it over and brands it, so it converges thereafter.
+      const adopted = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Tenant("ForeignTenant", {
+            tenantName: FOREIGN_TENANT,
+          }).pipe(adopt(true));
+        }),
+      );
+      expect(adopted.tenantName).toBe(FOREIGN_TENANT);
+
+      const branded = yield* getTenant(FOREIGN_TENANT);
+      const tags = Object.fromEntries(
+        (branded?.Tags ?? []).map((t) => [t.Key, t.Value]),
+      );
+      expect(tags["alchemy::id"]).toBe("ForeignTenant");
+
+      yield* stack.destroy();
+      yield* assertTenantDeleted(FOREIGN_TENANT);
     }),
   { timeout: 120_000 },
 );

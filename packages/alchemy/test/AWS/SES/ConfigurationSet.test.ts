@@ -309,3 +309,49 @@ test.provider.skipIf(!TRACKING_REDIRECT_DOMAIN)(
     }),
   { timeout: 120_000 },
 );
+
+// putConfigurationSetVdmOptions replaces VdmOptions wholesale, so a caller
+// managing only one member would wipe the other. The provider backfills the
+// unmanaged member from observed state; this pins that behavior.
+test.provider(
+  "managing one VDM member preserves the other",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const configSet = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* ConfigurationSet("VdmBackfill", {
+            vdm: {
+              dashboardEngagementMetrics: "ENABLED",
+              guardianOptimizedSharedDelivery: "ENABLED",
+            },
+          });
+        }),
+      );
+
+      // Re-deploy managing ONLY the dashboard member.
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* ConfigurationSet("VdmBackfill", {
+            vdm: { dashboardEngagementMetrics: "DISABLED" },
+          });
+        }),
+      );
+
+      const observed = yield* sesv2.getConfigurationSet({
+        ConfigurationSetName: configSet.configurationSetName,
+      });
+      expect(observed.VdmOptions?.DashboardOptions?.EngagementMetrics).toBe(
+        "DISABLED",
+      );
+      // Guardian was never mentioned in the second deploy — it must survive.
+      expect(
+        observed.VdmOptions?.GuardianOptions?.OptimizedSharedDelivery,
+      ).toBe("ENABLED");
+
+      yield* stack.destroy();
+      yield* assertConfigurationSetDeleted(configSet.configurationSetName);
+    }),
+  { timeout: 120_000 },
+);

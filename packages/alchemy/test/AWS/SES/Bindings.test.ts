@@ -337,11 +337,14 @@ describe("SES Bindings", () => {
             message?: string;
           };
           if (put.error === undefined) {
-            // Production account: the write succeeded — clean up and let
-            // the gated lifecycle test below cover the full flow.
-            yield* send(
+            // Production account: the write succeeded — assert that rather
+            // than letting an empty branch pass, then clean up and let the
+            // gated lifecycle test below cover the full flow.
+            expect(put.error).toBeUndefined();
+            const cleanup = (yield* send(
               HttpClientRequest.post(`${baseUrl}/unsuppress?email=${email}`),
-            );
+            ).pipe(Effect.flatMap((r) => r.json))) as { error?: string };
+            expect(cleanup.error).toBeUndefined();
           } else {
             expect(put.error).toBe("BadRequestException");
             expect(put.message).toContain("sandbox");

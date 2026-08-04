@@ -237,8 +237,8 @@ test.provider(
 
 // A custom MAIL FROM domain must be a subdomain of a real identity with MX and
 // SPF published, so the sync is only observable on a domain we control.
-test.provider.skipIf(!MAIL_FROM_DOMAIN)(
-  "syncs a custom MAIL FROM domain (AWS_TEST_SES_MAIL_FROM_DOMAIN)",
+test.provider.skipIf(!MAIL_FROM_DOMAIN || !MAIL_FROM_IDENTITY)(
+  "syncs a custom MAIL FROM domain (AWS_TEST_SES_MAIL_FROM_IDENTITY + _DOMAIN)",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
