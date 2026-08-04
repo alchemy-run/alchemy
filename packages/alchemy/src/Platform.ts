@@ -242,7 +242,7 @@ export interface Platform<
         new (_: never): BaseShape & Named<Id> & Tag<Resource["Type"]>;
       };
   };
-  <PropsReq = never, InitReq extends Services | PlatformServices = never>(
+  <PropsReq = never, InitReq = never>(
     id: string,
     props:
       | InputProps<Resource["Props"]>
