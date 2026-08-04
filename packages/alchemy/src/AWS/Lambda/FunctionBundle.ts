@@ -168,6 +168,11 @@ export const makeFunctionBundler = Effect.gen(function* () {
       parentId: string | undefined,
       isResolved: boolean,
     ): boolean => {
+      // Alchemy's cross-provider runtime helpers contain a guarded dynamic
+      // import of workerd's virtual module. A Lambda can never resolve it;
+      // keep the import external so the runtime fallback handles it instead
+      // of tripping [UNRESOLVED_IMPORT] before dead-code elimination.
+      if (moduleId === "cloudflare:workers") return true;
       if (moduleId.startsWith("@aws-sdk/")) return true;
       for (const root of installRoots) {
         if (matchesPackageRoot(moduleId, root)) return true;

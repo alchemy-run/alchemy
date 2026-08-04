@@ -23,6 +23,10 @@ export default [
   // the cli bundle below).
   defineConfig({
     entry: ["bin/exec.ts"],
+    // Supplied by workerd at runtime; it has no filesystem existence, and
+    // rolldown resolves before tree-shaking, so the guarded import trips
+    // [UNRESOLVED_IMPORT] even though it is dead code outside workerd.
+    external: ["cloudflare:workers"],
     format: ["esm"],
     clean: false,
     shims: true,
