@@ -139,6 +139,18 @@
       "path": "./examples/cloudflare-secrets-store/tsconfig.json"
     },
     {
+      "path": "./examples/cloudflare-website-astro/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-website-nuxt/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-website-sveltekit/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-website-waku/tsconfig.json"
+    },
+    {
       "path": "./examples/cloudflare-worker-async/tsconfig.json"
     },
     {

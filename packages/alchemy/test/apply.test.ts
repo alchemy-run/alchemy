@@ -423,6 +423,42 @@ describe("basic operations", () => {
   );
 
   test.provider(
+    "persists resolved binding data so an unchanged redeploy plans binding noops",
+    (stack) =>
+      Effect.gen(function* () {
+        // Binding data references an output of a resource created in the
+        // SAME deploy — unresolved at plan time, resolved during apply.
+        const program = Effect.gen(function* () {
+          const upstream = yield* BindingTarget("Upstream", {
+            string: "upstream-value",
+          });
+          const target = yield* BindingTarget("Target", { string: "t" });
+          yield* target.bind("Cap", { env: { UPSTREAM: upstream.string } });
+          return target;
+        });
+
+        const created = yield* stack.deploy(program);
+        expect(created.env).toEqual({ UPSTREAM: "upstream-value" });
+
+        // The persisted binding data must hold the RESOLVED value (what
+        // `reconcile` received) — not the raw plan-time data, whose Output
+        // proxies JSON state stores silently drop.
+        expect(yield* getState("Target")).toMatchObject({
+          status: "created",
+          bindings: [
+            { sid: "Cap", data: { env: { UPSTREAM: "upstream-value" } } },
+          ],
+        });
+
+        // An unchanged redeploy must plan the binding as a noop. Before the
+        // fix, the truncated persisted data diffed against the now-resolved
+        // value and forced a spurious update on every deploy after a create.
+        yield* stack.deploy(program);
+        expect((yield* getState("Target"))?.status).toEqual("created");
+      }),
+  );
+
+  test.provider(
     "should update a surviving consumer before deleting a removed dependency",
     (stack) =>
       Effect.gen(function* () {

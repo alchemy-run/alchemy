@@ -40,6 +40,7 @@ import {
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
+import { makeSourceContext, resolveSource } from "./Source.ts";
 import {
   isSelfUrl,
   Worker,
@@ -58,8 +59,9 @@ import type {
   WorkerBinding,
   WorkerSettingsBinding,
 } from "./WorkerBinding.ts";
-import { isPythonMain, readPythonWorkerBundle } from "./PythonWorkerBundle.ts";
-import { readPrebuiltWorkerBundle, WorkerBundle } from "./WorkerBundle.ts";
+import { readPrebuiltWorkerBundle } from "./Sources/Prebuilt.ts";
+import { isPythonMain, readPythonWorkerBundle } from "./Sources/Python.ts";
+import { WorkerBundle } from "./Sources/Rolldown.ts";
 import { isWorkerLoader } from "./WorkerLoader.ts";
 import { createWorkerName } from "./WorkerName.ts";
 class MissingDurableObjects extends Data.TaggedError("MissingDurableObjects")<{
@@ -995,6 +997,10 @@ const resolveWorkerMetadataHash = ({
     logpush: props.logpush,
     observability: props.observability,
     placement: props.placement,
+    // The source descriptor is plain JSON data; hashing it means
+    // switching providers (or changing provider options) triggers an
+    // update even when no hash slot the new source computes differs.
+    source: props.source,
     tags: props.tags,
     // Reduce each consumer to its script name: a referenced Worker's other
     // attributes (hash, url, ...) change on every consumer deploy, which
@@ -2115,10 +2121,11 @@ export const LiveWorkerProvider = () =>
         selfUrl?: string,
       ) {
         const compatibility = getCompatibility(props);
-        // Loaded lazily: `./Vite.ts` pulls in `@distilled.cloud/cloudflare-vite-plugin`
-        // (~0.5s), which is only needed for vite-based workers at build time —
-        // not for every Worker definition at module-load time.
-        const Vite = yield* Effect.promise(() => import("./Vite.ts"));
+        // Loaded lazily: `./Sources/Vite.ts` pulls in
+        // `@distilled.cloud/cloudflare-vite-plugin` (~0.5s), which is only
+        // needed for vite-based workers at build time — not for every Worker
+        // definition at module-load time.
+        const Vite = yield* Effect.promise(() => import("./Sources/Vite.ts"));
         const { clientDirectory, base, serverBundle, externalWorkspaces } =
           yield* Vite.viteBuild(
             props.vite?.rootDir,
@@ -2273,10 +2280,41 @@ export const LiveWorkerProvider = () =>
 
       const prepareAssetsAndBundle = (
         id: string,
+        workerName: string,
         props: WorkerProps,
         opts: { skipAssetsRead?: boolean; selfUrl?: string } = {},
       ) =>
         Effect.gen(function* () {
+          // External source provider (`props.source`): the provider is
+          // self-contained — it supplies the bundle, optionally its own
+          // assets (framework builds), and the hash slots it owns. The
+          // props-level `assets` directory is still read here for sources
+          // that don't own assets.
+          if (props.source) {
+            const source = yield* resolveSource(props);
+            const ctx = makeSourceContext({
+              id,
+              workerName,
+              props,
+              compatibility: getCompatibility(props),
+              stack: { name: stack.name, stage: stack.stage },
+            });
+            const [output, propsAssets] = yield* Effect.all(
+              [
+                source.build(ctx),
+                source.ownsAssets || opts.skipAssetsRead
+                  ? Effect.undefined
+                  : prepareAssets(props.assets),
+              ],
+              { concurrency: "unbounded" },
+            );
+            return {
+              assets: output.assets ?? propsAssets,
+              bundle: output.bundle,
+              input: output.hash.input,
+              additionalWorkspaces: output.hash.additionalWorkspaces,
+            };
+          }
           if (props.script !== undefined) {
             const [assets, bundleHash] = yield* Effect.all(
               [
@@ -2725,6 +2763,7 @@ export const LiveWorkerProvider = () =>
         );
         const { bundle, hash: preparedHash } = yield* prepareAssetsAndBundle(
           id,
+          parentName,
           news,
           { skipAssetsRead: true },
         );
@@ -2961,7 +3000,7 @@ export const LiveWorkerProvider = () =>
           assets,
           bundle,
           hash: preparedHash,
-        } = yield* prepareAssetsAndBundle(id, news, {
+        } = yield* prepareAssetsAndBundle(id, name, news, {
           skipAssetsRead: prebuiltAssets?.skip,
           selfUrl,
         });
@@ -3958,6 +3997,52 @@ export const LiveWorkerProvider = () =>
           if (metadataHash !== output.hash?.metadata) {
             return true;
           }
+        }
+        // External source provider: the source recomputes the hash slots
+        // it owns (without building where it can) and any defined slot
+        // that differs from state means an update. `additionalWorkspaces`
+        // is auxiliary metadata for the input hash, never a change signal.
+        if (props.source) {
+          const source = yield* resolveSource(props);
+          const slots = yield* source.hash(
+            makeSourceContext({
+              id,
+              workerName: output.workerName,
+              props,
+              compatibility: getCompatibility(props),
+              stack: { name: stack.name, stage: stack.stage },
+            }),
+            output.hash,
+          );
+          if (
+            slots.bundle !== undefined &&
+            slots.bundle !== output.hash?.bundle
+          ) {
+            return true;
+          }
+          if (slots.input !== undefined && slots.input !== output.hash?.input) {
+            return true;
+          }
+          if (
+            slots.assets !== undefined &&
+            slots.assets !== output.hash?.assets
+          ) {
+            return true;
+          }
+          if (source.ownsAssets) {
+            // Source-owned assets are covered by the `input` hash.
+            return false;
+          }
+          if (!props.assets) {
+            return false;
+          }
+          const assetsHash = Predicate.hasProperty(props.assets, "hash")
+            ? props.assets.hash
+            : undefined;
+          if (assetsHash === undefined) {
+            return true;
+          }
+          return assetsHash !== output.hash?.assets;
         }
         if (props.script !== undefined) {
           const scriptHash = yield* hashScript(props.script);

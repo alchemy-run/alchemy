@@ -290,6 +290,56 @@ export const expectUrlHeader = (
   );
 };
 
+/**
+ * Fetch `url` WITHOUT following redirects and assert the immediate
+ * response status equals `expected` (and the body is not a Cloudflare
+ * placeholder page). Retries through deploy propagation like
+ * {@link expectUrlContains}. Use it to prove a URL serves (or redirects)
+ * *directly* rather than bouncing through a 3xx first.
+ */
+export const expectDirectStatus = (
+  url: string,
+  expected: number,
+  options: ExpectUrlContainsOptions = {},
+) =>
+  retryResponse(
+    url,
+    `direct ${expected}`,
+    Effect.tryPromise({
+      try: async (signal) => {
+        const u = new URL(url);
+        u.searchParams.set("__alchemy_cb", String(Date.now()));
+        const res = await fetch(u, {
+          signal,
+          cache: "no-store",
+          redirect: "manual",
+          headers: {
+            "cache-control": "no-cache",
+            pragma: "no-cache",
+            accept: "*/*",
+          },
+        });
+        const body = await res.text();
+        if (res.status !== expected || looksLikeCloudflarePlaceholder(body)) {
+          throw new HttpResponseMismatch({
+            url,
+            expected: `direct ${expected}`,
+            actual: `${res.status} ${body.slice(0, 240)}`,
+          });
+        }
+        return res;
+      },
+      catch: (e) =>
+        e instanceof HttpResponseMismatch
+          ? e
+          : new HttpFetchFailed({
+              url,
+              message: e instanceof Error ? e.message : String(e),
+            }),
+    }),
+    options,
+  );
+
 const fetchOnceAbsent = (url: string, marker: string) =>
   Effect.tryPromise({
     try: async (signal) => {

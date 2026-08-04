@@ -475,7 +475,9 @@ describe.concurrent("StaticSite", () => {
         // asset directory, forever.
         const settled = yield* stack.plan(program());
         expect(actionOf(settled, "NoopSite/Build")).toBe("noop");
-        expect(actionOf(settled, "NoopSite/Worker")).toBe("noop");
+        // The Worker is declared at the site's own id (only Build/Dev are
+        // namespaced under it), so its plan row is keyed `NoopSite`.
+        expect(actionOf(settled, "NoopSite")).toBe("noop");
 
         // ...because the persisted hash is the build's `output` hash — the
         // content hash of the uploaded bytes — and not the `{ input, output }`

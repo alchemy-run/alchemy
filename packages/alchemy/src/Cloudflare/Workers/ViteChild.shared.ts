@@ -6,6 +6,7 @@ import type {
   Workflow,
 } from "@distilled.cloud/cloudflare-runtime";
 import type { WorkerBinding } from "./WorkerBinding.ts";
+import type { WorkerAssetsConfig, WorkerSourceDescriptor } from "./Worker.ts";
 
 /**
  * Default first port of the local dev-server range. Vite and
@@ -22,6 +23,11 @@ export interface ViteChildConfig {
   storageDirectory: string;
   stack: { name: string; stage: string };
   env: Record<string, unknown>;
+  source?: {
+    descriptor: WorkerSourceDescriptor;
+    id: string;
+    assets: WorkerAssetsConfig | undefined;
+  };
   worker: {
     name: string;
     compatibility: { date: string; flags: string[] };
@@ -31,7 +37,9 @@ export interface ViteChildConfig {
     bindingDescriptors: WorkerBinding[];
     /** Binding name → opt-out of local emulation (`Alchemy.remote()`). */
     devRemote: Record<string, boolean>;
-    durableObjectNamespaces: DurableObjectNamespace[];
+    durableObjectNamespaces: (DurableObjectNamespace & {
+      uniqueKey: string;
+    })[];
     workflows: Workflow[];
     hyperdrives: Record<string, Required<HyperdriveOrigin>>;
     queueConsumers: QueueConsumer[];

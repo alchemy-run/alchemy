@@ -45,7 +45,8 @@ import type {
   WorkerBindingResource,
   WorkerBindings,
 } from "./WorkerBinding.ts";
-import { type ModuleRule, type WorkerBuildOptions } from "./WorkerBundle.ts";
+import type { ModuleRule } from "./Sources/Prebuilt.ts";
+import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
 import {
   makeWorkerRuntimeContext,
   type WorkerRuntimeContext,
@@ -635,6 +636,22 @@ export interface WorkerProps<
   assets?: Assets;
   /** @internal used by Cloudflare.Website.Vite resource */
   vite?: ViteOptions;
+  /**
+   * An external source provider for this Worker — a package that builds
+   * the assets and server bundle (and serves local dev) in place of the
+   * built-in bundling pipeline. Used by framework integrations
+   * (Next/OpenNext, Astro, SvelteKit, Waku); most users configure it
+   * through the framework's `Website.*` wrapper rather than directly.
+   *
+   * The named package must be installed in your project — it is loaded
+   * with a dynamic `import()` and its default export must satisfy the
+   * `WorkerSourceModule` contract (`{ make(options) }`).
+   *
+   * Mutually exclusive with {@link script}, {@link vite}, and
+   * {@link main} — a source is self-contained; a provider that needs a
+   * custom entry takes it in its own `options`.
+   */
+  source?: WorkerSourceDescriptor;
   logpush?: boolean;
   /**
    * Cloudflare Workers Observability settings. Controls Workers Logs
@@ -908,6 +925,34 @@ export interface WorkerProps<
          */
         url?: string;
       };
+}
+
+/**
+ * A serializable reference to an external Worker source provider.
+ * Persists in state (`olds`) and crosses the local-provider RPC
+ * boundary, so it must stay plain JSON data — the implementation is
+ * resolved by dynamically importing {@link provider}.
+ */
+export interface WorkerSourceDescriptor {
+  /**
+   * Module specifier resolved with `import()`, e.g.
+   * `"@alchemy.run/cloudflare-next"`. The module's default export must
+   * satisfy the `WorkerSourceModule` contract.
+   */
+  readonly provider: string;
+  /**
+   * How the source serves local development. Server-mode sources run in an
+   * isolated child process; bundle-mode sources stream rebuilds back to the
+   * local Worker host.
+   */
+  readonly devMode: "server" | "bundle";
+  /**
+   * Provider-specific options (rootDir, memo, framework config, ...).
+   * Must be JSON-serializable AND JSON-stable: the descriptor persists
+   * in state and participates in the metadata hash, so non-deterministic
+   * values here cause perpetual redeploys.
+   */
+  readonly options?: unknown;
 }
 
 export interface ViteOptions {

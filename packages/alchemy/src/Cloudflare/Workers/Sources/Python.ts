@@ -3,11 +3,17 @@ import * as FileSystem from "effect/FileSystem";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import fg from "fast-glob";
-import { fileURLToPath } from "node:url";
 import path from "pathe";
-import * as Bundle from "../../Bundle/Bundle.ts";
-import { exec } from "../../Util/exec.ts";
-import { sha256 } from "../../Util/sha256.ts";
+import * as Artifacts from "../../../Artifacts.ts";
+import * as Bundle from "../../../Bundle/Bundle.ts";
+import { exec } from "../../../Util/exec.ts";
+import { sha256 } from "../../../Util/sha256.ts";
+import type {
+  SourceContext,
+  SourceDevHandle,
+  SourceProvider,
+} from "../Source.ts";
+import { resolveMainPath } from "./shared.ts";
 
 /**
  * Whether a Worker `main` entry points at a Python module. Python Workers
@@ -89,15 +95,6 @@ export interface PythonWorkerBundleOptions {
     flags: string[];
   };
 }
-
-const resolveMain = (main: string) =>
-  Effect.sync(() => {
-    try {
-      return fileURLToPath(main);
-    } catch {
-      return main;
-    }
-  }).pipe(Effect.map((p) => path.resolve(p)));
 
 const uvError = (message: string) => (cause: unknown) =>
   new Bundle.BundleError({ message, cause });
@@ -310,7 +307,7 @@ export const readPythonWorkerBundle = Effect.fn(function* (
   options: PythonWorkerBundleOptions,
 ) {
   const fs = yield* FileSystem.FileSystem;
-  const main = yield* resolveMain(options.main);
+  const main = yield* resolveMainPath(options.main);
   const root = path.dirname(main);
   const entryName = path.basename(main);
 
@@ -400,7 +397,7 @@ export const watchPythonWorkerBundle = (options: PythonWorkerBundleOptions) =>
   Stream.unwrap(
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
-      const main = yield* resolveMain(options.main);
+      const main = yield* resolveMainPath(options.main);
       const root = path.dirname(main);
       const build = readPythonWorkerBundle(options).pipe(
         Effect.map(
@@ -427,3 +424,42 @@ export const watchPythonWorkerBundle = (options: PythonWorkerBundleOptions) =>
       return Stream.fromEffect(build).pipe(Stream.concat(rebuilds));
     }),
   );
+
+/**
+ * Source provider for Python workers (`.py` entry): no bundling — the
+ * entry plus sibling `.py` files upload as Python modules with
+ * dependencies vendored via uv. The read is cached per run under the
+ * shared `"build"` artifact key so diff and reconcile vendor once.
+ */
+export const makePythonSource = (main: string): SourceProvider => {
+  const pythonOptions = (ctx: SourceContext) => ({
+    id: ctx.id,
+    main,
+    compatibility: ctx.compatibility,
+  });
+  const build = (ctx: SourceContext) =>
+    readPythonWorkerBundle(pythonOptions(ctx)).pipe(Artifacts.cached("build"));
+  return {
+    ownsAssets: false,
+    build: (ctx) =>
+      build(ctx).pipe(
+        Effect.map((output) => ({
+          bundle: output,
+          assets: undefined,
+          hash: {
+            bundle: output.hash,
+            assets: undefined,
+            input: undefined,
+            additionalWorkspaces: undefined,
+          },
+        })),
+      ),
+    hash: (ctx) =>
+      build(ctx).pipe(Effect.map((output) => ({ bundle: output.hash }))),
+    dev: (ctx) =>
+      Effect.succeed({
+        mode: "bundle",
+        bundles: watchPythonWorkerBundle(pythonOptions(ctx)),
+      } satisfies SourceDevHandle),
+  };
+};

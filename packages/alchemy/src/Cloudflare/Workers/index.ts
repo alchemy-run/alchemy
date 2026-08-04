@@ -29,6 +29,7 @@ export * from "./RuntimeBindings.ts";
 export * from "./ScheduledEvents.ts";
 export * from "./SecretKey.ts";
 export * from "./SecretKeyBinding.ts";
+export * from "./Source.ts";
 export * from "./Subdomain.ts";
 export * from "./VersionMetadata.ts";
 export * from "./VersionMetadataBinding.ts";
