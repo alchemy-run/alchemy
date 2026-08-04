@@ -68,7 +68,7 @@ export interface SchemaAttributes {
   /** Human-readable name of the schema. */
   name: string;
   /** The kind of the schema. */
-  kind: "openapi_v3";
+  kind: "openapi_v3" | (string & {});
   /** The raw schema source as stored by Cloudflare. */
   source: string;
   /** Whether the schema is enabled for validation. */

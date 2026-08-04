@@ -1,10 +1,20 @@
-import * as ops from "@distilled.cloud/planetscale/Operations";
+import * as ps from "@distilled.cloud/planetscale";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import { Client } from "pg";
+import type { Client } from "pg";
 import { listSqlFiles, readSqlFile, type SqlFile } from "../../SQL/SqlFile.ts";
+
+// `pg` is an optional peer dependency — loaded lazily so importing the
+// Planetscale provider never requires the driver unless migrations run.
+const importPg = () =>
+  import("pg").catch((cause) => {
+    throw new Error(
+      "Failed to load the 'pg' driver. Install the optional peer dependency 'pg' to run Planetscale Postgres migrations.",
+      { cause },
+    );
+  });
 
 const MIGRATION_ROLE_TTL_SECONDS = 600;
 
@@ -137,6 +147,10 @@ const withPostgresClient = <A, E, R>(
   withTemporaryPostgresRole(target, (role) =>
     Effect.acquireUseRelease(
       Effect.gen(function* () {
+        const { Client } = yield* Effect.tryPromise({
+          try: importPg,
+          catch: toMigrationError,
+        });
         const client = yield* Effect.sync(
           () =>
             new Client({
@@ -170,7 +184,7 @@ const withTemporaryPostgresRole = <A, E, R>(
 ) =>
   Effect.acquireUseRelease(
     Effect.gen(function* () {
-      const created = yield* ops.createRole({
+      const created = yield* ps.createRole({
         organization: target.organization,
         database: target.database,
         branch: target.branch,
@@ -191,7 +205,7 @@ const withTemporaryPostgresRole = <A, E, R>(
     }),
     use,
     (role) =>
-      ops
+      ps
         .deleteRole({
           organization: target.organization,
           database: target.database,

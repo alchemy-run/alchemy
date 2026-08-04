@@ -5,12 +5,12 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import type { Providers } from "./Providers.ts";
 
-export type VirtualFieldProps = Axiom.CreateVirtualFieldInput;
+export type VirtualFieldProps = Axiom.CreateVirtualFieldRequest;
 
 export type VirtualField = Resource<
   "Axiom.VirtualField",
   VirtualFieldProps,
-  Axiom.CreateVirtualFieldOutput,
+  Axiom.CreateVirtualFieldResponse,
   never,
   Providers
 >;

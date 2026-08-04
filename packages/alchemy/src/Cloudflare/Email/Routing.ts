@@ -136,10 +136,7 @@ export const RoutingProvider = () =>
       const desired = news.enabled ?? true;
 
       if (desired) {
-        const result = yield* emailRouting.enableEmailRouting({
-          zoneId,
-          body: {},
-        });
+        const result = yield* emailRouting.enableEmailRouting({ zoneId });
         return {
           routingId: result.id,
           zoneId,
@@ -148,10 +145,7 @@ export const RoutingProvider = () =>
           status: (result.status ?? undefined) as RoutingStatus | undefined,
         };
       } else {
-        const result = yield* emailRouting.disableEmailRouting({
-          zoneId,
-          body: {},
-        });
+        const result = yield* emailRouting.disableEmailRouting({ zoneId });
         return {
           routingId: result.id,
           zoneId,
@@ -163,7 +157,7 @@ export const RoutingProvider = () =>
     }),
     delete: Effect.fn(function* ({ output }) {
       yield* emailRouting
-        .disableEmailRouting({ zoneId: output.zoneId, body: {} })
+        .disableEmailRouting({ zoneId: output.zoneId })
         .pipe(Effect.catch(() => Effect.void));
     }),
   });

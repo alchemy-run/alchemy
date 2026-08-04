@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import type { FileSystem } from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import type { Path } from "effect/Path";
-import type { Teardown } from "effect/Runtime";
+import { defaultTeardown, type Teardown } from "effect/Runtime";
 import type { Stdio } from "effect/Stdio";
 import type { Terminal } from "effect/Terminal";
 import type { HttpServer } from "effect/unstable/http/HttpServer";
@@ -58,6 +58,23 @@ export const PlatformServices: Layer.Layer<PlatformServices> = platformLayer({
   },
 });
 
+/**
+ * ALWAYS exit once the main effect completes. The platform `runMain` default
+ * only force-exits on failure or signal interruption — a *successful*
+ * `alchemy deploy`/`destroy` otherwise lingers for ~100 seconds after "Done"
+ * while keep-alive sockets (Cloudflare API agents, provider sidecar handles)
+ * pin the event loop until the remote side closes them. All Effect finalizers
+ * have already run by the time teardown is invoked; the macrotask hop lets
+ * any buffered stdout drain before the process exits.
+ */
+const exitingTeardown: Teardown = (exit, onExit) => {
+  defaultTeardown(exit, (code) => {
+    const finalCode = code !== 0 ? code : Number(process.exitCode ?? 0) || 0;
+    setTimeout(() => process.exit(finalCode), 0);
+    onExit(finalCode);
+  });
+};
+
 export const runMain = <E, A>(
   effect: Effect.Effect<A, E>,
   options?: {
@@ -65,13 +82,17 @@ export const runMain = <E, A>(
     readonly teardown?: Teardown | undefined;
   },
 ): void => {
+  const opts = {
+    ...options,
+    teardown: options?.teardown ?? exitingTeardown,
+  };
   if (isBun) {
     void import("@effect/platform-bun/BunRuntime").then((BunRuntime) =>
-      BunRuntime.runMain(effect, options),
+      BunRuntime.runMain(effect, opts),
     );
   } else {
     void import("@effect/platform-node/NodeRuntime").then((NodeRuntime) =>
-      NodeRuntime.runMain(effect, options),
+      NodeRuntime.runMain(effect, opts),
     );
   }
 };
@@ -83,7 +104,11 @@ export const httpServer = (
   platformLayer({
     bun: async () => {
       const BunHttpServer = await import("@effect/platform-bun/BunHttpServer");
-      return BunHttpServer.layer({ hostname: host, port });
+      // `idleTimeout: 0` disables Bun's default 10s request idle timeout.
+      // The RPC spawner serves a long-lived `/logs` stream (sidecar output
+      // forwarded to the exec child's renderer) that can legitimately sit
+      // idle between lines; Bun would otherwise sever it mid-session.
+      return BunHttpServer.layer({ hostname: host, port, idleTimeout: 0 });
     },
     node: async () => {
       const [NodeHttpServer, Http] = await Promise.all([

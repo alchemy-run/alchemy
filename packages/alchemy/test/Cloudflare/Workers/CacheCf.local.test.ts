@@ -73,6 +73,10 @@ test.provider(
       );
       const url = deployed.worker.url!;
 
+      // The local provider serves from the dev proxy — proof no cloud call
+      // ran.
+      expect(url).toMatch(/^http:\/\/localhost:\d+$/);
+
       // request.cf: the middleware injects Miniflare's static fallback blob,
       // so `colo`/`country` are present without any configuration.
       const cf = (yield* getJsonReady(`${url}/cf`)) as {

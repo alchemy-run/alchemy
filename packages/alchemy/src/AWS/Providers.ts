@@ -508,11 +508,7 @@ export const providers = () =>
       EKS.AccessEntry,
       EKS.Addon,
       EKS.Cluster,
-      EKS.Deployment,
       EKS.FargateProfile,
-      EKS.HelmChart,
-      EKS.Job,
-      EKS.Manifest,
       EKS.Nodegroup,
       EKS.PodIdentityAssociation,
       ElastiCache.ServerlessCache,
@@ -664,6 +660,7 @@ export const providers = () =>
       Lambda.EventSourceMapping,
       Lambda.Function,
       Lambda.LayerVersion,
+      Lambda.Version,
       Lambda.MicrovmImage,
       Lambda.NetworkConnector,
       Lambda.Permission,
@@ -1178,11 +1175,7 @@ export const providers = () =>
           EKS.AccessEntryProvider(),
           EKS.AddonProvider(),
           EKS.ClusterProvider(),
-          EKS.DeploymentProvider(),
           EKS.FargateProfileProvider(),
-          EKS.HelmChartProvider(),
-          EKS.JobProvider(),
-          EKS.ManifestProvider(),
           EKS.NodegroupProvider(),
           EKS.PodIdentityAssociationProvider(),
           ElastiCache.ServerlessCacheProvider(),
@@ -1264,6 +1257,7 @@ export const providers = () =>
           Lambda.EventSourceMappingProvider(),
           Lambda.FunctionProvider(),
           Lambda.LayerVersionProvider(),
+          Lambda.VersionProvider(),
           Lambda.MicrovmImageProvider(),
           Lambda.NetworkConnectorProvider(),
           Lambda.PermissionProvider(),
@@ -1678,6 +1672,10 @@ export const providers = () =>
         ),
       ),
     ),
+    // The `aws-eks` Kubernetes cluster adapter is provideMerged (not just
+    // provided) so the cluster-agnostic `Kubernetes.*` workload providers
+    // can resolve it dynamically from the ambient stack context.
+    Layer.provideMerge(EKS.EksKubernetesAdapter()),
     Layer.provideMerge(
       Layer.mergeAll(
         Command.providers(),
@@ -1687,6 +1685,10 @@ export const providers = () =>
         DockerLive,
       ),
     ),
+    // Plan-executable data-source capabilities: registering the impl layers
+    // at the stack level lets `Capability.execute(...)` Outputs (e.g.
+    // `AWS.EC2.getAmi`) resolve during plan.
+    Layer.provideMerge(EC2.GetAmiHttp),
     Layer.provideMerge(Region.fromEnvironment),
     Layer.provideMerge(Credentials.fromEnvironment),
     Layer.provideMerge(Endpoint.fromEnvironment),

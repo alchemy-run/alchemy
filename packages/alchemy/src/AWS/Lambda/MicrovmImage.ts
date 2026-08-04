@@ -3,6 +3,7 @@ import type { Region } from "@distilled.cloud/aws/Region";
 import type * as microvms from "@distilled.cloud/aws/lambda-microvms";
 
 import * as Effect from "effect/Effect";
+import type * as Bundle from "../../Bundle/Bundle.ts";
 import { Platform } from "../../Platform.ts";
 import type { Main } from "../../Platform.ts";
 import type { Resource } from "../../Resource.ts";
@@ -85,6 +86,16 @@ export interface MicrovmImageProps {
    * Extra module ids to leave external when bundling (effectful mode).
    */
   external?: string[];
+
+  /**
+   * Bundler configuration for {@link main} (effectful mode): rolldown
+   * `input`/`output` overrides plus pure-annotation options (`pure`).
+   * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
+   * `@distilled.cloud/*` are annotated as pure by default so unused code
+   * from those packages is tree-shaken; list additional packages via
+   * `pure.packages`, or disable with `pure: false`.
+   */
+  build?: Bundle.BundleConfig;
 
   /**
    * The base MicroVM image to build on top of — either its ARN or another
@@ -390,6 +401,45 @@ export type MicrovmImageShape = Main<MicrovmImageServices>;
  *   headers: AWS.Lambda.microvmAuthHeaders(authToken),
  * });
  * const body = yield* res.json;
+ * ```
+ *
+ * @section Bundling & Tree-shaking
+ * `main` is bundled with rolldown at deploy time. Top-level calls in the
+ * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
+ * `@distilled.cloud/*` packages receive `#__PURE__` annotations by
+ * default, so anything the MicroVM program doesn't use from those packages is
+ * tree-shaken out of the bundle. Any other package — including your own
+ * app — is left untouched unless you list it explicitly.
+ *
+ * @example Treat additional packages as pure
+ * Pass package names (or picomatch globs) via `build.pure.packages` to
+ * annotate them in addition to the defaults.
+ * ```typescript
+ * {
+ *   main: import.meta.url,
+ *   build: {
+ *     pure: { packages: ["my-lib", "@my-scope/*"] },
+ *   },
+ * }
+ * ```
+ *
+ * Listing a package annotates calls whose result is bound (variable
+ * initializers, exports) — safe anywhere. If a listed package also
+ * declares `"sideEffects": false` (or `[]`) in its `package.json`, that
+ * combination opts it into full annotation: top-level calls whose result
+ * is discarded (e.g. `router.on("/path", handler)` registrations) are
+ * also marked pure and deleted under minification when unused. Only list
+ * a `sideEffects: false` package if its modules really are free of
+ * meaningful top-level side effects. The `effect`, `alchemy`, and
+ * `@distilled.cloud` defaults declare exactly that, on purpose — their
+ * modules are designed to be fully tree-shakeable.
+ *
+ * @example Disable pure annotations
+ * ```typescript
+ * {
+ *   main: import.meta.url,
+ *   build: { pure: false },
+ * }
  * ```
  *
  * @section External Images (your own Dockerfile)

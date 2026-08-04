@@ -11,6 +11,12 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as pathe from "pathe";
 
+// `dev: true` runs local providers behind the RPC sidecar proxy by default,
+// matching the process topology of the real `alchemy dev` command (see
+// MakeOptions.sidecar in Test/Core.ts). For Queue and Consumer this matters
+// doubly: both are RPC-backed providers, so under the proxy their entire
+// lifecycle (broker registration, consumer wiring, worker restart hooks)
+// runs in the sidecar process.
 const { test } = Test.make({
   providers: Cloudflare.providers(),
   dev: true,
@@ -81,7 +87,10 @@ test.provider(
         }),
       );
 
+      // The local provider fabricates a `dev:` id — proof no cloud call ran
+      // — and the worker serves from the local dev proxy.
       expect(deployed.queue.queueId).toMatch(/^dev:/);
+      expect(deployed.worker.url).toMatch(/^http:\/\/localhost:\d+$/);
 
       const sent = (yield* getJsonReady(
         `${deployed.worker.url}/send?text=local-hello`,

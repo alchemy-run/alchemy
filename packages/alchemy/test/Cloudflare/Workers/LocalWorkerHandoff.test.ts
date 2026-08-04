@@ -1,12 +1,9 @@
 import * as Cloudflare from "@/Cloudflare";
 import * as Alchemy from "@/index.ts";
-import * as RpcProviderProxy from "@/Local/RpcProviderProxy";
-import * as RpcSpawner from "@/Local/RpcSpawner";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -18,6 +15,16 @@ import HandoffWorkerLive, {
   setDeployN,
 } from "./fixtures/handoff-worker.ts";
 
+/**
+ * `dev: true` runs the local providers in a persistent, file-scoped RPC
+ * sidecar by default, exactly like `alchemy dev` (see MakeOptions.sidecar in
+ * Test/Core.ts). This test DEPENDS on that topology: in-process (`sidecar:
+ * false`), each `deploy(Stack)` builds a fresh provider (fresh in-memory
+ * instance maps), so the second deploy never takes the "Changes detected,
+ * interrupting existing instance" replacement path this test exists to
+ * cover. The proxy caches its sidecar session per entry URL, so both
+ * deploys talk to the same provider process.
+ */
 const { test, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
   state: Alchemy.localState(),
@@ -27,27 +34,6 @@ const { test, deploy, destroy } = Test.make({
 const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
-);
-
-/**
- * Run the local providers in a persistent RPC sidecar, exactly like
- * `alchemy dev`. Without this, each `deploy(Stack)` builds a fresh provider
- * (fresh in-memory instance maps), so the second deploy never takes the
- * "Changes detected, interrupting existing instance" replacement path this
- * test exists to cover. The proxy caches its sidecar session per entry URL,
- * so both deploys talk to the same provider process.
- */
-const Sidecar = Layer.unwrap(
-  Effect.map(RpcSpawner.RpcSpawner, (spawner) =>
-    RpcProviderProxy.layer(spawner.url),
-  ),
-).pipe(
-  Layer.provideMerge(
-    RpcSpawner.layerServer({
-      profile: process.env.ALCHEMY_PROFILE,
-      envFile: undefined,
-    }),
-  ),
 );
 
 const Stack = Alchemy.Stack(
@@ -123,8 +109,14 @@ const registryEntryIno = (workerName: string) =>
 test(
   "previous instance keeps serving and stays registered during redeploy",
   Effect.gen(function* () {
+    // Clear any state a previous interrupted run left behind.
+    yield* destroy(Stack);
+
     setDeployN("1");
     const first = yield* deploy(Stack);
+
+    // The local provider serves from the dev proxy — proof no cloud call ran.
+    expect(first.url).toMatch(/^http:\/\/localhost:\d+$/);
 
     // Wait for the first instance to actually serve (fresh workerd + DO).
     const initial = yield* fetchDeploy(first.url).pipe(
@@ -173,6 +165,6 @@ test(
     expect(yield* registryEntryIno(second.workerName)).toBe(inoBefore);
 
     yield* destroy(Stack);
-  }).pipe(Effect.provide(Sidecar), logLevel),
+  }).pipe(logLevel),
   { timeout: 240_000 },
 );
