@@ -56,7 +56,8 @@ export interface EmailIdentityProps {
   /**
    * A custom MAIL FROM domain (a verified subdomain of the identity) SES uses
    * in the message envelope. Publish the required MX and SPF records for the
-   * subdomain to complete setup.
+   * subdomain to complete setup. Leave undefined to keep SES's current
+   * setting — there is no removal path once one is configured.
    */
   mailFromDomain?: string;
   /**

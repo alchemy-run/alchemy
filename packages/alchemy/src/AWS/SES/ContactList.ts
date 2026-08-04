@@ -1,5 +1,6 @@
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -31,12 +32,14 @@ export interface ContactListProps {
    */
   contactListName?: string;
   /**
-   * A human-readable description of the contact list.
+   * A human-readable description of the contact list. Leave undefined to keep
+   * whatever SES currently has.
    */
   description?: string;
   /**
-   * The interest topics contacts can subscribe to. `updateContactList` does a
-   * complete replacement, so the full desired set is sent on every change.
+   * The interest topics contacts can subscribe to. Replaced wholesale when
+   * set — pass the full desired set. Leave undefined to keep whatever SES
+   * currently has.
    */
   topics?: ContactListTopic[];
   /**
@@ -261,18 +264,38 @@ export const ContactListProvider = () =>
                   }),
                 ),
               );
-            observed = yield* sesv2.getContactList({ ContactListName: name });
-          } else if (
-            observed.Description !== news.description ||
-            !sameTopics(observed.Topics, news.topics)
-          ) {
-            // 3. SYNC — updateContactList is a complete replacement of the
-            //    topics/description metadata.
-            yield* sesv2.updateContactList({
-              ContactListName: name,
-              Description: news.description,
-              Topics: news.topics,
-            });
+            // getList tolerates NotFound; the list is not always readable the
+            // instant create returns, and on the AlreadyExists race another
+            // writer may still be mid-create.
+            observed = yield* getList(name).pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("1 second"),
+                until: (list) => list !== undefined,
+                times: 8,
+              }),
+            );
+          } else {
+            // 3. SYNC — only the aspects the caller manages. An omitted prop
+            //    keeps whatever SES currently has, matching every sibling
+            //    resource in this service; updateContactList replaces each
+            //    field it is given, so observed values are echoed back for the
+            //    fields we are not managing.
+            const managesDescription = news.description !== undefined;
+            const managesTopics = news.topics !== undefined;
+            const descriptionChanged =
+              managesDescription && observed.Description !== news.description;
+            const topicsChanged =
+              managesTopics && !sameTopics(observed.Topics, news.topics);
+
+            if (descriptionChanged || topicsChanged) {
+              yield* sesv2.updateContactList({
+                ContactListName: name,
+                Description: managesDescription
+                  ? news.description
+                  : observed.Description,
+                Topics: managesTopics ? news.topics : observed.Topics,
+              });
+            }
           }
 
           // 3b. SYNC TAGS — diff against OBSERVED cloud tags so adoption

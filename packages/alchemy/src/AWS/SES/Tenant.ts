@@ -1,5 +1,6 @@
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -263,7 +264,15 @@ export const TenantProvider = () =>
                   Effect.succeed({}),
                 ),
               );
-            observed = yield* getTenant(name);
+            // Not always readable the instant create returns, and on the
+            // AlreadyExists race another writer may still be mid-create.
+            observed = yield* getTenant(name).pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("1 second"),
+                until: (tenant) => tenant !== undefined,
+                times: 8,
+              }),
+            );
           }
 
           if (

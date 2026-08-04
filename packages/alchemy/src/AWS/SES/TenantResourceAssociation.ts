@@ -129,9 +129,19 @@ export const TenantResourceAssociationProvider = () =>
       });
 
       return TenantResourceAssociation.Provider.of({
-        // Deleting an association requires its parent tenant to still exist,
-        // so the tenant must outlive every association nuke tears down.
-        nuke: { dependsOn: ["AWS.SES.Tenant"] },
+        // Deleting an association requires BOTH ends to still exist: the
+        // tenant, and the resource it points at — SES refuses to delete a
+        // configuration set that still has tenant associations ("Cannot
+        // delete <arn> because it has tenant associations"). So every
+        // associable type must outlive the associations nuke tears down.
+        nuke: {
+          dependsOn: [
+            "AWS.SES.Tenant",
+            "AWS.SES.ConfigurationSet",
+            "AWS.SES.EmailIdentity",
+            "AWS.SES.EmailTemplate",
+          ],
+        },
         stables: ["tenantName", "resourceArn"],
 
         // Associations are keyed by their parent tenant, so enumeration walks

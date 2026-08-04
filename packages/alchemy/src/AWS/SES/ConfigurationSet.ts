@@ -101,13 +101,21 @@ export interface ConfigurationSetProps {
   suppressedReasons?: SuppressionListReason[];
   /**
    * Open- and click-tracking configuration. Leave undefined to keep whatever
-   * SES currently has — there is no API to remove a custom redirect domain
-   * once set, so clearing this prop does not restore the SES default.
+   * SES currently has.
+   *
+   * Members cannot be unset once set: SES exposes no API to remove a custom
+   * redirect domain, so dropping this prop keeps the current state rather
+   * than restoring the default SES tracking domain.
    */
   tracking?: ConfigurationSetTrackingSettings;
   /**
    * Virtual Deliverability Manager configuration for this configuration set.
    * Requires account-level VDM to be enabled — see `SES.AccountSettings`.
+   *
+   * Members cannot be unset once set: dropping this prop keeps the current
+   * state rather than clearing it. A member you do omit while managing its
+   * sibling is preserved (SES replaces VdmOptions wholesale, so the
+   * unmanaged member is backfilled from observed state).
    */
   vdm?: ConfigurationSetVdmSettings;
   /**

@@ -26,19 +26,22 @@ export interface ContactProps {
    */
   emailAddress: string;
   /**
-   * The contact's per-topic subscription preferences. `updateContact` does a
-   * complete replacement, so the full desired set is sent on every change.
+   * The contact's per-topic subscription preferences. Replaced wholesale when
+   * set — pass the full desired set. Leave undefined to keep whatever SES
+   * currently has.
    */
   topicPreferences?: ContactTopicPreference[];
   /**
-   * Whether the contact is unsubscribed from all topics.
+   * Whether the contact is unsubscribed from all topics. Leave undefined to
+   * keep SES's current setting.
    * @default false
    */
   unsubscribeAll?: boolean;
   /**
    * Arbitrary application metadata attached to the contact. Serialized to the
    * JSON string SES stores; equivalent representations (key order, whitespace)
-   * are ignored when detecting drift.
+   * are ignored when detecting drift. Leave undefined to keep whatever SES
+   * currently has.
    */
   attributes?: Record<string, unknown>;
 }
@@ -287,25 +290,48 @@ export const ContactProvider = () =>
                   }),
                 ),
               );
-          } else if (
-            (observed.UnsubscribeAll ?? false) !==
-              (news.unsubscribeAll ?? false) ||
-            (yield* Effect.sync(
-              () =>
-                normalizeAttributes(observed.AttributesData) !==
-                normalizeAttributes(news.attributes),
-            )) ||
-            !samePreferences(observed.TopicPreferences, news.topicPreferences)
-          ) {
-            // 3. SYNC — updateContact is a complete replacement of the
-            //    preferences and metadata.
-            yield* sesv2.updateContact({
-              ContactListName: contactListName,
-              EmailAddress: emailAddress,
-              TopicPreferences: news.topicPreferences,
-              UnsubscribeAll: news.unsubscribeAll,
-              AttributesData: attributesData,
-            });
+          } else {
+            // 3. SYNC — only the aspects the caller manages. An omitted prop
+            //    keeps whatever SES currently has, matching every sibling
+            //    resource in this service; updateContact replaces each field
+            //    it is given, so observed values are echoed back for the
+            //    fields we are not managing.
+            const managesPreferences = news.topicPreferences !== undefined;
+            const managesUnsubscribe = news.unsubscribeAll !== undefined;
+            const managesAttributes = news.attributes !== undefined;
+
+            const preferencesChanged =
+              managesPreferences &&
+              !samePreferences(
+                observed.TopicPreferences,
+                news.topicPreferences,
+              );
+            const unsubscribeChanged =
+              managesUnsubscribe &&
+              (observed.UnsubscribeAll ?? false) !== news.unsubscribeAll;
+            const attributesChanged =
+              managesAttributes &&
+              (yield* Effect.sync(
+                () =>
+                  normalizeAttributes(observed.AttributesData) !==
+                  normalizeAttributes(news.attributes),
+              ));
+
+            if (preferencesChanged || unsubscribeChanged || attributesChanged) {
+              yield* sesv2.updateContact({
+                ContactListName: contactListName,
+                EmailAddress: emailAddress,
+                TopicPreferences: managesPreferences
+                  ? news.topicPreferences
+                  : observed.TopicPreferences,
+                UnsubscribeAll: managesUnsubscribe
+                  ? news.unsubscribeAll
+                  : observed.UnsubscribeAll,
+                AttributesData: managesAttributes
+                  ? attributesData
+                  : observed.AttributesData,
+              });
+            }
           }
 
           return { contactListName, emailAddress };
