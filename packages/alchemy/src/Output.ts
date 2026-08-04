@@ -12,7 +12,7 @@ import { RuntimeContext, sanitizeKey } from "./RuntimeContext.ts";
 import { Stack } from "./Stack.ts";
 import { Stage } from "./Stage.ts";
 import * as State from "./State/State.ts";
-import { isPrimitive } from "./Util/data.ts";
+import { isPrimitive, type Primitive } from "./Util/data.ts";
 
 const inspect = Symbol.for("nodejs.util.inspect.custom");
 
@@ -48,6 +48,23 @@ export const asOutput = <T>(t: T | Output<T> | Effect.Effect<T>): Output<T> =>
       ? new EffectExpr(VoidExpr, () => t)
       : new LiteralExpr(t);
 
+/**
+ * Lift a plan-time Effect into an {@link Output}.
+ *
+ * The effect runs when the stack resolves the Output during plan/deploy —
+ * with the stack's services (cloud credentials, region, ...) provided — and
+ * never inside a deployed runtime: constructing the Output is inert, so
+ * helpers built on `fromEffect` (e.g. AMI lookups) are safe to call from
+ * composition code that is re-executed inside a Function/Worker/Instance
+ * bundle.
+ *
+ * The effect must not fail (`E = never`) — die with a descriptive error for
+ * unresolvable lookups.
+ */
+export const fromEffect = <A, Req = never>(
+  effect: Effect.Effect<A, never, Req>,
+): ToOutput<A, Req> => new EffectExpr(VoidExpr, () => effect) as any;
+
 export const isOutput = (value: any): value is Output<any> =>
   value &&
   (typeof value === "object" || typeof value === "function") &&
@@ -73,16 +90,24 @@ export interface Output<A = any, Req = any> extends Pipeable {
 
 export interface Accessor<A> extends Effect.Effect<A> {}
 
-export type ToOutput<A, Req = never> = [Extract<A, object>] extends [never]
-  ? Output<A, Req>
-  : [Extract<A, any[]>] extends [never]
-    ? ObjectExpr<
-        {
-          [attr in keyof A]: A[attr];
-        },
-        Req
-      >
-    : ArrayExpr<Extract<A, any[]>, Req>;
+export type ToOutput<A, Req = never> =
+  // Branded primitives (`string & Brand<"...">`) are assignable to `object`
+  // via the brand intersection, so they must short-circuit to a plain Output
+  // before the object check — otherwise they explode into an ObjectExpr
+  // mapped over every String/Number method. Date is opaque for the same
+  // reason (mirrors AttrOutput in Resource.ts).
+  [A] extends [Primitive | Date]
+    ? Output<A, Req>
+    : [Extract<A, object>] extends [never]
+      ? Output<A, Req>
+      : [Extract<A, any[]>] extends [never]
+        ? ObjectExpr<
+            {
+              [attr in keyof A]: A[attr];
+            },
+            Req
+          >
+        : ArrayExpr<Extract<A, any[]>, Req>;
 
 export const ExprSymbol = Symbol.for("alchemy/Expr");
 

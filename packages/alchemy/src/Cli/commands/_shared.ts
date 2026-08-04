@@ -29,6 +29,7 @@ import { CloudflareAuth } from "../../Cloudflare/Auth/AuthProvider.ts";
 import { GitHubAuth } from "../../GitHub/AuthProvider.ts";
 import { NeonAuth } from "../../Neon/AuthProvider.ts";
 import { PlanetscaleAuth } from "../../Planetscale/AuthProvider.ts";
+import { PrismaAuth } from "../../Prisma/AuthProvider.ts";
 import * as Stack from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import { recordCli } from "../../Telemetry/Metrics.ts";
@@ -460,6 +461,7 @@ export const builtinAuth = Layer.mergeAll(
   GitHubAuth,
   NeonAuth,
   PlanetscaleAuth,
+  PrismaAuth,
 );
 
 /**

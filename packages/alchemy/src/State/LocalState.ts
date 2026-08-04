@@ -142,14 +142,27 @@ export const makeLocalState = () =>
         ),
       delete: (request) => fs.remove(resource(request)).pipe(recover),
       deleteStack: ({ stack, stage }) =>
-        fs
-          .remove(
+        Effect.suspend(() => {
+          const dir =
             stage === undefined
               ? path.join(stateDir, stack)
-              : stageDir({ stack, stage }),
-            { recursive: true },
-          )
-          .pipe(recover),
+              : stageDir({ stack, stage });
+          return fs.remove(dir, { recursive: true }).pipe(
+            recover,
+            // Drop cached `ensure`d directories under the removed tree, or a
+            // later `set` for the same (stack, stage) skips makeDirectory and
+            // its write fails with NotFound — silently swallowed by `recover`.
+            Effect.tap(() =>
+              Effect.sync(() => {
+                for (const cached of created) {
+                  if (cached === dir || cached.startsWith(dir + path.sep)) {
+                    created.delete(cached);
+                  }
+                }
+              }),
+            ),
+          );
+        }),
       list: (request) =>
         fs.readDirectory(stageDir(request)).pipe(
           recover,

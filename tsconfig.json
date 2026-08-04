@@ -21,10 +21,10 @@
       "path": "./distilled/packages/planetscale/tsconfig.json"
     },
     {
-      "path": "./distilled/packages/neon/tsconfig.json"
+      "path": "./distilled/packages/axiom/tsconfig.json"
     },
     {
-      "path": "./distilled/packages/axiom/tsconfig.json"
+      "path": "./distilled/packages/neon/tsconfig.json"
     },
     // cloudflare-tools (submodule) — reference the composite leaf configs
     // directly; the per-package tsconfig.json files are non-composite
@@ -44,9 +44,9 @@
     {
       "path": "./cloudflare-tools/packages/cloudflare-vite-plugin/tsconfig.workers.json"
     },
-    {
-      "path": "./tsconfig.scripts.json"
-    },
+    // {
+    //   "path": "./tsconfig.scripts.json"
+    // },
     {
       "path": "./packages/alchemy-test/tsconfig.json"
     },
@@ -77,6 +77,9 @@
     },
     {
       "path": "./examples/aws-eks/tsconfig.json"
+    },
+    {
+      "path": "./examples/aws-bedrock-ai/tsconfig.json"
     },
     {
       "path": "./examples/aws-lambda-httpapi/tsconfig.json"
@@ -137,6 +140,12 @@
     },
     {
       "path": "./examples/cloudflare-worker-async/tsconfig.json"
+    },
+    {
+      "path": "./examples/prisma-compute-effect/tsconfig.json"
+    },
+    {
+      "path": "./examples/prisma-tanstack-start/tsconfig.json"
     },
     {
       "path": "./examples/docker-postgres/tsconfig.json"

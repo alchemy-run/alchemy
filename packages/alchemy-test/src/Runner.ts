@@ -1,11 +1,13 @@
 /**
  * Single-process test runner.
  *
- * Discovers `*.test.ts` files, imports them one at a time (registration is
- * global), then executes every collected test as an Effect — files run
- * concurrently up to a limit, tests within a file run sequentially unless
- * their suite is `describe.concurrent`. Each test gets a buffering Effect
- * Logger + Console so its output can be shown in isolation.
+ * Discovers `*.test.ts` files, imports them ALL IN PARALLEL (the per-file
+ * collector rides AsyncLocalStorage, so registration attribution survives
+ * concurrent imports — see Registry.ts), then executes every collected
+ * test as an Effect — files run concurrently up to a limit, tests within a
+ * file run sequentially unless their suite is `describe.concurrent`. Each
+ * test gets a buffering Effect Logger + Console so its output can be shown
+ * in isolation.
  */
 import * as Cause from "effect/Cause";
 import * as ConsoleModule from "effect/Console";
@@ -15,6 +17,7 @@ import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Logger from "effect/Logger";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Semaphore from "effect/Semaphore";
 import { inspect } from "node:util";
@@ -241,13 +244,15 @@ const collectFile = (
   relative: string,
 ): Effect.Effect<CollectedFile> =>
   Effect.promise(async (): Promise<CollectedFile> => {
-    const root = Registry.beginFile(relative);
     try {
-      await import(pathToFileURL(absolute).href);
-      // Flush microtasks + one macrotask so registrations deferred with
-      // queueMicrotask (e.g. Test.make's fallback afterAll) land in the tree.
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      return { file: relative, suite: root };
+      const suite = await Registry.collect(relative, async () => {
+        await import(pathToFileURL(absolute).href);
+        // Flush microtasks + one macrotask so registrations deferred with
+        // queueMicrotask (e.g. Test.make's fallback afterAll) land in the
+        // tree — their ALS context resolves this file's collector.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      return { file: relative, suite };
     } catch (error) {
       return {
         file: relative,
@@ -257,8 +262,6 @@ const collectFile = (
             ? (error.stack ?? error.message)
             : String(error),
       };
-    } finally {
-      Registry.endFile();
     }
   });
 
@@ -411,6 +414,51 @@ const hookError = (attempt: TestAttempt): string | undefined => {
   return errors.length === 0 ? undefined : errors.join("\n\n");
 };
 
+/**
+ * How long a timed-out test body's interruption (finalizers included) may
+ * run before the runner abandons the fiber and reports the timeout anyway.
+ * Without this bound, a finalizer blocked on the same wedged machinery the
+ * timeout just interrupted (e.g. a `test.provider` scratch destroy against
+ * a hung dev deploy) swallows the report entirely — the test never finishes
+ * and the run dies at the wall clock with no error attribution.
+ */
+const INTERRUPT_GRACE_MS = 10_000;
+
+/**
+ * Run a test body with a timeout that cannot be swallowed by hung
+ * finalizers: on timeout the body fiber is interrupted, its finalizers get
+ * {@link INTERRUPT_GRACE_MS} to settle, and then the fiber is abandoned
+ * (it dies with the run) and the timeout is reported.
+ */
+const runBodyWithTimeout = Effect.fn(function* (
+  body: () => Effect.Effect<unknown, unknown>,
+  timeoutMs: number,
+) {
+  // Detached: a timed-out body whose teardown never settles must not block
+  // the attempt fiber's own completion (a supervised child would).
+  const fiber = yield* Effect.forkDetach(Effect.suspend(body), {
+    startImmediately: true,
+  });
+  const awaited = yield* Fiber.await(fiber).pipe(
+    Effect.timeoutOption(Duration.millis(timeoutMs)),
+  );
+  if (Option.isSome(awaited)) return awaited.value;
+  // Fire-and-forget interrupt: `Fiber.interrupt` AWAITS settlement, which a
+  // hung finalizer never provides. Fire it, then give teardown a bounded
+  // grace before abandoning the fiber (it dies with the process).
+  yield* Effect.sync(() => fiber.interruptUnsafe());
+  const settled = yield* Fiber.await(fiber).pipe(
+    Effect.timeoutOption(Duration.millis(INTERRUPT_GRACE_MS)),
+  );
+  return Exit.fail(
+    new Error(
+      Option.isNone(settled)
+        ? `test timed out after ${timeoutMs}ms (teardown did not settle within ${INTERRUPT_GRACE_MS}ms and was abandoned)`
+        : `test timed out after ${timeoutMs}ms`,
+    ),
+  ) as Exit.Exit<unknown, unknown>;
+});
+
 const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
   const meta = metaOf(ctx.file, test);
   const skipped = isSkipped(test);
@@ -443,10 +491,7 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
     return Effect.gen(function* () {
       const beforeExit = yield* runHooks(before, timeoutMs).pipe(Effect.exit);
       const bodyExit = Exit.isSuccess(beforeExit)
-        ? yield* Effect.suspend(test.body!).pipe(
-            Effect.timeout(Duration.millis(timeoutMs)),
-            Effect.exit,
-          )
+        ? yield* runBodyWithTimeout(test.body!, timeoutMs)
         : undefined;
       return { beforeEach: beforeExit, body: bodyExit };
     }).pipe(
@@ -686,18 +731,32 @@ export const run = Effect.fn(function* (options: RunOptions) {
   const relative = absoluteFiles.map((f) => path.relative(options.root, f));
   yield* emit({ _tag: "CollectStart", files: relative });
 
-  // Phase 1 — import EVERY file before running anything. Imports are lazy
-  // and pure (registration only), and must be serial anyway because the
-  // registration state is global. Collecting fully up-front keeps run
-  // semantics simple: `.only` applies across the whole run, and the full
-  // test list is known before the first test starts.
-  const collected: Array<CollectedFile> = [];
-  for (let i = 0; i < absoluteFiles.length; i++) {
-    // collectFile never fails — import errors are captured on the result.
-    const c = yield* collectFile(absoluteFiles[i]!, relative[i]!);
-    collected.push(c);
-    yield* emit({ _tag: "FileCollected", file: relative[i]! });
-  }
+  // Phase 1 — import EVERY file before running anything, in parallel.
+  // The per-file collector rides AsyncLocalStorage (see Registry.ts), so
+  // registration stays correctly attributed under concurrent imports.
+  // Collecting fully up-front keeps run semantics simple: `.only` applies
+  // across the whole run, and the full test list is known before the first
+  // test starts.
+  //
+  // Concurrency is BOUNDED: kicking off every import at once floods the
+  // main thread with synchronous parse/link/evaluate work — timers and the
+  // progress line starve (a slow start becomes indistinguishable from a
+  // hang), and it maximizes exposure to loader races under concurrent
+  // dynamic imports. The shared dependency graph is deduped by the module
+  // cache, so a modest bound keeps nearly all of the speedup.
+  const collectConcurrency =
+    options.concurrency === "unbounded"
+      ? 32
+      : Math.min(options.concurrency, 32);
+  // collectFile never fails — import errors are captured on the result.
+  const collected = yield* Effect.forEach(
+    absoluteFiles.map((absolute, i) => [absolute, relative[i]!] as const),
+    ([absolute, rel]) =>
+      collectFile(absolute, rel).pipe(
+        Effect.tap(() => emit({ _tag: "FileCollected", file: rel })),
+      ),
+    { concurrency: collectConcurrency },
+  );
 
   const onlyMode = collected.some(
     (c) => c.suite !== undefined && containsOnly(c.suite),
@@ -832,6 +891,7 @@ export const run = Effect.fn(function* (options: RunOptions) {
     todo: allResults.filter((r) => r.result.status === "todo").length,
     durationMs: Date.now() - startedAt,
     failures,
+    fileFailures,
   };
   yield* emit({ _tag: "RunEnd", summary });
   // Drain the live hook-line queue so tail lines from the final file's

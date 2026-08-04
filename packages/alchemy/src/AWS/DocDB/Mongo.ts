@@ -1,9 +1,19 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import { type Db, MongoClient, type MongoClientOptions } from "mongodb";
+import type { Db, MongoClient, MongoClientOptions } from "mongodb";
 import { makeExecutionMemo } from "../../Runtime/ExecutionMemo.ts";
 import type { MongoConnectionInfo } from "./Connect.ts";
+
+// `mongodb` is an optional peer dependency — loaded lazily so importing the
+// AWS provider barrel never requires the driver unless a client is built.
+const importMongodb = () =>
+  import("mongodb").catch((cause) => {
+    throw new Error(
+      "Failed to load the 'mongodb' driver. Install the optional peer dependency 'mongodb' to connect to DocumentDB.",
+      { cause },
+    );
+  });
 
 /** A failure raised by the underlying `mongodb` driver. */
 export class MongoError extends Data.TaggedError("AWS.DocDB.MongoError")<{
@@ -102,15 +112,17 @@ export const mongo = <E, R>(
       const info = yield* connection;
       const client = yield* Effect.acquireRelease(
         Effect.tryPromise({
-          try: () =>
-            new MongoClient(Redacted.value(info.url), {
+          try: async () => {
+            const { MongoClient } = await importMongodb();
+            return new MongoClient(Redacted.value(info.url), {
               ...(options?.ca !== undefined
                 ? // A caller-supplied CA restores full identity verification
                   // (overriding the URL's tlsAllowInvalidCertificates).
                   { ca: options.ca, tlsAllowInvalidCertificates: false }
                 : {}),
               ...options?.clientOptions,
-            }).connect(),
+            }).connect();
+          },
           catch: (cause) => new MongoError({ cause }),
         }),
         (client) => Effect.promise(() => client.close().catch(() => {})),

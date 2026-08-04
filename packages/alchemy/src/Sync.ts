@@ -185,7 +185,12 @@ export const sync = (
         );
       }
 
-      const provider = yield* findProviderByType(resourceType);
+      // Observe with the provider variant of the mode that created the row —
+      // a local dev worker's state must be read by the local provider.
+      const provider = yield* findProviderByType(
+        resourceType,
+        old.providerMode,
+      );
       if (!provider.read) {
         return yield* skip(
           `provider '${resourceType}' does not implement read`,
@@ -436,7 +441,12 @@ export const plan = (stack: {
         fqn,
       });
       if (!persisted || isActionState(persisted)) continue;
-      const provider = yield* findProviderByType(persisted.resourceType);
+      // Repair the row with the provider mode that created it (sync never
+      // switches modes — a local ⇄ live switch is a plan-time replacement).
+      const provider = yield* findProviderByType(
+        persisted.resourceType,
+        persisted.providerMode,
+      );
       const action =
         r.action === "drifted"
           ? ("update" as const)
@@ -448,6 +458,7 @@ export const plan = (stack: {
         props: persisted.props,
         state: persisted,
         provider,
+        mode: persisted.providerMode,
         // Synthetic ResourceLike reconstructed from persisted state, the
         // same way Plan.make builds its deletion nodes.
         resource: {
@@ -461,6 +472,7 @@ export const plan = (stack: {
           Provider: Provider(persisted.resourceType),
           RemovalPolicy: persisted.removalPolicy,
           Adopt: undefined,
+          Mode: persisted.providerMode,
           RuntimeContext: undefined!,
           Providers: undefined,
         } as ResourceLike,

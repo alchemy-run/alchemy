@@ -1,5 +1,6 @@
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as Redacted from "effect/Redacted";
+import type * as Bundle from "../../Bundle/Bundle.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import {
   type Main,
@@ -78,6 +79,13 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
    * physical name from the stack, stage, and logical ID.
    */
   name?: string;
+  /**
+   * Name of the exported Durable Object class this container backs when the
+   * Container is bound on an **async** Worker's `env`. Defaults to the
+   * binding name (the `env` key). Ignored by the Effect-native path, where
+   * the class name comes from the hosting Durable Object.
+   */
+  className?: string;
   /**
    * Initial number of instances to maintain. Matches wrangler, which forces
    * this to 0 whenever {@link maxInstances} is set (pure scale-from-zero).
@@ -253,6 +261,14 @@ export interface EffectfulContainerProps extends ContainerApplicationPropsBase {
    * redundant install step.
    */
   autoInstallExternals?: boolean;
+  /**
+   * Bundler configuration for {@link main}: rolldown `input`/`output`
+   * overrides plus pure-annotation options (`pure`). `effect`, `@effect/*`,
+   * `alchemy`, `@alchemy.run/*`, and `@distilled.cloud/*` are annotated as
+   * pure by default so unused code from those packages is tree-shaken; list
+   * additional packages via `pure.packages`, or disable with `pure: false`.
+   */
+  build?: Bundle.BundleConfig;
 }
 
 /**
@@ -286,6 +302,12 @@ export interface RemoteContainerProps extends ContainerApplicationPropsBase {
    * The pre-built image to pull and re-push.
    *
    * E.g. `ghcr.io/alpine/alpine:latest`
+   *
+   * When the reference already points at the target registry (the
+   * {@link ContainerApplicationPropsBase.registryId | registryId} host,
+   * `registry.cloudflare.com` by default) — e.g. a digest reference pushed
+   * by CI like `registry.cloudflare.com/<accountId>/app@sha256:...` — it is
+   * deployed as-is and the docker pull/push round-trip is skipped entirely.
    */
   image: string;
 }
@@ -317,6 +339,7 @@ export interface AnyContainerApplicationProps extends ContainerApplicationPropsB
   runtime?: "bun" | "node";
   external?: string[];
   autoInstallExternals?: boolean;
+  build?: Bundle.BundleConfig;
 }
 
 export type ContainerServices =
@@ -460,6 +483,45 @@ export type ContainerShape = Main<ContainerServices>;
  * environment can run extra build steps (system packages, config) while the
  * bundled program is still layered on top.
  *
+ * @section Bundling & Tree-shaking
+ * `main` is bundled with rolldown at deploy time. Top-level calls in the
+ * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
+ * `@distilled.cloud/*` packages receive `#__PURE__` annotations by
+ * default, so anything the container program doesn't use from those packages is
+ * tree-shaken out of the bundle. Any other package — including your own
+ * app — is left untouched unless you list it explicitly.
+ *
+ * @example Treat additional packages as pure
+ * Pass package names (or picomatch globs) via `build.pure.packages` to
+ * annotate them in addition to the defaults.
+ * ```typescript
+ * {
+ *   main: import.meta.url,
+ *   build: {
+ *     pure: { packages: ["my-lib", "@my-scope/*"] },
+ *   },
+ * }
+ * ```
+ *
+ * Listing a package annotates calls whose result is bound (variable
+ * initializers, exports) — safe anywhere. If a listed package also
+ * declares `"sideEffects": false` (or `[]`) in its `package.json`, that
+ * combination opts it into full annotation: top-level calls whose result
+ * is discarded (e.g. `router.on("/path", handler)` registrations) are
+ * also marked pure and deleted under minification when unused. Only list
+ * a `sideEffects: false` package if its modules really are free of
+ * meaningful top-level side effects. The `effect`, `alchemy`, and
+ * `@distilled.cloud` defaults declare exactly that, on purpose — their
+ * modules are designed to be fully tree-shakeable.
+ *
+ * @example Disable pure annotations
+ * ```typescript
+ * {
+ *   main: import.meta.url,
+ *   build: { pure: false },
+ * }
+ * ```
+ *
  * @section Scaling & Instance Types
  * Control the desired and maximum instance counts with `instances`/`maxInstances`
  * and pick a compute size with `instanceType`. For finer control, override
@@ -600,7 +662,15 @@ export type ContainerShape = Main<ContainerServices>;
  *
  * A `rolling` strategy with `stepPercentage: 25` replaces instances in 25%
  * increments so the application stays available during the update; the default
- * `immediate` strategy swaps everything at once.
+ * `immediate` strategy swaps everything at once. Steps advance automatically
+ * as new instances become healthy; each replaced instance receives `SIGTERM`
+ * and has 15 minutes to shut down cleanly before `SIGKILL`.
+ *
+ * Rollouts replace instances — they do not split requests between two image
+ * versions (request-level traffic splitting exists one layer up, on the
+ * Worker, via `version.traffic`). The fronting Worker and Durable Object cut
+ * over immediately while instances roll, so keep the Worker-to-container
+ * protocol compatible across both image versions until a rollout completes.
  */
 export interface ContainerApplication<Shape = unknown> extends Resource<
   ContainerTypeId,
@@ -715,7 +785,12 @@ export declare namespace DevContainerImage {
 }
 
 export const ContainerProvider = () =>
-  ProviderLayer.select({
-    live: () => LiveContainerProvider(),
-    local: () => LocalContainerProvider(),
-  });
+  // `{ Type }` instead of `ContainerPlatform` — importing the platform here
+  // would create a module cycle (ContainerPlatform.ts imports this file).
+  ProviderLayer.dual(
+    { Type: ContainerTypeId },
+    {
+      live: () => LiveContainerProvider(),
+      local: () => LocalContainerProvider(),
+    },
+  );

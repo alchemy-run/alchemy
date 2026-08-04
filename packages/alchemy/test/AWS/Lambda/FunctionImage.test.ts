@@ -96,11 +96,12 @@ describe("Lambda Function images", (it) => {
           image: { uri: "example" },
           main: "./handler.ts",
           runtime: "nodejs22.x",
+          layers: ["arn:aws:lambda:us-east-1:123456789012:layer:example:1"],
         }),
       );
       expect(Result.isFailure(mixedPackage)).toBe(true);
       if (Result.isFailure(mixedPackage)) {
-        expect(mixedPackage.failure.message).toContain("main, runtime");
+        expect(mixedPackage.failure.message).toContain("main, runtime, layers");
       }
 
       const zipConfig = yield* Effect.result(

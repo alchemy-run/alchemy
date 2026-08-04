@@ -21,9 +21,21 @@ import type { Providers } from "../Providers.ts";
 export type ClusterStatus = sagemaker.ClusterStatus;
 
 /**
- * An instance group surfaced on the cluster's attributes — the value EKS
- * workloads reference via `hyperpod.instanceGroup` to pin themselves to
- * the group.
+ * The well-known node label carrying the HyperPod instance-group name.
+ * HyperPod nodes join the orchestrating EKS cluster as ordinary Kubernetes
+ * nodes carrying this label.
+ */
+export const HYPERPOD_INSTANCE_GROUP_LABEL =
+  "sagemaker.amazonaws.com/instance-group-name";
+
+/** The well-known node label carrying HyperPod's node health verdict. */
+export const HYPERPOD_NODE_HEALTH_LABEL =
+  "sagemaker.amazonaws.com/node-health-status";
+
+/**
+ * An instance group surfaced on the cluster's attributes — Kubernetes
+ * workloads pin themselves to the group by referencing its
+ * {@link ClusterInstanceGroupRef.nodeSelector}.
  */
 export interface ClusterInstanceGroupRef {
   /** The group's name (the `sagemaker.amazonaws.com/instance-group-name` node label). */
@@ -34,6 +46,18 @@ export interface ClusterInstanceGroupRef {
   CurrentCount: number | undefined;
   /** Instances the group is converging toward. */
   TargetCount: number | undefined;
+  /**
+   * A Kubernetes node selector pinning pods onto this group's
+   * health-checked nodes — pass it to a `Kubernetes.Job` /
+   * `Kubernetes.Deployment` through the `podTemplate` escape hatch:
+   *
+   * ```ts
+   * podTemplate: {
+   *   spec: { nodeSelector: hyperpod.instanceGroups.workers.nodeSelector },
+   * }
+   * ```
+   */
+  nodeSelector: Record<string, string>;
 }
 
 /**
@@ -145,10 +169,10 @@ export interface Cluster extends Resource<
      */
     orchestratorEksClusterArn: string | undefined;
     /**
-     * The cluster's instance groups, keyed by group name. Reference one
-     * from an EKS workload's `hyperpod.instanceGroup` to pin the workload
-     * to the group through the resource graph:
-     * `hyperpod.instanceGroups.workers`.
+     * The cluster's instance groups, keyed by group name. Pin a
+     * Kubernetes workload onto a group through the resource graph with
+     * its node selector:
+     * `hyperpod.instanceGroups.workers.nodeSelector`.
      */
     instanceGroups: Record<string, ClusterInstanceGroupRef>;
   },
@@ -271,19 +295,25 @@ export type ClusterOf<Groups> = Omit<Cluster, "instanceGroups"> & {
  *
  * @example High level: an effectful Job pinned to HyperPod nodes
  * ```typescript
- * // AWS.EKS.Job / AWS.EKS.Deployment run on HyperPod via the orchestrating
- * // EKS cluster; the `hyperpod` prop derives the node selector, namespace,
- * // and Kueue labels — pass the ComputeQuota resource to submit through
- * // task governance.
- * const evaluate = yield* AWS.EKS.Job(
+ * // Kubernetes.Job / Kubernetes.Deployment run on HyperPod via the
+ * // orchestrating EKS cluster in plain Kubernetes vocabulary — the
+ * // HyperPod resources expose the derived values as attributes: the
+ * // group's `nodeSelector`, the quota's governed `namespace` and Kueue
+ * // `queueName`.
+ * const evaluate = yield* Kubernetes.Job(
  *   "Evaluate",
  *   {
  *     cluster: eksCluster,
  *     main: import.meta.url,
- *     hyperpod: {
- *       instanceGroup: "workers",
- *       quota,
- *       priorityClass: "training",
+ *     namespace: quota.namespace,
+ *     labels: {
+ *       [AWS.SageMaker.KUEUE_QUEUE_NAME_LABEL]: quota.queueName,
+ *       [AWS.SageMaker.KUEUE_PRIORITY_CLASS_LABEL]: "training-priority",
+ *     },
+ *     podTemplate: {
+ *       spec: {
+ *         nodeSelector: hyperpod.instanceGroups.workers.nodeSelector,
+ *       },
  *     },
  *   },
  *   Effect.gen(function* () {
@@ -309,8 +339,9 @@ export type ClusterOf<Groups> = Omit<Cluster, "instanceGroups"> & {
  *   },
  * });
  *
- * // Creates the hyperpod-ns-research namespace + Kueue LocalQueue that
- * // `hyperpod: { quota }` on an EKS Job/Deployment submits into.
+ * // Creates the hyperpod-ns-research namespace + Kueue LocalQueue —
+ * // exposed as `quota.namespace` / `quota.queueName` for governed
+ * // Kubernetes workloads to reference.
  * const quota = yield* AWS.SageMaker.ComputeQuota("ResearchQuota", {
  *   clusterArn: hyperpod.clusterArn,
  *   computeQuotaTarget: { TeamName: "research", FairShareWeight: 10 },
@@ -381,6 +412,10 @@ const toAttrs = (
                 InstanceType: group.InstanceType,
                 CurrentCount: group.CurrentCount,
                 TargetCount: group.TargetCount,
+                nodeSelector: {
+                  [HYPERPOD_NODE_HEALTH_LABEL]: "Schedulable",
+                  [HYPERPOD_INSTANCE_GROUP_LABEL]: group.InstanceGroupName,
+                },
               },
             ],
           ]
@@ -404,6 +439,22 @@ class ClusterNotReady extends Data.TaggedError("ClusterNotReady")<{
 export class ClusterFailed extends Data.TaggedError("ClusterFailed")<{
   readonly clusterName: string;
   readonly message: string | undefined;
+}> {}
+
+/**
+ * The cluster is stuck in `Deleting` because SageMaker's internal teardown
+ * cannot proceed — e.g. the instance group's execution role (which HyperPod
+ * assumes to delete node ENIs) was deleted or lost its
+ * `ec2:DeleteNetworkInterface` / `ec2:DeleteNetworkInterfacePermission`
+ * permissions mid-teardown. Retrying `deleteCluster` can never fix this;
+ * the role and its permissions must be restored out-of-band, after which
+ * SageMaker's own retry completes the deletion within a minute.
+ */
+export class ClusterTeardownBlocked extends Data.TaggedError(
+  "ClusterTeardownBlocked",
+)<{
+  readonly clusterName: string;
+  readonly message: string;
 }> {}
 
 // Explicitly-typed retry wrapper — an inline `Effect.retry` in provider
@@ -446,6 +497,32 @@ const waitForCluster = (name: string, target: "InService" | "Gone") =>
       const described = yield* describeClusterOrUndefined(name);
       if (target === "Gone") {
         if (described === undefined) return;
+        // SageMaker's internal teardown deletes node ENIs by assuming the
+        // instance group's execution role. If that role (or its EC2
+        // permissions) was deleted mid-teardown, every internal retry
+        // fails and the cluster stays `Deleting` forever — surface the
+        // node's permission failure immediately instead of polling the
+        // full wait budget on a delete that can never finish.
+        const nodes = yield* sagemaker
+          .listClusterNodes({ ClusterName: name })
+          .pipe(
+            Effect.catchTag("ResourceNotFound", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+        const blocked = (nodes?.ClusterNodeSummaries ?? []).find((node) =>
+          node.InstanceStatus?.Message?.includes(
+            "does not have permission to perform",
+          ),
+        );
+        if (blocked !== undefined) {
+          return yield* Effect.fail(
+            new ClusterTeardownBlocked({
+              clusterName: name,
+              message: blocked.InstanceStatus?.Message ?? "",
+            }),
+          );
+        }
         return yield* Effect.fail(
           new ClusterNotReady({
             clusterName: name,
@@ -504,6 +581,21 @@ export const ClusterProvider = () =>
     Effect.gen(function* () {
       return {
         stables: ["clusterName", "clusterArn"],
+        // HyperPod's internal teardown deletes node ENIs by assuming the
+        // instance group's execution role inside the cluster's VPC —
+        // deleting the role or network mid-teardown wedges the cluster in
+        // `Deleting` permanently, so nuke must fully delete clusters
+        // before touching these types.
+        nuke: {
+          dependsOn: [
+            "AWS.IAM.Role",
+            "AWS.IAM.Policy",
+            "AWS.IAM.InstanceProfile",
+            "AWS.EC2.Vpc",
+            "AWS.EC2.Subnet",
+            "AWS.EC2.SecurityGroup",
+          ],
+        },
         list: () =>
           Effect.gen(function* () {
             const summaries = yield* sagemaker.listClusters.pages({}).pipe(
@@ -688,21 +780,29 @@ export const ClusterProvider = () =>
           return attrs;
         }),
         delete: Effect.fn(function* ({ output }) {
+          const described = yield* describeClusterOrUndefined(
+            output.clusterName,
+          );
+          if (described === undefined) return;
           // A cluster mid-create/update rejects deletion with a Conflict —
           // wait for it to settle first, then delete. A cluster stuck in
-          // `Failed` (or one that never converges) is still deletable.
-          yield* waitForCluster(output.clusterName, "InService").pipe(
-            Effect.catchTag(
-              ["ClusterFailed", "ClusterNotReady"],
-              () => Effect.void,
-            ),
-          );
-          yield* sagemaker
-            .deleteCluster({ ClusterName: output.clusterName })
-            .pipe(
-              Effect.catchTag("ResourceNotFound", () => Effect.void),
-              Effect.catchTag("ConflictException", () => Effect.void),
+          // `Failed` (or one that never converges) is still deletable. One
+          // already `Deleting` (a previous attempt) skips straight to the
+          // Gone wait instead of burning the full InService wait budget.
+          if (described.ClusterStatus !== "Deleting") {
+            yield* waitForCluster(output.clusterName, "InService").pipe(
+              Effect.catchTag(
+                ["ClusterFailed", "ClusterNotReady"],
+                () => Effect.void,
+              ),
             );
+            yield* sagemaker
+              .deleteCluster({ ClusterName: output.clusterName })
+              .pipe(
+                Effect.catchTag("ResourceNotFound", () => Effect.void),
+                Effect.catchTag("ConflictException", () => Effect.void),
+              );
+          }
           yield* waitForCluster(output.clusterName, "Gone");
         }),
       };

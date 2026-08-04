@@ -48,6 +48,7 @@ function providersSidebarEntry() {
       { label: "Cloudflare", link: "/cloudflare" },
       { label: "PlanetScale", link: "/planetscale" },
       { label: "Neon", link: "/neon" },
+      { label: "Prisma", link: "/prisma" },
       { label: "Axiom", link: "/axiom" },
       { label: "GitHub", link: "/github" },
       { label: "Docker", link: "/docker" },
@@ -436,6 +437,10 @@ export default defineConfig({
                   label: "Custom Provider",
                   link: "/infrastructure-as-code/custom-provider",
                 },
+                {
+                  label: "Local Providers",
+                  link: "/infrastructure-as-code/local-provider",
+                },
               ],
             },
             {
@@ -466,6 +471,10 @@ export default defineConfig({
                 {
                   label: "Circular Bindings",
                   link: "/infrastructure-as-effects/circular-bindings",
+                },
+                {
+                  label: "Telemetry",
+                  link: "/infrastructure-as-effects/telemetry",
                 },
                 {
                   label: "Custom Runtime",
@@ -626,6 +635,10 @@ export default defineConfig({
               items: [
                 { label: "Workers", link: "/cloudflare/compute/workers" },
                 {
+                  label: "Gradual deployments",
+                  link: "/cloudflare/compute/gradual-deployments",
+                },
+                {
                   label: "Python Workers",
                   link: "/cloudflare/compute/python-workers",
                 },
@@ -688,6 +701,7 @@ export default defineConfig({
                   link: "/cloudflare/frontend/react-router",
                 },
                 { label: "Vue", link: "/cloudflare/frontend/vue" },
+                { label: "Foldkit", link: "/cloudflare/frontend/foldkit" },
                 {
                   label: "SolidStart",
                   link: "/cloudflare/frontend/solidstart",
@@ -867,6 +881,12 @@ export default defineConfig({
               ],
             },
             {
+              label: "AI",
+              items: [
+                { label: "Bedrock & Effect AI", link: "/aws/ai/bedrock" },
+              ],
+            },
+            {
               label: "Messaging & events",
               items: [
                 { label: "SQS", link: "/aws/messaging/sqs" },
@@ -881,6 +901,15 @@ export default defineConfig({
                   link: "/aws/messaging/dynamodb-streams",
                 },
                 { label: "S3 events", link: "/aws/messaging/s3-events" },
+              ],
+            },
+            {
+              label: "Email",
+              items: [
+                {
+                  label: "Receiving inbound email",
+                  link: "/aws/email/receiving",
+                },
               ],
             },
             {
@@ -966,6 +995,38 @@ export default defineConfig({
           ],
         },
         {
+          label: "Prisma",
+          items: [
+            { label: "Overview", link: "/prisma" },
+            { label: "Setup", link: "/prisma/setup" },
+            {
+              label: "Data",
+              items: [
+                { label: "Postgres", link: "/prisma/data/postgres" },
+                { label: "Branches", link: "/prisma/data/branches" },
+                { label: "Connections", link: "/prisma/data/connections" },
+              ],
+            },
+            {
+              label: "Compute",
+              items: [
+                { label: "Apps", link: "/prisma/compute/apps" },
+                { label: "Deployments", link: "/prisma/compute/deployments" },
+              ],
+            },
+            {
+              label: "Guides",
+              items: [
+                {
+                  label: "Connect from Workers",
+                  link: "/prisma/guides/cloudflare-workers",
+                },
+              ],
+            },
+            providerResourcesEntry("Prisma"),
+          ],
+        },
+        {
           label: "Axiom",
           items: [
             { label: "Overview", link: "/axiom" },
@@ -1019,6 +1080,7 @@ export default defineConfig({
               label: "Effect SQL",
               items: [
                 { label: "Postgres", link: "/sql/effect-sql/postgres" },
+                { label: "MySQL", link: "/sql/effect-sql/mysql" },
                 { label: "D1", link: "/sql/effect-sql/d1" },
                 { label: "Migrations", link: "/sql/effect-sql/migrations" },
                 {
@@ -1031,6 +1093,7 @@ export default defineConfig({
               label: "Drizzle",
               items: [
                 { label: "Postgres", link: "/sql/drizzle/postgres" },
+                { label: "MySQL", link: "/sql/drizzle/mysql" },
                 { label: "D1", link: "/sql/drizzle/d1" },
                 { label: "Migrations", link: "/sql/drizzle/migrations" },
               ],

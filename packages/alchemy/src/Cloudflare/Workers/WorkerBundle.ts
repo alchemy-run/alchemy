@@ -1,4 +1,3 @@
-import cloudflareRolldown from "@distilled.cloud/cloudflare-rolldown-plugin";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import { flow } from "effect/Function";
@@ -20,6 +19,25 @@ import {
   type DurableObjectExport,
 } from "./DurableObject.ts";
 
+/**
+ * Bundler options for a Worker: the generic {@link Bundle.BundleExtraOptions}
+ * plus rolldown output overrides merged over Alchemy's defaults.
+ */
+export interface WorkerBuildOptions extends Bundle.BundleExtraOptions {
+  /**
+   * Rolldown output options merged over Alchemy's defaults. Use this to
+   * control chunking (`codeSplitting`), minification, etc.
+   */
+  output?: rolldown.OutputOptions;
+  /**
+   * Forwarded to rolldown's `preserveEntrySignatures` input option. Some
+   * `output.codeSplitting` configurations require relaxing it (e.g.
+   * `includeDependenciesRecursively: false` needs `"allow-extension"`).
+   * Workers must keep their entry exports, so never pass `false`.
+   */
+  preserveEntrySignatures?: rolldown.InputOptions["preserveEntrySignatures"];
+}
+
 export interface WorkerBundleOptions {
   id: string;
   main: string;
@@ -36,8 +54,45 @@ export interface WorkerBundleOptions {
         exports: Record<string, DurableObjectExport | WorkflowExport>;
       };
   stack: { name: string; stage: string };
-  extraOptions: Bundle.BundleExtraOptions | undefined;
+  extraOptions: WorkerBuildOptions | undefined;
 }
+
+/**
+ * Rebuild any `builtin:esm-external-require` plugin instance with OUR copy of
+ * rolldown.
+ *
+ * cloudflare-tools is its own bun workspace with its own dependency store, so
+ * under bun's `bun` export condition `@distilled.cloud/cloudflare-rolldown-plugin`
+ * can resolve a physically different copy of rolldown than the one Alchemy
+ * bundles with. Builtin plugins — here `builtin:esm-external-require`, which
+ * rewrites CJS `require`s of Node builtins into ESM imports under
+ * `nodejs_compat` — are `BuiltinPlugin` class instances that rolldown
+ * recognizes with an `instanceof` check. An instance constructed by the
+ * foreign rolldown copy fails that check and is silently treated as a
+ * hookless JS plugin, so CJS requires keep rolldown's throwing `require`
+ * shim and the Worker fails Cloudflare startup validation (#880).
+ * Reconstructing the builtin from its `_options` with the rolldown copy we
+ * actually invoke makes the identity check pass regardless of which copy the
+ * plugin package resolved.
+ */
+const rebindEsmExternalRequirePlugin = (
+  plugins: Array<rolldown.Plugin | null>,
+  esmExternalRequirePlugin: (typeof import("rolldown/plugins"))["esmExternalRequirePlugin"],
+): Array<rolldown.Plugin | null> =>
+  plugins.map((plugin) => {
+    if (
+      typeof plugin === "object" &&
+      plugin !== null &&
+      "name" in plugin &&
+      plugin.name === "builtin:esm-external-require" &&
+      "_options" in plugin
+    ) {
+      return esmExternalRequirePlugin(
+        plugin._options as Parameters<typeof esmExternalRequirePlugin>[0],
+      ) as rolldown.Plugin;
+    }
+    return plugin;
+  });
 
 export const WorkerBundle = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -45,9 +100,20 @@ export const WorkerBundle = Effect.gen(function* () {
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
 
   const makeOptions = Effect.fn(function* (options: WorkerBundleOptions) {
+    // Loaded lazily so importing the Cloudflare provider (or the CLI, whose
+    // command tree reaches this module) never loads rolldown's native
+    // binding — only actually bundling a Worker does (#562).
+    const [{ default: cloudflareRolldown }, { esmExternalRequirePlugin }] =
+      yield* Effect.promise(() =>
+        Promise.all([
+          import("@distilled.cloud/cloudflare-rolldown-plugin"),
+          import("rolldown/plugins"),
+        ]),
+      );
     const realMain = yield* sanitizeMain(options.main);
     const inputOptions: rolldown.InputOptions = {
       input: realMain,
+      preserveEntrySignatures: options.extraOptions?.preserveEntrySignatures,
       // Forever-devtool native modules that vite/chokidar reference behind
       // runtime guards. Rolldown resolves before tree-shaking, so the dead
       // `require('../pkg')` (lightningcss < 1.32) and `require('fsevents')`
@@ -65,10 +131,13 @@ export const WorkerBundle = Effect.gen(function* () {
         Effect.provide(context),
       ),
       plugins: [
-        cloudflareRolldown({
-          compatibilityDate: options.compatibility.date,
-          compatibilityFlags: options.compatibility.flags,
-        }),
+        rebindEsmExternalRequirePlugin(
+          cloudflareRolldown({
+            compatibilityDate: options.compatibility.date,
+            compatibilityFlags: options.compatibility.flags,
+          }),
+          esmExternalRequirePlugin,
+        ),
         options.entry.kind === "effect"
           ? [
               virtualEntryPlugin(
@@ -89,7 +158,17 @@ export const WorkerBundle = Effect.gen(function* () {
       sourcemap: "hidden",
       minify: true,
       keepNames: true,
+      // Rolldown's default chunking can split top-level initializer modules
+      // (e.g. Drizzle `pgTable` schemas) away from the classes they read,
+      // and workerd then evaluates a reader before its imported binding is
+      // initialized — the script fails Cloudflare startup validation with
+      // `ScriptStartupError: Cannot access '<minified>' before
+      // initialization` (#749). `strictExecutionOrder` wraps cross-chunk
+      // modules so evaluation follows ESM semantics regardless of how the
+      // graph was chunked. See DrizzleSchemaChunks.test.ts.
+      strictExecutionOrder: true,
       dir: `.alchemy/bundles/${options.id}`,
+      ...options.extraOptions?.output,
     };
     return { inputOptions, outputOptions, extraOptions: options.extraOptions };
   });

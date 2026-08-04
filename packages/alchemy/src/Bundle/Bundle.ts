@@ -4,7 +4,7 @@ import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import assert from "node:assert";
-import * as rolldown from "rolldown";
+import type * as rolldown from "rolldown";
 import { sha256, sha256Object } from "../Util/sha256.ts";
 import {
   bundleAnalyzerPlugin,
@@ -12,6 +12,14 @@ import {
 } from "./BundleAnalyzerPlugin.ts";
 import { purePlugin, type PurePluginOptions } from "./PurePlugin.ts";
 import { rawPlugin } from "./RawPlugin.ts";
+
+/**
+ * Rolldown is loaded lazily on first {@link build}/{@link watch} so that
+ * merely importing alchemy — the CLI command tree, the Cloudflare provider
+ * barrel — never loads `@rolldown/binding-*`. A stack that bundles
+ * nothing must not require the native bundler to be loadable (#562).
+ */
+const loadRolldown = () => import("rolldown");
 
 /**
  * Extra options accepted by {@link build} / {@link watch} on top of the
@@ -23,9 +31,12 @@ export interface BundleExtraOptions {
    * call/new expressions in matching packages with `/*#__PURE__*\/`
    * so rolldown can tree-shake them.
    *
-   * - `undefined` (default): plugin is enabled with default packages
-   *   (`effect`, `@effect/*`).
+   * - `undefined` (default): plugin is enabled with the default packages
+   *   (`effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`,
+   *   `@distilled.cloud/*` — see `DEFAULT_PURE_PACKAGES`).
    * - `PurePluginOptions`: plugin is enabled with the provided options.
+   *   `packages` extends the defaults; set `replaceDefaults: true` to
+   *   replace them instead.
    * - `false`: plugin is disabled.
    */
   readonly pure?: PurePluginOptions | false;
@@ -39,6 +50,31 @@ export interface BundleExtraOptions {
    * - `BundleAnalyzerPluginOptions`: plugin is enabled with the provided options.
    */
   readonly bundleAnalyzer?: BundleAnalyzerPluginOptions | boolean;
+}
+
+/**
+ * The user-facing bundler configuration shared by every resource that
+ * bundles an entrypoint with rolldown (AWS Lambda Function, Batch
+ * JobDefinition, App Runner Service, ECR image sources, EC2 hosted
+ * instances, Docker service images, Cloudflare container images, …):
+ * rolldown input/output overrides plus the {@link BundleExtraOptions}
+ * (pure-annotation packages via `pure`, bundle analyzer).
+ *
+ * Top-level calls in `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`,
+ * and `@distilled.cloud/*` are annotated as pure by default so unused
+ * code from those packages is tree-shaken out of the bundle; list
+ * additional packages via `pure.packages`, or disable annotation with
+ * `pure: false`.
+ */
+export interface BundleConfig extends BundleExtraOptions {
+  /**
+   * Rolldown input options overrides.
+   */
+  readonly input?: Partial<rolldown.InputOptions>;
+  /**
+   * Rolldown output options overrides.
+   */
+  readonly output?: Partial<rolldown.OutputOptions>;
 }
 
 export interface BundleOutput {
@@ -106,8 +142,27 @@ const ALCHEMY_DEFINE: Record<string, string> = {
 };
 
 /**
- * Merge {@link ALCHEMY_DEFINE} into the caller's `transform.define`, letting
- * the framework flags win over any caller-provided keys.
+ * Default rolldown `moduleTypes` applied to every bundle, mirroring the
+ * `Text` module rules Wrangler applies to Workers (and alchemy's own
+ * {@link defaultModuleRules} for prebuilt bundles): importing a `.sql`,
+ * `.txt`, or `.html` file default-exports its contents as a string.
+ *
+ * `.sql` is what makes drizzle-kit's generated Durable Object migrations
+ * bundle (`migrations.js` does `import m0000 from './0000_x.sql'`) work
+ * without a wrangler-style rules config or a codegen step.
+ */
+const ALCHEMY_MODULE_TYPES: NonNullable<rolldown.InputOptions["moduleTypes"]> =
+  {
+    ".sql": "text",
+    ".txt": "text",
+    ".html": "text",
+  };
+
+/**
+ * Merge {@link ALCHEMY_DEFINE} into the caller's `transform.define` (the
+ * framework flags win over any caller-provided keys) and
+ * {@link ALCHEMY_MODULE_TYPES} into the caller's `moduleTypes` (caller
+ * keys win, so an extension can be remapped or disabled per bundle).
  */
 const withAlchemyDefine = (
   inputOptions: rolldown.InputOptions,
@@ -119,6 +174,10 @@ const withAlchemyDefine = (
       ...inputOptions.transform?.define,
       ...ALCHEMY_DEFINE,
     },
+  },
+  moduleTypes: {
+    ...ALCHEMY_MODULE_TYPES,
+    ...inputOptions.moduleTypes,
   },
 });
 
@@ -148,9 +207,10 @@ export const build = (
 ): Effect.Effect<BundleOutput, BundleError> =>
   Effect.tryPromise({
     try: async () => {
+      const rolldown = await loadRolldown();
       const bundle = await rolldown.rolldown({
         ...withAlchemyDefine(inputOptions),
-        plugins: [inputOptions.plugins, builtInPlugins(extra)],
+        plugins: [inputOptions.plugins, await builtInPlugins(extra)],
         optimization: inputOptions.optimization ?? {
           inlineConst: {
             mode: "smart",
@@ -188,12 +248,13 @@ export const watch = (
       }
   >((queue) =>
     Effect.acquireRelease(
-      Effect.sync(() => {
+      Effect.promise(async () => {
+        const rolldown = await loadRolldown();
         const watcher = rolldown.watch({
           ...withAlchemyDefine(inputOptions),
           plugins: [
             inputOptions.plugins,
-            builtInPlugins(extra),
+            await builtInPlugins(extra),
             // The watcher event listener does not receive the bundle output, so we grab it using a plugin.
             {
               name: "alchemy:watch-bundle",
@@ -348,12 +409,12 @@ export function bundleOutputFromRolldownOutputBundle(
  * `node_modules/<pkg>/...` by upstream resolver plugins such as
  * `@distilled.cloud/cloudflare-rolldown-plugin`.
  */
-function builtInPlugins(
+async function builtInPlugins(
   extra?: BundleExtraOptions,
-): rolldown.RolldownPluginOption {
+): Promise<rolldown.RolldownPluginOption> {
   return [
     extra?.bundleAnalyzer
-      ? bundleAnalyzerPlugin(
+      ? await bundleAnalyzerPlugin(
           extra.bundleAnalyzer === true ? {} : extra.bundleAnalyzer,
         )
       : undefined,

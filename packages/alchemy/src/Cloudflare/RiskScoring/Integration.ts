@@ -45,7 +45,7 @@ export type IntegrationAttributes = {
   /** Account that owns the integration. */
   accountId: string;
   /** The third-party consumer of risk-score changes. */
-  integrationType: "Okta";
+  integrationType: "Okta" | (string & {});
   /** Observed tenant base URL. */
   tenantUrl: string;
   /** Observed client-supplied reference id. */
@@ -216,7 +216,7 @@ type ObservedIntegration = {
   id: string;
   active: boolean;
   createdAt: string;
-  integrationType: "Okta";
+  integrationType: string;
   referenceId: string;
   tenantUrl: string;
   wellKnownUrl: string;

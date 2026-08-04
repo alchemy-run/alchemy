@@ -1,6 +1,7 @@
 import * as mediapackagev2 from "@distilled.cloud/aws/mediapackagev2";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -533,10 +534,7 @@ export const OriginEndpointProvider = () =>
                 ),
               { concurrency: 5 },
             );
-            return endpoints.filter(
-              (endpoint): endpoint is OriginEndpoint["Attributes"] =>
-                endpoint !== undefined,
-            );
+            return endpoints.filter(Predicate.isNotUndefined);
           }),
       };
     }),

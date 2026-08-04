@@ -87,6 +87,25 @@ export type _ImageRuntimeOptionsRejected = Assert<
     : true
 >;
 
+export type _ZipLayersAccepted = Assert<
+  {
+    main: "./handler.ts";
+    layers: ["arn:aws:lambda:us-east-1:123456789012:layer:example:1"];
+  } extends FunctionProps
+    ? true
+    : false
+>;
+
+export type _ImageLayersRejected = Assert<
+  {
+    image: { context: "./lambda"; dockerfile: "Dockerfile" };
+    architecture: "x86_64";
+    layers: ["arn:aws:lambda:us-east-1:123456789012:layer:example:1"];
+  } extends FunctionProps
+    ? false
+    : true
+>;
+
 export type _ZipImageConfigRejected = Assert<
   {
     main: "./handler.ts";

@@ -6,6 +6,7 @@ import * as Output from "@/Output";
 import * as Plan from "@/Plan";
 import * as Provider from "@/Provider";
 import { UnsatisfiedResourceCycle } from "@/Plan";
+import { remote } from "@/ProviderMode.ts";
 import type { ResourceBinding } from "@/Resource";
 import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
@@ -32,7 +33,9 @@ import {
   BindingTarget,
   Bucket,
   Function,
+  inDev,
   KindStablesResource,
+  ModalResource,
   NoPrecreateBindingTarget,
   OverrideStablesResource,
   Queue,
@@ -2246,9 +2249,17 @@ describe("whole-resource refs resolve to the upstream's stable attributes", () =
   // that `ResourceExpr` to the downstream verbatim, so its `news` looked
   // unresolved (`isResolved(news) === false`) and the stable values never
   // reached the downstream `diff`. This forced the Neon `Branch` to manually
-  // extract `project.projectId` as a workaround. The engine must instead
-  // materialize the known stable attributes into a plain object so the
-  // stable values flow into the diff and the downstream can no-op.
+  // extract `project.projectId` as a workaround. The engine materializes the
+  // known stable attributes into a plain object for the DIFF-facing `news`
+  // so the stable values flow into the diff and the downstream can no-op.
+  //
+  // The plan node's `props`, however, must keep the reference as an
+  // evaluable `ResourceExpr`: Apply re-resolves `node.props` against the
+  // upstream's fresh post-reconcile attributes, and a materialized
+  // stables-only snapshot would permanently hide every non-stable attribute
+  // from the downstream's `reconcile` (e.g. a Lambda Alias promoting a
+  // freshly-published Lambda Version would never see the new version
+  // number — #993's alias promotion bug).
   const seedUpdatingUpstream = () =>
     seed({
       A: {
@@ -2273,7 +2284,7 @@ describe("whole-resource refs resolve to the upstream's stable attributes", () =
     });
 
   test(
-    "the whole-resource ref resolves to the upstream's stable attributes (not an Expr)",
+    "the node's whole-resource ref stays an evaluable Expr carrying the stable attributes",
     Effect.gen(function* () {
       yield* seedUpdatingUpstream();
 
@@ -2290,10 +2301,15 @@ describe("whole-resource refs resolve to the upstream's stable attributes", () =
       expect(plan.resources.A!.action).toBe("update");
 
       const bProps = (plan.resources.B as any).props as TestResourceProps;
-      // The whole-resource ref must resolve to a fully-resolved plain object
-      // of the upstream's stable attributes — NOT an unresolved Expr.
-      expect(Output.isExpr(bProps.object)).toBe(false);
-      expect(bProps.object).toEqual({
+      // The node's props keep the whole-resource ref as an evaluable
+      // `ResourceExpr` (so Apply resolves the upstream's FRESH attributes
+      // after its reconcile), with the stable attributes riding along for
+      // plan-time consumers.
+      expect(Output.isExpr(bProps.object)).toBe(true);
+      expect(Output.isResourceExpr(bProps.object)).toBe(true);
+      expect(
+        (bProps.object as any as Output.ResourceExpr<any>).stables,
+      ).toEqual({
         stableString: "A",
         stableArray: ["A"],
       });
@@ -2338,6 +2354,121 @@ describe("whole-resource refs resolve to the upstream's stable attributes", () =
       // Only stable attributes flow in and they are unchanged, so the
       // downstream no-ops instead of being dragged into a needless update.
       expect(plan.resources.B!.action).toBe("noop");
+    }),
+  );
+
+  // The binding path mirrors the props split: `diffBindings` compares the
+  // materialized (stables-only) view, but the node's binding rows carry the
+  // apply-faithful payload so `Output.evaluate(node.bindings, outputs)`
+  // re-resolves the upstream's fresh post-reconcile attributes.
+  const seedHostWithFullPayload = () =>
+    seed({
+      Host: {
+        instanceId,
+        providerVersion: 0,
+        logicalId: "Host",
+        fqn: "Host",
+        namespace: undefined,
+        resourceType: "Test.BindingTarget",
+        status: "created",
+        props: { name: "host" },
+        attr: {
+          name: "host",
+          string: "Host",
+          env: {},
+          replaceString: undefined,
+        },
+        downstream: [],
+        // Terminal commits persist the payload the provider reconciled
+        // with — the upstream's FULL attributes (#874), not the plan-time
+        // stables-only projection.
+        bindings: [
+          {
+            sid: "FromA",
+            data: {
+              env: {
+                A: {
+                  string: "old-value",
+                  stableString: "A",
+                  stableArray: ["A"],
+                },
+              },
+            },
+          },
+        ],
+      },
+    });
+
+  const hostProgram = (upstreamString: string) =>
+    Effect.gen(function* () {
+      const A = yield* TestResource("A", { string: upstreamString });
+      const host = yield* BindingTarget("Host", { name: "host" });
+      // The binding data embeds the WHOLE upstream resource.
+      yield* host.bind("FromA", { env: { A } } as any);
+    });
+
+  test(
+    "the node's binding payload keeps the whole-resource ref as an evaluable Expr carrying the stable attributes",
+    Effect.gen(function* () {
+      yield* seedUpdatingUpstream();
+
+      const plan = yield* hostProgram("new-value").pipe(makePlan);
+
+      expect(plan.resources.A!.action).toBe("update");
+
+      const rows = (plan.resources.Host as any).bindings;
+      expect(rows).toHaveLength(1);
+      expect(rows[0].sid).toBe("FromA");
+      const payload = rows[0].data.env.A;
+      expect(Output.isResourceExpr(payload)).toBe(true);
+      expect((payload as Output.ResourceExpr<any>).stables).toEqual({
+        stableString: "A",
+        stableArray: ["A"],
+      });
+    }),
+  );
+
+  test(
+    "an updating upstream marks the binding row 'update' from the materialized comparison while the payload stays evaluable",
+    Effect.gen(function* () {
+      yield* seedUpdatingUpstream();
+      yield* seedHostWithFullPayload();
+
+      const plan = yield* hostProgram("new-value").pipe(makePlan);
+
+      expect(plan.resources.A!.action).toBe("update");
+      // The host's own props are unchanged; the binding drift alone drags
+      // it into the update that re-delivers A's fresh attributes.
+      expect(plan.resources.Host!.action).toBe("update");
+
+      const rows = (plan.resources.Host as any).bindings;
+      expect(rows).toHaveLength(1);
+      // Action from the materialized comparison (persisted full attrs vs
+      // stables-only projection)...
+      expect(rows[0].action).toBe("update");
+      // ...payload from the apply-faithful resolution.
+      expect(Output.isResourceExpr(rows[0].data.env.A)).toBe(true);
+    }),
+  );
+
+  test(
+    "an unchanged upstream's full persisted binding payload no-ops instead of churning",
+    Effect.gen(function* () {
+      yield* seedUpdatingUpstream();
+      yield* seedHostWithFullPayload();
+
+      // Same props as seeded — A no-ops, so it resolves to its full
+      // persisted attrs and the materialized binding payload matches the
+      // persisted row exactly.
+      const plan = yield* hostProgram("old-value").pipe(makePlan);
+
+      expect(plan.resources.A!.action).toBe("noop");
+      expect(plan.resources.Host!.action).toBe("noop");
+      const rows = (plan.resources.Host as any).bindings;
+      expect(rows[0].action).toBe("noop");
+      // Nothing left to re-evaluate — the payload is the plain full attrs.
+      expect(Output.isExpr(rows[0].data.env.A)).toBe(false);
+      expect(rows[0].data.env.A.string).toBe("old-value");
     }),
   );
 });
@@ -2876,6 +3007,203 @@ describe("engine-level adoption", () => {
       ) as Effect.Effect<Plan.Plan<A>, any, State>;
     }) as Effect.Effect<Plan.Plan<A>, any, State>;
 
+  const creatingWithoutAttrs = {
+    instanceId,
+    providerVersion: 0,
+    logicalId: "Recovering",
+    fqn: "Recovering",
+    namespace: undefined,
+    resourceType: "Test.TestResource",
+    status: "creating" as const,
+    props: { string: "hello" },
+    attr: undefined,
+    downstream: [],
+    bindings: [],
+  } satisfies ResourceState;
+
+  test.provider("cold adoption reconciles with olds undefined", (scratch) =>
+    Effect.gen(function* () {
+      let creates = 0;
+      let updates = 0;
+      const hooks = {
+        read: () => Effect.succeed(ownedAttrs),
+        create: () =>
+          Effect.sync(() => {
+            creates++;
+          }),
+        update: () =>
+          Effect.sync(() => {
+            updates++;
+          }),
+      };
+
+      yield* scratch
+        .deploy(
+          Effect.gen(function* () {
+            yield* TestResource("Adopted", { string: "hello" });
+          }),
+        )
+        .pipe(Effect.provideService(TestResourceHooks, hooks));
+
+      expect(creates).toBe(1);
+      expect(updates).toBe(0);
+
+      const state = yield* yield* State;
+      expect(
+        yield* state.get({
+          stack: scratch.name,
+          stage: TEST_STAGE,
+          fqn: "Adopted",
+        }),
+      ).toMatchObject({
+        status: "updated",
+        props: { string: "hello" },
+      });
+    }),
+  );
+
+  test.provider(
+    "cold adoption keeps olds undefined after a failed first reconcile",
+    (scratch) =>
+      Effect.gen(function* () {
+        let creates = 0;
+        let updates = 0;
+        const hooks = {
+          read: () => Effect.succeed(ownedAttrs),
+          create: () =>
+            Effect.suspend(() => {
+              creates++;
+              return creates === 1
+                ? Effect.fail(new Error("first adoption reconcile failed"))
+                : Effect.void;
+            }),
+          update: () =>
+            Effect.sync(() => {
+              updates++;
+            }),
+        };
+        const program = () =>
+          Effect.gen(function* () {
+            yield* TestResource("Adopted", { string: "hello" });
+          });
+
+        const first = yield* scratch
+          .deploy(program())
+          .pipe(Effect.provideService(TestResourceHooks, hooks), Effect.exit);
+        expect(Exit.isFailure(first)).toBe(true);
+        expect(creates).toBe(1);
+        expect(updates).toBe(0);
+
+        const state = yield* yield* State;
+        expect(
+          yield* state.get({
+            stack: scratch.name,
+            stage: TEST_STAGE,
+            fqn: "Adopted",
+          }),
+        ).toMatchObject({
+          status: "updating",
+          adopting: true,
+        });
+
+        yield* scratch
+          .deploy(program())
+          .pipe(Effect.provideService(TestResourceHooks, hooks));
+
+        expect(creates).toBe(2);
+        expect(updates).toBe(0);
+        const completed = yield* state.get({
+          stack: scratch.name,
+          stage: TEST_STAGE,
+          fqn: "Adopted",
+        });
+        expect(completed).toMatchObject({ status: "updated" });
+        expect((completed as any)?.adopting).toBeUndefined();
+      }),
+  );
+
+  test(
+    "recovered Unowned attrs require explicit adoption",
+    Effect.gen(function* () {
+      yield* seed({ Recovering: creatingWithoutAttrs });
+
+      const exit = yield* makeAdoptPlan(
+        Effect.gen(function* () {
+          yield* TestResource("Recovering", { string: "hello" });
+        }),
+        {
+          adopt: false,
+          readHook: () => Effect.succeed(Unowned(ownedAttrs)),
+        },
+      ).pipe(Effect.exit);
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const reason = exit.cause.reasons.find(Cause.isFailReason);
+        expect((reason?.error as any)?._tag).toBe("OwnedBySomeoneElse");
+        expect((reason?.error as any)?.resourceType).toBe("Test.TestResource");
+      }
+    }),
+  );
+
+  test(
+    "explicit adoption strips Unowned from recovered attrs",
+    Effect.gen(function* () {
+      yield* seed({ Recovering: creatingWithoutAttrs });
+
+      const plan = yield* makeAdoptPlan(
+        Effect.gen(function* () {
+          yield* TestResource("Recovering", { string: "hello" });
+        }),
+        {
+          adopt: true,
+          readHook: () => Effect.succeed(Unowned(ownedAttrs)),
+        },
+      );
+
+      const recovered = plan.resources.Recovering!;
+      expect(recovered.action).toBe("create");
+      expect(Unowned.is((recovered.state as any).attr)).toBe(false);
+      expect(
+        Object.getOwnPropertySymbols((recovered.state as any).attr),
+      ).toEqual([]);
+    }),
+  );
+
+  test(
+    "recovered attrs still diff immutable desired changes",
+    Effect.gen(function* () {
+      yield* seed({
+        Recovering: {
+          ...creatingWithoutAttrs,
+          props: { replaceString: "old" },
+        },
+      });
+
+      const plan = yield* makeAdoptPlan(
+        Effect.gen(function* () {
+          yield* TestResource("Recovering", { replaceString: "new" });
+        }),
+        {
+          readHook: () =>
+            Effect.succeed({
+              ...ownedAttrs,
+              replaceString: "old",
+            }),
+        },
+      );
+
+      expect(plan.resources.Recovering).toMatchObject({
+        action: "replace",
+        props: { replaceString: "new" },
+        state: {
+          status: "creating",
+          attr: { replaceString: "old" },
+        },
+      });
+    }),
+  );
+
   test(
     "owned read result is silently adopted (no AdoptPolicy needed) and forced to update",
     Effect.gen(function* () {
@@ -2891,6 +3219,13 @@ describe("engine-level adoption", () => {
       // (owned) attrs, the cloud resource may carry drift the engine
       // can't detect from `props` alone.
       expect(plan.resources.Adopted!.action).toBe("update");
+      expect(plan.resources.Adopted).toMatchObject({
+        adopting: true,
+        state: {
+          status: "created",
+          attr: { string: "hello" },
+        },
+      });
 
       // Planning no longer persists the adopted state (issue #793): it rides
       // on the plan node and is only committed to the store at apply time.
@@ -2927,6 +3262,10 @@ describe("engine-level adoption", () => {
       // logical id (a plain noop would leave the resource looking
       // foreign-owned to subsequent deploys).
       expect(plan.resources.Adopted!.action).toBe("update");
+      expect(plan.resources.Adopted).toMatchObject({
+        adopting: true,
+        state: { status: "created" },
+      });
 
       // The adopted state rides on the plan node, not the store (issue #793).
       const node = plan.resources.Adopted!;
@@ -3006,6 +3345,10 @@ describe("engine-level adoption", () => {
       );
 
       expect(plan.resources.Adopted!.action).toBe("update");
+      expect(plan.resources.Adopted).toMatchObject({
+        adopting: true,
+        state: { status: "created" },
+      });
 
       // Adopted state rides on the plan node; planning persists nothing
       // (issue #793).
@@ -3485,6 +3828,34 @@ describe("read is never handed unresolved persisted props", () => {
   );
 
   test(
+    "a recovery read that crashes degrades to re-driving the create instead of killing the plan",
+    Effect.gen(function* () {
+      // Stripped-at-commit props: an unresolved Output persisted as a hole
+      // still passes `isResolved`, so the read probe DOES run — and a
+      // provider that dereferences the hole crashes with a defect (e.g. a
+      // SchemaError deep in its SDK client, see #995). The plan must
+      // contain the defect to this resource's probe and fall through to
+      // re-driving the create.
+      yield* seed({
+        Half: {
+          ...creatingWithUnresolvedProps("Half"),
+          props: { string: undefined } as any,
+        },
+      });
+      const layer = Layer.succeed(TestResourceHooks, {
+        read: () =>
+          Effect.die(new Error("SchemaError: Expected string, got undefined")),
+      });
+      const plan = yield* makePlan(
+        Effect.gen(function* () {
+          yield* TestResource("Half", { string: "resolved-now" });
+        }),
+      ).pipe(Effect.provide(layer));
+      expect(plan.resources.Half!.action).toBe("create");
+    }),
+  );
+
+  test(
     "resolved persisted creating props still go through read recovery when re-declared (control)",
     Effect.gen(function* () {
       yield* seed({
@@ -3501,6 +3872,366 @@ describe("read is never handed unresolved persisted props", () => {
       ).pipe(Effect.provide(layer));
       expect(reads).toContain("Half");
       expect(plan.resources.Half!.action).toBe("create");
+    }),
+  );
+});
+
+describe("provider modes (local ⇄ live)", () => {
+  // ModalResource registers via `ProviderLayer.dual` with distinct live and
+  // local implementations. These tests cover the PLAN-level semantics:
+  //   - the resolved mode lands on the plan node (`node.mode`)
+  //   - a persisted mode different from the resolved mode forces a
+  //     REPLACEMENT, overriding whatever the provider diff would say
+  //   - legacy rows (no persisted mode) are assumed to be the current run's
+  //     mode — no replacement churn
+  //   - deletions carry the persisted mode so orphans are torn down by the
+  //     provider that created them
+  //   - a mode-switching upstream invalidates its attrs for downstream diffs
+
+  const modalState = (
+    fqn: string,
+    overrides?: Partial<ResourceState>,
+  ): ResourceState =>
+    ({
+      instanceId,
+      providerVersion: 0,
+      logicalId: fqn,
+      fqn,
+      namespace: undefined,
+      resourceType: "Test.ModalResource",
+      status: "created",
+      props: { value: "v1" },
+      attr: { value: "v1", runtime: "local" },
+      downstream: [],
+      bindings: [],
+      providerMode: "local",
+      ...overrides,
+    }) as ResourceState;
+
+  test(
+    "a fresh create resolves the run default (live) onto the node",
+    Effect.gen(function* () {
+      const plan = yield* makePlan(ModalResource("A", { value: "v1" }));
+      expect(plan.resources.A).toMatchObject({
+        action: "create",
+        mode: "live",
+      });
+    }),
+  );
+
+  test(
+    "a dev run resolves the local mode onto the node",
+    Effect.gen(function* () {
+      const plan = yield* inDev(makePlan(ModalResource("A", { value: "v1" })));
+      expect(plan.resources.A).toMatchObject({
+        action: "create",
+        mode: "local",
+      });
+    }),
+  );
+
+  test(
+    "remote() opts a resource out of local emulation during dev",
+    Effect.gen(function* () {
+      const plan = yield* inDev(
+        makePlan(ModalResource("A", { value: "v1" }).pipe(remote())),
+      );
+      expect(plan.resources.A).toMatchObject({
+        action: "create",
+        mode: "live",
+      });
+    }),
+  );
+
+  test(
+    "mode-agnostic resources plan with mode undefined even in a dev run",
+    Effect.gen(function* () {
+      // A single-implementation provider (no dual registration) satisfies
+      // any requested mode — constructs that mix emulatable and live-only
+      // resources just work in dev.
+      const plan = yield* inDev(
+        makePlan(
+          Effect.gen(function* () {
+            yield* ModalResource("A", { value: "v1" });
+            yield* TestResource("T", { string: "x" });
+          }),
+        ),
+      );
+      expect(plan.resources.A!.mode).toBe("local");
+      expect(plan.resources.T!.mode).toBeUndefined();
+    }),
+  );
+
+  test(
+    "a persisted mode different from the resolved mode forces a replacement",
+    Effect.gen(function* () {
+      yield* seed({ A: modalState("A") }); // providerMode: "local"
+
+      // Identical props — the provider diff would report `noop` — but the
+      // row was reconciled by the LOCAL provider and this run resolves to
+      // LIVE, so the plan must replace (create-first).
+      const plan = yield* makePlan(ModalResource("A", { value: "v1" }));
+      expect(plan.resources.A).toMatchObject({
+        action: "replace",
+        deleteFirst: false,
+        mode: "live",
+      });
+    }),
+  );
+
+  test(
+    "the same mode plans normally (noop on identical props)",
+    Effect.gen(function* () {
+      yield* seed({ A: modalState("A") }); // providerMode: "local"
+      const plan = yield* inDev(makePlan(ModalResource("A", { value: "v1" })));
+      expect(plan.resources.A).toMatchObject({ action: "noop" });
+    }),
+  );
+
+  test(
+    "switching live → local replaces too",
+    Effect.gen(function* () {
+      yield* seed({ A: modalState("A", { providerMode: "live" }) });
+      const plan = yield* inDev(makePlan(ModalResource("A", { value: "v1" })));
+      expect(plan.resources.A).toMatchObject({
+        action: "replace",
+        mode: "local",
+      });
+    }),
+  );
+
+  test(
+    "a mode switch overrides the provider diff (update would have sufficed)",
+    Effect.gen(function* () {
+      yield* seed({ A: modalState("A") }); // providerMode: "local"
+      // Changed value — same-mode planning would produce `update` — but the
+      // mode switch escalates to `replace` without consulting the diff.
+      const plan = yield* makePlan(ModalResource("A", { value: "v2" }));
+      expect(plan.resources.A).toMatchObject({
+        action: "replace",
+        mode: "live",
+      });
+    }),
+  );
+
+  test(
+    "legacy rows without a persisted mode are assumed to be the current run's mode",
+    Effect.gen(function* () {
+      yield* seed({ A: modalState("A", { providerMode: undefined }) });
+
+      // Deploy (live) run: assumed live → noop. Dev run: the row is ALSO
+      // assumed local (assume-current applies to whatever mode this plan
+      // resolves) → still no replacement churn; the row is stamped on its
+      // next write.
+      const liveDefault = yield* makePlan(ModalResource("A", { value: "v1" }));
+      expect(liveDefault.resources.A).toMatchObject({ action: "noop" });
+
+      const devRun = yield* inDev(
+        makePlan(ModalResource("A", { value: "v1" })),
+      );
+      expect(devRun.resources.A).toMatchObject({ action: "noop" });
+    }),
+  );
+
+  test(
+    "a mode-agnostic resource never replaces across dev/deploy runs",
+    Effect.gen(function* () {
+      yield* seed({
+        T: {
+          instanceId,
+          providerVersion: 0,
+          logicalId: "T",
+          fqn: "T",
+          namespace: undefined,
+          resourceType: "Test.TestResource",
+          status: "created",
+          props: { string: "x" },
+          attr: {
+            string: "x",
+            stringArray: [],
+            stableString: "T",
+            stableArray: ["T"],
+          },
+          downstream: [],
+          bindings: [],
+          // Mode-agnostic providers never stamp a mode.
+          providerMode: undefined,
+        },
+      });
+      const plan = yield* inDev(makePlan(TestResource("T", { string: "x" })));
+      expect(plan.resources.T).toMatchObject({ action: "noop" });
+    }),
+  );
+
+  test(
+    "an interrupted create still replaces on a mode switch",
+    Effect.gen(function* () {
+      // A `creating` row (attr-less, interrupted) normally re-drives its
+      // create via the read-recovery branch. When the mode switched, that
+      // branch is skipped — the other runtime's half-created instance must
+      // be replaced, not resumed.
+      yield* seed({
+        A: modalState("A", {
+          status: "creating",
+          attr: undefined,
+        } as Partial<ResourceState>),
+      });
+      const plan = yield* makePlan(ModalResource("A", { value: "v1" }));
+      expect(plan.resources.A).toMatchObject({
+        action: "replace",
+        mode: "live",
+      });
+    }),
+  );
+
+  test(
+    "an interrupted update still replaces on a mode switch",
+    Effect.gen(function* () {
+      yield* seed({
+        A: modalState("A", {
+          status: "updating",
+          props: { value: "v2" },
+          old: {
+            props: { value: "v1" },
+            bindings: [],
+            attr: { value: "v1", runtime: "local" },
+          },
+        } as Partial<ResourceState>),
+      });
+      // Same-mode planning would resume the interrupted update; a mode
+      // switch must escalate to a replacement of the other runtime's
+      // instance instead.
+      const plan = yield* makePlan(ModalResource("A", { value: "v2" }));
+      expect(plan.resources.A).toMatchObject({
+        action: "replace",
+        mode: "live",
+      });
+    }),
+  );
+
+  test(
+    "an in-flight replacement generation hit by a mode switch restarts a new generation",
+    Effect.gen(function* () {
+      // `replacing`: the (local) replacement candidate is still being
+      // created. A mode switch makes that candidate itself obsolete — the
+      // plan must mint a NEW outer generation (`restart: true`) rather than
+      // resuming the local candidate under the live provider.
+      yield* seed({
+        A: modalState("A", {
+          status: "replacing",
+          attr: undefined,
+          deleteFirst: false,
+          old: modalState("A", {
+            instanceId: "00000000000000000000000000000000",
+          }),
+        } as Partial<ResourceState>),
+      });
+      const plan = yield* makePlan(ModalResource("A", { value: "v1" }));
+      expect(plan.resources.A).toMatchObject({
+        action: "replace",
+        restart: true,
+        mode: "live",
+      });
+    }),
+  );
+
+  test(
+    "a completed-but-undrained replacement hit by a mode switch restarts; same mode just drains",
+    Effect.gen(function* () {
+      const replaced = (providerMode: "local" | "live") =>
+        modalState("A", {
+          status: "replaced",
+          deleteFirst: false,
+          providerMode,
+          old: modalState("A", {
+            instanceId: "00000000000000000000000000000000",
+          }),
+        } as Partial<ResourceState>);
+
+      // The live replacement of a LOCAL row completed but its old chain
+      // hasn't drained. Re-planning in the same (live) mode continues the
+      // existing generation (no restart — GC just finishes).
+      yield* seed({ A: replaced("live") });
+      const sameMode = yield* makePlan(ModalResource("A", { value: "v1" }));
+      expect(sameMode.resources.A).toMatchObject({ action: "replace" });
+      expect((sameMode.resources.A as any).restart).toBeUndefined();
+
+      // But if the completed replacement was LOCAL and this run resolves
+      // live, the current "new" generation is itself obsolete — restart.
+      yield* seed({ A: replaced("local") });
+      const switched = yield* makePlan(ModalResource("A", { value: "v1" }));
+      expect(switched.resources.A).toMatchObject({
+        action: "replace",
+        restart: true,
+        mode: "live",
+      });
+    }),
+  );
+
+  test(
+    "orphan deletions carry the persisted mode",
+    Effect.gen(function* () {
+      yield* seed({
+        LocalOrphan: modalState("LocalOrphan"), // providerMode: "local"
+        LegacyOrphan: modalState("LegacyOrphan", {
+          providerMode: undefined,
+        }),
+      });
+      const plan = yield* makePlan(Effect.void);
+      // The Delete node records the mode its provider was resolved for —
+      // Apply deletes the local orphan with the LOCAL provider even though
+      // this is a live-default run.
+      expect(plan.deletions.LocalOrphan).toMatchObject({
+        action: "delete",
+        mode: "local",
+      });
+      expect(plan.deletions.LegacyOrphan).toMatchObject({ action: "delete" });
+      expect(plan.deletions.LegacyOrphan!.mode).toBeUndefined();
+    }),
+  );
+
+  test(
+    "a mode-switching upstream invalidates its attrs for downstream diffs",
+    Effect.gen(function* () {
+      yield* seed({
+        A: modalState("A", { downstream: ["B"] }), // providerMode: "local"
+        B: {
+          instanceId,
+          providerVersion: 0,
+          logicalId: "B",
+          fqn: "B",
+          namespace: undefined,
+          resourceType: "Test.TestResource",
+          status: "created",
+          props: { string: "v1" },
+          attr: {
+            string: "v1",
+            stringArray: [],
+            stableString: "B",
+            stableArray: ["B"],
+          },
+          downstream: [],
+          bindings: [],
+        },
+      });
+
+      const program = Effect.gen(function* () {
+        const a = yield* ModalResource("A", { value: "v1" });
+        yield* TestResource("B", { string: a.value });
+      });
+
+      // Mode switch (local row, deploy plan): A is being replaced, so its
+      // attrs are NOT stable — B must observe an unresolved upstream and
+      // plan an update rather than nooping against stale values.
+      const switched = yield* makePlan(program);
+      expect(switched.resources.A).toMatchObject({ action: "replace" });
+      expect(switched.resources.B).toMatchObject({ action: "update" });
+
+      // Control — same mode (dev run): A noops, its persisted attrs
+      // resolve, B noops.
+      const same = yield* inDev(makePlan(program));
+      expect(same.resources.A).toMatchObject({ action: "noop" });
+      expect(same.resources.B).toMatchObject({ action: "noop" });
     }),
   );
 });

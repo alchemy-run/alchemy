@@ -55,6 +55,12 @@ export const DOCS_TABS: DocsTab[] = [
     slot: "primary",
   },
   {
+    label: "Prisma",
+    href: "/prisma",
+    prefixes: ["/prisma", "/providers/prisma"],
+    slot: "primary",
+  },
+  {
     label: "Axiom",
     href: "/axiom",
     prefixes: ["/axiom", "/providers/axiom"],

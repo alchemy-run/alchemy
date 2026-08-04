@@ -268,6 +268,7 @@ export const bundleContainerProgram = Effect.fn(function* ({
   isExternal = false,
   external = [],
   outdir,
+  build,
 }: {
   id: string;
   main: string;
@@ -276,6 +277,7 @@ export const bundleContainerProgram = Effect.fn(function* ({
   isExternal?: boolean;
   external?: string[];
   outdir?: string;
+  build?: Bundle.BundleConfig;
 }) {
   const stack = yield* Stack;
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
@@ -289,6 +291,7 @@ export const bundleContainerProgram = Effect.fn(function* ({
   ) {
     return yield* Bundle.build(
       {
+        ...build?.input,
         input: entry,
         cwd,
         external: [
@@ -296,6 +299,7 @@ export const bundleContainerProgram = Effect.fn(function* ({
           "cloudflare:workflows",
           ...(runtime === "bun" ? ["bun", "bun:*"] : []),
           ...external,
+          ...((build?.input?.external as string[] | undefined) ?? []),
         ],
         platform: "node",
         resolve: {
@@ -303,17 +307,20 @@ export const bundleContainerProgram = Effect.fn(function* ({
             runtime === "bun"
               ? ["bun", "import", "module", "default"]
               : ["node", "import", "module", "default"],
+          ...build?.input?.resolve,
         },
-        plugins,
+        plugins: [build?.input?.plugins, plugins],
         treeshake: true,
       },
       {
+        ...build?.output,
         format: "esm",
-        sourcemap: false,
-        minify: false,
+        sourcemap: build?.output?.sourcemap ?? false,
+        minify: build?.output?.minify ?? false,
         dir: outdir,
         entryFileNames: "index.mjs",
       },
+      build,
     );
   });
 
@@ -338,6 +345,7 @@ const HttpServer = NodeHttpServer;
 }
 import { Stack } from "alchemy/Stack";
 import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
+import { provideProcessTelemetry } from "alchemy/Telemetry";
 import { CloudflareEnvironment } from "alchemy/Cloudflare";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
@@ -367,8 +375,15 @@ const stack = Layer.succeed(Stack, {
 });
 
 const serverEffect = tag.pipe(
-  Effect.flatMap(func => func.RuntimeContext.exports),
-  Effect.flatMap(exports => exports.default),
+  // Process-lifetime telemetry: built once into the root scope; exporters
+  // batch on their intervals and flush when the scope closes on graceful
+  // shutdown.
+  Effect.flatMap((func) =>
+    func.RuntimeContext.exports.pipe(
+      Effect.flatMap((exports) => exports.default),
+      provideProcessTelemetry(func.RuntimeContext),
+    ),
+  ),
   Effect.provide(
     layer.pipe(
       Layer.provideMerge(stack),
@@ -487,6 +502,7 @@ export const prepareContainerBuildContext = Effect.fn(function* (
         isExternal: news.isExternal,
         external: news.external,
         outdir: context,
+        build: news.build,
       }),
       docker.materialize({
         context,

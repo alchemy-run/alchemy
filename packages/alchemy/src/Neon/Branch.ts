@@ -5,9 +5,9 @@ import {
   getProjectBranch,
   listProjectBranchDatabases,
   listProjectBranches,
-  type ListProjectBranchesOutput,
+  type ListProjectBranchesResponse,
   listProjects,
-  type ListProjectsOutput,
+  type ListProjectsResponse,
   updateProjectBranch,
 } from "@distilled.cloud/neon";
 import * as Effect from "effect/Effect";
@@ -503,7 +503,7 @@ export const BranchProvider = () =>
   });
 
 const listAllProjects = Effect.gen(function* () {
-  const projects: ListProjectsOutput["projects"][number][] = [];
+  const projects: ListProjectsResponse["projects"][number][] = [];
   let cursor: string | undefined;
   while (true) {
     const page = yield* listProjects(cursor !== undefined ? { cursor } : {});
@@ -526,7 +526,7 @@ const listAllProjects = Effect.gen(function* () {
 
 const listAllBranches = (projectId: string) =>
   Effect.gen(function* () {
-    const branches: ListProjectBranchesOutput["branches"][number][] = [];
+    const branches: ListProjectBranchesResponse["branches"][number][] = [];
     let cursor: string | undefined;
     do {
       const page = yield* listProjectBranches({
@@ -541,7 +541,7 @@ const listAllBranches = (projectId: string) =>
 
 const hydrateBranch = (
   projectId: string,
-  branch: ListProjectBranchesOutput["branches"][number],
+  branch: ListProjectBranchesResponse["branches"][number],
 ) =>
   Effect.gen(function* () {
     const dbs = yield* listProjectBranchDatabases({
@@ -595,7 +595,7 @@ const createBranchName = (id: string, name: string | undefined) =>
 
 const findBranchByName = (projectId: string, name: string) =>
   Effect.gen(function* () {
-    const matches: ListProjectBranchesOutput["branches"][number][] = [];
+    const matches: ListProjectBranchesResponse["branches"][number][] = [];
     let cursor: string | undefined;
     do {
       const page = yield* listProjectBranches({

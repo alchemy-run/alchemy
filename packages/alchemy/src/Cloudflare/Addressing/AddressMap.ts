@@ -263,7 +263,6 @@ export const AddressMapProvider = () =>
             accountId: acct,
             addressMapId,
             ipAddress: ip,
-            body: {},
           });
         }
       }
@@ -291,12 +290,11 @@ export const AddressMapProvider = () =>
                 accountId: acct,
                 addressMapId,
                 zoneId: m.identifier,
-                body: {},
               })
             : addressing.putAddressMapAccount({
                 accountId: acct,
                 addressMapId,
-                body: {},
+                memberAccountId: m.identifier,
               });
         }
       }
@@ -314,6 +312,7 @@ export const AddressMapProvider = () =>
             : addressing.deleteAddressMapAccount({
                 accountId: acct,
                 addressMapId,
+                memberAccountId: m.identifier,
               });
         }
       }
