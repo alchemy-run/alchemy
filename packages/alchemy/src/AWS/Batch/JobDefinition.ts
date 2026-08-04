@@ -170,12 +170,14 @@ export interface JobDefinitionProps extends PlatformProps {
    */
   propagateTags?: boolean;
   /**
-   * Bundler configuration for the Effect-native entrypoint.
+   * Bundler configuration for the Effect-native entrypoint: rolldown
+   * `input`/`output` overrides plus pure-annotation options (`pure`).
+   * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
+   * `@distilled.cloud/*` are annotated as pure by default so unused code
+   * from those packages is tree-shaken; list additional packages via
+   * `pure.packages`, or disable with `pure: false`.
    */
-  build?: {
-    input?: Partial<rolldown.InputOptions>;
-    output?: Partial<rolldown.OutputOptions>;
-  };
+  build?: Bundle.BundleConfig;
   /**
    * Docker image build for the Effect-native form: optional full
    * `dockerfile`. When omitted, Alchemy generates a Dockerfile for the
@@ -887,6 +889,7 @@ export const JobDefinitionProvider = () =>
               minify: props.build?.output?.minify ?? false,
               entryFileNames: "index.mjs",
             },
+            props.build,
           );
         });
 

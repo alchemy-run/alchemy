@@ -69,6 +69,7 @@ export const bundleMicrovmProgram = Effect.fn(function* ({
   isExternal = false,
   external = [],
   port,
+  build,
 }: {
   main: string;
   runtime: "bun" | "node";
@@ -76,6 +77,7 @@ export const bundleMicrovmProgram = Effect.fn(function* ({
   isExternal?: boolean;
   external?: string[];
   port: number;
+  build?: Bundle.BundleConfig;
 }) {
   const fs = yield* FileSystem.FileSystem;
   const stack = yield* Stack;
@@ -90,12 +92,14 @@ export const bundleMicrovmProgram = Effect.fn(function* ({
   ) {
     return yield* Bundle.build(
       {
+        ...build?.input,
         input: entry,
         cwd,
         external: [
           "@aws-sdk/*",
           ...(runtime === "bun" ? ["bun", "bun:*"] : []),
           ...external,
+          ...((build?.input?.external as string[] | undefined) ?? []),
         ],
         platform: "node",
         resolve: {
@@ -103,19 +107,22 @@ export const bundleMicrovmProgram = Effect.fn(function* ({
             runtime === "bun"
               ? ["bun", "import", "module", "default"]
               : ["node", "import", "module", "default"],
+          ...build?.input?.resolve,
         },
-        plugins,
+        plugins: [build?.input?.plugins, plugins],
         treeshake: true,
       },
       {
+        ...build?.output,
         format: "esm",
-        sourcemap: false,
-        minify: false,
+        sourcemap: build?.output?.sourcemap ?? false,
+        minify: build?.output?.minify ?? false,
         entryFileNames: "index.mjs",
         // Emit chunks as `.mjs` too so Node treats them as ESM unconditionally
         // (no `package.json` `"type":"module"` needed in the image).
         chunkFileNames: "[name]-[hash].mjs",
       },
+      build,
     );
   });
 

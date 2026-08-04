@@ -1,5 +1,6 @@
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as Redacted from "effect/Redacted";
+import type * as Bundle from "../../Bundle/Bundle.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import {
   type Main,
@@ -260,6 +261,14 @@ export interface EffectfulContainerProps extends ContainerApplicationPropsBase {
    * redundant install step.
    */
   autoInstallExternals?: boolean;
+  /**
+   * Bundler configuration for {@link main}: rolldown `input`/`output`
+   * overrides plus pure-annotation options (`pure`). `effect`, `@effect/*`,
+   * `alchemy`, `@alchemy.run/*`, and `@distilled.cloud/*` are annotated as
+   * pure by default so unused code from those packages is tree-shaken; list
+   * additional packages via `pure.packages`, or disable with `pure: false`.
+   */
+  build?: Bundle.BundleConfig;
 }
 
 /**
@@ -330,6 +339,7 @@ export interface AnyContainerApplicationProps extends ContainerApplicationPropsB
   runtime?: "bun" | "node";
   external?: string[];
   autoInstallExternals?: boolean;
+  build?: Bundle.BundleConfig;
 }
 
 export type ContainerServices =

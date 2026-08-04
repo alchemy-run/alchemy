@@ -67,13 +67,14 @@ export interface Ec2HostedProps extends PlatformProps {
   port?: number;
   /** Environment variables injected into the hosted runtime. */
   env?: Record<string, any>;
-  /** Overrides for the rolldown bundling of `main`. */
-  build?: {
-    /** Rolldown input options overrides. */
-    input?: Partial<rolldown.InputOptions>;
-    /** Rolldown output options overrides. */
-    output?: Partial<rolldown.OutputOptions>;
-  };
+  /**
+   * Overrides for the rolldown bundling of `main`: `input`/`output`
+   * overrides plus pure-annotation options (`pure`). `effect`, `@effect/*`,
+   * `alchemy`, `@alchemy.run/*`, and `@distilled.cloud/*` are annotated as
+   * pure by default so unused code from those packages is tree-shaken; list
+   * additional packages via `pure.packages`, or disable with `pure: false`.
+   */
+  build?: Bundle.BundleConfig;
   /** Managed policy ARNs attached to the instance role. */
   roleManagedPolicyArns?: string[];
 }
@@ -205,6 +206,7 @@ export const createEc2HostedSupport = ({
           minify: props.build?.output?.minify ?? false,
           entryFileNames: "index.mjs",
         },
+        props.build,
       );
     });
 

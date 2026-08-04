@@ -3,6 +3,7 @@ import type { Region } from "@distilled.cloud/aws/Region";
 import type * as microvms from "@distilled.cloud/aws/lambda-microvms";
 
 import * as Effect from "effect/Effect";
+import type * as Bundle from "../../Bundle/Bundle.ts";
 import { Platform } from "../../Platform.ts";
 import type { Main } from "../../Platform.ts";
 import type { Resource } from "../../Resource.ts";
@@ -85,6 +86,16 @@ export interface MicrovmImageProps {
    * Extra module ids to leave external when bundling (effectful mode).
    */
   external?: string[];
+
+  /**
+   * Bundler configuration for {@link main} (effectful mode): rolldown
+   * `input`/`output` overrides plus pure-annotation options (`pure`).
+   * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
+   * `@distilled.cloud/*` are annotated as pure by default so unused code
+   * from those packages is tree-shaken; list additional packages via
+   * `pure.packages`, or disable with `pure: false`.
+   */
+  build?: Bundle.BundleConfig;
 
   /**
    * The base MicroVM image to build on top of — either its ARN or another
