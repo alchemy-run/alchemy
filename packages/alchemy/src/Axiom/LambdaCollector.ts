@@ -91,10 +91,16 @@ export interface AxiomLambdaCollectorProps {
    * every dataset passed below.
    */
   token: ResourceInput<ApiToken>;
-  /** Dataset (kind `otel:traces:v1`) traces are exported into. */
-  traces: ResourceInput<Dataset>;
-  /** Dataset (kind `otel:logs:v1`) logs are exported into. */
-  logs: ResourceInput<Dataset>;
+  /**
+   * Dataset (kind `otel:traces:v1`) traces are exported into — an
+   * `Axiom.Dataset` resource, or the name of one that already exists.
+   */
+  traces: ResourceInput<Dataset> | string;
+  /**
+   * Dataset (kind `otel:logs:v1`) logs are exported into — an
+   * `Axiom.Dataset` resource, or the name of one that already exists.
+   */
+  logs: ResourceInput<Dataset> | string;
   /**
    * Axiom's OTLP/HTTP host.
    * @default "https://api.axiom.co"
@@ -128,6 +134,18 @@ const instance = <T>(resource: ResourceInput<T>): Effect.Effect<T> =>
   Effect.isEffect(resource)
     ? (resource as Effect.Effect<T>)
     : Effect.succeed(resource);
+
+/**
+ * The dataset's ingest name. A declaration is yielded (registering the
+ * Dataset), a plain name is taken as-is so an account's pre-existing
+ * datasets need no resource.
+ */
+const datasetName = (
+  dataset: ResourceInput<Dataset> | string,
+): Effect.Effect<Input<string>> =>
+  typeof dataset === "string"
+    ? Effect.succeed(dataset)
+    : Effect.map(instance(dataset), (resolved) => resolved.name);
 
 /**
  * Export a Lambda's telemetry to Axiom through the OpenTelemetry Collector
@@ -207,8 +225,8 @@ export const LambdaCollector = (
       // if this host is the first to reference them) so the accessors below
       // produce real Outputs.
       const token = yield* instance(props.token);
-      const traces = yield* instance(props.traces);
-      const logs = yield* instance(props.logs);
+      const traces = yield* datasetName(props.traces);
+      const logs = yield* datasetName(props.logs);
       return Collector({
         config: LayerVersion(props.configId ?? "AxiomCollectorConfig", {
           content: { "collector.yaml": COLLECTOR_YAML },
@@ -224,8 +242,8 @@ export const LambdaCollector = (
           // state. `Bearer ` is prepended in the collector config rather than
           // here so the redaction survives interpolation.
           AXIOM_INGEST_TOKEN: token.token,
-          AXIOM_TRACES_DATASET: traces.name,
-          AXIOM_LOGS_DATASET: logs.name,
+          AXIOM_TRACES_DATASET: traces,
+          AXIOM_LOGS_DATASET: logs,
         },
       });
     }),

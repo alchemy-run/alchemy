@@ -309,17 +309,11 @@ export const Collector = (props: CollectorProps): Layer.Layer<never> =>
         return Layer.empty;
       }
 
-      const configLayer = yield* instance(
-        typeof props.config === "string"
-          ? LayerVersion("CollectorConfig", {
-              path: props.config,
-              description: "OpenTelemetry Collector configuration",
-            })
-          : props.config,
-      );
-
-      const host = yield* Binding.Host;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
+        // Resolve the host BEFORE declaring the configuration layer: a wrong
+        // host should fail without having registered a resource for a
+        // Function that can never use it.
+        const host = yield* Binding.Host;
         if (
           host === undefined ||
           (host as { Type?: string }).Type !== "AWS.Lambda.Function"
@@ -330,6 +324,15 @@ export const Collector = (props: CollectorProps): Layer.Layer<never> =>
             ),
           );
         }
+
+        const configLayer = yield* instance(
+          typeof props.config === "string"
+            ? LayerVersion("CollectorConfig", {
+                path: props.config,
+                description: "OpenTelemetry Collector configuration",
+              })
+            : props.config,
+        );
 
         const extension = props.extension;
         const extensionArn = isArnOverride(extension)

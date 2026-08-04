@@ -1,4 +1,5 @@
 import * as AWS from "@/AWS";
+import { collectorExtensionLayerArn } from "@/AWS/Lambda/Collector.ts";
 import * as Test from "@/Test/Alchemy";
 import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as Lambda from "@distilled.cloud/aws/lambda";
@@ -25,8 +26,6 @@ import {
   OtelExtensionReceiverLive,
 } from "./fixtures/otel-extension-receiver.ts";
 
-const collectorRelease = "0_22_0";
-const collectorLayerVersion = 1;
 const architecture = "arm64" as const;
 const remoteExportDelayMs = 4_000;
 const collectionRetrySchedule = Schedule.max([
@@ -37,17 +36,6 @@ const functionReadySchedule = Schedule.max([
   Schedule.fixed(500),
   Schedule.recurs(60),
 ]);
-
-const collectorLayerArn = ({
-  region,
-  architecture,
-}: {
-  region: string;
-  architecture: AWS.Lambda.FunctionArchitecture;
-}) => {
-  const layerArchitecture = architecture === "x86_64" ? "amd64" : architecture;
-  return `arn:aws:lambda:${region}:184161586896:layer:opentelemetry-collector-${layerArchitecture}-${collectorRelease}:${collectorLayerVersion}`;
-};
 
 const collectorConfigPath = fileURLToPath(
   new URL("./fixtures/otel-collector-extension", import.meta.url),
@@ -143,15 +131,6 @@ const getReadyFunction = (functionName: string) =>
   );
 
 describe("OpenTelemetry Collector Lambda extension", () => {
-  it("maps Lambda architectures to the upstream managed layer names", () => {
-    expect(
-      collectorLayerArn({ region: "us-east-1", architecture: "x86_64" }),
-    ).toContain(":layer:opentelemetry-collector-amd64-");
-    expect(
-      collectorLayerArn({ region: "eu-west-1", architecture: "arm64" }),
-    ).toContain("arn:aws:lambda:eu-west-1:");
-  });
-
   it.effect(
     "bounds memory, keeps decouple last, and keeps the remote endpoint extension-owned",
     () =>
@@ -208,13 +187,9 @@ describe("OpenTelemetry Collector Lambda extension", () => {
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {
             const receiver = yield* receiverProgram;
-            const configLayer = yield* AWS.Lambda.LayerVersion(
-              "OtelExtensionConfig",
-              {
-                path: collectorConfigPath,
-                compatibleArchitectures: [architecture],
-              },
-            );
+            // No layers, no OPENTELEMETRY_* env, no LayerVersion: the fixture
+            // provides `AWS.Lambda.Collector` on its own Effect and the
+            // binding channel carries all of it onto this Function.
             const fn = yield* OtelExtensionFunction.pipe(
               Effect.provide(
                 OtelExtensionFunctionLive({
@@ -223,32 +198,29 @@ describe("OpenTelemetry Collector Lambda extension", () => {
                   memorySize: 512,
                   timeout: Duration.seconds(15),
                   url: true,
-                  layers: [
-                    collectorLayerArn({ region, architecture }),
-                    configLayer,
-                  ],
-                  env: {
-                    OPENTELEMETRY_COLLECTOR_CONFIG_URI: "/opt/collector.yaml",
-                    OPENTELEMETRY_EXTENSION_LOG_LEVEL: "debug",
-                    COLLECTOR_EXPORTER_OTLP_ENDPOINT: receiver.functionUrl,
-                    OTEL_TEST_EXPORT_DELAY_MS: String(remoteExportDelayMs),
+                  collector: {
+                    remoteOtlpEndpoint: receiver.functionUrl as string,
+                    remoteExportDelayMs,
                   },
                 }),
               ),
             );
-            return { fn, configLayer };
+            return { fn };
           }),
         );
 
-        expect(deployed.configLayer.compatibleArchitectures).toEqual([
-          architecture,
-        ]);
         const cloudFunction = yield* getReadyFunction(deployed.fn.functionName);
         expect(cloudFunction.Architectures).toEqual([architecture]);
-        expect(cloudFunction.Layers?.map((layer) => layer.Arn)).toEqual([
-          collectorLayerArn({ region, architecture }),
-          deployed.configLayer.layerVersionArn,
-        ]);
+        // The managed extension is attached first, the generated config layer
+        // second — the order `/opt` is populated in.
+        const attachedLayers = cloudFunction.Layers?.map((layer) => layer.Arn);
+        expect(attachedLayers?.[0]).toBe(
+          collectorExtensionLayerArn({ region, architecture }),
+        );
+        expect(attachedLayers?.[1]).toMatch(
+          /^arn:aws:lambda:[^:]+:\d{12}:layer:.*CollectorConfig.*:\d+$/i,
+        );
+        expect(attachedLayers).toHaveLength(2);
         const environment = cloudFunction.Environment?.Variables ?? {};
         const envValue = (key: string) => {
           const value = environment[key];
