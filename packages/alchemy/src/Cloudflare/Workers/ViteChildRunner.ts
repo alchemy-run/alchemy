@@ -1,21 +1,22 @@
 import { layerRuntime } from "@distilled.cloud/cloudflare-runtime";
+import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stdio from "effect/Stdio";
 import * as Stream from "effect/Stream";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as NodeV8 from "node:v8";
-import { CloudflareAuth } from "../Auth/AuthProvider.ts";
-import * as Credentials from "../Credentials.ts";
 import * as RpcServerEnvironment from "../../Local/RpcServerEnvironment.ts";
 import { PlatformServices, runMain } from "../../Util/PlatformServices.ts";
+import { CloudflareAuth } from "../Auth/AuthProvider.ts";
+import * as Credentials from "../Credentials.ts";
 import { materializeRuntimeBindings } from "./RuntimeBindings.ts";
 import * as Vite from "./Vite.ts";
 import {
   DEFAULT_DEV_PORT,
-  type ViteChildConfig,
   VITE_CHILD_READY_PREFIX,
   VITE_CHILD_READY_SUFFIX,
+  type ViteChildConfig,
 } from "./ViteChild.shared.ts";
 
 const readConfig = Effect.gen(function* () {
@@ -86,18 +87,17 @@ const program = Effect.scoped(
     if (!url) {
       return yield* Effect.die("Vite child started without a local URL");
     }
-    yield* Effect.sync(() => {
-      process.stdout.write(
-        `${VITE_CHILD_READY_PREFIX}${url}${VITE_CHILD_READY_SUFFIX}\n`,
-      );
-    });
+    yield* Console.log(
+      `${VITE_CHILD_READY_PREFIX}${url}${VITE_CHILD_READY_SUFFIX}`,
+    );
     return yield* Effect.never;
   }),
 );
 
 runMain(
   program.pipe(
-    Effect.provide(RpcServerEnvironment.fromEnv()),
-    Effect.provide(PlatformServices),
+    Effect.provide(
+      RpcServerEnvironment.fromEnv().pipe(Layer.provideMerge(PlatformServices)),
+    ),
   ),
 );
