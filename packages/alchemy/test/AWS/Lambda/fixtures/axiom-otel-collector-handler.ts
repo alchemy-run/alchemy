@@ -16,8 +16,10 @@ export class AxiomCollectorFunction extends Lambda.Function<Lambda.Function>()(
 
 export interface AxiomCollectorOptions {
   readonly token: ApiToken;
-  readonly traces: Dataset;
-  readonly logs: Dataset;
+  /** A `Dataset` resource, or the name of one that already exists. */
+  readonly traces: Dataset | string;
+  /** A `Dataset` resource, or the name of one that already exists. */
+  readonly logs: Dataset | string;
   readonly endpoint?: string;
 }
 

@@ -28,8 +28,21 @@ import * as Binding from "../../Binding.ts";
 import type { Input } from "../../Input.ts";
 import { layerOtlp } from "../../Telemetry.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import type { FunctionArchitecture } from "./Function.ts";
+import type { Function, FunctionArchitecture } from "./Function.ts";
 import { LayerVersion } from "./LayerVersion.ts";
+
+/**
+ * Narrow the ambient binding host to a Lambda Function.
+ *
+ * Deliberately NOT `isBindingHost`: that predicate also admits ECS Tasks and
+ * Kubernetes workloads, which share the `{ env, policyStatements }` contract
+ * but have no notion of a layer. The Collector ships as a layer, so a
+ * Lambda Function is the only host it can attach to.
+ */
+const isLambdaFunction = (value: unknown): value is Function =>
+  typeof value === "object" &&
+  value !== null &&
+  (value as { Type?: string }).Type === "AWS.Lambda.Function";
 
 /**
  * A resource passed to the layer: either the module-scope declaration (an
@@ -314,13 +327,10 @@ export const Collector = (props: CollectorProps): Layer.Layer<never> =>
         // host should fail without having registered a resource for a
         // Function that can never use it.
         const host = yield* Binding.Host;
-        if (
-          host === undefined ||
-          (host as { Type?: string }).Type !== "AWS.Lambda.Function"
-        ) {
+        if (!isLambdaFunction(host)) {
           return yield* Effect.die(
             new Error(
-              `AWS.Lambda.Collector: unsupported host ${(host as { Type?: string } | undefined)?.Type ?? "(none)"} — the Collector runs as a Lambda extension layer, so it is only attachable to an AWS.Lambda.Function`,
+              `AWS.Lambda.Collector: unsupported host ${host?.Type ?? "(none)"} — the Collector runs as a Lambda extension layer, so it is only attachable to an AWS.Lambda.Function`,
             ),
           );
         }
@@ -346,8 +356,7 @@ export const Collector = (props: CollectorProps): Layer.Layer<never> =>
                 (yield* AWSEnvironment.current as unknown as Effect.Effect<{
                   region: string;
                 }>).region,
-              architecture:
-                extension?.architecture ?? architectureOf(host as never),
+              architecture: extension?.architecture ?? architectureOf(host),
               release: extension?.release,
               layerVersion: extension?.layerVersion,
               publisherAccountId: extension?.publisherAccountId,
@@ -384,10 +393,7 @@ export const Collector = (props: CollectorProps): Layer.Layer<never> =>
  * architecture cannot be resolved at bind time (the ARN is a string built
  * now), so it fails loudly and points at the explicit override.
  */
-const architectureOf = (host: {
-  Props?: { architecture?: unknown };
-  LogicalId?: string;
-}): FunctionArchitecture => {
+const architectureOf = (host: Function): FunctionArchitecture => {
   const architecture = host.Props?.architecture ?? "x86_64";
   if (architecture !== "x86_64" && architecture !== "arm64") {
     throw new Error(

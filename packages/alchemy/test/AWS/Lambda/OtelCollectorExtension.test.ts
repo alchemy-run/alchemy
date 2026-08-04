@@ -199,7 +199,7 @@ describe("OpenTelemetry Collector Lambda extension", () => {
                   timeout: Duration.seconds(15),
                   url: true,
                   collector: {
-                    remoteOtlpEndpoint: receiver.functionUrl as string,
+                    remoteOtlpEndpoint: receiver.functionUrl.as<string>(),
                     remoteExportDelayMs,
                   },
                 }),

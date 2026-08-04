@@ -1,5 +1,5 @@
 import * as Lambda from "@/AWS/Lambda";
-import type { InputProps } from "@/Input.ts";
+import type { Input, InputProps } from "@/Input.ts";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -16,8 +16,12 @@ export class OtelExtensionFunction extends Lambda.Function<Lambda.Function>()(
 ) {}
 
 export interface OtelExtensionFunctionOptions {
-  /** Backend the Collector extension exports to. */
-  readonly remoteOtlpEndpoint: string;
+  /**
+   * Backend the Collector extension exports to. An `Input` because it is
+   * normally another Function's `functionUrl` Output, resolved when the
+   * binding is applied.
+   */
+  readonly remoteOtlpEndpoint: Input<string>;
   /** Milliseconds the test receiver stalls each remote export by. */
   readonly remoteExportDelayMs: number;
 }
