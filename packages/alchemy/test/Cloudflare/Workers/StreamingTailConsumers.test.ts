@@ -36,22 +36,66 @@ interface RecordedTailEvent {
 }
 
 /**
- * Cloud-side `tailStream()` delivery is not generally available: streaming
- * tail workers are an unreleased Cloudflare feature. Probed 2026-08-04 on
- * the testing account: the `streaming_tail_consumers` metadata PUT succeeds
- * and the producer serves, but producer invocations delivered ZERO streaming
- * sessions across 5 minutes of polling (60 × 5s, each poll re-invoking the
- * producer), while a plain `tail()` consumer on the same account delivers
- * within seconds (TailConsumers.test.ts, green). There is no typed error to
- * capture — the API accepts the field and delivery is silently absent.
- * `tailStream()` has no public docs, and wrangler's own streaming-tail
- * support is local-dev-only, "still experimental and not about to be
- * shipped" (cloudflare/workers-sdk#10703). Set this env var on an account
- * with streaming tail delivery enabled to assert delivery end-to-end;
- * workerd delivery is always covered by StreamingTailConsumers.local.test.ts.
+ * Cloud-side `tailStream()` delivery is not yet available: Cloudflare's
+ * production API refuses the `streaming_tail_worker` compatibility flag —
+ * the flag that enables workerd's streaming tail model — with the typed
+ * `ScriptStartupError` (code 10021) "The compatibility flag
+ * streaming_tail_worker is experimental and cannot yet be used in Workers
+ * deployed to Cloudflare." A deployed consumer therefore cannot opt into
+ * the `tailStream()` handler, so no events are ever delivered to it. The
+ * ungated probe test below pins that exact rejection.
+ *
+ * Probed 2026-08-04 on the testing account: the `streaming_tail_consumers`
+ * metadata PUT succeeds and the producer serves, but producer invocations
+ * delivered ZERO streaming sessions across 5 minutes of polling (60 × 5s,
+ * each poll re-invoking the producer) — with and without
+ * `observability.traces.enabled` on the producer — while a plain `tail()`
+ * consumer on the same account delivers within seconds
+ * (TailConsumers.test.ts, green). Local workerd delivery is real and
+ * covered by StreamingTailConsumers.local.test.ts. Set this env var once
+ * Cloudflare ships production delivery (the probe test will fail then) to
+ * assert delivery end-to-end.
  */
 const STREAMING_TAIL_DELIVERY =
   !!process.env.CLOUDFLARE_TEST_STREAMING_TAIL_DELIVERY;
+
+/**
+ * Ungated platform probe: production refuses the experimental
+ * `streaming_tail_worker` compatibility flag, which is the root cause of
+ * zero cloud-side `tailStream()` delivery (a deployed consumer cannot
+ * enable the streaming tail model). The day this test FAILS — the flag
+ * deploys, or the rejection changes shape — streaming tail workers have
+ * shipped (or changed): re-verify delivery with
+ * CLOUDFLARE_TEST_STREAMING_TAIL_DELIVERY=1 and drop the gate above.
+ */
+test.provider(
+  "production refuses the streaming_tail_worker compatibility flag (probe)",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const error = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Worker("StreamingTailFlagProbe", {
+              script: producerScript,
+              compatibility: { flags: ["streaming_tail_worker"] },
+            });
+          }),
+        )
+        .pipe(Effect.flip);
+
+      expect(error._tag).toEqual("ScriptStartupError");
+      if (error._tag === "ScriptStartupError") {
+        expect(error.message).toContain(
+          "streaming_tail_worker is experimental and cannot yet be used",
+        );
+      }
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 240_000 },
+);
 
 /**
  * `streamingTailConsumers` uploads `streaming_tail_consumers` in the script

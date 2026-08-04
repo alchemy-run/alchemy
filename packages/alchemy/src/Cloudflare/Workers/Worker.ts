@@ -775,10 +775,12 @@ export interface WorkerProps<
    * Changing the list is an in-place update. Omitting the prop (or passing
    * `[]`) deploys this Worker with no streaming tail consumers attached.
    *
-   * Streaming tail workers are experimental on Cloudflare's cloud: deployed
-   * Workers accept the configuration, but event delivery is not yet
-   * generally available. Under `alchemy dev`, local delivery is fully
-   * emulated.
+   * Streaming tail workers are experimental on Cloudflare's cloud: the
+   * configuration deploys, but production does not yet deliver events —
+   * Cloudflare rejects the `streaming_tail_worker` compatibility flag as
+   * "experimental and cannot yet be used in Workers deployed to
+   * Cloudflare", so a deployed consumer cannot enable its `tailStream()`
+   * handler. Under `alchemy dev`, local delivery is fully emulated.
    *
    * @see https://developers.cloudflare.com/workers/observability/logs/tail-workers/
    */
