@@ -370,7 +370,10 @@ export const Collector = (props: CollectorProps): Layer.Layer<never> =>
         url: props.endpoint ?? LOOPBACK_ENDPOINT,
         serviceName: props.serviceName,
       });
-    }),
+      // Named so publishing the config layer and binding the extension are
+      // attributable in a deploy trace rather than anonymous work under
+      // whichever Function happened to build this layer.
+    }).pipe(Effect.withSpan("AWS.Lambda.Collector")),
   ) as Layer.Layer<never>;
 
 /**

@@ -246,7 +246,10 @@ export const LambdaCollector = (
           AXIOM_LOGS_DATASET: logs,
         },
       });
-    }),
+      // Its own span, nesting the `AWS.Lambda.Collector` one: a deploy trace
+      // then shows whether the token/dataset resolution or the extension
+      // attachment is the slow half.
+    }).pipe(Effect.withSpan("Axiom.LambdaCollector")),
   ) as Layer.Layer<never>;
 
 /** The Collector configuration this preset packages. Exported for tests. */
