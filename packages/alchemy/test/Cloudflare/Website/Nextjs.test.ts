@@ -35,11 +35,11 @@ const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
 const nextjsProps = (rootDir: string) => ({
   rootDir,
-  url: true as const,
-  subdomain: { enabled: true, previewsEnabled: true },
+  workersDev: { enabled: true, previewsEnabled: true },
   memo: {
     include: [
       "app/**",
+      "pages/**",
       "public/**",
       "package.json",
       "jsconfig.json",
@@ -93,6 +93,7 @@ test.provider(
           "open-next.config.ts",
           "middleware.js",
           "app",
+          "pages",
           "public",
         ],
       });
@@ -180,6 +181,85 @@ test.provider(
         timeout: "60 seconds",
         label: "nextjs prerendered ISR page",
       });
+
+      // Dynamic segment prerendered by generateStaticParams (SSG).
+      yield* expectUrlContains(
+        `${site1.url!}/products/alpha`,
+        "product-slug:",
+        { timeout: "60 seconds", label: "nextjs prerendered dynamic segment" },
+      );
+      // Non-prerendered slug renders on demand in the Worker.
+      yield* expectUrlContains(
+        `${site1.url!}/products/gamma`,
+        "product-slug:",
+        { timeout: "60 seconds", label: "nextjs on-demand dynamic segment" },
+      );
+      // Catch-all dynamic segment.
+      yield* expectUrlContains(
+        `${site1.url!}/docs/guides/deploy/workers`,
+        "DOCS_CATCHALL_MARKER",
+        { timeout: "60 seconds", label: "nextjs catch-all segment" },
+      );
+
+      // Streaming SSR through the real edge: the shell (with the Suspense
+      // fallback) flushes before the slow segment resolves. identity
+      // encoding keeps intermediate proxies from buffering the stream.
+      const streamRes = yield* client.execute(
+        HttpClientRequest.get(`${site1.url!}/streaming`).pipe(
+          HttpClientRequest.setHeader("accept-encoding", "identity"),
+        ),
+      );
+      expect(streamRes.status).toBe(200);
+      const streamBody = yield* streamRes.text;
+      expect(streamBody).toContain("STREAMING_SUSPENSE_MARKER");
+      expect(streamBody).toContain("STREAMING_RESOLVED_MARKER");
+
+      // Custom not-found boundary: unmatched routes and notFound() calls
+      // both serve the custom 404 content with a 404 status.
+      const missing = yield* client.get(`${site1.url!}/definitely/not/a/route`);
+      expect(missing.status).toBe(404);
+      expect(yield* missing.text).toContain("CUSTOM_NOT_FOUND_MARKER");
+      const gone = yield* client.get(`${site1.url!}/gone`);
+      expect(gone.status).toBe(404);
+      expect(yield* gone.text).toContain("CUSTOM_NOT_FOUND_MARKER");
+
+      // next.config redirects / rewrites / headers. The fetch-backed
+      // client follows the 308, so assert the redirect lands on the home
+      // page's content — a broken redirect would 404 instead.
+      yield* expectUrlContains(`${site1.url!}/old-home`, "NEXTJS_SSR_MARKER", {
+        timeout: "60 seconds",
+        label: "nextjs next.config redirect (followed to home)",
+      });
+      const rewritten2 = yield* fetchJsonReady<{ hello: string }>(
+        `${site1.url!}/rewritten-hello`,
+      );
+      expect(rewritten2.hello).toBe("world");
+      const headered = yield* client.get(`${site1.url!}/api/hello`);
+      expect(headered.headers["x-fixture-config-header"]).toBe(
+        "from-next-config",
+      );
+
+      // next/image (unoptimized): the page renders the img and the raw
+      // asset serves through the ASSETS binding. Real optimization needs
+      // a zone with Cloudflare Images — documented on the resource.
+      yield* expectUrlContains(`${site1.url!}/image`, "IMAGE_PAGE_MARKER", {
+        timeout: "60 seconds",
+        label: "nextjs next/image page",
+      });
+      const pixel = yield* client.get(`${site1.url!}/pixel.png`);
+      expect(pixel.status).toBe(200);
+      expect(pixel.headers["content-type"]).toContain("image/png");
+
+      // Pages Router page (getServerSideProps) + API route, coexisting
+      // with the App Router.
+      yield* expectUrlContains(`${site1.url!}/legacy`, "PAGES_ROUTER_MARKER", {
+        timeout: "60 seconds",
+        label: "nextjs pages-router page",
+      });
+      const legacy = yield* fetchJsonReady<{ legacy: string }>(
+        `${site1.url!}/api/legacy`,
+      );
+      expect(legacy.legacy).toBe("pages-api");
 
       // ── deploy 2: no changes ⇒ the rebuild-free input hash matches and
       // the deploy short-circuits without rebuilding ───────────────────────

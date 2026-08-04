@@ -72,6 +72,22 @@ export interface SelfUrlWorkerBinding {
 }
 
 /**
+ * Alchemy-only binding: a service binding that points at the host Worker
+ * ITSELF (`Worker.SelfReference`). The provider lowers this into a
+ * `service` binding targeting the Worker's own physical name just before
+ * the script upload — Cloudflare never sees this type. In local dev it
+ * lowers to the runtime's in-process self service (bypassing the assets
+ * middleware), matching production semantics.
+ *
+ * The canonical consumer is OpenNext's `WORKER_SELF_REFERENCE` (the ISR
+ * revalidation queue re-fetches the worker through it).
+ */
+export interface SelfServiceWorkerBinding {
+  type: "self_service";
+  name: string;
+}
+
+/**
  * The `queue` metadata binding extended with the alchemy-only `queueId`.
  * The local worker provider uses it to discriminate a locally-emulated
  * queue (`dev:` id → local broker) from an `Alchemy.remote()` queue in dev
@@ -101,7 +117,10 @@ export type QueueWorkerBinding = Extract<
  * The wire-shape binding union the Cloudflare API accepts — {@link WorkerBinding}
  * minus the alchemy-only members that must be lowered before upload.
  */
-export type WireWorkerBinding = Exclude<WorkerBinding, SelfUrlWorkerBinding>;
+export type WireWorkerBinding = Exclude<
+  WorkerBinding,
+  SelfUrlWorkerBinding | SelfServiceWorkerBinding
+>;
 
 export type WorkerBinding =
   | Exclude<
@@ -110,7 +129,8 @@ export type WorkerBinding =
     >
   | DurableObjectNamespaceWorkerBinding
   | QueueWorkerBinding
-  | SelfUrlWorkerBinding;
+  | SelfUrlWorkerBinding
+  | SelfServiceWorkerBinding;
 
 export type WorkerSettingsBinding = Exclude<
   workers.GetScriptScriptAndVersionSettingResponse["bindings"],

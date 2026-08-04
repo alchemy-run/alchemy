@@ -34,11 +34,13 @@ const fixtureEntries = [
   "open-next.config.ts",
   "middleware.js",
   "app",
+  "pages",
   "public",
 ];
 
 const memoInclude = [
   "app/**",
+  "pages/**",
   "public/**",
   "package.json",
   "jsconfig.json",

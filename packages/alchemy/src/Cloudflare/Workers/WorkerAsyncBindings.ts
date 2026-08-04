@@ -43,6 +43,7 @@ import { isSecretKey } from "./SecretKey.ts";
 import { isVersionMetadata } from "./VersionMetadata.ts";
 import type { WorkerBindingProps } from "./Worker.ts";
 import {
+  isSelfReference,
   isSelfUrl,
   isWorker,
   type Worker,
@@ -499,6 +500,14 @@ const toBinding = (
     // `plain_text` binding holding the resolved URL just before upload.
     return {
       type: "self_url",
+      name: bindingName,
+    };
+  } else if (isSelfReference(binding)) {
+    // A service binding to the Worker itself. The provider lowers this
+    // sentinel into a `service` binding targeting the Worker's own
+    // physical name just before upload.
+    return {
+      type: "self_service",
       name: bindingName,
     };
   } else if (isWorkerLoader(binding)) {

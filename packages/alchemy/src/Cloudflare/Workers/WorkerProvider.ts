@@ -2726,12 +2726,20 @@ export const LiveWorkerProvider = () =>
         } satisfies Worker["Attributes"]["hash"];
         // Lower the `Worker.URL` sentinel into the aliased preview URL —
         // same lowering `putWorker` performs, with the alias standing in
-        // for the script's own URL.
+        // for the script's own URL. `Worker.SelfReference` lowers to a
+        // service binding on the parent script (versions have no name of
+        // their own).
         const metadataBindings = bindings.flatMap((b) =>
           (b.data.bindings ?? []).map((item) =>
             item.type === "self_url"
               ? { type: "plain_text" as const, name: item.name, text: selfUrl! }
-              : item,
+              : item.type === "self_service"
+                ? {
+                    type: "service" as const,
+                    name: item.name,
+                    service: parentName,
+                  }
+                : item,
           ),
         );
         appendAlchemyAndEnvBindings(
@@ -2978,6 +2986,11 @@ export const LiveWorkerProvider = () =>
             // Cloudflare has no native binding for it.
             if (item.type === "self_url") {
               return { type: "plain_text", name: item.name, text: selfUrl! };
+            }
+            // Lower the `Worker.SelfReference` sentinel into a service
+            // binding targeting this Worker's own physical name.
+            if (item.type === "self_service") {
+              return { type: "service", name: item.name, service: name };
             }
             if (
               item.type === "durable_object_namespace" &&

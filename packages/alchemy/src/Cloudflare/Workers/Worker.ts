@@ -1244,6 +1244,37 @@ export const isSelfUrl = (value: unknown): value is URLEffect =>
   (value as URLEffect)["~alchemy/Kind"] === "Cloudflare.Workers.URL";
 
 /**
+ * A service binding that points at this Worker ITSELF. Declare it on `env`
+ * to give the Worker a self-referencing service binding — the provider
+ * lowers it into a `service` binding targeting the Worker's own physical
+ * name at upload, and local dev serves it with the runtime's in-process
+ * self service.
+ *
+ * The canonical consumer is OpenNext's `WORKER_SELF_REFERENCE` (the ISR
+ * revalidation queue re-fetches the worker through it):
+ *
+ * ```typescript
+ * const site = yield* Cloudflare.Website.Nextjs("Site", {
+ *   env: {
+ *     WORKER_SELF_REFERENCE: Cloudflare.Workers.SelfReference,
+ *   },
+ * });
+ * ```
+ */
+export const SelfReference = {
+  "~alchemy/Kind": "Cloudflare.Workers.SelfReference",
+} as const;
+export type SelfReference = typeof SelfReference;
+
+/** Returns true when the value is the {@link SelfReference} marker. */
+export const isSelfReference = (value: unknown): value is SelfReference =>
+  typeof value === "object" &&
+  value !== null &&
+  "~alchemy/Kind" in value &&
+  (value as SelfReference)["~alchemy/Kind"] ===
+    "Cloudflare.Workers.SelfReference";
+
+/**
  * A Cloudflare Worker host with deploy-time binding support and runtime export
  * collection.
  *

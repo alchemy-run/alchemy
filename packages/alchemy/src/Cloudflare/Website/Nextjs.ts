@@ -5,6 +5,7 @@ import { effectClass } from "../../Util/effect.ts";
 import type { Providers } from "../Providers.ts";
 import type { AssetsConfig } from "../Workers/Assets.ts";
 import {
+  SelfReference,
   Worker,
   type NormalizedBindings,
   type WorkerAssetsConfig,
@@ -118,13 +119,22 @@ export interface NextjsProps<
  * `next dev` (Turbopack HMR) with the Worker's bindings proxied onto
  * `getCloudflareContext()`.
  *
- * Known v1 limitations:
- * - The incremental cache is the read-only static-assets flavor: ISR pages
- *   serve their prerendered payloads, but revalidation writes are a no-op
- *   (no KV/R2/D1-backed cache yet).
- * - `WORKER_SELF_REFERENCE` (OpenNext's self service binding, used by the
- *   revalidation queue) is not wired on deploy — consistent with the
- *   read-only cache above.
+ * ISR comes in two flavors, chosen by the project's `open-next.config.ts`:
+ * the zero-infra static-assets incremental cache (prerendered pages serve
+ * as built; revalidation writes are a no-op), or the fully writable
+ * KV-backed setup (`revalidatePath`/`revalidateTag` and time-based
+ * regeneration all work) — see the Writable ISR section below. OpenNext's
+ * `WORKER_SELF_REFERENCE` self service binding is always wired on deploy.
+ *
+ * Known limitations (upstream `@opennextjs/cloudflare`):
+ * - Edge-runtime routes/pages (`export const runtime = "edge"`) are not
+ *   supported — the build fails with the offending route list; remove the
+ *   directive (the node runtime runs on Workers). Middleware is fine.
+ * - `next/image` optimization requires a zone with Cloudflare Images;
+ *   on `workers.dev`, use `unoptimized` (images serve as raw assets).
+ * - Partial Prerendering / `"use cache"` (`cacheComponents`) and
+ *   Pages-Router `i18n` config are untested/out of scope for now. App
+ *   Router i18n via middleware works (middleware is fully supported).
  *
  * @resource
  * @product Website
@@ -181,6 +191,45 @@ export interface NextjsProps<
  *   await env.UPLOADS.put("key", await request.text());
  *   return Response.json({ ok: true });
  * }
+ * ```
+ *
+ * @section Writable ISR
+ * With the KV incremental cache, ISR revalidation actually writes:
+ * `revalidatePath` / `revalidateTag` purge entries, and time-based
+ * `revalidate` windows regenerate pages in the background through the
+ * same-worker Durable Object queue. Configure OpenNext for it and bind
+ * the pieces — `WORKER_SELF_REFERENCE` is wired automatically:
+ *
+ * ```typescript
+ * // open-next.config.ts
+ * import { defineCloudflareConfig } from "@opennextjs/cloudflare";
+ * import kvIncrementalCache from "@opennextjs/cloudflare/overrides/incremental-cache/kv-incremental-cache";
+ * import doQueue from "@opennextjs/cloudflare/overrides/queue/do-queue";
+ * import kvNextTagCache from "@opennextjs/cloudflare/overrides/tag-cache/kv-next-tag-cache";
+ *
+ * export default defineCloudflareConfig({
+ *   incrementalCache: kvIncrementalCache,
+ *   queue: doQueue,
+ *   tagCache: kvNextTagCache,
+ * });
+ * ```
+ *
+ * @example Binding the writable-ISR resources
+ * ```typescript
+ * const incCache = yield* Cloudflare.KV.Namespace("NextIncCache");
+ * const tagCache = yield* Cloudflare.KV.Namespace("NextTagCache");
+ *
+ * const site = yield* Cloudflare.Website.Nextjs("Site", {
+ *   env: {
+ *     NEXT_INC_CACHE_KV: incCache,
+ *     NEXT_TAG_CACHE_KV: tagCache,
+ *     // The revalidation queue: a Durable Object class shipped in the
+ *     // OpenNext worker bundle itself.
+ *     NEXT_CACHE_DO_QUEUE: Cloudflare.DurableObject("NEXT_CACHE_DO_QUEUE", {
+ *       className: "DOQueueHandler",
+ *     }),
+ *   },
+ * });
  * ```
  *
  * @section Custom Rebuild Scope
@@ -266,6 +315,15 @@ export const Nextjs: {
           Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
           (props) => ({
             ...props,
+            // OpenNext's revalidation queues (memory-queue, do-queue) fetch
+            // the worker back through `WORKER_SELF_REFERENCE`. Always wire
+            // the self service binding — it's inert when unused, and its
+            // absence turns ISR revalidation into a silent no-op. An
+            // explicit user-provided `env.WORKER_SELF_REFERENCE` wins.
+            env: {
+              WORKER_SELF_REFERENCE: SelfReference,
+              ...props?.env,
+            },
             // OpenNext requires nodejs_compat; the Worker here is external
             // (no inline Effect entry), so the engine won't add it.
             compatibility: {
