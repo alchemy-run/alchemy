@@ -2,11 +2,13 @@
  * Local-vs-live mode indicators in the plan/deploy renderers.
  *
  * The rule (shared by the Ink TUI and the non-interactive LoggingCli via
- * `formatModeNote`): mark only the EXCEPTIONS relative to the run's default
- * mode, so output stays quiet in the common case —
- *   - deploy (default live): local rows get a `local` tag
- *   - dev (default local): live rows get a `remote` tag (the
- *     `Alchemy.remote()` vocabulary; the persisted enum stays "live")
+ * `formatModeNote`): dev tags EVERY mode-stamped row; deploy tags only the
+ * local exceptions —
+ *   - dev (default local): local rows get a `local` tag, live rows get a
+ *     `remote` tag (the `Alchemy.remote()` vocabulary; the persisted enum
+ *     stays "live")
+ *   - deploy (default live): local rows get a `local` tag; live rows are
+ *     quiet
  *   - mode-agnostic rows (no resolved mode) are never tagged
  *   - mode-switch replacements always show the transition (`local → live`)
  */
@@ -26,13 +28,17 @@ describe("formatModeNote", () => {
     ).toBeUndefined();
   });
 
-  test("the run-default mode is quiet", () => {
+  test("a live row during deploy (default live) is quiet", () => {
     expect(
       formatModeNote({ mode: "live", defaultMode: "live" }),
     ).toBeUndefined();
-    expect(
-      formatModeNote({ mode: "local", defaultMode: "local" }),
-    ).toBeUndefined();
+  });
+
+  test("a local row during dev (default local) is tagged local", () => {
+    // Dev tags EVERY stamped row — knowing what's emulated is the point.
+    expect(formatModeNote({ mode: "local", defaultMode: "local" })).toBe(
+      "local",
+    );
   });
 
   test("a local row during deploy (default live) is tagged local", () => {
@@ -165,7 +171,7 @@ describe("formatPlanLines mode tags", () => {
         },
       }),
     );
-    expect(lineFor(lines, "Emulated")).not.toContain("(remote");
+    expect(lineFor(lines, "Emulated")).toContain("(local)");
     expect(lineFor(lines, "RealQueue")).toContain("(remote)");
     expect(lineFor(lines, "ModeAgnostic")).not.toContain("(remote");
     expect(lineFor(lines, "ModeAgnostic")).not.toContain("(local");

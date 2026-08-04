@@ -5,29 +5,32 @@ import type { ProviderMode } from "../ProviderMode.ts";
  * non-interactive LoggingCli) for the local-vs-live provider-mode
  * indicator on a resource row.
  *
- * The rule: mark the EXCEPTIONS relative to the run's default mode so
- * output stays quiet in the common case.
+ * The rule: in a dev run every mode-stamped row shows its mode — the
+ * whole point of `alchemy dev` is knowing what is emulated and what is
+ * real, so `(local)` and `(remote)` are both explicit. A live deploy
+ * only tags the exceptions (`local` leftovers from dev being
+ * deleted/replaced) — tagging every row `remote` in a normal deploy
+ * would be noise.
  *
+ * - `alchemy dev` (default `"local"`): local rows are tagged `local`,
+ *   live rows are tagged `remote` — matching the `Alchemy.remote()`
+ *   vocabulary users see. The persisted enum stays `"live"`; only the
+ *   display says `remote`.
  * - `alchemy deploy` (default `"live"`): rows resolved to the local
- *   provider (e.g. leftover dev rows being deleted/replaced) are tagged
- *   `local`.
- * - `alchemy dev` (default `"local"`): rows resolved to the live provider
- *   (`Alchemy.remote()` opt-outs) are tagged `remote` — matching the
- *   `Alchemy.remote()` vocabulary users see. The persisted enum stays
- *   `"live"`; only the display says `remote`.
+ *   provider are tagged `local`; live rows are untagged.
  * - Mode-agnostic providers have no resolved mode (`undefined`) — nothing
  *   is shown.
  * - Mode-switch replacements ALWAYS annotate the transition
  *   (e.g. `local → live`), regardless of the run default.
  */
 
-/** The display label for a minority-mode row (`"live"` renders as `remote`). */
+/** The display label for a mode-stamped row (`"live"` renders as `remote`). */
 export const modeLabel = (mode: ProviderMode): string =>
   mode === "live" ? "remote" : "local";
 
 /**
  * The mode note for a resource row, or `undefined` when nothing should be
- * shown (the quiet common case).
+ * shown (mode-agnostic rows, and live rows in a live-default run).
  *
  * @param mode the mode the node's provider was resolved for (`undefined`
  *   for mode-agnostic providers — never annotated)
@@ -48,6 +51,7 @@ export const formatModeNote = (options: {
     return `${priorMode} → ${mode}`;
   }
   const defaultMode = options.defaultMode ?? "live";
-  if (mode === defaultMode) return undefined;
+  // Live-default runs stay quiet for live rows; dev runs tag everything.
+  if (defaultMode === "live" && mode === "live") return undefined;
   return modeLabel(mode);
 };
