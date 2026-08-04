@@ -12,6 +12,14 @@ on:
         required: false
         type: string
         default: ""
+      force-latest:
+        description: >-
+          Also move npm's `latest` dist-tag to this release, even for a
+          prerelease (beta/alpha/rc). If the version is already
+          published, `latest` is moved onto it instead of skipping.
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: release-${{ github.ref }}
@@ -31,6 +39,7 @@ jobs:
       # distilled submodule, so consumer checkouts must fetch it.
       submodules: "true"
       version: ${{ inputs.version }}
+      force-latest: ${{ inputs.force-latest }}
       repo: alchemy-run/alchemy
       current-version: "2.0.0"
       # Each package builds in its own publish job: the tsc build pulls
