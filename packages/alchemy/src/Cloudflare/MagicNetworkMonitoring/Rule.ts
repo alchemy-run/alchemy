@@ -118,11 +118,11 @@ export interface RuleAttributes {
    */
   duration: string | undefined;
   /** Zscore sensitivity, if set. */
-  zscoreSensitivity: "low" | "medium" | "high" | undefined;
+  zscoreSensitivity: "low" | "medium" | "high" | (string & {}) | undefined;
   /** Zscore target, if set. */
-  zscoreTarget: "bits" | "packets" | undefined;
+  zscoreTarget: "bits" | "packets" | (string & {}) | undefined;
   /** Prefix match type, if set. */
-  prefixMatch: "exact" | "subnet" | "supernet" | undefined;
+  prefixMatch: "exact" | "subnet" | "supernet" | (string & {}) | undefined;
 }
 
 export type Rule = Resource<
@@ -286,9 +286,10 @@ export const RuleProvider = () =>
             // config has propagated, so ride out that consistency window.
             Effect.retry({
               while: (e) => e._tag === "MnmConfigMissing",
-              schedule: Schedule.exponential("500 millis").pipe(
-                Schedule.both(Schedule.recurs(8)),
-              ),
+              schedule: Schedule.max([
+                Schedule.exponential("500 millis"),
+                Schedule.recurs(8),
+              ]),
             }),
             Effect.catchTag("DuplicateMnmRuleName", (error) =>
               findByName(accountId, name).pipe(

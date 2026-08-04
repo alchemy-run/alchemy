@@ -1,7 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import { poll } from "@/Util/poll.ts";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -37,10 +37,13 @@ const logLevel = Effect.provideService(
 // script is resolvable. Cap each backoff at 5s and stop after 12 attempts
 // (~45s worst case) so a genuine failure surfaces instead of hanging.
 const readinessRetry = {
-  schedule: Schedule.exponential("500 millis").pipe(
-    Schedule.either(Schedule.spaced("5 seconds")),
-    Schedule.both(Schedule.recurs(12)),
-  ),
+  schedule: Schedule.max([
+    Schedule.min([
+      Schedule.exponential("500 millis"),
+      Schedule.spaced("5 seconds"),
+    ]),
+    Schedule.recurs(12),
+  ]),
 } as const;
 
 const getJson = (url: string) =>
@@ -67,9 +70,10 @@ const exercise = (label: string, baseUrl: string) =>
     yield* HttpClient.get(`${baseUrl}/health`).pipe(
       Effect.flatMap(HttpClientResponse.filterStatusOk),
       Effect.retry({
-        schedule: Schedule.exponential("500 millis").pipe(
-          Schedule.both(Schedule.recurs(20)),
-        ),
+        schedule: Schedule.max([
+          Schedule.exponential("500 millis"),
+          Schedule.recurs(20),
+        ]),
       }),
     );
 

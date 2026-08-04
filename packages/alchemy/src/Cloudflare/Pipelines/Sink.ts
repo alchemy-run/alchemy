@@ -348,9 +348,10 @@ export const SinkProvider = () =>
         // race a `SinkAlreadyExists` against the dying sink.
         yield* getSink(accountId, observed.id).pipe(
           Effect.repeat({
-            schedule: Schedule.exponential("250 millis").pipe(
-              Schedule.both(Schedule.recurs(8)),
-            ),
+            schedule: Schedule.max([
+              Schedule.exponential("250 millis"),
+              Schedule.recurs(8),
+            ]),
             until: (s) => s === undefined,
           }),
         );
@@ -458,9 +459,10 @@ const deleteSink = (accountId: string, sinkId: string) =>
   pipelines.deleteSink({ accountId, sinkId }).pipe(
     Effect.retry({
       while: (e) => e._tag === "SinkInUse",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(8)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(8),
+      ]),
     }),
     Effect.catchTag("SinkNotFound", () => Effect.void),
     Effect.catchTag("InvalidSinkId", () => Effect.void),

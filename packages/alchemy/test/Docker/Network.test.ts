@@ -2,11 +2,10 @@ import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
 import * as Docker from "@/Docker";
 import * as Provider from "@/Provider";
 import { inMemoryState } from "@/State";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { describe, expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
-import { describe } from "vitest";
 import { isDockerReady } from "./Runtime.ts";
 
 const { test } = Test.make({
@@ -31,6 +30,36 @@ test.provider("diff replaces a network when labels change", () =>
         driver: "bridge",
         enableIPv6: false,
         labels: { usage: "old" },
+        createdAt: 0,
+      },
+    });
+    expect(networkDiff).toEqual({ action: "replace", deleteFirst: true });
+  }),
+);
+
+test.provider("diff replaces a network when its Docker context changes", () =>
+  Effect.gen(function* () {
+    const networkProvider = yield* Provider.findProvider(Docker.Network);
+    const networkDiff = yield* networkProvider.diff!({
+      id: "app",
+      fqn: "app",
+      instanceId: "instance",
+      olds: {
+        name: "app",
+        context: "default",
+      },
+      news: {
+        name: "app",
+        context: "remote-build",
+      },
+      oldBindings: [],
+      newBindings: [],
+      output: {
+        id: "app",
+        name: "app",
+        driver: "bridge",
+        enableIPv6: false,
+        labels: {},
         createdAt: 0,
       },
     });

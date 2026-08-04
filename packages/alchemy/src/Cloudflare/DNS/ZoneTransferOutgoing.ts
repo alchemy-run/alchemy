@@ -228,8 +228,8 @@ export const ZoneTransferOutgoingProvider = () =>
       const observedEnabled = yield* getEnabled(zoneId);
       if (observedEnabled !== desiredEnabled) {
         yield* desiredEnabled
-          ? dns.enableZoneTransferOutgoing({ zoneId, body: {} })
-          : dns.disableZoneTransferOutgoing({ zoneId, body: {} });
+          ? dns.enableZoneTransferOutgoing({ zoneId })
+          : dns.disableZoneTransferOutgoing({ zoneId });
       }
 
       return toAttributes(observed, zoneId, desiredEnabled);

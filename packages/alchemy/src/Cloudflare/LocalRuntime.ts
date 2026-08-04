@@ -32,6 +32,22 @@ export class LocalRuntimeState extends Context.Service<
       Consumer["Attributes"]["consumerId"],
       Consumer["Attributes"]
     >;
+    /**
+     * Restart hooks for locally running Workers, keyed by script name.
+     *
+     * A local workerd instance bakes its queue-consumer wiring in at start
+     * time (`runtime.start({ queueConsumers })`), but the `Consumer`
+     * resource that populates {@link queueConsumers} reconciles as a
+     * *sibling* of the Worker — the engine may start workerd before the
+     * consumer registers. Providers that mutate a worker's runtime wiring
+     * (e.g. `ConsumerProviderLocal`) invoke the script's hook after
+     * updating state so the running instance is reconfigured; the hook is
+     * a no-op until the worker has served at least once.
+     */
+    readonly workerRestarts: MutableHashMap.MutableHashMap<
+      string,
+      Effect.Effect<void>
+    >;
   }
 >()("alchemy/cloudflare/LocalRuntimeState") {}
 
@@ -40,10 +56,11 @@ const LocalRuntimeStateLive = Layer.succeed(
   LocalRuntimeState.of({
     queues: MutableHashMap.empty(),
     queueConsumers: MutableHashMap.empty(),
+    workerRestarts: MutableHashMap.empty(),
   }),
 );
 
-export const localRuntimeServices = () =>
+const makeLocalRuntimeServices = () =>
   RpcProvider.providerServicesEffect(
     Effect.gen(function* () {
       const getEnv = yield* CloudflareEnvironment;
@@ -62,6 +79,26 @@ export const localRuntimeServices = () =>
       );
     }),
   );
+
+let _localRuntimeServices:
+  | ReturnType<typeof makeLocalRuntimeServices>
+  | undefined;
+
+/**
+ * The shared local-runtime dependency layer (workerd `Runtime`,
+ * `WorkerProxy`, {@link LocalRuntimeState}) used by every Cloudflare local
+ * provider.
+ *
+ * Returns a **module-memoized layer reference**: local providers register
+ * via `ProviderLayer.dual`, which builds each provider's local variant
+ * lazily against the stack build's shared `Layer.MemoMap` — memoization is
+ * keyed by layer identity, so Worker/Queue/Consumer/Container composing
+ * this exact reference into their local thunks share one runtime instance
+ * per stack build (a fresh build gets a fresh instance via its own memo
+ * map; the layer blueprint itself is immutable).
+ */
+export const localRuntimeServices = () =>
+  (_localRuntimeServices ??= makeLocalRuntimeServices());
 
 export const isLocalId = (id: string | undefined): id is string =>
   typeof id === "string" && id.startsWith("dev:");

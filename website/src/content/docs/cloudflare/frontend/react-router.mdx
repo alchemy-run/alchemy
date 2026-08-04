@@ -5,6 +5,11 @@ sidebar:
   order: 6
 ---
 
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+export const deps = `react react-dom react-router`;
+export const devDeps = `vite @vitejs/plugin-react @vitejs/plugin-rsc`;
+
 React Router v7 builds through Vite, so
 [`Cloudflare.Website.Vite`](/cloudflare/frontend/vite) deploys it — one
 resource, no Wrangler config, no manual entrypoint. In React Server
@@ -39,10 +44,20 @@ renderer, and the Worker handler.
 React Server Components need React Router 7.16+ and the RSC Vite
 plugin:
 
-```sh
-bun add react react-dom react-router
-bun add -d vite @vitejs/plugin-react @vitejs/plugin-rsc
-```
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun add ${deps}\nbun add -d ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm install ${deps}\nnpm install -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm add ${deps}\npnpm add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn add ${deps}\nyarn add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+</Tabs>
 
 `@vitejs/plugin-rsc` is what splits the build into `client`, `ssr`, and
 `rsc` environments; `@vitejs/plugin-react` handles the usual JSX/HMR
@@ -89,8 +104,8 @@ Give each server environment its own build input:
 
 ```diff lang="typescript"
 // vite.config.ts
- export default defineConfig({
-   plugins: [react(), rsc({ ... })],
+export default defineConfig({
+  plugins: [react(), rsc({ ... })],
 +  environments: {
 +    // The Worker is the RSC environment.
 +    rsc: {
@@ -109,7 +124,7 @@ Give each server environment its own build input:
 +      },
 +    },
 +  },
- });
+});
 ```
 
 The `rsc` input is the Worker entry, and the extra `ssr` input

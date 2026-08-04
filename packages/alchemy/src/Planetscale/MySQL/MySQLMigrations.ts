@@ -1,10 +1,15 @@
-import * as ops from "@distilled.cloud/planetscale/Operations";
+import * as ps from "@distilled.cloud/planetscale";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { createConnection, type Connection } from "mysql2/promise";
-import { listSqlFiles, readSqlFile, type SqlFile } from "../../Sql/SqlFile.ts";
+import {
+  listSqlFiles,
+  readSqlFile,
+  splitSqlStatements,
+  type SqlFile,
+} from "../../SQL/SqlFile.ts";
 
 const MIGRATION_PASSWORD_TTL_SECONDS = 600;
 
@@ -95,7 +100,7 @@ const applyMySQLMigrations = (options: ApplyMigrationsOptions) =>
         nextSeq += 1;
         yield* Effect.gen(function* () {
           yield* mysqlQuery(connection, "START TRANSACTION");
-          for (const statement of splitMySQLStatements(file.sql)) {
+          for (const statement of splitSqlStatements(file.sql)) {
             yield* mysqlQuery(connection, statement);
           }
           yield* mysqlExecute(
@@ -119,24 +124,11 @@ const applyMySQLMigrations = (options: ApplyMigrationsOptions) =>
 const runMySQLSql = (target: MySQLMigrationTarget, sql: string) =>
   withMySQLConnection(target, (connection) =>
     Effect.gen(function* () {
-      for (const statement of splitMySQLStatements(sql)) {
+      for (const statement of splitSqlStatements(sql)) {
         yield* mysqlQuery(connection, statement);
       }
     }),
   );
-
-// Drizzle (and other migration tools) emit `--> statement-breakpoint` as a
-// separator between statements. PlanetScale's Vitess parser rejects the `-->`
-// token ("syntax error at position 2") because MySQL line comments require
-// whitespace after `--`. Split on the marker and run each statement
-// individually so the connector never sees the breakpoint comment.
-const STATEMENT_BREAKPOINT = /\r?\n\s*-->\s*statement-breakpoint\s*\r?\n?/g;
-
-const splitMySQLStatements = (sql: string): string[] =>
-  sql
-    .split(STATEMENT_BREAKPOINT)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
 
 const getNextMySQLSeq = (connection: Connection, table: string) =>
   mysqlQueryRows<{ id: string }>(connection, `SELECT id FROM ${table};`).pipe(
@@ -189,7 +181,7 @@ const withTemporaryMySQLPassword = <A, E, R>(
 ) =>
   Effect.acquireUseRelease(
     Effect.gen(function* () {
-      const created = yield* ops.createPassword({
+      const created = yield* ps.createPassword({
         organization: target.organization,
         database: target.database,
         branch: target.branch,
@@ -206,7 +198,7 @@ const withTemporaryMySQLPassword = <A, E, R>(
     }),
     use,
     (password) =>
-      ops
+      ps
         .deletePassword({
           organization: target.organization,
           database: target.database,
@@ -217,9 +209,10 @@ const withTemporaryMySQLPassword = <A, E, R>(
           // Already-deleted passwords are a success: nothing to clean up.
           Effect.catchTag("NotFound", () => Effect.void),
           Effect.retry({
-            schedule: Schedule.exponential("500 millis").pipe(
-              Schedule.both(Schedule.recurs(5)),
-            ),
+            schedule: Schedule.max([
+              Schedule.exponential("500 millis"),
+              Schedule.recurs(5),
+            ]),
           }),
           // Migrations succeeded; don't fail the parent over a release-step
           // hiccup. The password's TTL bounds the orphan window; log loudly

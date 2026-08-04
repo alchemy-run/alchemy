@@ -1,14 +1,13 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import * as S3 from "@distilled.cloud/aws/s3";
+import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { describe } from "vitest";
-
 import BucketEventSourceFunctionLive, {
   BucketEventSourceFunction,
 } from "./fixtures/event-source-handler.ts";
@@ -19,11 +18,13 @@ const sharedStack = Core.scratchStack(testOptions, "S3EventSource");
 
 // Lambda function URL cold-start plus IAM propagation can take well over a
 // minute on a fresh deploy under parallel-suite load. Budget ~150s.
-const readinessPolicy = Schedule.fixed("2 seconds").pipe(
-  Schedule.both(Schedule.recurs(75)),
-);
+const readinessPolicy = Schedule.max([
+  Schedule.fixed("2 seconds"),
+  Schedule.recurs(75),
+]);
 
 let baseUrl: string;
+let fixtureBucketName: string | undefined;
 
 describe("S3 Bucket Event Source", () => {
   beforeAll(
@@ -74,11 +75,42 @@ describe("S3 Bucket Event Source", () => {
       yield* Effect.logInfo(
         "S3 EventSource test: fixture responded successfully",
       );
+
+      // Capture the fixture's bucket name so afterAll can assert it is
+      // really gone after the trailing destroy. The route answers 503 until
+      // resource Outputs hydrate, so retry through that window.
+      const named = yield* HttpClient.get(`${baseUrl}/bucket-name`).pipe(
+        Effect.flatMap((response) =>
+          response.status === 200
+            ? response.json
+            : Effect.fail(
+                new Error(`bucket-name not ready: ${response.status}`),
+              ),
+        ),
+        Effect.retry({ schedule: readinessPolicy }),
+      );
+      fixtureBucketName = (named as { bucketName: string }).bucketName;
+      expect(fixtureBucketName).toBeTruthy();
     }),
     { timeout: 240_000 },
   );
 
-  afterAll(sharedStack.destroy(), { timeout: 60_000 });
+  afterAll(
+    Effect.gen(function* () {
+      yield* sharedStack.destroy();
+      // Prove the trailing destroy removed the fixture bucket (skip if
+      // setup never captured the name). afterAll lacks the providers layer
+      // test bodies get, so provide it for the out-of-band distilled call.
+      if (fixtureBucketName) {
+        yield* Core.withProviders(
+          assertBucketDeleted(fixtureBucketName),
+          testOptions,
+          "S3EventSource",
+        );
+      }
+    }),
+    { timeout: 120_000 },
+  );
 
   test.provider(
     "object created under the watched prefix triggers the subscription to write derived state",
@@ -116,9 +148,10 @@ describe("S3 Bucket Event Source", () => {
         const processed = yield* fetchProcessed.pipe(
           Effect.retry({
             while: (error) => error._tag === "ProcessedNotReady",
-            schedule: Schedule.fixed("5 seconds").pipe(
-              Schedule.both(Schedule.recurs(48)), // ~4 min budget
-            ),
+            schedule: Schedule.max([
+              Schedule.fixed("5 seconds"),
+              Schedule.recurs(48),
+            ]),
           }),
         );
 
@@ -137,6 +170,23 @@ interface ProcessedRecord {
 }
 
 class ProcessedNotReady extends Data.TaggedError("ProcessedNotReady") {}
+
+class BucketStillExists extends Data.TaggedError("BucketStillExists") {}
+
+// Out-of-band assert-gone after the final destroy: retry while headBucket
+// still succeeds (S3 delete visibility is eventually consistent), settle on
+// the typed NotFound.
+const assertBucketDeleted = Effect.fn(function* (name: string) {
+  yield* S3.headBucket({ Bucket: name }).pipe(
+    Effect.flatMap(() => Effect.fail(new BucketStillExists())),
+    Effect.retry({
+      while: (e) => e._tag === "BucketStillExists",
+      schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(10)]),
+    }),
+    Effect.catchTag("NotFound", () => Effect.void),
+    Effect.catch(() => Effect.void),
+  );
+});
 
 class FunctionNotReady extends Data.TaggedError("FunctionNotReady")<{
   readonly status: number;

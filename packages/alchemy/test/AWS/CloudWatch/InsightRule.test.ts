@@ -1,8 +1,8 @@
 import * as AWS from "@/AWS";
 import { InsightRule } from "@/AWS/CloudWatch";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -43,5 +43,10 @@ test.provider("list enumerates the deployed insight rule", (stack) =>
     expect(all.some((r) => r.ruleName === deployed.ruleName)).toBe(true);
 
     yield* stack.destroy();
+
+    // Out-of-band assert-gone: the exhaustively-paginated live listing no
+    // longer contains the rule after the final destroy.
+    const after = yield* provider.list();
+    expect(after.some((r) => r.ruleName === deployed.ruleName)).toBe(false);
   }),
 );

@@ -211,18 +211,30 @@ export const AppProvider = () =>
         .pipe(Effect.catchTag("FlagshipAppNotFound", () => Effect.void));
     }),
     // Account-scoped collection (pattern b): enumerate every app in the
-    // ambient account via the paginated listApps op. The list item shape
-    // matches GetAppResponse, so each maps directly into Attributes.
+    // ambient account via the paginated listApps op. Cloudflare's list
+    // index can contain ghost rows — apps that were deleted but survive in
+    // the listing while GET/DELETE both return "App not found" — so each
+    // row is validated via getApp and ghosts are dropped (otherwise census
+    // tooling re-discovers an undeletable app forever).
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      return yield* flagship.listApps.pages({ accountId }).pipe(
+      const listed = yield* flagship.listApps.pages({ accountId }).pipe(
         Stream.runCollect,
         Effect.map((chunk) =>
-          Array.from(chunk).flatMap((page) =>
-            (page.result ?? []).map((app) => toAttributes(app, accountId)),
-          ),
+          Array.from(chunk).flatMap((page) => page.result ?? []),
         ),
       );
+      const rows = yield* Effect.forEach(
+        listed,
+        (app) =>
+          getApp(accountId, app.id).pipe(
+            Effect.map((observed) =>
+              observed ? toAttributes(observed, accountId) : undefined,
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter((row): row is AppAttributes => row !== undefined);
     }),
   });
 
@@ -241,10 +253,11 @@ const getApp = (accountId: string, appId: string) =>
  * oldest for determinism.
  */
 const findByName = (accountId: string, name: string) =>
-  flagship.listApps({ accountId }).pipe(
-    Effect.map((list) =>
-      list.result
-        .filter((a) => a.name === name)
+  flagship.listApps.items({ accountId }).pipe(
+    Stream.filter((a) => a.name === name),
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk)
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
         .at(0),
     ),

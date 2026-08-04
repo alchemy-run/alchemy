@@ -1,9 +1,9 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as rdc from "@distilled.cloud/cloudflare/r2-data-catalog";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
@@ -61,9 +61,10 @@ const expectGone = (accountId: string, bucketName: string) =>
     Effect.catchTag("WarehouseNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "CatalogStillActive",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

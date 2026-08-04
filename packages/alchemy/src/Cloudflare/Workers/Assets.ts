@@ -4,6 +4,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Schedule from "effect/Schedule";
 import type { PlatformError } from "effect/PlatformError";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { sha256, sha256Object } from "../../Util/index.ts";
@@ -25,6 +26,13 @@ export interface AssetsConfig extends Exclude<
 
 export interface AssetReadResult {
   directory: string;
+  /**
+   * The normalized `base` this manifest was keyed with (`""` when the
+   * assets are served from the origin root). Manifest keys are request
+   * paths, so `uploadAssets` strips this back off to find each file on
+   * disk.
+   */
+  pathPrefix: string;
   config: AssetsConfig | undefined;
   manifest: Record<string, { hash: string; size: number }>;
   _headers: string | undefined;
@@ -34,7 +42,41 @@ export interface AssetReadResult {
 
 export interface AssetsProps extends AssetsConfig {
   directory: string;
+  /**
+   * The path this site is served from, when it is not the origin root —
+   * e.g. `"/docs"` for a Worker on the route `example.com/docs*`. Matches
+   * Vite's `base`, and `Website.Vite` fills it in from the resolved Vite
+   * config automatically; set it by hand when you bring your own build.
+   *
+   * Cloudflare's asset router matches request paths against the manifest
+   * literally and never strips a prefix, so its model is that the assets
+   * directory mirrors the served path. This does that at manifest time:
+   * `dist/app.js` is uploaded as `/docs/app.js`, leaving the build output
+   * on disk untouched.
+   *
+   * Bases that name no path — `"/"`, `"./"`, `"https://cdn.example.com/"` —
+   * are ignored, as an absolute base means the assets are served by a CDN
+   * rather than by this Worker.
+   *
+   * `_headers` and `_redirects` are NOT rewritten: their rules match the
+   * incoming request path, so author them with the full served path
+   * (`/docs/old /docs/new 301`).
+   *
+   * @default undefined (assets are served from the origin root)
+   * @see https://developers.cloudflare.com/workers/static-assets/routing/advanced/serving-a-subdirectory/
+   */
+  base?: string;
 }
+
+/**
+ * `base` → manifest path prefix. Only a root-relative base names a path
+ * this Worker serves; `"/"`, `"./"`, protocol-relative and absolute URLs
+ * all mean "no prefix".
+ */
+export const getAssetsPathPrefix = (base: string | undefined) =>
+  base?.startsWith("/") && !base.startsWith("//")
+    ? base.replace(/\/+$/, "")
+    : "";
 
 export type ValidationError =
   | AssetTooLargeError
@@ -65,6 +107,13 @@ export class FailedToReadAssetError extends Data.TaggedError(
   message: string;
   name: string;
   cause: PlatformError;
+}> {}
+
+export class AssetUploadSessionError extends Data.TaggedError(
+  "AssetUploadSessionError",
+)<{
+  message: string;
+  workerName: string;
 }> {}
 
 const getContentType = (name: string) => {
@@ -102,12 +151,66 @@ const createIgnoreMatcher = (patterns: string[]) => {
   return (file: string) => matcher.ignores(file);
 };
 
+/**
+ * Read the special `_headers` / `_redirects` files from an assets
+ * directory. They are excluded from the upload manifest, but their raw
+ * contents must be sent to Cloudflare in the script metadata's asset
+ * config (`config._headers` / `config._redirects`) for the rules to
+ * apply.
+ *
+ * The directory is optional: a config-only assets object (e.g. Vite's
+ * `assets: { runWorkerFirst: true }`, whose directory is supplied by the
+ * build) has no directory to read, and in `dev` there is no build output at
+ * all. That yields no rules rather than an error.
+ */
+export const readAssetsConfigFiles = Effect.fn(function* (
+  directory: string | undefined,
+) {
+  if (directory === undefined) {
+    return { _headers: undefined, _redirects: undefined };
+  }
+  const path = yield* Path.Path;
+  const resolvedDirectory = path.resolve(directory);
+  const [_headers, _redirects] = yield* Effect.all([
+    maybeReadString(path.join(resolvedDirectory, "_headers")),
+    maybeReadString(path.join(resolvedDirectory, "_redirects")),
+  ]);
+  return { _headers, _redirects };
+});
+
+/**
+ * Merge `_headers` / `_redirects` file contents into an asset config,
+ * producing the config to send in the script-upload metadata. Explicit
+ * `headers` / `redirects` props win over the files.
+ */
+export const mergeAssetsConfigFiles = (
+  config: AssetsConfig | undefined,
+  files: { _headers: string | undefined; _redirects: string | undefined },
+): AssetsConfig | undefined => {
+  const headers = config?.headers ?? files._headers;
+  const redirects = config?.redirects ?? files._redirects;
+  if (headers === undefined && redirects === undefined) {
+    return config;
+  }
+  return {
+    ...config,
+    ...(headers !== undefined ? { headers } : undefined),
+    ...(redirects !== undefined ? { redirects } : undefined),
+  };
+};
+
 export const readAssets = Effect.fn(function* ({
   directory,
+  base,
   ...config
 }: AssetsProps) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  // `base` nests the *manifest* paths (what Cloudflare matches request
+  // pathnames against) under a prefix; files stay where they are on disk.
+  // It is deliberately excluded from the `config` sent to Cloudflare — it
+  // is not part of the API's asset config shape.
+  const pathPrefix = getAssetsPathPrefix(base);
   const resolvedDirectory = path.resolve(directory);
   const [files, ignore, _headers, _redirects] = yield* Effect.all([
     fs.readDirectory(resolvedDirectory, { recursive: true }),
@@ -158,7 +261,7 @@ export const readAssets = Effect.fn(function* ({
         });
       }
       manifest.set(
-        (name.startsWith("/") ? name : `/${name}`).replaceAll("\\", "/"),
+        `${pathPrefix}${(name.startsWith("/") ? name : `/${name}`).replaceAll("\\", "/")}`,
         {
           hash,
           size,
@@ -166,6 +269,18 @@ export const readAssets = Effect.fn(function* ({
       );
     }),
   );
+  // Cloudflare's SPA fallback is hard-coded to `/index.html` at the
+  // manifest root, so prefixing every key would 404 every client-side
+  // route under the base. Alias the shell back to the root — one extra
+  // manifest line, zero extra uploads, since entries are content-addressed.
+  const indexHtml = manifest.get(`${pathPrefix}/index.html`);
+  if (
+    indexHtml &&
+    config.notFoundHandling === "single-page-application" &&
+    !manifest.has("/index.html")
+  ) {
+    manifest.set("/index.html", indexHtml);
+  }
   const sortedManifest = Object.fromEntries(
     Array.from(manifest.entries()).sort((a, b) => a[0].localeCompare(b[0])),
   );
@@ -185,7 +300,14 @@ export const readAssets = Effect.fn(function* ({
   });
   return {
     directory,
-    config,
+    pathPrefix,
+    // Fold the `_headers` / `_redirects` file contents into the config
+    // that gets sent to Cloudflare (`metadata.assets.config`). Merged
+    // *after* hashing so the hash input shape stays stable for
+    // already-deployed workers. Deliberately NOT `base`-prefixed: their
+    // rules match the incoming request path, which already carries the
+    // base, so they are authored with the full served path.
+    config: mergeAssetsConfigFiles(config, { _headers, _redirects }),
     manifest: sortedManifest,
     _headers,
     _redirects,
@@ -204,70 +326,121 @@ export const uploadAssets = Effect.fn(function* (
   const createScriptAssetUpload = yield* workers.createScriptAssetUpload;
   const createAssetUpload = yield* workers.createAssetUpload;
 
-  yield* note("Checking assets...");
-  const session = yield* createScriptAssetUpload({
-    accountId,
-    scriptName: workerName,
-    manifest: assets.manifest,
-  });
-  if (!session.buckets?.length) {
-    return { jwt: session.jwt ?? undefined };
-  }
-  if (!session.jwt) {
-    return { jwt: undefined };
-  }
-  const uploadJwt = session.jwt;
-  let uploaded = 0;
-  const total = session.buckets.flat().length;
-  yield* note(`Uploaded ${uploaded} of ${total} assets...`);
+  // Manifest keys are the paths Cloudflare *serves*, so they carry the
+  // `base` prefix. The files themselves are on disk at the un-prefixed
+  // path relative to the assets directory, so drop the prefix to get
+  // back to something `readFile` can open.
+  const toDiskPath = (name: string) =>
+    assets.pathPrefix && name.startsWith(`${assets.pathPrefix}/`)
+      ? name.slice(assets.pathPrefix.length)
+      : name;
+
   const assetsByHash = new Map<string, string>();
   for (const [name, { hash }] of Object.entries(assets.manifest)) {
-    assetsByHash.set(hash, name);
+    assetsByHash.set(hash, toDiskPath(name));
   }
-  let jwt: string | undefined | null;
   const directory = path.resolve(assets.directory);
-  yield* Effect.forEach(
-    session.buckets,
-    Effect.fn(function* (bucket) {
-      const body: Record<string, File> = {};
-      yield* Effect.forEach(
-        bucket,
-        Effect.fn(function* (hash) {
-          const name = assetsByHash.get(hash);
-          if (!name) {
-            return yield* new AssetNotFoundError({
-              message: `Asset ${hash} not found in manifest`,
-              hash,
-            });
-          }
-          const file = yield* fs.readFile(path.join(directory, name)).pipe(
-            Effect.mapError(
-              (error) =>
-                new FailedToReadAssetError({
-                  message: `Failed to read asset ${name}: ${error.message}`,
-                  name,
-                  cause: error,
-                }),
-            ),
-          );
-          body[hash] = new File([Buffer.from(file).toString("base64")], hash, {
-            type: getContentType(name),
-          });
-        }),
-      );
-      const result = yield* createAssetUpload({
-        accountId,
-        base64: true,
-        body,
-        jwtToken: uploadJwt,
-      });
 
-      uploaded += bucket.length;
-      yield* note(`Uploaded ${uploaded} of ${total} assets...`);
-      if (result.jwt) {
-        jwt = result.jwt;
+  // One full upload session: ask Cloudflare which assets are missing,
+  // upload each bucket, and return the completion JWT that putWorker
+  // must redeem. The session JWT can expire mid-upload on very large
+  // asset sets (Unauthorized), and the final bucket response has been
+  // observed in the wild to omit the completion JWT — both cases are
+  // retried below with a fresh session. Already-uploaded assets are
+  // not re-bucketed, so a retry resumes where the last session
+  // stopped, and a fresh session with nothing left to upload returns
+  // the completion JWT directly.
+  const runSession = Effect.fn(function* () {
+    yield* note("Checking assets...");
+    const session = yield* createScriptAssetUpload({
+      accountId,
+      scriptName: workerName,
+      manifest: assets.manifest,
+    });
+    if (!session.buckets?.length) {
+      if (!session.jwt) {
+        return yield* new AssetUploadSessionError({
+          message: `Asset upload session for worker ${workerName} returned no completion token`,
+          workerName,
+        });
       }
+      return session.jwt;
+    }
+    if (!session.jwt) {
+      return yield* new AssetUploadSessionError({
+        message: `Asset upload session for worker ${workerName} returned ${session.buckets.length} buckets to upload but no upload token`,
+        workerName,
+      });
+    }
+    const uploadJwt = session.jwt;
+    let uploaded = 0;
+    const total = session.buckets.flat().length;
+    yield* note(`Uploaded ${uploaded} of ${total} assets...`);
+    let jwt: string | undefined | null;
+    yield* Effect.forEach(
+      session.buckets,
+      Effect.fn(function* (bucket) {
+        const body: Record<string, File> = {};
+        yield* Effect.forEach(
+          bucket,
+          Effect.fn(function* (hash) {
+            const name = assetsByHash.get(hash);
+            if (!name) {
+              return yield* new AssetNotFoundError({
+                message: `Asset ${hash} not found in manifest`,
+                hash,
+              });
+            }
+            const file = yield* fs.readFile(path.join(directory, name)).pipe(
+              Effect.mapError(
+                (error) =>
+                  new FailedToReadAssetError({
+                    message: `Failed to read asset ${name}: ${error.message}`,
+                    name,
+                    cause: error,
+                  }),
+              ),
+            );
+            body[hash] = new File(
+              [Buffer.from(file).toString("base64")],
+              hash,
+              {
+                type: getContentType(name),
+              },
+            );
+          }),
+        );
+        const result = yield* createAssetUpload({
+          accountId,
+          base64: true,
+          body,
+          jwtToken: uploadJwt,
+        });
+
+        uploaded += bucket.length;
+        yield* note(`Uploaded ${uploaded} of ${total} assets...`);
+        if (result.jwt) {
+          jwt = result.jwt;
+        }
+      }),
+    );
+    if (!jwt) {
+      return yield* new AssetUploadSessionError({
+        message: `Uploaded ${total} assets for worker ${workerName} but Cloudflare did not return a completion token`,
+        workerName,
+      });
+    }
+    return jwt;
+  });
+
+  const jwt = yield* runSession().pipe(
+    Effect.retry({
+      while: (error): boolean =>
+        error._tag === "Unauthorized" ||
+        error._tag === "AssetUploadSessionError",
+      schedule: Schedule.exponential("1 second"),
+      times: 3,
     }),
   );
-  return { jwt: jwt ?? undefined };
+  return { jwt };
 });

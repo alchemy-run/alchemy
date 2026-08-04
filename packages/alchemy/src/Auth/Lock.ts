@@ -50,7 +50,10 @@ export const withLock = <A, E, R>(
       try {
         await fs.mkdir(lockDir, { recursive: true });
         return await lock(lockPath, {
-          retries: { retries: 600, minTimeout: 50, maxTimeout: 50 },
+          // A full single-process test run can build hundreds of provider
+          // layers concurrently. Each credential read briefly takes this
+          // lock, so tail waiters need enough budget to drain that queue.
+          retries: { retries: 2_400, minTimeout: 50, maxTimeout: 50 },
           // The holder refreshes the lockfile mtime on a timer. Under heavy
           // load (e.g. a full test run saturating every core) that timer can
           // be starved for several seconds, so keep the stale threshold well
@@ -79,7 +82,7 @@ export const withLock = <A, E, R>(
         ) {
           throw new Error(
             `Timed out waiting for the alchemy auth lock '${lockPath}' — another alchemy ` +
-              `process has held it for over 30s. If no other alchemy process is running, ` +
+              `process has held it for over 120s. If no other alchemy process is running, ` +
               `delete the lock file and retry.`,
             { cause: err },
           );

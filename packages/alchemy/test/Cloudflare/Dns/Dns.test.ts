@@ -2,8 +2,8 @@ import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Core from "@/Test/Core.ts";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -48,10 +48,11 @@ test(
       "string",
     );
 
-    // Unique per run so repeated runs never collide on record name.
-    const name = `alchemy-dns-test-${Math.random()
-      .toString(36)
-      .slice(2, 10)}.${zoneName}`;
+    // Deterministic record name — the same on every run (never
+    // Date.now()/random). The fixture's /dns route deletes any leftover
+    // record with this name before creating, so a crashed run self-heals
+    // instead of leaking records into the zone.
+    const name = `alchemy-dns-test-crud.${zoneName}`;
 
     const client = yield* HttpClient.HttpClient;
     const res = yield* client
@@ -69,9 +70,10 @@ test(
         ),
         // Cap exponential backoff at 3s so retries stay bounded.
         Effect.retry({
-          schedule: Schedule.exponential("500 millis").pipe(
-            Schedule.either(Schedule.spaced("3 seconds")),
-          ),
+          schedule: Schedule.min([
+            Schedule.exponential("500 millis"),
+            Schedule.spaced("3 seconds"),
+          ]),
           times: 20,
         }),
       );

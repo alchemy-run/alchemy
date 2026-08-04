@@ -2,9 +2,9 @@ import { adopt } from "@/AdoptPolicy";
 import * as Planetscale from "@/Planetscale";
 import * as Provider from "@/Provider";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
-import * as Test from "@/Test/Vitest";
-import * as ops from "@distilled.cloud/planetscale/Operations";
-import { describe, expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import * as ps from "@distilled.cloud/planetscale";
+import { describe, expect } from "alchemy-test";
 import { Data, Schedule } from "effect";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -235,6 +235,65 @@ describe
     );
 
     test.provider(
+      "reconciles replicas in place via keyspace resize",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const { database } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const database = yield* Planetscale.MySQLDatabase(
+                "MySQLDatabaseReplicas",
+                {
+                  clusterSize: "PS_10",
+                  replicas: 3,
+                },
+              );
+              return { database };
+            }),
+          );
+
+          // PS_10 includes 2 replicas; the third is added in place via a
+          // keyspace resize request after creation.
+          expect(database.replicas).toEqual(3);
+
+          const keyspaces = yield* ps.listKeyspaces({
+            organization: database.organization,
+            database: database.name,
+            branch: "main",
+          });
+          const keyspace = keyspaces.data.find((x) => x.name === database.name);
+          expect(keyspace?.replicas).toEqual(3);
+          expect(keyspace?.extra_replicas).toEqual(1);
+
+          // Scale back down — must resize in place, never replace.
+          const { updatedDatabase } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const updatedDatabase = yield* Planetscale.MySQLDatabase(
+                "MySQLDatabaseReplicas",
+                {
+                  clusterSize: "PS_10",
+                  replicas: 2,
+                },
+              );
+              return { updatedDatabase };
+            }),
+          );
+
+          expect(updatedDatabase.id).toEqual(database.id);
+          expect(updatedDatabase.replicas).toEqual(2);
+
+          yield* stack.destroy();
+
+          yield* waitForDatabaseToBeDeleted(
+            database.name,
+            database.organization,
+          );
+        }).pipe(logLevel),
+      5_000_000,
+    );
+
+    test.provider(
       "creates non-main default branch if specified",
       (stack) =>
         Effect.gen(function* () {
@@ -410,7 +469,7 @@ describe
           );
 
           // Verify database still exists (was not deleted via API)
-          const live = yield* ops.getDatabase({
+          const live = yield* ps.getDatabase({
             organization: database.organization,
             database: database.name,
           });
@@ -421,7 +480,7 @@ describe
           expect(live.kind).toEqual("mysql");
 
           // Clean up manually for the test
-          yield* ops
+          yield* ps
             .deleteDatabase({
               organization: database.organization,
               database: database.name,
@@ -436,7 +495,7 @@ const waitForDatabaseToBeDeleted = Effect.fn(function* (
   database: string,
   organization: string,
 ) {
-  yield* ops
+  yield* ps
     .getDatabase({
       organization,
       database,

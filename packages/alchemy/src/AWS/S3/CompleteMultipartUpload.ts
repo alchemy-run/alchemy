@@ -8,7 +8,33 @@ export interface CompleteMultipartUploadRequest extends Omit<
   "Bucket"
 > {}
 
-/** @binding */
+/**
+ * Runtime binding for `s3:CompleteMultipartUpload`.
+ *
+ * Assembles the parts uploaded with `UploadPart` into the final object. The
+ * part list must be in ascending `PartNumber` order with the `ETag` each
+ * `UploadPart` call returned. Provide the implementation with
+ * `Effect.provide(AWS.S3.CompleteMultipartUploadHttp)`.
+ * @binding
+ * @section Multipart Uploads
+ * @example Complete a Multipart Upload
+ * ```typescript
+ * // init — bind the operation to the bucket
+ * const completeUpload = yield* AWS.S3.CompleteMultipartUpload(bucket);
+ *
+ * // runtime — parts collected from each AWS.S3.UploadPart call
+ * yield* completeUpload({
+ *   Key: "backups/archive.tar",
+ *   UploadId,
+ *   MultipartUpload: {
+ *     Parts: [
+ *       { ETag: part1.ETag, PartNumber: 1 },
+ *       { ETag: part2.ETag, PartNumber: 2 },
+ *     ],
+ *   },
+ * });
+ * ```
+ */
 export interface CompleteMultipartUpload extends Binding.Service<
   CompleteMultipartUpload,
   "AWS.S3.CompleteMultipartUpload",

@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import type { CRUD, Plan } from "../Plan.ts";
 import { Cli } from "./Cli.ts";
 import type { ApplyEvent, ApplyStatus } from "./Event.ts";
+import { formatModeNote } from "./ModeTag.ts";
 
 const ESC = "\x1b[";
 const RESET = `${ESC}0m`;
@@ -57,7 +58,18 @@ const isTerminal = (status: ApplyStatus): boolean =>
   status === "replaced" ||
   status === "fail";
 
-const formatPlanLines = (plan: Plan): string[] => {
+/**
+ * Dim `(local)` / `(remote)` / `(local → live)` suffix for a resource row,
+ * or `""` when the row's mode matches the run default (the quiet common
+ * case). See {@link formatModeNote} for the rule.
+ */
+const modeSuffix = (options: Parameters<typeof formatModeNote>[0]): string => {
+  const note = formatModeNote(options);
+  return note ? ` ${dim(`(${note})`)}` : "";
+};
+
+/** Exported for unit tests — pure plan-preview rendering. */
+export const formatPlanLines = (plan: Plan): string[] => {
   const items = [
     ...Object.values(plan.resources),
     ...Object.values(plan.deletions),
@@ -79,7 +91,13 @@ const formatPlanLines = (plan: Plan): string[] => {
   const lines = [`${bold("Plan:")} ${summary}`];
   for (const item of sorted) {
     const action = actionColor[item.action](item.action);
-    lines.push(`${tag(item.resource.LogicalId)} ${action}`);
+    const mode = modeSuffix({
+      mode: item.mode,
+      priorMode:
+        item.action === "replace" ? item.state.providerMode : undefined,
+      defaultMode: plan.defaultMode,
+    });
+    lines.push(`${tag(item.resource.LogicalId)} ${action}${mode}`);
     for (const binding of item.bindings) {
       if (binding.action === "noop") continue;
       const bindingAction = actionColor[binding.action](binding.action);
@@ -113,22 +131,30 @@ export const LoggingCli = Layer.succeed(
 
         const counts = { ok: 0, fail: 0 };
         return {
+          // Write through the Effect Console SERVICE (not the global
+          // `console`) so environments that override it — e.g. the
+          // alchemy-test runner's per-test buffering console — capture
+          // apply progress instead of having it leak to stdout.
           emit: (event: ApplyEvent) =>
-            Effect.sync(() => {
+            Effect.suspend(() => {
               if (event.kind === "annotate") {
-                console.log(`${tag(event.id)} ${blue(event.message)}`);
-                return;
+                return Console.log(`${tag(event.id)} ${blue(event.message)}`);
               }
               const id = event.bindingId
                 ? `${event.id}/${event.bindingId}`
                 : event.id;
               const status = statusColor(event.status)(event.status);
+              const mode = modeSuffix({
+                mode: event.providerMode,
+                priorMode: event.fromProviderMode,
+                defaultMode: plan.defaultMode,
+              });
               const msg = event.message ? ` ${dim("—")} ${event.message}` : "";
-              console.log(`${tag(id)} ${status}${msg}`);
               if (isTerminal(event.status)) {
                 if (event.status === "fail") counts.fail++;
                 else counts.ok++;
               }
+              return Console.log(`${tag(id)} ${status}${mode}${msg}`);
             }),
           done: () =>
             Console.log(

@@ -1,4 +1,4 @@
-import * as ops from "@distilled.cloud/planetscale/Operations";
+import * as ps from "@distilled.cloud/planetscale";
 import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -35,9 +35,10 @@ export class PlanetscaleConflict extends Data.TaggedError(
  * database creates routinely run 10-12 minutes, so a 10-minute budget
  * regularly false-positives as "stuck".
  */
-const defaultSchedule = Schedule.spaced("5 seconds").pipe(
-  Schedule.both(Schedule.recurs(360)),
-);
+const defaultSchedule = Schedule.max([
+  Schedule.spaced("5 seconds"),
+  Schedule.recurs(360),
+]);
 
 /**
  * Generic polling helper that retries until `predicate(value)` returns true
@@ -89,7 +90,7 @@ export const waitForBranchReady = Effect.fn(function* (
           `Waiting for branch to be ready... (${seconds} seconds elapsed; this can take a few minutes)`,
         );
       }
-      return yield* ops.getBranch({ organization, database, branch });
+      return yield* ps.getBranch({ organization, database, branch });
     }).pipe(
       Effect.catchTag("NotFound", () =>
         Effect.fail(
@@ -126,7 +127,7 @@ export const waitForDatabaseReady = Effect.fn(function* (
           `Waiting for database to be ready... (${seconds} seconds elapsed; this can take a few minutes)`,
         );
       }
-      return yield* ops.getDatabase({ organization, database });
+      return yield* ps.getDatabase({ organization, database });
     }).pipe(
       Effect.catchTag("NotFound", () =>
         Effect.fail(

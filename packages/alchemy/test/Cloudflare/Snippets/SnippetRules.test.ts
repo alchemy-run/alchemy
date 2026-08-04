@@ -3,10 +3,10 @@ import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import { poll } from "@/Util/poll";
 import * as snippets from "@distilled.cloud/cloudflare/snippets";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -52,7 +52,7 @@ const resolveZoneId = Effect.gen(function* () {
 });
 
 interface WireRule {
-  readonly snippet_name?: string;
+  readonly snippetName?: string;
   readonly expression?: string;
   readonly enabled?: boolean;
   readonly description?: string | null;
@@ -84,9 +84,10 @@ const pollLiveRules = (zoneId: string, expectedLength: number) =>
     description: `snippet rules length === ${expectedLength}`,
     effect: listLiveRules(zoneId),
     predicate: (rules) => rules.length === expectedLength,
-    schedule: Schedule.exponential("500 millis").pipe(
-      Schedule.both(Schedule.recurs(10)),
-    ),
+    schedule: Schedule.max([
+      Schedule.exponential("500 millis"),
+      Schedule.recurs(10),
+    ]),
   });
 
 const findSnippet = (zoneId: string, name: string) =>
@@ -158,7 +159,7 @@ test.provider(
 
       const live = yield* pollLiveRules(zoneId, 1);
       expect(live).toHaveLength(1);
-      expect(live[0].snippet_name).toEqual(NAME_RULES_A);
+      expect(live[0].snippetName).toEqual(NAME_RULES_A);
       expect(live[0].expression).toEqual(EXPRESSION_V1);
 
       // `list()` enumerates every zone (no account-wide rule-list API) and
@@ -215,7 +216,7 @@ test.provider(
       const liveUpdated = yield* pollLiveRules(zoneId, 2);
       expect(liveUpdated).toHaveLength(2);
       expect(liveUpdated[0].expression).toEqual(EXPRESSION_V2);
-      expect(liveUpdated[1].snippet_name).toEqual(NAME_RULES_B);
+      expect(liveUpdated[1].snippetName).toEqual(NAME_RULES_B);
 
       // Destroy — rules must be deleted before the snippets they
       // reference (dependency ordering via the `snippetName` input). The

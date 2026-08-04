@@ -1,11 +1,13 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved, somePropsAreDifferent } from "../../Diff.ts";
+import { retryWhileLingeringEnis } from "./LingeringEnis.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
@@ -436,20 +438,25 @@ export const SubnetProvider = () =>
                     if (news.cidrBlock === undefined) {
                       return yield* Effect.fail(error);
                     }
-                    const lookup = yield* ec2.describeSubnets({
-                      Filters: [
-                        { Name: "vpc-id", Values: [news.vpcId] },
-                        { Name: "cidr-block", Values: [news.cidrBlock] },
-                      ],
-                    });
-                    const existing = lookup.Subnets?.find((s) =>
-                      hasTags(
-                        alchemyTags,
-                        Object.fromEntries(
-                          (s.Tags ?? []).map((t) => [t.Key ?? "", t.Value]),
+                    const existing = yield* ec2.describeSubnets
+                      .items({
+                        Filters: [
+                          { Name: "vpc-id", Values: [news.vpcId] },
+                          { Name: "cidr-block", Values: [news.cidrBlock] },
+                        ],
+                      })
+                      .pipe(
+                        Stream.filter((s) =>
+                          hasTags(
+                            alchemyTags,
+                            Object.fromEntries(
+                              (s.Tags ?? []).map((t) => [t.Key ?? "", t.Value]),
+                            ),
+                          ),
                         ),
-                      ),
-                    );
+                        Stream.runHead,
+                        Effect.map(Option.getOrUndefined),
+                      );
                     if (existing?.SubnetId === undefined) {
                       return yield* Effect.fail(error);
                     }
@@ -575,7 +582,13 @@ export const SubnetProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.Subnets ?? []).map(toSubnetAttributes),
+                (page.Subnets ?? [])
+                  // Per-AZ default subnets are default-VPC furniture AWS
+                  // provisions; never census/nuke them. Custom subnets created
+                  // inside the default VPC have DefaultForAz=false and are
+                  // still listed.
+                  .filter((subnet) => !subnet.DefaultForAz)
+                  .map(toSubnetAttributes),
               ),
             ),
           ),
@@ -585,36 +598,28 @@ export const SubnetProvider = () =>
 
           yield* session.note(`Deleting subnet: ${subnetId}`);
 
-          // 1. Attempt to delete subnet
-          yield* ec2
-            .deleteSubnet({
-              SubnetId: subnetId,
-              DryRun: false,
-            })
-            .pipe(
-              Effect.tapError(Effect.logDebug),
-              Effect.catchTag("InvalidSubnetID.NotFound", () => Effect.void),
-              // Retry on dependency violations (resources still being deleted).
-              // ENIs from a just-deleted ALB or CloudFront VPC origin can take
-              // several minutes to detach after the owning resource is gone, so
-              // budget ~12 min (fast exponential start, capped at 30s steps).
-              Effect.retry({
-                while: (e) => {
-                  // DependencyViolation means there are still dependent resources
-                  // This can happen if ENIs/instances are being deleted concurrently
-                  return e._tag === "DependencyViolation";
-                },
-                schedule: Schedule.exponential(1000, 1.5).pipe(
-                  Schedule.either(Schedule.spaced("30 seconds")),
-                  Schedule.both(Schedule.recurs(30)),
-                  Schedule.tapOutput(([, attempt]) =>
-                    session.note(
-                      `Waiting for dependencies to clear... (attempt ${attempt + 1})`,
-                    ),
-                  ),
-                ),
-              }),
-            );
+          // 1. Attempt to delete subnet. DependencyViolation means resources
+          // still occupy it — ENIs from a just-deleted ALB, CloudFront VPC
+          // origin, or a VPC-attached Lambda can take minutes to release
+          // after the owning resource is gone. Lambda Hyperplane ENIs are
+          // reaped explicitly between attempts (they otherwise linger up to
+          // ~20 minutes and used to force a second `destroy` run).
+          yield* retryWhileLingeringEnis(
+            ec2
+              .deleteSubnet({
+                SubnetId: subnetId,
+                DryRun: false,
+              })
+              .pipe(
+                Effect.tapError(Effect.logDebug),
+                Effect.catchTag("InvalidSubnetID.NotFound", () => Effect.void),
+              ),
+            {
+              scope: { name: "subnet-id", value: subnetId },
+              isDependencyViolation: (e) => e._tag === "DependencyViolation",
+              session,
+            },
+          );
 
           // 2. Wait for subnet to be fully deleted
           yield* waitForSubnetDeleted(subnetId, session);
@@ -700,12 +705,11 @@ const waitForSubnetAvailable = (
   }).pipe(
     Effect.retry({
       while: (e) => e instanceof SubnetPending,
-      schedule: Schedule.fixed(2000).pipe(
-        Schedule.both(Schedule.recurs(30)), // Max 60 seconds
-        Schedule.tapOutput(([, attempt]) =>
+      schedule: Schedule.max([Schedule.fixed(2000), Schedule.recurs(30)]).pipe(
+        Schedule.tap(({ attempt }) =>
           session
             ? session.note(
-                `Waiting for subnet to be available... (${(attempt + 1) * 2}s)`,
+                `Waiting for subnet to be available... (${attempt * 2}s)`,
               )
             : Effect.void,
         ),
@@ -738,12 +742,9 @@ const waitForSubnetDeleted = (
   }).pipe(
     Effect.retry({
       while: (e) => e instanceof SubnetStillExists,
-      schedule: Schedule.fixed(2000).pipe(
-        Schedule.both(Schedule.recurs(15)), // Max 30 seconds
-        Schedule.tapOutput(([, attempt]) =>
-          session.note(
-            `Waiting for subnet deletion... (${(attempt + 1) * 2}s)`,
-          ),
+      schedule: Schedule.max([Schedule.fixed(2000), Schedule.recurs(15)]).pipe(
+        Schedule.tap(({ attempt }) =>
+          session.note(`Waiting for subnet deletion... (${attempt * 2}s)`),
         ),
       ),
     }),

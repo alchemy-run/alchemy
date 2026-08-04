@@ -1,6 +1,7 @@
 import * as contentScanning from "@distilled.cloud/cloudflare/content-scanning";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
@@ -195,11 +196,9 @@ export const ExpressionProvider = () =>
       //    a guarantee: a missing expression falls through to the payload
       //    scan and then to create. (Scanning must be enabled here — a
       //    disabled zone fails with the typed ContentScanningNotEnabled.)
-      const expressions = yield* contentScanning
-        .listPayloads({ zoneId })
-        .pipe(Effect.map((r) => r.result));
-      let observed = output?.expressionId
-        ? expressions.find((e) => e.id === output.expressionId)
+      const expressionId = output?.expressionId;
+      let observed: ObservedExpression | undefined = expressionId
+        ? yield* findExpression(zoneId, (e) => e.id === expressionId)
         : undefined;
 
       // 2. Fall back to matching by payload text. Ownership has already
@@ -207,7 +206,10 @@ export const ExpressionProvider = () =>
       //    `Unowned` and the engine gates takeover behind the adopt policy
       //    before reconcile ever runs.
       if (!observed) {
-        observed = expressions.find((e) => e.payload === news.payload);
+        observed = yield* findExpression(
+          zoneId,
+          (e) => e.payload === news.payload,
+        );
       }
 
       // 3. Ensure — create when missing. The create call returns the full
@@ -250,13 +252,31 @@ export const ExpressionProvider = () =>
 type ObservedExpression = { id?: string | null; payload?: string | null };
 
 /**
+ * Find the first expression on the zone matching `predicate`, terminating
+ * pagination as soon as a match is seen. Unlike {@link listExpressions},
+ * "not observable" errors propagate (reconcile requires scanning enabled).
+ */
+const findExpression = (
+  zoneId: string,
+  predicate: (e: ObservedExpression) => boolean,
+) =>
+  contentScanning.listPayloads
+    .items({ zoneId })
+    .pipe(
+      Stream.filter(predicate),
+      Stream.runHead,
+      Effect.map(Option.getOrUndefined),
+    );
+
+/**
  * List the zone's custom scan expressions, mapping "not observable"
  * (scanning disabled on the zone, or the zone itself gone) to `undefined`.
  */
 const listExpressions = (zoneId: string) =>
-  contentScanning.listPayloads({ zoneId }).pipe(
-    Effect.map(
-      (response): readonly ObservedExpression[] | undefined => response.result,
+  contentScanning.listPayloads.items({ zoneId }).pipe(
+    Stream.runCollect,
+    Effect.map((chunk): readonly ObservedExpression[] | undefined =>
+      Array.from(chunk),
     ),
     Effect.catchTag("ContentScanningNotEnabled", () =>
       Effect.succeed(undefined),

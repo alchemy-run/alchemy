@@ -5,14 +5,20 @@ description: Replace raw pg with Drizzle's effect-postgres integration, manage y
 
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
-export const drizzleDeps = `drizzle-orm@^1.0.0-rc.1 @effect/sql-pg pg`;
-export const drizzleDevDeps = `drizzle-kit@^1.0.0-rc.1 @types/pg`;
+export const drizzleDeps = `drizzle-orm@^1.0.0-rc.4 @effect/sql-pg pg`;
+export const drizzleDevDeps = `drizzle-kit@^1.0.0-rc.4 @types/pg`;
+export const mysqlDeps = `@effect/sql-mysql2 mysql2`;
 
 The previous tutorial wired your Worker to Neon Postgres through
 Hyperdrive. Now we'll layer **Drizzle ORM** on top: typed schemas,
 typed queries, and — most usefully — a `Drizzle.Schema` resource
 that regenerates migration SQL programmatically on every deploy
 and lets `Neon.Branch` apply them transactionally.
+
+Targeting D1 instead of Postgres? The same flow on Cloudflare's
+serverless SQLite — `dialect: "sqlite"`, the native binding as
+transport, and the `effect-d1` driver — is covered in
+[Drizzle on D1](/cloudflare/data/d1-drizzle).
 
 ## Define the schema
 
@@ -143,9 +149,9 @@ On every `bun alchemy deploy`, the provider:
 
 No `drizzle-kit generate` step in your CI — the deploy owns it.
 
-## Open the connection with `Drizzle.postgres`
+## Open the connection with `Drizzle.Postgres`
 
-`Drizzle.postgres` takes Hyperdrive's connection string and returns a
+`Drizzle.Postgres` takes Hyperdrive's connection string and returns a
 typed `EffectPgDatabase`. Bind it once at init and use it directly
 inside `fetch` — no manual `Client` setup, no `Effect.promise(...)`
 wrappers around queries:
@@ -170,7 +176,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
   },
   Effect.gen(function* () {
     const hd = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
-    const db = yield* Drizzle.postgres(hd.connectionString);
+    const db = yield* Drizzle.Postgres(hd.connectionString);
 
     return {
       fetch: Effect.gen(function* () {
@@ -219,16 +225,16 @@ export them from `src/schema.ts`:
 ```diff lang="typescript"
 // src/schema.ts
 +import { defineRelations } from "drizzle-orm";
- import {
-   integer,
-   pgTable,
-   serial,
-   text,
-   timestamp,
- } from "drizzle-orm/pg-core";
+import {
+  integer,
+  pgTable,
+  serial,
+  text,
+  timestamp,
+} from "drizzle-orm/pg-core";
 
- export const Users = pgTable("users", { /* ... */ });
- export const Posts = pgTable("posts", { /* ... */ });
+export const Users = pgTable("users", { /* ... */ });
+export const Posts = pgTable("posts", { /* ... */ });
 
 +export const relations = defineRelations({ Users, Posts }, (t) => ({
 +  Users: {
@@ -247,27 +253,27 @@ export them from `src/schema.ts`:
 doesn't touch the generated migration SQL. The foreign key was
 already declared on `Posts.userId.references(...)`.
 
-## Pass `relations` to `Drizzle.postgres`
+## Pass `relations` to `Drizzle.Postgres`
 
-Hand the relations object to `Drizzle.postgres` as its second
+Hand the relations object to `Drizzle.Postgres` as its second
 argument. The returned `db` now exposes a typed `db.query` namespace
 keyed by your table names:
 
 ```diff lang="typescript"
 // src/Api.ts
- import { Hyperdrive } from "./Db.ts";
+import { Hyperdrive } from "./Db.ts";
 -import { Users } from "./schema.ts";
 +import { relations, Users } from "./schema.ts";
 
- Effect.gen(function* () {
-   const hd = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
--  const db = yield* Drizzle.postgres(hd.connectionString);
-+  const db = yield* Drizzle.postgres(hd.connectionString, {
+Effect.gen(function* () {
+  const hd = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
+-  const db = yield* Drizzle.Postgres(hd.connectionString);
++  const db = yield* Drizzle.Postgres(hd.connectionString, {
 +    relations,
 +  });
 
-   return {
-     fetch: Effect.gen(function* () {
+  return {
+    fetch: Effect.gen(function* () {
 -      const users = yield* db.select().from(Users);
 -      return yield* HttpServerResponse.json(users);
 +      const user = yield* db.query.Users.findFirst({
@@ -275,9 +281,9 @@ keyed by your table names:
 +        with: { posts: true },
 +      });
 +      return yield* HttpServerResponse.json({ user });
-     }),
-   };
- })
+    }),
+  };
+})
 ```
 
 `db.query.Users.findFirst` is fully typed: `where` accepts a typed
@@ -383,7 +389,7 @@ export const Hyperdrive: Effect.Effect<
 `Planetscale.PostgresRole` mints the credentials — its `origin`
 output feeds Hyperdrive the host, port, user, and password in one
 object. The Worker code needs no changes at all:
-`Drizzle.postgres(conn.connectionString, { relations })` speaks the
+`Drizzle.Postgres(conn.connectionString, { relations })` speaks the
 Postgres wire protocol through Hyperdrive regardless of who hosts
 the database, so the schema, relations, and every query from the
 walkthrough above carry over verbatim.
@@ -391,9 +397,9 @@ walkthrough above carry over verbatim.
 </TabItem>
 <TabItem label="MySQL">
 
-The MySQL flavor changes three things: the schema dialect, how
-migrations are generated, and the runtime client. Start with the
-schema — same tables, `mysql-core` column builders:
+The MySQL flavor changes three things: the schema dialect, the
+migration dialect, and the runtime driver. Start with the schema —
+same tables, `mysql-core` column builders:
 
 ```typescript
 // src/schema.ts
@@ -411,37 +417,42 @@ export const Users = mysqlTable("users", {
 (`Posts` and the `defineRelations` block follow the same shape as
 the Postgres version.)
 
-Migrations are generated with `drizzle-kit generate` and checked in,
-rather than regenerated by a `Drizzle.Schema` resource on deploy.
-Add a `drizzle.config.ts`:
+Swap the runtime driver dependency — `@effect/sql-mysql2` and
+`mysql2` in place of `@effect/sql-pg` and `pg`:
 
-```typescript
-// drizzle.config.ts
-import { defineConfig } from "drizzle-kit";
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun add ${mysqlDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm install ${mysqlDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm add ${mysqlDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn add ${mysqlDeps}`} lang="sh" />
+  </TabItem>
+</Tabs>
 
-export default defineConfig({
-  schema: "./src/schema.ts",
-  out: "./migrations",
-  dialect: "mysql",
-});
-```
-
-Run `bun drizzle-kit generate` whenever the schema changes — the
-branch resource picks up whatever `.sql` files it finds under
-`./migrations`, so there's no `Drizzle.providers()` layer to
-register in `alchemy.run.ts` (just `Cloudflare.providers()` and
-`Planetscale.providers()`).
-
-`src/Db.ts` uses the MySQL resource trio — database, branch, and a
+`src/Db.ts` keeps `Drizzle.Schema` (with `dialect: "mysql"`) and
+uses the MySQL resource trio — database, branch, and a
 `Planetscale.MySQLPassword` in place of the Postgres role:
 
 ```typescript
 // src/Db.ts
 import * as Cloudflare from "alchemy/Cloudflare";
+import * as Drizzle from "alchemy/Drizzle";
 import * as Planetscale from "alchemy/Planetscale";
 import * as Effect from "effect/Effect";
 
 export const PlanetscaleDb = Effect.gen(function* () {
+  const schema = yield* Drizzle.Schema("app-schema", {
+    schema: "./src/schema.ts",
+    out: "./migrations",
+    dialect: "mysql",
+  });
+
   const database = yield* Planetscale.MySQLDatabase("app-db", {
     region: { slug: "us-east" },
     clusterSize: "PS_10",
@@ -450,7 +461,7 @@ export const PlanetscaleDb = Effect.gen(function* () {
   const branch = yield* Planetscale.MySQLBranch("app-branch", {
     database,
     isProduction: false,
-    migrationsDir: "./migrations",
+    migrationsDir: schema.out,
   });
 
   const password = yield* Planetscale.MySQLPassword("app-password", {
@@ -475,71 +486,44 @@ export const Hyperdrive: Effect.Effect<
 });
 ```
 
-At runtime there's no `Drizzle.mysql` helper — use
-`drizzle-orm/mysql2` directly (swap the `pg` dependency for
-`mysql2`). The client is created per request and closed when the
-response is done:
+At runtime, `Drizzle.MySQL` is the drop-in sibling of
+`Drizzle.Postgres` — the same connection-string wiring, backed by
+`@effect/sql-mysql2`:
 
 ```typescript
 // src/Api.ts
 import * as Cloudflare from "alchemy/Cloudflare";
-import { drizzle } from "drizzle-orm/mysql2";
+import * as Drizzle from "alchemy/Drizzle";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Hyperdrive } from "./Db.ts";
-import * as schema from "./schema.ts";
 import { relations, Users } from "./schema.ts";
 
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
-  {
-    main: import.meta.url,
-    compatibility: {
-      flags: ["nodejs_compat"],
-    },
-  },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
+    const db = yield* Drizzle.MySQL(conn.connectionString, { relations });
 
     return {
       fetch: Effect.gen(function* () {
-        const connectionString = yield* conn.connectionString;
-        const db = drizzle({
-          connection: {
-            uri: Redacted.value(connectionString),
-            // mysql2's text/binary parsers JIT via `new Function(...)`,
-            // which Cloudflare Workers' isolate disallows.
-            disableEval: true,
-          },
-          schema,
-          relations,
-          mode: "default",
-        });
-
-        const close = Effect.tryPromise({
-          try: () => db.$client.end(),
-          catch: (cause) => cause,
-        }).pipe(Effect.catch(() => Effect.void));
-
-        return yield* Effect.gen(function* () {
-          const users = yield* Effect.tryPromise({
-            try: () => db.select().from(Users),
-            catch: (cause) => cause,
-          });
-          return yield* HttpServerResponse.json({ users });
-        }).pipe(Effect.ensuring(close));
+        const users = yield* db.select().from(Users);
+        return yield* HttpServerResponse.json({ users });
       }),
     };
   }).pipe(Effect.provide(Cloudflare.Hyperdrive.ConnectBinding)),
 ) {}
 ```
 
-Two MySQL-specific details: `disableEval: true` is required because
-mysql2's parsers compile via `new Function(...)`, which the Workers
-isolate blocks; and queries go through `Effect.tryPromise` because
-the plain mysql2 driver returns Promises — there's no effect-native
-integration like `@effect/sql-pg` on this path.
+On Workers the client defaults to the text protocol (Hyperdrive's
+MySQL proxy has no `COM_STMT_PREPARE`) and eval-free row parsing
+(the isolate forbids `new Function(...)`) — see
+[Workers defaults](/sql/effect-sql/mysql#workers-defaults). One
+query-surface difference from Postgres: MySQL has no `RETURNING`
+clause, so inserts report generated ids via `$returningId()` and
+upserts use `onDuplicateKeyUpdate` — see
+[Drizzle: MySQL](/sql/drizzle/mysql).
 
 </TabItem>
 </Tabs>
@@ -564,5 +548,5 @@ and Container primitives from earlier tutorials.
   and passwords as resources
 - [Neon provider](/neon) — projects, branches, and
   [migrations](/neon/data/migrations)
-- [Drizzle hub](/drizzle) — where `Drizzle.Schema`'s generation and
-  diff semantics live, including [Migrations as resources](/drizzle/migrations)
+- [SQL hub](/sql) — where `Drizzle.Schema`'s generation and
+  diff semantics live, including [Drizzle migrations](/sql/drizzle/migrations)

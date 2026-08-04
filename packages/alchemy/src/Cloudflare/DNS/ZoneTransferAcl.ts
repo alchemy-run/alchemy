@@ -209,10 +209,11 @@ const getAcl = (accountId: string, aclId: string) =>
  * pick the lexicographically-first id for determinism.
  */
 const findByName = (accountId: string, name: string) =>
-  dns.listZoneTransferAcls({ accountId }).pipe(
-    Effect.map((list) =>
-      list.result
-        .filter((a) => a.name === name)
+  dns.listZoneTransferAcls.items({ accountId }).pipe(
+    Stream.filter((a) => a.name === name),
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk)
         .sort((a, b) => a.id.localeCompare(b.id))
         .at(0),
     ),

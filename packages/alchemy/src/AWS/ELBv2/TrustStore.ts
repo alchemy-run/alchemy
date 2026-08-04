@@ -31,10 +31,15 @@ export interface TrustStore extends Resource<
   "AWS.ELBv2.TrustStore",
   TrustStoreProps,
   {
+    /** The ARN of the trust store. */
     trustStoreArn: TrustStoreArn;
+    /** The name of the trust store. */
     name: string;
+    /** The status of the trust store (`ACTIVE` or `CREATING`). */
     status: string;
+    /** The number of CA certificates in the trust store's bundle. */
     numberOfCaCertificates: number;
+    /** The tags applied to the trust store. */
     tags: Record<string, string>;
   },
   never,
@@ -264,9 +269,10 @@ export const TrustStoreProvider = () =>
               // eventual-consistency window.
               Effect.retry({
                 while: (e) => e._tag === "TrustStoreInUseException",
-                schedule: Schedule.spaced("3 seconds").pipe(
-                  Schedule.both(Schedule.recurs(8)),
-                ),
+                schedule: Schedule.max([
+                  Schedule.spaced("3 seconds"),
+                  Schedule.recurs(8),
+                ]),
               }),
               Effect.catchTag("TrustStoreNotFoundException", () => Effect.void),
               Effect.catchTag("TrustStoreInUseException", () => Effect.void),

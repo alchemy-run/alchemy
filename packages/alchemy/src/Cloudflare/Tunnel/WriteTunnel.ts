@@ -17,8 +17,7 @@ import * as Binding from "../../Binding.ts";
 import type { Worker } from "../Workers/Worker.ts";
 import type { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import { type Token } from "./TunnelBinding.ts";
-import { authorizeWith } from "../HttpClientUtils.ts";
+import { type TunnelAuth } from "./TunnelBinding.ts";
 
 /**
  * Binding that lets a Worker create, update, and delete Cloudflare Tunnels at
@@ -137,33 +136,33 @@ export interface WriteTunnelClient {
   >;
 }
 
-/** Build the write client over a bound token. */
-export const writeClient = (token: Token): WriteTunnelClient => {
-  const authorize = authorizeWith(token);
+/** Build the write client over an injectable {@link TunnelAuth}. */
+export const writeClient = (auth: TunnelAuth): WriteTunnelClient => {
+  const { authorize } = auth;
   return {
     create: Effect.fn("Cloudflare.Tunnel.create")(function* (request) {
-      const accountId = yield* token.accountId;
+      const accountId = yield* auth.accountId;
       return yield* authorize(
         zeroTrust.createTunnelCloudflared({ accountId, ...request }),
       );
     }),
     update: Effect.fn("Cloudflare.Tunnel.update")(
       function* (tunnelId, request) {
-        const accountId = yield* token.accountId;
+        const accountId = yield* auth.accountId;
         return yield* authorize(
           zeroTrust.patchTunnelCloudflared({ accountId, tunnelId, ...request }),
         );
       },
     ),
     delete: Effect.fn("Cloudflare.Tunnel.delete")(function* (tunnelId) {
-      const accountId = yield* token.accountId;
+      const accountId = yield* auth.accountId;
       return yield* authorize(
         zeroTrust.deleteTunnelCloudflared({ accountId, tunnelId }),
       );
     }),
     putConfiguration: Effect.fn("Cloudflare.Tunnel.putConfiguration")(
       function* (tunnelId, config) {
-        const accountId = yield* token.accountId;
+        const accountId = yield* auth.accountId;
         return yield* authorize(
           zeroTrust.putTunnelCloudflaredConfiguration({
             accountId,

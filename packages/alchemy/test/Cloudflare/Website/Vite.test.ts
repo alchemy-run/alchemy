@@ -1,8 +1,9 @@
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Vitest";
+import { isLocalId } from "@/Cloudflare/LocalRuntime";
+import * as Test from "@/Test/Alchemy";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -34,7 +35,12 @@ const logLevel = Effect.provideService(
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "vite-fixture");
 const spaFixtureDir = pathe.resolve(import.meta.dirname, "vite-spa-fixture");
+const foldkitFixtureDir = pathe.resolve(import.meta.dirname, "foldkit-fixture");
 const doFixtureDir = pathe.resolve(import.meta.dirname, "vite-do-fixture");
+const containerFixtureDir = pathe.resolve(
+  import.meta.dirname,
+  "vite-container-fixture",
+);
 const reactRouterRscFixtureDir = pathe.resolve(
   import.meta.dirname,
   "react-router-rsc-fixture",
@@ -124,7 +130,7 @@ test.provider(
   { timeout: 360_000 },
 );
 
-// Regression test for https://github.com/alchemy-run/alchemy-effect/issues/792.
+// Regression test for https://github.com/alchemy-run/alchemy/issues/792.
 //
 // A pure client-only Vite project (no vite.config.ts, no plugins, no worker
 // entry) resolves as `appType: "spa"`, so the Cloudflare Vite plugin declares
@@ -170,6 +176,62 @@ test.provider(
       yield* expectUrlContains(`${site.url!}/`, marker, {
         timeout: "120 seconds",
         label: "spa marker",
+      });
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+    }).pipe(logLevel),
+  { timeout: 360_000 },
+);
+
+// Foldkit (foldkit.dev) is an Effect-native Elm-architecture frontend
+// framework. Its apps are plain client-only Vite projects (the Foldkit Vite
+// plugin only adds HMR/devtools wiring), so `Cloudflare.Website.Vite` deploys
+// them as-is. This pins that the Foldkit plugin composes with the injected
+// Cloudflare Vite plugin and that deep links fall back to `index.html` via
+// `single-page-application` not-found handling.
+test.provider(
+  "Vite: Foldkit SPA deploys and serves with SPA fallback",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const rootDir = yield* cloneFixture(foldkitFixtureDir, {
+        prefix: "alchemy-vite-foldkit-",
+        tempRoot,
+        entries: ["index.html", "package.json", "vite.config.ts", "src"],
+      });
+      const memoInclude = [
+        "index.html",
+        "src/**",
+        "package.json",
+        "vite.config.ts",
+      ];
+
+      const site = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Website.Vite("FixViteFoldkit", {
+            ...viteProps(rootDir, memoInclude),
+            assets: {
+              notFoundHandling: "single-page-application",
+            },
+          });
+        }),
+      );
+
+      expect(site.url).toBeDefined();
+      expect(site.hash?.input).toBeDefined();
+      yield* expectWorkerExists(site.workerName, accountId);
+      yield* expectUrlContains(`${site.url!}/`, "Foldkit Fixture", {
+        timeout: "120 seconds",
+        label: "foldkit index",
+      });
+      // Deep link falls back to index.html so client-side routing can boot.
+      yield* expectUrlContains(`${site.url!}/counter/42`, "Foldkit Fixture", {
+        timeout: "60 seconds",
+        label: "foldkit spa fallback",
       });
 
       yield* stack.destroy();
@@ -318,6 +380,182 @@ test.provider(
   { timeout: 360_000 },
 );
 
+// ─────────────────────────────────────────────────────────────────────
+// Workspace-aware memoization
+//
+// A Vite project in a monorepo can bundle source from sibling workspace
+// packages. Those directories are discovered from the module graph at
+// build time, persisted in `hash.workspaces` (relative to the Vite
+// root), and included in the `hash.input` computation — so editing only
+// a sibling package busts the memo and triggers a rebuild.
+// ─────────────────────────────────────────────────────────────────────
+
+test.provider(
+  "Vite: edits in a sibling workspace package bust the build memo",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+
+      yield* stack.destroy();
+
+      // Hand-rolled two-package workspace: `app` is the Vite root and
+      // `shared` is a sibling package whose source the client bundle
+      // imports directly (escaping the Vite root).
+      yield* fs.makeDirectory(tempRoot, { recursive: true });
+      const parent = yield* fs.makeTempDirectory({
+        prefix: "alchemy-vite-ws-",
+        directory: tempRoot,
+      });
+      yield* Effect.addFinalizer(
+        Exit.match({
+          onSuccess: () =>
+            Effect.ignore(fs.remove(parent, { recursive: true })),
+          onFailure: () => Effect.void,
+        }),
+      );
+      const rootDir = path.join(parent, "app");
+      const sharedDir = path.join(parent, "shared");
+
+      const writeShared = (marker: string) =>
+        fs.writeFileString(
+          path.join(sharedDir, "src/message.ts"),
+          `export const message = ${JSON.stringify(marker)};\n`,
+        );
+
+      yield* fs.makeDirectory(path.join(rootDir, "src"), { recursive: true });
+      yield* fs.makeDirectory(path.join(sharedDir, "src"), {
+        recursive: true,
+      });
+      yield* fs.writeFileString(
+        path.join(rootDir, "index.html"),
+        htmlPage("vite-workspace-fixture"),
+      );
+      yield* fs.writeFileString(
+        path.join(rootDir, "package.json"),
+        JSON.stringify({
+          name: "alchemy-vite-workspace-app",
+          version: "0.0.0",
+          private: true,
+          type: "module",
+        }),
+      );
+      // Same shape as vite-fixture/vite.config.ts: point the SSR build at
+      // the minimal worker entry so the cloudflare-vite-plugin can wrap it.
+      yield* fs.writeFileString(
+        path.join(rootDir, "vite.config.ts"),
+        `import { defineConfig } from "vite";
+export default defineConfig({
+  environments: {
+    ssr: { build: { rollupOptions: { input: "./src/worker.ts" } } },
+  },
+});
+`,
+      );
+      yield* fs.writeFileString(
+        path.join(rootDir, "src/worker.ts"),
+        `type Env = { ASSETS: { fetch: (req: Request) => Promise<Response> } };
+export default {
+  fetch(request: Request, env: Env): Promise<Response> {
+    return env.ASSETS.fetch(request);
+  },
+};
+`,
+      );
+      // The client entry imports across the Vite root boundary into the
+      // sibling package's source.
+      yield* fs.writeFileString(
+        path.join(rootDir, "src/main.ts"),
+        `import { message } from "../../shared/src/message.ts";
+const el = document.getElementById("app");
+if (el) {
+  el.textContent = message;
+}
+`,
+      );
+      yield* fs.writeFileString(
+        path.join(sharedDir, "package.json"),
+        JSON.stringify({
+          name: "alchemy-vite-workspace-shared",
+          version: "0.0.0",
+          private: true,
+          type: "module",
+        }),
+      );
+
+      const memoInclude = [
+        "index.html",
+        "src/**",
+        "package.json",
+        "vite.config.ts",
+      ];
+
+      const marker1 = `vite-ws-1-${Date.now()}`;
+      yield* writeShared(marker1);
+
+      const site1 = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Website.Vite(
+            "ViteWorkspace",
+            viteProps(rootDir, memoInclude),
+          );
+        }),
+      );
+
+      expect(site1.url).toBeDefined();
+      expect(site1.hash?.input).toBeDefined();
+      // The sibling package was discovered from the module graph and
+      // persisted relative to the Vite root.
+      expect(site1.hash?.additionalWorkspaces).toContain("../shared");
+      yield* expectWorkerExists(site1.workerName, accountId);
+      yield* expectBundleContains(site1.url!, marker1, {
+        label: "workspace marker v1 in client bundle",
+      });
+
+      // ── deploy 2: edit ONLY the sibling package ────────────────────────
+      const marker2 = `vite-ws-2-${Date.now()}`;
+      yield* writeShared(marker2);
+
+      const site2 = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Website.Vite(
+            "ViteWorkspace",
+            viteProps(rootDir, memoInclude),
+          );
+        }),
+      );
+
+      // Nothing under `rootDir` changed — only the sibling workspace did.
+      // The workspace-aware input hash must still bust the memo.
+      expect(site2.hash?.input).toBeDefined();
+      expect(site2.hash?.input).not.toEqual(site1.hash?.input);
+      expect(site2.hash?.additionalWorkspaces).toContain("../shared");
+      yield* expectBundleContains(site2.url!, marker2, {
+        label: "workspace marker v2 in client bundle",
+      });
+
+      // ── deploy 3: no changes anywhere ⇒ memo hit ───────────────────────
+      const site3 = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Website.Vite(
+            "ViteWorkspace",
+            viteProps(rootDir, memoInclude),
+          );
+        }),
+      );
+
+      expect(site3.hash?.input).toEqual(site2.hash?.input);
+      expect(site3.hash?.additionalWorkspaces).toEqual(
+        site2.hash?.additionalWorkspaces,
+      );
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(site1.workerName, accountId);
+    }).pipe(logLevel),
+  { timeout: 360_000 },
+);
+
 test.provider(
   "Vite: `env` props are inlined and env-only changes redeploy",
   (stack) =>
@@ -449,6 +687,75 @@ test.provider(
       yield* waitForWorkerToBeDeleted(site.workerName, accountId);
     }).pipe(logLevel),
   { timeout: 360_000 },
+);
+
+test.provider(
+  "Vite: Container binding on env deploys a container-backed DO class",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const rootDir = yield* cloneFixture(containerFixtureDir, {
+        prefix: "alchemy-vite-container-",
+        tempRoot,
+        entries: ["index.html", "package.json", "vite.config.ts", "src"],
+      });
+      const memoInclude = [
+        "index.html",
+        "src/**",
+        "package.json",
+        "vite.config.ts",
+      ];
+
+      // A `Cloudflare.Container` declaration on `env` is Effect-shaped —
+      // before #997 the Vite build's env resolution ran it as an inlined
+      // env Effect and the deploy died before the build started.
+      const site = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Website.Vite("ViteContainer", {
+            ...viteProps(rootDir, memoInclude),
+            compatibility: {
+              date: "2026-03-17",
+              flags: ["nodejs_compat"],
+            },
+            assets: {
+              runWorkerFirst: ["/api/*"],
+            },
+            env: {
+              ECHO: Cloudflare.Container("ViteEchoContainer", {
+                className: "EchoObject",
+                image: "mendhak/http-https-echo:latest",
+                observability: { logs: { enabled: true } },
+              }),
+            },
+          });
+        }),
+      );
+
+      expect(site.url).toBeDefined();
+      yield* expectWorkerExists(site.workerName, accountId);
+      yield* expectUrlContains(`${site.url!}/`, "Vite Container fixture", {
+        timeout: "120 seconds",
+        label: "vite container fixture assets",
+      });
+
+      // The echo image reflects the request as JSON ("method" only appears
+      // in a real echo response, never in an error page) — proof the request
+      // went Worker → DO class → container port 8080 and back.
+      const echo = yield* fetchContainerReady(
+        `${site.url!}/api/echo`,
+        "method",
+      );
+      expect(echo).toContain("method");
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+    }).pipe(logLevel),
+  // Container image pull + push + rollout comfortably exceeds the plain
+  // Vite deploy budget (mirrors AsyncContainer.test.ts).
+  { timeout: 600_000 },
 );
 
 test.provider(
@@ -763,10 +1070,10 @@ const freshConn = HttpClient.mapRequest(
   HttpClientRequest.setHeader("connection", "close"),
 );
 
-// The local dev provider returns `worker.url` from `URL#toString()`, which
-// keeps a trailing slash (`http://localhost:PORT/`), whereas the cloud
-// provider returns a bare origin (`https://….workers.dev`). Join without
-// producing a `//` path that the dev server's router won't match.
+// Both providers return `worker.url` as a bare origin these days, but an
+// external dev server URL parsed from stdout can still carry a trailing
+// slash. Join without producing a `//` path that the dev server's router
+// won't match.
 const joinUrl = (base: string, path: string) =>
   `${base.replace(/\/+$/, "")}${path}`;
 
@@ -787,6 +1094,40 @@ const fetchJsonReady = <T>(url: string) =>
       Effect.retry({
         schedule: Schedule.exponential("500 millis"),
         times: 15,
+      }),
+    );
+  });
+
+// Retry a container-backed route until it answers 200 with a body containing
+// `expected` — the container's first request rides through image provisioning
+// and instance cold start, which comfortably outlasts fetchJsonReady's budget
+// (mirrors AsyncContainer.test.ts's readiness poll).
+const fetchContainerReady = (url: string, expected: string) =>
+  Effect.gen(function* () {
+    const client = freshConn(yield* HttpClient.HttpClient);
+    return yield* client.get(url).pipe(
+      Effect.flatMap((res) =>
+        res.text.pipe(
+          Effect.flatMap((body) =>
+            res.status === 200 && body.includes(expected)
+              ? Effect.succeed(body)
+              : Effect.fail(
+                  new Error(
+                    `container not ready: ${res.status} ${body.slice(0, 200)}`,
+                  ),
+                ),
+          ),
+        ),
+      ),
+      Effect.timeout("10 seconds"),
+      Effect.retry({
+        // Cap exponential backoff at 3s — snappy fast path without the
+        // geometric blow-up dominating wall time on a slow rollout.
+        schedule: Schedule.min([
+          Schedule.exponential("500 millis"),
+          Schedule.spaced("3 seconds"),
+        ]),
+        times: 60,
       }),
     );
   });
@@ -869,10 +1210,13 @@ const expectBundleContains = (
       Effect.retry({
         // ~2 minutes total: capped exponential sampling through edge
         // propagation of both the fresh index.html and the new asset.
-        schedule: Schedule.exponential("500 millis", 1.5).pipe(
-          Schedule.either(Schedule.spaced("5 seconds")),
-          Schedule.both(Schedule.recurs(30)),
-        ),
+        schedule: Schedule.max([
+          Schedule.min([
+            Schedule.exponential("500 millis", 1.5),
+            Schedule.spaced("5 seconds"),
+          ]),
+          Schedule.recurs(30),
+        ]),
       }),
       Effect.tapError((error) =>
         Effect.logError(
@@ -885,8 +1229,7 @@ const expectBundleContains = (
 
 const viteProps = (rootDir: string, memoInclude: string[]) => ({
   rootDir,
-  url: true as const,
-  subdomain: { enabled: true, previewsEnabled: true },
+  workersDev: true,
   compatibility: {
     date: "2024-09-23",
     flags: ["nodejs_compat"],
@@ -926,6 +1269,9 @@ const waitForBucketToBeDeleted = Effect.fn(function* (
   bucketName: string,
   accountId: string,
 ) {
+  // Dev-mode buckets are purely virtual (`dev:`-prefixed identity) — there
+  // is no cloud bucket to wait on, and the real API rejects the name.
+  if (isLocalId(bucketName)) return;
   yield* r2
     .getBucket({
       accountId,
@@ -936,10 +1282,13 @@ const waitForBucketToBeDeleted = Effect.fn(function* (
       Effect.retry({
         while: (error): error is BucketStillExists =>
           error instanceof BucketStillExists,
-        schedule: Schedule.exponential("200 millis").pipe(
-          Schedule.either(Schedule.spaced("2 seconds")),
-          Schedule.both(Schedule.recurs(20)),
-        ),
+        schedule: Schedule.max([
+          Schedule.min([
+            Schedule.exponential("200 millis"),
+            Schedule.spaced("2 seconds"),
+          ]),
+          Schedule.recurs(20),
+        ]),
       }),
       Effect.catchTag("NoSuchBucket", () => Effect.void),
     );

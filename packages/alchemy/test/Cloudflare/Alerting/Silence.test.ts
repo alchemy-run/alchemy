@@ -1,9 +1,9 @@
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as alerting from "@distilled.cloud/cloudflare/alerting";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -210,8 +210,9 @@ const waitForSilenceDeleted = (accountId: string, silenceId: string) =>
     Effect.catchTag("SilenceNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "SilenceNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );

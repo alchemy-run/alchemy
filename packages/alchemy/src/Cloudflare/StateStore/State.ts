@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
@@ -408,20 +409,21 @@ export const teardownStateStore = (options: TeardownOptions = {}) =>
       AuthTokenSecretName,
       EncryptionKeySecretName,
     ]);
-    const stores = yield* SecretsStore.listStores({ accountId }).pipe(
-      Effect.map((r) => r.result),
+    const stores = yield* SecretsStore.listStores.items({ accountId }).pipe(
+      Stream.runCollect,
+      Effect.map((chunk) => Array.from(chunk)),
       Effect.catchTag("InvalidAccountId", () => Effect.succeed([])),
     );
     for (const store of stores) {
-      const secrets = yield* SecretsStore.listStoreSecrets({
-        accountId,
-        storeId: store.id,
-      }).pipe(
-        Effect.map((r) => r.result),
-        Effect.catchTag(["StoreNotFound", "InvalidAccountId"], () =>
-          Effect.succeed([]),
-        ),
-      );
+      const secrets = yield* SecretsStore.listStoreSecrets
+        .items({ accountId, storeId: store.id })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+          Effect.catchTag(["StoreNotFound", "InvalidAccountId"], () =>
+            Effect.succeed([]),
+          ),
+        );
       const ours = secrets.filter((s) => ourSecretNames.has(s.name));
       for (const secret of ours) {
         yield* Clank.info(`Deleting secret '${secret.name}'...`);
@@ -686,9 +688,10 @@ const hoistBootstrapStack = Effect.fn(function* ({
               // Secrets Store bindings) can take a while to serve
               // consistently; anything persisting past that is a real
               // failure to surface, not to spin on.
-              schedule: Schedule.fixed(500).pipe(
-                Schedule.both(Schedule.recurs(60)),
-              ),
+              schedule: Schedule.max([
+                Schedule.fixed(500),
+                Schedule.recurs(60),
+              ]),
             }),
           );
       }
@@ -738,8 +741,9 @@ export const loginWithCloudflare = (profileName: string, force: boolean) =>
     }
 
     // 1. Locate the single Secrets Store on the account.
-    const stores = yield* SecretsStore.listStores({ accountId });
-    const store = stores.result[0];
+    const store = yield* SecretsStore.listStores
+      .items({ accountId })
+      .pipe(Stream.runHead, Effect.map(Option.getOrUndefined));
     if (!store) {
       return yield* Effect.fail(
         new AuthError({
@@ -761,10 +765,13 @@ export const loginWithCloudflare = (profileName: string, force: boolean) =>
           isTransientEdgeSessionError(error),
         // Cap the exponential delay at 2s so 15 retries stay within
         // ~30s instead of doubling unboundedly.
-        schedule: Schedule.exponential(200).pipe(
-          Schedule.either(Schedule.spaced("2 seconds")),
-          Schedule.both(Schedule.recurs(15)),
-        ),
+        schedule: Schedule.max([
+          Schedule.min([
+            Schedule.exponential(200),
+            Schedule.spaced("2 seconds"),
+          ]),
+          Schedule.recurs(15),
+        ]),
       }),
     );
 
@@ -898,9 +905,10 @@ const waitForStateStoreVersion = (url: string) =>
       // Edge propagation is usually sub-second but production traces
       // show redeploys occasionally serving the old version for well
       // over 10s. Poll for ~30s before failing loudly.
-      schedule: Schedule.spaced("500 millis").pipe(
-        Schedule.both(Schedule.recurs(60)),
-      ),
+      schedule: Schedule.max([
+        Schedule.spaced("500 millis"),
+        Schedule.recurs(60),
+      ]),
     }),
     Effect.withSpan("state_store.wait_for_version", {
       attributes: {
@@ -938,9 +946,10 @@ const checkStateStoreVersion = (url: string) =>
           : Effect.fail(e),
       ),
       Effect.retry({
-        schedule: Schedule.spaced("250 millis").pipe(
-          Schedule.both(Schedule.recurs(40)),
-        ),
+        schedule: Schedule.max([
+          Schedule.spaced("250 millis"),
+          Schedule.recurs(40),
+        ]),
       }),
       Effect.catch(() => Effect.succeed(undefined)),
     );

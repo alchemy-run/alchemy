@@ -44,10 +44,15 @@ export interface MetricStream extends Resource<
   "AWS.CloudWatch.MetricStream",
   MetricStreamProps,
   {
+    /** Physical name of the metric stream. */
     metricStreamName: MetricStreamName;
+    /** ARN of the metric stream. */
     metricStreamArn: MetricStreamArn;
+    /** Current state of the stream (`running` or `stopped`). */
     state: string | undefined;
+    /** The full metric stream description as last read from CloudWatch. */
     metricStream: cloudwatch.GetMetricStreamOutput;
+    /** Tags on the metric stream, including the internal Alchemy ownership tags. */
     tags: Record<string, string>;
   },
   never,
@@ -55,7 +60,8 @@ export interface MetricStream extends Resource<
 > {}
 
 /**
- * A CloudWatch metric stream.
+ * A CloudWatch metric stream — continuously exports CloudWatch metrics to
+ * a Kinesis Data Firehose delivery stream (and on to S3, Datadog, etc.).
  * @resource
  * @section Creating Metric Streams
  * @example Firehose Delivery Stream
@@ -65,6 +71,27 @@ export interface MetricStream extends Resource<
  *   RoleArn: "arn:aws:iam::123456789012:role/example",
  *   OutputFormat: "json",
  * });
+ * ```
+ *
+ * @example Stream Only Selected Namespaces
+ * ```typescript
+ * const stream = yield* MetricStream("LambdaMetricsExport", {
+ *   FirehoseArn: firehose.deliveryStreamArn,
+ *   RoleArn: role.roleArn,
+ *   OutputFormat: "json",
+ *   IncludeFilters: [{ Namespace: "AWS/Lambda" }],
+ * });
+ * ```
+ *
+ * @section Reading Metric Streams at Runtime
+ * @example Read the Stream's State from a Function
+ * ```typescript
+ * // init — bind the stream to the function (see GetMetricStream)
+ * const getMetricStream = yield* AWS.CloudWatch.GetMetricStream(stream);
+ *
+ * // runtime
+ * const result = yield* getMetricStream();
+ * const state = result.State; // "running" | "stopped"
  * ```
  */
 export const MetricStream = Resource<MetricStream>(

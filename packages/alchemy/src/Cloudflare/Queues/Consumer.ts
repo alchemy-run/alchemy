@@ -1,5 +1,6 @@
 import * as queues from "@distilled.cloud/cloudflare/queues";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as MutableHashMap from "effect/MutableHashMap";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
@@ -14,6 +15,7 @@ import {
   isLiveId,
   LOCAL_ENTRY_URL,
   LocalRuntimeState,
+  localRuntimeServices,
 } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -72,6 +74,18 @@ export type Consumer = Resource<
     accountId: string;
     deadLetterQueue?: string;
     settings?: ConsumerSettings;
+    /**
+     * Dev only, live queues only: the real queue's name, resolved from the
+     * cloud so the local runtime can wire the broker + pull loop for a
+     * locally-running consumer of an `Alchemy.remote()` queue.
+     */
+    queueName?: string;
+    /**
+     * Dev only, live queues only: id of the `http_pull` consumer attached
+     * to the real queue so the local runtime can drain it via the HTTP
+     * pull API. Deleted when this resource is deleted.
+     */
+    pullConsumerId?: string;
   },
   never,
   Providers
@@ -284,8 +298,8 @@ export const ConsumerProviderLive = () =>
       if (
         owned &&
         observed &&
-        observed.script !== undefined &&
-        observed.script !== news.scriptName
+        observed.scriptName !== undefined &&
+        observed.scriptName !== news.scriptName
       ) {
         yield* queues
           .deleteConsumer({
@@ -308,9 +322,10 @@ export const ConsumerProviderLive = () =>
             Effect.catchTag("ConsumerNotFound", () => Effect.void),
             Effect.retry({
               while: (e) => e === "still-attached",
-              schedule: Schedule.spaced("1 second").pipe(
-                Schedule.both(Schedule.recurs(30)),
-              ),
+              schedule: Schedule.max([
+                Schedule.spaced("1 second"),
+                Schedule.recurs(30),
+              ]),
             }),
             Effect.ignore,
           );
@@ -326,12 +341,12 @@ export const ConsumerProviderLive = () =>
       if (
         observed &&
         !owned &&
-        observed.script !== undefined &&
-        observed.script !== news.scriptName
+        observed.scriptName !== undefined &&
+        observed.scriptName !== news.scriptName
       ) {
         return yield* Effect.die(
           `Cloudflare queue "${queueId}" already has a worker ` +
-            `consumer for script "${observed.script}", but this ` +
+            `consumer for script "${observed.scriptName}", but this ` +
             `resource is configured for "${news.scriptName}" and ` +
             `local state for the consumer was missing. Each queue ` +
             `can have only one worker consumer — delete the ` +
@@ -391,12 +406,12 @@ export const ConsumerProviderLive = () =>
                   );
                 }
                 if (
-                  match.script !== undefined &&
-                  match.script !== news.scriptName
+                  match.scriptName !== undefined &&
+                  match.scriptName !== news.scriptName
                 ) {
                   return yield* Effect.die(
                     `Cloudflare queue "${queueId}" already has a ` +
-                      `worker consumer for script "${match.script}", ` +
+                      `worker consumer for script "${match.scriptName}", ` +
                       `but this resource is configured for ` +
                       `"${news.scriptName}". Each queue can have only ` +
                       `one worker consumer — delete the existing one ` +
@@ -437,7 +452,7 @@ export const ConsumerProviderLive = () =>
 
       yield* queues.getConsumer({ accountId: acct, queueId, consumerId }).pipe(
         Effect.flatMap((fetched) =>
-          toObserved(fetched)?.script === news.scriptName
+          toObserved(fetched)?.scriptName === news.scriptName
             ? Effect.void
             : Effect.fail("ScriptUnbound" as const),
         ),
@@ -487,9 +502,10 @@ export const ConsumerProviderLive = () =>
           Effect.catchTag("ConsumerNotFound", () => Effect.void),
           Effect.retry({
             while: (e) => e === "still-attached",
-            schedule: Schedule.spaced("1 second").pipe(
-              Schedule.both(Schedule.recurs(30)),
-            ),
+            schedule: Schedule.max([
+              Schedule.spaced("1 second"),
+              Schedule.recurs(30),
+            ]),
           }),
           Effect.ignore,
         );
@@ -511,10 +527,7 @@ export const ConsumerProviderLive = () =>
           return {
             consumerId: fetched.consumerId!,
             queueId: output.queueId,
-            scriptName:
-              ("scriptName" in fetched && typeof fetched.scriptName === "string"
-                ? fetched.scriptName
-                : output.scriptName) ?? output.scriptName,
+            scriptName: toObserved(fetched)?.scriptName ?? output.scriptName,
             accountId: output.accountId,
             deadLetterQueue: output.deadLetterQueue,
             settings: output.settings,
@@ -534,7 +547,7 @@ export const ConsumerProviderLive = () =>
           return {
             consumerId: match.consumerId,
             queueId: output.queueId,
-            scriptName: match.script ?? output.scriptName,
+            scriptName: match.scriptName ?? output.scriptName,
             accountId: output.accountId,
             deadLetterQueue: output.deadLetterQueue,
             settings: output.settings,
@@ -547,7 +560,7 @@ export const ConsumerProviderLive = () =>
 
 type ObservedConsumer = {
   consumerId: string;
-  script: string | undefined;
+  scriptName: string | undefined;
 };
 
 const toObserved = (c: {
@@ -556,14 +569,15 @@ const toObserved = (c: {
   type?: "worker" | "http_pull" | null;
 }): ObservedConsumer | undefined =>
   c.consumerId && c.type === "worker"
-    ? { consumerId: c.consumerId, script: c.scriptName ?? undefined }
+    ? { consumerId: c.consumerId, scriptName: c.scriptName ?? undefined }
     : undefined;
 
 // ~60s budget — Worker reconcile uploads typically land in 2–10s,
 // but a fresh container/asset deploy can stretch that.
-const queueHandlerReadinessSchedule = Schedule.spaced("2 seconds").pipe(
-  Schedule.both(Schedule.recurs(30)),
-);
+const queueHandlerReadinessSchedule = Schedule.max([
+  Schedule.spaced("2 seconds"),
+  Schedule.recurs(30),
+]);
 
 export const ConsumerProviderLocal = () =>
   RpcProvider.effect(
@@ -571,6 +585,27 @@ export const ConsumerProviderLocal = () =>
     LOCAL_ENTRY_URL,
     Effect.gen(function* () {
       const localRuntimeState = yield* LocalRuntimeState;
+
+      // Restart the locally running workerd instances (if any) for the
+      // given scripts so start-time queue-consumer wiring is re-read from
+      // `localRuntimeState.queueConsumers`. See `workerRestarts` on
+      // {@link LocalRuntimeState}.
+      const restartScripts = (scriptNames: ReadonlyArray<string>) =>
+        Effect.forEach(
+          scriptNames,
+          (scriptName) =>
+            MutableHashMap.get(
+              localRuntimeState.workerRestarts,
+              scriptName,
+            ).pipe(
+              Option.match({
+                onNone: () => Effect.void,
+                onSome: (restart) => restart,
+              }),
+            ),
+          { discard: true },
+        );
+
       return {
         list: () =>
           Effect.sync(() =>
@@ -612,6 +647,40 @@ export const ConsumerProviderLocal = () =>
         }),
         reconcile: Effect.fn(function* ({ news, output }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
+          // A LIVE queue (`Alchemy.remote()`) consumed by a LOCAL worker:
+          // Cloudflare only pushes to deployed consumers, so the local
+          // runtime drains the real queue via the HTTP pull API instead.
+          // Observe the queue (name + existing consumers) and ensure an
+          // `http_pull` consumer exists for the pull loop to lease from.
+          let queueName: string | undefined;
+          let pullConsumerId: string | undefined;
+          if (isLiveId(news.queueId)) {
+            const queue = yield* queues.getQueue({
+              accountId,
+              queueId: news.queueId,
+            });
+            queueName = queue.queueName ?? undefined;
+            const existingPull = (queue.consumers ?? []).find(
+              (c) => c.type === "http_pull",
+            );
+            if (existingPull?.consumerId) {
+              pullConsumerId = existingPull.consumerId;
+            } else {
+              const created = yield* queues.createConsumer({
+                accountId,
+                queueId: news.queueId,
+                type: "http_pull",
+                settings: {
+                  batchSize: news.settings?.batchSize,
+                  maxRetries: news.settings?.maxRetries,
+                  retryDelay: news.settings?.retryDelay,
+                },
+              });
+              pullConsumerId =
+                ("consumerId" in created ? created.consumerId : undefined) ??
+                undefined;
+            }
+          }
           const consumer: Consumer["Attributes"] = {
             consumerId: output?.consumerId ?? `dev:${crypto.randomUUID()}`,
             queueId: news.queueId,
@@ -619,11 +688,24 @@ export const ConsumerProviderLocal = () =>
             deadLetterQueue: news.deadLetterQueue,
             accountId,
             settings: news.settings,
+            queueName,
+            pullConsumerId,
           };
           MutableHashMap.set(
             localRuntimeState.queueConsumers,
             consumer.consumerId,
             consumer,
+          );
+          // A local workerd instance only reads its queue-consumer wiring
+          // at start time, and this reconcile races the sibling Worker's
+          // start (the Worker's `precreate` resolves `scriptName` before
+          // workerd is up). Restart any already-running instance so it
+          // picks up the new wiring; if the worker hasn't served yet this
+          // is a no-op and its first serve observes the map we just set.
+          yield* restartScripts(
+            output && output.scriptName !== consumer.scriptName
+              ? [output.scriptName, consumer.scriptName]
+              : [consumer.scriptName],
           );
           return consumer;
         }),
@@ -632,13 +714,32 @@ export const ConsumerProviderLocal = () =>
             localRuntimeState.queueConsumers,
             output.consumerId,
           );
+          yield* restartScripts([output.scriptName]);
+          // Remove the http_pull consumer this row attached to its live
+          // queue. Idempotent: gone-already (or queue deleted first) is
+          // success.
+          if (output.pullConsumerId && isLiveId(output.queueId)) {
+            yield* queues
+              .deleteConsumer({
+                accountId: output.accountId,
+                queueId: output.queueId,
+                consumerId: output.pullConsumerId,
+              })
+              .pipe(
+                Effect.catchTag(
+                  ["ConsumerNotFound", "QueueNotFound"],
+                  () => Effect.void,
+                ),
+              );
+          }
         }),
       };
     }),
   );
 
 export const ConsumerProvider = () =>
-  ProviderLayer.select({
-    local: () => ConsumerProviderLocal(),
+  ProviderLayer.dual(Consumer, {
+    local: () =>
+      ConsumerProviderLocal().pipe(Layer.provide(localRuntimeServices())),
     live: () => ConsumerProviderLive(),
   });

@@ -116,10 +116,13 @@ export const SettingsProvider = () =>
             // test timeout when a zone is persistently 403.
             Effect.retry({
               while: (e) => e._tag === "Forbidden",
-              schedule: Schedule.exponential("500 millis").pipe(
-                Schedule.either(Schedule.spaced("5 seconds")),
-                Schedule.both(Schedule.recurs(8)),
-              ),
+              schedule: Schedule.max([
+                Schedule.min([
+                  Schedule.exponential("500 millis"),
+                  Schedule.spaced("5 seconds"),
+                ]),
+                Schedule.recurs(8),
+              ]),
             }),
             Effect.map((observed) =>
               toAttributes(

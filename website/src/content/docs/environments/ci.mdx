@@ -206,11 +206,10 @@ By the end you'll have:
    request. The comment auto-updates on every push because the
    logical ID stays the same.
 
-   ```typescript twoslash
-   // @noErrors
+   ```diff lang="typescript"
    import * as Alchemy from "alchemy";
-   + import * as GitHub from "alchemy/GitHub";
-   + import * as Output from "alchemy/Output";
+   +import * as GitHub from "alchemy/GitHub";
+   +import * as Output from "alchemy/Output";
    import * as Effect from "effect/Effect";
 
    export default Alchemy.Stack(
@@ -218,25 +217,25 @@ By the end you'll have:
      { providers: Layer.mergeAll(GitHub.providers(), Cloudflare.providers()) },
      Effect.gen(function* () {
        const app = yield* App;
-   +   const github = yield* GitHub.GitHubEnv;
+   +    const github = yield* GitHub.GitHubEnv;
 
-   +   if (github?.pr) {
-   +     yield* GitHub.Comment("preview-comment", {
-   +       owner: github.owner,
-   +       repository: github.repository,
-   +       issueNumber: github.pr,
-   +       body: Output.interpolate`
-   +         ## Preview Deployed
+   +    if (github?.pr) {
+   +      yield* GitHub.Comment("preview-comment", {
+   +        owner: github.owner,
+   +        repository: github.repository,
+   +        issueNumber: github.pr,
+   +        body: Output.interpolate`
+   +          ## Preview Deployed
    +
-   +         **URL:** ${app.url}
+   +          **URL:** ${app.url}
    +
-   +         Built from commit ${github.sha.slice(0, 7)}
+   +          Built from commit ${github.sha.slice(0, 7)}
    +
-   +         ---
-   +         _This comment updates automatically with each push._
-   +       `,
-   +     });
-   +   }
+   +          ---
+   +          _This comment updates automatically with each push._
+   +        `,
+   +      });
+   +    }
 
        return { url: app.url };
      }),
@@ -362,7 +361,6 @@ token-management token.
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as GitHub from "alchemy/GitHub";
-import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -377,7 +375,7 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-    const accountId = yield* Config.string("CLOUDFLARE_ACCOUNT_ID");
+    const { accountId } = yield* yield* Cloudflare.CloudflareEnvironment;
 
     const apiToken = yield* Cloudflare.ApiToken.AccountApiToken("CIToken", {
       accountId,
@@ -421,6 +419,13 @@ export default Alchemy.Stack(
 
 A few details worth knowing:
 
+- `Cloudflare.CloudflareEnvironment` resolves the credentials of the
+  profile you're deploying with, account ID included — no
+  `CLOUDFLARE_ACCOUNT_ID` env var needed for this local deploy. The
+  double `yield*` is because the service's value is itself an Effect:
+  credentials are cached and can refresh themselves (OAuth tokens
+  expire), so you yield once for the service and once to resolve the
+  current credentials.
 - `Cloudflare.ApiToken.AccountApiToken` calls
   `POST /accounts/{account_id}/tokens` and Cloudflare returns the
   freshly minted token value exactly once. Alchemy captures it,
@@ -473,6 +478,11 @@ For stricter isolation you can run preview environments on one
 Cloudflare account and production on another. Mint two tokens from
 the same `stacks/github.ts` and prefix the secrets so the workflow
 can pick the right pair based on `STAGE`.
+
+Your profile resolves a single account ID, so this is the one case
+where you pass the account IDs in explicitly — set
+`TEST_CLOUDFLARE_ACCOUNT_ID` and `PROD_CLOUDFLARE_ACCOUNT_ID` in
+your environment when deploying this stack.
 
 ```typescript
 // stacks/github.ts

@@ -47,7 +47,7 @@ export interface EndpointHealthcheckAttributes {
   /** The Cloudflare account the healthcheck belongs to. */
   accountId: string;
   /** Type of check performed. */
-  checkType: "icmp";
+  checkType: "icmp" | (string & {});
   /** The IP address of the host checks are performed against. */
   endpoint: string;
   /** Name associated with this check. */
@@ -124,7 +124,13 @@ export const EndpointHealthcheckProvider = () =>
       }
       // The name is create-only: Cloudflare's PUT echoes a new name back
       // but never persists it, so a name change forces a replacement.
-      const desiredName = yield* createHealthcheckName(id, news.name);
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a replace.
+      const desiredName =
+        news.name ??
+        output?.name ??
+        (yield* createHealthcheckName(id, news.name));
       if (output !== undefined && output.name !== desiredName) {
         return { action: "replace" } as const;
       }
@@ -260,9 +266,10 @@ const observeExisting = (accountId: string, id: string) =>
     Effect.map((hc): ObservedHealthcheck => ({ ...hc, accountId })),
     Effect.retry({
       while: (e) => e._tag === "EndpointHealthcheckNotFound",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(6)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(6),
+      ]),
     }),
     Effect.catchTag("EndpointHealthcheckNotFound", () =>
       Effect.succeed(undefined),

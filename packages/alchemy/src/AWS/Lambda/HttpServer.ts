@@ -1,4 +1,6 @@
 import type {
+  ALBEvent,
+  ALBResult,
   APIGatewayProxyEvent,
   APIGatewayProxyResult,
   LambdaFunctionURLEvent,
@@ -7,6 +9,7 @@ import type {
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import type { Scope } from "effect/Scope";
+import * as HttpMiddleware from "effect/unstable/http/HttpMiddleware";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as Http from "../../Http.ts";
@@ -31,13 +34,29 @@ export const isApiGatewayProxyEvent = (
   );
 };
 
+/**
+ * Application Load Balancer target events carry a `requestContext.elb` marker
+ * (the target group ARN) and a top-level `httpMethod` + `path`.
+ */
+export const isAlbEvent = (event: any): event is ALBEvent => {
+  return (
+    typeof event?.httpMethod === "string" &&
+    event?.requestContext?.elb !== undefined
+  );
+};
+
 export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
-  const safeHandler = Http.safeHttpEffect(handler);
+  // `HttpMiddleware.tracer` creates the `http.server` root span per request
+  // (continuing an incoming `traceparent`), matching the Worker bridge's
+  // fetch path. With the default no-op tracer this is free; with a telemetry
+  // exporter installed the span is exported when the invocation scope
+  // flushes.
+  const safeHandler = HttpMiddleware.tracer(Http.safeHttpEffect(handler));
   return (
     event: any,
   ):
     | Effect.Effect<
-        APIGatewayProxyResult | LambdaFunctionURLResult,
+        ALBResult | APIGatewayProxyResult | LambdaFunctionURLResult,
         never,
         Exclude<
           Effect.Services<typeof handler>,
@@ -56,6 +75,27 @@ export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
         Effect.flatMap(toLambdaFunctionURLResult),
       ) as Effect.Effect<
         LambdaFunctionURLResult,
+        never,
+        Exclude<
+          Effect.Services<typeof handler>,
+          HttpServerRequest.HttpServerRequest | Scope
+        >
+      >;
+    }
+    if (isAlbEvent(event)) {
+      const webRequest = albEventToWebRequest(event);
+      const request = HttpServerRequest.fromWeb(webRequest).modify({
+        url: webRequest.url,
+      });
+      return safeHandler.pipe(
+        Effect.provideService(HttpServerRequest.HttpServerRequest, request),
+        // The ALB result shape is the API Gateway v1 result shape (statusCode,
+        // headers, multiValueHeaders, body, isBase64Encoded); ALB reads
+        // whichever of headers/multiValueHeaders matches the target group's
+        // multi-value-headers setting.
+        Effect.flatMap(toApiGatewayProxyResult),
+      ) as Effect.Effect<
+        ALBResult,
         never,
         Exclude<
           Effect.Services<typeof handler>,
@@ -108,6 +148,70 @@ const functionUrlEventToWebRequest = (
 
   let body: string | ArrayBuffer | undefined;
   if (event.body !== undefined) {
+    body = event.isBase64Encoded
+      ? Uint8Array.from(atob(event.body), (c) => c.charCodeAt(0)).buffer
+      : event.body;
+  }
+
+  return new Request(url, {
+    method,
+    headers,
+    body: body && method !== "GET" && method !== "HEAD" ? body : undefined,
+  });
+};
+
+const albEventToWebRequest = (event: ALBEvent): Request => {
+  const headers = new Headers();
+  if (event.multiValueHeaders) {
+    for (const [key, values] of Object.entries(event.multiValueHeaders)) {
+      if (!values) continue;
+      for (const value of values) {
+        if (value !== undefined && value !== null) {
+          headers.append(key, value);
+        }
+      }
+    }
+  }
+  if (event.headers) {
+    for (const [key, value] of Object.entries(event.headers)) {
+      if (value !== undefined && value !== null && !headers.has(key)) {
+        headers.set(key, value);
+      }
+    }
+  }
+
+  const protocol =
+    headers.get("x-forwarded-proto") ??
+    headers.get("X-Forwarded-Proto") ??
+    "http";
+  const host = headers.get("host") ?? headers.get("Host") ?? "alb";
+
+  // Unlike API Gateway, ALB does NOT URL-decode the path or query-string
+  // parameters — they arrive still percent-encoded, so join them verbatim
+  // (re-encoding would double-encode).
+  const queryParts: string[] = [];
+  if (event.multiValueQueryStringParameters) {
+    for (const [k, vs] of Object.entries(
+      event.multiValueQueryStringParameters,
+    )) {
+      if (!vs) continue;
+      for (const v of vs) {
+        queryParts.push(`${k}=${v ?? ""}`);
+      }
+    }
+  } else if (event.queryStringParameters) {
+    for (const [k, v] of Object.entries(event.queryStringParameters)) {
+      if (v === undefined || v === null) continue;
+      queryParts.push(`${k}=${v}`);
+    }
+  }
+  const queryString = queryParts.length > 0 ? `?${queryParts.join("&")}` : "";
+
+  const url = `${protocol}://${host}${event.path ?? "/"}${queryString}`;
+  const method = event.httpMethod;
+
+  let body: string | ArrayBuffer | undefined;
+  if (event.body !== null && event.body !== undefined) {
     body = event.isBase64Encoded
       ? Uint8Array.from(atob(event.body), (c) => c.charCodeAt(0)).buffer
       : event.body;

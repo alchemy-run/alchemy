@@ -1,9 +1,9 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as aisearch from "@distilled.cloud/cloudflare/aisearch";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -23,9 +23,10 @@ const logLevel = Effect.provideService(
 // attempts, polling so sparsely that a settled token is detected tens
 // of seconds late — under full-suite parallel load (when propagation
 // windows stretch) that alone can blow the test timeout.
-const propagationSchedule = Schedule.exponential("500 millis").pipe(
-  Schedule.either(Schedule.spaced("3 seconds")),
-);
+const propagationSchedule = Schedule.min([
+  Schedule.exponential("500 millis"),
+  Schedule.spaced("3 seconds"),
+]);
 
 const getToken = (accountId: string, id: string) =>
   aisearch.readToken({ accountId, id }).pipe(

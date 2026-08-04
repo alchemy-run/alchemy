@@ -1,8 +1,8 @@
 import * as AWS from "@/AWS";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as Lambda from "@distilled.cloud/aws/lambda";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { fileURLToPath } from "node:url";
@@ -26,7 +26,6 @@ test.provider(
         envVersion: string;
         alias?: {
           aliasName: string;
-          functionVersion: string;
           description?: string;
           routingConfig?: Lambda.AliasRoutingConfiguration;
         };
@@ -42,24 +41,24 @@ test.provider(
             },
           });
 
+          const version = yield* AWS.Lambda.Version("AliasVersion", {
+            function: fn,
+          });
+
           const live = alias
             ? yield* AWS.Lambda.Alias("LiveAlias", {
-                functionName: fn.functionName,
-                functionVersion: alias.functionVersion,
+                version,
                 aliasName: alias.aliasName,
                 description: alias.description,
                 routingConfig: alias.routingConfig,
               })
             : undefined;
 
-          return { fn, live };
+          return { fn, version, live };
         });
 
       const initial = yield* stack.deploy(program({ envVersion: "1" }));
-      const version1 = yield* publishVersion(
-        initial.fn.functionName,
-        "version 1",
-      );
+      const version1 = initial.version.version;
 
       // --- create ---
       const created = yield* stack.deploy(
@@ -67,7 +66,6 @@ test.provider(
           envVersion: "1",
           alias: {
             aliasName: "live",
-            functionVersion: version1,
             description: "live v1",
           },
         }),
@@ -90,27 +88,11 @@ test.provider(
       expect(liveV1!.RoutingConfig?.AdditionalVersionWeights ?? {}).toEqual({});
 
       // --- update (function version + weighted routing + description) ---
-      const updatedFunction = yield* stack.deploy(
-        program({
-          envVersion: "2",
-          alias: {
-            aliasName: "live",
-            functionVersion: version1,
-            description: "live v1",
-          },
-        }),
-      );
-      const version2 = yield* publishVersion(
-        updatedFunction.fn.functionName,
-        "version 2",
-      );
-
       const updated = yield* stack.deploy(
         program({
           envVersion: "2",
           alias: {
             aliasName: "live",
-            functionVersion: version2,
             description: "weighted live",
             routingConfig: {
               AdditionalVersionWeights: {
@@ -120,6 +102,7 @@ test.provider(
           },
         }),
       );
+      const version2 = updated.version.version;
       const updatedAlias = updated.live!;
 
       // Updating in place must keep the same ARN (not a replacement).
@@ -151,7 +134,6 @@ test.provider(
           envVersion: "2",
           alias: {
             aliasName: "live",
-            functionVersion: version2,
           },
         }),
       );
@@ -181,7 +163,6 @@ test.provider(
           envVersion: "2",
           alias: {
             aliasName: "stable",
-            functionVersion: version2,
             description: "renamed",
           },
         }),
@@ -230,6 +211,25 @@ test.provider(
         "stable",
       );
       expect(afterDestroy).toBeUndefined();
+
+      // ...and the host function itself is gone (bounded retry to ride out
+      // delete propagation).
+      yield* Lambda.getFunction({
+        FunctionName: replaced.fn.functionName,
+      }).pipe(
+        Effect.flatMap(() =>
+          Effect.fail(
+            new Error(`Function ${replaced.fn.functionName} still exists`),
+          ),
+        ),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+        Effect.retry({
+          schedule: Schedule.max([
+            Schedule.exponential(500),
+            Schedule.recurs(8),
+          ]),
+        }),
+      );
     }).pipe(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
@@ -249,26 +249,4 @@ const getAliasOrUndefined = Effect.fn(function* (
       Effect.succeed(undefined),
     ),
   );
-});
-
-const publishVersion = Effect.fn(function* (
-  functionName: string,
-  description: string,
-) {
-  const config = yield* Lambda.publishVersion({
-    FunctionName: functionName,
-    Description: description,
-  }).pipe(
-    Effect.retry({
-      while: (e) => e._tag === "ResourceConflictException",
-      schedule: Schedule.exponential(500).pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
-    }),
-    Effect.filterOrFail(
-      (config) => config.Version !== undefined,
-      () => new Error("Published Lambda version was missing Version."),
-    ),
-  );
-  return config.Version!;
 });

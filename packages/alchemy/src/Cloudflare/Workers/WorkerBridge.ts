@@ -13,9 +13,13 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as EffectHttp from "effect/unstable/http/HttpEffect";
-import { makeEntrypointLayer } from "../../Runtime.ts";
+import {
+  makeEntrypointLayer,
+  reifyBoundConfigProvider,
+} from "../../Runtime.ts";
 import { Self } from "../../Self.ts";
 import { Stack } from "../../Stack.ts";
+import { buildEventTelemetry } from "../../Telemetry.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import cloudflare_workers from "./cloudflare_workers.ts";
 import { isScopeEjected } from "./HttpServer.ts";
@@ -38,13 +42,16 @@ import type { WorkerRuntimeContext } from "./WorkerRuntimeContext.ts";
 
 /**
  * The isolate-lifetime artifacts produced by a single layer build: the built
- * service Context, the resolved export for this entrypoint, and the user's
- * RPC shape (a thunk — the shape is only populated once `serve` has run).
+ * service Context, the resolved export for this entrypoint, the user's
+ * RPC shape (a thunk — the shape is only populated once `serve` has run),
+ * and the telemetry Layer override registered during init (a thunk for the
+ * same reason).
  */
 export interface WorkerBuild<Export = any> {
   readonly context: Context.Context<any>;
   readonly export: Export;
   readonly shape: () => Record<string, any>;
+  readonly telemetry: () => Layer.Layer<never, any, any> | undefined;
 }
 
 /**
@@ -99,6 +106,16 @@ export const makeWorkerBridge = (
                   fromExecutionContext(ctx),
                 ),
                 Layer.succeed(Scope.Scope, scope),
+                // The configured telemetry exporters. Constructed as part
+                // of this per-event layer, but `buildEventTelemetry`
+                // attaches their batching fibers and flush finalizers to
+                // the request `scope` (not this build's transient scope),
+                // so buffered telemetry flushes when the scope closes into
+                // `ctx.waitUntil` below — never on workerd's ephemeral
+                // isolate scope.
+                Layer.effectContext(
+                  buildEventTelemetry(built.context, scope, built.telemetry()),
+                ),
               ).pipe(
                 Layer.provideMerge(Layer.succeedContext(services)),
                 Layer.provideMerge(Layer.succeedContext(built.context)),
@@ -115,8 +132,15 @@ export const makeWorkerBridge = (
       .finally(() =>
         isScopeEjected(scope)
           ? undefined
-          : Scope.close(scope, Exit.void).pipe(Effect.runPromise, (promise) =>
-              ctx.waitUntil(promise),
+          : ctx.waitUntil(
+              // The HttpMiddleware tracer ends the request's root span in a
+              // dispatcher task scheduled after the handler effect resolves.
+              // Yield one macrotask before closing the scope so that span
+              // reaches the telemetry exporter's buffer before the scope's
+              // flush finalizer runs.
+              new Promise((resolve) => setTimeout(resolve, 0)).then(() =>
+                Effect.runPromise(Scope.close(scope, Exit.void)),
+              ),
             ),
       );
   };
@@ -270,7 +294,14 @@ const getSharedBuild = (
               ConfigProvider.ConfigProvider,
               ConfigProvider.orElse(
                 ConfigProvider.fromUnknown({ ALCHEMY_PHASE: "runtime" }),
-                ConfigProvider.fromUnknown(env),
+                // Auto-bound `Config` values arrive in `env` as
+                // `{"_tag":"Redacted","value":...}` markers; reify them so a
+                // `Config` re-read inside a request handler decodes the raw
+                // source value instead of the marker JSON.
+                reifyBoundConfigProvider(
+                  ConfigProvider.fromUnknown(env),
+                  env as Record<string, unknown>,
+                ),
               ),
             ),
           ),
@@ -388,6 +419,7 @@ export const getWorkerExport = <Export = any>({
                 context,
                 export: exp,
                 shape: rc.shape,
+                telemetry: () => rc.telemetry,
               }),
             ),
             Effect.provideContext(context),

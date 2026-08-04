@@ -1,3 +1,4 @@
+import type { Input } from "../../Input.ts";
 import * as Scheduler from "../Scheduler/index.ts";
 import type { Cluster } from "./Cluster.ts";
 
@@ -10,32 +11,34 @@ export interface ScheduleProps {
   /**
    * ECS task definition and roles to invoke on each schedule tick.
    *
-   * This is typically the output of `AWS.ECS.Task(...)`.
+   * This is typically an `AWS.ECS.Task` resource (whose attributes are
+   * `Output`s — the fields are `Input`-typed because `every` is a helper
+   * function, not resource Props).
    */
   task: {
     /**
      * Task definition ARN to run.
      */
-    taskDefinitionArn: string;
+    taskDefinitionArn: Input<string>;
     /**
      * Task role ARN passed through EventBridge `iam:PassRole`.
      */
-    taskRoleArn: string;
+    taskRoleArn: Input<string>;
     /**
      * Execution role ARN passed through EventBridge `iam:PassRole`.
      */
-    executionRoleArn: string;
+    executionRoleArn: Input<string>;
   };
 
   /**
    * Subnets used for the Fargate task network configuration.
    */
-  subnets: string[];
+  subnets: Input<string[]>;
 
   /**
    * Security groups attached to the scheduled task ENIs.
    */
-  securityGroups?: string[];
+  securityGroups?: Input<string[]>;
 
   /**
    * Whether the scheduled task should receive a public IP.

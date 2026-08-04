@@ -1,15 +1,16 @@
 import * as hyperdrive from "@distilled.cloud/cloudflare/hyperdrive";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 
-import { AlchemyContext } from "../../AlchemyContext.ts";
 import { isResolved } from "../../Diff.ts";
+import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import { generateLocalId, isLiveId } from "../LocalRuntime.ts";
+import { generateLocalId } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
 
 export type Scheme = "postgres" | "postgresql" | "mysql";
@@ -161,10 +162,12 @@ export const Connection = Resource<Connection>("Cloudflare.Hyperdrive");
 export const isHyperdriveConnection = (value: unknown): value is Connection =>
   isResourceOfType(value, "Cloudflare.Hyperdrive");
 
-export const ConnectionProvider = () =>
+export const ProviderLive = () =>
   Provider.succeed(Connection, {
-    // The `hyperdriveId` is not marked as stable because if you start in dev mode, the ID will change on first deploy.
-    stables: ["accountId"],
+    // `hyperdriveId` is stable within live mode: `updateConfig` never changes
+    // it, and the dev→deploy transition (which DOES mint a new id) is a
+    // mode-switch the engine plans as a REPLACEMENT, so updates can rely on it.
+    stables: ["hyperdriveId", "accountId"],
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       return yield* hyperdrive.listConfigs.pages({ accountId }).pipe(
@@ -192,32 +195,22 @@ export const ConnectionProvider = () =>
     }),
     diff: Effect.fn(function* ({ id, olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const ctx = yield* AlchemyContext;
-      if (ctx.dev) return undefined;
-
       if (!isResolved(news)) return undefined;
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      const name = yield* createConfigName(id, news.name);
-      const oldName = output?.name
-        ? output.name
-        : yield* createConfigName(id, olds.name);
+      const oldName = output?.name ?? (yield* createConfigName(id, olds.name));
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a replace.
+      const name = news.name ?? oldName;
       if (oldName !== name) {
         return { action: "replace" } as const;
-      }
-      if (!isLiveId(output?.hyperdriveId)) {
-        return { action: "update" };
       }
     }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const ctx = yield* AlchemyContext;
-      if (ctx.dev) {
-        return output;
-      }
-
-      if (isLiveId(output?.hyperdriveId)) {
+      if (output?.hyperdriveId) {
         return yield* hyperdrive
           .getConfig({
             accountId: output.accountId,
@@ -269,18 +262,6 @@ export const ConnectionProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = output?.name ?? (yield* createConfigName(id, news.name));
 
-      const ctx = yield* AlchemyContext;
-      if (ctx.dev) {
-        return {
-          hyperdriveId: output?.hyperdriveId ?? generateLocalId(),
-          name,
-          accountId: output?.accountId ?? accountId,
-          origin: news.origin,
-          mtls: news.mtls ?? {},
-          dev: news.dev,
-        };
-      }
-
       const requestBody = {
         origin: toRequestOrigin(news.origin),
         caching: news.caching,
@@ -292,7 +273,7 @@ export const ConnectionProvider = () =>
       // to update; otherwise we createConfig and fall back to "find by
       // name then update" if Cloudflare reports the name is already in
       // use (race or a cold-start adoption).
-      const synced = isLiveId(output?.hyperdriveId)
+      const synced = output?.hyperdriveId
         ? yield* hyperdrive.updateConfig({
             accountId: output.accountId,
             hyperdriveId: output.hyperdriveId,
@@ -328,8 +309,6 @@ export const ConnectionProvider = () =>
       };
     }),
     delete: Effect.fn(function* ({ output }) {
-      if (!isLiveId(output.hyperdriveId)) return;
-
       yield* hyperdrive
         .deleteConfig({
           accountId: output.accountId,
@@ -337,6 +316,53 @@ export const ConnectionProvider = () =>
         })
         .pipe(Effect.catchTag("HyperdriveConfigNotFound", () => Effect.void));
     }),
+  });
+
+/**
+ * Local (dev) provider — the config is purely virtual: reconcile mints a
+ * `dev:` id and echoes the desired props into attributes, with no cloud API
+ * calls. The actual local behavior lives in the Worker binding: the local
+ * runtime's Hyperdrive plugin is an origin passthrough driven by the
+ * `hyperdrives` record `ConnectBinding` lowers (the `dev` prop when set,
+ * otherwise the real `origin`).
+ */
+export const ProviderLocal = () =>
+  Provider.succeed(Connection, {
+    stables: ["accountId"],
+    diff: Effect.fn(function* ({ news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (!output?.hyperdriveId) return { action: "update" } as const;
+      if (!isResolved(news)) return undefined;
+      if (output.accountId !== accountId) {
+        return { action: "replace" } as const;
+      }
+      // Fall through to the engine's default prop diff (name/origin/dev
+      // changes update in place; reconcile re-echoes them).
+    }),
+    read: Effect.fn(function* ({ output }) {
+      // Purely virtual — the persisted state row is the source of truth.
+      return output ?? undefined;
+    }),
+    reconcile: Effect.fn(function* ({ id, news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return {
+        hyperdriveId: output?.hyperdriveId ?? generateLocalId(),
+        name: yield* createConfigName(id, news.name),
+        accountId: output?.accountId ?? accountId,
+        origin: news.origin,
+        mtls: news.mtls ?? {},
+        dev: news.dev,
+      };
+    }),
+    delete: Effect.fn(function* () {
+      // Purely virtual — dropping the state row is enough.
+    }),
+  });
+
+export const ConnectionProvider = () =>
+  ProviderLayer.dual(Connection, {
+    local: () => ProviderLocal(),
+    live: () => ProviderLive(),
   });
 
 const createConfigName = (id: string, name: string | undefined) =>
@@ -348,8 +374,11 @@ const createConfigName = (id: string, name: string | undefined) =>
 const findByName = (name: string) =>
   Effect.gen(function* () {
     const { accountId } = yield* yield* CloudflareEnvironment;
-    const list = yield* hyperdrive.listConfigs({ accountId });
-    return list.result.find((c) => c.name === name);
+    return yield* hyperdrive.listConfigs.items({ accountId }).pipe(
+      Stream.filter((c) => c.name === name),
+      Stream.runHead,
+      Effect.map(Option.getOrUndefined),
+    );
   });
 
 export const defaultPort = (scheme: Scheme): number =>

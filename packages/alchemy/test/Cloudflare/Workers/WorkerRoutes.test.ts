@@ -1,10 +1,10 @@
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as workers from "@distilled.cloud/cloudflare/workers";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -139,7 +139,7 @@ test.provider.skipIf(!zoneName)(
           Effect.gen(function* () {
             return yield* Cloudflare.Worker("RouteWorker", {
               main,
-              url: false,
+              workersDev: false,
               routes: [{ pattern: T1_V1, zoneName }],
             });
           }),
@@ -168,7 +168,7 @@ test.provider.skipIf(!zoneName)(
           Effect.gen(function* () {
             return yield* Cloudflare.Worker("RouteWorker", {
               main,
-              url: false,
+              workersDev: false,
               routes: [{ pattern: T1_V1, zoneName }],
             });
           }),
@@ -183,7 +183,7 @@ test.provider.skipIf(!zoneName)(
           Effect.gen(function* () {
             return yield* Cloudflare.Worker("RouteWorker", {
               main,
-              url: false,
+              workersDev: false,
               routes: [{ pattern: T1_V2, zoneId }, { pattern: T1_ADDED }],
             });
           }),
@@ -207,7 +207,7 @@ test.provider.skipIf(!zoneName)(
           Effect.gen(function* () {
             return yield* Cloudflare.Worker("RouteWorker", {
               main,
-              url: false,
+              workersDev: false,
             });
           }),
         );
@@ -253,7 +253,7 @@ test.provider.skipIf(!zoneName)(
           Effect.gen(function* () {
             return yield* Cloudflare.Worker("DriftRouteWorker", {
               main,
-              url: false,
+              workersDev: false,
               compatibility: { date: "2024-01-01" },
               routes: [{ pattern: T2_KEPT, zoneName }],
             });
@@ -287,7 +287,7 @@ test.provider.skipIf(!zoneName)(
           Effect.gen(function* () {
             return yield* Cloudflare.Worker("DriftRouteWorker", {
               main,
-              url: false,
+              workersDev: false,
               compatibility: { date: "2024-01-02" },
               routes: [{ pattern: T2_KEPT, zoneName }],
             });
@@ -334,7 +334,7 @@ test.provider.skipIf(!zoneName)(
           Effect.gen(function* () {
             return yield* Cloudflare.Worker("RouteOwnerWorker", {
               main,
-              url: false,
+              workersDev: false,
               routes: [{ pattern: T3_PATTERN, zoneName }],
             });
           }),
@@ -345,12 +345,12 @@ test.provider.skipIf(!zoneName)(
             Effect.gen(function* () {
               const owner = yield* Cloudflare.Worker("RouteOwnerWorker", {
                 main,
-                url: false,
+                workersDev: false,
                 routes: [{ pattern: T3_PATTERN, zoneName }],
               });
               const thief = yield* Cloudflare.Worker("RouteThiefWorker", {
                 main,
-                url: false,
+                workersDev: false,
                 routes: [{ pattern: T3_PATTERN, zoneName }],
               });
               return { owner, thief };

@@ -9,7 +9,7 @@ import {
   hasAlchemyTags,
   stripInternalTags,
 } from "../Tags.ts";
-import { Docker, dockerPhysicalName } from "./Docker.ts";
+import { Docker, dockerContextName, dockerPhysicalName } from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
 
 export interface VolumeLabel {
@@ -32,6 +32,8 @@ export interface VolumeProps {
   driverOpts?: Record<string, string>;
   /** Custom metadata labels. */
   labels?: Record<string, string>;
+  /** Docker context name or context resource. */
+  context?: Docker.ContextRef;
 }
 
 export interface Volume extends Resource<
@@ -92,6 +94,15 @@ export interface Volume extends Resource<
  *   },
  * });
  * ```
+ *
+ * @section Docker Context
+ * @example Create a volume in a named Docker context
+ * ```typescript
+ * const data = yield* Docker.Volume("data", {
+ *   name: "app-data",
+ *   context: "remote-build",
+ * });
+ * ```
  */
 export const Volume = Resource<Volume>("Docker.Volume");
 
@@ -104,9 +115,10 @@ export const VolumeProvider = () =>
       return Volume.Provider.of({
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, instanceId, olds, output }) {
+          const context = dockerContextName(olds.context);
           const name = yield* dockerPhysicalName(id, olds, instanceId);
           const info = yield* docker.volume
-            .inspect(name)
+            .inspect(name, context)
             .pipe(
               Effect.catchReason(
                 "PlatformError",
@@ -122,11 +134,20 @@ export const VolumeProvider = () =>
           const owned = yield* hasAlchemyTags(id, info.Labels ?? undefined);
           return owned ? attrs : Unowned(attrs);
         }),
-        diff: Effect.fn(function* ({ id, instanceId, output, news }) {
+        diff: Effect.fn(function* ({ id, instanceId, output, news, olds }) {
           if (!isResolved(news)) return undefined;
-          const args = yield* makeVolumeArgs(id, news, instanceId);
           if (
-            output?.name !== args.name ||
+            dockerContextName(olds.context) !== dockerContextName(news.context)
+          ) {
+            return { action: "replace" as const, deleteFirst: true };
+          }
+          const args = yield* makeVolumeArgs(id, news, instanceId);
+          // Auto-generated names are engine-owned: the deployed name stays
+          // authoritative even if the generator would name this id differently
+          // today. Only an explicit user-provided name can force a replace.
+          const desiredName = news?.name ?? output?.name ?? args.name;
+          if (
+            output?.name !== desiredName ||
             output?.driver !== args.driver ||
             !Equal.equals(output?.driverOpts ?? {}, args.opt ?? {}) ||
             // Compare only user labels; internal `alchemy::*` branding lives on
@@ -136,20 +157,26 @@ export const VolumeProvider = () =>
             return { action: "replace" as const, deleteFirst: true };
           }
         }),
-        reconcile: Effect.fn(function* ({ id, instanceId, news }) {
+        reconcile: Effect.fn(function* ({ id, instanceId, news, output }) {
+          const context = dockerContextName(news.context);
           const args = yield* makeVolumeArgs(id, news, instanceId);
+          // Prefer the deployed name: regenerating would target a different
+          // volume if the generator's output for this id ever drifts.
+          const name = news?.name ?? output?.name ?? args.name;
           const internalTags = yield* createInternalTags(id);
           const result = yield* docker.volume.create({
             ...args,
+            name,
             label: { ...internalTags, ...args.label },
+            context,
           });
           return toVolumeAttributes(
-            yield* docker.volume.inspect(result.stdout),
+            yield* docker.volume.inspect(result.stdout, context),
           );
         }),
-        delete: Effect.fn(({ output }) =>
+        delete: Effect.fn(({ olds, output }) =>
           docker.volume
-            .remove(output.name)
+            .remove(output.name, dockerContextName(olds.context))
             .pipe(
               Effect.catchReason(
                 "PlatformError",

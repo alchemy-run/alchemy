@@ -1,7 +1,7 @@
 import * as Command from "@/Command/index.ts";
 import * as Provider from "@/Provider.ts";
-import * as Test from "@/Test/Vitest";
-import { assert, describe, expect, it } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { assert, describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Schedule from "effect/Schedule";
@@ -12,6 +12,17 @@ const { test } = Test.make({
   // in a cloud provider's auth chain.
   providers: Command.providers(),
   dev: true,
+});
+
+// Typed provider errors are an in-process contract: across the `alchemy dev`
+// RPC boundary (the default dev-test topology) a failed lifecycle op is
+// re-thrown as a flattened defect — `_tag`/`reason` do not survive
+// `Schema.Defect` serialization — so assertions on `CommandError`'s shape
+// must run against the in-process provider.
+const { test: inProcessTest } = Test.make({
+  providers: Command.providers(),
+  dev: true,
+  sidecar: false,
 });
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "fixture");
@@ -433,20 +444,22 @@ test.provider(
   { timeout: 30_000 },
 );
 
-test.provider("errors when the command fails in first 5 seconds", (stack) =>
-  Effect.gen(function* () {
-    const error = yield* stack
-      .deploy(
-        Command.Dev("Dev", {
-          command: `node ${dieScript}`,
-        }),
-      )
-      .pipe(Effect.flip);
-    assert(Command.isCommandError(error));
-    assert(error.reason._tag === "UnexpectedExit");
-    expect(error.reason.exitCode).toBe(1);
-    expect(error.reason.stderr).toContain("I'm not feeling it...");
-  }),
+inProcessTest.provider(
+  "errors when the command fails in first 5 seconds",
+  (stack) =>
+    Effect.gen(function* () {
+      const error = yield* stack
+        .deploy(
+          Command.Dev("Dev", {
+            command: `node ${dieScript}`,
+          }),
+        )
+        .pipe(Effect.flip);
+      assert(Command.isCommandError(error));
+      assert(error.reason._tag === "UnexpectedExit");
+      expect(error.reason.exitCode).toBe(1);
+      expect(error.reason.stderr).toContain("I'm not feeling it...");
+    }),
 );
 
 describe("extractUrl", () => {

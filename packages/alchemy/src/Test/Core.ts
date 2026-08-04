@@ -1,7 +1,9 @@
 /** @effect-diagnostics anyUnknownInErrorContext:off */
 
 import { ConfigProvider } from "effect/ConfigProvider";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
@@ -18,6 +20,8 @@ import { LoggingCli } from "../Cli/LoggingCli.ts";
 import { deploy as _deploy } from "../Deploy.ts";
 import { destroy as _destroy } from "../Destroy.ts";
 import type { Input } from "../Input.ts";
+import * as RpcProviderProxy from "../Local/RpcProviderProxy.ts";
+import * as RpcSpawner from "../Local/RpcSpawner.ts";
 import * as Plan from "../Plan.ts";
 import {
   type CompiledStack,
@@ -57,13 +61,124 @@ export interface MakeOptions<ROut = any> {
    * `ALCHEMY_DEV` environment variable (`"1"` / `"true"` enable it).
    */
   dev?: boolean;
+  /**
+   * Run local providers behind the RPC sidecar proxy, matching the process
+   * topology of the real `alchemy dev` command: an {@link RpcProviderProxy}
+   * is installed, so `RpcProvider.providerServicesEffect` layers (e.g.
+   * Cloudflare's `localRuntimeServices()`) are EMPTY in the test process and
+   * RPC-backed providers run their lifecycle in a spawned sidecar process.
+   *
+   * Defaults to the resolved `dev` flag — dev tests run the real `alchemy
+   * dev` topology unless they opt out. In-process dev (`sidecar: false`)
+   * masks missing main-process lifecycle dependencies (the class of bug
+   * behind #1007, where D1's local migrations only failed under `alchemy
+   * dev`); it remains available because it IS still a real production path —
+   * a plain `alchemy deploy` deleting a `providerMode: "local"` state row
+   * runs the local provider in-process — and because in-process runs are
+   * easier to debug.
+   *
+   * Fully lazy: only the proxy facade is installed up front. The spawner
+   * HTTP server starts — and a sidecar child process is forked — on the
+   * first provider session request (a deploy/destroy building an RPC-backed
+   * local provider); a dev file that never does starts no processes at all.
+   * Once started, the sidecar lives for the whole test file (its own scope,
+   * closed by the adapter's final cleanup hook), so `beforeAll(deploy(Stack))`
+   * + per-test requests work the same way they do under a real `alchemy dev`
+   * session.
+   */
+  sidecar?: boolean;
 }
+
+/**
+ * The RPC sidecar topology used by the real `alchemy dev` command, in one
+ * process-local layer: an {@link RpcSpawner} HTTP server that forks sidecar
+ * processes on demand, and an {@link RpcProviderProxy} pointed at it.
+ */
+export const sidecarProxy = (options: { profile?: string }) =>
+  Layer.unwrap(
+    Effect.map(RpcSpawner.RpcSpawner, (spawner) =>
+      RpcProviderProxy.layer(spawner.url),
+    ),
+  ).pipe(
+    Layer.provideMerge(
+      RpcSpawner.layerServer({
+        profile: options.profile ?? process.env.ALCHEMY_PROFILE,
+        envFile: undefined,
+      }),
+    ),
+  );
 
 /** Resolve the effective `dev` flag from explicit options or `ALCHEMY_DEV`. */
 export const resolveDev = (options: { dev?: boolean }): boolean => {
   if (options.dev !== undefined) return options.dev;
   const env = process.env.ALCHEMY_DEV;
   return env === "1" || env?.toLowerCase() === "true";
+};
+
+/** Resolve the effective `sidecar` flag: defaults to the resolved `dev` flag. */
+export const resolveSidecar = (options: MakeOptions): boolean =>
+  options.sidecar ?? resolveDev(options);
+
+/**
+ * The per-file sidecar runtime created by each adapter's `make(...)`.
+ *
+ * `provide` installs a lazy {@link RpcProviderProxy} facade into an effect.
+ * Installing the facade is free: the spawner HTTP server only starts (and,
+ * downstream of it, a sidecar child process is only forked) when a provider
+ * actually requests a session — i.e. when a deploy/destroy builds an
+ * RPC-backed local provider. A dev file that never does starts nothing.
+ *
+ * The real spawner build is memoized (one per test file) and lands in the
+ * handle's OWN scope — deliberately not the adapter's shared scope, which
+ * `destroy(Stack)` closes as soon as any test calls it (self-contained tests
+ * destroy mid-file, and the sidecar must survive for the file's remaining
+ * tests). Adapters run `close` from the same final cleanup hook that closes
+ * the shared scope.
+ */
+export interface SidecarHandle {
+  readonly provide: <A, E, R>(
+    eff: Effect.Effect<A, E, R>,
+  ) => Effect.Effect<A, any, any>;
+  readonly close: Effect.Effect<void>;
+}
+
+export const makeSidecarHandle = (
+  options: MakeOptions,
+): SidecarHandle | undefined => {
+  if (!resolveSidecar(options)) return undefined;
+  const scope = Scope.makeUnsafe("sequential");
+  const memoMap = Layer.makeMemoMapUnsafe();
+  const real = sidecarProxy(options);
+  const lazy = Layer.effect(
+    RpcProviderProxy.RpcProviderProxy,
+    Effect.gen(function* () {
+      // Capture the ambient platform context (provided by `toEffect`) so the
+      // deferred spawner build can run inside a provider's `get` without
+      // leaking platform requirements onto the RpcProviderProxy interface.
+      // The MemoMap dedupes concurrent first calls, so the file gets exactly
+      // one spawner no matter how many tests race.
+      const context = yield* Effect.context<never>();
+      const realProxy = Layer.buildWithMemoMap(real, memoMap, scope).pipe(
+        Effect.map((built) =>
+          Context.get(built, RpcProviderProxy.RpcProviderProxy),
+        ),
+        Effect.provideContext(context as Context.Context<any>),
+        Effect.orDie,
+      );
+      return RpcProviderProxy.RpcProviderProxy.of({
+        get: (serverEntryUrl, providerName) =>
+          Effect.flatMap(realProxy, (proxy) =>
+            proxy.get(serverEntryUrl, providerName),
+          ),
+      });
+    }),
+  );
+  return {
+    provide: (eff) => Effect.provide(eff, lazy),
+    close: Effect.suspend(() => Scope.close(scope, Exit.void)).pipe(
+      Effect.ignore,
+    ),
+  };
 };
 
 const overrideAlchemyContext = (overrides: { dev: boolean }) =>
@@ -103,11 +218,12 @@ export const toEffect = <A>(
   effect: TestEffect<A>,
   options: MakeOptions,
   scope?: Scope.Scope,
+  sidecar?: SidecarHandle,
 ): Effect.Effect<A, any, never> => {
   const base = Effect.gen(function* () {
     const cfg = yield* loadConfigProvider(Option.none());
     const configProvider = withProfileOverride(cfg, options.profile);
-    return yield* effect.pipe(
+    return yield* (sidecar ? sidecar.provide(effect) : effect).pipe(
       provideFreshArtifactStore,
       Effect.provide(Layer.succeed(ConfigProvider, configProvider)),
     );
@@ -133,7 +249,8 @@ export const run = <A>(
   effect: TestEffect<A>,
   options: MakeOptions,
   scope?: Scope.Scope,
-): Promise<A> => Effect.runPromise(toEffect(effect, options, scope));
+  sidecar?: SidecarHandle,
+): Promise<A> => Effect.runPromise(toEffect(effect, options, scope, sidecar));
 
 /**
  * Wrap an effect so it runs with `options.providers` + a placeholder Stack +
@@ -288,14 +405,7 @@ export const scratchStack = <ROut>(
     plan: ((effect: Effect.Effect<any, any, any>) =>
       buildPlan(effect)) as ScratchStack<ROut>["plan"],
     destroy: () =>
-      Plan.make({
-        name: stackName,
-        stage,
-        resources: {},
-        bindings: {},
-        actions: {},
-        output: {},
-      }).pipe(
+      Plan.destroy({ name: stackName, stage }).pipe(
         Effect.flatMap(apply),
         Effect.asVoid,
         Effect.provide(stateLayer),

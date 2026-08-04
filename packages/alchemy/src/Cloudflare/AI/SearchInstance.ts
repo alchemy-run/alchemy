@@ -388,15 +388,10 @@ export type SearchInstance = Resource<
  * `parseType` selects how pages are discovered:
  * - `"sitemap"` (Cloudflare default) — read `<seed>/sitemap.xml` (discovered
  *   via `robots.txt`) and index the URLs it lists.
- * - `"crawl"` — start at `source` and follow links.
- * - `"feed-rss"` — treat the seed as an RSS / Atom feed.
+ * - `"discover"` — start at `source` and follow links.
  *
- * `crawlOptions` controls link discovery (mainly for `parseType: "crawl"`):
- * - `depth` — how many links deep to follow from the seed.
- * - `includeSubdomains` — also crawl subdomains of the seed host.
- * - `includeExternalLinks` — follow links off the seed host.
- * - `maxAge` — skip re-fetching pages younger than this (seconds).
- * - `source` — where links come from: `"all"`, `"sitemaps"`, or `"links"`.
+ * `crawlOptions` is no longer accepted by the API — Cloudflare removed it;
+ * discovery behavior is controlled solely by `parseType`.
  *
  * `parseOptions` controls how each page is parsed:
  * - `useBrowserRendering` — render JS in a headless browser before parsing.
@@ -416,7 +411,7 @@ export type SearchInstance = Resource<
  * const instance = yield* Cloudflare.AI.SearchInstance("site-search", {
  *   type: "web-crawler",
  *   source: "https://example.com",
- *   sourceParams: { webCrawler: { parseType: "crawl" } },
+ *   sourceParams: { webCrawler: { parseType: "discover" } },
  * });
  * ```
  * @example Fully-configured crawl
@@ -426,14 +421,7 @@ export type SearchInstance = Resource<
  *   source: "https://example.com",
  *   sourceParams: {
  *     webCrawler: {
- *       parseType: "crawl",
- *       crawlOptions: {
- *         depth: 3,
- *         includeSubdomains: true,
- *         includeExternalLinks: false,
- *         maxAge: 86_400,
- *         source: "all",
- *       },
+ *       parseType: "discover",
  *       parseOptions: {
  *         useBrowserRendering: true,
  *         includeImages: false,
@@ -443,7 +431,7 @@ export type SearchInstance = Resource<
  *   },
  * });
  * ```
- * @example Sitemap and RSS sources
+ * @example Sitemap source
  * ```typescript
  * // Index the URLs listed in one or more sitemaps (the default parse mode).
  * const fromSitemap = yield* Cloudflare.AI.SearchInstance("sitemap-search", {
@@ -456,13 +444,6 @@ export type SearchInstance = Resource<
  *     },
  *   },
  * });
- *
- * // Treat the seed as an RSS / Atom feed.
- * const fromFeed = yield* Cloudflare.AI.SearchInstance("feed-search", {
- *   type: "web-crawler",
- *   source: "https://example.com/feed.xml",
- *   sourceParams: { webCrawler: { parseType: "feed-rss" } },
- * });
  * ```
  * @example Store crawl output in a specific R2 bucket
  * ```typescript
@@ -471,7 +452,7 @@ export type SearchInstance = Resource<
  *   source: "https://example.com",
  *   sourceParams: {
  *     webCrawler: {
- *       parseType: "crawl",
+ *       parseType: "discover",
  *       storeOptions: { storageId: "my-crawl-bucket", storageType: "r2" },
  *     },
  *   },
@@ -594,9 +575,12 @@ export const SearchInstanceProvider = () =>
         return { action: "replace" } as const;
       }
       // The instance id is its identity — renaming is a replacement.
-      const newId = yield* createInstanceId(id, news.instanceId);
       const oldId =
         output?.instanceId ?? (yield* createInstanceId(id, olds.instanceId));
+      // Auto-generated ids are engine-owned: the deployed id stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided instanceId can force a replace.
+      const newId = news.instanceId ?? oldId;
       if (newId !== oldId) {
         return { action: "replace" } as const;
       }
@@ -835,9 +819,10 @@ const retryTokenPropagation = <A, E extends { _tag: string }, R>(
       // sparsely and detects a settled token tens of seconds late. Capped
       // polling detects within 6s of propagation completing while still
       // covering a long total window.
-      schedule: Schedule.exponential("1 second", 1.5).pipe(
-        Schedule.either(Schedule.spaced("6 seconds")),
-      ),
+      schedule: Schedule.min([
+        Schedule.exponential("1 second", 1.5),
+        Schedule.spaced("6 seconds"),
+      ]),
       times: 22,
     }),
   );

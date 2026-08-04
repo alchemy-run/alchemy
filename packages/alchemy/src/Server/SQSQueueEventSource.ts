@@ -4,6 +4,7 @@ import * as Stream from "effect/Stream";
 
 import { AWSEnvironment } from "../AWS/Environment.ts";
 import * as SQS from "../AWS/SQS/index.ts";
+import { toWireSeconds } from "../Util/Duration.ts";
 import { ServerHost } from "./Process.ts";
 
 export const SQSQueueEventSource = Layer.effect(
@@ -17,7 +18,7 @@ export const SQSQueueEventSource = Layer.effect(
 
     return Effect.fn(function* <StreamReq = never, Req = never>(
       queue: SQS.Queue,
-      props: SQS.QueueEventSourceProps,
+      props: SQS.MessagesProps,
       process: (
         stream: Stream.Stream<SQS.SQSRecord, never, StreamReq>,
       ) => Effect.Effect<void, never, Req | StreamReq>,
@@ -33,8 +34,11 @@ export const SQSQueueEventSource = Layer.effect(
           Effect.gen(function* () {
             const queueArn = yield* QueueArn;
             const result = yield* receiveMessage({
-              MaxNumberOfMessages: props.batchSize ?? 10,
-              WaitTimeSeconds: props.maximumBatchingWindowInSeconds,
+              MaxNumberOfMessages:
+                props.maxNumberOfMessages ?? props.batchSize ?? 10,
+              WaitTimeSeconds:
+                toWireSeconds(props.waitTime) ??
+                toWireSeconds(props.maximumBatchingWindow),
             });
 
             const messages = result.Messages ?? [];

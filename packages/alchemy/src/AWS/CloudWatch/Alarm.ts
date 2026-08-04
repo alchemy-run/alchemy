@@ -39,11 +39,17 @@ export interface Alarm extends Resource<
   "AWS.CloudWatch.Alarm",
   AlarmProps,
   {
+    /** Physical name of the alarm. */
     alarmName: AlarmName;
+    /** ARN of the alarm. */
     alarmArn: AlarmArn;
+    /** Current state of the alarm (`OK`, `ALARM`, or `INSUFFICIENT_DATA`). */
     stateValue: AlarmStateValue | undefined;
+    /** Human-readable reason for the current state. */
     stateReason: string | undefined;
+    /** The full MetricAlarm description as last read from CloudWatch. */
     metricAlarm: cloudwatch.MetricAlarm;
+    /** Tags on the alarm, including the internal Alchemy ownership tags. */
     tags: Record<string, string>;
   },
   never,
@@ -51,7 +57,9 @@ export interface Alarm extends Resource<
 > {}
 
 /**
- * A CloudWatch metric alarm.
+ * A CloudWatch metric alarm — watches a single metric (or metric-math
+ * expression) and transitions between `OK`, `ALARM`, and
+ * `INSUFFICIENT_DATA`, optionally firing actions on state change.
  * @resource
  * @section Creating Alarms
  * @example Threshold Alarm
@@ -65,6 +73,34 @@ export interface Alarm extends Resource<
  *   Threshold: 1,
  *   ComparisonOperator: "GreaterThanOrEqualToThreshold",
  * });
+ * ```
+ *
+ * @example Alarm on a Lambda Function's Errors
+ * ```typescript
+ * const fn = yield* MyFunction;
+ *
+ * const alarm = yield* Alarm("FnErrors", {
+ *   MetricName: "Errors",
+ *   Namespace: "AWS/Lambda",
+ *   Dimensions: [{ Name: "FunctionName", Value: fn.functionName }],
+ *   Statistic: "Sum",
+ *   Period: 60,
+ *   EvaluationPeriods: 1,
+ *   Threshold: 1,
+ *   ComparisonOperator: "GreaterThanOrEqualToThreshold",
+ *   TreatMissingData: "notBreaching",
+ * });
+ * ```
+ *
+ * @section Reading Alarm State at Runtime
+ * @example Read the Alarm's State from a Function
+ * ```typescript
+ * // init — bind the alarm to the function (see DescribeAlarms)
+ * const describeAlarms = yield* AWS.CloudWatch.DescribeAlarms(alarm);
+ *
+ * // runtime
+ * const result = yield* describeAlarms();
+ * const state = result.MetricAlarms?.[0]?.StateValue;
  * ```
  */
 export const Alarm = Resource<Alarm>("AWS.CloudWatch.Alarm");

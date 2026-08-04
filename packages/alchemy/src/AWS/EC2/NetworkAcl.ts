@@ -335,11 +335,13 @@ export const NetworkAclProvider = () =>
                 while: (e) => {
                   return e._tag === "DependencyViolation";
                 },
-                schedule: Schedule.exponential(1000, 1.5).pipe(
-                  Schedule.both(Schedule.recurs(15)),
-                  Schedule.tapOutput(([, attempt]) =>
+                schedule: Schedule.max([
+                  Schedule.exponential(1000, 1.5),
+                  Schedule.recurs(15),
+                ]).pipe(
+                  Schedule.tap(({ attempt }) =>
                     session.note(
-                      `Waiting for dependencies to clear... (attempt ${attempt + 1})`,
+                      `Waiting for dependencies to clear... (attempt ${attempt})`,
                     ),
                   ),
                 ),

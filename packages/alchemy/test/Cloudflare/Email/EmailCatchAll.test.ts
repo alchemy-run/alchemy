@@ -3,14 +3,12 @@ import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Provider from "@/Provider";
 import { isResourceState, State, type ResourceState } from "@/State";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as emailRouting from "@distilled.cloud/cloudflare/email-routing";
-import { expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { describe } from "vitest";
-
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
@@ -53,7 +51,7 @@ const getCatchAll = (zoneId: string) =>
 // behind: Email Routing enabled, catch-all back at the Cloudflare default
 // (disabled, drop, no name).
 const setBaseline = (zoneId: string) =>
-  emailRouting.enableEmailRouting({ zoneId, body: {} }).pipe(
+  emailRouting.enableEmailRouting({ zoneId }).pipe(
     Effect.andThen(
       emailRouting.putRuleCatchAll({
         zoneId,

@@ -37,11 +37,17 @@ export interface SAMLProvider extends Resource<
   "AWS.IAM.SAMLProvider",
   SAMLProviderProps,
   {
+    /** The ARN of the SAML provider. */
     samlProviderArn: string;
+    /** The name of the SAML provider. */
     name: string;
+    /** The unique ID AWS assigns to the provider. */
     samlProviderUUID: string | undefined;
+    /** The SAML metadata document from the identity provider. */
     samlMetadataDocument: string | undefined;
+    /** Whether SAML assertions must be encrypted (`Required` / `Allowed`). */
     assertionEncryptionMode: iam.AssertionEncryptionModeType | undefined;
+    /** The tags applied to the provider. */
     tags: Record<string, string>;
   },
   never,
@@ -71,10 +77,10 @@ export const SAMLProvider = Resource<SAMLProvider>("AWS.IAM.SAMLProvider");
 // until the prior delete settles. A bounded retry rides out that window; a
 // well-formed metadata document never fails persistently, so this never masks a
 // genuine bad-input error for longer than the small budget.
-const transientWriteSchedule = Schedule.exponential(500).pipe(
-  Schedule.jittered,
-  Schedule.both(Schedule.recurs(6)),
-);
+const transientWriteSchedule = Schedule.max([
+  Schedule.exponential(500).pipe(Schedule.jittered),
+  Schedule.recurs(6),
+]);
 const isTransientWriteError = (error: {
   _tag: "ValidationError" | "ConcurrentModificationException" | (string & {});
 }) =>

@@ -21,9 +21,10 @@ type TypeId = typeof TypeId;
 // calls on that typed tag so reconcile waits out the propagation window.
 const targetVisibleRetry = {
   while: (e: { _tag: string }) => e._tag === "ZoneTagResourceNotFound",
-  schedule: Schedule.exponential("500 millis").pipe(
-    Schedule.both(Schedule.recurs(10)),
-  ),
+  schedule: Schedule.max([
+    Schedule.exponential("500 millis"),
+    Schedule.recurs(10),
+  ]),
 } as const;
 
 /**

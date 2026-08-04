@@ -8,7 +8,29 @@ export interface AddPermissionRequest extends Omit<
   "TopicArn"
 > {}
 
-/** @binding */
+/**
+ * Runtime binding for `sns:AddPermission`.
+ *
+ * Bind this operation to a {@link Topic} inside a function runtime to grant
+ * other AWS accounts access to topic actions by adding a labeled statement
+ * to the topic's access policy. The binding grants the host function
+ * `sns:AddPermission` on the topic. Provide the `AddPermissionHttp` layer on
+ * the Function to implement the binding.
+ * @binding
+ * @section Managing Topic Permissions
+ * @example Allow Another Account to Publish
+ * ```typescript
+ * // init (provide SNS.AddPermissionHttp on the Function)
+ * const addPermission = yield* SNS.AddPermission(topic);
+ *
+ * // runtime
+ * yield* addPermission({
+ *   Label: "PartnerPublish",
+ *   AWSAccountId: ["123456789012"],
+ *   ActionName: ["Publish"],
+ * });
+ * ```
+ */
 export interface AddPermission extends Binding.Service<
   AddPermission,
   "AWS.SNS.AddPermission",

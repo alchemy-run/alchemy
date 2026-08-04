@@ -2,9 +2,9 @@ import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import * as Provider from "@/Provider";
 import { isResourceState, State, type ResourceState } from "@/State";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as originCa from "@distilled.cloud/cloudflare/origin-ca-certificates";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -52,9 +52,10 @@ const expectRevoked = (certificateId: string) =>
     Effect.catchTag("CertificateNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "CertificateNotRevoked",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
+      schedule: Schedule.max([
+        Schedule.exponential("500 millis"),
+        Schedule.recurs(10),
+      ]),
     }),
   );
 

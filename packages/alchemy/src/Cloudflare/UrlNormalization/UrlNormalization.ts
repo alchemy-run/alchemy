@@ -155,10 +155,13 @@ export const UrlNormalizationProvider = () =>
             // zone never falls out of the enumeration on a blip.
             Effect.retry({
               while: (e) => e._tag === "Forbidden",
-              schedule: Schedule.exponential("500 millis").pipe(
-                Schedule.either(Schedule.spaced("5 seconds")),
-                Schedule.both(Schedule.recurs(8)),
-              ),
+              schedule: Schedule.max([
+                Schedule.min([
+                  Schedule.exponential("500 millis"),
+                  Schedule.spaced("5 seconds"),
+                ]),
+                Schedule.recurs(8),
+              ]),
             }),
             Effect.map((observed) => toAttributes(zoneId, observed)),
             // Plan-gated or partial zones reject the route; skip them.
