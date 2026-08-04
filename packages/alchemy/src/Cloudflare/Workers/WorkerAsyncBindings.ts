@@ -43,7 +43,7 @@ import { isSecretKey } from "./SecretKey.ts";
 import { isVersionMetadata } from "./VersionMetadata.ts";
 import type { WorkerBindingProps } from "./Worker.ts";
 import {
-  isSelfReference,
+  isSelf,
   isSelfUrl,
   isWorker,
   type Worker,
@@ -502,7 +502,7 @@ const toBinding = (
       type: "self_url",
       name: bindingName,
     };
-  } else if (isSelfReference(binding)) {
+  } else if (isSelf(binding)) {
     // A service binding to the Worker itself. The provider lowers this
     // sentinel into a `service` binding targeting the Worker's own
     // physical name just before upload.

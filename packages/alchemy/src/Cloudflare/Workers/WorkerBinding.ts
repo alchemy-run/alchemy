@@ -73,7 +73,7 @@ export interface SelfUrlWorkerBinding {
 
 /**
  * Alchemy-only binding: a service binding that points at the host Worker
- * ITSELF (`Worker.SelfReference`). The provider lowers this into a
+ * ITSELF (`Worker.Self`). The provider lowers this into a
  * `service` binding targeting the Worker's own physical name just before
  * the script upload — Cloudflare never sees this type. In local dev it
  * lowers to the runtime's in-process self service (bypassing the assets

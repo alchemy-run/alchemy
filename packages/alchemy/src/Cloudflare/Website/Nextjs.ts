@@ -5,7 +5,7 @@ import { effectClass } from "../../Util/effect.ts";
 import type { Providers } from "../Providers.ts";
 import type { AssetsConfig } from "../Workers/Assets.ts";
 import {
-  SelfReference,
+  Self,
   Worker,
   type NormalizedBindings,
   type WorkerAssetsConfig,
@@ -321,7 +321,7 @@ export const Nextjs: {
             // absence turns ISR revalidation into a silent no-op. An
             // explicit user-provided `env.WORKER_SELF_REFERENCE` wins.
             env: {
-              WORKER_SELF_REFERENCE: SelfReference,
+              WORKER_SELF_REFERENCE: Self,
               ...props?.env,
             },
             // OpenNext requires nodejs_compat; the Worker here is external

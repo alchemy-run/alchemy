@@ -27,7 +27,7 @@ import {
 } from "../../Resource.ts";
 import type { Rpc } from "../../Rpc.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import type { Self } from "../../Self.ts";
+import type { Self as SelfService } from "../../Self.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Container } from "../Containers/Container.ts";
 import type { DevContainerImage } from "../Containers/ContainerApplication.ts";
@@ -258,7 +258,7 @@ export type WorkerServices =
   | WorkerEnvironment
   | CloudflareEnvironment
   | Container.Application<any>
-  | Self;
+  | SelfService;
 
 export type WorkerShape<Req = never> = Main<WorkerServices | Req> &
   MainRpc<WorkerServices | Req>;
@@ -1256,23 +1256,22 @@ export const isSelfUrl = (value: unknown): value is URLEffect =>
  * ```typescript
  * const site = yield* Cloudflare.Website.Nextjs("Site", {
  *   env: {
- *     WORKER_SELF_REFERENCE: Cloudflare.Workers.SelfReference,
+ *     WORKER_SELF_REFERENCE: Cloudflare.Workers.Self,
  *   },
  * });
  * ```
  */
-export const SelfReference = {
-  "~alchemy/Kind": "Cloudflare.Workers.SelfReference",
+export const Self = {
+  "~alchemy/Kind": "Cloudflare.Workers.Self",
 } as const;
-export type SelfReference = typeof SelfReference;
+export type Self = typeof Self;
 
-/** Returns true when the value is the {@link SelfReference} marker. */
-export const isSelfReference = (value: unknown): value is SelfReference =>
+/** Returns true when the value is the {@link Self} marker. */
+export const isSelf = (value: unknown): value is Self =>
   typeof value === "object" &&
   value !== null &&
   "~alchemy/Kind" in value &&
-  (value as SelfReference)["~alchemy/Kind"] ===
-    "Cloudflare.Workers.SelfReference";
+  (value as Self)["~alchemy/Kind"] === "Cloudflare.Workers.Self";
 
 /**
  * A Cloudflare Worker host with deploy-time binding support and runtime export
