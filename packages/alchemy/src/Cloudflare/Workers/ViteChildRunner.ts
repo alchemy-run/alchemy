@@ -13,12 +13,12 @@ import {
 import { CloudflareAuth } from "../Auth/AuthProvider.ts";
 import * as Credentials from "../Credentials.ts";
 import * as RpcServerEnvironment from "../../Local/RpcServerEnvironment.ts";
+import { findAvailablePort } from "../../Util/Node.ts";
 import { PlatformServices, runMain } from "../../Util/PlatformServices.ts";
 import { materializeRuntimeBindings } from "./RuntimeBindings.ts";
 import { loadSource, SourceProviderError } from "./Source.ts";
 import * as Vite from "./Sources/Vite.ts";
 import {
-  DEFAULT_DEV_PORT,
   type ViteChildConfig,
   VITE_CHILD_READY_PREFIX,
   VITE_CHILD_READY_SUFFIX,
@@ -70,6 +70,15 @@ const program = Effect.scoped(
       },
     );
     const source = config.source;
+    const viteHost = "127.0.0.1";
+    // TODO(BlankParticle): replace this probe with `port: 0` once the Vite fix
+    // is released: https://github.com/vitejs/vite/pull/23158
+    // Vite currently treats `port: 0` as an absent value and falls back to
+    // its default port. Probe an ephemeral port ourselves until the fixed
+    // Vite release is available.
+    // `strictPort: false` still handles the small race between releasing the
+    // probe socket and Vite binding the selected port.
+    const vitePort = source ? undefined : yield* findAvailablePort(viteHost);
     const url = source
       ? yield* loadSource(source.descriptor).pipe(
           // `loadSource` is typed against the full `SourceServices` union
@@ -124,10 +133,8 @@ const program = Effect.scoped(
             context: runtimeContext,
           },
           {
-            // Match Alchemy's local Worker port range. The stable Alchemy proxy
-            // normally occupies the first port in the range, so the internal
-            // Vite server must be allowed to advance.
-            port: DEFAULT_DEV_PORT,
+            host: viteHost,
+            port: vitePort,
             strictPort: false,
           },
         ).pipe(Effect.map((server) => server.resolvedUrls?.local[0]));

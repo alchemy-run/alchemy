@@ -1018,13 +1018,28 @@ devTest.provider(
             "ViteChildB",
             props(rootB),
           );
-          return { appA, appB };
+          const defaultPortWorker = yield* Cloudflare.Worker(
+            "ViteChildDefaultPortWorker",
+            {
+              script:
+                'export default { fetch: () => new Response("default-port-worker") };',
+            },
+          );
+          return { appA, appB, defaultPortWorker };
         }),
       );
 
       expect(deployed.appA.url).not.toBe(deployed.appB.url);
       yield* Effect.all(
         [
+          expectUrlContains(
+            deployed.defaultPortWorker.url!,
+            "default-port-worker",
+            {
+              timeout: "30 seconds",
+              label: "default-port worker",
+            },
+          ),
           expectUrlContains(deployed.appA.url!, "child-app-a", {
             timeout: "30 seconds",
             label: "child A HTML",
