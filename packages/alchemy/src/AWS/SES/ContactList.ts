@@ -97,6 +97,37 @@ export interface ContactList extends Resource<
  *   ],
  * });
  * ```
+ *
+ * @example Contact List with Tags
+ * ```typescript
+ * const list = yield* SES.ContactList("Newsletter", {
+ *   tags: { Team: "growth", Environment: "prod" },
+ * });
+ * ```
+ *
+ * @section Populating the List
+ * @example Add Contacts to the List
+ * ```typescript
+ * const list = yield* SES.ContactList("Newsletter", {
+ *   topics: [
+ *     {
+ *       TopicName: "product-updates",
+ *       DisplayName: "Product Updates",
+ *       DefaultSubscriptionStatus: "OPT_IN",
+ *     },
+ *   ],
+ * });
+ *
+ * for (const email of ["a@example.com", "b@example.com"]) {
+ *   yield* SES.Contact(`Subscriber-${email}`, {
+ *     contactListName: list.contactListName,
+ *     emailAddress: email,
+ *     topicPreferences: [
+ *       { TopicName: "product-updates", SubscriptionStatus: "OPT_IN" },
+ *     ],
+ *   });
+ * }
+ * ```
  */
 export const ContactList = Resource<ContactList>("AWS.SES.ContactList");
 

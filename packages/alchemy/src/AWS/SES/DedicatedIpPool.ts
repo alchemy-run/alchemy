@@ -76,6 +76,41 @@ export interface DedicatedIpPool extends Resource<
  *   scalingMode: "MANAGED",
  * });
  * ```
+ *
+ * @example Explicit Pool Name
+ * ```typescript
+ * // Without poolName a deterministic lowercase name is derived from
+ * // app/stage/id. Pool names allow lowercase letters, numbers, and dashes.
+ * const pool = yield* SES.DedicatedIpPool("Marketing", {
+ *   poolName: "acme-marketing",
+ * });
+ * ```
+ *
+ * @section Changing the Scaling Mode
+ * @example Migrate a Standard Pool to Managed
+ * ```typescript
+ * // STANDARD -> MANAGED is applied in place — the pool keeps its name and
+ * // its dedicated IPs.
+ * const pool = yield* SES.DedicatedIpPool("Marketing", {
+ *   scalingMode: "MANAGED", // was "STANDARD"
+ * });
+ *
+ * // MANAGED -> STANDARD has no AWS API, so it REPLACES the pool: a new pool
+ * // is created and the old one deleted, dropping its dedicated IPs.
+ * ```
+ *
+ * @section Isolating Reputation
+ * @example Separate Marketing and Transactional Reputation
+ * ```typescript
+ * // Give each kind of mail its own pool so a marketing reputation hit
+ * // cannot take down password resets.
+ * const marketing = yield* SES.DedicatedIpPool("Marketing", {
+ *   scalingMode: "STANDARD",
+ * });
+ * const transactional = yield* SES.DedicatedIpPool("Transactional", {
+ *   scalingMode: "MANAGED",
+ * });
+ * ```
  */
 export const DedicatedIpPool = Resource<DedicatedIpPool>(
   "AWS.SES.DedicatedIpPool",

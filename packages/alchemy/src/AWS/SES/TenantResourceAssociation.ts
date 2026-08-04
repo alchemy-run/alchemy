@@ -56,6 +56,43 @@ export interface TenantResourceAssociation extends Resource<
  *   resourceArn: identity.identityArn,
  * });
  * ```
+ *
+ * @example Associate a Configuration Set
+ * ```typescript
+ * const configSet = yield* SES.ConfigurationSet("AcmeTracking", {});
+ * yield* SES.TenantResourceAssociation("ConfigSetLink", {
+ *   tenantName: tenant.tenantName,
+ *   resourceArn: configSet.configurationSetArn,
+ * });
+ * ```
+ *
+ * @example Associate an Email Template
+ * ```typescript
+ * const template = yield* SES.EmailTemplate("Welcome", {
+ *   subject: "Welcome, {{name}}!",
+ *   text: "Thanks for signing up, {{name}}.",
+ * });
+ * yield* SES.TenantResourceAssociation("TemplateLink", {
+ *   tenantName: tenant.tenantName,
+ *   resourceArn: template.templateArn,
+ * });
+ * ```
+ *
+ * @example Share One Identity Across Two Tenants
+ * ```typescript
+ * // A resource can belong to any number of tenants.
+ * const acme = yield* SES.Tenant("Acme", {});
+ * const globex = yield* SES.Tenant("Globex", {});
+ *
+ * yield* SES.TenantResourceAssociation("AcmeSender", {
+ *   tenantName: acme.tenantName,
+ *   resourceArn: identity.identityArn,
+ * });
+ * yield* SES.TenantResourceAssociation("GlobexSender", {
+ *   tenantName: globex.tenantName,
+ *   resourceArn: identity.identityArn,
+ * });
+ * ```
  */
 export const TenantResourceAssociation = Resource<TenantResourceAssociation>(
   "AWS.SES.TenantResourceAssociation",

@@ -81,6 +81,27 @@ export interface Contact extends Resource<
  *   ],
  * });
  * ```
+ *
+ * @example Unsubscribe a Contact from Everything
+ * ```typescript
+ * // unsubscribeAll overrides every per-topic preference.
+ * const contact = yield* SES.Contact("Subscriber", {
+ *   contactListName: list.contactListName,
+ *   emailAddress: "reader@example.com",
+ *   unsubscribeAll: true,
+ * });
+ * ```
+ *
+ * @section Application Metadata
+ * @example Attach Your Own Data to a Contact
+ * ```typescript
+ * // attributesData is an opaque JSON string SES stores and returns verbatim.
+ * const contact = yield* SES.Contact("Subscriber", {
+ *   contactListName: list.contactListName,
+ *   emailAddress: "reader@example.com",
+ *   attributesData: JSON.stringify({ plan: "pro", signupSource: "docs" }),
+ * });
+ * ```
  */
 export const Contact = Resource<Contact>("AWS.SES.Contact");
 

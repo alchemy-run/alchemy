@@ -87,6 +87,57 @@ export interface Tenant extends Resource<
  *   suppressionScope: "TENANT",
  * });
  * ```
+ *
+ * @example Tenant with Tags
+ * ```typescript
+ * const tenant = yield* SES.Tenant("CustomerA", {
+ *   tags: { Customer: "acme", CostCenter: "growth" },
+ * });
+ * ```
+ *
+ * @section Associating Resources
+ * @example Give the Tenant an Identity, Config Set, and Template
+ * ```typescript
+ * const tenant = yield* SES.Tenant("CustomerA", {});
+ * const identity = yield* SES.EmailIdentity("Sender", {
+ *   emailIdentity: "mail.acme.example.com",
+ * });
+ * const configSet = yield* SES.ConfigurationSet("AcmeTracking", {});
+ *
+ * // A resource must be associated before the tenant can send with it.
+ * yield* SES.TenantResourceAssociation("AcmeIdentity", {
+ *   tenantName: tenant.tenantName,
+ *   resourceArn: identity.identityArn,
+ * });
+ * yield* SES.TenantResourceAssociation("AcmeConfigSet", {
+ *   tenantName: tenant.tenantName,
+ *   resourceArn: configSet.configurationSetArn,
+ * });
+ * ```
+ *
+ * @section Tenant Suppression Lists
+ * @example Read and Write the Tenant's Own Suppression List
+ * ```typescript
+ * // With suppressionScope: "TENANT" the list is separate from the account's.
+ * const tenant = yield* SES.Tenant("CustomerA", {
+ *   suppressedReasons: ["BOUNCE", "COMPLAINT"],
+ *   suppressionScope: "TENANT",
+ * });
+ *
+ * // init — account-level bindings, scoped per call via TenantName
+ * const suppress = yield* SES.PutSuppressedDestination();
+ * const listSuppressed = yield* SES.ListSuppressedDestinations();
+ *
+ * // runtime
+ * yield* suppress({
+ *   EmailAddress: "hard-bounce@example.com",
+ *   Reason: "BOUNCE",
+ *   TenantName: yield* tenant.tenantName,
+ * });
+ * const { SuppressedDestinationSummaries } = yield* listSuppressed({
+ *   TenantName: yield* tenant.tenantName,
+ * });
+ * ```
  */
 export const Tenant = Resource<Tenant>("AWS.SES.Tenant");
 

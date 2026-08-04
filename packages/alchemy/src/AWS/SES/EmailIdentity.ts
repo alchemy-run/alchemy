@@ -131,6 +131,40 @@ export interface EmailIdentity extends Resource<
  * });
  * ```
  *
+ * @section DKIM and Feedback
+ * @example Turn Easy DKIM Signing Off
+ * ```typescript
+ * // Omit the prop entirely to leave SES's current setting alone.
+ * const identity = yield* SES.EmailIdentity("Sender", {
+ *   emailIdentity: "mail.example.com",
+ *   dkimSigningEnabled: false,
+ * });
+ * ```
+ *
+ * @example Stop Forwarding Bounces and Complaints by Email
+ * ```typescript
+ * // Turn this off once a configuration set event destination is handling
+ * // bounces and complaints, so they stop arriving as mail.
+ * const identity = yield* SES.EmailIdentity("Sender", {
+ *   emailIdentity: "mail.example.com",
+ *   feedbackForwardingEnabled: false,
+ * });
+ * ```
+ *
+ * @section Custom MAIL FROM Domain
+ * @example Send with Your Own Envelope Domain
+ * ```typescript
+ * // mailFromDomain must be a subdomain of the identity, and needs MX and
+ * // SPF records published before SES will use it.
+ * const identity = yield* SES.EmailIdentity("Sender", {
+ *   emailIdentity: "mail.example.com",
+ *   mailFromDomain: "bounce.mail.example.com",
+ *   // Reject rather than silently falling back to the SES default when the
+ *   // MX record cannot be read.
+ *   mailFromBehaviorOnMxFailure: "REJECT_MESSAGE",
+ * });
+ * ```
+ *
  * @section Sending Email at Runtime
  * @example Send Through the Identity from a Lambda Function
  * ```typescript

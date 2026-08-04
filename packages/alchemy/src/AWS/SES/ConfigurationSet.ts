@@ -142,6 +142,27 @@ export interface ConfigurationSet extends Resource<
  * });
  * ```
  *
+ * @section Open and Click Tracking
+ * @example Host Tracking Links on Your Own Domain
+ * ```typescript
+ * // The redirect domain must be a verified subdomain you own with a valid
+ * // certificate. Without it SES uses its own tracking domain.
+ * const configSet = yield* SES.ConfigurationSet("Tracked", {
+ *   customRedirectDomain: "links.example.com",
+ *   trackingHttpsPolicy: "REQUIRE",
+ * });
+ * ```
+ *
+ * @section Virtual Deliverability Manager
+ * @example Collect Engagement Metrics for This Configuration Set
+ * ```typescript
+ * // Requires account-level VDM — see SES.AccountSettings.
+ * const configSet = yield* SES.ConfigurationSet("Measured", {
+ *   vdmDashboardEngagementMetrics: "ENABLED",
+ *   vdmGuardianOptimizedSharedDelivery: "ENABLED",
+ * });
+ * ```
+ *
  * @section Event Destinations
  * @example Stream Events to SNS
  * ```typescript

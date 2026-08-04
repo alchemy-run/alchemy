@@ -105,6 +105,36 @@ export interface AccountSettings extends Resource<
  *   suppression: { suppressedReasons: ["BOUNCE", "COMPLAINT"] },
  * });
  * ```
+ *
+ * @example Enable Guardian Optimized Shared Delivery
+ * ```typescript
+ * const settings = yield* SES.AccountSettings("Account", {
+ *   vdm: {
+ *     enabled: "ENABLED",
+ *     guardianOptimizedSharedDelivery: "ENABLED",
+ *   },
+ * });
+ * ```
+ *
+ * @section Pausing Account-Wide Sending
+ * @example Stop All Sending for the Account
+ * ```typescript
+ * // WARNING: this halts every outbound email in the account, including mail
+ * // sent by stacks and systems outside this one. Prefer a configuration
+ * // set's sendingEnabled to pause a single sending path.
+ * const settings = yield* SES.AccountSettings("Account", {
+ *   sendingEnabled: false,
+ * });
+ * ```
+ *
+ * @example Manage Only VDM and Leave Sending Alone
+ * ```typescript
+ * // Omitted aspects are never touched — this deploy will not read or write
+ * // the account's sending status or suppression list.
+ * const settings = yield* SES.AccountSettings("Account", {
+ *   vdm: { enabled: "ENABLED" },
+ * });
+ * ```
  */
 export const AccountSettings = Resource<AccountSettings>(
   "AWS.SES.AccountSettings",

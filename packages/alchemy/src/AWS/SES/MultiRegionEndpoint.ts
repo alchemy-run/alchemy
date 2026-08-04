@@ -94,6 +94,50 @@ export interface MultiRegionEndpoint extends Resource<
  *   details: { routesDetails: [{ region: "eu-west-1" }] },
  * });
  * ```
+ *
+ * @example Three-Region Endpoint
+ * ```typescript
+ * // Traffic is split across the primary region plus every listed route.
+ * const endpoint = yield* SES.MultiRegionEndpoint("Global", {
+ *   details: {
+ *     routesDetails: [
+ *       { region: "eu-west-1" },
+ *       { region: "ap-southeast-2" },
+ *     ],
+ *   },
+ * });
+ * ```
+ *
+ * @example Explicit Endpoint Name
+ * ```typescript
+ * const endpoint = yield* SES.MultiRegionEndpoint("Global", {
+ *   endpointName: "acme-global",
+ *   details: { routesDetails: [{ region: "eu-west-1" }] },
+ * });
+ * ```
+ *
+ * @section Waiting for READY
+ * @example Poll Until the Endpoint Is Usable
+ * ```typescript
+ * import * as sesv2 from "@distilled.cloud/aws/sesv2";
+ * import * as Schedule from "effect/Schedule";
+ *
+ * const endpoint = yield* SES.MultiRegionEndpoint("Global", {
+ *   details: { routesDetails: [{ region: "eu-west-1" }] },
+ * });
+ *
+ * // Reconcile returns as soon as SES accepts the create, so status is
+ * // usually CREATING. Poll yourself when you need to block on readiness.
+ * const ready = yield* sesv2
+ *   .getMultiRegionEndpoint({ EndpointName: yield* endpoint.endpointName })
+ *   .pipe(
+ *     Effect.repeat({
+ *       schedule: Schedule.spaced("30 seconds"),
+ *       until: (r) => r.Status === "READY",
+ *       times: 40,
+ *     }),
+ *   );
+ * ```
  */
 export const MultiRegionEndpoint = Resource<MultiRegionEndpoint>(
   "AWS.SES.MultiRegionEndpoint",

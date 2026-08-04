@@ -78,6 +78,59 @@ export interface EmailIdentityPolicy extends Resource<
  *   },
  * });
  * ```
+ *
+ * @example Explicit Policy Name
+ * ```typescript
+ * // Without policyName a deterministic name is derived from app/stage/id.
+ * const policy = yield* SES.EmailIdentityPolicy("AllowPartner", {
+ *   emailIdentity: identity.emailIdentity,
+ *   policyName: "partner-send",
+ *   policy: { Version: "2012-10-17", Statement: [] },
+ * });
+ * ```
+ *
+ * @example Restrict the Grant with Conditions
+ * ```typescript
+ * const policy = yield* SES.EmailIdentityPolicy("AllowPartnerScoped", {
+ *   emailIdentity: identity.emailIdentity,
+ *   policy: {
+ *     Version: "2012-10-17",
+ *     Statement: [
+ *       {
+ *         Effect: "Allow",
+ *         Principal: { AWS: "arn:aws:iam::111122223333:root" },
+ *         Action: ["ses:SendEmail", "ses:SendRawEmail"],
+ *         Resource: identity.identityArn,
+ *         Condition: {
+ *           StringEquals: { "ses:FromAddress": "noreply@mail.example.com" },
+ *         },
+ *       },
+ *     ],
+ *   },
+ * });
+ * ```
+ *
+ * @example Several Policies on One Identity
+ * ```typescript
+ * // Each policy is a separate resource keyed by its own name.
+ * for (const partner of ["111122223333", "444455556666"]) {
+ *   yield* SES.EmailIdentityPolicy(`Allow${partner}`, {
+ *     emailIdentity: identity.emailIdentity,
+ *     policyName: `partner-${partner}`,
+ *     policy: {
+ *       Version: "2012-10-17",
+ *       Statement: [
+ *         {
+ *           Effect: "Allow",
+ *           Principal: { AWS: `arn:aws:iam::${partner}:root` },
+ *           Action: ["ses:SendEmail"],
+ *           Resource: identity.identityArn,
+ *         },
+ *       ],
+ *     },
+ *   });
+ * }
+ * ```
  */
 export const EmailIdentityPolicy = Resource<EmailIdentityPolicy>(
   "AWS.SES.EmailIdentityPolicy",

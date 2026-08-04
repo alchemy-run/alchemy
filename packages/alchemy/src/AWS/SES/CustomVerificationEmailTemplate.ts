@@ -73,6 +73,34 @@ export interface CustomVerificationEmailTemplate extends Resource<
  *   failureRedirectionURL: "https://example.com/verify-failed",
  * });
  * ```
+ *
+ * @example Explicit Template Name
+ * ```typescript
+ * // Without templateName a deterministic name is derived from app/stage/id.
+ * const template = yield* SES.CustomVerificationEmailTemplate("Verify", {
+ *   templateName: "onboarding-verification",
+ *   fromEmailAddress: "verify@example.com",
+ *   templateSubject: "Please confirm your email",
+ *   templateContent:
+ *     "<html><body>Click the link to verify your address.</body></html>",
+ *   successRedirectionURL: "https://example.com/verified",
+ *   failureRedirectionURL: "https://example.com/verify-failed",
+ * });
+ * ```
+ *
+ * @section Sending the Verification Email
+ * @example Verify a New Address from a Lambda Function
+ * ```typescript
+ * // init — account-level binding, no resource argument
+ * const sendVerification = yield* SES.SendCustomVerificationEmail();
+ *
+ * // runtime — SES emails the branded template to the address, and the
+ * // address becomes a verified identity once the recipient clicks through.
+ * const { MessageId } = yield* sendVerification({
+ *   EmailAddress: "new-user@example.com",
+ *   TemplateName: yield* template.templateName,
+ * });
+ * ```
  */
 export const CustomVerificationEmailTemplate =
   Resource<CustomVerificationEmailTemplate>(
