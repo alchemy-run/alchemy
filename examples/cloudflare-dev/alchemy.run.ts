@@ -42,8 +42,25 @@ const TailWorker = Effect.gen(function* () {
   });
 });
 
+/**
+ * Streaming tail consumer: listed in AsyncWorker's `streamingTailConsumers`,
+ * its `tailStream()` receives each invocation's events live (onset → log →
+ * outcome) and records completed sessions into KV, exposed over
+ * `GET /events`.
+ */
+const StreamTailWorker = Effect.gen(function* () {
+  const events = yield* Cloudflare.KV.Namespace("StreamTailEvents");
+  return yield* Cloudflare.Worker("StreamTailWorker", {
+    main: "./src/StreamTailWorker.ts",
+    env: {
+      EVENTS: events,
+    },
+  });
+});
+
 const AsyncWorker = (deps: {
   tailWorker: Cloudflare.Worker;
+  streamTailWorker: Cloudflare.Worker;
   liveKv: Cloudflare.KV.Namespace;
 }) =>
   Effect.gen(function* () {
@@ -63,6 +80,9 @@ const AsyncWorker = (deps: {
       // Every invocation of this worker delivers a trace batch (console
       // logs, outcome) to the tail worker.
       tailConsumers: [deps.tailWorker],
+      // ... and streams the same invocation's events live (onset → log →
+      // outcome) to the streaming tail worker's `tailStream()` handler.
+      streamingTailConsumers: [deps.streamTailWorker],
       env: {
         COUNTER: Cloudflare.DurableObject<Counter>("Counter", {
           className: "Counter",
@@ -158,10 +178,15 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const tailWorker = yield* TailWorker;
+    const streamTailWorker = yield* StreamTailWorker;
     const liveKv = yield* Cloudflare.KV.Namespace("LiveKV").pipe(
       Alchemy.remote(),
     );
-    const asyncWorker = yield* AsyncWorker({ tailWorker, liveKv });
+    const asyncWorker = yield* AsyncWorker({
+      tailWorker,
+      streamTailWorker,
+      liveKv,
+    });
     const effectWorker = yield* EffectWorker;
     const media = yield* MediaWorker;
     const inboxWorker = yield* InboxWorker;
@@ -174,6 +199,7 @@ export default Alchemy.Stack(
       effectWorker: effectWorker.url,
       mediaWorker: media.worker.url,
       tailWorker: tailWorker.url,
+      streamTailWorker: streamTailWorker.url,
       inboxWorker: inboxWorker.url,
       // `dev:`-prefixed ids mean "locally emulated"; LiveKV must NOT carry
       // one (it's a real cloud namespace, even during dev).

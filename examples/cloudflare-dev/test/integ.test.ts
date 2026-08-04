@@ -31,6 +31,7 @@ const stack = beforeAll(
           effectWorker,
           mediaWorker,
           tailWorker,
+          streamTailWorker,
           inboxWorker,
           liveKvNamespaceId,
           secretsStoreId,
@@ -40,13 +41,21 @@ const stack = beforeAll(
         assert(typeof effectWorker === "string");
         assert(typeof mediaWorker === "string");
         assert(typeof tailWorker === "string");
+        assert(typeof streamTailWorker === "string");
         assert(typeof inboxWorker === "string");
         assert(typeof liveKvNamespaceId === "string");
         assert(typeof secretsStoreId === "string");
         assert(typeof secretsSecretId === "string");
         const hyperdrive = (outputs as { hyperdrive?: string }).hyperdrive;
         yield* Effect.forEach(
-          [asyncWorker, effectWorker, mediaWorker, tailWorker, inboxWorker],
+          [
+            asyncWorker,
+            effectWorker,
+            mediaWorker,
+            tailWorker,
+            streamTailWorker,
+            inboxWorker,
+          ],
           (url) =>
             HttpClient.get(url).pipe(
               Effect.flatMap(HttpClientResponse.filterStatusOk),
@@ -63,6 +72,7 @@ const stack = beforeAll(
           effectWorker,
           mediaWorker,
           tailWorker,
+          streamTailWorker,
           inboxWorker,
           liveKvNamespaceId,
           secretsStoreId,
@@ -155,8 +165,14 @@ const findEmlContaining = (needle: string) =>
 test(
   "deploys all workers with URLs",
   Effect.gen(function* () {
-    const { asyncWorker, effectWorker, mediaWorker, tailWorker, inboxWorker } =
-      yield* stack;
+    const {
+      asyncWorker,
+      effectWorker,
+      mediaWorker,
+      tailWorker,
+      streamTailWorker,
+      inboxWorker,
+    } = yield* stack;
 
     // Local dev proxy URLs — proof no cloud deploy ran for the workers.
     for (const url of [
@@ -164,6 +180,7 @@ test(
       effectWorker,
       mediaWorker,
       tailWorker,
+      streamTailWorker,
       inboxWorker,
     ]) {
       expect(url).toBeString();
@@ -548,6 +565,65 @@ test(
         ),
       ),
     ).toBe(true);
+  }),
+  { timeout: 60_000 },
+);
+
+/**
+ * streamingTailConsumers: AsyncWorker lists StreamTailWorker as a streaming
+ * tail consumer, so every invocation opens a streaming session against its
+ * `tailStream()` handler — onset delivered while the producer is still
+ * executing, then each event live, ending with the terminal `outcome` — and
+ * the completed session is recorded into KV. Each poll re-invokes the
+ * producer so an early dropped session (registry still warming) doesn't
+ * strand the test.
+ */
+test(
+  "StreamTailWorker streams AsyncWorker's invocation events",
+  Effect.gen(function* () {
+    const { asyncWorker, streamTailWorker } = yield* stack;
+
+    const sessions = yield* Effect.gen(function* () {
+      yield* HttpClient.get(new URL("/tail-ping", asyncWorker)).pipe(
+        Effect.flatMap((res) => res.text),
+        Effect.orDie,
+      );
+      const res = yield* HttpClient.get(new URL("/events", streamTailWorker));
+      if (res.status !== 200) return [] as string[];
+      const body = (yield* res.json) as { sessions?: unknown };
+      return Array.isArray(body.sessions) ? (body.sessions as string[]) : [];
+    }).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("1 second"),
+        until: (sessions): boolean =>
+          sessions.some((session) =>
+            session.includes("cloudflare-dev-tail-marker"),
+          ),
+        times: 20,
+      }),
+    );
+
+    const session = sessions.find((s) =>
+      s.includes("cloudflare-dev-tail-marker"),
+    );
+    expect(session).toBeDefined();
+    const events = JSON.parse(session!) as {
+      event?: { type?: string; outcome?: string; message?: unknown };
+    }[];
+    const types = events.map((tailEvent) => tailEvent.event?.type);
+    expect(types).toContain("onset");
+    expect(types).toContain("outcome");
+    const log = events.find(
+      (tailEvent) =>
+        tailEvent.event?.type === "log" &&
+        Array.isArray(tailEvent.event?.message) &&
+        tailEvent.event.message.includes("cloudflare-dev-tail-marker"),
+    );
+    expect(log).toBeDefined();
+    const outcome = events.find(
+      (tailEvent) => tailEvent.event?.type === "outcome",
+    );
+    expect(outcome?.event?.outcome).toBe("ok");
   }),
   { timeout: 60_000 },
 );
