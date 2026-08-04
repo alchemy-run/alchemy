@@ -1,0 +1,35 @@
+{
+  "name": "cloudflare-spacetimedb-todo",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "alchemy dev",
+    "build": "vite build",
+    "deploy": "alchemy deploy",
+    "destroy": "alchemy destroy",
+    "generate": "spacetime generate --lang typescript --out-dir ./src/module_bindings --module-path ./spacetimedb --yes",
+    "spacetime:publish": "spacetime publish alchemy-todo --module-path ./spacetimedb --yes=all"
+  },
+  "dependencies": {
+    "alchemy": "workspace:*",
+    "effect": "catalog:",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "spacetimedb": "2.7.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "examples/cloudflare-spacetimedb-todo"
+  }
+}

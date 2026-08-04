@@ -1,0 +1,218 @@
+---
+title: Getting started with SpacetimeDB
+description: Build, generate bindings, connect from a Worker, and ship a Vite SPA — the todo example end-to-end.
+---
+
+This walkthrough ships the `cloudflare-spacetimedb-todo` example
+end-to-end: declare a `Database`, generate TypeScript bindings,
+expose connection coordinates to a Cloudflare Worker, and inline
+them into a Vite SPA. Every step is one concept per `##` heading so
+you can paste-and-run as you go.
+
+The full example lives at
+[`examples/cloudflare-spacetimedb-todo`](https://github.com/sam-goodwin/alchemy/tree/main/examples/cloudflare-spacetimedb-todo)
+in the repo.
+
+## Install the SpacetimeDB CLI
+
+```bash
+curl -sSf https://install.spacetimedb.com | sh
+export PATH="$HOME/.local/bin:$PATH"
+spacetime --version
+```
+
+The CLI is required at deploy time for `SpacetimeDB.Database` and
+`SpacetimeDB.Generate`. `alchemy dev` invokes
+`spacetime dev --server-only`.
+
+## Mint a Maincloud token
+
+```bash
+spacetime login show --token
+```
+
+Set the token in your shell (or `.env`):
+
+```bash
+export SPACETIMEDB_TOKEN="<token>"
+```
+
+`SpacetimeDB.providers()` reads it automatically.
+
+## Create the project
+
+Start a fresh alchemy app (or reuse an existing one):
+
+```bash
+mkdir alchemy-spacetimedb-todo && cd alchemy-spacetimedb-todo
+bun init -y
+bun add alchemy effect spacetimedb
+```
+
+## Declare the Database
+
+`Database` is the single resource that publishes the module. Point
+`modulePath` at a directory with a `Cargo.toml` (Rust) or
+`package.json` (TypeScript) module:
+
+```diff lang="typescript" title="alchemy.run.ts"
++import * as SpacetimeDB from "alchemy/spacetimeDB";
+ import { Alchemy } from "alchemy";
+
+ export const app = await Alchemy({
+   name: "spacetimedb-todo",
+-  providers: {},
++  providers: { ...SpacetimeDB.providers() },
+   phase: process.argv.includes("--destroy") ? "destroy" : "up",
+ }, async () => {
++  const db = yield* SpacetimeDB.Database("Todos", {
++    modulePath: "./spacetimedb",
++  });
++
++  return { db };
+ });
+```
+
+`alchemy apply` publishes the module to Maincloud and returns
+`db.uri`, `db.databaseIdentity`, `db.moduleContentHash`, etc.
+
+## Generate TypeScript bindings
+
+`Generate` runs `spacetime generate` so the client always has fresh
+typed tables/reducers. Pair it with the same `modulePath` as
+`Database`:
+
+```diff lang="typescript" title="alchemy.run.ts"
+-  const db = yield* SpacetimeDB.Database("Todos", {
+-    modulePath: "./spacetimedb",
+-  });
+-
+-  return { db };
++  const db = yield* SpacetimeDB.Database("Todos", {
++    modulePath: "./spacetimedb",
++  });
++
++  yield* SpacetimeDB.Generate("Bindings", {
++    lang: "typescript",
++    outDir: "./src/module_bindings",
++    modulePath: "./spacetimedb",
++  });
++
++  return { db };
+```
+
+After `alchemy apply`, `./src/module_bindings/` contains `DbConnection`,
+`todo`, `Reducer` types, and table interfaces.
+
+## Expose connection to a Worker
+
+A Cloudflare Worker can connect to SpacetimeDB directly via the
+generated `DbConnection`. Pass the `Database` resource through
+`bindings` — alchemy wires the connection coordinates as env vars:
+
+```diff lang="typescript" title="alchemy.run.ts"
++import { Worker } from "alchemy/cloudflare";
+
+-  return { db };
++  const api = yield* Worker("Api", {
++    bindings: { SPACETIMEDB: db },
++  });
++
++  return { db, api };
+```
+
+Inside the Worker, build a `DbConnection` from the typed binding:
+
+```typescript title="worker/api.ts"
+import * as Effect from "effect/Effect";
+import { env } from "cloudflare:workers";
+import { DbConnection } from "../module_bindings";
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const conn = DbConnection.builder()
+      .withUri(env.SPACETIMEDB_URI)
+      .withDatabaseName(env.SPACETIMEDB_DATABASE_NAME)
+      .withToken(env.SPACETIMEDB_TOKEN)
+      .onConnect((c) => console.log("connected", c.identity.toHexString()))
+      .build();
+    return new Response(`identity=${conn.identity?.toHexString()}`);
+  },
+};
+```
+
+## Inline coordinates into a Vite SPA
+
+For SPAs, inlining the coordinates at build time avoids round-trips
+through the API. Spread `SpacetimeDB.viteEnv(db)` into
+`Cloudflare.Website.Vite(...).env`:
+
+```diff lang="typescript" title="alchemy.run.ts"
++import { Website } from "alchemy/cloudflare";
+
+-  return { db, api };
++  const web = yield* Website.Vite("Web", {
++    env: { ...SpacetimeDB.viteEnv(db) },
++  });
++
++  return { db, api, web };
+```
+
+In the SPA, read them via `import.meta.env.VITE_SPACETIMEDB_*`.
+
+## Run locally with hot-reload
+
+```bash
+bun alchemy dev
+```
+
+`alchemy dev` starts `spacetime dev --server-only` on
+`127.0.0.1:3000`, watches `spacetimedb/`, and binds the SPA / Worker
+to localhost. Edits to module sources hot-reload into the running
+database.
+
+## Deploy to Maincloud
+
+```bash
+bun alchemy deploy
+```
+
+This publishes the module to Maincloud using your
+`SPACETIMEDB_TOKEN`, deploys the Worker, and ships the SPA to
+Cloudflare Pages. The dashboard URL is exposed on the database
+output:
+
+```typescript
+console.log(db.dashboardUrl); // → https://spacetimedb.com/<name>
+```
+
+## Persist identity tokens in the browser
+
+When using SpacetimeAuth, the SPA receives an OIDC token per user.
+`SpacetimeDB.withTokenPersistence` wraps the `DbConnection.builder()`
+chain so the token survives page reloads via `localStorage` (or
+your custom `BrowserStorage`):
+
+```typescript title="src/App.tsx"
+import { DbConnection } from "./module_bindings";
+import { withTokenPersistence } from "alchemy/spacetimeDB";
+
+const conn = withTokenPersistence(
+  DbConnection.builder()
+    .withUri(import.meta.env.VITE_SPACETIMEDB_URI)
+    .withDatabaseName(import.meta.env.VITE_SPACETIMEDB_DATABASE_NAME),
+  {
+    storage: globalThis.localStorage,
+  },
+).build();
+```
+
+## Next steps
+
+- [Database API reference](/providers/spacetimedb/database) — props,
+  attributes, removal policy.
+- [Connect runtime](/spacetimedb/connect-runtime) — typed
+  `Connection<C>("name")` lookups and `makeConnectionLayer` for
+  Worker-side connections.
+- [Removal policy](/spacetimedb/index#removal-policy) — opt in to
+  `destroy()` for ephemeral databases.
