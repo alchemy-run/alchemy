@@ -26,10 +26,15 @@ export interface SigningCertificate extends Resource<
   "AWS.IAM.SigningCertificate",
   SigningCertificateProps,
   {
+    /** The IAM user the signing certificate belongs to. */
     userName: string;
+    /** The unique ID of the signing certificate. */
     certificateId: string;
+    /** The PEM-encoded certificate body. */
     certificateBody: string;
+    /** Whether the certificate is `Active` or `Inactive`. */
     status: iam.StatusType;
+    /** When the certificate was uploaded. */
     uploadDate: Date | undefined;
   },
   never,

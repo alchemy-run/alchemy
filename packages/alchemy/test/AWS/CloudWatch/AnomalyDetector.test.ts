@@ -1,8 +1,8 @@
 import { AnomalyDetector } from "@/AWS/CloudWatch";
 import * as AWS from "@/AWS";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -37,6 +37,13 @@ test.provider(
       expect(all.some((d) => d.detectorId === detector.detectorId)).toBe(true);
 
       yield* stack.destroy();
+
+      // Out-of-band assert-gone: the exhaustively-paginated live listing no
+      // longer contains the detector after the final destroy.
+      const after = yield* provider.list();
+      expect(after.some((d) => d.detectorId === detector.detectorId)).toBe(
+        false,
+      );
     }),
   { timeout: 240_000 },
 );

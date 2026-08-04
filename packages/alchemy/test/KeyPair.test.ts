@@ -2,8 +2,8 @@ import * as NodeCrypto from "node:crypto";
 import { KeyPair, KeyPairProvider } from "@/KeyPair";
 import * as Provider from "@/Provider";
 import { inMemoryState } from "@/State";
-import * as Test from "@/Test/Vitest";
-import { describe, expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 

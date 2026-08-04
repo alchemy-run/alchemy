@@ -50,6 +50,32 @@ export type ApplicationDestination =
     }
   | { type: "via_mcp_server_portal"; mcpServerId: string };
 
+/**
+ * Configuration for an OAuth authorization flow managed by Cloudflare Access.
+ */
+export interface OAuthConfiguration {
+  /** Whether Access acts as the OAuth authorization server. */
+  enabled?: boolean;
+  /** OAuth grant and token lifetimes. */
+  grant?: {
+    /** Lifetime of issued access tokens, as a Go-style duration. */
+    accessTokenLifetime?: string;
+    /** Lifetime of the authorization session, as a Go-style duration. */
+    sessionDuration?: string;
+  };
+  /** Settings for OAuth dynamic client registration. */
+  dynamicClientRegistration?: {
+    /** Whether dynamic client registration is enabled. */
+    enabled?: boolean;
+    /** Explicit redirect URIs that dynamically registered clients may use. */
+    allowedUris?: ReadonlyArray<string>;
+    /** Whether any localhost redirect URI is allowed. */
+    allowAnyOnLocalhost?: boolean;
+    /** Whether any loopback-address redirect URI is allowed. */
+    allowAnyOnLoopback?: boolean;
+  };
+}
+
 export interface ApplicationProps {
   /**
    * The Access application type.
@@ -91,6 +117,12 @@ export interface ApplicationProps {
    * ```
    */
   destinations?: ReadonlyArray<ApplicationDestination>;
+  /**
+   * Optional OAuth authorization-server configuration managed by Access.
+   * Use this for non-browser clients such as MCP clients that authenticate
+   * through OAuth and may register redirect URIs dynamically.
+   */
+  oauthConfiguration?: OAuthConfiguration;
   /**
    * Token TTL for sessions issued by this application. Accepts Go-style
    * duration strings, e.g. `"24h"`, `"720h"`, `"2h45m"`.
@@ -171,6 +203,8 @@ export interface ApplicationAttributes {
   domain: string;
   /** Resolved destinations (echoed back by Cloudflare). */
   destinations: ReadonlyArray<ApplicationDestination> | undefined;
+  /** Resolved managed OAuth configuration. */
+  oauthConfiguration: OAuthConfiguration | undefined;
   /** Application type. */
   type: ApplicationType;
   /** Display name (resolved). */
@@ -218,6 +252,26 @@ export type Application = Resource<
  *   domain: "dashboard.example.com",
  *   sessionDuration: "24h",
  *   policies: [allowMyOrg.policyId],
+ * });
+ * ```
+ *
+ * @example Managed OAuth for an MCP server
+ * ```typescript
+ * const app = yield* Cloudflare.Access.Application("McpServer", {
+ *   type: "self_hosted",
+ *   domain: "mcp.example.com",
+ *   oauthConfiguration: {
+ *     enabled: true,
+ *     grant: {
+ *       sessionDuration: "24h",
+ *       accessTokenLifetime: "15m",
+ *     },
+ *     dynamicClientRegistration: {
+ *       enabled: true,
+ *       allowAnyOnLocalhost: true,
+ *       allowAnyOnLoopback: true,
+ *     },
+ *   },
  * });
  * ```
  *
@@ -347,6 +401,9 @@ export const ApplicationProvider = () =>
         aud: observed.aud,
         domain,
         destinations: observed.destinations ?? output?.destinations,
+        // Live cloud state is authoritative. In particular, do not resurrect
+        // a persisted configuration when Cloudflare explicitly returns null.
+        oauthConfiguration: observed.oauthConfiguration,
         type: observed.type,
         name,
         accountId: output?.accountId ?? accountId,
@@ -387,12 +444,7 @@ export const ApplicationProvider = () =>
         const created = yield* zeroTrust
           .createAccessApplicationForAccount({
             accountId,
-            // Cloudflare requires a `domain` body field, but ignores it for
-            // warp (auto-set). Sending an empty string is safe and keeps
-            // distilled's request shape valid for the non-warp case where
-            // the caller forgot to pass one — server validation will then
-            // reject with a clear error rather than a TypeScript surprise.
-            domain: body.domain ?? "",
+            domain: body.domain,
             type: news.type,
             name: resolvedName,
             sessionDuration: body.sessionDuration,
@@ -408,6 +460,9 @@ export const ApplicationProvider = () =>
               body.destinations === undefined
                 ? undefined
                 : Array.from(body.destinations),
+            oauthConfiguration: toRequestOAuthConfiguration(
+              body.oauthConfiguration,
+            ),
           })
           .pipe(
             // A referenced policy may be propagating, or the call may be
@@ -442,7 +497,7 @@ export const ApplicationProvider = () =>
           .updateAccessApplicationForAccount({
             accountId,
             appId: observed.id,
-            domain: body.domain ?? observed.domain ?? "",
+            domain: body.domain ?? observed.domain,
             type: news.type,
             name: resolvedName,
             sessionDuration: body.sessionDuration,
@@ -458,6 +513,15 @@ export const ApplicationProvider = () =>
               body.destinations === undefined
                 ? undefined
                 : Array.from(body.destinations),
+            // Preserve a live managed OAuth configuration when the caller
+            // does not manage it but another mutable field triggers this
+            // PUT-style update.
+            oauthConfiguration: toRequestOAuthConfiguration(
+              mergeOAuthConfiguration(
+                observed.oauthConfiguration,
+                body.oauthConfiguration,
+              ),
+            ),
           })
           // A just-added policy reference may still be propagating, or the
           // call may be throttled (403) — ride out both.
@@ -478,6 +542,10 @@ export const ApplicationProvider = () =>
         aud: observed.aud,
         domain: observed.domain ?? body.domain ?? "",
         destinations: observed.destinations ?? body.destinations,
+        // Keep the provider output cloud-authoritative. If Cloudflare rejects
+        // or clears the desired configuration, do not mask that drift with
+        // the request body.
+        oauthConfiguration: observed.oauthConfiguration,
         type: observed.type,
         name: observed.name ?? resolvedName,
         accountId,
@@ -513,6 +581,7 @@ export const ApplicationProvider = () =>
                     aud: app.aud,
                     domain: app.domain ?? "",
                     destinations: app.destinations,
+                    oauthConfiguration: app.oauthConfiguration,
                     type: app.type,
                     name: app.name ?? "",
                     accountId,
@@ -632,6 +701,7 @@ interface ObservedApp {
   readonly type?: ApplicationType;
   readonly domain?: string;
   readonly destinations?: ReadonlyArray<ApplicationDestination>;
+  readonly oauthConfiguration?: OAuthConfiguration;
   readonly allowedIdps?: ReadonlyArray<string>;
   readonly autoRedirectToIdentity?: boolean;
   readonly appLauncherVisible?: boolean;
@@ -650,6 +720,51 @@ const undefArr = <T>(
 ): ReadonlyArray<T> | undefined =>
   v == null ? undefined : (v.filter((x) => x != null) as ReadonlyArray<T>);
 
+interface RawOAuthConfiguration {
+  readonly enabled?: boolean | null;
+  readonly grant?: {
+    readonly accessTokenLifetime?: string | null;
+    readonly sessionDuration?: string | null;
+  } | null;
+  readonly dynamicClientRegistration?: {
+    readonly enabled?: boolean | null;
+    readonly allowedUris?: ReadonlyArray<string | null> | null;
+    readonly allowAnyOnLocalhost?: boolean | null;
+    readonly allowAnyOnLoopback?: boolean | null;
+  } | null;
+}
+
+const narrowOAuthConfiguration = (
+  raw: RawOAuthConfiguration | null | undefined,
+): OAuthConfiguration | undefined =>
+  raw == null
+    ? undefined
+    : {
+        enabled: undef(raw.enabled),
+        grant:
+          raw.grant == null
+            ? undefined
+            : {
+                accessTokenLifetime: undef(raw.grant.accessTokenLifetime),
+                sessionDuration: undef(raw.grant.sessionDuration),
+              },
+        dynamicClientRegistration:
+          raw.dynamicClientRegistration == null
+            ? undefined
+            : {
+                enabled: undef(raw.dynamicClientRegistration.enabled),
+                allowedUris: undefArr(
+                  raw.dynamicClientRegistration.allowedUris,
+                ) as string[] | undefined,
+                allowAnyOnLocalhost: undef(
+                  raw.dynamicClientRegistration.allowAnyOnLocalhost,
+                ),
+                allowAnyOnLoopback: undef(
+                  raw.dynamicClientRegistration.allowAnyOnLoopback,
+                ),
+              },
+      };
+
 const narrowApp = (raw: {
   id?: string | null;
   aud?: string | null;
@@ -657,6 +772,7 @@ const narrowApp = (raw: {
   type?: ApplicationType | null | string;
   domain?: string | null;
   destinations?: ReadonlyArray<unknown> | null;
+  oauthConfiguration?: RawOAuthConfiguration | null;
   allowedIdps?: ReadonlyArray<string> | null;
   autoRedirectToIdentity?: boolean | null;
   appLauncherVisible?: boolean | null;
@@ -675,6 +791,7 @@ const narrowApp = (raw: {
     raw.destinations == null
       ? undefined
       : (raw.destinations as ReadonlyArray<ApplicationDestination>),
+  oauthConfiguration: narrowOAuthConfiguration(raw.oauthConfiguration),
   allowedIdps: undefArr(raw.allowedIdps ?? undefined),
   autoRedirectToIdentity: undef(raw.autoRedirectToIdentity),
   appLauncherVisible: undef(raw.appLauncherVisible),
@@ -729,6 +846,7 @@ type RequestPolicy = Exclude<
 interface AppMutableBody {
   domain?: string;
   destinations?: ReadonlyArray<ApplicationDestination>;
+  oauthConfiguration?: OAuthConfiguration;
   type: ApplicationType;
   name?: string;
   sessionDuration?: string;
@@ -787,6 +905,63 @@ const toRequestPolicies = (
 ): Array<RequestPolicy> | undefined =>
   policies === undefined ? undefined : policies.map(toRequestPolicy);
 
+const mergeOAuthConfiguration = (
+  observed: OAuthConfiguration | undefined,
+  desired: OAuthConfiguration | undefined,
+): OAuthConfiguration | undefined => {
+  if (desired === undefined) return observed;
+  return {
+    enabled: desired.enabled ?? observed?.enabled,
+    grant:
+      desired.grant === undefined
+        ? observed?.grant
+        : {
+            accessTokenLifetime:
+              desired.grant.accessTokenLifetime ??
+              observed?.grant?.accessTokenLifetime,
+            sessionDuration:
+              desired.grant.sessionDuration ?? observed?.grant?.sessionDuration,
+          },
+    dynamicClientRegistration:
+      desired.dynamicClientRegistration === undefined
+        ? observed?.dynamicClientRegistration
+        : {
+            enabled:
+              desired.dynamicClientRegistration.enabled ??
+              observed?.dynamicClientRegistration?.enabled,
+            allowedUris:
+              desired.dynamicClientRegistration.allowedUris ??
+              observed?.dynamicClientRegistration?.allowedUris,
+            allowAnyOnLocalhost:
+              desired.dynamicClientRegistration.allowAnyOnLocalhost ??
+              observed?.dynamicClientRegistration?.allowAnyOnLocalhost,
+            allowAnyOnLoopback:
+              desired.dynamicClientRegistration.allowAnyOnLoopback ??
+              observed?.dynamicClientRegistration?.allowAnyOnLoopback,
+          },
+  };
+};
+
+const toRequestOAuthConfiguration = (
+  config: OAuthConfiguration | undefined,
+): zeroTrust.CreateAccessApplicationForAccountRequest["oauthConfiguration"] =>
+  config === undefined
+    ? undefined
+    : {
+        enabled: config.enabled,
+        grant: config.grant,
+        dynamicClientRegistration:
+          config.dynamicClientRegistration === undefined
+            ? undefined
+            : {
+                ...config.dynamicClientRegistration,
+                allowedUris:
+                  config.dynamicClientRegistration.allowedUris === undefined
+                    ? undefined
+                    : Array.from(config.dynamicClientRegistration.allowedUris),
+              },
+      };
+
 const resolvePolicies = (
   policies: ApplicationProps["policies"],
 ): ReadonlyArray<ResolvedPolicy> | undefined =>
@@ -812,6 +987,9 @@ const buildMutableBody = (
   }
   if (news.destinations !== undefined) {
     body.destinations = news.destinations;
+  }
+  if (news.oauthConfiguration !== undefined) {
+    body.oauthConfiguration = news.oauthConfiguration;
   }
   if (news.sessionDuration !== undefined) {
     body.sessionDuration = news.sessionDuration;
@@ -840,6 +1018,65 @@ const buildMutableBody = (
 
 const jsonEq = <T>(x: T, y: T): boolean =>
   JSON.stringify(x) === JSON.stringify(y);
+
+const oauthConfigurationEquals = (
+  desired: OAuthConfiguration | undefined,
+  observed: OAuthConfiguration | undefined,
+): boolean => {
+  if (desired === undefined) return true;
+  if (observed === undefined) return false;
+  if (desired.enabled !== undefined && desired.enabled !== observed.enabled) {
+    return false;
+  }
+
+  const desiredGrant = desired.grant;
+  if (desiredGrant?.accessTokenLifetime !== undefined) {
+    if (
+      desiredGrant.accessTokenLifetime !== observed.grant?.accessTokenLifetime
+    ) {
+      return false;
+    }
+  }
+  if (desiredGrant?.sessionDuration !== undefined) {
+    if (desiredGrant.sessionDuration !== observed.grant?.sessionDuration) {
+      return false;
+    }
+  }
+
+  const desiredRegistration = desired.dynamicClientRegistration;
+  const observedRegistration = observed.dynamicClientRegistration;
+  if (
+    desiredRegistration?.enabled !== undefined &&
+    desiredRegistration.enabled !== observedRegistration?.enabled
+  ) {
+    return false;
+  }
+  if (
+    desiredRegistration?.allowAnyOnLocalhost !== undefined &&
+    desiredRegistration.allowAnyOnLocalhost !==
+      observedRegistration?.allowAnyOnLocalhost
+  ) {
+    return false;
+  }
+  if (
+    desiredRegistration?.allowAnyOnLoopback !== undefined &&
+    desiredRegistration.allowAnyOnLoopback !==
+      observedRegistration?.allowAnyOnLoopback
+  ) {
+    return false;
+  }
+  if (
+    desiredRegistration?.allowedUris !== undefined &&
+    !arrayEquals(
+      [...desiredRegistration.allowedUris].sort(),
+      [...(observedRegistration?.allowedUris ?? [])].sort(),
+      jsonEq,
+    )
+  ) {
+    return false;
+  }
+  return true;
+};
 
 const policiesEq = (
   desired: ReadonlyArray<ResolvedPolicy> | undefined,
@@ -888,6 +1125,14 @@ const bodyEqualsObserved = (
     desired.destinations !== undefined &&
     JSON.stringify(desired.destinations) !==
       JSON.stringify(observed.destinations ?? [])
+  ) {
+    return false;
+  }
+  if (
+    !oauthConfigurationEquals(
+      desired.oauthConfiguration,
+      observed.oauthConfiguration,
+    )
   ) {
     return false;
   }

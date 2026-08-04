@@ -31,6 +31,21 @@ export class RpcServer extends Context.Service<RpcServer, never>()(
 ) {}
 
 /**
+ * The provider shape served over RPC. The `mode`/`modes` variant machinery
+ * (lazy Layer-built Effects, see `ProviderLayer.dual`) is process-local and
+ * cannot cross the RPC boundary — the sidecar serves the concrete provider
+ * implementation, never the mode-dispatching wrapper. `pricing` is plain
+ * synchronous cost-estimation data/functions (see `../Cost.ts`) — never
+ * Effect/Stream-shaped, so it doesn't fit `RpcWrapped`'s handler recognition
+ * and isn't meaningful to proxy over RPC anyway (it's pure math, identical
+ * regardless of which process evaluates it).
+ */
+export type RpcProviderService<R extends ResourceLike> = Omit<
+  ProviderService<R>,
+  "mode" | "modes" | "pricing"
+>;
+
+/**
  * The RPC API that is implemented by the server and consumed by {@link RpcProviderProxy}.
  */
 export interface RpcProxyApi {
@@ -40,14 +55,7 @@ export interface RpcProxyApi {
    */
   readonly getProvider: <R extends ResourceLike>(
     type: R["Type"],
-    // `pricing` is plain synchronous cost-estimation data/functions (see
-    // `../Cost.ts`) — never Effect/Stream-shaped, so it doesn't fit
-    // `RpcWrapped`'s handler recognition and isn't meaningful to proxy over
-    // RPC anyway (it's pure math, identical regardless of which process
-    // evaluates it). Omitted here rather than taught to `RpcWrapped`.
-  ) => Promise<
-    RpcSerialization.RpcWrapped<Omit<ProviderService<R>, "pricing">>
-  >;
+  ) => Promise<RpcSerialization.RpcWrapped<RpcProviderService<R>>>;
 }
 
 const serverPlatformLayer = platformLayer({
@@ -135,11 +143,19 @@ export const layerServer = (
               if (!provider) {
                 throw new Error(`Provider "${type}" not found`);
               }
-              // See the `pricing` comment on `RpcProxyApi.getProvider` —
-              // stripped here rather than sent over the wire.
-              const { pricing: _pricing, ...rpcSafe } =
-                provider as ProviderService<R>;
-              return RpcSerialization.wrapRpcHandlers(rpcSafe, ["tail"]);
+              // Strip the process-local variant machinery and `pricing`
+              // (see RpcProviderService above) — lazy Effects don't
+              // serialize, and pricing is pure math not worth proxying.
+              const {
+                mode: _mode,
+                modes: _modes,
+                pricing: _pricing,
+                ...serializable
+              } = provider as ProviderService<R>;
+              return RpcSerialization.wrapRpcHandlers(
+                serializable as RpcProviderService<R>,
+                ["tail"],
+              );
             },
           }),
         parentConnected: () => Deferred.doneUnsafe(connected, Effect.void),

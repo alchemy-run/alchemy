@@ -380,7 +380,7 @@ const differs = (
 ) => desired !== undefined && desired !== (observed ?? undefined);
 
 type ObservedToken = {
-  id?: string | null;
+  id?: string;
   clientId?: string | null;
   clientSecret?: string | null;
   name?: string | null;

@@ -1,15 +1,15 @@
 import * as AWS from "@/AWS";
 import { Function } from "@/AWS/CloudFront";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS !== "true")(
+test.provider(
   "create and delete a CloudFront Function with key value store associations",
   (stack) =>
     Effect.gen(function* () {
@@ -47,23 +47,12 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS !== "true")(
   { timeout: 300_000 },
 );
 
-// BLOCKED by a distilled typing bug: distilled `aws` service `cloudfront`,
-// operation `listFunctions`, requires `FunctionConfig.Comment` (S.String) but
-// CloudFront omits `Comment` in `listFunctions` responses for functions created
-// without one. Any account containing a comment-less function makes the
-// response decode fail with:
-//   SchemaError: Missing key
-//     at ["FunctionList"]["Items"][0]["FunctionConfig"]["Comment"]
-// Fix (coordinator-owned): make `FunctionConfig.Comment` optional —
-//   distilled/packages/aws/patches/cloudfront.json
-//   { "structures": { "FunctionConfig": { "members": { "Comment": { "optional": true } } } } }
-// then regenerate the cloudfront service. Verified: with that patch the list()
-// op enumerates all functions and this test passes live. Once patched, enable
-// by setting ALCHEMY_TEST_CLOUDFRONT_FUNCTION_LIST=true.
-test.provider.skipIf(
-  process.env.ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS !== "true" ||
-    process.env.ALCHEMY_TEST_CLOUDFRONT_FUNCTION_LIST !== "true",
-)(
+// `FunctionConfig.Comment` is patched optional in
+// distilled/packages/aws/patches/cloudfront.json — CloudFront omits `Comment`
+// in `listFunctions` responses for functions created without one, and a
+// comment-less function anywhere in the account used to fail the decode with
+// `SchemaError: Missing key ... FunctionConfig.Comment`.
+test.provider(
   "list enumerates the deployed CloudFront Function",
   (stack) =>
     Effect.gen(function* () {

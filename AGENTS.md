@@ -109,8 +109,8 @@ Alchemy resource coverage is produced as a **software factory**: fleets of agent
 ```
 
 1. **Catalog** — fan out research agents over the provider's distilled service modules (one batch per thematic group). Each agent reads the generated SDK (`distilled/packages/{cloud}/src/services/{service}.ts`), cross-references the vendor API docs, and writes a self-contained design spec to `processes/{Cloud}/catalog/{service}.md`: resources, namespaces, props/attrs with replacement rules, lifecycle-to-operation mapping, scope (account/zone), testability, priority. The coordinator aggregates a machine-readable `summary.json` + human `INDEX.md` that tracks `implemented | partial | missing` per resource — this is the factory's order book.
-2. **Implement + test** in waves (below). Tests run against the real cloud (`ALCHEMY_PROFILE=testing`); zone-scoped tests use the standing test zone (`alchemy-test-2.us` via `findZoneByName`).
-3. **Patch the SDK, never the consumer** — every `UnknownCloudflareError`, out-of-union status error, or wrong request/response schema found by a test becomes a patch under `distilled/packages/{cloud}/patches/{service}/{op}.json` (see the Typed Error Doctrine section). Regenerate only that service. The typed union improves for every future consumer of the SDK — that is the flywheel's output.
+2. **Implement + test** in waves (below). Tests run against the real cloud (`bun run test --profile testing`); zone-scoped tests use the standing test zone (`alchemy-test-2.us` via `findZoneByName`).
+3. **Patch the SDK, never the consumer** — every `UnknownCloudflareError`, out-of-union status error, or wrong request/response schema found by a test becomes an RFC 6902 JSON Patch against the service's Smithy model, under `distilled/packages/{cloud}/patches/{service}/{op}.json` (see the Typed Error Doctrine section). Regenerate only that service. The typed union improves for every future consumer of the SDK — that is the flywheel's output.
 4. **Update the catalog** statuses after each wave and pick the next batch from the order book. Repeat until everything left is documented as out of scope (deprecated APIs, billing/data-only endpoints, closed-beta, needs-external-systems).
 
 ## Orchestration rules (the coordinator)
@@ -128,12 +128,12 @@ Alchemy resource coverage is produced as a **software factory**: fleets of agent
 `tsc -b` over the workspace is expensive; dozens of agents running it concurrently thrashes the machine (and concurrent `tsbuildinfo` writes race). Instead:
 
 - **Agents are banned** from running `tsc` or `bun run build` (root or distilled) in any form. The coordinator owns type-checking and runs a one-shot `bun tsc -b` at wave boundaries.
-- **vitest resolves distilled from `src/*.ts` directly, NOT the built `lib/`** (the `bun` export condition; see `packages/alchemy/vitest.config.ts`). So a regenerated service is **immediately test-visible** the moment `bun scripts/generate.ts --service {service}` (+ oxlint/oxfmt) finishes — there is nothing to rebuild and **nothing to wait for**. Do NOT sleep and do NOT gate a test re-run on a build after regenerating. This applies to response-schema patches as well as error-tag-only patches.
+- **The test runner resolves distilled from `src/*.ts` directly, NOT the built `lib/`** (`alchemy-test` runs in plain bun, which resolves the `bun` export condition natively). So a regenerated service is **immediately test-visible** the moment `bun scripts/generate.ts --resource {service}` (+ oxfmt) finishes — there is nothing to rebuild and **nothing to wait for**. Do NOT sleep and do NOT gate a test re-run on a build after regenerating. This applies to response-schema patches as well as error-tag-only patches.
 
 ## Speed doctrine: never wait on a hang
 
-- Run tests from `packages/alchemy` (suite paths are relative to it, e.g. `test/Cloudflare/...`). Wrap **every** test invocation in a hard kill: `cd packages/alchemy && timeout 240 ALCHEMY_PROFILE=testing bun vitest run <suite>`. Hitting the wall **is** the failure — read the partial output, find the hang (unbounded retry, infinite pagination, the engine deadlock below), fix the root cause. Never just re-run hoping.
-- Per-test vitest timeout ≤ 90–120s. A suite needing more than ~3–5 minutes total is a bug.
+- Run tests with `bun run test` (works from the repo root or `packages/alchemy`; suite paths are relative to `packages/alchemy`, e.g. `test/Cloudflare/...`). Wrap **every** test invocation in a hard kill: `timeout 240 bun run test <suite> --profile testing`. Hitting the wall **is** the failure — read the partial output (and the run's log under `.alchemy/log/test/`), find the hang (unbounded retry, infinite pagination, the engine deadlock below), fix the root cause. Never just re-run hoping. The runner also prints the currently-running tests whenever nothing finishes for 10s — use that list to identify the hang.
+- Per-test timeout ≤ 90–120s (`{ timeout: ... }` on the test, or `--timeout` for the whole run). A suite needing more than ~3–5 minutes total is a bug.
 - Every `Effect.retry`/`Effect.repeat` is bounded: `times ≤ 8–10`, total backoff under ~45–60s. Never poll for asynchronous provisioning slower than ~90s — skipIf-gate instead.
 - **Known engine bug**: a deploy that *replaces* a resource while simultaneously *removing* its old dependency deadlocks. Keep both dependencies deployed across replacement steps in tests (see `test/Cloudflare/R2/BucketEventNotification.test.ts`).
 - **Three-iteration budget**: if a suite is not green after ~3 fix iterations and the blocker is platform behavior (entitlement, slow async provisioning, beta API), implement fully, skipIf-gate with the typed tag and exact error, verify a skip-clean run, and report honestly. Do not burn an hour on one resource.
@@ -161,7 +161,7 @@ A wave task prompt is a contract. Include, every time:
 6. The **Typed Error Doctrine** hard rule with the patch-regenerate command for *their* service only.
 7. Registration discipline for the shared files, including the nested-mergeAll note.
 8. Test requirements: `test.provider`, start **and** end with `stack.destroy()`, deterministic names (engine default or constant), out-of-band verification via distilled, typed wait-until-gone, replacement coverage where applicable.
-9. Known footguns: `diff` receives `Input<Props>` — narrow with `isResolved(news)` before property access; never `Input<T>` in declared Props; Effect 4 APIs (`Effect.result` + `Result.isSuccess/isFailure`, not `Effect.either`/`effect/Either`); request-schema patch keys are camelCase, response keys are wire snake_case; fixtures (CSRs, PEMs, JWKS) are generated once and checked in as constants, never at test time.
+9. Known footguns: `diff` receives `Input<Props>` — narrow with `isResolved(news)` before property access; never `Input<T>` in declared Props; Effect 4 APIs (`Effect.result` + `Result.isSuccess/isFailure`, not `Effect.either`/`effect/Either`); JSON Patches address the Smithy model, so shape IDs are `com.cloudflare.{service}#Name` and member names are wire names (snake_case) — the camelCase TS surface is derived at codegen; fixtures (CSRs, PEMs, JWKS) are generated once and checked in as constants, never at test time.
 10. A **structured result schema**: `{ service, resources, testsPassed, testCommand, files, patches (with reasons), skippedTests (with exact errors), notes }` — the coordinator aggregates these into the catalog.
 
 # Documentation Generation
@@ -672,21 +672,62 @@ See the [VPC Smoke Test](./test/AWS/EC2/Vpc.smoke.test.ts) for an example.
 
 # Typed Error Doctrine (distilled)
 
+## How distilled is built (Smithy + JSON Patch)
+
+Distilled is a Smithy-based SDK factory. Every provider package (`distilled/packages/{cloud}`) runs the same pipeline:
+
+1. **Convert** — the provider's spec source is converted into Smithy 2.0 JSON models, one per service, in `.generated-specs/{service}.json`. Cloudflare mines them from the downloaded API docs (`scripts/spec-to-smithy.ts` over `specs/api/resources/**`); AWS consumes the official `api-models-aws` Smithy models submodule directly. Hand-authored models for APIs the spec source doesn't cover live in `manual-specs/`.
+2. **Patch** — an **RFC 6902 JSON Patch chain** (files shaped `{ "description": ..., "patches": [ops] }`) is applied to the provider's intermediary spec before codegen. For Cloudflare, patches in `patches/{service}/*.json` target the **Smithy model**, applied in filename order with `*.manual.json` files last; `_metadata.json` carries service-level `/metadata/keyDictionary` and `/metadata/opAliases`. OpenAPI-sourced providers (Neon, PlanetScale, Stripe, …) patch the **OpenAPI document** upstream of the smithy conversion instead. A patch whose target path is stale (no longer in the model) warns and is skipped; a malformed patch **fails the generator run**.
+3. **Generate** — the shared smithy→SDK compiler in `@distilled.cloud/core/codegen` compiles each patched model into an Effect SDK module at `src/services/{service}.ts` plus the barrel.
+
+Consequences:
+
+- **Never edit `src/services/*.ts`** — regeneration overwrites it. Anything wrong in the generated SDK (missing error, wrong request/response schema, misnamed operation or member) is fixed with a JSON Patch (`add`/`remove`/`replace`/`move` on the model) in `patches/{service}/`.
+- Patch paths address the **Smithy model**: shape IDs are `com.cloudflare.{service}#Name`, and member names are **wire names** (snake_case). The camelCase TS surface is derived at codegen; `move` ops rename shapes and members.
+
+## The doctrine
+
 Every error a distilled operation can produce in practice MUST be a tagged error in that operation's **type-level** error union. The catch-all classes (`UnknownCloudflareError`, `CloudflareHttpError`, and the status-derived classes like `NotFound`/`BadRequest` that distilled leaves out of the typed union) exist only to *surface* gaps — they are never something alchemy code handles.
 
 **When you hit an unmatched error** (an `UnknownCloudflareError`, or you find yourself wanting to check `CloudflareHttpError.status` or an out-of-union `NotFound`), the fix is ALWAYS a distilled patch, never a catch in alchemy:
 
 1. Note the error's code / status / message from the failure output.
-2. Add or extend `distilled/packages/cloudflare/patches/{service}/{operation}.json` with a **meaningful, resource-specific tag** (e.g. `WidgetNotFound`, not a bare `NotFound`):
+2. Add or extend `distilled/packages/cloudflare/patches/{service}/{operation}.json` with a JSON Patch that (a) adds an error structure carrying the `smithy.api#error` trait and `com.cloudflare.protocols#errorMatchers` matchers, and (b) attaches it to the operation's `errors` list. Use a **meaningful, resource-specific tag** (e.g. `WidgetNotFound`, not a bare `NotFound`):
 
    ```json
-   { "errors": { "WidgetNotFound": [{ "code": 1234 }] } }
+   {
+     "description": "Type the not-found error on getWidget",
+     "patches": [
+       {
+         "op": "add",
+         "path": "/shapes/com.cloudflare.widgets#WidgetNotFound",
+         "value": {
+           "type": "structure",
+           "members": {
+             "code": { "target": "smithy.api#Integer" },
+             "message": { "target": "smithy.api#String" }
+           },
+           "traits": {
+             "smithy.api#error": "client",
+             "com.cloudflare.protocols#errorMatchers": [{ "code": 1234 }]
+           }
+         }
+       },
+       {
+         "op": "add",
+         "path": "/shapes/com.cloudflare.widgets#GetWidget/errors",
+         "value": [{ "target": "com.cloudflare.widgets#WidgetNotFound" }]
+       }
+     ]
+   }
    ```
 
-   Matchers may combine `code`, `status`, and `message` (`{ "includes": "..." }` / `{ "matches": "..." }`) — e.g. `[{ "status": 400, "message": { "includes": "snippet not found" } }]` when Cloudflare misuses 400 for a missing resource. Prefer matching the Cloudflare error `code` when one exists; fall back to `status` + `message` otherwise.
+   If the operation already has an `errors` array (from an earlier patch), append with `"path": ".../errors/-"` instead of adding the whole array. Matchers may combine `code`, `status`, and `message` (a string, or `{ "includes": "..." }` / `{ "matches": "..." }`) — e.g. `[{ "status": 400, "message": { "includes": "snippet not found" } }]` when Cloudflare misuses 400 for a missing resource. Prefer matching the Cloudflare error `code` when one exists; fall back to `status` + `message` otherwise. The most specific matcher wins; ties break by declaration order.
 
-3. Regenerate ONLY that service: `cd distilled/packages/cloudflare && bun scripts/generate.ts --service {service}` (then `bun oxlint --fix src/services/{service}.ts && bun oxfmt --write src/services/{service}.ts`).
+3. Regenerate ONLY that service: `cd distilled/packages/cloudflare && bun scripts/generate.ts --resource {service}` (then format: `bun oxfmt src/services/{service}.ts`). A warned-stale or failed patch is a bug in your patch — fix it; never leave a red generate.
 4. Handle the now-typed tag in alchemy code and re-run the tests.
+
+**AWS is the one exception to the JSON Patch format**: it layers typed-error metadata over the official Smithy models with a per-service schema file `distilled/packages/aws/patches/{service}.json` (error categories, aliases, synthetic errors with message matchers — see `distilled/packages/aws/scripts/spec-schema.ts`), regenerated with `cd distilled/packages/aws && bun scripts/generate.ts --sdk {service}`. The doctrine is identical; only the patch dialect differs.
 
 **Forbidden patterns** — these defeat the type system and must never appear in alchemy code or tests:
 
@@ -716,6 +757,41 @@ Effect.catchTag(["WidgetNotFound", "Gone"], () => Effect.succeed(undefined))
 ```
 
 If `Effect.catchTag("SomeTag", ...)` fails to typecheck, that is the signal that distilled's union is missing the error — patch distilled (step 2 above); do not loosen the alchemy-side types.
+
+# Provider Modes & Local Providers (doctrine)
+
+Some resource types have TWO implementations: a **live** provider (converges real cloud state, `alchemy deploy`) and a **local** provider (emulates the resource on the developer's machine, `alchemy dev`). Provider mode is a first-class engine concept — see [ProviderMode.ts](./packages/alchemy/src/ProviderMode.ts), [Local/ProviderLayer.ts](./packages/alchemy/src/Local/ProviderLayer.ts), [Local/LocalProvider.ts](./packages/alchemy/src/Local/LocalProvider.ts), and the user-facing guide at [website/src/content/docs/infrastructure-as-code/local-provider.mdx](./website/src/content/docs/infrastructure-as-code/local-provider.mdx).
+
+Engine semantics (never re-implement these per provider):
+
+- **Register both variants with `ProviderLayer.dual(cls, { live: () => ..., local: () => ... })`** — never select one at layer build. The run-default variant builds eagerly; the other is lazy and memoized, so mode-specific dependency layers (workerd, Docker) MUST compose *inside* the `local` thunk (e.g. `LocalWorkerProvider().pipe(Layer.provide(localRuntimeServices()))`), never globally — a plain deploy must not construct local machinery unless a local-mode row needs deleting. Dep layers shared across several local providers must be **module-memoized layer references** so the build MemoMap dedupes them to one instance.
+- **Every state commit stamps `providerMode`.** A persisted mode that differs from the resolved mode plans a REPLACEMENT (the provider diff is not consulted), and every delete — replacement old generations, GC chain draining, orphans, `destroy`, `sync`/`tail`/`logs` — resolves the provider variant of the row's *stamped* mode via `findProviderByType(type, mode)`. Legacy rows without a stamp are assumed to be the current run's mode (no churn; re-stamped on next write).
+- **`Alchemy.remote()`** opts a resource or scope OUT of local emulation during dev (captured at registration like `adopt()`; a no-op during deploy). There is deliberately no `local()` — dev mode IS the local default; tests simulate a dev run by overriding `AlchemyContext.dev` (`inDev` in [test.resources.ts](./packages/alchemy/test/test.resources.ts)) or `Test.make({ dev: true })`. Conflicting decorations on one FQN die with `ConflictingProviderModeError`. Single-implementation providers are **mode-agnostic**: they satisfy any requested mode, never stamp, never replace on a switch — dev runs over constructs mixing emulatable and live-only resources (R2) just work.
+
+## `LocalProvider.make` — long-running local providers
+
+A local provider whose physical resource is a **running process** (dev server, workerd instance) MUST be built with `LocalProvider.make(cls, serverEntryUrl, spec)` — do not hand-roll FiberMap/instance-registry/hash machinery in the provider:
+
+- **`resolveConfig(ctx)`** — the restart surface. Plain, canonically-hashable data only (no closures or runtime objects: derive plain *descriptors* here and materialize `BindingHook`s etc. inside `start` — see the descriptor/hook split in [LocalWorkerProvider.ts](./packages/alchemy/src/Cloudflare/Workers/LocalWorkerProvider.ts)). Must be cheap and side-effect-free — it runs inside `diff` on every plan. Its canonical hash decides noop-vs-restart AND the same value is handed to `start`, so "what changed?" and "what starts?" can never drift. Deliberately EXCLUDE runtime wiring observed at start time (e.g. queue consumers read from `LocalRuntimeState`) — sibling reconciles drive those via restart hooks, not config.
+- **`start(ctx)`** — boot ONE instance in the ambient `Scope` and return Attributes at *readiness*; the process keeps running until the runner closes the scope on restart/delete. For processes that can die on their own, fork `ctx.invalidate` after the exit so the next plan reports `update`.
+- **`stop(ctx)`** — delete-only cleanup for state that intentionally survives restarts (URL proxies kept for address stability, restart hooks). NOT called on restarts.
+- Generated for you: instance registry, per-id lock (restarts never interleave), config-hash noop/restart, instanceId-guarded delete (a create-first replacement's old-generation delete cannot kill its successor), `list`. The provider is wrapped in `RpcProvider`, so during `alchemy dev` the registry lives in the sidecar and survives user-code hot reloads.
+- **Never use `Hash.structure` to compare configs** — it XOR-folds sibling fields, so a value mirrored into two subtrees (env ↔ bindings) cancels out. The helper's canonical hash (sorted-key JSON + sha256, Redacted/bytes/cycle-aware) is the law.
+
+Registry-style local providers (the "instance" is an in-memory row, e.g. Cloudflare's local Queue mutating `LocalRuntimeState`) do NOT use `LocalProvider.make` — write a plain provider and register it via `dual`.
+
+Reference implementations: [Command/Dev.ts](./packages/alchemy/src/Command/Dev.ts) (minimal: spawn + URL readiness), [Cloudflare Workers LocalWorkerProvider.ts](./packages/alchemy/src/Cloudflare/Workers/LocalWorkerProvider.ts) (full-size: bundler watch loop, cross-restart proxy in `stop`), [Cloudflare Queues Queue.ts](./packages/alchemy/src/Cloudflare/Queues/Queue.ts) (registry-style, no runner). Engine coverage lives in [test/provider-mode.test.ts](./packages/alchemy/test/provider-mode.test.ts) and the "provider modes" describes in [plan.test.ts](./packages/alchemy/test/plan.test.ts) / [apply.test.ts](./packages/alchemy/test/apply.test.ts).
+
+## Local tests (`{Resource}.local.test.ts`)
+
+Every resource with a local (dev) provider gets a **`{Resource}.local.test.ts`** co-located with its live test, using `Test.make({ providers, dev: true })`. Dev-mode tests run local providers behind a **file-scoped RPC sidecar by default** — the same `RpcProviderProxy` topology the real `alchemy dev` command uses, where `providerServicesEffect` layers (e.g. `localRuntimeServices()`) are EMPTY in the test process and RPC-backed providers run their lifecycle in the sidecar. This is what catches a plain local provider that needs those services in the main process (the class of bug behind #1007, which in-process tests masked). `Test.make({ ..., sidecar: false })` opts a file back into the in-process topology — reserve it for debugging provider code or pinning the in-process path a plain `alchemy deploy` takes when deleting `providerMode: "local"` rows.
+
+The suite must cover, minimum:
+
+1. **The local roundtrip** — deploy the resource + a worker binding it (file-based fixture `main`, never inline `script` — unsupported in dev) and drive the binding over HTTP against the local simulator. Assert the resource's identity carries the `dev:` marker (proof no cloud call ran; for the Worker itself the marker is a `http://localhost:<port>` `url`).
+2. **The `Alchemy.remote()` opt-out** — the same shape with the resource piped through `Alchemy.remote()`: assert a real (non-`dev:`) identity, round-trip through the remote-proxied binding, verify out-of-band via distilled that the write landed in the real cloud resource, and after `stack.destroy()` verify the cloud resource is gone (pins the stamped-mode delete path).
+
+Reference: [KV Namespace.local.test.ts](./packages/alchemy/test/Cloudflare/KV/Namespace.local.test.ts) (includes the mixed local + live stack), [R2 Bucket.local.test.ts](./packages/alchemy/test/Cloudflare/R2/Bucket.local.test.ts), [D1 Database.local.test.ts](./packages/alchemy/test/Cloudflare/D1/Database.local.test.ts) (includes local migrations and the #1007 regression), [Queues Queue.local.test.ts](./packages/alchemy/test/Cloudflare/Queues/Queue.local.test.ts) (produce→consume through RPC-backed providers). The harness contract itself is pinned by [TestSidecar.test.ts](./packages/alchemy/test/Local/TestSidecar.test.ts).
 
 # Test Fixtures for Effect-Native Workers / Functions
 
@@ -772,8 +848,8 @@ Compose a `Stack` that deploys the fixture, share one deploy across the file wit
 // Service.test.ts
 import * as Alchemy from "@/index.ts";
 import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -819,7 +895,7 @@ Notes:
 - `afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack))` is the standard cleanup — set `NO_DESTROY=1` locally to keep the deployment around between runs while iterating.
 - Always retry the first request (`Schedule.exponential("500 millis")`) — fresh workers.dev URLs and Lambda function URLs take a few seconds to start serving 200s.
 - For POST: use `client.post(url)` for empty bodies, or `HttpClient.execute(HttpClientRequest.post(url).pipe(HttpClientRequest.bodyJsonUnsafe(body)))` for typed bodies.
-- **Never use `while (Date.now() < deadline)` loops to poll** for an async side effect (a workflow status, a cron fire, a queue drain, eventual-consistency read, etc.). Use `Effect.repeat` with a `Schedule` and an `until` predicate so the polling participates in the Effect runtime — tracing, interruption, and error propagation work correctly, and the intent is declarative. Cap iterations with `times: N` (or a bounded schedule) so the test fails fast instead of running until the vitest timeout:
+- **Never use `while (Date.now() < deadline)` loops to poll** for an async side effect (a workflow status, a cron fire, a queue drain, eventual-consistency read, etc.). Use `Effect.repeat` with a `Schedule` and an `until` predicate so the polling participates in the Effect runtime — tracing, interruption, and error propagation work correctly, and the intent is declarative. Cap iterations with `times: N` (or a bounded schedule) so the test fails fast instead of running until the test timeout:
 
   ```ts
   // good — declarative, bounded, interruption-safe
@@ -831,7 +907,7 @@ Notes:
     }),
   );
 
-  // bad — opaque loop, ignores interruption, leaks into vitest timeout
+  // bad — opaque loop, ignores interruption, leaks into the test timeout
   let value: Value | undefined;
   const deadline = Date.now() + 180_000;
   while (Date.now() < deadline) {
@@ -880,13 +956,84 @@ This runs the TypeScript compiler in build mode, which checks all projects in th
 
 ## Running tests
 
-Run tests from `packages/alchemy` — suite paths are relative to it:
+`packages/alchemy/test` runs on **alchemy-test** (`packages/alchemy-test`), our own single-process, Effect-native test runner. The CLI is vitest/bun-test compatible: positional paths (files or directories) and `-t` work the same way.
+
+There is exactly ONE entry point: `bun run test <options>`. It works identically from the repo root and from `packages/alchemy` (the root script just cds into `packages/alchemy`); suite paths are always relative to `packages/alchemy`. Compose the flags you need — there are no per-variant package scripts. NOTE: `bun run test`, not `bun test` — the latter invokes bun's own built-in test runner.
 
 ```bash
-cd packages/alchemy && ALCHEMY_PROFILE=testing bun vitest run test/Cloudflare/{Service}/{Resource}.test.ts
+# a suite, against the real cloud
+bun run test test/Cloudflare/{Service}/{Resource}.test.ts --profile testing
+
+# a directory, filtered by test name
+bun run test test/Cloudflare/Workers -t "cron" --profile testing
+
+# positional args that aren't real paths are file-name substring filters
+bun run test Bucket --profile testing   # every *Bucket* test file
+
+# skip the slow tests (replaces the old FAST=1 env prefix)
+bun run test --fast --profile testing
+
+# interactive TUI (humans only — never in an agent shell)
+bun run test --tui
 ```
 
-vitest resolves distilled from `src/*.ts` directly (the `bun` export condition; see `packages/alchemy/vitest.config.ts`), so a regenerated service is test-visible immediately — no `lib/` rebuild is ever required before re-running tests.
+(`examples/` still use plain `bun test`.)
+
+### Cleaning leaked test resources
+
+If an interrupted live-cloud test leaves resources behind, do **not** add
+test-specific API cleanup helpers, adoption workarounds, or alternate names to
+make the test pass. Clean the testing account with the account-wide teardown
+command, then rerun the failing test:
+
+```bash
+bun nuke
+bun clear:state --profile testing
+```
+
+Lifecycle tests should continue to validate normal stack ownership and cleanup;
+they must not silently adopt or directly delete leaked resources from earlier
+runs.
+
+Additional flags beyond vitest:
+
+| Flag              | Default | Purpose                                                       |
+| ----------------- | ------- | ------------------------------------------------------------- |
+| `-t <regex>`      | —       | Test-name pattern (regex, like bun/vitest) tested against the full nested title (`file > describes > name`), so any fragment matches regardless of nesting. An invalid regex degrades to a literal substring instead of erroring. Remember to escape regex metacharacters when filtering literally: `-t "create \(default\)"` |
+| `--profile <name>` | —      | Sets `ALCHEMY_PROFILE` before any test module is imported. Use `--profile testing` for live-cloud suites instead of an `ALCHEMY_PROFILE=testing` env prefix |
+| `--fast`          | off     | Sets `FAST=1` before imports — suites `skipIf(process.env.FAST)` their slow tests (long-provisioning resources, smoke tests). Replaces the `FAST=1` env prefix |
+| `--timeout <ms>`  | 120000  | Default per-test timeout                                      |
+| `--retry <n>`     | 2       | Re-runs of a failing test body (use `--retry 0` when debugging) |
+| `--concurrency <n\|unbounded>` | 32 | Files running concurrently (one bun process, no forks). Bounded by default — unbounded saturates the event loop on large suites and produces spurious 0ms `beforeAll` timeouts |
+| `--sequential`    | off     | Run tests within each file sequentially                       |
+| `--tui`           | off     | Opt-in interactive TUI (default is line-per-test output)      |
+
+Output behavior (plain mode, the default):
+
+- The collection phase (importing every test file, ~45s for the full suite) reports `collecting N/TOTAL test files (elapsed) <current file>` — repainted in place on a TTY, printed every 5s otherwise. A run that appears stuck before any test starts is almost always just collecting; if it really is stuck, the line names the file whose import hangs.
+- One line per test as it finishes, prefixed with a `[done/total]` progress counter so the remaining count is visible; a **failing test prints its error and captured output inline** immediately.
+- Passing tests' output is swallowed on the console — but **every** test's output (passes included) is streamed to a per-run log at **`.alchemy/log/test/{timestamp}-pid{pid}.log`** (relative to the cwd), so concurrent runs in different terminals never trample each other. The absolute path (with line/KB counts) is printed at the end of every run (`Full log: …`) — read that file when you need the complete record, e.g. a passing test's deploy output or a hang's partial log. The file is appended live, so it's readable mid-run; logs older than a week are pruned automatically (by stat mtime).
+- If nothing finishes for 10s, the runner prints the list of currently-running tests with elapsed times — the first place to look when a run seems hung.
+- Exit code is non-zero if any test failed.
+
+Runner semantics to know:
+
+- Everything runs in ONE bun process: files run concurrently (respecting `describe.sequential`), imports of all test files happen up-front (they must be lazy and pure — registration only, no top-level side effects beyond `Test.make`/`describe`/`test`).
+- Tests that mutate process-global state (e.g. `process.env.PATH`) must pass `{ exclusive: true }` in the test options to take the whole-process write lock.
+- The harness (`alchemy-test` package) provides `describe`, `it`/`test` (incl. `it.effect`/`it.live`), hooks, `layer`, `expect`, and `assert` — the codemod `scripts/codemod-alchemy-test.ts` migrates vitest imports and is idempotent.
+- The runner runs in plain bun, so distilled resolves from `src/*.ts` via the `bun` export condition — a regenerated service is test-visible immediately, no `lib/` rebuild required.
+
+## The convergence loop: nuke → test → census → fix-fleet
+
+Ironing out the AWS suite is an iterative loop, driven by a coordinator, that terminates only when the suite is green AND the account is clean for **two consecutive rounds**. "Green" alone is not the bar — a passing test that leaves cloud resources behind is a provider bug by definition.
+
+Each iteration:
+
+0. **Clean slate** — first run `aws sso login` (the alchemy `testing` profile and the raw `aws` CLI ride the same SSO session; an expired token mid-round breaks the pipeline with auth errors — only escalate to a human if the login doesn't complete automatically). Then `bun nuke --yes` (deletes every alchemy-tagged cloud resource; `scripts/nuke.sh` already spares state buckets, SSO roles, and AWS-managed singletons) then `bun alchemy state clear ./stacks/nuke.ts --profile testing --yes`. Never overlap nuke with a running suite. Plain `bun clear:state` lacks the profile and dies on expired Cloudflare OAuth; nuke without `--yes` hangs on an interactive confirm in non-interactive shells.
+1. **Full suite, bounded** — `bun run test test/AWS --profile testing`. The runner defaults to `--concurrency 32`; NEVER override it to `unbounded` on a full-suite run: all ~775 files' `beforeAll` deploys start at once, the event loop saturates, and hundreds of fake 0ms `beforeAll TimeoutError` failures drown the real signal (heap is ~8.5 GB regardless of N — the constraint is CPU, not memory). Target ≤10 min wall-clock, hard cap 128; measured 32 → ~21 min clean. The saturation tell is `beforeAll` failures at 0ms; real failures fail slow. If the cap can't reach 10 min, the residual is individual slow files — skipIf-gate them per the speed doctrine.
+2. **Leak census** — `bun nuke --dry-run` after the suite; diff against the pre-suite baseline. Worklist = **failed services ∪ leaking services** (a service can pass green and still leak). Leave the leaked resources LIVE as forensic evidence for the fix agents; carry-over holdouts that survive repeated nuke passes (stuck deletes) go on the worklist too — their delete path is the bug.
+3. **Fix-fleet workflow** — one agent per service on the worklist (account-singleton services — CloudTrail, Config, SecurityHub, GuardDuty, ControlTower, IdentityCenter — run as a sequential chain; everything else fans out). Each agent gets its exact failures, its leak inventory, and this root-cause priority: **provider bug > distilled patch > test fix** — never paper over a provider leak in the test. Each agent runs ONLY its own suite (`timeout 240 bun run test test/AWS/{Service} --profile testing`), audits its tests for non-deterministic names (rely on PhysicalName auto-naming; random data in message payloads/idempotency tokens is fine), verifies zero orphans from its service via out-of-band distilled list/describe calls, and reports a structured result. Agents never run tsc/build and never run the account-wide nuke.
+4. **Gate** — the coordinator runs the one-shot `bun tsc -b`, fixes cross-cutting fallout, commits the iteration (+ distilled submodule bump when patches were made), and loops back to 0. Terminate on two consecutive iterations of green-suite + census reduced to documented-undeletable residue (e.g. BackupSearch terminal records, Contributor-Insights rules with no delete API, keys in scheduled deletion).
 
 ## Multi-agent sessions: the coordinator owns type-checking
 

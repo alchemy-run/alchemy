@@ -1,7 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import { poll } from "@/Util/poll.ts";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -294,9 +294,7 @@ test(
     );
 
     const httpClient = (yield* HttpClient.HttpClient).pipe(withCounterKey(key));
-    const fromB = yield* httpClient
-      .get(`${urlB}/do`)
-      .pipe(Effect.timeout(requestTimeout), Effect.retry(readinessRetry));
+    const fromB = yield* requestUntilReady(httpClient.get(`${urlB}/do`));
     expect(fromB.status).toBe(200);
     expect((yield* fromB.json) as { value: number }).toEqual({ value: 2 });
   }).pipe(logLevel),

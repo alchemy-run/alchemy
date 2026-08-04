@@ -9,7 +9,7 @@ import {
   WORKERS_PAID_PLAN_USD,
 } from "@/Cli/LoggingCli";
 import type { CRUD } from "@/Plan";
-import { describe, expect, test } from "@effect/vitest";
+import { describe, expect, test } from "alchemy-test";
 
 /**
  * `formatCostSummaryLines` only reads `action`/`provider.pricing`/`props`/

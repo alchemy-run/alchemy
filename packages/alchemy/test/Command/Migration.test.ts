@@ -1,8 +1,8 @@
 import * as Command from "@/Command";
 import { Stack } from "@/Stack";
 import { type ResourceState, State } from "@/State";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as pathe from "pathe";

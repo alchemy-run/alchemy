@@ -5,6 +5,19 @@ import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { WorkerEnvironmentKVObject } from "./object.ts";
 
+/** The regions a DO can be hinted toward, as `/colo` accepts them. */
+const LOCATION_HINTS: readonly Cloudflare.DurableObjectLocationHint[] = [
+  "wnam",
+  "enam",
+  "sam",
+  "weur",
+  "eeur",
+  "apac",
+  "oc",
+  "afr",
+  "me",
+];
+
 export default class DurableObjectWorkerEnvironmentWorker extends Cloudflare.Worker<DurableObjectWorkerEnvironmentWorker>()(
   "DurableObjectWorkerEnvironmentWorker",
   {
@@ -24,6 +37,25 @@ export default class DurableObjectWorkerEnvironmentWorker extends Cloudflare.Wor
           yield* object.put(key, "ok").pipe(Effect.orDie);
           const value = yield* object.get(key).pipe(Effect.orDie);
           return yield* HttpServerResponse.json({ value });
+        }
+
+        // Create a DO instance under a `locationHint` and report the colo it
+        // actually landed in. The name must be one no request has addressed
+        // before: a hint only steers *creation*.
+        if (request.method === "GET" && url.pathname === "/colo") {
+          const name = url.searchParams.get("name") ?? "default";
+          // Match the query param against the hints Cloudflare accepts rather
+          // than casting it — an unrecognised one is dropped, so a typo in a
+          // test reads as "no hint" instead of reaching the runtime.
+          const hint = LOCATION_HINTS.find(
+            (candidate) => candidate === url.searchParams.get("hint"),
+          );
+          const object = objects.getByName(
+            name,
+            hint ? { locationHint: hint } : undefined,
+          );
+          const colo = yield* object.colo().pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({ colo });
         }
 
         // Mirrors the tutorial's `/tick/:n` route verbatim — forwards the

@@ -27,7 +27,7 @@ the inner one returns the public API.
 Create `src/counter.ts` with the smallest possible DO — empty
 public API, no state yet:
 
-```typescript twoslash
+```typescript
 // src/counter.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
@@ -211,19 +211,19 @@ const { test, beforeAll, deploy } = Test.make({
 const stack = beforeAll(deploy(Stack));
 
 +test(
-+   "Counter persists per key",
-+   Effect.gen(function* () {
-+     const { url } = yield* stack;
++    "Counter persists per key",
++    Effect.gen(function* () {
++      const { url } = yield* stack;
 +
-+     const a1 = yield* HttpClient.post(`${url}/counter/foo`);
-+     expect(yield* a1.text).toBe("1");
++      const a1 = yield* HttpClient.post(`${url}/counter/foo`);
++      expect(yield* a1.text).toBe("1");
 +
-+     const a2 = yield* HttpClient.post(`${url}/counter/foo`);
-+     expect(yield* a2.text).toBe("2");
++      const a2 = yield* HttpClient.post(`${url}/counter/foo`);
++      expect(yield* a2.text).toBe("2");
 +
-+     const b1 = yield* HttpClient.post(`${url}/counter/bar`);
-+     expect(yield* b1.text).toBe("1");
-+   }),
++      const b1 = yield* HttpClient.post(`${url}/counter/bar`);
++      expect(yield* b1.text).toBe("1");
++    }),
 +);
 ```
 
@@ -339,18 +339,18 @@ const { test, beforeAll, deploy } = Test.make({
 const stack = beforeAll(deploy(Stack));
 
 +test(
-+   "tick streams 5 sequential values",
-+   Effect.gen(function* () {
-+     const { url } = yield* stack;
++    "tick streams 5 sequential values",
++    Effect.gen(function* () {
++      const { url } = yield* stack;
 +
-+     const response = yield* HttpClient.get(`${url}/tick/5`);
-+     const lines = yield* response.stream.pipe(
-+       Stream.decodeText,
-+       Stream.splitLines,
-+       Stream.runCollect,
-+     );
-+     expect([...lines]).toEqual(["0", "1", "2", "3", "4"]);
-+   }),
++      const response = yield* HttpClient.get(`${url}/tick/5`);
++      const lines = yield* response.stream.pipe(
++        Stream.decodeText,
++        Stream.splitLines,
++        Stream.runCollect,
++      );
++      expect([...lines]).toEqual(["0", "1", "2", "3", "4"]);
++    }),
 +);
 ```
 
@@ -393,6 +393,54 @@ If you want schema-*validated* procedures (payload validation,
 tagged error schemas shared with external clients), reach for
 [Effect RPC](/cloudflare/apis/effect-rpc) on a Worker instead.
 
+## Place an instance in a region
+
+A Durable Object is created wherever its **first-ever** request came
+from, and it lives there for good. That is the right default when an
+instance's traffic all comes from whoever created it — `getByName(userId)`
+lands next to that user by construction.
+
+It is the wrong default as soon as the name stops tracking geography. A
+pool sharded by hash (`pool:7`), a fixed roster, a shard index — any of
+these can be created by whichever request happened to arrive first, and
+every later caller pays for that accident. A Sydney user hashed onto an
+instance a Frankfurt request created is making a cross-planet round trip
+on every call, forever.
+
+Pass a `locationHint` to say where a **new** instance should be created:
+
+```typescript
+const shard = shards.getByName("pool:apac:3", { locationHint: "apac" });
+```
+
+Hints only apply at creation, so this is safe to add to an existing call
+site: instances that already exist stay where they are, and nothing you
+pass can move them.
+
+Derive the name and the hint from the same region, so each region
+addresses its own shards:
+
+```typescript
+// in a Worker fetch handler
+const region = hintFor(request.cf?.continent); // your own mapping
+const shard = shards.getByName(`pool:${region}:${index}`, {
+  locationHint: region,
+});
+```
+
+:::caution
+Hint the region you name. If two regions can address one name, they race
+to create the single instance behind it and the loser is stuck talking
+across the planet — the hint cannot fix it afterwards.
+:::
+
+Available hints are `wnam`, `enam`, `sam`, `weur`, `eeur`, `apac`, `oc`,
+`afr`, and `me`. Each is best-effort:
+Cloudflare places the instance in the nearest location it can to the
+hinted region, which may not be inside it. Under `alchemy dev` there is
+only one location to place anything in, so hints are accepted and
+ignored — placement is only observable once deployed.
+
 ## Call scope vs isolate scope
 
 A Durable Object shares its isolate's layer build with the Worker
@@ -407,8 +455,9 @@ finishes draining.
 
 As everywhere on workerd, there is no isolate-teardown hook: cleanup
 belongs in methods (call scope), not in the constructor or init.
-Per-call resources like `Drizzle.postgres` pools open lazily inside
-the method and close with its scope. See
+Per-call resources like `Drizzle.Postgres` pools open lazily inside
+the method and close with its scope (see the
+[SQL connection lifecycle](/sql/effect-sql/lifecycle)). See
 [Instance scope vs request scope](/infrastructure-as-effects/functions-and-servers#instance-scope-vs-request-scope)
 for the model across all runtimes.
 
@@ -430,6 +479,8 @@ Related:
 
 - [Workers](/cloudflare/compute/workers) — the runtime every DO is reached
   through.
+- [Drizzle migrations](/sql/drizzle/migrations#durable-object-migrations) —
+  run drizzle-kit's `durable-sqlite` migrations inside the object at init.
 
 Reference:
 

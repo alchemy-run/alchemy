@@ -1,7 +1,7 @@
 import { planProp } from "@/Cost";
 import type { Input } from "@/Input";
 import { asOutput } from "@/Output";
-import { describe, expect, test } from "@effect/vitest";
+import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
 interface Props {

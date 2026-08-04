@@ -73,8 +73,7 @@ Your existing Worker runtime code does not need to change. The async
 pattern declares bindings on the Worker's `env` prop and uses
 `Cloudflare.InferEnv` to type the `env` object:
 
-```typescript twoslash
-// @noErrors
+```diff lang="typescript"
 // alchemy.run.ts
 +export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
 
@@ -86,17 +85,16 @@ export const Worker = Cloudflare.Worker("Worker", {
 
 Your handler stays the same — just update the type import:
 
-```typescript twoslash
-// @noErrors
+```diff lang="typescript"
 // src/worker.ts
 -import type { Env } from "../alchemy.run.ts";
 +import type { WorkerEnv } from "../alchemy.run.ts";
 
 export default {
-- async fetch(request: Request, env: Env) {
-+ async fetch(request: Request, env: WorkerEnv) {
--   const object = await env.BUCKET.get("key");
-+   const object = await env.Bucket.get("key");
+-  async fetch(request: Request, env: Env) {
++  async fetch(request: Request, env: WorkerEnv) {
+-    const object = await env.BUCKET.get("key");
++    const object = await env.Bucket.get("key");
     return new Response(object?.body ?? null);
   },
 };
@@ -206,8 +204,7 @@ integration.
 Instead of declaring `env` bindings on the resource props, you bind
 resources in the Worker's Init phase using `yield*`:
 
-```typescript twoslash
-// @noErrors
+```diff lang="typescript"
 // src/worker.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
@@ -244,8 +241,7 @@ The Worker resource declaration moves from `alchemy.run.ts` into the
 Worker file itself (using `import.meta.url` as the `main`), and the
 Stack just `yield*`-s the imported Worker:
 
-```typescript twoslash
-// @noErrors
+```diff lang="typescript"
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
 +import * as Cloudflare from "alchemy/Cloudflare";
@@ -264,7 +260,7 @@ export default Alchemy.Stack(
   "MyApp",
   { providers: Cloudflare.providers(), state: Cloudflare.state() },
   Effect.gen(function* () {
-+   const bucket = yield* Bucket;
++    const bucket = yield* Bucket;
     const worker = yield* Worker;
     return { url: worker.url };
   }),

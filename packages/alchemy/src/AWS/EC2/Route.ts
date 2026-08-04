@@ -8,6 +8,7 @@ import { isResolved, somePropsAreDifferent } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
+import { getDefaultVpcScope } from "./defaultVpcScope.ts";
 import type { RouteTableId } from "./RouteTable.ts";
 
 export interface RouteProps {
@@ -411,6 +412,11 @@ export const RouteProvider = () =>
         // automatically and that this provider does not manage.
         list: () =>
           Effect.gen(function* () {
+            // Routes in the default VPC's main route table (the 0.0.0.0/0 IGW
+            // route AWS provisions) are default-VPC furniture; never
+            // census/nuke them. Routes in user-created route tables inside the
+            // default VPC are still listed.
+            const defaultVpc = yield* getDefaultVpcScope;
             return yield* ec2.describeRouteTables.pages({}).pipe(
               Stream.runCollect,
               Effect.map((chunk) =>
@@ -418,8 +424,22 @@ export const RouteProvider = () =>
                   (page.RouteTables ?? []).flatMap((rt) => {
                     const routeTableId = rt.RouteTableId;
                     if (routeTableId === undefined) return [];
+                    if (
+                      defaultVpc.vpcId !== undefined &&
+                      rt.VpcId === defaultVpc.vpcId &&
+                      rt.Associations?.some((a) => a.Main)
+                    ) {
+                      return [];
+                    }
                     return (rt.Routes ?? [])
-                      .filter((r) => r.GatewayId !== "local")
+                      .filter(
+                        (r) =>
+                          r.GatewayId !== "local" &&
+                          // VPC Lattice injects service-managed routes while
+                          // a VPC association is active. They cannot be
+                          // deleted through EC2 and drain with the association.
+                          r.GatewayId !== "VpcLattice",
+                      )
                       .map((r) => ({
                         routeTableId: routeTableId as RouteTableId,
                         destinationCidrBlock: r.DestinationCidrBlock,

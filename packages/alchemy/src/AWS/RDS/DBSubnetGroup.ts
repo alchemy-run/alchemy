@@ -33,12 +33,33 @@ export interface DBSubnetGroup extends Resource<
   "AWS.RDS.DBSubnetGroup",
   DBSubnetGroupProps,
   {
+    /**
+     * Name of the subnet group.
+     */
     dbSubnetGroupName: string;
+    /**
+     * ARN of the subnet group.
+     */
     dbSubnetGroupArn: string | undefined;
+    /**
+     * VPC the subnets belong to.
+     */
     vpcId: string | undefined;
+    /**
+     * Subnet IDs registered in the group.
+     */
     subnetIds: string[];
+    /**
+     * Status of the subnet group (e.g. `Complete`).
+     */
     status: string | undefined;
+    /**
+     * Network types the group supports (`IPV4`, `DUAL`).
+     */
     supportedNetworkTypes: string[] | undefined;
+    /**
+     * Tags on the subnet group.
+     */
     tags: Record<string, string>;
   },
   never,
@@ -47,7 +68,27 @@ export interface DBSubnetGroup extends Resource<
 
 /**
  * An RDS DB subnet group for Aurora clusters, instances, and proxies.
+ *
+ * RDS requires a subnet group spanning at least two Availability Zones
+ * before a cluster or instance can be placed in a VPC. Changing the name
+ * replaces the group; the subnet list updates in place.
  * @resource
+ * @section Creating a Subnet Group
+ * @example Subnet Group Across Two AZs
+ * ```typescript
+ * const subnetGroup = yield* DBSubnetGroup("SubnetGroup", {
+ *   subnetIds: [privateSubnetA.subnetId, privateSubnetB.subnetId],
+ * });
+ * ```
+ *
+ * @example Place an Aurora Cluster in the Group
+ * ```typescript
+ * const cluster = yield* DBCluster("Cluster", {
+ *   engine: "aurora-postgresql",
+ *   dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
+ *   vpcSecurityGroupIds: [dbSecurityGroup.groupId],
+ * });
+ * ```
  */
 export const DBSubnetGroup = Resource<DBSubnetGroup>("AWS.RDS.DBSubnetGroup");
 

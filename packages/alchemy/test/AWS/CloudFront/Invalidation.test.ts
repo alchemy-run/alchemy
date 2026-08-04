@@ -4,10 +4,10 @@ import type { PolicyStatement } from "@/AWS/IAM/Policy";
 import { Bucket } from "@/AWS/S3";
 import * as Output from "@/Output";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as S3 from "@distilled.cloud/aws/s3";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
@@ -102,10 +102,12 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS !== "true")(
         Id: deployed.invalidation.invalidationId,
       });
       expect(current.Invalidation?.Status).toEqual("Completed");
-      expect(current.Invalidation?.InvalidationBatch?.Paths?.Items).toEqual([
-        "/index.html",
-        "/docs/*",
-      ]);
+      // CloudFront returns invalidation paths in arbitrary order.
+      expect(
+        [
+          ...(current.Invalidation?.InvalidationBatch?.Paths?.Items ?? []),
+        ].sort(),
+      ).toEqual(["/docs/*", "/index.html"]);
 
       yield* stack.destroy();
       yield* assertDistributionDeleted(deployed.distribution.distributionId);

@@ -1,7 +1,7 @@
 import { Action } from "@/Action";
 import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -52,8 +52,10 @@ test.provider(
             source: target.url.as<string>(),
             sourceParams: {
               webCrawler: {
-                parseType: "crawl",
-                crawlOptions: { source: "links" },
+                // Cloudflare renamed `crawl` → `discover` and removed
+                // `crawlOptions` from the API. The fixture serves a
+                // sitemap, so discovery always finds content.
+                parseType: "discover",
               },
             },
           });

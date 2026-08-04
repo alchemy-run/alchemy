@@ -1,13 +1,12 @@
 import * as Docker from "@/Docker";
 import * as Provider from "@/Provider";
 import { inMemoryState } from "@/State";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import { describe } from "vitest";
 import { findAvailablePort, isDockerReady } from "./Runtime.ts";
 
 const { test } = Test.make({
@@ -49,6 +48,41 @@ test.provider("diff pulls again unless alwaysPull is disabled", () =>
       output,
     });
     expect(refreshed).toEqual({ action: "update" });
+  }),
+);
+
+test.provider("diff pulls again when Docker context changes", () =>
+  Effect.gen(function* () {
+    const provider = yield* Provider.findProvider(Docker.RemoteImage);
+    const output = {
+      imageRef: "nginx:alpine",
+      imageId: "sha256:0",
+      createdAt: 0,
+      name: "nginx",
+      tag: "alpine",
+    };
+
+    const changed = yield* provider.diff!({
+      id: "nginx",
+      fqn: "nginx",
+      instanceId: "instance",
+      olds: {
+        name: "nginx",
+        tag: "alpine",
+        alwaysPull: false,
+        context: "default",
+      },
+      news: {
+        name: "nginx",
+        tag: "alpine",
+        alwaysPull: false,
+        context: "remote-build",
+      },
+      oldBindings: [],
+      newBindings: [],
+      output,
+    });
+    expect(changed).toEqual({ action: "update" });
   }),
 );
 

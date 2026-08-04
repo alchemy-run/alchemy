@@ -1,5 +1,5 @@
 import { isStateStoreCredentialsStale } from "@/Cloudflare/StateStore/CredentialsFile.ts";
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "alchemy-test";
 
 const ACCOUNT_A = "c8eeff0e4f5ebeeedc8d9af2013d7997";
 const ACCOUNT_B = "a1b2c3d4e5f60718293a4b5c6d7e8f90";

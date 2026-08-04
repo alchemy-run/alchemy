@@ -1,6 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -57,7 +57,7 @@ class CountMismatch extends Data.TaggedError("CountMismatch")<{
  * the returned Effect, so dispatch must invoke every listener for
  * the event type.
  */
-test.provider(
+test.provider.skipIf(!!process.env.FAST)(
   "send → subscribe handlers → DO state → polled by test client",
   (stack) =>
     Effect.gen(function* () {

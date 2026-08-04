@@ -22,8 +22,8 @@ const site = yield* Cloudflare.Website.Vite("Website");
 ```
 
 Alchemy loads **your** project's Vite install (resolved from
-`rootDir`'s `package.json`), appends the Cloudflare Vite plugin —
-Alchemy's fork of `@cloudflare/vite-plugin` — to the plugins your
+`rootDir`'s `package.json`), appends Alchemy's own Cloudflare Vite
+plugin to the plugins your
 `vite.config.ts` already declares, and runs `builder.buildApp()`.
 Client assets are uploaded as Worker static assets; if the build
 emits a server bundle (SSR), that bundle becomes the Worker entry —
@@ -59,9 +59,9 @@ directory of files.
 ## Remove `@cloudflare/vite-plugin`
 
 :::caution[Remove @cloudflare/vite-plugin if present]
-Alchemy appends its own fork of the Cloudflare Vite plugin
+Alchemy appends its own Cloudflare Vite plugin
 (`@distilled.cloud/cloudflare-vite-plugin`) and is **not
-compatible** with the upstream `@cloudflare/vite-plugin` in your
+compatible** with `@cloudflare/vite-plugin` in your
 `vite.config.ts`. Remove it — this applies to every framework
 deployed with this resource:
 
@@ -151,6 +151,27 @@ the build runs, so the client reads a concrete
 `import.meta.env.VITE_API_URL`. `Redacted` values are unwrapped
 when `VITE_`-prefixed — the prefix means you are opting the value
 into the public bundle, so don't prefix secrets with `VITE_`.
+
+### The site's own URL
+
+`backend.url` works for *another* Worker's URL, but a site can't
+reference its own `url` Output. `Worker.URL` closes the loop:
+Alchemy resolves the URL the Worker will be served at — its first
+custom domain, otherwise its `workers.dev` URL — before the build
+and injects it:
+
+```typescript
+const web = yield* Cloudflare.Website.Vite("Website", {
+  env: {
+    VITE_PUBLIC_URL: Cloudflare.Worker.URL,
+  },
+});
+```
+
+The client bundle reads a concrete
+`import.meta.env.VITE_PUBLIC_URL`, and server code sees the same
+value on `env.VITE_PUBLIC_URL` (typed `string` by `InferEnv`).
+Under `alchemy dev` it resolves to the local dev server's URL.
 
 ### Runtime bindings
 

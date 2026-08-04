@@ -5,9 +5,9 @@ import * as Provider from "@/Provider";
 import { poll } from "@/Util/poll.ts";
 import { State } from "@/State";
 import type { CreatedResourceState } from "@/State/ResourceState";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as queues from "@distilled.cloud/cloudflare/queues";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import { MinimumLogLevel } from "effect/References";
@@ -25,7 +25,8 @@ const logLevel = Effect.provideService(
 /**
  * Seed a `created` Queue state row whose `queueId` is a `dev:` mock id —
  * i.e. the shape `alchemy dev` persists when a queue is "created" locally
- * against the in-memory local runtime instead of Cloudflare.
+ * against the in-memory local runtime instead of Cloudflare. Dev runs stamp
+ * `providerMode: "local"` on every commit, so the seeded row carries it.
  */
 const seedDevQueue = (input: {
   stackName: string;
@@ -49,6 +50,7 @@ const seedDevQueue = (input: {
         logicalId: input.fqn,
         instanceId: "00000000000000000000000000000001",
         providerVersion: 0,
+        providerMode: "local",
         bindings: [],
         downstream: [],
         props: {},
@@ -66,9 +68,10 @@ const seedDevQueue = (input: {
  * is a `dev:` mock id) must be promoted to a real Cloudflare queue on the
  * first live deploy.
  *
- * The live provider's `diff` sees the `dev:` id and returns `update`
- * (rather than `noop`/`replace`), so the engine calls `reconcile`, which
- * observes that the cached id is not a real queue and creates one. The
+ * The row is stamped `providerMode: "local"`, which differs from the
+ * deploy's resolved mode (`live`), so the engine plans a REPLACEMENT: the
+ * live provider creates a real queue and the old local-mode generation is
+ * deleted via the local provider (no cloud call for the `dev:` id). The
  * resulting `queueId` must be a live id and resolvable on Cloudflare.
  */
 test.provider("promotes a dev queue to a live queue on deploy", (stack) =>
@@ -174,8 +177,9 @@ test.provider("list enumerates the deployed queue", (stack) =>
  * persisted `queueId` is a `dev:` mock id) has no Cloudflare counterpart.
  * Destroying it must NOT issue a `deleteQueue` against Cloudflare — the
  * `dev:` id is not a valid queue id and the request URL would be
- * malformed. The live provider's `delete` short-circuits on the non-live
- * id, so destroy succeeds and the state row is removed cleanly.
+ * malformed. The row is stamped `providerMode: "local"`, so the engine
+ * resolves the LOCAL provider's `delete` for it (an in-memory registry
+ * removal), and destroy succeeds with the state row removed cleanly.
  */
 test.provider("suppresses deletion of a dev-only queue", (stack) =>
   Effect.gen(function* () {

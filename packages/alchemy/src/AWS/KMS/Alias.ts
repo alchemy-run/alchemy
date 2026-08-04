@@ -150,6 +150,19 @@ export const AliasProvider = () =>
           AliasName: output.aliasName,
         })
         .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
+
+      const remaining = yield* Effect.repeat(readAlias(output.aliasName), {
+        schedule: Schedule.fixed("250 millis"),
+        until: (alias) => alias === undefined,
+        times: 20,
+      });
+      if (remaining !== undefined) {
+        yield* Effect.die(
+          new Error(
+            `KMS alias ${output.aliasName} remained observable after delete`,
+          ),
+        );
+      }
       yield* session.note(`Deleted KMS alias ${output.aliasName}`);
     }),
   });

@@ -39,11 +39,17 @@ export interface InstanceProfile extends Resource<
   "AWS.IAM.InstanceProfile",
   InstanceProfileProps,
   {
+    /** The ARN of the instance profile. */
     instanceProfileArn: string;
+    /** The name of the instance profile. */
     instanceProfileName: string;
+    /** The stable unique ID of the instance profile. */
     instanceProfileId: string | undefined;
+    /** The IAM path of the instance profile. */
     path: string | undefined;
+    /** The role attached to the instance profile, if any. */
     roleName: string | undefined;
+    /** The tags applied to the instance profile. */
     tags: Record<string, string>;
   },
   never,

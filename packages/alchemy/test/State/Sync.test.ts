@@ -4,7 +4,7 @@ import {
   type ResourceState,
   type StateService,
 } from "@/State";
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
 describe("syncState", () => {

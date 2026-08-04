@@ -1,5 +1,6 @@
 import * as queues from "@distilled.cloud/cloudflare/queues";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as MutableHashMap from "effect/MutableHashMap";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
@@ -14,9 +15,9 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { QueuesPricing } from "../CloudflarePricing.ts";
 import {
   generateLocalId,
-  isLiveId,
   LOCAL_ENTRY_URL,
   LocalRuntimeState,
+  localRuntimeServices,
 } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -111,23 +112,19 @@ export const Queue = Resource<Queue>("Cloudflare.Queues.Queue", {
 export const ProviderLive = () =>
   Provider.succeed(Queue, {
     pricing: QueuesPricing,
-    // The `queueId` is not marked as stable because if you start in dev mode, the ID will change on first deploy.
-    stables: ["accountId"],
+    stables: ["queueId", "accountId"],
     diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!isResolved(news)) return undefined;
-      // If the queueId is a `dev:` ID, we need to update to a live one.
-      // The live resource doesn't exist yet, so there's no need to replace even if the name or accountId changed.
-      if (!isLiveId(output?.queueId)) {
-        return { action: "update" };
-      }
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      const name = yield* createQueueName(id, news.name);
-      const oldName = output?.queueName
-        ? output.queueName
-        : yield* createQueueName(id, olds.name);
+      const oldName =
+        output?.queueName ?? (yield* createQueueName(id, olds.name));
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a replace.
+      const name = news.name ?? oldName;
       if (name !== oldName) {
         return { action: "replace" } as const;
       }
@@ -143,9 +140,7 @@ export const ProviderLive = () =>
       let observed:
         | { queueId?: string | null; queueName?: string | null }
         | undefined;
-      // A `dev:` id never exists on Cloudflare — skip straight to the
-      // name scan (promotion from dev to live).
-      if (output?.queueId && isLiveId(output.queueId)) {
+      if (output?.queueId) {
         observed = yield* queues
           .getQueue({
             accountId: acct,
@@ -196,8 +191,6 @@ export const ProviderLive = () =>
       };
     }),
     delete: Effect.fn(function* ({ output }) {
-      // If the queueId is a `dev:` ID, the resource only exists locally, so we don't need to delete it from Cloudflare.
-      if (!isLiveId(output.queueId)) return;
       // Dependents (e.g. R2 event notification configs targeting this
       // queue) may still be tearing down concurrently — ride out the
       // dependency violation briefly, then fail loudly instead of
@@ -240,7 +233,7 @@ export const ProviderLive = () =>
     }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      if (output?.queueId && isLiveId(output.queueId)) {
+      if (output?.queueId) {
         return yield* queues
           .getQueue({
             accountId: output.accountId,
@@ -340,7 +333,7 @@ export const ProviderLocal = () =>
   );
 
 export const QueueProvider = () =>
-  ProviderLayer.select({
-    local: () => ProviderLocal(),
+  ProviderLayer.dual(Queue, {
+    local: () => ProviderLocal().pipe(Layer.provide(localRuntimeServices())),
     live: () => ProviderLive(),
   });

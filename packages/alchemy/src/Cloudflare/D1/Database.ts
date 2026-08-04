@@ -1,21 +1,31 @@
+import type { RuntimeServices } from "@distilled.cloud/cloudflare-runtime";
 import * as d1 from "@distilled.cloud/cloudflare/d1";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 
-import type { HttpClient } from "effect/unstable/http/HttpClient";
 import { isResolved } from "../../Diff.ts";
+import * as ProviderLayer from "../../Local/ProviderLayer.ts";
+import * as RpcProvider from "../../Local/RpcProvider.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
-import { listSqlFiles, readSqlFile } from "../../Sql/SqlFile.ts";
+import { listSqlFiles, readSqlFile } from "../../SQL/SqlFile.ts";
 import { recordsEqual } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { D1Pricing } from "../CloudflarePricing.ts";
-import type { Credentials } from "../Credentials.ts";
+import {
+  generateLocalId,
+  LOCAL_ENTRY_URL,
+  localRuntimeServices,
+} from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
-import { applyMigrations } from "./ApplyMigrations.ts";
+import { applyMigrations, applyMigrationsWith } from "./ApplyMigrations.ts";
 import { cloneDatabase } from "./CloneDatabase.ts";
 import { importD1Database } from "./ImportDatabase.ts";
+import { withLocalD1Executor } from "./LocalD1Gateway.ts";
 
 export const isDatabase = (value: unknown): value is Database =>
   isResourceOfType(value, "Cloudflare.D1Database");
@@ -250,7 +260,7 @@ export type Database = Resource<
  */
 export const Database = Resource<Database>("Cloudflare.D1Database");
 
-export const DatabaseProvider = () =>
+export const ProviderLive = () =>
   Provider.succeed(Database, {
     pricing: D1Pricing,
     stables: ["databaseId", "accountId"],
@@ -260,10 +270,12 @@ export const DatabaseProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      const name = yield* createDatabaseName(id, news.name);
-      const oldName = output?.databaseName
-        ? output.databaseName
-        : yield* createDatabaseName(id, olds.name);
+      const oldName =
+        output?.databaseName ?? (yield* createDatabaseName(id, olds.name));
+      // Auto-generated names are engine-owned: the deployed name stays
+      // authoritative even if the generator would name this id differently
+      // today. Only an explicit user-provided name can force a replace.
+      const name = news.name ?? oldName;
       const oldJurisdiction =
         output?.jurisdiction ?? olds.jurisdiction ?? "default";
       if (
@@ -369,8 +381,11 @@ export const DatabaseProvider = () =>
           );
       }
       const name = yield* createDatabaseName(id, olds?.name);
-      const dbs = yield* d1.listDatabases({ accountId, name });
-      const match = dbs.result.find((db) => db.name === name);
+      const match = yield* d1.listDatabases.items({ accountId, name }).pipe(
+        Stream.filter((db) => db.name === name),
+        Stream.runHead,
+        Effect.map(Option.getOrUndefined),
+      );
       if (match) {
         return {
           databaseId: match.uuid!,
@@ -417,8 +432,13 @@ export const DatabaseProvider = () =>
           );
       }
       if (!observed) {
-        const dbs = yield* d1.listDatabases({ accountId: acct, name });
-        observed = dbs.result.find((db) => db.name === name);
+        observed = yield* d1.listDatabases
+          .items({ accountId: acct, name })
+          .pipe(
+            Stream.filter((db) => db.name === name),
+            Stream.runHead,
+            Effect.map(Option.getOrUndefined),
+          );
       }
 
       // Ensure — create if missing. Cloudflare returns
@@ -438,11 +458,13 @@ export const DatabaseProvider = () =>
           .pipe(
             Effect.catchTag("InvalidProperty", () =>
               Effect.gen(function* () {
-                const dbs = yield* d1.listDatabases({
-                  accountId: acct,
-                  name,
-                });
-                const match = dbs.result.find((db) => db.name === name);
+                const match = yield* d1.listDatabases
+                  .items({ accountId: acct, name })
+                  .pipe(
+                    Stream.filter((db) => db.name === name),
+                    Stream.runHead,
+                    Effect.map(Option.getOrUndefined),
+                  );
                 if (match) {
                   return match;
                 }
@@ -482,11 +504,7 @@ export const DatabaseProvider = () =>
       // Clone is a one-shot seed performed only on first creation.
       // Re-running it on an existing database would clobber data.
       if (isFirstCreation && news.clone) {
-        const sourceId = yield* resolveCloneSource(
-          news.clone,
-          acct,
-          d1.listDatabases,
-        );
+        const sourceId = yield* resolveCloneSource(news.clone, acct);
         yield* cloneDatabase({
           accountId: acct,
           sourceDatabaseId: sourceId,
@@ -547,6 +565,162 @@ export const DatabaseProvider = () =>
     }),
   });
 
+/**
+ * Local (dev) provider — the database is purely virtual: a `dev:` id keyed
+ * into the local workerd D1 simulator (DO SQLite under `.alchemy/local/d1`).
+ * `toRuntimeBinding` lowers a `d1` binding whose id is `dev:`-prefixed onto
+ * the local D1 service.
+ *
+ * Migrations ARE applied locally: reconcile boots an ephemeral gateway
+ * workerd (see `LocalD1Gateway.ts`) and drives the same executor-agnostic
+ * migration flow the live provider uses, against the simulator's storage.
+ *
+ * RPC-backed: under `alchemy dev` (an `RpcProviderProxy` in context) the
+ * whole lifecycle runs in the Cloudflare sidecar process — where
+ * `localRuntimeServices()` is real and shared with the Worker/Queue/
+ * Container local providers — instead of in the user's process where that
+ * layer is gated empty (the root cause of #1007). In-process runs (no
+ * proxy: `sidecar: false` tests, a plain deploy deleting a local-mode row)
+ * build the provider directly with the un-gated runtime from the `dual`
+ * registration.
+ */
+export const ProviderLocal = () =>
+  RpcProvider.effect(
+    Database,
+    LOCAL_ENTRY_URL,
+    Effect.gen(function* () {
+      // The local runtime services (workerd `Runtime`, binding plugins) and
+      // the HTTP client are resolved once at layer build and closed over —
+      // lifecycle effects run with the engine's call-time context, which
+      // doesn't include them.
+      const runtimeContext = yield* Effect.context<
+        RuntimeServices | HttpClient.HttpClient
+      >();
+
+      return {
+        stables: ["accountId"],
+        diff: Effect.fn(function* ({ news = {}, output }) {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          if (!output?.databaseId) return { action: "update" } as const;
+          if (!isResolved(news)) return undefined;
+          if (output.accountId !== accountId) {
+            return { action: "replace" } as const;
+          }
+          // Detect migration/import file drift — same rules as the live
+          // provider.
+          if (news.migrationsDir) {
+            const newHashes = yield* hashMigrations(news.migrationsDir);
+            if (!recordsEqual(newHashes, output.migrationsHashes ?? {})) {
+              return { action: "update" } as const;
+            }
+            if (
+              (news.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE) !==
+              (output.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE)
+            ) {
+              return { action: "update" } as const;
+            }
+          }
+          if (news.importFiles?.length) {
+            const newHashes = yield* hashImports(
+              news.importFiles,
+              yield* rootDir,
+            );
+            if (!recordsEqual(newHashes, output.importHashes ?? {})) {
+              return { action: "update" } as const;
+            }
+          }
+          // Fall through to the engine's default prop diff.
+        }),
+        read: Effect.fn(function* ({ output }) {
+          // Purely virtual — the persisted state row is the source of truth.
+          return output ?? undefined;
+        }),
+        reconcile: Effect.fn(function* ({ id, news = {}, output }) {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const databaseId = output?.databaseId ?? generateLocalId();
+
+          // Sync migrations — the shared flow is idempotent (skips applied
+          // entries), driven through the ephemeral local gateway.
+          const migrationsTable =
+            news.migrationsTable ??
+            output?.migrationsTable ??
+            DEFAULT_MIGRATIONS_TABLE;
+          let migrationsHashes: Record<string, string> = {};
+          if (news.migrationsDir) {
+            const files = yield* listSqlFiles(news.migrationsDir);
+            if (files.length > 0) {
+              yield* withLocalD1Executor(databaseId, (executor) =>
+                applyMigrationsWith(executor, {
+                  migrationsTable,
+                  migrationsFiles: files,
+                }),
+              ).pipe(Effect.provideContext(runtimeContext));
+            }
+            for (const file of files) migrationsHashes[file.id] = file.hash;
+          } else {
+            migrationsHashes = output?.migrationsHashes ?? {};
+          }
+
+          // Sync imports — locally an import file is just multi-statement
+          // SQL, executed through the same gateway. Files whose hash matches
+          // previously-imported state are skipped (mirroring `runImports`).
+          const importHashes: Record<string, string> = {
+            ...(output?.importHashes ?? {}),
+          };
+          if (news.importFiles?.length) {
+            const importRootDir = yield* rootDir;
+            const pending: Array<{ path: string; sql: string; hash: string }> =
+              [];
+            for (const filePath of news.importFiles) {
+              const file = yield* readSqlFile(importRootDir, filePath);
+              if (importHashes[filePath] === file.hash) continue;
+              pending.push({ path: filePath, sql: file.sql, hash: file.hash });
+            }
+            if (pending.length > 0) {
+              yield* withLocalD1Executor(databaseId, (executor) =>
+                Effect.forEach(pending, (file) => executor(file.sql), {
+                  discard: true,
+                }),
+              ).pipe(Effect.provideContext(runtimeContext));
+              for (const file of pending) {
+                importHashes[file.path] = file.hash;
+              }
+            }
+          }
+
+          return {
+            databaseId,
+            databaseName: yield* createDatabaseName(id, news.name),
+            jurisdiction: (news.jurisdiction ?? "default") as Jurisdiction,
+            readReplication: news.readReplication,
+            accountId: output?.accountId ?? accountId,
+            migrationsDir: news.migrationsDir,
+            migrationsTable: news.migrationsDir ? migrationsTable : undefined,
+            migrationsHashes,
+            importHashes,
+          };
+        }),
+        delete: Effect.fn(function* () {
+          // The simulator's on-disk data is keyed by the dev id; dropping
+          // the state row is enough — orphaned data is reclaimed with
+          // `.alchemy`.
+        }),
+      };
+    }),
+  );
+
+export const DatabaseProvider = () =>
+  ProviderLayer.dual(Database, {
+    // The local provider's reconcile boots an ephemeral workerd gateway to
+    // apply migrations, so it needs the shared local runtime layer. Under
+    // `alchemy dev` the provider is an RPC stub (this gated layer is empty
+    // and unused) and the sidecar entry (`../Local.ts`) supplies the real
+    // runtime; without the proxy the provider builds in-process and this
+    // layer is real.
+    local: () => ProviderLocal().pipe(Layer.provide(localRuntimeServices())),
+    live: () => ProviderLive(),
+  });
+
 const createDatabaseName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {
     return name ?? (yield* createPhysicalName({ id }));
@@ -558,18 +732,7 @@ const rootDir = Effect.sync(() => process.cwd());
  * Resolve a clone source spec into a concrete database UUID. Looks up by
  * name through `listDatabases` when only a name is provided.
  */
-const resolveCloneSource = (
-  source: CloneSource,
-  accountId: string,
-  listDbs: (input: {
-    accountId: string;
-    name?: string;
-  }) => Effect.Effect<
-    d1.ListDatabasesResponse,
-    d1.ListDatabasesError,
-    Credentials | HttpClient
-  >,
-) =>
+const resolveCloneSource = (source: CloneSource, accountId: string) =>
   Effect.gen(function* () {
     if ("databaseId" in source && source.databaseId) {
       // At lifecycle time, Output<string> attributes have resolved to strings.
@@ -577,8 +740,11 @@ const resolveCloneSource = (
     }
     if ("name" in source && source.name) {
       const name = source.name as unknown as string;
-      const dbs = yield* listDbs({ accountId, name });
-      const match = dbs.result.find((db) => db.name === name);
+      const match = yield* d1.listDatabases.items({ accountId, name }).pipe(
+        Stream.filter((db) => db.name === name),
+        Stream.runHead,
+        Effect.map(Option.getOrUndefined),
+      );
       if (!match?.uuid) {
         return yield* Effect.die(
           `Source database "${name}" not found for cloning`,

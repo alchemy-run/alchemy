@@ -97,7 +97,12 @@ export const tailCommand = Command.make(
             });
             if (!(resourceState as any)?.attr) continue;
 
-            const provider = yield* findProviderByType(resource.Type);
+            // Tail with the provider variant of the mode that deployed the
+            // row (a local dev worker's logs come from the local provider).
+            const provider = yield* findProviderByType(
+              resource.Type,
+              (resourceState as any).providerMode,
+            );
             if (!provider.tail) continue;
 
             tailable.push({

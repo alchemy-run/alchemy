@@ -2,10 +2,9 @@ import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy.ts";
 import * as Docker from "@/Docker";
 import * as Provider from "@/Provider";
 import { inMemoryState } from "@/State";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { describe } from "vitest";
 import { isDockerReady } from "./Runtime.ts";
 
 const { test } = Test.make({
@@ -30,6 +29,37 @@ test.provider("diff replaces a volume when labels change", () =>
         driver: "local",
         driverOpts: {},
         labels: { usage: "old" },
+        mountpoint: undefined,
+        createdAt: 0,
+      },
+    });
+    expect(volumeDiff).toEqual({ action: "replace", deleteFirst: true });
+  }),
+);
+
+test.provider("diff replaces a volume when its Docker context changes", () =>
+  Effect.gen(function* () {
+    const volumeProvider = yield* Provider.findProvider(Docker.Volume);
+    const volumeDiff = yield* volumeProvider.diff!({
+      id: "data",
+      fqn: "data",
+      instanceId: "instance",
+      olds: {
+        name: "data",
+        context: "default",
+      },
+      news: {
+        name: "data",
+        context: "remote-build",
+      },
+      oldBindings: [],
+      newBindings: [],
+      output: {
+        id: "data",
+        name: "data",
+        driver: "local",
+        driverOpts: {},
+        labels: {},
         mountpoint: undefined,
         createdAt: 0,
       },

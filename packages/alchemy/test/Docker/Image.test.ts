@@ -1,7 +1,7 @@
 import * as Docker from "@/Docker";
 import { inMemoryState } from "@/State";
-import * as Test from "@/Test/Vitest";
-import { describe, expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -13,6 +13,37 @@ const { test } = Test.make({
 });
 
 describe("Docker.Image", { concurrent: false }, () => {
+  test.provider("plans an update when the Docker context changes", (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectoryScoped({
+        prefix: "alchemy-docker-context-plan-",
+      });
+      yield* fs.writeFileString(
+        path.join(root, "Dockerfile"),
+        "FROM scratch\n",
+      );
+
+      const base = Docker.Image("context-image", {
+        tag: "latest",
+        context: "default",
+        build: { context: root },
+      });
+      const changed = Docker.Image("context-image", {
+        tag: "latest",
+        context: "remote-build",
+        build: { context: root },
+      });
+
+      yield* stack.deploy(base);
+      const plan = yield* stack.plan(changed);
+      expect(plan.resources["context-image"]).toMatchObject({
+        action: "update",
+      });
+    }),
+  );
+
   test.provider.skipIf(!isDockerReady)(
     "builds a tiny Dockerfile with an auto-generated name",
     (stack) =>

@@ -236,7 +236,7 @@ export const ReserveProvider = () =>
       // Optionally clear data already stored in reserve — an async
       // operation that we kick off and poll to completion (bounded).
       if (olds?.clearOnDelete === true) {
-        yield* cache.clearCacheReserve({ zoneId, body: {} });
+        yield* cache.clearCacheReserve({ zoneId });
         yield* cache.statusCacheReserve({ zoneId }).pipe(
           Effect.repeat({
             schedule: Schedule.spaced("5 seconds"),

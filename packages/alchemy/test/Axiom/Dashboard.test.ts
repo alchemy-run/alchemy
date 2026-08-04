@@ -1,7 +1,7 @@
 import * as Axiom from "@/Axiom";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import * as Test from "@/Test/Alchemy";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 
@@ -34,7 +34,7 @@ const dashboardProps = {
     timeWindowStart: "qr-now-1h",
     timeWindowEnd: "qr-now",
   },
-} as const;
+};
 
 test.provider.skipIf(!hasAxiomCreds)(
   "list enumerates the deployed dashboard",

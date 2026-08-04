@@ -5,7 +5,7 @@ import { Stack } from "@/Stack";
 import { Stage } from "@/Stage";
 import { inMemoryState } from "@/State/InMemoryState";
 import type { ResourceState } from "@/State/ResourceState";
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";

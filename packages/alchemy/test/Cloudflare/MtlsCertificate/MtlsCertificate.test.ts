@@ -1,15 +1,14 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import { poll } from "@/Util/poll.ts";
 import * as mtls from "@distilled.cloud/cloudflare/mtls-certificates";
-import { expect } from "@effect/vitest";
+import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { describe } from "vitest";
 import { CA_CERT_1, CA_CERT_2, LEAF_CERT, LEAF_KEY } from "./fixtures/certs.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });

@@ -2,9 +2,9 @@ import * as AdoptPolicy from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Provider from "@/Provider";
-import * as Test from "@/Test/Vitest";
+import * as Test from "@/Test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
-import { expect } from "@effect/vitest";
+import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -50,6 +50,19 @@ test.provider(
             type: "self_hosted",
             domain,
             sessionDuration: "24h",
+            oauthConfiguration: {
+              enabled: true,
+              grant: {
+                sessionDuration: "24h",
+                accessTokenLifetime: "15m",
+              },
+              dynamicClientRegistration: {
+                enabled: true,
+                allowedUris: [],
+                allowAnyOnLocalhost: true,
+                allowAnyOnLoopback: true,
+              },
+            },
             policies: [policy.policyId],
           });
           return { app, policy };
@@ -60,6 +73,15 @@ test.provider(
       expect(app.type).toEqual("self_hosted");
       expect(app.domain).toEqual(domain);
       expect(app.aud.length).toBeGreaterThan(0);
+      expect(app.oauthConfiguration?.enabled).toBe(true);
+      expect(app.oauthConfiguration?.grant?.sessionDuration).toBe("24h");
+      expect(app.oauthConfiguration?.grant?.accessTokenLifetime).toBe("15m");
+      expect(app.oauthConfiguration?.dynamicClientRegistration?.enabled).toBe(
+        true,
+      );
+      expect(
+        app.oauthConfiguration?.dynamicClientRegistration?.allowedUris ?? [],
+      ).toEqual([]);
       expect(policy.policyId.length).toBeGreaterThan(0);
 
       const live = yield* zeroTrust.getAccessApplicationForAccount({
@@ -70,12 +92,45 @@ test.provider(
         id?: string | null;
         type?: string | null;
         policies?: ReadonlyArray<{ id?: string | null }> | null;
+        oauthConfiguration?: {
+          enabled?: boolean | null;
+          grant?: {
+            sessionDuration?: string | null;
+            accessTokenLifetime?: string | null;
+          } | null;
+          dynamicClientRegistration?: {
+            enabled?: boolean | null;
+            allowedUris?: ReadonlyArray<string | null> | null;
+            allowAnyOnLocalhost?: boolean | null;
+            allowAnyOnLoopback?: boolean | null;
+          } | null;
+        } | null;
       };
       expect(liveRecord.id).toEqual(app.applicationId);
       expect(liveRecord.type).toEqual("self_hosted");
       expect(liveRecord.policies?.length ?? 0).toBeGreaterThanOrEqual(1);
       const liveIds = (liveRecord.policies ?? []).map((p) => p.id);
       expect(liveIds).toContain(policy.policyId);
+      expect(liveRecord.oauthConfiguration?.enabled).toBe(true);
+      expect(liveRecord.oauthConfiguration?.grant?.sessionDuration).toBe("24h");
+      expect(liveRecord.oauthConfiguration?.grant?.accessTokenLifetime).toBe(
+        "15m",
+      );
+      expect(
+        liveRecord.oauthConfiguration?.dynamicClientRegistration?.enabled,
+      ).toBe(true);
+      expect(
+        liveRecord.oauthConfiguration?.dynamicClientRegistration?.allowedUris ??
+          [],
+      ).toEqual([]);
+      expect(
+        liveRecord.oauthConfiguration?.dynamicClientRegistration
+          ?.allowAnyOnLocalhost,
+      ).toBe(true);
+      expect(
+        liveRecord.oauthConfiguration?.dynamicClientRegistration
+          ?.allowAnyOnLoopback,
+      ).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -198,6 +253,18 @@ test.provider(
           return yield* Cloudflare.Access.Application("UpdatePolicies", {
             type: "self_hosted",
             domain,
+            oauthConfiguration: {
+              enabled: true,
+              grant: {
+                sessionDuration: "24h",
+                accessTokenLifetime: "15m",
+              },
+              dynamicClientRegistration: {
+                enabled: true,
+                allowedUris: ["https://client.example.com/callback"],
+                allowAnyOnLocalhost: true,
+              },
+            },
             policies: [allow.policyId],
           });
         }),
@@ -221,6 +288,12 @@ test.provider(
           return yield* Cloudflare.Access.Application("UpdatePolicies", {
             type: "self_hosted",
             domain,
+            // Update one managed OAuth leaf while preserving omitted fields.
+            oauthConfiguration: {
+              dynamicClientRegistration: {
+                allowAnyOnLoopback: true,
+              },
+            },
             policies: [allow.policyId, deny.policyId],
           });
         }),
@@ -234,8 +307,42 @@ test.provider(
       });
       const liveRecord = live as unknown as {
         policies?: ReadonlyArray<unknown> | null;
+        oauthConfiguration?: {
+          enabled?: boolean | null;
+          grant?: {
+            sessionDuration?: string | null;
+            accessTokenLifetime?: string | null;
+          } | null;
+          dynamicClientRegistration?: {
+            enabled?: boolean | null;
+            allowedUris?: ReadonlyArray<string | null> | null;
+            allowAnyOnLocalhost?: boolean | null;
+            allowAnyOnLoopback?: boolean | null;
+          } | null;
+        } | null;
       };
       expect(liveRecord.policies?.length ?? 0).toEqual(2);
+      // The partial desired body must merge over the live managed OAuth
+      // configuration before the PUT-style application update.
+      expect(liveRecord.oauthConfiguration?.enabled).toBe(true);
+      expect(liveRecord.oauthConfiguration?.grant?.sessionDuration).toBe("24h");
+      expect(liveRecord.oauthConfiguration?.grant?.accessTokenLifetime).toBe(
+        "15m",
+      );
+      expect(
+        liveRecord.oauthConfiguration?.dynamicClientRegistration?.enabled,
+      ).toBe(true);
+      expect(
+        liveRecord.oauthConfiguration?.dynamicClientRegistration?.allowedUris,
+      ).toEqual(["https://client.example.com/callback"]);
+      expect(
+        liveRecord.oauthConfiguration?.dynamicClientRegistration
+          ?.allowAnyOnLocalhost,
+      ).toBe(true);
+      expect(
+        liveRecord.oauthConfiguration?.dynamicClientRegistration
+          ?.allowAnyOnLoopback,
+      ).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),

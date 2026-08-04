@@ -44,8 +44,17 @@ export interface ScheduleGroup extends Resource<
   "AWS.Scheduler.ScheduleGroup",
   ScheduleGroupProps,
   {
+    /**
+     * ARN of the schedule group.
+     */
     scheduleGroupArn: string;
+    /**
+     * Name of the schedule group.
+     */
     scheduleGroupName: string;
+    /**
+     * Current state of the schedule group (`ACTIVE` or `DELETING`).
+     */
     state: string | undefined;
   },
   never,

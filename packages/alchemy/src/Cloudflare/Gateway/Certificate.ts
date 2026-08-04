@@ -224,7 +224,6 @@ export const CertificateProvider = () =>
         yield* zeroTrust.activateGatewayCertificate({
           accountId,
           certificateId,
-          body: {},
         });
       } else if (
         !wantActive &&
@@ -233,7 +232,6 @@ export const CertificateProvider = () =>
         yield* zeroTrust.deactivateGatewayCertificate({
           accountId,
           certificateId,
-          body: {},
         });
       }
       const desired = wantActive ? "available" : "inactive";
@@ -253,7 +251,7 @@ export const CertificateProvider = () =>
       const status = observed.bindingStatus ?? undefined;
       if (status === "available" || status === "pending_deployment") {
         yield* zeroTrust
-          .deactivateGatewayCertificate({ accountId, certificateId, body: {} })
+          .deactivateGatewayCertificate({ accountId, certificateId })
           .pipe(
             Effect.catchTag("GatewayCertificateNotFound", () => Effect.void),
           );

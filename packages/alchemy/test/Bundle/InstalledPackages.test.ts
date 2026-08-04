@@ -11,7 +11,7 @@ import {
   resolvePackageInstallIdentity,
 } from "@/Bundle/InstalledPackages";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -729,35 +729,41 @@ describe("Lambda external packages", () => {
   );
 
   describe.sequential("npm install failures", () => {
-    it.effect("fails when npm is missing from PATH", () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectory({
-          prefix: "alchemy-external-missing-npm-",
-        });
-        const originalPath = process.env.PATH;
+    it.effect(
+      "fails when npm is missing from PATH",
+      () =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const root = yield* fs.makeTempDirectory({
+            prefix: "alchemy-external-missing-npm-",
+          });
+          const originalPath = process.env.PATH;
 
-        try {
-          process.env.PATH = "";
-          yield* fs.writeFileString(
-            path.join(root, "package.json"),
-            JSON.stringify({ dependencies: { sharp: "^0.34.5" } }),
-          );
+          try {
+            process.env.PATH = "";
+            yield* fs.writeFileString(
+              path.join(root, "package.json"),
+              JSON.stringify({ dependencies: { sharp: "^0.34.5" } }),
+            );
 
-          const error = yield* installResolvedPackages({
-            resolved: { sharp: "^0.34.5" },
-            architecture: "arm64",
-          }).pipe(Effect.flip);
-          expect(error.message).toContain(
-            "Failed to run 'npm install' for build.install:",
-          );
-          expect(error.message).toMatch(/NotFound|ENOENT/);
-        } finally {
-          process.env.PATH = originalPath;
-          yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
-        }
-      }).pipe(Effect.provide(NodeServices.layer)),
+            const error = yield* installResolvedPackages({
+              resolved: { sharp: "^0.34.5" },
+              architecture: "arm64",
+            }).pipe(Effect.flip);
+            expect(error.message).toContain(
+              "Failed to run 'npm install' for build.install:",
+            );
+            expect(error.message).toMatch(/NotFound|ENOENT/);
+          } finally {
+            process.env.PATH = originalPath;
+            yield* fs.remove(root, { recursive: true }).pipe(Effect.ignore);
+          }
+        }).pipe(Effect.provide(NodeServices.layer)),
+      // Blanking process.env.PATH is process-global: every concurrently
+      // running test that spawns a child process would fail with ENOENT.
+      // `exclusive` takes the runner's whole-process write lock.
+      { exclusive: true },
     );
 
     it.effect(

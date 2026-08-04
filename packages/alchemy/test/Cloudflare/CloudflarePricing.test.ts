@@ -9,7 +9,7 @@ import {
   WorkersPricing,
 } from "@/Cloudflare/CloudflarePricing";
 import { asOutput } from "@/Output";
-import { describe, expect, test } from "@effect/vitest";
+import { describe, expect, test } from "alchemy-test";
 
 describe("CloudflarePricing", () => {
   describe("floors — nothing here has a nonzero cost at zero usage", () => {
