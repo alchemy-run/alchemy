@@ -2356,6 +2356,121 @@ describe("whole-resource refs resolve to the upstream's stable attributes", () =
       expect(plan.resources.B!.action).toBe("noop");
     }),
   );
+
+  // The binding path mirrors the props split: `diffBindings` compares the
+  // materialized (stables-only) view, but the node's binding rows carry the
+  // apply-faithful payload so `Output.evaluate(node.bindings, outputs)`
+  // re-resolves the upstream's fresh post-reconcile attributes.
+  const seedHostWithFullPayload = () =>
+    seed({
+      Host: {
+        instanceId,
+        providerVersion: 0,
+        logicalId: "Host",
+        fqn: "Host",
+        namespace: undefined,
+        resourceType: "Test.BindingTarget",
+        status: "created",
+        props: { name: "host" },
+        attr: {
+          name: "host",
+          string: "Host",
+          env: {},
+          replaceString: undefined,
+        },
+        downstream: [],
+        // Terminal commits persist the payload the provider reconciled
+        // with — the upstream's FULL attributes (#874), not the plan-time
+        // stables-only projection.
+        bindings: [
+          {
+            sid: "FromA",
+            data: {
+              env: {
+                A: {
+                  string: "old-value",
+                  stableString: "A",
+                  stableArray: ["A"],
+                },
+              },
+            },
+          },
+        ],
+      },
+    });
+
+  const hostProgram = (upstreamString: string) =>
+    Effect.gen(function* () {
+      const A = yield* TestResource("A", { string: upstreamString });
+      const host = yield* BindingTarget("Host", { name: "host" });
+      // The binding data embeds the WHOLE upstream resource.
+      yield* host.bind("FromA", { env: { A } } as any);
+    });
+
+  test(
+    "the node's binding payload keeps the whole-resource ref as an evaluable Expr carrying the stable attributes",
+    Effect.gen(function* () {
+      yield* seedUpdatingUpstream();
+
+      const plan = yield* hostProgram("new-value").pipe(makePlan);
+
+      expect(plan.resources.A!.action).toBe("update");
+
+      const rows = (plan.resources.Host as any).bindings;
+      expect(rows).toHaveLength(1);
+      expect(rows[0].sid).toBe("FromA");
+      const payload = rows[0].data.env.A;
+      expect(Output.isResourceExpr(payload)).toBe(true);
+      expect((payload as Output.ResourceExpr<any>).stables).toEqual({
+        stableString: "A",
+        stableArray: ["A"],
+      });
+    }),
+  );
+
+  test(
+    "an updating upstream marks the binding row 'update' from the materialized comparison while the payload stays evaluable",
+    Effect.gen(function* () {
+      yield* seedUpdatingUpstream();
+      yield* seedHostWithFullPayload();
+
+      const plan = yield* hostProgram("new-value").pipe(makePlan);
+
+      expect(plan.resources.A!.action).toBe("update");
+      // The host's own props are unchanged; the binding drift alone drags
+      // it into the update that re-delivers A's fresh attributes.
+      expect(plan.resources.Host!.action).toBe("update");
+
+      const rows = (plan.resources.Host as any).bindings;
+      expect(rows).toHaveLength(1);
+      // Action from the materialized comparison (persisted full attrs vs
+      // stables-only projection)...
+      expect(rows[0].action).toBe("update");
+      // ...payload from the apply-faithful resolution.
+      expect(Output.isResourceExpr(rows[0].data.env.A)).toBe(true);
+    }),
+  );
+
+  test(
+    "an unchanged upstream's full persisted binding payload no-ops instead of churning",
+    Effect.gen(function* () {
+      yield* seedUpdatingUpstream();
+      yield* seedHostWithFullPayload();
+
+      // Same props as seeded — A no-ops, so it resolves to its full
+      // persisted attrs and the materialized binding payload matches the
+      // persisted row exactly.
+      const plan = yield* hostProgram("old-value").pipe(makePlan);
+
+      expect(plan.resources.A!.action).toBe("noop");
+      expect(plan.resources.Host!.action).toBe("noop");
+      const rows = (plan.resources.Host as any).bindings;
+      expect(rows[0].action).toBe("noop");
+      // Nothing left to re-evaluate — the payload is the plain full attrs.
+      expect(Output.isExpr(rows[0].data.env.A)).toBe(false);
+      expect(rows[0].data.env.A.string).toBe("old-value");
+    }),
+  );
 });
 
 describe("diff.stables overrides provider.stables", () => {
