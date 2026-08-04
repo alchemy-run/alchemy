@@ -1,13 +1,17 @@
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Test from "@/Test/Alchemy";
+import * as kv from "@distilled.cloud/cloudflare/kv";
 import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
@@ -31,18 +35,71 @@ const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "nuxt-app");
 // node_modules when the fixture's own tree has none.
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
+const fixtureEntries = [
+  ".gitignore",
+  "package.json",
+  "nuxt.config.ts",
+  "worker-entry.ts",
+  "app",
+  "server",
+  "public",
+];
+
+const memoInclude = [
+  "app/**",
+  "server/**",
+  "public/**",
+  "nuxt.config.ts",
+  "worker-entry.ts",
+  "package.json",
+];
+
 const nuxtProps = (rootDir: string) => ({
   rootDir,
   workersDev: { enabled: true, previewsEnabled: true },
   memo: {
-    include: [
-      "app/**",
-      "server/**",
-      "public/**",
-      "nuxt.config.ts",
-      "package.json",
-    ],
+    include: memoInclude,
   },
+});
+
+class NamespaceStillExists extends Data.TaggedError("NamespaceStillExists") {}
+
+const waitForNamespaceToBeDeleted = Effect.fn(function* (
+  namespaceId: string,
+  accountId: string,
+) {
+  yield* kv.getNamespace({ accountId, namespaceId }).pipe(
+    Effect.flatMap(() => Effect.fail(new NamespaceStillExists())),
+    Effect.retry({
+      while: (e): e is NamespaceStillExists =>
+        e instanceof NamespaceStillExists,
+      schedule: Schedule.exponential(250),
+      times: 10,
+    }),
+    Effect.catchTag("NamespaceNotFound", () => Effect.void),
+  );
+});
+
+/**
+ * Read `keyName` from the real cloud namespace via distilled's KV API,
+ * retrying through KV's brief read-after-write lag while the key is not
+ * yet visible.
+ */
+const readNamespaceValue = Effect.fn(function* (options: {
+  accountId: string;
+  namespaceId: string;
+  keyName: string;
+}) {
+  const res = yield* kv.getNamespaceValue(options).pipe(
+    Effect.retry({
+      while: (e): boolean => e._tag === "KeyNotFound",
+      schedule: Schedule.exponential("1 second"),
+      times: 8,
+    }),
+  );
+  return yield* Effect.tryPromise(() =>
+    new Response(Stream.toReadableStream(res.body) as BodyInit).text(),
+  );
 });
 
 test.provider(
@@ -58,14 +115,7 @@ test.provider(
       const rootDir = yield* cloneFixture(fixtureDir, {
         prefix: "alchemy-nuxt-",
         tempRoot,
-        entries: [
-          ".gitignore",
-          "package.json",
-          "nuxt.config.ts",
-          "app",
-          "server",
-          "public",
-        ],
+        entries: fixtureEntries,
       });
 
       const bindingMarker = "nuxt-binding-marker";
@@ -73,16 +123,19 @@ test.provider(
       const deploy = () =>
         stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Website.Nuxt("NuxtSite", {
+            const siteKv = yield* Cloudflare.KV.Namespace("SiteKV");
+            const site = yield* Cloudflare.Website.Nuxt("NuxtSite", {
               ...nuxtProps(rootDir),
               env: {
                 TEST_BINDING: bindingMarker,
+                SITE_KV: siteKv,
               },
             });
+            return { site, siteKv };
           }),
         );
 
-      const site1 = yield* deploy();
+      const { site: site1, siteKv } = yield* deploy();
 
       expect(site1.url).toBeDefined();
       expect(site1.hash?.input).toBeDefined();
@@ -122,6 +175,41 @@ test.provider(
       expect(hello.binding).toBe(bindingMarker);
       expect(hello.hasWaitUntil).toBe(true);
 
+      // POST route: the JSON body flows through h3's readBody and comes
+      // back verbatim, with the binding visible on a non-GET route.
+      const echoPayload = { message: "hello-from-post", n: 42 };
+      const echo = yield* postJsonReady<{
+        method: string;
+        echoed: { message: string; n: number };
+        binding: string | null;
+      }>(`${site1.url!}/api/echo`, echoPayload);
+      expect(echo.method).toBe("POST");
+      expect(echo.echoed).toEqual(echoPayload);
+      expect(echo.binding).toBe(bindingMarker);
+
+      // KV binding: the worker's PUT lands in the real namespace and the
+      // worker's GET reads it back through the native binding.
+      const kvKey = "nuxt-live-key";
+      const kvValue = "nuxt-live-value";
+      expect(siteKv.namespaceId).toBeDefined();
+      const put = yield* putJsonReady<{ put: boolean; key: string }>(
+        `${site1.url!}/api/kv?key=${kvKey}&value=${kvValue}`,
+      );
+      expect(put.put).toBe(true);
+      const got = yield* fetchJsonReady<{ key: string; value: string | null }>(
+        `${site1.url!}/api/kv?key=${kvKey}`,
+      );
+      expect(got.value).toBe(kvValue);
+
+      // Out-of-band: the write is visible through the cloud KV API — the
+      // binding really targeted the namespace this stack provisioned.
+      const observed = yield* readNamespaceValue({
+        accountId,
+        namespaceId: siteKv.namespaceId,
+        keyName: kvKey,
+      });
+      expect(observed).toBe(kvValue);
+
       // Static asset from `public/`.
       yield* expectUrlContains(`${site1.url!}/robots.txt`, "User-agent", {
         timeout: "60 seconds",
@@ -140,7 +228,7 @@ test.provider(
 
       // ── deploy 2: no changes ⇒ the rebuild-free input hash matches and
       // the deploy short-circuits without building ─────────────────────────
-      const site2 = yield* deploy();
+      const { site: site2 } = yield* deploy();
 
       expect(site2.hash?.input).toBeDefined();
       expect(site2.hash?.input).toEqual(site1.hash?.input);
@@ -158,7 +246,7 @@ test.provider(
         index.replace("NUXT_PAGE_MARKER", "NUXT_PAGE_MARKER_V2"),
       );
 
-      const site3 = yield* deploy();
+      const { site: site3 } = yield* deploy();
 
       expect(site3.hash?.input).toBeDefined();
       expect(site3.hash?.input).not.toEqual(site1.hash?.input);
@@ -169,6 +257,114 @@ test.provider(
 
       yield* stack.destroy();
       yield* waitForWorkerToBeDeleted(site1.workerName, accountId);
+
+      // Destroy must also delete the stack-provisioned KV namespace.
+      yield* waitForNamespaceToBeDeleted(siteKv.namespaceId, accountId);
+    }).pipe(logLevel),
+  { timeout: 600_000 },
+);
+
+// ─────────────────────────────────────────────────────────────────────
+// Custom worker entry (seam: NuxtProps.main → nitro.options.entry)
+//
+// `main` points the deploy at the user's own module, which wraps nitro's
+// emitted cloudflare-module handler (imported from
+// `nitropack/presets/cloudflare/runtime/cloudflare-module`) and re-exports
+// the `Counter` Durable Object class — DO classes must live on the
+// deployed worker for their namespace bindings to resolve. Mirrors
+// Waku.test.ts's "main deploys a custom worker entry" test.
+// ─────────────────────────────────────────────────────────────────────
+
+test.provider(
+  "Nuxt: main deploys a custom worker entry hosting a Durable Object",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const rootDir = yield* cloneFixture(fixtureDir, {
+        prefix: "alchemy-nuxt-main-",
+        tempRoot,
+        entries: fixtureEntries,
+      });
+
+      const bindingMarker = "nuxt-main-marker";
+
+      const site = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Website.Nuxt("NuxtMainSite", {
+            ...nuxtProps(rootDir),
+            // The user's own worker entry: wraps nitro's handler and
+            // exports the Counter DO.
+            main: "worker-entry.ts",
+            env: {
+              TEST_BINDING: bindingMarker,
+              COUNTER: Cloudflare.DurableObject("Counter", {
+                className: "Counter",
+              }),
+            },
+          });
+        }),
+      );
+
+      expect(site.url).toBeDefined();
+      yield* expectWorkerExists(site.workerName, accountId);
+
+      // The DO namespace is bound and state increments ACROSS requests —
+      // instance identity on the deployed worker, through the custom entry.
+      // (POST increments, GET reads — see server/api/counter.ts.)
+      const first = yield* postJsonReady<{ count: number }>(
+        `${site.url!}/api/counter`,
+        {},
+      );
+      const second = yield* postJsonReady<{ count: number }>(
+        `${site.url!}/api/counter`,
+        {},
+      );
+      expect(second.count).toBe(first.count + 1);
+
+      const read = yield* fetchJsonReady<{ count: number }>(
+        `${site.url!}/api/counter`,
+      );
+      expect(read.count).toBe(second.count);
+
+      // Wrapping nitro's handler keeps every framework route working:
+      // the SSR page still renders (and still reads bindings).
+      yield* expectUrlContains(`${site.url!}/`, "NUXT_PAGE_MARKER", {
+        timeout: "120 seconds",
+        label: "SSR page through the custom entry",
+      });
+      yield* expectUrlContains(`${site.url!}/`, `binding:${bindingMarker}`, {
+        timeout: "60 seconds",
+        label: "env binding through the custom entry",
+      });
+
+      // API route through the wrapped handler.
+      const hello = yield* fetchJsonReady<{
+        marker: string;
+        binding: string | null;
+      }>(`${site.url!}/api/hello`);
+      expect(hello.marker).toBe("api-route-ok");
+      expect(hello.binding).toBe(bindingMarker);
+
+      // Static asset + prerendered page still serve from assets alongside
+      // the custom entry.
+      yield* expectUrlContains(`${site.url!}/robots.txt`, "User-agent", {
+        timeout: "60 seconds",
+        label: "static asset with custom entry",
+      });
+      yield* expectUrlContains(
+        `${site.url!}/prerendered`,
+        "this-page-is-prerendered",
+        {
+          timeout: "60 seconds",
+          label: "prerendered page with custom entry",
+        },
+      );
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(site.workerName, accountId);
     }).pipe(logLevel),
   { timeout: 600_000 },
 );
@@ -198,3 +394,43 @@ const fetchJsonReady = <T>(url: string) =>
       }),
     );
   });
+
+/** POST a JSON body to `url` until it answers 200 with a JSON body. */
+const postJsonReady = <T>(url: string, body: unknown) =>
+  HttpClient.execute(
+    HttpClientRequest.post(url).pipe(HttpClientRequest.bodyJsonUnsafe(body)),
+  ).pipe(
+    Effect.flatMap((res) =>
+      res.status === 200
+        ? Effect.flatMap(res.text, (responseBody) =>
+            Effect.try({
+              try: () => JSON.parse(responseBody) as T,
+              catch: () => new Error(`non-json body: ${responseBody}`),
+            }),
+          )
+        : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+    ),
+    Effect.retry({
+      schedule: Schedule.exponential("500 millis"),
+      times: 15,
+    }),
+  );
+
+/** PUT (empty body) to `url` until it answers 200 with a JSON body. */
+const putJsonReady = <T>(url: string) =>
+  HttpClient.execute(HttpClientRequest.put(url)).pipe(
+    Effect.flatMap((res) =>
+      res.status === 200
+        ? Effect.flatMap(res.text, (responseBody) =>
+            Effect.try({
+              try: () => JSON.parse(responseBody) as T,
+              catch: () => new Error(`non-json body: ${responseBody}`),
+            }),
+          )
+        : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+    ),
+    Effect.retry({
+      schedule: Schedule.exponential("500 millis"),
+      times: 15,
+    }),
+  );

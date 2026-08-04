@@ -1,16 +1,24 @@
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Test from "@/Test/Alchemy";
+import * as kv from "@distilled.cloud/cloudflare/kv";
 import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
-import { expectDirectStatus, expectUrlContains } from "../Utils/Http.ts";
+import {
+  expectDirectStatus,
+  expectUrlContains,
+  expectUrlHeader,
+} from "../Utils/Http.ts";
 import {
   expectWorkerExists,
   waitForWorkerToBeDeleted,
@@ -71,16 +79,22 @@ test.provider(
       const deploy = () =>
         stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Website.Waku("WakuSite", {
+            const siteKv = yield* Cloudflare.KV.Namespace("SiteKV");
+            const site = yield* Cloudflare.Website.Waku("WakuSite", {
               ...wakuProps(rootDir),
               env: {
                 MESSAGE: bindingMarker,
+                // A real resource binding (not a plain-string var): the
+                // `/api/kv` route reads and writes through it at request
+                // time via `cloudflare:workers` env.
+                SITE_KV: siteKv,
               },
             });
+            return { site, siteKv };
           }),
         );
 
-      const site1 = yield* deploy();
+      const { site: site1, siteKv } = yield* deploy();
 
       expect(site1.url).toBeDefined();
       expect(site1.hash?.input).toBeDefined();
@@ -126,9 +140,86 @@ test.provider(
         label: "waku SSG page serves without a redirect",
       });
 
+      // ── API route: a POST reaches the worker through the asset router
+      // and round-trips a JSON body plus the env binding ──────────────────
+      const echoed = yield* requestJsonReady<{
+        echoed: { ping: string };
+        message: string;
+      }>(
+        HttpClientRequest.post(`${site1.url!}/echo`).pipe(
+          HttpClientRequest.bodyJsonUnsafe({ ping: "pong" }),
+        ),
+      );
+      expect(echoed.echoed).toEqual({ ping: "pong" });
+      expect(echoed.message).toBe(bindingMarker);
+
+      // ── middleware: `src/middleware/*.ts` runs ahead of the RSC
+      // middleware for every worker-handled request — the header shows on
+      // the dynamic SSR page (static assets bypass the worker) ────────────
+      yield* expectUrlHeader(
+        `${site1.url!}/`,
+        "x-waku-middleware",
+        "alchemy-waku-fixture",
+        {
+          timeout: "60 seconds",
+          label: "waku middleware response header",
+        },
+      );
+
+      // ── KV: the SITE_KV namespace binding round-trips through the
+      // `/api/kv` route ───────────────────────────────────────────────────
+      expect(siteKv.namespaceId).toBeDefined();
+      yield* requestJsonReady<{ ok: boolean }>(
+        HttpClientRequest.put(`${site1.url!}/api/kv`).pipe(
+          HttpClientRequest.bodyJsonUnsafe({
+            key: "waku-live-key",
+            value: "kv-live-value",
+          }),
+        ),
+      );
+      const kvRead = yield* requestJsonReady<{
+        key: string;
+        value: string | null;
+      }>(HttpClientRequest.get(`${site1.url!}/api/kv?key=waku-live-key`)).pipe(
+        Effect.filterOrFail(
+          (res) => res.value === "kv-live-value",
+          (res) => new Error(`kv value not visible yet: ${res.value}`),
+        ),
+        Effect.retry({
+          schedule: Schedule.exponential("1 second", 1.5),
+          times: 6,
+        }),
+      );
+      expect(kvRead.value).toBe("kv-live-value");
+
+      // Out-of-band via the cloud API: the worker's write landed in the
+      // REAL namespace the stack provisioned.
+      const rawValue = yield* kv
+        .getNamespaceValue({
+          accountId,
+          namespaceId: siteKv.namespaceId,
+          keyName: "waku-live-key",
+        })
+        .pipe(
+          Effect.flatMap((res) =>
+            Effect.tryPromise(() =>
+              new Response(
+                Stream.toReadableStream(res.body) as BodyInit,
+              ).text(),
+            ),
+          ),
+          // The KV REST read can lag the worker's write briefly.
+          Effect.retry({
+            while: (e) => e._tag === "KeyNotFound",
+            schedule: Schedule.exponential("1 second", 1.5),
+            times: 8,
+          }),
+        );
+      expect(rawValue).toBe("kv-live-value");
+
       // ── deploy 2: no changes ⇒ the rebuild-free input hash matches and
       // the deploy short-circuits without rebuilding ───────────────────────
-      const site2 = yield* deploy();
+      const { site: site2 } = yield* deploy();
 
       expect(site2.hash?.input).toBeDefined();
       expect(site2.hash?.input).toEqual(site1.hash?.input);
@@ -146,7 +237,7 @@ test.provider(
         index.replace("WAKU_PAGE_MARKER", "WAKU_PAGE_MARKER_V2"),
       );
 
-      const site3 = yield* deploy();
+      const { site: site3 } = yield* deploy();
 
       expect(site3.hash?.input).toBeDefined();
       expect(site3.hash?.input).not.toEqual(site1.hash?.input);
@@ -157,6 +248,8 @@ test.provider(
 
       yield* stack.destroy();
       yield* waitForWorkerToBeDeleted(site1.workerName, accountId);
+      // Destroy must also delete the bound KV namespace from the cloud.
+      yield* waitForNamespaceToBeDeleted(siteKv.namespaceId, accountId);
     }).pipe(logLevel),
   { timeout: 600_000 },
 );
@@ -266,14 +359,15 @@ test.provider(
 );
 
 /**
- * GET `url` until it answers 200 with a JSON body (fresh workers.dev URLs
- * take a few seconds to start serving; DO namespaces can lag the first
- * deploy). Mirrors Vite.test.ts's helper of the same name.
+ * Execute `request` until it answers 200 with a JSON body (fresh
+ * workers.dev URLs take a few seconds to start serving; DO namespaces can
+ * lag the first deploy). Generalizes Vite.test.ts's `fetchJsonReady` to
+ * arbitrary methods/bodies (POST/PUT round-trips).
  */
-const fetchJsonReady = <T>(url: string) =>
+const requestJsonReady = <T>(request: HttpClientRequest.HttpClientRequest) =>
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
-    return yield* client.get(url).pipe(
+    return yield* client.execute(request).pipe(
       Effect.flatMap((res) =>
         res.status === 200
           ? Effect.flatMap(res.text, (body) =>
@@ -290,3 +384,28 @@ const fetchJsonReady = <T>(url: string) =>
       }),
     );
   });
+
+const fetchJsonReady = <T>(url: string) =>
+  requestJsonReady<T>(HttpClientRequest.get(url));
+
+class NamespaceStillExists extends Data.TaggedError("NamespaceStillExists") {}
+
+/**
+ * Poll until the KV namespace is gone from the cloud (bounded). Same
+ * pattern as Astro.test.ts.
+ */
+const waitForNamespaceToBeDeleted = Effect.fn(function* (
+  namespaceId: string,
+  accountId: string,
+) {
+  yield* kv.getNamespace({ accountId, namespaceId }).pipe(
+    Effect.flatMap(() => Effect.fail(new NamespaceStillExists())),
+    Effect.retry({
+      while: (e): e is NamespaceStillExists =>
+        e instanceof NamespaceStillExists,
+      schedule: Schedule.exponential(250),
+      times: 10,
+    }),
+    Effect.catchTag("NamespaceNotFound", () => Effect.void),
+  );
+});
