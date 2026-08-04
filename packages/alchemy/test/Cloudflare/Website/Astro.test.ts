@@ -13,7 +13,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
-import { expectUrlContains } from "../Utils/Http.ts";
+import { expectUrlContains, expectUrlRedirect } from "../Utils/Http.ts";
 import {
   expectWorkerExists,
   waitForWorkerToBeDeleted,
@@ -74,6 +74,201 @@ const fetchSession = (url: string, cookie?: string) =>
       }),
   });
 
+class AstroResponseMismatch extends Data.TaggedError("AstroResponseMismatch")<{
+  url: string;
+  detail: string;
+}> {}
+
+const responseRetry = Effect.retry({
+  schedule: Schedule.min([
+    Schedule.exponential("1 second", 1.5),
+    Schedule.spaced("8 seconds"),
+  ]),
+  times: 8,
+});
+
+/**
+ * Fetch the middleware-backed `/locals` page and assert the middleware ran
+ * in the SAME request that rendered the page: the `x-middleware: hit`
+ * header is present and the body renders the exact per-request id the
+ * middleware mirrored onto `x-request-id`.
+ */
+const expectMiddlewareLocals = (url: string) =>
+  Effect.tryPromise({
+    try: async (signal) => {
+      const u = new URL(url);
+      u.searchParams.set("__alchemy_cb", String(Date.now()));
+      const res = await fetch(u, {
+        signal,
+        cache: "no-store",
+        headers: { "cache-control": "no-cache", accept: "*/*" },
+      });
+      return {
+        status: res.status,
+        body: await res.text(),
+        middleware: res.headers.get("x-middleware"),
+        requestId: res.headers.get("x-request-id"),
+      };
+    },
+    catch: (e) =>
+      new AstroResponseMismatch({
+        url,
+        detail: e instanceof Error ? e.message : String(e),
+      }),
+  }).pipe(
+    Effect.filterOrFail(
+      (r) =>
+        r.status === 200 &&
+        r.middleware === "hit" &&
+        r.requestId !== null &&
+        r.body.includes(`locals-request-id=${r.requestId}`),
+      (r) =>
+        new AstroResponseMismatch({
+          url,
+          detail: `${r.status} x-middleware=${r.middleware} x-request-id=${r.requestId} body=${r.body.slice(0, 200)}`,
+        }),
+    ),
+    responseRetry,
+  );
+
+/** The exact payload `src/pages/api/binary.ts` serves. */
+const BINARY_BYTES = [
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01, 0x02, 0x03,
+];
+
+/**
+ * Fetch the binary endpoint and assert the exact bytes and content type
+ * survive the round trip through the Worker.
+ */
+const expectBinaryEndpoint = (url: string) =>
+  Effect.tryPromise({
+    try: async (signal) => {
+      const u = new URL(url);
+      u.searchParams.set("__alchemy_cb", String(Date.now()));
+      const res = await fetch(u, {
+        signal,
+        cache: "no-store",
+        headers: { "cache-control": "no-cache", accept: "*/*" },
+      });
+      return {
+        status: res.status,
+        contentType: res.headers.get("content-type"),
+        bytes: [...new Uint8Array(await res.arrayBuffer())],
+      };
+    },
+    catch: (e) =>
+      new AstroResponseMismatch({
+        url,
+        detail: e instanceof Error ? e.message : String(e),
+      }),
+  }).pipe(
+    Effect.filterOrFail(
+      (r) =>
+        r.status === 200 &&
+        r.contentType === "application/octet-stream" &&
+        r.bytes.length === BINARY_BYTES.length &&
+        r.bytes.every((b, i) => b === BINARY_BYTES[i]),
+      (r) =>
+        new AstroResponseMismatch({
+          url,
+          detail: `${r.status} ${r.contentType} bytes=[${r.bytes.join(",")}]`,
+        }),
+    ),
+    responseRetry,
+  );
+
+/**
+ * POST the urlencoded feedback form and assert the server-rendered echo —
+ * pins that POSTs reach the Worker through the asset router.
+ */
+const expectFormPostEcho = (url: string, message: string) =>
+  Effect.tryPromise({
+    try: async (signal) => {
+      const res = await fetch(url, {
+        signal,
+        method: "POST",
+        cache: "no-store",
+        body: new URLSearchParams({ message }),
+        headers: { "cache-control": "no-cache", accept: "*/*" },
+      });
+      return { status: res.status, body: await res.text() };
+    },
+    catch: (e) =>
+      new AstroResponseMismatch({
+        url,
+        detail: e instanceof Error ? e.message : String(e),
+      }),
+  }).pipe(
+    Effect.filterOrFail(
+      (r) => r.status === 200 && r.body.includes(`received: ${message}`),
+      (r) =>
+        new AstroResponseMismatch({
+          url,
+          detail: `${r.status} ${r.body.slice(0, 240)}`,
+        }),
+    ),
+    responseRetry,
+  );
+
+/**
+ * Round-trip a value through the fixture's `/api/kv` route (backed by the
+ * user-declared `SITE_KV` binding): PUT then GET until the read observes
+ * the write.
+ */
+const kvRoundTrip = (base: string, key: string, value: string) =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise({
+      try: async (signal) => {
+        const res = await fetch(
+          `${base}/api/kv?key=${encodeURIComponent(key)}&value=${encodeURIComponent(value)}`,
+          { signal, method: "PUT", cache: "no-store" },
+        );
+        return { status: res.status, body: await res.text() };
+      },
+      catch: (e) =>
+        new AstroResponseMismatch({
+          url: `${base}/api/kv`,
+          detail: e instanceof Error ? e.message : String(e),
+        }),
+    }).pipe(
+      Effect.filterOrFail(
+        (r) => r.status === 200,
+        (r) =>
+          new AstroResponseMismatch({
+            url: `${base}/api/kv`,
+            detail: `PUT ${r.status} ${r.body.slice(0, 240)}`,
+          }),
+      ),
+      responseRetry,
+    );
+
+    // Read back through the binding, retrying through KV read lag.
+    yield* Effect.tryPromise({
+      try: async (signal) => {
+        const res = await fetch(
+          `${base}/api/kv?key=${encodeURIComponent(key)}&__alchemy_cb=${Date.now()}`,
+          { signal, cache: "no-store" },
+        );
+        return { status: res.status, body: await res.text() };
+      },
+      catch: (e) =>
+        new AstroResponseMismatch({
+          url: `${base}/api/kv`,
+          detail: e instanceof Error ? e.message : String(e),
+        }),
+    }).pipe(
+      Effect.filterOrFail(
+        (r) => r.status === 200 && r.body.includes(`"value":"${value}"`),
+        (r) =>
+          new AstroResponseMismatch({
+            url: `${base}/api/kv`,
+            detail: `GET ${r.status} ${r.body.slice(0, 240)}`,
+          }),
+      ),
+      responseRetry,
+    );
+  });
+
 class NamespaceStillExists extends Data.TaggedError("NamespaceStillExists") {}
 
 const waitForNamespaceToBeDeleted = Effect.fn(function* (
@@ -128,6 +323,10 @@ test.provider(
       const deploy = () =>
         stack.deploy(
           Effect.gen(function* () {
+            // A REAL user-declared KV namespace bound through `env` —
+            // distinct from the auto-provisioned session namespace. The
+            // fixture's `/api/kv` route reads/writes it via the runtime env.
+            const siteKv = yield* Cloudflare.KV.Namespace("SiteKV");
             const site = yield* Cloudflare.Website.Astro("AstroSite", {
               rootDir,
               workersDev: { enabled: true, previewsEnabled: true },
@@ -135,7 +334,7 @@ test.provider(
               // auto-injects it, and this deploy proves that path.
               compatibility: { date: "2026-03-10" },
               memo,
-              env: { TEST_MARKER: marker },
+              env: { TEST_MARKER: marker, SITE_KV: siteKv },
               assets: {
                 htmlHandling: "auto-trailing-slash",
                 notFoundHandling: "none",
@@ -145,12 +344,12 @@ test.provider(
             // session namespace the Astro resource auto-provisioned — a
             // handle for the out-of-band lifecycle assertions below.
             const sessions = yield* Cloudflare.KV.Namespace("AstroSiteSession");
-            return { site, sessions };
+            return { site, sessions, siteKv };
           }),
         );
 
       // ── deploy 1: build + serve ────────────────────────────────────────
-      const { site: site1, sessions } = yield* deploy();
+      const { site: site1, sessions, siteKv } = yield* deploy();
       expect(site1.url).toBeDefined();
       expect(site1.hash?.input).toBeDefined();
       yield* expectWorkerExists(site1.workerName, accountId);
@@ -160,11 +359,16 @@ test.provider(
         timeout: "120 seconds",
         label: "SSR page renders env binding",
       });
-      // Prerendered page served from static assets.
-      yield* expectUrlContains(`${site1.url!}/about/`, "prerendered-page", {
-        timeout: "60 seconds",
-        label: "prerendered page",
-      });
+      // Prerendered page served from static assets. Keep the body — the
+      // hashed-asset assertion below extracts the `/_astro/*.css` href.
+      const aboutBody = yield* expectUrlContains(
+        `${site1.url!}/about/`,
+        "prerendered-page",
+        {
+          timeout: "60 seconds",
+          label: "prerendered page",
+        },
+      );
       // Plain static asset from public/.
       yield* expectUrlContains(
         `${site1.url!}/static.txt`,
@@ -216,6 +420,89 @@ test.provider(
       );
       expect(second.body).toContain("session-count=2");
 
+      // ── middleware: locals + response-header mutation ──────────────────
+      yield* expectMiddlewareLocals(`${site1.url!}/locals`);
+
+      // ── config redirects flow through `_redirects` to the asset layer ──
+      yield* expectUrlRedirect(`${site1.url!}/old-about`, "/about/", {
+        status: 301,
+        timeout: "60 seconds",
+        label: "config redirect via _redirects",
+      });
+
+      // ── hashed `/_astro/*` asset serves with the immutable Cache-Control
+      // from the adapter-emitted `_headers` — pins alchemy's asset uploader
+      // honoring `_headers` ──────────────────────────────────────────────
+      const assetHref = aboutBody.match(/\/_astro\/[^"']+\.css/)?.[0];
+      expect(assetHref).toBeDefined();
+      const assetUrl = `${site1.url!}${assetHref!}`;
+      yield* Effect.tryPromise({
+        try: async (signal) => {
+          const u = new URL(assetUrl);
+          u.searchParams.set("__alchemy_cb", String(Date.now()));
+          const res = await fetch(u, {
+            signal,
+            cache: "no-store",
+            headers: { "cache-control": "no-cache", accept: "*/*" },
+          });
+          await res.arrayBuffer();
+          return {
+            status: res.status,
+            cacheControl: res.headers.get("cache-control"),
+          };
+        },
+        catch: (e) =>
+          new AstroResponseMismatch({
+            url: assetUrl,
+            detail: e instanceof Error ? e.message : String(e),
+          }),
+      }).pipe(
+        Effect.filterOrFail(
+          (r) =>
+            r.status === 200 &&
+            r.cacheControl === "public, max-age=31536000, immutable",
+          (r) =>
+            new AstroResponseMismatch({
+              url: assetUrl,
+              detail: `${r.status} cache-control: ${r.cacheControl}`,
+            }),
+        ),
+        responseRetry,
+      );
+
+      // ── binary endpoint returns the exact bytes ────────────────────────
+      yield* expectBinaryEndpoint(`${site1.url!}/api/binary`);
+
+      // ── urlencoded form POST reaches the Worker through the asset
+      // router and re-renders with the echoed message ─────────────────────
+      yield* expectFormPostEcho(`${site1.url!}/feedback`, marker);
+
+      // ── user-declared KV binding: round-trip through the runtime env,
+      // then verify out-of-band that the write landed in the REAL
+      // namespace ────────────────────────────────────────────────────────
+      expect(siteKv.namespaceId).toBeDefined();
+      yield* kvRoundTrip(site1.url!, "astro-live-key", marker);
+      const observed = yield* kv
+        .getNamespaceValue({
+          accountId,
+          namespaceId: siteKv.namespaceId,
+          keyName: "astro-live-key",
+        })
+        .pipe(
+          Effect.flatMap((res) =>
+            Effect.tryPromise(() =>
+              new Response(
+                Stream.toReadableStream(res.body) as BodyInit,
+              ).text(),
+            ),
+          ),
+          Effect.retry({
+            schedule: Schedule.exponential("1 second", 1.5),
+            times: 8,
+          }),
+        );
+      expect(observed).toBe(marker);
+
       // ── deploy 2: nothing changed ⇒ memo hit (no rebuild) ──────────────
       const { site: site2 } = yield* deploy();
       expect(site2.hash?.input).toEqual(site1.hash?.input);
@@ -241,10 +528,12 @@ test.provider(
       yield* stack.destroy();
       yield* waitForWorkerToBeDeleted(site1.workerName, accountId);
 
-      // Destroy must also clean up the auto-provisioned session namespace.
+      // Destroy must also clean up the auto-provisioned session namespace
+      // and the user-declared SITE_KV namespace.
       yield* waitForNamespaceToBeDeleted(sessions.namespaceId, accountId);
+      yield* waitForNamespaceToBeDeleted(siteKv.namespaceId, accountId);
     }).pipe(logLevel),
-  { timeout: 360_000 },
+  { timeout: 420_000 },
 );
 
 class NotFoundPageMismatch extends Data.TaggedError("NotFoundPageMismatch")<{
