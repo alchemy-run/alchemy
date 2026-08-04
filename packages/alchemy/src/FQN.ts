@@ -6,17 +6,39 @@ import type { NamespaceNode } from "./Namespace.ts";
 export const FQN_SEPARATOR = "/";
 
 /**
- * Encode an FQN for safe filesystem storage.
- * Replaces `/` (FQN separator) with `__` to avoid subdirectory creation.
+ * Encode an FQN for safe filesystem/object-key storage.
+ *
+ * `%`, `_`, and `\` are percent-escaped BEFORE `/` (the FQN separator)
+ * is replaced with `__`, so every `__` in an encoded name is
+ * unambiguously a separator. This makes the codec injective: a logical
+ * id containing a literal `__` (e.g. `foo__bar`) encodes to
+ * `foo%5F%5Fbar` and can never collide with the encoding of `foo/bar`.
  */
 export const encodeFqn = (fqn: string): string =>
-  fqn.replaceAll(FQN_SEPARATOR, "__");
+  fqn
+    .replaceAll("%", "%25")
+    .replaceAll("_", "%5F")
+    .replaceAll("\\", "%5C")
+    .replaceAll(FQN_SEPARATOR, "__");
 
 /**
- * Decode a filename back to FQN.
+ * Decode a filename back to FQN. Exact inverse of {@link encodeFqn}.
  */
 export const decodeFqn = (filename: string): string =>
-  filename.replaceAll("__", FQN_SEPARATOR);
+  filename
+    .replaceAll("__", FQN_SEPARATOR)
+    .replaceAll("%5C", "\\")
+    .replaceAll("%5F", "_")
+    .replaceAll("%25", "%");
+
+/**
+ * The legacy (lossy) encoding used before {@link encodeFqn} escaped
+ * `%`/`_`/`\`: a bare `/` → `__` replacement. State stores keep this
+ * for read-fallback so state written by older versions stays readable;
+ * writes always use {@link encodeFqn} and clean up the legacy name.
+ */
+export const encodeFqnLegacy = (fqn: string): string =>
+  fqn.replaceAll(FQN_SEPARATOR, "__");
 
 /**
  * Convert a NamespaceNode chain to an array of namespace IDs, from root to leaf.

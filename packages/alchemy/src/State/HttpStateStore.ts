@@ -9,6 +9,7 @@ import { StateApi } from "./HttpStateApi.ts";
 import type { ReplacedResourceState, ResourceState } from "./ResourceState.ts";
 import {
   StateStoreError,
+  withValidatedNames,
   type PersistedState,
   type StateService,
 } from "./State.ts";
@@ -193,7 +194,9 @@ export const makeHttpStateStore = ({
             mapStateStoreError,
           ),
     };
-    return service;
+    // Client-side guard: stack/stage travel as raw URL path segments, so a
+    // name containing `/` would silently address a different route.
+    return withValidatedNames(service);
   });
 
 /**

@@ -133,3 +133,82 @@ export interface StateService {
     value: unknown;
   }): Effect.Effect<unknown, StateStoreError, never>;
 }
+
+/**
+ * Validate a stack or stage name before it is used as a storage path
+ * segment (a directory name, S3 key segment, or URL path segment).
+ *
+ * Rejects names that would escape or restructure the store's layout:
+ * the empty string, `.`, `..`, and anything containing `/` or `\`.
+ */
+export const validateStateName = (
+  kind: "stack" | "stage",
+  name: string,
+): Effect.Effect<void, StateStoreError> =>
+  name.length === 0 ||
+  name === "." ||
+  name === ".." ||
+  name.includes("/") ||
+  name.includes("\\")
+    ? Effect.fail(
+        new StateStoreError({
+          message: `Invalid ${kind} name ${JSON.stringify(
+            name,
+          )}: must be non-empty, must not be "." or "..", and must not contain "/" or "\\"`,
+        }),
+      )
+    : Effect.void;
+
+/**
+ * Wrap a {@link StateService} so every operation validates its stack
+ * and stage names with {@link validateStateName} before touching the
+ * backend. This is the shared guard for all backends that embed the
+ * names in a path-like structure — the local file tree, S3 object
+ * keys, and HTTP route segments all share the same assumption that a
+ * name is a single path segment.
+ */
+export const withValidatedNames = (state: StateService): StateService => {
+  const check = (stack: string, stage?: string) =>
+    stage === undefined
+      ? validateStateName("stack", stack)
+      : Effect.flatMap(validateStateName("stack", stack), () =>
+          validateStateName("stage", stage),
+        );
+  return {
+    ...state,
+    listStages: (stack) =>
+      Effect.flatMap(check(stack), () => state.listStages(stack)),
+    get: (request) =>
+      Effect.flatMap(check(request.stack, request.stage), () =>
+        state.get(request),
+      ),
+    getReplacedResources: (request) =>
+      Effect.flatMap(check(request.stack, request.stage), () =>
+        state.getReplacedResources(request),
+      ),
+    set: (request) =>
+      Effect.flatMap(check(request.stack, request.stage), () =>
+        state.set(request),
+      ),
+    delete: (request) =>
+      Effect.flatMap(check(request.stack, request.stage), () =>
+        state.delete(request),
+      ),
+    deleteStack: (request) =>
+      Effect.flatMap(check(request.stack, request.stage), () =>
+        state.deleteStack(request),
+      ),
+    list: (request) =>
+      Effect.flatMap(check(request.stack, request.stage), () =>
+        state.list(request),
+      ),
+    getOutput: (request) =>
+      Effect.flatMap(check(request.stack, request.stage), () =>
+        state.getOutput(request),
+      ),
+    setOutput: (request) =>
+      Effect.flatMap(check(request.stack, request.stage), () =>
+        state.setOutput(request),
+      ),
+  };
+};

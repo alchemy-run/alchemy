@@ -7,11 +7,12 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import { CredentialsStoreLive } from "../../Auth/Credentials.ts";
-import { decodeFqn, encodeFqn } from "../../FQN.ts";
+import { decodeFqn, encodeFqn, encodeFqnLegacy } from "../../FQN.ts";
 import { STATE_STORE_VERSION } from "../../State/HttpStateApi.ts";
 import {
   State,
   StateStoreError,
+  withValidatedNames,
   type PersistedState,
   type StateService,
 } from "../../State/State.ts";
@@ -214,6 +215,23 @@ export const makeS3State = (options: S3StateOptions = {}) =>
       fqn: string;
     }) => `${stagePrefix(request)}${encodeFqn(request.fqn)}.json`;
 
+    // The pre-escaping key for the same fqn. `undefined` when identical to
+    // the current encoding (nothing to fall back to) or when it would
+    // collide with the bookkeeping object (an fqn like `__stack_output__`
+    // legacy-encodes to the output object's own key — reading or deleting
+    // it as a resource would corrupt the stack output).
+    const legacyResourceKey = (request: {
+      stack: string;
+      stage: string;
+      fqn: string;
+    }) => {
+      const name = `${encodeFqnLegacy(request.fqn)}.json`;
+      if (name === OUTPUT_FILE || name === `${encodeFqn(request.fqn)}.json`) {
+        return undefined;
+      }
+      return `${stagePrefix(request)}${name}`;
+    };
+
     const outputKey = (request: { stack: string; stage: string }) =>
       `${stagePrefix(request)}${OUTPUT_FILE}`;
 
@@ -300,7 +318,19 @@ export const makeS3State = (options: S3StateOptions = {}) =>
       listStages: (stack: string) =>
         run((bucket) => listChildren(bucket, `${prefix}${stack}/`)),
       get: (request) =>
-        run((bucket) => readJson<PersistedState>(bucket, resourceKey(request))),
+        run((bucket) =>
+          readJson<PersistedState>(bucket, resourceKey(request)).pipe(
+            Effect.flatMap((found) => {
+              if (found !== undefined) return Effect.succeed(found);
+              // Fall back to the key written by the legacy (pre-escaping)
+              // encoding so state persisted by older versions stays readable.
+              const legacy = legacyResourceKey(request);
+              return legacy === undefined
+                ? Effect.succeed(undefined)
+                : readJson<PersistedState>(bucket, legacy);
+            }),
+          ),
+        ),
       getReplacedResources: Effect.fn(function* (request) {
         return (yield* Effect.all(
           (yield* state.list(request)).map((fqn) =>
@@ -314,11 +344,29 @@ export const makeS3State = (options: S3StateOptions = {}) =>
       }),
       set: (request) =>
         run((bucket) =>
-          writeJson(bucket, resourceKey(request), request.value),
+          writeJson(bucket, resourceKey(request), request.value).pipe(
+            // Migrate on write: an object left under the legacy encoding for
+            // the same fqn would otherwise resurface as a duplicate in `list`.
+            Effect.flatMap(() => {
+              const legacy = legacyResourceKey(request);
+              return legacy === undefined
+                ? Effect.void
+                : s3.deleteObject({ Bucket: bucket, Key: legacy });
+            }),
+          ),
         ).pipe(Effect.map(() => request.value)),
       delete: (request) =>
         run((bucket) =>
-          s3.deleteObject({ Bucket: bucket, Key: resourceKey(request) }),
+          s3.deleteObject({ Bucket: bucket, Key: resourceKey(request) }).pipe(
+            Effect.flatMap(() => {
+              const legacy = legacyResourceKey(request);
+              return legacy === undefined
+                ? Effect.void
+                : Effect.asVoid(
+                    s3.deleteObject({ Bucket: bucket, Key: legacy }),
+                  );
+            }),
+          ),
         ).pipe(Effect.asVoid),
       deleteStack: ({ stack, stage }) =>
         run((bucket) =>
@@ -350,7 +398,7 @@ export const makeS3State = (options: S3StateOptions = {}) =>
           writeJson(bucket, outputKey(request), request.value),
         ).pipe(Effect.map(() => request.value)),
     };
-    return state;
+    return withValidatedNames(state);
   });
 
 /**

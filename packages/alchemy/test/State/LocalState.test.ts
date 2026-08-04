@@ -424,38 +424,61 @@ describe("makeLocalState", () => {
       }).pipe(Effect.provide(PlatformServices)),
     );
 
-    it.effect("literal __ in a logical id: get roundtrips, list decodes", () =>
+    it.effect("literal __ and / fqns coexist as distinct resources", () =>
       Effect.gen(function* () {
         const state = yield* makeLocalState();
         const stack = "local-state-test-underscores";
         const stage = "test";
-        const value = resource("foo__bar", { value: "u" });
+        const underscored = resource("foo__bar", { value: "underscore" });
+        const slashed = resource("foo/bar", { value: "slash" });
 
-        yield* state.set({ stack, stage, fqn: "foo__bar", value });
+        yield* state.set({ stack, stage, fqn: "foo__bar", value: underscored });
+        yield* state.set({ stack, stage, fqn: "foo/bar", value: slashed });
+
         expect(yield* state.get({ stack, stage, fqn: "foo__bar" })).toEqual(
-          value,
+          underscored,
         );
-        // Known encoding collision: `/` is stored as `__`, so decodeFqn
-        // cannot distinguish a literal `__` in a logical id from a
-        // namespace separator. `list` reports this resource as "foo/bar".
-        expect(yield* state.list({ stack, stage })).toEqual(["foo/bar"]);
+        expect(yield* state.get({ stack, stage, fqn: "foo/bar" })).toEqual(
+          slashed,
+        );
+        expect((yield* state.list({ stack, stage })).toSorted()).toEqual([
+          "foo/bar",
+          "foo__bar",
+        ]);
 
         yield* state.deleteStack({ stack });
       }).pipe(Effect.provide(PlatformServices)),
     );
 
-    it.effect("a resource named __stack_output__ never surfaces in list", () =>
-      Effect.gen(function* () {
-        const state = yield* makeLocalState();
-        const stack = "local-state-test-output-clash";
-        const stage = "test";
-        const value = resource("__stack_output__", { value: "clash" });
+    it.effect(
+      "a resource named __stack_output__ coexists with the output",
+      () =>
+        Effect.gen(function* () {
+          const state = yield* makeLocalState();
+          const stack = "local-state-test-output-clash";
+          const stage = "test";
+          const value = resource("__stack_output__", { value: "clash" });
 
-        yield* state.set({ stack, stage, fqn: "__stack_output__", value });
-        expect(yield* state.list({ stack, stage })).toEqual([]);
+          yield* state.set({ stack, stage, fqn: "__stack_output__", value });
+          yield* state.setOutput({ stack, stage, value: { out: true } });
 
-        yield* state.deleteStack({ stack });
-      }).pipe(Effect.provide(PlatformServices)),
+          expect(
+            yield* state.get({ stack, stage, fqn: "__stack_output__" }),
+          ).toEqual(value);
+          expect(yield* state.getOutput({ stack, stage })).toEqual({
+            out: true,
+          });
+          expect(yield* state.list({ stack, stage })).toEqual([
+            "__stack_output__",
+          ]);
+
+          yield* state.delete({ stack, stage, fqn: "__stack_output__" });
+          expect(yield* state.getOutput({ stack, stage })).toEqual({
+            out: true,
+          });
+
+          yield* state.deleteStack({ stack });
+        }).pipe(Effect.provide(PlatformServices)),
     );
 
     it.effect("overlong names fail with a typed StateStoreError", () =>
@@ -479,6 +502,177 @@ describe("makeLocalState", () => {
         expect(getError._tag).toBe("StateStoreError");
 
         yield* state.deleteStack({ stack });
+      }).pipe(Effect.provide(PlatformServices)),
+    );
+  });
+
+  describe("legacy encoding migration", () => {
+    // Simulate state written by an older version: `_`/`%`/`\` were not
+    // escaped, only `/` → `__`. For fqn "my_legacy_res" the legacy file
+    // is `my_legacy_res.json`; the current encoding writes
+    // `my%5Flegacy%5Fres.json`.
+    const legacyFqn = "my_legacy_res";
+    const legacyFile = (stack: string) =>
+      statePath(stack, "test", `${legacyFqn}.json`);
+
+    const writeLegacyFile = (stack: string, round: number) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const dir = yield* statePath(stack, "test");
+        yield* fs.makeDirectory(dir, { recursive: true });
+        yield* fs.writeFileString(
+          yield* legacyFile(stack),
+          JSON.stringify(resource(legacyFqn, { round })),
+        );
+      });
+
+    it.effect("get falls back to the legacy filename", () =>
+      Effect.gen(function* () {
+        const state = yield* makeLocalState();
+        const stack = "local-state-test-legacy-read";
+        yield* writeLegacyFile(stack, 1);
+
+        expect(
+          yield* state.get({ stack, stage: "test", fqn: legacyFqn }),
+        ).toMatchObject({ attr: { round: 1 } });
+        expect(yield* state.list({ stack, stage: "test" })).toEqual([
+          legacyFqn,
+        ]);
+
+        yield* state.deleteStack({ stack });
+      }).pipe(Effect.provide(PlatformServices)),
+    );
+
+    it.effect("set migrates the legacy file to the escaped filename", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const state = yield* makeLocalState();
+        const stack = "local-state-test-legacy-set";
+        yield* writeLegacyFile(stack, 1);
+
+        yield* state.set({
+          stack,
+          stage: "test",
+          fqn: legacyFqn,
+          value: resource(legacyFqn, { round: 2 }),
+        });
+
+        expect(
+          yield* state.get({ stack, stage: "test", fqn: legacyFqn }),
+        ).toMatchObject({ attr: { round: 2 } });
+        // exactly one entry — the legacy file was removed, not duplicated
+        expect(yield* state.list({ stack, stage: "test" })).toEqual([
+          legacyFqn,
+        ]);
+        expect(yield* fs.exists(yield* legacyFile(stack))).toBe(false);
+
+        yield* state.deleteStack({ stack });
+      }).pipe(Effect.provide(PlatformServices)),
+    );
+
+    it.effect("delete removes the legacy file too", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const state = yield* makeLocalState();
+        const stack = "local-state-test-legacy-delete";
+        yield* writeLegacyFile(stack, 1);
+
+        yield* state.delete({ stack, stage: "test", fqn: legacyFqn });
+
+        expect(
+          yield* state.get({ stack, stage: "test", fqn: legacyFqn }),
+        ).toBeUndefined();
+        expect(yield* fs.exists(yield* legacyFile(stack))).toBe(false);
+
+        yield* state.deleteStack({ stack });
+      }).pipe(Effect.provide(PlatformServices)),
+    );
+
+    it.effect("legacy fallback never reads the stack output file", () =>
+      Effect.gen(function* () {
+        const state = yield* makeLocalState();
+        const stack = "local-state-test-legacy-output-guard";
+        const stage = "test";
+        yield* state.setOutput({ stack, stage, value: { out: true } });
+
+        // fqn "__stack_output__" legacy-encodes to the bookkeeping file's
+        // own name; the fallback must not surface the output as a resource
+        expect(
+          yield* state.get({ stack, stage, fqn: "__stack_output__" }),
+        ).toBeUndefined();
+        // ...nor may delete remove the output through the legacy name
+        yield* state.delete({ stack, stage, fqn: "__stack_output__" });
+        expect(yield* state.getOutput({ stack, stage })).toEqual({ out: true });
+
+        yield* state.deleteStack({ stack });
+      }).pipe(Effect.provide(PlatformServices)),
+    );
+  });
+
+  describe("name validation", () => {
+    const INVALID = ["", ".", "..", "a/b", "a\\b"];
+
+    it.effect("rejects invalid stack names with a typed error", () =>
+      Effect.gen(function* () {
+        const state = yield* makeLocalState();
+        for (const stack of INVALID) {
+          const err = yield* state
+            .get({ stack, stage: "test", fqn: "resource-a" })
+            .pipe(Effect.flip);
+          expect(err._tag).toBe("StateStoreError");
+          const setErr = yield* state
+            .set({
+              stack,
+              stage: "test",
+              fqn: "resource-a",
+              value: resource("resource-a", {}),
+            })
+            .pipe(Effect.flip);
+          expect(setErr._tag).toBe("StateStoreError");
+          const deleteErr = yield* state
+            .deleteStack({ stack })
+            .pipe(Effect.flip);
+          expect(deleteErr._tag).toBe("StateStoreError");
+        }
+      }).pipe(Effect.provide(PlatformServices)),
+    );
+
+    it.effect("rejects invalid stage names with a typed error", () =>
+      Effect.gen(function* () {
+        const state = yield* makeLocalState();
+        const stack = "local-state-test-validation";
+        for (const stage of INVALID) {
+          const err = yield* state
+            .get({ stack, stage, fqn: "resource-a" })
+            .pipe(Effect.flip);
+          expect(err._tag).toBe("StateStoreError");
+          const outputErr = yield* state
+            .setOutput({ stack, stage, value: {} })
+            .pipe(Effect.flip);
+          expect(outputErr._tag).toBe("StateStoreError");
+          const deleteErr = yield* state
+            .deleteStack({ stack, stage })
+            .pipe(Effect.flip);
+          expect(deleteErr._tag).toBe("StateStoreError");
+        }
+      }).pipe(Effect.provide(PlatformServices)),
+    );
+
+    it.effect("stack deletion without a stage skips stage validation", () =>
+      Effect.gen(function* () {
+        const state = yield* makeLocalState();
+        const stack = "local-state-test-validation-nostage";
+        yield* state.set({
+          stack,
+          stage: "test",
+          fqn: "resource-a",
+          value: resource("resource-a", {}),
+        });
+
+        yield* state.deleteStack({ stack });
+        expect(
+          yield* state.get({ stack, stage: "test", fqn: "resource-a" }),
+        ).toBeUndefined();
       }).pipe(Effect.provide(PlatformServices)),
     );
   });

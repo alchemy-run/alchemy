@@ -3,10 +3,15 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
-import { decodeFqn, encodeFqn } from "../FQN.ts";
+import { decodeFqn, encodeFqn, encodeFqnLegacy } from "../FQN.ts";
 import { recordStateStoreInit } from "../Telemetry/Metrics.ts";
 import { STATE_STORE_VERSION } from "./HttpStateApi.ts";
-import { State, StateStoreError, type StateService } from "./State.ts";
+import {
+  State,
+  StateStoreError,
+  withValidatedNames,
+  type StateService,
+} from "./State.ts";
 import { encodeState, reviveState } from "./StateEncoding.ts";
 
 export const localState = () =>
@@ -25,6 +30,13 @@ export const localState = () =>
       return yield* Effect.cached(make);
     }),
   );
+
+/**
+ * The bookkeeping file that stores a stack's resolved output. Lives
+ * alongside the resource files in the stage directory, so it must be
+ * filtered out of `list` results and shielded from legacy-fqn fallback.
+ */
+const OUTPUT_FILE = "__stack_output__.json";
 
 export const makeLocalState = () =>
   Effect.gen(function* () {
@@ -61,8 +73,25 @@ export const makeLocalState = () =>
       fqn: string;
     }) => path.join(stateDir, stack, stage, `${encodeFqn(fqn)}.json`);
 
+    // The pre-escaping filename for the same fqn. `undefined` when it is
+    // identical to the current encoding (nothing to fall back to) or when
+    // it would collide with the bookkeeping file (an fqn like
+    // `__stack_output__` legacy-encodes to the output file's own name —
+    // reading or deleting it as a resource would corrupt the stack output).
+    const legacyResource = (request: {
+      stack: string;
+      stage: string;
+      fqn: string;
+    }) => {
+      const name = `${encodeFqnLegacy(request.fqn)}.json`;
+      if (name === OUTPUT_FILE || name === `${encodeFqn(request.fqn)}.json`) {
+        return undefined;
+      }
+      return path.join(stateDir, request.stack, request.stage, name);
+    };
+
     const outputFile = ({ stack, stage }: { stack: string; stage: string }) =>
-      path.join(stateDir, stack, stage, `__stack_output__.json`);
+      path.join(stateDir, stack, stage, OUTPUT_FILE);
 
     // Write state files atomically: write to a unique sibling temp file, then
     // rename it over the target. Rename within a directory is atomic on POSIX
@@ -91,6 +120,12 @@ export const makeLocalState = () =>
         ? undefined
         : JSON.parse(contents, reviveState);
 
+    const readState = (file: string) =>
+      fs.readFile(file).pipe(
+        Effect.map((contents) => parseState(contents.toString())),
+        recover,
+      );
+
     const created = new Set<string>();
 
     const ensure = (dir: string) =>
@@ -114,9 +149,16 @@ export const makeLocalState = () =>
           Effect.map((files) => files ?? []),
         ),
       get: (request) =>
-        fs.readFile(resource(request)).pipe(
-          Effect.map((file) => parseState(file.toString())),
-          recover,
+        readState(resource(request)).pipe(
+          Effect.flatMap((found) => {
+            if (found !== undefined) return Effect.succeed(found);
+            // Fall back to the filename written by the legacy (pre-escaping)
+            // encoding so state persisted by older versions stays readable.
+            const legacy = legacyResource(request);
+            return legacy === undefined
+              ? Effect.succeed(undefined)
+              : readState(legacy);
+          }),
         ),
       getReplacedResources: Effect.fn(function* (request) {
         return (yield* Effect.all(
@@ -137,10 +179,25 @@ export const makeLocalState = () =>
               JSON.stringify(encodeState(request.value), null, 2),
             ),
           ),
+          // Migrate on write: a file left under the legacy encoding for the
+          // same fqn would otherwise resurface as a duplicate in `list`.
+          Effect.flatMap(() => {
+            const legacy = legacyResource(request);
+            return legacy === undefined ? Effect.void : fs.remove(legacy);
+          }),
           recover,
           Effect.map(() => request.value),
         ),
-      delete: (request) => fs.remove(resource(request)).pipe(recover),
+      delete: (request) =>
+        fs.remove(resource(request)).pipe(
+          recover,
+          Effect.flatMap(() => {
+            const legacy = legacyResource(request);
+            return legacy === undefined
+              ? Effect.void
+              : fs.remove(legacy).pipe(recover);
+          }),
+        ),
       deleteStack: ({ stack, stage }) =>
         Effect.suspend(() => {
           const dir =
@@ -175,10 +232,7 @@ export const makeLocalState = () =>
               //    non-existent resource;
               //  - in-flight `*.tmp` files written by `writeAtomic` (and any
               //    other non-`.json` entry), which are not resources.
-              .filter(
-                (file) =>
-                  file.endsWith(".json") && file !== "__stack_output__.json",
-              )
+              .filter((file) => file.endsWith(".json") && file !== OUTPUT_FILE)
               .map((file) => decodeFqn(file.replace(/\.json$/, ""))),
           ),
         ),
@@ -199,5 +253,5 @@ export const makeLocalState = () =>
           Effect.map(() => request.value),
         ),
     };
-    return state;
+    return withValidatedNames(state);
   });
