@@ -48,6 +48,10 @@ import type {
   WorkerBindings,
 } from "./WorkerBinding.ts";
 import {
+  lookup as workerLookup,
+  type WorkerLookupProps,
+} from "./WorkerLookup.ts";
+import {
   makeWorkerRuntimeContext,
   type WorkerRuntimeContext,
 } from "./WorkerRuntimeContext.ts";
@@ -2232,6 +2236,11 @@ export const Worker: ResourceClassLike<Worker> &
      * accessor. See {@link URLEffect}.
      */
     readonly URL: URLEffect;
+    /**
+     * Reference an existing Worker managed outside this stack, by its
+     * deployed script name. See {@link workerLookup}.
+     */
+    readonly lookup: typeof workerLookup;
   } = Platform(
   WorkerTypeId,
   {
@@ -2246,5 +2255,7 @@ export const Worker: ResourceClassLike<Worker> &
       bindWorkerAsyncBindings(resource as Worker, props),
     createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
   },
-  { URL },
+  // `lookup` is arrow-wrapped for the same reason the hooks above are:
+  // WorkerLookup.ts imports `WorkerTypeId` from this module.
+  { URL, lookup: (props: WorkerLookupProps) => workerLookup(props) },
 );
