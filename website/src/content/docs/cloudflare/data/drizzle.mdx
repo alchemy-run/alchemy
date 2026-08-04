@@ -483,7 +483,6 @@ At runtime, `Drizzle.MySQL` is the drop-in sibling of
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Drizzle from "alchemy/Drizzle";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Hyperdrive } from "./Db.ts";
 import { relations, Users } from "./schema.ts";
@@ -501,20 +500,13 @@ export default class Api extends Cloudflare.Worker<Api>()(
         return yield* HttpServerResponse.json({ users });
       }),
     };
-  }).pipe(
-    Effect.provide(
-      Layer.mergeAll(
-        Cloudflare.Hyperdrive.ConnectBinding,
-        Cloudflare.MySQLBinding,
-      ),
-    ),
-  ),
+  }).pipe(Effect.provide(Cloudflare.Hyperdrive.ConnectBinding)),
 ) {}
 ```
 
-`Cloudflare.MySQLBinding` switches the client to the text protocol
-(Hyperdrive's MySQL proxy has no `COM_STMT_PREPARE`) and eval-free
-row parsing (the isolate forbids `new Function(...)`) — see
+On Workers the client defaults to the text protocol (Hyperdrive's
+MySQL proxy has no `COM_STMT_PREPARE`) and eval-free row parsing
+(the isolate forbids `new Function(...)`) — see
 [Workers defaults](/sql/effect-sql/mysql#workers-defaults). One
 query-surface difference from Postgres: MySQL has no `RETURNING`
 clause, so inserts report generated ids via `$returningId()` and

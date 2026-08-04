@@ -3,7 +3,6 @@ import * as Planetscale from "@/Planetscale/index.ts";
 import * as SQL from "@/SQL/MySQL.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { makeLayerUsers, makeSqlRoutes, type UserRow } from "./routes.ts";
@@ -134,12 +133,5 @@ export default class SqlMySQLWorker extends Cloudflare.Worker<SqlMySQLWorker>()(
         ),
       ),
     };
-  }).pipe(
-    Effect.provide(
-      Layer.mergeAll(
-        Cloudflare.Hyperdrive.ConnectBinding,
-        Cloudflare.MySQLBinding,
-      ),
-    ),
-  ),
+  }).pipe(Effect.provide(Cloudflare.Hyperdrive.ConnectBinding)),
 ) {}

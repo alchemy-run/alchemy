@@ -24,7 +24,6 @@ at runtime, so it slots straight in:
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as SQL from "alchemy/SQL/MySQL";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Hyperdrive } from "./db.ts";
 
@@ -41,14 +40,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
         return yield* HttpServerResponse.json({ users });
       }),
     };
-  }).pipe(
-    Effect.provide(
-      Layer.mergeAll(
-        Cloudflare.Hyperdrive.ConnectBinding,
-        Cloudflare.MySQLBinding,
-      ),
-    ),
-  ),
+  }).pipe(Effect.provide(Cloudflare.Hyperdrive.ConnectBinding)),
 ) {}
 ```
 
@@ -61,8 +53,7 @@ and closed when the event settles — see
 ## Workers defaults
 
 mysql2 has two habits that break on Cloudflare Workers, and
-`Cloudflare.MySQLBinding` (provided in the Worker example above)
-turns both off:
+`SQL.MySQL` defaults both away when it detects workerd:
 
 - **Prepared statements are disabled** (`disablePreparedStatements`)
   — Hyperdrive's MySQL proxy speaks only the text protocol; a
@@ -77,20 +68,9 @@ fields (mysql2's URI code path ignores `poolConfig`). Query-string
 parameters like `?ssl={"rejectUnauthorized":true}` are folded into
 `poolConfig`, matching mysql2's own URI convention.
 
-Other runtimes — a Lambda or container connecting directly — provide
-no binding, so you keep prepared statements and the fast parsers. A
-custom platform (or another text-protocol proxy) provides its own
-defaults with the same `MySQLDefaults` reference the Cloudflare
-binding uses:
-
-```typescript
-import { MySQLDefaults } from "alchemy/SQL/MySQLDefaults";
-import * as Layer from "effect/Layer";
-
-Layer.succeed(MySQLDefaults, { disablePreparedStatements: true });
-```
-
-And either flag can be forced per client:
+Outside workerd — a Lambda or container connecting directly — the
+defaults stay off, so you keep prepared statements and the fast
+parsers. The config always wins over detection, in either direction:
 
 ```typescript
 const sql = yield* SQL.MySQL({

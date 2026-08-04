@@ -7,7 +7,6 @@ import * as Redacted from "effect/Redacted";
 import * as Sql from "effect/unstable/sql/SqlClient";
 import { makeExecutionMemo } from "../Runtime/ExecutionMemo.ts";
 import { proxyChain } from "../Util/proxy-chain.ts";
-import { MySQLDefaults, type MySQLDefaultOptions } from "./MySQLDefaults.ts";
 
 /**
  * Options for {@link MySQL}: `@effect/sql-mysql2`'s client configuration,
@@ -22,6 +21,10 @@ export type MySQLConfig<E = never, R = never> = Omit<
     | Redacted.Redacted<string>
     | Effect.Effect<Redacted.Redacted<string>, E, R>;
 };
+
+const isWorkerd = () =>
+  (globalThis as { navigator?: { userAgent?: string } }).navigator
+    ?.userAgent === "Cloudflare-Workers" || "WebSocketPair" in globalThis;
 
 // Query-string params are JSON-parsed into poolConfig entries (mysql2's own
 // URI convention), so `mysql://...?ssl={"rejectUnauthorized":true}` works.
@@ -58,18 +61,20 @@ const parseMySQLUrl = (url: Redacted.Redacted<string>) =>
 /**
  * Resolve a {@link MySQLConfig} into the `MysqlClientConfig` handed to
  * `@effect/sql-mysql2`. The `url` is parsed into discrete connection fields
- * (mysql2's URI code path ignores `poolConfig`) and merged over `defaults` —
- * the {@link MySQLDefaults} a platform binding like `Cloudflare.MySQLBinding`
- * provides. Explicit config fields win over parsed / defaulted values.
+ * (mysql2's URI code path ignores `poolConfig`), and on workerd the defaults
+ * flip to `poolConfig.disableEval` (no runtime codegen in the isolate) and
+ * `disablePreparedStatements` (Hyperdrive's MySQL proxy has no
+ * `COM_STMT_PREPARE`). Explicit config fields always win over parsed /
+ * detected values.
  */
 export const resolveMySQLConfig = <E = never, R = never>(
   config: MySQLConfig<E, R>,
-  defaults: MySQLDefaultOptions = {},
 ): Effect.Effect<MysqlClient.MysqlClientConfig, E, R> =>
   Effect.gen(function* () {
     const { url, ...overrides } = config;
     const resolved = Effect.isEffect(url) ? yield* url : url;
     const parsed = yield* parseMySQLUrl(resolved);
+    const workerd = yield* Effect.sync(isWorkerd);
     return {
       ...overrides,
       host: overrides.host ?? parsed.host,
@@ -78,13 +83,11 @@ export const resolveMySQLConfig = <E = never, R = never>(
       username: overrides.username ?? parsed.username,
       password: overrides.password ?? parsed.password,
       poolConfig: {
-        ...(defaults.poolConfig as Mysql.PoolOptions),
+        ...(workerd ? { disableEval: true } : {}),
         ...parsed.poolConfig,
         ...overrides.poolConfig,
       },
-      disablePreparedStatements:
-        overrides.disablePreparedStatements ??
-        defaults.disablePreparedStatements,
+      disablePreparedStatements: overrides.disablePreparedStatements ?? workerd,
     } satisfies MysqlClient.MysqlClientConfig;
   });
 
@@ -104,12 +107,10 @@ export const resolveMySQLConfig = <E = never, R = never>(
  * });
  * ```
  *
- * On Workers, provide `Cloudflare.MySQLBinding` alongside the Hyperdrive
- * binding — it supplies the {@link MySQLDefaults} workerd needs (text
- * protocol, eval-free row parsers). The pool opens on the first query of an
- * execution, is reused for every query in it, and closes when the event
- * settles (see {@link makeExecutionMemo}); plan/deploy never connect.
- * Defaults are overridden in the config:
+ * The pool opens on the first query of an execution, is reused for every
+ * query in it, and closes when the event settles (see
+ * {@link makeExecutionMemo}); plan/deploy never connect. Workers defaults
+ * ({@link resolveMySQLConfig}) are overridden in the config:
  *
  * ```typescript
  * const sql = yield* SQL.MySQL({
@@ -122,19 +123,16 @@ export const resolveMySQLConfig = <E = never, R = never>(
  * @binding
  */
 export const MySQL = <E = never, R = never>(config: MySQLConfig<E, R>) =>
-  Effect.gen(function* () {
-    // Read at init, where binding layers (e.g. Cloudflare.MySQLBinding) are
-    // in context — handler executions don't see init-provided layers.
-    const defaults = yield* MySQLDefaults;
-    const client = yield* makeExecutionMemo(
+  Effect.map(
+    makeExecutionMemo(
       Effect.gen(function* () {
-        const resolved = yield* resolveMySQLConfig(config, defaults);
+        const resolved = yield* resolveMySQLConfig(config);
         const mysqlCtx = yield* Layer.build(MysqlClient.layer(resolved));
         return Context.get(mysqlCtx, MysqlClient.MysqlClient);
       }),
-    );
-    return proxyChain<MysqlClient.MysqlClient>(client);
-  });
+    ),
+    (client) => proxyChain<MysqlClient.MysqlClient>(client),
+  );
 
 /**
  * Provide an `@effect/sql-mysql2` client as the `MysqlClient` and generic

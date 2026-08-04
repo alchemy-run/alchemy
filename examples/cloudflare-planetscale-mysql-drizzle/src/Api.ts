@@ -99,13 +99,5 @@ export default class Api extends Cloudflare.Worker<Api>()(
         }),
       ),
     };
-  }).pipe(
-    Effect.provide(
-      Layer.mergeAll(
-        Cloudflare.Hyperdrive.ConnectBinding,
-        // MySQL on Workers: text protocol + eval-free row parsers.
-        Cloudflare.MySQLBinding,
-      ),
-    ),
-  ),
+  }).pipe(Effect.provide(Layer.mergeAll(Cloudflare.Hyperdrive.ConnectBinding))),
 ) {}

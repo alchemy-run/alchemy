@@ -17,7 +17,6 @@ export * from "./GitHubRepositoryEventSource.ts";
 export * from "./HttpServer.ts";
 export * from "./InferEnv.ts";
 export * from "./LocalWorkerProvider.ts";
-export * from "./MySQLBinding.ts";
 export * from "./ObservabilityDestination.ts";
 export * from "./RateLimit.ts";
 export * from "./RateLimitBinding.ts";
