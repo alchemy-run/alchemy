@@ -215,6 +215,11 @@ describe("AWS.Lambda.HttpServer", () => {
       ),
     );
 
+    // Defects render effect's native `causeResponse` fallback — an empty
+    // `500` with no body or content-type (the same wire shape effect's own
+    // servers produce) — instead of alchemy's former hand-rolled
+    // "Internal Server Error" text response. The cause is reported/logged
+    // server-side, never echoed to the client.
     expect(result.statusCode).toBe(500);
     expect(result.headers?.["content-type"]).toBeUndefined();
     expect(result.body).toBeUndefined();

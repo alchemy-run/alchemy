@@ -1,3 +1,4 @@
+import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -86,13 +87,44 @@ export const safeHttpEffect = <Req = never>(
       ),
     ) as any as HttpEffect<Req>,
     (cause) =>
+      // `causeResponse` is effect's native failure boundary: Respondable
+      // failures keep their intended response (e.g. RouteNotFound -> 404),
+      // client aborts map to 499, and everything else becomes an empty 500 —
+      // the cause is never echoed to the network, as it can contain sensitive
+      // data (prompt contents, API keys baked into error messages, internal
+      // file paths).
       causeResponse(cause).pipe(
-        Effect.tap(([, reportableCause]) =>
-          ErrorReporter.report(reportableCause),
+        Effect.flatMap(([response, reportableCause]) =>
+          Effect.withFiber((fiber) =>
+            fiber.getRef(ErrorReporter.CurrentErrorReporters).size > 0
+              ? ErrorReporter.report(reportableCause)
+              : logUnreportedCause(reportableCause),
+          ).pipe(Effect.as(response)),
         ),
-        Effect.map(([response]) => response),
       ),
   );
+
+/**
+ * No `ErrorReporter` is registered by default, so without a fallback a defect
+ * in a deployed Function/Worker would produce a bare 500 and vanish without a
+ * trace. Log the cause server-side so operators can debug, applying the same
+ * filtering `ErrorReporter.make` reporters do: interrupts (client aborts) and
+ * `ErrorReporter.ignore`-annotated values (Respondable errors like
+ * RouteNotFound, and the response `causeResponse` appends) are not failures
+ * and are skipped.
+ */
+const logUnreportedCause = (cause: Cause.Cause<unknown>) => {
+  const failures = cause.reasons.filter(
+    (reason) =>
+      reason._tag !== "Interrupt" &&
+      !ErrorReporter.isIgnored(
+        reason._tag === "Fail" ? reason.error : reason.defect,
+      ),
+  );
+  return failures.length === 0
+    ? Effect.void
+    : Effect.logError("HTTP handler failed", Cause.fromReasons(failures));
+};
 
 export const resolvePort = (options: { port?: number } | undefined) =>
   options?.port !== undefined
