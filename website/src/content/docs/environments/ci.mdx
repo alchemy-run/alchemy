@@ -169,6 +169,15 @@ credentials your CI needs — a scoped Cloudflare API token, an AWS
 IAM role for OIDC, etc. — and write them straight into the repo as
 encrypted secrets.
 
+:::tip[Just need a token?]
+If all you want is a `CLOUDFLARE_API_TOKEN` to paste into your
+repo's secrets by hand, run
+[`alchemy cloudflare create-token`](/cli/cloudflare#cloudflare-create-token)
+and set it (plus `CLOUDFLARE_ACCOUNT_ID`) under **Settings →
+Secrets and variables → Actions**. This guide automates the same
+thing with code.
+:::
+
 ## How PR previews work
 
 Open a PR. Alchemy does the rest.
@@ -288,6 +297,12 @@ By the end you'll have:
    `GITHUB_TOKEN` is provided automatically by GitHub Actions and is used
    by the `GitHub.Comment` resource to post PR comments.
 
+   CI itself never runs `alchemy login`. GitHub Actions sets
+   `CI=true`, and when `CI` is set Alchemy skips the interactive
+   login and reads provider credentials directly from environment
+   variables — the secrets and variables you're about to wire in.
+   Profiles only exist on your machine.
+
 </Steps>
 
 ## The GitHub Stack
@@ -315,6 +330,13 @@ Rather than hand those rights to your default
 ```sh
 alchemy login --profile admin
 ```
+
+For Cloudflare, pick **API Token or API Key** at the
+authentication-method prompt, then **API Key + Email**. The prompt
+recommends OAuth, but that recommendation is for day-to-day deploy
+profiles: Cloudflare's OAuth flow has no scope for managing API
+tokens, so an OAuth-backed profile cannot mint the CI token. See
+[required Cloudflare permissions](#cloudflare) below.
 
 :::danger[Heads up]
 The credentials stored under `--profile admin` can mint new tokens
