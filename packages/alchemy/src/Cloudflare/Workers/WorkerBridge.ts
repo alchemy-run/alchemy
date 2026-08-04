@@ -18,6 +18,7 @@ import {
   reifyBoundConfigProvider,
 } from "../../Runtime.ts";
 import { Self } from "../../Self.ts";
+import { MySQLDefaults } from "../../SQL/MySQLDefaults.ts";
 import { Stack } from "../../Stack.ts";
 import { buildEventTelemetry } from "../../Telemetry.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -328,6 +329,15 @@ const getSharedBuild = (
               MinimumLogLevel,
               (env as any).DEBUG ? "Debug" : "Info",
             ),
+          ),
+          // workerd forbids runtime code generation (mysql2's eval'd row
+          // parsers), and its MySQL path is Hyperdrive, whose proxy speaks
+          // only the text protocol (no COM_STMT_PREPARE).
+          Layer.provideMerge(
+            Layer.succeed(MySQLDefaults, {
+              disablePreparedStatements: true,
+              poolConfig: { disableEval: true },
+            }),
           ),
         ),
       ),

@@ -52,8 +52,8 @@ and closed when the event settles — see
 
 ## Workers defaults
 
-mysql2 has two habits that break on Cloudflare Workers, and
-`SQL.MySQL` defaults both away when it detects workerd:
+mysql2 has two habits that break on Cloudflare Workers, and the
+Worker runtime provides a `MySQLDefaults` layer that turns both off:
 
 - **Prepared statements are disabled** (`disablePreparedStatements`)
   — Hyperdrive's MySQL proxy speaks only the text protocol; a
@@ -68,9 +68,18 @@ fields (mysql2's URI code path ignores `poolConfig`). Query-string
 parameters like `?ssl={"rejectUnauthorized":true}` are folded into
 `poolConfig`, matching mysql2's own URI convention.
 
-Outside workerd — a Lambda or container connecting directly — the
-defaults stay off, so you keep prepared statements and the fast
-parsers. Either can be forced explicitly:
+Other runtimes — a Lambda or container connecting directly — provide
+no defaults, so you keep prepared statements and the fast parsers. A
+custom platform (or another text-protocol proxy) can provide its own:
+
+```typescript
+import { MySQLDefaults } from "alchemy/SQL/MySQLDefaults";
+import * as Layer from "effect/Layer";
+
+Layer.succeed(MySQLDefaults, { disablePreparedStatements: true });
+```
+
+And either flag can be forced per client:
 
 ```typescript
 const sql = yield* SQL.MySQL({

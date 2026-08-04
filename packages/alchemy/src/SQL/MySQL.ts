@@ -7,6 +7,7 @@ import * as Redacted from "effect/Redacted";
 import * as Sql from "effect/unstable/sql/SqlClient";
 import { makeExecutionMemo } from "../Runtime/ExecutionMemo.ts";
 import { proxyChain } from "../Util/proxy-chain.ts";
+import { MySQLDefaults } from "./MySQLDefaults.ts";
 
 /**
  * Options for {@link MySQL}: `@effect/sql-mysql2`'s client configuration,
@@ -21,10 +22,6 @@ export type MySQLConfig<E = never, R = never> = Omit<
     | Redacted.Redacted<string>
     | Effect.Effect<Redacted.Redacted<string>, E, R>;
 };
-
-const isWorkerd = () =>
-  (globalThis as { navigator?: { userAgent?: string } }).navigator
-    ?.userAgent === "Cloudflare-Workers" || "WebSocketPair" in globalThis;
 
 // Query-string params are JSON-parsed into poolConfig entries (mysql2's own
 // URI convention), so `mysql://...?ssl={"rejectUnauthorized":true}` works.
@@ -61,11 +58,10 @@ const parseMySQLUrl = (url: Redacted.Redacted<string>) =>
 /**
  * Resolve a {@link MySQLConfig} into the `MysqlClientConfig` handed to
  * `@effect/sql-mysql2`. The `url` is parsed into discrete connection fields
- * (mysql2's URI code path ignores `poolConfig`), and on workerd the defaults
- * flip to `poolConfig.disableEval` (no runtime codegen in the isolate) and
- * `disablePreparedStatements` (Hyperdrive's MySQL proxy has no
- * `COM_STMT_PREPARE`). Explicit config fields win over parsed / defaulted
- * values.
+ * (mysql2's URI code path ignores `poolConfig`) and merged over the ambient
+ * {@link MySQLDefaults} — the runtime's platform layer (e.g. the Cloudflare
+ * Worker bridge disables prepared statements and mysql2's eval'd row
+ * parsers). Explicit config fields win over parsed / defaulted values.
  */
 export const resolveMySQLConfig = <E = never, R = never>(
   config: MySQLConfig<E, R>,
@@ -74,7 +70,7 @@ export const resolveMySQLConfig = <E = never, R = never>(
     const { url, ...overrides } = config;
     const resolved = Effect.isEffect(url) ? yield* url : url;
     const parsed = yield* parseMySQLUrl(resolved);
-    const workerd = yield* Effect.sync(isWorkerd);
+    const defaults = yield* MySQLDefaults;
     return {
       ...overrides,
       host: overrides.host ?? parsed.host,
@@ -83,11 +79,13 @@ export const resolveMySQLConfig = <E = never, R = never>(
       username: overrides.username ?? parsed.username,
       password: overrides.password ?? parsed.password,
       poolConfig: {
-        ...(workerd ? { disableEval: true } : {}),
+        ...(defaults.poolConfig as Mysql.PoolOptions),
         ...parsed.poolConfig,
         ...overrides.poolConfig,
       },
-      disablePreparedStatements: overrides.disablePreparedStatements ?? workerd,
+      disablePreparedStatements:
+        overrides.disablePreparedStatements ??
+        defaults.disablePreparedStatements,
     } satisfies MysqlClient.MysqlClientConfig;
   });
 
