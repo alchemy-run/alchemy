@@ -69,7 +69,7 @@ test.provider(
       ).pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(false)));
       expect(gone).toBe(false);
     }),
-  { timeout: 180_000 },
+  { timeout: 120_000 },
 );
 
 test.provider(
@@ -128,5 +128,5 @@ test.provider(
 
       yield* stack.destroy();
     }),
-  { timeout: 180_000 },
+  { timeout: 120_000 },
 );
