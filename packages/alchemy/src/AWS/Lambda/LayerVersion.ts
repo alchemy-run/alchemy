@@ -52,14 +52,26 @@ export interface LayerVersionProps {
    * for Node.js dependencies, `bin/` for executables). File modes are
    * preserved, so executables keep their `+x` bit.
    *
-   * Exactly one of `path` or {@link s3} is required.
+   * Exactly one of `path`, {@link content}, or {@link s3} is required.
    */
   path?: string;
+  /**
+   * Layer content declared inline as a virtual file tree, keyed by the path
+   * each file takes under `/opt` (e.g. `{ "collector.yaml": yaml }`).
+   *
+   * Use this for config-only layers whose content is generated or ships
+   * inside a package: unlike {@link path} it needs nothing on disk, so it
+   * survives bundling — a library can hand a caller a complete layer without
+   * shipping a data directory its consumers would have to resolve.
+   *
+   * Exactly one of {@link path}, `content`, or {@link s3} is required.
+   */
+  content?: Record<string, string>;
   /**
    * Layer content already uploaded to S3. Required for archives above the
    * 50 MB direct-upload limit.
    *
-   * Exactly one of {@link path} or `s3` is required.
+   * Exactly one of {@link path}, {@link content}, or `s3` is required.
    */
   s3?: LayerVersionS3Content;
   /**
@@ -171,6 +183,15 @@ export interface LayerVersion extends Resource<
  * });
  * ```
  *
+ * @example Declare a Config-Only Layer Inline
+ * ```typescript
+ * // No directory on disk — the file tree is the prop, so a library can hand
+ * // out a complete layer without shipping assets its consumers must resolve.
+ * const config = yield* LayerVersion("CollectorConfig", {
+ *   content: { "collector.yaml": collectorYaml },
+ * });
+ * ```
+ *
  * @example Publish From S3
  * ```typescript
  * const layer = yield* LayerVersion("BigLayer", {
@@ -251,9 +272,12 @@ export const LayerVersionProvider = () =>
           compatibleArchitectures: props.compatibleArchitectures,
           licenseInfo: props.licenseInfo,
         };
-        if (props.s3 && props.path) {
+        const sources = [props.path, props.content, props.s3].filter(
+          (source) => source !== undefined,
+        );
+        if (sources.length > 1) {
           return yield* Effect.die(
-            "AWS.Lambda.LayerVersion accepts either `path` or `s3`, not both.",
+            "AWS.Lambda.LayerVersion accepts exactly one of `path`, `content`, or `s3`.",
           );
         }
         if (props.s3) {
@@ -269,9 +293,29 @@ export const LayerVersionProvider = () =>
             sourceHash: yield* sha256Object({ s3, config }),
           };
         }
+        if (props.content) {
+          const archive = yield* zipFiles(
+            Object.entries(props.content).map(
+              ([file, content]) =>
+                ({
+                  path: file.replaceAll("\\", "/"),
+                  content,
+                }) satisfies ZipFile,
+            ),
+          );
+          return {
+            content: {
+              ZipFile: new Uint8Array(archive),
+            } satisfies lambda.LayerVersionContentInput,
+            sourceHash: yield* sha256Object({
+              archive: yield* sha256(archive),
+              config,
+            }),
+          };
+        }
         if (!props.path) {
           return yield* Effect.die(
-            "AWS.Lambda.LayerVersion requires either `path` or `s3`.",
+            "AWS.Lambda.LayerVersion requires one of `path`, `content`, or `s3`.",
           );
         }
         const fs = yield* FileSystem.FileSystem;

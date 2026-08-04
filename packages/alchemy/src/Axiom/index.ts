@@ -5,6 +5,7 @@ export * from "./Chart.ts";
 export * from "./Credentials.ts";
 export * from "./Dashboard.ts";
 export * from "./Dataset.ts";
+export * from "./LambdaCollector.ts";
 export * from "./Monitor.ts";
 export * from "./Notifier.ts";
 export * from "./Telemetry.ts";
