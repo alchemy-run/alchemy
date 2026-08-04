@@ -2,6 +2,7 @@ import { adopt } from "@/AdoptPolicy";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as R2 from "@/Cloudflare/R2";
+import * as Command from "@/Command/index.ts";
 import * as Provider from "@/Provider";
 import * as Output from "@/Output";
 import { Stack } from "@/Stack";
@@ -1845,6 +1846,60 @@ export default {
           timeout: "60 seconds",
           label: "node:crypto served under default nodejs_compat",
         });
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
+      }).pipe(logLevel),
+    { timeout: 360_000 },
+  );
+
+  test.provider(
+    "deploys a worker whose main is derived from a Command.Build output",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+
+        yield* stack.destroy();
+
+        // Regression for #1049: `main` computed from another resource's
+        // output is still an unresolved Output when `precreate` runs on raw
+        // props — `getCompatibility` (via `isPythonMain`) must tolerate it.
+        // The entry module only exists after the build command runs, so the
+        // Worker cannot know its `main` path until `build.outdir` resolves.
+        const marker = "alchemy-output-main-e2e-ok-7c31";
+        const tempDir = yield* fs.makeTempDirectory({
+          prefix: "alchemy-output-main-",
+        });
+        yield* fs.writeFileString(
+          path.join(tempDir, "worker.src.mjs"),
+          `export default { fetch: () => new Response(${JSON.stringify(marker)}) };\n`,
+        );
+        yield* fs.writeFileString(
+          path.join(tempDir, "build.sh"),
+          "mkdir -p dist\ncp worker.src.mjs dist/worker.mjs\n",
+        );
+
+        const worker = yield* stack.deploy(
+          Effect.gen(function* () {
+            const build = yield* Command.Build("OutputMainBuild", {
+              command: "bash build.sh",
+              cwd: tempDir,
+              outdir: "dist",
+            });
+            return yield* Cloudflare.Worker("OutputMainWorker", {
+              isExternal: true,
+              workersDev: true,
+              main: Output.map(build.outdir, (dir) =>
+                pathe.resolve(dir, "worker.mjs"),
+              ),
+            });
+          }),
+        );
+
+        expect(worker.url).toBeDefined();
+        yield* expectUrlContains(worker.url!, marker);
 
         yield* stack.destroy();
         yield* waitForWorkerToBeDeleted(worker.workerName, accountId);

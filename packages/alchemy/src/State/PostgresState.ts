@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
-import { Pool } from "pg";
+import type { Pool } from "pg";
 import { recordStateStoreInit } from "../Telemetry/Metrics.ts";
 import { STATE_STORE_VERSION } from "./HttpStateApi.ts";
 import type { ReplacedResourceState } from "./ResourceState.ts";
@@ -19,6 +19,17 @@ import { encodeState, reviveStateRecursive } from "./StateEncoding.ts";
  * client that can run parameterized queries and hand out a dedicated
  * connection (for the session-scoped advisory lock) satisfies it.
  */
+// `pg` is an optional peer dependency — loaded lazily so importing this
+// module never requires the driver; only `postgresState({ dsn })` (which
+// constructs a Pool) does. A caller-supplied `client` needs no driver.
+const importPg = () =>
+  import("pg").catch((cause) => {
+    throw new Error(
+      "Failed to load the 'pg' driver. Install the optional peer dependency 'pg' to use postgresState with a `dsn`.",
+      { cause },
+    );
+  });
+
 export interface PostgresStateClient {
   query(
     text: string,
@@ -270,6 +281,14 @@ export const makePostgresState = (
         const client: PostgresStateClient =
           options.client ??
           (yield* Effect.gen(function* () {
+            const { Pool } = yield* Effect.tryPromise({
+              try: importPg,
+              catch: (cause) =>
+                new StateStoreError({
+                  message:
+                    cause instanceof Error ? cause.message : String(cause),
+                }),
+            });
             const pool = new Pool({ connectionString: options.dsn });
             yield* Scope.addFinalizer(
               scope,

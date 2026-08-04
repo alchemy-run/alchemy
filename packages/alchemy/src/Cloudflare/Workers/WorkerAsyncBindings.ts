@@ -23,18 +23,23 @@ import { isQueue } from "../Queues/Queue.ts";
 import { maybeQueueShim } from "../Queues/QueueShim.ts";
 import { isBucket } from "../R2/Bucket.ts";
 import { isSecret } from "../SecretsStore/Secret.ts";
+import { isStream } from "../Stream/Stream.ts";
 import { isIndex } from "../Vectorize/VectorizeIndex.ts";
+import { isVpcService } from "../VpcService/VpcService.ts";
+import type { VpcServiceLookup } from "../VpcService/VpcServiceLookup.ts";
 import { isDispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
 import { isWorkflowLike, WorkflowResource } from "../Workflows/Workflow.ts";
 import { makeWorkflowName } from "../Workflows/WorkflowName.ts";
 import { isAI } from "./AI.ts";
 import { isAssets } from "./Assets.ts";
+import { isBinding as isWorkerOnlyBinding } from "./Binding.ts";
 import { isBrowser } from "./Browser.ts";
 import {
   isDurableObjectLike,
   normalizeTransferredFrom,
 } from "./DurableObject.ts";
 import { isRateLimit } from "./RateLimit.ts";
+import { isSecretKey } from "./SecretKey.ts";
 import { isVersionMetadata } from "./VersionMetadata.ts";
 import type { WorkerBindingProps } from "./Worker.ts";
 import {
@@ -152,6 +157,16 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
           hyperdrives: isHyperdriveConnection(binding)
             ? getHyperdriveDevOrigin(binding)
             : undefined,
+          // Dev-only local-emulation opt-out channel (like `hyperdrives`):
+          // worker-only bindings and `SendEmail` descriptors piped through
+          // `Alchemy.remote()` carry the internal `devRemote` flag on their
+          // binding value; contribute it as binding data so the wire binding
+          // stays pure.
+          devRemote:
+            (isWorkerOnlyBinding(binding) || isSendEmail(binding)) &&
+            binding.devRemote
+              ? { [bindingName]: true }
+              : undefined,
         });
       } else {
         // Defensive catch-all: `toBinding` currently always classifies
@@ -320,6 +335,11 @@ const toBinding = (
       type: "browser",
       name: bindingName,
     };
+  } else if (isStream(binding)) {
+    return {
+      type: "stream",
+      name: bindingName,
+    };
   } else if (isApp(binding)) {
     return {
       type: "flagship",
@@ -338,6 +358,16 @@ const toBinding = (
       name: bindingName,
       namespaceId: binding.namespaceId,
       simple: binding.simple,
+    };
+  } else if (isSecretKey(binding)) {
+    return {
+      type: "secret_key",
+      name: bindingName,
+      format: binding.format,
+      algorithm: binding.algorithm,
+      usages: binding.usages,
+      keyBase64: binding.keyBase64,
+      keyJwk: binding.keyJwk,
     };
   } else if (isSendEmail(binding)) {
     return {
@@ -362,6 +392,12 @@ const toBinding = (
       workflowName: binding.workflowName ?? binding.name,
       className: binding.className ?? binding.name,
       scriptName: binding.scriptName,
+    };
+  } else if (isVpcService(binding)) {
+    return {
+      type: "vpc_service",
+      name: bindingName,
+      serviceId: binding.serviceId,
     };
   } else if (isDatabase(binding)) {
     return {
@@ -471,8 +507,22 @@ const toBinding = (
       name: bindingName,
     };
   } else if (Output.isOutput(binding)) {
-    return Output.map(binding, (value: Json | Redacted.Redacted<Json>) =>
-      toValueBinding(bindingName, value),
+    return Output.map(
+      binding,
+      (value: Json | Redacted.Redacted<Json> | VpcServiceLookup) =>
+        // A `VpcService.lookup(...)` data source resolves to the service's
+        // attributes branded with the resource `Type`; classify it like the
+        // managed resource instead of a plain json env value.
+        isVpcService(value)
+          ? {
+              type: "vpc_service" as const,
+              name: bindingName,
+              serviceId: (value as VpcServiceLookup).serviceId,
+            }
+          : toValueBinding(
+              bindingName,
+              value as Json | Redacted.Redacted<Json>,
+            ),
     );
   } else {
     return {

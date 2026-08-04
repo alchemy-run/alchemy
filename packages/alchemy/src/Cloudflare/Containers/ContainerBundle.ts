@@ -268,6 +268,7 @@ export const bundleContainerProgram = Effect.fn(function* ({
   isExternal = false,
   external = [],
   outdir,
+  build,
 }: {
   id: string;
   main: string;
@@ -276,6 +277,7 @@ export const bundleContainerProgram = Effect.fn(function* ({
   isExternal?: boolean;
   external?: string[];
   outdir?: string;
+  build?: Bundle.BundleConfig;
 }) {
   const stack = yield* Stack;
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
@@ -289,6 +291,7 @@ export const bundleContainerProgram = Effect.fn(function* ({
   ) {
     return yield* Bundle.build(
       {
+        ...build?.input,
         input: entry,
         cwd,
         external: [
@@ -296,6 +299,7 @@ export const bundleContainerProgram = Effect.fn(function* ({
           "cloudflare:workflows",
           ...(runtime === "bun" ? ["bun", "bun:*"] : []),
           ...external,
+          ...((build?.input?.external as string[] | undefined) ?? []),
         ],
         platform: "node",
         resolve: {
@@ -303,17 +307,20 @@ export const bundleContainerProgram = Effect.fn(function* ({
             runtime === "bun"
               ? ["bun", "import", "module", "default"]
               : ["node", "import", "module", "default"],
+          ...build?.input?.resolve,
         },
-        plugins,
+        plugins: [build?.input?.plugins, plugins],
         treeshake: true,
       },
       {
+        ...build?.output,
         format: "esm",
-        sourcemap: false,
-        minify: false,
+        sourcemap: build?.output?.sourcemap ?? false,
+        minify: build?.output?.minify ?? false,
         dir: outdir,
         entryFileNames: "index.mjs",
       },
+      build,
     );
   });
 
@@ -495,6 +502,7 @@ export const prepareContainerBuildContext = Effect.fn(function* (
         isExternal: news.isExternal,
         external: news.external,
         outdir: context,
+        build: news.build,
       }),
       docker.materialize({
         context,

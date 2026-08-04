@@ -9,6 +9,7 @@ minimumReleaseAgeExcludes = [
   "@opentui/core-linux-x64-musl",
   "@opentui/core-linux-arm64-musl",
   "@opentui/core-win32-x64",
+  "@opentui/core-win32-arm64",
   "@distilled.cloud/aws",
   "@distilled.cloud/axiom",
   "@distilled.cloud/cloudflare-rolldown-plugin",

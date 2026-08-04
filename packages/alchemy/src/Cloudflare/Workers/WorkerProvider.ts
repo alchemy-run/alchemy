@@ -144,6 +144,39 @@ export const resolveNamespaceName = (
 };
 
 /**
+ * Resolve a Worker's `tailConsumers` / `streamingTailConsumers` prop into
+ * the wire-shape consumer list
+ * (`[{ service }]`). The engine resolves a passed {@link Worker} to its
+ * Attributes object — possibly stables-only during planning, but
+ * `workerName` is always a stable — so each entry is either a script-name
+ * string or that attributes object. Whole-resource entries are reduced to
+ * the script name alone so hashing/diffing never sees the consumer's
+ * per-deploy fields (`hash`, `url`, ...), mirroring
+ * {@link resolveVersionParentName}.
+ *
+ * An empty array resolves to `[]` (explicitly detach every consumer);
+ * `undefined`/absent resolves to `undefined`.
+ *
+ * This is also the seam for local emulation: the local provider lowers this
+ * same resolved list into workerd's `Worker.tails` / `Worker.streamingTails`
+ * service designators (`RuntimeWorker.tails` / `RuntimeWorker.streamingTails`).
+ *
+ * @internal
+ */
+export const resolveTailConsumers = (
+  tailConsumers: WorkerProps["tailConsumers" | "streamingTailConsumers"],
+): { service: string }[] | undefined => {
+  if (tailConsumers == null) return undefined;
+  return tailConsumers.flatMap((consumer) => {
+    const service =
+      typeof consumer === "string"
+        ? consumer
+        : (consumer as { workerName?: unknown }).workerName;
+    return typeof service === "string" ? [{ service }] : [];
+  });
+};
+
+/**
  * A Worker's `version` configuration is invalid — a prop that can't be
  * combined with `version.parent` (script-level settings belong to the
  * parent), a locally-hosted Durable Object / Workflow class on a version
@@ -963,6 +996,11 @@ const resolveWorkerMetadataHash = ({
     observability: props.observability,
     placement: props.placement,
     tags: props.tags,
+    // Reduce each consumer to its script name: a referenced Worker's other
+    // attributes (hash, url, ...) change on every consumer deploy, which
+    // would spuriously re-deploy this producer.
+    tailConsumers: resolveTailConsumers(props.tailConsumers),
+    streamingTailConsumers: resolveTailConsumers(props.streamingTailConsumers),
     workersDev: resolveWorkersDev(props.workersDev),
     // Reduce `version.parent` to the parent's script name: the resolved
     // parent is a full attributes object whose *other* fields (hash, url,
@@ -2314,7 +2352,17 @@ export const LiveWorkerProvider = () =>
         assets: WorkerProps["assets"],
         output: Worker["Attributes"] | undefined,
       ) => {
-        if (!Predicate.hasProperty(assets, "hash")) return undefined;
+        // An explicitly-undefined `hash` (`{ directory, hash: maybe }`) is
+        // the hash-less shape, not a supplied hash — the same rule
+        // `assetsChanged` applies during diff. Without the `undefined` check
+        // a greenfield create (`output === undefined`) compares `undefined
+        // === undefined`, sets `skip`, and uploads a Worker with no assets.
+        if (
+          !Predicate.hasProperty(assets, "hash") ||
+          assets.hash === undefined
+        ) {
+          return undefined;
+        }
         // `base` shapes the uploaded manifest paths (see `readAssets`); it
         // is alchemy-only and must not leak into the API's asset config.
         const { directory, hash, base, ...config } = assets;
@@ -2558,6 +2606,8 @@ export const LiveWorkerProvider = () =>
             ["assets", news.assets],
             ["namespace", news.namespace],
             ["crons", news.crons],
+            ["tailConsumers", news.tailConsumers],
+            ["streamingTailConsumers", news.streamingTailConsumers],
             ["domain", news.domain],
             ["routes", news.routes],
             ["tags", news.tags],
@@ -3335,6 +3385,10 @@ export const LiveWorkerProvider = () =>
         );
 
         const compatibility = getCompatibility(news);
+        const tailConsumers = resolveTailConsumers(news.tailConsumers);
+        const streamingTailConsumers = resolveTailConsumers(
+          news.streamingTailConsumers,
+        );
         const metadata: workers.PutScriptRequest["metadata"] = {
           assets: metadataAssets,
           bindings: metadataBindings,
@@ -3359,7 +3413,8 @@ export const LiveWorkerProvider = () =>
           },
           placement: news.placement,
           tags: metadataTags,
-          tailConsumers: undefined,
+          tailConsumers,
+          streamingTailConsumers,
           usageModel: undefined,
         };
         const rolloutTraffic = getSelfRolloutTraffic(news);
@@ -3534,6 +3589,12 @@ export const LiveWorkerProvider = () =>
             domain: undefined,
             routes: [],
             crons: [],
+            tailConsumers:
+              settings.tailConsumers?.map((c) => ({ service: c.service })) ??
+              tailConsumers,
+            // The settings read endpoint doesn't expose
+            // `streaming_tail_consumers`; record what this deploy uploaded.
+            streamingTailConsumers,
             hash,
           } satisfies Worker["Attributes"];
         }
@@ -3775,6 +3836,19 @@ export const LiveWorkerProvider = () =>
           accountId,
           routes,
           crons,
+          // Observed post-upload settings are authoritative: the gradual
+          // rollout branch above deploys via the versions API, which leaves
+          // script-level settings (tail consumers included) at their live
+          // values until the next full deploy.
+          tailConsumers:
+            settings.tailConsumers?.map((c) => ({ service: c.service })) ??
+            tailConsumers,
+          // GET script-settings has no `streaming_tail_consumers` field (the
+          // API only carries it on upload metadata), so the uploaded value is
+          // authoritative here. In the gradual-rollout branch the versions
+          // API leaves script-level settings live-as-is, matching how the
+          // metadata surface treats every other script-level field.
+          streamingTailConsumers,
           versionOf: undefined,
           versionId,
           deploymentId,
@@ -4517,6 +4591,13 @@ export const LiveWorkerProvider = () =>
                 domain: undefined,
                 routes: [],
                 crons: [],
+                tailConsumers: settings.tailConsumers?.map((c) => ({
+                  service: c.service,
+                })),
+                // Not observable: GET script-settings has no
+                // `streaming_tail_consumers` field. Carry the last deployed
+                // value forward like other provider-managed caches.
+                streamingTailConsumers: output?.streamingTailConsumers,
               } satisfies Worker["Attributes"];
               return hasAlchemyWorkerTags(id, settings.tags ?? [])
                 ? attrs
@@ -4637,6 +4718,13 @@ export const LiveWorkerProvider = () =>
               durableObjectNamespaces: getDurableObjects(settings.bindings),
               routes: routesList,
               crons,
+              tailConsumers: settings.tailConsumers?.map((c) => ({
+                service: c.service,
+              })),
+              // Not observable: GET script-settings has no
+              // `streaming_tail_consumers` field. Carry the last deployed
+              // value forward like other provider-managed caches.
+              streamingTailConsumers: output?.streamingTailConsumers,
               // Rule placement is provider-managed state, not observed here
               // (a getPhas call per known zone on every read); carry the
               // cleanup list forward like any other stable cache.

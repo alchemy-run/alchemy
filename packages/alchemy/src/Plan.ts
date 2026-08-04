@@ -243,6 +243,14 @@ export type Plan<Output = any> = {
    */
   cycleMembers: ReadonlySet<string>;
   /**
+   * The run-level default {@link ProviderMode} this plan was built with
+   * (`alchemy dev` → `"local"`, `alchemy deploy` → `"live"`). Renderers use
+   * it to tag only the EXCEPTIONS — rows whose resolved mode differs from
+   * the run default. `undefined` (plans built by older/auxiliary builders)
+   * is treated as `"live"`.
+   */
+  defaultMode?: ProviderMode;
+  /**
    * Marks a plan built by {@link destroy}. `apply` finishes a destroy plan
    * by deleting the stage's remaining persisted state — notably the stack
    * output record written by the last deploy — instead of persisting a new
@@ -357,7 +365,9 @@ export const make = <A>(
 
               const { provider, mode } =
                 yield* resolveProviderAndMode(resource);
-              const props = yield* resolveInput(resource.Props);
+              const props = materializeStableRefs(
+                yield* resolveInput(resource.Props),
+              );
               const persisted = yield* state.get({
                 stack: stackName,
                 stage: stage,
@@ -465,6 +475,16 @@ export const make = <A>(
           ));
       });
 
+    /**
+     * Resolve an input value as far as *truth* permits, keeping everything
+     * else evaluable. A whole-resource reference to an updating upstream
+     * stays a `ResourceExpr` (its stable attributes riding along): the
+     * non-stable attributes are unknown at plan time and MUST be
+     * re-evaluated — Apply runs `Output.evaluate(node.props, outputs)`
+     * against the upstream's fresh post-reconcile attributes right before
+     * `reconcile`. This is the value plan nodes carry; the diff-facing view
+     * is derived from it by {@link materializeStableRefs}.
+     */
     const resolveInput = (input: any): Effect.Effect<any, Config.ConfigError> =>
       Effect.gen(function* () {
         if (!input) {
@@ -496,17 +516,10 @@ export const make = <A>(
           // resolving any nested outputs in the result.
           const resourceExpr = Output.of(input);
           const resolved = yield* resolveOutput(resourceExpr);
-          // An upstream being updated in place resolves to a `ResourceExpr`
-          // carrying only its *stable* attributes (see `withStables` in
-          // `resolveResource`). When the resource is referenced *whole*
-          // (rather than via a single prop like `upstream.id`), materialize
-          // those stable attributes into a plain object so the known, stable
-          // values flow into the consumer's `diff`. Otherwise the consumer
-          // sees the whole reference as an unresolved `Expr`, `isResolved`
-          // short-circuits, and a stable identifier that should have been
-          // available is missing — forcing consumers to hand-extract it.
-          if (Output.isResourceExpr(resolved) && resolved.stables) {
-            return yield* resolveInput(resolved.stables);
+          if (Output.isResourceExpr(resolved)) {
+            // Still-unresolved reference (creating, replacing, or updating
+            // upstream) — keep it evaluable for Apply.
+            return resolved;
           }
           return yield* resolveInput(resolved);
         } else if (typeof input === "object") {
@@ -521,6 +534,44 @@ export const make = <A>(
         }
         return input;
       });
+
+    /**
+     * Project a {@link resolveInput} resolution into the DIFF-facing view:
+     * replace each whole-resource `ResourceExpr` that carries stable
+     * attributes (an upstream being *updated* in place — see `withStables` in
+     * `resolveResource`) with a plain object of those stables, so the known
+     * values flow into the consumer's `diff` and `havePropsChanged` instead
+     * of the whole reference looking unresolved and `isResolved`
+     * short-circuiting (#670 — this forced the Neon `Branch` to hand-extract
+     * `project.projectId`).
+     *
+     * The projection is deliberately lossy — diffs compare VALUES. Plan nodes
+     * never carry it: they keep the evaluable resolution so `reconcile` sees
+     * the upstream's fresh non-stable attributes (e.g. a Lambda Version's
+     * `version` number — #993's alias promotion bug).
+     */
+    const materializeStableRefs = (input: any): any => {
+      // Expr checks come first: Output proxies are callable, so a plain
+      // `typeof input === "object"` guard would let them slip through.
+      if (Output.isResourceExpr(input) && input.stables) {
+        return materializeStableRefs(input.stables);
+      } else if (Output.isExpr(input)) {
+        // Genuinely unknown (e.g. a creating upstream) — nothing to show diff.
+        return input;
+      } else if (!input || typeof input !== "object") {
+        return input;
+      } else if (Duration.isDuration(input) || Redacted.isRedacted(input)) {
+        return input;
+      } else if (Array.isArray(input)) {
+        return input.map(materializeStableRefs);
+      }
+      return Object.fromEntries(
+        Object.entries(input).map(([key, value]) => [
+          key,
+          materializeStableRefs(value),
+        ]),
+      );
+    };
 
     const resolveOutput = (expr: Output.Expr<any>): Effect.Effect<any> =>
       Effect.gen(function* () {
@@ -767,14 +818,36 @@ export const make = <A>(
             const { provider, mode } = yield* resolveProviderAndMode(resource);
             const id = resource.LogicalId;
             const fqn = resource.FQN;
-            const news = yield* resolveInput(resource.Props);
+            // Apply-facing props (stored on the plan node): whole-resource
+            // references to updating upstreams stay evaluable `ResourceExpr`s.
+            // Apply runs `Output.evaluate(node.props, outputs)` right before
+            // `reconcile`, so these references resolve to the upstream's
+            // fresh post-reconcile attributes.
+            const applyProps = yield* resolveInput(resource.Props);
+            // Diff-facing view of the same resolution: stable attributes
+            // materialized so their known values flow into `diff` /
+            // `havePropsChanged`.
+            const news = materializeStableRefs(applyProps);
             const downstream = newDownstreamDependencies[fqn] ?? [];
 
-            // Collapse duplicate bindings by sid so the binding set handed to
-            // `diff` matches what `reconcile` receives (see `dedupeBindings`).
-            const newBindings: ResourceBinding[] = dedupeBindings(
+            // Apply-facing binding rows, mirroring `applyProps`: payloads
+            // whose data embeds a whole-resource reference to an updating
+            // upstream keep it as an evaluable `ResourceExpr`. Apply runs
+            // `Output.evaluate(node.bindings, outputs)` right before
+            // `reconcile`, so the host receives the upstream's fresh
+            // post-reconcile attributes. Collapse duplicates by sid so the
+            // binding set handed to `diff` matches what `reconcile` receives
+            // (see `dedupeBindings`).
+            const applyBindings: ResourceBinding[] = dedupeBindings(
               yield* resolveInput(stack.bindings[fqn] ?? []),
             );
+            // Diff-facing view of the same rows: stable attributes
+            // materialized so `diffBindings` / `provider.diff` compare known
+            // values. Terminal commits still persist the payload the provider
+            // actually reconciled with (#874) — Apply commits the evaluated
+            // `bindingOutputs`, not these plan-time shapes.
+            const newBindings: ResourceBinding[] =
+              materializeStableRefs(applyBindings);
             const persisted = yield* state.get({
               stack: stackName,
               stage: stage,
@@ -892,7 +965,20 @@ export const make = <A>(
 
             // Sid-sorted like `newBindings` (see the resolveResource note).
             const oldBindings = dedupeBindings(oldState?.bindings ?? []);
-            const bindingDiffs = diffBindings(oldBindings, newBindings);
+            // Actions come from the materialized comparison (`newBindings`);
+            // the payloads the node carries into Apply come from the
+            // apply-faithful rows, joined by sid — both are views of the same
+            // deduped `stack.bindings[fqn]` rows, so action and payload can
+            // never drift. `delete` rows keep the persisted old data.
+            const applyBindingData = new Map(
+              applyBindings.map((b) => [b.sid, b.data]),
+            );
+            const bindingDiffs = diffBindings(oldBindings, newBindings).map(
+              (b) =>
+                b.action === "delete" || !applyBindingData.has(b.sid)
+                  ? b
+                  : { ...b, data: applyBindingData.get(b.sid) },
+            );
 
             // Local ⇄ live switch: the persisted row was reconciled by a
             // different provider mode than the one resolved for this run.
@@ -924,7 +1010,7 @@ export const make = <A>(
             if (oldState === undefined) {
               return Node<Create>({
                 action: "create",
-                props: news,
+                props: applyProps,
                 state: oldState,
               });
             } else if (
@@ -1069,7 +1155,7 @@ export const make = <A>(
                 // let's just continue where we left off
                 return Node<Create>({
                   action: "create",
-                  props: news,
+                  props: applyProps,
                   state: oldState,
                 });
               } else if (diff.action === "update") {
@@ -1078,7 +1164,7 @@ export const make = <A>(
                 // TODO(sam): should we maybe try an update instead?
                 return Node<Create>({
                   action: "create",
-                  props: news,
+                  props: applyProps,
                   state: oldState,
                 });
               } else {
@@ -1087,7 +1173,7 @@ export const make = <A>(
                 // we must use a replace step to create a new one and delete the potential old one
                 return Node<Replace>({
                   action: "replace",
-                  props: news,
+                  props: applyProps,
                   deleteFirst: diff.deleteFirst ?? false,
                   state: oldState,
                 });
@@ -1100,7 +1186,7 @@ export const make = <A>(
                 // we can continue where we left off
                 return Node<Update>({
                   action: "update",
-                  props: news,
+                  props: applyProps,
                   state: oldState,
                 });
               } else {
@@ -1108,7 +1194,7 @@ export const make = <A>(
                 return Node<Replace>({
                   action: "replace",
                   deleteFirst: diff.deleteFirst ?? false,
-                  props: news,
+                  props: applyProps,
                   // TODO(sam): can Apply handle replacements when the oldState is UpdatingResourceState?
                   // -> or should we do a provider.read to try and reconcile back to UpdatedResourceState?
                   state: oldState,
@@ -1123,7 +1209,7 @@ export const make = <A>(
                 return Node<Replace>({
                   action: "replace",
                   deleteFirst: oldState.deleteFirst,
-                  props: news,
+                  props: applyProps,
                   state: oldState,
                 });
               } else if (diff.action === "update") {
@@ -1134,7 +1220,7 @@ export const make = <A>(
                 return Node<Replace>({
                   action: "replace",
                   deleteFirst: oldState.deleteFirst,
-                  props: news,
+                  props: applyProps,
                   state: oldState,
                 });
               } else {
@@ -1145,7 +1231,7 @@ export const make = <A>(
                   restart: true,
                   action: "replace",
                   deleteFirst: diff.deleteFirst ?? oldState.deleteFirst,
-                  props: news,
+                  props: applyProps,
                   state: oldState,
                 });
               }
@@ -1158,7 +1244,7 @@ export const make = <A>(
                 return Node<Replace>({
                   action: "replace",
                   deleteFirst: oldState.deleteFirst,
-                  props: news,
+                  props: applyProps,
                   state: oldState,
                 });
               } else if (diff.action === "update") {
@@ -1168,7 +1254,7 @@ export const make = <A>(
                 // 2. Then proceed as normal to delete the replaced resources (after all downstream references are updated)
                 return Node<Update>({
                   action: "update",
-                  props: news,
+                  props: applyProps,
                   state: oldState,
                 });
               } else {
@@ -1179,7 +1265,7 @@ export const make = <A>(
                   restart: true,
                   action: "replace",
                   deleteFirst: diff.deleteFirst ?? oldState.deleteFirst,
-                  props: news,
+                  props: applyProps,
                   state: oldState,
                 });
               }
@@ -1188,7 +1274,7 @@ export const make = <A>(
               // so continue by re-creating it with the same instanceId and desired props
               return Node<Create>({
                 action: "create",
-                props: news,
+                props: applyProps,
                 state: {
                   ...oldState,
                   status: "creating",
@@ -1200,13 +1286,13 @@ export const make = <A>(
               return Node<Update>({
                 action: "update",
                 adopting: forceUpdateAfterAdoption,
-                props: news,
+                props: applyProps,
                 state: oldState,
               });
             } else if (diff.action === "replace") {
               return Node<Replace>({
                 action: "replace",
-                props: news,
+                props: applyProps,
                 state: oldState,
                 deleteFirst: diff?.deleteFirst ?? false,
               });
@@ -1229,7 +1315,12 @@ export const make = <A>(
           Effect.fn("plan.diff.action")(function* (action) {
             const fqn = action.FQN;
             const downstream = newDownstreamDependencies[fqn] ?? [];
-            const resolvedInput = yield* resolveInput(action.Input);
+            // The node carries the RAW input expression (evaluated at apply);
+            // the drift hash uses the diff-facing view so stable upstream
+            // attributes hash as their known values.
+            const resolvedInput = materializeStableRefs(
+              yield* resolveInput(action.Input),
+            );
             const inputHash = yield* hashInput(resolvedInput);
             const oldState = yield* state.get({
               stack: stackName,
@@ -1499,6 +1590,7 @@ export const make = <A>(
       actionDeletions,
       output: stack.output,
       cycleMembers,
+      defaultMode: runDefaultMode,
     } satisfies Plan<A> as Plan<A>;
   }).pipe(
     ensureArtifactStore,
