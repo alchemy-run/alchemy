@@ -3,6 +3,8 @@ import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -107,6 +109,30 @@ test.provider(
       expect(site2.hash?.input).toBeDefined();
       expect(site2.hash?.input).toEqual(site1.hash?.input);
       expect(site2.url).toBe(site1.url);
+
+      // ── deploy 3: edit a route ⇒ the input hash busts and the rebuilt
+      // page serves the new content ────────────────────────────────────────
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const pagePath = path.join(rootDir, "src", "routes", "+page.svelte");
+      const editedMarker = "sveltekit-edited-marker";
+      const page = yield* fs.readFileString(pagePath);
+      yield* fs.writeFileString(
+        pagePath,
+        page.replace(
+          "SvelteKit SSR home",
+          `SvelteKit SSR home ${editedMarker}`,
+        ),
+      );
+
+      const site3 = yield* deploy();
+
+      expect(site3.hash?.input).toBeDefined();
+      expect(site3.hash?.input).not.toEqual(site1.hash?.input);
+      yield* expectUrlContains(`${site3.url!}/`, editedMarker, {
+        timeout: "120 seconds",
+        label: "edited SSR home page",
+      });
 
       yield* stack.destroy();
       yield* waitForWorkerToBeDeleted(site1.workerName, accountId);

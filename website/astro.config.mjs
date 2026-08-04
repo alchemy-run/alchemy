@@ -708,6 +708,11 @@ export default defineConfig({
                 },
                 { label: "Astro", link: "/cloudflare/frontend/astro" },
                 { label: "Nuxt", link: "/cloudflare/frontend/nuxt" },
+                {
+                  label: "SvelteKit",
+                  link: "/cloudflare/frontend/sveltekit",
+                },
+                { label: "Waku", link: "/cloudflare/frontend/waku" },
               ],
             },
             {
