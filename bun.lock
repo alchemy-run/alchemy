@@ -51,7 +51,7 @@
     },
     "cloudflare-tools/packages/cloudflare-rolldown-plugin": {
       "name": "@distilled.cloud/cloudflare-rolldown-plugin",
-      "version": "0.14.0",
+      "version": "0.15.0",
       "dependencies": {
         "@cloudflare/unenv-preset": "^2.16.0",
         "magic-string": "^0.30.21",
@@ -76,7 +76,7 @@
     },
     "cloudflare-tools/packages/cloudflare-runtime": {
       "name": "@distilled.cloud/cloudflare-runtime",
-      "version": "0.14.0",
+      "version": "0.15.0",
       "dependencies": {
         "@alchemy.run/node-utils": "catalog:",
         "@puppeteer/browsers": "^2.10.6",
@@ -114,7 +114,7 @@
     },
     "cloudflare-tools/packages/cloudflare-vite-plugin": {
       "name": "@distilled.cloud/cloudflare-vite-plugin",
-      "version": "0.14.0",
+      "version": "0.15.0",
       "dependencies": {
         "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:*",
       },
@@ -212,7 +212,7 @@
     },
     "distilled/packages/aws": {
       "name": "@distilled.cloud/aws",
-      "version": "0.30.2",
+      "version": "0.29.1",
       "dependencies": {
         "@aws-crypto/crc32": "catalog:",
         "@aws-crypto/util": "catalog:",
@@ -235,7 +235,6 @@
         "dedent": "catalog:",
         "dotenv": "catalog:",
         "pathe": "catalog:",
-        "rolldown": "catalog:",
         "vitest": "catalog:",
       },
       "peerDependencies": {
@@ -244,84 +243,64 @@
     },
     "distilled/packages/axiom": {
       "name": "@distilled.cloud/axiom",
-      "version": "0.30.2",
+      "version": "0.31.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
       },
       "devDependencies": {
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
-        "dotenv": "catalog:",
-        "rolldown": "catalog:",
-        "vitest": "catalog:",
-      },
-      "peerDependencies": {
-        "effect": "catalog:",
       },
     },
     "distilled/packages/azure": {
       "name": "@distilled.cloud/azure",
-      "version": "0.30.2",
+      "version": "0.31.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
       },
       "devDependencies": {
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
-        "dotenv": "catalog:",
-        "rolldown": "catalog:",
-        "vitest": "catalog:",
-      },
-      "peerDependencies": {
-        "effect": "catalog:",
       },
     },
     "distilled/packages/cloudflare": {
       "name": "@distilled.cloud/cloudflare",
-      "version": "0.30.2",
+      "version": "0.0.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
       },
       "devDependencies": {
-        "@effect/platform-node": "catalog:",
-        "@effect/vitest": "catalog:",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
-        "dotenv": "catalog:",
-        "rolldown": "catalog:",
-        "typescript-5": "npm:typescript@^5.9.3",
-        "vitest": "catalog:",
-      },
-      "peerDependencies": {
-        "effect": "catalog:",
       },
     },
     "distilled/packages/coinbase": {
       "name": "@distilled.cloud/coinbase",
-      "version": "0.30.2",
+      "version": "0.31.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
       },
       "devDependencies": {
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
-        "dotenv": "catalog:",
-        "rolldown": "catalog:",
-        "vitest": "catalog:",
-        "yaml": "^2.8.2",
-      },
-      "peerDependencies": {
-        "effect": "catalog:",
       },
     },
     "distilled/packages/core": {
       "name": "@distilled.cloud/core",
-      "version": "0.30.2",
+      "version": "0.0.0",
       "devDependencies": {
+        "@effect/platform-bun": "catalog:",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
-        "dotenv": "catalog:",
-        "vitest": "catalog:",
+        "effect": "catalog:",
       },
       "peerDependencies": {
         "effect": "catalog:",
@@ -329,244 +308,184 @@
     },
     "distilled/packages/expo-eas": {
       "name": "@distilled.cloud/expo-eas",
-      "version": "0.30.2",
+      "version": "0.31.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
       },
       "devDependencies": {
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
-        "dotenv": "catalog:",
-        "rolldown": "catalog:",
-        "vitest": "catalog:",
-      },
-      "peerDependencies": {
-        "effect": "catalog:",
       },
     },
     "distilled/packages/fly-io": {
       "name": "@distilled.cloud/fly-io",
-      "version": "0.30.2",
+      "version": "0.31.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
       },
       "devDependencies": {
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
-        "dotenv": "catalog:",
-        "rolldown": "catalog:",
-        "vitest": "catalog:",
-      },
-      "peerDependencies": {
-        "effect": "catalog:",
       },
     },
     "distilled/packages/gcp": {
       "name": "@distilled.cloud/gcp",
-      "version": "0.30.2",
+      "version": "0.31.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
       },
       "devDependencies": {
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
-        "dotenv": "catalog:",
-        "rolldown": "catalog:",
-        "vitest": "catalog:",
-      },
-      "peerDependencies": {
-        "effect": "catalog:",
       },
     },
     "distilled/packages/kubernetes": {
       "name": "@distilled.cloud/kubernetes",
-      "version": "0.30.2",
+      "version": "0.31.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
       },
       "devDependencies": {
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
-        "dotenv": "catalog:",
-        "rolldown": "catalog:",
-        "vitest": "catalog:",
-      },
-      "peerDependencies": {
-        "effect": "catalog:",
       },
     },
     "distilled/packages/mongodb-atlas": {
       "name": "@distilled.cloud/mongodb-atlas",
-      "version": "0.30.2",
+      "version": "0.31.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
       },
       "devDependencies": {
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
-        "dotenv": "catalog:",
-        "rolldown": "catalog:",
-        "vitest": "catalog:",
-      },
-      "peerDependencies": {
-        "effect": "catalog:",
       },
     },
     "distilled/packages/neon": {
       "name": "@distilled.cloud/neon",
-      "version": "0.30.2",
+      "version": "0.31.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
       },
       "devDependencies": {
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
-        "dotenv": "catalog:",
-        "rolldown": "catalog:",
-        "vitest": "catalog:",
-      },
-      "peerDependencies": {
-        "effect": "catalog:",
       },
     },
     "distilled/packages/planetscale": {
       "name": "@distilled.cloud/planetscale",
-      "version": "0.30.2",
+      "version": "0.31.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
       },
       "devDependencies": {
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
-        "dotenv": "catalog:",
-        "rolldown": "catalog:",
-        "vitest": "catalog:",
-      },
-      "peerDependencies": {
-        "effect": "catalog:",
       },
     },
     "distilled/packages/posthog": {
       "name": "@distilled.cloud/posthog",
-      "version": "0.30.2",
+      "version": "0.31.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
       },
       "devDependencies": {
-        "@effect/platform-node": "catalog:",
-        "@effect/vitest": "catalog:",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
-        "dotenv": "catalog:",
-        "rolldown": "catalog:",
-        "vitest": "catalog:",
-      },
-      "peerDependencies": {
-        "effect": "catalog:",
       },
     },
     "distilled/packages/prisma-postgres": {
       "name": "@distilled.cloud/prisma-postgres",
-      "version": "0.30.2",
+      "version": "0.31.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
       },
       "devDependencies": {
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
-        "dotenv": "catalog:",
-        "rolldown": "catalog:",
-        "vitest": "catalog:",
-      },
-      "peerDependencies": {
-        "effect": "catalog:",
       },
     },
     "distilled/packages/stripe": {
       "name": "@distilled.cloud/stripe",
-      "version": "0.30.2",
+      "version": "0.31.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
       },
       "devDependencies": {
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
-        "dotenv": "catalog:",
-        "rolldown": "catalog:",
-        "vitest": "catalog:",
-      },
-      "peerDependencies": {
-        "effect": "catalog:",
       },
     },
     "distilled/packages/supabase": {
       "name": "@distilled.cloud/supabase",
-      "version": "0.30.2",
+      "version": "0.31.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
       },
       "devDependencies": {
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
-        "dotenv": "catalog:",
-        "rolldown": "catalog:",
-        "vitest": "catalog:",
-      },
-      "peerDependencies": {
-        "effect": "catalog:",
       },
     },
     "distilled/packages/turso": {
       "name": "@distilled.cloud/turso",
-      "version": "0.30.2",
+      "version": "0.31.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
       },
       "devDependencies": {
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
-        "dotenv": "catalog:",
-        "rolldown": "catalog:",
-        "vitest": "catalog:",
-      },
-      "peerDependencies": {
-        "effect": "catalog:",
       },
     },
     "distilled/packages/typesense": {
       "name": "@distilled.cloud/typesense",
-      "version": "0.30.2",
+      "version": "0.31.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
       },
       "devDependencies": {
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
-        "dotenv": "catalog:",
-        "rolldown": "catalog:",
-        "vitest": "catalog:",
-        "yaml": "catalog:",
-      },
-      "peerDependencies": {
-        "effect": "catalog:",
       },
     },
     "distilled/packages/workos": {
       "name": "@distilled.cloud/workos",
-      "version": "0.30.2",
+      "version": "0.31.0",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
+        "@effect/platform-bun": "catalog:",
+        "effect": "catalog:",
       },
       "devDependencies": {
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
-        "dotenv": "catalog:",
-        "rolldown": "catalog:",
-        "vitest": "catalog:",
-        "yaml": "catalog:",
-      },
-      "peerDependencies": {
-        "effect": "catalog:",
       },
     },
     "examples/aws-bedrock-ai": {
@@ -724,6 +643,7 @@
       "name": "cloudflare-dev",
       "version": "0.0.0",
       "dependencies": {
+        "@cloudflare/puppeteer": "^1.1.0",
         "@cloudflare/workers-types": "catalog:",
         "@effect/platform-bun": "catalog:",
         "@effect/platform-node": "catalog:",
@@ -2044,23 +1964,23 @@
 
     "@opentelemetry/semantic-conventions": ["@opentelemetry/semantic-conventions@1.43.0", "", {}, "sha512-eSYWTm620tTk45EKSedaUL8MFYI8hW164hIXsgIHyxu3VobUB3fFCu5t0hQby6OoWRPsG1KkKUG2M5UadiLiVg=="],
 
-    "@opentui/core": ["@opentui/core@0.4.5", "", { "dependencies": { "bun-ffi-structs": "0.2.4", "diff": "9.0.0", "marked": "17.0.1", "string-width": "7.2.0", "strip-ansi": "7.1.2" }, "optionalDependencies": { "@opentui/core-darwin-arm64": "0.4.5", "@opentui/core-darwin-x64": "0.4.5", "@opentui/core-linux-arm64": "0.4.5", "@opentui/core-linux-arm64-musl": "0.4.5", "@opentui/core-linux-x64": "0.4.5", "@opentui/core-linux-x64-musl": "0.4.5", "@opentui/core-win32-arm64": "0.4.5", "@opentui/core-win32-x64": "0.4.5" }, "peerDependencies": { "web-tree-sitter": "0.25.10" } }, "sha512-JsgRTPkA6e+Vxmumxai6SElOSlRQkbzNKHlCfemlArRiLhfC1IZ9RXJo2QH4xSu+uBOWAM90uss73/pPlkdEig=="],
+    "@opentui/core": ["@opentui/core@0.5.0", "", { "dependencies": { "bun-ffi-structs": "0.3.1", "diff": "9.0.0", "marked": "17.0.1", "string-width": "7.2.0", "strip-ansi": "7.1.2" }, "optionalDependencies": { "@opentui/core-darwin-arm64": "0.5.0", "@opentui/core-darwin-x64": "0.5.0", "@opentui/core-linux-arm64": "0.5.0", "@opentui/core-linux-arm64-musl": "0.5.0", "@opentui/core-linux-x64": "0.5.0", "@opentui/core-linux-x64-musl": "0.5.0", "@opentui/core-win32-arm64": "0.5.0", "@opentui/core-win32-x64": "0.5.0" }, "peerDependencies": { "web-tree-sitter": "0.25.10" } }, "sha512-LCHPiwB8zjvJ1KTTayQoq5nygdRwLI1ApsvWiCF06PtMPr0yP/zU+L3xk9KiFoTbAabtgA7PoBf16M2hPZR+tg=="],
 
-    "@opentui/core-darwin-arm64": ["@opentui/core-darwin-arm64@0.4.5", "", { "os": "darwin", "cpu": "arm64" }, "sha512-8KUG0oRidnR+oW1RSZJ72/PhZLl+qRRMk5U/mieF4c0SJ5V3tYACpBZAKzQfHNd1f7QzD8FHZct1lPpQgtmkWg=="],
+    "@opentui/core-darwin-arm64": ["@opentui/core-darwin-arm64@0.5.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-FcLH4Rs2/xnBOudMzuHimEK8aNuJ3QpOde+xjz+7hf/0cmurnDJLs+VJ85qYYdBdcnuBonFbjZfB19OLd2RwIA=="],
 
-    "@opentui/core-darwin-x64": ["@opentui/core-darwin-x64@0.4.5", "", { "os": "darwin", "cpu": "x64" }, "sha512-R2bocsg55gwjOqCp/MWFgFYzRmsduKegB6nzgFAPCvAD/L5Jf30xpWJWFlSg3x8vxe1L9WJ84dfqa4M7mZZ3wA=="],
+    "@opentui/core-darwin-x64": ["@opentui/core-darwin-x64@0.5.0", "", { "os": "darwin", "cpu": "x64" }, "sha512-rOuwFrA74oOfMkvKP1EHKXUsoQ01/mvx57wsVdrhqDZuNrJrWpW6Q8xunTow5O4TzERSGrjfu25yophO+aH2hg=="],
 
-    "@opentui/core-linux-arm64": ["@opentui/core-linux-arm64@0.4.5", "", { "os": "linux", "cpu": "arm64" }, "sha512-R4MZ25a4CzOAGVjW9aj1hUfzQGVfCJwrwBDbNs2SXaIvzcZqkxCVtU4FoQ5LsaD0j/BdNQVg2CIfFkFsm1fDuQ=="],
+    "@opentui/core-linux-arm64": ["@opentui/core-linux-arm64@0.5.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-BidyUBbI6n9WGPZpmJ1X457FUCMhbj7G2kcPnUln8w2zuaXGb9AN8QfOTtD9JGuujkx0Xsz8yhfC3cCWLQyz5w=="],
 
-    "@opentui/core-linux-arm64-musl": ["@opentui/core-linux-arm64-musl@0.4.5", "", { "os": "linux", "cpu": "arm64" }, "sha512-ieqdyKI6EIYPalYAETB2wsdP83hr5Ifi+dFnBFUmdEEFHsoKwBmn2S7bsTOYlX7Bg03F4/YPIg+IvRpeC+cUJw=="],
+    "@opentui/core-linux-arm64-musl": ["@opentui/core-linux-arm64-musl@0.5.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-fIS0eDs9m6SDgVVG0Aaqn6Co39K8J436Vp0xMD3FjPc41mpsoFjyHquhIkpAX9bh8Qr225uGG5zRm7A+88FlKw=="],
 
-    "@opentui/core-linux-x64": ["@opentui/core-linux-x64@0.4.5", "", { "os": "linux", "cpu": "x64" }, "sha512-SNyuQoxMKI1vuJhgxSSW96adWM6LqFl2SoS3GM4tGeneGOanVVG2Y06PvlytXvF4cKik97t0rqkVMRetmOs93w=="],
+    "@opentui/core-linux-x64": ["@opentui/core-linux-x64@0.5.0", "", { "os": "linux", "cpu": "x64" }, "sha512-GwPW6tXCamEUdg3ykabzYW9ayGCOR18yiHKbuY8GB5EgbcA2rkwczE7KQs08RGuSNSWIGEEwHZE2cqhXjYogCQ=="],
 
-    "@opentui/core-linux-x64-musl": ["@opentui/core-linux-x64-musl@0.4.5", "", { "os": "linux", "cpu": "x64" }, "sha512-mKVKcIcPiSVVZZsdPSBoWwoa2/TCeQAaMDeHF7PFw2kt5bTXZPP7xxWfRQLCNIcA1eaGl59UuwUWHDR2Ve548Q=="],
+    "@opentui/core-linux-x64-musl": ["@opentui/core-linux-x64-musl@0.5.0", "", { "os": "linux", "cpu": "x64" }, "sha512-SEg+/lG2ToswziX/ICMRy2QTHmZcb2wfQftQsbmejjL8zI3vGIhT+YlgVHz4jYlGm9zj/gLl2hAHj7mGKPZFzA=="],
 
-    "@opentui/core-win32-arm64": ["@opentui/core-win32-arm64@0.4.5", "", { "os": "win32", "cpu": "arm64" }, "sha512-GHTTsqeR45q2Iek9Rb7ty+x/hAKn2jZ1ujlCgPR8LBKyF7h0E1dNFryoZ7ehMc3kJndP1sKn836IemKFqxuDdQ=="],
+    "@opentui/core-win32-arm64": ["@opentui/core-win32-arm64@0.5.0", "", { "os": "win32", "cpu": "arm64" }, "sha512-3XPaF3syiFzqez0OZTvYqNvdz5KRBk9b2VhxOo3/0q1UP10EPmeKupghhZzvESEoa0pP3vEu923ToxvwTSE9pQ=="],
 
-    "@opentui/core-win32-x64": ["@opentui/core-win32-x64@0.4.5", "", { "os": "win32", "cpu": "x64" }, "sha512-Y8T/yXCDGagRGiQrtmuB6AhRcPucKFs/Dre3v8kJwNYqDccI4FzUPKclZ7djfmRZNjl7JUqPhZZP/PwDpQocMg=="],
+    "@opentui/core-win32-x64": ["@opentui/core-win32-x64@0.5.0", "", { "os": "win32", "cpu": "x64" }, "sha512-G0vnuBhDKl7PJa9nHlzN54P0UbeNSJZx+6d9c4aMrmIGvRCKI9XiL2V/Y/hSsbVKTknTVktcTr9TqRnXBcwu0g=="],
 
     "@oslojs/encoding": ["@oslojs/encoding@1.1.0", "", {}, "sha512-70wQhgYmndg4GCPxPPxPGevRKqTIJ2Nh4OkiMWmDAVYsTQ+Ta7Sq+rPevXyXGdzr30/qZBnyOalCszoMxlyldQ=="],
 
@@ -2972,7 +2892,7 @@
 
     "buffer-from": ["buffer-from@1.1.2", "", {}, "sha512-E+XQCRwSbaaiChtv6k6Dwgc+bx+Bs6vuKJHHl5kox/BaKbhiXzqQOwK4cO22yElGp2OCmjwVhT3HmxgyPGnJfQ=="],
 
-    "bun-ffi-structs": ["bun-ffi-structs@0.2.4", "", { "peerDependencies": { "typescript": "^5" } }, "sha512-AJzsqoVFs1KBbJbWHIYrVZLDC3NhTqqh25awRXqzoLzmBAKr5oqk6+CwuYHAekKx+VBCYVohBoKuRq40dV+TYg=="],
+    "bun-ffi-structs": ["bun-ffi-structs@0.3.1", "", { "peerDependencies": { "typescript": "^5" } }, "sha512-3gM7PpVWLyrwxWjcilSiGuhWanhZivvo6l0u573NziPH6f/gwk6McbaYgn7oJWov6pKGRTDbrg94W5DcJsKTtQ=="],
 
     "bun-types": ["bun-types@1.3.14", "", { "dependencies": { "@types/node": "*" } }, "sha512-4N0ig0fEomHt5R0KCFWjovxow98rIoRwKolrYdCcknNwMekCXRnWEUvgu5soYV8QXtVsrUD8B95MBOZGPvr6KQ=="],
 
@@ -4448,8 +4368,6 @@
 
     "typescript": ["typescript@7.0.2", "", { "optionalDependencies": { "@typescript/typescript-aix-ppc64": "7.0.2", "@typescript/typescript-darwin-arm64": "7.0.2", "@typescript/typescript-darwin-x64": "7.0.2", "@typescript/typescript-freebsd-arm64": "7.0.2", "@typescript/typescript-freebsd-x64": "7.0.2", "@typescript/typescript-linux-arm": "7.0.2", "@typescript/typescript-linux-arm64": "7.0.2", "@typescript/typescript-linux-loong64": "7.0.2", "@typescript/typescript-linux-mips64el": "7.0.2", "@typescript/typescript-linux-ppc64": "7.0.2", "@typescript/typescript-linux-riscv64": "7.0.2", "@typescript/typescript-linux-s390x": "7.0.2", "@typescript/typescript-linux-x64": "7.0.2", "@typescript/typescript-netbsd-arm64": "7.0.2", "@typescript/typescript-netbsd-x64": "7.0.2", "@typescript/typescript-openbsd-arm64": "7.0.2", "@typescript/typescript-openbsd-x64": "7.0.2", "@typescript/typescript-sunos-x64": "7.0.2", "@typescript/typescript-win32-arm64": "7.0.2", "@typescript/typescript-win32-x64": "7.0.2" }, "bin": { "tsc": "bin/tsc" } }, "sha512-8FYau96o3NKOhbjKi/qNvG/W5jhzxkbdm5sj9AbZ/5T5sWqn3hJgLfGx27sRKZWTvyzCP8dLRBTf5tBTSRVUNA=="],
 
-    "typescript-5": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
-
     "typescript-auto-import-cache": ["typescript-auto-import-cache@0.3.6", "", { "dependencies": { "semver": "^7.3.8" } }, "sha512-RpuHXrknHdVdK7wv/8ug3Fr0WNsNi5l5aB8MYYuXhq2UH5lnEB1htJ1smhtD5VeCsGr2p8mUDtd83LCQDFVgjQ=="],
 
     "ufo": ["ufo@1.6.4", "", {}, "sha512-JFNbkD1Svwe0KvGi8GOeLcP4kAWQ609twvCdcHxq1oSL8svv39ZuSvajcD8B+5D0eL4+s1Is2D/O6KN3qcTeRA=="],
@@ -4740,53 +4658,15 @@
 
     "@distilled.cloud/aws/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
 
-    "@distilled.cloud/axiom/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
-
-    "@distilled.cloud/azure/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
-
-    "@distilled.cloud/cloudflare/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
-
     "@distilled.cloud/cloudflare-rolldown-plugin/@cloudflare/workers-types": ["@cloudflare/workers-types@5.20260729.1", "", {}, "sha512-X5r/4y0gKMq/B72qkz/tEwNK4c3v2regT3to6Ia8qqC66E0+YIN/fU7x0JG6ej2rLxtU3TV3aVhfK9y8+jMMAw=="],
 
     "@distilled.cloud/cloudflare-runtime/@cloudflare/workers-types": ["@cloudflare/workers-types@5.20260729.1", "", {}, "sha512-X5r/4y0gKMq/B72qkz/tEwNK4c3v2regT3to6Ia8qqC66E0+YIN/fU7x0JG6ej2rLxtU3TV3aVhfK9y8+jMMAw=="],
 
     "@distilled.cloud/cloudflare-vite-plugin/@cloudflare/workers-types": ["@cloudflare/workers-types@5.20260729.1", "", {}, "sha512-X5r/4y0gKMq/B72qkz/tEwNK4c3v2regT3to6Ia8qqC66E0+YIN/fU7x0JG6ej2rLxtU3TV3aVhfK9y8+jMMAw=="],
 
-    "@distilled.cloud/coinbase/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
-
-    "@distilled.cloud/core/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
-
-    "@distilled.cloud/expo-eas/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
-
-    "@distilled.cloud/fly-io/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
-
-    "@distilled.cloud/gcp/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
-
-    "@distilled.cloud/kubernetes/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
-
-    "@distilled.cloud/mongodb-atlas/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
-
-    "@distilled.cloud/neon/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
-
-    "@distilled.cloud/planetscale/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
-
-    "@distilled.cloud/posthog/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
-
-    "@distilled.cloud/prisma-postgres/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
-
-    "@distilled.cloud/stripe/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
-
-    "@distilled.cloud/supabase/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
-
-    "@distilled.cloud/turso/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
-
-    "@distilled.cloud/typesense/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
-
     "@distilled.cloud/vendor-workers-shared/@cloudflare/workers-types": ["@cloudflare/workers-types@5.20260729.1", "", {}, "sha512-X5r/4y0gKMq/B72qkz/tEwNK4c3v2regT3to6Ia8qqC66E0+YIN/fU7x0JG6ej2rLxtU3TV3aVhfK9y8+jMMAw=="],
 
     "@distilled.cloud/vendor-workflows-shared/@cloudflare/workers-types": ["@cloudflare/workers-types@5.20260729.1", "", {}, "sha512-X5r/4y0gKMq/B72qkz/tEwNK4c3v2regT3to6Ia8qqC66E0+YIN/fU7x0JG6ej2rLxtU3TV3aVhfK9y8+jMMAw=="],
-
-    "@distilled.cloud/workos/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
 
     "@effect/platform-node/undici": ["undici@8.9.0", "", {}, "sha512-aWZpUj7XoGonMClx4gdDRfgBjqeA+F473aDmROQQbM9n6PRfK/u1q/a0X4wMTgcHfT8H6fpbt98PFuDUwFg2YA=="],
 
