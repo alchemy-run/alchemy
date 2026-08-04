@@ -1,15 +1,12 @@
 import { Action } from "@/Action";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Alchemy from "@/index.ts";
-import * as RpcProviderProxy from "@/Local/RpcProviderProxy";
-import * as RpcSpawner from "@/Local/RpcSpawner";
 import * as Test from "@/Test/Alchemy";
 import * as d1 from "@distilled.cloud/cloudflare/d1";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -17,33 +14,28 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as pathe from "pathe";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
 
+// `dev: true` runs local providers behind the RPC sidecar proxy by default,
+// matching the process topology of the real `alchemy dev` command (see
+// MakeOptions.sidecar in Test/Core.ts).
 const { test, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
   dev: true,
 });
 
+// The in-process topology: no RpcProviderProxy, so the RPC-backed local
+// provider builds directly in this process with the un-gated
+// `localRuntimeServices()` from its dual registration. Still a real
+// production path — a programmatic `deploy({ dev: true })` without the
+// `alchemy dev` CLI has no sidecar.
+const { test: inProcessTest } = Test.make({
+  providers: Cloudflare.providers(),
+  dev: true,
+  sidecar: false,
+});
+
 const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
-);
-
-/**
- * Run local providers with the RPC proxy used by the real `alchemy dev`
- * command. In-process provider tests do not install this proxy, so
- * `RpcProvider.providerServicesEffect` keeps `localRuntimeServices()` in the
- * caller and masks missing lifecycle dependencies.
- */
-const Sidecar = Layer.unwrap(
-  Effect.map(RpcSpawner.RpcSpawner, (spawner) =>
-    RpcProviderProxy.layer(spawner.url),
-  ),
-).pipe(
-  Layer.provideMerge(
-    RpcSpawner.layerServer({
-      profile: process.env.ALCHEMY_PROFILE,
-      envFile: undefined,
-    }),
-  ),
 );
 
 const RpcMigrationStack = Alchemy.Stack(
@@ -90,11 +82,11 @@ const getJsonReady = (url: string) =>
   }).pipe(Effect.orDie);
 
 /**
- * Regression test for #1007. Under the RPC proxy used by `alchemy dev`,
- * `localRuntimeServices()` is intentionally omitted from the caller because
- * RPC providers consume it in the sidecar. D1's local provider is not an RPC
- * provider, so its migration lifecycle must provide the standalone gateway
- * runtime explicitly.
+ * Regression test for #1007. Under the RPC proxy used by `alchemy dev` (the
+ * default topology for `dev: true` tests), `localRuntimeServices()` is
+ * intentionally omitted from the caller because RPC providers consume it in
+ * the sidecar. D1's local provider is not an RPC provider, so its migration
+ * lifecycle must provide the standalone gateway runtime explicitly.
  */
 test(
   "D1 migrations apply with the alchemy dev RPC proxy",
@@ -107,7 +99,36 @@ test(
     expect(Object.keys(database.migrationsHashes)).toEqual(["0001_notes.sql"]);
 
     yield* destroy(RpcMigrationStack);
-  }).pipe(Effect.provide(Sidecar), logLevel),
+  }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+/**
+ * Counterpart of the #1007 regression above for the in-process topology:
+ * without the proxy, the provider's migration lifecycle runs in this
+ * process and must find the workerd runtime in its own layer (the dual
+ * registration's `localRuntimeServices()`, real when un-gated).
+ */
+inProcessTest.provider(
+  "D1 migrations apply in-process without the RPC proxy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const db = yield* stack.deploy(
+        Cloudflare.D1.Database("InProcessMigratedDB", {
+          migrationsDir: pathe.resolve(
+            import.meta.dirname,
+            "fixtures/rpc-migrations",
+          ),
+        }),
+      );
+
+      expect(db.databaseId).toMatch(/^dev:/);
+      expect(Object.keys(db.migrationsHashes)).toEqual(["0001_notes.sql"]);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
   { timeout: 120_000 },
 );
 

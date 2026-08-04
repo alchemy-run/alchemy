@@ -299,9 +299,9 @@ export const ShareProvider = () =>
         );
         if (!match) {
           yield* resourceSharing.createRecipient({
-            pathAccountId: acct,
+            accountId: acct,
             shareId: observed.id,
-            bodyAccountId: desired.accountId,
+            recipientAccountId: desired.accountId,
             organizationId: desired.organizationId,
           });
         }

@@ -28,7 +28,9 @@ export const SendBinding = Layer.effect(
               allowedSenderAddresses: sender.allowedSenderAddresses,
             },
           ],
-          dev: sender.dev,
+          // Dev-only local-emulation opt-out, contributed as a parallel
+          // channel (like `hyperdrives`) so the wire binding stays pure.
+          ...(sender.devRemote ? { devRemote: { [sender.name]: true } } : {}),
         });
       }
 

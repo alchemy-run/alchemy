@@ -1,4 +1,4 @@
-import * as ops from "@distilled.cloud/planetscale/Operations";
+import * as ps from "@distilled.cloud/planetscale";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -170,7 +170,7 @@ const withTemporaryPostgresRole = <A, E, R>(
 ) =>
   Effect.acquireUseRelease(
     Effect.gen(function* () {
-      const created = yield* ops.createRole({
+      const created = yield* ps.createRole({
         organization: target.organization,
         database: target.database,
         branch: target.branch,
@@ -191,7 +191,7 @@ const withTemporaryPostgresRole = <A, E, R>(
     }),
     use,
     (role) =>
-      ops
+      ps
         .deleteRole({
           organization: target.organization,
           database: target.database,

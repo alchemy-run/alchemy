@@ -1871,6 +1871,39 @@ describe("from creating state", () => {
   );
 
   test.provider(
+    "destroy survives a recovery read that crashes on degraded creating props",
+    (stack) =>
+      Effect.gen(function* () {
+        // An interrupted create can persist `creating` props whose
+        // unresolved Outputs were stripped to holes; a provider read that
+        // dereferences one crashes with a defect (e.g. a SchemaError deep
+        // in its SDK client, see #995). Destroy must degrade to "nothing
+        // recovered" and drop the row instead of bricking the stage.
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", {
+            string: "test-string",
+          });
+        }).pipe(stack.deploy, hook());
+        expect((yield* getState("A"))?.status).toEqual("creating");
+
+        const deleted: string[] = [];
+        yield* stack.destroy().pipe(
+          hook({
+            read: () =>
+              Effect.die(
+                new Error("SchemaError: Expected string, got undefined"),
+              ),
+            delete: (id) => Effect.sync(() => void deleted.push(id)),
+          }),
+        );
+
+        // Recovery failed — delete is not invoked, state is still dropped.
+        expect(deleted).toEqual([]);
+        expect(yield* getState("A")).toBeUndefined();
+      }),
+  );
+
+  test.provider(
     "destroy drops an attr-less creating row when the provider has no read",
     (stack) =>
       Effect.gen(function* () {
