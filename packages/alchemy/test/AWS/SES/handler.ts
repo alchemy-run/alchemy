@@ -83,7 +83,10 @@ export default SESTestFunction.make(
     const listSuppressed = yield* SES.ListSuppressedDestinations();
     const unsuppress = yield* SES.DeleteSuppressedDestination();
     const sendBounce = yield* SES.SendBounce();
-    const sendCustomVerification = yield* SES.SendCustomVerificationEmail();
+    const sendCustomVerification = yield* SES.SendCustomVerificationEmail(
+      identity,
+      configSet,
+    );
     const getMessageInsights = yield* SES.GetMessageInsights();
     const batchGetMetricData = yield* SES.BatchGetMetricData();
     const getDomainStatisticsReport = yield* SES.GetDomainStatisticsReport();

@@ -1,11 +1,11 @@
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import * as Layer from "effect/Layer";
-import { makeSESHttpBinding } from "./BindingHttp.ts";
+import { makeVerificationScopedHttpBinding } from "./BindingHttp.ts";
 import { SendCustomVerificationEmail } from "./SendCustomVerificationEmail.ts";
 
 export const SendCustomVerificationEmailHttp = Layer.effect(
   SendCustomVerificationEmail,
-  makeSESHttpBinding({
+  makeVerificationScopedHttpBinding({
     tag: "AWS.SES.SendCustomVerificationEmail",
     operation: sesv2.sendCustomVerificationEmail,
     actions: ["ses:SendCustomVerificationEmail"],

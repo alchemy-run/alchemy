@@ -102,6 +102,97 @@ export const makeTemplateScopedHttpBinding = <
   });
 
 /**
+ * Build the impl Effect for a verification send scoped to the identity the
+ * verification email is sent FROM (`SendCustomVerificationEmail`).
+ *
+ * The template carries the FROM address, so there is nothing to inject at
+ * runtime — the bound {@link EmailIdentity} exists to scope the policy. The
+ * grant covers the identity ARN, addresses at the identity's domain (SES
+ * authorizes against the identity of the FROM address, as in
+ * {@link makeSendScopedHttpBinding}), and the account's custom verification
+ * email templates, which SES exposes as a resource type.
+ *
+ * An optional {@link ConfigurationSet} is injected into the request and added
+ * to the grant, mirroring the send bindings.
+ */
+export const makeVerificationScopedHttpBinding = <
+  I extends { ConfigurationSetName?: string },
+  A,
+  E,
+  R,
+>(options: {
+  /** Fully-qualified binding tag, e.g. `AWS.SES.SendCustomVerificationEmail`. */
+  tag: string;
+  /** The distilled operation. */
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
+  /** IAM actions granted on the identity/address/template ARNs. */
+  actions: readonly string[];
+}) =>
+  Effect.gen(function* () {
+    const op = yield* options.operation;
+
+    return Effect.fn(function* <Identity extends EmailIdentity>(
+      identity: Identity,
+      configurationSet?: ConfigurationSet,
+    ) {
+      const ConfigurationSetName = configurationSet
+        ? yield* configurationSet.configurationSetName
+        : undefined;
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        const host = yield* Binding.Host;
+        if (isBindingHost(host)) {
+          // SES resolves the FROM address from the template, so authorize
+          // addresses at the identity's domain as well as the identity itself.
+          const addressArns = Output.all(identity.identityArn).pipe(
+            Output.map(([identityArn]) =>
+              identityArn.includes("@")
+                ? identityArn
+                : identityArn.replace(/:identity\//, ":identity/*@"),
+            ),
+          );
+          const templateArns = Output.all(identity.identityArn).pipe(
+            Output.map(([identityArn]) =>
+              identityArn.replace(
+                /:identity\/.*$/,
+                ":custom-verification-email-template/*",
+              ),
+            ),
+          );
+          yield* host.bind`Allow(${host}, ${options.tag}(${identity}, ${configurationSet ?? "none"}))`(
+            {
+              policyStatements: [
+                {
+                  Effect: "Allow",
+                  Action: [...options.actions],
+                  Resource: [
+                    identity.identityArn,
+                    addressArns,
+                    templateArns,
+                    ...(configurationSet
+                      ? [configurationSet.configurationSetArn]
+                      : []),
+                  ],
+                },
+              ],
+            },
+          );
+        }
+      }
+      return Effect.fn(`${options.tag}(${identity.LogicalId})`)(function* (
+        request: Omit<I, "ConfigurationSetName">,
+      ) {
+        const configurationSetName = ConfigurationSetName
+          ? yield* ConfigurationSetName
+          : undefined;
+        return yield* op({
+          ...request,
+          ConfigurationSetName: configurationSetName,
+        } as I);
+      });
+    });
+  });
+
+/**
  * Build the impl Effect for an identity-scoped send operation (`SendEmail`,
  * `SendBulkEmail`). The binding resolves the bound {@link EmailIdentity}
  * (and optional {@link ConfigurationSet}) and:
