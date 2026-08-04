@@ -830,17 +830,24 @@ export const make = <A>(
             const news = materializeStableRefs(applyProps);
             const downstream = newDownstreamDependencies[fqn] ?? [];
 
-            // Collapse duplicate bindings by sid so the binding set handed to
-            // `diff` matches what `reconcile` receives (see `dedupeBindings`).
-            // Bindings keep the diff-facing (materialized) shape for both the
-            // diff AND the node payload — the terminal commit must persist the
-            // exact payload `diffBindings` compared (#874). Re-resolving
-            // binding payloads freshly at apply is a separate change.
-            const newBindings: ResourceBinding[] = dedupeBindings(
-              materializeStableRefs(
-                yield* resolveInput(stack.bindings[fqn] ?? []),
-              ),
+            // Apply-facing binding rows, mirroring `applyProps`: payloads
+            // whose data embeds a whole-resource reference to an updating
+            // upstream keep it as an evaluable `ResourceExpr`. Apply runs
+            // `Output.evaluate(node.bindings, outputs)` right before
+            // `reconcile`, so the host receives the upstream's fresh
+            // post-reconcile attributes. Collapse duplicates by sid so the
+            // binding set handed to `diff` matches what `reconcile` receives
+            // (see `dedupeBindings`).
+            const applyBindings: ResourceBinding[] = dedupeBindings(
+              yield* resolveInput(stack.bindings[fqn] ?? []),
             );
+            // Diff-facing view of the same rows: stable attributes
+            // materialized so `diffBindings` / `provider.diff` compare known
+            // values. Terminal commits still persist the payload the provider
+            // actually reconciled with (#874) — Apply commits the evaluated
+            // `bindingOutputs`, not these plan-time shapes.
+            const newBindings: ResourceBinding[] =
+              materializeStableRefs(applyBindings);
             const persisted = yield* state.get({
               stack: stackName,
               stage: stage,
@@ -958,7 +965,20 @@ export const make = <A>(
 
             // Sid-sorted like `newBindings` (see the resolveResource note).
             const oldBindings = dedupeBindings(oldState?.bindings ?? []);
-            const bindingDiffs = diffBindings(oldBindings, newBindings);
+            // Actions come from the materialized comparison (`newBindings`);
+            // the payloads the node carries into Apply come from the
+            // apply-faithful rows, joined by sid — both are views of the same
+            // deduped `stack.bindings[fqn]` rows, so action and payload can
+            // never drift. `delete` rows keep the persisted old data.
+            const applyBindingData = new Map(
+              applyBindings.map((b) => [b.sid, b.data]),
+            );
+            const bindingDiffs = diffBindings(oldBindings, newBindings).map(
+              (b) =>
+                b.action === "delete" || !applyBindingData.has(b.sid)
+                  ? b
+                  : { ...b, data: applyBindingData.get(b.sid) },
+            );
 
             // Local ⇄ live switch: the persisted row was reconciled by a
             // different provider mode than the one resolved for this run.
