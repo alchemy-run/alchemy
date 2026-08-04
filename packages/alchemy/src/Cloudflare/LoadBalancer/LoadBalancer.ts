@@ -11,6 +11,7 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
+import { LoadBalancerPricing } from "./Pricing.ts";
 
 const TypeId = "Cloudflare.LoadBalancer.LoadBalancer" as const;
 type TypeId = typeof TypeId;
@@ -251,6 +252,7 @@ export const isLoadBalancer = (value: unknown): value is LoadBalancer =>
 
 export const LoadBalancerProvider = () =>
   Provider.succeed(LoadBalancer, {
+    pricing: LoadBalancerPricing,
     stables: ["loadBalancerId", "zoneId", "createdOn"],
 
     diff: Effect.fn(function* ({ olds, news }) {

@@ -8,6 +8,7 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
+import { PageShieldPricing } from "./Pricing.ts";
 
 const TypeId = "Cloudflare.PageShield.Settings" as const;
 type TypeId = typeof TypeId;
@@ -158,6 +159,7 @@ const desiredSettings = (props: SettingsProps): DesiredSettings => ({
 
 export const SettingsProvider = () =>
   Provider.succeed(Settings, {
+    pricing: PageShieldPricing,
     nuke: { singleton: true },
     stables: [
       "zoneId",

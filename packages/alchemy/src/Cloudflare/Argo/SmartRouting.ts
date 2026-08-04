@@ -7,6 +7,7 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
+import { ArgoSmartRoutingPricing } from "./Pricing.ts";
 
 const TypeId = "Cloudflare.Argo.SmartRouting" as const;
 type TypeId = typeof TypeId;
@@ -105,6 +106,7 @@ export const isSmartRouting = (value: unknown): value is SmartRouting =>
 
 export const SmartRoutingProvider = () =>
   Provider.succeed(SmartRouting, {
+    pricing: ArgoSmartRoutingPricing,
     stables: ["zoneId", "initialValue"],
 
     list: Effect.fn(function* () {

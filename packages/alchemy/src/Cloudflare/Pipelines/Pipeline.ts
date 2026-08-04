@@ -11,6 +11,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { PipelinePricing } from "./Pricing.ts";
 
 const TypeId = "Cloudflare.Pipelines.Pipeline" as const;
 type TypeId = typeof TypeId;
@@ -108,6 +109,7 @@ export const isPipeline = (value: unknown): value is Pipeline =>
 
 export const PipelineProvider = () =>
   Provider.succeed(Pipeline, {
+    pricing: PipelinePricing,
     stables: ["pipelineId", "accountId", "name", "createdAt"],
 
     diff: Effect.fn(function* ({ id, olds, news, output }) {

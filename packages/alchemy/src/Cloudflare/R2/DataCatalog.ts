@@ -10,6 +10,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { DataCatalogPricing } from "./Pricing.ts";
 
 const TypeId = "Cloudflare.R2.DataCatalog" as const;
 type TypeId = typeof TypeId;
@@ -207,6 +208,7 @@ export const isDataCatalog = (value: unknown): value is DataCatalog =>
 
 export const DataCatalogProvider = () =>
   Provider.succeed(DataCatalog, {
+    pricing: DataCatalogPricing,
     stables: ["catalogId", "name", "accountId", "bucketName", "catalogUri"],
     diff: Effect.fn(function* ({ olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

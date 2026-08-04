@@ -12,6 +12,7 @@ import { Resource } from "../../Resource.ts";
 import { arrayEqualsUnordered } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { PagesPricing } from "./Pricing.ts";
 
 const TypeId = "Cloudflare.Pages.Project" as const;
 type TypeId = typeof TypeId;
@@ -255,6 +256,7 @@ export const isProject = (value: unknown): value is Project =>
 
 export const ProjectProvider = () =>
   Provider.succeed(Project, {
+    pricing: PagesPricing,
     stables: ["projectId", "accountId", "name", "subdomain", "createdOn"],
     diff: Effect.fn(function* ({ id, olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

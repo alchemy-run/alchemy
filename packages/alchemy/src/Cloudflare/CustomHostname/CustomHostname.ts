@@ -10,6 +10,7 @@ import { arrayEqualsUnordered } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
+import { CustomHostnamePricing } from "./Pricing.ts";
 
 /**
  * Domain control validation (DCV) method used to prove control over the
@@ -290,6 +291,7 @@ export const isCustomHostname = (value: unknown): value is CustomHostname =>
 export const CustomHostnameProvider = () =>
   Provider.succeed(CustomHostname, {
     stables: ["customHostnameId", "zoneId", "hostname"],
+    pricing: CustomHostnamePricing,
 
     // Custom hostnames are a zone-scoped Cloudflare for SaaS feature. Fan out
     // over every zone in the account, exhaustively paginate each zone's custom

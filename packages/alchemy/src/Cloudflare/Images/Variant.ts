@@ -9,6 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { ImagesPricing } from "./Pricing.ts";
 
 const TypeId = "Cloudflare.Images.Variant" as const;
 type TypeId = typeof TypeId;
@@ -154,6 +155,7 @@ export const isVariant = (value: unknown): value is Variant =>
 
 export const VariantProvider = () =>
   Provider.succeed(Variant, {
+    pricing: ImagesPricing,
     stables: ["variantName", "accountId"],
 
     list: Effect.fn(function* () {

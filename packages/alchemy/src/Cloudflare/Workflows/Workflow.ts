@@ -20,6 +20,7 @@ import {
   WorkerEnvironment,
   type WorkerServices,
 } from "../Workers/Worker.ts";
+import { WorkflowsPricing } from "./Pricing.ts";
 import { makeWorkflowName } from "./WorkflowName.ts";
 
 type TypeId = "Cloudflare.Workflow";
@@ -888,6 +889,7 @@ export const WorkflowResource = Resource<WorkflowResource>(
 
 export const ProviderLive = () =>
   Provider.succeed(WorkflowResource, {
+    pricing: WorkflowsPricing,
     // `workflowId` is stable across live updates: `putWorkflow` is a
     // PUT-as-upsert keyed by the account-global `workflowName`, so re-putting
     // the same name (className/scriptName changes) preserves the workflow's

@@ -9,6 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { RealtimeTurnPricing } from "./Pricing.ts";
 
 const TypeId = "Cloudflare.Calls.TurnKey" as const;
 type TypeId = typeof TypeId;
@@ -109,6 +110,7 @@ export const isTurnKey = (value: unknown): value is TurnKey =>
 
 export const TurnKeyProvider = () =>
   Provider.succeed(TurnKey, {
+    pricing: RealtimeTurnPricing,
     stables: ["keyId", "accountId", "key", "created"],
     diff: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

@@ -8,6 +8,7 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
+import { CacheReservePricing } from "./Pricing.ts";
 
 const TypeId = "Cloudflare.Cache.Reserve" as const;
 type TypeId = typeof TypeId;
@@ -126,6 +127,7 @@ const desiredValue = (props: ReserveProps): "on" | "off" =>
 
 export const ReserveProvider = () =>
   Provider.succeed(Reserve, {
+    pricing: CacheReservePricing,
     stables: ["zoneId", "initialValue"],
 
     list: Effect.fn(function* () {
