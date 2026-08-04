@@ -35,10 +35,11 @@ export type SendEmailProps = {
  * destination/sender restrictions; the actual `send_email` entry is attached
  * to the Worker via {@link SendBinding}.
  *
- * Under `alchemy dev` the binding is a local stub by default: `send()` logs
- * the message to the dev console instead of delivering mail. Pipe the
- * descriptor through `Alchemy.remote()` to send through the live Cloudflare
- * Email service in dev — the same opt-out aspect resources use.
+ * Under `alchemy dev` the binding is lowered onto the local email simulator:
+ * `send()` validates the message and persists it as a `.eml` under
+ * `.alchemy/local/email` instead of delivering mail. Pipe the descriptor
+ * through `Alchemy.remote()` to send through the live Cloudflare Email
+ * service in dev — the same opt-out aspect resources use.
  *
  * @resource
  *
@@ -68,7 +69,7 @@ export type SendEmailProps = {
  * @section Local development
  * @example Send real mail from the dev loop
  * ```typescript
- * // Default: `send()` logs to the dev console under `alchemy dev`.
+ * // Default: `send()` lands in the local simulator under `alchemy dev`.
  * // Alchemy.remote() opts into the live Email service instead:
  * const Email = Cloudflare.Email.SendEmail("Email", {
  *   allowedSenderAddresses: ["noreply@example.com"],
@@ -79,14 +80,12 @@ export type SendEmail = SendEmailProps & {
   kind: SendEmailTypeId;
   name: string;
   /**
-   * The `Alchemy.remote()` decoration captured at registration time. When
-   * `true`, `alchemy dev` binds the live Cloudflare Email service instead
-   * of the local console-logging stub. Alchemy-only — stripped from the
-   * wire binding before upload.
-   *
-   * @internal
+   * Alchemy-internal: opt-out of local emulation in `alchemy dev` — the
+   * `Alchemy.remote()` decoration captured at registration time. Registered
+   * on the host Worker via the binding-data `devRemote` channel, never on
+   * the wire binding itself.
    */
-  remote?: boolean;
+  devRemote?: boolean;
 };
 
 export const isSendEmail = (value: unknown): value is SendEmail =>
@@ -106,13 +105,13 @@ export const SendEmail: (
   // at registration time, from the ambient ProviderModePolicy reference.
   // `send_email` has no cloud-side resource (and thus no provider mode to
   // stamp), so the captured flag rides on the descriptor instead.
-  const remote = (yield* ProviderModePolicy) === true;
+  const devRemote = (yield* ProviderModePolicy) === true || undefined;
   return {
     kind: SendEmailTypeId,
     name: id,
     destinationAddress: props?.destinationAddress,
     allowedDestinationAddresses: props?.allowedDestinationAddresses,
     allowedSenderAddresses: props?.allowedSenderAddresses,
-    remote: remote || undefined,
+    devRemote,
   } satisfies SendEmail;
 });

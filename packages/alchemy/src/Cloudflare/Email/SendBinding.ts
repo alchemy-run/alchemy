@@ -26,11 +26,11 @@ export const SendBinding = Layer.effect(
               destinationAddress: sender.destinationAddress,
               allowedDestinationAddresses: sender.allowedDestinationAddresses,
               allowedSenderAddresses: sender.allowedSenderAddresses,
-              // Alchemy-only: the captured `Alchemy.remote()` decoration
-              // (stripped before upload).
-              remote: sender.remote,
             },
           ],
+          // Dev-only local-emulation opt-out, contributed as a parallel
+          // channel (like `hyperdrives`) so the wire binding stays pure.
+          ...(sender.devRemote ? { devRemote: { [sender.name]: true } } : {}),
         });
       }
 

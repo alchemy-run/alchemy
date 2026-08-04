@@ -6,7 +6,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 /**
  * Dev-mode fixture with two `send_email` bindings side by side: the default
- * (stubbed locally — `send()` logs to the dev console) and one piped through
+ * (lowered onto the local email simulator) and one piped through
  * `Alchemy.remote()` (the live Cloudflare Email service, even in dev).
  */
 export default class LocalSendEmailWorker extends Cloudflare.Worker<LocalSendEmailWorker>()(

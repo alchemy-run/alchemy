@@ -243,6 +243,14 @@ export type Plan<Output = any> = {
    */
   cycleMembers: ReadonlySet<string>;
   /**
+   * The run-level default {@link ProviderMode} this plan was built with
+   * (`alchemy dev` → `"local"`, `alchemy deploy` → `"live"`). Renderers use
+   * it to tag only the EXCEPTIONS — rows whose resolved mode differs from
+   * the run default. `undefined` (plans built by older/auxiliary builders)
+   * is treated as `"live"`.
+   */
+  defaultMode?: ProviderMode;
+  /**
    * Marks a plan built by {@link destroy}. `apply` finishes a destroy plan
    * by deleting the stage's remaining persisted state — notably the stack
    * output record written by the last deploy — instead of persisting a new
@@ -1499,6 +1507,7 @@ export const make = <A>(
       actionDeletions,
       output: stack.output,
       cycleMembers,
+      defaultMode: runDefaultMode,
     } satisfies Plan<A> as Plan<A>;
   }).pipe(
     ensureArtifactStore,

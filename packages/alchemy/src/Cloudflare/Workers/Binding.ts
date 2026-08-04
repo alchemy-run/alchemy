@@ -27,6 +27,14 @@ export interface Binding<
   readonly kind: Kind;
   /** Binding name; the object key when declared on `env`. */
   readonly name: string;
+  /**
+   * Alchemy-internal: opt this binding out of local emulation in
+   * `alchemy dev` (set by the constructor's `dev: { remote: true }` prop on
+   * capabilities that support it — Browser, Images, Stream). Registered on
+   * the host Worker via the binding-data `devRemote` channel, never on the
+   * wire binding itself.
+   */
+  readonly devRemote?: boolean;
   /** Attach the binding to the surrounding Worker and resolve to the client. */
   asEffect(): Effect.Effect<Client, never, Service>;
   [Symbol.iterator](): Generator<Effect.Effect<Client, never, Service>, Client>;

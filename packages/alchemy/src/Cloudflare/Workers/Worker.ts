@@ -738,6 +738,47 @@ export interface WorkerProps<
    */
   crons?: string[];
   /**
+   * Tail Workers that consume this Worker's execution traces. Each entry is
+   * another {@link Worker} (or a literal script name) that exports a `tail()`
+   * handler; after each invocation of this Worker, Cloudflare delivers the
+   * invocation's trace events (console logs, exceptions, event metadata) to
+   * every listed consumer.
+   *
+   * Pass the consumer Worker resource directly — Alchemy resolves it to its
+   * deployed script name and deploys the consumer before this Worker — or a
+   * plain script name string for a tail Worker managed outside this stack.
+   *
+   * Changing the list is an in-place update. Omitting the prop (or passing
+   * `[]`) deploys this Worker with no tail consumers attached.
+   *
+   * @see https://developers.cloudflare.com/workers/observability/logs/tail-workers/
+   */
+  tailConsumers?: (string | Worker)[];
+  /**
+   * Streaming Tail Workers that consume this Worker's execution events as
+   * they happen. Each entry is another {@link Worker} (or a literal script
+   * name) that exports a `tailStream()` handler; Cloudflare invokes it with
+   * the invocation's `onset` event *while this Worker is still executing*,
+   * and the returned handler receives every subsequent event of the session
+   * (`log`, `spanOpen`, ...) ending with the terminal `outcome`.
+   *
+   * This differs from {@link tailConsumers}: a plain tail consumer's `tail()`
+   * handler receives the completed `TraceItem`s only after the producer's
+   * invocation finishes, while a streaming tail consumer observes events
+   * live, per-session, during execution.
+   *
+   * Pass the consumer Worker resource directly — Alchemy resolves it to its
+   * deployed script name and deploys the consumer before this Worker — or a
+   * plain script name string for a streaming tail Worker managed outside
+   * this stack.
+   *
+   * Changing the list is an in-place update. Omitting the prop (or passing
+   * `[]`) deploys this Worker with no streaming tail consumers attached.
+   *
+   * @see https://developers.cloudflare.com/workers/observability/logs/tail-workers/
+   */
+  streamingTailConsumers?: (string | Worker)[];
+  /**
    * The Worker's custom domain: one canonical hostname, plus optional
    * `aliases` that also serve the Worker and `redirects` that 301 to the
    * canonical name. A bare string is shorthand for `{ name }`. The
@@ -977,6 +1018,23 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
     routes: { id: string; pattern: string; zoneId: string }[];
     crons: string[];
     /**
+     * The tail consumers attached to this Worker's script — each entry the
+     * consuming Worker's script name — or `undefined` when none are
+     * attached. Local emulation (`RuntimeWorker.tails`) lowers this same
+     * list into workerd tail-service designators.
+     */
+    tailConsumers?: { service: string }[] | undefined;
+    /**
+     * The streaming tail consumers attached to this Worker's script — each
+     * entry the consuming Worker's script name — or `undefined` when none
+     * are attached. Recorded from the uploaded metadata: the script-settings
+     * read endpoint does not expose `streaming_tail_consumers`, so this is
+     * the deployed value, not an observed one. Local emulation
+     * (`RuntimeWorker.streamingTails`) lowers this same list into workerd
+     * streaming-tail service designators.
+     */
+    streamingTailConsumers?: { service: string }[] | undefined;
+    /**
      * The parent script name this Worker uploads versions to, when this
      * resource is a version worker (`version.parent` set). `undefined` for
      * a Worker that owns its own script — including one deploying with a
@@ -1038,6 +1096,17 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
     containers?: { className: string; dev: DevContainerImage | undefined }[];
     crons?: string[];
     hyperdrives?: Record<string, Required<DevOrigin>>;
+    /**
+     * Dev-only channel (like `hyperdrives`): binding name → opt-out of local
+     * emulation in `alchemy dev` (`dev: { remote: true }` on the capability
+     * constructor). Contributed alongside the pure wire binding instead of
+     * being embedded in it — wire descriptors stay exactly what Cloudflare
+     * accepts. Records from multiple bind calls merge by key; the local
+     * worker provider reads it when lowering `browser` / `images` / `stream`
+     * / `send_email` bindings to their local or remote runtime hooks. The
+     * live provider ignores it.
+     */
+    devRemote?: Record<string, boolean>;
   },
   Providers
 >;
@@ -1598,6 +1667,50 @@ export const isSelfUrl = (value: unknown): value is URLEffect =>
  *     },
  *   },
  * }
+ * ```
+ *
+ * @section Tail Workers
+ * A [Tail Worker](https://developers.cloudflare.com/workers/observability/logs/tail-workers/)
+ * receives execution traces (console logs, exceptions, event metadata) from
+ * other Workers. List it in a producer's `tailConsumers` and export a
+ * `tail()` handler from the consumer; Cloudflare delivers each invocation's
+ * trace events to every listed consumer after the invocation completes.
+ *
+ * @example Sending a Worker's traces to a Tail Worker
+ * ```typescript
+ * const tailWorker = yield* Cloudflare.Worker("TailWorker", {
+ *   // exports: export default { async tail(events, env, ctx) { ... } }
+ *   main: "./src/tail.ts",
+ * });
+ *
+ * const api = yield* Cloudflare.Worker("Api", {
+ *   main: "./src/api.ts",
+ *   tailConsumers: [tailWorker],
+ * });
+ * ```
+ *
+ * A *streaming* Tail Worker receives the same invocation's events live,
+ * while the producer is still executing: list it in
+ * `streamingTailConsumers` and export a `tailStream()` handler that is
+ * invoked with the invocation's `onset` event and returns a handler for
+ * every subsequent event of the session, ending with the terminal
+ * `outcome`.
+ *
+ * @example Streaming a Worker's events to a streaming Tail Worker
+ * ```typescript
+ * const streamTailWorker = yield* Cloudflare.Worker("StreamTailWorker", {
+ *   // exports: export default {
+ *   //   tailStream(onset, env, ctx) {
+ *   //     return (event) => { ... }; // log, spanOpen, ..., outcome
+ *   //   },
+ *   // }
+ *   main: "./src/stream-tail.ts",
+ * });
+ *
+ * const api = yield* Cloudflare.Worker("Api", {
+ *   main: "./src/api.ts",
+ *   streamingTailConsumers: [streamTailWorker],
+ * });
  * ```
  *
  * @section Workers Cache

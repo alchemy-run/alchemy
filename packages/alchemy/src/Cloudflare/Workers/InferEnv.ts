@@ -26,6 +26,7 @@ import type * as ImagesNs from "../Images/index.ts";
 import type * as KV from "../KV/index.ts";
 import type * as Queues from "../Queues/index.ts";
 import type * as R2 from "../R2/index.ts";
+import type * as StreamNs from "../Stream/index.ts";
 import type { DispatchNamespace as DispatchNamespaceResource } from "../WorkersForPlatforms/DispatchNamespace.ts";
 import type { AIBinding } from "./AIBinding.ts";
 import type { Assets } from "./Assets.ts";
@@ -33,6 +34,7 @@ import type { BrowserBinding } from "./BrowserBinding.ts";
 import type { DurableObjectLike } from "./DurableObject.ts";
 import type { RateLimitBinding } from "./RateLimitBinding.ts";
 import type { RpcErrorEnvelope, RpcStreamEnvelope } from "./Rpc.ts";
+import type { SecretKeyBinding } from "./SecretKeyBinding.ts";
 import type { VersionMetadataBinding } from "./VersionMetadataBinding.ts";
 import type { Worker } from "./Worker.ts";
 import type { WorkerLoader as WorkerLoaderResource } from "./WorkerLoader.ts";
@@ -91,32 +93,40 @@ export type GetBindingType<T> =
                                     ? Artifacts
                                     : T extends RateLimitBinding
                                       ? RateLimit
-                                      : T extends ImagesNs.ImagesBinding
-                                        ? ImagesBinding
-                                        : T extends BrowserBinding
-                                          ? BrowserRun
-                                          : T extends HyperdriveNs.Connection
-                                            ? Hyperdrive
-                                            : T extends VersionMetadataBinding
-                                              ? WorkerVersionMetadata
-                                              : T extends WorkerLoaderResource
-                                                ? WorkerLoader
-                                                : T extends WorkflowLike<
-                                                      infer Params
-                                                    >
-                                                  ? Workflow<Params>
-                                                  : T extends DurableObjectLike
-                                                    ? DurableObjectNamespace<
-                                                        Exclude<
-                                                          T["Shape"],
-                                                          undefined
+                                      : T extends SecretKeyBinding
+                                        ? CryptoKey
+                                        : T extends ImagesNs.ImagesBinding
+                                          ? ImagesBinding
+                                          : T extends BrowserBinding
+                                            ? BrowserRun
+                                            : // The ambient global `StreamBinding` from
+                                              // @cloudflare/workers-types (the alchemy binding value
+                                              // type of the same name is only reachable as
+                                              // `StreamNs.StreamBinding`).
+                                              T extends StreamNs.StreamBinding
+                                              ? StreamBinding
+                                              : T extends HyperdriveNs.Connection
+                                                ? Hyperdrive
+                                                : T extends VersionMetadataBinding
+                                                  ? WorkerVersionMetadata
+                                                  : T extends WorkerLoaderResource
+                                                    ? WorkerLoader
+                                                    : T extends WorkflowLike<
+                                                          infer Params
                                                         >
-                                                      >
-                                                    : T extends Redacted<any>
-                                                      ? // redacteds are always stored as secret_text, so are always string
-                                                        // we JSON.stringify when not a Redacted<string>
-                                                        string
-                                                      : T;
+                                                      ? Workflow<Params>
+                                                      : T extends DurableObjectLike
+                                                        ? DurableObjectNamespace<
+                                                            Exclude<
+                                                              T["Shape"],
+                                                              undefined
+                                                            >
+                                                          >
+                                                        : T extends Redacted<any>
+                                                          ? // redacteds are always stored as secret_text, so are always string
+                                                            // we JSON.stringify when not a Redacted<string>
+                                                            string
+                                                          : T;
 
 /**
  * Cloudflare service-binding wire shape for an Effect-native Worker.
