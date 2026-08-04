@@ -14,6 +14,16 @@ const main = path.resolve(import.meta.dirname, "handler.ts");
 // The SES mailbox simulator accepts mail even in the sandbox.
 const SIMULATOR = "success@simulator.amazonses.com";
 
+// The address the gated test starts verification FOR. SES authorizes
+// ses:SendCustomVerificationEmail against the identity of the address in the
+// request — the recipient — so the gated real-send test needs a binding scoped
+// to that address, not to the template's sender.
+//
+// Referenced, never managed: no EmailIdentity resource is declared for it, so
+// nothing adopts or destroys account state. Read at module load, which happens
+// both locally at deploy and inside the Lambda, so it is forwarded as env.
+const CVE_RECIPIENT = process.env.AWS_TEST_SES_CVE_RECIPIENT;
+
 export class SESTestFunction extends Lambda.Function<Lambda.Function>()(
   "SESTestFunction",
 ) {}
@@ -23,6 +33,13 @@ export default SESTestFunction.make(
     main,
     url: true,
     timeout: Duration.seconds(30),
+    // The gate is read at module load, which happens BOTH locally at deploy
+    // (where the binding is declared) and inside the Lambda (where the client
+    // is constructed). Forward it so the deployed function sees the same
+    // value the deploy did.
+    ...(CVE_RECIPIENT
+      ? { env: { AWS_TEST_SES_CVE_RECIPIENT: CVE_RECIPIENT } }
+      : {}),
   },
   Effect.gen(function* () {
     // Domain identity — deterministic, never verified. In the SES sandbox a
@@ -87,6 +104,17 @@ export default SESTestFunction.make(
       identity,
       configSet,
     );
+    // Scoped by REFERENCE to the address the gated test verifies. The binding
+    // above is scoped to the fixture's own (unverifiable) domain, so it can
+    // only ever authorize verification of addresses AT that domain — which is
+    // why the ungated test gets a request-level rejection there and this
+    // separate binding is needed for a real send. No ownership: the recipient
+    // is never declared as a resource.
+    const sendCustomVerificationVerified = CVE_RECIPIENT
+      ? yield* SES.SendCustomVerificationEmail({
+          emailIdentity: CVE_RECIPIENT,
+        })
+      : undefined;
     const getMessageInsights = yield* SES.GetMessageInsights();
     const batchGetMetricData = yield* SES.BatchGetMetricData();
     const getDomainStatisticsReport = yield* SES.GetDomainStatisticsReport();
@@ -286,6 +314,27 @@ export default SESTestFunction.make(
           return yield* respond(
             sendCustomVerification({
               EmailAddress: email ?? "verify-target@simulator.amazonses.com",
+              TemplateName: templateName,
+            }),
+            (result) => ({ messageId: result.MessageId }),
+          );
+        }
+
+        if (
+          request.method === "POST" &&
+          pathname === "/send-custom-verification-verified"
+        ) {
+          if (sendCustomVerificationVerified === undefined) {
+            return yield* HttpServerResponse.json(
+              { error: "AWS_TEST_SES_CVE_RECIPIENT not set at deploy time" },
+              { status: 412 },
+            );
+          }
+          const templateName =
+            url.searchParams.get("template") ?? "alchemy-test-missing-template";
+          return yield* respond(
+            sendCustomVerificationVerified({
+              EmailAddress: email ?? SIMULATOR,
               TemplateName: templateName,
             }),
             (result) => ({ messageId: result.MessageId }),

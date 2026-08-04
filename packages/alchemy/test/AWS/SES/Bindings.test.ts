@@ -529,11 +529,28 @@ describe("SES Bindings", () => {
         }),
     );
 
-    test.provider.skipIf(!CVE_TEMPLATE)(
-      "sends through a real template (AWS_TEST_SES_CVE_TEMPLATE)",
+    // The real send goes through a SECOND binding, scoped by reference to the
+    // address being verified. It cannot reuse the binding above: SES
+    // authorizes this action against the identity of the RECIPIENT, and that
+    // binding only covers addresses at the fixture's own domain.
+    //
+    // The reference form takes no ownership, so nothing here adopts or
+    // destroys the account's real identities.
+    test.provider.skipIf(!CVE_TEMPLATE || !CVE_RECIPIENT)(
+      "sends through a real template (AWS_TEST_SES_CVE_TEMPLATE + _RECIPIENT)",
       (_stack) =>
         Effect.gen(function* () {
-          const response = yield* sendCustomVerification(CVE_TEMPLATE);
+          const email = encodeURIComponent(CVE_RECIPIENT!);
+          const response = (yield* send(
+            HttpClientRequest.post(
+              `${baseUrl}/send-custom-verification-verified?email=${email}&template=${encodeURIComponent(CVE_TEMPLATE!)}`,
+            ),
+          ).pipe(Effect.flatMap((r) => r.json))) as {
+            messageId?: string;
+            error?: string;
+            message?: string;
+          };
+
           expect(response.error).toBeUndefined();
           expect(response.messageId).toBeTruthy();
         }),

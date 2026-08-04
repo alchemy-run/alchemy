@@ -1,6 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
+import type { Input } from "../../Input.ts";
 import * as Output from "../../Output.ts";
+import { AWSEnvironment } from "../Environment.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
 import type { ConfigurationSet } from "./ConfigurationSet.ts";
 import type { EmailIdentity } from "./EmailIdentity.ts";
@@ -102,18 +104,48 @@ export const makeTemplateScopedHttpBinding = <
   });
 
 /**
- * Build the impl Effect for a verification send scoped to the identity the
- * verification email is sent FROM (`SendCustomVerificationEmail`).
+ * An SES identity referenced by address or domain, used ONLY to scope an IAM
+ * grant.
  *
- * The template carries the FROM address, so there is nothing to inject at
- * runtime — the bound {@link EmailIdentity} exists to scope the policy. The
- * grant covers the identity ARN, addresses at the identity's domain (SES
- * authorizes against the identity of the FROM address, as in
- * {@link makeSendScopedHttpBinding}), and the account's custom verification
- * email templates, which SES exposes as a resource type.
+ * Unlike passing an {@link EmailIdentity} resource this creates no resource
+ * edge and no ownership: nothing is created, adopted, or destroyed. That
+ * matters when the identity is managed outside the stack — binding to a
+ * resource would mean owning it, and owning it would mean `destroy` deleting
+ * it.
+ */
+export interface EmailIdentityRef {
+  /** The verified email address or domain, e.g. `"sender@example.com"`. */
+  emailIdentity: string;
+}
+
+// Discriminate on the REF side: a resource's `emailIdentity` is an Output, not
+// a string. Testing for a resource key with `in` does not work — the resource
+// is an Output proxy, so every property "exists".
+const isEmailIdentityRef = (
+  identity: EmailIdentity | EmailIdentityRef,
+): identity is EmailIdentityRef =>
+  typeof (identity as EmailIdentityRef).emailIdentity === "string";
+
+/**
+ * Build the impl Effect for `SendCustomVerificationEmail`, scoped to the
+ * identity being VERIFIED.
  *
- * An optional {@link ConfigurationSet} is injected into the request and added
- * to the grant, mirroring the send bindings.
+ * Unlike the send bindings, SES authorizes this action against the identity
+ * of the address in the request — the recipient the verification email starts
+ * verification for — not against the template's FROM identity. Confirmed
+ * live: a policy granting only the sender identity is refused with
+ * "not authorized to perform: ses:SendCustomVerificationEmail on resource:
+ * arn:aws:ses:<region>:<account>:identity/<RECIPIENT>".
+ *
+ * So the bound identity names what the function is allowed to verify: a
+ * single address, or a domain, in which case addresses at that domain are
+ * covered. That is the constraint worth enforcing — it stops a leaked binding
+ * being used to send verification mail to arbitrary addresses.
+ *
+ * Accepts a managed {@link EmailIdentity} or an {@link EmailIdentityRef}; the
+ * reference form derives the ARNs from the ambient account and region without
+ * taking ownership. An optional {@link ConfigurationSet} is injected into the
+ * request and added to the grant.
  */
 export const makeVerificationScopedHttpBinding = <
   I extends { ConfigurationSetName?: string },
@@ -131,54 +163,77 @@ export const makeVerificationScopedHttpBinding = <
   Effect.gen(function* () {
     const op = yield* options.operation;
 
-    return Effect.fn(function* <Identity extends EmailIdentity>(
-      identity: Identity,
+    return Effect.fn(function* (
+      identity: EmailIdentity | EmailIdentityRef,
       configurationSet?: ConfigurationSet,
     ) {
       const ConfigurationSetName = configurationSet
         ? yield* configurationSet.configurationSetName
         : undefined;
+      const label = isEmailIdentityRef(identity)
+        ? identity.emailIdentity
+        : identity.LogicalId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          // SES resolves the FROM address from the template, so authorize
-          // addresses at the identity's domain as well as the identity itself.
-          const addressArns = Output.all(identity.identityArn).pipe(
-            Output.map(([identityArn]) =>
-              identityArn.includes("@")
-                ? identityArn
-                : identityArn.replace(/:identity\//, ":identity/*@"),
-            ),
-          );
-          const templateArns = Output.all(identity.identityArn).pipe(
-            Output.map(([identityArn]) =>
-              identityArn.replace(
-                /:identity\/.*$/,
-                ":custom-verification-email-template/*",
+          // Authorize the identity being verified: the address itself, or
+          // every address at the domain when a domain is bound. The account's
+          // custom verification email templates are granted alongside, since
+          // the request also names one.
+          const resources: Input<string>[] = [];
+          if (isEmailIdentityRef(identity)) {
+            const { accountId, region } =
+              yield* AWSEnvironment.current as unknown as Effect.Effect<{
+                accountId: string;
+                region: string;
+              }>;
+            const base = `arn:aws:ses:${region}:${accountId}`;
+            const name = identity.emailIdentity;
+            resources.push(
+              `${base}:identity/${name}`,
+              // A domain reference also authorizes addresses at that domain.
+              name.includes("@")
+                ? `${base}:identity/${name}`
+                : `${base}:identity/*@${name}`,
+              `${base}:custom-verification-email-template/*`,
+            );
+          } else {
+            resources.push(
+              identity.identityArn,
+              Output.all(identity.identityArn).pipe(
+                Output.map(([identityArn]) =>
+                  identityArn.includes("@")
+                    ? identityArn
+                    : identityArn.replace(/:identity\//, ":identity/*@"),
+                ),
               ),
-            ),
-          );
-          yield* host.bind`Allow(${host}, ${options.tag}(${identity}, ${configurationSet ?? "none"}))`(
+              Output.all(identity.identityArn).pipe(
+                Output.map(([identityArn]) =>
+                  identityArn.replace(
+                    /:identity\/.*$/,
+                    ":custom-verification-email-template/*",
+                  ),
+                ),
+              ),
+            );
+          }
+          if (configurationSet) {
+            resources.push(configurationSet.configurationSetArn);
+          }
+          yield* host.bind`Allow(${host}, ${options.tag}(${label}, ${configurationSet ?? "none"}))`(
             {
               policyStatements: [
                 {
                   Effect: "Allow",
                   Action: [...options.actions],
-                  Resource: [
-                    identity.identityArn,
-                    addressArns,
-                    templateArns,
-                    ...(configurationSet
-                      ? [configurationSet.configurationSetArn]
-                      : []),
-                  ],
+                  Resource: resources,
                 },
               ],
             },
           );
         }
       }
-      return Effect.fn(`${options.tag}(${identity.LogicalId})`)(function* (
+      return Effect.fn(`${options.tag}(${label})`)(function* (
         request: Omit<I, "ConfigurationSetName">,
       ) {
         const configurationSetName = ConfigurationSetName
