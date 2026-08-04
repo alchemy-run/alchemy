@@ -44,6 +44,16 @@ describe("Website prop surfaces", () => {
         main: "worker.ts",
       }),
     () =>
+      Cloudflare.Website.Octane("O", {
+        // @ts-expect-error `main` is not supported (no custom-entry seam)
+        main: "worker.ts",
+      }),
+    () =>
+      Cloudflare.Website.Octane("O", {
+        // @ts-expect-error `script` is owned by the source dispatch
+        script: "export default {}",
+      }),
+    () =>
       Cloudflare.Website.Astro("A", {
         // @ts-expect-error `source` is owned by the resource itself
         source: { provider: "x", options: {} },

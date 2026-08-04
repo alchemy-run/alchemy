@@ -165,7 +165,10 @@
         "react-dom": "^19.2.7",
         "react-router": "7.16.0",
         "nuxt": "4.5.1",
-        "nitropack": "2.13.4"
+        "nitropack": "2.13.4",
+        "octane": "0.1.22",
+        "@octanejs/vite-plugin": "0.1.22",
+        "@octanejs/adapter-cloudflare": "0.0.12"
       }
     }
   },
