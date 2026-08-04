@@ -227,6 +227,7 @@ export const LiveContainerProvider = () =>
             handler: props.handler,
             isExternal: props.isExternal,
             external: props.external,
+            build: props.build,
           });
           const finalDockerfile = buildFinalDockerfile(
             yield* containerEnvPreamble(props),

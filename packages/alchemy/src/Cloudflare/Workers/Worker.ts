@@ -792,6 +792,13 @@ export interface WorkerProps<
    * Changing the list is an in-place update. Omitting the prop (or passing
    * `[]`) deploys this Worker with no streaming tail consumers attached.
    *
+   * Streaming tail workers are experimental on Cloudflare's cloud: the
+   * configuration deploys, but production does not yet deliver events —
+   * Cloudflare rejects the `streaming_tail_worker` compatibility flag as
+   * "experimental and cannot yet be used in Workers deployed to
+   * Cloudflare", so a deployed consumer cannot enable its `tailStream()`
+   * handler. Under `alchemy dev`, local delivery is fully emulated.
+   *
    * @see https://developers.cloudflare.com/workers/observability/logs/tail-workers/
    */
   streamingTailConsumers?: (string | Worker)[];
@@ -1509,6 +1516,46 @@ export const isSelfUrl = (value: unknown): value is URLEffect =>
  *   main: "./.open-next/worker.js",
  *   bundle: false,
  *   assets: "./.open-next/assets",
+ * }
+ * ```
+ *
+ * @section Bundling & Tree-shaking
+ * `main` is bundled with rolldown at deploy time. Top-level calls in the
+ * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
+ * `@distilled.cloud/*` packages receive `#__PURE__` annotations by
+ * default, so anything the Worker doesn't use from those packages is
+ * tree-shaken out of the bundle. Any other
+ * package — including your own app — is left untouched unless you list
+ * it explicitly.
+ *
+ * @example Treat additional packages as pure
+ * Pass package names (or picomatch globs) via `build.pure.packages` to
+ * annotate them in addition to the defaults.
+ * ```typescript
+ * {
+ *   main: "./src/worker.ts",
+ *   build: {
+ *     pure: { packages: ["my-lib", "@my-scope/*"] },
+ *   },
+ * }
+ * ```
+ *
+ * Listing a package annotates calls whose result is bound (variable
+ * initializers, exports) — safe anywhere. If a listed package also
+ * declares `"sideEffects": false` (or `[]`) in its `package.json`, that
+ * combination opts it into full annotation: top-level calls whose result
+ * is discarded (e.g. `router.on("/path", handler)` registrations) are
+ * also marked pure and deleted under minification when unused. Only list
+ * a `sideEffects: false` package if its modules really are free of
+ * meaningful top-level side effects. The `effect`, `alchemy`, and
+ * `@distilled.cloud` defaults declare exactly that, on purpose — their
+ * modules are designed to be fully tree-shakeable.
+ *
+ * @example Disable pure annotations
+ * ```typescript
+ * {
+ *   main: "./src/worker.ts",
+ *   build: { pure: false },
  * }
  * ```
  *
