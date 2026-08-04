@@ -2,12 +2,16 @@ import * as AWS from "@/AWS";
 import * as Axiom from "@/Axiom";
 import * as Test from "@/Test/Alchemy";
 import * as Lambda from "@distilled.cloud/aws/lambda";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "alchemy-test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
-import * as pathe from "pathe";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import { fileURLToPath } from "node:url";
 import { expectAxiomContains } from "./fixtures/axiom-query.ts";
 import {
   OtelExtensionFunction,
@@ -36,13 +40,11 @@ const collectorLayerArn = ({
   return `arn:aws:lambda:${region}:184161586896:layer:opentelemetry-collector-${layerArchitecture}-${collectorRelease}:${collectorLayerVersion}`;
 };
 
-const collectorConfigPath = pathe.resolve(
-  import.meta.dirname,
-  "fixtures/axiom-otel-collector",
+const collectorConfigPath = fileURLToPath(
+  new URL("./fixtures/axiom-otel-collector", import.meta.url),
 );
-const handlerPath = pathe.resolve(
-  import.meta.dirname,
-  "fixtures/otel-extension-handler.ts",
+const handlerPath = fileURLToPath(
+  new URL("./fixtures/otel-extension-handler.ts", import.meta.url),
 );
 
 const { test } = Test.make({
@@ -50,11 +52,13 @@ const { test } = Test.make({
 });
 
 describe("Effect OpenTelemetry Collector export to Axiom", () => {
-  it("uses separate extension-owned exporters for traces and logs", () => {
-    const config = Bun.file(
-      pathe.join(collectorConfigPath, "collector.yaml"),
-    ).text();
-    return config.then((text) => {
+  it.effect("uses separate extension-owned exporters for traces and logs", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const text = yield* fs.readFileString(
+        path.join(collectorConfigPath, "collector.yaml"),
+      );
       expect(text).toContain("endpoint: 127.0.0.1:4318");
       expect(text).toContain("otlphttp/axiom-traces:");
       expect(text).toContain("otlphttp/axiom-logs:");
@@ -62,15 +66,17 @@ describe("Effect OpenTelemetry Collector export to Axiom", () => {
         "processors: [memory_limiter, resource, batch, decouple]",
       );
       expect(text).not.toContain("OTEL_EXPORTER_OTLP_ENDPOINT");
-    });
-  });
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
 
   test.provider.skipIf(!shouldRun)(
     "exports Effect traces and logs through the real Collector extension into existing Axiom datasets",
     (stack) =>
       Effect.gen(function* () {
         yield* stack.destroy();
-        const marker = `alchemy-lambda-otel-${crypto.randomUUID()}`;
+        const marker = `alchemy-lambda-otel-${yield* Effect.sync(() =>
+          crypto.randomUUID(),
+        )}`;
         const { region } = yield* AWS.AWSEnvironment.current;
 
         const deployed = yield* stack.deploy(
@@ -148,13 +154,12 @@ describe("Effect OpenTelemetry Collector export to Axiom", () => {
           /\/$/,
           "",
         );
-        const response = yield* Effect.tryPromise(() =>
-          fetch(`${functionUrl}/?marker=${encodeURIComponent(marker)}`),
+        const client = yield* HttpClient.HttpClient;
+        const response = yield* client.get(
+          `${functionUrl}/?marker=${encodeURIComponent(marker)}`,
         );
         expect(response.status).toBe(200);
-        expect(yield* Effect.tryPromise(() => response.text())).toContain(
-          marker,
-        );
+        expect(yield* response.text).toContain(marker);
 
         yield* expectAxiomContains({
           dataset: tracesDataset,
@@ -172,6 +177,7 @@ describe("Effect OpenTelemetry Collector export to Axiom", () => {
         Effect.tap(() => stack.destroy()),
         Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
       ),
-    { timeout: 600_000 },
+    // One Lambda deploy + `expectAxiomContains`'s bounded 36 x 5s ingest poll.
+    { timeout: 300_000 },
   );
 });

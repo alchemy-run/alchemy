@@ -7,7 +7,8 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import * as pathe from "pathe";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import { fileURLToPath } from "node:url";
 import { expectAxiomContains } from "./fixtures/axiom-query.ts";
 import {
   AxiomPlatformExtensionFunction,
@@ -31,9 +32,8 @@ const axiomExtensionLayerArn = ({
 }) =>
   `arn:aws:lambda:${region}:694952825951:layer:axiom-extension-${architecture}:${axiomExtensionLayerVersion}`;
 
-const handlerPath = pathe.resolve(
-  import.meta.dirname,
-  "fixtures/axiom-platform-extension-handler.ts",
+const handlerPath = fileURLToPath(
+  new URL("./fixtures/axiom-platform-extension-handler.ts", import.meta.url),
 );
 
 const { test } = Test.make({
@@ -65,7 +65,9 @@ describe("Axiom Lambda platform extension", () => {
     (stack) =>
       Effect.gen(function* () {
         yield* stack.destroy();
-        const marker = `alchemy-axiom-platform-${crypto.randomUUID()}`;
+        const marker = `alchemy-axiom-platform-${yield* Effect.sync(() =>
+          crypto.randomUUID(),
+        )}`;
         const { region } = yield* AWS.AWSEnvironment.current;
 
         const deployed = yield* stack.deploy(
@@ -125,13 +127,12 @@ describe("Axiom Lambda platform extension", () => {
           /\/$/,
           "",
         );
-        const response = yield* Effect.tryPromise(() =>
-          fetch(`${functionUrl}/?marker=${encodeURIComponent(marker)}`),
+        const client = yield* HttpClient.HttpClient;
+        const response = yield* client.get(
+          `${functionUrl}/?marker=${encodeURIComponent(marker)}`,
         );
         expect(response.status).toBe(200);
-        expect(yield* Effect.tryPromise(() => response.text())).toContain(
-          marker,
-        );
+        expect(yield* response.text).toContain(marker);
 
         yield* expectAxiomContains({
           dataset: eventsDataset,
@@ -145,6 +146,7 @@ describe("Axiom Lambda platform extension", () => {
         Effect.tap(() => stack.destroy()),
         Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
       ),
-    { timeout: 600_000 },
+    // One Lambda deploy + `expectAxiomContains`'s bounded 36 x 5s ingest poll.
+    { timeout: 300_000 },
   );
 });

@@ -3,14 +3,18 @@ import * as Test from "@/Test/Alchemy";
 import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as S3 from "@distilled.cloud/aws/s3";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "alchemy-test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { readFileSync } from "node:fs";
-import * as pathe from "pathe";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import { fileURLToPath } from "node:url";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 import {
   OtelExtensionFunction,
@@ -45,13 +49,11 @@ const collectorLayerArn = ({
   return `arn:aws:lambda:${region}:184161586896:layer:opentelemetry-collector-${layerArchitecture}-${collectorRelease}:${collectorLayerVersion}`;
 };
 
-const collectorConfigPath = pathe.resolve(
-  import.meta.dirname,
-  "fixtures/otel-collector-extension",
+const collectorConfigPath = fileURLToPath(
+  new URL("./fixtures/otel-collector-extension", import.meta.url),
 );
-const handlerPath = pathe.resolve(
-  import.meta.dirname,
-  "fixtures/otel-extension-handler.ts",
+const handlerPath = fileURLToPath(
+  new URL("./fixtures/otel-extension-handler.ts", import.meta.url),
 );
 
 const { test } = Test.make({
@@ -150,26 +152,34 @@ describe("OpenTelemetry Collector Lambda extension", () => {
     ).toContain("arn:aws:lambda:eu-west-1:");
   });
 
-  it("bounds memory, keeps decouple last, and keeps the remote endpoint extension-owned", () => {
-    const config = readFileSync(
-      pathe.join(collectorConfigPath, "collector.yaml"),
-      "utf8",
-    );
-    expect(config).toContain("endpoint: 127.0.0.1:4318");
-    expect(config).toContain(
-      "endpoint: ${env:COLLECTOR_EXPORTER_OTLP_ENDPOINT}",
-    );
-    expect(config).toContain("memory_limiter:");
-    expect(config).toContain("processors: [memory_limiter, batch, decouple]");
-    expect(config).not.toContain("OTEL_EXPORTER_OTLP_ENDPOINT");
-  });
+  it.effect(
+    "bounds memory, keeps decouple last, and keeps the remote endpoint extension-owned",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const config = yield* fs.readFileString(
+          path.join(collectorConfigPath, "collector.yaml"),
+        );
+        expect(config).toContain("endpoint: 127.0.0.1:4318");
+        expect(config).toContain(
+          "endpoint: ${env:COLLECTOR_EXPORTER_OTLP_ENDPOINT}",
+        );
+        expect(config).toContain("memory_limiter:");
+        expect(config).toContain(
+          "processors: [memory_limiter, batch, decouple]",
+        );
+        expect(config).not.toContain("OTEL_EXPORTER_OTLP_ENDPOINT");
+      }).pipe(Effect.provide(NodeServices.layer)),
+  );
 
-  test.provider(
+  test.provider.skipIf(!!process.env.FAST)(
     "exports remotely after the handler response through the real extension",
     (stack) =>
       Effect.gen(function* () {
         yield* stack.destroy();
 
+        const client = yield* HttpClient.HttpClient;
         const receiverProgram = OtelExtensionReceiver.pipe(
           Effect.provide(OtelExtensionReceiverLive),
         );
@@ -179,19 +189,19 @@ describe("OpenTelemetry Collector Lambda extension", () => {
         yield* expectUrlContains(receiverUrl, "otel-extension-receiver-ok", {
           timeout: "120 seconds",
         });
-        const sinkBucketName = yield* Effect.tryPromise(() =>
-          fetch(receiverUrl)
-            .then((response) => response.json())
-            .then((body) => (body as { bucketName: string }).bucketName),
+        const sinkBucketName = yield* client.get(receiverUrl).pipe(
+          Effect.flatMap((response) => response.json),
+          Effect.map((body) => (body as { bucketName: string }).bucketName),
         );
-        const receiverProbe = `receiver-probe-${crypto.randomUUID()}`;
-        const receiverProbeStatus = yield* Effect.tryPromise(() =>
-          fetch(`${receiverUrl}/v1/traces`, {
-            method: "POST",
-            body: receiverProbe,
-          }).then((response) => response.status),
+        const receiverProbe = `receiver-probe-${yield* Effect.sync(() =>
+          crypto.randomUUID(),
+        )}`;
+        const receiverProbeResponse = yield* HttpClient.execute(
+          HttpClientRequest.post(`${receiverUrl}/v1/traces`).pipe(
+            HttpClientRequest.bodyText(receiverProbe),
+          ),
         );
-        expect(receiverProbeStatus).toBe(200);
+        expect(receiverProbeResponse.status).toBe(200);
         yield* expectCollected(sinkBucketName, receiverProbe);
 
         const { region } = yield* AWS.AWSEnvironment.current;
@@ -258,24 +268,22 @@ describe("OpenTelemetry Collector Lambda extension", () => {
         ).toBe(receiverUrl);
 
         const fnUrl = (deployed.fn.functionUrl as string).replace(/\/$/, "");
-        const invoke = (marker: string) =>
-          Effect.tryPromise(async () => {
-            const started = performance.now();
-            const response = await fetch(
-              `${fnUrl}/?marker=${encodeURIComponent(marker)}`,
-            );
-            const body = (await response.json()) as {
-              marker: string;
-              sandboxId: string;
-            };
-            return {
-              body,
-              elapsedMs: performance.now() - started,
-              status: response.status,
-            };
-          });
+        const invoke = Effect.fn(function* (marker: string) {
+          const started = yield* Effect.sync(() => performance.now());
+          const response = yield* client.get(
+            `${fnUrl}/?marker=${encodeURIComponent(marker)}`,
+          );
+          const body = (yield* response.json) as {
+            marker: string;
+            sandboxId: string;
+          };
+          const elapsedMs = yield* Effect.sync(
+            () => performance.now() - started,
+          );
+          return { body, elapsedMs, status: response.status };
+        });
 
-        const warmMarker = `warm-${crypto.randomUUID()}`;
+        const warmMarker = `warm-${yield* Effect.sync(() => crypto.randomUUID())}`;
         const warm = yield* invoke(warmMarker);
         expect(warm.status).toBe(200);
         expect(warm.body.marker).toBe(warmMarker);
@@ -290,7 +298,9 @@ describe("OpenTelemetry Collector Lambda extension", () => {
         // deliberately delayed remote export.
         yield* Effect.sleep(Duration.millis(remoteExportDelayMs + 1_000));
 
-        const measuredMarker = `measured-${crypto.randomUUID()}`;
+        const measuredMarker = `measured-${yield* Effect.sync(() =>
+          crypto.randomUUID(),
+        )}`;
         const measured = yield* invoke(measuredMarker);
         expect(measured.status).toBe(200);
         expect(measured.body.marker).toBe(measuredMarker);
