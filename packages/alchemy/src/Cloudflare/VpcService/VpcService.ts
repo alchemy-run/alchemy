@@ -6,7 +6,7 @@ import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
+import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -124,6 +124,9 @@ export const VpcService = Resource<VpcService>(
   "Cloudflare.VpcService.VpcService",
   { aliases: ["Cloudflare.VpcService"] },
 );
+
+export const isVpcService = (value: unknown): value is VpcService =>
+  isResourceOfType(value, "Cloudflare.VpcService.VpcService");
 
 const createServiceName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {

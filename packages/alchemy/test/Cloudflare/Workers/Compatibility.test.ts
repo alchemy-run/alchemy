@@ -1,5 +1,6 @@
 import { getCompatibility } from "@/Cloudflare/Workers/Compatibility";
 import type { WorkerProps } from "@/Cloudflare/Workers/Worker";
+import * as Output from "@/Output";
 import { describe, expect, test } from "alchemy-test";
 
 describe("getCompatibility", () => {
@@ -64,6 +65,25 @@ describe("getCompatibility", () => {
     } as WorkerProps);
     expect(flags).toContain("python_workers");
     expect(flags).not.toContain("nodejs_compat");
+  });
+
+  // `precreate` is handed raw, *unresolved* props so resources in a
+  // dependency cycle can signal early, and `main` is an Input — a `main`
+  // derived from another resource's output (e.g. a `Command.Build` outdir)
+  // is still an Output there. An unresolved Output is a callable Proxy, so
+  // a `main !== undefined` guard passes and `main.split("?")[0]` used to
+  // blow up with a bare `TypeError` out of the Worker's pre-create.
+  test("tolerates an unresolved Output main", () => {
+    const main = Output.map(
+      Output.literal("/build"),
+      (dir: string) => `${dir}/server/entry.mjs`,
+    ) as unknown as string;
+    const { flags } = getCompatibility({
+      isExternal: true,
+      main,
+    } as WorkerProps);
+    expect(flags).not.toContain("python_workers");
+    expect(flags).toContain("nodejs_compat");
   });
 
   test("forces handle_cross_request_promise_resolution for Effect workers on old dates", () => {

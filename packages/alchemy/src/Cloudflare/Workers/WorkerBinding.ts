@@ -23,6 +23,8 @@ import type { Bucket } from "../R2/Bucket.ts";
 import type { Secret } from "../SecretsStore/Secret.ts";
 import type { StreamBinding } from "../Stream/StreamBinding.ts";
 import type { Index as VectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
+import type { VpcService } from "../VpcService/VpcService.ts";
+import type { VpcServiceLookup } from "../VpcService/VpcServiceLookup.ts";
 import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
 import type { WorkflowLike } from "../Workflows/Workflow.ts";
 import type { AIBinding } from "./AIBinding.ts";
@@ -160,6 +162,8 @@ export type WorkerBindingResource =
   | DispatchNamespace
   | DurableObjectLike<any>
   | WorkflowLike<any>
+  | VpcService
+  | VpcServiceLookup
   // A Container bound directly in `env` declares a container-backed Durable
   // Object class (DO namespace binding + ContainerApplication in one).
   | Container.Decl.Any;
