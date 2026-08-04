@@ -1,6 +1,9 @@
 import * as AWS from "@/AWS";
 import * as Kubernetes from "@/Kubernetes";
-import { renderHelmChart } from "@/Kubernetes/internal/helm.ts";
+import {
+  parseRenderedManifests,
+  renderHelmChart,
+} from "@/Kubernetes/internal/helm.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -89,6 +92,69 @@ describe("renderHelmChart (local fixture)", (it) => {
           expect(result.failure._tag).toBe("HelmError");
         }
       }),
+  );
+});
+
+describe("parseRenderedManifests", (it) => {
+  it.effect("ignores Helm OCI pull metadata", () =>
+    Effect.gen(function* () {
+      const objects = yield* parseRenderedManifests(
+        "oci://registry.example.test/charts/example",
+        `Pulled: registry.example.test/charts/example:1.2.3
+Digest: sha256:0123456789abcdef
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: example
+`,
+      );
+
+      expect(objects).toHaveLength(1);
+      expect(objects[0]?.kind).toBe("ConfigMap");
+      expect(objects[0]?.metadata.name).toBe("example");
+    }),
+  );
+
+  it.effect("rejects pull-shaped metadata for non-OCI charts", () =>
+    Effect.gen(function* () {
+      const result = yield* Effect.result(
+        parseRenderedManifests(
+          "example",
+          `Pulled: registry.example.test/charts/example:1.2.3
+Digest: sha256:0123456789abcdef
+`,
+        ),
+      );
+
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure._tag).toBe("HelmError");
+      }
+    }),
+  );
+
+  it.effect("rejects pull metadata that is not the leading OCI preamble", () =>
+    Effect.gen(function* () {
+      const result = yield* Effect.result(
+        parseRenderedManifests(
+          "oci://registry.example.test/charts/example",
+          `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: example
+---
+Pulled: registry.example.test/charts/example:1.2.3
+Digest: sha256:0123456789abcdef
+`,
+        ),
+      );
+
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure._tag).toBe("HelmError");
+      }
+    }),
   );
 });
 

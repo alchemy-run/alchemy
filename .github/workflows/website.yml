@@ -4,9 +4,9 @@ on:
   # Manual override — deploys unconditionally on whatever branch it's run
   # from (use this to force a prod deploy from main without a release).
   workflow_dispatch:
-  # No `paths` filter on push: prod deploys are gated on the release
-  # commit title (see the `if` below), and a release commit must always
-  # deploy regardless of which files it touches.
+  # No `paths` filter on push: every main commit updates main.alchemy.run,
+  # while release commits update production regardless of which files they
+  # touch.
   push:
     branches:
       - main
@@ -23,7 +23,7 @@ on:
       - "website/**"
       - "packages/alchemy/**"
       - "bun.lock"
-      - ".github/workflows/deploy.yml"
+      - ".github/workflows/website.yml"
 
 concurrency:
   group: deploy-website-${{ github.ref }}
@@ -31,22 +31,21 @@ concurrency:
 
 env:
   STAGE: ${{ github.event_name == 'pull_request' && format('pr-{0}',
-    github.event.number) || (github.ref == 'refs/heads/main' && 'prod' ||
-    github.ref_name) }}
+    github.event.number) || (github.event_name == 'workflow_dispatch' ||
+    startsWith(github.event.head_commit.message, 'chore(release):')) && 'prod' ||
+    (github.ref == 'refs/heads/main' && 'staging' || github.ref_name) }}
 
 jobs:
   deploy:
-    # Deploy on `workflow_dispatch` always. On push-to-main, only deploy
-    # release commits (`chore(release): x.y.z`) so the website updates in
-    # lockstep with releases. On PRs, require BOTH:
+    # Deploy every push to main. Release commits (`chore(release): x.y.z`)
+    # and manual dispatches deploy production; other main commits deploy to
+    # main.alchemy.run. On PRs, require BOTH:
     #   - the PR is internal (forks can't access bot/Cloudflare secrets
     #     so `create-github-app-token` would error immediately), AND
     #   - the PR carries the `deploy-website` label (opt-in — most PRs
     #     don't need a website preview, so default to skipping).
     if: >-
       github.event.action != 'closed' &&
-      (github.event_name != 'push' ||
-       startsWith(github.event.head_commit.message, 'chore(release):')) &&
       (github.event_name != 'pull_request' ||
        (github.event.pull_request.head.repo.full_name == github.repository &&
         contains(github.event.pull_request.labels.*.name, 'deploy-website')))

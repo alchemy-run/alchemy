@@ -622,6 +622,11 @@ export interface WorkerProps<
    * - An AssetsProps object with directory and config
    * - An object with path and hash (e.g., from a Build resource)
    *
+   * Plans hash the directory contents, so an unchanged tree converges to a
+   * noop. Supplying a precomputed `hash` (e.g. from a Build resource) makes
+   * that hash authoritative instead — the directory is not read during
+   * planning at all.
+   *
    * When neither {@link main} nor {@link script} is provided, the Worker is
    * deployed **assets-only**: no script is uploaded at all and Cloudflare's
    * asset layer serves every request, applying `htmlHandling` /

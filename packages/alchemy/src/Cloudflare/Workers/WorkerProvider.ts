@@ -19,7 +19,7 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import * as Artifacts from "../../Artifacts.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { hashDirectory, type MemoOptions } from "../../Command/Memo.ts";
-import { isResolved, stripEffects } from "../../Diff.ts";
+import { havePropsChanged, isResolved, stripEffects } from "../../Diff.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as Provider from "../../Provider.ts";
 import { type ResourceBinding } from "../../Resource.ts";
@@ -31,6 +31,7 @@ import { localRuntimeServices } from "../LocalRuntime.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import { resolveZoneId } from "../Zone/lookup.ts";
 import {
+  getAssetsPathPrefix,
   mergeAssetsConfigFiles,
   readAssets,
   readAssetsConfigFiles,
@@ -2118,7 +2119,7 @@ export const LiveWorkerProvider = () =>
         // (~0.5s), which is only needed for vite-based workers at build time —
         // not for every Worker definition at module-load time.
         const Vite = yield* Effect.promise(() => import("./Vite.ts"));
-        const { clientDirectory, serverBundle, externalWorkspaces } =
+        const { clientDirectory, base, serverBundle, externalWorkspaces } =
           yield* Vite.viteBuild(
             props.vite?.rootDir,
             Object.fromEntries(
@@ -2186,6 +2187,10 @@ export const LiveWorkerProvider = () =>
                     props.vite?.rootDir ?? process.cwd(),
                     clientDirectory,
                   ),
+                  // The resolved Vite `base` is what rewrote the URLs in
+                  // the emitted HTML, so it is the only prefix the
+                  // manifest can agree with.
+                  base,
                 })
               : Effect.undefined,
             serverBundle,
@@ -2348,8 +2353,22 @@ export const LiveWorkerProvider = () =>
         output: Worker["Attributes"] | undefined,
       ) => {
         if (!Predicate.hasProperty(assets, "hash")) return undefined;
-        const { directory, hash, ...config } = assets;
-        return { directory, config, hash, skip: hash === output?.hash?.assets };
+        // `base` shapes the uploaded manifest paths (see `readAssets`); it
+        // is alchemy-only and must not leak into the API's asset config.
+        const { directory, hash, base, ...config } = assets;
+        // `base` re-keys the manifest without changing the build output, so
+        // a caller-supplied hash alone would let the skip path carry a
+        // stale root-keyed manifest forward across a `base` change. Salt
+        // the stored/compared hash with the prefix; unprefixed deploys keep
+        // their existing hashes.
+        const pathPrefix = getAssetsPathPrefix(base);
+        const effectiveHash = pathPrefix ? `${hash}#base=${pathPrefix}` : hash;
+        return {
+          directory,
+          config,
+          hash: effectiveHash,
+          skip: effectiveHash === output?.hash?.assets,
+        };
       };
 
       /**
@@ -3828,6 +3847,51 @@ export const LiveWorkerProvider = () =>
         } satisfies Worker["Attributes"];
       });
 
+      // Compare the desired assets against the deployed asset-content hash.
+      //
+      // For `AssetsWithHash` (the documented `Command.Build` contract) the
+      // upstream build already produced an authoritative hash — compare
+      // strings without touching the filesystem. Reading the directory here
+      // would crash when the prior state was written on a different machine
+      // and the path doesn't exist locally, blocking any local reapply even
+      // though the precomputed hash is right there in props.
+      //
+      // For the plain `string` / `AssetsProps` shapes there is no hash in
+      // props, so read + hash the directory exactly like the apply path does
+      // (`readAssets`) and compare against the stored content hash — an
+      // unchanged tree converges to a noop plan instead of a forever-dirty
+      // conservative update. The overall read cost is unchanged: previously
+      // every plan reported "changed" and `putWorker` read the tree during
+      // apply only to discover nothing changed (`keepAssets`); now the diff
+      // reads it and a match skips reconcile entirely. A directory that is
+      // missing or invalid at plan time (e.g. produced by an upstream build
+      // step that only runs during apply) degrades to "changed" — apply
+      // reads it once and either uploads or surfaces the real typed error.
+      const assetsChanged = Effect.fn(function* (
+        assets: WorkerProps["assets"],
+        output: Worker["Attributes"],
+      ) {
+        if (!assets) {
+          return false;
+        }
+        // An explicitly-undefined `hash` (`{ directory, hash: maybe }`) is
+        // the hash-less shape, not a supplied hash — fall through to the
+        // directory read instead of comparing undefined forever-dirty.
+        if (
+          Predicate.hasProperty(assets, "hash") &&
+          assets.hash !== undefined
+        ) {
+          return assets.hash !== output.hash?.assets;
+        }
+        const read = yield* prepareAssets(assets).pipe(
+          Effect.catchTag(
+            ["PlatformError", "AssetTooLargeError", "TooManyAssetsError"],
+            () => Effect.succeed(undefined),
+          ),
+        );
+        return read === undefined || read.hash !== output.hash?.assets;
+      });
+
       const hasChanged = Effect.fn(function* (
         id: string,
         props: WorkerProps,
@@ -3880,16 +3944,7 @@ export const LiveWorkerProvider = () =>
           if (scriptHash !== output.hash?.bundle) {
             return true;
           }
-          if (!props.assets) {
-            return false;
-          }
-          const assetsHash = Predicate.hasProperty(props.assets, "hash")
-            ? props.assets.hash
-            : undefined;
-          if (assetsHash === undefined) {
-            return true;
-          }
-          return assetsHash !== output.hash?.assets;
+          return yield* assetsChanged(props.assets, output);
         }
         if (props.vite) {
           const { hash } = yield* hashViteInput(
@@ -3906,17 +3961,12 @@ export const LiveWorkerProvider = () =>
           if (output.hash?.bundle !== undefined) {
             return true;
           }
-          const assetsHash =
-            props.assets && Predicate.hasProperty(props.assets, "hash")
-              ? props.assets.hash
-              : undefined;
-          if (assetsHash === undefined) {
-            // Same conservative rule as the directory-shaped `assets` below:
-            // don't read the directory during diff; `putWorker` reads once
-            // and keeps the existing manifest if nothing actually changed.
+          // No assets either — the config is invalid; report "changed" so
+          // the apply runs and surfaces the descriptive error.
+          if (!props.assets) {
             return true;
           }
-          return assetsHash !== output.hash?.assets;
+          return yield* assetsChanged(props.assets, output);
         }
         const bundleHash = yield* prepareBundle(id, props).pipe(
           Effect.map((b) => b.hash),
@@ -3924,32 +3974,7 @@ export const LiveWorkerProvider = () =>
         if (bundleHash !== output.hash?.bundle) {
           return true;
         }
-        if (!props.assets) {
-          return false;
-        }
-        // We deliberately don't read the assets directory during diff.
-        // For `AssetsWithHash` (the documented contract) the upstream
-        // `Command.Build` already gave us an authoritative hash — we
-        // just compare strings. Reading the directory here would
-        // (a) hash the same tree twice per apply (`putWorker` reads
-        // again when an upload is actually required), and (b) crash
-        // when the prior state was written on a different machine
-        // and `path` doesn't exist locally — blocking any local
-        // reapply even though the precomputed hash is right there
-        // in props.
-        //
-        // For the legacy `string` / `AssetsProps` shapes there's no
-        // hash in props to compare against, so we conservatively
-        // assume the assets changed; `putWorker` will read once,
-        // hash, and use `keepAssets` if it turns out nothing actually
-        // changed.
-        const assetsHash = Predicate.hasProperty(props.assets, "hash")
-          ? props.assets.hash
-          : undefined;
-        if (assetsHash === undefined) {
-          return true;
-        }
-        return assetsHash !== output.hash?.assets;
+        return yield* assetsChanged(props.assets, output);
       });
 
       return Worker.Provider.of({
@@ -4196,6 +4221,47 @@ export const LiveWorkerProvider = () =>
               action: "update",
               stables: stables.length > 0 ? stables : undefined,
             };
+          }
+          // Machine-local source locations (`main`, `assets.directory`,
+          // `vite.rootDir`) name WHERE the source lives; their deploy-relevant
+          // effect is fully captured by the content hashes `hasChanged` just
+          // compared (bundle, asset content, vite input — all deliberately
+          // path-independent). Left alone, the engine's raw-props fallback
+          // would still flag a relocated checkout (CI runner ↔ laptop, temp
+          // build dirs) as changed forever. When the ONLY residual raw-prop
+          // difference is such a path, suppress the fallback with an explicit
+          // noop; any other residual difference still falls through to the
+          // engine's conservative comparison, so props outside the hashed
+          // metadata surface keep deploying (#745). Guarded on resolved
+          // bindings — without them the metadata hash was skipped above and
+          // the raw-props fallback is the only net for metadata edits.
+          if (Array.isArray(newBindings)) {
+            const normalizeSourcePaths = (props: WorkerProps) => ({
+              ...props,
+              ...(props.main !== undefined ? { main: "<source>" } : undefined),
+              ...(props.assets
+                ? {
+                    assets: {
+                      ...(typeof props.assets === "string"
+                        ? undefined
+                        : props.assets),
+                      directory: "<source>",
+                    },
+                  }
+                : undefined),
+              ...(props.vite
+                ? { vite: { ...props.vite, rootDir: "<source>" } }
+                : undefined),
+            });
+            if (
+              olds !== undefined &&
+              !havePropsChanged(
+                normalizeSourcePaths(olds),
+                normalizeSourcePaths(news),
+              )
+            ) {
+              return { action: "noop" };
+            }
           }
         }),
         precreate: Effect.fn(function* ({ id, news, session, bindings }) {
