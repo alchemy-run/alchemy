@@ -44,6 +44,22 @@ const UNVERIFIED_FROM = "noreply@ses-bindings.alchemy-test.example.com";
 // ends by deleting it, so repeated runs leave no residue.
 const SUPPRESSED_ADDRESS = "suppressed@ses-bindings.alchemy-test.example.com";
 
+// The tags SES raises about a REQUEST — a bad argument, a missing object, or
+// an unentitled account. A binding that failed to attach its IAM action would
+// answer AccessDeniedException instead, so asserting membership here (rather
+// than `typeof error === "string"`) is what makes these tests able to fail.
+const REQUEST_TAGS = ["BadRequestException", "NotFoundException"];
+
+// SendCustomVerificationEmail additionally rejects an unverified sender and a
+// sandboxed account through its own tags.
+const CVE_REQUEST_TAGS = [
+  ...REQUEST_TAGS,
+  "MessageRejected",
+  "MailFromDomainNotVerifiedException",
+  "SendingPausedException",
+  "LimitExceededException",
+];
+
 const readinessPolicy = Schedule.max([
   Schedule.fixed("2 seconds"),
   Schedule.recurs(75),
@@ -471,10 +487,14 @@ describe("SES Bindings", () => {
           // The fixture declares no template — SES rejects
           // CreateCustomVerificationEmailTemplate unless its sender is already
           // verified, which a bare account has none of. So the request names a
-          // template that does not resolve and SES answers with a typed error,
-          // which still proves ses:SendCustomVerificationEmail IAM + request
-          // marshalling reach the deployed Lambda.
-          expect(typeof response.error).toBe("string");
+          // template that does not resolve and SES answers with a typed error.
+          //
+          // The tag must be one SES raises about the REQUEST. AccessDenied
+          // would mean the binding failed to attach
+          // ses:SendCustomVerificationEmail — the regression this test exists
+          // to catch — so it is asserted against explicitly.
+          expect(response.error).not.toBe("AccessDeniedException");
+          expect(CVE_REQUEST_TAGS).toContain(response.error);
           expect(response.messageId).toBeUndefined();
         }),
     );
@@ -491,105 +511,187 @@ describe("SES Bindings", () => {
   });
 
   describe("GetMessageInsights", () => {
+    const insights = (messageId?: string) =>
+      send(
+        HttpClientRequest.get(
+          `${baseUrl}/message-insights${
+            messageId ? `?messageId=${encodeURIComponent(messageId)}` : ""
+          }`,
+        ),
+      ).pipe(Effect.flatMap((r) => r.json)) as Effect.Effect<
+        { messageId?: string; error?: string },
+        any,
+        any
+      >;
+
     test.provider(
-      "looking up a non-existent message id surfaces a typed SES error through the binding",
+      "a well-formed but unknown message id is rejected with a typed tag",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/message-insights`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
-            messageId?: string;
-            error?: string;
-          };
+          const response = yield* insights();
 
-          // No real send backs the fabricated MessageId, so SES rejects it
-          // with a typed error — NotFoundException, or BadRequestException when
-          // VDM is disabled on the account. That proves the binding wires
-          // ses:GetMessageInsights IAM + request marshalling into the Lambda.
-          // With VDM on (AWS_TEST_SES_VDM=1) the tag is unambiguous.
-          expect(typeof response.error).toBe("string");
+          // No real send backs the fabricated MessageId, so SES rejects it —
+          // NotFoundException, or BadRequestException when VDM is disabled on
+          // the account. AccessDenied would mean ses:GetMessageInsights never
+          // reached the role.
+          expect(response.error).not.toBe("AccessDeniedException");
+          expect(REQUEST_TAGS).toContain(response.error);
           expect(response.messageId).toBeUndefined();
           if (VDM_ENABLED) expect(response.error).toBe("NotFoundException");
+        }),
+    );
+
+    test.provider.skipIf(!VDM_ENABLED)(
+      "a malformed message id is rejected with BadRequestException (AWS_TEST_SES_VDM)",
+      (_stack) =>
+        Effect.gen(function* () {
+          // Only reachable with VDM enabled. Without it SES short-circuits
+          // every GetMessageInsights call with NotFoundException ("To use this
+          // feature you must enable Virtual Deliverability Manager") before it
+          // ever looks at the id, so malformed and well-formed ids are
+          // indistinguishable on a VDM-less account.
+          const response = yield* insights("not-a-message-id");
+
+          expect(response.error).not.toBe("AccessDeniedException");
+          expect(response.error).toBe("BadRequestException");
+          expect(response.messageId).toBeUndefined();
         }),
     );
   });
 
   describe("BatchGetMetricData", () => {
+    const metricData = (partialDay = false) =>
+      send(
+        HttpClientRequest.post(
+          `${baseUrl}/metric-data${partialDay ? "?partialDay=1" : ""}`,
+        ),
+      ).pipe(Effect.flatMap((r) => r.json)) as Effect.Effect<
+        { results?: number; error?: string },
+        any,
+        any
+      >;
+
     test.provider(
-      "requesting a metric time-series round-trips through the binding",
+      "a midnight-aligned window reaches SES through the binding",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.post(`${baseUrl}/metric-data`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
-            results?: number;
-            error?: string;
-          };
+          const response = yield* metricData();
 
-          // With VDM enabled SES returns a (possibly empty) Results array; with
-          // VDM disabled it rejects with a typed BadRequestException. Both
-          // prove the binding wires ses:BatchGetMetricData IAM + the query
-          // payload into the deployed Lambda. Set AWS_TEST_SES_VDM=1 on a
-          // VDM-enabled account to demand the series instead.
-          if (VDM_ENABLED) {
-            expect(response.error).toBeUndefined();
-            expect(typeof response.results).toBe("number");
-          } else if (response.error === undefined) {
+          // With VDM enabled SES returns a (possibly empty) Results array;
+          // without it the account is rejected with BadRequestException. Both
+          // prove the IAM action and payload marshalling are wired — but
+          // neither may be an authorization failure.
+          expect(response.error).not.toBe("AccessDeniedException");
+          if (response.error === undefined) {
             expect(typeof response.results).toBe("number");
           } else {
-            expect(typeof response.error).toBe("string");
+            expect(REQUEST_TAGS).toContain(response.error);
           }
+        }),
+    );
+
+    test.provider.skipIf(!VDM_ENABLED)(
+      "returns a metric series on a VDM-enabled account (AWS_TEST_SES_VDM)",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* metricData();
+          expect(response.error).toBeUndefined();
+          expect(typeof response.results).toBe("number");
+        }),
+    );
+
+    test.provider.skipIf(!VDM_ENABLED)(
+      "a partial-day window is rejected with BadRequestException (AWS_TEST_SES_VDM)",
+      (_stack) =>
+        Effect.gen(function* () {
+          // SES requires daily-aggregated queries to run midnight-to-midnight
+          // UTC, which pins that the binding forwards the timestamps it is
+          // given. Only reachable with VDM enabled: without it SES rejects
+          // every BatchGetMetricData call with NotFoundException before
+          // validating the window.
+          const response = yield* metricData(true);
+
+          expect(response.error).not.toBe("AccessDeniedException");
+          expect(response.error).toBe("BadRequestException");
         }),
     );
   });
 
   describe("GetDomainStatisticsReport", () => {
+    const domainStatistics = (domain?: string) =>
+      send(
+        HttpClientRequest.get(
+          `${baseUrl}/domain-statistics${
+            domain ? `?domain=${encodeURIComponent(domain)}` : ""
+          }`,
+        ),
+      ).pipe(Effect.flatMap((r) => r.json)) as Effect.Effect<
+        { days?: number; error?: string },
+        any,
+        any
+      >;
+
     test.provider(
-      "requesting a domain deliverability report round-trips through the binding",
+      "requesting a domain deliverability report reaches SES through the binding",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/domain-statistics`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
-            days?: number;
-            error?: string;
-          };
+          const response = yield* domainStatistics();
 
-          // Without the deliverability-dashboard subscription (or for a domain
-          // with no data) SES rejects with a typed error; with it, it returns
-          // DailyVolumes. Both prove the binding wires
-          // ses:GetDomainStatisticsReport IAM + the request into the Lambda.
-          // Live testing should pin the tag for the account's subscription.
+          // The deliverability dashboard is a paid subscription; without it
+          // SES rejects the request with a typed tag. Either way the call must
+          // have been authorized.
+          expect(response.error).not.toBe("AccessDeniedException");
           if (response.error === undefined) {
             expect(typeof response.days).toBe("number");
           } else {
-            expect(typeof response.error).toBe("string");
+            expect(REQUEST_TAGS).toContain(response.error);
           }
+        }),
+    );
+
+    test.provider(
+      "a domain the account does not own is rejected with a typed tag",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* domainStatistics(
+            "not-our-domain.alchemy-test.example.com",
+          );
+
+          expect(response.error).not.toBe("AccessDeniedException");
+          expect(REQUEST_TAGS).toContain(response.error);
+          expect(response.days).toBeUndefined();
         }),
     );
   });
 
   describe("GetBlacklistReports", () => {
+    const blacklistReports = (ip?: string) =>
+      send(
+        HttpClientRequest.get(
+          `${baseUrl}/blacklist-reports${
+            ip ? `?ip=${encodeURIComponent(ip)}` : ""
+          }`,
+        ),
+      ).pipe(Effect.flatMap((r) => r.json)) as Effect.Effect<
+        { ips?: string[]; error?: string },
+        any,
+        any
+      >;
+
+    // This binding has no request-rejection path to pin: SES needs no
+    // subscription for it and validates nothing about the items it is given.
+    // A garbage item (`not-an-ip-address`) returns 200 with an empty
+    // BlacklistReport exactly like a well-formed IP the account does not own,
+    // so a "malformed input" test here would assert the same thing as the
+    // success test. One unconditional test is the honest coverage.
     test.provider(
-      "requesting blacklist reports for dedicated IPs round-trips through the binding",
+      "returns a blacklist report for the requested IPs",
       (_stack) =>
         Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/blacklist-reports`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
-            ips?: string[];
-            error?: string;
-          };
+          const response = yield* blacklistReports();
 
-          // SES returns a BlacklistReport keyed by the requested IPs (empty
-          // when none are blacklisted, or the account owns no dedicated IPs).
-          // A typed error is also acceptable — either proves the binding wires
-          // ses:GetBlacklistReports IAM + the request into the deployed Lambda.
-          if (response.error === undefined) {
-            expect(Array.isArray(response.ips)).toBe(true);
-          } else {
-            expect(typeof response.error).toBe("string");
-          }
+          expect(response.error).toBeUndefined();
+          expect(Array.isArray(response.ips)).toBe(true);
         }),
     );
   });

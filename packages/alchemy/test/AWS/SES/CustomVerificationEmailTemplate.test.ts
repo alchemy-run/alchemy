@@ -5,6 +5,7 @@ import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -30,6 +31,43 @@ const assertCvetDeleted = (name: string) =>
       schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
     }),
   );
+
+// UNGATED probe. Both lifecycle tests below need a verified sender, so on a
+// bare account this file would otherwise assert nothing at all. This proves
+// the gate itself is real and correctly typed: SES refuses to create the
+// template when its FromEmailAddress is unverified, and distilled surfaces
+// that as NotFoundException rather than an untyped catch-all. If AWS ever
+// changes the rejection, this fails instead of silently skipping forever.
+test.provider(
+  "creating a template from an unverified sender fails with the typed tag",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const result = yield* Effect.result(
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* CustomVerificationEmailTemplate("UnverifiedProbe", {
+              fromEmailAddress: "definitely-not-verified@alchemy-test.invalid",
+              templateSubject: "Please confirm your email",
+              templateContent:
+                "<html><body>Click to verify your address.</body></html>",
+              successRedirectionURL: "https://example.com/verified",
+              failureRedirectionURL: "https://example.com/verify-failed",
+            });
+          }),
+        ),
+      );
+
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(JSON.stringify(result.failure)).toContain("NotFoundException");
+      }
+
+      yield* stack.destroy();
+    }),
+  { timeout: 120_000 },
+);
 
 test.provider.skipIf(!VERIFIED_FROM)(
   "custom verification template lifecycle: create, update, delete",

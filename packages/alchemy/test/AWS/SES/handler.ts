@@ -310,8 +310,12 @@ export default SESTestFunction.make(
           // SES rejects partial-day windows: "To get daily aggregated data
           // you must not specify partial-day timestamps. Please make your
           // interval go from midnight to midnight UTC."
+          //
+          // ?partialDay=1 deliberately sends such a window so a test can pin
+          // the typed rejection independently of whether VDM is enabled.
+          const partialDay = url.searchParams.get("partialDay") !== null;
           const end = new Date();
-          end.setUTCHours(0, 0, 0, 0);
+          if (!partialDay) end.setUTCHours(0, 0, 0, 0);
           const start = new Date(end.getTime() - 7 * 24 * 3600 * 1000);
           return yield* respond(
             batchGetMetricData({
