@@ -5,6 +5,7 @@ import {
 } from "@/State/PostgresState";
 import { StateStoreError, type StateService } from "@/State/State";
 import { describe, expect, it } from "alchemy-test";
+import * as Config from "effect/Config";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -291,8 +292,8 @@ const withStore = <A, E>(
   }).pipe(Effect.scoped);
 
 /** Builds the store without a client, to exercise option validation. */
-const withoutClient = <A, E>(
-  options: PostgresStateOptions,
+const withoutClient = <A, E, E2>(
+  options: PostgresStateOptions<E2>,
   use: (store: StateService) => Effect.Effect<A, E>,
 ): Effect.Effect<A, E | StateStoreError> =>
   Effect.gen(function* () {
@@ -311,25 +312,43 @@ const sampleState = {
 } as never;
 
 describe("Postgres state store", () => {
-  it.effect("requires exactly one of client or dsn", () => {
+  it.effect("requires exactly one of client or url", () => {
     const fake = makeFakePostgres();
     return Effect.gen(function* () {
       const neither = yield* withoutClient({}, (store) =>
         store.get(request),
       ).pipe(Effect.flip);
       expect(neither).toBeInstanceOf(StateStoreError);
-      expect(neither.message).toContain("exactly one of `client` or `dsn`");
+      expect(neither.message).toContain("exactly one of `client` or `url`");
 
       const both = yield* withStore(
         fake,
-        { dsn: "postgres://localhost/state" },
+        { url: Redacted.make("postgres://localhost/state") },
         (store) => store.get(request),
       ).pipe(Effect.flip);
       expect(both).toBeInstanceOf(StateStoreError);
       expect((both as StateStoreError).message).toContain(
-        "exactly one of `client` or `dsn`",
+        "exactly one of `client` or `url`",
       );
     });
+  });
+
+  it.effect("reports an unresolvable url config as a state store error", () => {
+    // `url` accepts any Effect of a Redacted string, so
+    // `Config.redacted(...)` can be passed straight through; a missing
+    // variable surfaces as a StateStoreError like any other failure.
+    return withoutClient(
+      { url: Config.redacted("ALCHEMY_TEST_MISSING_STATE_DATABASE_URL") },
+      (store) => store.get(request),
+    ).pipe(
+      Effect.flip,
+      Effect.map((error) => {
+        expect(error).toBeInstanceOf(StateStoreError);
+        expect(error.message).toContain(
+          "ALCHEMY_TEST_MISSING_STATE_DATABASE_URL",
+        );
+      }),
+    );
   });
 
   it.effect("round-trips resource state including Redacted values", () => {

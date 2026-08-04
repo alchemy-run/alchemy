@@ -2,7 +2,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
+import type * as Redacted from "effect/Redacted";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
@@ -21,20 +21,20 @@ import { encodeState, reviveStateRecursive } from "./StateEncoding.ts";
 // `@effect/sql-pg` is loaded lazily rather than imported statically (as
 // `SQL/Postgres.ts` does) so that `postgresState({ client })` — which takes
 // any `@effect/sql` client — works without the optional peer installed at
-// all. Only `postgresState({ dsn })`, which builds a pool, needs it.
+// all. Only `postgresState({ url })`, which builds a pool, needs it.
 // `@effect/sql-pg` depends on `pg` itself, so `pg` is never imported here.
 const importPgClient = () =>
   import("@effect/sql-pg/PgClient").catch((cause) => {
     throw new Error(
-      "Failed to load '@effect/sql-pg'. Install the optional peer dependency '@effect/sql-pg' to use postgresState with a `dsn`.",
+      "Failed to load '@effect/sql-pg'. Install the optional peer dependency '@effect/sql-pg' to use postgresState with a `url`.",
       { cause },
     );
   });
 
-export interface PostgresStateOptions {
+export interface PostgresStateOptions<E = never, R = never> {
   /**
    * An existing `@effect/sql` client. The caller owns its lifecycle — the
-   * store only issues queries against it. Exactly one of `client` and `dsn`
+   * store only issues queries against it. Exactly one of `client` and `url`
    * must be provided.
    *
    * The client must be **pool-backed** and able to hand out at least two
@@ -46,10 +46,14 @@ export interface PostgresStateOptions {
    */
   client?: SqlClient.SqlClient;
   /**
-   * Postgres connection string. The store creates its own `@effect/sql-pg`
-   * pool from it and closes that pool when the state layer is released.
+   * Postgres connection URL, as a `Redacted` value or an Effect yielding one
+   * — `Config.redacted("STATE_DATABASE_URL")` is itself an Effect, so it can
+   * be passed directly. The store creates its own `@effect/sql-pg` pool from
+   * the URL and closes that pool when the state layer is released.
    */
-  dsn?: string;
+  url?:
+    | Redacted.Redacted<string>
+    | Effect.Effect<Redacted.Redacted<string>, E, R>;
   /**
    * Prefix for the advisory-lock key. The full key for a stack/stage is
    * `{lockKeyPrefix}:{stack}/{stage}`.
@@ -128,16 +132,17 @@ interface Lease {
  * bookkeeping is needed.
  *
  * @section Using the Postgres State Store
- * @example Connection string
+ * @example Connection URL from configuration
  * ```typescript
  * import * as Alchemy from "alchemy";
  * import { postgresState } from "alchemy/State/PostgresState";
+ * import * as Config from "effect/Config";
  *
  * const Stack = Alchemy.Stack(
  *   "my-stack",
  *   {
  *     providers: myProviders(),
- *     state: postgresState({ dsn: process.env.STATE_DATABASE_URL! }),
+ *     state: postgresState({ url: Config.redacted("STATE_DATABASE_URL") }),
  *   },
  *   Effect.gen(function* () {
  *     // ...
@@ -148,20 +153,34 @@ interface Lease {
  * @example Caller-owned pool
  * ```typescript
  * import * as PgClient from "@effect/sql-pg/PgClient";
+ * import * as Config from "effect/Config";
  *
  * // A pool, not `PgClient.makeClient`: the store needs a second connection
  * // to verify the advisory lock held on the reserved one.
- * const sql = yield* PgClient.make({ url: Redacted.make(dsn) });
- * const state = postgresState({ client: sql, lockKeyPrefix: "my-app" });
+ * const sql = yield* PgClient.make({
+ *   url: yield* Config.redacted("STATE_DATABASE_URL"),
+ * });
+ * const state = postgresState({
+ *   client: sql,
+ *   lockKeyPrefix: yield* Config.string("STATE_LOCK_PREFIX"),
+ * });
  * ```
  */
-export const postgresState = (options: PostgresStateOptions) =>
+export const postgresState = <E = never, R = never>(
+  options: PostgresStateOptions<E, R>,
+) =>
   Layer.effect(
     State,
     Effect.gen(function* () {
       const scope = yield* Effect.scope;
+      // The layer carries the `url` Effect's requirements; the service it
+      // builds must not, so they are provided here, once.
+      const context = yield* Effect.context<R>();
 
-      const make = makePostgresState(options, scope).pipe(recordStateStoreInit);
+      const make = makePostgresState(options, scope).pipe(
+        recordStateStoreInit,
+        Effect.provideContext(context),
+      );
 
       return yield* Effect.cached(make);
     }),
@@ -171,17 +190,21 @@ export const postgresState = (options: PostgresStateOptions) =>
  * Construct a Postgres-backed {@link StateService}.
  *
  * Construction itself never touches the database — pool creation (when a
- * `dsn` was given), schema migration, and advisory-lock acquisition are all
+ * `url` was given), schema migration, and advisory-lock acquisition are all
  * deferred to the first state operation. Finalizers for the advisory locks
  * and any store-owned pool are registered on `scope`.
  */
-export const makePostgresState = (
-  options: PostgresStateOptions,
+export const makePostgresState = <E = never, R = never>(
+  options: PostgresStateOptions<E, R>,
   scope: Scope.Scope,
 ) =>
   Effect.gen(function* () {
     const prefix = options.lockKeyPrefix ?? "alchemy";
     const ttlMs = options.leaseCheckTtlMs ?? DEFAULT_LEASE_CHECK_TTL_MS;
+    // Captured once, so a `url` Effect that needs services (a custom
+    // ConfigProvider, say) can still be resolved later — from inside the
+    // service methods, whose own requirements are fixed at `never`.
+    const context = yield* Effect.context<R>();
 
     const toError = (cause: unknown): StateStoreError =>
       cause instanceof StateStoreError
@@ -240,34 +263,37 @@ export const makePostgresState = (
      * registered on `scope`, so the pool closes with the state layer.
      */
     const openPool = (
-      dsn: string,
+      url: NonNullable<PostgresStateOptions<E, R>["url"]>,
     ): Effect.Effect<SqlClient.SqlClient, StateStoreError> =>
       Effect.gen(function* () {
         const PgClient = yield* Effect.tryPromise({
           try: importPgClient,
           catch: toError,
         });
+        const resolved = Effect.isEffect(url)
+          ? yield* Effect.provideContext(url, context).pipe(stateError)
+          : url;
         const built = yield* Layer.build(
-          PgClient.layer({ url: Redacted.make(dsn) }),
+          PgClient.layer({ url: resolved }),
         ).pipe(Scope.provide(scope), stateError);
         return Context.get(built, PgClient.PgClient);
       });
 
     // Nothing touches the database at layer construction time. The client
-    // is resolved (or created from the DSN) and the schema migrated inside
+    // is resolved (or created from the URL) and the schema migrated inside
     // this cached Effect, which runs once on the first state operation.
     const ready = yield* Effect.cached(
       Effect.gen(function* () {
-        const { client, dsn } = options;
+        const { client, url } = options;
         const resolved: SqlClient.SqlClient =
-          client !== undefined && dsn === undefined
+          client !== undefined && url === undefined
             ? client
-            : dsn !== undefined && client === undefined
-              ? yield* openPool(dsn)
+            : url !== undefined && client === undefined
+              ? yield* openPool(url)
               : yield* Effect.fail(
                   new StateStoreError({
                     message:
-                      "postgresState requires exactly one of `client` or `dsn`",
+                      "postgresState requires exactly one of `client` or `url`",
                   }),
                 );
         // The store reads columns by the exact names written below, so a
