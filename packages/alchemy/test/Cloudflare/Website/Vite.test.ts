@@ -130,6 +130,67 @@ test.provider(
   { timeout: 360_000 },
 );
 
+// Regression test for https://github.com/alchemy-run/alchemy/issues/1016.
+//
+// `hashViteInput` used to pass a relative root as both the directory and its
+// base, resolving `app` as `<cwd>/app/app`. The empty match produced a constant
+// input hash, so source edits were incorrectly treated as no-ops.
+test.provider(
+  "Vite: a source edit changes the input hash when rootDir is relative",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+
+      yield* stack.destroy();
+
+      const absoluteRoot = yield* cloneFixture(fixtureDir, {
+        prefix: "alchemy-vite-relative-root-",
+        tempRoot,
+        entries: ["index.html", "package.json", "vite.config.ts", "src"],
+      });
+      const rootDir = path.relative(process.cwd(), absoluteRoot);
+      const indexPath = path.join(absoluteRoot, "index.html");
+      const memoInclude = [
+        "index.html",
+        "src/**",
+        "package.json",
+        "vite.config.ts",
+      ];
+
+      expect(path.isAbsolute(rootDir)).toBe(false);
+      yield* fs.writeFileString(indexPath, htmlPage("relative-root-v1"));
+
+      const site1 = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Website.Vite(
+            "ViteRelativeRoot",
+            viteProps(rootDir, memoInclude),
+          );
+        }),
+      );
+      expect(site1.hash?.input).toBeDefined();
+
+      yield* fs.writeFileString(indexPath, htmlPage("relative-root-v2"));
+
+      const site2 = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Website.Vite(
+            "ViteRelativeRoot",
+            viteProps(rootDir, memoInclude),
+          );
+        }),
+      );
+      expect(site2.hash?.input).toBeDefined();
+      expect(site2.hash?.input).not.toEqual(site1.hash?.input);
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(site1.workerName, accountId);
+    }).pipe(logLevel),
+  { timeout: 360_000 },
+);
+
 // Regression test for https://github.com/alchemy-run/alchemy/issues/792.
 //
 // A pure client-only Vite project (no vite.config.ts, no plugins, no worker

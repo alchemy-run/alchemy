@@ -2220,15 +2220,25 @@ export const LiveWorkerProvider = () =>
         options: ViteOptions["memo"],
         additionalWorkspaces: Effect.Effect<Iterable<string>, E>,
       ) {
+        // Resolved once: every workspace cwd is relative to the Vite root, so
+        // the root must be an absolute base. Resolving it per call and passing
+        // `rootDir` as its own cwd would apply a relative root twice
+        // (`path.resolve("app", "app")` → `<cwd>/app/app`), hashing a
+        // directory that doesn't exist — a constant hash that never registers
+        // an edit, so the deploy no-ops forever. See issue #1016.
+        const resolvedRoot = path.resolve(rootDir);
         // Relative paths participate in memo hashes and surface in outputs;
         // keep them POSIX so Windows and CI agree.
         const relativeToRoot = (cwd: string) =>
-          path.relative(rootDir, cwd).replaceAll("\\", "/");
+          path
+            .relative(resolvedRoot, path.resolve(resolvedRoot, cwd))
+            .replaceAll("\\", "/");
         const hashWorkspaceDirectory = (cwd: string, memo?: MemoOptions) =>
-          hashDirectory({ cwd: path.resolve(rootDir, cwd), memo }).pipe(
+          hashDirectory({ cwd: path.resolve(resolvedRoot, cwd), memo }).pipe(
             Effect.map((hash) => `${relativeToRoot(cwd)}:${hash}`),
           );
-        const hashRoot = hashWorkspaceDirectory(rootDir, options);
+        // `"."` — the root itself, never re-applied on top of itself.
+        const hashRoot = hashWorkspaceDirectory(".", options);
         if (Array.isArray(options?.workspaces)) {
           return yield* Effect.all(
             [
