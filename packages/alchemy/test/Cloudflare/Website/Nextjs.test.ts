@@ -8,6 +8,7 @@ import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
@@ -42,6 +43,7 @@ const nextjsProps = (rootDir: string) => ({
       "public/**",
       "package.json",
       "jsconfig.json",
+      "middleware.js",
       "next.config.mjs",
       "open-next.config.ts",
     ],
@@ -53,19 +55,21 @@ const fetchJsonReady = <T>(url: string) =>
     const client = yield* HttpClient.HttpClient;
     return yield* client.get(url).pipe(
       Effect.flatMap((res) =>
-        res.status === 200
-          ? Effect.flatMap(res.text, (body) =>
-              Effect.try({
+        Effect.flatMap(res.text, (body) =>
+          res.status === 200
+            ? Effect.try({
                 try: () => JSON.parse(body) as T,
                 catch: () => new Error(`non-json body: ${body}`),
-              }),
-            )
-          : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+              })
+            : Effect.fail(
+                new Error(
+                  `Worker not ready (${res.status}): ${body.slice(0, 300)}`,
+                ),
+              ),
+        ),
       ),
-      Effect.retry({
-        schedule: Schedule.exponential("500 millis"),
-        times: 15,
-      }),
+      // Bounded: ~60s of edge propagation, then fail with the last body.
+      Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
     );
   });
 
@@ -87,6 +91,7 @@ test.provider(
           "jsconfig.json",
           "next.config.mjs",
           "open-next.config.ts",
+          "middleware.js",
           "app",
           "public",
         ],
@@ -97,10 +102,12 @@ test.provider(
       const deploy = () =>
         stack.deploy(
           Effect.gen(function* () {
+            const kv = yield* Cloudflare.KV.Namespace("NextjsFixtureKv");
             return yield* Cloudflare.Website.Nextjs("NextjsSite", {
               ...nextjsProps(rootDir),
               env: {
                 TEST_TEXT: bindingMarker,
+                FIXTURE_KV: kv,
               },
             });
           }),
@@ -118,17 +125,44 @@ test.provider(
         label: "nextjs SSR home page",
       });
 
-      // API route handler.
-      const hello = yield* fetchJsonReady<{ hello: string }>(
-        `${site1.url!}/api/hello`,
-      );
+      // API route handler — the middleware matcher covers /api/*, so the
+      // pass-through header also proves middleware executes on deploy.
+      const client = yield* HttpClient.HttpClient;
+      const helloRes = yield* client
+        .get(`${site1.url!}/api/hello`)
+        .pipe(
+          Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
+        );
+      expect(helloRes.status).toBe(200);
+      expect(helloRes.headers["x-fixture-middleware"]).toBe("passed");
+      const hello = (yield* helloRes.json) as { hello: string };
       expect(hello.hello).toBe("world");
+
+      // Middleware rewrite: /mw-rewrite serves the API route's response.
+      const rewritten = yield* fetchJsonReady<{ hello: string }>(
+        `${site1.url!}/mw-rewrite`,
+      );
+      expect(rewritten.hello).toBe("world");
 
       // Binding read through OpenNext's `getCloudflareContext()`.
       const binding = yield* fetchJsonReady<{ value: string | null }>(
         `${site1.url!}/api/binding`,
       );
       expect(binding.value).toBe(bindingMarker);
+
+      // KV round-trip through a real resource binding: PUT then GET.
+      const kvKey = `nextjs-live-${site1.hash?.input?.slice(0, 8)}`;
+      const kvValue = `kv-value-${bindingMarker}`;
+      const putRes = yield* client.execute(
+        HttpClientRequest.put(`${site1.url!}/api/kv`).pipe(
+          HttpClientRequest.bodyJsonUnsafe({ key: kvKey, value: kvValue }),
+        ),
+      );
+      expect(putRes.status).toBe(200);
+      const kvRead = yield* fetchJsonReady<{ value: string | null }>(
+        `${site1.url!}/api/kv?key=${kvKey}`,
+      );
+      expect(kvRead.value).toBe(kvValue);
 
       // Static asset from `public/`.
       yield* expectUrlContains(

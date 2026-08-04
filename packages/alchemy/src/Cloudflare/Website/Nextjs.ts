@@ -53,6 +53,19 @@ export interface NextjsBuildOptions {
    * @default false
    */
   debug?: boolean;
+  /**
+   * Local dev (`alchemy dev`) behavior.
+   *
+   * - `"preview"` (default): build the OpenNext worker and serve it under
+   *   workerd — production parity (workerd APIs, ISR/cache semantics),
+   *   no HMR.
+   * - `"hmr"`: run the real `next dev` (Turbopack HMR) in Node with the
+   *   Worker's bindings proxied onto OpenNext's `getCloudflareContext()`
+   *   contract. App code runs in Node, not workerd — CF-specific runtime
+   *   behavior still needs `"preview"`.
+   * @default "preview"
+   */
+  devMode?: "preview" | "hmr";
 }
 
 export interface NextjsProps<
@@ -74,7 +87,7 @@ export interface NextjsProps<
    * `include`/`exclude` globs when the default is too broad.
    */
   memo?: MemoOptions;
-  /** Next.js/OpenNext-specific build configuration. */
+  /** Next.js/OpenNext-specific build and dev configuration. */
   nextjs?: NextjsBuildOptions;
   /**
    * Optional configuration for static asset routing behavior.
@@ -100,6 +113,11 @@ export interface NextjsProps<
  * must be installed in the deploying project — the source provider is
  * loaded with a dynamic `import()`.
  *
+ * Local dev (`alchemy dev`) defaults to preview parity — the built worker
+ * served under workerd. Set `nextjs: { devMode: "hmr" }` for the real
+ * `next dev` (Turbopack HMR) with the Worker's bindings proxied onto
+ * `getCloudflareContext()`.
+ *
  * Known v1 limitations:
  * - The incremental cache is the read-only static-assets flavor: ISR pages
  *   serve their prerendered payloads, but revalidation writes are a no-op
@@ -107,8 +125,6 @@ export interface NextjsProps<
  * - `WORKER_SELF_REFERENCE` (OpenNext's self service binding, used by the
  *   revalidation queue) is not wired on deploy — consistent with the
  *   read-only cache above.
- * - Local dev (`alchemy dev`) is preview parity: the built worker served
- *   under workerd, no HMR.
  *
  * @resource
  * @product Website
@@ -271,10 +287,18 @@ export const Nextjs: {
             },
             source: {
               provider: NEXTJS_SOURCE_PROVIDER,
+              devMode: "server",
               options: {
                 root: props?.rootDir,
                 memo: props?.memo,
-                ...props?.nextjs,
+                ...(props?.nextjs !== undefined
+                  ? (({ devMode, ...build }) => ({
+                      ...build,
+                      ...(devMode !== undefined
+                        ? { dev: { mode: devMode } }
+                        : {}),
+                    }))(props.nextjs)
+                  : {}),
               },
             },
           }),

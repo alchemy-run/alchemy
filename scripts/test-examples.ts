@@ -7,6 +7,7 @@ const examples = [
   "./examples/cloudflare-tanstack-start-solid",
   "./examples/cloudflare-neon-drizzle",
   "./examples/cloudflare-website-astro",
+  "./examples/cloudflare-website-nextjs",
   "./examples/cloudflare-website-nuxt",
   "./examples/cloudflare-website-sveltekit",
   "./examples/cloudflare-website-waku",
