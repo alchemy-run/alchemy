@@ -116,6 +116,23 @@ export interface BrowserClient {
   ): BrowserEffect<BrowserMarkdownResult>;
 }
 
+/** Extra options accepted by the {@link Browser} binding constructor. */
+export interface BrowserBindingProps {
+  /**
+   * Configuration for the binding in `alchemy dev`.
+   * @default { remote: false }
+   */
+  dev?: {
+    /**
+     * Whether to proxy to the real Browser Rendering service in development.
+     * If `false`, a real headless Chrome is launched locally and driven over
+     * CDP (downloaded on first use into the shared wrangler cache).
+     * @default false
+     */
+    remote?: boolean;
+  };
+}
+
 /**
  * A Cloudflare Browser Rendering binding for launching headless browser sessions
  * from Workers — a Worker-only binding with no backing cloud resource.
@@ -172,13 +189,20 @@ export interface Browser extends Binding.Service<
    * @param name Binding name (logical id) — the `env` key it resolves to.
    * @default "BROWSER"
    */
-  (name?: string): BrowserBinding;
+  (name?: string, props?: BrowserBindingProps): BrowserBinding;
 }
 
-export const Browser = Binding.Service<Browser>({
+export const Browser = Binding.Service<Browser, { devRemote?: boolean }>({
   id: TypeId,
   defaultName: "BROWSER",
-  toWorkerBinding: (binding) => ({ type: "browser", name: binding.name }),
+  parse: (name?: string, props?: BrowserBindingProps) => ({
+    name,
+    devRemote: props?.dev?.remote,
+  }),
+  toWorkerBinding: (binding) => ({
+    type: "browser",
+    name: binding.name,
+  }),
 });
 
 export const isBrowser = (value: unknown): value is BrowserBinding =>

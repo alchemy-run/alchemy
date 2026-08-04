@@ -641,6 +641,7 @@
       "name": "cloudflare-dev",
       "version": "0.0.0",
       "dependencies": {
+        "@cloudflare/puppeteer": "^1.1.0",
         "@cloudflare/workers-types": "catalog:",
         "@effect/platform-bun": "catalog:",
         "@effect/platform-node": "catalog:",
@@ -1981,6 +1982,8 @@
     "@opentui/core-linux-x64": ["@opentui/core-linux-x64@0.5.0", "", { "os": "linux", "cpu": "x64" }, "sha512-GwPW6tXCamEUdg3ykabzYW9ayGCOR18yiHKbuY8GB5EgbcA2rkwczE7KQs08RGuSNSWIGEEwHZE2cqhXjYogCQ=="],
 
     "@opentui/core-linux-x64-musl": ["@opentui/core-linux-x64-musl@0.5.0", "", { "os": "linux", "cpu": "x64" }, "sha512-SEg+/lG2ToswziX/ICMRy2QTHmZcb2wfQftQsbmejjL8zI3vGIhT+YlgVHz4jYlGm9zj/gLl2hAHj7mGKPZFzA=="],
+
+    "@opentui/core-win32-arm64": ["@opentui/core-win32-arm64@0.5.0", "", { "os": "win32", "cpu": "arm64" }, "sha512-3XPaF3syiFzqez0OZTvYqNvdz5KRBk9b2VhxOo3/0q1UP10EPmeKupghhZzvESEoa0pP3vEu923ToxvwTSE9pQ=="],
 
     "@opentui/core-win32-x64": ["@opentui/core-win32-x64@0.5.0", "", { "os": "win32", "cpu": "x64" }, "sha512-G0vnuBhDKl7PJa9nHlzN54P0UbeNSJZx+6d9c4aMrmIGvRCKI9XiL2V/Y/hSsbVKTknTVktcTr9TqRnXBcwu0g=="],
 

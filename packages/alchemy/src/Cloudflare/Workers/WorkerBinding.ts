@@ -21,6 +21,7 @@ import type { Namespace } from "../KV/Namespace.ts";
 import type { Queue } from "../Queues/Queue.ts";
 import type { Bucket } from "../R2/Bucket.ts";
 import type { Secret } from "../SecretsStore/Secret.ts";
+import type { StreamBinding } from "../Stream/StreamBinding.ts";
 import type { Index as VectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
 import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
 import type { WorkflowLike } from "../Workflows/Workflow.ts";
@@ -31,6 +32,7 @@ import type { BrowserBinding } from "./BrowserBinding.ts";
 import type { DurableObjectLike } from "./DurableObject.ts";
 import type { RateLimitBinding } from "./RateLimitBinding.ts";
 import { makeRpcStub } from "./Rpc.ts";
+import type { SecretKeyBinding } from "./SecretKeyBinding.ts";
 import type { VersionMetadataBinding } from "./VersionMetadataBinding.ts";
 import { Worker, WorkerEnvironment } from "./Worker.ts";
 import type { WorkerLoader } from "./WorkerLoader.ts";
@@ -139,9 +141,11 @@ export type WorkerBindingResource =
   | SendEmail
   | ArtifactsNamespace
   | RateLimitBinding
+  | SecretKeyBinding
   | BrowserBinding
   | FlagshipApp
   | ImagesBinding
+  | StreamBinding
   | Hyperdrive
   | VectorizeIndex
   | Secret

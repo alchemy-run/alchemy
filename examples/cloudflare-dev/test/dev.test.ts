@@ -26,6 +26,16 @@
  *   - KV (Effect-style) → EffectWorker `/` lists the namespace
  *   - Workflow          → `/workflow/start` + status poll to completion
  *   - Container         → `/sandbox` fetches through the local container
+ *   - Cache API         → `/cache` misses then hits
+ *   - Rate limit        → `/ratelimit` throttles the third call
+ *   - versionMetadata   → `/version` returns a stubbed id
+ *   - Service binding   → `/service` calls EffectWorker worker-to-worker
+ *   - Secrets Store     → MediaWorker `/secret` echoes the seeded value
+ *
+ * The heavier local simulators (Browser, Images, Stream, email, tail
+ * consumers, cron, secret_key, Analytics Engine) are covered end-to-end by
+ * integ.test.ts — the binding lowering is identical under both topologies,
+ * so this suite pins only the cheap ones on the CLI path.
  */
 import { afterAll, expect, test } from "bun:test";
 import { spawn, spawnSync } from "node:child_process";
@@ -155,6 +165,11 @@ test(
       () => outputUrl("effectWorker"),
       { tries: 30, delayMs: 1000 },
     );
+    const mediaWorker = await pollUntil(
+      "mediaWorker url in stack outputs",
+      () => outputUrl("mediaWorker"),
+      { tries: 30, delayMs: 1000 },
+    );
 
     // Assets: the fallthrough route serves ./assets/index.html.
     const index = await (await fetchOk(asyncWorker)).text();
@@ -223,6 +238,48 @@ test(
       { tries: 50, delayMs: 500 },
     );
     expect(received).toMatchObject({ body: message });
+
+    // Cache API: per-run key — first miss, second hit.
+    const cacheKey = crypto.randomUUID();
+    const cacheOnce = async () =>
+      (await (
+        await fetchOk(new URL(`/cache?key=${cacheKey}`, asyncWorker))
+      ).json()) as { hit: boolean };
+    expect((await cacheOnce()).hit).toBe(false);
+    expect((await cacheOnce()).hit).toBe(true);
+
+    // Rate limit: 2 per 10s per key — the third call is throttled.
+    const rlKey = crypto.randomUUID();
+    const limitOnce = async () =>
+      (await (
+        await fetchOk(new URL(`/ratelimit?key=${rlKey}`, asyncWorker))
+      ).json()) as { success: boolean };
+    expect((await limitOnce()).success).toBe(true);
+    expect((await limitOnce()).success).toBe(true);
+    expect((await limitOnce()).success).toBe(false);
+
+    // Version metadata: locally stubbed with a random id.
+    const version = (await (
+      await fetchOk(new URL("/version", asyncWorker))
+    ).json()) as { id: string };
+    expect(typeof version.id).toBe("string");
+    expect(version.id.length).toBeGreaterThan(0);
+
+    // Service binding: AsyncWorker calls EffectWorker worker-to-worker. The
+    // dev registry may pick the peer up asynchronously, so allow retries.
+    const service = (await (
+      await fetchOk(new URL("/service", asyncWorker), undefined, {
+        tries: 30,
+        delayMs: 1000,
+      })
+    ).json()) as { url: string };
+    expect(service.url).toBe(effectWorker.replace(/\/$/, ""));
+
+    // Secrets Store: the seeded value round-trips through the binding.
+    const secret = (await (
+      await fetchOk(new URL("/secret", mediaWorker))
+    ).json()) as { value: string };
+    expect(secret.value).toBe("store-secret-abc123");
 
     // KV via the Effect-style binding: EffectWorker's root route lists the
     // namespace.
