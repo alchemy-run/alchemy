@@ -24,6 +24,8 @@ no adapter setup.
   a wrangler-free in-memory Cloudflare adapter.
 - [`Waku`](/cloudflare/frontend/waku) — Waku (React Server
   Components) apps.
+- [`Octane`](/cloudflare/frontend/octane) — OctaneJS fullstack apps
+  built through Octane's own Cloudflare adapter.
 - [`StaticSite`](/cloudflare/frontend/static-site) — any build
   command's output directory, for static generators like Zola and
   Hugo.
@@ -48,6 +50,8 @@ project skips the build and deploy entirely.
 | Nuxt | `Nuxt` | [Nuxt](/cloudflare/frontend/nuxt) |
 | SvelteKit | `SvelteKit` | [SvelteKit](/cloudflare/frontend/sveltekit) |
 | Waku | `Waku` | [Waku](/cloudflare/frontend/waku) |
+| OctaneJS (fullstack) | `Octane` | [Octane](/cloudflare/frontend/octane) |
+| OctaneJS (SPA) | `Vite` | [Octane](/cloudflare/frontend/octane#octane-spas-use-vite-instead) |
 | Zola, Hugo, or any static generator | `StaticSite` | [Static sites](/cloudflare/frontend/static-site) |
 
 Every row is backed by a checked-in example or a live deploy test in
@@ -58,8 +62,9 @@ static generator works the same way.
 ## How to choose
 
 Use the resource named after your framework. `Astro`, `Nuxt`,
-`SvelteKit`, and `Waku` each drive their framework's own programmatic
-build and know its output layout, config surface, and dev server.
+`SvelteKit`, `Waku`, and `Octane` each drive their framework's own
+programmatic build and know its output layout, config surface, and dev
+server.
 
 Use `Vite` when the framework is a plugin in your `vite.config.ts`
 and a single `vite build` produces the whole app — TanStack Start,
@@ -86,4 +91,5 @@ without a dedicated resource.
   [Astro](/cloudflare/frontend/astro),
   [Nuxt](/cloudflare/frontend/nuxt),
   [SvelteKit](/cloudflare/frontend/sveltekit),
-  [Waku](/cloudflare/frontend/waku).
+  [Waku](/cloudflare/frontend/waku),
+  [Octane](/cloudflare/frontend/octane).
