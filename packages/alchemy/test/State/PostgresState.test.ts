@@ -1,121 +1,175 @@
+import * as PgClient from "@effect/sql-pg/PgClient";
 import {
   makePostgresState,
-  type PostgresStateClient,
-  type PostgresStateConnection,
   type PostgresStateOptions,
 } from "@/State/PostgresState";
 import { StateStoreError, type StateService } from "@/State/State";
 import { describe, expect, it } from "alchemy-test";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Redacted from "effect/Redacted";
+import * as Stream from "effect/Stream";
+import * as Reactivity from "effect/unstable/reactivity/Reactivity";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
+import type * as SqlConnection from "effect/unstable/sql/SqlConnection";
+import * as SqlError from "effect/unstable/sql/SqlError";
 
 interface FakeQuery {
   text: string;
-  values: unknown[];
+  values: ReadonlyArray<unknown>;
 }
 
-interface FakeConnection extends PostgresStateConnection {
+interface FakeConnection extends SqlConnection.Connection {
   queries: FakeQuery[];
   released: boolean;
 }
 
+const unsupported = (operation: string) =>
+  Effect.die(new Error(`fake postgres does not support ${operation}`));
+
+const sqlFailure = (message: string) =>
+  new SqlError.SqlError({
+    reason: new SqlError.ConnectionError({
+      cause: new Error(message),
+      message,
+      operation: "execute",
+    }),
+  });
+
 /**
- * Hermetic fake of the small `pg` surface the store uses. It recognizes the
- * store's fixed SQL statements and keeps rows in in-memory maps, so tests
- * exercise the real store logic (lock acquisition, lease guard, encoding)
- * without a database. Every checked-out connection records its own queries
- * separately from the pool, so tests can prove which connection ran what —
- * in particular that the lease re-verification never touches the reserved
- * lock connection.
+ * Hermetic fake of the `@effect/sql` driver surface the store uses: a real
+ * `SqlClient` built on the real `@effect/sql-pg` statement compiler, whose
+ * connections are in-memory. It recognizes the store's fixed SQL statements
+ * and keeps rows in in-memory maps, so tests exercise the real store logic
+ * (lock acquisition, lease guard, encoding) without a database.
+ *
+ * Every acquired connection records its own queries and answers
+ * `pg_backend_pid()` with its own id, so tests can prove which connection
+ * ran what and can tell a pool apart from a single shared connection.
+ *
+ * What this fake cannot do is model a real pool: `singleConnection: true`
+ * reproduces `PgClient.makeClient`/`fromClient`, where reserving and
+ * running a plain statement both land on the same connection, but nothing
+ * here reproduces pool exhaustion, queueing, or a killed backend. That is
+ * why the store asks Postgres itself which backend answered the liveness
+ * check instead of trusting the client to hand out a second connection.
  */
-const makeFakePostgres = () => {
+const makeFakePostgres = (options: { singleConnection?: boolean } = {}) => {
   const resources = new Map<string, unknown>();
   const outputs = new Map<string, unknown>();
-  const poolQueries: FakeQuery[] = [];
   const connections: FakeConnection[] = [];
   const control = {
     lockAcquired: true,
     lockLive: true,
     lockQueries: 0,
+    failLockQuery: false,
+    // Holds the lock query in flight: `started` fires when the store issues
+    // it, and it only answers once `release` completes.
+    lockGate: undefined as
+      | { started: Deferred.Deferred<void>; release: Deferred.Deferred<void> }
+      | undefined,
   };
 
   const resourceKey = (stack: unknown, stage: unknown, fqn: unknown) =>
     `${stack} ${stage} ${fqn}`;
   const outputKey = (stack: unknown, stage: unknown) => `${stack} ${stage}`;
 
-  const handle = async (
+  const rows = (
+    values: ReadonlyArray<SqlConnection.Row>,
+  ): Effect.Effect<ReadonlyArray<SqlConnection.Row>, SqlError.SqlError> =>
+    Effect.succeed(values);
+
+  const handle = (
     text: string,
-    values: unknown[],
-  ): Promise<{ rows: Record<string, unknown>[] }> => {
+    values: ReadonlyArray<unknown>,
+    backendPid: number,
+  ): Effect.Effect<ReadonlyArray<SqlConnection.Row>, SqlError.SqlError> => {
     const sql = text.replaceAll(/\s+/g, " ").trim().toLowerCase();
     if (sql === "begin" || sql === "commit" || sql === "rollback") {
-      return { rows: [] };
+      return rows([]);
     }
     if (sql.includes("pg_try_advisory_lock")) {
       control.lockQueries += 1;
-      return { rows: [{ acquired: control.lockAcquired, pid: 42 }] };
+      if (control.failLockQuery) {
+        return Effect.fail(sqlFailure("connection terminated unexpectedly"));
+      }
+      const acquired = rows([
+        { acquired: control.lockAcquired, pid: backendPid },
+      ]);
+      const gate = control.lockGate;
+      return gate === undefined
+        ? acquired
+        : Effect.sync(() => {
+            Deferred.doneUnsafe(gate.started, Effect.void);
+          }).pipe(
+            Effect.andThen(Deferred.await(gate.release)),
+            Effect.andThen(acquired),
+          );
     }
     if (sql.includes("pg_advisory_xact_lock")) {
-      return { rows: [{}] };
+      return rows([{}]);
     }
     if (sql.includes("pg_advisory_unlock")) {
-      return { rows: [{}] };
+      return rows([{}]);
     }
     if (sql.includes("from pg_locks")) {
-      return { rows: [{ live: control.lockLive }] };
+      return rows([{ live: control.lockLive, checker_pid: backendPid }]);
     }
     if (sql.startsWith("create table")) {
-      return { rows: [] };
+      return rows([]);
     }
     if (sql.startsWith("insert into alchemy_resource_state")) {
       const [stack, stage, fqn, json] = values;
       resources.set(resourceKey(stack, stage, fqn), JSON.parse(String(json)));
-      return { rows: [] };
+      return rows([]);
     }
     if (sql.startsWith("insert into alchemy_stack_output")) {
       const [stack, stage, json] = values;
       outputs.set(outputKey(stack, stage), JSON.parse(String(json)));
-      return { rows: [] };
+      return rows([]);
     }
     if (sql.includes("value ->> 'status'")) {
       const [stack, stage] = values;
-      const rows = Array.from(resources.entries())
-        .filter(([key]) => key.startsWith(`${stack} ${stage} `))
-        .map(([, value]) => ({ value }))
-        .filter(
-          (row) =>
-            (row.value as { status?: string } | undefined)?.status ===
-            "replaced",
-        );
-      return { rows };
+      return rows(
+        Array.from(resources.entries())
+          .filter(([key]) => key.startsWith(`${stack} ${stage} `))
+          .map(([, value]) => ({ value }))
+          .filter(
+            (row) =>
+              (row.value as { status?: string } | undefined)?.status ===
+              "replaced",
+          ),
+      );
     }
     if (sql.startsWith("select value from alchemy_resource_state")) {
       const [stack, stage, fqn] = values;
       const value = resources.get(resourceKey(stack, stage, fqn));
-      return { rows: value === undefined ? [] : [{ value }] };
+      return rows(value === undefined ? [] : [{ value }]);
     }
     if (sql.startsWith("select value from alchemy_stack_output")) {
       const [stack, stage] = values;
       const value = outputs.get(outputKey(stack, stage));
-      return { rows: value === undefined ? [] : [{ value }] };
+      return rows(value === undefined ? [] : [{ value }]);
     }
     if (sql.startsWith("select fqn from alchemy_resource_state")) {
       const [stack, stage] = values;
-      const rows = Array.from(resources.keys())
-        .filter((key) => key.startsWith(`${stack} ${stage} `))
-        .map((key) => ({ fqn: key.split(" ")[2] }))
-        .sort((a, b) => String(a.fqn).localeCompare(String(b.fqn)));
-      return { rows };
+      return rows(
+        Array.from(resources.keys())
+          .filter((key) => key.startsWith(`${stack} ${stage} `))
+          .map((key) => ({ fqn: key.split(" ")[2] }))
+          .sort((a, b) => String(a.fqn).localeCompare(String(b.fqn))),
+      );
     }
     if (sql.startsWith("select stack from alchemy_resource_state")) {
       const stacks = new Set<string>();
       for (const key of resources.keys()) stacks.add(key.split(" ")[0]!);
       for (const key of outputs.keys()) stacks.add(key.split(" ")[0]!);
-      return {
-        rows: Array.from(stacks)
+      return rows(
+        Array.from(stacks)
           .sort()
           .map((stack) => ({ stack })),
-      };
+      );
     }
     if (sql.startsWith("select stage from alchemy_resource_state")) {
       const [stack] = values;
@@ -128,11 +182,11 @@ const makeFakePostgres = () => {
         const [s, stage] = key.split(" ");
         if (s === stack) stages.add(stage!);
       }
-      return {
-        rows: Array.from(stages)
+      return rows(
+        Array.from(stages)
           .sort()
           .map((stage) => ({ stage })),
-      };
+      );
     }
     if (sql.startsWith("delete from alchemy_resource_state")) {
       const [stack, stage, fqn] = values;
@@ -149,7 +203,7 @@ const makeFakePostgres = () => {
           if (key.startsWith(`${stack} `)) resources.delete(key);
         }
       }
-      return { rows: [] };
+      return rows([]);
     }
     if (sql.startsWith("delete from alchemy_stack_output")) {
       const [stack, stage] = values;
@@ -159,36 +213,57 @@ const makeFakePostgres = () => {
           outputs.delete(key);
         }
       }
-      return { rows: [] };
+      return rows([]);
     }
-    throw new Error(`fake postgres does not recognize: ${sql}`);
+    return Effect.die(new Error(`fake postgres does not recognize: ${sql}`));
   };
 
-  const connect = async (): Promise<PostgresStateConnection> => {
+  let nextBackendPid = 100;
+
+  const makeConnection = (): FakeConnection => {
     const queries: FakeQuery[] = [];
+    const backendPid = nextBackendPid++;
+    const execute = (text: string, values: ReadonlyArray<unknown>) =>
+      Effect.suspend(() => {
+        queries.push({ text, values });
+        return handle(text, values, backendPid);
+      });
     const connection: FakeConnection = {
       queries,
       released: false,
-      query: (text, values = []) => {
-        queries.push({ text, values });
-        return handle(text, values);
-      },
-      release: () => {
-        connection.released = true;
-      },
+      execute,
+      executeUnprepared: execute,
+      executeRaw: execute,
+      executeValues: () => unsupported("executeValues"),
+      executeValuesUnprepared: () => unsupported("executeValuesUnprepared"),
+      executeStream: () => Stream.fromEffect(unsupported("executeStream")),
     };
     connections.push(connection);
     return connection;
   };
 
-  const client: PostgresStateClient = {
-    query: (text, values = []) => {
-      poolQueries.push({ text, values });
-      return handle(text, values);
-    },
-    connect,
-  };
-  return { client, poolQueries, connections, resources, outputs, control };
+  // A scoped acquirer, exactly like a pool's: every acquisition hands out a
+  // fresh connection and marks it released when its scope closes. With
+  // `singleConnection`, every acquisition returns the same connection —
+  // what `PgClient.makeClient` does, where `reserve` and plain statements
+  // share one backend.
+  const shared = options.singleConnection ? makeConnection() : undefined;
+  const acquirer: SqlConnection.Acquirer =
+    shared === undefined
+      ? Effect.acquireRelease(Effect.sync(makeConnection), (connection) =>
+          Effect.sync(() => {
+            connection.released = true;
+          }),
+        )
+      : Effect.succeed(shared);
+
+  const client = SqlClient.make({
+    acquirer,
+    compiler: PgClient.makeCompiler(),
+    spanAttributes: [],
+  }).pipe(Effect.provide(Reactivity.layer));
+
+  return { client, connections, resources, outputs, control };
 };
 
 const connectionRunning = (
@@ -199,10 +274,27 @@ const connectionRunning = (
     connection.queries.some((query) => query.text.includes(fragment)),
   );
 
+type FakePostgres = ReturnType<typeof makeFakePostgres>;
+
 const withStore = <A, E>(
+  fake: FakePostgres,
+  options: Omit<PostgresStateOptions, "client">,
+  use: (store: StateService) => Effect.Effect<A, E>,
+): Effect.Effect<A, E | StateStoreError> =>
+  Effect.gen(function* () {
+    const scope = yield* Effect.scope;
+    const store = yield* makePostgresState(
+      { ...options, client: yield* fake.client },
+      scope,
+    );
+    return yield* use(store);
+  }).pipe(Effect.scoped);
+
+/** Builds the store without a client, to exercise option validation. */
+const withoutClient = <A, E>(
   options: PostgresStateOptions,
   use: (store: StateService) => Effect.Effect<A, E>,
-) =>
+): Effect.Effect<A, E | StateStoreError> =>
   Effect.gen(function* () {
     const scope = yield* Effect.scope;
     const store = yield* makePostgresState(options, scope);
@@ -222,23 +314,27 @@ describe("Postgres state store", () => {
   it.effect("requires exactly one of client or dsn", () => {
     const fake = makeFakePostgres();
     return Effect.gen(function* () {
-      const neither = yield* withStore({}, (store) => store.get(request)).pipe(
-        Effect.flip,
-      );
+      const neither = yield* withoutClient({}, (store) =>
+        store.get(request),
+      ).pipe(Effect.flip);
       expect(neither).toBeInstanceOf(StateStoreError);
       expect(neither.message).toContain("exactly one of `client` or `dsn`");
 
       const both = yield* withStore(
-        { client: fake.client, dsn: "postgres://localhost/state" },
+        fake,
+        { dsn: "postgres://localhost/state" },
         (store) => store.get(request),
       ).pipe(Effect.flip);
-      expect(both.message).toContain("exactly one of `client` or `dsn`");
+      expect(both).toBeInstanceOf(StateStoreError);
+      expect((both as StateStoreError).message).toContain(
+        "exactly one of `client` or `dsn`",
+      );
     });
   });
 
   it.effect("round-trips resource state including Redacted values", () => {
     const fake = makeFakePostgres();
-    return withStore({ client: fake.client }, (store) =>
+    return withStore(fake, {}, (store) =>
       Effect.gen(function* () {
         expect(yield* store.get(request)).toBeUndefined();
 
@@ -262,7 +358,7 @@ describe("Postgres state store", () => {
 
   it.effect("serializes the schema migration under an advisory lock", () => {
     const fake = makeFakePostgres();
-    return withStore({ client: fake.client }, (store) =>
+    return withStore(fake, {}, (store) =>
       Effect.gen(function* () {
         yield* store.get(request);
 
@@ -288,7 +384,7 @@ describe("Postgres state store", () => {
 
   it.effect("acquires the advisory lock once per stack/stage", () => {
     const fake = makeFakePostgres();
-    return withStore({ client: fake.client }, (store) =>
+    return withStore(fake, {}, (store) =>
       Effect.gen(function* () {
         yield* store.set({ ...request, value: sampleState });
         yield* store.get(request);
@@ -307,10 +403,10 @@ describe("Postgres state store", () => {
   });
 
   it.effect(
-    "re-verifies the lease from the pool, never the lock connection",
+    "never runs the lease check on the reserved lock connection",
     () => {
       const fake = makeFakePostgres();
-      return withStore({ client: fake.client, leaseCheckTtlMs: 0 }, (store) =>
+      return withStore(fake, { leaseCheckTtlMs: 0 }, (store) =>
         Effect.gen(function* () {
           yield* store.set({ ...request, value: sampleState });
           yield* store.get(request);
@@ -321,15 +417,39 @@ describe("Postgres state store", () => {
           );
           expect(lock).toBeDefined();
           // The reserved connection only ever takes the lock; the liveness
-          // check must ask a different backend via the pool, because the
-          // reserved connection cannot reliably report on itself once its
-          // backend has been killed server-side.
+          // check must ask a different backend, because the reserved
+          // connection cannot reliably report on itself once its backend
+          // has been killed server-side.
           expect(
             lock!.queries.some((query) => query.text.includes("pg_locks")),
           ).toBe(false);
           expect(
-            fake.poolQueries.some((query) => query.text.includes("pg_locks")),
+            fake.connections
+              .filter((connection) => connection !== lock)
+              .some((connection) =>
+                connection.queries.some((query) =>
+                  query.text.includes("pg_locks"),
+                ),
+              ),
           ).toBe(true);
+        }),
+      );
+    },
+  );
+
+  it.effect(
+    "refuses a client that cannot verify the lock independently",
+    () => {
+      // A single-connection client routes the liveness check straight back to
+      // the backend holding the lock, which cannot vouch for itself. The
+      // store notices because the check reports its own backend pid.
+      const fake = makeFakePostgres({ singleConnection: true });
+      return withStore(fake, { leaseCheckTtlMs: 0 }, (store) =>
+        Effect.gen(function* () {
+          const error = yield* store.get(request).pipe(Effect.flip);
+          expect(error).toBeInstanceOf(StateStoreError);
+          expect(error.message).toContain("cannot be verified");
+          expect(error.message).toContain("not pool-backed");
         }),
       );
     },
@@ -337,31 +457,29 @@ describe("Postgres state store", () => {
 
   it.effect("prefixes the lock key with lockKeyPrefix", () => {
     const fake = makeFakePostgres();
-    return withStore(
-      { client: fake.client, lockKeyPrefix: "my-app" },
-      (store) =>
-        Effect.gen(function* () {
-          yield* store.get(request);
-          const lock = connectionRunning(
-            fake.connections,
-            "pg_try_advisory_lock",
-          );
-          expect(lock?.queries[0]?.values).toEqual(["my-app:app/prod"]);
-        }),
+    return withStore(fake, { lockKeyPrefix: "my-app" }, (store) =>
+      Effect.gen(function* () {
+        yield* store.get(request);
+        const lock = connectionRunning(
+          fake.connections,
+          "pg_try_advisory_lock",
+        );
+        expect(lock?.queries[0]?.values).toEqual(["my-app:app/prod"]);
+      }),
     );
   });
 
   it.effect("fails immediately when another deploy holds the lock", () => {
     const fake = makeFakePostgres();
     fake.control.lockAcquired = false;
-    return withStore({ client: fake.client }, (store) =>
+    return withStore(fake, {}, (store) =>
       Effect.gen(function* () {
         const result = yield* store.get(request).pipe(Effect.flip);
         expect(result).toBeInstanceOf(StateStoreError);
         expect(result.message).toContain(
           "another deploy holds the Postgres state lock",
         );
-        // The reserved connection goes back to the pool on contention.
+        // The reserved connection is released on contention.
         const lock = connectionRunning(
           fake.connections,
           "pg_try_advisory_lock",
@@ -371,9 +489,73 @@ describe("Postgres state store", () => {
     );
   });
 
+  it.effect(
+    "releases the reserved connection when the lock query fails",
+    () => {
+      const fake = makeFakePostgres();
+      // The lock attempt fails at the driver, so the reserved connection must
+      // go back to the pool rather than leak.
+      fake.control.failLockQuery = true;
+      return withStore(fake, {}, (store) =>
+        Effect.gen(function* () {
+          const error = yield* store.get(request).pipe(Effect.flip);
+          expect(error).toBeInstanceOf(StateStoreError);
+          expect(error.message).toContain("connection terminated unexpectedly");
+
+          const lock = connectionRunning(
+            fake.connections,
+            "pg_try_advisory_lock",
+          );
+          expect(lock?.released).toBe(true);
+        }),
+      );
+    },
+  );
+
+  it.effect(
+    "registers the unlock finalizer even when interrupted mid-acquisition",
+    () => {
+      const fake = makeFakePostgres();
+      return Effect.gen(function* () {
+        const started = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        fake.control.lockGate = { started, release };
+
+        const fiber = yield* withStore(fake, {}, (store) =>
+          store.get(request),
+        ).pipe(Effect.forkChild({ startImmediately: true }));
+
+        // Interrupt while the lock query is still in flight. Taking the
+        // lock and registering its unlock finalizer is uninterruptible, so
+        // the store must finish both before the interruption is honored —
+        // otherwise the session lock would stay held on a connection handed
+        // back to the pool, and every later deploy of this stack/stage
+        // would fail on it.
+        yield* Deferred.await(started);
+        const interrupting = yield* Fiber.interrupt(fiber).pipe(
+          Effect.forkChild({ startImmediately: true }),
+        );
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(interrupting);
+
+        const lock = connectionRunning(
+          fake.connections,
+          "pg_try_advisory_lock",
+        );
+        expect(lock).toBeDefined();
+        expect(
+          lock!.queries.some((query) =>
+            query.text.includes("pg_advisory_unlock"),
+          ),
+        ).toBe(true);
+        expect(lock!.released).toBe(true);
+      });
+    },
+  );
+
   it.effect("unlocks and releases the lock connection on scope close", () => {
     const fake = makeFakePostgres();
-    return withStore({ client: fake.client }, (store) =>
+    return withStore(fake, {}, (store) =>
       store.set({ ...request, value: sampleState }),
     ).pipe(
       Effect.andThen(
@@ -396,7 +578,7 @@ describe("Postgres state store", () => {
 
   it.effect("fails loudly when the lock lease is lost mid-run", () => {
     const fake = makeFakePostgres();
-    return withStore({ client: fake.client, leaseCheckTtlMs: 0 }, (store) =>
+    return withStore(fake, { leaseCheckTtlMs: 0 }, (store) =>
       Effect.gen(function* () {
         yield* store.set({ ...request, value: sampleState });
 
@@ -414,7 +596,7 @@ describe("Postgres state store", () => {
 
   it.effect("filters replaced resources in SQL", () => {
     const fake = makeFakePostgres();
-    return withStore({ client: fake.client }, (store) =>
+    return withStore(fake, {}, (store) =>
       Effect.gen(function* () {
         yield* store.set({ ...request, value: sampleState });
         yield* store.set({
@@ -432,7 +614,7 @@ describe("Postgres state store", () => {
 
   it.effect("lists stacks, stages, and fqns", () => {
     const fake = makeFakePostgres();
-    return withStore({ client: fake.client }, (store) =>
+    return withStore(fake, {}, (store) =>
       Effect.gen(function* () {
         yield* store.set({ ...request, value: sampleState });
         yield* store.set({
@@ -458,7 +640,7 @@ describe("Postgres state store", () => {
 
   it.effect("deleteStack removes resource rows and stack outputs", () => {
     const fake = makeFakePostgres();
-    return withStore({ client: fake.client }, (store) =>
+    return withStore(fake, {}, (store) =>
       Effect.gen(function* () {
         yield* store.set({ ...request, value: sampleState });
         yield* store.setOutput({ ...request, value: { ok: true } });
@@ -482,7 +664,7 @@ describe("Postgres state store", () => {
     fake.resources.set("app prod app/prod/db", { status: "created" });
     fake.outputs.set("app prod", { ok: true });
 
-    return withStore({ client: fake.client }, (store) =>
+    return withStore(fake, {}, (store) =>
       Effect.gen(function* () {
         yield* store.deleteStack({ stack: "app" });
 
@@ -499,7 +681,7 @@ describe("Postgres state store", () => {
 
   it.effect("delete removes a single resource", () => {
     const fake = makeFakePostgres();
-    return withStore({ client: fake.client }, (store) =>
+    return withStore(fake, {}, (store) =>
       Effect.gen(function* () {
         yield* store.set({ ...request, value: sampleState });
         yield* store.delete(request);

@@ -1,8 +1,12 @@
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
-import type { Pool } from "pg";
+import type * as SqlClient from "effect/unstable/sql/SqlClient";
+import type * as SqlError from "effect/unstable/sql/SqlError";
 import { recordStateStoreInit } from "../Telemetry/Metrics.ts";
 import { STATE_STORE_VERSION } from "./HttpStateApi.ts";
 import type { ReplacedResourceState } from "./ResourceState.ts";
@@ -14,53 +18,36 @@ import {
 } from "./State.ts";
 import { encodeState, reviveStateRecursive } from "./StateEncoding.ts";
 
-/**
- * The subset of a `pg` `Pool` the Postgres state store uses. Any pool-shaped
- * client that can run parameterized queries and hand out a dedicated
- * connection (for the session-scoped advisory lock) satisfies it.
- */
-// `pg` is an optional peer dependency — loaded lazily so importing this
-// module never requires the driver; only `postgresState({ dsn })` (which
-// constructs a Pool) does. A caller-supplied `client` needs no driver.
-const importPg = () =>
-  import("pg").catch((cause) => {
+// `@effect/sql-pg` is loaded lazily rather than imported statically (as
+// `SQL/Postgres.ts` does) so that `postgresState({ client })` — which takes
+// any `@effect/sql` client — works without the optional peer installed at
+// all. Only `postgresState({ dsn })`, which builds a pool, needs it.
+// `@effect/sql-pg` depends on `pg` itself, so `pg` is never imported here.
+const importPgClient = () =>
+  import("@effect/sql-pg/PgClient").catch((cause) => {
     throw new Error(
-      "Failed to load the 'pg' driver. Install the optional peer dependency 'pg' to use postgresState with a `dsn`.",
+      "Failed to load '@effect/sql-pg'. Install the optional peer dependency '@effect/sql-pg' to use postgresState with a `dsn`.",
       { cause },
     );
   });
 
-export interface PostgresStateClient {
-  query(
-    text: string,
-    values?: unknown[],
-  ): Promise<{ rows: Record<string, unknown>[] }>;
-  connect(): Promise<PostgresStateConnection>;
-}
-
-/**
- * A dedicated connection checked out from the pool. It holds the
- * session-scoped advisory lock for a `(stack, stage)` pair for the whole
- * lifetime of the state layer.
- */
-export interface PostgresStateConnection {
-  query(
-    text: string,
-    values?: unknown[],
-  ): Promise<{ rows: Record<string, unknown>[] }>;
-  release(destroy?: boolean): void;
-}
-
 export interface PostgresStateOptions {
   /**
-   * An existing `pg` connection pool (or a compatible client). The caller
-   * owns its lifecycle — the store only issues queries against it. Exactly
-   * one of `client` and `dsn` must be provided.
+   * An existing `@effect/sql` client. The caller owns its lifecycle — the
+   * store only issues queries against it. Exactly one of `client` and `dsn`
+   * must be provided.
+   *
+   * The client must be **pool-backed** and able to hand out at least two
+   * concurrent connections: the store keeps one connection reserved for the
+   * advisory lock and verifies that lock from another one. A
+   * single-connection client (`PgClient.makeClient`) is refused at the first
+   * lease check, and a pool capped at `maxConnections: 1` blocks forever
+   * waiting for a free connection.
    */
-  client?: PostgresStateClient;
+  client?: SqlClient.SqlClient;
   /**
-   * Postgres connection string. The store creates its own `pg` pool from it
-   * and closes that pool when the state layer is released.
+   * Postgres connection string. The store creates its own `@effect/sql-pg`
+   * pool from it and closes that pool when the state layer is released.
    */
   dsn?: string;
   /**
@@ -128,14 +115,17 @@ interface Lease {
  * `create table if not exists`.
  *
  * Concurrent deploys are serialized with a session-scoped Postgres advisory
- * lock per `(stack, stage)`: the lock is taken on a dedicated pooled
- * connection when the first operation for the pair runs, and contention
- * fails immediately instead of queueing. Every subsequent operation first
- * re-verifies — from a *different* pool connection, by inspecting
+ * lock per `(stack, stage)`: the lock is taken on a reserved connection
+ * (`SqlClient.reserve`) when the first operation for the pair runs, and
+ * contention fails immediately instead of queueing. Every subsequent
+ * operation first re-verifies — from a *different* connection, by inspecting
  * `pg_locks` — that the backend which took the lock still holds it, so a
  * dropped lock connection fails loudly instead of letting operations run
- * unlocked. If the process crashes, Postgres releases the session lock when
- * the connection drops; no recovery bookkeeping is needed.
+ * unlocked. That check reports the backend it ran on as well, so a
+ * single-connection client, which would have the lock holder vouch for
+ * itself, is refused instead of silently trusted. If the process crashes,
+ * Postgres releases the session lock when the connection drops; no recovery
+ * bookkeeping is needed.
  *
  * @section Using the Postgres State Store
  * @example Connection string
@@ -157,10 +147,12 @@ interface Lease {
  *
  * @example Caller-owned pool
  * ```typescript
- * import { Pool } from "pg";
+ * import * as PgClient from "@effect/sql-pg/PgClient";
  *
- * const pool = new Pool({ connectionString: dsn });
- * const state = postgresState({ client: pool, lockKeyPrefix: "my-app" });
+ * // A pool, not `PgClient.makeClient`: the store needs a second connection
+ * // to verify the advisory lock held on the reserved one.
+ * const sql = yield* PgClient.make({ url: Redacted.make(dsn) });
+ * const state = postgresState({ client: sql, lockKeyPrefix: "my-app" });
  * ```
  */
 export const postgresState = (options: PostgresStateOptions) =>
@@ -202,39 +194,25 @@ export const makePostgresState = (
             cause: cause instanceof Error ? cause : undefined,
           });
 
-    const attempt = <A>(
-      f: () => Promise<A>,
-    ): Effect.Effect<A, StateStoreError> =>
-      Effect.tryPromise({ try: f, catch: toError });
+    const stateError = <A, E2, R2>(
+      effect: Effect.Effect<A, E2, R2>,
+    ): Effect.Effect<A, StateStoreError, R2> =>
+      Effect.mapError(effect, toError);
 
     /**
      * Idempotent schema migration. Concurrent `create table if not exists`
      * statements can still collide inside Postgres on the shared catalog
      * rows (duplicate pg_type/pg_class key errors), so the migration runs
-     * on one dedicated connection inside a transaction that first takes a
-     * transaction-scoped advisory lock on a fixed migration key. The lock
-     * releases automatically at commit or rollback.
+     * in a transaction — one connection, pinned by `withTransaction` — that
+     * first takes a transaction-scoped advisory lock on a fixed migration
+     * key. The lock releases automatically at commit or rollback.
      */
-    const migrate = (client: PostgresStateClient) =>
-      Effect.gen(function* () {
-        const conn = yield* attempt(() => client.connect());
-        const releaseConn = Effect.sync(() => {
-          try {
-            conn.release();
-          } catch {
-            // The pool may already be closed; nothing left to release.
-          }
-        });
-        yield* Effect.gen(function* () {
-          yield* attempt(() => conn.query("begin"));
-          yield* attempt(() =>
-            conn.query(
-              "select pg_advisory_xact_lock(hashtextextended($1, 0))",
-              [`${prefix}:schema`],
-            ),
-          );
-          yield* attempt(() =>
-            conn.query(`
+    const migrate = (sql: SqlClient.SqlClient) =>
+      sql
+        .withTransaction(
+          Effect.gen(function* () {
+            yield* sql`select pg_advisory_xact_lock(hashtextextended(${`${prefix}:schema`}, 0))`;
+            yield* sql`
               create table if not exists alchemy_resource_state (
                 stack text not null,
                 stage text not null,
@@ -243,10 +221,8 @@ export const makePostgresState = (
                 updated_at timestamptz not null default now(),
                 primary key (stack, stage, fqn)
               )
-            `),
-          );
-          yield* attempt(() =>
-            conn.query(`
+            `;
+            yield* sql`
               create table if not exists alchemy_stack_output (
                 stack text not null,
                 stage text not null,
@@ -254,15 +230,27 @@ export const makePostgresState = (
                 updated_at timestamptz not null default now(),
                 primary key (stack, stage)
               )
-            `),
-          );
-          yield* attempt(() => conn.query("commit"));
-        }).pipe(
-          Effect.tapError(() =>
-            attempt(() => conn.query("rollback")).pipe(Effect.ignore),
-          ),
-          Effect.ensuring(releaseConn),
-        );
+            `;
+          }),
+        )
+        .pipe(stateError);
+
+    /**
+     * Builds a store-owned `@effect/sql-pg` pool. Its `end` finalizer is
+     * registered on `scope`, so the pool closes with the state layer.
+     */
+    const openPool = (
+      dsn: string,
+    ): Effect.Effect<SqlClient.SqlClient, StateStoreError> =>
+      Effect.gen(function* () {
+        const PgClient = yield* Effect.tryPromise({
+          try: importPgClient,
+          catch: toError,
+        });
+        const built = yield* Layer.build(
+          PgClient.layer({ url: Redacted.make(dsn) }),
+        ).pipe(Scope.provide(scope), stateError);
+        return Context.get(built, PgClient.PgClient);
       });
 
     // Nothing touches the database at layer construction time. The client
@@ -270,137 +258,147 @@ export const makePostgresState = (
     // this cached Effect, which runs once on the first state operation.
     const ready = yield* Effect.cached(
       Effect.gen(function* () {
-        if ((options.client === undefined) === (options.dsn === undefined)) {
-          return yield* Effect.fail(
-            new StateStoreError({
-              message:
-                "postgresState requires exactly one of `client` or `dsn`",
-            }),
-          );
-        }
-        const client: PostgresStateClient =
-          options.client ??
-          (yield* Effect.gen(function* () {
-            const { Pool } = yield* Effect.tryPromise({
-              try: importPg,
-              catch: (cause) =>
-                new StateStoreError({
-                  message:
-                    cause instanceof Error ? cause.message : String(cause),
-                }),
-            });
-            const pool = new Pool({ connectionString: options.dsn });
-            yield* Scope.addFinalizer(
-              scope,
-              attempt(() => pool.end()).pipe(Effect.ignore),
-            );
-            return pool;
-          }));
-        yield* migrate(client);
-        return client;
+        const { client, dsn } = options;
+        const resolved: SqlClient.SqlClient =
+          client !== undefined && dsn === undefined
+            ? client
+            : dsn !== undefined && client === undefined
+              ? yield* openPool(dsn)
+              : yield* Effect.fail(
+                  new StateStoreError({
+                    message:
+                      "postgresState requires exactly one of `client` or `dsn`",
+                  }),
+                );
+        // The store reads columns by the exact names written below, so a
+        // client configured with name transforms must not rewrite them.
+        const sql = resolved.withoutTransforms();
+        yield* migrate(sql);
+        return sql;
       }),
     );
 
     const run = <A>(
-      f: (client: PostgresStateClient) => Promise<A>,
+      f: (sql: SqlClient.SqlClient) => Effect.Effect<A, SqlError.SqlError>,
     ): Effect.Effect<A, StateStoreError> =>
-      ready.pipe(Effect.flatMap((client) => attempt(() => f(client))));
+      ready.pipe(Effect.flatMap((sql) => stateError(f(sql))));
 
     const lockKey = (stack: string, stage: string) =>
       `${prefix}:${stack}/${stage}`;
 
     /**
-     * Acquires the session-scoped advisory lock for `key` on a dedicated
-     * connection checked out from the pool. Session (not transaction)
-     * scope, because a deploy spans many commits. Contention fails
-     * immediately rather than queueing.
+     * Acquires the session-scoped advisory lock for `key` on a connection
+     * reserved for the store's lifetime. Session (not transaction) scope,
+     * because a deploy spans many commits. Contention fails immediately
+     * rather than queueing.
      */
     const acquireLease = (key: string): Effect.Effect<Lease, StateStoreError> =>
-      Effect.gen(function* () {
-        const client = yield* ready;
-        const reserved = yield* attempt(() => client.connect());
-        const releaseReserved = (destroy?: boolean) =>
-          Effect.sync(() => {
-            try {
-              reserved.release(destroy);
-            } catch {
-              // The pool may already be closed; nothing left to release.
-            }
-          });
-        const acquired = yield* attempt(() =>
-          reserved.query(
-            "select pg_try_advisory_lock(hashtextextended($1, 0)) as acquired, pg_backend_pid() as pid",
-            [key],
-          ),
-        ).pipe(
-          Effect.map((result) => result.rows[0]),
-          Effect.tapError(() => releaseReserved(true)),
-        );
-        if (acquired?.acquired !== true) {
-          yield* releaseReserved();
-          return yield* Effect.fail(
-            new StateStoreError({
-              message: `another deploy holds the Postgres state lock '${key}'`,
+      Effect.uninterruptibleMask((restore) =>
+        Effect.gen(function* () {
+          const sql = yield* restore(ready);
+          // Forked from the store's scope, so the reserved connection is
+          // reclaimed with the store even if nothing below closes it. From
+          // here to the unlock finalizer nothing is interruptible: handing
+          // a connection back to the pool while it still holds a session
+          // lock would strand that lock until the process exits, and every
+          // later deploy of this stack/stage would fail on it.
+          const lockScope = yield* Scope.fork(scope);
+          const releaseReserved = Scope.close(lockScope, Exit.void);
+          const reserved = yield* restore(
+            sql.reserve.pipe(Scope.provide(lockScope), stateError),
+          ).pipe(Effect.onError(() => releaseReserved));
+
+          // Pins a statement to the reserved connection exactly the way
+          // `withTransaction` does, so spans, span attributes and row
+          // handling stay identical to every other statement.
+          const onReserved = <A>(
+            effect: Effect.Effect<A, SqlError.SqlError>,
+          ): Effect.Effect<A, SqlError.SqlError> =>
+            Effect.provideService(effect, sql.transactionService, [
+              reserved,
+              0,
+            ]);
+
+          const acquired = yield* onReserved(
+            sql`select pg_try_advisory_lock(hashtextextended(${key}, 0)) as acquired, pg_backend_pid() as pid`,
+          ).pipe(
+            stateError,
+            Effect.map((rows) => rows[0]),
+            Effect.onError(() => releaseReserved),
+          );
+          if (acquired?.acquired !== true) {
+            yield* releaseReserved;
+            return yield* Effect.fail(
+              new StateStoreError({
+                message: `another deploy holds the Postgres state lock '${key}'`,
+              }),
+            );
+          }
+          const lockPid = Number(acquired.pid);
+
+          yield* Scope.addFinalizer(
+            scope,
+            onReserved(
+              sql`select pg_advisory_unlock(hashtextextended(${key}, 0))`,
+            ).pipe(
+              // If the connection already dropped, Postgres auto-released
+              // the session-scoped lock; there is nothing left to unlock.
+              Effect.ignore,
+              Effect.andThen(releaseReserved),
+            ),
+          );
+
+          // Deliberately verifies from a DIFFERENT connection, never the
+          // reserved one: once the reserved connection's backend has been
+          // killed server-side, querying it cannot answer reliably. Asking
+          // another connection whether the backend pid captured at acquire
+          // time still holds this advisory lock in `pg_locks` gives the same
+          // answer (a dead or reused backend cannot hold the lock) without
+          // touching the connection that might be dead. The check reports
+          // its own backend pid too, because a single-connection client
+          // routes it straight back to the lock holder, which cannot vouch
+          // for itself.
+          const checkLive = run(
+            (poolSql) => poolSql`
+              select
+                exists (
+                  select 1 from pg_locks
+                  where locktype = 'advisory'
+                    and pid = ${lockPid}
+                    and objsubid = 1
+                    and granted
+                    -- pg_locks splits the 64-bit advisory key into two
+                    -- int4 halves; reassembling them with << 32 relies on
+                    -- bigint wraparound matching hashtextextended's signed
+                    -- 64-bit result, which is exact for all inputs.
+                    and ((classid::bigint << 32) | (objid::bigint & 4294967295))
+                      = hashtextextended(${key}, 0)
+                ) as live,
+                pg_backend_pid() as checker_pid
+            `,
+          ).pipe(
+            Effect.flatMap((rows) => {
+              const row = rows[0];
+              if (Number(row?.checker_pid) === lockPid) {
+                return Effect.fail(
+                  new StateStoreError({
+                    message: `the Postgres state lock '${key}' cannot be verified: the check ran on the same backend (pid ${lockPid}) that holds the lock, so this client is not pool-backed; pass postgresState a connection pool`,
+                  }),
+                );
+              }
+              return row?.live === true
+                ? Effect.void
+                : Effect.fail(
+                    new StateStoreError({
+                      message: `the Postgres state lock '${key}' was lost mid-run; refusing to continue unlocked`,
+                    }),
+                  );
             }),
           );
-        }
-        const lockPid = Number(acquired.pid);
 
-        yield* Scope.addFinalizer(
-          scope,
-          attempt(() =>
-            reserved.query(
-              "select pg_advisory_unlock(hashtextextended($1, 0))",
-              [key],
-            ),
-          ).pipe(
-            // If the connection already dropped, Postgres auto-released the
-            // session-scoped lock; there is nothing left to unlock.
-            Effect.ignore,
-            Effect.andThen(releaseReserved()),
-          ),
-        );
-
-        // Deliberately verifies from a DIFFERENT pool connection, never the
-        // reserved one: once the reserved connection's backend has been
-        // killed server-side, querying it cannot answer reliably. Asking
-        // another connection whether the backend pid captured at acquire
-        // time still holds this advisory lock in `pg_locks` gives the same
-        // answer (a dead or reused backend cannot hold the lock) without
-        // touching the connection that might be dead.
-        const checkLive = attempt(() =>
-          client.query(
-            `
-              select exists (
-                select 1 from pg_locks
-                where locktype = 'advisory'
-                  and pid = $2
-                  and objsubid = 1
-                  and granted
-                  -- pg_locks splits the 64-bit advisory key into two
-                  -- int4 halves; reassembling them with << 32 relies on
-                  -- bigint wraparound matching hashtextextended's signed
-                  -- 64-bit result, which is exact for all inputs.
-                  and ((classid::bigint << 32) | (objid::bigint & 4294967295))
-                    = hashtextextended($1, 0)
-              ) as live
-            `,
-            [key, lockPid],
-          ),
-        ).pipe(
-          Effect.flatMap((result) =>
-            result.rows[0]?.live === true
-              ? Effect.void
-              : Effect.fail(
-                  new StateStoreError({
-                    message: `the Postgres state lock '${key}' was lost mid-run; refusing to continue unlocked`,
-                  }),
-                ),
-          ),
-        );
-
-        return { checkLive: amortizeCheck(checkLive, ttlMs) };
-      });
+          return { checkLive: amortizeCheck(checkLive, ttlMs) };
+        }),
+      );
 
     // One lease per (stack, stage), acquired lazily on the first operation
     // that touches the pair and cached for the store's lifetime. The mutex
@@ -457,18 +455,14 @@ export const makePostgresState = (
     const jsonParam = (value: unknown) => JSON.stringify(encodeState(value));
 
     const deleteStage = (stack: string, stage: string) =>
-      run((client) =>
-        client.query(
-          "delete from alchemy_resource_state where stack = $1 and stage = $2",
-          [stack, stage],
-        ),
+      run(
+        (sql) =>
+          sql`delete from alchemy_resource_state where stack = ${stack} and stage = ${stage}`,
       ).pipe(
         Effect.andThen(
-          run((client) =>
-            client.query(
-              "delete from alchemy_stack_output where stack = $1 and stage = $2",
-              [stack, stage],
-            ),
+          run(
+            (sql) =>
+              sql`delete from alchemy_stack_output where stack = ${stack} and stage = ${stage}`,
           ),
         ),
         Effect.asVoid,
@@ -480,37 +474,32 @@ export const makePostgresState = (
       listStacks: () =>
         verifyHeldLeases.pipe(
           Effect.andThen(
-            run((client) =>
-              client.query(
-                "select stack from alchemy_resource_state union select stack from alchemy_stack_output order by stack",
-              ),
+            run(
+              (sql) =>
+                sql`select stack from alchemy_resource_state union select stack from alchemy_stack_output order by stack`,
             ),
           ),
-          Effect.map((result) => result.rows.map((row) => String(row.stack))),
+          Effect.map((rows) => rows.map((row) => String(row.stack))),
         ),
       listStages: (stack) =>
         verifyHeldLeases.pipe(
           Effect.andThen(
-            run((client) =>
-              client.query(
-                "select stage from alchemy_resource_state where stack = $1 union select stage from alchemy_stack_output where stack = $1 order by stage",
-                [stack],
-              ),
+            run(
+              (sql) =>
+                sql`select stage from alchemy_resource_state where stack = ${stack} union select stage from alchemy_stack_output where stack = ${stack} order by stage`,
             ),
           ),
-          Effect.map((result) => result.rows.map((row) => String(row.stage))),
+          Effect.map((rows) => rows.map((row) => String(row.stage))),
         ),
       get: (request) =>
         guarded(
           request,
-          run((client) =>
-            client.query(
-              "select value from alchemy_resource_state where stack = $1 and stage = $2 and fqn = $3",
-              [request.stack, request.stage, request.fqn],
-            ),
+          run(
+            (sql) =>
+              sql`select value from alchemy_resource_state where stack = ${request.stack} and stage = ${request.stage} and fqn = ${request.fqn}`,
           ).pipe(
-            Effect.map((result) => {
-              const row = result.rows[0];
+            Effect.map((rows) => {
+              const row = rows[0];
               // Every row was written by `set` through `encodeState`, so
               // reviving it recovers a PersistedState by construction.
               return row === undefined
@@ -525,14 +514,12 @@ export const makePostgresState = (
       getReplacedResources: (request) =>
         guarded(
           request,
-          run((client) =>
-            client.query(
-              "select value from alchemy_resource_state where stack = $1 and stage = $2 and value ->> 'status' = 'replaced'",
-              [request.stack, request.stage],
-            ),
+          run(
+            (sql) =>
+              sql`select value from alchemy_resource_state where stack = ${request.stack} and stage = ${request.stage} and value ->> 'status' = 'replaced'`,
           ).pipe(
-            Effect.map((result) =>
-              result.rows.map(
+            Effect.map((rows) =>
+              rows.map(
                 (row) =>
                   reviveStateRecursive(row.value) as ReplacedResourceState,
               ),
@@ -542,31 +529,21 @@ export const makePostgresState = (
       set: (request) =>
         guarded(
           request,
-          run((client) =>
-            client.query(
-              `
-                insert into alchemy_resource_state (stack, stage, fqn, value, updated_at)
-                values ($1, $2, $3, $4::jsonb, now())
-                on conflict (stack, stage, fqn) do update
-                  set value = excluded.value, updated_at = excluded.updated_at
-              `,
-              [
-                request.stack,
-                request.stage,
-                request.fqn,
-                jsonParam(request.value),
-              ],
-            ),
+          run(
+            (sql) => sql`
+              insert into alchemy_resource_state (stack, stage, fqn, value, updated_at)
+              values (${request.stack}, ${request.stage}, ${request.fqn}, ${jsonParam(request.value)}::jsonb, now())
+              on conflict (stack, stage, fqn) do update
+                set value = excluded.value, updated_at = excluded.updated_at
+            `,
           ).pipe(Effect.map(() => request.value)),
         ),
       delete: (request) =>
         guarded(
           request,
-          run((client) =>
-            client.query(
-              "delete from alchemy_resource_state where stack = $1 and stage = $2 and fqn = $3",
-              [request.stack, request.stage, request.fqn],
-            ),
+          run(
+            (sql) =>
+              sql`delete from alchemy_resource_state where stack = ${request.stack} and stage = ${request.stage} and fqn = ${request.fqn}`,
           ).pipe(Effect.asVoid),
         ),
       // Deleting a whole stack first acquires the advisory lock for every
@@ -586,19 +563,15 @@ export const makePostgresState = (
                 ),
               ),
               Effect.andThen(
-                run((client) =>
-                  client.query(
-                    "delete from alchemy_resource_state where stack = $1",
-                    [stack],
-                  ),
+                run(
+                  (sql) =>
+                    sql`delete from alchemy_resource_state where stack = ${stack}`,
                 ),
               ),
               Effect.andThen(
-                run((client) =>
-                  client.query(
-                    "delete from alchemy_stack_output where stack = $1",
-                    [stack],
-                  ),
+                run(
+                  (sql) =>
+                    sql`delete from alchemy_stack_output where stack = ${stack}`,
                 ),
               ),
               Effect.asVoid,
@@ -607,26 +580,20 @@ export const makePostgresState = (
       list: (request) =>
         guarded(
           request,
-          run((client) =>
-            client.query(
-              "select fqn from alchemy_resource_state where stack = $1 and stage = $2 order by fqn",
-              [request.stack, request.stage],
-            ),
-          ).pipe(
-            Effect.map((result) => result.rows.map((row) => String(row.fqn))),
-          ),
+          run(
+            (sql) =>
+              sql`select fqn from alchemy_resource_state where stack = ${request.stack} and stage = ${request.stage} order by fqn`,
+          ).pipe(Effect.map((rows) => rows.map((row) => String(row.fqn)))),
         ),
       getOutput: (request) =>
         guarded(
           request,
-          run((client) =>
-            client.query(
-              "select value from alchemy_stack_output where stack = $1 and stage = $2",
-              [request.stack, request.stage],
-            ),
+          run(
+            (sql) =>
+              sql`select value from alchemy_stack_output where stack = ${request.stack} and stage = ${request.stage}`,
           ).pipe(
-            Effect.map((result) => {
-              const row = result.rows[0];
+            Effect.map((rows) => {
+              const row = rows[0];
               return row === undefined
                 ? undefined
                 : reviveStateRecursive(row.value);
@@ -636,16 +603,13 @@ export const makePostgresState = (
       setOutput: (request) =>
         guarded(
           request,
-          run((client) =>
-            client.query(
-              `
-                insert into alchemy_stack_output (stack, stage, value, updated_at)
-                values ($1, $2, $3::jsonb, now())
-                on conflict (stack, stage) do update
-                  set value = excluded.value, updated_at = excluded.updated_at
-              `,
-              [request.stack, request.stage, jsonParam(request.value)],
-            ),
+          run(
+            (sql) => sql`
+              insert into alchemy_stack_output (stack, stage, value, updated_at)
+              values (${request.stack}, ${request.stage}, ${jsonParam(request.value)}::jsonb, now())
+              on conflict (stack, stage) do update
+                set value = excluded.value, updated_at = excluded.updated_at
+            `,
           ).pipe(Effect.map(() => request.value)),
         ),
     };
