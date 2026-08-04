@@ -31,6 +31,7 @@ import { localRuntimeServices } from "../LocalRuntime.ts";
 import { detachQueueConsumersOfScript } from "../Queues/Consumer.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import {
+  inferZoneIdForHostname,
   resolveZoneId,
   type Reference as ZoneReference,
 } from "../Zone/lookup.ts";
@@ -1142,41 +1143,6 @@ const resolveWorkerMetadataHash = ({
         }
       : undefined,
   }).pipe(Effect.flatMap((metadata) => sha256Object({ metadata })));
-
-/**
- * Infer the Cloudflare Zone ID for a given hostname by walking up the DNS
- * label hierarchy with exact, account-scoped `?name=` lookups
- * (`resolveZoneId`). Listing the account's zones and matching locally is a
- * trap: the list endpoint paginates (20 zones per page), so a hostname whose
- * zone sits on a later page silently fails to resolve.
- *
- * `zoneCache` is the caller's per-run memo — one map per reconcile pass, so a
- * Worker with several domains or routes in the same zone looks it up once.
- */
-export const inferZoneIdForHostname = (
-  hostname: string,
-  zoneCache: Map<string, string>,
-) =>
-  Effect.gen(function* () {
-    const cached = zoneCache.get(hostname);
-    if (cached) return cached;
-
-    const { accountId } = yield* yield* CloudflareEnvironment;
-    const zoneId = yield* resolveZoneId({
-      accountId,
-      zone: undefined,
-      hostname,
-    }).pipe(
-      Effect.catch(() =>
-        Effect.die(
-          `Could not infer Cloudflare Zone for hostname "${hostname}". ` +
-            "Ensure the parent zone exists in this account.",
-        ),
-      ),
-    );
-    zoneCache.set(hostname, zoneId);
-    return zoneId;
-  });
 
 export const WorkerProvider = () =>
   ProviderLayer.dual(Worker, {
