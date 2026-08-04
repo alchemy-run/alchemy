@@ -31,6 +31,7 @@ const publicExports = [
   "BucketKey",
   "BucketKeyProvider",
   "BucketError",
+  "AmbiguousBucketKeyError",
   "bucketEnvKeys",
   "bucketKeyLogicalId",
   "bucketCredentials",

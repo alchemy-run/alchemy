@@ -1,3 +1,4 @@
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { isResolved } from "../Diff.ts";
@@ -144,15 +145,18 @@ const physicalBucketKeyName = (name: string, instanceId: string) => {
   return `${name.trim().slice(0, maxPrefixLength)}-${effectiveSuffix}`;
 };
 
-class AmbiguousPrismaBucketKeyError extends Error {
-  readonly _tag = "AmbiguousPrismaBucketKeyError";
-
-  constructor(bucketId: string, name: string, count: number) {
-    super(
-      `Prisma bucket '${bucketId}' has ${count} keys named '${name}'; refusing to select one arbitrarily`,
-    );
-  }
-}
+/**
+ * Raised when more than one key on a bucket carries the deterministic name
+ * of a single resource instance, so no key can be recovered unambiguously.
+ */
+export class AmbiguousBucketKeyError extends Data.TaggedError(
+  "PrismaAmbiguousBucketKeyError",
+)<{
+  bucketId: string;
+  name: string;
+  count: number;
+  message: string;
+}> {}
 
 const listKeys = (client: PrismaManagementClient, bucketId: string) =>
   client
@@ -171,11 +175,12 @@ const uniqueKeyNamed = (
       );
       return matches.length > 1
         ? Effect.fail(
-            new AmbiguousPrismaBucketKeyError(
+            new AmbiguousBucketKeyError({
               bucketId,
-              expectedName,
-              matches.length,
-            ),
+              name: expectedName,
+              count: matches.length,
+              message: `Prisma bucket '${bucketId}' has ${matches.length} keys named '${expectedName}'; refusing to select one arbitrarily`,
+            }),
           )
         : Effect.succeed(matches[0]);
     }),

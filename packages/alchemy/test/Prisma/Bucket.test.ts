@@ -448,6 +448,33 @@ describe("Prisma BucketKey provider", () => {
   );
 
   it.effect(
+    "fails with a tagged error when two keys share the recovery name",
+    () => {
+      // Two keys under the deterministic name leave nothing to recover:
+      // picking either could revoke a key another deploy is using.
+      const client = {
+        listBucketKeys: () =>
+          Effect.succeed([apiBucketKey("key-a"), apiBucketKey("key-b")]),
+      } as unknown as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const provider = yield* BucketKey.Provider;
+        const error = yield* provider
+          .reconcile(
+            reconcileInput("BucketKey", {
+              bucket: "bucket-1",
+              role: "read_write" as const,
+            }),
+          )
+          .pipe(Effect.flip);
+
+        expect(error._tag).toBe("PrismaAmbiguousBucketKeyError");
+        expect(error.message).toContain("refusing to select one arbitrarily");
+      }).pipe(Effect.provide(bucketKeyLayer(client)));
+    },
+  );
+
+  it.effect(
     "returns persisted attributes while the key exists, without re-creating",
     () => {
       let creates = 0;
