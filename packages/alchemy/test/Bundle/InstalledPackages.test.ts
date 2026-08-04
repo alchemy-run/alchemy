@@ -6,6 +6,7 @@ import {
   normalizeInstallTargets,
   npmInstallArgs,
   npmLockfileArgs,
+  npmPlainInstallArgs,
   parsePackageRoot,
   parsePackageRootFromSpecifier,
   resolveInstallTargets,
@@ -142,6 +143,15 @@ describe("Lambda external packages", () => {
       "--libc=glibc",
       "--package-lock-only",
       "--ignore-scripts",
+    ]);
+    expect(npmPlainInstallArgs("arm64")).toEqual([
+      "install",
+      "--force",
+      "--platform=linux",
+      "--os=linux",
+      "--arch=arm64",
+      "--cpu=arm64",
+      "--libc=glibc",
     ]);
   });
 
@@ -426,10 +436,9 @@ describe("Lambda external packages", () => {
           private: true,
           dependencies: { sharp: "^0.34.5" },
         });
-        expect(installArgs).toEqual([
-          npmLockfileArgs("arm64"),
-          npmInstallArgs("arm64"),
-        ]);
+        // No lockfile in the fixture means nothing to pin, so the install is a
+        // single plain `npm install` instead of the lockfile-generate + ci pair.
+        expect(installArgs).toEqual([npmPlainInstallArgs("arm64")]);
         expect(files.map((file) => file.path)).toEqual(
           expect.arrayContaining([
             "package.json",
@@ -865,7 +874,11 @@ describe("Lambda external packages", () => {
             architecture: "arm64",
             runNpmInstall: (directory, args) =>
               Effect.gen(function* () {
-                if (args[0] !== "ci") return;
+                if (
+                  args[0] === "install" &&
+                  args.includes("--package-lock-only")
+                )
+                  return;
                 yield* fs.writeFileString(
                   path.join(directory, "package.json"),
                   JSON.stringify({
@@ -1194,20 +1207,153 @@ describe("Lambda external packages", () => {
             cwd,
             requested: { root: "*" },
           });
+          // `shared` resolves uniquely under the root so one flat rule covers
+          // it; only the divergent `leaf` needs per-branch nesting.
           expect(identity.overrides).toEqual({
             "root@1.0.0": {
-              left: {
-                ".": "1.0.0",
-                shared: { ".": "1.0.0", leaf: "1.0.0" },
-              },
-              right: {
-                ".": "1.0.0",
-                shared: { ".": "1.0.0", leaf: "2.0.0" },
-              },
+              left: { ".": "1.0.0", leaf: "1.0.0" },
+              right: { ".": "1.0.0", leaf: "2.0.0" },
+              shared: "1.0.0",
             },
           });
         }),
     ).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect(
+    "keeps overrides flat and compact for diamond-shaped graphs",
+    () => {
+      // 16 levels of diamonds = 2^16 distinct paths. A path-enumerating walk
+      // would take minutes and emit megabytes; the deduplicated walk must emit
+      // one flat rule per package.
+      const levels = 16;
+      const packages: Record<string, unknown> = {
+        "": { dependencies: { root: "^1.0.0" } },
+        "node_modules/root": {
+          version: "1.0.0",
+          dependencies: { a1: "^1.0.0", b1: "^1.0.0" },
+        },
+      };
+      for (let i = 1; i <= levels; i++) {
+        const dependencies =
+          i === levels
+            ? {}
+            : { [`a${i + 1}`]: "^1.0.0", [`b${i + 1}`]: "^1.0.0" };
+        packages[`node_modules/a${i}`] = { version: "1.0.0", dependencies };
+        packages[`node_modules/b${i}`] = { version: "1.0.0", dependencies };
+      }
+      return withLockfileFixture(
+        {
+          prefix: "alchemy-external-diamond-",
+          packageJson: { dependencies: { root: "^1.0.0" } },
+          lockfileName: "package-lock.json",
+          lockfileContent: JSON.stringify({ lockfileVersion: 3, packages }),
+        },
+        ({ cwd }) =>
+          Effect.gen(function* () {
+            const identity = yield* resolvePackageInstallIdentity({
+              cwd,
+              requested: { root: "*" },
+            });
+            const rootOverrides = identity.overrides["root@1.0.0"];
+            expect(typeof rootOverrides).toBe("object");
+            expect(Object.keys(rootOverrides as object)).toHaveLength(
+              levels * 2,
+            );
+            expect(
+              Object.values(rootOverrides as Record<string, unknown>).every(
+                (spec) => spec === "1.0.0",
+              ),
+            ).toBe(true);
+          }),
+      ).pipe(Effect.provide(NodeServices.layer));
+    },
+  );
+
+  it.effect("disambiguates pnpm peer-variant resolutions without failing", () =>
+    withLockfileFixture(
+      {
+        prefix: "alchemy-external-pnpm-peer-variants-",
+        packageJson: { dependencies: { root: "^1.0.0" } },
+        lockfileName: "pnpm-lock.yaml",
+        lockfileContent: [
+          "lockfileVersion: '9.0'",
+          "importers:",
+          "  .:",
+          "    dependencies:",
+          "      root:",
+          "        specifier: ^1.0.0",
+          "        version: 1.0.0",
+          "snapshots:",
+          "  root@1.0.0:",
+          "    dependencies:",
+          "      m1: 1.0.0",
+          "      m2: 1.0.0",
+          "  m1@1.0.0:",
+          "    dependencies:",
+          "      p: 1.0.0(x@1.0.0)",
+          "  m2@1.0.0:",
+          "    dependencies:",
+          "      p: 1.0.0(x@2.0.0)",
+          "  p@1.0.0(x@1.0.0):",
+          "    dependencies:",
+          "      x: 1.0.0",
+          "  p@1.0.0(x@2.0.0):",
+          "    dependencies:",
+          "      x: 2.0.0",
+          "  x@1.0.0: {}",
+          "  x@2.0.0: {}",
+        ].join("\n"),
+      },
+      ({ cwd }) =>
+        Effect.gen(function* () {
+          const identity = yield* resolvePackageInstallIdentity({
+            cwd,
+            requested: { root: "*" },
+          });
+          expect(identity.overrides).toEqual({
+            "root@1.0.0": {
+              m1: { ".": "1.0.0", x: "1.0.0" },
+              m2: { ".": "1.0.0", x: "2.0.0" },
+              p: "1.0.0",
+            },
+          });
+        }),
+    ).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect(
+    "parses bun.lock JSONC with comments, trailing commas, and tricky strings",
+    () =>
+      withLockfileFixture(
+        {
+          prefix: "alchemy-external-bun-jsonc-",
+          packageJson: { dependencies: { weird: "^1.0.0" } },
+          lockfileName: "bun.lock",
+          lockfileContent: [
+            "{",
+            "  /* block",
+            "     comment */",
+            '  "lockfileVersion": 1,',
+            '  "workspaces": {',
+            '    "": { "dependencies": { "weird": "^1.0.0" } }, // line comment',
+            "  },",
+            '  "packages": {',
+            '    "weird": ["weird@1.2.3", "", { "bin": { "weird,]": "cli,}.js" } }],',
+            "  },",
+            "}",
+          ].join("\n"),
+        },
+        ({ cwd }) =>
+          Effect.gen(function* () {
+            expect(
+              yield* resolveInstallTargets({
+                cwd,
+                requested: { weird: "*" },
+              }),
+            ).toEqual({ weird: "1.2.3" });
+          }),
+      ).pipe(Effect.provide(NodeServices.layer)),
   );
 
   it.effect(

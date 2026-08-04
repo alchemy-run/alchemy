@@ -166,6 +166,12 @@ export function npmLockfileArgs(
   ];
 }
 
+export function npmPlainInstallArgs(
+  architecture: "x86_64" | "arm64",
+): ReadonlyArray<string> {
+  return npmCommandArgs("install", architecture);
+}
+
 const npmCommandArgs = (
   command: "ci" | "install",
   architecture: "x86_64" | "arm64",
@@ -329,14 +335,14 @@ export function installResolvedPackages(
       fileSystem.makeTempDirectory({ prefix: "alchemy-lambda-packages-" }),
       (directory) =>
         Effect.gen(function* () {
+          const hasOverrides =
+            options.overrides !== undefined &&
+            Object.keys(options.overrides).length > 0;
           const manifest = JSON.stringify(
             {
               private: true,
               dependencies: options.resolved,
-              ...(options.overrides !== undefined &&
-              Object.keys(options.overrides).length > 0
-                ? { overrides: options.overrides }
-                : {}),
+              ...(hasOverrides ? { overrides: options.overrides } : {}),
             },
             null,
             2,
@@ -345,8 +351,16 @@ export function installResolvedPackages(
             pathService.join(directory, "package.json"),
             `${manifest}\n`,
           );
-          yield* runInstall(directory, npmLockfileArgs(options.architecture));
-          yield* runInstall(directory, npmInstallArgs(options.architecture));
+          if (hasOverrides) {
+            // Generate a lock so `npm ci` reproduces the override-pinned graph.
+            yield* runInstall(directory, npmLockfileArgs(options.architecture));
+            yield* runInstall(directory, npmInstallArgs(options.architecture));
+          } else {
+            yield* runInstall(
+              directory,
+              npmPlainInstallArgs(options.architecture),
+            );
+          }
           return yield* readArtifactFiles(directory);
         }),
       (directory) =>
@@ -425,13 +439,15 @@ const printBunBinaryLockfile = (
   ).pipe(
     Effect.flatMap(exec),
     Effect.scoped,
-    Effect.mapError(
-      (cause) =>
-        new BundleError({
-          message: `Failed to inspect legacy Bun lockfile '${lockfilePath}'`,
-          cause,
-        }),
-    ),
+    Effect.mapError((cause) => {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      return new BundleError({
+        message: message.includes("ENOENT")
+          ? `Failed to inspect legacy Bun lockfile '${lockfilePath}': 'bun' was not found on PATH. Reading a binary bun.lockb shells out to bun; install Bun or migrate to the text-based bun.lock format.`
+          : `Failed to inspect legacy Bun lockfile '${lockfilePath}'`,
+        cause,
+      });
+    }),
     Effect.flatMap(({ exitCode, stdout, stderr }) =>
       exitCode === 0
         ? Effect.succeed(stdout)
@@ -594,14 +610,6 @@ interface MutablePackageOverrideMap {
 }
 type MutablePackageOverrides = Record<string, MutablePackageOverride>;
 
-interface OverrideContext {
-  readonly rootSelector: string;
-  readonly ancestry: ReadonlyArray<{
-    readonly dependencyName: string;
-    readonly installSpec: string;
-  }>;
-}
-
 interface LockedGraphRoot<Node> {
   readonly node: Node;
   readonly rootSelector: string;
@@ -613,47 +621,138 @@ interface LockedGraphDependency<Node> {
   readonly node?: Node;
 }
 
+/**
+ * Builds npm `overrides` pinning every dependency name reachable from each
+ * root. npm override keys apply to the whole subtree below the matched
+ * package (most-specific rule wins), so a name that resolves to a single
+ * version anywhere under the root needs one flat rule. Nested rules are only
+ * emitted along the branches where the lockfile resolves the same name to
+ * different versions, which keeps the overrides object proportional to the
+ * dependency graph instead of to its (potentially exponential) path count.
+ */
 const addLockedGraphOverrides = <Node>(
   overrides: MutablePackageOverrides,
   roots: ReadonlyArray<LockedGraphRoot<Node>>,
   nodeId: (node: Node) => unknown,
   dependencies: (node: Node) => ReadonlyArray<LockedGraphDependency<Node>>,
 ): void => {
-  const queue: Array<{
-    readonly node: Node;
-    readonly context: OverrideContext;
-    readonly pathIds: ReadonlySet<unknown>;
-  }> = roots.map(({ node, rootSelector }) => ({
-    node,
-    context: { rootSelector, ancestry: [] },
-    pathIds: new Set([nodeId(node)]),
-  }));
-  while (queue.length > 0) {
-    const { node, context, pathIds } = queue.shift()!;
-    for (const dependency of dependencies(node)) {
-      addPackageOverride(
-        overrides,
-        context,
-        dependency.dependencyName,
-        dependency.installSpec,
-      );
-      if (dependency.node === undefined) continue;
-      const childId = nodeId(dependency.node);
-      if (pathIds.has(childId)) continue;
-      queue.push({
-        node: dependency.node,
-        context: {
-          ...context,
-          ancestry: [
-            ...context.ancestry,
-            {
-              dependencyName: dependency.dependencyName,
-              installSpec: dependency.installSpec,
-            },
-          ],
-        },
-        pathIds: new Set([...pathIds, childId]),
-      });
+  const edgeMemo = new Map<
+    unknown,
+    ReadonlyArray<LockedGraphDependency<Node>>
+  >();
+  const edgesOf = (node: Node): ReadonlyArray<LockedGraphDependency<Node>> => {
+    const id = nodeId(node);
+    let edges = edgeMemo.get(id);
+    if (edges === undefined) {
+      edges = dependencies(node);
+      edgeMemo.set(id, edges);
+    }
+    return edges;
+  };
+
+  // name → set of install specs observed anywhere in the subtree (memoized).
+  const specsMemo = new Map<
+    unknown,
+    ReadonlyMap<string, ReadonlySet<string>>
+  >();
+  const specsOf = (start: Node): ReadonlyMap<string, ReadonlySet<string>> => {
+    const startId = nodeId(start);
+    const memoized = specsMemo.get(startId);
+    if (memoized !== undefined) return memoized;
+    const specs = new Map<string, Set<string>>();
+    const visited = new Set<unknown>([startId]);
+    const queue: Node[] = [start];
+    while (queue.length > 0) {
+      const node = queue.pop()!;
+      for (const edge of edgesOf(node)) {
+        let set = specs.get(edge.dependencyName);
+        if (set === undefined) {
+          set = new Set();
+          specs.set(edge.dependencyName, set);
+        }
+        set.add(edge.installSpec);
+        if (edge.node === undefined) continue;
+        const childId = nodeId(edge.node);
+        if (visited.has(childId)) continue;
+        visited.add(childId);
+        queue.push(edge.node);
+      }
+    }
+    specsMemo.set(startId, specs);
+    return specs;
+  };
+
+  const asOverrideMap = (
+    parent: MutablePackageOverrideMap,
+    dependencyName: string,
+  ): MutablePackageOverrideMap => {
+    const existing = parent[dependencyName];
+    if (typeof existing === "object") return existing;
+    const record: MutablePackageOverrideMap = {};
+    if (typeof existing === "string") record["."] = existing;
+    parent[dependencyName] = record;
+    return record;
+  };
+
+  // Resolves the still-conflicted names inside `node`'s subtree, nesting only
+  // as deep as required to disambiguate. Names that stay ambiguous along an
+  // identical override path are left unpinned (npm overrides cannot express
+  // them); everything else is pinned exactly.
+  const resolveConflicts = (
+    out: MutablePackageOverrideMap,
+    node: Node,
+    conflicted: ReadonlySet<string>,
+    path: ReadonlySet<unknown>,
+  ): void => {
+    const still = new Set<string>();
+    const specs = specsOf(node);
+    for (const name of conflicted) {
+      const set = specs.get(name);
+      if (set === undefined) continue;
+      if (set.size === 1) {
+        const spec = [...set][0]!;
+        const existing = out[name];
+        if (existing === undefined) out[name] = spec;
+        else if (typeof existing === "object" && existing["."] === undefined) {
+          existing["."] = spec;
+        }
+      } else {
+        still.add(name);
+      }
+    }
+    if (still.size === 0) return;
+    for (const edge of edgesOf(node)) {
+      // Pin the direct occurrence of a name that stays conflicted deeper down.
+      if (still.has(edge.dependencyName)) {
+        const record = asOverrideMap(out, edge.dependencyName);
+        if (record["."] === undefined) record["."] = edge.installSpec;
+      }
+      if (edge.node === undefined) continue;
+      const childId = nodeId(edge.node);
+      if (path.has(childId)) continue;
+      const childSpecs = specsOf(edge.node);
+      if (![...still].some((name) => childSpecs.has(name))) continue;
+      const record = asOverrideMap(out, edge.dependencyName);
+      if (record["."] === undefined) record["."] = edge.installSpec;
+      resolveConflicts(record, edge.node, still, new Set([...path, childId]));
+    }
+  };
+
+  for (const { node, rootSelector } of roots) {
+    const existing = overrides[rootSelector];
+    const rootMap: MutablePackageOverrideMap =
+      typeof existing === "object" ? existing : {};
+    if (typeof existing === "string") rootMap["."] = existing;
+    const specs = specsOf(node);
+    if (specs.size === 0) continue;
+    overrides[rootSelector] = rootMap;
+    const conflicted = new Set<string>();
+    for (const [name, set] of specs) {
+      if (set.size === 1) rootMap[name] = [...set][0]!;
+      else conflicted.add(name);
+    }
+    if (conflicted.size > 0) {
+      resolveConflicts(rootMap, node, conflicted, new Set([nodeId(node)]));
     }
   }
 };
@@ -1020,53 +1119,6 @@ const dependencySpecifiers = (entry: JsonRecord): JsonRecord => ({
   ...asRecord(entry.peerDependencies),
 });
 
-const addPackageOverride = (
-  overrides: MutablePackageOverrides,
-  context: OverrideContext,
-  dependencyName: string,
-  installSpec: string,
-): void => {
-  let current = asMutableOverrideRecord(
-    overrides,
-    context.rootSelector,
-    undefined,
-  );
-  for (const ancestor of context.ancestry) {
-    current = asMutableOverrideRecord(
-      current,
-      ancestor.dependencyName,
-      ancestor.installSpec,
-    );
-  }
-  const previous = current[dependencyName];
-  const previousSpec =
-    typeof previous === "string"
-      ? previous
-      : typeof previous?.["."] === "string"
-        ? previous["."]
-        : undefined;
-  if (previousSpec !== undefined && previousSpec !== installSpec) {
-    throw new Error(
-      `Lockfile resolves '${context.rootSelector} > ${context.ancestry.map((part) => part.dependencyName).join(" > ")} > ${dependencyName}' to both '${previousSpec}' and '${installSpec}'.`,
-    );
-  }
-  if (previous === undefined) current[dependencyName] = installSpec;
-};
-
-const asMutableOverrideRecord = (
-  parent: Record<string, MutablePackageOverride>,
-  dependencyName: string,
-  installSpec: string | undefined,
-): Record<string, MutablePackageOverride> => {
-  const existing = parent[dependencyName];
-  if (typeof existing === "object") return existing;
-  const record: Record<string, MutablePackageOverride> = {};
-  const self = existing ?? installSpec;
-  if (self !== undefined) record["."] = self;
-  parent[dependencyName] = record;
-  return record;
-};
-
 const lockedInstallSpec = (
   dependencyName: string,
   actualName: string,
@@ -1360,7 +1412,83 @@ const parseBunPackageDescriptor = (
   return parsePackageDescriptor(value[0]);
 };
 
-const parseJsonc = (content: string): unknown => Bun.JSONC.parse(content);
+/**
+ * Parses `bun.lock` JSONC (comments + trailing commas) without relying on the
+ * Bun runtime, so lockfile pinning also works when alchemy runs under Node.
+ */
+const parseJsonc = (content: string): unknown =>
+  JSON.parse(stripJsonc(content));
+
+const stripJsonc = (content: string): string => {
+  let out = "";
+  let i = 0;
+  const length = content.length;
+  while (i < length) {
+    const char = content[i]!;
+    if (char === '"') {
+      out += char;
+      i++;
+      while (i < length) {
+        const stringChar = content[i]!;
+        out += stringChar;
+        i++;
+        if (stringChar === "\\") {
+          if (i < length) {
+            out += content[i];
+            i++;
+          }
+        } else if (stringChar === '"') {
+          break;
+        }
+      }
+      continue;
+    }
+    if (char === "/" && content[i + 1] === "/") {
+      while (i < length && content[i] !== "\n") i++;
+      continue;
+    }
+    if (char === "/" && content[i + 1] === "*") {
+      i += 2;
+      while (i < length && !(content[i] === "*" && content[i + 1] === "/")) i++;
+      i += 2;
+      continue;
+    }
+    if (char === ",") {
+      // Drop the comma when the next significant token closes the container.
+      let j = i + 1;
+      while (j < length) {
+        const nextChar = content[j]!;
+        if (nextChar === "/" && content[j + 1] === "/") {
+          while (j < length && content[j] !== "\n") j++;
+        } else if (nextChar === "/" && content[j + 1] === "*") {
+          j += 2;
+          while (j < length && !(content[j] === "*" && content[j + 1] === "/"))
+            j++;
+          j += 2;
+        } else if (
+          nextChar === " " ||
+          nextChar === "\t" ||
+          nextChar === "\n" ||
+          nextChar === "\r"
+        ) {
+          j++;
+        } else {
+          break;
+        }
+      }
+      if (content[j] === "}" || content[j] === "]") {
+        i++;
+        continue;
+      }
+      out += char;
+      i++;
+      continue;
+    }
+    out += char;
+    i++;
+  }
+  return out;
+};
 
 const asRecord = (value: unknown): JsonRecord | undefined =>
   typeof value === "object" && value !== null && !Array.isArray(value)
