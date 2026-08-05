@@ -44,6 +44,7 @@ import {
   missingProviderError,
   tryFindProviderByType,
 } from "./Provider.ts";
+import type { ProviderMode } from "./ProviderMode.ts";
 import type { ResourceBinding } from "./Resource.ts";
 import { Stack } from "./Stack.ts";
 import { Stage } from "./Stage.ts";
@@ -312,6 +313,7 @@ export const apply = <P extends Plan>(
               ApplyStatus,
               "created" | "updated" | "ran" | "skipped"
             >;
+            providerMode?: ProviderMode;
           }
         >();
 
@@ -348,8 +350,15 @@ export const apply = <P extends Plan>(
 
         yield* Effect.forEach(
           Array.from(terminalStatuses.entries()),
-          ([fqn, { id, type, status }]) =>
-            emit(session, { kind: "status-change", id, fqn, type, status }),
+          ([fqn, { id, type, status, providerMode }]) =>
+            emit(session, {
+              kind: "status-change",
+              id,
+              fqn,
+              type,
+              status,
+              providerMode,
+            }),
           { concurrency: "unbounded" },
         );
 
@@ -570,6 +579,7 @@ const executePlan = Effect.fn(function* (
       id: string;
       type: string;
       status: Extract<ApplyStatus, "created" | "updated" | "ran" | "skipped">;
+      providerMode?: ProviderMode;
     }
   >,
   session: PlanStatusSession,
@@ -719,6 +729,7 @@ const executeNode = (
       id: string;
       type: string;
       status: Extract<ApplyStatus, "created" | "updated">;
+      providerMode?: ProviderMode;
     }
   >,
   session: PlanStatusSession,
@@ -773,6 +784,16 @@ const executeNode = (
         emit(session, { id: logicalId, fqn, kind: "annotate", message: note }),
     } satisfies ScopedPlanStatusSession;
 
+    // On a mode-switch replacement (local ⇄ live) surface the transition:
+    // the old generation's stamped mode → the mode resolved for this run.
+    const fromProviderMode =
+      node.action === "replace" &&
+      node.mode !== undefined &&
+      node.state.providerMode !== undefined &&
+      node.state.providerMode !== node.mode
+        ? node.state.providerMode
+        : undefined;
+
     const report = (status: ApplyStatus) =>
       emit(session, {
         kind: "status-change",
@@ -780,6 +801,8 @@ const executeNode = (
         fqn,
         type: node.resource.Type,
         status,
+        providerMode: node.mode,
+        fromProviderMode,
       });
 
     const markTerminal = (status: "created" | "updated") =>
@@ -788,6 +811,7 @@ const executeNode = (
           id: logicalId,
           type: node.resource.Type,
           status,
+          providerMode: node.mode,
         });
         // Emit immediately so the CLI surfaces the terminal status as soon
         // as the resource is actually done — instead of batching every
@@ -808,6 +832,7 @@ const executeNode = (
           fqn,
           type: node.resource.Type,
           status,
+          providerMode: node.mode,
         });
       });
 
@@ -1178,6 +1203,8 @@ const executeNode = (
             ...node.state,
             attr,
             props: news,
+            // Resolved payload, not raw `node.bindings` — see create commit.
+            bindings: bindingOutputs,
             providerMode: node.mode,
           });
         } else {
@@ -1509,6 +1536,7 @@ const executeNode = (
           fqn,
           type: node.resource.Type,
           status: "fail",
+          providerMode: node.mode,
         });
       }),
     ),
@@ -1560,6 +1588,7 @@ const executeActionNode = (
       id: string;
       type: string;
       status: Extract<ApplyStatus, "created" | "updated" | "ran" | "skipped">;
+      providerMode?: ProviderMode;
     }
   >,
   session: PlanStatusSession,
@@ -1730,6 +1759,7 @@ const converge = Effect.fn(function* (
       id: string;
       type: string;
       status: Extract<ApplyStatus, "created" | "updated" | "ran" | "skipped">;
+      providerMode?: ProviderMode;
     }
   >,
   session: PlanStatusSession,
@@ -1852,6 +1882,7 @@ const converge = Effect.fn(function* (
         id: logicalId,
         type: node.resource.Type,
         status: "updated",
+        providerMode: node.mode,
       });
     }
 
@@ -2152,6 +2183,7 @@ const collectGarbage = Effect.fn(function* (
             fqn,
             type: resourceType,
             status,
+            providerMode,
           });
 
         const scopedSession = {

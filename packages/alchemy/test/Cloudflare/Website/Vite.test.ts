@@ -49,6 +49,10 @@ const tanstackDevBindingsFixtureDir = pathe.resolve(
   import.meta.dirname,
   "tanstack-dev-bindings-fixture",
 );
+const viteChildFixtureDir = pathe.resolve(
+  import.meta.dirname,
+  "vite-child-fixture",
+);
 
 // Vite/Rollup's `vite:build-html` plugin chokes when the project root
 // is outside the current working directory because it tries to express
@@ -123,6 +127,67 @@ test.provider(
         timeout: "60 seconds",
         label: "deploy2 v2 marker",
       });
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(site1.workerName, accountId);
+    }).pipe(logLevel),
+  { timeout: 360_000 },
+);
+
+// Regression test for https://github.com/alchemy-run/alchemy/issues/1016.
+//
+// `hashViteInput` used to pass a relative root as both the directory and its
+// base, resolving `app` as `<cwd>/app/app`. The empty match produced a constant
+// input hash, so source edits were incorrectly treated as no-ops.
+test.provider(
+  "Vite: a source edit changes the input hash when rootDir is relative",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+
+      yield* stack.destroy();
+
+      const absoluteRoot = yield* cloneFixture(fixtureDir, {
+        prefix: "alchemy-vite-relative-root-",
+        tempRoot,
+        entries: ["index.html", "package.json", "vite.config.ts", "src"],
+      });
+      const rootDir = path.relative(process.cwd(), absoluteRoot);
+      const indexPath = path.join(absoluteRoot, "index.html");
+      const memoInclude = [
+        "index.html",
+        "src/**",
+        "package.json",
+        "vite.config.ts",
+      ];
+
+      expect(path.isAbsolute(rootDir)).toBe(false);
+      yield* fs.writeFileString(indexPath, htmlPage("relative-root-v1"));
+
+      const site1 = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Website.Vite(
+            "ViteRelativeRoot",
+            viteProps(rootDir, memoInclude),
+          );
+        }),
+      );
+      expect(site1.hash?.input).toBeDefined();
+
+      yield* fs.writeFileString(indexPath, htmlPage("relative-root-v2"));
+
+      const site2 = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Website.Vite(
+            "ViteRelativeRoot",
+            viteProps(rootDir, memoInclude),
+          );
+        }),
+      );
+      expect(site2.hash?.input).toBeDefined();
+      expect(site2.hash?.input).not.toEqual(site1.hash?.input);
 
       yield* stack.destroy();
       yield* waitForWorkerToBeDeleted(site1.workerName, accountId);
@@ -904,6 +969,98 @@ test.provider(
       yield* waitForWorkerToBeDeleted(site.workerName, accountId);
     }).pipe(logLevel),
   { timeout: 360_000 },
+);
+
+devTest.provider(
+  "Vite dev: each app runs in a child rooted at its own cwd",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      yield* stack.destroy();
+
+      const entries = [
+        "index.html",
+        "package.json",
+        "vite.config.ts",
+        "worker.ts",
+      ];
+      const clone = (prefix: string) =>
+        cloneFixture(viteChildFixtureDir, { prefix, tempRoot, entries });
+      const [rootA, rootB] = yield* Effect.all(
+        [clone("alchemy-vite-child-a-"), clone("alchemy-vite-child-b-")],
+        { concurrency: "unbounded" },
+      );
+      yield* Effect.all([
+        fs.writeFileString(
+          path.join(rootA, "index.html"),
+          htmlPage("child-app-a"),
+        ),
+        fs.writeFileString(
+          path.join(rootB, "index.html"),
+          htmlPage("child-app-b"),
+        ),
+      ]);
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const props = (rootDir: string) => ({
+            ...viteProps(rootDir, entries),
+            main: "worker.ts",
+            assets: { notFoundHandling: "single-page-application" as const },
+            dev: { port: 0 },
+          });
+          const appA = yield* Cloudflare.Website.Vite(
+            "ViteChildA",
+            props(rootA),
+          );
+          const appB = yield* Cloudflare.Website.Vite(
+            "ViteChildB",
+            props(rootB),
+          );
+          const defaultPortWorker = yield* Cloudflare.Worker(
+            "ViteChildDefaultPortWorker",
+            {
+              script:
+                'export default { fetch: () => new Response("default-port-worker") };',
+            },
+          );
+          return { appA, appB, defaultPortWorker };
+        }),
+      );
+
+      expect(deployed.appA.url).not.toBe(deployed.appB.url);
+      yield* Effect.all(
+        [
+          expectUrlContains(
+            deployed.defaultPortWorker.url!,
+            "default-port-worker",
+            {
+              timeout: "30 seconds",
+              label: "default-port worker",
+            },
+          ),
+          expectUrlContains(deployed.appA.url!, "child-app-a", {
+            timeout: "30 seconds",
+            label: "child A HTML",
+          }),
+          expectUrlContains(deployed.appB.url!, "child-app-b", {
+            timeout: "30 seconds",
+            label: "child B HTML",
+          }),
+          expectUrlContains(deployed.appA.url!, rootA, {
+            timeout: "30 seconds",
+            label: "child A cwd",
+          }),
+          expectUrlContains(deployed.appB.url!, rootB, {
+            timeout: "30 seconds",
+            label: "child B cwd",
+          }),
+        ],
+        { concurrency: "unbounded" },
+      );
+    }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+  { timeout: 120_000 },
 );
 
 devTest.provider(

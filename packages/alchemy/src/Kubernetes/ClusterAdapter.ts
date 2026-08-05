@@ -30,7 +30,7 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import type * as rolldown from "rolldown";
+import type * as Bundle from "../Bundle/Bundle.ts";
 import type { InstanceId } from "../InstanceId.ts";
 import type { ResourceBinding } from "../Resource.ts";
 import type { InlineDockerfile } from "../Docker/Dockerfile.ts";
@@ -163,10 +163,14 @@ export type WorkloadServices =
 export interface WorkloadImageSource {
   main?: string;
   handler?: string;
-  build?: {
-    input?: Partial<rolldown.InputOptions>;
-    output?: Partial<rolldown.OutputOptions>;
-  };
+  /**
+   * Bundler configuration for `main`: rolldown `input`/`output` overrides
+   * plus pure-annotation options (`pure`). `effect`, `@effect/*`,
+   * `alchemy`, `@alchemy.run/*`, and `@distilled.cloud/*` are annotated as
+   * pure by default so unused code from those packages is tree-shaken; list
+   * additional packages via `pure.packages`, or disable with `pure: false`.
+   */
+  build?: Bundle.BundleConfig;
   context?: string;
   dockerfile?: string | InlineDockerfile;
   image?: string;

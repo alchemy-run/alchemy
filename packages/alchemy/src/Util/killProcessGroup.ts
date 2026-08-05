@@ -1,3 +1,5 @@
+import { exitHook } from "@alchemy.run/node-utils/exit-hook";
+import * as Effect from "effect/Effect";
 import * as NodeChildProcess from "node:child_process";
 
 /**
@@ -18,3 +20,17 @@ export const killProcessGroup = (pid: number, signal: NodeJS.Signals) => {
     // ignore errors during best-effort cleanup
   }
 };
+
+/**
+ * Last line of defense against abrupt process exit: exit-hook's
+ * SIGTERM/SIGINT handlers call `process.exit` synchronously (the node-utils
+ * lockfile registers one at import time), which preempts the Effect
+ * finalizers that would normally kill the child. Run the group kill from the
+ * exit hook itself; unregister when the scope closes normally so
+ * restarts/deletes don't accumulate hooks.
+ */
+export const registerExitKill = (pid: number) =>
+  Effect.acquireRelease(
+    Effect.sync(() => exitHook(() => killProcessGroup(pid, "SIGKILL"))),
+    (unregister) => Effect.sync(unregister),
+  );

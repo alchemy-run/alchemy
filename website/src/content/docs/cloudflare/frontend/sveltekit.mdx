@@ -1,0 +1,128 @@
+---
+title: SvelteKit
+description: Deploy a SvelteKit app to Cloudflare Workers with Cloudflare.Website.SvelteKit — a wrangler-free in-memory adapter, real bindings on platform.env, and full-HMR local dev.
+sidebar:
+  order: 11
+---
+
+`Cloudflare.Website.SvelteKit` deploys a SvelteKit app as a
+Cloudflare Worker. It builds the app with SvelteKit's own Vite
+pipeline and a wrangler-free in-memory Cloudflare adapter, then
+re-bundles the server output for workerd. Client assets and
+prerendered pages deploy as Worker static assets; dynamic routes are
+served by the generated Worker. There is no `svelte.config.js` to
+write, no `@sveltejs/adapter-cloudflare` to install, and no Wrangler
+file.
+
+## Install
+
+The build integration is loaded from your project at deploy time:
+
+```sh
+bun add -d @distilled.cloud/sveltekit
+```
+
+## Add it to the Stack
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MySvelteKitSite",
+  {
+    providers: Cloudflare.providers(),
+    state: Cloudflare.state(),
+  },
+  Effect.gen(function* () {
+    const site = yield* Cloudflare.Website.SvelteKit("Website");
+    return { url: site.url };
+  }),
+);
+```
+
+SvelteKit's server code is built for Node, so the `nodejs_compat`
+compatibility flag is added automatically — you don't need to pass
+it.
+
+See
+[examples/cloudflare-website-sveltekit](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-website-sveltekit)
+for the checked-in example.
+
+## Bindings
+
+The resource returns a plain `Worker`, so `env` accepts the full
+binding vocabulary — KV namespaces, R2 buckets, Durable Objects,
+secrets:
+
+```typescript
+const kv = yield* Cloudflare.KV.Namespace("Cache");
+
+const site = yield* Cloudflare.Website.SvelteKit("Website", {
+  env: {
+    CACHE: kv,
+    API_KEY: Alchemy.secret("API_KEY"),
+  },
+});
+```
+
+Server routes read them through SvelteKit's `platform.env`:
+
+```typescript
+// src/routes/+page.server.ts
+export const load = async ({ platform }) => {
+  const cached = await platform?.env?.CACHE.get("greeting");
+  return { greeting: cached ?? "hello" };
+};
+```
+
+## Kit and adapter options
+
+Since kit v3 the configuration lives in memory — pass it via the
+`kit` prop instead of a `svelte.config.js`. The generated Cloudflare
+adapter is configured via `adapter`:
+
+```typescript
+const site = yield* Cloudflare.Website.SvelteKit("Website", {
+  kit: {
+    alias: { $lib: "src/lib" },
+  },
+  adapter: {
+    notFoundHandling: "404-page",
+    fallback: "spa",
+  },
+});
+```
+
+Don't set `kit.adapter` — Alchemy injects its own wrangler-free
+Cloudflare adapter.
+
+## Rebuilds and memo
+
+Input files are content-hashed (respecting `.gitignore` by default),
+so an unchanged project skips both the build and the deploy. Narrow
+the scope with `memo` when the project lives in a large repository:
+
+```typescript
+const site = yield* Cloudflare.Website.SvelteKit("Website", {
+  memo: {
+    include: ["src/**", "static/**", "package.json"],
+  },
+});
+```
+
+## Local dev
+
+```sh
+bun alchemy dev
+```
+
+`alchemy dev` runs SvelteKit's own Vite dev server — Node SSR with
+full HMR. `platform.env` carries the Worker's real Cloudflare
+bindings, served wrangler-free through the cloudflare-runtime
+platform proxy: calls like `platform.env.CACHE.get(...)` round-trip
+to a local workerd instance, so dev state is live and shared. Literal
+`env` values (strings and secrets) overlay the proxied bindings. Your
+server code is identical in dev and production.

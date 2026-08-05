@@ -43,6 +43,31 @@ export interface EmailIdentityProps {
    */
   dkimSigningKeyLength?: DkimSigningKeyLength;
   /**
+   * Whether Easy DKIM signing is enabled for the identity. Leave undefined to
+   * keep SES's current setting.
+   */
+  dkimSigningEnabled?: boolean;
+  /**
+   * Whether SES forwards bounce and complaint feedback to the identity's email
+   * address. Leave undefined to keep SES's current setting.
+   * @default true
+   */
+  feedbackForwardingEnabled?: boolean;
+  /**
+   * A custom MAIL FROM domain (a verified subdomain of the identity) SES uses
+   * in the message envelope. Publish the required MX and SPF records for the
+   * subdomain to complete setup. Leave undefined to keep SES's current
+   * setting — there is no removal path once one is configured.
+   */
+  mailFromDomain?: string;
+  /**
+   * What SES does when the custom MAIL FROM domain's MX record can't be read:
+   * fall back to the SES default (`USE_DEFAULT_VALUE`) or reject the message
+   * (`REJECT_MESSAGE`).
+   * @default "USE_DEFAULT_VALUE"
+   */
+  mailFromBehaviorOnMxFailure?: sesv2.BehaviorOnMxFailure;
+  /**
    * Tags to apply to the identity. Merged with internal Alchemy tags.
    */
   tags?: Record<string, string>;
@@ -104,6 +129,40 @@ export interface EmailIdentity extends Resource<
  * const identity = yield* SES.EmailIdentity("Sender", {
  *   emailIdentity: "mail.example.com",
  *   configurationSetName: configSet.configurationSetName,
+ * });
+ * ```
+ *
+ * @section DKIM and Feedback
+ * @example Turn Easy DKIM Signing Off
+ * ```typescript
+ * // Omit the prop entirely to leave SES's current setting alone.
+ * const identity = yield* SES.EmailIdentity("Sender", {
+ *   emailIdentity: "mail.example.com",
+ *   dkimSigningEnabled: false,
+ * });
+ * ```
+ *
+ * @example Stop Forwarding Bounces and Complaints by Email
+ * ```typescript
+ * // Turn this off once a configuration set event destination is handling
+ * // bounces and complaints, so they stop arriving as mail.
+ * const identity = yield* SES.EmailIdentity("Sender", {
+ *   emailIdentity: "mail.example.com",
+ *   feedbackForwardingEnabled: false,
+ * });
+ * ```
+ *
+ * @section Custom MAIL FROM Domain
+ * @example Send with Your Own Envelope Domain
+ * ```typescript
+ * // mailFromDomain must be a subdomain of the identity, and needs MX and
+ * // SPF records published before SES will use it.
+ * const identity = yield* SES.EmailIdentity("Sender", {
+ *   emailIdentity: "mail.example.com",
+ *   mailFromDomain: "bounce.mail.example.com",
+ *   // Reject rather than silently falling back to the SES default when the
+ *   // MX record cannot be read.
+ *   mailFromBehaviorOnMxFailure: "REJECT_MESSAGE",
  * });
  * ```
  *
@@ -282,7 +341,50 @@ export const EmailIdentityProvider = () =>
             });
           }
 
-          // 3c. SYNC TAGS — diff against OBSERVED cloud tags so adoption
+          // 3c. SYNC Easy DKIM signing enablement — only applied when
+          //     explicitly requested and observably different.
+          if (
+            news.dkimSigningEnabled !== undefined &&
+            (observed.DkimAttributes?.SigningEnabled ?? false) !==
+              news.dkimSigningEnabled
+          ) {
+            yield* sesv2.putEmailIdentityDkimAttributes({
+              EmailIdentity: name,
+              SigningEnabled: news.dkimSigningEnabled,
+            });
+          }
+
+          // 3d. SYNC feedback forwarding — only applied when explicitly
+          //     requested and observably different (SES defaults it to on).
+          if (
+            news.feedbackForwardingEnabled !== undefined &&
+            (observed.FeedbackForwardingStatus ?? true) !==
+              news.feedbackForwardingEnabled
+          ) {
+            yield* sesv2.putEmailIdentityFeedbackAttributes({
+              EmailIdentity: name,
+              EmailForwardingEnabled: news.feedbackForwardingEnabled,
+            });
+          }
+
+          // 3e. SYNC custom MAIL FROM domain — only applied when explicitly
+          //     requested and observably different.
+          if (
+            news.mailFromDomain !== undefined &&
+            (observed.MailFromAttributes?.MailFromDomain !==
+              news.mailFromDomain ||
+              (news.mailFromBehaviorOnMxFailure !== undefined &&
+                observed.MailFromAttributes?.BehaviorOnMxFailure !==
+                  news.mailFromBehaviorOnMxFailure))
+          ) {
+            yield* sesv2.putEmailIdentityMailFromAttributes({
+              EmailIdentity: name,
+              MailFromDomain: news.mailFromDomain,
+              BehaviorOnMxFailure: news.mailFromBehaviorOnMxFailure,
+            });
+          }
+
+          // 3f. SYNC TAGS — diff against OBSERVED cloud tags so adoption
           //     converges.
           const observedTags = toTagRecord(observed.Tags);
           const { upsert, removed } = diffTags(observedTags, desiredTags);

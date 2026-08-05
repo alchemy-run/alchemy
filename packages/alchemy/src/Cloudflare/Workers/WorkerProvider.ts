@@ -40,6 +40,7 @@ import {
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
+import { makeSourceContext, resolveSource } from "./Source.ts";
 import {
   isSelfUrl,
   Worker,
@@ -58,8 +59,9 @@ import type {
   WorkerBinding,
   WorkerSettingsBinding,
 } from "./WorkerBinding.ts";
-import { isPythonMain, readPythonWorkerBundle } from "./PythonWorkerBundle.ts";
-import { readPrebuiltWorkerBundle, WorkerBundle } from "./WorkerBundle.ts";
+import { readPrebuiltWorkerBundle } from "./Sources/Prebuilt.ts";
+import { isPythonMain, readPythonWorkerBundle } from "./Sources/Python.ts";
+import { WorkerBundle } from "./Sources/Rolldown.ts";
 import { isWorkerLoader } from "./WorkerLoader.ts";
 import { createWorkerName } from "./WorkerName.ts";
 class MissingDurableObjects extends Data.TaggedError("MissingDurableObjects")<{
@@ -141,6 +143,39 @@ export const resolveNamespaceName = (
   if (namespace == null) return undefined;
   if (typeof namespace === "string") return namespace;
   return (namespace as { name?: string }).name;
+};
+
+/**
+ * Resolve a Worker's `tailConsumers` / `streamingTailConsumers` prop into
+ * the wire-shape consumer list
+ * (`[{ service }]`). The engine resolves a passed {@link Worker} to its
+ * Attributes object — possibly stables-only during planning, but
+ * `workerName` is always a stable — so each entry is either a script-name
+ * string or that attributes object. Whole-resource entries are reduced to
+ * the script name alone so hashing/diffing never sees the consumer's
+ * per-deploy fields (`hash`, `url`, ...), mirroring
+ * {@link resolveVersionParentName}.
+ *
+ * An empty array resolves to `[]` (explicitly detach every consumer);
+ * `undefined`/absent resolves to `undefined`.
+ *
+ * This is also the seam for local emulation: the local provider lowers this
+ * same resolved list into workerd's `Worker.tails` / `Worker.streamingTails`
+ * service designators (`RuntimeWorker.tails` / `RuntimeWorker.streamingTails`).
+ *
+ * @internal
+ */
+export const resolveTailConsumers = (
+  tailConsumers: WorkerProps["tailConsumers" | "streamingTailConsumers"],
+): { service: string }[] | undefined => {
+  if (tailConsumers == null) return undefined;
+  return tailConsumers.flatMap((consumer) => {
+    const service =
+      typeof consumer === "string"
+        ? consumer
+        : (consumer as { workerName?: unknown }).workerName;
+    return typeof service === "string" ? [{ service }] : [];
+  });
 };
 
 /**
@@ -962,7 +997,16 @@ const resolveWorkerMetadataHash = ({
     logpush: props.logpush,
     observability: props.observability,
     placement: props.placement,
+    // The source descriptor is plain JSON data; hashing it means
+    // switching providers (or changing provider options) triggers an
+    // update even when no hash slot the new source computes differs.
+    source: props.source,
     tags: props.tags,
+    // Reduce each consumer to its script name: a referenced Worker's other
+    // attributes (hash, url, ...) change on every consumer deploy, which
+    // would spuriously re-deploy this producer.
+    tailConsumers: resolveTailConsumers(props.tailConsumers),
+    streamingTailConsumers: resolveTailConsumers(props.streamingTailConsumers),
     workersDev: resolveWorkersDev(props.workersDev),
     // Reduce `version.parent` to the parent's script name: the resolved
     // parent is a full attributes object whose *other* fields (hash, url,
@@ -2077,10 +2121,7 @@ export const LiveWorkerProvider = () =>
         selfUrl?: string,
       ) {
         const compatibility = getCompatibility(props);
-        // Loaded lazily: `./Vite.ts` pulls in `@distilled.cloud/cloudflare-vite-plugin`
-        // (~0.5s), which is only needed for vite-based workers at build time —
-        // not for every Worker definition at module-load time.
-        const Vite = yield* Effect.promise(() => import("./Vite.ts"));
+        const Vite = yield* loadVite;
         const { clientDirectory, base, serverBundle, externalWorkspaces } =
           yield* Vite.viteBuild(
             props.vite?.rootDir,
@@ -2156,7 +2197,7 @@ export const LiveWorkerProvider = () =>
                 })
               : Effect.undefined,
             serverBundle,
-            hashViteInput(
+            Vite.hashViteInput(
               props.vite?.rootDir,
               props.vite?.memo,
               externalWorkspaces,
@@ -2177,58 +2218,49 @@ export const LiveWorkerProvider = () =>
         };
       });
 
-      const hashViteInput = Effect.fn(function* <E>(
-        rootDir: string = process.cwd(),
-        options: ViteOptions["memo"],
-        additionalWorkspaces: Effect.Effect<Iterable<string>, E>,
-      ) {
-        // Relative paths participate in memo hashes and surface in outputs;
-        // keep them POSIX so Windows and CI agree.
-        const relativeToRoot = (cwd: string) =>
-          path.relative(rootDir, cwd).replaceAll("\\", "/");
-        const hashWorkspaceDirectory = (cwd: string, memo?: MemoOptions) =>
-          hashDirectory({ cwd: path.resolve(rootDir, cwd), memo }).pipe(
-            Effect.map((hash) => `${relativeToRoot(cwd)}:${hash}`),
-          );
-        const hashRoot = hashWorkspaceDirectory(rootDir, options);
-        if (Array.isArray(options?.workspaces)) {
-          return yield* Effect.all(
-            [
-              hashRoot,
-              ...options.workspaces.map(({ cwd, ...options }) =>
-                hashWorkspaceDirectory(cwd, options),
-              ),
-            ],
-            { concurrency: "unbounded" },
-          ).pipe(
-            Effect.flatMap(([root, ...workspaces]) =>
-              sha256Object([root, ...workspaces.sort()]),
-            ),
-            Effect.map((hash) => ({ hash, workspaces: undefined })),
-          );
-        }
-        const [root, workspaces] = yield* Effect.all(
-          [hashRoot, additionalWorkspaces],
-          { concurrency: "unbounded" },
-        );
-        const workspaceHashes = yield* Effect.forEach(
-          workspaces,
-          (cwd) => hashWorkspaceDirectory(cwd),
-          { concurrency: "unbounded" },
-        );
-        const hash = yield* sha256Object([root, ...workspaceHashes.sort()]);
-        return {
-          hash,
-          workspaces: Array.from(workspaces).map(relativeToRoot),
-        };
-      });
+      // Loaded lazily: `./Sources/Vite.ts` pulls in
+      // `@distilled.cloud/cloudflare-vite-plugin` (~0.5s), which is only
+      // needed for vite-based workers at build time — not for every Worker
+      // definition at module-load time.
+      const loadVite = Effect.promise(() => import("./Sources/Vite.ts"));
 
       const prepareAssetsAndBundle = (
         id: string,
+        workerName: string,
         props: WorkerProps,
         opts: { skipAssetsRead?: boolean; selfUrl?: string } = {},
       ) =>
         Effect.gen(function* () {
+          // External source provider (`props.source`): the provider is
+          // self-contained — it supplies the bundle, optionally its own
+          // assets (framework builds), and the hash slots it owns. The
+          // props-level `assets` directory is still read here for sources
+          // that don't own assets.
+          if (props.source) {
+            const source = yield* resolveSource(props);
+            const ctx = makeSourceContext({
+              id,
+              workerName,
+              props,
+              compatibility: getCompatibility(props),
+              stack: { name: stack.name, stage: stack.stage },
+            });
+            const [output, propsAssets] = yield* Effect.all(
+              [
+                source.build(ctx),
+                source.ownsAssets || opts.skipAssetsRead
+                  ? Effect.undefined
+                  : prepareAssets(props.assets),
+              ],
+              { concurrency: "unbounded" },
+            );
+            return {
+              assets: output.assets ?? propsAssets,
+              bundle: output.bundle,
+              input: output.hash.input,
+              additionalWorkspaces: output.hash.additionalWorkspaces,
+            };
+          }
           if (props.script !== undefined) {
             const [assets, bundleHash] = yield* Effect.all(
               [
@@ -2314,7 +2346,17 @@ export const LiveWorkerProvider = () =>
         assets: WorkerProps["assets"],
         output: Worker["Attributes"] | undefined,
       ) => {
-        if (!Predicate.hasProperty(assets, "hash")) return undefined;
+        // An explicitly-undefined `hash` (`{ directory, hash: maybe }`) is
+        // the hash-less shape, not a supplied hash — the same rule
+        // `assetsChanged` applies during diff. Without the `undefined` check
+        // a greenfield create (`output === undefined`) compares `undefined
+        // === undefined`, sets `skip`, and uploads a Worker with no assets.
+        if (
+          !Predicate.hasProperty(assets, "hash") ||
+          assets.hash === undefined
+        ) {
+          return undefined;
+        }
         // `base` shapes the uploaded manifest paths (see `readAssets`); it
         // is alchemy-only and must not leak into the API's asset config.
         const { directory, hash, base, ...config } = assets;
@@ -2558,6 +2600,8 @@ export const LiveWorkerProvider = () =>
             ["assets", news.assets],
             ["namespace", news.namespace],
             ["crons", news.crons],
+            ["tailConsumers", news.tailConsumers],
+            ["streamingTailConsumers", news.streamingTailConsumers],
             ["domain", news.domain],
             ["routes", news.routes],
             ["tags", news.tags],
@@ -2665,6 +2709,7 @@ export const LiveWorkerProvider = () =>
         );
         const { bundle, hash: preparedHash } = yield* prepareAssetsAndBundle(
           id,
+          parentName,
           news,
           { skipAssetsRead: true },
         );
@@ -2901,7 +2946,7 @@ export const LiveWorkerProvider = () =>
           assets,
           bundle,
           hash: preparedHash,
-        } = yield* prepareAssetsAndBundle(id, news, {
+        } = yield* prepareAssetsAndBundle(id, name, news, {
           skipAssetsRead: prebuiltAssets?.skip,
           selfUrl,
         });
@@ -2994,7 +3039,15 @@ export const LiveWorkerProvider = () =>
               `Cloudflare Worker update: assets unchanged for ${name}, keeping existing`,
             );
             keepAssets = true;
-            metadataAssets = { config: assets.config };
+            // Fold the build-emitted `_headers`/`_redirects` into the PUT
+            // config: source providers (Astro/SvelteKit/Waku/Nuxt) hash the
+            // files and carry them on the read result, but only `readAssets`
+            // pre-merges them — without this, framework header/redirect
+            // rules never reach Cloudflare. Idempotent for pre-merged
+            // configs (explicit config wins).
+            metadataAssets = {
+              config: mergeAssetsConfigFiles(assets.config, assets),
+            };
           } else {
             yield* Effect.logInfo(
               `Cloudflare Worker ${olds ? "update" : "create"}: uploading assets for ${name}`,
@@ -3007,7 +3060,8 @@ export const LiveWorkerProvider = () =>
             );
             metadataAssets = {
               jwt,
-              config: assets.config,
+              // Same `_headers`/`_redirects` fold as the keep path above.
+              config: mergeAssetsConfigFiles(assets.config, assets),
             };
           }
           metadataBindings.push({
@@ -3335,6 +3389,10 @@ export const LiveWorkerProvider = () =>
         );
 
         const compatibility = getCompatibility(news);
+        const tailConsumers = resolveTailConsumers(news.tailConsumers);
+        const streamingTailConsumers = resolveTailConsumers(
+          news.streamingTailConsumers,
+        );
         const metadata: workers.PutScriptRequest["metadata"] = {
           assets: metadataAssets,
           bindings: metadataBindings,
@@ -3359,7 +3417,8 @@ export const LiveWorkerProvider = () =>
           },
           placement: news.placement,
           tags: metadataTags,
-          tailConsumers: undefined,
+          tailConsumers,
+          streamingTailConsumers,
           usageModel: undefined,
         };
         const rolloutTraffic = getSelfRolloutTraffic(news);
@@ -3534,6 +3593,12 @@ export const LiveWorkerProvider = () =>
             domain: undefined,
             routes: [],
             crons: [],
+            tailConsumers:
+              settings.tailConsumers?.map((c) => ({ service: c.service })) ??
+              tailConsumers,
+            // The settings read endpoint doesn't expose
+            // `streaming_tail_consumers`; record what this deploy uploaded.
+            streamingTailConsumers,
             hash,
           } satisfies Worker["Attributes"];
         }
@@ -3775,6 +3840,19 @@ export const LiveWorkerProvider = () =>
           accountId,
           routes,
           crons,
+          // Observed post-upload settings are authoritative: the gradual
+          // rollout branch above deploys via the versions API, which leaves
+          // script-level settings (tail consumers included) at their live
+          // values until the next full deploy.
+          tailConsumers:
+            settings.tailConsumers?.map((c) => ({ service: c.service })) ??
+            tailConsumers,
+          // GET script-settings has no `streaming_tail_consumers` field (the
+          // API only carries it on upload metadata), so the uploaded value is
+          // authoritative here. In the gradual-rollout branch the versions
+          // API leaves script-level settings live-as-is, matching how the
+          // metadata surface treats every other script-level field.
+          streamingTailConsumers,
           versionOf: undefined,
           versionId,
           deploymentId,
@@ -3875,6 +3953,45 @@ export const LiveWorkerProvider = () =>
             return true;
           }
         }
+        // External source provider: the source recomputes the hash slots
+        // it owns (without building where it can) and any defined slot
+        // that differs from state means an update. `additionalWorkspaces`
+        // is auxiliary metadata for the input hash, never a change signal.
+        if (props.source) {
+          const source = yield* resolveSource(props);
+          const slots = yield* source.hash(
+            makeSourceContext({
+              id,
+              workerName: output.workerName,
+              props,
+              compatibility: getCompatibility(props),
+              stack: { name: stack.name, stage: stack.stage },
+            }),
+            output.hash,
+          );
+          for (const slot of ["bundle", "input", "assets"] as const) {
+            if (
+              slots[slot] !== undefined &&
+              slots[slot] !== output.hash?.[slot]
+            ) {
+              return true;
+            }
+          }
+          if (source.ownsAssets) {
+            // Source-owned assets are covered by the `input` hash.
+            return false;
+          }
+          if (!props.assets) {
+            return false;
+          }
+          const assetsHash = Predicate.hasProperty(props.assets, "hash")
+            ? props.assets.hash
+            : undefined;
+          if (assetsHash === undefined) {
+            return true;
+          }
+          return assetsHash !== output.hash?.assets;
+        }
         if (props.script !== undefined) {
           const scriptHash = yield* hashScript(props.script);
           if (scriptHash !== output.hash?.bundle) {
@@ -3883,7 +4000,8 @@ export const LiveWorkerProvider = () =>
           return yield* assetsChanged(props.assets, output);
         }
         if (props.vite) {
-          const { hash } = yield* hashViteInput(
+          const Vite = yield* loadVite;
+          const { hash } = yield* Vite.hashViteInput(
             props.vite.rootDir,
             props.vite.memo,
             Effect.succeed(output.hash?.additionalWorkspaces ?? []),
@@ -4517,6 +4635,13 @@ export const LiveWorkerProvider = () =>
                 domain: undefined,
                 routes: [],
                 crons: [],
+                tailConsumers: settings.tailConsumers?.map((c) => ({
+                  service: c.service,
+                })),
+                // Not observable: GET script-settings has no
+                // `streaming_tail_consumers` field. Carry the last deployed
+                // value forward like other provider-managed caches.
+                streamingTailConsumers: output?.streamingTailConsumers,
               } satisfies Worker["Attributes"];
               return hasAlchemyWorkerTags(id, settings.tags ?? [])
                 ? attrs
@@ -4637,6 +4762,13 @@ export const LiveWorkerProvider = () =>
               durableObjectNamespaces: getDurableObjects(settings.bindings),
               routes: routesList,
               crons,
+              tailConsumers: settings.tailConsumers?.map((c) => ({
+                service: c.service,
+              })),
+              // Not observable: GET script-settings has no
+              // `streaming_tail_consumers` field. Carry the last deployed
+              // value forward like other provider-managed caches.
+              streamingTailConsumers: output?.streamingTailConsumers,
               // Rule placement is provider-managed state, not observed here
               // (a getPhas call per known zone on every read); carry the
               // cleanup list forward like any other stable cache.

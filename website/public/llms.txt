@@ -75,7 +75,7 @@ Stages, credential profiles, auth providers, secrets and config, local developme
 - [Auth Providers](https://alchemy.run/environments/auth-providers) — An Auth Provider produces the credentials for a cloud's API calls — resolved lazily as Effects, so tokens and role sessions can refresh instead of pinning one static key.
 - [Custom Auth Provider](https://alchemy.run/environments/custom-auth-provider) — Plug a third-party API into alchemy login — a lazy credentials service backed by an AuthProvider that resolves keys from a Profile, env vars, or a refreshable session.
 - [Secrets & Config](https://alchemy.run/environments/secrets) — Use effect/Config to read env vars at init time and have Alchemy automatically bind them onto the deploy target.
-- [Local development](https://alchemy.run/environments/local-development) — How alchemy dev provides hot reloading, local workerd execution, and cloud-backed resources for fast iteration.
+- [Local development](https://alchemy.run/environments/local-development) — How alchemy dev provides hot reloading, local workerd execution, and local emulation with per-resource opt-in to real cloud services.
 - [CI](https://alchemy.run/environments/ci) — Set up CI/CD pipelines for alchemy projects with GitHub Actions, automated deployments, and PR previews — with provider credentials managed as code.
 
 ## State Store
@@ -260,6 +260,11 @@ A linear five-part walkthrough from zero to a tested, CI-deployed AWS project. E
 - [SNS](https://alchemy.run/aws/messaging/sns) — Create an SNS Topic, publish to it from a Lambda with the Publish binding, fan messages out to SQS queues, and consume notifications as a typed Stream.
 - [SQS](https://alchemy.run/aws/messaging/sqs) — Add an SQS Queue, publish messages from your Lambda, and consume them from a second consumer Lambda — all wired through Alchemy bindings.
 
+## AWS — Email
+
+- [Sending & managing email](https://alchemy.run/aws/email/sending) — Send email with SES — verify a domain or address identity, send from a Lambda with the SendEmail binding, then manage identity policies, contact lists, custom verification templates, dedicated IP pools, tenants, multi-region endpoints, account settings, and VDM deliverability insights.
+- [Receiving inbound email](https://alchemy.run/aws/email/receiving) — Receive inbound mail with SES receipt rule sets and rules — store raw messages in S3, fan out to SNS, invoke a Lambda, or bounce, plus IP filters, the active rule set pointer, and the SendBounce runtime binding. Region-limited (us-east-1/us-west-2/eu-west-1).
+
 ## AWS — Security & secrets
 
 - [Secrets & env](https://alchemy.run/aws/security/secrets-env) — Deliver API keys from .env to a Lambda with effect/Config, and graduate to AWS Secrets Manager when the secret is a shared, generated, or rotated cloud resource.
@@ -354,4 +359,4 @@ Cloud-agnostic local process primitives — memoized builds, one-off commands, a
 
 Per-resource API reference, generated from JSDoc on the source `.ts` files via `bun generate:api-reference`. Each page documents the resource's input properties (with types, defaults, and constraints), output attributes, and Quick Reference / Examples sections derived from `@section` / `@example` JSDoc tags.
 
-The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~847 KB) — only fetch it when you need to locate a specific resource's reference page.
+The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~849 KB) — only fetch it when you need to locate a specific resource's reference page.

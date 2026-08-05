@@ -3,7 +3,6 @@
  * Shared between the `Build`, `Dev`, and `Exec` resources.
  */
 
-import { exitHook } from "@alchemy.run/node-utils/exit-hook";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
@@ -24,7 +23,7 @@ import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import type { ScopedPlanStatusSession } from "../Cli/Cli.ts";
 import { isNonInteractive } from "../Util/interactive.ts";
-import { killProcessGroup } from "../Util/killProcessGroup.ts";
+import { registerExitKill } from "../Util/killProcessGroup.ts";
 import {
   makeCommandRedactor,
   redactPlatformReason,
@@ -330,20 +329,7 @@ export const CommandExecutorLive = () =>
               }),
             ),
           ),
-          // Last line of defense against abrupt process exit: exit-hook's
-          // SIGTERM/SIGINT handlers call `process.exit` synchronously (the
-          // node-utils lockfile registers one at import time), which preempts
-          // the Effect finalizers that would normally kill the child. Run the
-          // group kill from the exit hook itself; unregister when the scope
-          // closes normally so restarts/deletes don't accumulate hooks.
-          Effect.tap((child) =>
-            Effect.acquireRelease(
-              Effect.sync(() =>
-                exitHook(() => killProcessGroup(child.pid, "SIGKILL")),
-              ),
-              (unregister) => Effect.sync(unregister),
-            ),
-          ),
+          Effect.tap((child) => registerExitKill(child.pid)),
           Effect.map((child) =>
             redactChildProcessHandle(child, makeCommandRedactor(props.env)),
           ),

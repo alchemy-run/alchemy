@@ -149,6 +149,7 @@ const resolveArtifact = Effect.fn(function* (
       isExternal: news.isExternal ?? false,
       external: news.external,
       port,
+      build: news.build,
     });
     const dockerfile = buildMicrovmDockerfile(news.dockerfile, runtime, port);
     const hash = yield* sha256(`${bundleHash}:${dockerfile}:${propsId}`);

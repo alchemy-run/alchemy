@@ -6,6 +6,10 @@ const examples = [
   "./examples/cloudflare-tanstack",
   "./examples/cloudflare-tanstack-start-solid",
   "./examples/cloudflare-neon-drizzle",
+  "./examples/cloudflare-website-astro",
+  "./examples/cloudflare-website-nuxt",
+  "./examples/cloudflare-website-sveltekit",
+  "./examples/cloudflare-website-waku",
   "./examples/aws-lambda",
 ] as const;
 

@@ -72,5 +72,6 @@ export * from "./TopicRuleEventSource.ts";
 export * from "./UpdateMicrovmImageVersion.ts";
 export * from "./UpdateMicrovmImageVersionHttp.ts";
 export * from "./UserPoolTriggerEventSource.ts";
+export * from "./Version.ts";
 export * from "./WebSocketEventSource.ts";
 export * from "./WirelessDestinationEventSource.ts";

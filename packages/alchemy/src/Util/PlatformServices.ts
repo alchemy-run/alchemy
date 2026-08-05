@@ -104,7 +104,8 @@ export const httpServer = (
     /**
      * Bun kills responses idle for >10s by default — long-running request
      * handlers (e.g. the dashboard's plan evaluation) need more headroom.
-     * Seconds, max 255. Node's server is unaffected.
+     * Seconds, max 255; defaults to 0 (no idle timeout). Node's server is
+     * unaffected.
      */
     idleTimeout?: number;
     /**
@@ -119,12 +120,15 @@ export const httpServer = (
   platformLayer({
     bun: async () => {
       const BunHttpServer = await import("@effect/platform-bun/BunHttpServer");
+      // `idleTimeout: 0` (the default here) disables Bun's 10s request
+      // idle timeout, which would otherwise sever long-lived streams that
+      // legitimately sit idle between lines — the RPC spawner's `/logs`
+      // feed and the dashboard's SSE stream both do. Callers may still
+      // narrow it.
       return BunHttpServer.layer({
         hostname: host,
         port,
-        ...(options?.idleTimeout !== undefined
-          ? { idleTimeout: options.idleTimeout }
-          : undefined),
+        idleTimeout: options?.idleTimeout ?? 0,
         ...(options?.gracefulShutdownTimeout !== undefined
           ? { gracefulShutdownTimeout: options.gracefulShutdownTimeout }
           : undefined),

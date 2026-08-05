@@ -423,6 +423,42 @@ describe("basic operations", () => {
   );
 
   test.provider(
+    "persists resolved binding data so an unchanged redeploy plans binding noops",
+    (stack) =>
+      Effect.gen(function* () {
+        // Binding data references an output of a resource created in the
+        // SAME deploy — unresolved at plan time, resolved during apply.
+        const program = Effect.gen(function* () {
+          const upstream = yield* BindingTarget("Upstream", {
+            string: "upstream-value",
+          });
+          const target = yield* BindingTarget("Target", { string: "t" });
+          yield* target.bind("Cap", { env: { UPSTREAM: upstream.string } });
+          return target;
+        });
+
+        const created = yield* stack.deploy(program);
+        expect(created.env).toEqual({ UPSTREAM: "upstream-value" });
+
+        // The persisted binding data must hold the RESOLVED value (what
+        // `reconcile` received) — not the raw plan-time data, whose Output
+        // proxies JSON state stores silently drop.
+        expect(yield* getState("Target")).toMatchObject({
+          status: "created",
+          bindings: [
+            { sid: "Cap", data: { env: { UPSTREAM: "upstream-value" } } },
+          ],
+        });
+
+        // An unchanged redeploy must plan the binding as a noop. Before the
+        // fix, the truncated persisted data diffed against the now-resolved
+        // value and forced a spurious update on every deploy after a create.
+        yield* stack.deploy(program);
+        expect((yield* getState("Target"))?.status).toEqual("created");
+      }),
+  );
+
+  test.provider(
     "should update a surviving consumer before deleting a removed dependency",
     (stack) =>
       Effect.gen(function* () {
@@ -4700,6 +4736,128 @@ describe("resource identity (fqn) threading", () => {
         expect(probe.id).toEqual("leaf");
         expect(probe.fqn).toEqual("Parent/leaf");
         expect((yield* getState("Parent/leaf"))?.status).toEqual("created");
+      }),
+  );
+});
+
+// =============================================================================
+// WHOLE-RESOURCE REFS RE-RESOLVE FRESH ATTRS AT APPLY
+// The plan materializes a whole-resource reference to an *updating* upstream
+// into its stable attributes for the downstream's `diff` — but the node's
+// props keep the evaluable reference, so `reconcile` receives the upstream's
+// fresh post-reconcile attributes, non-stable ones included. Baking the
+// stables-only snapshot into node.props left e.g. a Lambda Alias pointing at
+// the previous Lambda Version forever (#993's alias promotion bug).
+// =============================================================================
+
+describe("whole-resource refs re-resolve fresh attrs at apply", () => {
+  test.provider(
+    "downstream reconcile sees the upstream's fresh non-stable attributes",
+    (stack) =>
+      Effect.gen(function* () {
+        const observed: TestResourceProps[] = [];
+        const capture = hook({
+          create: () => Effect.void,
+          update: (id, props) =>
+            Effect.sync(() => {
+              if (id === "B") {
+                observed.push(props);
+              }
+            }),
+          delete: () => Effect.void,
+        });
+
+        const program = (version: string) =>
+          Effect.gen(function* () {
+            const A = yield* TestResource("A", { string: version });
+            // B references the WHOLE upstream resource, not a single prop.
+            return yield* TestResource("B", { object: A as any });
+          });
+
+        yield* program("v1").pipe(stack.deploy, capture);
+
+        // A updates in place: the non-stable `string` changes while
+        // `stableString` / `stableArray` stay put. B must re-reconcile
+        // against A's FRESH attributes — not the stables-only snapshot the
+        // plan hands B's diff.
+        yield* program("v2").pipe(stack.deploy, capture);
+
+        expect(observed).toHaveLength(1);
+        const object = observed[0]!.object as any;
+        expect(object.string).toBe("v2");
+        expect(object.stableString).toBe("A");
+
+        // The persisted props captured the fully-resolved attrs, so the next
+        // no-op deploy diffs full-against-full instead of churning.
+        const persisted = yield* getState("B");
+        expect((persisted?.props as any).object.string).toBe("v2");
+
+        yield* stack.destroy().pipe(capture);
+      }),
+  );
+
+  test.provider(
+    "host reconcile sees the upstream's fresh non-stable attributes through a binding",
+    (stack) =>
+      Effect.gen(function* () {
+        // Captures the DIFF-facing binding rows the host provider observes
+        // at plan time (materialized stables-only snapshots).
+        const diffObserved: any[] = [];
+        const capture = <A, Err, Req>(test: Effect.Effect<A, Err, Req>) =>
+          test.pipe(
+            Effect.provide(
+              Layer.succeed(TestResourceHooks, {
+                diff: (id, newBindings) =>
+                  Effect.sync(() => {
+                    if (id === "Host") {
+                      diffObserved.push(newBindings);
+                    }
+                  }),
+              }),
+            ),
+          );
+
+        const program = (version: string) =>
+          Effect.gen(function* () {
+            const A = yield* TestResource("A", { string: version });
+            const host = yield* BindingTarget("Host", { name: "host" });
+            // The binding data embeds the WHOLE upstream resource.
+            yield* host.bind("FromA", { env: { A } } as any);
+            return host;
+          });
+
+        yield* program("v1").pipe(stack.deploy, capture);
+        const created = yield* getState("Host");
+        expect((created?.bindings as any)[0].data.env.A.string).toBe("v1");
+
+        // A updates in place: the host's `diff` compares against the
+        // materialized stables-only snapshot, but the binding payload the
+        // host's `reconcile` receives must re-resolve to A's FRESH
+        // post-reconcile attributes at apply.
+        yield* program("v2").pipe(stack.deploy, capture);
+
+        // The plan-time diff saw the stables-only materialization.
+        const lastDiff = diffObserved.at(-1);
+        expect(lastDiff[0].data.env.A).toEqual({
+          stableString: "A",
+          stableArray: ["A"],
+        });
+
+        // The reconciled attr merged the fresh payload...
+        const updated = yield* getState("Host");
+        expect((updated?.attr as any).env.A.string).toBe("v2");
+        // ...and the terminal commit persisted the RESOLVED payload the
+        // provider reconciled with (#874).
+        const bound = (updated?.bindings as any)[0].data.env.A;
+        expect(bound.string).toBe("v2");
+        expect(bound.stableString).toBe("A");
+
+        // With full attrs persisted, the next plan diffs full-against-full
+        // instead of churning on the stables-only snapshot.
+        const rePlan = yield* program("v2").pipe(stack.plan, capture);
+        expect((rePlan.resources as any).Host.action).toBe("noop");
+
+        yield* stack.destroy().pipe(capture);
       }),
   );
 });
