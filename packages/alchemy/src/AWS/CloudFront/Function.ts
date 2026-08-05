@@ -233,9 +233,7 @@ export const FunctionProvider = () =>
                     Effect.retry({
                       while: (error) =>
                         error._tag === "InvalidArgument" &&
-                        isKeyValueStoreAssociationPending(
-                          error as { Message?: string },
-                        ),
+                        isKeyValueStoreAssociationPending(error),
                       schedule: cappedCloudFrontRetrySchedule,
                     }),
                   );
@@ -268,9 +266,7 @@ export const FunctionProvider = () =>
                 Effect.retry({
                   while: (error) =>
                     error._tag === "InvalidArgument" &&
-                    isKeyValueStoreAssociationPending(
-                      error as { Message?: string },
-                    ),
+                    isKeyValueStoreAssociationPending(error),
                   schedule: cappedCloudFrontRetrySchedule,
                 }),
               );
@@ -333,8 +329,8 @@ const isFunctionDeletePending = (error: {
 }): error is cloudfront.FunctionInUse | cloudfront.PreconditionFailed =>
   error._tag === "FunctionInUse" || error._tag === "PreconditionFailed";
 
-const isKeyValueStoreAssociationPending = (error: { Message?: string }) => {
-  const message = error.Message ?? "";
+const isKeyValueStoreAssociationPending = (error: { message?: string }) => {
+  const message = error.message ?? "";
   return (
     message.includes("KeyValueStoreAssociationArn") &&
     message.includes("cannot be associated before the resource is provisioned")

@@ -293,7 +293,7 @@ export const ScheduledActionProvider = () =>
           if (action === undefined) {
             return yield* Effect.fail(
               new aas.ObjectNotFoundException({
-                Message: `Scheduled action '${scheduledActionName}' was not readable after PutScheduledAction`,
+                message: `Scheduled action '${scheduledActionName}' was not readable after PutScheduledAction`,
               }),
             );
           }

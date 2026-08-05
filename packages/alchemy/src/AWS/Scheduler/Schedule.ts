@@ -22,7 +22,7 @@ const retryUntilRoleAssumable = <A, E extends { _tag: string }, R>(
   Effect.retry(effect, {
     while: (e) => {
       if (e._tag !== "ValidationException") return false;
-      const message = (e as { Message?: unknown }).Message;
+      const message = (e as { message?: unknown }).message;
       return typeof message === "string" && message.includes("assume the role");
     },
     schedule: Schedule_.spaced("5 seconds"),

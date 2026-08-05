@@ -70,6 +70,7 @@ export interface AwsResolvedCredentials {
     accessKeyId: Redacted.Redacted<string>;
     secretAccessKey: Redacted.Redacted<string>;
     sessionToken: Redacted.Redacted<string> | undefined;
+    region: string;
   }>;
   region: string;
   source: {
@@ -126,6 +127,7 @@ export const AwsAuth = AuthProviderLayer<
                 accessKeyId,
                 secretAccessKey,
                 sessionToken,
+                region,
               }),
             ),
             // Provide Region directly from the resolved inputs. Relying on the
@@ -274,6 +276,7 @@ export const AwsAuth = AuthProviderLayer<
                   accessKeyId,
                   secretAccessKey,
                   sessionToken,
+                  region,
                 }),
                 region,
                 source: { type: "env" as const },
@@ -298,6 +301,7 @@ export const AwsAuth = AuthProviderLayer<
                         sessionToken: creds.sessionToken
                           ? Redacted.make(creds.sessionToken)
                           : undefined,
+                        region: creds.region,
                       }),
                       region: creds.region,
                       source: { type: "stored" as const },
