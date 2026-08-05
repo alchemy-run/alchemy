@@ -3,11 +3,13 @@ import type { Bucket as PrismaBucket } from "@/Prisma/Bucket";
 import type { ReadBucketClient } from "@/Prisma/ReadBucket";
 import type { ReadWriteBucketClient } from "@/Prisma/ReadWriteBucket";
 import type { WriteBucketClient } from "@/Prisma/WriteBucket";
+import * as Cloudflare from "@/Cloudflare";
 import * as Prisma from "@/Prisma";
 import * as Test from "@/Test/Alchemy";
 import { describe, expect, it } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -92,7 +94,7 @@ describe("Prisma bucket binding identity", () => {
 });
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
-  providers: Prisma.providers(),
+  providers: Layer.merge(Cloudflare.providers(), Prisma.providers()),
 });
 
 const wantsLive = process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS === "true";
@@ -102,7 +104,10 @@ const hasLiveCredentials =
   process.env.ALCHEMY_RUN_LIVE_PRISMA_WITH_PROFILE === "true";
 const runLive = wantsLive && hasLiveCredentials;
 
-const HOOK_TIMEOUT = 600_000;
+// One Prisma Compute deploy alone can take the full 600s Compute.live.test.ts
+// budgets for it; this stack deploys three of them plus a Worker, a project,
+// a bucket and its keys.
+const HOOK_TIMEOUT = 1_200_000;
 const TEST_TIMEOUT = 120_000;
 
 const logLevel = Effect.provideService(
@@ -196,6 +201,20 @@ const expectMissing = (base: string, key: string) =>
     retryMismatch,
   );
 
+/** `/get` again, but keeping the stored `contentType` / `metadata` alongside the body. */
+const getObject = (base: string, key: string) =>
+  untilOk(HttpClient.get(`${base}/get?key=${encodeURIComponent(key)}`)).pipe(
+    Effect.flatMap((res) => res.json),
+    Effect.map(
+      (body) =>
+        body as {
+          value: string | null;
+          contentType: string | null;
+          metadata: Record<string, string> | null;
+        },
+    ),
+  );
+
 /** HEAD-equivalent: `/head` returns `{ exists, size }` (metadata only, no body). */
 const headObject = (base: string, key: string) =>
   untilOk(HttpClient.get(`${base}/head?key=${encodeURIComponent(key)}`)).pipe(
@@ -220,14 +239,28 @@ const expectListed = (base: string, prefix: string, key: string) =>
     retryMismatch,
   );
 
-const put = (base: string, key: string, value: string) =>
-  untilOk(
+/** `PutOptions` the `/put` route rebuilds from query params. */
+interface PutQuery {
+  contentType?: string;
+  metaKey?: string;
+  metaValue?: string;
+}
+
+const put = (base: string, key: string, value: string, options?: PutQuery) => {
+  const params = new URLSearchParams({ key });
+  if (options?.contentType) params.set("contentType", options.contentType);
+  if (options?.metaKey) {
+    params.set("metaKey", options.metaKey);
+    params.set("metaValue", options.metaValue ?? "");
+  }
+  return untilOk(
     HttpClient.execute(
-      HttpClientRequest.put(`${base}/put?key=${encodeURIComponent(key)}`).pipe(
+      HttpClientRequest.put(`${base}/put?${params}`).pipe(
         HttpClientRequest.bodyText(value),
       ),
     ),
   );
+};
 
 const del = (base: string, key: string) =>
   untilOk(
@@ -247,10 +280,54 @@ const delMany = (base: string, keys: string[]) =>
     ),
   );
 
+/** One page of `/list`, with the paging fields the client reports. */
+const listPage = (
+  base: string,
+  query: {
+    prefix: string;
+    delimiter?: string;
+    limit?: number;
+    cursor?: string;
+  },
+) => {
+  const params = new URLSearchParams({ prefix: query.prefix });
+  if (query.delimiter) params.set("delimiter", query.delimiter);
+  if (query.limit !== undefined) params.set("limit", String(query.limit));
+  if (query.cursor) params.set("cursor", query.cursor);
+  return untilOk(HttpClient.get(`${base}/list?${params}`)).pipe(
+    Effect.flatMap((res) => res.json),
+    Effect.map(
+      (body) =>
+        body as {
+          keys: string[];
+          delimitedPrefixes: string[];
+          truncated: boolean;
+          cursor: string | null;
+        },
+    ),
+  );
+};
+
+/** Ask the deployed app to mint a presigned URL and hand it back. */
+const presign = (
+  base: string,
+  route: "presign-get" | "presign-put",
+  key: string,
+  contentType?: string,
+) => {
+  const params = new URLSearchParams({ key });
+  if (contentType) params.set("contentType", contentType);
+  return untilOk(HttpClient.get(`${base}/${route}?${params}`)).pipe(
+    Effect.flatMap((res) => res.json),
+    Effect.map((body) => (body as { url: string }).url),
+  );
+};
+
 /**
  * Drive every client method through `fetch`: `put` → `get` → `head` →
- * `list` → `delete` (single) → `delete` (batch), reading back through
- * `readBase` and writing through `writeBase`. All apps share one bucket, so
+ * `list` → `delete` (single) → `delete` (batch) → `put` with options →
+ * paged/delimited `list` → `presignPut`/`presignGet`, reading back through
+ * `readBase` and writing through `writeBase`. All hosts share one bucket, so
  * keys are namespaced by `label` to keep the runs independent.
  */
 const exercise = (label: string, writeBase: string, readBase: string) =>
@@ -285,21 +362,74 @@ const exercise = (label: string, writeBase: string, readBase: string) =>
     yield* delMany(writeBase, [k2, k3]);
     yield* expectMissing(readBase, k2);
     yield* expectMissing(readBase, k3);
+
+    // put options — contentType and user metadata survive the round-trip
+    const ok = `${prefix}with-options`;
+    yield* put(writeBase, ok, '{"ok":true}', {
+      contentType: "application/json",
+      metaKey: "owner",
+      metaValue: "api",
+    });
+    yield* expectValue(readBase, ok, '{"ok":true}');
+    const stored = yield* getObject(readBase, ok);
+    expect(stored.contentType).toBe("application/json");
+    expect(stored.metadata).toEqual({ owner: "api" });
+
+    // list paging — a small `limit` truncates and hands back a cursor that
+    // continues the listing; `delimiter` rolls the nested keys up instead.
+    const page = `${prefix}page/`;
+    yield* put(writeBase, `${page}a`, "a");
+    yield* put(writeBase, `${page}b`, "b");
+    yield* put(writeBase, `${page}c`, "c");
+    yield* expectListed(readBase, page, `${page}c`);
+
+    const first = yield* listPage(readBase, { prefix: page, limit: 2 });
+    expect(first.keys.length).toBe(2);
+    expect(first.truncated).toBe(true);
+    expect(typeof first.cursor).toBe("string");
+    const second = yield* listPage(readBase, {
+      prefix: page,
+      cursor: first.cursor ?? undefined,
+    });
+    expect([...first.keys, ...second.keys]).toContain(`${page}c`);
+
+    const rolled = yield* listPage(readBase, { prefix, delimiter: "/" });
+    expect(rolled.delimitedPrefixes).toContain(page);
+
+    // presign — the app mints the URLs, the test uses them with no
+    // credentials of its own: upload through the PUT URL, read it back
+    // through the GET URL.
+    const pk = `${prefix}presigned`;
+    const payload = `${label}-presigned-payload`;
+    const putUrl = yield* presign(writeBase, "presign-put", pk, "text/plain");
+    const uploaded = yield* HttpClient.execute(
+      HttpClientRequest.put(putUrl).pipe(
+        HttpClientRequest.bodyText(payload, "text/plain"),
+      ),
+    );
+    expect(uploaded.status).toBe(200);
+
+    const getUrl = yield* presign(readBase, "presign-get", pk);
+    const downloaded = yield* untilOk(HttpClient.get(getUrl));
+    expect(yield* downloaded.text).toBe(payload);
   });
 
 /**
- * Deploys three Prisma Compute apps that all bind one shared Object Store
- * bucket — read / write / read-write over the native Compute binding — via
- * {@link Stack}, then drives the binding over `fetch`:
+ * Deploys three Prisma Compute apps and one Cloudflare Worker that all bind
+ * one shared Object Store bucket — read / write / read-write on Compute,
+ * read-write on the Worker — via {@link Stack}, then drives the binding over
+ * `fetch`:
  *
  * - write through the Write app, read it back through the Read app
  *   (cross-app, proving both halves agree on the bucket);
- * - round-trip a key through the ReadWrite app by itself.
+ * - round-trip a key through the ReadWrite app by itself;
+ * - round-trip a key through the Worker, whose binding takes the
+ *   text-binding branch instead of the environment branch.
  *
  * The stack lives in `fixtures/stack.ts` so it can also be inspected
  * directly, e.g. `alchemy tail --stage test ./test/Prisma/fixtures/stack.ts`.
  */
-describe.skipIf(!runLive)("Prisma bucket binding over Prisma Compute", () => {
+describe.skipIf(!runLive)("Prisma bucket binding over deployed hosts", () => {
   const stack = beforeAll(deploy(Stack), { timeout: HOOK_TIMEOUT });
   afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
     timeout: HOOK_TIMEOUT,
@@ -319,6 +449,15 @@ describe.skipIf(!runLive)("Prisma bucket binding over Prisma Compute", () => {
     Effect.gen(function* () {
       const out = yield* stack;
       yield* exercise("rw-bind", out.readWrite, out.readWrite);
+    }).pipe(logLevel),
+    { timeout: TEST_TIMEOUT },
+  );
+
+  test(
+    "read-write round-trip in a Cloudflare Worker",
+    Effect.gen(function* () {
+      const out = yield* stack;
+      yield* exercise("rw-worker", out.worker, out.worker);
     }).pipe(logLevel),
     { timeout: TEST_TIMEOUT },
   );

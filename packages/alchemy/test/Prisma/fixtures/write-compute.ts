@@ -16,6 +16,8 @@ export default Compute(
       appName: "alchemy-bucket-binding-write",
       main: import.meta.filename,
       port: 8080,
+      timeoutSeconds: 240,
+      destroyOldDeployment: true,
     };
   }),
   Effect.gen(function* () {
