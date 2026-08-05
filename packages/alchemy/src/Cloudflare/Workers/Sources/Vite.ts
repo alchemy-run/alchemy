@@ -9,11 +9,16 @@ import { createRequire } from "node:module";
 import nodePath from "node:path";
 import { pathToFileURL } from "node:url";
 import type * as vite from "vite";
-import { viteBuildOutputPlugin } from "../../../Bundle/Vite.ts";
+import {
+  viteBuildOutputPlugin,
+  type ViteBuildOutput,
+} from "../../../Bundle/Vite.ts";
 import { hashDirectory, type MemoOptions } from "../../../Command/Memo.ts";
+import { initialCwd } from "../../../Util/Node.ts";
 import { sha256Object } from "../../../Util/sha256.ts";
 import { readAssets } from "../Assets.ts";
 import type { SourceDevHandle, SourceProvider } from "../Source.ts";
+import { runViteBuildChild } from "../ViteChild.ts";
 import type { ViteOptions } from "../Worker.ts";
 import { isWorkerLoader } from "../WorkerLoader.ts";
 
@@ -94,7 +99,7 @@ const makeViteLogger = (console: ConsoleService.Console): vite.Logger => {
 const ALCHEMY_CLOUDFLARE_VITE_INJECTED = "ALCHEMY_CLOUDFLARE_VITE_INJECTED";
 
 export const viteDev = (
-  rootDir: string = process.cwd(),
+  rootDir: string = initialCwd,
   env: Record<string, unknown>,
   pluginOptions: CloudflareVitePluginOptions,
   serverOptions: vite.ServerOptions,
@@ -121,8 +126,59 @@ export const viteDev = (
       }),
   );
 
+/**
+ * Run a production Vite build in a child process rooted at the project
+ * directory and adapt the result to the in-process {@link ViteBuildOutput}
+ * shape.
+ *
+ * The child boundary is what makes concurrent builds safe: vite resolves a
+ * relative root against live `process.cwd()`, plugins read cwd freely, and
+ * build-time spawns chdir the hosting process transiently (cross-spawn's
+ * PATH resolution) — so an in-process build both breaks under and causes
+ * cwd races when the engine runs builds concurrently.
+ */
 export const viteBuild = (
-  rootDir: string = process.cwd(),
+  rootDir: string = initialCwd,
+  env: Record<string, unknown>,
+  pluginOptions: CloudflareVitePluginOptions,
+) =>
+  ConsoleService.consoleWith((console) =>
+    Effect.gen(function* () {
+      const result = yield* runViteBuildChild(
+        {
+          // Anchor to the initial cwd so the resolution itself can't race a
+          // transient chdir; the child's own cwd is this resolved root.
+          rootDir: nodePath.resolve(initialCwd, rootDir),
+          // Only `VITE_`-prefixed entries participate in the build (see
+          // `getDefine`); the rest may hold non-serializable values.
+          env: Object.fromEntries(
+            Object.entries(env).filter(([key]) => key.startsWith("VITE_")),
+          ),
+          main: pluginOptions.main,
+          compatibilityDate: pluginOptions.compatibilityDate,
+          compatibilityFlags: pluginOptions.compatibilityFlags,
+          viteEnvironments: pluginOptions.viteEnvironments,
+        },
+        (channel, line) =>
+          channel === "stderr" ? console.error(line) : console.log(line),
+      );
+      return {
+        clientDirectory: result.clientDirectory,
+        base: result.base,
+        serverBundle: Effect.succeed(result.serverBundle),
+        externalWorkspaces: Effect.succeed(new Set(result.externalWorkspaces)),
+      } satisfies ViteBuildOutput;
+    }),
+  );
+
+/**
+ * The in-process build implementation. ONLY safe inside the dedicated
+ * build child (`ViteBuildChildRunner.ts`), whose cwd is the project root
+ * and which hosts no concurrent work — never call it from the engine
+ * process (see {@link viteBuild}).
+ */
+export const viteBuildInProcess = (
+  rootDir: string,
   env: Record<string, unknown>,
   pluginOptions: CloudflareVitePluginOptions,
 ) =>
@@ -178,9 +234,7 @@ type ViteModule = typeof import("vite");
  * Dynamically load Vite from the project root. Falls back to the bundled
  * copy if the project doesn't have its own Vite installation.
  */
-async function loadVite(
-  projectRoot: string = process.cwd(),
-): Promise<ViteModule> {
+async function loadVite(projectRoot: string = initialCwd): Promise<ViteModule> {
   try {
     const require = createRequire(nodePath.join(projectRoot, "package.json"));
     const vitePath = require.resolve("vite");
@@ -234,7 +288,7 @@ const resolveViteEnv = (env: Record<string, unknown>) =>
  * the rebuild-free change signal for the `input` hash slot.
  */
 export const hashViteInput = Effect.fn(function* <E, R>(
-  rootDir: string = process.cwd(),
+  rootDir: string = initialCwd,
   options: ViteOptions["memo"],
   additionalWorkspaces: Effect.Effect<Iterable<string>, E, R>,
 ) {
@@ -244,8 +298,9 @@ export const hashViteInput = Effect.fn(function* <E, R>(
   // `rootDir` as its own cwd would apply a relative root twice
   // (`path.resolve("app", "app")` → `<cwd>/app/app`), hashing a
   // directory that doesn't exist — a constant hash that never registers
-  // an edit, so the deploy no-ops forever. See issue #1016.
-  const resolvedRoot = path.resolve(rootDir);
+  // an edit, so the deploy no-ops forever. See issue #1016. Anchored to
+  // the initial cwd so a transient chdir can't skew the resolution.
+  const resolvedRoot = path.resolve(initialCwd, rootDir);
   // Relative paths participate in memo hashes and surface in outputs;
   // keep them POSIX so Windows and CI agree.
   const relativeToRoot = (cwd: string) =>
@@ -317,8 +372,11 @@ export const makeViteSource = (vite: ViteOptions): SourceProvider => ({
               ...(ctx.assets && typeof ctx.assets !== "string"
                 ? ctx.assets
                 : undefined),
+              // `clientDirectory` from the build child is absolute; the
+              // base only matters for the in-process legacy shape.
               directory: path.resolve(
-                vite.rootDir ?? process.cwd(),
+                initialCwd,
+                vite.rootDir ?? ".",
                 clientDirectory,
               ),
             })

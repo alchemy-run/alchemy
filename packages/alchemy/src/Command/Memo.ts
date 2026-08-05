@@ -4,6 +4,7 @@ import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import fg from "fast-glob";
 import { gitignoreRulesToGlobs } from "../Util/gitignore-rules-to-globs.ts";
+import { initialCwd } from "../Util/Node.ts";
 import { sha256, sha256Object } from "../Util/sha256.ts";
 
 /**
@@ -103,7 +104,9 @@ const Memo = Effect.gen(function* () {
     cwd: string | undefined,
     options: MemoOptions,
   ): Effect.fn.Return<ResolvedMemoOptions, PlatformError> {
-    const resolvedCwd = cwd ? path.resolve(cwd) : process.cwd();
+    // Anchored: a live `process.cwd()` read can race a concurrent tool's
+    // transient chdir (see Util/Node.ts `initialCwd`).
+    const resolvedCwd = path.resolve(initialCwd, cwd ?? ".");
     return {
       cwd: resolvedCwd,
       // Rewrite absolute include patterns to cwd-relative ones: fast-glob

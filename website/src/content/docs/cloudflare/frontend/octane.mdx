@@ -5,6 +5,10 @@ sidebar:
   order: 13
 ---
 
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+export const devDeps = "@distilled.cloud/octane @octanejs/adapter-cloudflare";
+
 `Cloudflare.Website.Octane` deploys an [OctaneJS](https://octanejs.dev)
 fullstack app as a Cloudflare Worker. Octane wraps Vite, so the resource
 is deliberately thin: it runs your project's own `vite build` — Octane's
@@ -16,14 +20,28 @@ command to run.
 
 ## Install
 
-The build integration is loaded from your project at deploy time,
-alongside Octane's own packages:
+The build integration is not bundled with alchemy — the resource
+dynamically imports `@distilled.cloud/octane` from your project at
+deploy time, so it must be installed alongside Octane's own
+Cloudflare adapter. Both are only used at build time, so dev
+dependencies are enough:
 
-```sh
-bun add -d @distilled.cloud/octane @octanejs/adapter-cloudflare
-```
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun add -d ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm install -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+</Tabs>
 
-## Select the Cloudflare adapter
+## Configure Octane
 
 Your `octane.config.ts` picks the deploy target, exactly as in Octane's
 own deployment story:
@@ -43,12 +61,31 @@ export default defineConfig({
 
 A missing or foreign adapter fails the deploy with an actionable error.
 
+## Declare the Website
+
+Declare the site as a module-level const (rather than inline in the
+Stack) and derive the typed shape of its bindings from it:
+
+```typescript
+// alchemy.run.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+
+export const Website = Cloudflare.Website.Octane("Website");
+
+export type WebsiteEnv = Cloudflare.InferEnv<typeof Website>;
+```
+
+`WebsiteEnv` is the typed shape of the Worker's bindings, derived
+from the class — you'll import it into your Octane code in
+[Read bindings in server code](#read-bindings-in-server-code).
+
 ## Add it to the Stack
+
+Yield the class from your Stack and return its URL:
 
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(
@@ -58,7 +95,7 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-    const site = yield* Cloudflare.Website.Octane("Website");
+    const site = yield* Website;
     return { url: site.url };
   }),
 );
@@ -72,39 +109,66 @@ See
 [examples/cloudflare-octane](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-octane)
 for the checked-in example.
 
-## Bindings
+## Add bindings
 
 The resource returns a plain `Worker`, so `env` accepts the full binding
 vocabulary — KV namespaces, R2 buckets, secrets:
 
-```typescript
-const cache = yield* Cloudflare.KV.Namespace("Cache");
+```diff lang="typescript"
+// alchemy.run.ts
++import * as Config from "effect/Config";
 
-const site = yield* Cloudflare.Website.Octane("Website", {
-  env: {
-    CACHE: cache,
-    API_KEY: Alchemy.secret("API_KEY"),
-  },
++export const Cache = Cloudflare.KV.Namespace("Cache");
+
+export const Website = Cloudflare.Website.Octane("Website", {
++  env: {
++    CACHE: Cache,
++    API_KEY: Config.redacted("API_KEY"),
++  },
 });
 ```
 
-Octane middleware and `ServerRoute` handlers read them through the
+`Cache` is a description, not a deploy — Alchemy provisions the real
+namespace because the Website binds it. `Config.redacted` reads
+`API_KEY` from your environment at deploy time and binds it as a
+Worker secret — see [Secrets & env](/cloudflare/security/secrets-env).
+
+## Read bindings in server code
+
+Octane middleware and `ServerRoute` handlers read bindings through the
 adapter's runtime contract: `context.platform` is the Cloudflare
-`{ env, ctx }` pair.
+`{ env, ctx }` pair. Type it with the inferred env type — `env` and
+`ctx` are optional because Octane's dev server supplies no platform
+(see [Local dev](#local-dev)):
 
 ```typescript
 // octane.config.ts
+import type { WebsiteEnv } from "./alchemy.run.ts";
+
+interface Platform {
+  readonly env?: WebsiteEnv;
+  readonly ctx?: { waitUntil(promise: Promise<unknown>): void };
+}
+
 new ServerRoute({
   path: "/api/visits",
   methods: ["GET"],
   handler: async (context) => {
-    const { env, ctx } = context.platform as CloudflarePlatform<Env>;
-    const visits = Number((await env.CACHE.get("visits")) ?? "0") + 1;
-    ctx.waitUntil(env.CACHE.put("visits", String(visits)));
+    const platform = context.platform as Platform | undefined;
+    const cache = platform?.env?.CACHE;
+    if (cache === undefined) {
+      return Response.json({ visits: null, dev: true });
+    }
+    const visits = Number((await cache.get("visits")) ?? "0") + 1;
+    platform?.ctx?.waitUntil(cache.put("visits", String(visits)));
     return Response.json({ visits });
   },
 });
 ```
+
+`platform.env.CACHE` is typed as a KV namespace and `.API_KEY` as a
+string — renaming a binding in `alchemy.run.ts` is a type error in
+your handlers.
 
 ## Asset routing
 
@@ -122,23 +186,9 @@ plugin, so deploy it with
 [`Cloudflare.Website.Vite`](/cloudflare/frontend/vite):
 
 ```typescript
-const app = yield* Cloudflare.Website.Vite("Octane", {
+export const OctaneApp = Cloudflare.Website.Vite("Octane", {
   assets: {
     notFoundHandling: "single-page-application",
-  },
-});
-```
-
-## Rebuilds and memo
-
-Input files are content-hashed (respecting `.gitignore` by default), so
-an unchanged project skips both the build and the deploy. Narrow the
-scope with `memo` when the project lives in a large repository:
-
-```typescript
-const site = yield* Cloudflare.Website.Octane("Website", {
-  memo: {
-    include: ["src/**", "public/**", "index.html", "octane.config.ts", "vite.config.ts", "package.json"],
   },
 });
 ```

@@ -25,6 +25,7 @@ import * as Provider from "../../Provider.ts";
 import { type ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { cachedFunction } from "../../Util/cached-function.ts";
+import { initialCwd } from "../../Util/Node.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { localRuntimeServices } from "../LocalRuntime.ts";
@@ -2170,7 +2171,8 @@ export const LiveWorkerProvider = () =>
               // package) — absolutize before handing it over (#796).
               main: props.vite?.main
                 ? path.resolve(
-                    props.vite.rootDir ?? process.cwd(),
+                    initialCwd,
+                    props.vite.rootDir ?? ".",
                     props.vite.main,
                   )
                 : undefined,
@@ -2186,8 +2188,11 @@ export const LiveWorkerProvider = () =>
                   ...(props.assets && typeof props.assets !== "string"
                     ? props.assets
                     : undefined),
+                  // `clientDirectory` from the build child is absolute;
+                  // the base only matters as a legacy fallback.
                   directory: path.resolve(
-                    props.vite?.rootDir ?? process.cwd(),
+                    initialCwd,
+                    props.vite?.rootDir ?? ".",
                     clientDirectory,
                   ),
                   // The resolved Vite `base` is what rewrote the URLs in

@@ -87,7 +87,6 @@ export default defineConfig({
 ```typescript
 const site = yield* Cloudflare.Website.Vite("Website", {
   rootDir: "./web",
-  compatibility: { flags: ["nodejs_compat"] },
   assets: { runWorkerFirst: true },
 });
 ```
@@ -106,6 +105,10 @@ const site = yield* Cloudflare.Website.Vite("Website", {
   `compatibility`, `crons`, and so on. See
   [Workers](/cloudflare/compute/workers).
 
+SSR server bundles routinely use Node APIs at runtime — the
+`nodejs_compat` compatibility flag covers that, and it is enabled by
+default for every Worker, so there is nothing to pass.
+
 :::caution[index.html must be at rootDir]
 Vite resolves `index.html` relative to its project root. `rootDir`
 defaults to `process.cwd()` — so place `index.html` next to your
@@ -114,18 +117,16 @@ See Vite's
 [project structure docs](https://vite.dev/guide/#index-html-and-project-root).
 :::
 
-Like `Worker`, the resource also has a class form — useful when
-other resources bind to the site, or when you want to derive its
-`env` types:
+Like `Worker`, the resource also has a class form — only needed
+when *other* resources bind to the site (the class gives it a named
+type they can reference):
 
 ```typescript
-export class Website extends Cloudflare.Website.Vite<Website>()("Website", {
-  compatibility: { flags: ["nodejs_compat"] },
-}) {}
+export class Website extends Cloudflare.Website.Vite<Website>()("Website", {}) {}
 ```
 
-See [TanStack Start](/cloudflare/frontend/tanstack-start) for the
-class form in a real app.
+For everything else — including deriving `env` types — a plain
+`const` is enough; see [Runtime bindings](#runtime-bindings) below.
 
 ## Environment
 
@@ -180,13 +181,12 @@ Non-`VITE_` values become native Worker bindings, available to SSR
 code and typed via `Cloudflare.InferEnv`:
 
 ```typescript
-export class Website extends Cloudflare.Website.Vite<Website>()("Website", {
-  compatibility: { flags: ["nodejs_compat"] },
+export const Website = Cloudflare.Website.Vite("Website", {
   env: {
     BUCKET: Bucket,
     BACKEND: Backend,
   },
-}) {}
+});
 
 export type WebsiteEnv = Cloudflare.InferEnv<typeof Website>;
 ```
@@ -203,7 +203,6 @@ produces the Worker entry chunk and which are bundled alongside it:
 
 ```typescript
 const app = yield* Cloudflare.Website.Vite("ReactRouterRSC", {
-  compatibility: { flags: ["nodejs_compat"] },
   viteEnvironments: { entry: "rsc", children: ["ssr"] },
 });
 ```

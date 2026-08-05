@@ -31,6 +31,13 @@ const logLevel = Effect.provideService(
 const fixtureDir = pathe.resolve(import.meta.dirname, "staticsite-fixture");
 const workerEntry = pathe.resolve(import.meta.dirname, "fixtures/worker.ts");
 
+// Read back through `Config.string` by the #796 test below. Set at module
+// load (collection time): `ConfigProvider.fromEnv` snapshots `process.env`
+// when the test harness constructs the provider — BEFORE a test body runs —
+// so setting this inside the test only ever satisfied the NEXT attempt
+// (the failure was masked by the runner's default retry).
+process.env.STATICSITE_ENV_TEST = "from-config";
+
 describe.concurrent("StaticSite", () => {
   test.provider(
     "StaticSite: editing a source file republishes the assets in a single deploy",
@@ -751,10 +758,9 @@ describe.concurrent("StaticSite", () => {
           "#!/bin/bash\nmkdir -p dist\necho dep > dist/dep.txt\n",
         );
 
-        yield* Effect.sync(() => {
-          process.env.STATICSITE_ENV_TEST = "from-config";
-        });
-
+        // `STATICSITE_ENV_TEST` is set at module load (see top of file) —
+        // the harness's ConfigProvider snapshots process.env before the
+        // test body runs.
         yield* stack.deploy(
           Effect.gen(function* () {
             const dep = yield* Command.Build("EnvDep", {
