@@ -521,48 +521,84 @@ test.provider(
     }).pipe(logLevel),
 );
 
-test.provider("getIdentityProvider data source resolves a live IdP", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider(
+  "getIdentityProvider data source feeds another resource's props",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-    const NAME = "alchemy-zt-idp-lookup";
+      yield* stack.destroy();
 
-    // First deploy creates the IdP; the second (same resource, so nothing
-    // is orphaned) also evaluates the data source, whose Output resolves at
-    // plan time against the already-live IdP.
-    const idp = yield* stack.deploy(
-      Cloudflare.Access.IdentityProvider("LookupOidc", {
-        name: NAME,
-        type: "oidc",
-        config: oidcConfig,
-      }),
-    );
+      const NAME = "alchemy-zt-idp-lookup";
 
-    const result = yield* stack.deploy(
-      Effect.gen(function* () {
-        const same = yield* Cloudflare.Access.IdentityProvider("LookupOidc", {
+      // First deploy creates the IdP alone so the live IdP exists before
+      // the next plan's data-source Output resolves.
+      const idp = yield* stack.deploy(
+        Cloudflare.Access.IdentityProvider("LookupOidc", {
           name: NAME,
           type: "oidc",
           config: oidcConfig,
-        });
-        return {
-          deployedId: same.identityProviderId,
-          lookedUp: Cloudflare.Access.getIdentityProvider({ name: NAME }),
-          missing: Cloudflare.Access.getIdentityProvider({
-            name: "alchemy-zt-idp-lookup-nonexistent",
+        }),
+      );
+
+      // Second deploy consumes the lookup Output IN PLACE OF a resource
+      // reference: `allowedIdps` receives the looked-up id — the "gate an
+      // application on an IdP managed outside the stack" use case.
+      const result = yield* stack.deploy(
+        Effect.gen(function* () {
+          const same = yield* Cloudflare.Access.IdentityProvider("LookupOidc", {
+            name: NAME,
+            type: "oidc",
+            config: oidcConfig,
+          });
+          yield* Cloudflare.Zone.Zone("TestZone", {
+            name: zoneName,
+          }).pipe(adopt(true));
+          const app = yield* Cloudflare.Access.Application("LookupGatedApp", {
+            type: "self_hosted",
+            domain: `alchemy-test-idp-lookup.${zoneName}`,
+            sessionDuration: "24h",
+            allowedIdps: [
+              Cloudflare.Access.getIdentityProvider({
+                name: NAME,
+              }).identityProviderId.as<string>(),
+            ],
+          });
+          return {
+            deployedId: same.identityProviderId,
+            app,
+            missing: Cloudflare.Access.getIdentityProvider({
+              name: "alchemy-zt-idp-lookup-nonexistent",
+            }),
+          };
+        }),
+      );
+
+      expect(result.deployedId).toEqual(idp.identityProviderId);
+      expect(result.missing).toBeUndefined();
+      expect(result.app.applicationId).toBeTruthy();
+
+      // The application's allowed-IdP list must carry the looked-up id —
+      // verified out-of-band against the live application.
+      const liveApp = yield* zeroTrust
+        .getAccessApplicationForAccount({
+          accountId,
+          appId: result.app.applicationId,
+        })
+        .pipe(
+          Effect.retry({
+            while: (e): boolean => e._tag === "Forbidden",
+            ...forbiddenRetryPolicy,
           }),
-        };
-      }),
-    );
+        );
+      const allowed =
+        (liveApp as { allowedIdps?: ReadonlyArray<string | null> | null })
+          .allowedIdps ?? [];
+      expect(allowed).toContain(idp.identityProviderId);
 
-    expect(result.deployedId).toEqual(idp.identityProviderId);
-    expect(result.lookedUp?.identityProviderId).toEqual(idp.identityProviderId);
-    expect(result.lookedUp?.type).toEqual("oidc");
-    expect(result.missing).toBeUndefined();
-
-    yield* stack.destroy();
-    yield* expectGone(undefined, idp.accountId, idp.identityProviderId);
-  }).pipe(logLevel),
+      yield* stack.destroy();
+      yield* expectGone(undefined, idp.accountId, idp.identityProviderId);
+    }).pipe(logLevel),
 );
 
 class LookupNotServing extends Data.TaggedError("LookupNotServing")<{
