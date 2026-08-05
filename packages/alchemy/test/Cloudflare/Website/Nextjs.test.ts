@@ -12,6 +12,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
+import { linkJsApiTypeScript } from "./TypeScriptCompat.ts";
 import {
   expectWorkerExists,
   waitForWorkerToBeDeleted,
@@ -42,8 +43,8 @@ const nextjsProps = (rootDir: string) => ({
       "pages/**",
       "public/**",
       "package.json",
-      "jsconfig.json",
-      "middleware.js",
+      "tsconfig.json",
+      "middleware.ts",
       "next.config.mjs",
       "open-next.config.ts",
     ],
@@ -88,15 +89,16 @@ test.provider(
         tempRoot,
         entries: [
           "package.json",
-          "jsconfig.json",
+          "tsconfig.json",
           "next.config.mjs",
           "open-next.config.ts",
-          "middleware.js",
+          "middleware.ts",
           "app",
           "pages",
           "public",
         ],
       });
+      yield* linkJsApiTypeScript(rootDir);
 
       const bindingMarker = "nextjs-binding-marker";
 
@@ -271,7 +273,7 @@ test.provider(
 
       // ── deploy 3: edit the SSR page ⇒ the input hash changes and the
       // new content deploys ────────────────────────────────────────────────
-      const pagePath = path.join(rootDir, "app/page.jsx");
+      const pagePath = path.join(rootDir, "app/page.tsx");
       const page = yield* fs.readFileString(pagePath);
       yield* fs.writeFileString(
         pagePath,

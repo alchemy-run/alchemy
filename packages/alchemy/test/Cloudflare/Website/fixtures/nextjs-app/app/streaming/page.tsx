@@ -1,3 +1,4 @@
+/** @jsxImportSource react */
 import { Suspense } from "react";
 
 export const dynamic = "force-dynamic";

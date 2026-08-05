@@ -1,7 +1,12 @@
+/** @jsxImportSource react */
 // Catch-all dynamic segment, always rendered on demand in the Worker.
 export const dynamic = "force-dynamic";
 
-export default async function Docs({ params }) {
+export default async function Docs({
+  params,
+}: {
+  params: Promise<{ path: string[] }>;
+}) {
   const { path } = await params;
   return (
     <main>

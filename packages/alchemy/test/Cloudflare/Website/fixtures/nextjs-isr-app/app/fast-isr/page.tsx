@@ -1,3 +1,4 @@
+/** @jsxImportSource react */
 // Short revalidate window: after it lapses, the next hit serves STALE and
 // enqueues a background revalidation through the Durable Object queue
 // (`NEXT_CACHE_DO_QUEUE`), which re-renders via `WORKER_SELF_REFERENCE`

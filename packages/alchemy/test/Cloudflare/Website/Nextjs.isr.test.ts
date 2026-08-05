@@ -10,6 +10,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
+import { linkJsApiTypeScript } from "./TypeScriptCompat.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -80,13 +81,14 @@ test.provider(
         tempRoot,
         entries: [
           "package.json",
-          "jsconfig.json",
+          "tsconfig.json",
           "next.config.mjs",
           "open-next.config.ts",
           "app",
           "public",
         ],
       });
+      yield* linkJsApiTypeScript(rootDir);
 
       const deploy = () =>
         stack.deploy(
@@ -101,7 +103,7 @@ test.provider(
                   "app/**",
                   "public/**",
                   "package.json",
-                  "jsconfig.json",
+                  "tsconfig.json",
                   "next.config.mjs",
                   "open-next.config.ts",
                 ],
@@ -149,10 +151,26 @@ test.provider(
 
       // 2. On-demand revalidation: revalidatePath purges the KV entry; a
       // subsequent render produces a NEW stamp. With a read-only cache
-      // this would never change.
-      const revalidateRes = yield* client.execute(
-        HttpClientRequest.post(`${site.url!}/api/revalidate`),
-      );
+      // this would never change. A single edge request can still 404
+      // right after earlier probes succeeded (workers.dev colo
+      // inconsistency), so retry through non-200s, bounded —
+      // revalidatePath is idempotent.
+      const revalidateRes = yield* client
+        .execute(HttpClientRequest.post(`${site.url!}/api/revalidate`))
+        .pipe(
+          Effect.flatMap((res) =>
+            res.status === 200
+              ? Effect.succeed(res)
+              : Effect.flatMap(res.text, (body) =>
+                  Effect.fail(
+                    new Error(
+                      `revalidate not ready (${res.status}): ${body.slice(0, 200)}`,
+                    ),
+                  ),
+                ),
+          ),
+          Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
+        );
       expect(revalidateRes.status).toBe(200);
       const fresh = yield* pollStamp(
         `${site.url!}/isr`,
