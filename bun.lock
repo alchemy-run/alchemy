@@ -269,6 +269,21 @@
         "effect": "catalog:",
       },
     },
+    "distilled/packages/otel-collector": {
+      "name": "@distilled.cloud/otel-collector",
+      "version": "0.30.2",
+      "dependencies": {
+        "@distilled.cloud/core": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+        "vitest": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
+      },
+    },
     "distilled/packages/planetscale": {
       "name": "@distilled.cloud/planetscale",
       "version": "1.0.0-rc.4",
@@ -1532,6 +1547,7 @@
         "@distilled.cloud/cloudflare": "workspace:*",
         "@distilled.cloud/core": "workspace:*",
         "@distilled.cloud/neon": "workspace:*",
+        "@distilled.cloud/otel-collector": "workspace:*",
         "@distilled.cloud/planetscale": "workspace:*",
         "@effect/sql-d1": "catalog:",
         "@effect/sql-sqlite-do": "catalog:",
@@ -2471,6 +2487,8 @@
     "@distilled.cloud/mongodb-atlas": ["@distilled.cloud/mongodb-atlas@workspace:distilled/packages/mongodb-atlas"],
 
     "@distilled.cloud/neon": ["@distilled.cloud/neon@workspace:distilled/packages/neon"],
+
+    "@distilled.cloud/otel-collector": ["@distilled.cloud/otel-collector@workspace:distilled/packages/otel-collector"],
 
     "@distilled.cloud/planetscale": ["@distilled.cloud/planetscale@workspace:distilled/packages/planetscale"],
 
