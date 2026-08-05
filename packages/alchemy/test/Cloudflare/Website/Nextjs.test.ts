@@ -217,13 +217,30 @@ test.provider(
       expect(streamBody).toContain("STREAMING_RESOLVED_MARKER");
 
       // Custom not-found boundary: unmatched routes and notFound() calls
-      // both serve the custom 404 content with a 404 status.
-      const missing = yield* client.get(`${site1.url!}/definitely/not/a/route`);
-      expect(missing.status).toBe(404);
-      expect(yield* missing.text).toContain("CUSTOM_NOT_FOUND_MARKER");
-      const gone = yield* client.get(`${site1.url!}/gone`);
-      expect(gone.status).toBe(404);
-      expect(yield* gone.text).toContain("CUSTOM_NOT_FOUND_MARKER");
+      // both serve the custom 404 content with a 404 status. A colo that
+      // hasn't picked up the deployment yet serves Cloudflare's platform
+      // "Page not found" (also a 404), so retry until the response is the
+      // app's own boundary rather than asserting the first answer.
+      const expectCustom404 = (url: string, label: string) =>
+        client.get(url).pipe(
+          Effect.flatMap((res) =>
+            Effect.flatMap(res.text, (body) =>
+              res.status === 404 && body.includes("CUSTOM_NOT_FOUND_MARKER")
+                ? Effect.void
+                : Effect.fail(
+                    new Error(
+                      `${label}: status=${res.status}, custom not-found marker absent`,
+                    ),
+                  ),
+            ),
+          ),
+          Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
+        );
+      yield* expectCustom404(
+        `${site1.url!}/definitely/not/a/route`,
+        "unmatched route",
+      );
+      yield* expectCustom404(`${site1.url!}/gone`, "notFound() page");
 
       // next.config redirects / rewrites / headers. The fetch-backed
       // client follows the 308, so assert the redirect lands on the home
