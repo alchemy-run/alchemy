@@ -27,7 +27,7 @@ import {
 } from "../../Resource.ts";
 import type { Rpc } from "../../Rpc.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import type { Self } from "../../Self.ts";
+import type { Self as SelfService } from "../../Self.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Container } from "../Containers/Container.ts";
 import type { DevContainerImage } from "../Containers/ContainerApplication.ts";
@@ -258,7 +258,7 @@ export type WorkerServices =
   | WorkerEnvironment
   | CloudflareEnvironment
   | Container.Application<any>
-  | Self;
+  | SelfService;
 
 export type WorkerShape<Req = never> = Main<WorkerServices | Req> &
   MainRpc<WorkerServices | Req>;
@@ -1242,6 +1242,36 @@ export const isSelfUrl = (value: unknown): value is URLEffect =>
   value !== null &&
   "~alchemy/Kind" in value &&
   (value as URLEffect)["~alchemy/Kind"] === "Cloudflare.Workers.URL";
+
+/**
+ * A service binding that points at this Worker ITSELF. Declare it on `env`
+ * to give the Worker a self-referencing service binding — the provider
+ * lowers it into a `service` binding targeting the Worker's own physical
+ * name at upload, and local dev serves it with the runtime's in-process
+ * self service.
+ *
+ * The canonical consumer is OpenNext's `WORKER_SELF_REFERENCE` (the ISR
+ * revalidation queue re-fetches the worker through it):
+ *
+ * ```typescript
+ * const site = yield* Cloudflare.Website.Nextjs("Site", {
+ *   env: {
+ *     WORKER_SELF_REFERENCE: Cloudflare.Workers.Self,
+ *   },
+ * });
+ * ```
+ */
+export const Self = {
+  "~alchemy/Kind": "Cloudflare.Workers.Self",
+} as const;
+export type Self = typeof Self;
+
+/** Returns true when the value is the {@link Self} marker. */
+export const isSelf = (value: unknown): value is Self =>
+  typeof value === "object" &&
+  value !== null &&
+  "~alchemy/Kind" in value &&
+  (value as Self)["~alchemy/Kind"] === "Cloudflare.Workers.Self";
 
 /**
  * A Cloudflare Worker host with deploy-time binding support and runtime export

@@ -406,7 +406,13 @@ export const LocalWorkerProvider = () =>
            * editing the script restarts the instance.
            */
           script: props.script,
-          hasAssets: !!(props.assets || props.vite),
+          // External source providers (`props.source`) own their asset
+          // wiring: their dev servers either serve assets natively or add
+          // their own ASSETS hook against a runtime that configures
+          // `worker.assets`. Auto-injecting the hook here would fail in
+          // proxy-hosted dev modes with no assets directory (the hook
+          // errors when the Assets service is unconfigured).
+          hasAssets: !!(props.assets || props.vite) && !props.source,
           /**
            * Assets-only Worker (no entry module at all): served locally by
            * a stub that delegates every request to the ASSETS binding.

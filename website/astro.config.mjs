@@ -707,6 +707,7 @@ export default defineConfig({
                   link: "/cloudflare/frontend/solidstart",
                 },
                 { label: "Astro", link: "/cloudflare/frontend/astro" },
+                { label: "Next.js", link: "/cloudflare/frontend/nextjs" },
                 { label: "Nuxt", link: "/cloudflare/frontend/nuxt" },
                 {
                   label: "SvelteKit",
