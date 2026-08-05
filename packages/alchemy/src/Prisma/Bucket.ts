@@ -1,3 +1,4 @@
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
@@ -93,6 +94,20 @@ export interface Bucket extends Resource<
  */
 export const Bucket = Resource<Bucket>("Prisma.Bucket");
 
+/**
+ * The bucket the provider observed belongs to a different project than the
+ * one requested or persisted. Convergence and deletion both refuse rather
+ * than acting on a bucket that is not the one this resource manages.
+ */
+export class BucketProjectMismatchError extends Data.TaggedError(
+  "PrismaBucketProjectMismatchError",
+)<{
+  bucketId: string;
+  actualProjectId: string;
+  expectedProjectId: string;
+  message: string;
+}> {}
+
 const attrsFrom = (bucket: ApiBucket): Bucket["Attributes"] => ({
   bucketId: bucket.id,
   name: bucket.name,
@@ -165,11 +180,12 @@ const ProviderLive = () =>
             : undefined;
           if (observed) {
             if (observed.project.id !== projectId) {
-              return yield* Effect.fail(
-                new Error(
-                  `Prisma bucket '${observed.id}' belongs to project '${observed.project.id}', not requested project '${projectId}'. Refusing to claim convergence; replace the bucket.`,
-                ),
-              );
+              return yield* new BucketProjectMismatchError({
+                bucketId: observed.id,
+                actualProjectId: observed.project.id,
+                expectedProjectId: projectId,
+                message: `Prisma bucket '${observed.id}' belongs to project '${observed.project.id}', not requested project '${projectId}'. Refusing to claim convergence; replace the bucket.`,
+              });
             }
             return attrsFrom(observed);
           }
@@ -187,11 +203,12 @@ const ProviderLive = () =>
             .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
           if (!bucket) return;
           if (bucket.project.id !== output.projectId) {
-            return yield* Effect.fail(
-              new Error(
-                `Prisma bucket '${bucket.id}' no longer matches persisted project '${output.projectId}'. Refusing to delete a mismatched bucket.`,
-              ),
-            );
+            return yield* new BucketProjectMismatchError({
+              bucketId: bucket.id,
+              actualProjectId: bucket.project.id,
+              expectedProjectId: output.projectId,
+              message: `Prisma bucket '${bucket.id}' no longer matches persisted project '${output.projectId}'. Refusing to delete a mismatched bucket.`,
+            });
           }
           // Deletion cascades server-side: the Management API removes the
           // bucket together with its objects and any remaining keys.
