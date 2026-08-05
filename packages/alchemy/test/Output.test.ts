@@ -1066,6 +1066,15 @@ describe("upstream walkers: cycles and non-plain leaves (#1082)", () => {
     expect(Output.hasOutputs({ effect, layer, context })).toBe(false);
   });
 
+  it("traverses null-prototype objects and treats functions as leaves", () => {
+    const a = fakeResource("Test.A", "NP-A");
+    const nullProto = Object.assign(Object.create(null), { dep: Output.of(a) });
+    expect(Object.keys(Output.upstreamAny({ nullProto }))).toEqual(["NP-A"]);
+    // A function in props is a leaf — a closure capturing a resource is not
+    // a declared dependency.
+    expect(Output.upstreamAny({ fn: () => a })).toEqual({});
+  });
+
   it("treats any class instance as a leaf (never walks its internals)", () => {
     const a = fakeResource("Test.A", "CL-A");
     class SdkConfig {
@@ -1137,6 +1146,77 @@ describe("upstream walkers: cycles and non-plain leaves (#1082)", () => {
         expect(result.value).toBe("resolved");
       }),
     ),
+  );
+
+  it.effect(
+    "evaluate resolves outputs at every nesting depth of plain data",
+    () =>
+      provideState(
+        Effect.gen(function* () {
+          const src = fakeResource("Test.A", "EV-A");
+          const out = (Output.of(src) as any).name;
+          const result = yield* Output.evaluate(
+            {
+              layers: [
+                { config: { hosts: [{ url: out }, { url: "static" }] } },
+              ],
+              matrix: [[out]],
+              mixed: [1, "x", { deep: [out] }, null],
+              nullProto: Object.assign(Object.create(null), { ref: out }),
+            },
+            { "EV-A": { name: "resolved-name" } },
+          );
+          expect(result.layers[0].config.hosts[0].url).toBe("resolved-name");
+          expect(result.layers[0].config.hosts[1].url).toBe("static");
+          expect(result.matrix[0][0]).toBe("resolved-name");
+          expect(result.mixed).toEqual([
+            1,
+            "x",
+            { deep: ["resolved-name"] },
+            null,
+          ]);
+          expect(result.nullProto.ref).toBe("resolved-name");
+        }),
+      ),
+  );
+
+  it.effect("evaluate cuts cyclic plain data but resolves siblings", () =>
+    provideState(
+      Effect.gen(function* () {
+        const src = fakeResource("Test.A", "CY-EV");
+        const out = (Output.of(src) as any).name;
+        const cyclic: any = { tag: "c" };
+        cyclic.self = cyclic;
+        const arr: any[] = [cyclic];
+        cyclic.arr = arr;
+        const result = yield* Output.evaluate(
+          { cyc: cyclic, url: out },
+          { "CY-EV": { name: "sibling" } },
+        );
+        expect(result.url).toBe("sibling");
+        expect(result.cyc.tag).toBe("c");
+        expect(result.cyc.self).toBeUndefined();
+        expect(result.cyc.arr[0]).toBeUndefined();
+      }),
+    ),
+  );
+
+  it.effect(
+    "evaluate preserves diamonds — shared objects evaluate in both positions",
+    () =>
+      provideState(
+        Effect.gen(function* () {
+          const src = fakeResource("Test.A", "DI-EV");
+          const shared = { url: (Output.of(src) as any).name };
+          const result = yield* Output.evaluate(
+            { left: shared, right: shared, list: [shared] },
+            { "DI-EV": { name: "diamond" } },
+          );
+          expect(result.left).toEqual({ url: "diamond" });
+          expect(result.right).toEqual({ url: "diamond" });
+          expect(result.list[0]).toEqual({ url: "diamond" });
+        }),
+      ),
   );
 });
 

@@ -5,8 +5,10 @@ import {
   stripEffects,
   stripUnresolved,
 } from "@/Diff";
+import * as Output from "@/Output";
 import { describe, expect, test } from "alchemy-test";
 import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -180,10 +182,184 @@ describe("Diff", () => {
         cyclic.self = cyclic;
         return { config: cyclic };
       };
-      // Cyclic plain objects can't be JSON-encoded; the walkers must not
-      // hang before that surfaces. hasUnresolvedInputs is the cycle-prone
-      // pre-pass — pin that it terminates.
+      // The full comparison — stripUnresolved cuts the cycle, so the
+      // JSON.stringify comparison sees identical truncated shapes.
+      expect(havePropsChanged(make(), make())).toBe(false);
+      expect(havePropsChanged(make(), { ...make(), extra: "x" } as any)).toBe(
+        true,
+      );
       expect(hasUnresolvedInputs(make())).toBe(false);
+    });
+  });
+
+  describe("hasUnresolvedInputs across nesting shapes", () => {
+    test("finds an Output expr deep in arrays-in-objects-in-arrays", () => {
+      const expr = Output.literal("x");
+      expect(
+        hasUnresolvedInputs({ layers: [{ config: { hosts: [expr] } }] }),
+      ).toBe(true);
+      expect(hasUnresolvedInputs({ matrix: [[[expr]]] })).toBe(true);
+    });
+
+    test("finds an Effect deep in nested containers", () => {
+      expect(hasUnresolvedInputs({ a: [{ b: { c: [Effect.void] } }] })).toBe(
+        true,
+      );
+    });
+
+    test("a shared diamond subtree containing an expr is found from either parent", () => {
+      const shared = { dep: Output.literal("x") };
+      expect(hasUnresolvedInputs({ left: shared, right: shared })).toBe(true);
+      expect(hasUnresolvedInputs({ left: { v: 1 }, right: shared })).toBe(true);
+    });
+
+    test("fully-plain deep structures are resolved", () => {
+      expect(
+        hasUnresolvedInputs({ a: [{ b: [[{ c: 1 }]], d: new Date(0) }] }),
+      ).toBe(false);
+    });
+  });
+
+  describe("stripUnresolved semantics", () => {
+    test("preserves Date/Redacted/Duration by identity", () => {
+      const date = new Date(0);
+      const secret = Redacted.make("s");
+      const dur = Duration.seconds(5);
+      const stripped: any = stripUnresolved({ date, secret, dur });
+      expect(stripped.date).toBe(date);
+      expect(stripped.secret).toBe(secret);
+      expect(stripped.dur).toBe(dur);
+    });
+
+    test("drops Output exprs and Effects at any nesting depth", () => {
+      const stripped: any = stripUnresolved({
+        deep: [{ inner: { expr: Output.literal("x") } }],
+        arr: [[Effect.void]],
+        keep: [{ v: 1 }],
+      });
+      expect(stripped.deep[0].inner.expr).toBeUndefined();
+      expect(stripped.arr[0][0]).toBeUndefined();
+      expect(stripped.keep).toEqual([{ v: 1 }]);
+    });
+
+    test("cuts cycles but preserves diamonds", () => {
+      const shared = { v: 1 };
+      const cyclic: any = { name: "c" };
+      cyclic.self = cyclic;
+      const stripped: any = stripUnresolved({
+        left: shared,
+        right: shared,
+        cyc: cyclic,
+      });
+      expect(stripped.left).toEqual({ v: 1 });
+      expect(stripped.right).toEqual({ v: 1 });
+      expect(stripped.cyc.name).toBe("c");
+      expect(stripped.cyc.self).toBeUndefined();
+      expect(() => JSON.stringify(stripped)).not.toThrow();
+    });
+  });
+
+  describe("stripEffects semantics", () => {
+    test("keeps Output exprs intact but drops Effects, deeply", () => {
+      const expr = Output.literal("x");
+      const stripped: any = stripEffects({
+        deep: [{ expr, eff: Effect.void }],
+      });
+      expect(stripped.deep[0].expr).toBe(expr);
+      expect(stripped.deep[0].eff).toBeUndefined();
+    });
+
+    test("preserves Date/Redacted/Duration and cuts cycles", () => {
+      const date = new Date(0);
+      const cyclic: any = { date };
+      cyclic.self = cyclic;
+      const stripped: any = stripEffects({ cyc: cyclic });
+      expect(stripped.cyc.date).toBe(date);
+      expect(stripped.cyc.self).toBeUndefined();
+    });
+  });
+
+  describe("deepEqual / havePropsChanged across nesting shapes", () => {
+    test("deepEqual is key-order insensitive at every depth", () => {
+      expect(
+        deepEqual(
+          { a: [{ x: 1, y: [{ p: 1, q: 2 }] }], b: 2 },
+          { b: 2, a: [{ y: [{ q: 2, p: 1 }], x: 1 }] },
+        ),
+      ).toBe(true);
+    });
+
+    test("deepEqual compares Dates by value", () => {
+      expect(
+        deepEqual({ d: new Date("2027-01-01") }, { d: new Date("2027-01-01") }),
+      ).toBe(true);
+      expect(
+        deepEqual({ d: new Date("2027-01-01") }, { d: new Date("2027-01-02") }),
+      ).toBe(false);
+    });
+
+    test("deepEqual compares Durations by value", () => {
+      expect(
+        deepEqual({ d: Duration.seconds(5) }, { d: Duration.seconds(5) }),
+      ).toBe(true);
+      expect(
+        deepEqual({ d: Duration.seconds(5) }, { d: Duration.seconds(6) }),
+      ).toBe(false);
+    });
+
+    test("deepEqual terminates on cyclic values on either side", () => {
+      const make = () => {
+        const c: any = { v: 1 };
+        c.self = c;
+        return c;
+      };
+      expect(deepEqual({ c: make() }, { c: make() })).toBe(true);
+    });
+
+    test("havePropsChanged detects a change deep in arrays-in-objects-in-arrays", () => {
+      const shape = (url: string) => ({
+        layers: [{ config: { hosts: [{ url }, { url: "static" }] } }],
+      });
+      expect(havePropsChanged(shape("a"), shape("a"))).toBe(false);
+      expect(havePropsChanged(shape("a"), shape("b"))).toBe(true);
+    });
+
+    test("havePropsChanged detects array length and order changes", () => {
+      expect(
+        havePropsChanged({ arr: [[1, 2]] }, { arr: [[2, 1]] } as any),
+      ).toBe(true);
+      expect(havePropsChanged({ arr: [[1]] }, { arr: [[1], []] } as any)).toBe(
+        true,
+      );
+    });
+
+    test("havePropsChanged detects a changed Date", () => {
+      expect(
+        havePropsChanged(
+          { expires: new Date("2027-01-01") },
+          { expires: new Date("2027-01-01") },
+        ),
+      ).toBe(false);
+      expect(
+        havePropsChanged(
+          { expires: new Date("2027-01-01") },
+          { expires: new Date("2028-01-01") },
+        ),
+      ).toBe(true);
+    });
+
+    test("class instances never churn a diff — different instances compare equal", () => {
+      class SdkConfig {
+        constructor(readonly v: number) {}
+      }
+      // Runtime-only wiring: stripped at the commit boundary, so two deploys
+      // constructing fresh instances must not report a phantom change.
+      expect(
+        havePropsChanged(
+          { config: new SdkConfig(1) } as any,
+          { config: new SdkConfig(2) } as any,
+        ),
+      ).toBe(false);
     });
   });
 });

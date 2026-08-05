@@ -6353,3 +6353,153 @@ describe("deeply nested dependencies (order + resolution)", () => {
       }),
   );
 });
+
+// End-to-end pins for the #1082 leaf rules: class instances in props reach
+// `reconcile` by identity (prototype intact), are stripped from persisted
+// state, and never churn a diff; cyclic plain data deploys and re-deploys
+// without hanging or phantom updates.
+describe("non-plain and cyclic props through deploy", () => {
+  test.provider(
+    "a Date prop reaches reconcile intact and re-deploys without churn",
+    (stack) =>
+      Effect.gen(function* () {
+        const seen: Date[] = [];
+        const updates: string[] = [];
+        const hooks = {
+          create: (_id: string, props: any) =>
+            Effect.sync(() => {
+              seen.push(props.expires);
+            }),
+          update: (id: string, props: any) =>
+            Effect.sync(() => {
+              updates.push(id);
+              seen.push(props.expires);
+            }),
+          delete: () => Effect.succeed(undefined),
+          read: () => Effect.succeed(undefined),
+        };
+
+        const program = (iso: string) =>
+          Effect.gen(function* () {
+            return yield* TestResource("A", {
+              string: "date-holder",
+              expires: new Date(iso),
+            } as any);
+          });
+
+        yield* program("2027-01-01").pipe(stack.deploy, hook(hooks));
+        // The Date arrives in reconcile as a real Date, not `{}`.
+        expect(seen[0]).toBeInstanceOf(Date);
+        expect(seen[0]!.toISOString()).toBe("2027-01-01T00:00:00.000Z");
+
+        // Same date again — no phantom update from Date handling.
+        yield* program("2027-01-01").pipe(stack.deploy, hook(hooks));
+        expect(updates).toEqual([]);
+
+        // Changed date — must be detected and delivered.
+        yield* program("2028-06-15").pipe(stack.deploy, hook(hooks));
+        expect(updates).toEqual(["A"]);
+        const last = seen[seen.length - 1]!;
+        expect(last).toBeInstanceOf(Date);
+        expect(last.toISOString()).toBe("2028-06-15T00:00:00.000Z");
+
+        yield* stack.destroy();
+        expect(yield* listState()).toEqual([]);
+      }),
+  );
+
+  test.provider(
+    "a class-instance prop reaches reconcile by identity and never churns",
+    (stack) =>
+      Effect.gen(function* () {
+        class SdkConfig {
+          constructor(readonly region: string) {}
+        }
+        const received: any[] = [];
+        const updates: string[] = [];
+        const hooks = {
+          create: (_id: string, props: any) =>
+            Effect.sync(() => {
+              received.push(props.config);
+            }),
+          update: (id: string) =>
+            Effect.sync(() => {
+              updates.push(id);
+            }),
+          delete: () => Effect.succeed(undefined),
+          read: () => Effect.succeed(undefined),
+        };
+
+        const program = () =>
+          Effect.gen(function* () {
+            // A fresh instance every deploy — identity differs run to run.
+            return yield* TestResource("A", {
+              string: "sdk-holder",
+              config: new SdkConfig("us-east-1"),
+            } as any);
+          });
+
+        yield* program().pipe(stack.deploy, hook(hooks));
+        // Prototype intact all the way into reconcile.
+        expect(received[0]).toBeInstanceOf(SdkConfig);
+        expect(received[0].region).toBe("us-east-1");
+
+        // Persisted state holds plain data only — the instance is stripped.
+        const persisted = yield* getState("A");
+        expect((persisted?.props as any).config).toBeUndefined();
+        expect(() => JSON.stringify(persisted?.props)).not.toThrow();
+
+        // A fresh (different-identity) instance must not cause an update:
+        // runtime-only wiring is invisible to the diff.
+        yield* program().pipe(stack.deploy, hook(hooks));
+        expect(updates).toEqual([]);
+
+        yield* stack.destroy();
+        expect(yield* listState()).toEqual([]);
+      }),
+  );
+
+  test.provider(
+    "cyclic plain props deploy, persist truncated, and re-deploy as noop",
+    (stack) =>
+      Effect.gen(function* () {
+        const updates: string[] = [];
+        const hooks = {
+          create: () => Effect.succeed(undefined),
+          update: (id: string) =>
+            Effect.sync(() => {
+              updates.push(id);
+            }),
+          delete: () => Effect.succeed(undefined),
+          read: () => Effect.succeed(undefined),
+        };
+
+        const program = () =>
+          Effect.gen(function* () {
+            const cyclic: any = { name: "cfg" };
+            cyclic.self = cyclic;
+            const A = yield* TestResource("A", { string: "up" });
+            const B = yield* TestResource("B", {
+              config: cyclic,
+              url: A.string,
+            } as any);
+            return { A, B };
+          });
+
+        yield* program().pipe(stack.deploy, hook(hooks));
+
+        // Persisted with the cycle cut — still JSON-serializable.
+        const persisted = yield* getState("B");
+        expect((persisted?.props as any).config.name).toBe("cfg");
+        expect((persisted?.props as any).config.self).toBeUndefined();
+        expect(() => JSON.stringify(persisted?.props)).not.toThrow();
+
+        // Identical (still-cyclic) props — a clean noop.
+        yield* program().pipe(stack.deploy, hook(hooks));
+        expect(updates).toEqual([]);
+
+        yield* stack.destroy();
+        expect(yield* listState()).toEqual([]);
+      }),
+  );
+});
