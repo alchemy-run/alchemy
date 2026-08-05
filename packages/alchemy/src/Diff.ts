@@ -5,7 +5,7 @@ import type { Input } from "./Input.ts";
 import * as Output from "./Output.ts";
 import type { BindingNode } from "./Plan.ts";
 import type { ResourceBinding } from "./Resource.ts";
-import { isPlainData, isPrimitive } from "./Util/data.ts";
+import { isPlainData, isPrimitive, mapPlainData } from "./Util/data.ts";
 
 export type Diff = NoopDiff | UpdateDiff | ReplaceDiff;
 
@@ -98,21 +98,9 @@ const _stripUnresolved = (
     return value;
   }
   if (isPlainData(value)) {
-    if (ancestors.has(value)) return undefined;
-    ancestors.add(value);
-    try {
-      if (Array.isArray(value)) {
-        return value.map((item) => _stripUnresolved(item, ancestors));
-      }
-      return Object.fromEntries(
-        Object.entries(value).map(([key, item]) => [
-          key,
-          _stripUnresolved(item, ancestors),
-        ]),
-      );
-    } finally {
-      ancestors.delete(value);
-    }
+    return mapPlainData(value, ancestors, (child) =>
+      _stripUnresolved(child, ancestors),
+    );
   }
   // Any other class instance (Layer, Context, SDK objects) is runtime-only
   // wiring that can't round-trip through JSON — a beta.103 Context is even
@@ -153,21 +141,9 @@ const _stripEffects = (
     return value;
   }
   if (isPlainData(value)) {
-    if (ancestors.has(value)) return undefined;
-    ancestors.add(value);
-    try {
-      if (Array.isArray(value)) {
-        return value.map((item) => _stripEffects(item, ancestors));
-      }
-      return Object.fromEntries(
-        Object.entries(value).map(([key, item]) => [
-          key,
-          _stripEffects(item, ancestors),
-        ]),
-      );
-    } finally {
-      ancestors.delete(value);
-    }
+    return mapPlainData(value, ancestors, (child) =>
+      _stripEffects(child, ancestors),
+    );
   }
   // Non-plain instances (Layer, Context, SDK objects) are dropped with
   // Effects — same runtime-only rationale, and their internals may be
@@ -266,24 +242,18 @@ const canonicalize = (
   // toJSON).
   if (Duration.isDuration(value) || value instanceof Date) return value;
   if (isPlainData(value)) {
-    if (ancestors.has(value)) return undefined;
-    ancestors.add(value);
-    try {
-      if (Array.isArray(value)) {
-        return value.map((v) => canonicalize(v, stripNullish, ancestors));
-      }
-      return Object.fromEntries(
-        Object.entries(value)
-          .filter(([, nested]) => !stripNullish || nested != null)
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([key, nested]) => [
-            key,
-            canonicalize(nested, stripNullish, ancestors),
-          ]),
-      );
-    } finally {
-      ancestors.delete(value);
-    }
+    const rebuilt = mapPlainData(value, ancestors, (child) =>
+      canonicalize(child, stripNullish, ancestors),
+    );
+    if (rebuilt === undefined || Array.isArray(rebuilt)) return rebuilt;
+    // Deterministic key order for the JSON.stringify comparison. Filtering
+    // after the walk is JSON-equivalent to filtering before it —
+    // undefined-valued keys are dropped by JSON.stringify either way.
+    return Object.fromEntries(
+      Object.entries(rebuilt as Record<string, unknown>)
+        .filter(([, nested]) => !stripNullish || nested != null)
+        .sort(([a], [b]) => a.localeCompare(b)),
+    );
   }
   if (value && typeof value === "object") {
     // Non-plain instances (Effect, Layer, Context, SDK objects) never

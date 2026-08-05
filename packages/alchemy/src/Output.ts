@@ -701,24 +701,21 @@ export const evaluate: <A, Req = never>(
         return output;
       }
     }
-    if (Array.isArray(expr)) {
-      if (ancestors.has(expr)) {
-        return undefined;
-      }
-      const nested = new Set(ancestors).add(expr);
-      return yield* Effect.all(
-        expr.map((item) => evaluate(item, upstream, nested)),
-      );
-    } else if (Config.isConfig(expr)) {
+    if (Config.isConfig(expr)) {
       // Resolve Config against the deploy environment — see resolveInput in
       // Plan.ts for rationale. `Config.redacted` resolves to a `Redacted`,
-      // which stays opaque via the branch below.
+      // which stays opaque via the leaf fallthrough below.
       return yield* evaluate(yield* expr, upstream, ancestors);
     } else if (isPlainData(expr)) {
       if (ancestors.has(expr)) {
         return undefined;
       }
       const nested = new Set(ancestors).add(expr);
+      if (Array.isArray(expr)) {
+        return yield* Effect.all(
+          expr.map((item) => evaluate(item, upstream, nested)),
+        );
+      }
       return Object.fromEntries(
         yield* Effect.all(
           Object.entries(expr).map(([key, value]) =>

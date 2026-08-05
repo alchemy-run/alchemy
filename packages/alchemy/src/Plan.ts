@@ -60,7 +60,7 @@ import {
   type UpdatedResourceState,
   type UpdatingReourceState,
 } from "./State/index.ts";
-import { isPlainData } from "./Util/data.ts";
+import { isPlainData, mapPlainData } from "./Util/data.ts";
 import { findCycleMembers } from "./Util/scc.ts";
 import { hashInput } from "./Util/sha256.ts";
 
@@ -506,17 +506,6 @@ export const make = <A>(
           // `Config.redacted` resolves to a `Redacted`, which stays opaque via
           // the branch below.
           return yield* resolveInput(yield* input, ancestors);
-        } else if (Array.isArray(input)) {
-          if (ancestors.has(input)) {
-            return undefined;
-          }
-          const nested = new Set(ancestors).add(input);
-          return yield* Effect.all(
-            input.map((item) => resolveInput(item, nested)),
-            {
-              concurrency: "unbounded",
-            },
-          );
         } else if (isResource(input)) {
           // Resource objects have dynamic properties (path, hash, etc.) that are
           // created on-demand by a Proxy getter and aren't enumerable via Object.entries.
@@ -535,6 +524,12 @@ export const make = <A>(
             return undefined;
           }
           const nested = new Set(ancestors).add(input);
+          if (Array.isArray(input)) {
+            return yield* Effect.all(
+              input.map((item) => resolveInput(item, nested)),
+              { concurrency: "unbounded" },
+            );
+          }
           return Object.fromEntries(
             yield* Effect.all(
               Object.entries(input).map(([key, value]) =>
@@ -589,27 +584,10 @@ export const make = <A>(
         // Primitives and non-plain instances (Duration, Redacted, Date,
         // Effect/Layer/Context) are leaves — see isPlainData (#1082).
         return input;
-      } else if (ancestors.has(input)) {
-        return undefined;
-      } else if (Array.isArray(input)) {
-        ancestors.add(input);
-        try {
-          return input.map((item) => materializeStableRefs(item, ancestors));
-        } finally {
-          ancestors.delete(input);
-        }
       }
-      ancestors.add(input);
-      try {
-        return Object.fromEntries(
-          Object.entries(input).map(([key, value]) => [
-            key,
-            materializeStableRefs(value, ancestors),
-          ]),
-        );
-      } finally {
-        ancestors.delete(input);
-      }
+      return mapPlainData(input, ancestors, (child) =>
+        materializeStableRefs(child, ancestors),
+      );
     };
 
     const resolveOutput = (expr: Output.Expr<any>): Effect.Effect<any> =>
