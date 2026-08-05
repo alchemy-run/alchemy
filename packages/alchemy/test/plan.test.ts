@@ -4235,3 +4235,103 @@ describe("provider modes (local ⇄ live)", () => {
     }),
   );
 });
+
+// Upstream dependency detection must find a Resource/Output reference at ANY
+// nesting depth of plain data — objects in arrays, arrays in objects, and
+// arbitrary mixes (#1082 hardened the walkers with a plain-data gate + cycle
+// guards; these pin that no nesting shape lost its dependency edge). Each
+// case plans `A` (upstream) and `B` whose props embed a reference to `A` in a
+// different shape, then asserts the A→B edge exists in the plan DAG.
+describe("upstream detection across nesting shapes", () => {
+  // Each shape gets the raw resource and an attr Output to embed.
+  const shapes: [name: string, props: (a: any) => Record<string, any>][] = [
+    ["raw resource at top level", (a) => ({ ref: a })],
+    ["attr output at top level", (a) => ({ name: a.name })],
+    ["raw resource in object", (a) => ({ obj: { ref: a } })],
+    ["attr output in object", (a) => ({ obj: { name: a.name } })],
+    [
+      "deeply nested object (4 levels)",
+      (a) => ({ l1: { l2: { l3: { l4: { name: a.name } } } } }),
+    ],
+    ["raw resource in array", (a) => ({ arr: [a] })],
+    ["attr output in array", (a) => ({ arr: [a.name] })],
+    [
+      "output among primitives in array",
+      (a) => ({ arr: [1, "x", a.name, null, true] }),
+    ],
+    ["array in object in array", (a) => ({ arr: [{ inner: [a.name] }] })],
+    ["object in array in object", (a) => ({ obj: { list: [{ ref: a }] } })],
+    [
+      "arrays in objects in arrays in objects",
+      (a) => ({
+        layers: [
+          { config: { hosts: [{ url: a.name }, { url: "static" }] } },
+          { config: { hosts: [] } },
+        ],
+      }),
+    ],
+    [
+      "mixed: raw resource and output at different depths",
+      (a) => ({
+        top: a,
+        nested: { deep: [{ deeper: { name: a.name } }] },
+      }),
+    ],
+    [
+      "nested empty containers alongside the ref",
+      (a) => ({
+        empties: [{}, [], { x: [] }],
+        ref: { arr: [[a.name]] },
+      }),
+    ],
+    ["array of arrays", (a) => ({ matrix: [[a.name]] })],
+  ];
+
+  for (const [name, props] of shapes) {
+    test(
+      `finds the dependency: ${name}`,
+      Effect.gen(function* () {
+        const plan = yield* Effect.gen(function* () {
+          const a = yield* Bucket("A", { name: "nest-a" });
+          yield* TestResource("B", props(a) as any);
+        }).pipe(makePlan);
+
+        expect(plan.resources.A!.action).toBe("create");
+        expect(plan.resources.B!.action).toBe("create");
+        // The dependency edge A -> B must exist regardless of nesting shape.
+        expect(plan.resources.A!.downstream).toContain("B");
+        expect(plan.resources.B!.downstream).not.toContain("A");
+      }),
+    );
+  }
+
+  test(
+    "a reference inside a foreign class instance is NOT a dependency",
+    Effect.gen(function* () {
+      class SdkConfig {
+        constructor(readonly ref: any) {}
+      }
+      const plan = yield* Effect.gen(function* () {
+        const a = yield* Bucket("A", { name: "nest-a" });
+        yield* TestResource("B", { config: new SdkConfig(a.name) } as any);
+      }).pipe(makePlan);
+
+      expect(plan.resources.A!.downstream).not.toContain("B");
+    }),
+  );
+
+  test(
+    "cyclic plain objects in props do not hang planning",
+    Effect.gen(function* () {
+      const cyclic: any = { name: "cycle" };
+      cyclic.self = cyclic;
+      const plan = yield* Effect.gen(function* () {
+        const a = yield* Bucket("A", { name: "nest-a" });
+        yield* TestResource("B", { config: cyclic, ref: a.name } as any);
+      }).pipe(makePlan);
+
+      // The cycle is tolerated AND the sibling dependency is still found.
+      expect(plan.resources.A!.downstream).toContain("B");
+    }),
+  );
+});

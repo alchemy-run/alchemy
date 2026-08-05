@@ -48,6 +48,21 @@ describe("Website prop surfaces", () => {
         // @ts-expect-error `source` is owned by the resource itself
         source: { provider: "x", options: {} },
       }),
+    () =>
+      Cloudflare.Website.Nextjs("X", {
+        // @ts-expect-error `script` is owned by the source dispatch
+        script: "export default {}",
+      }),
+    () =>
+      Cloudflare.Website.Nextjs("X", {
+        // @ts-expect-error `main` is not supported (OpenNext owns the entry)
+        main: "worker.ts",
+      }),
+    () =>
+      Cloudflare.Website.Nextjs("X", {
+        // @ts-expect-error `source` is owned by the resource itself
+        source: { provider: "x", options: {} },
+      }),
   ];
 
   it("rejects source-dispatch props at the type level", () => {
