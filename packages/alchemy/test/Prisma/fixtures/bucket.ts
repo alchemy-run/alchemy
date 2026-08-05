@@ -7,10 +7,7 @@ import * as Effect from "effect/Effect";
 
 /**
  * Project owning the shared bucket. No default database is created — the
- * binding suite only needs Object Store. The name is set explicitly and kept
- * short: bucket creation 500s on the Management API when the owning
- * project's name is 51+ characters (verified 2026-08-05; the auto-generated
- * physical name is 64), so a generated name breaks every bucket create.
+ * binding suite only needs Object Store.
  */
 export const TestProject = Project("PrismaBucketBindingProject", {
   name: "alchemy-bucket-binding",
