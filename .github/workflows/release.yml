@@ -25,7 +25,7 @@ permissions:
 
 jobs:
   release:
-    uses: alchemy-run/actions/.github/workflows/release.yml@a18b368e044cb380a8c4904d5cfbccbc2798e768 # main
+    uses: alchemy-run/actions/.github/workflows/release.yml@45c20065c654cb378d02a707427405a1ad9ac3f3 # main
     with:
       # The bun workspace includes `distilled/packages/*` from the
       # distilled submodule, so consumer checkouts must fetch it.
