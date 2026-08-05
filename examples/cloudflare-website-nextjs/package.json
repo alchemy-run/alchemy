@@ -21,7 +21,7 @@
     "@types/react-dom": "^19.2.2",
     "alchemy": "workspace:*",
     "effect": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "^6.0.3"
   },
   "engines": {
     "node": ">=22"
