@@ -95,8 +95,8 @@ export interface WorkerEntrypointBinding {
  * ```typescript
  * env: {
  *   VENDOR: Cloudflare.WorkerEntrypoint(vendorWorker, {
- *     entrypoint: "GatekeeperVendor",
- *     props: { sharingDomain: site.url },
+ *     entrypoint: "Vendor",
+ *     props: { baseUrl: site.url },
  *   }),
  * }
  * ```

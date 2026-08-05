@@ -461,7 +461,7 @@ values resolve at deploy time:
 env: {
   VENDOR: Cloudflare.WorkerEntrypoint(vendorWorker, {
     entrypoint: "Vendor",
-    props: { sharingDomain: site.url },
+    props: { baseUrl: site.url },
   }),
 }
 ```
