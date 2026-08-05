@@ -1,13 +1,22 @@
 import * as Layer from "effect/Layer";
 import * as UIProvider from "../../UI/UIProvider.ts";
+import type { AccountSettings } from "./AccountSettings.ts";
 import type { ActiveReceiptRuleSet } from "./ActiveReceiptRuleSet.ts";
 import type { ConfigurationSet } from "./ConfigurationSet.ts";
 import type { ConfigurationSetEventDestination } from "./ConfigurationSetEventDestination.ts";
+import type { Contact } from "./Contact.ts";
+import type { ContactList } from "./ContactList.ts";
+import type { CustomVerificationEmailTemplate } from "./CustomVerificationEmailTemplate.ts";
+import type { DedicatedIpPool } from "./DedicatedIpPool.ts";
 import type { EmailIdentity } from "./EmailIdentity.ts";
+import type { EmailIdentityPolicy } from "./EmailIdentityPolicy.ts";
 import type { EmailTemplate } from "./EmailTemplate.ts";
+import type { MultiRegionEndpoint } from "./MultiRegionEndpoint.ts";
 import type { ReceiptFilter } from "./ReceiptFilter.ts";
 import type { ReceiptRule } from "./ReceiptRule.ts";
 import type { ReceiptRuleSet } from "./ReceiptRuleSet.ts";
+import type { Tenant } from "./Tenant.ts";
+import type { TenantResourceAssociation } from "./TenantResourceAssociation.ts";
 
 /**
  * Dashboard UI providers for AWS SES resources.
@@ -17,6 +26,32 @@ import type { ReceiptRuleSet } from "./ReceiptRuleSet.ts";
  */
 
 const regionOf = (arn: string | undefined) => arn?.split(":")[3];
+
+export const AccountSettingsUI = UIProvider.succeed<AccountSettings>(
+  "AWS.SES.AccountSettings",
+  {
+    displayName: "SES Account Settings",
+    icon: "sliders-horizontal",
+    color: "#E7157B",
+    category: "email",
+    summary: (ctx) =>
+      ctx.attrs === undefined
+        ? undefined
+        : ctx.attrs.sendingEnabled
+          ? "sending enabled"
+          : "sending paused",
+    facts: (ctx) => [
+      { label: "sending enabled", value: ctx.attrs?.sendingEnabled },
+      { label: "vdm", value: ctx.attrs?.vdmEnabled },
+      {
+        label: "suppressed reasons",
+        value: ctx.attrs?.suppressedReasons?.length
+          ? ctx.attrs.suppressedReasons.join(", ")
+          : undefined,
+      },
+    ],
+  },
+);
 
 export const ActiveReceiptRuleSetUI = UIProvider.succeed<ActiveReceiptRuleSet>(
   "AWS.SES.ActiveReceiptRuleSet",
@@ -94,6 +129,90 @@ export const ConfigurationSetEventDestinationUI =
     },
   );
 
+export const ContactUI = UIProvider.succeed<Contact>("AWS.SES.Contact", {
+  displayName: "SES Contact",
+  icon: "user-round",
+  color: "#E7157B",
+  category: "email",
+  summary: (ctx) => ctx.attrs?.emailAddress,
+  facts: (ctx) => [
+    { label: "email", value: ctx.attrs?.emailAddress, copy: true },
+    { label: "contact list", value: ctx.attrs?.contactListName, copy: true },
+    { label: "unsubscribed from all", value: ctx.props?.unsubscribeAll },
+    { label: "topic preferences", value: ctx.props?.topicPreferences?.length },
+  ],
+});
+
+export const ContactListUI = UIProvider.succeed<ContactList>(
+  "AWS.SES.ContactList",
+  {
+    displayName: "SES Contact List",
+    icon: "users-round",
+    color: "#E7157B",
+    category: "email",
+    summary: (ctx) => ctx.attrs?.contactListName,
+    consoleUrl: (ctx) => {
+      const region = regionOf(ctx.attrs?.contactListArn);
+      return ctx.attrs?.contactListName === undefined || region === undefined
+        ? undefined
+        : `https://${region}.console.aws.amazon.com/ses/home?region=${region}#/contact-lists/${encodeURIComponent(ctx.attrs.contactListName)}`;
+    },
+    facts: (ctx) => [
+      { label: "contact list", value: ctx.attrs?.contactListName, copy: true },
+      {
+        label: "arn",
+        value: ctx.attrs?.contactListArn,
+        mono: true,
+        copy: true,
+      },
+      { label: "description", value: ctx.props?.description },
+      { label: "topics", value: ctx.props?.topics?.length },
+    ],
+  },
+);
+
+export const CustomVerificationEmailTemplateUI =
+  UIProvider.succeed<CustomVerificationEmailTemplate>(
+    "AWS.SES.CustomVerificationEmailTemplate",
+    {
+      displayName: "SES Verification Template",
+      icon: "mail-check",
+      color: "#E7157B",
+      category: "email",
+      summary: (ctx) => ctx.attrs?.templateName,
+      facts: (ctx) => [
+        { label: "template", value: ctx.attrs?.templateName, copy: true },
+        { label: "from", value: ctx.props?.fromEmailAddress, copy: true },
+        { label: "subject", value: ctx.props?.templateSubject },
+        {
+          label: "on success",
+          value: ctx.props?.successRedirectionURL,
+          href: ctx.props?.successRedirectionURL,
+        },
+        {
+          label: "on failure",
+          value: ctx.props?.failureRedirectionURL,
+          href: ctx.props?.failureRedirectionURL,
+        },
+      ],
+    },
+  );
+
+export const DedicatedIpPoolUI = UIProvider.succeed<DedicatedIpPool>(
+  "AWS.SES.DedicatedIpPool",
+  {
+    displayName: "SES Dedicated IP Pool",
+    icon: "server",
+    color: "#E7157B",
+    category: "network",
+    summary: (ctx) => ctx.attrs?.poolName,
+    facts: (ctx) => [
+      { label: "pool", value: ctx.attrs?.poolName, copy: true },
+      { label: "scaling mode", value: ctx.attrs?.scalingMode },
+    ],
+  },
+);
+
 export const EmailIdentityUI = UIProvider.succeed<EmailIdentity>(
   "AWS.SES.EmailIdentity",
   {
@@ -122,6 +241,22 @@ export const EmailIdentityUI = UIProvider.succeed<EmailIdentity>(
   },
 );
 
+export const EmailIdentityPolicyUI = UIProvider.succeed<EmailIdentityPolicy>(
+  "AWS.SES.EmailIdentityPolicy",
+  {
+    displayName: "SES Identity Policy",
+    icon: "shield-check",
+    color: "#E7157B",
+    category: "security",
+    summary: (ctx) => ctx.attrs?.policyName,
+    facts: (ctx) => [
+      { label: "policy", value: ctx.attrs?.policyName, copy: true },
+      { label: "identity", value: ctx.attrs?.emailIdentity, copy: true },
+      { label: "statements", value: ctx.props?.policy?.Statement?.length },
+    ],
+  },
+);
+
 export const EmailTemplateUI = UIProvider.succeed<EmailTemplate>(
   "AWS.SES.EmailTemplate",
   {
@@ -134,6 +269,23 @@ export const EmailTemplateUI = UIProvider.succeed<EmailTemplate>(
       { label: "template", value: ctx.attrs?.templateName, copy: true },
       { label: "arn", value: ctx.attrs?.templateArn, mono: true, copy: true },
       { label: "subject", value: ctx.props?.subject },
+    ],
+  },
+);
+
+export const MultiRegionEndpointUI = UIProvider.succeed<MultiRegionEndpoint>(
+  "AWS.SES.MultiRegionEndpoint",
+  {
+    displayName: "SES Multi-Region Endpoint",
+    icon: "globe",
+    color: "#E7157B",
+    category: "network",
+    summary: (ctx) => ctx.attrs?.endpointName,
+    facts: (ctx) => [
+      { label: "endpoint", value: ctx.attrs?.endpointName, copy: true },
+      { label: "id", value: ctx.attrs?.endpointId, mono: true, copy: true },
+      { label: "status", value: ctx.attrs?.status },
+      { label: "regions", value: ctx.props?.regions?.join(", ") },
     ],
   },
 );
@@ -186,14 +338,57 @@ export const ReceiptRuleSetUI = UIProvider.succeed<ReceiptRuleSet>(
   },
 );
 
+export const TenantUI = UIProvider.succeed<Tenant>("AWS.SES.Tenant", {
+  displayName: "SES Tenant",
+  icon: "building-2",
+  color: "#E7157B",
+  category: "email",
+  summary: (ctx) => ctx.attrs?.tenantName,
+  facts: (ctx) => [
+    { label: "tenant", value: ctx.attrs?.tenantName, copy: true },
+    { label: "id", value: ctx.attrs?.tenantId, mono: true, copy: true },
+    { label: "arn", value: ctx.attrs?.tenantArn, mono: true, copy: true },
+  ],
+});
+
+export const TenantResourceAssociationUI =
+  UIProvider.succeed<TenantResourceAssociation>(
+    "AWS.SES.TenantResourceAssociation",
+    {
+      displayName: "SES Tenant Association",
+      icon: "link",
+      color: "#E7157B",
+      category: "email",
+      summary: (ctx) => ctx.attrs?.tenantName,
+      facts: (ctx) => [
+        { label: "tenant", value: ctx.attrs?.tenantName, copy: true },
+        {
+          label: "resource",
+          value: ctx.attrs?.resourceArn,
+          mono: true,
+          copy: true,
+        },
+      ],
+    },
+  );
+
 export const ui = () =>
   Layer.mergeAll(
+    AccountSettingsUI,
     ActiveReceiptRuleSetUI,
     ConfigurationSetUI,
     ConfigurationSetEventDestinationUI,
+    ContactUI,
+    ContactListUI,
+    CustomVerificationEmailTemplateUI,
+    DedicatedIpPoolUI,
     EmailIdentityUI,
+    EmailIdentityPolicyUI,
     EmailTemplateUI,
+    MultiRegionEndpointUI,
     ReceiptFilterUI,
     ReceiptRuleUI,
     ReceiptRuleSetUI,
+    TenantUI,
+    TenantResourceAssociationUI,
   );

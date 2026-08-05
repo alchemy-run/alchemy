@@ -11,6 +11,7 @@
   "type": "module",
   "scripts": {
     "deploy": "alchemy deploy",
+    "dashboard": "alchemy dashboard",
     "dev": "alchemy dev",
     "destroy": "alchemy destroy",
     "logs": "alchemy logs",

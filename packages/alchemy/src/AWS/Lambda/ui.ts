@@ -7,6 +7,7 @@ import type { LayerVersion } from "./LayerVersion.ts";
 import type { MicrovmImage } from "./MicrovmImage.ts";
 import type { NetworkConnector } from "./NetworkConnector.ts";
 import type { Permission } from "./Permission.ts";
+import type { Version } from "./Version.ts";
 
 /**
  * Dashboard UI providers for AWS Lambda resources.
@@ -112,6 +113,30 @@ export const AliasUI = UIProvider.succeed<Alias>("AWS.Lambda.Alias", {
   ],
 });
 
+export const VersionUI = UIProvider.succeed<Version>("AWS.Lambda.Version", {
+  displayName: "Lambda Version",
+  icon: "git-commit-horizontal",
+  color: "#ED7100",
+  category: "compute",
+  summary: (ctx) =>
+    ctx.attrs === undefined
+      ? undefined
+      : `${ctx.attrs.functionName}:${ctx.attrs.version}`,
+  consoleUrl: (ctx) => {
+    const region = regionOf(ctx.attrs?.functionArn);
+    return region === undefined || ctx.attrs === undefined
+      ? undefined
+      : `https://${region}.console.aws.amazon.com/lambda/home?region=${region}#/functions/${ctx.attrs.functionName}/versions/${ctx.attrs.version}`;
+  },
+  facts: (ctx) => [
+    { label: "version", value: ctx.attrs?.version, mono: true, copy: true },
+    { label: "function", value: ctx.attrs?.functionName, mono: true },
+    { label: "arn", value: ctx.attrs?.versionArn, mono: true, copy: true },
+    { label: "code sha256", value: ctx.attrs?.codeSha256, mono: true },
+    { label: "config sha256", value: ctx.attrs?.configSha256, mono: true },
+  ],
+});
+
 export const NetworkConnectorUI = UIProvider.succeed<NetworkConnector>(
   "AWS.Lambda.NetworkConnector",
   {
@@ -214,6 +239,7 @@ export const ui = () =>
     PermissionUI,
     EventSourceMappingUI,
     AliasUI,
+    VersionUI,
     NetworkConnectorUI,
     MicrovmImageUI,
     LayerVersionUI,
