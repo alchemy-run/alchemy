@@ -6,9 +6,11 @@ import type { Parameter } from "./Parameter.ts";
 import type { Services } from "./Services.ts";
 
 export type ToolParameters<Refs> = {
-  [toolName in Extract<Refs, Parameter>["~alchemy/Name"]]: Extract<
+  // per-key PRECISE: each parameter name maps to ITS schema's type,
+  // not the union of every parameter's type in the template
+  [N in Extract<Refs, Parameter>["~alchemy/Name"]]: Extract<
     Refs,
-    Parameter
+    Parameter & { readonly "~alchemy/Name": N }
   >["schema"]["Type"];
 };
 

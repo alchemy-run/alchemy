@@ -1,9 +1,9 @@
 import type * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
-import type * as Layer from "effect/Layer";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import { makeTerm } from "./Agent.ts";
 import type { Services } from "./Services.ts";
+import type { FragmentTools, WiredLayer } from "./Wire.ts";
 
 /**
  * The service shape a skill's tag resolves to: the skill's TEACHING
@@ -69,11 +69,19 @@ export interface Skill<Name extends string = string, Self = unknown> {
    * The implementation Layer: the skill's tag out, the template's
    * spliced TOOLS' tags in (a custom `Layer.effect(Coding, …)` may
    * instead build the whole bundle's physics inline).
+   *
+   * The Layer is {@link WiredLayer wire-branded} with the tools the
+   * teaching mentions — a skill's tools are encapsulated behind its
+   * tag (they never surface on a HOST agent's wire type), so the
+   * skill's own layer is what a UI checks renderer coverage against
+   * (via `AI.ToolNames` / `AI.ToolInput`). Note `Layer.provide`
+   * (binding the physics) returns a plain Layer — type renderer
+   * packs off the `make` result, the teaching itself.
    */
   readonly make: <const Refs extends any[]>(
     template: TemplateStringsArray,
     ...refs: Refs
-  ) => Layer.Layer<Self, never, Services<Refs>>;
+  ) => WiredLayer<Self, Services<Refs>, FragmentTools<Refs>>;
   new (_: never): SkillService & { readonly "~alchemy/Name": Name };
 }
 

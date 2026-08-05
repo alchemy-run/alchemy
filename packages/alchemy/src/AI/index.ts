@@ -16,4 +16,5 @@ export * from "./Services.ts";
 export * from "./Skill.ts";
 export * from "./Thread.ts";
 export * from "./Tool.ts";
+export * from "./Wire.ts";
 export * from "./WireMode.ts";

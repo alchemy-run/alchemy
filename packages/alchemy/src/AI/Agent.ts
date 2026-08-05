@@ -1,5 +1,4 @@
 import * as Context from "effect/Context";
-import type * as Layer from "effect/Layer";
 import type { Actor } from "./Actor.ts";
 import {
   layer,
@@ -10,6 +9,7 @@ import {
 } from "./Kernel.ts";
 import { prose } from "./Prose.ts";
 import type { Services } from "./Services.ts";
+import type { CharterTools, FragmentTools, WiredLayer } from "./Wire.ts";
 
 /**
  * An `Agent` term is a callable persona — a NAME, declared as a
@@ -93,10 +93,14 @@ export interface Agent<Name extends string = string, Self = unknown> {
     <const Refs extends any[]>(
       template: TemplateStringsArray,
       ...refs: Refs
-    ): Layer.Layer<Self, never, Kernel | Exclude<Services<Refs>, TurnServices>>;
+    ): WiredLayer<
+      Self,
+      Kernel | Exclude<Services<Refs>, TurnServices>,
+      FragmentTools<Refs>
+    >;
     <C extends Charter>(
       charter: C,
-    ): Layer.Layer<Self, never, Kernel | CharterServices<C>>;
+    ): WiredLayer<Self, Kernel | CharterServices<C>, CharterTools<C>>;
   };
   /**
    * Instances are branded with the agent's name so distinct agents

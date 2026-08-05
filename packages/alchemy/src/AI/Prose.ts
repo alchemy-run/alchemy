@@ -24,10 +24,18 @@ import type { Services } from "./Services.ts";
  * is not in that frozen head forms the run's SITUATION, delivered as
  * one superseding message when (and only when) it changes.
  */
-export interface Fragment {
+export interface Fragment<
+  Refs extends ReadonlyArray<unknown> = ReadonlyArray<unknown>,
+> {
   readonly "~alchemy/Kind": "Fragment";
   readonly template: TemplateStringsArray;
-  readonly refs: ReadonlyArray<unknown>;
+  /**
+   * The splices, with their TYPES retained — mention-is-presence as a
+   * type-level fact: `Wire.FragmentTools` extracts every tool/door a
+   * fragment mentions, so a UI can prove renderer coverage against
+   * the charter's actual surface (see Wire.ts).
+   */
+  readonly refs: Refs;
 }
 
 /**
@@ -50,7 +58,7 @@ export interface Fragment {
 export const prose = <const Refs extends any[]>(
   template: TemplateStringsArray,
   ...refs: Refs
-): Effect.Effect<Fragment, never, Services<Refs>> =>
+): Effect.Effect<Fragment<Refs>, never, Services<Refs>> =>
   Effect.succeed({
     "~alchemy/Kind": "Fragment",
     template,
