@@ -108,7 +108,9 @@ still parks.
 
 `AI.prose` builds a `Fragment` and charges its splices' requirements to the
 R channel (mention = dependency; capability-by-omission is a type-level
-fact). Templates are **margin-stripped** so prose indents with the code:
+fact — on the output side too: the Layer's type carries the wire
+surface the mentions produce, §2c-ii). Templates are **margin-stripped**
+so prose indents with the code:
 
 ```ts
 return yield* AI.prose`
@@ -324,6 +326,45 @@ v0 evaluation is IN-PROCESS (`new Function`, TypeScript stripped by
 sandbox-as-service extraction (§13) replaces the evaluator without
 touching this contract, and exposing `thread`/a sub-model through the
 same bridge is the RLM configuration.
+
+### 2c-ii. The wire surface as a TYPE — consumers prove coverage
+
+Mention-is-presence holds in the type system on the OUTPUT side too,
+not just the R channel (§2). `Fragment<Refs>` retains its splices'
+types, and `Agent.make` / `Skill.make` return a `WiredLayer` branded
+(phantom — nothing at runtime) with the union of every tool the prose
+can mention: inline `ToolImpl`s, `Tool` class splices, doors, nested
+fragments — conditional branches accumulate, exactly as they do on the
+requirement channel (`AI/Wire.ts`).
+
+The kernel exposes only the FACTS — `AI.ToolNames<L>` (a union of
+literal names) and `AI.ToolInput<L, Name>` (that tool's parameter type,
+from its `Parameter` splices). What a consumer builds on them is
+USERLAND: a transcript UI derives its own registry contract and gets
+renderer coverage checked the way `Layer.provide` checks services —
+
+```ts
+// ui — type-only import (erased at build; no server code in the bundle)
+import type { ReviewBotLive } from "../src/ReviewBot.ts";
+
+type Renderers<L> = {
+  [N in AI.ToolNames<L> & string]: (input: AI.ToolInput<L, N>) => ToolCallView;
+};
+
+const REVIEW_BOT: Renderers<typeof ReviewBotLive> = { … };
+// forget a card → `Property 'sync_checkout' is missing in type …`
+// touch a field the tool doesn't have → won't compile
+```
+
+Encapsulation mirrors §2's requirement rules: a SKILL's tools ride the
+skill's own `make` Layer, never the host agent's wire type — the UI
+composes one typed pack per layer (`Renderers<typeof CodingGeneral>`
+beside the agent's) and spreads them into its lookup table. Note that
+`Layer.provide` (binding physics) returns a plain Layer: packs type
+against the `make` result, the teaching itself. Kernel intrinsics
+(`dispatch`, `spawn`, `skill`) are conversation control, not
+capabilities (§2c) — they are OFF every agent's wire type; their cards
+are the consumer's untyped remainder.
 
 ### 2d. Writing prose: the context-engineering doctrine
 
