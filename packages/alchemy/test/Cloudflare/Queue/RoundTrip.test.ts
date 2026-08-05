@@ -168,16 +168,19 @@ test.provider.skipIf(!!process.env.FAST)(
                 );
           }),
           Effect.retry({
-            // Cap the exponential at 4s so 40 attempts sample for ~2.5 minutes.
-            // Uncapped, the doubling sleeps pass the whole 240s test budget
-            // after ~9 attempts and the test dies in a single long sleep even
-            // though the consumer would have caught up moments later.
+            // Cap the exponential at 4s so 75 attempts sample for ~5 minutes.
+            // Uncapped, the doubling sleeps pass the whole test budget after
+            // ~9 attempts and the test dies in a single long sleep even
+            // though the consumer would have caught up moments later. The
+            // ~5 minute ceiling matters under full-suite load: queue consumer
+            // scheduling lags well past 2.5 minutes when the account is
+            // deploying hundreds of workers concurrently.
             schedule: Schedule.max([
               Schedule.min([
                 Schedule.exponential("500 millis"),
                 Schedule.spaced("4 seconds"),
               ]),
-              Schedule.recurs(40),
+              Schedule.recurs(75),
             ]),
           }),
         );
@@ -211,5 +214,5 @@ test.provider.skipIf(!!process.env.FAST)(
     }).pipe(logLevel),
   // The send readiness budget (~85s) plus two DO catch-up polls (~2.5 min
   // cap each) can legitimately stack under full-suite load.
-  { timeout: 300_000 },
+  { timeout: 600_000 },
 );
