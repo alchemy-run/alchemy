@@ -439,7 +439,23 @@ test.provider(
         label: "session page",
       });
 
-      const first = yield* fetchSession(`${site1.url!}/session`);
+      // A single edge request can still 404 right after the readiness
+      // probe above succeeded (workers.dev colo inconsistency) — retry
+      // through it, bounded, before asserting on the body.
+      const first = yield* fetchSession(`${site1.url!}/session`).pipe(
+        Effect.filterOrFail(
+          (res) => res.status === 200,
+          (res) =>
+            new SessionFetchFailed({
+              url: `${site1.url!}/session`,
+              message: `expected 200, got ${res.status}: ${res.body.slice(0, 240)}`,
+            }),
+        ),
+        Effect.retry({
+          schedule: Schedule.exponential("1 second", 1.5),
+          times: 8,
+        }),
+      );
       expect(first.status).toBe(200);
       expect(first.body).toContain("session-count=1");
       expect(first.sessionCookie).toBeDefined();
