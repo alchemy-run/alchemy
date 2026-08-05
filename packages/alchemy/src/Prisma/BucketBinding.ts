@@ -147,6 +147,23 @@ const runtimeOutput = <A>(
   output.bind(key).pipe(Effect.flatMap((effect) => effect));
 
 /**
+ * {@link runtimeOutput} for the secret: hosts deliver env values as plain
+ * strings (Prisma Compute env rows and Cloudflare `secret_text` both carry
+ * the unwrapped value), so the `Redacted` wrapper does not survive the trip
+ * and must be rebuilt at the read — the same shape as `Connect`'s runtime
+ * accessors.
+ */
+const runtimeSecret = (
+  key: string,
+  output: Output.Output<Redacted.Redacted<string>>,
+): Effect.Effect<Redacted.Redacted<string>, never, RuntimeContext> =>
+  runtimeOutput(key, output).pipe(
+    Effect.map((value) =>
+      Redacted.isRedacted(value) ? value : Redacted.make(String(value)),
+    ),
+  );
+
+/**
  * Read the bucket key's values back out of the host environment.
  */
 export const bucketCredentials = (
@@ -158,7 +175,7 @@ export const bucketCredentials = (
     endpoint: runtimeOutput(keys.endpoint, outputs.endpoint),
     bucketName: runtimeOutput(keys.bucketName, outputs.bucketName),
     accessKeyId: runtimeOutput(keys.accessKeyId, outputs.accessKeyId),
-    secretAccessKey: runtimeOutput(
+    secretAccessKey: runtimeSecret(
       keys.secretAccessKey,
       outputs.secretAccessKey,
     ),
