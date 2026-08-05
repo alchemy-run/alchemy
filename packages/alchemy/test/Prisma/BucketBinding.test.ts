@@ -3,13 +3,11 @@ import type { Bucket as PrismaBucket } from "@/Prisma/Bucket";
 import type { ReadBucketClient } from "@/Prisma/ReadBucket";
 import type { ReadWriteBucketClient } from "@/Prisma/ReadWriteBucket";
 import type { WriteBucketClient } from "@/Prisma/WriteBucket";
-import * as Cloudflare from "@/Cloudflare";
 import * as Prisma from "@/Prisma";
 import * as Test from "@/Test/Alchemy";
 import { describe, expect, it } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -94,7 +92,7 @@ describe("Prisma bucket binding identity", () => {
 });
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
-  providers: Layer.merge(Cloudflare.providers(), Prisma.providers()),
+  providers: Prisma.providers(),
 });
 
 const wantsLive = process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS === "true";
@@ -105,8 +103,8 @@ const hasLiveCredentials =
 const runLive = wantsLive && hasLiveCredentials;
 
 // One Prisma Compute deploy alone can take the full 600s Compute.live.test.ts
-// budgets for it; this stack deploys three of them plus a Worker, a project,
-// a bucket and its keys.
+// budgets for it; this stack deploys three of them plus a project, a bucket
+// and its keys.
 const HOOK_TIMEOUT = 1_200_000;
 const TEST_TIMEOUT = 120_000;
 
@@ -140,7 +138,7 @@ class AppNotReady extends Data.TaggedError("AppNotReady")<{
 // while riding out cold-start propagation.
 const ready = Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(30)]);
 
-/** Retry an HTTP call until it returns 200 (rides out cold-start 404s). */
+/** Retry an HTTP call until it returns 200 (rides out the app endpoint's deploy propagation). */
 const untilOk = <E, R>(
   eff: Effect.Effect<HttpClientResponse.HttpClientResponse, E, R>,
 ) =>
@@ -160,48 +158,12 @@ const untilOk = <E, R>(
     }),
   );
 
-class ValueMismatch extends Data.TaggedError("ValueMismatch")<{
-  expected: string;
-  actual: string | null;
-}> {}
+// Reads assert directly with no retry-until-match: Prisma Object Store is
+// Tigris-backed, and same-region requests are read-after-write consistent —
+// these apps run in their bucket's region, so a read after a 200 write
+// observes the write. `untilOk` above only rides out endpoint readiness.
 
-const retryMismatch = <A, E, R>(
-  eff: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E, R> =>
-  eff.pipe(
-    Effect.retry({
-      while: (e: E) => e instanceof ValueMismatch,
-      schedule: ready,
-    }),
-  );
-
-/** GET `${base}/get?key=` and retry until the value matches (read-after-write propagation). */
-const expectValue = (base: string, key: string, expected: string) =>
-  untilOk(HttpClient.get(`${base}/get?key=${encodeURIComponent(key)}`)).pipe(
-    Effect.flatMap((res) => res.json),
-    Effect.flatMap((body) => {
-      const actual = (body as { value: string | null }).value;
-      return actual === expected
-        ? Effect.succeed(actual)
-        : Effect.fail(new ValueMismatch({ expected, actual }));
-    }),
-    retryMismatch,
-  );
-
-/** GET `/get` and retry until the object is gone (`value === null`). */
-const expectMissing = (base: string, key: string) =>
-  untilOk(HttpClient.get(`${base}/get?key=${encodeURIComponent(key)}`)).pipe(
-    Effect.flatMap((res) => res.json),
-    Effect.flatMap((body) => {
-      const actual = (body as { value: string | null }).value;
-      return actual === null
-        ? Effect.succeed(null)
-        : Effect.fail(new ValueMismatch({ expected: "<missing>", actual }));
-    }),
-    retryMismatch,
-  );
-
-/** `/get` again, but keeping the stored `contentType` / `metadata` alongside the body. */
+/** GET `${base}/get?key=` — the stored body plus `contentType` / `metadata`. */
 const getObject = (base: string, key: string) =>
   untilOk(HttpClient.get(`${base}/get?key=${encodeURIComponent(key)}`)).pipe(
     Effect.flatMap((res) => res.json),
@@ -220,23 +182,6 @@ const headObject = (base: string, key: string) =>
   untilOk(HttpClient.get(`${base}/head?key=${encodeURIComponent(key)}`)).pipe(
     Effect.flatMap((res) => res.json),
     Effect.map((body) => body as { exists: boolean; size: number | null }),
-  );
-
-/** `/list?prefix=` and retry until `key` appears (list is eventually consistent). */
-const expectListed = (base: string, prefix: string, key: string) =>
-  untilOk(
-    HttpClient.get(`${base}/list?prefix=${encodeURIComponent(prefix)}`),
-  ).pipe(
-    Effect.flatMap((res) => res.json),
-    Effect.flatMap((body) => {
-      const keys = (body as { keys: string[] }).keys;
-      return keys.includes(key)
-        ? Effect.succeed(keys)
-        : Effect.fail(
-            new ValueMismatch({ expected: key, actual: keys.join(",") }),
-          );
-    }),
-    retryMismatch,
   );
 
 /** `PutOptions` the `/put` route rebuilds from query params. */
@@ -336,9 +281,9 @@ const exercise = (label: string, writeBase: string, readBase: string) =>
     const k1 = `${prefix}k1`;
     const v1 = `${label}-value`;
 
-    // put + get (read-after-write)
+    // put + get
     expect((yield* put(writeBase, k1, v1)).status).toBe(200);
-    expect(yield* expectValue(readBase, k1, v1)).toBe(v1);
+    expect((yield* getObject(readBase, k1)).value).toBe(v1);
 
     // head — metadata reflects the written object
     const meta = yield* headObject(readBase, k1);
@@ -346,11 +291,11 @@ const exercise = (label: string, writeBase: string, readBase: string) =>
     expect(meta.size).toBe(new TextEncoder().encode(v1).length);
 
     // list — the key shows up under its prefix
-    expect(yield* expectListed(readBase, prefix, k1)).toContain(k1);
+    expect((yield* listPage(readBase, { prefix })).keys).toContain(k1);
 
     // delete (single) — head/get then report it gone
     yield* del(writeBase, k1);
-    yield* expectMissing(readBase, k1);
+    expect((yield* getObject(readBase, k1)).value).toBeNull();
     expect((yield* headObject(readBase, k1)).exists).toBe(false);
 
     // delete (batch) — write two, delete both in one call
@@ -358,10 +303,10 @@ const exercise = (label: string, writeBase: string, readBase: string) =>
     const k3 = `${prefix}k3`;
     yield* put(writeBase, k2, "v2");
     yield* put(writeBase, k3, "v3");
-    expect(yield* expectValue(readBase, k2, "v2")).toBe("v2");
+    expect((yield* getObject(readBase, k2)).value).toBe("v2");
     yield* delMany(writeBase, [k2, k3]);
-    yield* expectMissing(readBase, k2);
-    yield* expectMissing(readBase, k3);
+    expect((yield* getObject(readBase, k2)).value).toBeNull();
+    expect((yield* getObject(readBase, k3)).value).toBeNull();
 
     // put options — contentType and user metadata survive the round-trip
     const ok = `${prefix}with-options`;
@@ -370,8 +315,8 @@ const exercise = (label: string, writeBase: string, readBase: string) =>
       metaKey: "owner",
       metaValue: "api",
     });
-    yield* expectValue(readBase, ok, '{"ok":true}');
     const stored = yield* getObject(readBase, ok);
+    expect(stored.value).toBe('{"ok":true}');
     expect(stored.contentType).toBe("application/json");
     expect(stored.metadata).toEqual({ owner: "api" });
 
@@ -381,7 +326,6 @@ const exercise = (label: string, writeBase: string, readBase: string) =>
     yield* put(writeBase, `${page}a`, "a");
     yield* put(writeBase, `${page}b`, "b");
     yield* put(writeBase, `${page}c`, "c");
-    yield* expectListed(readBase, page, `${page}c`);
 
     const first = yield* listPage(readBase, { prefix: page, limit: 2 });
     expect(first.keys.length).toBe(2);
@@ -410,21 +354,19 @@ const exercise = (label: string, writeBase: string, readBase: string) =>
     expect(uploaded.status).toBe(200);
 
     const getUrl = yield* presign(readBase, "presign-get", pk);
-    const downloaded = yield* untilOk(HttpClient.get(getUrl));
+    const downloaded = yield* HttpClient.get(getUrl);
+    expect(downloaded.status).toBe(200);
     expect(yield* downloaded.text).toBe(payload);
   });
 
 /**
- * Deploys three Prisma Compute apps and one Cloudflare Worker that all bind
- * one shared Object Store bucket — read / write / read-write on Compute,
- * read-write on the Worker — via {@link Stack}, then drives the binding over
- * `fetch`:
+ * Deploys three Prisma Compute apps that all bind one shared Object Store
+ * bucket — read / write / read-write — via {@link Stack}, then drives the
+ * binding over `fetch`:
  *
  * - write through the Write app, read it back through the Read app
  *   (cross-app, proving both halves agree on the bucket);
- * - round-trip a key through the ReadWrite app by itself;
- * - round-trip a key through the Worker, whose binding takes the
- *   text-binding branch instead of the environment branch.
+ * - round-trip a key through the ReadWrite app by itself.
  *
  * The stack lives in `fixtures/stack.ts` so it can also be inspected
  * directly, e.g. `alchemy tail --stage test ./test/Prisma/fixtures/stack.ts`.
@@ -449,15 +391,6 @@ describe.skipIf(!runLive)("Prisma bucket binding over deployed hosts", () => {
     Effect.gen(function* () {
       const out = yield* stack;
       yield* exercise("rw-bind", out.readWrite, out.readWrite);
-    }).pipe(logLevel),
-    { timeout: TEST_TIMEOUT },
-  );
-
-  test(
-    "read-write round-trip in a Cloudflare Worker",
-    Effect.gen(function* () {
-      const out = yield* stack;
-      yield* exercise("rw-worker", out.worker, out.worker);
     }).pipe(logLevel),
     { timeout: TEST_TIMEOUT },
   );

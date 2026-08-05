@@ -27,9 +27,10 @@ export default Compute(
   Effect.gen(function* () {
     const bucket = yield* TestBucket;
     const store = yield* ReadWriteBucket(bucket);
-    // Binding the same bucket at the same access level twice must reuse one
-    // bucket key: the second bind registers the same logical id, so the
-    // deploy itself fails if a second key were minted instead.
+    // A second bind of the same bucket and access level must resolve to the
+    // SAME bucket-key logical id (pinned by the identity tests) and reuse
+    // that resource; registering a conflicting duplicate would fail the
+    // deploy.
     yield* ReadWriteBucket(bucket);
     return {
       fetch: Effect.gen(function* () {
