@@ -19,15 +19,21 @@ export class ToolOutputStore extends Context.Service<
 >()("alchemy-org/ToolOutputStore") {}
 
 /**
- * Scoped local artifact store. Host paths never reach the model:
- * tools return opaque IDs consumed by `ReadOutput`.
+ * Local artifact store. Host paths never reach the model: tools
+ * return opaque IDs consumed by `ReadOutput`.
+ *
+ * Deliberately NOT a scoped temp directory: layer construction is
+ * isolate-scoped, and a scoped dir's finalizer runs when the
+ * CONSTRUCTING scope closes — right after init on the local service —
+ * deleting the store out from under every long-lived run that pipes
+ * tool output through it. The OS owns temp cleanup.
  */
 export const ToolOutputStoreLive = Layer.effect(
   ToolOutputStore,
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const root = yield* fs.makeTempDirectoryScoped({
+    const root = yield* fs.makeTempDirectory({
       prefix: "alchemy-tool-output-",
     });
     const files = new Map<string, string>();

@@ -58,6 +58,16 @@ export interface Actor<In = unknown> {
     options?: {
       readonly key?: string;
       readonly parent?: RunRef;
+      /**
+       * `wake: false` delivers WITHOUT waking: the input lands in the
+       * run's thread durably, but a parked run stays parked — the
+       * accumulated inputs are read on its next wake (an operator
+       * message, a reminder, a waking send), and a BUSY run picks
+       * them up at its next sampling boundary as usual. The
+       * level-triggered delivery mode: events as CONTEXT, not
+       * triggers. Default `true` (a send wakes a parked run).
+       */
+      readonly wake?: boolean;
     },
   ): Effect.Effect<void, never, RuntimeContext>;
   /**

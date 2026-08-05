@@ -19,10 +19,14 @@ export const makeDurableObjectStore = (
   options?: { readonly prefix?: string },
 ): PersistentRef.StoreService => {
   const prefix = options?.prefix ?? "alchemy:ref:";
+  // The tuple → flat-key mapping is THIS store's job; `pathKey` is the
+  // canonical collision-free path encoding.
+  const rowKey = (key: PersistentRef.StoreKey) =>
+    prefix + PersistentRef.pathKey(key);
   return {
-    load: (name) => Effect.sync(() => state.storage.kv.get(prefix + name)),
-    write: (name, encoded) =>
-      Effect.sync(() => void state.storage.kv.put(prefix + name, encoded)),
+    load: (key) => Effect.sync(() => state.storage.kv.get(rowKey(key))),
+    write: (key, encoded) =>
+      Effect.sync(() => void state.storage.kv.put(rowKey(key), encoded)),
   };
 };
 

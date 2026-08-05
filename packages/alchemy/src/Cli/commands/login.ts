@@ -143,15 +143,19 @@ export const loginCommand = Command.make(
             // runs unconditionally and overwrites the stored entry.
             const stored = configure ? undefined : existing?.[provider.name];
 
-            let cfg: { method: string };
             if (stored == null) {
-              cfg = yield* provider.configure(profile, { ci });
+              // configure establishes fresh credentials itself (e.g. the
+              // Cloudflare OAuth browser flow), so no login call is needed.
+              const cfg = yield* provider.configure(profile, { ci });
               yield* profiles.setProfile(profile, {
                 ...existing,
                 [provider.name]: cfg,
               });
             } else {
-              cfg = stored;
+              // Already configured: refresh the stored credentials, falling
+              // back to the provider's interactive re-auth when the refresh
+              // token itself has expired.
+              yield* provider.login(profile, stored);
             }
           }),
         { discard: true },

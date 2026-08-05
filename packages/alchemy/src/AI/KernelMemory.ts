@@ -8,7 +8,7 @@ import * as Queue from "effect/Queue";
 import * as Schedule from "effect/Schedule";
 import * as S from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { isAiError } from "effect/unstable/ai/AiError";
+import { isAiError, type AiError } from "effect/unstable/ai/AiError";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import * as Prompt from "effect/unstable/ai/Prompt";
 import * as Response from "effect/unstable/ai/Response";
@@ -87,6 +87,12 @@ interface InboxItem {
 
 interface RunState {
   readonly inbox: Queue.Queue<InboxItem>;
+  /**
+   * QUIET inputs (`send(…, { wake: false })`): delivered into the
+   * thread at the next sampling boundary, but never a wake themselves
+   * — a parked run stays parked with these accumulating as context.
+   */
+  readonly quiet: Array<InboxItem>;
   /** The CURRENT round's waiters — resolved by `AI.reply` or, for
    *  rounds that never reply, by quiescence with the response text. */
   readonly waiters: Array<Deferred.Deferred<unknown>>;
@@ -323,6 +329,8 @@ export const KernelMemory: Layer.Layer<
               Effect.provideService(Thread, makeThreadService(run)),
               Effect.provideService(Tick, makeTickService(run)),
               Effect.provideService(PersistentRef.Store, run.stateStore),
+              // the FRAME: refs are namespaced by the run's identity
+              PersistentRef.within(termName, run.key),
               Effect.provide(RuntimeContext.phantom),
               Effect.provide(context),
             ) as Effect.Effect<A, E>;
@@ -344,6 +352,8 @@ export const KernelMemory: Layer.Layer<
             effect.pipe(
               Effect.provideService(Thread, makeThreadService(run)),
               Effect.provideService(PersistentRef.Store, run.stateStore),
+              // the FRAME: refs are namespaced by the run's identity
+              PersistentRef.within(termName, run.key),
               Effect.provide(RuntimeContext.phantom),
               Effect.provide(context),
             ) as Effect.Effect<A, E>;
@@ -688,8 +698,16 @@ export const KernelMemory: Layer.Layer<
             // a deterministic failure (billing, auth, content policy)
             // must not be re-sampled — it propagates TYPED to the
             // loop, whose exit fails every waiter with the real cause.
+            // A MALFORMED TOOL CALL is excluded from blind re-sampling:
+            // the loop feeds it back to the model as a corrective note
+            // (the model can fix its own parameters; a re-sample of the
+            // identical prompt usually just repeats the mistake).
             Effect.retry({
-              while: (error) => (isAiError(error) ? error.isRetryable : true),
+              while: (error) =>
+                isAiError(error)
+                  ? error.isRetryable &&
+                    error.reason._tag !== "ToolParameterValidationError"
+                  : true,
               schedule: Schedule.exponential("1 second"),
               times: 3,
             }),
@@ -709,6 +727,7 @@ export const KernelMemory: Layer.Layer<
           Effect.gen(function* () {
             return {
               inbox: yield* Queue.unbounded<InboxItem>(),
+              quiet: [],
               waiters: [],
               settled: yield* Deferred.make<unknown>(),
               key,
@@ -1099,11 +1118,16 @@ export const KernelMemory: Layer.Layer<
             // startup race) parks on the queue instead of sampling an
             // empty thread
             let quiescent = true;
+            // consecutive malformed-tool-call feedback rounds (see the
+            // step catch below) — resets on any well-formed sampling
+            let malformed = 0;
             while (true) {
               if (yield* Deferred.isDone(run.settled)) break;
               let items: Array<InboxItem> = yield* Queue.clear(run.inbox);
               if (items.length === 0 && quiescent) {
-                // PARKED: the run's work is done until the world moves
+                // PARKED: the run's work is done until the world moves.
+                // Quiet inputs deliberately DON'T factor in — they
+                // accumulate as context and never wake a parked run.
                 yield* observe(run, { type: "parked" });
                 const wake = yield* Effect.raceFirst(
                   Effect.map(Queue.take(run.inbox), (item) => ({
@@ -1117,6 +1141,9 @@ export const KernelMemory: Layer.Layer<
                 if (wake.settled) break;
                 items = [wake.item, ...(yield* Queue.clear(run.inbox))];
               }
+              // quiet inputs JOIN whatever round is happening anyway —
+              // prepended (they arrived earlier), never a wake themselves
+              items = [...run.quiet.splice(0), ...items];
               // boundary work: requested compaction applies BEFORE the
               // new inputs join the thread, so nothing fresh is lost
               applyCompaction(run);
@@ -1181,7 +1208,38 @@ export const KernelMemory: Layer.Layer<
                         channel: part.kind,
                         delta: part.delta,
                       }),
+              ).pipe(
+                // A MALFORMED TOOL CALL is a model-visible fact, not a
+                // crash: nothing was executed, so tell the model what
+                // was wrong and let it re-issue. Bounded — a model that
+                // keeps emitting invalid calls crashes with the real
+                // error after the streak budget.
+                Effect.catchIf(
+                  (error): error is AiError =>
+                    isAiError(error) &&
+                    error.reason._tag === "ToolParameterValidationError",
+                  (error) =>
+                    malformed >= 3
+                      ? Effect.fail(error)
+                      : Effect.succeed({ malformed: error.message } as const),
+                ),
               );
+              if ("malformed" in response) {
+                malformed++;
+                const text =
+                  `your last response included a tool call with INVALID ` +
+                  `parameters — NOTHING was executed:\n${response.malformed}\n` +
+                  `Re-issue the call with parameters matching the tool's schema.`;
+                run.prompt = Prompt.concat(run.prompt, [noteMessage(text)]);
+                yield* observe(run, {
+                  type: "input",
+                  text: `<note>\n${text}\n</note>`,
+                  kind: "note",
+                });
+                quiescent = false; // come straight back around and re-sample
+                continue;
+              }
+              malformed = 0;
               // where the time goes: one line per sampling (model
               // round-trip INCLUDING the tool handlers that ran
               // inside it) — the timing profile of every run
@@ -1347,11 +1405,16 @@ export const KernelMemory: Layer.Layer<
           item: InboxItem,
           key?: string,
           parent?: { readonly term: string; readonly key: string },
+          wake = true,
         ) =>
           Effect.gen(function* () {
             const run = yield* ensure(key, parent);
             if (!(yield* Deferred.isDone(run.settled))) {
-              yield* Queue.offer(run.inbox, item);
+              if (wake) {
+                yield* Queue.offer(run.inbox, item);
+              } else {
+                run.quiet.push(item);
+              }
             }
             return run;
           });
@@ -1359,7 +1422,12 @@ export const KernelMemory: Layer.Layer<
         const actor: Actor = {
           send: (item, options) =>
             Effect.asVoid(
-              admit({ input: item }, options?.key, options?.parent),
+              admit(
+                { input: item },
+                options?.key,
+                options?.parent,
+                options?.wake,
+              ),
             ),
           dispatch: (item, options) =>
             Effect.gen(function* () {

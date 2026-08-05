@@ -1,30 +1,29 @@
 /**
- * The org, running on your machine — an Effectful {@link Local.Vite}
- * service hosting the factory as a detached local process: the
- * {@link OrgLocal} provide-list (KernelMemory, profile credentials,
- * REST polling, bun:sqlite, the local toolbox) under the shared HTTP
- * surface (Routes.ts), with the UI built by Vite and served from the
- * same address.
+ * The review bot, running on your machine — an Effectful
+ * {@link LocalService.Vite} service hosting the bot as a detached
+ * local process: the {@link Local} provide-list (KernelMemory,
+ * profile credentials, REST polling, bun:sqlite, the read/run
+ * toolbox) under the HTTP surface (Routes.ts), with the UI built by
+ * Vite and served from the same address.
  *
- * Long-lived machinery (GitHub pollers, kernel run loops) registers on
- * {@link Local.Host} / the process Scope — so plain
- * `Effect.provide(OrgLocal)` is enough; the fibers survive init
- * returning. GitHub credentials resolve from the ALCHEMY PROFILE
- * (`alchemy login`); running additionally needs `ANTHROPIC_API_KEY`
- * in the operator's environment (the reconciler passes the shell env
- * through).
+ * Long-lived machinery (the GitHub poller, kernel run loops)
+ * registers on the process Scope — so plain `Effect.provide(Local)`
+ * is enough; the fibers survive init returning. GitHub credentials
+ * resolve from the ALCHEMY PROFILE (`alchemy login`); running
+ * additionally needs `ANTHROPIC_API_KEY` in the operator's
+ * environment (the reconciler passes the shell env through).
  */
 import * as AI from "alchemy/AI";
-import * as Local from "alchemy/Local";
+import * as LocalService from "alchemy/Local";
 import * as Effect from "effect/Effect";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { OrgLocal } from "./OrgLocal.ts";
+import { Local } from "./Local.ts";
 import { orgRoutes } from "./Routes.ts";
 
-export default class AlchemyOrg extends Local.Vite<AlchemyOrg>()(
-  "AlchemyOrg",
+export default class ReviewBotServer extends LocalService.Vite<ReviewBotServer>()(
+  "ReviewBot",
   {
     // no port pinned: the runtime binds an ephemeral one and reports it
     // back through the startup handshake — it lands in the `url` output.
@@ -59,5 +58,5 @@ export default class AlchemyOrg extends Local.Vite<AlchemyOrg>()(
         return yield* api;
       }),
     };
-  }).pipe(Effect.provide(OrgLocal)),
+  }).pipe(Effect.provide(Local)),
 ) {}

@@ -53,23 +53,21 @@ interface BoardThread {
   ticks: number;
   createdAt: number;
   updatedAt: number;
-  label: string;
 }
 
-interface BoardIssue {
+interface BoardPullRequest {
   number: number;
   title: string;
   state: "open" | "closed" | "unknown";
   updatedAt: number;
-  /** The issue's channel chat id — open this when the issue is clicked. */
-  channel: string | undefined;
-  /** Workers the owner dispatched, chronological. */
-  agents: BoardThread[];
+  /** The review thread, once the bot has been admitted for this PR. */
+  thread: BoardThread | undefined;
 }
 
 interface Board {
-  issues: BoardIssue[];
-  other: BoardThread[];
+  /** `owner/repo` — the repository the bot reviews. */
+  repo: string;
+  prs: BoardPullRequest[];
 }
 
 const STATUS_COLOR: Record<BoardThread["status"], string> = {
@@ -79,23 +77,77 @@ const STATUS_COLOR: Record<BoardThread["status"], string> = {
   crashed: "bg-brick",
 };
 
-const ISSUE_STATE: Record<BoardIssue["state"], string> = {
+const ISSUE_STATE: Record<BoardPullRequest["state"], string> = {
   open: "text-moss border-moss/40",
   closed: "text-terracotta border-terracotta/40",
   unknown: "text-muted-foreground border-border",
 };
 
+/** The `#N` pill — GitHub-linked (with hover preview) when the repo
+ *  is known (the supervisor's run key IS the repository). */
+const IssueBadge = ({
+  number,
+  state,
+  repo,
+}: {
+  number: number;
+  state: BoardPullRequest["state"];
+  repo: string | undefined;
+}) => {
+  const badge = (
+    <span
+      className={cn(
+        "rounded-full border px-1.5 py-0 font-mono text-[10px] leading-4",
+        ISSUE_STATE[state],
+        repo && "hover:bg-accent",
+      )}
+    >
+      #{number}
+    </span>
+  );
+  return repo ? (
+    <RefHoverCard repo={repo} number={number}>
+      <a
+        href={`https://github.com/${repo}/issues/${number}`}
+        target="_blank"
+        rel="noreferrer"
+        onClick={(event) => event.stopPropagation()}
+      >
+        {badge}
+      </a>
+    </RefHoverCard>
+  ) : (
+    badge
+  );
+};
+
 export const App = () => {
-  const [board, setBoard] = useState<Board>({ issues: [], other: [] });
+  const [board, setBoard] = useState<Board>({ repo: "", prs: [] });
   const [selected, setSelected] = useState<string>();
   // every thread the user has opened STAYS MOUNTED (hidden, socket
   // paused) — switching back restores its state and scroll position
   const [visited, setVisited] = useState<string[]>([]);
+  // PRs whose review the user requested — auto-select when the
+  // thread lands on the board stream
+  const [requested, setRequested] = useState<Set<number>>(() => new Set());
   const select = (id: string) => {
     setVisited((current) =>
       current.includes(id) ? current : [...current, id],
     );
     setSelected(id);
+  };
+
+  /** A PR with no live thread: clicking REQUESTS its review — the
+   *  server synthesizes the opened event and the thread appears. */
+  const requestReview = (number: number) => {
+    setRequested((current) => new Set(current).add(number));
+    void fetch(`/api/prs/${number}/review`, { method: "POST" }).catch(() => {
+      setRequested((current) => {
+        const next = new Set(current);
+        next.delete(number);
+        return next;
+      });
+    });
   };
 
   // Directory feed: SSE of board snapshots (falls back to polling).
@@ -132,129 +184,79 @@ export const App = () => {
     };
   }, []);
 
-  const empty = board.issues.length === 0 && board.other.length === 0;
+  // The newest review thread is HOME: select it once threads exist
+  // (and the user hasn't navigated anywhere yet).
+  useEffect(() => {
+    if (selected !== undefined) return;
+    const first = board.prs.find((pr) => pr.thread !== undefined);
+    if (first?.thread !== undefined) select(first.thread.id);
+  }, [board.prs, selected]);
 
-  /** The agents of the issue whose CHANNEL is this chat. */
-  const agentsFor = (id: string): BoardThread[] =>
-    board.issues.find((issue) => issue.channel === id)?.agents ?? [];
-
-  /** When `id` is a worker, the issue-owner thread to climb back to. */
-  const breadcrumbFor = (
-    id: string,
-  ): { label: string; to: string } | undefined => {
-    for (const issue of board.issues) {
-      if (
-        issue.channel !== undefined &&
-        issue.agents.some((agent) => agent.id === id)
-      ) {
-        return { label: `#${issue.number} ${issue.title}`, to: issue.channel };
+  // a REQUESTED review's thread just appeared — jump to it
+  useEffect(() => {
+    for (const pull of board.prs) {
+      if (pull.thread !== undefined && requested.has(pull.number)) {
+        setRequested((current) => {
+          const next = new Set(current);
+          next.delete(pull.number);
+          return next;
+        });
+        select(pull.thread.id);
+        return;
       }
     }
-    return undefined;
-  };
+  }, [board.prs, requested]);
+
+  const empty = board.prs.length === 0;
 
   return (
     <div className="flex h-screen bg-background text-foreground">
       <aside className="w-80 shrink-0 overflow-y-auto border-r border-border">
         <div className="px-4 py-3 font-mono text-sm font-semibold tracking-tight">
-          alchemy-org
+          review-bot
         </div>
-        {board.issues.map((issue) => {
-          const busy =
-            issue.agents.some((agent) => agent.status === "running") ||
-            undefined;
+        {/* THE PULL REQUESTS — one review thread each */}
+        {board.prs.map((pull) => {
+          const repo = board.repo || pull.thread?.key.split("#")[0];
           return (
             <button
-              key={issue.number}
+              key={pull.number}
               type="button"
-              disabled={issue.channel === undefined}
-              onClick={() => issue.channel && select(issue.channel)}
+              onClick={() =>
+                pull.thread !== undefined
+                  ? select(pull.thread.id)
+                  : requestReview(pull.number)
+              }
               className={cn(
-                "flex w-full items-center gap-2 border-b border-border/50 px-4 py-3 text-left",
-                issue.channel !== undefined && "hover:bg-accent",
+                "flex w-full items-center gap-2 border-b border-border/50 px-4 py-3 text-left hover:bg-accent",
                 selected !== undefined &&
-                  (issue.channel === selected ||
-                    issue.agents.some((agent) => agent.id === selected)) &&
+                  pull.thread?.id === selected &&
                   "bg-accent",
               )}
             >
-              {/* channel key carries owner/repo: "IssueOwner:owner/repo#N" */}
-              {(() => {
-                const repo = issue.channel
-                  ?.slice(issue.channel.indexOf(":") + 1)
-                  .split("#")[0];
-                const badge = (
-                  <span
-                    className={cn(
-                      "rounded-full border px-1.5 py-0 font-mono text-[10px] leading-4",
-                      ISSUE_STATE[issue.state],
-                      repo && "hover:bg-accent",
-                    )}
-                  >
-                    #{issue.number}
-                  </span>
-                );
-                return repo ? (
-                  <RefHoverCard repo={repo} number={issue.number}>
-                    <a
-                      href={`https://github.com/${repo}/issues/${issue.number}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      {badge}
-                    </a>
-                  </RefHoverCard>
-                ) : (
-                  badge
-                );
-              })()}
+              <IssueBadge
+                number={pull.number}
+                state={pull.state}
+                repo={repo}
+              />
               <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                {issue.title}
+                {pull.title}
               </span>
-              {busy && (
+              {pull.thread?.status === "running" && (
                 <span className="size-2 shrink-0 animate-pulse rounded-full bg-moss" />
               )}
-              {issue.channel === undefined && (
+              {pull.thread === undefined && (
                 <span className="shrink-0 text-[10px] text-muted-foreground">
-                  queued
+                  {requested.has(pull.number) ? "reviewing…" : "review"}
                 </span>
               )}
             </button>
           );
         })}
-        {board.other.length > 0 && (
-          <div className="mt-2">
-            <div className="px-4 py-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Other threads
-            </div>
-            {board.other.map((thread) => (
-              <button
-                key={thread.id}
-                type="button"
-                onClick={() => select(thread.id)}
-                className={cn(
-                  "flex w-full items-center gap-2 py-1.5 pr-4 pl-6 text-left text-sm hover:bg-accent",
-                  selected === thread.id && "bg-accent",
-                )}
-              >
-                <span
-                  className={cn(
-                    "size-2 shrink-0 rounded-full",
-                    STATUS_COLOR[thread.status],
-                  )}
-                />
-                <span className="min-w-0 flex-1 truncate">{thread.label}</span>
-                <span className="shrink-0 text-xs text-muted-foreground">
-                  {thread.ticks} ticks
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
         {empty && (
           <div className="px-4 py-8 text-sm text-muted-foreground">
-            No activity yet — file an issue on test-alchemy.
+            No pull requests yet — open one on test-alchemy and the
+            bot reviews it.
           </div>
         )}
       </aside>
@@ -277,15 +279,15 @@ export const App = () => {
               <ChatView
                 id={id}
                 active={id === selected}
-                agents={agentsFor(id)}
-                breadcrumb={breadcrumbFor(id)}
+                agents={[]}
+                breadcrumb={undefined}
                 onOpenThread={select}
               />
             </div>
           ))}
           {selected === undefined && (
             <div className="flex h-full items-center justify-center text-muted-foreground">
-              Select an issue
+              Select a pull request
             </div>
           )}
         </div>
@@ -1052,7 +1054,7 @@ const Chat = ({
           <PromptInputBody>
             {/* pr-12 keeps typed text clear of the submit button */}
             <PromptInputTextarea
-              placeholder="Steer this agent…"
+              placeholder="Talk to the reviewer…"
               className="pr-12"
             />
           </PromptInputBody>

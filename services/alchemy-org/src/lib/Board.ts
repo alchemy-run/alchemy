@@ -1,164 +1,74 @@
 /**
- * The ISSUE BOARD — the org's DOMAIN projection over the generic
- * chat summaries (`AI.Chats`): an `IssueOwner` run keyed `owner/repo#n`
- * anchors issue `n`; kernel parentage (the `admitted` observation's
- * dispatch edge) collects the workers it dispatched, chronological.
- * Roots that anchor no issue (the unlinked-PR desk, Discord) land in
- * `other`. GitHub's open-issues list (when available) supplies
- * titles/state for issues with no channel yet.
+ * The BOARD — the bot's domain projection over the generic chat
+ * summaries (`AI.Chats`): one ReviewBot run per pull request, keyed
+ * `owner/repo#N`. GitHub's open-PR list (when available) supplies
+ * titles and states for the sidebar.
  */
 import type * as AI from "alchemy/AI";
 
-/** One agent thread on the board. */
-export interface BoardThread extends AI.ChatSummary {
-  /** Human label — "Engineer", "Reviewer", "PR #59", … */
-  readonly label: string;
-}
-
-export interface BoardIssue {
+export interface BoardPullRequest {
   readonly number: number;
   readonly title: string;
   readonly state: "open" | "closed" | "unknown";
+  /** The review thread, once the bot has been admitted for this PR. */
+  readonly thread: AI.ChatSummary | undefined;
   readonly updatedAt: number;
-  /** The issue's CHANNEL chat — the thread you open when you click
-   *  the issue. Undefined until the owner has been admitted. */
-  readonly channel: string | undefined;
-  /** Agents the owner dispatched (chronological) — the UI links a
-   *  dispatch card in the owner thread to its worker thread through this. */
-  readonly agents: Array<BoardThread>;
 }
 
 export interface Board {
-  readonly issues: Array<BoardIssue>;
-  /** Threads that belong to no issue (unlinked PRs, Discord, …). */
-  readonly other: Array<BoardThread>;
+  /** `owner/repo` — the repository the bot reviews. */
+  readonly repo: string;
+  readonly prs: Array<BoardPullRequest>;
 }
 
-/** Best-effort parse of a chat's first input as a GitHub event. */
-const parseEvent = (
-  firstInput: string | undefined,
-): { issue?: any; pullRequest?: any } => {
-  if (firstInput === undefined) return {};
-  try {
-    const parsed = JSON.parse(firstInput);
-    return typeof parsed === "object" && parsed !== null ? parsed : {};
-  } catch {
-    return {};
-  }
-};
-
 export const buildBoard = (
+  repo: string,
   chats: ReadonlyArray<AI.ChatSummary>,
-  openIssues:
+  openPrs:
     | ReadonlyArray<{ readonly number: number; readonly title: string }>
     | undefined,
 ): Board => {
-  const byParent = new Map<string, Array<AI.ChatSummary>>();
-  for (const chat of chats) {
-    if (chat.parent === undefined) continue;
-    const siblings = byParent.get(chat.parent) ?? [];
-    siblings.push(chat);
-    byParent.set(chat.parent, siblings);
-  }
-
-  /** Every descendant a root dispatched (the root excluded), flat. */
-  const descendants = (chat: AI.ChatSummary): Array<AI.ChatSummary> =>
-    (byParent.get(chat.id) ?? []).flatMap((child) => [
-      child,
-      ...descendants(child),
-    ]);
-
-  const label = (chat: AI.ChatSummary): string => {
-    // a PARENTLESS Reviewer run is a standalone (unlinked) PR review
-    // — dispatched by the router, not by an owner's door
-    if (chat.term === "Reviewer" && chat.parent === undefined) {
-      return `PR #${chat.key.match(/#(\d+)$/)?.[1] ?? "?"}`;
-    }
-    return chat.term;
-  };
-
-  const issues = new Map<
+  const prs = new Map<
     number,
     {
       title: string;
-      state: BoardIssue["state"];
-      channel: string | undefined;
+      state: BoardPullRequest["state"];
+      thread: AI.ChatSummary | undefined;
       updatedAt: number;
-      agents: Array<AI.ChatSummary>;
     }
   >();
-  const ensureIssue = (number: number) => {
-    let issue = issues.get(number);
-    if (issue === undefined) {
-      issue = {
-        title: `#${number}`,
-        state: "unknown",
-        channel: undefined,
-        updatedAt: 0,
-        agents: [],
-      };
-      issues.set(number, issue);
+  const ensure = (number: number) => {
+    let pr = prs.get(number);
+    if (pr === undefined) {
+      pr = { title: `#${number}`, state: "unknown", thread: undefined, updatedAt: 0 };
+      prs.set(number, pr);
     }
-    return issue;
+    return pr;
   };
-  for (const open of openIssues ?? []) {
-    const issue = ensureIssue(open.number);
-    issue.title = open.title;
-    issue.state = "open";
+
+  for (const open of openPrs ?? []) {
+    const pr = ensure(open.number);
+    pr.title = open.title;
+    pr.state = "open";
   }
 
-  const other: Array<AI.ChatSummary> = [];
   for (const chat of chats) {
-    if (chat.parent !== undefined) continue; // reachable via its root
-    const threadNumber = Number(chat.key.match(/#(\d+)$/)?.[1]);
-    if (chat.term === "IssueOwner" && Number.isFinite(threadNumber)) {
-      const issue = ensureIssue(threadNumber);
-      const event = parseEvent(chat.firstInput);
-      if (event.issue?.title) issue.title = event.issue.title;
-      if (issue.state === "unknown" && openIssues !== undefined) {
-        issue.state = "closed"; // fetched the open list; not on it
-      }
-      issue.channel = chat.id;
-      const workers = descendants(chat);
-      issue.updatedAt = Math.max(
-        chat.updatedAt,
-        ...workers.map((worker) => worker.updatedAt),
-      );
-      issue.agents.push(...workers);
-    } else {
-      other.push(chat, ...descendants(chat));
+    if (chat.term !== "ReviewBot") continue;
+    const number = Number(chat.key.match(/#(\d+)$/)?.[1]);
+    if (!Number.isFinite(number)) continue;
+    const pr = ensure(number);
+    pr.thread = chat;
+    pr.updatedAt = chat.updatedAt;
+    if (pr.state === "unknown" && openPrs !== undefined) {
+      pr.state = "closed"; // fetched the open list; not on it
     }
   }
 
-  /** Chronological + labeled, with ordinals when a label repeats. */
-  const present = (
-    threads: Array<AI.ChatSummary>,
-  ): Array<BoardThread> => {
-    const seen = new Map<string, number>();
-    return threads
-      .sort((a, b) => a.createdAt - b.createdAt)
-      .map((chat) => {
-        const base = label(chat);
-        const count = (seen.get(base) ?? 0) + 1;
-        seen.set(base, count);
-        return { ...chat, label: count === 1 ? base : `${base} (${count})` };
-      });
-  };
-
-  // Stable order: newest issue number first — activity never reshuffles
-  // the sidebar, so a row stays where the user last saw it.
-  const boardIssues = [...issues.entries()]
-    .map(([number, issue]) => ({
-      number,
-      title: issue.title,
-      state: issue.state,
-      updatedAt: issue.updatedAt,
-      channel: issue.channel,
-      agents: present(issue.agents),
-    }))
-    .sort((a, b) => b.number - a.number);
   return {
-    issues: boardIssues,
-    other: present(other).reverse(),
+    repo,
+    // newest PR first — activity never reshuffles the sidebar
+    prs: [...prs.entries()]
+      .map(([number, pr]) => ({ number, ...pr }))
+      .sort((a, b) => b.number - a.number),
   };
 };

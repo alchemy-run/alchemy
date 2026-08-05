@@ -55,7 +55,7 @@ import * as Schedule from "effect/Schedule";
 import * as S from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
-import { isAiError } from "effect/unstable/ai/AiError";
+import { isAiError, type AiError } from "effect/unstable/ai/AiError";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import type * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -232,7 +232,7 @@ type DistributiveOmit<T, K extends PropertyKey> = T extends any
 interface RunRpc extends MainRpc<DurableObjectState> {
   readonly deliver: (
     input: unknown,
-    options?: { readonly parent?: RunRef },
+    options?: { readonly parent?: RunRef; readonly wake?: boolean },
   ) => Effect.Effect<void, unknown, RuntimeContext>;
   readonly dispatch: (
     input: unknown,
@@ -526,11 +526,12 @@ export const KernelCloudflare: Layer.Layer<
         /**
          * The run's `PersistentRef.Store`: DO storage rows under the
          * run's own prefix, written through the synchronous KV API —
-         * write coalescing + the output gate make the Ref's infallible
-         * setter honest. ONE instance per activation: `PersistentRef`
-         * memoizes refs per store instance, so every `make` of a name
-         * within this activation shares one in-memory cache. Building
-         * the object only captures `state`; storage is touched lazily.
+         * write coalescing + the output gate make writes durable before
+         * anything leaves the DO. ONE instance per activation:
+         * `PersistentRef` memoizes refs per store instance, so every
+         * `make` of a name within this activation shares one in-memory
+         * cache. Building the object only captures `state`; storage is
+         * touched lazily.
          */
         const stateStore = makeDurableObjectStore(state);
 
@@ -543,6 +544,11 @@ export const KernelCloudflare: Layer.Layer<
             Effect.provideService(Thread, threadService),
             Effect.provideService(Tick, tick),
             Effect.provideService(PersistentRef.Store, stateStore),
+            // The FRAME: every ref this run makes is namespaced by the
+            // run's durable identity, so isolation is a logical
+            // property of the key — not an accident of this store
+            // being per-DO — and survives a swap to a shared store.
+            PersistentRef.within(me.term, me.key),
             Effect.provide(RuntimeContext.phantom),
             Effect.provide(registration.context),
           ) as Effect.Effect<A, E>;
@@ -848,8 +854,16 @@ export const KernelCloudflare: Layer.Layer<
             // burst, which abandons the round to its waiters. No
             // `orDie`: erasing the typed error into the defect lane
             // condemns it to the recovery loop's blind re-entries.
+            // A MALFORMED TOOL CALL is excluded from blind re-sampling:
+            // the burst feeds it back to the model as a corrective note
+            // (the model can fix its own parameters; a re-sample of the
+            // identical prompt usually just repeats the mistake).
             Effect.retry({
-              while: (error) => (isAiError(error) ? error.isRetryable : true),
+              while: (error) =>
+                isAiError(error)
+                  ? error.isRetryable &&
+                    error.reason._tag !== "ToolParameterValidationError"
+                  : true,
               schedule: Schedule.exponential("1 second"),
               times: 3,
             }),
@@ -968,6 +982,9 @@ export const KernelCloudflare: Layer.Layer<
            * and owed a reply.
            */
           let quiescent = !recovering;
+          // consecutive malformed-tool-call feedback rounds (see the
+          // step catch below) — resets on any well-formed sampling
+          let malformed = 0;
 
           while (true) {
             meta = yield* readMeta;
@@ -1227,7 +1244,38 @@ export const KernelCloudflare: Layer.Layer<
                         delta: part.delta,
                       }),
                 ),
+            ).pipe(
+              // A MALFORMED TOOL CALL is a model-visible fact, not a
+              // crash: nothing was executed, so tell the model what
+              // was wrong and let it re-issue. Bounded — a model that
+              // keeps emitting invalid calls crashes with the real
+              // error after the streak budget.
+              Effect.catchIf(
+                (error): error is AiError =>
+                  isAiError(error) &&
+                  error.reason._tag === "ToolParameterValidationError",
+                (error) =>
+                  malformed >= 3
+                    ? Effect.fail(error)
+                    : Effect.succeed({ malformed: error.message } as const),
+              ),
             );
+            if ("malformed" in response) {
+              malformed++;
+              const text =
+                `your last response included a tool call with INVALID ` +
+                `parameters — NOTHING was executed:\n${response.malformed}\n` +
+                `Re-issue the call with parameters matching the tool's schema.`;
+              yield* appendThread([noteMessage(text)]);
+              yield* observe({
+                type: "input",
+                text: `<note>\n${text}\n</note>`,
+                kind: "note",
+              });
+              quiescent = false; // come straight back around and re-sample
+              continue;
+            }
+            malformed = 0;
 
             yield* appendThread(
               encodeMessages(
@@ -1403,7 +1451,10 @@ export const KernelCloudflare: Layer.Layer<
             ) as Effect.Effect<void>,
           webSocketClose: (socket, code, reason) =>
             Effect.ignore(socket.close(code, reason)),
-          deliver: (input: unknown, options?: { parent?: RunRef }) =>
+          deliver: (
+            input: unknown,
+            options?: { parent?: RunRef; wake?: boolean },
+          ) =>
             Effect.gen(function* () {
               const meta = yield* readMeta;
               if (meta.settled !== undefined) return;
@@ -1411,7 +1462,15 @@ export const KernelCloudflare: Layer.Layer<
                 yield* observe({ type: "admitted", parent: options?.parent });
               }
               yield* enqueue(input);
-              yield* state.waitUntil(burst);
+              // QUIET delivery (`wake: false`): the row is durable in
+              // the inbox but no burst is kicked — a parked run stays
+              // parked, and whatever wakes it next (a waking send, a
+              // reminder, an operator steer) drains everything
+              // accumulated. A run that is ALREADY bursting picks the
+              // row up at its next boundary regardless.
+              if (options?.wake !== false) {
+                yield* state.waitUntil(burst);
+              }
             }),
           dispatch: (input: unknown, options?: { parent?: RunRef }) =>
             Effect.gen(function* () {
@@ -1506,7 +1565,7 @@ export const KernelCloudflare: Layer.Layer<
         return {
           send: (item: unknown, options?: Parameters<Actor["send"]>[1]) =>
             stub(options?.key ?? mint())
-              .deliver(item, { parent: options?.parent })
+              .deliver(item, { parent: options?.parent, wake: options?.wake })
               .pipe(Effect.orDie, Effect.asVoid),
           dispatch: (
             item: unknown,

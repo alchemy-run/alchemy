@@ -1,7 +1,7 @@
 /**
  * The QualityAssurance skill — verifying a change against the real
- * checkout: search, read, and run. Substrate compositions live in
- * QualityAssuranceLocal.ts / QualityAssuranceWorker.ts.
+ * checkout: search, read, and run. Deliberately NO editor: judge, not
+ * author, as a type-level fact.
  */
 import * as AI from "alchemy/AI";
 import * as Layer from "effect/Layer";
@@ -14,7 +14,6 @@ import {
   ReadOutput,
 } from "../tools/index.ts";
 import { ReadToolsLocal, RunToolsLocal } from "../tools/LocalToolbox.ts";
-import { ReadToolsSandbox, RunToolsSandbox } from "../tools/SandboxToolbox.ts";
 
 export class QualityAssurance extends AI.Skill<QualityAssurance>()(
   "QualityAssurance",
@@ -23,7 +22,7 @@ export class QualityAssurance extends AI.Skill<QualityAssurance>()(
 /**
  * The teaching — read-and-run only.
  */
-export const QualityAssuranceLive = QualityAssurance.make`
+export const QualityAssuranceGeneral = QualityAssurance.make`
   # Verifying a change in the repository checkout
 
   Your tools: ${Grep}, ${Glob}, ${ListDirectory}, ${ReadFile},
@@ -36,10 +35,6 @@ export const QualityAssuranceLive = QualityAssurance.make`
   - Claims are checked by RUNNING: the test suite through ${Bash} is
     evidence; the diff's say-so is not.`;
 
-export const QualityAssuranceLocal = QualityAssuranceLive.pipe(
+export const QualityAssuranceLocal = QualityAssuranceGeneral.pipe(
   Layer.provide([ReadToolsLocal, RunToolsLocal]),
-);
-
-export const QualityAssuranceWorker = QualityAssuranceLive.pipe(
-  Layer.provide([ReadToolsSandbox, RunToolsSandbox]),
 );

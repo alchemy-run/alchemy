@@ -19,20 +19,23 @@ export const SqliteLedger = (path: string): Layer.Layer<Ledger> =>
     Ledger,
     Effect.gen(function* () {
       // bun:sqlite is synchronous — every call is wrapped so it
-      // participates in the Effect runtime (tracing, error channels)
-      const db = yield* Effect.acquireRelease(
-        Effect.try({
-          try: () => {
-            const database = new SqliteDatabase(path, { create: true });
-            database.run(LEDGER_TABLE);
-            database.run(META_TABLE);
-            return database;
-          },
-          catch: (cause) =>
-            new Error(`SqliteLedger failed to open ${path}: ${cause}`),
-        }).pipe(Effect.orDie),
-        (database) => Effect.sync(() => database.close()),
-      );
+      // participates in the Effect runtime (tracing, error channels).
+      // Deliberately NO finalizer: layer construction is isolate-scoped
+      // and its finalizers run when the CONSTRUCTING scope closes —
+      // which for the local service is right after init, closing the
+      // database out from under the long-lived polling fibers. SQLite
+      // commits per statement and the ledger is designed to survive
+      // process restarts, so the OS closing the fd at exit is enough.
+      const db = yield* Effect.try({
+        try: () => {
+          const database = new SqliteDatabase(path, { create: true });
+          database.run(LEDGER_TABLE);
+          database.run(META_TABLE);
+          return database;
+        },
+        catch: (cause) =>
+          new Error(`SqliteLedger failed to open ${path}: ${cause}`),
+      }).pipe(Effect.orDie);
 
       return Ledger.of({
         offer: (queue, key, task) =>

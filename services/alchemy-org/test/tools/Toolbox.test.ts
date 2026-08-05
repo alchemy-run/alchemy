@@ -10,8 +10,6 @@ import { ToolOutputStoreLive } from "../../src/lib/ToolOutputStore.ts";
 import {
   Bash,
   BashLocal,
-  EditFile,
-  EditFileLocal,
   Glob,
   GlobLocal,
   Grep,
@@ -22,8 +20,6 @@ import {
   ReadFileLocal,
   ReadOutput,
   ReadOutputLocal,
-  WriteFile,
-  WriteFileLocal,
 } from "../../src/tools/index.ts";
 import { Workspace, fixed as workspace } from "alchemy/Workspace";
 
@@ -64,8 +60,6 @@ const withWorkspace = <A, E>(program: Effect.Effect<A, E, any>): Promise<A> =>
         GlobLocal,
         ListDirectoryLocal,
         ReadFileLocal,
-        EditFileLocal,
-        WriteFileLocal,
         BashLocal,
         ReadOutputLocal,
       ).pipe(Layer.provide(Support));
@@ -135,90 +129,6 @@ test("ReadFile pages, numbers lines, rejects binary, and returns digest", () =>
       expect(
         yield* (read as any)({ path: "binary.dat" }).pipe(Effect.flip),
       ).toContain("binary");
-    }),
-  ));
-
-test("EditFile applies atomic multi-edits and rejects stale digests", () =>
-  withWorkspace(
-    Effect.gen(function* () {
-      const read = yield* ReadFile;
-      const edit = yield* EditFile;
-      const fs = yield* FileSystem.FileSystem;
-      const ws = yield* Workspace;
-      const first = yield* (read as any)({ path: "src/one.ts" });
-      const digest = /\[SHA-256: ([a-f0-9]{64})\]/.exec(first)![1]!;
-
-      const result = yield* (edit as any)({
-        path: "src/one.ts",
-        expectedDigest: digest,
-        edits: [
-          { oldString: "one = 1", newString: "one = 10" },
-          { oldString: "shared = true", newString: "shared = false" },
-        ],
-      });
-      expect(result).toContain("replaced 2 block");
-      expect(
-        yield* fs.readFileString(yield* ws.resolveExisting("src/one.ts")),
-      ).toContain("one = 10");
-
-      expect(
-        yield* (edit as any)({
-          path: "src/one.ts",
-          expectedDigest: digest,
-          edits: [{ oldString: "one = 10", newString: "one = 11" }],
-        }).pipe(Effect.flip),
-      ).toContain("changed since it was read");
-
-      const current = yield* (read as any)({ path: "src/one.ts" });
-      const currentDigest = /\[SHA-256: ([a-f0-9]{64})\]/.exec(current)![1]!;
-      const before = yield* fs.readFileString(
-        yield* ws.resolveExisting("src/one.ts"),
-      );
-      expect(
-        yield* (edit as any)({
-          path: "src/one.ts",
-          expectedDigest: currentDigest,
-          edits: [
-            { oldString: "one = 10", newString: "one = 11" },
-            { oldString: "missing", newString: "never" },
-          ],
-        }).pipe(Effect.flip),
-      ).toContain("not found");
-      expect(
-        yield* fs.readFileString(yield* ws.resolveExisting("src/one.ts")),
-      ).toBe(before);
-    }),
-  ));
-
-test("WriteFile distinguishes create from digest-guarded overwrite", () =>
-  withWorkspace(
-    Effect.gen(function* () {
-      const write = yield* WriteFile;
-      const read = yield* ReadFile;
-      const created = yield* (write as any)({
-        path: "src/new.ts",
-        content: "export const created = true;\n",
-        mode: "create",
-      });
-      expect(created).toContain("SHA-256");
-      expect(
-        yield* (write as any)({
-          path: "src/one.ts",
-          content: "overwrite\n",
-          mode: "create",
-        }).pipe(Effect.flip),
-      ).toContain("already exists");
-
-      const observed = yield* (read as any)({ path: "src/one.ts" });
-      const digest = /\[SHA-256: ([a-f0-9]{64})\]/.exec(observed)![1]!;
-      expect(
-        yield* (write as any)({
-          path: "src/one.ts",
-          content: "overwrite\n",
-          mode: "overwrite",
-          expectedDigest: digest,
-        }),
-      ).toContain("SHA-256");
     }),
   ));
 

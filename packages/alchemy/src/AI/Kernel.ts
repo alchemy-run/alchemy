@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type * as Scope from "effect/Scope";
+import type * as PersistentRef from "../PersistentRef.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Actor } from "./Actor.ts";
 import type { Agent } from "./Agent.ts";
@@ -121,14 +122,16 @@ export type Charter = Effect.Effect<Fragment | Turn | TurnFn, any, any>;
  * requirements because no user Layer could ever provide them.
  *
  * These are RUNTIME facts and affordances: `Thread` (the run's
- * identity and conversation) and `Tick` (this sampling). Init runs
- * ONCE PER RUN at admit — the thread already exists, so init MAY read
- * `Thread` for thread-scoped setup (a `Ref` keyed by the run, a
- * workspace checkout addressed by `thread.key`). `Tick` exists only
- * inside the loop: no sampling is under way during init, so only
- * turns and tool handlers see it.
+ * identity and conversation), `Tick` (this sampling), and the
+ * `PersistentRef.Store` (durable named state, framed by the run's
+ * identity — the opt-in named-state capability both kernels provide).
+ * Init runs ONCE PER RUN at admit — the thread already exists, so
+ * init MAY read `Thread` for thread-scoped setup (a `PersistentRef`
+ * keyed by the run, a workspace checkout addressed by `thread.key`).
+ * `Tick` exists only inside the loop: no sampling is under way during
+ * init, so only turns and tool handlers see it.
  */
-export type TurnServices = Thread | Tick | RuntimeContext;
+export type TurnServices = Thread | Tick | RuntimeContext | PersistentRef.Store;
 
 /**
  * A charter's requirement union: the init effect's own requirements
@@ -142,7 +145,7 @@ export type TurnServices = Thread | Tick | RuntimeContext;
 export type CharterServices<C> =
   C extends Effect.Effect<infer A, any, infer RInit>
     ?
-        | Exclude<RInit, Thread | RuntimeContext>
+        | Exclude<RInit, Thread | RuntimeContext | PersistentRef.Store>
         | (A extends Effect.Effect<any, any, infer RTurn>
             ? Exclude<RTurn, TurnServices>
             : A extends (tick: any) => Effect.Effect<any, any, infer RTurn>

@@ -20,6 +20,7 @@ import {
   GitPullRequestArrow,
   Link2,
   MessageSquare,
+  RefreshCw,
   Reply,
   ScrollText,
   Search,
@@ -27,7 +28,11 @@ import {
   Terminal,
   type LucideIcon,
 } from "lucide-react";
+import type * as AI from "alchemy/AI";
 import { useState, type ReactNode } from "react";
+import type { ReviewBotLive } from "../../src/ReviewBot.ts";
+import type { QualityAssuranceGeneral } from "../../src/skills/QualityAssurance.ts";
+import { DiffCard, splitDiffOutput } from "@/components/code";
 import { RefHoverCard } from "@/components/ref-hover-card";
 import { useAnchoredToggle } from "@/lib/anchor";
 import { cn } from "@/lib/utils";
@@ -153,11 +158,30 @@ const lastLine = (text: string): string | undefined => {
   return lines.length > 0 ? lines[lines.length - 1] : undefined;
 };
 
+/** A renderer as the transcript sees it — the wire is untyped JSON, so
+ *  `input` is `any` here; the ReviewBot's own cards are authored against
+ *  their PRECISE input types (see {@link REVIEW_BOT}) and merge in. */
 type Renderer = (
-  input: Record<string, any>,
+  input: any,
   output: string | undefined,
   running: boolean,
 ) => ToolCallView;
+
+/**
+ * THIS app's registry contract for one agent/skill layer: a card per
+ * wire tool, each receiving that tool's typed input. Built on the
+ * core's type-level facts (`AI.ToolNames` / `AI.ToolInput` — the wire
+ * surface a `make` Layer carries); the registry SHAPE — this signature,
+ * `ToolCallView` — is ours, which is why the type lives here and not
+ * in alchemy.
+ */
+type Renderers<L> = {
+  [Name in AI.ToolNames<L> & string]: (
+    input: AI.ToolInput<L, Name>,
+    output: string | undefined,
+    running: boolean,
+  ) => ToolCallView;
+};
 
 /** `#N` as a link into GitHub — issues and PRs share the /issues/N
  *  door (GitHub redirects PR numbers), and PullRequestRefs carry an
@@ -245,7 +269,75 @@ const renderOpenPullRequest: Renderer = (input, output) => {
   };
 };
 
-const RENDERERS: Record<string, Renderer> = {
+/**
+ * Cards for the ReviewBot's OWN wire, typed straight off the charter:
+ * `ReviewBotLive`'s TYPE carries every tool its prose can mention
+ * (mention-is-presence, lifted into the type system — alchemy/AI/Wire.ts),
+ * and the annotation holds this object to it. Two guarantees, both
+ * compiler-enforced, both visible right here:
+ *
+ * - mention a new tool in the charter without adding its card → this
+ *   object errors, naming the missing tool;
+ * - each renderer's `input` is that tool's ACTUAL parameter type
+ *   (`comment` gets `{ message: string }`, `readDiff` gets a typed
+ *   PR ref) — touch a field the tool doesn't have and it won't compile.
+ *
+ * The import of `ReviewBotLive` is type-only: erased at build, no
+ * server code reaches the browser bundle.
+ */
+const REVIEW_BOT: Renderers<typeof ReviewBotLive> = {
+  readDiff: (input, output) => {
+    const stat = output === undefined ? undefined : diffStat(output);
+    const split = output === undefined ? undefined : splitDiffOutput(output);
+    return {
+      icon: FileDiff,
+      title: <>Read diff of PR <RefLink refValue={input.pr} /></>,
+      badge: stat && <DiffStatBadge added={stat.added} removed={stat.removed} />,
+      body:
+        split === undefined ? undefined : (
+          <div>
+            {split.header.length > 0 && (
+              <Mono>{clamp(split.header, 1200)}</Mono>
+            )}
+            {split.patch !== undefined ? (
+              <DiffCard patch={split.patch} />
+            ) : (
+              <DiffText text={output ?? ""} />
+            )}
+          </div>
+        ),
+    };
+  },
+
+  readIssue: (input, output) => ({
+    icon: FileText,
+    title: <>Read issue <RefLink refValue={input.issue} /></>,
+    body: output === undefined ? undefined : <WindowedText text={output} />,
+  }),
+
+  comment: (input) => ({
+    icon: MessageSquare,
+    title: <>Comment on the pull request</>,
+    body: input.message ? <Mono>{input.message}</Mono> : undefined,
+  }),
+
+  sync_checkout: (_input, output, running) => ({
+    icon: RefreshCw,
+    title: <>Sync checkout to the pull request&apos;s head</>,
+    summary: running || output === undefined ? undefined : lastLine(output),
+  }),
+};
+
+/**
+ * Cards for the {@link QualityAssurance} skill's wire — a skill's
+ * tools are encapsulated behind its tag (never on the HOST agent's
+ * wire type, mirroring the requirement channel), so coverage is
+ * checked against the skill's OWN layer: the teaching's prose splices
+ * are the tool list. Same guarantees as {@link REVIEW_BOT}: miss a
+ * card → compile error naming the tool; each `input` is the tool's
+ * actual parameter type.
+ */
+const QUALITY_ASSURANCE: Renderers<typeof QualityAssuranceGeneral> = {
   bash: (input, output, running) => {
     const parsed = output === undefined ? undefined : parseBashOutput(output);
     return {
@@ -307,6 +399,74 @@ const RENDERERS: Record<string, Renderer> = {
       ),
   }),
 
+  grep: (input, output) => ({
+    icon: Search,
+    title: (
+      <>
+        grep <span className="font-mono text-honey">/{input.pattern}/</span>
+        {input.path && (
+          <span className="text-muted-foreground"> in {input.path}</span>
+        )}
+      </>
+    ),
+    badge:
+      output === undefined ? undefined : (
+        <span className="shrink-0 text-[11px] text-muted-foreground">
+          {/no matches/i.test(output) ? "0" : countLines(output)}
+        </span>
+      ),
+    summary: output === undefined ? undefined : firstLine(output),
+    body: output === undefined ? undefined : <WindowedText text={output} />,
+  }),
+
+  glob: (input, output) => ({
+    icon: FolderSearch,
+    title: (
+      <>
+        glob <span className="font-mono text-honey">{input.pattern}</span>
+        {input.path && (
+          <span className="text-muted-foreground"> in {input.path}</span>
+        )}
+      </>
+    ),
+    badge:
+      output === undefined ? undefined : (
+        <span className="shrink-0 text-[11px] text-muted-foreground">
+          {/no files/i.test(output) ? "0" : countLines(output)}
+        </span>
+      ),
+    body: output === undefined ? undefined : <WindowedText text={output} />,
+  }),
+
+  listDirectory: (input, output) => ({
+    icon: FolderTree,
+    title: (
+      <>
+        ls <span className="font-mono text-mist">{input.path || "."}</span>
+      </>
+    ),
+    body: output === undefined ? undefined : <WindowedText text={output} />,
+  }),
+
+  readOutput: (input, output) => ({
+    icon: ScrollText,
+    title: (
+      <>
+        Read output{" "}
+        <span className="font-mono text-muted-foreground">{input.outputId}</span>
+      </>
+    ),
+    body: output === undefined ? undefined : <WindowedText text={output} />,
+  }),
+};
+
+/**
+ * The remainder: kernel intrinsics (`skill`, `remind_me` — their
+ * schemas live in the kernel, not on any agent's wire) and verbs from
+ * OLDER transcripts (the org days: editors, GitHub write tools).
+ * Unknown names fall back to the generic collapsible card.
+ */
+const EXTRAS: Record<string, Renderer> = {
   writeFile: (input, output) => ({
     icon: FilePlus2,
     title: (
@@ -392,76 +552,6 @@ const RENDERERS: Record<string, Renderer> = {
     };
   },
 
-  grep: (input, output) => ({
-    icon: Search,
-    title: (
-      <>
-        grep <span className="font-mono text-honey">/{input.pattern}/</span>
-        {input.path && (
-          <span className="text-muted-foreground"> in {input.path}</span>
-        )}
-      </>
-    ),
-    badge:
-      output === undefined ? undefined : (
-        <span className="shrink-0 text-[11px] text-muted-foreground">
-          {/no matches/i.test(output) ? "0" : countLines(output)}
-        </span>
-      ),
-    summary: output === undefined ? undefined : firstLine(output),
-    body: output === undefined ? undefined : <WindowedText text={output} />,
-  }),
-
-  glob: (input, output) => ({
-    icon: FolderSearch,
-    title: (
-      <>
-        glob <span className="font-mono text-honey">{input.pattern}</span>
-        {input.path && (
-          <span className="text-muted-foreground"> in {input.path}</span>
-        )}
-      </>
-    ),
-    badge:
-      output === undefined ? undefined : (
-        <span className="shrink-0 text-[11px] text-muted-foreground">
-          {/no files/i.test(output) ? "0" : countLines(output)}
-        </span>
-      ),
-    body: output === undefined ? undefined : <WindowedText text={output} />,
-  }),
-
-  listDirectory: (input, output) => ({
-    icon: FolderTree,
-    title: (
-      <>
-        ls <span className="font-mono text-mist">{input.path || "."}</span>
-      </>
-    ),
-    body: output === undefined ? undefined : <WindowedText text={output} />,
-  }),
-
-  readOutput: (input, output) => ({
-    icon: ScrollText,
-    title: (
-      <>
-        Read output{" "}
-        <span className="font-mono text-muted-foreground">{input.outputId}</span>
-      </>
-    ),
-    body: output === undefined ? undefined : <WindowedText text={output} />,
-  }),
-
-  readDiff: (input, output) => {
-    const stat = output === undefined ? undefined : diffStat(output);
-    return {
-      icon: FileDiff,
-      title: <>Read diff of PR <RefLink refValue={input.pr} /></>,
-      badge: stat && <DiffStatBadge added={stat.added} removed={stat.removed} />,
-      body: output === undefined ? undefined : <DiffText text={output} />,
-    };
-  },
-
   /* ── GitHub verbs ──────────────────────────────────────────── */
 
   openPullRequest: renderOpenPullRequest,
@@ -496,12 +586,6 @@ const RENDERERS: Record<string, Renderer> = {
     body: input.body ? <Mono>{clamp(String(input.body), 2000)}</Mono> : undefined,
   }),
 
-  readIssue: (input, output) => ({
-    icon: FileText,
-    title: <>Read issue <RefLink refValue={input.issue} /></>,
-    body: output === undefined ? undefined : <WindowedText text={output} />,
-  }),
-
   searchIssues: (input, output) => ({
     icon: Search,
     title: (
@@ -513,12 +597,6 @@ const RENDERERS: Record<string, Renderer> = {
       </>
     ),
     body: output === undefined ? undefined : <WindowedText text={output} />,
-  }),
-
-  comment: (input) => ({
-    icon: MessageSquare,
-    title: <>Comment on <RefLink refValue={input.issue} /></>,
-    body: input.message ? <Mono>{String(input.message)}</Mono> : undefined,
   }),
 
   linkIssues: (input) => ({
@@ -560,6 +638,14 @@ const RENDERERS: Record<string, Renderer> = {
     ),
     body: input.note ? <Mono>{String(input.note)}</Mono> : undefined,
   }),
+};
+
+/** The transcript's lookup table: the typed, charter-checked packs
+ *  layered over the untyped remainder. */
+const RENDERERS: Record<string, Renderer> = {
+  ...EXTRAS,
+  ...QUALITY_ASSURANCE,
+  ...REVIEW_BOT,
 };
 
 /** Whether a compact per-tool card exists for this tool name. */

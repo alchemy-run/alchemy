@@ -230,6 +230,50 @@ describe("KernelMemory", () => {
     }).pipe(Effect.scoped, Effect.provide(testLayer(model, search.layer)));
   });
 
+  it.live(
+    "quiet send (wake: false) accumulates without waking a parked run",
+    () => {
+      const model = Model.make([
+        () => [Model.text("noted"), Model.finish()],
+        () => [Model.text("caught up"), Model.finish()],
+      ]);
+      const search = recordingSearch();
+      const calls = (count: number) =>
+        Effect.sync(() => model.calls.length).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("10 millis"),
+            until: (length) => length >= count,
+            times: 200,
+          }),
+        );
+      return Effect.gen(function* () {
+        const researcher = yield* interpret(Researcher, ResearcherCharter);
+        const first = yield* researcher.dispatch("issue opened", {
+          key: "repo#9",
+        });
+        expect(first).toBe("noted");
+
+        // news lands QUIETLY while parked — no sampling happens at all
+        yield* researcher.send("PR #1 opened", { key: "repo#9", wake: false });
+        yield* researcher.send("PR #1 merged", { key: "repo#9", wake: false });
+        yield* Effect.sleep("150 millis");
+        expect(model.calls).toHaveLength(1);
+
+        // the next REAL wake reads everything that accumulated, in order,
+        // ahead of the waking input itself
+        yield* researcher.steer("repo#9", "what happened while I was away?");
+        yield* calls(2);
+        const prompt = Model.promptText(model.calls[1]!);
+        expect(prompt).toContain("PR #1 opened");
+        expect(prompt).toContain("PR #1 merged");
+        expect(prompt).toContain("what happened while I was away?");
+        expect(prompt.indexOf("PR #1 opened")).toBeLessThan(
+          prompt.indexOf("what happened while I was away?"),
+        );
+      }).pipe(Effect.scoped, Effect.provide(testLayer(model, search.layer)));
+    },
+  );
+
   it.effect("agent references compile into ONE dispatch tool", () => {
     const model = Model.make([
       // call 0: the LEAD delegates

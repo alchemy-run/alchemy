@@ -20,14 +20,7 @@ export const testAlchemy = GitHub.Repository("test-alchemy", {
   owner: "alchemy-run",
   name: "test-alchemy",
   description:
-    "Sandbox repository managed by the alchemy-org software factory — cut issues here and the factory resolves them",
+    "Sandbox repository managed by the alchemy-org review bot — open pull requests here and the bot reviews them",
   hasIssues: true,
   deleteBranchOnMerge: true,
 });
-
-/**
- * Ledger metadata key for the org's PR→issue link — born structured
- * where the PR is created (OpenPullRequest), read by the event router.
- */
-export const prLinkKey = (repo: string, pr: number) =>
-  `pr-link:${repo}#${pr}`;

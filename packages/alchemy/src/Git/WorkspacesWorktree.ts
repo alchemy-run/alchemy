@@ -117,9 +117,19 @@ export const WorkspacesWorktree = (
               .pipe(Effect.orDie);
             const url = yield* authedUrl(remote);
             yield* git(["clone", "--filter=blob:none", url, repoDir]);
-          } else {
-            yield* git(["-C", repoDir, "fetch", "origin", ref]);
           }
+          // Fetch with an EXPLICIT refspec so non-branch refs resolve as
+          // `origin/{ref}` too — `pull/140/head` (a PR head, which plain
+          // clone/fetch never materializes) lands at
+          // refs/remotes/origin/pull/140/head, exactly where `build`'s
+          // `worktree add … origin/{ref}` looks for it.
+          yield* git([
+            "-C",
+            repoDir,
+            "fetch",
+            "origin",
+            `+${ref}:refs/remotes/origin/${ref}`,
+          ]);
           return repoDir;
         });
 

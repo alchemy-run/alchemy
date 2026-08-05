@@ -1,26 +1,24 @@
 /**
- * E2E composition smoke: the WHOLE org Layer graph — processes
- * (Issues, PullRequests), agents (Engineer), skills
- * (Coding), tools (GitHub bindings, local toolbox), kernel + model,
- * ledger, event polling — builds against real physics, the charters
- * interpret, the pollers register, and the sealed Shapes read the
- * real repository.
+ * E2E composition smoke: the WHOLE bot Layer graph — the ReviewBot
+ * charter, the QA skill and toolbox, GitHub bindings, kernel + model,
+ * ledger, event polling — builds against real physics, the charter
+ * interprets, the poller registers, and the chat projection is
+ * readable.
  *
  * Gated on the runtime credentials (`GITHUB_ACCESS_TOKEN`/`GITHUB_TOKEN`
  * and `ANTHROPIC_API_KEY`); without them the test skips.
  */
+import * as AI from "alchemy/AI";
 import * as GitHub from "alchemy/GitHub";
 import { BunServices } from "@effect/platform-bun";
 import { expect, test } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import { Issues } from "../src/processes/Issues.ts";
-import { PullRequests } from "../src/processes/PullRequests.ts";
-import { OrgLocal as OrgLive } from "../src/OrgLocal.ts";
+import { Local } from "../src/Local.ts";
 
 /**
- * The GitHub Providers requirement is PHANTOM on this path: the org
+ * The GitHub Providers requirement is PHANTOM on this path: the bot
  * resolves `testAlchemy`'s identity from its static owner/name props
  * (see RepositoryLike.resolveRepository), never through the provider
  * collection — same situation as the detached runtime, which provides
@@ -34,7 +32,7 @@ const hasCredentials =
   process.env.ANTHROPIC_API_KEY !== undefined;
 
 test.skipIf(!hasCredentials)(
-  "the org composes end-to-end and reads its world",
+  "the bot composes end-to-end and reads its world",
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -43,16 +41,11 @@ test.skipIf(!hasCredentials)(
         yield* fs.makeDirectory(".alchemy", { recursive: true });
 
         yield* Effect.gen(function* () {
-          const issues = yield* Issues;
-          const pullRequests = yield* PullRequests;
-          const [issueList, pullList] = yield* Effect.all([
-            issues.list(),
-            pullRequests.list(),
-          ]);
-          expect(Array.isArray(issueList)).toBe(true);
-          expect(Array.isArray(pullList)).toBe(true);
+          const chats = yield* AI.Chats;
+          const list = yield* chats.list();
+          expect(Array.isArray(list)).toBe(true);
         }).pipe(
-          Effect.provide(OrgLive),
+          Effect.provide(Local),
           Effect.provide(ProvidersPhantom),
           Effect.scoped,
         );

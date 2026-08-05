@@ -13,12 +13,17 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { cjk } from "@streamdown/cjk";
-import { code } from "@streamdown/code";
 import { math } from "@streamdown/math";
 import { mermaid } from "@streamdown/mermaid";
+import { CodeCard } from "@/components/code";
 import type { UIMessage } from "ai";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
-import type { ComponentProps, HTMLAttributes, ReactElement } from "react";
+import type {
+  ComponentProps,
+  HTMLAttributes,
+  ReactElement,
+  ReactNode,
+} from "react";
 import {
   createContext,
   memo,
@@ -321,16 +326,48 @@ export const MessageBranchPage = ({
 
 export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 
-const streamdownPlugins = { cjk, code, math, mermaid };
+// deliberately NO `code` plugin: fenced blocks render through
+// @pierre/diffs (`markdownComponents` below), not streamdown's
+// built-in Shiki pipeline — one highlighter, one look.
+const streamdownPlugins = { cjk, math, mermaid };
+
+/**
+ * Fenced code renders through @pierre/diffs (Shiki, shadow DOM,
+ * compact) instead of streamdown's built-in block; inline code keeps
+ * the default styling. `pre` unwraps so the card owns all chrome.
+ */
+const markdownComponents: MessageResponseProps["components"] = {
+  pre: ({ children }) => <>{children}</>,
+  code: ({ className, children, node: _node, ...rest }) => {
+    const language = /language-(\w+)/.exec(className ?? "")?.[1];
+    if (language === undefined) {
+      return (
+        <code
+          className={cn(
+            "rounded bg-secondary px-1 py-0.5 font-mono text-[0.85em]",
+            className
+          )}
+          {...rest}
+        >
+          {children}
+        </code>
+      );
+    }
+    return <CodeCard code={String(children ?? "")} language={language} />;
+  },
+};
 
 export const MessageResponse = memo(
-  ({ className, ...props }: MessageResponseProps) => (
+  ({ className, components, ...props }: MessageResponseProps) => (
     <Streamdown
       className={cn(
         "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
         className
       )}
       plugins={streamdownPlugins}
+      // callers add overrides (e.g. the anchor hover-cards); the code
+      // rendering is house style and always applies
+      components={{ ...markdownComponents, ...components }}
       {...props}
     />
   ),
