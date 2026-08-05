@@ -1,6 +1,8 @@
 import type * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
+import type { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type {
   IdentityProviderAttributes,
   IdentityProviderType,
@@ -43,6 +45,12 @@ export type FindIdentityProviderOptions = {
  * IdPs that are managed outside the stack (e.g. the dashboard-provisioned
  * `cloudflare` WARP login method, whose display name is often `""`).
  * The implementation is registered by `Cloudflare.providers()`.
+ *
+ * As a **runtime binding** inside a Worker, provide
+ * {@link GetIdentityProviderHttp} — it mints a scoped
+ * {@link AccountApiToken} with the `Access: Organizations, Identity
+ * Providers, and Groups Read` permission and binds it into the Worker so
+ * the lookup can run at runtime.
  * @binding
  * @section Looking Up Identity Providers
  * @example Restrict an Access application to the managed WARP IdP
@@ -60,6 +68,16 @@ export type FindIdentityProviderOptions = {
  * ```typescript
  * const okta = Cloudflare.Access.getIdentityProvider({ name: "Okta SSO" });
  * ```
+ * @example Look up an IdP at runtime inside a Worker
+ * ```typescript
+ * // init — bind the lookup
+ * const findWarpIdp = yield* Cloudflare.Access.GetIdentityProvider({
+ *   type: "cloudflare",
+ * });
+ *
+ * // runtime — resolve the IdP
+ * const warp = yield* findWarpIdp();
+ * ```
  */
 export interface GetIdentityProvider extends Binding.Service<
   GetIdentityProvider,
@@ -71,8 +89,10 @@ export interface GetIdentityProvider extends Binding.Service<
       IdentityProviderAttributes | undefined,
       | zeroTrust.ListIdentityProvidersForAccountError
       | zeroTrust.ListIdentityProvidersForZoneError,
-      zeroTrust.CloudflareOpContext
-    >
+      RuntimeContext
+    >,
+    never,
+    CloudflareEnvironment
   >
 > {}
 

@@ -7,11 +7,14 @@ import * as Test from "@/Test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import IdpLookupWorker from "./fixtures/idp-lookup-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -560,6 +563,75 @@ test.provider("getIdentityProvider data source resolves a live IdP", (stack) =>
     yield* stack.destroy();
     yield* expectGone(undefined, idp.accountId, idp.identityProviderId);
   }).pipe(logLevel),
+);
+
+class LookupNotServing extends Data.TaggedError("LookupNotServing")<{
+  message: string;
+}> {}
+
+test.provider(
+  "GetIdentityProvider binding resolves the IdP at runtime inside a Worker",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const idp = yield* Cloudflare.Access.IdentityProvider(
+            "WorkerLookupOidc",
+            {
+              name: "alchemy-zt-idp-worker-lookup",
+              type: "oidc",
+              config: oidcConfig,
+            },
+          );
+          const worker = yield* IdpLookupWorker;
+          return { idp, worker };
+        }),
+      );
+
+      // Anchor on the expected marker, never a bare 200 — fresh workers.dev
+      // hostnames serve a placeholder with 200 while propagating, and the
+      // freshly-minted scoped token can 403 (→ worker 500) for ~30s.
+      const client = yield* HttpClient.HttpClient;
+      const body = yield* client.get(`${deployed.worker.url}/`).pipe(
+        Effect.flatMap((res) =>
+          Effect.gen(function* () {
+            const text = yield* res.text;
+            if (res.status !== 200 || !text.includes("identityProviderId")) {
+              return yield* new LookupNotServing({
+                message: `status=${res.status} body=${text.slice(0, 300)}`,
+              });
+            }
+            return JSON.parse(text) as {
+              identityProviderId: string | null;
+              type: string | null;
+            };
+          }),
+        ),
+        Effect.retry({
+          while: (e): boolean => e._tag === "LookupNotServing",
+          schedule: Schedule.max([
+            Schedule.min([
+              Schedule.exponential("1 second"),
+              Schedule.spaced("5 seconds"),
+            ]),
+            Schedule.recurs(15),
+          ]),
+        }),
+      );
+
+      expect(body.identityProviderId).toEqual(deployed.idp.identityProviderId);
+      expect(body.type).toEqual("oidc");
+
+      yield* stack.destroy();
+      yield* expectGone(
+        undefined,
+        deployed.idp.accountId,
+        deployed.idp.identityProviderId,
+      );
+    }).pipe(logLevel),
+  { timeout: 180_000 },
 );
 
 // Compile-time contract of the per-type configs — never executed. The
