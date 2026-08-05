@@ -1380,10 +1380,14 @@ export const FunctionProvider = () =>
           Runtime: news.runtime ?? "nodejs24.x",
           Architectures: [news.architecture ?? "x86_64"],
           MemorySize: news.memorySize,
-          // Always explicit: `UpdateFunctionConfiguration` treats an omitted
-          // `Layers` as "leave as-is", so removing the prop would strand the
-          // previously-attached layers.
-          Layers: (layers ?? []).map(layerVersionArnOf),
+          // `reconcile` always passes an explicit list (`[]` included):
+          // `UpdateFunctionConfiguration` treats an omitted `Layers` as
+          // "leave as-is", so sending nothing would strand layers dropped
+          // from the prop. Precreate passes `undefined` instead, which is
+          // what omits the key — the stub cannot know the layer set yet, and
+          // sending `[]` there would detach the layers a previous reconcile
+          // attached, only for this reconcile to re-attach them.
+          Layers: layers?.map(layerVersionArnOf),
           Environment: runtimeEnv
             ? {
                 Variables: {
