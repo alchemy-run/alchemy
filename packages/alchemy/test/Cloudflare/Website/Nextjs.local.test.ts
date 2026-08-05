@@ -16,6 +16,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
+import { linkJsApiTypeScript } from "./TypeScriptCompat.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers(), dev: true });
 
@@ -29,10 +30,10 @@ const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
 const fixtureEntries = [
   "package.json",
-  "jsconfig.json",
+  "tsconfig.json",
   "next.config.mjs",
   "open-next.config.ts",
-  "middleware.js",
+  "middleware.ts",
   "app",
   "pages",
   "public",
@@ -43,8 +44,8 @@ const memoInclude = [
   "pages/**",
   "public/**",
   "package.json",
-  "jsconfig.json",
-  "middleware.js",
+  "tsconfig.json",
+  "middleware.ts",
   "next.config.mjs",
   "open-next.config.ts",
 ];
@@ -109,6 +110,7 @@ test.provider(
         tempRoot,
         entries: fixtureEntries,
       });
+      yield* linkJsApiTypeScript(rootDir);
 
       const bindingMarker = "nextjs-dev-binding-marker";
 
@@ -192,6 +194,7 @@ test.provider(
         tempRoot,
         entries: fixtureEntries,
       });
+      yield* linkJsApiTypeScript(rootDir);
 
       const bindingMarker = "nextjs-hmr-binding-marker";
 
@@ -228,7 +231,7 @@ test.provider(
       // ── HMR: edit the page in place. The stack is NOT re-applied —
       // Turbopack must recompile and serve the new marker through the
       // same alchemy proxy ─────────────────────────────────────────────
-      const pagePath = path.join(rootDir, "app", "page.jsx");
+      const pagePath = path.join(rootDir, "app", "page.tsx");
       const page = yield* fs.readFileString(pagePath);
       yield* fs.writeFileString(
         pagePath,
@@ -266,6 +269,7 @@ test.provider(
         tempRoot,
         entries: fixtureEntries,
       });
+      yield* linkJsApiTypeScript(rootDir);
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {

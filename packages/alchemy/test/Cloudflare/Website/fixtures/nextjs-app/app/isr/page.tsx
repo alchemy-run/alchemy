@@ -1,3 +1,4 @@
+/** @jsxImportSource react */
 // A long revalidate window: the test asserts the *prerendered* payload
 // serves (the static-assets incremental cache is read-only), not a
 // revalidation round-trip.

@@ -1,3 +1,4 @@
+/** @jsxImportSource react */
 import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";

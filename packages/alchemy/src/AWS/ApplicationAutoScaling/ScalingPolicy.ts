@@ -342,7 +342,7 @@ export const ScalingPolicyProvider = () =>
           if (policy === undefined) {
             return yield* Effect.fail(
               new aas.ObjectNotFoundException({
-                Message: `Scaling policy '${policyName}' was not readable after PutScalingPolicy`,
+                message: `Scaling policy '${policyName}' was not readable after PutScalingPolicy`,
               }),
             );
           }

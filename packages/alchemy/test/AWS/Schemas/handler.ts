@@ -152,7 +152,7 @@ export default SchemasTestFunction.make(
             Effect.catchTag("ForbiddenException", (e) =>
               Effect.succeed({
                 outcome: "forbidden" as const,
-                message: e.Message ?? "",
+                message: e.message ?? "",
               }),
             ),
           );

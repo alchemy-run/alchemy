@@ -1,3 +1,4 @@
+/** @jsxImportSource react */
 // Long revalidate window: within it the KV-cached payload serves as-is;
 // on-demand revalidation (`revalidatePath` from /api/revalidate) purges
 // the entry so the next render produces a fresh stamp — proof the

@@ -290,6 +290,9 @@ const ensureWorkerAwsAccess = (host: WorkerHost) =>
                 : Redacted.make(secret)
               : Redacted.make(""),
             sessionToken: undefined,
+            // STS AssumeRole is signed against a fixed global endpoint region;
+            // per-request operations provide their own image-derived Region.
+            region: "us-east-1",
           } satisfies ResolvedCredentials;
         }),
       );

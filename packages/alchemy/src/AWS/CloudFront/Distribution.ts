@@ -295,7 +295,7 @@ export interface DistributionOriginGroup {
 }
 
 const isFunctionAssociationPending = (error: cloudfront.InvalidArgument) => {
-  const message = error.Message ?? "";
+  const message = error.message ?? "";
   return (
     message.includes("FunctionAssociationArn") &&
     message.includes("not found or is not published")
@@ -916,7 +916,7 @@ export const DistributionProvider = () =>
                             Effect.fail(
                               new DistributionFunctionAssociationPending({
                                 message:
-                                  error.Message ??
+                                  error.message ??
                                   "CloudFront function association pending",
                               }),
                             ),
@@ -988,7 +988,7 @@ export const DistributionProvider = () =>
                           Effect.fail(
                             new DistributionFunctionAssociationPending({
                               message:
-                                error.Message ??
+                                error.message ??
                                 "CloudFront function association pending",
                             }),
                           ),
