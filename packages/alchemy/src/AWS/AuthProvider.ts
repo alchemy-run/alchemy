@@ -1,6 +1,9 @@
 import * as Floci from "@alchemy.run/floci";
 import * as DistilledAuth from "@distilled.cloud/aws/Auth";
-import { Credentials } from "@distilled.cloud/aws/Credentials";
+import {
+  Credentials,
+  type ResolvedCredentials,
+} from "@distilled.cloud/aws/Credentials";
 import * as STS from "@distilled.cloud/aws/sts";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
@@ -97,12 +100,14 @@ export interface AwsStoredCredentials {
 
 export interface AwsResolvedCredentials {
   accountId: string;
-  credentials: Effect.Effect<{
-    accessKeyId: Redacted.Redacted<string>;
-    secretAccessKey: Redacted.Redacted<string>;
-    sessionToken: Redacted.Redacted<string> | undefined;
-    region: string;
-  }>;
+  /**
+   * `ResolvedCredentials` carries the region it authenticated against —
+   * `@distilled.cloud/aws` reads `Region` as an OPTIONAL override and falls
+   * back to this when nothing provides one. Alchemy always provides `Region`
+   * from {@link AWSEnvironment}, so this is the fallback, not the source of
+   * truth for where an operation is dispatched.
+   */
+  credentials: Effect.Effect<ResolvedCredentials>;
   region: string;
   /**
    * Custom AWS endpoint (local emulator). Flows into
