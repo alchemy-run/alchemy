@@ -161,16 +161,21 @@ export interface CollectorProps {
    */
   configId?: string;
   /**
-   * Values the configuration's `${env:...}` placeholders read — backend
-   * endpoints, dataset names, ingest tokens. `Redacted` values bind as
-   * secrets, exactly like {@link layerOtlp} headers, so a token passed here
-   * never lands in plaintext state.
+   * Extra variables on the deployed Function's environment.
    *
-   * These are the placeholders you write by hand — a `${env:...}` written
-   * as a plain string in the configuration is a literal, baked into the file
-   * untouched. The configuration's own generated placeholders are all
-   * prefixed `ALCHEMY_OTEL_`, so the two sets cannot collide silently: a
-   * name declared here that a generated one would shadow fails the build.
+   * This is NOT how a value reaches the configuration — a configuration
+   * carries its own values, as `Output`s, `Redacted`s and `Config`
+   * references. It is for everything that shares the Function's environment
+   * without being the collector: the extension's own settings
+   * (`OPENTELEMETRY_EXTENSION_LOG_LEVEL`), a sibling module that reads a
+   * token by a name it chose, and the variables a `Config` leaf in the
+   * configuration refers to.
+   *
+   * `Redacted` values bind as secrets, exactly like {@link layerOtlp}
+   * headers, so a token passed here never lands in plaintext state. The
+   * configuration's generated variables are all prefixed `ALCHEMY_OTEL_`, so
+   * the two sets cannot collide silently: a name declared here that a
+   * generated one would shadow fails the build.
    */
   env?: Record<
     string,
@@ -294,27 +299,30 @@ export const collectorExtensionLayerArn = (options: {
  * ) {}
  * ```
  *
- * @example A placeholder you write yourself
+ * @example A literal prefix in front of a secret
  * ```typescript
- * // A `${env:...}` written as a plain string is a literal: it is baked into
- * // the file untouched, and `env` supplies it. Reach for this when a value
- * // needs a literal prefix that must not become part of the secret.
- * AWS.Lambda.Collector({
- *   config: AWS.Lambda.collector({
- *     pipelines: {
- *       traces: AWS.Lambda.pipeline({
- *         receivers: [AWS.Lambda.Receiver.otlp({ protocols: { http: {} } })],
- *         exporters: [
- *           AWS.Lambda.Exporter.otlpHttp("backend", {
- *             endpoint: "https://api.example.com",
- *             headers: { authorization: "Bearer ${env:INGEST_TOKEN}" },
- *           }),
- *         ],
- *       }),
- *     },
- *   }),
- *   // `Redacted` binds through the secret channel — never plaintext state.
- *   env: { INGEST_TOKEN: token.value },
+ * // `Bearer ` is not part of the token, and applying it must not drag the
+ * // token into the layer archive to do it. `interpolate` concatenates and
+ * // nothing else: the literal bakes, the `Redacted` still binds.
+ * AWS.Lambda.Exporter.otlpHttp("backend", {
+ *   endpoint: "https://api.example.com",
+ *   headers: {
+ *     authorization: AWS.Lambda.interpolate`Bearer ${token.value}`,
+ *   },
+ * })
+ * ```
+ *
+ * @example A variable the deployed environment already provides
+ * ```typescript
+ * // A `Config` primitive NAMES a variable rather than carrying a value: it
+ * // renders as that exact name and binds nothing, so the emitted file — and
+ * // therefore the config layer — is identical whatever the variable holds.
+ * // Reach for it when something other than this deploy provisions the value.
+ * AWS.Lambda.Exporter.otlpHttp("backend", {
+ *   endpoint: Config.string("BACKEND_URL"),
+ *   headers: {
+ *     authorization: AWS.Lambda.interpolate`Bearer ${Config.redacted("INGEST_TOKEN")}`,
+ *   },
  * })
  * ```
  *

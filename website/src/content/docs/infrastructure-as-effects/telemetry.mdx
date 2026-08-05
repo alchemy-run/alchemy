@@ -233,6 +233,32 @@ an extension *value*, so `extensions:` and `service.extensions` are
 derived from the exporters. Deduplication is by reference identity —
 one value shared by two pipelines is one emitted instance.
 
+A string leaf is written as the value it is, never as a
+`${env:...}` placeholder — that syntax is the emitter's output, not its
+input. A plain string bakes into the file. An `Output` or `Redacted`
+binds to a generated variable, so a token never reaches the layer
+archive and rotating one does not republish the layer. A `Config`
+primitive *names* a variable the deployed Function already provides,
+and renders as exactly that name:
+
+```typescript
+AWS.Lambda.Exporter.otlpHttp("backend", {
+  // Provisioned elsewhere: rendered as `${env:BACKEND_URL}`, bound to
+  // nothing.
+  endpoint: Config.string("BACKEND_URL"),
+  headers: {
+    // `Bearer ` bakes; the token still binds as a secret.
+    authorization: AWS.Lambda.interpolate`Bearer ${token.value}`,
+  },
+});
+```
+
+`interpolate` is how a literal prefix and a reference share one leaf.
+Each hole keeps the meaning it has alone — the combinator adds
+concatenation and nothing else. A derived `Config` (`map`, `orElse`,
+`withDefault`, `nested`) has no single name to render and is refused at
+the declaration that wrote it.
+
 You do not add `Alchemy.Telemetry.layerOtlp` yourself — `Collector`
 installs it, aimed at loopback, so the handler never learns the remote
 endpoint.

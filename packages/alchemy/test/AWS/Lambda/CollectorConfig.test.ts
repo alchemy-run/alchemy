@@ -3,12 +3,14 @@ import {
   collectorPlaceholderName,
   Exporter,
   Extension,
+  interpolate,
   pipeline,
   Processor,
   Receiver,
 } from "@/AWS/Lambda/CollectorConfig.ts";
 import * as Output from "@/Output.ts";
 import { describe, expect, it } from "alchemy-test";
+import * as Config from "effect/Config";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -594,11 +596,11 @@ describe("the emitted file", () => {
     expect(env.ALCHEMY_OTEL_EXPORTERS_OTLPHTTP_BACKEND_ENDPOINT).toBeDefined();
   });
 
-  it("bakes a hand-written ${env:...} placeholder verbatim", () => {
-    // A caller's own placeholder is a plain string, so it is a literal and
-    // survives untouched next to the generated ones. `CollectorProps.env`
-    // supplies it — which is how the extension live test varies a backend
-    // endpoint per run without republishing the layer.
+  it("treats a hand-written ${env:...} as the plain string it is", () => {
+    // Not a supported way to write a reference — `Config.string` is (see
+    // "variable references" below). This pins that the emitter does not
+    // special-case the syntax on the way IN: a string is a literal, whatever
+    // it happens to spell.
     const { content, env } = withExporter(
       Exporter.otlpHttp({ endpoint: "${env:MY_BACKEND_URL}" }),
     );
@@ -714,6 +716,212 @@ describe("placeholder names", () => {
         },
       }),
     ).toThrow(/both generate the environment variable/);
+  });
+});
+
+describe("variable references", () => {
+  it("renders a Config primitive under the name it already carries", () => {
+    // The whole point: the name the caller wrote is the name in the file. No
+    // rewriting, and nothing bound — the variable is not this configuration's
+    // to provide.
+    const { content, env } = withExporter(
+      Exporter.otlpHttp("backend", {
+        endpoint: Config.string("BACKEND_URL"),
+        headers: { authorization: Config.redacted("AXIOM_TOKEN") },
+      }),
+    );
+    const parsed = JSON.parse(content) as {
+      exporters: Record<
+        string,
+        { endpoint: string; headers: Record<string, string> }
+      >;
+    };
+    expect(parsed.exporters["otlphttp/backend"]!.endpoint).toBe(
+      "${env:BACKEND_URL}",
+    );
+    expect(parsed.exporters["otlphttp/backend"]!.headers.authorization).toBe(
+      "${env:AXIOM_TOKEN}",
+    );
+    expect(env).toEqual({});
+    // A reference is not a secret channel, so nothing ALCHEMY_OTEL_* appears.
+    expect(content).not.toContain("ALCHEMY_OTEL");
+  });
+
+  it("keeps the emitted file identical to the hand-written placeholder it replaces", () => {
+    // The migration away from `${env:...}` strings must be a pure API change:
+    // the same bytes deploy, so no layer republishes.
+    const written = withExporter(
+      Exporter.otlpHttp("backend", { endpoint: "${env:BACKEND_URL}" }),
+    );
+    const referenced = withExporter(
+      Exporter.otlpHttp("backend", { endpoint: Config.string("BACKEND_URL") }),
+    );
+    expect(referenced.content).toBe(written.content);
+  });
+
+  it("refuses a derived Config at the declaration that wrote it", () => {
+    // Each of these is derived a different way, and each must be rejected by
+    // a different clause of the observation — see `collectorVariableName`.
+    const derived: readonly [string, Config.Config<string>][] = [
+      ["map", Config.string("A").pipe(Config.map((s) => s.toUpperCase()))],
+      ["orElse", Config.string("A").pipe(Config.orElse(() => Config.string("B")))],
+      ["withDefault", Config.string("A").pipe(Config.withDefault("fallback"))],
+      ["nested", Config.nested(Config.string("A"), "NAMESPACE")],
+      ["unnamed", Config.string()],
+    ];
+    for (const [label, config] of derived) {
+      expect(
+        () =>
+          Exporter.otlpHttp("backend", {
+            endpoint: config,
+          }),
+        label,
+      ).toThrow(/is not a variable reference/);
+    }
+  });
+
+  it("refuses a Config whose value is not a string", () => {
+    // The leaf renders into a string field, and `${env:...}` substitution
+    // produces a string — a number config has nothing to contribute.
+    expect(() =>
+      Exporter.otlpHttp("backend", {
+        endpoint: Config.number("PORT") as never,
+      }),
+    ).toThrow(/is not a variable reference/);
+  });
+
+  it("refuses a generated name that would shadow a referenced one", () => {
+    // Both leaves would answer to ALCHEMY_OTEL_..._ENDPOINT: one because the
+    // deploy binds it, the other because the caller asked to read it.
+    const name = collectorPlaceholderName([
+      "exporters",
+      "otlphttp/backend",
+      "endpoint",
+    ]);
+    expect(() =>
+      withExporter(
+        Exporter.otlpHttp("backend", {
+          endpoint: Output.asOutput("https://backend.example"),
+          headers: { authorization: Config.string(name) },
+        }),
+      ),
+    ).toThrow(/already reads/);
+  });
+});
+
+describe("interpolate", () => {
+  it("splices a reference into literal text without binding it", () => {
+    const { content, env } = withExporter(
+      Exporter.otlpHttp("backend", {
+        endpoint: "https://backend.example",
+        headers: {
+          authorization: interpolate`Bearer ${Config.redacted("AXIOM_TOKEN")}`,
+        },
+      }),
+    );
+    const parsed = JSON.parse(content) as {
+      exporters: Record<string, { headers: Record<string, string> }>;
+    };
+    expect(parsed.exporters["otlphttp/backend"]!.headers.authorization).toBe(
+      "Bearer ${env:AXIOM_TOKEN}",
+    );
+    expect(env).toEqual({});
+  });
+
+  it("keeps a Redacted out of the file even behind a literal prefix", () => {
+    // The prefix is not part of the secret, and applying it must not force the
+    // secret into the layer to do it.
+    const secret = "axiom-super-secret-token-value";
+    const { content, env } = withExporter(
+      Exporter.otlpHttp("backend", {
+        endpoint: "https://backend.example",
+        headers: {
+          authorization: interpolate`Bearer ${Redacted.make(secret)}`,
+        },
+      }),
+    );
+    expect(content).not.toContain(secret);
+    expect(content).toContain(
+      "Bearer ${env:ALCHEMY_OTEL_EXPORTERS_OTLPHTTP_BACKEND_HEADERS_AUTHORIZATION}",
+    );
+    // A single dynamic segment binds under the leaf's own path, so the name is
+    // exactly the one the bare secret would have produced.
+    const bound =
+      env.ALCHEMY_OTEL_EXPORTERS_OTLPHTTP_BACKEND_HEADERS_AUTHORIZATION;
+    expect(Redacted.value(bound as Redacted.Redacted<string>)).toBe(secret);
+  });
+
+  it("indexes the generated names when a template holds several values", () => {
+    const { content, env } = withExporter(
+      Exporter.otlpHttp("backend", {
+        endpoint: interpolate`https://${Output.asOutput("host.example")}/v1/${Output.asOutput("traces")}`,
+      }),
+    );
+    expect(content).toContain(
+      "https://${env:ALCHEMY_OTEL_EXPORTERS_OTLPHTTP_BACKEND_ENDPOINT_0}/v1/${env:ALCHEMY_OTEL_EXPORTERS_OTLPHTTP_BACKEND_ENDPOINT_1}",
+    );
+    expect(Object.keys(env).sort()).toEqual([
+      "ALCHEMY_OTEL_EXPORTERS_OTLPHTTP_BACKEND_ENDPOINT_0",
+      "ALCHEMY_OTEL_EXPORTERS_OTLPHTTP_BACKEND_ENDPOINT_1",
+    ]);
+  });
+
+  it("mixes literals, references and deploy-time values in one leaf", () => {
+    const { content, env } = withExporter(
+      Exporter.otlpHttp("backend", {
+        endpoint: interpolate`https://${Config.string("BACKEND_HOST")}/${Output.asOutput("v1")}`,
+      }),
+    );
+    // Only the deploy-time half costs a variable.
+    expect(content).toContain(
+      "https://${env:BACKEND_HOST}/${env:ALCHEMY_OTEL_EXPORTERS_OTLPHTTP_BACKEND_ENDPOINT_1}",
+    );
+    expect(Object.keys(env)).toEqual([
+      "ALCHEMY_OTEL_EXPORTERS_OTLPHTTP_BACKEND_ENDPOINT_1",
+    ]);
+  });
+
+  it("bakes a plain string hole exactly as the surrounding literals are", () => {
+    const { content, env } = withExporter(
+      Exporter.otlpHttp("backend", {
+        endpoint: interpolate`https://${"backend.example"}/v1`,
+      }),
+    );
+    expect(content).toContain("https://backend.example/v1");
+    expect(env).toEqual({});
+  });
+
+  it("flattens a nested interpolation so a fragment can be reused", () => {
+    const host = interpolate`${Config.string("BACKEND_HOST")}:4318`;
+    const { content } = withExporter(
+      Exporter.otlpHttp("backend", { endpoint: interpolate`https://${host}/v1` }),
+    );
+    expect(content).toContain("https://${env:BACKEND_HOST}:4318/v1");
+  });
+
+  it("shares one variable between two leaves built from one value", () => {
+    // Reference identity routes dynamic values, and a template must not
+    // sidestep that by binding the same secret twice.
+    const token = Redacted.make("shared-secret");
+    const { content, env } = withExporter(
+      Exporter.otlpHttp("backend", {
+        endpoint: "https://backend.example",
+        headers: {
+          authorization: interpolate`Bearer ${token}`,
+          "x-fallback-auth": token,
+        },
+      }),
+    );
+    expect(Object.keys(env)).toHaveLength(1);
+    const [name] = Object.keys(env);
+    expect(content).toContain(`Bearer \${env:${name}}`);
+  });
+
+  it("refuses a component spliced into a string", () => {
+    expect(
+      () =>
+        interpolate`auth=${Extension.sigv4Auth({ region: "us-east-1" })}` as never,
+    ).toThrow(/cannot be interpolated/);
   });
 });
 

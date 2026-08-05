@@ -55,10 +55,14 @@ and points the in-process exporter at the loopback receiver. Override the
 pinning with `extension: { release, layerVersion }`, or bypass derivation
 entirely with `extension: { layerVersionArn }`.
 
-Values that must not be baked into the layer route themselves: an `Output`
-or a `Redacted` leaf becomes a generated `${env:...}` placeholder bound
-through the Function's environment, so a rotated token or a repointed
-backend never republishes the layer.
+A string leaf is written as the value it is, never as a placeholder string.
+An `Output` or a `Redacted` leaf binds to a generated environment variable
+rather than being baked into the layer, so a rotated token or a repointed
+backend never republishes it. A `Config` primitive —
+`Config.string("BACKEND_URL")` — names a variable the deployed Function
+already provides and renders as that name, binding nothing. Use
+``AWS.Lambda.interpolate`Bearer ${token.value}` `` when a literal prefix and
+a reference share one leaf.
 
 Exporting to Axiom needs no configuration at all — `Axiom.LambdaCollector`
 builds the configuration and wires the ingest token and datasets:

@@ -43,14 +43,22 @@
  *
  * ## The static/dynamic split
  *
- * A codec can only validate values it can see. Three kinds of leaf are not
+ * A codec can only validate values it can see. Several kinds of leaf are not
  * strings yet at declaration time:
  *
- * - an `Output` (or `Config`/`Effect`) that resolves at deploy;
+ * - an `Output` (or `Effect`) that resolves at deploy;
  * - a `Redacted`, whose material must never reach the config file, because the
  *   config layer is an ordinary downloadable Lambda layer;
+ * - a `Config` primitive — `Config.redacted("AXIOM_TOKEN")` — which does not
+ *   carry a value at all, but NAMES one the deployed environment provides;
+ * - an {@link interpolate} template, which is the two of those plus literal
+ *   text, concatenated;
  * - an {@link Extension} value, whose component id is not decided until
  *   `collector()` sees what name it was declared under.
+ *
+ * Note what is NOT in that list: a `${env:...}` string. That syntax is this
+ * module's output, never its input — a reference is written as the value it
+ * refers to, and the emitter decides how it renders.
  *
  * So every generated interface carries a `Str` type parameter over its *plain
  * string* leaves, and the constructors instantiate it at
@@ -62,14 +70,19 @@
  * At construction each such leaf is swapped for a unique **sentinel string**,
  * so the codec still validates the whole structure (the sentinel satisfies the
  * `string` the schema expects), and the reference is parked. At emission a
- * deferred sentinel becomes `${env:NAME}` and its value is handed to the
- * Function's environment, while an extension sentinel becomes the component id
- * the extension ended up declared under.
+ * deferred sentinel becomes `${env:NAME}` — the name GENERATED from the config
+ * path when the deploy owns the value, or the name the `Config` already
+ * carries when the environment does — while an extension sentinel becomes the
+ * component id the extension ended up declared under. Only in the first case
+ * is anything handed to the Function's environment.
  *
  * @packageDocumentation
  */
+import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import {
@@ -92,8 +105,26 @@ import { isPlainObject } from "../../Util/data.ts";
 /**
  * A string leaf whose value is not known here: another resource's attribute,
  * or a secret.
+ *
+ * A value of this kind is resolved at DEPLOY time and never written into the
+ * emitted file: the emitter binds it to a generated environment variable and
+ * hands the value to the Function's environment.
  */
 export type CollectorValue = Input<string> | Input<Redacted.Redacted<string>>;
+
+/**
+ * A reference to a variable the DEPLOYED environment provides.
+ *
+ * `Config.redacted("AXIOM_TOKEN")` says "read `AXIOM_TOKEN` where this runs".
+ * The emitter renders `${env:AXIOM_TOKEN}` — the same name, no rewriting — and
+ * binds nothing, because the variable is not this configuration's to provide.
+ *
+ * Only a PRIMITIVE with a name is accepted; see {@link collectorVariableName}
+ * for what "primitive" means and why a derived config cannot be one.
+ */
+export type CollectorVariable =
+  | Config.Config<string>
+  | Config.Config<Redacted.Redacted<string>>;
 
 /**
  * Everything a plain-string leaf accepts.
@@ -111,7 +142,240 @@ export type CollectorValue = Input<string> | Input<Redacted.Redacted<string>>;
  * 'OtlpHttpExporter<CollectorInput>'`, and a hover on `.tls` reads
  * `OtlpHttpExporterTls<CollectorInput>` rather than fifteen inlined fields.
  */
-export type CollectorInput = CollectorValue | Extension;
+export type CollectorInput =
+  | CollectorValue
+  | CollectorVariable
+  | Interpolation
+  | Extension;
+
+/**
+ * What one non-literal string leaf resolves to, after the kind of reference it
+ * was written as has been decided.
+ *
+ * Deciding this at DECLARATION time rather than at emission is what puts a bad
+ * `Config` at the constructor call that wrote it, next to the rest of that
+ * component's validation, instead of at the far end of the build.
+ */
+export type CollectorLeaf =
+  | {
+      /** Resolved by the deploy; bound to a generated variable. */
+      readonly _tag: "Value";
+      readonly value: CollectorValue;
+    }
+  | {
+      /** Provided by the deployed environment; rendered, never bound. */
+      readonly _tag: "Variable";
+      readonly name: string;
+    }
+  | {
+      /** Literals and leaves, concatenated. */
+      readonly _tag: "Interpolation";
+      readonly segments: readonly (string | CollectorLeaf)[];
+    };
+
+/** Classify one non-literal leaf. Throws for a `Config` that has no name. */
+const leafOf = (value: CollectorInput): CollectorLeaf =>
+  Config.isConfig(value)
+    ? { _tag: "Variable", name: collectorVariableName(value) }
+    : isInterpolation(value)
+      ? { _tag: "Interpolation", segments: value.segments }
+      : { _tag: "Value", value: value as CollectorValue };
+
+// ---------------------------------------------------------------------------
+// Variable references
+// ---------------------------------------------------------------------------
+
+/**
+ * The probe value a name-extraction pass feeds back as every variable's
+ * content. `\0`-delimited so no plausible transformation is the identity on it
+ * by accident.
+ */
+const PROBE = "\u0000probe\u0000";
+
+/**
+ * The environment variable a {@link CollectorVariable} names.
+ *
+ * `Config` in Effect 4 is opaque — it carries no AST, only a `parse` function
+ * — so the name is not read off the value, it is OBSERVED: the config is
+ * parsed twice against probe providers that record every path they are asked
+ * for, and a primitive is exactly the config that
+ *
+ * 1. asks for one single-segment path,
+ * 2. hands that path's content back UNCHANGED when the probe supplies it, and
+ * 3. fails when the probe does not.
+ *
+ * Each clause rejects a different way of being derived, which is why all three
+ * are checked rather than just the first: `map` fails (2) because the result is
+ * no longer the probe; `orElse` and `zip`/`all` fail (1) because they ask for a
+ * second path; `withDefault` and `option` fail (3) because they succeed on a
+ * variable that is not there. `nested` is rejected by (1) as well — it asks for
+ * a two-segment path, and an environment variable has one name.
+ *
+ * The alternative — matching on `Config`'s internals — would break silently on
+ * an Effect release. This breaks loudly or not at all: the observation is of
+ * the same public `parse` contract the runtime itself uses.
+ */
+export const collectorVariableName = (config: CollectorVariable): string => {
+  const observe = (
+    present: boolean,
+  ): {
+    readonly paths: (string | number)[][];
+    readonly exit: Exit.Exit<unknown, unknown>;
+  } => {
+    const paths: (string | number)[][] = [];
+    const provider = ConfigProvider.make((path) =>
+      Effect.sync(() => {
+        paths.push([...path]);
+        return present ? ConfigProvider.makeValue(PROBE) : undefined;
+      }),
+    );
+    return {
+      paths,
+      // A primitive's `parse` is synchronous. Anything that is not resolves to
+      // a defect here, which lands in the same rejection below.
+      exit: Effect.runSyncExit(
+        (config as Config.Config<unknown>).parse(provider) as Effect.Effect<
+          unknown,
+          unknown
+        >,
+      ),
+    };
+  };
+
+  const reject = (why: string): never => {
+    throw new Error(
+      `AWS.Lambda.Collector: this \`Config\` is not a variable reference — ${why}. ` +
+        "A config leaf must name one environment variable the deployed Function " +
+        "already provides, e.g. `Config.redacted(\"AXIOM_TOKEN\")` or " +
+        "`Config.string(\"BACKEND_URL\")`. A derived config (`map`, `zip`, `orElse`, " +
+        "`withDefault`, `option`, `nested`) has no single name to render, and a " +
+        "value that should be resolved by the deploy belongs on the deploy-time " +
+        "channel instead — pass the `Output`/`Redacted` itself, or compose the two " +
+        "with `interpolate`.",
+    );
+  };
+
+  const present = observe(true);
+  const name = present.paths[0]?.[0];
+  if (
+    present.paths.length !== 1 ||
+    present.paths[0]!.length !== 1 ||
+    typeof name !== "string"
+  ) {
+    return reject(
+      present.paths.length === 0
+        ? "it reads no variable at all"
+        : `it reads ${present.paths
+            .map((path) => JSON.stringify(path.join(".")))
+            .join(", ")} rather than one plain name`,
+    );
+  }
+  if (Exit.isFailure(present.exit)) {
+    return reject("it rejects the value of the variable it names");
+  }
+  const value = present.exit.value;
+  const plain = Redacted.isRedacted(value)
+    ? Redacted.value(value as Redacted.Redacted<string>)
+    : value;
+  if (plain !== PROBE) {
+    return reject("it transforms the variable it reads rather than returning it");
+  }
+
+  const absent = observe(false);
+  if (Exit.isSuccess(absent.exit)) {
+    return reject("it still produces a value when the variable is absent");
+  }
+  if (absent.paths.length !== 1) {
+    return reject("it falls back to another variable when the first is absent");
+  }
+
+  return name;
+};
+
+// ---------------------------------------------------------------------------
+// Interpolation
+// ---------------------------------------------------------------------------
+
+/** Brands an {@link Interpolation} so `park` does not walk into it. */
+const InterpolationTag = Symbol.for(
+  "alchemy/AWS.Lambda.Collector/Interpolation",
+);
+
+/**
+ * One string leaf assembled from literals and references.
+ *
+ * Built by {@link interpolate}, accepted anywhere a plain-string leaf is.
+ */
+export interface Interpolation {
+  readonly [InterpolationTag]: true;
+  /** Literal text, and the leaves the gaps between it resolve to. */
+  readonly segments: readonly (string | CollectorLeaf)[];
+}
+
+const isInterpolation = (value: unknown): value is Interpolation =>
+  typeof value === "object" && value !== null && InterpolationTag in value;
+
+/**
+ * Assemble a string leaf from literal text and references.
+ *
+ * A header is rarely just a token: Axiom wants `Bearer <token>`, and the
+ * prefix is not part of the secret. `interpolate` is how the two are written
+ * as what they are, without a hand-written `${env:...}` anywhere:
+ *
+ * ```typescript
+ * headers: {
+ *   authorization: AWS.Lambda.interpolate`Bearer ${Config.redacted("AXIOM_TOKEN")}`,
+ * }
+ * ```
+ *
+ * Each hole keeps the meaning it has on its own — the combinator adds
+ * concatenation and nothing else:
+ *
+ * - a `Config` primitive renders `${env:NAME}`, binding nothing;
+ * - an `Output` or `Redacted` binds to a generated variable, so a token still
+ *   never reaches the layer archive even with a literal prefix in front of it;
+ * - a plain string is baked in, exactly as the surrounding literals are.
+ *
+ * Nested interpolations flatten, so a fragment can be built once and reused.
+ */
+export const interpolate = (
+  literals: TemplateStringsArray,
+  ...values: readonly CollectorInput[]
+): Interpolation => {
+  const segments: (string | CollectorLeaf)[] = [];
+  const push = (segment: string | CollectorLeaf) => {
+    const last = segments[segments.length - 1];
+    if (typeof segment === "string") {
+      if (segment === "") return;
+      if (typeof last === "string") {
+        segments[segments.length - 1] = last + segment;
+        return;
+      }
+    }
+    segments.push(segment);
+  };
+  literals.forEach((literal, index) => {
+    push(literal);
+    if (index >= values.length) return;
+    const value = values[index]!;
+    if (isComponent(value)) {
+      throw new Error(
+        "AWS.Lambda.Collector: a component cannot be interpolated into a string — " +
+          "an extension is referenced as a value, not spliced into one",
+      );
+    }
+    if (isInterpolation(value)) {
+      for (const segment of value.segments) push(segment);
+      return;
+    }
+    if (typeof value === "string") {
+      push(value);
+      return;
+    }
+    push(leafOf(value));
+  });
+  return { [InterpolationTag]: true, segments };
+};
 
 // ---------------------------------------------------------------------------
 // Components
@@ -149,8 +413,8 @@ export interface Component<Section extends string, Type extends string> {
   readonly key: string;
   /** The wire-encoded config, with sentinels standing in for dynamic leaves. */
   readonly encoded: unknown;
-  /** Sentinel -> the unresolved or secret value it stands for. */
-  readonly dynamic: ReadonlyMap<string, CollectorValue>;
+  /** Sentinel -> the reference it stands for. */
+  readonly dynamic: ReadonlyMap<string, CollectorLeaf>;
   /** Sentinel -> the extension whose component id it stands for. */
   readonly refs: ReadonlyMap<string, Extension>;
 }
@@ -184,7 +448,7 @@ const isDeferred = (value: unknown): boolean =>
 
 /** What a single `park` pass pulled out of a props tree. */
 interface Parked {
-  readonly dynamic: Map<string, CollectorValue>;
+  readonly dynamic: Map<string, CollectorLeaf>;
   readonly refs: Map<string, Extension>;
 }
 
@@ -205,9 +469,11 @@ const park = (value: unknown, parked: Parked): unknown => {
     parked.refs.set(sentinel, value as Extension);
     return sentinel;
   }
-  if (isDeferred(value)) {
+  // A `Config` IS an `Effect` and an `Interpolation` IS a plain object, so
+  // both must be classified before the structural tests below claim them.
+  if (Config.isConfig(value) || isInterpolation(value) || isDeferred(value)) {
     const sentinel = `\u0000otel:${sentinels++}\u0000`;
-    parked.dynamic.set(sentinel, value as CollectorValue);
+    parked.dynamic.set(sentinel, leafOf(value as CollectorInput));
     return sentinel;
   }
   if (Array.isArray(value))
@@ -691,7 +957,7 @@ export const collector = (spec: {
     tree.extensions = sectionOf("extensions", extensions);
 
   // Sentinel -> what it stands for, across every component in the config.
-  const deferred = new Map<string, CollectorValue>();
+  const deferred = new Map<string, CollectorLeaf>();
   const references = new Map<string, Extension>();
   for (const component of [
     ...receivers,
@@ -714,6 +980,19 @@ export const collector = (spec: {
   // Value reference -> the variable it was bound to.
   const bound = new Map<unknown, string>();
 
+  // Every name a `Config` leaf points at, collected before anything is bound:
+  // a generated name that shadowed one of these would silently redirect a
+  // reference the deployed environment already answers.
+  const referenced = new Set<string>();
+  const collect = (leaf: CollectorLeaf): void => {
+    if (leaf._tag === "Variable") referenced.add(leaf.name);
+    else if (leaf._tag === "Interpolation") {
+      for (const segment of leaf.segments)
+        if (typeof segment !== "string") collect(segment);
+    }
+  };
+  for (const leaf of deferred.values()) collect(leaf);
+
   const bind = (
     value: CollectorValue,
     path: readonly (string | number)[],
@@ -728,10 +1007,42 @@ export const collector = (spec: {
         `AWS.Lambda.Collector: \`${where}\` and \`${previous}\` both generate the environment variable ${name} — rename one of the component instances so the two paths differ by more than punctuation`,
       );
     }
+    if (referenced.has(name)) {
+      throw new Error(
+        `AWS.Lambda.Collector: \`${where}\` generates the environment variable ${name}, which a \`Config\` leaf elsewhere in this configuration already reads — rename the component instance, or read a different variable`,
+      );
+    }
     origin.set(name, where);
     bound.set(value, name);
     env[name] = value;
     return `\${env:${name}}`;
+  };
+
+  /**
+   * Render one parked leaf.
+   *
+   * An interpolation's single dynamic segment binds under the leaf's own path,
+   * so the common `Bearer ${token}` shape produces exactly the variable the
+   * bare token would have. Only when there are several does the index join the
+   * name, because only then does the path alone stop identifying them.
+   */
+  const render = (
+    leaf: CollectorLeaf,
+    path: readonly (string | number)[],
+  ): string => {
+    if (leaf._tag === "Variable") return `\${env:${leaf.name}}`;
+    if (leaf._tag === "Value") return bind(leaf.value, path);
+    const dynamic = leaf.segments.filter(
+      (segment) => typeof segment !== "string",
+    ).length;
+    let index = 0;
+    return leaf.segments
+      .map((segment) =>
+        typeof segment === "string"
+          ? segment
+          : render(segment, dynamic > 1 ? [...path, index++] : path),
+      )
+      .join("");
   };
 
   const walk = (
@@ -741,7 +1052,7 @@ export const collector = (spec: {
     if (value === null) return null;
     if (typeof value === "string") {
       if (REFERENCE.test(value)) return references.get(value)!.key;
-      return DEFERRED.test(value) ? bind(deferred.get(value)!, path) : value;
+      return DEFERRED.test(value) ? render(deferred.get(value)!, path) : value;
     }
     if (typeof value === "number" || typeof value === "boolean") return value;
     if (Array.isArray(value)) {
@@ -758,8 +1069,9 @@ export const collector = (spec: {
       return out;
     }
     // Anything left is a value the codecs typed as `unknown` (the collector's
-    // `map[string]any` fields), so it never went through `park`.
-    return bind(value as CollectorValue, path);
+    // `map[string]any` fields), so it never went through `park` and is
+    // classified here instead.
+    return render(leafOf(value as CollectorInput), path);
   };
 
   return { content: `${JSON.stringify(walk(tree, []), null, 2)}\n`, env };
