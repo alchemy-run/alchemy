@@ -50,6 +50,7 @@ import {
   type WorkerProps,
 } from "./Worker.ts";
 import type { WorkerBinding, WorkerBindingResource } from "./WorkerBinding.ts";
+import { isWorkerEntrypoint } from "./WorkerEntrypoint.ts";
 import { isWorkerLoader } from "./WorkerLoader.ts";
 
 export const bindWorkerAsyncBindings = Effect.fn(function* (
@@ -470,6 +471,17 @@ const toBinding = (
       type: "hyperdrive",
       name: bindingName,
       id: binding.hyperdriveId,
+    };
+  } else if (isWorkerEntrypoint(binding)) {
+    // A named-entrypoint service binding (`Cloudflare.WorkerEntrypoint`).
+    // Tested BEFORE `isWorker` — the marker carries the Worker rather than
+    // being one, but keep the specific classifier ahead of the general one.
+    return {
+      type: "service",
+      name: bindingName,
+      service: binding.worker.workerName,
+      entrypoint: binding.entrypoint,
+      props: binding.props,
     };
   } else if (isWorker(binding)) {
     return {

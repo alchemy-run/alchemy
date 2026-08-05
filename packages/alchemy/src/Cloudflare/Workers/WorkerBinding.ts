@@ -38,6 +38,7 @@ import { makeRpcStub } from "./Rpc.ts";
 import type { SecretKeyBinding } from "./SecretKeyBinding.ts";
 import type { VersionMetadataBinding } from "./VersionMetadataBinding.ts";
 import { Worker, WorkerEnvironment } from "./Worker.ts";
+import type { WorkerEntrypointBinding } from "./WorkerEntrypoint.ts";
 import type { WorkerLoader } from "./WorkerLoader.ts";
 
 type DistilledWorkerBinding = Exclude<
@@ -114,6 +115,21 @@ export type QueueWorkerBinding = Extract<
 };
 
 /**
+ * The `service` metadata binding extended with workerd's `ctx.props`.
+ * `props` is what a `Cloudflare.WorkerEntrypoint(worker, { props })` env
+ * entry lowers to; the local runtime delivers it to the target entrypoint.
+ * The Cloudflare API's binding schema does not carry the field yet, so on
+ * live uploads it is dropped at encode until the distilled `workers`
+ * service adds it.
+ */
+export type ServiceWorkerBinding = Extract<
+  DistilledWorkerBinding,
+  { type: "service" }
+> & {
+  props?: Record<string, unknown>;
+};
+
+/**
  * The wire-shape binding union the Cloudflare API accepts — {@link WorkerBinding}
  * minus the alchemy-only members that must be lowered before upload.
  */
@@ -125,10 +141,13 @@ export type WireWorkerBinding = Exclude<
 export type WorkerBinding =
   | Exclude<
       DistilledWorkerBinding,
-      { type: "durable_object_namespace" } | { type: "queue" }
+      | { type: "durable_object_namespace" }
+      | { type: "queue" }
+      | { type: "service" }
     >
   | DurableObjectNamespaceWorkerBinding
   | QueueWorkerBinding
+  | ServiceWorkerBinding
   | SelfUrlWorkerBinding
   | SelfServiceWorkerBinding;
 
@@ -173,6 +192,7 @@ export type WorkerBindingResource =
   | VectorizeIndex
   | Secret
   | Worker
+  | WorkerEntrypointBinding
   | WorkerLoader
   | VersionMetadataBinding
   // The Worker's own URL (`Worker.URL`).

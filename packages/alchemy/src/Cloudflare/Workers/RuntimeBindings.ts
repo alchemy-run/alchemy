@@ -228,6 +228,7 @@ export const toRuntimeBinding = Effect.fn(function* (
         binding: b.name,
         scriptName: b.service,
         entrypoint: b.entrypoint,
+        props: b.props,
       });
     case "stream":
       // Local emulation stores videos in a local simulator (no transcoding,
