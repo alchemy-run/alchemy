@@ -129,32 +129,30 @@ yield* Axiom.ApiToken("query", {
 
 ## Export from Lambda
 
-Keep Effect's ordinary telemetry layer pointed at the local
-Collector:
+`Axiom.LambdaCollector` is the whole wiring: it attaches the pinned
+Collector extension layer, ships a configuration with separate
+exporters for the traces and logs datasets, binds the ingest
+credential, and points Effect's telemetry at the local Collector.
 
 ```typescript
-Alchemy.Telemetry.layerOtlp({
-  url: "http://127.0.0.1:4318",
-  serviceName: "my-lambda",
-})
+export default class Api extends AWS.Lambda.Function<Api>()(
+  "Api",
+  { main: import.meta.url, architecture: "arm64" },
+  Effect.gen(function* () {
+    return { fetch: handler };
+  }).pipe(
+    Effect.provide(
+      Axiom.LambdaCollector({ token: Ingest, traces: Traces, logs: Logs }),
+    ),
+  ),
+) {}
 ```
 
-Use separate Collector exporters for the Axiom traces and logs
-datasets:
-
-```yaml
-exporters:
-  otlphttp/axiom-traces:
-    endpoint: https://api.axiom.co
-    headers:
-      authorization: Bearer ${env:AXIOM_INGEST_TOKEN}
-      x-axiom-dataset: ${env:AXIOM_TRACES_DATASET}
-  otlphttp/axiom-logs:
-    endpoint: https://api.axiom.co
-    headers:
-      authorization: Bearer ${env:AXIOM_INGEST_TOKEN}
-      x-axiom-dataset: ${env:AXIOM_LOGS_DATASET}
-```
+Traces and logs get separate exporters because Axiom routes by
+dataset header. The ingest token is `Redacted` and stays that way:
+the `Bearer ` prefix is applied inside the redaction, so the
+credential binds as a secret and never enters the layer archive —
+which matters because a Lambda layer is a downloadable artifact.
 
 An `Axiom.ApiToken` can be scoped to existing, externally owned
 datasets without declaring those datasets as Alchemy resources:
@@ -169,10 +167,11 @@ const ingest = yield* Axiom.ApiToken("LambdaIngest", {
 });
 ```
 
-Pass `ingest.token` to the Function environment as a `Redacted`
-value. The Collector owns the vendor configuration, but this is not
-secret isolation: external extensions share the Function's
-environment variables, IAM role, CPU, and memory.
+Pass the token as `Axiom.LambdaCollector`'s `token`, and the dataset
+names as `traces`/`logs`. The Collector owns the vendor
+configuration, but this is not secret isolation: external extensions
+share the Function's environment variables, IAM role, CPU, and
+memory.
 
 The vendor-neutral
 [`aws-lambda-opentelemetry`](https://github.com/alchemy-run/alchemy/tree/main/examples/aws-lambda-opentelemetry)

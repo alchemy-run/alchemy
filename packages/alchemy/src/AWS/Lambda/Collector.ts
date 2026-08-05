@@ -28,6 +28,7 @@ import * as Binding from "../../Binding.ts";
 import type { Input } from "../../Input.ts";
 import { layerOtlp } from "../../Telemetry.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import type { EmittedCollectorConfig } from "./CollectorConfig.ts";
 import type { Function, FunctionArchitecture } from "./Function.ts";
 import { LayerVersion } from "./LayerVersion.ts";
 
@@ -45,14 +46,21 @@ const isLambdaFunction = (value: unknown): value is Function =>
   (value as { Type?: string }).Type === "AWS.Lambda.Function";
 
 /**
- * A resource passed to the layer: either the module-scope declaration (an
- * Effect that resolves to the instance, so the same declaration shared by
- * several Functions registers exactly one resource) or an already-yielded
- * instance.
+ * Narrow `config` to something {@link import("./CollectorConfig.ts").collector
+ * | collector} produced.
+ *
+ * The type already says so, which is the whole point of the typed surface —
+ * this is the backstop for a JavaScript caller still passing the directory
+ * path the pre-typed API accepted, so it fails with the migration hint
+ * instead of packaging a layer whose `collector.yaml` is `undefined`.
  */
-type CollectorConfigInput =
-  | LayerVersion
-  | Effect.Effect<LayerVersion, never, any>;
+const isEmittedCollectorConfig = (
+  value: unknown,
+): value is EmittedCollectorConfig =>
+  typeof value === "object" &&
+  value !== null &&
+  typeof (value as { content?: unknown }).content === "string" &&
+  typeof (value as { env?: unknown }).env === "object";
 
 /**
  * Where the Collector's local OTLP receiver listens. The in-process
@@ -129,19 +137,40 @@ export interface CollectorExtensionArn {
 
 export interface CollectorProps {
   /**
-   * The Collector configuration.
+   * The Collector configuration, assembled by
+   * {@link import("./CollectorConfig.ts").collector | collector}.
    *
-   * A directory path is packaged into an `AWS.Lambda.LayerVersion` for you
-   * — it must contain `collector.yaml`, since that is where the extension
-   * reads from under `/opt`. Pass an existing `LayerVersion` declaration
-   * instead to share one config layer across several Functions.
+   * Packaged into an `AWS.Lambda.LayerVersion` and attached — there is no
+   * file on disk and no YAML to hand-write. Each component is validated by
+   * the generated codec at the constructor call that declared it, the
+   * `receivers`/`processors`/`exporters`/`extensions` sections are derived
+   * from what the pipelines reference, and `Output` and `Redacted` leaves
+   * are bound as environment variables rather than written into the layer.
    */
-  config: string | CollectorConfigInput;
+  config: EmittedCollectorConfig;
+  /**
+   * Logical id of the generated configuration `LayerVersion`.
+   *
+   * Resources memoize by logical id, so the default gives every Function its
+   * own layer and two Functions share one by naming the same id. Sharing
+   * requires the two configurations to be identical; they are compared, and
+   * a mismatch fails the build rather than silently deploying the first
+   * Function's configuration to the second.
+   *
+   * @default `CollectorConfig-${the host Function's logical id}`
+   */
+  configId?: string;
   /**
    * Values the configuration's `${env:...}` placeholders read — backend
    * endpoints, dataset names, ingest tokens. `Redacted` values bind as
    * secrets, exactly like {@link layerOtlp} headers, so a token passed here
    * never lands in plaintext state.
+   *
+   * These are the placeholders you write by hand — a `${env:...}` written
+   * as a plain string in the configuration is a literal, baked into the file
+   * untouched. The configuration's own generated placeholders are all
+   * prefixed `ALCHEMY_OTEL_`, so the two sets cannot collide silently: a
+   * name declared here that a generated one would shadow fails the build.
    */
   env?: Record<
     string,
@@ -207,17 +236,6 @@ export const collectorExtensionLayerArn = (options: {
 };
 
 /**
- * Resource declarations are Effects — yield them to get the instance, so a
- * declaration shared across Functions registers one resource.
- */
-const instance = (
-  resource: CollectorConfigInput,
-): Effect.Effect<LayerVersion> =>
-  Effect.isEffect(resource)
-    ? (resource as Effect.Effect<LayerVersion>)
-    : Effect.succeed(resource);
-
-/**
  * Run the OpenTelemetry Collector as a Lambda extension and point this
  * Function's telemetry at it.
  *
@@ -228,8 +246,10 @@ const instance = (
  * merged alongside it — destinations accumulate rather than clobber.
  *
  * @section Attaching the Collector
- * @example Bring your own collector.yaml
+ * @example Configure the Collector in TypeScript
  * ```typescript
+ * import * as AWS from "alchemy/AWS";
+ *
  * export default class Api extends AWS.Lambda.Function<Api>()(
  *   "Api",
  *   { main: import.meta.url, architecture: "arm64" },
@@ -238,34 +258,77 @@ const instance = (
  *   }).pipe(
  *     Effect.provide(
  *       AWS.Lambda.Collector({
- *         config: fileURLToPath(new URL("./collector-config", import.meta.url)),
- *         env: { COLLECTOR_EXPORTER_OTLP_ENDPOINT: backend.url },
+ *         config: AWS.Lambda.collector({
+ *           pipelines: {
+ *             traces: AWS.Lambda.pipeline({
+ *               receivers: [
+ *                 AWS.Lambda.Receiver.otlp({
+ *                   protocols: { http: { endpoint: "127.0.0.1:4318" } },
+ *                 }),
+ *               ],
+ *               processors: [
+ *                 AWS.Lambda.Processor.memoryLimiter({
+ *                   checkInterval: Duration.seconds(1),
+ *                   limitMib: 128,
+ *                 }),
+ *                 AWS.Lambda.Processor.batch({ timeout: Duration.seconds(1) }),
+ *                 AWS.Lambda.Processor.decouple({ maxQueueSize: 200 }),
+ *               ],
+ *               exporters: [
+ *                 AWS.Lambda.Exporter.otlpHttp("backend", {
+ *                   // An Output: bound as an env var, never baked into the
+ *                   // layer, so repointing the backend does not republish it.
+ *                   endpoint: backend.url,
+ *                   // A Redacted: bound through the secret channel. A layer
+ *                   // is a downloadable artifact — a token baked in is a
+ *                   // token published.
+ *                   headers: { authorization: token.value },
+ *                 }),
+ *               ],
+ *             }),
+ *           },
+ *         }),
  *       }),
  *     ),
  *   ),
  * ) {}
  * ```
  *
- * @example Secrets in the collector environment
+ * @example A placeholder you write yourself
  * ```typescript
+ * // A `${env:...}` written as a plain string is a literal: it is baked into
+ * // the file untouched, and `env` supplies it. Reach for this when a value
+ * // needs a literal prefix that must not become part of the secret.
  * AWS.Lambda.Collector({
- *   config: collectorConfig,
+ *   config: AWS.Lambda.collector({
+ *     pipelines: {
+ *       traces: AWS.Lambda.pipeline({
+ *         receivers: [AWS.Lambda.Receiver.otlp({ protocols: { http: {} } })],
+ *         exporters: [
+ *           AWS.Lambda.Exporter.otlpHttp("backend", {
+ *             endpoint: "https://api.example.com",
+ *             headers: { authorization: "Bearer ${env:INGEST_TOKEN}" },
+ *           }),
+ *         ],
+ *       }),
+ *     },
+ *   }),
  *   // `Redacted` binds through the secret channel — never plaintext state.
- *   env: { AXIOM_INGEST_TOKEN: token.value, AXIOM_TRACES_DATASET: "traces" },
+ *   env: { INGEST_TOKEN: token.value },
  * })
  * ```
  *
  * @section Sharing one configuration layer
- * @example One LayerVersion, several Functions
+ * @example One layer, several Functions
  * ```typescript
- * // Declared once at module scope: yielding the same declaration from two
- * // Functions registers a single LayerVersion.
- * const collectorConfig = AWS.Lambda.LayerVersion("CollectorConfig", {
- *   path: fileURLToPath(new URL("./collector-config", import.meta.url)),
- *   compatibleArchitectures: ["arm64"],
+ * // Each Function gets its own config layer by default. Name the same
+ * // `configId` from two Functions to share one — their configurations must
+ * // be identical, and a mismatch fails the build.
+ * const collectorConfig = AWS.Lambda.collector({
+ *   pipelines: { traces: tracesPipeline },
  * });
  *
- * AWS.Lambda.Collector({ config: collectorConfig });
+ * AWS.Lambda.Collector({ config: collectorConfig, configId: "SharedCollectorConfig" });
  * ```
  *
  * @section Pinning and overrides
@@ -309,8 +372,8 @@ const instance = (
  * Functions must build once per host. Without `fresh`, layer memoization
  * hands every host after the first the original build — a Function that
  * silently deploys with no telemetry at all. The configuration LayerVersion
- * is unaffected: resources memoize by logical id, so a shared config
- * declaration still registers exactly one resource. Freshness does not
+ * is unaffected: resources memoize by logical id, so two Functions naming
+ * the same `configId` still register exactly one resource. Freshness does not
  * propagate upward — an application layer that wraps this one and is itself
  * shared as a module constant reintroduces the hazard, so mark such wrappers
  * `Layer.fresh` too.
@@ -348,14 +411,58 @@ export const Collector = (props: CollectorProps): Layer.Layer<never> =>
             );
           }
 
-          const configLayer = yield* instance(
-            typeof props.config === "string"
-              ? LayerVersion("CollectorConfig", {
-                  path: props.config,
-                  description: "OpenTelemetry Collector configuration",
-                })
-              : props.config,
+          if (!isEmittedCollectorConfig(props.config)) {
+            return yield* Effect.die(
+              new Error(
+                "AWS.Lambda.Collector: `config` must be built by `collector({ pipelines })` — the collector is configured in TypeScript, not from a YAML file on disk",
+              ),
+            );
+          }
+
+          // The configuration arrived already emitted: `collector()` validated
+          // every component against its generated codec and produced file
+          // content plus environment pairs. From here on it is an ordinary
+          // `content`-packaged LayerVersion, so nothing downstream knows the
+          // configuration was ever anything but a layer.
+          const emitted = props.config;
+
+          const collision = Object.keys(emitted.env).find(
+            (name) => props.env?.[name] !== undefined,
           );
+          if (collision !== undefined) {
+            return yield* Effect.die(
+              new Error(
+                `AWS.Lambda.Collector: \`env.${collision}\` collides with a placeholder generated from the configuration — rename it, or move the value into the configuration itself`,
+              ),
+            );
+          }
+
+          // Per-host by default: two Functions with different configurations
+          // must not collide on one logical id, because registration is
+          // idempotent by id and the second would silently inherit the
+          // first's layer. Naming the same id explicitly is how you opt INTO
+          // sharing one layer.
+          const configId =
+            props.configId ?? `CollectorConfig-${String(host.LogicalId)}`;
+          const configLayer = yield* LayerVersion(configId, {
+            content: { "collector.yaml": emitted.content },
+            description: "OpenTelemetry Collector configuration",
+          });
+
+          // Registration returned an EXISTING resource if this id was already
+          // used — which is the sharing path, and is only correct when both
+          // Functions asked for the same configuration.
+          const registered = configLayer.Props?.content?.["collector.yaml"];
+          if (
+            typeof registered === "string" &&
+            registered !== emitted.content
+          ) {
+            return yield* Effect.die(
+              new Error(
+                `AWS.Lambda.Collector: \`configId: "${configId}"\` is already registered with a different configuration — two Functions can share one config layer only if their configurations are identical. Give this one its own \`configId\`.`,
+              ),
+            );
+          }
 
           const extension = props.extension;
           const extensionArn = isArnOverride(extension)
@@ -382,6 +489,7 @@ export const Collector = (props: CollectorProps): Layer.Layer<never> =>
             layers: [extensionArn, configLayer],
             env: {
               OPENTELEMETRY_COLLECTOR_CONFIG_URI: CONFIG_URI,
+              ...emitted.env,
               ...props.env,
             },
           });
@@ -395,7 +503,7 @@ export const Collector = (props: CollectorProps): Layer.Layer<never> =>
         // Named so publishing the config layer and binding the extension are
         // attributable in a deploy trace rather than anonymous work under
         // whichever Function happened to build this layer.
-      }).pipe(Effect.withSpan("AWS.Lambda.Collector")),
+      }).pipe(Effect.withSpan("collector.attach")),
     ),
   ) as Layer.Layer<never>;
 

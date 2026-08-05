@@ -4,12 +4,9 @@ import * as Test from "@/Test/Alchemy";
 import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as S3 from "@distilled.cloud/aws/s3";
-import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "alchemy-test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -17,6 +14,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { fileURLToPath } from "node:url";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
+import { otelExtensionCollectorConfig } from "./fixtures/otel-collector-config.ts";
 import {
   OtelExtensionFunction,
   OtelExtensionFunctionLive,
@@ -37,9 +35,6 @@ const functionReadySchedule = Schedule.max([
   Schedule.recurs(60),
 ]);
 
-const collectorConfigPath = fileURLToPath(
-  new URL("./fixtures/otel-collector-extension", import.meta.url),
-);
 const handlerPath = fileURLToPath(
   new URL("./fixtures/otel-extension-handler.ts", import.meta.url),
 );
@@ -131,26 +126,36 @@ const getReadyFunction = (functionName: string) =>
   );
 
 describe("OpenTelemetry Collector Lambda extension", () => {
-  it.effect(
-    "bounds memory, keeps decouple last, and keeps the remote endpoint extension-owned",
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const config = yield* fs.readFileString(
-          path.join(collectorConfigPath, "collector.yaml"),
-        );
-        expect(config).toContain("endpoint: 127.0.0.1:4318");
-        expect(config).toContain(
-          "endpoint: ${env:COLLECTOR_EXPORTER_OTLP_ENDPOINT}",
-        );
-        expect(config).toContain("memory_limiter:");
-        expect(config).toContain(
-          "processors: [memory_limiter, batch, decouple]",
-        );
-        expect(config).not.toContain("OTEL_EXPORTER_OTLP_ENDPOINT");
-      }).pipe(Effect.provide(NodeServices.layer)),
-  );
+  it("bounds memory, keeps decouple last, and keeps the remote endpoint extension-owned", () => {
+    // Asserts on the file the deployed layer actually carries — the very
+    // value the fixture below hands to `AWS.Lambda.Collector`.
+    const config = JSON.parse(otelExtensionCollectorConfig.content) as {
+      receivers: Record<string, any>;
+      processors: Record<string, any>;
+      exporters: Record<string, any>;
+      service: { pipelines: Record<string, { processors: string[] }> };
+    };
+
+    expect(config.receivers.otlp.protocols.http.endpoint).toBe(
+      "127.0.0.1:4318",
+    );
+    expect(config.exporters.otlphttp.endpoint).toBe(
+      "${env:COLLECTOR_EXPORTER_OTLP_ENDPOINT}",
+    );
+    expect(config.processors.memory_limiter).toBeDefined();
+    for (const pipeline of Object.values(config.service.pipelines)) {
+      expect(pipeline.processors).toEqual([
+        "memory_limiter",
+        "batch",
+        "decouple",
+      ]);
+    }
+    // The in-process exporter must only ever know loopback — binding the
+    // standard SDK variable would route it straight past the extension.
+    expect(otelExtensionCollectorConfig.content).not.toContain(
+      "OTEL_EXPORTER_OTLP_ENDPOINT",
+    );
+  });
 
   test.provider.skipIf(!!process.env.FAST)(
     "exports remotely after the handler response through the real extension",

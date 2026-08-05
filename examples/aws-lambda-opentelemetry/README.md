@@ -15,22 +15,53 @@ All of that wiring is one call inside the Function's Effect:
 ```ts
 Effect.provide(
   AWS.Lambda.Collector({
-    config: collectorConfigPath,
-    env: { COLLECTOR_EXPORTER_OTLP_ENDPOINT: otlpEndpoint },
+    config: AWS.Lambda.collector({
+      pipelines: {
+        traces: AWS.Lambda.pipeline({
+          receivers: [
+            AWS.Lambda.Receiver.otlp({
+              protocols: { http: { endpoint: "127.0.0.1:4318" } },
+            }),
+          ],
+          processors: [
+            AWS.Lambda.Processor.memoryLimiter({
+              checkInterval: Duration.seconds(1),
+              limitMib: 128,
+            }),
+            AWS.Lambda.Processor.batch({ timeout: Duration.seconds(1) }),
+            AWS.Lambda.Processor.decouple({ maxQueueSize: 200 }),
+          ],
+          exporters: [AWS.Lambda.Exporter.otlpHttp({ endpoint: otlpEndpoint })],
+        }),
+      },
+    }),
   }),
 )
 ```
 
+The Collector is configured in TypeScript, not YAML. The component types
+are generated from the collector's own Go config structs, so a misspelt
+field fails at the constructor call that wrote it, with a JSON path — and
+the component set is exactly the one the pinned extension ships. Sections
+are never written by hand: a pipeline holds component *values*, so
+`receivers:`, `processors:` and `exporters:` are derived from what the
+pipelines use, and one value shared by two pipelines is one entry.
+
 `AWS.Lambda.Collector` derives and attaches the pinned managed extension
 layer (Region- and architecture-scoped: Lambda's `x86_64` maps to the
-upstream layer's `amd64` name), packages `layers/collector-config` into a
+upstream layer's `amd64` name), serializes the configuration into a
 `LayerVersion` at `/opt/collector.yaml`, binds the extension's environment,
 and points the in-process exporter at the loopback receiver. Override the
 pinning with `extension: { release, layerVersion }`, or bypass derivation
 entirely with `extension: { layerVersionArn }`.
 
+Values that must not be baked into the layer route themselves: an `Output`
+or a `Redacted` leaf becomes a generated `${env:...}` placeholder bound
+through the Function's environment, so a rotated token or a repointed
+backend never republishes the layer.
+
 Exporting to Axiom needs no configuration at all — `Axiom.LambdaCollector`
-ships its own `collector.yaml` and wires the ingest token and datasets:
+builds the configuration and wires the ingest token and datasets:
 
 ```ts
 Effect.provide(Axiom.LambdaCollector({ token: Ingest, traces: Traces, logs: Logs }))
@@ -71,7 +102,7 @@ extension, a bounded OTLP receiver, and a four-second receiver delay:
 
 ```sh
 cd ../../packages/alchemy
-timeout 240 bun alchemy-test \
+timeout 240 bun run test \
   test/AWS/Lambda/OtelCollectorExtension.test.ts \
   --profile testing --concurrency 1 --retry 0
 ```

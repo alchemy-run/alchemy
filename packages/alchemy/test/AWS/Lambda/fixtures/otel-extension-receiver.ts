@@ -40,11 +40,15 @@ export const OtelExtensionReceiverLive = OtelExtensionReceiver.make(
         }
 
         const encoded = new Uint8Array(yield* request.arrayBuffer);
-        const decoded =
-          request.headers["content-encoding"] === "gzip"
-            ? gunzipSync(encoded)
-            : encoded;
-        const raw = new TextDecoder().decode(decoded);
+        // Sync, CPU-only Node APIs still go through `Effect.sync` so the
+        // call participates in the runtime (tracing, interruption).
+        const raw = yield* Effect.sync(() =>
+          new TextDecoder().decode(
+            request.headers["content-encoding"] === "gzip"
+              ? gunzipSync(encoded)
+              : encoded,
+          ),
+        );
         yield* putObject({
           Key: `otlp/${crypto.randomUUID()}.json`,
           Body: JSON.stringify({

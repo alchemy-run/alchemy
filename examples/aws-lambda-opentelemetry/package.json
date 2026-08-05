@@ -11,8 +11,7 @@
   "scripts": {
     "build": "tsc -b",
     "deploy": "alchemy deploy",
-    "destroy": "alchemy destroy",
-    "test": "bun test"
+    "destroy": "alchemy destroy"
   },
   "dependencies": {
     "@distilled.cloud/aws": "catalog:",

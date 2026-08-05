@@ -5,6 +5,7 @@
  *
  * @packageDocumentation
  */
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import {
@@ -12,18 +13,54 @@ import {
   type CollectorExtension,
   type CollectorExtensionArn,
 } from "../AWS/Lambda/Collector.ts";
-import { LayerVersion } from "../AWS/Lambda/LayerVersion.ts";
+import {
+  collector,
+  type CollectorInput,
+  type EmittedCollectorConfig,
+  Exporter,
+  pipeline,
+  Processor,
+  Receiver,
+} from "../AWS/Lambda/CollectorConfig.ts";
 import type { Input } from "../Input.ts";
+import * as Output from "../Output.ts";
+import * as Redacted from "effect/Redacted";
 import type { ApiToken } from "./ApiToken.ts";
 import type { Dataset } from "./Dataset.ts";
 import type { ResourceInput } from "./Telemetry.ts";
 
+/** Axiom's OTLP/HTTP ingest host. */
+const DEFAULT_OTLP_ENDPOINT = "https://api.axiom.co";
+
+/**
+ * Build the `Authorization` header value from the ingest token.
+ *
+ * Axiom wants `Bearer <token>`, and the prefix is applied INSIDE the
+ * redaction: the mapped value is a `Redacted` again, so it stays on the
+ * secret channel from here to the deployed environment variable and never
+ * reaches the layer archive. Unwrapping to concatenate happens once, at
+ * deploy time, inside the same process that is already handling the token —
+ * the same trust boundary that encodes it onto the wire.
+ *
+ * One `Output` is built and handed to BOTH exporters, so the emitter's
+ * reference-identity dedupe binds it to a single environment variable.
+ */
+const bearerToken = (
+  token: Output.Output<Redacted.Redacted<string>>,
+): Output.Output<Redacted.Redacted<string>> =>
+  Output.map(token, (value) =>
+    Redacted.make(`Bearer ${Redacted.value(value)}`),
+  );
+
 /**
  * The Collector configuration this preset ships.
  *
- * Declared inline rather than as a data file: the layer is packaged through
- * `LayerVersion.content`, so it survives bundling and needs no asset path
- * resolution in consumer projects.
+ * Assembled from the same combinators a caller would use rather than
+ * templated YAML, so every component is validated against the generated
+ * codec at the call that declares it, the config sections are derived from
+ * what the pipelines reference, and the `endpoint` / dataset values route
+ * themselves: a plain string bakes into the layer, an `Output` from an
+ * `Axiom.Dataset` resource binds as an environment variable instead.
  *
  * Shape notes, all of which the pipelines depend on:
  * - The `otlp` receiver binds loopback only — the extension is reachable
@@ -34,56 +71,70 @@ import type { ResourceInput } from "./Telemetry.ts";
  *   response path and onto the extension's own lifecycle.
  * - Traces and logs get separate exporters because Axiom routes by dataset
  *   header, and the two signals belong in differently-shaped datasets.
+ * - One receiver and one processor VALUE each, shared by both pipelines, so
+ *   each is declared once.
+ *
+ * Exported so tests can assert on what the preset actually deploys.
  */
-const COLLECTOR_YAML = `receivers:
-  otlp:
-    protocols:
-      http:
-        endpoint: 127.0.0.1:4318
+export const axiomCollectorConfig = (options: {
+  /** Axiom's OTLP/HTTP host. */
+  endpoint: Input<string>;
+  /**
+   * The complete `Authorization` header value, i.e. `Bearer <token>`.
+   *
+   * Pass ONE value for both exporters: the emitter binds a shared reference
+   * to a single environment variable. A `Redacted` here never reaches the
+   * layer archive — see {@link bearerToken}.
+   */
+  authorization: CollectorInput;
+  /** Dataset traces are written to. */
+  tracesDataset: Input<string>;
+  /** Dataset logs are written to. */
+  logsDataset: Input<string>;
+}): EmittedCollectorConfig => {
+  const otlp = Receiver.otlp({
+    protocols: { http: { endpoint: "127.0.0.1:4318" } },
+  });
+  const processors = [
+    Processor.memoryLimiter({
+      checkInterval: Duration.seconds(1),
+      limitMib: 128,
+      spikeLimitMib: 32,
+    }),
+    Processor.batch({ timeout: Duration.seconds(1) }),
+    Processor.decouple({
+      // Once full, this in-memory queue applies backpressure to the
+      // function's local export. It improves latency; it does not make
+      // delivery durable.
+      maxQueueSize: 200,
+    }),
+  ];
+  const axiomExporter = (name: string, dataset: Input<string>) =>
+    Exporter.otlpHttp(name, {
+      compression: "zstd",
+      endpoint: options.endpoint,
+      headers: {
+        authorization: options.authorization,
+        "x-axiom-dataset": dataset,
+      },
+    });
 
-processors:
-  memory_limiter:
-    check_interval: 1s
-    limit_mib: 128
-    spike_limit_mib: 32
-  batch:
-    timeout: 1s
-  decouple:
-    # Once full, this in-memory queue applies backpressure to the function's
-    # local export. It improves latency; it does not make delivery durable.
-    max_queue_size: 200
-
-exporters:
-  otlphttp/axiom-traces:
-    compression: zstd
-    endpoint: \${env:AXIOM_OTLP_ENDPOINT}
-    headers:
-      authorization: Bearer \${env:AXIOM_INGEST_TOKEN}
-      x-axiom-dataset: \${env:AXIOM_TRACES_DATASET}
-  otlphttp/axiom-logs:
-    compression: zstd
-    endpoint: \${env:AXIOM_OTLP_ENDPOINT}
-    headers:
-      authorization: Bearer \${env:AXIOM_INGEST_TOKEN}
-      x-axiom-dataset: \${env:AXIOM_LOGS_DATASET}
-
-service:
-  telemetry:
-    logs:
-      level: warn
-  pipelines:
-    traces:
-      receivers: [otlp]
-      processors: [memory_limiter, batch, decouple]
-      exporters: [otlphttp/axiom-traces]
-    logs:
-      receivers: [otlp]
-      processors: [memory_limiter, batch, decouple]
-      exporters: [otlphttp/axiom-logs]
-`;
-
-/** Axiom's OTLP/HTTP ingest host. */
-const DEFAULT_OTLP_ENDPOINT = "https://api.axiom.co";
+  return collector({
+    telemetry: { logs: { level: "warn" } },
+    pipelines: {
+      traces: pipeline({
+        receivers: [otlp],
+        processors,
+        exporters: [axiomExporter("axiom-traces", options.tracesDataset)],
+      }),
+      logs: pipeline({
+        receivers: [otlp],
+        processors,
+        exporters: [axiomExporter("axiom-logs", options.logsDataset)],
+      }),
+    },
+  });
+};
 
 export interface AxiomLambdaCollectorProps {
   /**
@@ -109,7 +160,7 @@ export interface AxiomLambdaCollectorProps {
   /**
    * The logical id of the generated configuration `LayerVersion`. Give two
    * Functions the same id inside one stack and they share one layer.
-   * @default "AxiomCollectorConfig"
+   * @default a per-Function id — see `AWS.Lambda.Collector`
    */
   configId?: string;
   /** Managed extension layer pinning — see `AWS.Lambda.Collector`. */
@@ -208,11 +259,47 @@ const datasetName = (
  *
  * @example Take over the Collector configuration
  * ```typescript
- * // Beyond what this preset exposes, drop to the primitive and bring your
- * // own collector.yaml.
+ * // Beyond what this preset exposes, drop to the primitive and write the
+ * // configuration out. Every component is validated at the call that
+ * // declares it, and the config sections are derived from the pipelines.
  * AWS.Lambda.Collector({
- *   config: fileURLToPath(new URL("./collector-config", import.meta.url)),
- *   env: { AXIOM_INGEST_TOKEN: token.token, AXIOM_TRACES_DATASET: traces.name },
+ *   config: AWS.Lambda.collector({
+ *     pipelines: {
+ *       traces: AWS.Lambda.pipeline({
+ *         receivers: [
+ *           AWS.Lambda.Receiver.otlp({
+ *             protocols: { http: { endpoint: "127.0.0.1:4318" } },
+ *           }),
+ *         ],
+ *         processors: [
+ *           AWS.Lambda.Processor.memoryLimiter({
+ *             checkInterval: Duration.seconds(1),
+ *             limitMib: 128,
+ *           }),
+ *           // Sample before export to cut ingest volume.
+ *           AWS.Lambda.Processor.probabilisticSampler({
+ *             samplingPercentage: 10,
+ *           }),
+ *           AWS.Lambda.Processor.batch({ timeout: Duration.seconds(1) }),
+ *           AWS.Lambda.Processor.decouple({ maxQueueSize: 200 }),
+ *         ],
+ *         exporters: [
+ *           AWS.Lambda.Exporter.otlpHttp("axiom", {
+ *             endpoint: "https://api.axiom.co",
+ *             compression: "zstd",
+ *             headers: {
+ *               // Redacted in, Redacted out: the prefix is applied inside the
+ *               // secret, so the credential never enters the layer archive.
+ *               authorization: Output.map(ingest.token, (t) =>
+ *                 Redacted.make(`Bearer ${Redacted.value(t)}`),
+ *               ),
+ *               "x-axiom-dataset": traces.name,
+ *             },
+ *           }),
+ *         ],
+ *       }),
+ *     },
+ *   }),
  * })
  * ```
  */
@@ -233,30 +320,29 @@ export const LambdaCollector = (
         const traces = yield* datasetName(props.traces);
         const logs = yield* datasetName(props.logs);
         return Collector({
-          config: LayerVersion(props.configId ?? "AxiomCollectorConfig", {
-            content: { "collector.yaml": COLLECTOR_YAML },
-            description: "Axiom OpenTelemetry Collector configuration",
+          config: axiomCollectorConfig({
+            // Each of these routes itself at emission: a literal endpoint or
+            // a pre-existing dataset name bakes into the layer, while an
+            // `Output` from an `Axiom.Dataset` becomes a generated env var,
+            // so a renamed dataset reconfigures the Function instead of
+            // republishing the layer.
+            endpoint: props.endpoint ?? DEFAULT_OTLP_ENDPOINT,
+            // Built once and shared by both exporters, so the emitter binds
+            // it to ONE environment variable. `ApiToken.token` is `Redacted`
+            // and stays that way through the prefixing, so the credential
+            // rides the secret channel and never enters the layer archive.
+            authorization: bearerToken(token.token),
+            tracesDataset: traces,
+            logsDataset: logs,
           }),
+          configId: props.configId,
           extension: props.extension,
           disabled: props.disabled,
           serviceName: props.serviceName,
-          env: {
-            AXIOM_OTLP_ENDPOINT: props.endpoint ?? DEFAULT_OTLP_ENDPOINT,
-            // The token binds as a secret: `ApiToken.token` is `Redacted`, and
-            // the binding channel routes Redacted values away from plaintext
-            // state. `Bearer ` is prepended in the collector config rather than
-            // here so the redaction survives interpolation.
-            AXIOM_INGEST_TOKEN: token.token,
-            AXIOM_TRACES_DATASET: traces,
-            AXIOM_LOGS_DATASET: logs,
-          },
         });
-        // Its own span, nesting the `AWS.Lambda.Collector` one: a deploy trace
+        // Its own span, nesting the `collector.attach` one: a deploy trace
         // then shows whether the token/dataset resolution or the extension
         // attachment is the slow half.
-      }).pipe(Effect.withSpan("Axiom.LambdaCollector")),
+      }).pipe(Effect.withSpan("collector.axiom")),
     ),
   ) as Layer.Layer<never>;
-
-/** The Collector configuration this preset packages. Exported for tests. */
-export const axiomCollectorYaml = COLLECTOR_YAML;

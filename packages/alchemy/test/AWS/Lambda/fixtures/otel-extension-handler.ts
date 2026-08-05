@@ -3,13 +3,13 @@ import type { Input, InputProps } from "@/Input.ts";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { fileURLToPath } from "node:url";
+import {
+  EXPORT_DELAY_VAR,
+  OTLP_ENDPOINT_VAR,
+  otelExtensionCollectorConfig,
+} from "./otel-collector-config.ts";
 
 const sandboxId = crypto.randomUUID();
-
-const collectorConfigPath = fileURLToPath(
-  new URL("./otel-collector-extension", import.meta.url),
-);
 
 export class OtelExtensionFunction extends Lambda.Function<Lambda.Function>()(
   "OtelExtensionFunction",
@@ -56,15 +56,15 @@ const implementation = (options?: OtelExtensionFunctionOptions) =>
   }).pipe(
     Effect.provide(
       Lambda.Collector({
-        config: collectorConfigPath,
+        config: otelExtensionCollectorConfig,
         serviceName: "otel-lambda-extension-test",
         // A live test is a deploy, not a dev run — but be explicit so the
         // suite never silently no-ops if the harness ever runs it in dev.
         disabled: false,
         env: {
           OPENTELEMETRY_EXTENSION_LOG_LEVEL: "debug",
-          COLLECTOR_EXPORTER_OTLP_ENDPOINT: options?.remoteOtlpEndpoint ?? "",
-          OTEL_TEST_EXPORT_DELAY_MS: String(options?.remoteExportDelayMs ?? 0),
+          [OTLP_ENDPOINT_VAR]: options?.remoteOtlpEndpoint ?? "",
+          [EXPORT_DELAY_VAR]: String(options?.remoteExportDelayMs ?? 0),
         },
       }),
     ),

@@ -168,52 +168,85 @@ the environment from accepting another invocation.
 
 A Lambda **layer** is only how the Collector binary is attached. The
 binary starts as an external **extension**, a separate lifecycle
-participant registered with Lambda's Extensions API. A second,
-config-only `AWS.Lambda.LayerVersion` can reproducibly place the
-Collector YAML at `/opt/collector.yaml`:
+participant registered with Lambda's Extensions API.
+
+`AWS.Lambda.Collector` assembles all of that from inside the
+Function's Effect: it derives and attaches the pinned managed
+extension layer, serializes the configuration into a second,
+config-only `AWS.Lambda.LayerVersion` at `/opt/collector.yaml`, binds
+the extension's environment, and points the in-process exporter at the
+loopback receiver.
 
 ```typescript
-const collectorConfig = yield* AWS.Lambda.LayerVersion("CollectorConfig", {
-  path: "./layers/collector-config",
-  compatibleArchitectures: [architecture],
-});
+import * as AWS from "alchemy/AWS";
 
-const fn = yield* TelemetryFunction.pipe(
-  Effect.provide(
-    TelemetryFunctionLive({
-      main: import.meta.resolve("./src/TelemetryFunction.ts"),
-      architecture,
-      layers: [
-        collectorExtensionLayerArn({ region, architecture }),
-        collectorConfig,
-      ],
-      env: {
-        OPENTELEMETRY_COLLECTOR_CONFIG_URI: "/opt/collector.yaml",
-        COLLECTOR_EXPORTER_OTLP_ENDPOINT: remoteOtlpEndpoint,
-      },
-    }),
+export default class Api extends AWS.Lambda.Function<Api>()(
+  "Api",
+  { main: import.meta.url, architecture: "arm64" },
+  Effect.gen(function* () {
+    return { fetch: handler };
+  }).pipe(
+    Effect.provide(
+      AWS.Lambda.Collector({
+        config: AWS.Lambda.collector({
+          pipelines: {
+            traces: AWS.Lambda.pipeline({
+              receivers: [
+                AWS.Lambda.Receiver.otlp({
+                  protocols: { http: { endpoint: "127.0.0.1:4318" } },
+                }),
+              ],
+              processors: [
+                AWS.Lambda.Processor.memoryLimiter({
+                  checkInterval: Duration.seconds(1),
+                  limitMib: 128,
+                }),
+                AWS.Lambda.Processor.batch({ timeout: Duration.seconds(1) }),
+                AWS.Lambda.Processor.decouple({ maxQueueSize: 200 }),
+              ],
+              exporters: [
+                AWS.Lambda.Exporter.otlpHttp("backend", {
+                  // An Output — bound as an env var, never baked into the
+                  // layer. A `Redacted` header value binds as a secret.
+                  endpoint: backend.url,
+                }),
+              ],
+            }),
+          },
+        }),
+      }),
+    ),
   ),
-);
+) {}
 ```
 
-Inside the Function, keep Alchemy's ordinary Effect telemetry layer
-visible and point it only at localhost:
+The Collector is configured in TypeScript rather than YAML. The
+component types are generated from the collector's own Go config
+structs, so a misspelt field fails at the constructor call that wrote
+it, with a JSON path, and the component set is exactly the one the
+pinned extension ships.
 
-```typescript
-Alchemy.Telemetry.layerOtlp({
-  url: "http://127.0.0.1:4318",
-  serviceName: "my-lambda",
-})
-```
+Nothing writes a config section by hand. A pipeline holds component
+*values*, so `receivers:`, `processors:` and `exporters:` are derived
+from what the pipelines use; an exporter's `auth.authenticator` holds
+an extension *value*, so `extensions:` and `service.extensions` are
+derived from the exporters. Deduplication is by reference identity —
+one value shared by two pipelines is one emitted instance.
+
+You do not add `Alchemy.Telemetry.layerOtlp` yourself — `Collector`
+installs it, aimed at loopback, so the handler never learns the remote
+endpoint.
 
 Put `memory_limiter` before `batch`, keep `batch` before `decouple`,
 and keep `decouple` last in each Collector pipeline. `decouple` is
 currently an alpha component: size its in-memory queue, watch
-backpressure and dropped telemetry, and pin the Collector layer
-version. Managed layer ARNs are regional and
-architecture-specific (`amd64` for Lambda's `x86_64`, or `arm64`),
-so derive the ARN from the Function's Region and architecture
-instead of copying one global ARN.
+backpressure and dropped telemetry. Managed layer ARNs are regional
+and architecture-specific (`amd64` for Lambda's `x86_64`, or
+`arm64`); `Collector` derives the ARN from the Function's Region and
+architecture rather than copying one global ARN, and pins the
+upstream release — override either with `extension: { release,
+layerVersion }`, or bypass derivation entirely with
+`extension: { layerVersionArn }`.
 
 This is the vendor-neutral path when Effect is already producing the
 telemetry and a remote OTLP backend is the destination. For

@@ -5,10 +5,30 @@ import {
   Collector,
   collectorExtensionLayerArn,
 } from "@/AWS/Lambda/Collector.ts";
-import { axiomCollectorYaml } from "@/Axiom/LambdaCollector.ts";
+import {
+  collector,
+  Exporter,
+  pipeline,
+  Receiver,
+} from "@/AWS/Lambda/CollectorConfig.ts";
+import { axiomCollectorConfig } from "@/Axiom/LambdaCollector.ts";
+import * as Output from "@/Output.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+
+/** The smallest configuration that assembles. */
+const minimalConfig = collector({
+  pipelines: {
+    traces: pipeline({
+      receivers: [
+        Receiver.otlp({ protocols: { http: { endpoint: "127.0.0.1:4318" } } }),
+      ],
+      exporters: [Exporter.debug({})],
+    }),
+  },
+});
 
 /**
  * Build the Collector layer with a stubbed engine context and NO binding
@@ -18,7 +38,7 @@ import * as Effect from "effect/Effect";
 const buildWithoutHost = (options: { dev: boolean; disabled?: boolean }) =>
   Effect.void.pipe(
     Effect.provide(
-      Collector({ config: "/nonexistent", disabled: options.disabled }),
+      Collector({ config: minimalConfig, disabled: options.disabled }),
     ),
     Effect.provideService(AlchemyContext, {
       dotAlchemy: "/nonexistent/.alchemy",
@@ -103,7 +123,7 @@ describe("AWS.Lambda.Collector dev gating", () => {
       const result = yield* buildWithoutHost({ dev: false });
       expect(result.attached).toBe(true);
       // Pin WHY it failed: reaching the host check is the proof it tried to
-      // attach, rather than tripping over the bogus config path first.
+      // attach, rather than tripping over the configuration first.
       expect(result.reason).toContain("unsupported host");
     }),
   );
@@ -128,7 +148,7 @@ describe("AWS.Lambda.Collector shared across hosts", () => {
     "rebuilds at every provide site instead of reusing the outer host's build",
     () =>
       Effect.gen(function* () {
-        const shared = Collector({ config: "/nonexistent" });
+        const shared = Collector({ config: minimalConfig });
 
         // Inner site: enabled (`dev: false`) — a real build must reach the
         // host check and die. Reusing the outer site's disabled (empty) build
@@ -166,36 +186,146 @@ describe("AWS.Lambda.Collector shared across hosts", () => {
   );
 });
 
+/** The token the preset would prefix, as `Axiom.ApiToken.token` is Redacted. */
+const AXIOM_TOKEN = "axiom-ingest-token-abcdef";
+
+/**
+ * The preset's `Authorization` value: one shared reference, exactly as
+ * `Axiom.LambdaCollector` builds it, so the dedupe path is what is tested.
+ */
+const axiomAuthorization = Redacted.make(`Bearer ${AXIOM_TOKEN}`);
+
+/**
+ * The preset's configuration with the non-secret values supplied as plain
+ * literals, so assertions can read the emitted file directly. The
+ * `Output`-valued case (a real `Axiom.Dataset`) is covered below.
+ */
+const axiomEmitted = axiomCollectorConfig({
+  endpoint: "https://api.axiom.co",
+  authorization: axiomAuthorization,
+  tracesDataset: "api-traces",
+  logsDataset: "api-logs",
+});
+
+/** The emitted file, parsed — canonical JSON, so this is exact. */
+const axiomConfig = JSON.parse(axiomEmitted.content) as {
+  receivers: Record<string, any>;
+  processors: Record<string, any>;
+  exporters: Record<string, any>;
+  service: {
+    telemetry?: Record<string, any>;
+    pipelines: Record<string, { processors: string[] }>;
+  };
+};
+
 describe("Axiom.LambdaCollector packaged configuration", () => {
   it("receives on loopback only", () => {
-    expect(axiomCollectorYaml).toContain("endpoint: 127.0.0.1:4318");
+    expect(axiomConfig.receivers.otlp.protocols.http.endpoint).toBe(
+      "127.0.0.1:4318",
+    );
   });
 
   it("routes traces and logs to separate dataset-scoped exporters", () => {
-    expect(axiomCollectorYaml).toContain("otlphttp/axiom-traces:");
-    expect(axiomCollectorYaml).toContain("otlphttp/axiom-logs:");
-    expect(axiomCollectorYaml).toContain(
-      "x-axiom-dataset: ${env:AXIOM_TRACES_DATASET}",
-    );
-    expect(axiomCollectorYaml).toContain(
-      "x-axiom-dataset: ${env:AXIOM_LOGS_DATASET}",
-    );
+    expect(axiomConfig.exporters["otlphttp/axiom-traces"]).toBeDefined();
+    expect(axiomConfig.exporters["otlphttp/axiom-logs"]).toBeDefined();
+    expect(
+      axiomConfig.exporters["otlphttp/axiom-traces"].headers["x-axiom-dataset"],
+    ).toBe("api-traces");
+    expect(
+      axiomConfig.exporters["otlphttp/axiom-logs"].headers["x-axiom-dataset"],
+    ).toBe("api-logs");
+    expect(axiomConfig.service.pipelines.traces).toBeDefined();
+    expect(axiomConfig.service.pipelines.logs).toBeDefined();
   });
 
   it("bounds memory first and decouples last in every pipeline", () => {
     // `memory_limiter` first sheds load before the sandbox OOMs; `decouple`
     // last is what moves remote export off the response path.
-    const pipelines = axiomCollectorYaml.match(/processors: \[.*\]/g) ?? [];
+    const pipelines = Object.values(axiomConfig.service.pipelines);
     expect(pipelines.length).toBe(2);
-    for (const pipeline of pipelines) {
-      expect(pipeline).toBe("processors: [memory_limiter, batch, decouple]");
+    for (const declared of pipelines) {
+      expect(declared.processors).toEqual([
+        "memory_limiter",
+        "batch",
+        "decouple",
+      ]);
     }
-    expect(axiomCollectorYaml).toContain("memory_limiter:");
+    expect(axiomConfig.processors.memory_limiter).toBeDefined();
+  });
+
+  it("declares one receiver and one processor set for both pipelines", () => {
+    // Both pipelines hold the SAME component values, so each is emitted once.
+    expect(Object.keys(axiomConfig.receivers)).toEqual(["otlp"]);
+    expect(Object.keys(axiomConfig.processors).sort()).toEqual([
+      "batch",
+      "decouple",
+      "memory_limiter",
+    ]);
+  });
+
+  it("keeps the collector's own logging quiet", () => {
+    expect(axiomConfig.service.telemetry).toEqual({ logs: { level: "warn" } });
   });
 
   it("keeps the remote endpoint extension-owned", () => {
     // The in-process exporter must only ever know loopback — binding the
     // standard SDK variable would route it straight past the extension.
-    expect(axiomCollectorYaml).not.toContain("OTEL_EXPORTER_OTLP_ENDPOINT");
+    expect(axiomEmitted.content).not.toContain("OTEL_EXPORTER_OTLP_ENDPOINT");
+  });
+
+  it("binds the ingest credential once and shares it across both exporters", () => {
+    // The credential goes through the TYPED secret channel — no hand-written
+    // placeholder, no `props.env` entry. Both exporters must reference the
+    // same generated variable, so rotating the token touches one value.
+    const traces =
+      axiomConfig.exporters["otlphttp/axiom-traces"].headers.authorization;
+    const logs =
+      axiomConfig.exporters["otlphttp/axiom-logs"].headers.authorization;
+    expect(traces).toMatch(/^\$\{env:ALCHEMY_OTEL_[A-Z0-9_]+\}$/);
+    expect(logs).toBe(traces);
+
+    // Exactly one pair was generated for it.
+    const name = traces.slice("${env:".length, -1);
+    const generated = Object.keys(axiomEmitted.env).filter((key) =>
+      key.endsWith("_AUTHORIZATION"),
+    );
+    expect(generated).toEqual([name]);
+
+    // It is still Redacted, and it carries the Bearer prefix — asserted on
+    // the bound value, never on the emitted content.
+    const bound = axiomEmitted.env[name];
+    expect(Redacted.isRedacted(bound)).toBe(true);
+    expect(
+      Redacted.value(bound as Redacted.Redacted<string>).startsWith("Bearer "),
+    ).toBe(true);
+  });
+
+  it("never writes the ingest credential into the emitted file", () => {
+    // The load-bearing property of the preset: a layer archive is a
+    // downloadable artifact, so the token must not be in it in any form.
+    expect(axiomEmitted.content).not.toContain(AXIOM_TOKEN);
+    expect(axiomEmitted.content).not.toContain("Bearer axiom");
+  });
+
+  it("binds dataset names that are Outputs instead of baking them", () => {
+    // The real preset path: `Axiom.Dataset` attributes are Outputs, so the
+    // emitted layer must stay free of them — otherwise renaming a dataset
+    // republishes the layer.
+    const emitted = axiomCollectorConfig({
+      endpoint: "https://api.axiom.co",
+      authorization: axiomAuthorization,
+      tracesDataset: Output.fromEffect(Effect.succeed("api-traces")),
+      logsDataset: Output.fromEffect(Effect.succeed("api-logs")),
+    });
+    expect(emitted.content).not.toContain("api-traces");
+    expect(emitted.content).not.toContain("api-logs");
+    expect(
+      Object.keys(emitted.env)
+        .filter((key) => key.endsWith("_X_AXIOM_DATASET"))
+        .sort(),
+    ).toEqual([
+      "ALCHEMY_OTEL_EXPORTERS_OTLPHTTP_AXIOM_LOGS_HEADERS_X_AXIOM_DATASET",
+      "ALCHEMY_OTEL_EXPORTERS_OTLPHTTP_AXIOM_TRACES_HEADERS_X_AXIOM_DATASET",
+    ]);
   });
 });
