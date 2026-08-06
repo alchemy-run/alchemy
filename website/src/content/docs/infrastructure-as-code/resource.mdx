@@ -245,47 +245,58 @@ what's happening: `[Assets] update (renamed from Bucket)`.
 
 ### Safety semantics
 
-The migration is deliberately conservative. The examples below all
-assume this rename:
-
-```typescript
-yield* Cloudflare.R2.Bucket("Assets").pipe(Alchemy.renamedFrom("Bucket"));
-```
+The migration is deliberately conservative.
 
 **Identity is proven, not assumed.** Only a migration ever copies an
 instance ID, so a leftover row from an interrupted move is provably
 a copy — it's dropped state-only, the physical resource untouched:
 
-```text
-state:  Bucket (instance a3f1)  +  Assets (instance a3f1)
-plan:   [Assets] update (renamed from Bucket)   ← drops the copy
+```diff lang="typescript"
+-const bucket = yield* Cloudflare.R2.Bucket("Bucket");
++// a crashed deploy left rows at BOTH ids with the SAME instance id;
++// re-deploying drops the leftover copy — the cloud is never touched
++const bucket = yield* Cloudflare.R2.Bucket("Assets").pipe(
++  Alchemy.renamedFrom("Bucket"),
++);
 ```
 
 A former row with a *different* instance ID is someone else's — the
-old name was reused after the rename shipped — and follows normal
-lifecycle rules:
+old name was reused after the rename shipped — so the alias is
+ignored and the row follows normal lifecycle rules:
 
-```text
-state:  Bucket (instance 9c2e)  +  Assets (instance a3f1)
-plan:   [Assets] noop            ← alias ignored
-        [Bucket] delete          ← normal orphan, if undeclared
+```diff lang="typescript"
+ // deployed long after the rename: `Bucket` is its own resource now,
+ // with its own instance id — `renamedFrom` never adopts it
+ const assets = yield* Cloudflare.R2.Bucket("Assets").pipe(
+   Alchemy.renamedFrom("Bucket"),
+ );
+ const bucket = yield* Cloudflare.R2.Bucket("Bucket");
 ```
 
 **Types must match.** A former row written by a different resource
-type can't be this resource's state, whatever its FQN says — it is
-never migrated:
+type can't be this resource's state, whatever its FQN says — nothing
+migrates, and the orphaned row follows its own lifecycle:
 
-```text
-state:  Bucket (a KV.Namespace row)
-plan:   [Assets] create          ← nothing to migrate
+```diff lang="typescript"
+-const cache = yield* Cloudflare.KV.Namespace("Store");
++// the row at `Store` belongs to a KV.Namespace — it is never adopted;
++// `Assets` is created fresh and `Store` is a normal orphan delete
++const assets = yield* Cloudflare.R2.Bucket("Assets").pipe(
++  Alchemy.renamedFrom("Store"),
++);
 ```
 
 And a different-typed row sitting at the *new* ID fails the plan —
 migrating over it would silently abandon its cloud resource:
 
-```text
-state:  Assets (a KV.Namespace row)  +  Bucket (an R2.Bucket row)
-plan:   ✗ a state row of a different type already occupies 'Assets'
+```diff lang="typescript"
+-const cache = yield* Cloudflare.KV.Namespace("Assets");
+-const bucket = yield* Cloudflare.R2.Bucket("Bucket");
++// ✗ a state row of a different type already occupies 'Assets' —
++//   delete or rename the KV namespace first, then re-deploy
++const bucket = yield* Cloudflare.R2.Bucket("Assets").pipe(
++  Alchemy.renamedFrom("Bucket"),
++);
 ```
 
 **Ambiguity fails loudly.** Two resources claiming the same former
