@@ -30,3 +30,47 @@ describe("Port.find", () => {
     }),
   );
 });
+
+describe("Port.isUnsupportedHostError", () => {
+  it("recognizes coded unsupported-host errors", () => {
+    expect(
+      Port.isUnsupportedHostError({ code: "EAFNOSUPPORT" }, "::1", true),
+    ).toBe(true);
+  });
+
+  it("does not mistake a coded address conflict for an unsupported host", () => {
+    expect(
+      Port.isUnsupportedHostError({ code: "EADDRINUSE" }, "::1", false),
+    ).toBe(false);
+  });
+
+  it("recognizes Bun's uncoded IPv6 failure when IPv6 is unavailable", () => {
+    expect(
+      Port.isUnsupportedHostError(
+        new Error("Failed to listen at ::"),
+        "::",
+        false,
+      ),
+    ).toBe(true);
+  });
+
+  it("does not ignore an uncoded IPv6 failure on a dual-stack machine", () => {
+    expect(
+      Port.isUnsupportedHostError(
+        new Error("Failed to listen at ::"),
+        "::",
+        true,
+      ),
+    ).toBe(false);
+  });
+
+  it("does not mistake an uncoded IPv4 failure for an unsupported host", () => {
+    expect(
+      Port.isUnsupportedHostError(
+        new Error("Failed to listen at 0.0.0.0"),
+        "0.0.0.0",
+        false,
+      ),
+    ).toBe(false);
+  });
+});

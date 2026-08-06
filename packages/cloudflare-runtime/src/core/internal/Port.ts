@@ -2,6 +2,7 @@ import * as Cache from "effect/Cache";
 import * as Effect from "effect/Effect";
 import * as Semaphore from "effect/Semaphore";
 import * as NodeNet from "node:net";
+import * as NodeOs from "node:os";
 import { ConfigError, SystemError } from "../RuntimeError.shared.ts";
 
 export const MAX_PORT = 65535;
@@ -42,6 +43,31 @@ const errorCode = (error: unknown): string | undefined =>
   typeof error.code === "string"
     ? error.code
     : undefined;
+
+/**
+ * Whether a failed bind means the requested host is unavailable rather than
+ * the port being occupied. Node reports a coded error for this, while Bun can
+ * reject an IPv6 bind without a `code` on machines with no IPv6 stack.
+ */
+export const isUnsupportedHostError = (
+  error: unknown,
+  host: string | undefined,
+  hasIPv6Interface?: boolean,
+): boolean => {
+  const code = errorCode(error);
+  if (code !== undefined) return UNSUPPORTED_HOST_CODES.has(code);
+  return (
+    host !== undefined &&
+    NodeNet.isIPv6(host) &&
+    !(
+      hasIPv6Interface ??
+      Object.values(NodeOs.networkInterfaces()).some(
+        (addresses) =>
+          addresses?.some((address) => address.family === "IPv6") ?? false,
+      )
+    )
+  );
+};
 
 export interface Ports {
   /**
@@ -116,7 +142,7 @@ export const make = (options: PortsOptions) =>
         server.once("error", (error) => {
           server.close(() => {
             const code = errorCode(error);
-            if (code !== undefined && UNSUPPORTED_HOST_CODES.has(code)) {
+            if (isUnsupportedHostError(error, host)) {
               // The host isn't available on this machine, so it can't hold the
               // port either — treat the probe as a success.
               return resume(Effect.succeed(port));
