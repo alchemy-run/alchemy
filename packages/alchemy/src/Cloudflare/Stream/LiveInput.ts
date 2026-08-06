@@ -7,6 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { StreamPricing } from "./Pricing.ts";
 
 const TypeId = "Cloudflare.Stream.LiveInput" as const;
 type TypeId = typeof TypeId;
@@ -170,6 +171,7 @@ export const isLiveInput = (value: unknown): value is LiveInput =>
 
 export const LiveInputProvider = () =>
   Provider.succeed(LiveInput, {
+    pricing: StreamPricing,
     stables: ["liveInputId", "accountId", "created"],
 
     diff: Effect.fn(function* ({ output }) {

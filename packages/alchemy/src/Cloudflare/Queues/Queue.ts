@@ -12,6 +12,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { QueuesPricing } from "../CloudflarePricing.ts";
 import {
   generateLocalId,
   LOCAL_ENTRY_URL,
@@ -110,6 +111,7 @@ export const Queue = Resource<Queue>("Cloudflare.Queues.Queue", {
 
 export const ProviderLive = () =>
   Provider.succeed(Queue, {
+    pricing: QueuesPricing,
     stables: ["queueId", "accountId"],
     diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

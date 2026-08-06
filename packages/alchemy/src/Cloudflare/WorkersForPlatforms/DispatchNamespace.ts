@@ -8,6 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { DispatchNamespacePricing } from "./Pricing.ts";
 
 const TypeId = "Cloudflare.Workers.DispatchNamespace" as const;
 type TypeId = typeof TypeId;
@@ -155,6 +156,7 @@ export const isDispatchNamespace = (
 
 export const DispatchNamespaceProvider = () =>
   Provider.succeed(DispatchNamespace, {
+    pricing: DispatchNamespacePricing,
     stables: ["namespaceId", "name", "accountId", "createdOn"],
     diff: Effect.fn(function* ({ olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

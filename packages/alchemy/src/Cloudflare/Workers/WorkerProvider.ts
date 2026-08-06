@@ -28,6 +28,7 @@ import { cachedFunction } from "../../Util/cached-function.ts";
 import { initialCwd } from "../../Util/Node.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { WorkersPricing } from "../CloudflarePricing.ts";
 import { localRuntimeServices } from "../LocalRuntime.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import { resolveZoneId } from "../Zone/lookup.ts";
@@ -4050,6 +4051,7 @@ export const LiveWorkerProvider = () =>
       });
 
       return Worker.Provider.of({
+        pricing: WorkersPricing,
         stables: ["workerId", "workerName"],
         list: () =>
           Effect.gen(function* () {

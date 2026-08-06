@@ -9,6 +9,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { R2Pricing } from "../CloudflarePricing.ts";
 import { generateLocalId } from "../LocalRuntime.ts";
 import type * as Cloudflare from "../Providers.ts";
 import * as Zone from "../Zone/index.ts";
@@ -830,6 +831,7 @@ export const ProviderLive = () =>
         });
 
       return {
+        pricing: R2Pricing,
         stables: ["bucketName", "accountId"],
         list: () =>
           Effect.gen(function* () {

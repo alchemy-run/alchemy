@@ -7,6 +7,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { VectorizePricing } from "../CloudflarePricing.ts";
 import type { Providers } from "../Providers.ts";
 
 const TypeId = "Cloudflare.VectorizeIndex" as const;
@@ -140,6 +141,7 @@ export const isIndex = (value: unknown): value is Index =>
 
 export const IndexProvider = () =>
   Provider.succeed(Index, {
+    pricing: VectorizePricing,
     stables: ["indexName", "accountId"],
     diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

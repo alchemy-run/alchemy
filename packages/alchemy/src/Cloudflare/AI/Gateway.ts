@@ -8,6 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { AiGatewayPricing } from "./Pricing.ts";
 
 export type GatewayRateLimitingTechnique = "fixed" | "sliding";
 
@@ -473,6 +474,7 @@ export const Gateway = Resource<Gateway>("Cloudflare.AI.Gateway", {
 
 export const GatewayResourceProvider = () =>
   Provider.succeed(Gateway, {
+    pricing: AiGatewayPricing,
     stables: ["gatewayId", "accountId"],
     diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
       if (!isResolved(news)) return undefined;

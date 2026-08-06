@@ -11,6 +11,7 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
+import { EmailSendingPricing } from "./Pricing.ts";
 
 const SendingSubdomainTypeId = "Cloudflare.Email.SendingSubdomain" as const;
 type SendingSubdomainTypeId = typeof SendingSubdomainTypeId;
@@ -124,6 +125,7 @@ export const isSendingSubdomain = (value: unknown): value is SendingSubdomain =>
 
 export const SendingSubdomainProvider = () =>
   Provider.succeed(SendingSubdomain, {
+    pricing: EmailSendingPricing,
     // No update API exists — every attribute is stable across updates.
     stables: [
       "subdomainId",

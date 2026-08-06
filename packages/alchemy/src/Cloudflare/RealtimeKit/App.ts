@@ -8,6 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { RealtimeKitPricing } from "./Pricing.ts";
 
 const TypeId = "Cloudflare.RealtimeKit.App" as const;
 type TypeId = typeof TypeId;
@@ -93,6 +94,7 @@ export const isApp = (value: unknown): value is App =>
 
 export const AppProvider = () =>
   Provider.succeed(App, {
+    pricing: RealtimeKitPricing,
     stables: ["appId", "accountId", "name", "createdAt"],
     diff: Effect.fn(function* ({ olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

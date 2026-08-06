@@ -10,6 +10,7 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
+import { CertificatePackPricing } from "./Pricing.ts";
 
 const TypeId = "Cloudflare.Ssl.CertificatePack" as const;
 type TypeId = typeof TypeId;
@@ -240,6 +241,7 @@ export const isCertificatePack = (value: unknown): value is CertificatePack =>
 export const CertificatePackProvider = () =>
   Provider.succeed(CertificatePack, {
     stables: ["certificatePackId", "zoneId"],
+    pricing: CertificatePackPricing,
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       // news is Input<Props> during plan — only compare once resolved.

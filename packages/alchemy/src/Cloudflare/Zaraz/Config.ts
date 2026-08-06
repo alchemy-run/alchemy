@@ -12,6 +12,7 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { resolveZoneId, type Reference } from "../Zone/index.ts";
 import { listAllZones } from "../Zone/lookup.ts";
+import { ZarazPricing } from "./Pricing.ts";
 import { defineZarazEvents } from "./ZarazEventTypes.ts";
 
 export type Workflow = zaraz.GetWorkflowResponse;
@@ -201,6 +202,7 @@ export const Config = Object.assign(
 
 export const ConfigProvider = () =>
   Provider.succeed(Config, {
+    pricing: ZarazPricing,
     nuke: { singleton: true },
     stables: ["zoneId"],
     list: Effect.fn(function* () {

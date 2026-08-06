@@ -15,6 +15,7 @@ import { type ResourceBinding } from "../../Resource.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { normalizeNulls } from "../../Util/stable.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { ContainerPricing } from "../CloudflarePricing.ts";
 import { isLiveId } from "../LocalRuntime.ts";
 import { CloudflareLogs, type TelemetryFilter } from "../Logs.ts";
 import type {
@@ -754,6 +755,7 @@ export const LiveContainerProvider = () =>
       };
 
       return ContainerPlatform.Provider.of({
+        pricing: ContainerPricing,
         stables: ["accountId", "applicationId"],
         diff: Effect.fn(function* ({
           id,

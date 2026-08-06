@@ -6,6 +6,7 @@ import * as Option from "effect/Option";
 import type * as Stream from "effect/Stream";
 import type { Artifacts } from "./Artifacts.ts";
 import type { ScopedPlanStatusSession } from "./Cli/Cli.ts";
+import type { ResourceCost } from "./Cost.ts";
 import type { Diff } from "./Diff.ts";
 import type { Input } from "./Input.ts";
 import type { InstanceId } from "./InstanceId.ts";
@@ -112,6 +113,18 @@ export interface ProviderService<
    * provider via {@link tryFindProviderByType}.
    */
   aliases?: readonly string[];
+  /**
+   * Cost model for this resource, shown in `alchemy plan`'s cost summary.
+   * Optional and platform-neutral — any provider (Cloudflare, AWS, GCP, ...)
+   * can attach one; omit it entirely for resources with no meaningful
+   * per-unit billing dimension (the common case).
+   *
+   * Like {@link diff}, this runs during plan, so its functions receive
+   * `Input<Props>` — props that may still contain unresolved `Output`s. An
+   * unknown value can't be priced; implementations read price-determining
+   * props via `planProp` (see `Cost.ts`) and degrade to a labeled default.
+   */
+  pricing?: ResourceCost<Props<Res>>;
   /**
    * The {@link ProviderMode} this service operates in.
    *

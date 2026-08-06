@@ -10,6 +10,7 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
+import { LogpushPricing } from "./Pricing.ts";
 
 const TypeId = "Cloudflare.Logpush.Job" as const;
 type TypeId = typeof TypeId;
@@ -270,6 +271,7 @@ export const isJob = (value: unknown): value is Job =>
 
 export const JobProvider = () =>
   Provider.succeed(Job, {
+    pricing: LogpushPricing,
     stables: ["jobId", "accountId", "zoneId", "dataset", "kind"],
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {

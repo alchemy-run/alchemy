@@ -12,6 +12,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { SinkPricing } from "./Pricing.ts";
 
 const TypeId = "Cloudflare.Pipelines.Sink" as const;
 type TypeId = typeof TypeId;
@@ -282,6 +283,7 @@ export const isSink = (value: unknown): value is Sink =>
 
 export const SinkProvider = () =>
   Provider.succeed(Sink, {
+    pricing: SinkPricing,
     stables: ["sinkId", "accountId", "name", "type", "createdAt"],
 
     diff: Effect.fn(function* ({ id, olds, news, output }) {
