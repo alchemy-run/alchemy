@@ -162,6 +162,7 @@
         "nuxt": "4.5.1",
         "octane": "0.1.22",
         "svelte": "^5.56.6",
+        "vocs": "2.8.2",
         "waku": "1.0.0-beta.7"
       },
       "fixtures": {
@@ -205,9 +206,6 @@
     "turbo": "^2.9.16",
     "typescript": "catalog:",
     "yaml": "^2.8.2"
-  },
-  "patchedDependencies": {
-    "vocs@2.6.0": "patches/vocs@2.6.0.patch"
   },
   "devEngines": {
     "packageManager": {

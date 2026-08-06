@@ -14,7 +14,7 @@
     "react": "~19.2.6",
     "react-dom": "~19.2.6",
     "react-server-dom-webpack": "~19.2.6",
-    "vocs": "2.6.0",
+    "vocs": "catalog:frameworks",
     "waku": "catalog:frameworks"
   },
   "devDependencies": {
