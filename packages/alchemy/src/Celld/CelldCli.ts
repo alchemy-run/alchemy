@@ -2,10 +2,27 @@
  * Managed acquisition and invocation of the `celld` CLI.
  *
  * `celld deploy` is a pure bucket write (no fleet network access), so the
- * Fleet provider shells out to a pinned release binary, cached under
- * `~/.alchemy/bin/celld/{version}/`. The deploy bundles the staged project
- * with esbuild — resolved from the workspace's `esbuild` package and handed
- * to celld via `CELLD_ESBUILD` (no PATH mutation).
+ * Worker provider shells out to a pinned release binary, cached under
+ * `~/.alchemy/bin/celld/{version}/`.
+ *
+ * **On esbuild**: rolldown is alchemy's bundler — the staged project's
+ * `main` is already our flat Worker bundle. celld v0.1.0 has no
+ * prebundled-input path: its deploy unconditionally runs an esbuild it is
+ * pointed at (`CELLD_ESBUILD`) over the project. The exact invocation
+ * (captured empirically) is
+ *
+ * ```
+ * esbuild worker.js --bundle --format=esm --platform=browser
+ *   --target=es2024 --conditions=workerd,worker,browser
+ *   --external:node:* --external:cloudflare:*
+ * ```
+ *
+ * i.e. a benign flatten: it inlines our own relative chunk imports into one
+ * file, keeps the runtime modules external, and does NOT minify — so no
+ * identifier re-mangling on top of our `keepNames` output and ESM
+ * evaluation order is preserved. The cost is a second parse and the loss of
+ * sourcemaps across the flatten. `esbuild` is an optional peer dependency
+ * (catalog-managed): only Celld deploys need it.
  *
  * @internal not exported from the Celld barrel.
  */
@@ -80,7 +97,7 @@ export const resolveEsbuild: Effect.Effect<string, EsbuildNotFoundError> =
     return Effect.fail(
       new EsbuildNotFoundError({
         message:
-          "celld deploy requires esbuild. Add `esbuild` to your project's dependencies, or point CELLD_ESBUILD at an esbuild binary.",
+          "celld deploy requires esbuild (an optional peer dependency of alchemy). Add `esbuild` to your project's devDependencies, or point CELLD_ESBUILD at an esbuild binary.",
       }),
     );
   });

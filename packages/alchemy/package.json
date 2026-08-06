@@ -372,7 +372,6 @@
     "@types/aws-lambda": "catalog:",
     "aws4fetch": "catalog:",
     "capnweb": "^0.6.1",
-    "esbuild": "^0.25.0",
     "fast-glob": "^3.3.2",
     "fast-xml-parser": "catalog:",
     "ink": "^6.3.1",
@@ -388,6 +387,7 @@
   "devDependencies": {
     "@aws/durable-execution-sdk-js": "^2.1.0",
     "alchemy-test": "workspace:*",
+    "esbuild": "catalog:",
     "@cloudflare/containers": "catalog:",
     "@cloudflare/puppeteer": "^1.1.0",
     "@cloudflare/workers-types": "catalog:",
@@ -459,6 +459,7 @@
     "drizzle-kit": "catalog:",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
+    "esbuild": "catalog:",
     "mongodb": "^6.10.0",
     "mysql2": "^3.15.3",
     "pg": "^8.13.0",
@@ -488,6 +489,9 @@
       "optional": true
     },
     "drizzle-orm": {
+      "optional": true
+    },
+    "esbuild": {
       "optional": true
     },
     "mongodb": {
