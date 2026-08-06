@@ -547,7 +547,13 @@ export const make: (
         ),
       );
     }
-    const port = devOptions?.port ?? options?.dev?.port ?? 0;
+    // `nuxt.server.listen` is listhen-backed, and listhen treats `0` as
+    // "no port given" — it hunts upward from 3000, colliding with (or
+    // IPv6-shadowing) user-facing `alchemy dev` proxy ports. Allocate a
+    // real ephemeral port instead.
+    const port =
+      (devOptions?.port ?? options?.dev?.port) ||
+      (yield* FrameworkCore.findEphemeralPort());
     const listener = yield* Effect.acquireRelease(
       Effect.tryPromise({
         try: () => server.listen(port),

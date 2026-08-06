@@ -299,7 +299,12 @@ export const make: (
   const dev: Framework["Service"]["dev"] = Effect.fn(function* (devOptions) {
     const root = devOptions?.root ?? baseRoot;
     const vite = yield* loadVite(root);
-    const port = devOptions?.port ?? options?.dev?.port ?? 0;
+    // Vite treats `port: 0` as "no port given" and hunts upward from its
+    // default (5173), which can collide with (or IPv6-shadow) other dev
+    // servers' user-facing ports. Allocate a real ephemeral port instead.
+    const port =
+      (devOptions?.port ?? options?.dev?.port) ||
+      (yield* FrameworkCore.findEphemeralPort());
 
     const server = yield* Effect.acquireRelease(
       Effect.tryPromise({

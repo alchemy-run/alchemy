@@ -43,6 +43,7 @@ export type {
   DeployTargetServer,
   DeployTargetServices,
 } from "./DeployTarget.ts";
+export { findEphemeralPort } from "./DevPort.ts";
 export { Framework, FrameworkError } from "./Framework.ts";
 export type {
   FrameworkBuildOptions,

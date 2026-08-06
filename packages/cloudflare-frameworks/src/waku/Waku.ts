@@ -791,7 +791,14 @@ export const make = (
             process.env.NODE_ENV = INITIAL_NODE_ENV ?? "development";
           });
           const wakuConfig = yield* makeConfig(project, root, hooks);
-          const port = devOptions?.port ?? options?.port;
+          // Vite treats `port: 0` as "no port given" and hunts upward from
+          // its default (5173), which can collide with (or IPv6-shadow)
+          // other dev servers' user-facing ports. Allocate a real ephemeral
+          // port instead; keep strictPort off so a probe race just moves to
+          // the next ephemeral port.
+          const explicitPort = devOptions?.port || options?.port;
+          const port =
+            explicitPort || (yield* FrameworkCore.findEphemeralPort());
           const server = yield* Effect.acquireRelease(
             Effect.tryPromise({
               try: async () => {
@@ -801,14 +808,7 @@ export const make = (
                   plugins: [
                     project.vitePlugins.unstable_combinedPlugins(wakuConfig),
                   ],
-                  ...(port !== undefined
-                    ? {
-                        server: {
-                          port,
-                          strictPort: devOptions?.port !== undefined,
-                        },
-                      }
-                    : undefined),
+                  server: { port, strictPort: !!explicitPort },
                 });
                 return await server.listen();
               },

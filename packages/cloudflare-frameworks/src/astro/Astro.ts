@@ -274,7 +274,13 @@ export const make = <TargetConfig = unknown>(
           const root = yield* resolveRoot(devOptions?.root);
           const target = yield* resolveTarget(root);
           const astro = yield* loadAstro(root);
-          const config = makeConfig(root, target, { port: devOptions?.port });
+          // Vite (under Astro) treats `port: 0` as "no port given" and hunts
+          // upward from the default (4321), which can collide with (or
+          // IPv6-shadow) other dev servers' user-facing ports. Allocate a
+          // real ephemeral port instead.
+          const port =
+            devOptions?.port || (yield* FrameworkCore.findEphemeralPort());
+          const config = makeConfig(root, target, { port });
           const server = yield* Effect.acquireRelease(
             Effect.tryPromise({
               try: async () => await astro.dev(config),

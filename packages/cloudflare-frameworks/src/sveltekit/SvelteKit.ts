@@ -588,7 +588,12 @@ export const make: (
     );
     const vite = yield* loadVite(root);
     const config = yield* resolveViteConfig(root, adapter);
-    const port = devOptions?.port ?? options?.dev?.port;
+    // Without an explicit port Vite hunts upward from its default (5173),
+    // which can collide with (or IPv6-shadow) other dev servers'
+    // user-facing ports. Allocate a real ephemeral port instead.
+    const port =
+      (devOptions?.port ?? options?.dev?.port) ||
+      (yield* FrameworkCore.findEphemeralPort());
 
     const server = yield* Effect.acquireRelease(
       Effect.tryPromise({
@@ -597,7 +602,7 @@ export const make: (
             ...config,
             server: {
               ...config.server,
-              ...(port !== undefined ? { port } : undefined),
+              port,
             },
           });
           return await server.listen();
