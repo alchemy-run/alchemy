@@ -30,44 +30,63 @@ export class RenamePolicy extends Context.Service<
  * create+delete replacement when the id changes.
  *
  * ```ts
- * // was `Worker("Website/Worker", ...)` in a previous release:
- * const worker = yield* Worker("Website", props).pipe(
- *   renamedFrom("Website/Worker"),
+ * // was: Bucket("Bucket") — the row migrates and the deploy plans a noop
+ * const bucket = yield* Bucket("Assets").pipe(renamedFrom("Bucket"));
+ * ```
+ *
+ * A bare string resolves against the ambient namespace, exactly like the
+ * resource's own `id`:
+ *
+ * ```ts
+ * // FQN `Site/Assets`, former FQN `Site/Bucket`
+ * yield* Bucket("Assets").pipe(
+ *   renamedFrom("Bucket"),
+ *   Namespace.push("Site"),
  * );
  * ```
  *
- * A bare-string former id behaves exactly like the resource's own `id`
- * argument: it resolves against the ambient namespace, so a resource
- * declared inside `Namespace.push("Site")` with `renamedFrom("Worker")`
- * claims the former FQN `Site/Worker`. When the resource moved BETWEEN
- * namespaces, pass the absolute form instead — `renamedFrom({ fqn:
- * "Legacy/Worker" })` claims exactly that FQN regardless of the ambient
- * namespace.
+ * Moved between namespaces? Pass `{ fqn }` — the absolute FQN exactly as
+ * persisted in state, ignoring the ambient namespace:
  *
- * Renamed more than once? List every former id, MOST RECENT FIRST — the
- * planner checks them in declaration order and migrates from the first
- * matching row.
+ * ```ts
+ * // former FQN `LegacySite/Assets` (NOT `NewSite/LegacySite/Assets`)
+ * yield* Bucket("Assets").pipe(
+ *   renamedFrom({ fqn: "LegacySite/Assets" }),
+ *   Namespace.push("NewSite"),
+ * );
+ * ```
  *
- * Migration semantics (see Plan's `getPersistedRow`):
+ * Renamed more than once? List every former id, most recent first — the
+ * planner checks them in order and migrates from the first matching row:
  *
- * - No state row at the resource's FQN, a row at a former FQN → the row is
- *   the resource's state. Plan builds the node from it (an update/noop, not
- *   a create) and apply moves the row to the new FQN before any lifecycle
- *   operation runs.
- * - Rows at BOTH FQNs with the same `instanceId` → an interrupted
- *   migration; the leftover former row is dropped (state only — the
- *   physical resource is never touched). ALL former rows sharing the
- *   resource's instanceId are cleaned up in one apply, so a rename chain
- *   with repeated partial failures still converges in a single deploy.
- * - Rows at both FQNs with different `instanceId`s → the former row is some
- *   other resource's (e.g. a new resource reusing the old name after the
- *   rename shipped); it is ignored and handled like any other row.
- * - A former row whose `resourceType` is neither this resource's type nor
- *   one of its registered type-aliases is never migrated — it cannot be
- *   this resource's row, whatever its FQN says.
- * - A former FQN that is still actively declared by another resource is not
- *   a rename and is ignored; two resources claiming the same former FQN is
- *   ambiguous and fails the plan loudly.
+ * ```ts
+ * // rename history: Bucket → StaticAssets → Assets
+ * yield* Bucket("Assets").pipe(renamedFrom("StaticAssets", "Bucket"));
+ * ```
+ *
+ * Migration semantics, by state-row shape (see Plan's `getPersistedRow`;
+ * `new` = the row at the resource's FQN, `old` = a row at a former FQN):
+ *
+ * ```text
+ * new  old                     → outcome
+ * ──────────────────────────────────────────────────────────────────────
+ * —    row                     → migrate: the old row IS the resource's
+ *                                state (noop/update, never a create);
+ *                                apply moves it before any lifecycle op
+ * row  row, same instanceId    → interrupted migration: leftovers are
+ *                                dropped state-only — ALL of them in one
+ *                                apply — the physical resource is never
+ *                                touched
+ * row  row, diff instanceId    → someone else's row (a new resource
+ *                                reusing the old name): ignored, normal
+ *                                orphan handling
+ * any  row, diff resourceType  → never migrated — cannot be this
+ *                                resource's row, whatever its FQN says
+ * ```
+ *
+ * A former FQN that is still actively declared is not a rename and is
+ * ignored; two resources claiming the same former FQN fail the plan
+ * loudly.
  */
 export const renamedFrom =
   (...formerIds: [FormerId, ...FormerId[]]) =>
