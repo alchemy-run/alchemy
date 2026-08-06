@@ -69,6 +69,7 @@ export interface DurableObjectConfig<
  * ```
  *
  * ```typescript
+ * import * as Drizzle from "alchemy/Drizzle/Cloudflare";
  * import migrations from "./drizzle/migrations.js";
  * import { posts, relations, users } from "./schema.ts";
  *
