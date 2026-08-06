@@ -1,13 +1,15 @@
-import * as MysqlClient from "@effect/sql-mysql2/MysqlClient";
+// `@effect/sql-mysql2` (and mysql2 underneath) are optional peers — value
+// imports are deferred to first use so `alchemy/Drizzle` resolves without
+// them installed.
+import type * as MysqlClient from "@effect/sql-mysql2/MysqlClient";
 import type { AnyRelations, EmptyRelations } from "drizzle-orm";
 import type { EffectMysql2Database } from "drizzle-orm/effect-mysql2";
-import * as MySqlDrizzle from "drizzle-orm/effect-mysql2";
 import type { EffectDrizzleMySqlConfig } from "drizzle-orm/mysql-core/effect/utils";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Redacted from "effect/Redacted";
 import { makeExecutionMemo } from "../Runtime/ExecutionMemo.ts";
-import { resolveMySQLConfig, type MySQLConfig } from "../SQL/MySQL.ts";
+import type { MySQLConfig } from "../SQL/MySQL.ts";
 import { proxyChain } from "../Util/proxy-chain.ts";
 
 /**
@@ -55,6 +57,14 @@ export const MySQL = <
   Effect.map(
     makeExecutionMemo(
       Effect.gen(function* () {
+        const [MysqlClient, MySqlDrizzle, { resolveMySQLConfig }] =
+          yield* Effect.promise(() =>
+            Promise.all([
+              import("@effect/sql-mysql2/MysqlClient"),
+              import("drizzle-orm/effect-mysql2"),
+              import("../SQL/MySQL.ts"),
+            ]),
+          );
         const { client, ...drizzleConfig } = config ?? {};
         const mysqlCtx = yield* Layer.build(
           MysqlClient.layer(
