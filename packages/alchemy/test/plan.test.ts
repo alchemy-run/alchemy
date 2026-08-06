@@ -4678,6 +4678,125 @@ describe("renamed resources (renamedFrom)", () => {
   );
 
   test(
+    "renamedFrom on a fresh resource (no rows anywhere) is inert",
+    Effect.gen(function* () {
+      // Every new StaticSite carries `renamedFrom(`${id}/Worker`)` forever,
+      // so a green-field deploy must behave exactly as if the decoration
+      // were absent: a plain create — and the cold-start adoption probe
+      // still runs (probe suppression only applies while a row is actually
+      // migrating away).
+      const reads: string[] = [];
+      const plan = yield* Effect.gen(function* () {
+        yield* TestResource("New", { string: "v" }).pipe(renamedFrom("Old"));
+        return {};
+      }).pipe(
+        makePlan,
+        Effect.provide(
+          Layer.succeed(TestResourceHooks, {
+            read: (id: string) =>
+              Effect.sync(() => {
+                reads.push(id);
+                return undefined;
+              }),
+          }),
+        ),
+      );
+
+      const node = plan.resources.New!;
+      expect(node.action).toEqual("create");
+      expect(node.renamedFrom).toBeUndefined();
+      expect(node.state).toBeUndefined();
+      // The state-loss recovery probe still ran.
+      expect(reads).toEqual(["New"]);
+      expect(Object.keys(plan.deletions)).toHaveLength(0);
+    }),
+  );
+
+  test(
+    "a rename combined with a replacement-triggering change plans a replace carrying the rename",
+    Effect.gen(function* () {
+      yield* seed({
+        Old: {
+          instanceId,
+          providerVersion: 0,
+          logicalId: "Old",
+          fqn: "Old",
+          namespace: undefined,
+          resourceType: "Test.TestResource",
+          status: "created",
+          props: { string: "v", replaceString: "a" },
+          attr: { string: "v", replaceString: "a" } as any,
+          bindings: [],
+          downstream: [],
+        },
+      });
+
+      const plan = yield* Effect.gen(function* () {
+        yield* TestResource("New", {
+          string: "v",
+          replaceString: "b",
+        }).pipe(renamedFrom("Old"));
+        return {};
+      }).pipe(makePlan);
+
+      // The replacement wins the action; the rename rides along so apply
+      // still moves the row (and the old-generation delete targets the
+      // migrated attrs under the new FQN).
+      const node = plan.resources.New!;
+      expect(node.action).toEqual("replace");
+      expect(node.renamedFrom).toEqual(["Old"]);
+      expect(node.state?.instanceId).toEqual(instanceId);
+      expect(Object.keys(plan.deletions)).toHaveLength(0);
+    }),
+  );
+
+  test(
+    "an interrupted-create row migrates and resumes the create under the new FQN",
+    Effect.gen(function* () {
+      // The pre-rename deploy crashed mid-create: the row is `creating`.
+      yield* seed({
+        OldBucket: {
+          ...bucketRow("OldBucket"),
+          status: "creating",
+        } as ResourceState,
+      });
+
+      const plan = yield* Effect.gen(function* () {
+        yield* Bucket("NewBucket", { name: "b" }).pipe(
+          renamedFrom("OldBucket"),
+        );
+        return {};
+      }).pipe(makePlan);
+
+      // Create resumes with the SAME instanceId under the new identity —
+      // deterministic physical names regenerate identically, so the
+      // half-created cloud resource is found rather than duplicated.
+      const node = plan.resources.NewBucket!;
+      expect(node.action).toEqual("create");
+      expect(node.renamedFrom).toEqual(["OldBucket"]);
+      expect(node.state?.instanceId).toEqual(instanceId);
+      expect(node.state?.fqn).toEqual("NewBucket");
+      expect(Object.keys(plan.deletions)).toHaveLength(0);
+    }),
+  );
+
+  test(
+    "a duplicated former id is collected once",
+    Effect.gen(function* () {
+      yield* seed({ OldBucket: bucketRow("OldBucket") });
+
+      const plan = yield* Effect.gen(function* () {
+        yield* Bucket("NewBucket", { name: "b" }).pipe(
+          renamedFrom("OldBucket", { fqn: "OldBucket" }),
+        );
+        return {};
+      }).pipe(makePlan);
+
+      expect(plan.resources.NewBucket?.renamedFrom).toEqual(["OldBucket"]);
+    }),
+  );
+
+  test(
     "two resources claiming the same former FQN fail the plan loudly",
     Effect.gen(function* () {
       const exit = yield* Effect.gen(function* () {

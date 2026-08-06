@@ -446,6 +446,9 @@ export const make = <A>(
       const renamedFrom: string[] = [];
       for (const formerFqn of resource.FormerFqns) {
         if (formerFqnClaims.get(formerFqn) !== resource.FQN) continue;
+        // The same former id may be listed twice (or resolve identically);
+        // collect each former row once.
+        if (renamedFrom.includes(formerFqn)) continue;
         const formerPersisted = yield* state.get({
           stack: stackName,
           stage: stage,
