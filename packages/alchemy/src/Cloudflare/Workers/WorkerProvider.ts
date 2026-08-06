@@ -25,6 +25,7 @@ import * as Provider from "../../Provider.ts";
 import { type ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { cachedFunction } from "../../Util/cached-function.ts";
+import { initialCwd } from "../../Util/Node.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { localRuntimeServices } from "../LocalRuntime.ts";
@@ -2170,7 +2171,8 @@ export const LiveWorkerProvider = () =>
               // package) — absolutize before handing it over (#796).
               main: props.vite?.main
                 ? path.resolve(
-                    props.vite.rootDir ?? process.cwd(),
+                    initialCwd,
+                    props.vite.rootDir ?? ".",
                     props.vite.main,
                   )
                 : undefined,
@@ -2186,8 +2188,11 @@ export const LiveWorkerProvider = () =>
                   ...(props.assets && typeof props.assets !== "string"
                     ? props.assets
                     : undefined),
+                  // `clientDirectory` from the build child is absolute;
+                  // the base only matters as a legacy fallback.
                   directory: path.resolve(
-                    props.vite?.rootDir ?? process.cwd(),
+                    initialCwd,
+                    props.vite?.rootDir ?? ".",
                     clientDirectory,
                   ),
                   // The resolved Vite `base` is what rewrote the URLs in
@@ -2726,12 +2731,20 @@ export const LiveWorkerProvider = () =>
         } satisfies Worker["Attributes"]["hash"];
         // Lower the `Worker.URL` sentinel into the aliased preview URL —
         // same lowering `putWorker` performs, with the alias standing in
-        // for the script's own URL.
+        // for the script's own URL. `Worker.Self` lowers to a
+        // service binding on the parent script (versions have no name of
+        // their own).
         const metadataBindings = bindings.flatMap((b) =>
           (b.data.bindings ?? []).map((item) =>
             item.type === "self_url"
               ? { type: "plain_text" as const, name: item.name, text: selfUrl! }
-              : item,
+              : item.type === "self_service"
+                ? {
+                    type: "service" as const,
+                    name: item.name,
+                    service: parentName,
+                  }
+                : item,
           ),
         );
         appendAlchemyAndEnvBindings(
@@ -2978,6 +2991,11 @@ export const LiveWorkerProvider = () =>
             // Cloudflare has no native binding for it.
             if (item.type === "self_url") {
               return { type: "plain_text", name: item.name, text: selfUrl! };
+            }
+            // Lower the `Worker.Self` sentinel into a service
+            // binding targeting this Worker's own physical name.
+            if (item.type === "self_service") {
+              return { type: "service", name: item.name, service: name };
             }
             if (
               item.type === "durable_object_namespace" &&

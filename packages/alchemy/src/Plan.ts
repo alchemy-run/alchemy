@@ -2,10 +2,8 @@
 /** @effect-diagnostics missingEffectError:off */
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Redacted from "effect/Redacted";
 import { asEffect } from ".//Util/types.ts";
 import { isAction, type ActionLike } from "./Action.ts";
 import {
@@ -62,6 +60,7 @@ import {
   type UpdatedResourceState,
   type UpdatingReourceState,
 } from "./State/index.ts";
+import { isPlainData, mapPlainData } from "./Util/data.ts";
 import { findCycleMembers } from "./Util/scc.ts";
 import { hashInput } from "./Util/sha256.ts";
 
@@ -485,7 +484,15 @@ export const make = <A>(
      * `reconcile`. This is the value plan nodes carry; the diff-facing view
      * is derived from it by {@link materializeStableRefs}.
      */
-    const resolveInput = (input: any): Effect.Effect<any, Config.ConfigError> =>
+    const resolveInput = (
+      input: any,
+      // Ancestor chain of the current walk. A value that appears on its own
+      // ancestor path is a true cycle and is cut to `undefined` (a cycle can
+      // never persist or serialize anyway); an immutable per-level set (not
+      // a shared visited-set) keeps legitimately-shared diamond references
+      // intact and is race-free under `concurrency: "unbounded"` (#1082).
+      ancestors: ReadonlySet<object> = new Set(),
+    ): Effect.Effect<any, Config.ConfigError> =>
       Effect.gen(function* () {
         if (!input) {
           return input;
@@ -498,17 +505,7 @@ export const make = <A>(
           // providers receive a resolved value instead of a Config object.
           // `Config.redacted` resolves to a `Redacted`, which stays opaque via
           // the branch below.
-          return yield* resolveInput(yield* input);
-        } else if (Duration.isDuration(input) || Redacted.isRedacted(input)) {
-          // Opaque values that are resolved downstream. We don't walk them
-          // because it would strip their prototype, resulting in a plain object
-          // that downstream consumers can't interpret. Redacted additionally
-          // stays wrapped to preserve the secrecy boundary.
-          return input;
-        } else if (Array.isArray(input)) {
-          return yield* Effect.all(input.map(resolveInput), {
-            concurrency: "unbounded",
-          });
+          return yield* resolveInput(yield* input, ancestors);
         } else if (isResource(input)) {
           // Resource objects have dynamic properties (path, hash, etc.) that are
           // created on-demand by a Proxy getter and aren't enumerable via Object.entries.
@@ -521,17 +518,37 @@ export const make = <A>(
             // upstream) — keep it evaluable for Apply.
             return resolved;
           }
-          return yield* resolveInput(resolved);
-        } else if (typeof input === "object") {
+          return yield* resolveInput(resolved, ancestors);
+        } else if (isPlainData(input)) {
+          if (ancestors.has(input)) {
+            return undefined;
+          }
+          const nested = new Set(ancestors).add(input);
+          if (Array.isArray(input)) {
+            return yield* Effect.all(
+              input.map((item) => resolveInput(item, nested)),
+              { concurrency: "unbounded" },
+            );
+          }
           return Object.fromEntries(
             yield* Effect.all(
               Object.entries(input).map(([key, value]) =>
-                resolveInput(value).pipe(Effect.map((value) => [key, value])),
+                resolveInput(value, nested).pipe(
+                  Effect.map((value) => [key, value]),
+                ),
               ),
               { concurrency: "unbounded" },
             ),
           );
         }
+        // Everything else is an opaque leaf returned by identity: Duration,
+        // Redacted, Date, and effect runtime values (a Worker's `exports`
+        // carries each DO's `constructor` Effect and captured `services`
+        // Context). Rebuilding a class instance entry-by-entry would strip
+        // its prototype, and effect ≥4.0.0-beta.103's Context is cyclic
+        // (#1082). Redacted additionally stays wrapped to preserve the
+        // secrecy boundary. This sits after `Config.isConfig` on purpose —
+        // Configs are Effects but must still resolve.
         return input;
       });
 
@@ -550,26 +567,26 @@ export const make = <A>(
      * the upstream's fresh non-stable attributes (e.g. a Lambda Version's
      * `version` number — #993's alias promotion bug).
      */
-    const materializeStableRefs = (input: any): any => {
+    const materializeStableRefs = (
+      input: any,
+      // Ancestor-path cycle guard — see resolveInput (#1082). Sync DFS, so
+      // add/delete around the recursion is race-free.
+      ancestors: WeakSet<object> = new WeakSet(),
+    ): any => {
       // Expr checks come first: Output proxies are callable, so a plain
       // `typeof input === "object"` guard would let them slip through.
       if (Output.isResourceExpr(input) && input.stables) {
-        return materializeStableRefs(input.stables);
+        return materializeStableRefs(input.stables, ancestors);
       } else if (Output.isExpr(input)) {
         // Genuinely unknown (e.g. a creating upstream) — nothing to show diff.
         return input;
-      } else if (!input || typeof input !== "object") {
+      } else if (!input || !isPlainData(input)) {
+        // Primitives and non-plain instances (Duration, Redacted, Date,
+        // Effect/Layer/Context) are leaves — see isPlainData (#1082).
         return input;
-      } else if (Duration.isDuration(input) || Redacted.isRedacted(input)) {
-        return input;
-      } else if (Array.isArray(input)) {
-        return input.map(materializeStableRefs);
       }
-      return Object.fromEntries(
-        Object.entries(input).map(([key, value]) => [
-          key,
-          materializeStableRefs(value),
-        ]),
+      return mapPlainData(input, ancestors, (child) =>
+        materializeStableRefs(child, ancestors),
       );
     };
 

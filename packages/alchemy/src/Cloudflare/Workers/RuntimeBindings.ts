@@ -218,11 +218,17 @@ export const toRuntimeBinding = Effect.fn(function* (
         allowedDestinationAddresses: b.allowedDestinationAddresses,
         allowedSenderAddresses: b.allowedSenderAddresses,
       });
+    case "self_service":
+      // A service binding to the worker itself: served in-process by the
+      // runtime's self service (bypasses the assets middleware), matching
+      // the production `service: <own name>` lowering.
+      return Service.self(b.name);
     case "service":
       return Service.local({
         binding: b.name,
         scriptName: b.service,
         entrypoint: b.entrypoint,
+        props: b.props,
       });
     case "stream":
       // Local emulation stores videos in a local simulator (no transcoding,

@@ -3,6 +3,8 @@ export * from "./Application.ts";
 export * from "./Bookmark.ts";
 export * from "./Certificate.ts";
 export * from "./CustomPage.ts";
+export * from "./GetIdentityProvider.ts";
+export * from "./GetIdentityProviderHttp.ts";
 export * from "./Group.ts";
 export * from "./IdentityProvider.ts";
 export * from "./InfrastructureTarget.ts";

@@ -4,6 +4,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
+import { existsSync } from "node:fs";
 import { decodeFqn, encodeFqn } from "../FQN.ts";
 import { recordStateStoreInit } from "../Telemetry/Metrics.ts";
 import {
@@ -29,10 +30,28 @@ import {
 } from "./State.ts";
 import { encodeState, reviveState } from "./StateEncoding.ts";
 
+/**
+ * The process's working directory, captured ONCE at module load.
+ *
+ * The local state tree is anchored here instead of calling `process.cwd()`
+ * at store-build time: every state store built in this process — a deploy's
+ * and its later destroy's alike — must resolve the SAME `.alchemy/state`
+ * tree. A per-build `process.cwd()` read lets any transient working
+ * directory change (third-party code sharing the process) point one
+ * session's store at a different (empty) tree. A destroy built during such
+ * a window lists no state, plans "no changes", and silently leaks every
+ * cloud resource of the stack.
+ */
+const initialCwd = process.cwd();
+
 export interface LocalStateOptions {
   /**
    * Directory the `.alchemy` state root is created under.
-   * @default process.cwd()
+   *
+   * An EXPLICIT anchor, so it is immune to the cwd race described above.
+   * Omit it and the store anchors on `initialCwd`.
+   *
+   * @default the process's working directory at module load
    */
   rootDir?: string;
 }
@@ -58,9 +77,7 @@ export const makeLocalState = (options?: LocalStateOptions) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const rootDir =
-      options?.rootDir ?? (yield* Effect.sync(() => process.cwd()));
-    const dotAlchemy = path.join(rootDir, ".alchemy");
+    const dotAlchemy = path.join(options?.rootDir ?? initialCwd, ".alchemy");
     const stateDir = path.join(dotAlchemy, "state");
 
     const fail = (err: PlatformError) =>
@@ -78,6 +95,45 @@ export const makeLocalState = (options?: LocalStateOptions) =>
         Effect.catchTag("PlatformError", (e) =>
           e.reason._tag === "NotFound" ? Effect.void : fail(e),
         ),
+      );
+
+    // Directory-level NotFound recovery with a trust-but-verify twist.
+    //
+    // `list` and `deleteStack` treat a missing stage/stack directory as
+    // "no state" — the legitimate shape for a never-deployed (or fully
+    // destroyed) stack. But a FALSE NotFound here is catastrophic: a
+    // destroy that cannot see its state plans "no changes" and silently
+    // leaks every cloud resource of the stack. So before recovering, the
+    // async result is cross-checked with a synchronous `existsSync` — a
+    // deliberately independent code path (`node:fs`, not the FileSystem
+    // service) so a misbehaving async fs answer cannot vouch for itself.
+    // If the directory actually exists, fail loudly instead of degrading
+    // to an empty listing. A directory cannot legitimately reappear
+    // between the two checks: nothing recreates a stage dir concurrently
+    // with the session that is listing or deleting it.
+    const recoverMissingDir = <T>(
+      dir: string,
+      effect: Effect.Effect<T, PlatformError, never>,
+    ) =>
+      effect.pipe(
+        Effect.catchTag("PlatformError", (e) => {
+          if (e.reason._tag !== "NotFound") return fail(e);
+          return Effect.flatMap(
+            Effect.sync(() => existsSync(dir)),
+            (exists) =>
+              exists
+                ? Effect.fail(
+                    new StateStoreError({
+                      message:
+                        `state store reported NotFound for '${dir}', but the directory exists — ` +
+                        `refusing to treat the stack's state as empty (a destroy acting on this ` +
+                        `answer would leak every resource of the stack)`,
+                      cause: e,
+                    }),
+                  )
+                : Effect.void,
+          );
+        }),
       );
 
     const stageDir = ({ stack, stage }: { stack: string; stage: string }) =>
@@ -588,7 +644,7 @@ export const makeLocalState = (options?: LocalStateOptions) =>
               ? path.join(stateDir, stack)
               : stageDir({ stack, stage });
           return fs.remove(dir, { recursive: true }).pipe(
-            recover,
+            (eff) => recoverMissingDir(dir, eff),
             // Drop cached `ensure`d directories under the removed tree, or a
             // later `set` for the same (stack, stage) skips makeDirectory and
             // its write fails with NotFound — silently swallowed by `recover`.
@@ -605,7 +661,7 @@ export const makeLocalState = (options?: LocalStateOptions) =>
         }),
       list: (request) =>
         fs.readDirectory(stageDir(request)).pipe(
-          recover,
+          (eff) => recoverMissingDir(stageDir(request), eff),
           Effect.map((files) =>
             (files ?? [])
               // Only decode committed state files. Exclude:

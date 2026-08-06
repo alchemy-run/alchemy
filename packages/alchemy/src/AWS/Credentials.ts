@@ -106,6 +106,7 @@ export const makeAssumeRoleResolver = (options: {
           ? creds.SecretAccessKey
           : Redacted.make(creds.SecretAccessKey),
         sessionToken: Redacted.make(creds.SessionToken),
+        region: options.region ?? "us-east-1",
         expiration: creds.Expiration?.getTime(),
       } satisfies ResolvedCredentials;
     }).pipe(

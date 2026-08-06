@@ -679,11 +679,12 @@ const stageTracedNestjsArtifact = Effect.fn(function* (options: {
   const entry = path.join(options.appPath, options.compiledEntry);
   const entrypoint = path.relative(sourceRoot, entry).replaceAll("\\", "/");
   const fileList = yield* Effect.tryPromise({
-    try: async () => {
-      const { nodeFileTrace } = await importNft();
-      const result = await nodeFileTrace([entry], { base: sourceRoot });
-      return Array.from(result.fileList);
-    },
+    try: () =>
+      importNft()
+        .then(({ nodeFileTrace }) =>
+          nodeFileTrace([entry], { base: sourceRoot }),
+        )
+        .then((result) => Array.from(result.fileList)),
     catch: (cause) =>
       cause instanceof Error
         ? cause

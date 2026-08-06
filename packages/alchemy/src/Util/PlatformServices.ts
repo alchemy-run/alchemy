@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import type { FileSystem } from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import { disableCrossSpawnChdir } from "./Node.ts";
 import type { Path } from "effect/Path";
 import { defaultTeardown, type Teardown } from "effect/Runtime";
 import type { Stdio } from "effect/Stdio";
@@ -82,6 +83,10 @@ export const runMain = <E, A>(
     readonly teardown?: Teardown | undefined;
   },
 ): void => {
+  // Every alchemy process (CLI, exec child, sidecar, build/dev runners)
+  // runs concurrent effects that depend on a stable working directory —
+  // forbid cross-spawn's transient process-wide chdir (see Util/Node.ts).
+  disableCrossSpawnChdir();
   const opts = {
     ...options,
     teardown: options?.teardown ?? exitingTeardown,

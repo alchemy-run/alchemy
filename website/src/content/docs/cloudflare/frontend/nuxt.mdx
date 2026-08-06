@@ -5,27 +5,75 @@ sidebar:
   order: 10
 ---
 
-`Cloudflare.Website.Nuxt` deploys a Nuxt app as a Cloudflare Worker.
-It builds the app through your project's own `@nuxt/kit` with nitro's
-`cloudflare_module` preset: the nitro server bundle deploys as the
-Worker script, and client assets plus prerendered pages deploy as
-Worker static assets. There is no `nitro.preset` to edit, no Wrangler
-file, and no build command to run.
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+export const devDeps = "@distilled.cloud/nuxt";
+
+`Cloudflare.Website.Nuxt` deploys a [Nuxt](https://nuxt.com) app as
+a Cloudflare Worker. It builds the app through your project's own
+`@nuxt/kit` with nitro's `cloudflare_module` preset: the nitro server
+bundle deploys as the Worker script, and client assets plus
+prerendered pages deploy as Worker static assets. There is no
+`nitro.preset` to edit, no Wrangler file, and no build command to
+run.
 
 ## Install
 
-The build integration is loaded from your project at deploy time:
+The build integration is not bundled with alchemy — the resource
+dynamically imports `@distilled.cloud/nuxt` from your project at
+deploy time, so it must be installed alongside your framework. It is
+only used at build time, so a dev dependency is enough:
 
-```sh
-bun add -d @distilled.cloud/nuxt
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun add -d ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm install -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+</Tabs>
+
+## Configure Nuxt
+
+There is no framework config to change: your `nuxt.config.ts` loads
+natively — modules, layers, and all. Deploy-specific overrides are
+merged over it via the `nuxt` prop (the override wins) — see
+[Prerendering](#prerendering) below for an example.
+
+Don't set `nitro.preset` — the Cloudflare deploy target owns the
+preset, and a foreign preset is a hard error.
+
+## Declare the Website
+
+Declare the site as a module-level const (rather than inline in the
+Stack) and derive the typed shape of its bindings from it:
+
+```typescript
+// alchemy.run.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+
+export const Website = Cloudflare.Website.Nuxt("Website");
+
+export type WebsiteEnv = Cloudflare.InferEnv<typeof Website>;
 ```
 
+`WebsiteEnv` is the typed shape of the Worker's bindings, derived
+from the class — you'll import it into your Nuxt code in
+[Read bindings in server code](#read-bindings-in-server-code).
+
 ## Add it to the Stack
+
+Yield the class from your Stack and return its URL:
 
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(
@@ -35,7 +83,7 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-    const site = yield* Cloudflare.Website.Nuxt("Website");
+    const site = yield* Website;
     return { url: site.url };
   }),
 );
@@ -49,44 +97,51 @@ See
 [examples/cloudflare-website-nuxt](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-website-nuxt)
 for the checked-in example.
 
-## Your `nuxt.config.ts` still applies
-
-Unlike some of its siblings, the resource loads your project's
-`nuxt.config.ts` natively — modules, layers, and all. The `nuxt` prop
-is for deploy-specific overrides merged over it (the override wins):
-
-```typescript
-const site = yield* Cloudflare.Website.Nuxt("Website", {
-  nuxt: {
-    routeRules: {
-      "/about": { prerender: true },
-    },
-  },
-});
-```
-
-Don't set `nitro.preset` — the Cloudflare deploy target owns the
-preset, and a foreign preset is a hard error.
-
-## Bindings
+## Add bindings
 
 The resource returns a plain `Worker`, so `env` accepts the full
 binding vocabulary — KV namespaces, R2 buckets, Durable Objects,
 secrets:
 
-```typescript
-const bucket = yield* Cloudflare.R2.Bucket("Uploads");
+```diff lang="typescript"
+// alchemy.run.ts
++import * as Config from "effect/Config";
 
-const site = yield* Cloudflare.Website.Nuxt("Website", {
-  env: {
-    UPLOADS: bucket,
-    API_KEY: Alchemy.secret("API_KEY"),
-  },
++export const Uploads = Cloudflare.R2.Bucket("Uploads");
+
+export const Website = Cloudflare.Website.Nuxt("Website", {
++  env: {
++    UPLOADS: Uploads,
++    API_KEY: Config.redacted("API_KEY"),
++  },
 });
 ```
 
-Server routes and SSR read them through nitro's Cloudflare runtime
-contract, `event.context.cloudflare.env`:
+`Uploads` is a description, not a deploy — Alchemy provisions the
+real bucket because the Website binds it. `Config.redacted` reads
+`API_KEY` from your environment at deploy time and binds it as a
+Worker secret — see [Secrets & env](/cloudflare/security/secrets-env).
+
+## Read bindings in server code
+
+Server routes and SSR read bindings through nitro's Cloudflare
+runtime contract, `event.context.cloudflare.env`. Type it once by
+augmenting h3's event context with the inferred env type:
+
+```typescript
+// server/types.d.ts
+import type { WebsiteEnv } from "../alchemy.run.ts";
+
+declare module "h3" {
+  interface H3EventContext {
+    cloudflare: {
+      env: WebsiteEnv;
+    };
+  }
+}
+```
+
+Every server route now gets fully typed bindings:
 
 ```typescript
 // server/api/upload.ts
@@ -97,8 +152,11 @@ export default defineEventHandler(async (event) => {
 });
 ```
 
-`event.context.cf` and `event.context.cloudflare.context.waitUntil`
-are available the same way.
+`event.context.cloudflare.env.UPLOADS` is typed as an R2 bucket and
+`.API_KEY` as a string — renaming a binding in `alchemy.run.ts` is a
+type error in your routes. `event.context.cf` and
+`event.context.cloudflare.context.waitUntil` are available the same
+way.
 
 ## Prerendering
 
@@ -107,7 +165,7 @@ Routes marked for prerendering in `routeRules` (or via
 served as static assets, with no Worker invocation:
 
 ```typescript
-const site = yield* Cloudflare.Website.Nuxt("Website", {
+export const Website = Cloudflare.Website.Nuxt("Website", {
   nuxt: {
     routeRules: {
       "/about": { prerender: true },
@@ -137,7 +195,7 @@ export default nitroHandler;
 ```
 
 ```typescript
-const site = yield* Cloudflare.Website.Nuxt("Website", {
+export const Website = Cloudflare.Website.Nuxt("Website", {
   main: "worker-entry.ts",
   env: {
     COUNTER: Cloudflare.DurableObject("Counter", {
@@ -148,20 +206,6 @@ const site = yield* Cloudflare.Website.Nuxt("Website", {
 ```
 
 Every framework route keeps working through the re-exported handler.
-
-## Rebuilds and memo
-
-Input files are content-hashed (respecting `.gitignore` by default),
-so an unchanged project skips both the build and the deploy. Narrow
-the scope with `memo` when the project lives in a large repository:
-
-```typescript
-const site = yield* Cloudflare.Website.Nuxt("Website", {
-  memo: {
-    include: ["app/**", "server/**", "public/**", "nuxt.config.ts", "package.json"],
-  },
-});
-```
 
 ## Local dev
 

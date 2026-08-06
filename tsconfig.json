@@ -142,6 +142,9 @@
       "path": "./examples/cloudflare-website-astro/tsconfig.json"
     },
     {
+      "path": "./examples/cloudflare-website-nextjs/tsconfig.json"
+    },
+    {
       "path": "./examples/cloudflare-website-nuxt/tsconfig.json"
     },
     {

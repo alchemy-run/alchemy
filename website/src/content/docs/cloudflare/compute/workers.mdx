@@ -431,6 +431,49 @@ export default {
 };
 ```
 
+## Named entrypoints
+
+Binding another Worker directly (`env: { TARGET: worker }`) targets its
+*default* entrypoint. A Worker can export additional
+[`WorkerEntrypoint` classes](https://developers.cloudflare.com/workers/runtime-apis/bindings/service-bindings/rpc/) —
+workerd treats every named class export of an entry module as an
+entrypoint. Bind one by name with `Cloudflare.WorkerEntrypoint`:
+
+```typescript
+const caller = yield* Cloudflare.Worker("Caller", {
+  main: "./src/caller.ts",
+  env: {
+    API: Cloudflare.WorkerEntrypoint(target, "Api"),
+  },
+});
+```
+
+`InferEnv` types the entry as a `Fetcher` service stub; RPC methods on
+the target class are called on it directly (`env.API.greet("alice")`).
+
+## Entrypoint props
+
+The options form attaches properties the target entrypoint reads from
+`this.ctx.props` — workerd's per-binding configuration channel. `Output`
+values resolve at deploy time:
+
+```typescript
+env: {
+  VENDOR: Cloudflare.WorkerEntrypoint(vendorWorker, {
+    entrypoint: "Vendor",
+    props: { baseUrl: site.url },
+  }),
+}
+```
+
+:::caution
+`alchemy dev` delivers `props` to the local workerd today. On deployed
+Workers the Cloudflare API's binding schema does not carry the field
+yet, so `props` are dropped at upload until the distilled `workers`
+service adds it — the binding itself (service + entrypoint) deploys
+correctly either way.
+:::
+
 ## Versions & gradual deployments
 
 Every deploy of a Worker uploads an immutable

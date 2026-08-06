@@ -182,7 +182,7 @@ const retryThroughDeletionWindow = <A, E extends { _tag: string }, R>(
   Effect.retry(self, {
     while: (e) =>
       e._tag === "InvalidRequestException" &&
-      isDeletionInProgress((e as { Message?: string }).Message),
+      isDeletionInProgress((e as { message?: string }).message),
     schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
   });
 
@@ -479,7 +479,7 @@ export const SecretProvider = () =>
             .pipe(
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
               Effect.catchTag("InvalidRequestException", (error) =>
-                isDeletionInProgress(error.Message)
+                isDeletionInProgress(error.message)
                   ? Effect.void
                   : Effect.fail(error),
               ),

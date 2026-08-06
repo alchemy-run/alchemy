@@ -5,6 +5,10 @@ sidebar:
   order: 12
 ---
 
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+export const devDeps = "@distilled.cloud/waku";
+
 `Cloudflare.Website.Waku` deploys a [Waku](https://waku.gg) app as a
 Cloudflare Worker. It builds the project programmatically: the React
 Server Components server bundle deploys as the Worker script, and the
@@ -14,18 +18,57 @@ no build command to run.
 
 ## Install
 
-The build integration is loaded from your project at deploy time:
+The build integration is not bundled with alchemy — the resource
+dynamically imports `@distilled.cloud/waku` from your project at
+deploy time, so it must be installed alongside your framework. It is
+only used at build time, so a dev dependency is enough:
 
-```sh
-bun add -d @distilled.cloud/waku
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun add -d ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm install -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+</Tabs>
+
+## Configure Waku
+
+There is no framework config to write: the resource builds the
+project programmatically, so a fresh Waku project deploys as-is —
+your `waku.config.ts` stays untouched.
+
+## Declare the Website
+
+Declare the site as a module-level const (rather than inline in the
+Stack) and derive the typed shape of its bindings from it:
+
+```typescript
+// alchemy.run.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+
+export const Website = Cloudflare.Website.Waku("Website");
+
+export type WebsiteEnv = Cloudflare.InferEnv<typeof Website>;
 ```
 
+`WebsiteEnv` is the typed shape of the Worker's bindings, derived
+from the class — you'll import it into your Waku code in
+[Read bindings in server code](#read-bindings-in-server-code).
+
 ## Add it to the Stack
+
+Yield the class from your Stack and return its URL:
 
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(
@@ -35,7 +78,7 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-    const site = yield* Cloudflare.Website.Waku("Site");
+    const site = yield* Website;
     return { url: site.url };
   }),
 );
@@ -46,31 +89,73 @@ compatibility flag is added automatically — you don't need to pass
 it. SSG pages are served at their extensionless URLs (`/about`) via
 the default `drop-trailing-slash` asset handling.
 
+During `alchemy dev`, Waku's dev server runs with SSR executing in
+workerd, so server code sees the same runtime and the same real
+bindings it will have in production.
+
 See
 [examples/cloudflare-website-waku](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-website-waku)
 for the checked-in example.
 
-## Bindings
+## Add bindings
 
 The resource returns a plain `Worker`, so `env` accepts the full
 binding vocabulary — KV namespaces, R2 buckets, Durable Objects,
 secrets:
 
-```typescript
-const bucket = yield* Cloudflare.R2.Bucket("Uploads");
+```diff lang="typescript"
+// alchemy.run.ts
++import * as Config from "effect/Config";
 
-const site = yield* Cloudflare.Website.Waku("Site", {
-  env: {
-    UPLOADS: bucket,
-  },
++export const Uploads = Cloudflare.R2.Bucket("Uploads");
+
+export const Website = Cloudflare.Website.Waku("Website", {
++  env: {
++    UPLOADS: Uploads,
++    API_KEY: Config.redacted("API_KEY"),
++  },
 });
 ```
 
-Server components and API routes read them from the
-`cloudflare:workers` env at request time. Prefer a guarded dynamic
-import in page modules — Waku's SSG step renders static pages in
-Node, where a top-level `import { env } from "cloudflare:workers"`
-cannot resolve.
+`Uploads` is a description, not a deploy — Alchemy provisions the
+real bucket because the Website binds it. `Config.redacted` reads
+`API_KEY` from your environment at deploy time and binds it as a
+Worker secret — see [Secrets & env](/cloudflare/security/secrets-env).
+
+## Read bindings in server code
+
+Server components and API routes read bindings from the
+`cloudflare:workers` env at request time. Use a guarded dynamic
+import — Waku's SSG step renders static pages in Node, where a
+top-level `import { env } from "cloudflare:workers"` cannot
+resolve — and type the result with the inferred env type:
+
+```typescript
+// src/lib/env.ts
+import type { WebsiteEnv } from "../../alchemy.run.ts";
+
+export const getEnv = async (): Promise<WebsiteEnv> => {
+  const { env } = await import("cloudflare:workers");
+  return env as WebsiteEnv;
+};
+```
+
+Server code calls it per request:
+
+```typescript
+// src/pages/api/upload.ts
+import { getEnv } from "../../lib/env.ts";
+
+export const POST = async (request: Request) => {
+  const env = await getEnv();
+  await env.UPLOADS.put("hello.txt", await request.text());
+  return Response.json({ ok: true });
+};
+```
+
+`env.UPLOADS` is typed as an R2 bucket and `env.API_KEY` as a
+string — renaming a binding in `alchemy.run.ts` is a type error in
+your server code.
 
 ## Custom Worker entry (Durable Objects)
 
@@ -89,7 +174,7 @@ export default {
 ```
 
 ```typescript
-const site = yield* Cloudflare.Website.Waku("Site", {
+export const Website = Cloudflare.Website.Waku("Website", {
   main: "src/worker-entry.ts",
   env: {
     COUNTER: Cloudflare.DurableObject("Counter", {
@@ -98,28 +183,3 @@ const site = yield* Cloudflare.Website.Waku("Site", {
   },
 });
 ```
-
-## Rebuilds and memo
-
-Input files are content-hashed (respecting `.gitignore` by default),
-so an unchanged project skips both the build and the deploy. Narrow
-the scope with `memo` when the project has large directories that
-don't affect the build output:
-
-```typescript
-const site = yield* Cloudflare.Website.Waku("Site", {
-  memo: {
-    include: ["src/**", "public/**", "package.json"],
-  },
-});
-```
-
-## Local dev
-
-```sh
-bun alchemy dev
-```
-
-`alchemy dev` runs Waku's dev server with SSR executing in workerd,
-so server code sees the same runtime it will have in production. The
-Worker's bindings are real — the same `env` your deployed site reads.

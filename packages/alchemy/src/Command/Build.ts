@@ -6,6 +6,7 @@ import * as Redacted from "effect/Redacted";
 import { havePropsChanged, isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { initialCwd } from "../Util/Node.ts";
 import { sha256Object } from "../Util/sha256.ts";
 import {
   CommandExecutor,
@@ -39,13 +40,15 @@ export interface Build extends Resource<
   BuildProps,
   {
     /**
-     * Path to the build output, relative to `process.cwd()`.
+     * Path to the build output, relative to the process's initial working
+     * directory (`initialCwd` — captured at startup, immune to transient
+     * chdir by tools sharing the process).
      *
      * Stored relative (rather than absolute) so the value is portable across
      * machines — state written by a CI runner
      * (`/home/runner/work/.../dist`) resolves correctly on a local laptop and
-     * vice versa. Consumers should `path.resolve()` it against their own cwd
-     * to obtain an absolute path.
+     * vice versa. Consumers should resolve it against `initialCwd` to obtain
+     * an absolute path.
      */
     outdir: string;
     hash: {
@@ -80,7 +83,7 @@ export interface Build extends Resource<
  *   cwd: "./frontend",
  *   outdir: "dist",
  * });
- * yield* Console.log(build.outdir); // path to the dist directory, relative to process.cwd()
+ * yield* Console.log(build.outdir); // path to the dist directory, relative to the initial cwd
  * yield* Console.log(build.hash.output); // hash of the output files (when memo is enabled)
  * ```
  *
@@ -135,7 +138,11 @@ export const BuildProvider = () =>
       const { run } = yield* CommandExecutor;
 
       const makeOutput = Effect.fn(function* (props: BuildProps) {
-        const cwd = path.resolve(props.cwd ?? process.cwd());
+        // Anchored to the initial cwd: a live `process.cwd()` read can race
+        // a concurrent tool's transient chdir (framework source builds),
+        // and the relative `outdir` stored here is resolved again later
+        // (assets read) — mismatched bases corrupt the path.
+        const cwd = path.resolve(initialCwd, props.cwd ?? ".");
         const outdir = path.resolve(cwd, props.outdir);
         if (!(yield* fs.exists(outdir))) {
           return yield* makeCommandError(
@@ -146,7 +153,7 @@ export const BuildProvider = () =>
           );
         }
         return {
-          outdir: path.relative(process.cwd(), outdir),
+          outdir: path.relative(initialCwd, outdir),
           hash:
             props.memo === false
               ? { input: undefined, output: undefined }
@@ -209,7 +216,8 @@ export const BuildProvider = () =>
         reconcile: ({ news, session }) =>
           run(news, session).pipe(Effect.andThen(makeOutput(news))),
         delete: Effect.fn(function* ({ output }) {
-          const outdir = path.resolve(output.outdir);
+          // `output.outdir` is persisted relative to the initial cwd.
+          const outdir = path.resolve(initialCwd, output.outdir);
           if (!(yield* fs.exists(outdir))) return;
           yield* fs.remove(outdir, { recursive: true });
         }),

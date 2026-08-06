@@ -37,5 +37,6 @@ export * from "./WebSocket.ts";
 export * from "./Worker.ts";
 export * from "./WorkerBinding.ts";
 export * from "./WorkerBridge.ts";
+export * from "./WorkerEntrypoint.ts";
 export * from "./WorkerLoader.ts";
 export * from "./WorkerProvider.ts";

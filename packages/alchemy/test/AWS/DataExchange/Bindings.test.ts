@@ -1,6 +1,7 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
 import * as Test from "@/Test/Alchemy";
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as dataexchange from "@distilled.cloud/aws/dataexchange";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { describe, expect } from "alchemy-test";
@@ -26,6 +27,7 @@ const readinessPolicy = Schedule.max([
 
 let baseUrl: string;
 let functionArn: string;
+let functionName: string | undefined;
 let fixtureDataSetId: string | undefined;
 
 // beforeAll/afterAll hooks run outside `test.provider`'s layer, so raw
@@ -82,8 +84,9 @@ class IamPropagationLag extends Data.TaggedError("IamPropagationLag")<{
 // A freshly attached IAM policy can lag behind the Lambda's first calls —
 // DataExchange then rejects with AccessDeniedException, which the handler
 // surfaces as `{ error: "AccessDeniedException" }`. Retry the route through
-// the propagation window (bounded ~60s); any other outcome surfaces
-// immediately.
+// the propagation window (bounded ~5.5 minutes — under full-suite load IAM
+// propagation for fresh roles routinely exceeds 4 minutes); any other
+// outcome surfaces immediately.
 const postJsonThroughIamPropagation = (path: string) =>
   postJson(path).pipe(
     Effect.flatMap((body) =>
@@ -94,8 +97,8 @@ const postJsonThroughIamPropagation = (path: string) =>
     Effect.retry({
       while: (e) => e._tag === "IamPropagationLag",
       schedule: Schedule.max([
-        Schedule.spaced("5 seconds"),
-        Schedule.recurs(12),
+        Schedule.spaced("10 seconds"),
+        Schedule.recurs(33),
       ]),
     }),
   );
@@ -118,6 +121,7 @@ describe.sequential("DataExchange Bindings", () => {
       expect(attrs.functionUrl).toBeTruthy();
       baseUrl = attrs.functionUrl!.replace(/\/+$/, "");
       functionArn = attrs.functionArn;
+      functionName = attrs.functionName;
 
       const readinessUrl = `${baseUrl}/bindings`;
       yield* Effect.logInfo(
@@ -155,8 +159,50 @@ describe.sequential("DataExchange Bindings", () => {
         );
         expect(gone._tag).toBe("ResourceNotFoundException");
       }
+
+      // The Lambda provider reaps /aws/lambda/{name} on delete and watches
+      // ~90s for a flush-driven recreation, but this suite invokes the
+      // function right up until destroy, and the Lambda service occasionally
+      // flushes a final log batch AFTER that watch ends — silently
+      // re-creating the just-deleted group. Watch a bit longer here with a
+      // bounded observe→delete loop (every delete is idempotent); a flush
+      // landing after the final observation is unobservable and the nuke
+      // census is the backstop.
+      if (functionName !== undefined) {
+        const logGroupName = `/aws/lambda/${functionName}`;
+        const reapIfObserved = Effect.gen(function* () {
+          const present = yield* aws(
+            logs.describeLogGroups({
+              logGroupNamePrefix: logGroupName,
+              limit: 1,
+            }),
+          ).pipe(
+            Effect.map((response) =>
+              (response.logGroups ?? []).some(
+                (group) => group.logGroupName === logGroupName,
+              ),
+            ),
+          );
+          if (present) {
+            yield* aws(logs.deleteLogGroup({ logGroupName })).pipe(
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            );
+          }
+          return present;
+        });
+        // Fixed 6 passes over ~100s — do NOT stop on first absence, since an
+        // absent group can still be recreated by a late flush.
+        yield* reapIfObserved.pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("20 seconds"),
+            times: 5,
+          }),
+        );
+        const stillPresent = yield* reapIfObserved;
+        expect(stillPresent).toBe(false);
+      }
     }),
-    { timeout: 240_000 },
+    { timeout: 420_000 },
   );
 
   describe("binding registration", () => {
@@ -247,7 +293,9 @@ describe.sequential("DataExchange Bindings", () => {
           expect(response.assetCount).toBeGreaterThanOrEqual(1);
           expect(response.assetName).toBe("prices.csv");
         }),
-      { timeout: 150_000 },
+      // Covers the full IAM propagation retry budget (~5.5 min) plus the
+      // import job's own create → start → poll-to-COMPLETED runtime.
+      { timeout: 480_000 },
     );
 
     test.provider("ListJobs sees the import job", (_stack) =>
@@ -280,6 +328,8 @@ describe.sequential("DataExchange Bindings", () => {
             "not configured for AWS Marketplace",
           );
         }),
+      // Shares the IAM propagation retry budget with the /import test.
+      { timeout: 420_000 },
     );
   });
 

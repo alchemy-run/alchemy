@@ -366,8 +366,8 @@ export const apply = <P extends Plan>(
           // The destroy converged: every resource row was deleted above.
           // The rest of the stage's persisted state (notably the stack
           // output record) is dropped AFTER the deployment journal closes
-          // — see the exit mapping below — so the destroy's own record
-          // flushes cleanly before the stage directory disappears.
+          // — see the exit mapping below, which also verifies the stage
+          // really came out empty.
           return undefined;
         }
 
@@ -408,6 +408,25 @@ export const apply = <P extends Plan>(
           // deployment journal) is gone once this returns.
           // https://github.com/alchemy-run/alchemy/issues/961
           yield* store.deleteStack({ stack: stackName, stage });
+          // Invariant: a successful destroy leaves the stage EMPTY. If rows
+          // survive, this destroy session could not actually see (or delete)
+          // the stack's state — e.g. its plan listed an empty store while
+          // committed rows existed — and reporting success here would
+          // silently leak every cloud resource those rows track. Fail loudly
+          // instead so the leak surfaces in the run that caused it. Read
+          // through the raw store: the journaling facade's version is closed
+          // by now, and the raw store is what actually holds the rows.
+          const remaining = yield* store.list({ stack: stackName, stage });
+          if (remaining.length > 0) {
+            return yield* Effect.fail(
+              new StateStoreError({
+                message:
+                  `destroy of ${stackName}/${stage} reported success but ${remaining.length} ` +
+                  `state row(s) remain (${remaining.join(", ")}) — the destroy session could ` +
+                  `not see the stack's persisted state, so its cloud resources were NOT deleted`,
+              }),
+            );
+          }
         }
         return exit.value;
       }

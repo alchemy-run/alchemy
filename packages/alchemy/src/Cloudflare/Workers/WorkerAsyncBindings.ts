@@ -43,12 +43,14 @@ import { isSecretKey } from "./SecretKey.ts";
 import { isVersionMetadata } from "./VersionMetadata.ts";
 import type { WorkerBindingProps } from "./Worker.ts";
 import {
+  isSelf,
   isSelfUrl,
   isWorker,
   type Worker,
   type WorkerProps,
 } from "./Worker.ts";
 import type { WorkerBinding, WorkerBindingResource } from "./WorkerBinding.ts";
+import { isWorkerEntrypoint } from "./WorkerEntrypoint.ts";
 import { isWorkerLoader } from "./WorkerLoader.ts";
 
 export const bindWorkerAsyncBindings = Effect.fn(function* (
@@ -470,6 +472,17 @@ const toBinding = (
       name: bindingName,
       id: binding.hyperdriveId,
     };
+  } else if (isWorkerEntrypoint(binding)) {
+    // A named-entrypoint service binding (`Cloudflare.WorkerEntrypoint`).
+    // Tested BEFORE `isWorker` — the marker carries the Worker rather than
+    // being one, but keep the specific classifier ahead of the general one.
+    return {
+      type: "service",
+      name: bindingName,
+      service: binding.worker.workerName,
+      entrypoint: binding.entrypoint,
+      props: binding.props,
+    };
   } else if (isWorker(binding)) {
     return {
       type: "service",
@@ -499,6 +512,14 @@ const toBinding = (
     // `plain_text` binding holding the resolved URL just before upload.
     return {
       type: "self_url",
+      name: bindingName,
+    };
+  } else if (isSelf(binding)) {
+    // A service binding to the Worker itself. The provider lowers this
+    // sentinel into a `service` binding targeting the Worker's own
+    // physical name just before upload.
+    return {
+      type: "self_service",
       name: bindingName,
     };
   } else if (isWorkerLoader(binding)) {
