@@ -1,5 +1,5 @@
 // `@effect/sql-mysql2` (and mysql2 underneath) are optional peers — value
-// imports are deferred to first use so `alchemy/Drizzle` resolves without
+// imports are deferred to first use so `alchemy/Drizzle/MySQL` resolves without
 // them installed.
 import type * as MysqlClient from "@effect/sql-mysql2/MysqlClient";
 import type { AnyRelations, EmptyRelations } from "drizzle-orm";

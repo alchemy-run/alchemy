@@ -1,4 +1,5 @@
-import * as Drizzle from "@/Drizzle";
+import * as Drizzle from "@/Drizzle/Schema.ts";
+import { providers as drizzleProviders } from "@/Drizzle/Providers.ts";
 import * as Provider from "@/Provider";
 import * as Stack from "@/Stack";
 import { State } from "@/State";
@@ -9,7 +10,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 
-const { test } = Test.make({ providers: Drizzle.providers() });
+const { test } = Test.make({ providers: drizzleProviders() });
 
 const DRIZZLE_ORIGIN_UUID = "00000000-0000-0000-0000-000000000000";
 
