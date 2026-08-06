@@ -1,3 +1,25 @@
+## v2.0.0-beta.70
+
+*No significant changes*
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.69...HEAD)
+
+---
+
+## v2.0.0-beta.69
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **engine**: RenamedFrom() — migrate state rows across FQN renames &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy/issues/1108 [<samp>(abf3f)</samp>](https://github.com/alchemy-run/alchemy/commit/abf3fdfe)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **ci**: Bump actions pin — dist-tag moves now survive OIDC-only auth &nbsp;-&nbsp; by **sam** and **Cursor** in https://github.com/alchemy-run/alchemy/issues/1115 [<samp>(f94b7)</samp>](https://github.com/alchemy-run/alchemy/commit/f94b731c)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.68...HEAD)
+
+---
+
 ## v2.0.0-beta.68
 
 ### &nbsp;&nbsp;&nbsp;🚨 Breaking Changes
