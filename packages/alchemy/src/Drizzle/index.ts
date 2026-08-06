@@ -1,5 +1,5 @@
 export * from "./D1.ts";
-export * from "./DurableObject.ts";
+
 // The tagged errors drizzle's effect drivers fail with — re-exported so
 // consumers can reference them without reaching into drizzle-orm
 // internals. (`Effect.catchTag` needs only the tag string; these are for
