@@ -1,8 +1,24 @@
 {
   "name": "@alchemy.run/cloudflare-frameworks",
-  "version": "0.1.0-rc.1",
+  "version": "2.0.0-beta.70",
   "description": "Framework build and development integrations for Alchemy.",
+  "homepage": "https://alchemy.run",
   "license": "MIT",
+  "author": "Sam Goodwin <sam@alchemy.run>",
+  "keywords": [
+    "alchemy",
+    "cloudflare",
+    "effect",
+    "infrastructure-as-code"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "packages/cloudflare-frameworks"
+  },
+  "bugs": {
+    "url": "https://github.com/alchemy-run/alchemy/issues"
+  },
   "type": "module",
   "sideEffects": false,
   "files": [

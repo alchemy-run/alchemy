@@ -1,6 +1,7 @@
 {
   "name": "@fixtures/solid-spa",
   "version": "0.0.0",
+  "private": true,
   "description": "",
   "license": "MIT",
   "type": "module",

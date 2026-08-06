@@ -1,13 +1,22 @@
 {
   "name": "alchemy",
   "version": "2.0.0-beta.70",
+  "description": "Infrastructure as Effects for TypeScript.",
   "homepage": "https://alchemy.run",
   "license": "Apache-2.0",
   "author": "Sam Goodwin <sam@alchemy.run>",
+  "keywords": [
+    "alchemy",
+    "effect",
+    "infrastructure-as-code"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/alchemy-run/alchemy.git",
     "directory": "packages/alchemy"
+  },
+  "bugs": {
+    "url": "https://github.com/alchemy-run/alchemy/issues"
   },
   "bin": {
     "alchemy": "./bin/cli.js"

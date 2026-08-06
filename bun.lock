@@ -1500,7 +1500,7 @@
     },
     "packages/cloudflare-frameworks": {
       "name": "@alchemy.run/cloudflare-frameworks",
-      "version": "0.1.0-rc.1",
+      "version": "2.0.0-beta.70",
       "dependencies": {
         "@alchemy.run/cloudflare-runtime": "workspace:*",
         "@distilled.cloud/cloudflare": "catalog:",
@@ -1555,7 +1555,7 @@
     },
     "packages/cloudflare-runtime": {
       "name": "@alchemy.run/cloudflare-runtime",
-      "version": "0.1.0-rc.1",
+      "version": "2.0.0-beta.70",
       "dependencies": {
         "@alchemy.run/node-utils": "catalog:",
         "@cloudflare/unenv-preset": "catalog:workers",
