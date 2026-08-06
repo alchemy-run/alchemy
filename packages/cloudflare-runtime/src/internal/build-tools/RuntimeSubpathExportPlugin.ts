@@ -16,7 +16,15 @@ export const RuntimeSubpathExportPlugin = (): rolldown.Plugin => ({
       return;
     }
 
-    const resolved = path.resolve(path.dirname(importer), source);
+    const normalizedImporter = importer.replaceAll("\\", "/");
+    const normalizedSource = source.replaceAll("\\", "/");
+    const absoluteImporter = /^[A-Za-z]:\//.test(normalizedImporter)
+      ? `/${normalizedImporter}`
+      : normalizedImporter;
+    const resolved = path.posix.resolve(
+      path.posix.dirname(absoluteImporter),
+      normalizedSource,
+    );
     const match = resolved.match(/\/src\/(core|rolldown)\/(.+)\.ts$/);
     if (match === null) {
       return;
