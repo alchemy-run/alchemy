@@ -1,6 +1,6 @@
 import { expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import * as Text from "../../src/bindings/Text.ts";
+import * as Text from "../../../src/core/bindings/Text.ts";
 import { localRuntimeLayer, startTestWorker } from "../helpers/runtime.ts";
 
 const SCRIPT = `

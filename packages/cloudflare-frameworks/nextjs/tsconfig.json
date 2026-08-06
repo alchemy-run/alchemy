@@ -1,11 +1,11 @@
 {
   "extends": "../../../tsconfig.cloudflare.json",
-  "include": ["src/**/*.ts"],
-  "exclude": ["dist"],
+  "include": ["../src/nextjs/**/*.ts"],
+  "exclude": ["../dist/nextjs"],
   "compilerOptions": {
     "tsBuildInfoFile": ".cache/tsconfig.tsbuildinfo",
-    "outDir": "dist",
-    "rootDir": "src",
+    "outDir": "../dist/nextjs",
+    "rootDir": "../src/nextjs",
     "types": ["node"]
   }
 }

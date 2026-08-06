@@ -7,7 +7,7 @@
     "outDir": ".cache/test",
     "types": ["node"],
     "paths": {
-      "#/*": ["./src/*"]
+      "#/*": ["../src/vite/*"]
     }
   },
   "references": [{ "path": "./tsconfig.node.json" }]

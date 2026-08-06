@@ -7,7 +7,7 @@ import {
   normalizePresetName,
   presetConflictMessage,
   type NitroConfigSlice,
-} from "../src/UserConfig.ts";
+} from "../../src/nuxt/UserConfig.ts";
 
 describe("normalizePresetName / isSamePreset", () => {
   it("treats snake, kebab, and camel spellings as the same preset", () => {

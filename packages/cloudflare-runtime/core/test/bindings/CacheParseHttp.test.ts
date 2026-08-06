@@ -5,7 +5,7 @@
  * web-standard APIs, so they run directly in Node here.
  */
 import { describe, expect, it } from "@effect/vitest";
-import { parseHttpResponse } from "../../src/bindings/cache/parse-http.shared.ts";
+import { parseHttpResponse } from "../../../src/core/bindings/cache/parse-http.shared.ts";
 
 const ENCODER = new TextEncoder();
 

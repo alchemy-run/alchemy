@@ -49,7 +49,7 @@ describe("target decoupling", () => {
   for (const module of GENERIC_MODULES) {
     it(`src/${module} imports nothing cloudflare-specific`, async () => {
       const source = await NodeFsPromises.readFile(
-        NodePath.resolve(import.meta.dirname, "../src", module),
+        NodePath.resolve(import.meta.dirname, "../../src/waku", module),
         "utf8",
       );
       const specifiers = importSpecifiers(source);
@@ -64,7 +64,7 @@ describe("target decoupling", () => {
 
   it("src/cloudflare.ts is the module that owns the cloudflare imports", async () => {
     const source = await NodeFsPromises.readFile(
-      NodePath.resolve(import.meta.dirname, "../src/cloudflare.ts"),
+      NodePath.resolve(import.meta.dirname, "../../src/waku/cloudflare.ts"),
       "utf8",
     );
     const specifiers = importSpecifiers(source);

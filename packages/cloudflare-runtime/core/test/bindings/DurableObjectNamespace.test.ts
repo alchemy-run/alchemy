@@ -1,6 +1,6 @@
 import { expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import * as DurableObjectNamespace from "../../src/bindings/DurableObjectNamespace.ts";
+import * as DurableObjectNamespace from "../../../src/core/bindings/DurableObjectNamespace.ts";
 import { localRuntimeLayer, startTestWorker } from "../helpers/runtime.ts";
 
 const SCRIPT = `

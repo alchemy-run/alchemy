@@ -3,8 +3,15 @@ import { env } from "cloudflare:workers";
 import { NonRetryableError } from "cloudflare:workflows";
 import { afterEach, describe, it, vi } from "vitest";
 import workerdUnsafe from "workerd:unsafe";
-import { DEFAULT_STEP_LIMIT, InstanceEvent, InstanceStatus } from "../src";
-import { ABORT_REASONS, isAbortError } from "../src/lib/errors";
+import {
+  DEFAULT_STEP_LIMIT,
+  InstanceEvent,
+  InstanceStatus,
+} from "../../../src/internal/workflows-shared";
+import {
+  ABORT_REASONS,
+  isAbortError,
+} from "../../../src/internal/workflows-shared/lib/errors";
 import { setTestWorkflowCallback } from "./test-entry";
 import { runWorkflow, runWorkflowAndAwait } from "./utils";
 import type {
@@ -12,12 +19,12 @@ import type {
   DatabaseVersion,
   DatabaseWorkflow,
   EngineLogs,
-} from "../src/engine";
+} from "../../../src/internal/workflows-shared/engine";
 import type {
   RollbackContext,
   RollbackFn,
   WorkflowStepRollbackOptions,
-} from "../src/lib/rollback";
+} from "../../../src/internal/workflows-shared/lib/rollback";
 import type { WorkflowStep, WorkflowStepConfig } from "cloudflare:workers";
 
 afterEach(async () => {

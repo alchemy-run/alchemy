@@ -6,7 +6,7 @@ import type * as ViteModule from "vite";
 import {
   loadProjectModule,
   resolveProjectPackageDirectory,
-} from "../src/index.ts";
+} from "../../src/core/index.ts";
 import { run } from "./helpers.ts";
 
 const packageRoot = NodePath.resolve(import.meta.dirname, "..");

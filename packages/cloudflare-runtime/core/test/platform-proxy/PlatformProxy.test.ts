@@ -1,14 +1,14 @@
 import { expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import * as DurableObjectNamespace from "../../src/bindings/DurableObjectNamespace.ts";
-import * as Json from "../../src/bindings/Json.ts";
-import * as KvNamespace from "../../src/bindings/kv-namespace/index.ts";
-import * as R2Bucket from "../../src/bindings/r2-bucket/index.ts";
-import * as Text from "../../src/bindings/Text.ts";
+import * as DurableObjectNamespace from "../../../src/core/bindings/DurableObjectNamespace.ts";
+import * as Json from "../../../src/core/bindings/Json.ts";
+import * as KvNamespace from "../../../src/core/bindings/kv-namespace/index.ts";
+import * as R2Bucket from "../../../src/core/bindings/r2-bucket/index.ts";
+import * as Text from "../../../src/core/bindings/Text.ts";
 import {
   ExecutionContext,
   open,
-} from "../../src/platform-proxy/PlatformProxy.ts";
+} from "../../../src/core/platform-proxy/PlatformProxy.ts";
 import { localRuntimeLayer } from "../helpers/runtime.ts";
 
 const DO_SCRIPT = `

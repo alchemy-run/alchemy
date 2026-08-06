@@ -7,8 +7,8 @@ import type {
   RolldownPluginOption,
 } from "rolldown";
 import { rolldown } from "rolldown";
-import type { RolldownPluginOptions } from "../../src/plugin.js";
-import cloudflare from "../../src/plugin.js";
+import type { RolldownPluginOptions } from "../../../src/rolldown/plugin.js";
+import cloudflare from "../../../src/rolldown/plugin.js";
 import { getEntryChunk } from "./output.js";
 
 const DEFAULT_PLUGIN_OPTIONS: RolldownPluginOptions = {

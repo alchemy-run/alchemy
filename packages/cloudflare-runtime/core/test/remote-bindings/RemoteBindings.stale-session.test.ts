@@ -2,9 +2,9 @@ import { expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as http from "node:http";
-import { Service } from "../../src/bindings/index.ts";
-import * as RemoteBindings from "../../src/remote-bindings/RemoteBindings.ts";
-import * as RemoteWorker from "../../src/remote-bindings/RemoteWorker.ts";
+import { Service } from "../../../src/core/bindings/index.ts";
+import * as RemoteBindings from "../../../src/core/remote-bindings/RemoteBindings.ts";
+import * as RemoteWorker from "../../../src/core/remote-bindings/RemoteWorker.ts";
 import { localRuntimeLayer, startTestWorker } from "../helpers/runtime.ts";
 
 /**

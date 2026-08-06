@@ -1,14 +1,14 @@
 {
   "extends": "../../../tsconfig.cloudflare.json",
-  "include": ["src"],
-  "exclude": ["src/runtime"],
+  "include": ["../src/astro"],
+  "exclude": ["../src/astro/runtime"],
   // The build-side prerenderer imports the prerender protocol's endpoint
   // constants and types from the (worker-side) runtime project.
   "references": [{ "path": "./tsconfig.runtime.json" }],
   "compilerOptions": {
     "tsBuildInfoFile": ".cache/tsconfig.node.tsbuildinfo",
-    "outDir": "dist",
-    "rootDir": "src",
+    "outDir": "../dist/astro",
+    "rootDir": "../src/astro",
     "types": ["node"],
     // Dedupe vite's types: bun's isolated linker gives astro its own copy of
     // vite (a different peer-hash instance from ours), and the two

@@ -3,8 +3,8 @@ import {
   makeCloudflareTarget,
   NITRO_HANDLER_SPECIFIER,
   NITRO_PRESET,
-} from "../src/cloudflare.ts";
-import type { NitroConfigSlice } from "../src/UserConfig.ts";
+} from "../../src/nuxt/cloudflare.ts";
+import type { NitroConfigSlice } from "../../src/nuxt/UserConfig.ts";
 
 describe("makeCloudflareTarget", () => {
   it("declares the cloudflare platform, the nitro preset, and workerd bundle settings", () => {

@@ -22,7 +22,7 @@ let runtimeAddress: string;
 let startedBuilds: Array<PreviewWorkerBuild> = [];
 let closed = 0;
 
-vi.mock("../src/preview-server.ts", () => ({
+vi.mock("../../src/vite/preview-server.ts", () => ({
   startPreviewServer: async (_options: unknown, build: PreviewWorkerBuild) => {
     startedBuilds.push(build);
     return {

@@ -30,15 +30,15 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as SendEmail from "../../src/bindings/send-email/index.ts";
-import * as Docker from "../../src/Docker.ts";
-import * as Globals from "../../src/globals/Globals.ts";
-import * as Internet from "../../src/globals/Internet.ts";
-import * as Storage from "../../src/globals/Storage.ts";
-import * as Paths from "../../src/internal/Paths.ts";
-import * as Runtime from "../../src/Runtime.ts";
-import * as RuntimeServices from "../../src/RuntimeServices.ts";
-import * as Workerd from "../../src/workerd/Workerd.ts";
+import * as SendEmail from "../../../src/core/bindings/send-email/index.ts";
+import * as Docker from "../../../src/core/Docker.ts";
+import * as Globals from "../../../src/core/globals/Globals.ts";
+import * as Internet from "../../../src/core/globals/Internet.ts";
+import * as Storage from "../../../src/core/globals/Storage.ts";
+import * as Paths from "../../../src/core/internal/Paths.ts";
+import * as Runtime from "../../../src/core/Runtime.ts";
+import * as RuntimeServices from "../../../src/core/RuntimeServices.ts";
+import * as Workerd from "../../../src/core/workerd/Workerd.ts";
 import {
   localRuntimeLayer,
   makeTempDirectory,

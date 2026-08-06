@@ -10,15 +10,15 @@ import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import * as Paths from "../../src/internal/Paths.ts";
-import * as Registry from "../../src/registry/Registry.ts";
+import * as Paths from "../../../src/core/internal/Paths.ts";
+import * as Registry from "../../../src/core/registry/Registry.ts";
 import {
   resolvedTargetKey,
   type RegistryEntry,
   type ResolvedTarget,
   type ResolvedTargetMap,
   type Subscriber,
-} from "../../src/registry/RegistryTypes.shared.ts";
+} from "../../../src/core/registry/RegistryTypes.shared.ts";
 import { configProvider, waitForRegistryEntry } from "../helpers/runtime.ts";
 
 // The `fileSystemSupportsWatcher: true` variant exercises `fs.watch`, which on

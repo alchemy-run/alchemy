@@ -1,10 +1,13 @@
 {
   "extends": "../../../../tsconfig.cloudflare.json",
-  "include": ["src/node/**/*.ts", "src/index.ts"],
+  "include": [
+    "../../src/internal/workers-shared/node/**/*.ts",
+    "../../src/internal/workers-shared/index.ts"
+  ],
   "compilerOptions": {
     "tsBuildInfoFile": ".cache/tsconfig.node.tsbuildinfo",
     "outDir": ".cache/node",
-    "rootDir": "src",
+    "rootDir": "../../src/internal/workers-shared",
     "emitDeclarationOnly": true,
     "module": "Preserve",
     "moduleResolution": "bundler",

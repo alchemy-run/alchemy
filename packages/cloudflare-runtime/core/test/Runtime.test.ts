@@ -1,8 +1,8 @@
 import { expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import * as WorkerProxy from "../src/proxy/WorkerProxy.ts";
-import * as Runtime from "../src/Runtime.ts";
+import * as WorkerProxy from "../../src/core/proxy/WorkerProxy.ts";
+import * as Runtime from "../../src/core/Runtime.ts";
 import { localRuntimeLayer, PredicateFailed } from "./helpers/runtime.ts";
 
 const HELLO_SCRIPT = `

@@ -4,8 +4,12 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type * as Scope from "effect/Scope";
 import { describe, expect, it } from "vitest";
-import { fromHarnessOptions } from "../src/index.ts";
-import { make, readNitroOutput, SERVER_ENTRY_NAME } from "../src/Nuxt.ts";
+import { fromHarnessOptions } from "../../src/nuxt/index.ts";
+import {
+  make,
+  readNitroOutput,
+  SERVER_ENTRY_NAME,
+} from "../../src/nuxt/Nuxt.ts";
 
 const runWithNode = <A, E>(
   effect: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path | Scope.Scope>,

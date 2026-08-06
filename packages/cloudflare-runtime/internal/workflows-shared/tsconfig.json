@@ -1,10 +1,10 @@
 {
   "extends": "../../../../tsconfig.cloudflare.json",
-  "include": ["src/**/*.ts", "tests/**/*.ts"],
+  "include": ["../../src/internal/workflows-shared/**/*.ts", "tests/**/*.ts"],
   "compilerOptions": {
     "tsBuildInfoFile": ".cache/tsconfig.tsbuildinfo",
     "outDir": ".cache/out",
-    "rootDir": ".",
+    "rootDir": "../..",
     "emitDeclarationOnly": true,
     "module": "Preserve",
     "moduleResolution": "bundler",

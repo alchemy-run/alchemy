@@ -1,10 +1,10 @@
 {
   "extends": "../../../tsconfig.cloudflare.json",
-  "include": ["src/runtime"],
+  "include": ["../src/astro/runtime"],
   "compilerOptions": {
     "tsBuildInfoFile": ".cache/tsconfig.runtime.tsbuildinfo",
-    "outDir": "dist/runtime",
-    "rootDir": "src/runtime",
+    "outDir": "../dist/astro/runtime",
+    "rootDir": "../src/astro/runtime",
     "types": ["@cloudflare/workers-types"]
   }
 }

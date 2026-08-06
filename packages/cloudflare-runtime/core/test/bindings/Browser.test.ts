@@ -18,7 +18,7 @@
  */
 import { describe, expect, it, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import * as Browser from "../../src/bindings/browser/index.ts";
+import * as Browser from "../../../src/core/bindings/browser/index.ts";
 import { localRuntimeLayer, startTestWorker } from "../helpers/runtime.ts";
 
 // -----------------------------------------------------------------------------

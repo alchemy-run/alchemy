@@ -4,8 +4,11 @@ import {
   decodeResponse,
   makeErrorEnvelope,
   makeErrorResponse,
-} from "../../src/internal/response.shared.ts";
-import { ConfigError, SystemError } from "../../src/RuntimeError.shared.ts";
+} from "../../../src/core/internal/response.shared.ts";
+import {
+  ConfigError,
+  SystemError,
+} from "../../../src/core/RuntimeError.shared.ts";
 
 describe("response.shared", () => {
   it("makeErrorEnvelope encodes a ConfigError", () => {

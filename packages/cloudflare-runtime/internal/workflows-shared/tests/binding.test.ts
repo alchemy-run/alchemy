@@ -2,10 +2,16 @@ import { createExecutionContext, runInDurableObject } from "cloudflare:test";
 import type { WorkflowEvent } from "cloudflare:workers";
 import { env } from "cloudflare:workers";
 import { describe, it, vi } from "vitest";
-import { InstanceEvent, InstanceStatus } from "../src";
-import type { WorkflowHandle } from "../src/binding";
-import { WorkflowBinding } from "../src/binding";
-import type { Engine, EngineLogs } from "../src/engine";
+import {
+  InstanceEvent,
+  InstanceStatus,
+} from "../../../src/internal/workflows-shared";
+import type { WorkflowHandle } from "../../../src/internal/workflows-shared/binding";
+import { WorkflowBinding } from "../../../src/internal/workflows-shared/binding";
+import type {
+  Engine,
+  EngineLogs,
+} from "../../../src/internal/workflows-shared/engine";
 import { setTestWorkflowCallback } from "./test-entry";
 
 let instanceCounter = 0;

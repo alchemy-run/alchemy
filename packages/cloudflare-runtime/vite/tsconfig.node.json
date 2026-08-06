@@ -1,13 +1,13 @@
 {
   "extends": "../../../tsconfig.cloudflare.json",
-  "include": ["src"],
-  "exclude": ["dist", "**/*.worker.ts"],
+  "include": ["../src/vite"],
+  "exclude": ["../dist/vite", "../src/vite/**/*.worker.ts"],
   "compilerOptions": {
     "tsBuildInfoFile": ".cache/tsconfig.node.tsbuildinfo",
     // Type checking only: `dist` belongs to tsdown, and anything left there
     // would be published by the `files` entry.
     "outDir": ".cache/node",
-    "rootDir": "src"
+    "rootDir": "../src/vite"
   },
   "references": [
     { "path": "../rolldown/tsconfig.json" },

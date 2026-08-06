@@ -82,7 +82,7 @@ inside a framework's toolchain — belongs to the per-framework target module,
 which **extends** `DeployTarget` with framework-specific hooks:
 
 ```ts
-// packages/cloudflare-frameworks/waku/src/cloudflare.ts (illustrative)
+// packages/cloudflare-frameworks/src/waku/cloudflare.ts (illustrative)
 export interface WakuTarget extends DeployTarget<WakuCloudflareConfig> {
   /** Absolute path of the adapter module waku's config should select. */
   readonly adapterPath: Effect<string, DeployTargetError>;

@@ -22,8 +22,8 @@ import { expect, layer } from "@effect/vitest";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Images from "../../src/bindings/images/index.ts";
-import * as Stream from "../../src/bindings/stream/index.ts";
+import * as Images from "../../../src/core/bindings/images/index.ts";
+import * as Stream from "../../../src/core/bindings/stream/index.ts";
 import type { TestWorker } from "../helpers/runtime.ts";
 import { localRuntimeLayer, startTestWorker } from "../helpers/runtime.ts";
 

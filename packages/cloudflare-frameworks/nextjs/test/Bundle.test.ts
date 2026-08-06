@@ -7,7 +7,7 @@ import {
   bundleWorker,
   CREATE_REQUIRE_BANNER,
   WORKER_ENTRY_NAME,
-} from "../src/Bundle.ts";
+} from "../../src/nextjs/Bundle.ts";
 
 /**
  * A synthetic `.open-next` output exercising the four final-bundle rules:

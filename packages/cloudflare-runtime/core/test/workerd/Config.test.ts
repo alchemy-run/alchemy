@@ -1,8 +1,8 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Message } from "capnp-es";
-import * as WorkerdConfig from "../../src/workerd/Config.ts";
-import { Config as CapnpConfig } from "../../src/workerd/internal/config.capnp.ts";
-import { serializeConfig } from "../../src/workerd/internal/config.serialize.ts";
+import * as WorkerdConfig from "../../../src/core/workerd/Config.ts";
+import { Config as CapnpConfig } from "../../../src/core/workerd/internal/config.capnp.ts";
+import { serializeConfig } from "../../../src/core/workerd/internal/config.serialize.ts";
 
 describe("workerd/Config", () => {
   it("kVoid is a unique symbol", () => {

@@ -17,12 +17,12 @@ import cloudflareTarget, {
   withDevSessionKv,
   withPrerenderSessionKv,
   type DistilledCloudflareOptions,
-} from "../src/cloudflare.ts";
+} from "../../src/astro/cloudflare.ts";
 import {
   buildAssetsHeadersContent,
   headersFileHasCacheControlForPath,
-} from "../src/headers.ts";
-import { applyWorkerEnvToProcess } from "../src/source.ts";
+} from "../../src/astro/headers.ts";
+import { applyWorkerEnvToProcess } from "../../src/astro/source.ts";
 
 const noopLogger = {
   info: () => {},

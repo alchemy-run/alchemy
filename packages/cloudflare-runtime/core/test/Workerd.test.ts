@@ -5,7 +5,7 @@ import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
-import * as Workerd from "../src/workerd/Workerd.ts";
+import * as Workerd from "../../src/core/workerd/Workerd.ts";
 import * as PortHelpers from "./helpers/port.ts";
 
 const services = Layer.provide(Workerd.WorkerdLive, NodeServices.layer);

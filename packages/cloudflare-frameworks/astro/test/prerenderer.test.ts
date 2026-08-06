@@ -7,9 +7,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   makeIntegrationPluginOptions,
   SERVER_ENTRYPOINT,
-} from "../src/cloudflare.ts";
-import { createWorkerdPrerenderEnvironmentPlugin } from "../src/prerender-environment.ts";
-import { collectOutputModules } from "../src/prerenderer.ts";
+} from "../../src/astro/cloudflare.ts";
+import { createWorkerdPrerenderEnvironmentPlugin } from "../../src/astro/prerender-environment.ts";
+import { collectOutputModules } from "../../src/astro/prerenderer.ts";
 
 describe("makeIntegrationPluginOptions (workerd prerendering)", () => {
   it("promotes prerender to a child worker environment during a workerd build", () => {

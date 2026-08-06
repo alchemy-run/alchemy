@@ -9,7 +9,7 @@ import { expect, layer } from "@effect/vitest";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Cf from "../../src/globals/Cf.ts";
+import * as Cf from "../../../src/core/globals/Cf.ts";
 import type { TestWorker } from "../helpers/runtime.ts";
 import { localRuntimeLayer, startTestWorker } from "../helpers/runtime.ts";
 

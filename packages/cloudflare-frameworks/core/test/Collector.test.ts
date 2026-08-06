@@ -12,7 +12,7 @@ import {
   WORKER_ENTRY_PREFIX,
   type BuildOutputCollector,
   type CollectorOptions,
-} from "../src/index.ts";
+} from "../../src/core/index.ts";
 import { makeProject, run } from "./helpers.ts";
 
 const makeCollector = (options?: CollectorOptions) =>

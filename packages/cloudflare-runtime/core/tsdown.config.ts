@@ -1,7 +1,4 @@
-import {
-  InternalWorkerExportPlugin,
-  InternalWorkerImportPlugin,
-} from "../internal/build-tools/src/index.ts";
+import { InternalWorkerExportPlugin } from "../internal/build-tools/src/index.ts";
 import cloudflare from "@alchemy.run/cloudflare-runtime/rolldown";
 import { defineConfig, type UserConfig } from "tsdown";
 
@@ -14,10 +11,11 @@ const workerConfig = (
   entry: Array<string> | Record<string, string>,
   options: { compatibilityFlags?: Array<string>; clean?: boolean } = {},
 ): UserConfig => ({
+  cwd: "..",
   entry,
-  outDir: "dist/workers",
+  outDir: "dist/core/workers",
   clean: options.clean,
-  tsconfig: "tsconfig.workers.json",
+  tsconfig: "core/tsconfig.workers.json",
   format: "esm",
   minify: {
     mangle: false,
@@ -48,9 +46,9 @@ export default defineConfig([
   // worker itself, so it isn't an entry: it's bundled into its importers (as
   // a shared chunk when there are several).
   workerConfig([
-    "src/**/*.worker.ts",
-    "!src/internal/shared.worker.ts",
-    "!src/**/R2Bucket.worker.ts",
+    "src/core/**/*.worker.ts",
+    "!src/core/internal/shared.worker.ts",
+    "!src/core/**/R2Bucket.worker.ts",
   ]),
   // The R2 worker uses `node:crypto` and runs with `nodejs_compat`. Don't
   // clean the shared `dist/workers` directory, which the previous config
@@ -59,23 +57,31 @@ export default defineConfig([
   workerConfig(
     {
       "bindings/r2-bucket/R2Bucket.worker":
-        "src/bindings/r2-bucket/R2Bucket.worker.ts",
+        "src/core/bindings/r2-bucket/R2Bucket.worker.ts",
     },
     { compatibilityFlags: ["nodejs_compat"], clean: false },
   ),
   {
-    entry: ["src/**/*.ts", "!src/**/*.worker.ts", "!src/global.d.ts"],
+    cwd: "..",
+    entry: [
+      "src/core/**/*.ts",
+      "!src/core/**/*.worker.ts",
+      "!src/core/globals.d.ts",
+    ],
     // The consolidated package owns a hand-authored, prefixed export map.
     // Component builds must never rewrite the root package.json.
     exports: false,
-    outDir: "dist/node",
-    tsconfig: "tsconfig.node.json",
+    outDir: "dist/core/node",
+    tsconfig: "tsconfig.core-build.json",
     unbundle: true,
-    dts: true,
+    dts: { incremental: false },
     shims: false,
     target: "esnext",
     format: "esm",
-    inputOptions: { makeAbsoluteExternalsRelative: true },
+    inputOptions: {
+      external: [/^#cloudflare-runtime-/],
+      makeAbsoluteExternalsRelative: true,
+    },
     outputOptions: {
       entryFileNames: (chunkInfo) => {
         const name = chunkInfo.name.replace(
@@ -85,6 +91,5 @@ export default defineConfig([
         return `${name}.${name.endsWith(".d") ? "mts" : "mjs"}`;
       },
     },
-    plugins: [InternalWorkerImportPlugin()] as unknown as UserConfig["plugins"],
   },
 ]);

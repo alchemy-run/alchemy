@@ -8,7 +8,7 @@ import {
   makeSvelteKitConfigPlugin,
   mergeKitOptions,
   SVELTEKIT_SETUP_PLUGIN_NAME,
-} from "../src/UserConfig.ts";
+} from "../../src/sveltekit/UserConfig.ts";
 
 const makeAdapter = (name: string): Adapter => ({
   name,

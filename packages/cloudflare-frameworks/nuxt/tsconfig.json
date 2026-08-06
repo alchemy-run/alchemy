@@ -1,11 +1,11 @@
 {
   "extends": "../../../tsconfig.cloudflare.json",
-  "include": ["src"],
-  "exclude": ["dist"],
+  "include": ["../src/nuxt"],
+  "exclude": ["../dist/nuxt"],
   "compilerOptions": {
     "tsBuildInfoFile": ".cache/tsconfig.tsbuildinfo",
-    "outDir": "dist",
-    "rootDir": "src",
+    "outDir": "../dist/nuxt",
+    "rootDir": "../src/nuxt",
     "types": ["node"]
   }
 }

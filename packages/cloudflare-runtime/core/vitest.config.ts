@@ -1,13 +1,6 @@
-import { InternalWorkerImportPlugin } from "../internal/build-tools/src/index.ts";
-import path from "node:path";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  plugins: [
-    InternalWorkerImportPlugin({
-      workersRoot: path.resolve(import.meta.dirname, "dist/workers"),
-    }),
-  ],
   test: {
     pool: "forks",
     testTimeout: 30_000,

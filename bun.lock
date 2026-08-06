@@ -1042,7 +1042,7 @@
         "@playwright/test": "catalog:",
         "effect": "catalog:effect",
         "miniflare": "catalog:workers",
-        "wrangler": "file:../../packages/cloudflare-frameworks/nextjs/wrangler-stub",
+        "wrangler": "file:../../packages/cloudflare-frameworks/src/nextjs/wrangler-stub",
       },
     },
     "fixtures/nextjs-isr": {
@@ -1061,7 +1061,7 @@
         "@playwright/test": "catalog:",
         "effect": "catalog:effect",
         "miniflare": "catalog:workers",
-        "wrangler": "file:../../packages/cloudflare-frameworks/nextjs/wrangler-stub",
+        "wrangler": "file:../../packages/cloudflare-frameworks/src/nextjs/wrangler-stub",
       },
     },
     "fixtures/nuxt": {
@@ -1461,7 +1461,7 @@
     },
     "packages/cloudflare-runtime": {
       "name": "@alchemy.run/cloudflare-runtime",
-      "version": "0.17.1",
+      "version": "0.1.0-rc.1",
       "dependencies": {
         "@alchemy.run/node-utils": "catalog:",
         "@cloudflare/unenv-preset": "^2.16.0",
@@ -1528,7 +1528,7 @@
     },
     "packages/cloudflare-frameworks": {
       "name": "@alchemy.run/cloudflare-frameworks",
-      "version": "0.17.1",
+      "version": "0.1.0-rc.1",
       "dependencies": {
         "@alchemy.run/cloudflare-runtime": "workspace:*",
         "@astrojs/internal-helpers": "0.10.1",
@@ -6309,9 +6309,9 @@
 
     "@fixtures/monorepo-workspace/@cloudflare/workers-types": ["@cloudflare/workers-types@5.20260729.1", "", {}, "sha512-X5r/4y0gKMq/B72qkz/tEwNK4c3v2regT3to6Ia8qqC66E0+YIN/fU7x0JG6ej2rLxtU3TV3aVhfK9y8+jMMAw=="],
 
-    "@fixtures/nextjs/wrangler": ["wrangler@file:packages/cloudflare-frameworks/nextjs/wrangler-stub", {}],
+    "@fixtures/nextjs/wrangler": ["wrangler@file:packages/cloudflare-frameworks/src/nextjs/wrangler-stub", {}],
 
-    "@fixtures/nextjs-isr/wrangler": ["wrangler@file:packages/cloudflare-frameworks/nextjs/wrangler-stub", {}],
+    "@fixtures/nextjs-isr/wrangler": ["wrangler@file:packages/cloudflare-frameworks/src/nextjs/wrangler-stub", {}],
 
     "@fixtures/nuxt/@cloudflare/workers-types": ["@cloudflare/workers-types@5.20260729.1", "", {}, "sha512-X5r/4y0gKMq/B72qkz/tEwNK4c3v2regT3to6Ia8qqC66E0+YIN/fU7x0JG6ej2rLxtU3TV3aVhfK9y8+jMMAw=="],
 

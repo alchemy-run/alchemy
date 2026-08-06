@@ -1,26 +1,29 @@
 import { env, runInDurableObject } from "cloudflare:test";
 import { afterEach, describe, it, vi } from "vitest";
 import workerdUnsafe from "workerd:unsafe";
-import { InstanceEvent } from "../src";
-import { computeHash } from "../src/lib/cache";
+import { InstanceEvent } from "../../../src/internal/workflows-shared";
+import { computeHash } from "../../../src/internal/workflows-shared/lib/cache";
 import {
   InvalidStepReadableStreamError,
   OversizedStreamChunkError,
   UnsupportedStreamChunkError,
   WorkflowTimeoutError,
   isAbortError,
-} from "../src/lib/errors";
+} from "../../../src/internal/workflows-shared/lib/errors";
 import {
   STREAMING_STEP_CHUNKS_TABLE,
   getStreamOutputMetaKey,
   StreamOutputState,
   rollbackStreamOutput,
   writeStreamOutput,
-} from "../src/lib/streams";
-import { MODIFIER_KEYS } from "../src/modifier";
+} from "../../../src/internal/workflows-shared/lib/streams";
+import { MODIFIER_KEYS } from "../../../src/internal/workflows-shared/modifier";
 import { runWorkflow, runWorkflowAndAwait } from "./utils";
-import type { Engine, EngineLogs } from "../src/engine";
-import type { StreamOutputMeta } from "../src/lib/streams";
+import type {
+  Engine,
+  EngineLogs,
+} from "../../../src/internal/workflows-shared/engine";
+import type { StreamOutputMeta } from "../../../src/internal/workflows-shared/lib/streams";
 
 afterEach(async () => {
   await workerdUnsafe.abortAllDurableObjects();

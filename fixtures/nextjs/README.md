@@ -29,7 +29,7 @@ bun run test     # build + playwright (live = miniflare, dev = cloudflare-runtim
 ## Notes
 
 - `wrangler` resolves to the inert stub in
-  `packages/cloudflare-frameworks/nextjs/wrangler-stub` — only its `package.json` version field is
+  `packages/cloudflare-frameworks/src/nextjs/wrangler-stub` — only its `package.json` version field is
   ever read (OpenNext's `ensureNextjsVersionSupported`); no wrangler code is
   installed or executed.
 - The OpenNext pipeline runs `npx next build` internally (the fixture's own

@@ -1,15 +1,13 @@
-import {
-  InternalWorkerExportPlugin,
-  InternalWorkerImportPlugin,
-} from "../internal/build-tools/src/index.ts";
+import { InternalWorkerExportPlugin } from "../internal/build-tools/src/index.ts";
 import cloudflare from "@alchemy.run/cloudflare-runtime/rolldown";
 import { defineConfig } from "tsdown";
 
 export default defineConfig([
   {
-    entry: ["src/**/*.worker.ts"],
-    outDir: "dist/workers",
-    tsconfig: "tsconfig.workers.json",
+    cwd: "..",
+    entry: ["src/vite/**/*.worker.ts"],
+    outDir: "dist/vite/workers",
+    tsconfig: "vite/tsconfig.workers.json",
     format: "esm",
     minify: {
       mangle: false,
@@ -27,11 +25,12 @@ export default defineConfig([
     },
   },
   {
-    entry: ["src/plugin.ts"],
+    cwd: "..",
+    entry: ["src/vite/plugin.ts"],
     exports: false,
-    outDir: "dist/node",
-    tsconfig: "tsconfig.node.json",
-    dts: true,
+    outDir: "dist/vite/node",
+    tsconfig: "tsconfig.vite-build.json",
+    dts: { incremental: false },
     shims: false,
     target: "esnext",
     format: "esm",
@@ -40,10 +39,15 @@ export default defineConfig([
       // imports so the Vite declaration bundle shares the core runtime types.
       neverBundle: [/^@alchemy\.run\/cloudflare-runtime(?:\/|$)/],
     },
-    inputOptions: { makeAbsoluteExternalsRelative: true },
+    inputOptions: {
+      external: [
+        /^#cloudflare-runtime-/,
+        /^@alchemy\.run\/cloudflare-runtime(?:\/|$)/,
+      ],
+      makeAbsoluteExternalsRelative: true,
+    },
     outputOptions: {
       exports: "named",
     },
-    plugins: [InternalWorkerImportPlugin()],
   },
 ]);

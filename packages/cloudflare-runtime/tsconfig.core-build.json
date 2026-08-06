@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.cloudflare.json",
+  "include": [
+    "src/core",
+    "src/internal/workers-shared/index.ts",
+    "src/internal/workers-shared/node/**/*.ts",
+    "src/internal/workers-shared/shared/**/*.ts"
+  ],
+  "exclude": ["src/core/internal/workers.d.ts", "src/core/**/*.worker.ts"],
+  "compilerOptions": {
+    "tsBuildInfoFile": "core/.cache/tsconfig.build.tsbuildinfo",
+    "outDir": "core/.cache/build",
+    "rootDir": ".",
+    "emitDeclarationOnly": true
+  }
+}

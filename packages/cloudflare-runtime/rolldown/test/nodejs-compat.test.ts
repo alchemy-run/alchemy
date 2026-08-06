@@ -1,6 +1,6 @@
 import { createMiniflareFromRolldown } from "../../../cloudflare-test-tools/miniflare/src/miniflare.ts";
 import { assert, describe, expect, it } from "vitest";
-import cloudflare from "../src/plugin.js";
+import cloudflare from "../../src/rolldown/plugin.js";
 import { buildFixture } from "./utils/build-fixture";
 
 describe("nodejs_compat", () => {

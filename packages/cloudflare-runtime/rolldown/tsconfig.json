@@ -1,10 +1,10 @@
 {
   "extends": "../../../tsconfig.cloudflare.json",
-  "include": ["src"],
-  "exclude": ["dist"],
+  "include": ["../src/rolldown"],
+  "exclude": ["../dist/rolldown"],
   "compilerOptions": {
     "tsBuildInfoFile": ".cache/tsconfig.tsbuildinfo",
-    "outDir": "dist",
-    "rootDir": "src"
+    "outDir": "../dist/rolldown",
+    "rootDir": "../src/rolldown"
   }
 }

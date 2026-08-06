@@ -2,7 +2,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Internet from "../../src/globals/Internet.ts";
+import * as Internet from "../../../src/core/globals/Internet.ts";
 
 const services = Layer.provide(Internet.InternetLive, NodeServices.layer);
 

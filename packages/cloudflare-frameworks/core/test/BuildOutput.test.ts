@@ -8,7 +8,7 @@ import {
   toOutputFile,
   writeBuildOutput,
   type BuildOutput,
-} from "../src/index.ts";
+} from "../../src/core/index.ts";
 import { makeProject, run } from "./helpers.ts";
 
 describe("toOutputFile", () => {

@@ -1,10 +1,10 @@
 {
   "extends": "../../../../tsconfig.cloudflare.json",
-  "include": ["src/shared/**/*.ts"],
+  "include": ["../../src/internal/workers-shared/shared/**/*.ts"],
   "compilerOptions": {
     "tsBuildInfoFile": ".cache/tsconfig.shared.tsbuildinfo",
     "outDir": ".cache/shared",
-    "rootDir": "src",
+    "rootDir": "../../src/internal/workers-shared",
     "emitDeclarationOnly": true,
     "module": "Preserve",
     "moduleResolution": "bundler",

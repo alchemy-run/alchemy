@@ -10,7 +10,7 @@ import {
   type DevPlatformProxy,
   type OpenDevPlatformProxy,
   type OpenDevPlatformProxyOptions,
-} from "../src/cloudflare.ts";
+} from "../../src/sveltekit/cloudflare.ts";
 
 describe("generateWorkerShim", () => {
   const shim = generateWorkerShim({

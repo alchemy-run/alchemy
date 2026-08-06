@@ -4,7 +4,7 @@ E2e fixture for `@alchemy.run/cloudflare-frameworks/waku` exercising a **framewo
 user's own Durable Objects on the same worker** — the pattern alchemy's
 `Website.Vite` supports via its custom `main` entry, carried generically by
 framework-core's `DeployTarget.entry` (the user-entry seam; see
-`packages/cloudflare-frameworks/core/src/DeployTarget.ts` and the "user-entry seam"
+`packages/cloudflare-frameworks/src/core/DeployTarget.ts` and the "user-entry seam"
 section of `packages/cloudflare-frameworks/core/README.md`).
 
 The app is a waku site (a dynamic page + a `/counter` API route) whose

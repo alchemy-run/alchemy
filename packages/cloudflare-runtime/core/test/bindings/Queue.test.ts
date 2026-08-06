@@ -1,7 +1,7 @@
 import type { MessageBatchMetadata } from "@cloudflare/workers-types/experimental";
 import { assert, expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import * as Queue from "../../src/bindings/queue/Queue.ts";
+import * as Queue from "../../../src/core/bindings/queue/Queue.ts";
 import {
   localRuntimeLayer,
   poll,

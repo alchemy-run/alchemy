@@ -1,7 +1,7 @@
 import { expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Net from "node:net";
-import * as Hyperdrive from "../../src/bindings/hyperdrive/Hyperdrive.ts";
+import * as Hyperdrive from "../../../src/core/bindings/hyperdrive/Hyperdrive.ts";
 import { localRuntimeLayer, startTestWorker } from "../helpers/runtime.ts";
 
 const HYPERDRIVE_SCRIPT = `

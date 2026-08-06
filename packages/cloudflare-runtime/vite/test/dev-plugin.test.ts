@@ -12,7 +12,7 @@ import cloudflareVitePlugin from "#/plugin.ts";
 // WebSocket connections `DistilledDevEnvironment.connect` opens.
 let runtimeAddress: string;
 
-vi.mock("../src/dev-server.ts", () => ({
+vi.mock("../../src/vite/dev-server.ts", () => ({
   createDefaultContext: async () => ({}),
   startServer: async () => ({
     address: runtimeAddress,

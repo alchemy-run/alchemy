@@ -8,8 +8,8 @@ import {
   RESOLVED_EXPORT_TYPES_MODULE_ID,
   WORKER_EXPORT_TYPES_EVENT,
   type ExportTypes,
-} from "../src/export-types.js";
-import { virtualModulesPlugin } from "../src/plugins/virtual-modules.js";
+} from "../../src/rolldown/export-types.js";
+import { virtualModulesPlugin } from "../../src/rolldown/plugins/virtual-modules.js";
 import { buildFixture } from "./utils/build-fixture";
 
 describe("export type detection", async () => {

@@ -24,6 +24,6 @@
     "@playwright/test": "catalog:",
     "effect": "catalog:effect",
     "miniflare": "catalog:workers",
-    "wrangler": "file:../../packages/cloudflare-frameworks/nextjs/wrangler-stub"
+    "wrangler": "file:../../packages/cloudflare-frameworks/src/nextjs/wrangler-stub"
   }
 }

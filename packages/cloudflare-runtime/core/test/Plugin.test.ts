@@ -1,10 +1,10 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Plugin from "../src/Plugin.ts";
-import * as PluginContext from "../src/PluginContext.ts";
-import type { RuntimeWorker } from "../src/RuntimeWorker.ts";
-import { SERVICE_USER_WORKER } from "../src/internal/constants.ts";
+import * as Plugin from "../../src/core/Plugin.ts";
+import * as PluginContext from "../../src/core/PluginContext.ts";
+import type { RuntimeWorker } from "../../src/core/RuntimeWorker.ts";
+import { SERVICE_USER_WORKER } from "../../src/core/internal/constants.ts";
 
 const makeWorker = (overrides: Partial<RuntimeWorker> = {}): RuntimeWorker => ({
   name: "test",

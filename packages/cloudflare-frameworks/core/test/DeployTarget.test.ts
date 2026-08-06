@@ -9,7 +9,7 @@ import {
   resolveDeployTargetEntry,
   type BuildOutput,
   type DeployTarget,
-} from "../src/index.ts";
+} from "../../src/core/index.ts";
 import { makeProject, run } from "./helpers.ts";
 
 const emptyBuild: BuildOutput = {

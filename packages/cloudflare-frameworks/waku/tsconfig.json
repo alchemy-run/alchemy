@@ -1,11 +1,11 @@
 {
   "extends": "../../../tsconfig.cloudflare.json",
-  "include": ["src"],
-  "exclude": ["dist"],
+  "include": ["../src/waku"],
+  "exclude": ["../dist/waku"],
   "compilerOptions": {
     "tsBuildInfoFile": ".cache/tsconfig.tsbuildinfo",
-    "outDir": "dist",
-    "rootDir": "src",
+    "outDir": "../dist/waku",
+    "rootDir": "../src/waku",
     "types": ["node"]
   }
 }

@@ -6,8 +6,11 @@ import {
 import type { BuildOutput } from "@alchemy.run/cloudflare-frameworks/core";
 import * as Effect from "effect/Effect";
 import { describe, expect, it } from "vitest";
-import { makeCloudflareTarget, target } from "../src/cloudflare.ts";
-import type { SvelteKitTargetConfig } from "../src/index.ts";
+import {
+  makeCloudflareTarget,
+  target,
+} from "../../src/sveltekit/cloudflare.ts";
+import type { SvelteKitTargetConfig } from "../../src/sveltekit/index.ts";
 
 const emptyBuild: BuildOutput = {
   clientDirectory: undefined,

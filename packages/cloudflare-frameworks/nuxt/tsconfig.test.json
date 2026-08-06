@@ -1,6 +1,6 @@
 {
   "extends": "../../../tsconfig.cloudflare.json",
-  "include": ["src", "test", "vitest.config.ts"],
+  "include": ["../src/nuxt", "test", "vitest.config.ts"],
   "compilerOptions": {
     "composite": false,
     "noEmit": true,

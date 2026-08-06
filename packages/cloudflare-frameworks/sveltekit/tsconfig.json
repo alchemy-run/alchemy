@@ -1,11 +1,11 @@
 {
   "extends": "../../../tsconfig.cloudflare.json",
-  "include": ["src"],
-  "exclude": ["dist"],
+  "include": ["../src/sveltekit"],
+  "exclude": ["../dist/sveltekit"],
   "compilerOptions": {
     "tsBuildInfoFile": ".cache/tsconfig.tsbuildinfo",
-    "outDir": "dist",
-    "rootDir": "src",
+    "outDir": "../dist/sveltekit",
+    "rootDir": "../src/sveltekit",
     "types": ["node"]
   }
 }

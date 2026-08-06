@@ -1,6 +1,6 @@
 {
   "extends": "../../../tsconfig.cloudflare.json",
-  "include": ["src/**/*.ts", "test", "vitest.config.ts"],
+  "include": ["../src/nextjs/**/*.ts", "test", "vitest.config.ts"],
   "compilerOptions": {
     "composite": false,
     "noEmit": true,

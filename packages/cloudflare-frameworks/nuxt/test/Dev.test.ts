@@ -8,9 +8,12 @@ import {
   resolveClientModulePath,
   resolveDevPluginPath,
   type OpenDevProxy,
-} from "../src/dev/host.ts";
-import { RUNTIME_CONFIG_KEY, type DevConnectInfo } from "../src/dev/shared.ts";
-import { fromHarnessOptions } from "../src/index.ts";
+} from "../../src/nuxt/dev/host.ts";
+import {
+  RUNTIME_CONFIG_KEY,
+  type DevConnectInfo,
+} from "../../src/nuxt/dev/shared.ts";
+import { fromHarnessOptions } from "../../src/nuxt/index.ts";
 
 // The plugin runs inside nitro's dev SSR worker thread; in the test we stand
 // in for nitro: `defineNitroPlugin` is identity and `useRuntimeConfig`
@@ -108,7 +111,7 @@ const setupPlugin = async (config: Record<string, unknown>) => {
   nitro.config = config;
   vi.resetModules();
   const { default: plugin } =
-    (await import("../src/dev/plugin.ts")) as unknown as {
+    (await import("../../src/nuxt/dev/plugin.ts")) as unknown as {
       default: (app: unknown) => void;
     };
   const hooks = new Map<string, (event: unknown) => Promise<void>>();

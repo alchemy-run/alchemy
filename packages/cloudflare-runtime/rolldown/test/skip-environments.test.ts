@@ -3,13 +3,13 @@ import { assert, describe, expect, it, vi } from "vitest";
 import {
   parseViteEnvironments,
   type BasePluginOptions,
-} from "../src/options.js";
+} from "../../src/rolldown/options.js";
 import {
   cloudflareExternalsPlugin,
   nodejsUnenvPlugin,
   optionsPlugin,
   virtualModulesPlugin,
-} from "../src/plugins/index.js";
+} from "../../src/rolldown/plugins/index.js";
 
 const applyToEnvironment = (plugin: vite.Plugin | null, name: string) => {
   assert(plugin, "plugin is not defined");

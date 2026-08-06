@@ -6,8 +6,8 @@ import { describe, expect, it } from "vitest";
 import cloudflareTargetFactory, {
   makeWakuCloudflareTarget,
   makeWakuPluginOptions,
-} from "../src/cloudflare.ts";
-import { WAKU_SERVER_ENTRY_PATH } from "../src/index.ts";
+} from "../../src/waku/cloudflare.ts";
+import { WAKU_SERVER_ENTRY_PATH } from "../../src/waku/index.ts";
 
 const WAKU_DIR = "/project/node_modules/waku";
 

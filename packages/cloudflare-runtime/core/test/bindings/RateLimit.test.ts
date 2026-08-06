@@ -1,8 +1,8 @@
 import { expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { afterEach, describe, it, vi } from "vitest";
-import * as RateLimit from "../../src/bindings/rate-limit/RateLimit.ts";
-import makeBinding from "../../src/bindings/rate-limit/RateLimitBinding.worker.ts";
+import * as RateLimit from "../../../src/core/bindings/rate-limit/RateLimit.ts";
+import makeBinding from "../../../src/core/bindings/rate-limit/RateLimitBinding.worker.ts";
 import { localRuntimeLayer, startTestWorker } from "../helpers/runtime.ts";
 
 const RATE_LIMIT_SCRIPT = `

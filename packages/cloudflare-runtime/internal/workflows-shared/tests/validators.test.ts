@@ -7,7 +7,7 @@ import {
   MAX_STEP_NAME_LENGTH,
   MAX_WORKFLOW_INSTANCE_ID_LENGTH,
   MAX_WORKFLOW_NAME_LENGTH,
-} from "../src/lib/validators";
+} from "../../../src/internal/workflows-shared/lib/validators";
 
 describe("Workflow name validation", () => {
   it.for([

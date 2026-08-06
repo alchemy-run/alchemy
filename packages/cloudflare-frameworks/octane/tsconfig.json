@@ -1,11 +1,11 @@
 {
   "extends": "../../../tsconfig.cloudflare.json",
-  "include": ["src"],
-  "exclude": ["dist"],
+  "include": ["../src/octane"],
+  "exclude": ["../dist/octane"],
   "compilerOptions": {
     "tsBuildInfoFile": ".cache/tsconfig.tsbuildinfo",
-    "outDir": "dist",
-    "rootDir": "src",
+    "outDir": "../dist/octane",
+    "rootDir": "../src/octane",
     "types": ["node"]
   }
 }

@@ -5,10 +5,10 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import { KvNamespace } from "../dist/node/bindings/index.mjs";
-import * as WorkerProxy from "../dist/node/proxy/WorkerProxy.mjs";
-import * as Runtime from "../dist/node/Runtime.mjs";
-import * as RuntimeServices from "../dist/node/RuntimeServices.mjs";
+import { KvNamespace } from "../../dist/core/node/bindings/index.mjs";
+import * as WorkerProxy from "../../dist/core/node/proxy/WorkerProxy.mjs";
+import * as Runtime from "../../dist/core/node/Runtime.mjs";
+import * as RuntimeServices from "../../dist/core/node/RuntimeServices.mjs";
 
 const main = Effect.gen(function* () {
   const runtime = yield* Runtime.Runtime;

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { fromHarnessOptions, resolveExportTarget } from "../src/index.ts";
+import {
+  fromHarnessOptions,
+  resolveExportTarget,
+} from "../../src/sveltekit/index.ts";
 
 describe("fromHarnessOptions", () => {
   it("maps the shared vite options onto SvelteKit options", () => {

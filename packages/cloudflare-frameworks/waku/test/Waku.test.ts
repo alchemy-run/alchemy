@@ -16,10 +16,10 @@ import framework, {
   WAKU_SERVER_ENTRY_ID,
   WAKU_SERVER_ENTRY_MODULE,
   type WakuTarget,
-} from "../src/index.ts";
+} from "../../src/waku/index.ts";
 
 const ADAPTER =
-  "/project/node_modules/@alchemy.run/cloudflare-frameworks/waku/dist/adapter.js";
+  "/project/node_modules/@alchemy.run/cloudflare-frameworks/dist/waku/adapter.js";
 
 const flatten = (
   plugins: Array<ViteModule.PluginOption> | undefined,
@@ -238,7 +238,7 @@ describe("selectWakuTargetInput", () => {
 describe("adapter fork", () => {
   it("drops the wrangler-writing build enhancer and never imports wrangler", async () => {
     const source = await NodeFsPromises.readFile(
-      NodePath.resolve(import.meta.dirname, "../src/adapter.ts"),
+      NodePath.resolve(import.meta.dirname, "../../src/waku/adapter.ts"),
       "utf8",
     );
     expect(source).toContain("buildEnhancers: []");

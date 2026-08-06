@@ -1,7 +1,7 @@
 import { expect, it } from "@effect/vitest";
-import * as KvNamespace from "../../src/bindings/kv-namespace/index.ts";
-import * as Text from "../../src/bindings/Text.ts";
-import { getPlatformProxy } from "../../src/platform-proxy/getPlatformProxy.ts";
+import * as KvNamespace from "../../../src/core/bindings/kv-namespace/index.ts";
+import * as Text from "../../../src/core/bindings/Text.ts";
+import { getPlatformProxy } from "../../../src/core/platform-proxy/getPlatformProxy.ts";
 
 interface TestEnv {
   TEXT: string;

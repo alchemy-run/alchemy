@@ -8,9 +8,9 @@ import {
   ADAPTER_NAME,
   ADAPTER_PACKAGE,
   makeCloudflareTarget,
-} from "../src/cloudflare.ts";
-import { fromHarnessOptions } from "../src/index.ts";
-import { readOctaneOutput } from "../src/Octane.ts";
+} from "../../src/octane/cloudflare.ts";
+import { fromHarnessOptions } from "../../src/octane/index.ts";
+import { readOctaneOutput } from "../../src/octane/Octane.ts";
 
 const runWithNode = <A, E>(
   effect: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path | Scope.Scope>,

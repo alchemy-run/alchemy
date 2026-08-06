@@ -15,8 +15,8 @@ import cloudflareTarget, {
   IMAGE_PASSTHROUGH_ENDPOINT,
   makeIntegrationPluginOptions,
   SERVER_ENTRYPOINT,
-} from "../src/cloudflare.ts";
-import { createConfigPlugin } from "../src/config-plugin.ts";
+} from "../../src/astro/cloudflare.ts";
+import { createConfigPlugin } from "../../src/astro/config-plugin.ts";
 import framework, {
   DEFAULT_TARGET_SPECIFIER,
   isAstroTarget,
@@ -24,7 +24,7 @@ import framework, {
   makeAstroInlineConfig,
   NODE_ENVIRONMENTS,
   type AstroTarget,
-} from "../src/index.ts";
+} from "../../src/astro/index.ts";
 
 const ROOT = "/project";
 
@@ -540,7 +540,10 @@ describe("config plugin (virtual:astro-cloudflare:config)", () => {
 
 describe("vendored runtime purity", () => {
   it("never imports wrangler, @astrojs/cloudflare, or @cloudflare/vite-plugin", async () => {
-    const runtimeDir = NodePath.resolve(import.meta.dirname, "../src/runtime");
+    const runtimeDir = NodePath.resolve(
+      import.meta.dirname,
+      "../../src/astro/runtime",
+    );
     const entries = await NodeFsPromises.readdir(runtimeDir, {
       recursive: true,
       withFileTypes: true,

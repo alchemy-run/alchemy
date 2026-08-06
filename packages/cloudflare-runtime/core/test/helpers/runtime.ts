@@ -9,22 +9,25 @@ import * as Queue from "effect/Queue";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as Docker from "../../src/Docker.ts";
-import * as Globals from "../../src/globals/Globals.ts";
-import * as Internet from "../../src/globals/Internet.ts";
-import * as Storage from "../../src/globals/Storage.ts";
-import * as Paths from "../../src/internal/Paths.ts";
-import * as Runtime from "../../src/Runtime.ts";
-import * as RuntimeServices from "../../src/RuntimeServices.ts";
-import type { BindingHooks, RuntimeWorker } from "../../src/RuntimeWorker.ts";
-import * as Registry from "../../src/registry/Registry.ts";
-import * as RegistryProxy from "../../src/registry/RegistryProxy.ts";
+import * as Docker from "../../../src/core/Docker.ts";
+import * as Globals from "../../../src/core/globals/Globals.ts";
+import * as Internet from "../../../src/core/globals/Internet.ts";
+import * as Storage from "../../../src/core/globals/Storage.ts";
+import * as Paths from "../../../src/core/internal/Paths.ts";
+import * as Runtime from "../../../src/core/Runtime.ts";
+import * as RuntimeServices from "../../../src/core/RuntimeServices.ts";
+import type {
+  BindingHooks,
+  RuntimeWorker,
+} from "../../../src/core/RuntimeWorker.ts";
+import * as Registry from "../../../src/core/registry/Registry.ts";
+import * as RegistryProxy from "../../../src/core/registry/RegistryProxy.ts";
 import {
   type ResolvedTargetMap,
   resolvedTargetKey,
   type Subscriber,
-} from "../../src/registry/RegistryTypes.shared.ts";
-import * as Workerd from "../../src/workerd/Workerd.ts";
+} from "../../../src/core/registry/RegistryTypes.shared.ts";
+import * as Workerd from "../../../src/core/workerd/Workerd.ts";
 
 export const configProvider = (
   input: { fileSystemSupportsWatcher?: boolean } = {},

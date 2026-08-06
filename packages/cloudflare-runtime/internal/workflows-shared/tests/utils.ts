@@ -5,7 +5,7 @@ import type {
   DatabaseVersion,
   DatabaseWorkflow,
   Engine,
-} from "../src/engine";
+} from "../../../src/internal/workflows-shared/engine";
 import type { WorkflowStep } from "cloudflare:workers";
 
 // Track fire-and-forget init() RPC promises so they can be settled

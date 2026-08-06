@@ -10,7 +10,7 @@ import {
   makeRunnerConfig,
   toRuntimeModules,
   WORKER_ENTRY_MODULE,
-} from "../src/Nextjs.ts";
+} from "../../src/nextjs/Nextjs.ts";
 
 const file = (name: string, content: string | Uint8Array): OutputFile => ({
   name,

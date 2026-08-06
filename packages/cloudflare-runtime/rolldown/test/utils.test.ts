@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hasNodejsCompat, sanitizePath } from "../src/utils.js";
+import { hasNodejsCompat, sanitizePath } from "../../src/rolldown/utils.js";
 
 describe("utils", () => {
   describe("sanitizePath", () => {

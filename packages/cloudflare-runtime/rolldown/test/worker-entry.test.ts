@@ -1,6 +1,6 @@
 import type * as vite from "vite";
 import { assert, describe, expect, it } from "vitest";
-import { optionsPlugin } from "../src/plugins/options.js";
+import { optionsPlugin } from "../../src/rolldown/plugins/options.js";
 
 describe("vite worker entry resolution", () => {
   const callConfig = async (userConfig: vite.UserConfig) => {

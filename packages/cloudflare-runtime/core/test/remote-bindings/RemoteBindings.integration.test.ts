@@ -12,9 +12,9 @@ import {
   KvNamespace,
   R2Bucket,
   Service,
-} from "../../src/bindings/index.ts";
-import * as Runtime from "../../src/Runtime.ts";
-import * as RuntimeServices from "../../src/RuntimeServices.ts";
+} from "../../../src/core/bindings/index.ts";
+import * as Runtime from "../../../src/core/Runtime.ts";
+import * as RuntimeServices from "../../../src/core/RuntimeServices.ts";
 
 /**
  * Single integration spec that provisions one worker with every remote

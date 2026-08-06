@@ -4,7 +4,7 @@ import * as NodeHttp from "node:http";
 import {
   getAddress,
   toConnectableHost,
-} from "../../src/internal/get-address.ts";
+} from "../../../src/core/internal/get-address.ts";
 
 const listen = (host?: string) =>
   Effect.acquireRelease(

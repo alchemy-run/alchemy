@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as NodeNet from "node:net";
-import * as Port from "../../src/internal/Port.ts";
+import * as Port from "../../../src/core/internal/Port.ts";
 
 export const occupy = (port: number, host?: string) =>
   Effect.acquireRelease(

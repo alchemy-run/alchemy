@@ -12,7 +12,7 @@ import * as NodeFsPromises from "node:fs/promises";
 import * as NodePath from "node:path";
 import { describe, expect, it } from "vitest";
 
-const SRC = NodePath.resolve(import.meta.dirname, "../src");
+const SRC = NodePath.resolve(import.meta.dirname, "../../src/astro");
 
 /** Import/export specifiers of a TS module (static, type-only, and dynamic). */
 const collectSpecifiers = (source: string): Array<string> => {

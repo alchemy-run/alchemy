@@ -2,8 +2,8 @@ import { expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import { execFileSync } from "node:child_process";
-import * as DurableObjectNamespace from "../../src/bindings/DurableObjectNamespace.ts";
-import type { ContainerImage } from "../../src/Docker.ts";
+import * as DurableObjectNamespace from "../../../src/core/bindings/DurableObjectNamespace.ts";
+import type { ContainerImage } from "../../../src/core/Docker.ts";
 import { getFixture } from "../helpers/fixture.ts";
 import { localRuntimeLayer, startTestWorker } from "../helpers/runtime.ts";
 

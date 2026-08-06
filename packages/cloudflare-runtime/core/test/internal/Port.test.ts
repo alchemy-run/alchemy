@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import * as Port from "../../src/internal/Port.ts";
+import * as Port from "../../../src/core/internal/Port.ts";
 import * as PortHelpers from "../helpers/port.ts";
 
 describe("Port.find", () => {

@@ -1,7 +1,7 @@
 import { createMiniflareFromRolldown } from "../../../cloudflare-test-tools/miniflare/src/miniflare.ts";
 import type { ResolveIdResult } from "rolldown";
 import { describe, expect, it } from "vitest";
-import { cloudflareExternalsPlugin } from "../src/plugins/cloudflare-externals.js";
+import { cloudflareExternalsPlugin } from "../../src/rolldown/plugins/cloudflare-externals.js";
 import { buildFixture } from "./utils/build-fixture";
 
 describe("cloudflare externals", () => {

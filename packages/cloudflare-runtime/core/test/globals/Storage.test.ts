@@ -6,7 +6,7 @@ import * as NodeFs from "node:fs";
 import * as NodeOs from "node:os";
 import * as Predicate from "effect/Predicate";
 import * as NodePath from "node:path";
-import * as Storage from "../../src/globals/Storage.ts";
+import * as Storage from "../../../src/core/globals/Storage.ts";
 import { makeTempDirectory } from "../helpers/runtime.ts";
 
 const services = NodeServices.layer;

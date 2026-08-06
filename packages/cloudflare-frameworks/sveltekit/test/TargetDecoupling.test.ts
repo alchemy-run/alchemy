@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
 
 const srcDir = NodePath.resolve(
   NodePath.dirname(fileURLToPath(import.meta.url)),
-  "../src",
+  "../../src/sveltekit",
 );
 
 /** Every static import / re-export specifier in a module's source. */

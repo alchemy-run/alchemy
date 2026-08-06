@@ -2,7 +2,9 @@
 
 declare namespace Cloudflare {
   interface Env {
-    ENGINE: DurableObjectNamespace<import("../src/index").Engine>;
+    ENGINE: DurableObjectNamespace<
+      import("../../../src/internal/workflows-shared/index").Engine
+    >;
     USER_WORKFLOW: import("cloudflare:workers").WorkflowEntrypoint;
   }
 }

@@ -6,7 +6,7 @@
  * vocs's mdx/config/patch plugins), but it does NOT use waku's
  * `unstable_combinedPlugins`, so `@alchemy.run/cloudflare-frameworks/waku`'s Framework layer
  * cannot drive it directly. This layer mirrors that package's orchestration
- * (see packages/cloudflare-frameworks/waku/src/Waku.ts) with vocs's plugin stack swapped in:
+ * (see packages/cloudflare-frameworks/src/waku/Waku.ts) with vocs's plugin stack swapped in:
  *
  * - the deploy-target halves (wrangler-free adapter fork + cloudflare vite
  *   plugin pinned to waku's rsc entry) come from
@@ -48,7 +48,7 @@ export interface VocsFrameworkExtras {
 
 /**
  * `NODE_ENV` as it was when this module first loaded (see
- * packages/cloudflare-frameworks/waku/src/Waku.ts for the rationale: build and dev may run in the
+ * packages/cloudflare-frameworks/src/waku/Waku.ts for the rationale: build and dev may run in the
  * same long-lived playwright worker process).
  */
 const INITIAL_NODE_ENV = process.env.NODE_ENV;

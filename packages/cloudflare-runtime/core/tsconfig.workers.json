@@ -1,13 +1,13 @@
 {
   "extends": "../../../tsconfig.cloudflare.json",
   "include": [
-    "src/**/*.worker.ts",
-    "src/**/*.shared.ts",
-    "../internal/workers-shared/src/shared/**/*.ts",
-    "../internal/workers-shared/src/workers/**/*.ts",
-    "../internal/workflows-shared/src"
+    "../src/core/**/*.worker.ts",
+    "../src/core/**/*.shared.ts",
+    "../src/internal/workers-shared/shared/**/*.ts",
+    "../src/internal/workers-shared/workers/**/*.ts",
+    "../src/internal/workflows-shared"
   ],
-  "exclude": ["../internal/workers-shared/src/**/tests/**"],
+  "exclude": ["../src/internal/workers-shared/**/tests/**"],
   "compilerOptions": {
     "tsBuildInfoFile": ".cache/tsconfig.workers.tsbuildinfo",
     "outDir": ".cache/workers",
