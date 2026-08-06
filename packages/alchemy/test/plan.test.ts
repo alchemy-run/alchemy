@@ -4489,6 +4489,31 @@ describe("renamed resources (renamedFrom)", () => {
   );
 
   test(
+    "the absolute { fqn } form claims a former FQN across namespaces",
+    Effect.gen(function* () {
+      // The resource used to live at the ROOT of the stack; it moved into
+      // a namespace. A relative former id cannot express that (it would
+      // resolve inside the new namespace), so the absolute form is used.
+      yield* seed({ Thing: bucketRow("Thing") });
+
+      const plan = yield* Effect.gen(function* () {
+        yield* Bucket("Thing", { name: "b" }).pipe(
+          renamedFrom({ fqn: "Thing" }),
+          Namespace.push("New"),
+        );
+        return {};
+      }).pipe(makePlan);
+
+      const node = plan.resources["New/Thing"]!;
+      expect(node.action).toEqual("noop");
+      expect(node.renamedFrom).toEqual(["Thing"]);
+      expect(node.state?.fqn).toEqual("New/Thing");
+      expect(node.state?.instanceId).toEqual(instanceId);
+      expect(Object.keys(plan.deletions)).toHaveLength(0);
+    }),
+  );
+
+  test(
     "a rename chain with several same-instanceId leftovers is cleaned in one plan",
     Effect.gen(function* () {
       // A → B → C rename history with repeated partial failures: rows

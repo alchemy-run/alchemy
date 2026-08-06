@@ -391,15 +391,20 @@ export function Resource<R extends ResourceLike>(
           Effect.map(Option.getOrUndefined),
         ),
         Mode: ambientMode,
-        // Former logical ids resolve against the SAME namespace as the
+        // Bare-string former ids resolve against the SAME namespace as the
         // resource's own id, so `renamedFrom("Site/Worker")` declared at the
-        // caller's level claims `<callerNs>/Site/Worker`.
+        // caller's level claims `<callerNs>/Site/Worker`; the `{ fqn }` form
+        // is absolute (cross-namespace moves).
         FormerFqns: yield* Effect.serviceOption(RenamePolicy).pipe(
           Effect.map(
             Option.match({
               onNone: () => undefined,
               onSome: (formerIds) =>
-                formerIds.map((formerId) => toFqn(namespace, formerId)),
+                formerIds.map((formerId) =>
+                  typeof formerId === "string"
+                    ? toFqn(namespace, formerId)
+                    : formerId.fqn,
+                ),
             }),
           ),
         ),

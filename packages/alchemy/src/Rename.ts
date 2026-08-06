@@ -2,14 +2,26 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 
 /**
- * RenamePolicy carries the logical ids a resource was previously declared
+ * A former id a resource was previously declared under:
+ *
+ * - a bare `string` resolves against the ambient namespace, exactly like
+ *   the resource's own `id` argument does
+ * - `{ fqn: "..." }` is absolute — the full FQN as persisted in state,
+ *   ignoring any surrounding namespace. Needed when a resource moved
+ *   BETWEEN namespaces (a relative id can only address the current
+ *   namespace's subtree).
+ */
+export type FormerId = string | { fqn: string };
+
+/**
+ * RenamePolicy carries the former ids a resource was previously declared
  * under. It is captured from the ambient context at registration time (like
  * `AdoptPolicy` / `RemovalPolicy`) and resolved against the same namespace
  * as the resource's own id — see `ResourceLike.FormerFqns`.
  */
 export class RenamePolicy extends Context.Service<
   RenamePolicy,
-  readonly string[]
+  readonly FormerId[]
 >()("RenamePolicy") {}
 
 /**
@@ -24,10 +36,13 @@ export class RenamePolicy extends Context.Service<
  * );
  * ```
  *
- * Former ids are namespace-relative: they resolve against the same ambient
- * namespace as the resource's own id, so a resource declared inside
- * `Namespace.push("Site")` with `renamedFrom("Worker")` claims the former
- * FQN `Site/Worker`.
+ * A bare-string former id behaves exactly like the resource's own `id`
+ * argument: it resolves against the ambient namespace, so a resource
+ * declared inside `Namespace.push("Site")` with `renamedFrom("Worker")`
+ * claims the former FQN `Site/Worker`. When the resource moved BETWEEN
+ * namespaces, pass the absolute form instead — `renamedFrom({ fqn:
+ * "Legacy/Worker" })` claims exactly that FQN regardless of the ambient
+ * namespace.
  *
  * Renamed more than once? List every former id, MOST RECENT FIRST — the
  * planner checks them in declaration order and migrates from the first
@@ -55,6 +70,6 @@ export class RenamePolicy extends Context.Service<
  *   ambiguous and fails the plan loudly.
  */
 export const renamedFrom =
-  (...formerIds: [string, ...string[]]) =>
+  (...formerIds: [FormerId, ...FormerId[]]) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
     Effect.provideService(effect, RenamePolicy, formerIds);
