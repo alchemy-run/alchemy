@@ -67,7 +67,7 @@ export class Todo extends Schema.Class<Todo>("Todo")({
   createdAt: Schema.Date,
 }) {}
 
-export class TodoNotFound extends Schema.TaggedErrorClass<TodoNotFound>()(
+export class TodoNotFound extends Schema.TaggedError<TodoNotFound>()(
   "TodoNotFound",
   { message: Schema.String, id: Schema.Number },
 ) {}

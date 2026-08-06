@@ -30,7 +30,7 @@ everything from the second:
 
 ```sh
 src/
-├── Task.ts        # domain model + typed 404 (Schema.Class, TaggedErrorClass)
+├── Task.ts        # domain model + typed 404 (Schema.Class, TaggedError)
 ├── ApiSchema.ts   # endpoint declarations — one HttpApi value, imported by server AND clients
 ├── ApiService.ts  # the host — a Worker or Lambda Function; wired on the hub pages — returns { fetch }
 └── ApiClient.ts   # typed client derived from ApiSchema — no codegen, no string URLs
@@ -55,7 +55,7 @@ export class Task extends Schema.Class<Task>("Task")({
   completed: Schema.Boolean,
 }) {}
 
-export class TaskNotFound extends Schema.TaggedErrorClass<TaskNotFound>()(
+export class TaskNotFound extends Schema.TaggedError<TaskNotFound>()(
   "TaskNotFound",
   { id: Schema.String },
   { httpApiStatus: 404 },

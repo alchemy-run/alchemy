@@ -53,7 +53,7 @@ export class Task extends Schema.Class<Task>("Task")({
   completed: Schema.Boolean,
 }) {}
 
-export class TaskNotFound extends Schema.TaggedErrorClass<TaskNotFound>()(
+export class TaskNotFound extends Schema.TaggedError<TaskNotFound>()(
   "TaskNotFound",
   { id: Schema.String },
   { httpApiStatus: 404 },
@@ -61,7 +61,7 @@ export class TaskNotFound extends Schema.TaggedErrorClass<TaskNotFound>()(
 ```
 
 `Schema.Class` gives you a runtime-validated class with an inferred
-TypeScript type. `Schema.TaggedErrorClass` gives you a typed error you
+TypeScript type. `Schema.TaggedError` gives you a typed error you
 can return from handlers and discriminate against on the client —
 `httpApiStatus: 404` maps it to a 404 response instead of a generic 500.
 

@@ -331,6 +331,11 @@ export default Worker(
  * have.
  */
 const HttpPlatformStub = Layer.succeed(HttpPlatform.HttpPlatform, {
+  platform: "web",
+  compression: HttpPlatform.makeCompressionWeb({
+    algorithms: ["gzip", "deflate"],
+    transform: (algorithm) => HttpPlatform.compressionTransformWeb(algorithm),
+  }),
   fileResponse: () => Effect.die("HttpPlatform.fileResponse not supported"),
   fileWebResponse: () =>
     Effect.die("HttpPlatform.fileWebResponse not supported"),
