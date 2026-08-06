@@ -1205,7 +1205,13 @@ const toRuntimeAssets = Effect.fn(function* (
       | "404-page"
       | "single-page-application"
       | undefined,
-    runWorkerFirst: assets.runWorkerFirst,
+    // The deployed default is assets-first (`run_worker_first` omitted =
+    // false on the cloud API), but the runtime's router inverts it — it
+    // treats anything `!== false` (including `undefined`) as worker-first.
+    // Pin the cloud default explicitly so a Worker with an assets directory
+    // and a `main` serves asset paths from the asset layer locally exactly
+    // like it does deployed.
+    runWorkerFirst: assets.runWorkerFirst ?? false,
     serveDirectly: assets.serveDirectly,
   };
 });

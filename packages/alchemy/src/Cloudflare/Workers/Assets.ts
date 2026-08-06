@@ -117,23 +117,56 @@ export class AssetUploadSessionError extends Data.TaggedError(
   workerName: string;
 }> {}
 
+const contentTypesByExtension: Record<string, string> = {
+  html: "text/html",
+  htm: "text/html",
+  txt: "text/plain",
+  md: "text/markdown",
+  sql: "text/sql",
+  json: "application/json",
+  // Source maps are JSON; serving them as such lets devtools consume them.
+  map: "application/json",
+  jsonld: "application/ld+json",
+  xml: "application/xml",
+  csv: "text/csv",
+  // Browsers only accept JavaScript module scripts when the MIME type is a
+  // "JavaScript MIME type" (e.g. text/javascript). application/javascript+module
+  // is not valid and causes strict module loading to fail.
+  js: "text/javascript; charset=utf-8",
+  mjs: "text/javascript; charset=utf-8",
+  css: "text/css",
+  wasm: "application/wasm",
+  pdf: "application/pdf",
+  // images
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  avif: "image/avif",
+  svg: "image/svg+xml",
+  ico: "image/x-icon",
+  bmp: "image/bmp",
+  // fonts
+  woff: "font/woff",
+  woff2: "font/woff2",
+  ttf: "font/ttf",
+  otf: "font/otf",
+  eot: "application/vnd.ms-fontobject",
+  // media
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  ogg: "audio/ogg",
+  mp4: "video/mp4",
+  webm: "video/webm",
+  // app manifests
+  webmanifest: "application/manifest+json",
+};
+
 const getContentType = (name: string) => {
-  if (name.endsWith(".html")) return "text/html";
-  if (name.endsWith(".txt")) return "text/plain";
-  if (name.endsWith(".sql")) return "text/sql";
-  if (name.endsWith(".json")) return "application/json";
-  if (name.endsWith(".js") || name.endsWith(".mjs")) {
-    // Browsers only accept JavaScript module scripts when the MIME type is a
-    // "JavaScript MIME type" (e.g. text/javascript). application/javascript+module
-    // is not valid and causes strict module loading to fail.
-    return "text/javascript; charset=utf-8";
-  }
-  if (name.endsWith(".css")) return "text/css";
-  if (name.endsWith(".wasm")) return "application/wasm";
-  if (name.endsWith(".png")) return "image/png";
-  if (name.endsWith(".svg")) return "image/svg+xml";
-  if (name.endsWith(".ico")) return "image/x-icon";
-  return "application/octet-stream";
+  const dot = name.lastIndexOf(".");
+  const ext = dot === -1 ? "" : name.slice(dot + 1).toLowerCase();
+  return contentTypesByExtension[ext] ?? "application/octet-stream";
 };
 
 const maybeReadString = Effect.fn(function* (file: string) {
@@ -254,7 +287,21 @@ export const readAssets = Effect.fn(function* ({
           size,
         });
       }
+      // Hash content + extension (matching wrangler): the upload API stores
+      // one blob + content type per hash, so two identical bodies under
+      // different extensions must not collapse into a single entry — the
+      // second file would serve with the first file's content type.
+      const extension = name.slice(name.lastIndexOf(".") + 1).toLowerCase();
       const hash = yield* fs.readFile(file).pipe(
+        Effect.flatMap((content) =>
+          Effect.sync(() => {
+            const extBytes = new TextEncoder().encode(extension);
+            const hashed = new Uint8Array(content.length + extBytes.length);
+            hashed.set(content);
+            hashed.set(extBytes, content.length);
+            return hashed;
+          }),
+        ),
         Effect.flatMap(sha256),
         Effect.map((hash) => hash.slice(0, 32)),
       );
