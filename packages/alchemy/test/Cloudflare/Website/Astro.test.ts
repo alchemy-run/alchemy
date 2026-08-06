@@ -763,4 +763,96 @@ describe.concurrent("Astro", () => {
       }).pipe(logLevel),
     { timeout: 360_000 },
   );
+
+  // ─────────────────────────────────────────────────────────────────────
+  // SPA fallback: `assets.notFoundHandling: "single-page-application"`
+  //
+  // A client-routed static build: every real page is a prerendered asset,
+  // and a hard GET to any UNREGISTERED route must serve the app shell
+  // (`/index.html`) with a 200 so the client router can boot. The built
+  // `404.html` must NOT serve — SPA handling supersedes the 404 page.
+  // ─────────────────────────────────────────────────────────────────────
+
+  test.provider(
+    "Astro: SPA not-found handling serves the app shell for deep links",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
+        yield* stack.destroy();
+
+        const rootDir = yield* cloneFixture(staticFixtureDir, {
+          prefix: "alchemy-astro-spa-",
+          tempRoot,
+          entries: ["package.json", "public", "src"],
+        });
+
+        const site = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Website.Astro("AstroSpaSite", {
+              rootDir,
+              workersDev: { enabled: true, previewsEnabled: true },
+              compatibility: { date: "2026-03-10" },
+              memo: {
+                include: ["src/**", "public/**", "package.json"],
+                workspaces: [],
+              },
+              astro: { output: "static" },
+              assets: { notFoundHandling: "single-page-application" },
+            });
+          }),
+        );
+
+        expect(site.url).toBeDefined();
+        // Fully-static SPA deploy: assets only, no server bundle.
+        expect(site.hash?.bundle).toBeUndefined();
+        yield* expectWorkerExists(site.workerName, accountId);
+
+        // The app shell itself serves at `/`.
+        yield* expectUrlContains(`${site.url!}/`, "static-home", {
+          timeout: "120 seconds",
+          label: "SPA shell at /",
+        });
+
+        // (a) A hard GET to a route that was never registered serves the
+        // shell (`index.html`) with a 200 — `expectUrlContains` requires
+        // `res.ok`, so a 404 status can't satisfy this. The built
+        // `404.html` must NOT leak through.
+        const deepLinkBody = yield* expectUrlContains(
+          `${site.url!}/spa/definitely/not/a/route`,
+          "static-home",
+          {
+            timeout: "60 seconds",
+            label: "deep link serves SPA shell",
+          },
+        );
+        expect(deepLinkBody).not.toContain("static-404");
+
+        // (b) A real prerendered page still serves its own content, not
+        // the shell.
+        const aboutBody = yield* expectUrlContains(
+          `${site.url!}/about/`,
+          "static-about",
+          {
+            timeout: "60 seconds",
+            label: "real page still serves",
+          },
+        );
+        expect(aboutBody).not.toContain("static-home");
+
+        // (c) A real static asset still serves normally.
+        yield* expectUrlContains(
+          `${site.url!}/static.txt`,
+          "astro-static-public-asset",
+          {
+            timeout: "60 seconds",
+            label: "static asset with SPA handling",
+          },
+        );
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+      }).pipe(logLevel),
+    { timeout: 360_000 },
+  );
 });

@@ -137,6 +137,23 @@ const makePlan = (options: {
 const lineFor = (lines: string[], id: string) =>
   lines.find((line) => line.includes(`[${id}]`));
 
+describe("formatPlanLines rename tags", () => {
+  test("a migrated resource shows its former FQN", () => {
+    const lines = formatPlanLines(
+      makePlan({
+        defaultMode: "live",
+        resources: {
+          Assets: {
+            ...crud({ id: "Assets", action: "update", mode: "live" }),
+            renamedFrom: ["Bucket"],
+          } as CRUD,
+        },
+      }),
+    );
+    expect(lineFor(lines, "Assets")).toContain("(renamed from Bucket)");
+  });
+});
+
 describe("formatPlanLines mode tags", () => {
   test("deploy (default live): local deletion rows get a dim local tag", () => {
     const lines = formatPlanLines(
