@@ -15,7 +15,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:workers",
-    "@alchemy.run/frameworks": "workspace:*",
+    "@alchemy.run/cloudflare-frameworks": "workspace:*",
     "@alchemy.run/cloudflare-runtime": "workspace:*",
     "@alchemy.run/cloudflare-test-tools": "workspace:*",
     "@effect/platform-node": "catalog:effect",

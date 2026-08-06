@@ -40,7 +40,7 @@ jobs:
           { "dir": "packages/alchemy",     "name": "alchemy",                   "runner": "ubuntu-22-large" },
           { "dir": "packages/better-auth", "name": "@alchemy.run/better-auth",  "runner": "ubuntu-22-large" },
           { "dir": "packages/cloudflare-runtime", "name": "@alchemy.run/cloudflare-runtime", "runner": "ubuntu-22-large" },
-          { "dir": "packages/frameworks",         "name": "@alchemy.run/frameworks",         "runner": "ubuntu-22-large" },
+          { "dir": "packages/cloudflare-frameworks",         "name": "@alchemy.run/cloudflare-frameworks",         "runner": "ubuntu-22-large" },
           { "dir": "packages/pr-package",  "name": "@alchemy.run/pr-package",   "runner": "ubuntu-22-large" }
         ]
     secrets: inherit

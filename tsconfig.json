@@ -28,7 +28,7 @@
       "path": "./packages/cloudflare-runtime/tsconfig.json"
     },
     {
-      "path": "./packages/frameworks/tsconfig.json"
+      "path": "./packages/cloudflare-frameworks/tsconfig.json"
     },
     {
       "path": "./packages/cloudflare-test-tools/tsconfig.json"

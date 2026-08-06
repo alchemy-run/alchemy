@@ -15,14 +15,16 @@ import {
 
 /**
  * The module specifier of the Next.js source provider. Loaded with a
- * dynamic `import()`, so `@alchemy.run/frameworks/nextjs` must be installed in
- * the deploying project.
+ * dynamic `import()`, so `@alchemy.run/cloudflare-frameworks` must be installed
+ * in the deploying project. The provider is exposed through its `/nextjs`
+ * subpath.
  */
-const NEXTJS_SOURCE_PROVIDER = "@alchemy.run/frameworks/nextjs/source";
+const NEXTJS_SOURCE_PROVIDER =
+  "@alchemy.run/cloudflare-frameworks/nextjs/source";
 
 /**
  * The default compatibility date when none is provided. Matches the
- * `@alchemy.run/frameworks/nextjs` integration's own default so deploy and local
+ * `@alchemy.run/cloudflare-frameworks/nextjs` integration's own default so deploy and local
  * dev agree.
  */
 const DEFAULT_COMPATIBILITY_DATE = "2026-05-12";
@@ -103,16 +105,17 @@ export interface NextjsProps<
  * A Cloudflare Worker deployed from a Next.js project.
  *
  * `Nextjs` builds the app with the wrangler-free OpenNext pipeline from
- * [`@alchemy.run/frameworks/nextjs`](https://github.com/alchemy-run/alchemy/tree/main/packages/frameworks/nextjs):
+ * [`@alchemy.run/cloudflare-frameworks/nextjs`](https://github.com/alchemy-run/alchemy/tree/main/packages/cloudflare-frameworks/nextjs):
  * `next build` runs through `@opennextjs/cloudflare`, the resulting worker
  * is bundled into a self-contained ES module set, and the static assets
  * (including prerendered pages and the read-only incremental cache) deploy
  * as Workers static assets. Input files are content-hashed so unchanged
  * projects skip the build and deploy entirely.
  *
- * Both `@alchemy.run/frameworks/nextjs` and its peer `@opennextjs/cloudflare`
- * must be installed in the deploying project — the source provider is
- * loaded with a dynamic `import()`.
+ * Both `@alchemy.run/cloudflare-frameworks` and its peer
+ * `@opennextjs/cloudflare` must be installed in the deploying project. The
+ * source provider is loaded from the package's `/nextjs` export with a dynamic
+ * `import()`.
  *
  * Local dev (`alchemy dev`) defaults to preview parity — the built worker
  * served under workerd. Set `nextjs: { devMode: "hmr" }` for the real

@@ -1,6 +1,6 @@
 import { DurableObjectNamespace, Text } from "@alchemy.run/cloudflare-runtime/core/bindings";
 import * as Options from "@alchemy.run/cloudflare-test-tools/e2e/Options";
-import wakuFramework from "@alchemy.run/frameworks/waku";
+import wakuFramework from "@alchemy.run/cloudflare-frameworks/waku";
 
 export const FIXTURE_MESSAGE = "hello-from-waku-do-binding";
 

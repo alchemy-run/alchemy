@@ -89,7 +89,7 @@ export interface AstroProps<
  * project.
  *
  * `Astro` runs Astro's programmatic build with a wrangler-free
- * Cloudflare adapter (`@alchemy.run/frameworks/astro`): server-rendered pages
+ * Cloudflare adapter (`@alchemy.run/cloudflare-frameworks/astro`): server-rendered pages
  * execute in the Worker, prerendered pages and client assets deploy as
  * static assets — no `astro.config.*`, adapter setup, or Wrangler
  * configuration required.
@@ -97,11 +97,11 @@ export interface AstroProps<
  * Input files are content-hashed (respecting `.gitignore` by default)
  * so unchanged projects skip the build and deploy entirely.
  *
- * The `@alchemy.run/frameworks/astro` package must be installed in your
- * project (it is loaded dynamically at deploy time):
+ * The `@alchemy.run/cloudflare-frameworks` package must be installed in your
+ * project; its `/astro` export is loaded dynamically at deploy time:
  *
  * ```sh
- * bun add -d @alchemy.run/frameworks/astro
+ * bun add -d @alchemy.run/cloudflare-frameworks
  * ```
  *
  * @resource
@@ -287,7 +287,7 @@ export const Astro: {
             // `no_nodejs_compat` opt-out and the v2-mode date guard).
             main: undefined!,
             source: {
-              provider: "@alchemy.run/frameworks/astro/source",
+              provider: "@alchemy.run/cloudflare-frameworks/astro/source",
               devMode: "server",
               options: {
                 rootDir: props.rootDir,

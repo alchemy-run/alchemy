@@ -1,6 +1,6 @@
 # @fixtures/astro-static
 
-E2e fixture for `@alchemy.run/frameworks/astro` exercising the **fully-static path**:
+E2e fixture for `@alchemy.run/cloudflare-frameworks/astro` exercising the **fully-static path**:
 a real `astro.config.mjs` with `output: "static"`, several prerendered pages,
 a sitemap-ish nav linking every page, a `getStaticPaths` dynamic route, a
 custom `404.astro`, a client-side island (bundled `<script>` counter), and

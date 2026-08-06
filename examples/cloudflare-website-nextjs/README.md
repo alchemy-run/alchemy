@@ -2,7 +2,7 @@
 
 Deploys a [Next.js](https://nextjs.org) app to Cloudflare Workers with
 `Cloudflare.Website.Nextjs` — the wrangler-free OpenNext pipeline from
-`@alchemy.run/frameworks/nextjs`. No `wrangler.toml`, no adapter wiring: the
+`@alchemy.run/cloudflare-frameworks/nextjs`. No `wrangler.toml`, no adapter wiring: the
 integration runs `next build` through `@opennextjs/cloudflare`, bundles
 the resulting worker, and deploys the static assets (including
 prerendered pages) alongside it.
@@ -20,7 +20,7 @@ The integration packages must be installed in the project (the source
 provider is loaded dynamically at deploy time):
 
 ```sh
-bun add -d @alchemy.run/frameworks/nextjs @opennextjs/cloudflare
+bun add -d @alchemy.run/cloudflare-frameworks @opennextjs/cloudflare
 ```
 
 ## Deploy

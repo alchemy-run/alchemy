@@ -14,7 +14,7 @@
     "effect": "catalog:"
   },
   "devDependencies": {
-    "@alchemy.run/frameworks": "workspace:*",
+    "@alchemy.run/cloudflare-frameworks": "workspace:*",
     "@sveltejs/kit": "3.0.0-next.9",
     "@sveltejs/vite-plugin-svelte": "^7.2.0",
     "@types/node": "^24.12.0",

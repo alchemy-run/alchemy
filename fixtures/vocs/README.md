@@ -20,10 +20,10 @@ request and there are dynamic API routes (`/api/search`, `/api/og`,
 `/api/mcp`, `/api/feedback`) — so it runs as a worker.
 
 Vocs does not use waku's `unstable_combinedPlugins`, so the
-`@alchemy.run/frameworks/waku` Framework layer can't drive it directly. Instead,
+`@alchemy.run/cloudflare-frameworks/waku` Framework layer can't drive it directly. Instead,
 `framework.ts` is a fixture-local `Framework` implementation that mirrors
 `packages/waku`'s orchestration with vocs's plugin stack swapped in, reusing
-the deploy-target halves from `@alchemy.run/frameworks/waku/cloudflare` (the
+the deploy-target halves from `@alchemy.run/cloudflare-frameworks/waku/cloudflare` (the
 wrangler-free adapter fork, selected through vocs's `unstable_adapter`
 passthrough, + the cloudflare vite plugin pinned to waku's rsc entry).
 

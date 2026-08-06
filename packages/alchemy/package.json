@@ -393,7 +393,7 @@
     "@cloudflare/containers": "catalog:",
     "@cloudflare/puppeteer": "^1.1.0",
     "@cloudflare/workers-types": "catalog:",
-    "@alchemy.run/frameworks": "workspace:*",
+    "@alchemy.run/cloudflare-frameworks": "workspace:*",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/platform-node-shared": "catalog:",

@@ -4,7 +4,7 @@ import {
   Text,
 } from "@alchemy.run/cloudflare-runtime/core/bindings";
 import * as Options from "@alchemy.run/cloudflare-test-tools/e2e/Options";
-import * as Nuxt from "@alchemy.run/frameworks/nuxt";
+import * as Nuxt from "@alchemy.run/cloudflare-frameworks/nuxt";
 
 const SECRET = "s3cret-from-binding";
 
@@ -16,9 +16,9 @@ const SECRET = "s3cret-from-binding";
 export default Options.make({
   // The typed factory form (harness contract form 3): map the harness
   // options onto Nuxt options, then pin the dev port so parallel fixture
-  // runs don't collide. `framework: "@alchemy.run/frameworks/nuxt"` (the string
+  // runs don't collide. `framework: "@alchemy.run/cloudflare-frameworks/nuxt"` (the string
   // form) works identically when no framework-specific options are needed.
-  // The deploy target defaults to `@alchemy.run/frameworks/nuxt/cloudflare`.
+  // The deploy target defaults to `@alchemy.run/cloudflare-frameworks/nuxt/cloudflare`.
   framework: (options) => {
     const base = Nuxt.fromHarnessOptions(options as Nuxt.HarnessOptions);
     return Nuxt.layer({

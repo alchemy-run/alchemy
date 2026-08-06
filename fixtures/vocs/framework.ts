@@ -4,28 +4,28 @@
  * Vocs 2.x is built on waku (its `vocs()` vite plugin composes waku's own
  * `waku/vite-plugins` — environments, adapter-alias, static-build, ... — with
  * vocs's mdx/config/patch plugins), but it does NOT use waku's
- * `unstable_combinedPlugins`, so `@alchemy.run/frameworks/waku`'s Framework layer
+ * `unstable_combinedPlugins`, so `@alchemy.run/cloudflare-frameworks/waku`'s Framework layer
  * cannot drive it directly. This layer mirrors that package's orchestration
- * (see packages/frameworks/waku/src/Waku.ts) with vocs's plugin stack swapped in:
+ * (see packages/cloudflare-frameworks/waku/src/Waku.ts) with vocs's plugin stack swapped in:
  *
  * - the deploy-target halves (wrangler-free adapter fork + cloudflare vite
  *   plugin pinned to waku's rsc entry) come from
- *   `@alchemy.run/frameworks/waku/cloudflare` — vocs uses waku's environments
+ *   `@alchemy.run/cloudflare-frameworks/waku/cloudflare` — vocs uses waku's environments
  *   plugin, so the same rsc/ssr topology applies;
  * - the plugin stack is the one vocs's own CLI assembles
  *   (`[react(), vocs()]`), with the target's plugins injected ahead of
  *   vocs/waku's (the position where the workerd proxy middleware registers
  *   before waku's Node request bridge) and the adapter selected via vocs's
  *   `unstable_adapter` passthrough;
- * - the waku-parity vite config that `@alchemy.run/frameworks/waku` carries through
+ * - the waku-parity vite config that `@alchemy.run/cloudflare-frameworks/waku` carries through
  *   the in-memory waku config (dedupe, workerd optimizeDeps, neutral rolldown
  *   platform) rides the inline vite config instead, since vocs owns the waku
  *   config it builds internally.
  */
 import * as Options from "@alchemy.run/cloudflare-test-tools/e2e/Options";
-import * as FrameworkCore from "@alchemy.run/frameworks/core";
-import { WAKU_SERVER_ENTRY_MODULE } from "@alchemy.run/frameworks/waku";
-import makeWakuCloudflareTarget from "@alchemy.run/frameworks/waku/cloudflare";
+import * as FrameworkCore from "@alchemy.run/cloudflare-frameworks/core";
+import { WAKU_SERVER_ENTRY_MODULE } from "@alchemy.run/cloudflare-frameworks/waku";
+import makeWakuCloudflareTarget from "@alchemy.run/cloudflare-frameworks/waku/cloudflare";
 import react from "@vitejs/plugin-react";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -48,7 +48,7 @@ export interface VocsFrameworkExtras {
 
 /**
  * `NODE_ENV` as it was when this module first loaded (see
- * packages/frameworks/waku/src/Waku.ts for the rationale: build and dev may run in the
+ * packages/cloudflare-frameworks/waku/src/Waku.ts for the rationale: build and dev may run in the
  * same long-lived playwright worker process).
  */
 const INITIAL_NODE_ENV = process.env.NODE_ENV;
@@ -67,7 +67,7 @@ interface WakuPreviewServer {
 }
 
 /**
- * Waku-parity inline vite config. `@alchemy.run/frameworks/waku` injects these via
+ * Waku-parity inline vite config. `@alchemy.run/cloudflare-frameworks/waku` injects these via
  * the in-memory waku config's `vite` field; vocs builds that config itself
  * with `vite: {}`, so they ride the top-level inline config here (vite merges
  * inline config with plugin-contributed config).

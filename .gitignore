@@ -45,8 +45,8 @@ pnpm-workspace.yaml
 !packages/cloudflare-runtime/rolldown/test/fixtures/module-resolution/node_modules/**
 !packages/cloudflare-runtime/rolldown/test/fixtures/**/*.js
 !packages/cloudflare-runtime/**/*.d.ts
-!packages/frameworks/**/*.d.ts
-!packages/frameworks/nextjs/wrangler-stub/*.js
+!packages/cloudflare-frameworks/**/*.d.ts
+!packages/cloudflare-frameworks/nextjs/wrangler-stub/*.js
 !packages/cloudflare-test-tools/**/*.d.ts
 !fixtures/**/*.d.ts
 !fixtures/**/*.js

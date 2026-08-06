@@ -1,5 +1,5 @@
 import type { CloudflareVitePluginOptions } from "@alchemy.run/cloudflare-runtime/vite";
-import type { Framework } from "@alchemy.run/frameworks/core";
+import type { Framework } from "@alchemy.run/cloudflare-frameworks/core";
 import type * as Miniflare from "@alchemy.run/cloudflare-test-tools/miniflare";
 import * as Effect from "effect/Effect";
 import type * as FileSystem from "effect/FileSystem";
@@ -78,7 +78,7 @@ export interface Options {
    *
    * - omitted — the built-in Vite implementation (default; zero behavior
    *   change for existing fixtures)
-   * - a package specifier (e.g. `"@alchemy.run/frameworks/waku"`) — loaded from the
+   * - a package specifier (e.g. `"@alchemy.run/cloudflare-frameworks/waku"`) — loaded from the
    *   *fixture's* own `node_modules`; the module must default-export (or
    *   named-export `framework`) a factory `(options: Options) =>
    *   Layer<Framework>` (a `Layer<Framework>` export is also accepted)

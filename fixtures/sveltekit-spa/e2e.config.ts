@@ -1,6 +1,6 @@
 import { Text } from "@alchemy.run/cloudflare-runtime/core/bindings";
 import * as Options from "@alchemy.run/cloudflare-test-tools/e2e/Options";
-import * as SvelteKit from "@alchemy.run/frameworks/sveltekit";
+import * as SvelteKit from "@alchemy.run/cloudflare-frameworks/sveltekit";
 
 // Read by the /api/widgets endpoint via `platform.env` — the point of this
 // fixture: even with `ssr = false` (pure SPA), +server.ts endpoints still run

@@ -19,7 +19,7 @@
     "@cloudflare/workers-types": "catalog:workers",
     "@alchemy.run/cloudflare-runtime": "workspace:*",
     "@alchemy.run/cloudflare-test-tools": "workspace:*",
-    "@alchemy.run/frameworks": "workspace:*",
+    "@alchemy.run/cloudflare-frameworks": "workspace:*",
     "@playwright/test": "catalog:",
     "@types/node": "^24.12.0",
     "effect": "catalog:effect"

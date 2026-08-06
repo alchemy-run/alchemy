@@ -13,7 +13,7 @@ minimumReleaseAgeExcludes = [
   "@distilled.cloud/aws",
   "@distilled.cloud/axiom",
   "@alchemy.run/cloudflare-runtime",
-  "@alchemy.run/frameworks",
+  "@alchemy.run/cloudflare-frameworks",
   "@distilled.cloud/cloudflare",
   "@distilled.cloud/core",
   "@distilled.cloud/neon",

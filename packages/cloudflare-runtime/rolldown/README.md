@@ -5,7 +5,7 @@ Rolldown plugin for Cloudflare Workers.
 ## Install
 
 ```bash
-bun add @alchemy.run/cloudflare-runtime/rolldown rolldown
+bun add @alchemy.run/cloudflare-runtime rolldown
 ```
 
 ## Usage

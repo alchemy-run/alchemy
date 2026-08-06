@@ -1,6 +1,6 @@
 # @fixtures/sveltekit
 
-E2E fixture for `@alchemy.run/frameworks/sveltekit` — a SvelteKit app built and served
+E2E fixture for `@alchemy.run/cloudflare-frameworks/sveltekit` — a SvelteKit app built and served
 without wrangler:
 
 - **SSR** home page whose `+page.server.ts` load reads a `platform.env` value
@@ -42,11 +42,11 @@ without wrangler:
 There is no `svelte.config.js` or `wrangler.json` (kit v3 errors on a
 `svelte.config.js`; all kit options live in `vite.config.ts`). The deploy
 target's in-memory Cloudflare adapter is injected by
-`@alchemy.run/frameworks/sveltekit` into the user's `sveltekit()` call, and the
+`@alchemy.run/cloudflare-frameworks/sveltekit` into the user's `sveltekit()` call, and the
 worker/preview config comes from `e2e.config.ts` via the harness's
 target-scoped carriage (`target.cloudflare.worker` for the worker config,
 `target.cloudflare.preview` for the miniflare preview); the deploy target
-itself defaults to `@alchemy.run/frameworks/sveltekit/cloudflare`.
+itself defaults to `@alchemy.run/cloudflare-frameworks/sveltekit/cloudflare`.
 
 ## Commands
 
@@ -106,7 +106,7 @@ instances (e.g. `R2Object`) are unsupported, intermediate values like
 ## The caches wrapper (live)
 
 In live mode the worker entry is the generated shim from
-`@alchemy.run/frameworks/sveltekit/cloudflare`, which replaces the upstream adapter's
+`@alchemy.run/cloudflare-frameworks/sveltekit/cloudflare`, which replaces the upstream adapter's
 `worktop/cfw.cache` dependency with an inline pragma-cache over
 `caches.default`: GET/HEAD responses carrying a `cache-control` header are
 cached and served from cache unless the request says `no-cache`;
