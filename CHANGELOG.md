@@ -1,3 +1,13 @@
+## v2.0.0-beta.69
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **engine**: RenamedFrom() — migrate state rows across FQN renames &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy/issues/1108 [<samp>(abf3f)</samp>](https://github.com/alchemy-run/alchemy/commit/abf3fdfe)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.68...HEAD)
+
+---
+
 ## v2.0.0-beta.68
 
 ### &nbsp;&nbsp;&nbsp;🚨 Breaking Changes
