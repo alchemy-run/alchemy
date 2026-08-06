@@ -1,0 +1,13 @@
+{
+  "extends": "../../../tsconfig.cloudflare.json",
+  "include": ["tsdown.config.ts", "scripts"],
+  "compilerOptions": {
+    "tsBuildInfoFile": ".cache/tsconfig.tsbuildinfo",
+    "composite": false,
+    "noEmit": true
+  },
+  "references": [
+    { "path": "./tsconfig.node.json" },
+    { "path": "./tsconfig.workers.json" }
+  ]
+}

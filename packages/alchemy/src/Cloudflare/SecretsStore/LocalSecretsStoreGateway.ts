@@ -17,8 +17,8 @@
  * NOT exported from `index.ts` — provider-internal scaffolding.
  */
 import type * as runtime from "@cloudflare/workers-types";
-import { SecretsStore } from "@distilled.cloud/cloudflare-runtime/bindings";
-import { open } from "@distilled.cloud/cloudflare-runtime/platform-proxy";
+import { SecretsStore } from "@alchemy.run/cloudflare-runtime/core/bindings";
+import { open } from "@alchemy.run/cloudflare-runtime/core/platform-proxy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { gatewayName } from "../LocalGateway.ts";

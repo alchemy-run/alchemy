@@ -1,0 +1,16 @@
+{
+  "extends": "../../../../tsconfig.cloudflare.json",
+  "include": ["src/node/**/*.ts", "src/index.ts"],
+  "compilerOptions": {
+    "tsBuildInfoFile": ".cache/tsconfig.node.tsbuildinfo",
+    "outDir": ".cache/node",
+    "rootDir": "src",
+    "emitDeclarationOnly": true,
+    "module": "Preserve",
+    "moduleResolution": "bundler",
+    "types": ["node"],
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true
+  },
+  "references": [{ "path": "./tsconfig.shared.json" }]
+}

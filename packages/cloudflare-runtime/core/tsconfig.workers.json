@@ -1,0 +1,22 @@
+{
+  "extends": "../../../tsconfig.cloudflare.json",
+  "include": [
+    "src/**/*.worker.ts",
+    "src/**/*.shared.ts",
+    "../internal/workers-shared/src/shared/**/*.ts",
+    "../internal/workers-shared/src/workers/**/*.ts",
+    "../internal/workflows-shared/src"
+  ],
+  "exclude": ["../internal/workers-shared/src/**/tests/**"],
+  "compilerOptions": {
+    "tsBuildInfoFile": ".cache/tsconfig.workers.tsbuildinfo",
+    "outDir": ".cache/workers",
+    "rootDir": "..",
+    "emitDeclarationOnly": true,
+    "types": [
+      "@cloudflare/workers-types/experimental",
+      "@cloudflare/vitest-pool-workers/types",
+      "node"
+    ]
+  }
+}

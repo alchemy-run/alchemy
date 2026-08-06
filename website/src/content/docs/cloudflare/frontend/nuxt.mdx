@@ -7,7 +7,7 @@ sidebar:
 
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
-export const devDeps = "@distilled.cloud/nuxt";
+export const devDeps = "@alchemy.run/frameworks/nuxt";
 
 `Cloudflare.Website.Nuxt` deploys a [Nuxt](https://nuxt.com) app as
 a Cloudflare Worker. It builds the app through your project's own
@@ -20,7 +20,7 @@ run.
 ## Install
 
 The build integration is not bundled with alchemy — the resource
-dynamically imports `@distilled.cloud/nuxt` from your project at
+dynamically imports `@alchemy.run/frameworks/nuxt` from your project at
 deploy time, so it must be installed alongside your framework. It is
 only used at build time, so a dev dependency is enough:
 

@@ -14,9 +14,9 @@
     "bench:containers": "cd benchmark/container && bun run bench",
     "build:clean:shallow": "bun clean:shallow . && bun run build",
     "build:clean": "bun clean . && bun i && bun run build && bun download:env",
-    "build:cloudflare-tools": "bun tsc -b distilled/packages/cloudflare/tsconfig.json && bun run --cwd cloudflare-tools build",
-    "build:packages": "bun tsc -b && bun run --cwd cloudflare-tools build && bun run --filter './packages/*' build",
-    "build": "bun tsc -b && bun run --cwd cloudflare-tools build && bun run --filter ./website --filter './packages/*' build && bun lint:providers",
+    "build:cloudflare-packages": "bun tsc -b distilled/packages/cloudflare/tsconfig.json && turbo run build --filter=@alchemy.run/cloudflare-runtime --filter=@alchemy.run/frameworks --filter=@alchemy.run/cloudflare-test-tools",
+    "build:packages": "bun tsc -b && bun run --filter './packages/*' build",
+    "build": "bun tsc -b && bun run --filter ./website --filter './packages/*' build && bun lint:providers",
     "clean:shallow": "rm -rf alchemy/*.tgz && bun tsc -b --clean",
     "clean": "git clean -fqdx -e .env",
     "clear:state": "alchemy state clear ./stacks/nuke.ts",
@@ -46,14 +46,16 @@
     "logs:otel": "doppler run -c dev --project alchemy-v2 -- bun alchemy logs ./stacks/otel.ts",
     "nuke": "bash scripts/nuke.sh",
     "opencode": "OPENCODE_EXPERIMENTAL_OXFMT=true opencode",
-    "prepare": "husky && bun setup:git && effect-tsgo patch && bun build:cloudflare-tools",
+    "prepare": "husky && bun setup:git && effect-tsgo patch && bun build:cloudflare-packages",
     "publish:npm": "bun run build && bun run --filter alchemy publish:npm",
     "setup": "effect-tsgo patch && bun run download:external",
     "setup:git": "git config include.path ../.gitconfig",
     "sync:submodules": "git submodule sync --recursive && git submodule update --init --recursive",
     "test:cross-version": "bun run test/cross-version-test/run.ts",
+    "test:cloudflare-packages": "turbo run test --filter=@alchemy.run/cloudflare-runtime --filter=@alchemy.run/frameworks --filter='./fixtures/*'",
     "test:examples": "bun scripts/test-examples.ts",
-    "test": "cd ./packages/alchemy && bun alchemy-test"
+    "test": "cd ./packages/alchemy && bun alchemy-test",
+    "typecheck:cloudflare-packages": "turbo run typecheck --filter=@alchemy.run/cloudflare-runtime --filter=@alchemy.run/frameworks --filter=@alchemy.run/cloudflare-test-tools"
   },
   "workspaces": {
     "packages": [
@@ -64,9 +66,7 @@
       "examples/monorepo-multi-stack/*",
       "benchmark/*",
       "distilled/packages/*",
-      "cloudflare-tools/packages/*",
-      "cloudflare-tools/packages/vendor/*",
-      "cloudflare-tools/packages/tools/*"
+      "fixtures/*"
     ],
     "catalog": {
       "@alchemy.run/node-utils": "0.0.5",
@@ -76,9 +76,7 @@
       "@cloudflare/workers-types": "^4.20250805.0",
       "@distilled.cloud/aws": "workspace:*",
       "@distilled.cloud/axiom": "workspace:*",
-      "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:*",
-      "@distilled.cloud/cloudflare-runtime": "workspace:*",
-      "@distilled.cloud/cloudflare-vite-plugin": "workspace:*",
+      "@alchemy.run/cloudflare-runtime": "workspace:*",
       "@distilled.cloud/cloudflare": "workspace:*",
       "@distilled.cloud/core": "workspace:*",
       "@distilled.cloud/neon": "workspace:*",
@@ -200,6 +198,9 @@
     "turbo": "^2.9.16",
     "typescript": "catalog:",
     "yaml": "^2.8.2"
+  },
+  "patchedDependencies": {
+    "vocs@2.6.0": "patches/vocs@2.6.0.patch"
   },
   "devEngines": {
     "packageManager": {

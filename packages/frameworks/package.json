@@ -1,0 +1,241 @@
+{
+  "name": "@alchemy.run/frameworks",
+  "version": "0.17.1",
+  "description": "Framework build and development integrations for Alchemy.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "core/src",
+    "core/dist",
+    "astro/src",
+    "astro/dist",
+    "astro/types.d.ts",
+    "nextjs/src",
+    "nextjs/dist",
+    "nextjs/wrangler-stub",
+    "nuxt/src",
+    "nuxt/dist",
+    "octane/src",
+    "octane/dist",
+    "sveltekit/src",
+    "sveltekit/dist",
+    "waku/src",
+    "waku/dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p core/tsconfig.json && tsc -b astro/tsconfig.json && tsc -p nextjs/tsconfig.json && cp nextjs/src/runner.mjs nextjs/dist/runner.mjs && tsc -p nuxt/tsconfig.json && tsc -p octane/tsconfig.json && tsc -p sveltekit/tsconfig.json && tsc -p waku/tsconfig.json",
+    "clean": "rm -rf core/dist astro/dist nextjs/dist nuxt/dist octane/dist sveltekit/dist waku/dist",
+    "test": "bun run test:core && bun run test:astro && bun run test:nextjs && bun run test:nuxt && bun run test:octane && bun run test:sveltekit && bun run test:waku",
+    "test:core": "cd core && vitest run",
+    "test:astro": "cd astro && vitest run",
+    "test:nextjs": "cd nextjs && vitest run",
+    "test:nuxt": "cd nuxt && vitest run",
+    "test:octane": "cd octane && vitest run",
+    "test:sveltekit": "cd sveltekit && vitest run",
+    "test:waku": "cd waku && vitest run",
+    "typecheck": "tsc --noEmit -p core/tsconfig.json && tsc --noEmit -p core/tsconfig.test.json && tsc --noEmit -p astro/tsconfig.test.json && tsc --noEmit -p nextjs/tsconfig.json && tsc --noEmit -p nextjs/tsconfig.test.json && tsc --noEmit -p nuxt/tsconfig.json && tsc --noEmit -p nuxt/tsconfig.test.json && tsc --noEmit -p octane/tsconfig.json && tsc --noEmit -p octane/tsconfig.test.json && tsc --noEmit -p sveltekit/tsconfig.json && tsc --noEmit -p sveltekit/tsconfig.test.json && tsc --noEmit -p waku/tsconfig.json && tsc --noEmit -p waku/tsconfig.test.json"
+  },
+  "dependencies": {
+    "@alchemy.run/cloudflare-runtime": "workspace:*",
+    "@astrojs/internal-helpers": "0.10.1",
+    "@astrojs/underscore-redirects": "1.0.3",
+    "@distilled.cloud/cloudflare": "catalog:",
+    "@effect/platform-node": "catalog:effect",
+    "esbuild": "^0.28.1",
+    "fast-glob": "^3.3.2",
+    "rolldown": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:workers",
+    "@effect/platform-bun": "catalog:effect",
+    "@octanejs/vite-plugin": "catalog:fixtures",
+    "@opennextjs/cloudflare": "1.20.1",
+    "@sveltejs/kit": "3.0.0-next.9",
+    "astro": "7.1.0",
+    "effect": "catalog:effect",
+    "hono": "^4.12.14",
+    "nitropack": "2.13.4",
+    "nuxt": "catalog:fixtures",
+    "vite": "catalog:",
+    "vitest": "catalog:",
+    "waku": "1.0.0-beta.7"
+  },
+  "peerDependencies": {
+    "@effect/platform-bun": "catalog:effect",
+    "@effect/platform-node": "catalog:effect",
+    "@octanejs/vite-plugin": ">=0.1.22",
+    "@opennextjs/cloudflare": "1.20.1",
+    "@sveltejs/kit": ">=3.0.0-next.9",
+    "astro": "^7.0.0",
+    "effect": "catalog:effect",
+    "hono": "^4.12.14",
+    "nuxt": ">=4.5.0",
+    "vite": "^7.0.0 || ^8.0.0",
+    "waku": "1.0.0-beta.7"
+  },
+  "peerDependenciesMeta": {
+    "@effect/platform-bun": {
+      "optional": true
+    },
+    "@effect/platform-node": {
+      "optional": true
+    },
+    "@octanejs/vite-plugin": {
+      "optional": true
+    },
+    "@opennextjs/cloudflare": {
+      "optional": true
+    },
+    "@sveltejs/kit": {
+      "optional": true
+    },
+    "astro": {
+      "optional": true
+    },
+    "hono": {
+      "optional": true
+    },
+    "nuxt": {
+      "optional": true
+    },
+    "vite": {
+      "optional": true
+    },
+    "waku": {
+      "optional": true
+    }
+  },
+  "exports": {
+    "./core": {
+      "bun": "./core/src/index.ts",
+      "types": "./core/dist/index.d.ts",
+      "import": "./core/dist/index.js"
+    },
+    "./astro": {
+      "bun": "./astro/src/index.ts",
+      "types": "./astro/dist/index.d.ts",
+      "import": "./astro/dist/index.js",
+      "default": "./astro/dist/index.js"
+    },
+    "./astro/cloudflare": {
+      "bun": "./astro/src/cloudflare.ts",
+      "types": "./astro/dist/cloudflare.d.ts",
+      "import": "./astro/dist/cloudflare.js",
+      "default": "./astro/dist/cloudflare.js"
+    },
+    "./astro/source": {
+      "bun": "./astro/src/source.ts",
+      "types": "./astro/dist/source.d.ts",
+      "import": "./astro/dist/source.js",
+      "default": "./astro/dist/source.js"
+    },
+    "./astro/entrypoints/server": {
+      "types": "./astro/dist/runtime/entrypoints/server.d.ts",
+      "default": "./astro/dist/runtime/entrypoints/server.js"
+    },
+    "./astro/entrypoints/server.js": {
+      "types": "./astro/dist/runtime/entrypoints/server.d.ts",
+      "default": "./astro/dist/runtime/entrypoints/server.js"
+    },
+    "./astro/image-passthrough-endpoint": {
+      "types": "./astro/dist/runtime/entrypoints/image-passthrough-endpoint.d.ts",
+      "default": "./astro/dist/runtime/entrypoints/image-passthrough-endpoint.js"
+    },
+    "./astro/types.d.ts": "./astro/types.d.ts",
+    "./nextjs": {
+      "bun": "./nextjs/src/index.ts",
+      "types": "./nextjs/dist/index.d.ts",
+      "import": "./nextjs/dist/index.js",
+      "default": "./nextjs/dist/index.js"
+    },
+    "./nextjs/source": {
+      "bun": "./nextjs/src/source.ts",
+      "types": "./nextjs/dist/source.d.ts",
+      "import": "./nextjs/dist/source.js",
+      "default": "./nextjs/dist/source.js"
+    },
+    "./nuxt": {
+      "bun": "./nuxt/src/index.ts",
+      "types": "./nuxt/dist/index.d.ts",
+      "import": "./nuxt/dist/index.js",
+      "default": "./nuxt/dist/index.js"
+    },
+    "./nuxt/cloudflare": {
+      "bun": "./nuxt/src/cloudflare.ts",
+      "types": "./nuxt/dist/cloudflare.d.ts",
+      "import": "./nuxt/dist/cloudflare.js",
+      "default": "./nuxt/dist/cloudflare.js"
+    },
+    "./nuxt/source": {
+      "bun": "./nuxt/src/source.ts",
+      "types": "./nuxt/dist/source.d.ts",
+      "import": "./nuxt/dist/source.js",
+      "default": "./nuxt/dist/source.js"
+    },
+    "./octane": {
+      "bun": "./octane/src/index.ts",
+      "types": "./octane/dist/index.d.ts",
+      "import": "./octane/dist/index.js",
+      "default": "./octane/dist/index.js"
+    },
+    "./octane/cloudflare": {
+      "bun": "./octane/src/cloudflare.ts",
+      "types": "./octane/dist/cloudflare.d.ts",
+      "import": "./octane/dist/cloudflare.js",
+      "default": "./octane/dist/cloudflare.js"
+    },
+    "./octane/source": {
+      "bun": "./octane/src/source.ts",
+      "types": "./octane/dist/source.d.ts",
+      "import": "./octane/dist/source.js",
+      "default": "./octane/dist/source.js"
+    },
+    "./sveltekit": {
+      "bun": "./sveltekit/src/index.ts",
+      "types": "./sveltekit/dist/index.d.ts",
+      "import": "./sveltekit/dist/index.js",
+      "default": "./sveltekit/dist/index.js"
+    },
+    "./sveltekit/cloudflare": {
+      "bun": "./sveltekit/src/cloudflare.ts",
+      "types": "./sveltekit/dist/cloudflare.d.ts",
+      "import": "./sveltekit/dist/cloudflare.js",
+      "default": "./sveltekit/dist/cloudflare.js"
+    },
+    "./sveltekit/source": {
+      "bun": "./sveltekit/src/source.ts",
+      "types": "./sveltekit/dist/source.d.ts",
+      "import": "./sveltekit/dist/source.js",
+      "default": "./sveltekit/dist/source.js"
+    },
+    "./waku": {
+      "bun": "./waku/src/index.ts",
+      "types": "./waku/dist/index.d.ts",
+      "import": "./waku/dist/index.js",
+      "default": "./waku/dist/index.js"
+    },
+    "./waku/adapter": {
+      "bun": "./waku/src/adapter.ts",
+      "types": "./waku/dist/adapter.d.ts",
+      "import": "./waku/dist/adapter.js",
+      "default": "./waku/dist/adapter.js"
+    },
+    "./waku/cloudflare": {
+      "bun": "./waku/src/cloudflare.ts",
+      "types": "./waku/dist/cloudflare.d.ts",
+      "import": "./waku/dist/cloudflare.js",
+      "default": "./waku/dist/cloudflare.js"
+    },
+    "./waku/source": {
+      "bun": "./waku/src/source.ts",
+      "types": "./waku/dist/source.d.ts",
+      "import": "./waku/dist/source.js",
+      "default": "./waku/dist/source.js"
+    },
+    "./package.json": "./package.json"
+  }
+}

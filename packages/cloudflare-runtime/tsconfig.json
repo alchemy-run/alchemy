@@ -1,0 +1,14 @@
+{
+  "files": [],
+  "compilerOptions": {
+    "composite": true
+  },
+  "references": [
+    { "path": "./internal/build-tools" },
+    { "path": "./internal/workers-shared" },
+    { "path": "./internal/workflows-shared" },
+    { "path": "./rolldown" },
+    { "path": "./core" },
+    { "path": "./vite" }
+  ]
+}

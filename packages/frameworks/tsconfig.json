@@ -1,0 +1,15 @@
+{
+  "files": [],
+  "compilerOptions": {
+    "composite": true
+  },
+  "references": [
+    { "path": "./core" },
+    { "path": "./astro" },
+    { "path": "./nextjs" },
+    { "path": "./nuxt" },
+    { "path": "./octane" },
+    { "path": "./sveltekit" },
+    { "path": "./waku" }
+  ]
+}

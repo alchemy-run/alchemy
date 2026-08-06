@@ -8,9 +8,9 @@ import {
   type DurableObjectNamespace as RuntimeDurableObject,
   type QueueConsumer as RuntimeQueueConsumer,
   type Workflow as RuntimeWorkflow,
-} from "@distilled.cloud/cloudflare-runtime";
-import type { ContainerImage } from "@distilled.cloud/cloudflare-runtime/Docker";
-import * as WorkerProxy from "@distilled.cloud/cloudflare-runtime/proxy/WorkerProxy";
+} from "@alchemy.run/cloudflare-runtime/core";
+import type { ContainerImage } from "@alchemy.run/cloudflare-runtime/core/Docker";
+import * as WorkerProxy from "@alchemy.run/cloudflare-runtime/core/proxy/WorkerProxy";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";

@@ -1,11 +1,13 @@
 name: check
 
-# Runs the website docs validator (`bun run docs:check`) on every PR
-# so broken links / missing API references fail fast before merge.
+# Validates the website docs and the migrated Cloudflare package workspace.
 
 on:
+  push:
+    branches: [main]
   pull_request:
     types: [opened, reopened, synchronize]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -39,3 +41,46 @@ jobs:
       - run: bun install
       - run: bun tsc -b
       - run: bun run docs:check
+
+  cloudflare-packages:
+    name: Cloudflare packages (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-22-large
+          - macos-latest
+          - windows-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          submodules: true
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: latest
+
+      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - run: bun install
+      - run: bun run typecheck:cloudflare-packages
+      - name: Test
+        run: bun run test:cloudflare-packages -- ${{ runner.os == 'Windows' && '--concurrency=3' || runner.os == 'macOS' && '--concurrency=2' || '' }}
+        env:
+          TEST_MYSQL_URL: ${{ secrets.TEST_MYSQL_URL }}
+          TEST_POSTGRES_URL: ${{ secrets.TEST_POSTGRES_URL }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TEST_KV_NAMESPACE_ID: ${{ secrets.TEST_KV_NAMESPACE_ID }}
+          TEST_R2_BUCKET_NAME: ${{ secrets.TEST_R2_BUCKET_NAME }}
+          TEST_D1_DATABASE_ID: ${{ secrets.TEST_D1_DATABASE_ID }}
+          TEST_SERVICE_WORKER_NAME: ${{ secrets.TEST_SERVICE_WORKER_NAME }}

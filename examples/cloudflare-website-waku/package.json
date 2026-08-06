@@ -19,7 +19,7 @@
     "waku": "1.0.0-beta.7"
   },
   "devDependencies": {
-    "@distilled.cloud/waku": "workspace:*",
+    "@alchemy.run/frameworks": "workspace:*",
     "@types/node": "^24.12.0",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",

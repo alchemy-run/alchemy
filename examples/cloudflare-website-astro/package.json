@@ -13,7 +13,7 @@
     "astro": "7.1.0"
   },
   "devDependencies": {
-    "@distilled.cloud/astro": "workspace:*",
+    "@alchemy.run/frameworks": "workspace:*",
     "alchemy": "workspace:*",
     "effect": "catalog:",
     "typescript": "catalog:"

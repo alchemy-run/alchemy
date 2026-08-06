@@ -7,7 +7,7 @@ sidebar:
 
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
-export const devDeps = "@distilled.cloud/waku";
+export const devDeps = "@alchemy.run/frameworks/waku";
 
 `Cloudflare.Website.Waku` deploys a [Waku](https://waku.gg) app as a
 Cloudflare Worker. It builds the project programmatically: the React
@@ -19,7 +19,7 @@ no build command to run.
 ## Install
 
 The build integration is not bundled with alchemy — the resource
-dynamically imports `@distilled.cloud/waku` from your project at
+dynamically imports `@alchemy.run/frameworks/waku` from your project at
 deploy time, so it must be installed alongside your framework. It is
 only used at build time, so a dev dependency is enough:
 

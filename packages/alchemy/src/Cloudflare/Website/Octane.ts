@@ -17,7 +17,7 @@ import {
  * installed in the user's project — `loadSource` fails with a
  * `SourceProviderError` naming it otherwise.
  */
-const OCTANE_SOURCE_PROVIDER = "@distilled.cloud/octane/source";
+const OCTANE_SOURCE_PROVIDER = "@alchemy.run/frameworks/octane/source";
 
 export interface OctaneProps<
   Bindings extends WorkerBindingProps = {},
@@ -65,7 +65,7 @@ export interface OctaneProps<
  * `dist/client` deploys as static assets — no Wrangler configuration and
  * no build command required.
  *
- * Requires the `@distilled.cloud/octane` package to be installed in your
+ * Requires the `@alchemy.run/frameworks/octane` package to be installed in your
  * project (alongside `octane`, `@octanejs/vite-plugin`, and
  * `@octanejs/adapter-cloudflare`). Input files are content-hashed
  * (respecting `.gitignore` by default) so unchanged projects skip the

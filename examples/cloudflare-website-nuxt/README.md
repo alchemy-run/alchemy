@@ -22,7 +22,7 @@ bun alchemy destroy  # tear down
 
 ## Notes
 
-- `@distilled.cloud/nuxt` must be installed in the project — the Worker's source provider is loaded from it dynamically at deploy time.
+- `@alchemy.run/frameworks/nuxt` must be installed in the project — the Worker's source provider is loaded from it dynamically at deploy time.
 - Unchanged projects skip the build and deploy entirely (the project tree is content-hashed, respecting `.gitignore`).
 - In `alchemy dev`, `event.context.cloudflare` is served wrangler-free through cloudflare-runtime's platform proxy: resource bindings (KV, R2, D1, ...) resolve against a local workerd instance, and literal `env` values overlay them.
 - Nitro's `isr` route rule is Vercel/Netlify-only and silently ignored on Cloudflare — use `prerender` (as `/about` does here) or `cache` route rules instead.

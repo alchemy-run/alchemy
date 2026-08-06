@@ -38,8 +38,24 @@ pnpm-workspace.yaml
 !packages/alchemy/test/Cloudflare/Workers/fixtures/drizzle-do/drizzle/migrations.js
 *.map
 
+# Checked-in package-resolution fixtures for the consolidated Rolldown plugin.
+!packages/cloudflare-runtime/rolldown/test/fixtures/cloudflare-imports/node_modules/
+!packages/cloudflare-runtime/rolldown/test/fixtures/cloudflare-imports/node_modules/**
+!packages/cloudflare-runtime/rolldown/test/fixtures/module-resolution/node_modules/
+!packages/cloudflare-runtime/rolldown/test/fixtures/module-resolution/node_modules/**
+!packages/cloudflare-runtime/rolldown/test/fixtures/**/*.js
+!packages/cloudflare-runtime/**/*.d.ts
+!packages/frameworks/**/*.d.ts
+!packages/frameworks/nextjs/wrangler-stub/*.js
+!packages/cloudflare-test-tools/**/*.d.ts
+!fixtures/**/*.d.ts
+!fixtures/**/*.js
+
 .attest
 .cache
+.turbo
+coverage
+test-results
 .external
 .bundle-benchmark
 packages/alchemy/docs

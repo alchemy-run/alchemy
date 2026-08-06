@@ -1,0 +1,7 @@
+{
+  "files": [],
+  "compilerOptions": {
+    "composite": true
+  },
+  "references": [{ "path": "./miniflare" }, { "path": "./e2e" }]
+}

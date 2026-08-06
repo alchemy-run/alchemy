@@ -2224,7 +2224,7 @@ export const LiveWorkerProvider = () =>
       });
 
       // Loaded lazily: `./Sources/Vite.ts` pulls in
-      // `@distilled.cloud/cloudflare-vite-plugin` (~0.5s), which is only
+      // `@alchemy.run/cloudflare-runtime/vite` (~0.5s), which is only
       // needed for vite-based workers at build time — not for every Worker
       // definition at module-load time.
       const loadVite = Effect.promise(() => import("./Sources/Vite.ts"));

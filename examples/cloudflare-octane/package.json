@@ -9,7 +9,7 @@
     "destroy": "alchemy destroy"
   },
   "dependencies": {
-    "@distilled.cloud/octane": "workspace:*",
+    "@alchemy.run/frameworks": "workspace:*",
     "@octanejs/adapter-cloudflare": "catalog:fixtures",
     "@octanejs/vite-plugin": "catalog:fixtures",
     "alchemy": "workspace:*",

@@ -1,0 +1,12 @@
+{
+  "extends": "../../../tsconfig.cloudflare.json",
+  "files": [],
+  "compilerOptions": {
+    "composite": false,
+    "tsBuildInfoFile": ".cache/tsconfig.tsbuildinfo"
+  },
+  "references": [
+    { "path": "./tsconfig.node.json" },
+    { "path": "./tsconfig.runtime.json" }
+  ]
+}
