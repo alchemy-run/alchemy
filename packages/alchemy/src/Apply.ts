@@ -317,6 +317,57 @@ export const apply = <P extends Plan>(
           }
         >();
 
+        // ── FQN migrations (renamedFrom) ──
+        // Persist renames before any lifecycle operation runs: a node whose
+        // row was found under a former FQN carries that row pre-remapped in
+        // `node.state` (see Plan's rename resolution). Commit it at the
+        // current FQN FIRST, then drop the former row — in that order, so an
+        // interruption leaves rows at both FQNs with the same instanceId,
+        // which the next plan recognizes as an in-flight migration (and
+        // never as an orphan to delete). `state` is the journaling facade,
+        // so migrations land in the deployment journal like every other
+        // engine write.
+        //
+        // In a same-deploy shift (A→B while B→C), C's former FQN `B` is
+        // simultaneously B's migration TARGET. C must NOT delete it: B's own
+        // `state.set` supersedes the stale copy, and the migrations run
+        // concurrently — the delete could land after B's write and destroy
+        // the freshly migrated row.
+        const migrationTargets = new Set(
+          Object.values(plan.resources)
+            .filter(
+              (node) => node.renamedFrom?.length && node.state !== undefined,
+            )
+            .map((node) => node.resource.FQN),
+        );
+        yield* Effect.forEach(
+          Object.values(plan.resources),
+          (node) => {
+            const { renamedFrom, state: row } = node;
+            return renamedFrom === undefined ||
+              renamedFrom.length === 0 ||
+              row === undefined
+              ? Effect.void
+              : Effect.gen(function* () {
+                  yield* state.set({
+                    stack: stackName,
+                    stage,
+                    fqn: node.resource.FQN,
+                    value: row,
+                  });
+                  yield* Effect.forEach(
+                    renamedFrom.filter(
+                      (formerFqn) => !migrationTargets.has(formerFqn),
+                    ),
+                    (formerFqn) =>
+                      state.delete({ stack: stackName, stage, fqn: formerFqn }),
+                    { concurrency: "unbounded" },
+                  );
+                });
+          },
+          { concurrency: "unbounded" },
+        );
+
         yield* executePlan(
           plan,
           tracker,

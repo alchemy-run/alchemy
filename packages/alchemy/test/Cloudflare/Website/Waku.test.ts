@@ -52,8 +52,9 @@ const wakuProps = (rootDir: string) => ({
   },
 });
 
-// Tests are independent (per-test scratch stacks, private fixture clones),
-// so run them concurrently; suites are sequential by default.
+// Concurrent for consistency with the other Website suites; both tests
+// are `exclusive: true` (the Waku source build chdirs in-process), so the
+// runner's whole-process lock still serializes them globally.
 describe.concurrent("Waku", () => {
   test.provider(
     "Waku: deploys RSC SSR + binding + static assets and memoizes unchanged rebuilds",
@@ -256,7 +257,10 @@ describe.concurrent("Waku", () => {
         // Destroy must also delete the bound KV namespace from the cloud.
         yield* waitForNamespaceToBeDeleted(siteKv.namespaceId, accountId);
       }).pipe(logLevel),
-    { timeout: 600_000 },
+    // exclusive: the Waku build temporarily switches process.cwd() to the
+    // project root (waku resolves inputs relative to the cwd); concurrent
+    // fibers resolving relative paths would race that window.
+    { timeout: 600_000, exclusive: true },
   );
 
   // ─────────────────────────────────────────────────────────────────────
@@ -364,7 +368,10 @@ describe.concurrent("Waku", () => {
         yield* stack.destroy();
         yield* waitForWorkerToBeDeleted(site.workerName, accountId);
       }).pipe(logLevel),
-    { timeout: 600_000 },
+    // exclusive: the Waku build temporarily switches process.cwd() to the
+    // project root (waku resolves inputs relative to the cwd); concurrent
+    // fibers resolving relative paths would race that window.
+    { timeout: 600_000, exclusive: true },
   );
 });
 

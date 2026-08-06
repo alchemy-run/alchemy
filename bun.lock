@@ -52,7 +52,7 @@
     },
     "cloudflare-tools/packages/astro": {
       "name": "@distilled.cloud/astro",
-      "version": "0.13.7",
+      "version": "0.17.1",
       "dependencies": {
         "@astrojs/internal-helpers": "0.10.1",
         "@astrojs/underscore-redirects": "1.0.3",
@@ -84,7 +84,7 @@
     },
     "cloudflare-tools/packages/cloudflare-rolldown-plugin": {
       "name": "@distilled.cloud/cloudflare-rolldown-plugin",
-      "version": "0.16.0",
+      "version": "0.17.1",
       "dependencies": {
         "@cloudflare/unenv-preset": "^2.16.0",
         "magic-string": "^0.30.21",
@@ -109,7 +109,7 @@
     },
     "cloudflare-tools/packages/cloudflare-runtime": {
       "name": "@distilled.cloud/cloudflare-runtime",
-      "version": "0.16.0",
+      "version": "0.17.1",
       "dependencies": {
         "@alchemy.run/node-utils": "catalog:",
         "@puppeteer/browsers": "^2.10.6",
@@ -147,7 +147,7 @@
     },
     "cloudflare-tools/packages/cloudflare-vite-plugin": {
       "name": "@distilled.cloud/cloudflare-vite-plugin",
-      "version": "0.16.0",
+      "version": "0.17.1",
       "dependencies": {
         "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:*",
       },
@@ -178,7 +178,7 @@
     },
     "cloudflare-tools/packages/framework-core": {
       "name": "@distilled.cloud/framework-core",
-      "version": "0.13.7",
+      "version": "0.17.1",
       "devDependencies": {
         "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:*",
         "@effect/platform-node": "catalog:effect",
@@ -196,7 +196,7 @@
     },
     "cloudflare-tools/packages/nextjs": {
       "name": "@distilled.cloud/nextjs",
-      "version": "0.13.7",
+      "version": "0.17.1",
       "dependencies": {
         "@distilled.cloud/cloudflare": "catalog:",
         "@distilled.cloud/cloudflare-runtime": "workspace:*",
@@ -218,7 +218,7 @@
     },
     "cloudflare-tools/packages/nuxt": {
       "name": "@distilled.cloud/nuxt",
-      "version": "0.13.7",
+      "version": "0.17.1",
       "dependencies": {
         "@distilled.cloud/cloudflare-runtime": "workspace:*",
         "@distilled.cloud/framework-core": "workspace:*",
@@ -240,7 +240,7 @@
     },
     "cloudflare-tools/packages/octane": {
       "name": "@distilled.cloud/octane",
-      "version": "0.13.7",
+      "version": "0.17.1",
       "dependencies": {
         "@distilled.cloud/framework-core": "workspace:*",
         "fast-glob": "^3.3.2",
@@ -260,7 +260,7 @@
     },
     "cloudflare-tools/packages/sveltekit": {
       "name": "@distilled.cloud/sveltekit",
-      "version": "0.13.7",
+      "version": "0.17.1",
       "dependencies": {
         "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:*",
         "@distilled.cloud/cloudflare-runtime": "workspace:*",
@@ -354,7 +354,7 @@
     },
     "cloudflare-tools/packages/waku": {
       "name": "@distilled.cloud/waku",
-      "version": "0.13.7",
+      "version": "0.17.1",
       "dependencies": {
         "@distilled.cloud/cloudflare-runtime": "workspace:*",
         "@distilled.cloud/cloudflare-vite-plugin": "workspace:*",
@@ -411,12 +411,14 @@
       "version": "1.0.0-rc.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
-        "@effect/platform-bun": "catalog:",
-        "effect": "catalog:",
       },
       "devDependencies": {
+        "@effect/platform-bun": "catalog:",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
       },
     },
     "distilled/packages/azure": {
@@ -424,12 +426,14 @@
       "version": "1.0.0-rc.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
-        "@effect/platform-bun": "catalog:",
-        "effect": "catalog:",
       },
       "devDependencies": {
+        "@effect/platform-bun": "catalog:",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
       },
     },
     "distilled/packages/cloudflare": {
@@ -437,12 +441,14 @@
       "version": "1.0.0-rc.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
-        "@effect/platform-bun": "catalog:",
-        "effect": "catalog:",
       },
       "devDependencies": {
+        "@effect/platform-bun": "catalog:",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
       },
     },
     "distilled/packages/coinbase": {
@@ -450,12 +456,14 @@
       "version": "1.0.0-rc.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
-        "@effect/platform-bun": "catalog:",
-        "effect": "catalog:",
       },
       "devDependencies": {
+        "@effect/platform-bun": "catalog:",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
       },
     },
     "distilled/packages/core": {
@@ -476,12 +484,14 @@
       "version": "1.0.0-rc.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
-        "@effect/platform-bun": "catalog:",
-        "effect": "catalog:",
       },
       "devDependencies": {
+        "@effect/platform-bun": "catalog:",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
       },
     },
     "distilled/packages/fly-io": {
@@ -489,12 +499,14 @@
       "version": "1.0.0-rc.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
-        "@effect/platform-bun": "catalog:",
-        "effect": "catalog:",
       },
       "devDependencies": {
+        "@effect/platform-bun": "catalog:",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
       },
     },
     "distilled/packages/gcp": {
@@ -502,12 +514,14 @@
       "version": "1.0.0-rc.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
-        "@effect/platform-bun": "catalog:",
-        "effect": "catalog:",
       },
       "devDependencies": {
+        "@effect/platform-bun": "catalog:",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
       },
     },
     "distilled/packages/kubernetes": {
@@ -515,12 +529,14 @@
       "version": "1.0.0-rc.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
-        "@effect/platform-bun": "catalog:",
-        "effect": "catalog:",
       },
       "devDependencies": {
+        "@effect/platform-bun": "catalog:",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
       },
     },
     "distilled/packages/mongodb-atlas": {
@@ -528,12 +544,14 @@
       "version": "1.0.0-rc.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
-        "@effect/platform-bun": "catalog:",
-        "effect": "catalog:",
       },
       "devDependencies": {
+        "@effect/platform-bun": "catalog:",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
       },
     },
     "distilled/packages/neon": {
@@ -541,12 +559,14 @@
       "version": "1.0.0-rc.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
-        "@effect/platform-bun": "catalog:",
-        "effect": "catalog:",
       },
       "devDependencies": {
+        "@effect/platform-bun": "catalog:",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
       },
     },
     "distilled/packages/planetscale": {
@@ -554,12 +574,14 @@
       "version": "1.0.0-rc.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
-        "@effect/platform-bun": "catalog:",
-        "effect": "catalog:",
       },
       "devDependencies": {
+        "@effect/platform-bun": "catalog:",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
       },
     },
     "distilled/packages/posthog": {
@@ -567,12 +589,14 @@
       "version": "1.0.0-rc.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
-        "@effect/platform-bun": "catalog:",
-        "effect": "catalog:",
       },
       "devDependencies": {
+        "@effect/platform-bun": "catalog:",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
       },
     },
     "distilled/packages/prisma-postgres": {
@@ -580,12 +604,14 @@
       "version": "1.0.0-rc.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
-        "@effect/platform-bun": "catalog:",
-        "effect": "catalog:",
       },
       "devDependencies": {
+        "@effect/platform-bun": "catalog:",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
       },
     },
     "distilled/packages/stripe": {
@@ -593,12 +619,14 @@
       "version": "1.0.0-rc.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
-        "@effect/platform-bun": "catalog:",
-        "effect": "catalog:",
       },
       "devDependencies": {
+        "@effect/platform-bun": "catalog:",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
       },
     },
     "distilled/packages/supabase": {
@@ -606,12 +634,14 @@
       "version": "1.0.0-rc.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
-        "@effect/platform-bun": "catalog:",
-        "effect": "catalog:",
       },
       "devDependencies": {
+        "@effect/platform-bun": "catalog:",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
       },
     },
     "distilled/packages/turso": {
@@ -619,12 +649,14 @@
       "version": "1.0.0-rc.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
-        "@effect/platform-bun": "catalog:",
-        "effect": "catalog:",
       },
       "devDependencies": {
+        "@effect/platform-bun": "catalog:",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
       },
     },
     "distilled/packages/typesense": {
@@ -632,12 +664,14 @@
       "version": "1.0.0-rc.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
-        "@effect/platform-bun": "catalog:",
-        "effect": "catalog:",
       },
       "devDependencies": {
+        "@effect/platform-bun": "catalog:",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
       },
     },
     "distilled/packages/workos": {
@@ -645,12 +679,14 @@
       "version": "1.0.0-rc.2",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
-        "@effect/platform-bun": "catalog:",
-        "effect": "catalog:",
       },
       "devDependencies": {
+        "@effect/platform-bun": "catalog:",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
       },
     },
     "examples/aws-bedrock-ai": {
@@ -1318,7 +1354,7 @@
     },
     "packages/alchemy": {
       "name": "alchemy",
-      "version": "2.0.0-beta.67",
+      "version": "2.0.0-beta.70",
       "bin": {
         "alchemy": "./bin/cli.js",
       },
@@ -1477,7 +1513,7 @@
     },
     "packages/better-auth": {
       "name": "@alchemy.run/better-auth",
-      "version": "2.0.0-beta.67",
+      "version": "2.0.0-beta.70",
       "dependencies": {
         "alchemy": "workspace:*",
         "effect": "catalog:",
@@ -1509,7 +1545,7 @@
     },
     "packages/pr-package": {
       "name": "@alchemy.run/pr-package",
-      "version": "2.0.0-beta.67",
+      "version": "2.0.0-beta.70",
       "dependencies": {
         "alchemy": "workspace:*",
         "effect": "catalog:",
