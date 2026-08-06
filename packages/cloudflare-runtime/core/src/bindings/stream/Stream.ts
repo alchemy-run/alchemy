@@ -95,13 +95,11 @@ export const StreamLive = Layer.effect(
           .end(JSON.stringify(entryUrl));
         return;
       }
-      res
-        .writeHead(404, { "content-type": "application/json" })
-        .end(
-          JSON.stringify({
-            error: `Unknown stream loopback route "${url.pathname}"`,
-          }),
-        );
+      res.writeHead(404, { "content-type": "application/json" }).end(
+        JSON.stringify({
+          error: `Unknown stream loopback route "${url.pathname}"`,
+        }),
+      );
     };
 
     const makeStorageService = Effect.gen(function* () {

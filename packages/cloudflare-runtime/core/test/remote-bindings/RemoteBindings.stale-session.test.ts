@@ -127,16 +127,14 @@ const startWorkerWithRemoteBinding = (name: string) =>
 const fetchBody = (worker: {
   fetch: (path: string) => Effect.Effect<Response>;
 }) =>
-  worker
-    .fetch("/")
-    .pipe(
-      Effect.flatMap((response) =>
-        Effect.promise(async () => ({
-          status: response.status,
-          body: await response.text(),
-        })),
-      ),
-    );
+  worker.fetch("/").pipe(
+    Effect.flatMap((response) =>
+      Effect.promise(async () => ({
+        status: response.status,
+        body: await response.text(),
+      })),
+    ),
+  );
 
 const testLayer = RemoteBindings.RemoteBindingsLive.pipe(
   Layer.provide(StubRemoteWorker),
