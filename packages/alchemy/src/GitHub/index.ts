@@ -8,6 +8,7 @@ export {
   fromToken,
 } from "./Credentials.ts";
 export { Octokit } from "./Octokit.ts";
+export * from "./AppCredentials.ts";
 export * from "./CreateIssueComment.ts";
 export * from "./CreateIssueCommentHttp.ts";
 export * from "./CreateIssueCommentLocal.ts";
