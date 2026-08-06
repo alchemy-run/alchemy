@@ -1,24 +1,24 @@
-import type { ExportTypes } from "@alchemy.run/cloudflare-runtime/rolldown/export-types";
+import type { ExportTypes } from "../rolldown/export-types.ts";
 import {
   haveExportTypesChanged,
   isExportTypes,
   WORKER_EXPORT_TYPES_EVENT,
-} from "@alchemy.run/cloudflare-runtime/rolldown/export-types";
-import { parseViteEnvironments } from "@alchemy.run/cloudflare-runtime/rolldown/options";
-import type { OptionsApi } from "@alchemy.run/cloudflare-runtime/rolldown/plugins";
-import { workerEntryId } from "@alchemy.run/cloudflare-runtime/rolldown/plugins";
-import { resolvePluginApi } from "@alchemy.run/cloudflare-runtime/rolldown/utils";
-import type { RuntimeServices } from "@alchemy.run/cloudflare-runtime/core";
+} from "../rolldown/export-types.ts";
+import { parseViteEnvironments } from "../rolldown/options.ts";
+import type { OptionsApi } from "../rolldown/plugins/index.ts";
+import { workerEntryId } from "../rolldown/plugins/index.ts";
+import { resolvePluginApi } from "../rolldown/utils.ts";
+import type { RuntimeServices } from "../core/index.ts";
 import type * as Context from "effect/Context";
 import * as NodeHttp from "node:http";
 import { URL as NodeURL } from "node:url";
 import * as vite from "vite";
-import { DistilledDevEnvironment } from "./dev-environment.js";
-import type { ServerHandle } from "./dev-server.js";
-import { configuredExportTypes, mergeExportTypes } from "./export-types.js";
-import { resolveForwardedHost } from "./forwarded-host.js";
-import type { CloudflareVitePluginOptions } from "./plugin.js";
-import { handleWebSocket } from "./websockets.js";
+import { DistilledDevEnvironment } from "./dev-environment.ts";
+import type { ServerHandle } from "./dev-server.ts";
+import { configuredExportTypes, mergeExportTypes } from "./export-types.ts";
+import { resolveForwardedHost } from "./forwarded-host.ts";
+import type { CloudflareVitePluginOptions } from "./plugin.ts";
+import { handleWebSocket } from "./websockets.ts";
 
 let context: Context.Context<RuntimeServices> | undefined;
 

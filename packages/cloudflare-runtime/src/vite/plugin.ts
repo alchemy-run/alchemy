@@ -1,4 +1,4 @@
-import type { BasePluginOptions } from "@alchemy.run/cloudflare-runtime/rolldown/options";
+import type { BasePluginOptions } from "../rolldown/options.ts";
 import {
   additionalModulesPlugin,
   cloudflareExternalsPlugin,
@@ -8,12 +8,12 @@ import {
   optionsPlugin,
   virtualModulesPlugin,
   wasmInitPlugin,
-} from "@alchemy.run/cloudflare-runtime/rolldown/plugins";
+} from "../rolldown/plugins/index.ts";
 import type {
   BindingHooks,
   RuntimeServices,
   RuntimeWorker,
-} from "@alchemy.run/cloudflare-runtime/core";
+} from "../core/index.ts";
 import type * as Context from "effect/Context";
 import type * as vite from "vite";
 import { dev } from "./dev-plugin.ts";

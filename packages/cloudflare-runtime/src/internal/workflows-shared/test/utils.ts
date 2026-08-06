@@ -1,11 +1,11 @@
 import { env } from "cloudflare:test";
-import { setTestWorkflowCallback } from "./test-entry";
+import { setTestWorkflowCallback } from "./test-entry.ts";
 import type {
   DatabaseInstance,
   DatabaseVersion,
   DatabaseWorkflow,
   Engine,
-} from "../engine";
+} from "../engine.ts";
 import type { WorkflowStep } from "cloudflare:workers";
 
 // Track fire-and-forget init() RPC promises so they can be settled

@@ -16,7 +16,7 @@
  * re-expose the underlying integration surface for direct/advanced use.
  */
 import type { CloudflareVitePluginOptions } from "@alchemy.run/cloudflare-runtime/vite";
-import { makeDeployTarget } from "@alchemy.run/cloudflare-frameworks/core";
+import { makeDeployTarget } from "../core/index.ts";
 import * as Effect from "effect/Effect";
 import * as NodePath from "node:path";
 import { distilledCloudflare } from "./integration.ts";

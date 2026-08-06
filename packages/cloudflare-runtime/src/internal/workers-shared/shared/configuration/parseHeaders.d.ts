@@ -1,4 +1,4 @@
-import type { ParsedHeaders } from "./types";
+import type { ParsedHeaders } from "./types.ts";
 export declare function parseHeaders(
   input: string,
   {

@@ -4,8 +4,8 @@ import type { AddressInfo } from "node:net";
 import * as vite from "vite";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { WebSocketServer } from "ws";
-import { DistilledDevEnvironment } from "#/dev-environment";
-import cloudflareVitePlugin from "#/plugin";
+import { DistilledDevEnvironment } from "../dev-environment.ts";
+import cloudflareVitePlugin from "../plugin.ts";
 
 // Stand-in for the workerd dev runtime: a plain HTTP server (every proxied
 // request responds with "worker") that also accepts the module-runner

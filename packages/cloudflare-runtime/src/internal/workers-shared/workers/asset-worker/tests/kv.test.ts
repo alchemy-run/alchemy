@@ -1,6 +1,6 @@
 import { afterEach, assert, beforeEach, describe, it, vi } from "vitest";
-import { getAssetWithMetadataFromKV } from "../src/utils/kv";
-import type { AssetMetadata } from "../src/utils/kv";
+import { getAssetWithMetadataFromKV } from "../src/utils/kv.ts";
+import type { AssetMetadata } from "../src/utils/kv.ts";
 import type { MockInstance } from "vitest";
 
 describe("[Asset Worker] Fetching assets from KV", () => {

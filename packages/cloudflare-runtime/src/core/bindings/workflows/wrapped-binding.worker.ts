@@ -1,8 +1,8 @@
 import type {
   WorkflowBinding,
   WorkflowInstanceRestartOptions,
-} from "../../../internal/workflows-shared/binding";
-import type { WorkflowIntrospectionOperation } from "../../../internal/workflows-shared/types";
+} from "../../../internal/workflows-shared/binding.ts";
+import type { WorkflowIntrospectionOperation } from "../../../internal/workflows-shared/types.ts";
 
 class WorkflowImpl implements Workflow {
   constructor(private binding: WorkflowBinding) {}

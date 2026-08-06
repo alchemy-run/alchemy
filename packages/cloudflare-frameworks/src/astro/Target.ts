@@ -18,7 +18,7 @@ import {
   isDeployTarget,
   type DeployTarget,
   type DeployTargetInput,
-} from "@alchemy.run/cloudflare-frameworks/core";
+} from "../core/index.ts";
 import type { AstroIntegration } from "astro";
 
 export interface AstroTarget<Config = unknown> extends DeployTarget<Config> {

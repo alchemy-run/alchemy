@@ -1,15 +1,18 @@
 import { loadInternalWorker } from "../../internal/internal-worker.ts";
-import { parseHeaders, parseRedirects } from "../../../internal/workers-shared";
+import {
+  parseHeaders,
+  parseRedirects,
+} from "../../../internal/workers-shared/index.ts";
 import {
   constructHeaders,
   constructRedirects,
-} from "../../../internal/workers-shared/node/configuration/constructConfiguration";
+} from "../../../internal/workers-shared/node/configuration/constructConfiguration.ts";
 import {
   createAssetsIgnoreFunction,
   getContentType,
   normalizeFilePath,
-} from "../../../internal/workers-shared/node/helpers";
-import { parseStaticRouting } from "../../../internal/workers-shared/shared/configuration/parseStaticRouting";
+} from "../../../internal/workers-shared/node/helpers.ts";
+import { parseStaticRouting } from "../../../internal/workers-shared/shared/configuration/parseStaticRouting.ts";
 import {
   CONTENT_HASH_OFFSET,
   ENTRY_SIZE,
@@ -18,12 +21,12 @@ import {
   MAX_ASSET_SIZE,
   PATH_HASH_OFFSET,
   PATH_HASH_SIZE,
-} from "../../../internal/workers-shared/shared/constants";
+} from "../../../internal/workers-shared/shared/constants.ts";
 import type {
   AssetConfig,
   RouterConfig,
   StaticRouting,
-} from "../../../internal/workers-shared/shared/types";
+} from "../../../internal/workers-shared/shared/types.ts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";

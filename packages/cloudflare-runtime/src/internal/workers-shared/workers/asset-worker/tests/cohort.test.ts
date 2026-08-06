@@ -1,7 +1,7 @@
 import { describe, it, vi } from "vitest";
-import { COHORT_LOOKUP_TIMEOUT_MS, lookupCohort } from "../src/worker";
-import type { Env } from "../src/worker";
-import type { AccountCohortQuerierBinding } from "../worker-configuration";
+import { COHORT_LOOKUP_TIMEOUT_MS, lookupCohort } from "../src/worker.ts";
+import type { Env } from "../src/worker.ts";
+import type { AccountCohortQuerierBinding } from "../worker-configuration.d.ts";
 
 function makeEnv(
   querier?: Partial<AccountCohortQuerierBinding>,

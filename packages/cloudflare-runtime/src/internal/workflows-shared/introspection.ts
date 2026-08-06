@@ -7,7 +7,7 @@ import type {
   WorkflowIntrospectionStreamResult,
   WorkflowIntrospector,
   WorkflowStepSelector,
-} from "./types";
+} from "./types.ts";
 
 function normalizeStreamMockChunk(value: unknown): Uint8Array {
   if (value instanceof Uint8Array) {

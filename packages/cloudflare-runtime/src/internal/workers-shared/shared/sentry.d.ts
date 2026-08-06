@@ -1,5 +1,5 @@
 import { Toucan } from "toucan-js";
-import type { ColoMetadata } from "./types";
+import type { ColoMetadata } from "./types.ts";
 export declare function setupSentry(
   request: Request,
   context: ExecutionContext | undefined,

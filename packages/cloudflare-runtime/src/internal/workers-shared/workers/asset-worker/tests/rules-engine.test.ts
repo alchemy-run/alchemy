@@ -3,7 +3,7 @@ import {
   generateRulesMatcher,
   generateStaticRoutingRuleMatcher,
   replacer,
-} from "../src/utils/rules-engine";
+} from "../src/utils/rules-engine.ts";
 
 describe("rules engine", () => {
   test("it should match simple pathname hosts", ({ expect }) => {

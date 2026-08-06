@@ -1,5 +1,5 @@
 import { describe, test } from "vitest";
-import { resolveCompatibilityOptions } from "../src/compatibility-flags";
+import { resolveCompatibilityOptions } from "../src/compatibility-flags.ts";
 
 describe("resolveCompatibilityOptions", () => {
   test("it does not interfere with existing flags", ({ expect }) => {

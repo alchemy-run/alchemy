@@ -1,7 +1,11 @@
 import { RpcTarget } from "cloudflare:workers";
 import { ms } from "itty-time";
-import { INSTANCE_METADATA, InstanceEvent, InstanceStatus } from "./instance";
-import { computeHash } from "./lib/cache";
+import {
+  INSTANCE_METADATA,
+  InstanceEvent,
+  InstanceStatus,
+} from "./instance.ts";
+import { computeHash } from "./lib/cache.ts";
 import {
   ABORT_REASONS,
   InvalidStepReadableStreamError,
@@ -13,13 +17,13 @@ import {
   WorkflowFatalError,
   WorkflowInternalError,
   WorkflowTimeoutError,
-} from "./lib/errors";
-import { calcRetryDuration } from "./lib/retries";
+} from "./lib/errors.ts";
+import { calcRetryDuration } from "./lib/retries.ts";
 import {
   parseRollbackOptions,
   registerRollbackFn,
   ROLLBACK_CACHE_KEY_PREFIX,
-} from "./lib/rollback";
+} from "./lib/rollback.ts";
 import {
   cleanupPendingStreamOutput,
   createReplayReadableStream,
@@ -29,17 +33,20 @@ import {
   rollbackStreamOutput,
   StreamOutputState,
   writeStreamOutput,
-} from "./lib/streams";
+} from "./lib/streams.ts";
 import {
   isValidStepConfig,
   isValidStepName,
   MAX_STEP_NAME_LENGTH,
-} from "./lib/validators";
-import { MODIFIER_KEYS } from "./modifier";
-import type { Engine } from "./engine";
-import type { InstanceMetadata } from "./instance";
-import type { RollbackFn, WorkflowStepRollbackOptions } from "./lib/rollback";
-import type { StreamOutputMeta } from "./lib/streams";
+} from "./lib/validators.ts";
+import { MODIFIER_KEYS } from "./modifier.ts";
+import type { Engine } from "./engine.ts";
+import type { InstanceMetadata } from "./instance.ts";
+import type {
+  RollbackFn,
+  WorkflowStepRollbackOptions,
+} from "./lib/rollback.ts";
+import type { StreamOutputMeta } from "./lib/streams.ts";
 import type {
   WorkflowSleepDuration,
   WorkflowStepConfig,

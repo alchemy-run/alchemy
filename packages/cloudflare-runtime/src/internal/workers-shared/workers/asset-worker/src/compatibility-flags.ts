@@ -1,4 +1,4 @@
-import type { AssetConfig } from "../../../shared/types";
+import type { AssetConfig } from "../../../shared/types.ts";
 
 interface CompatibilityFlag {
   enable: `assets_${string}`;

@@ -1,8 +1,8 @@
 import { RpcTarget } from "cloudflare:workers";
-import { computeHash } from "./lib/cache";
-import { isReadableStreamLike, writeStreamOutput } from "./lib/streams";
-import type { Event } from "./context";
-import type { Engine } from "./engine";
+import { computeHash } from "./lib/cache.ts";
+import { isReadableStreamLike, writeStreamOutput } from "./lib/streams.ts";
+import type { Event } from "./context.ts";
+import type { Engine } from "./engine.ts";
 
 export type StepSelector = {
   name: string;

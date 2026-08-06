@@ -1,9 +1,9 @@
-import type { AssetConfig } from "../../shared/types";
+import type { AssetConfig } from "../../shared/types.ts";
 import type {
   Logger,
   ParsedHeaders,
   ParsedRedirects,
-} from "../../shared/configuration/types";
+} from "../../shared/configuration/types.ts";
 export declare function constructRedirects({
   redirects,
   redirectsFile,

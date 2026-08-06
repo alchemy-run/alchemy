@@ -1,4 +1,4 @@
-import type { UnsafePerformanceTimer } from "./types";
+import type { UnsafePerformanceTimer } from "./types.ts";
 
 export class PerformanceTimer {
   private performanceTimer;

@@ -1,10 +1,10 @@
-import * as FrameworkCore from "@alchemy.run/cloudflare-frameworks/core";
+import * as FrameworkCore from "../core/index.ts";
 import {
   Framework,
   FrameworkError,
   type DeployTarget,
   type DeployTargetInput,
-} from "@alchemy.run/cloudflare-frameworks/core";
+} from "../core/index.ts";
 import type { Adapter } from "@sveltejs/kit";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

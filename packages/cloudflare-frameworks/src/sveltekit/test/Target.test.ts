@@ -1,9 +1,6 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import {
-  isDeployTarget,
-  resolveDeployTarget,
-} from "@alchemy.run/cloudflare-frameworks/core";
-import type { BuildOutput } from "@alchemy.run/cloudflare-frameworks/core";
+import { isDeployTarget, resolveDeployTarget } from "../../core/index.ts";
+import type { BuildOutput } from "../../core/index.ts";
 import * as Effect from "effect/Effect";
 import { describe, expect, it } from "vitest";
 import { makeCloudflareTarget, target } from "../cloudflare.ts";

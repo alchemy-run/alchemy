@@ -1,5 +1,5 @@
-import * as Queue from "@alchemy.run/cloudflare-runtime/core/bindings/queue/Queue";
-import cloudflareVitePlugin from "#/plugin";
+import * as Queue from "../../core/bindings/queue/Queue.ts";
+import cloudflareVitePlugin from "../plugin.ts";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as vite from "vite";

@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { Context } from "./context";
+import { Context } from "./context.ts";
 import {
   INSTANCE_METADATA,
   InstanceEvent,
@@ -7,8 +7,8 @@ import {
   instanceStatusName,
   InstanceTrigger,
   toInstanceStatus,
-} from "./instance";
-import { computeHash } from "./lib/cache";
+} from "./instance.ts";
+import { computeHash } from "./lib/cache.ts";
 import {
   ABORT_REASONS,
   createWorkflowError,
@@ -17,32 +17,32 @@ import {
   shouldPreserveNonRetryableError,
   stepNotFoundError,
   WorkflowFatalError,
-} from "./lib/errors";
+} from "./lib/errors.ts";
 import {
   ENGINE_TIMEOUT,
   GracePeriodSemaphore,
   startGracePeriod,
-} from "./lib/gracePeriodSemaphore";
+} from "./lib/gracePeriodSemaphore.ts";
 import {
   readAndClearRestartFromStep,
   resolveGroupKeysToWipe,
   storeRestartFromStep,
   wipeRestartState,
-} from "./lib/restart";
-import { clearRollbackRegistry, executeRollbacks } from "./lib/rollback";
+} from "./lib/restart.ts";
+import { clearRollbackRegistry, executeRollbacks } from "./lib/rollback.ts";
 import {
   createReplayReadableStream,
   getInvalidStoredStreamOutputError,
   getStoredStreamOutputPreview,
   StreamOutputState,
-} from "./lib/streams";
-import { TimePriorityQueue } from "./lib/timePriorityQueue";
-import { MODIFIER_KEYS, WorkflowInstanceModifier } from "./modifier";
-import type { RestartFromStep } from "./binding";
-import type { Event } from "./context";
-import type { InstanceMetadata, RawInstanceLog } from "./instance";
-import type { RollbackRegistryEntry } from "./lib/rollback";
-import type { StreamOutputMeta } from "./lib/streams";
+} from "./lib/streams.ts";
+import { TimePriorityQueue } from "./lib/timePriorityQueue.ts";
+import { MODIFIER_KEYS, WorkflowInstanceModifier } from "./modifier.ts";
+import type { RestartFromStep } from "./binding.ts";
+import type { Event } from "./context.ts";
+import type { InstanceMetadata, RawInstanceLog } from "./instance.ts";
+import type { RollbackRegistryEntry } from "./lib/rollback.ts";
+import type { StreamOutputMeta } from "./lib/streams.ts";
 import type {
   WorkflowEntrypoint,
   WorkflowEvent,

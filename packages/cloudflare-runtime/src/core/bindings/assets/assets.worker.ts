@@ -4,4 +4,4 @@
 export {
   AssetWorkerInner,
   default,
-} from "../../../internal/workers-shared/workers/asset-worker";
+} from "../../../internal/workers-shared/workers/asset-worker/index.ts";

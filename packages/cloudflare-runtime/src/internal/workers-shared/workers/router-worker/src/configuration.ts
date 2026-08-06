@@ -1,4 +1,7 @@
-import type { EyeballRouterConfig, RouterConfig } from "../../../shared/types";
+import type {
+  EyeballRouterConfig,
+  RouterConfig,
+} from "../../../shared/types.ts";
 
 type RequiredEyeballRouterConfig = Required<Exclude<EyeballRouterConfig, null>>;
 

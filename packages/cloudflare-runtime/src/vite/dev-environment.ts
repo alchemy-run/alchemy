@@ -1,6 +1,6 @@
-import type { ExportTypes } from "@alchemy.run/cloudflare-runtime/rolldown/export-types";
-import { isExportTypes } from "@alchemy.run/cloudflare-runtime/rolldown/export-types";
-import { MODULE_REFERENCE_REGEX } from "@alchemy.run/cloudflare-runtime/rolldown/plugins";
+import type { ExportTypes } from "../rolldown/export-types.ts";
+import { isExportTypes } from "../rolldown/export-types.ts";
+import { MODULE_REFERENCE_REGEX } from "../rolldown/plugins/index.ts";
 import assert from "node:assert";
 import { URL as NodeURL } from "node:url";
 import * as vite from "vite";
@@ -10,7 +10,7 @@ import {
   EXPORT_TYPES_EVENT,
   INIT_PATH,
   REQUEST_EXPORT_TYPES_EVENT,
-} from "./module-runner/constants.shared";
+} from "./module-runner/constants.shared.ts";
 
 /** How long to wait for the Worker to report its export types before giving up. */
 const EXPORT_TYPES_TIMEOUT_MS = 10_000;

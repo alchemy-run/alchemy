@@ -3,21 +3,21 @@ import { env } from "cloudflare:workers";
 import { NonRetryableError } from "cloudflare:workflows";
 import { afterEach, describe, it, vi } from "vitest";
 import workerdUnsafe from "workerd:unsafe";
-import { DEFAULT_STEP_LIMIT, InstanceEvent, InstanceStatus } from "..";
-import { ABORT_REASONS, isAbortError } from "../lib/errors";
-import { setTestWorkflowCallback } from "./test-entry";
-import { runWorkflow, runWorkflowAndAwait } from "./utils";
+import { DEFAULT_STEP_LIMIT, InstanceEvent, InstanceStatus } from "../index.ts";
+import { ABORT_REASONS, isAbortError } from "../lib/errors.ts";
+import { setTestWorkflowCallback } from "./test-entry.ts";
+import { runWorkflow, runWorkflowAndAwait } from "./utils.ts";
 import type {
   DatabaseInstance,
   DatabaseVersion,
   DatabaseWorkflow,
   EngineLogs,
-} from "../engine";
+} from "../engine.ts";
 import type {
   RollbackContext,
   RollbackFn,
   WorkflowStepRollbackOptions,
-} from "../lib/rollback";
+} from "../lib/rollback.ts";
 import type { WorkflowStep, WorkflowStepConfig } from "cloudflare:workers";
 
 afterEach(async () => {

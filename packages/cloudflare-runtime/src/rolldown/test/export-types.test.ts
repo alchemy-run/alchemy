@@ -8,9 +8,9 @@ import {
   RESOLVED_EXPORT_TYPES_MODULE_ID,
   WORKER_EXPORT_TYPES_EVENT,
   type ExportTypes,
-} from "../export-types.js";
-import { virtualModulesPlugin } from "../plugins/virtual-modules.js";
-import { buildFixture } from "./utils/build-fixture";
+} from "../export-types.ts";
+import { virtualModulesPlugin } from "../plugins/virtual-modules.ts";
+import { buildFixture } from "./utils/build-fixture.ts";
 
 describe("export type detection", async () => {
   const built = await buildFixture({ fixture: "export-types/index.ts" });

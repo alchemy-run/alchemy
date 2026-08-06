@@ -1,14 +1,14 @@
-import { parseViteEnvironments } from "@alchemy.run/cloudflare-runtime/rolldown/options";
-import type { OptionsApi } from "@alchemy.run/cloudflare-runtime/rolldown/plugins";
-import { resolvePluginApi } from "@alchemy.run/cloudflare-runtime/rolldown/utils";
+import { parseViteEnvironments } from "../rolldown/options.ts";
+import type { OptionsApi } from "../rolldown/plugins/index.ts";
+import { resolvePluginApi } from "../rolldown/utils.ts";
 import * as NodeFs from "node:fs";
 import * as NodeHttp from "node:http";
 import * as NodePath from "node:path";
 import { URL as NodeURL } from "node:url";
 import type * as vite from "vite";
-import { resolveForwardedHost } from "./forwarded-host.js";
-import type { CloudflareVitePluginOptions } from "./plugin.js";
-import { handleWebSocket } from "./websockets.js";
+import { resolveForwardedHost } from "./forwarded-host.ts";
+import type { CloudflareVitePluginOptions } from "./plugin.ts";
+import { handleWebSocket } from "./websockets.ts";
 
 /**
  * Preview mode: serve the freshly built worker through workerd.

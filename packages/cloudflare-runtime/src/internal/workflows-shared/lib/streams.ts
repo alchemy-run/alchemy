@@ -4,7 +4,7 @@ import {
   StreamOutputStorageLimitError,
   UnsupportedStreamChunkError,
   WorkflowTimeoutError,
-} from "./errors";
+} from "./errors.ts";
 
 // ── Constants ───────────────────────────────────────────────────────────────
 

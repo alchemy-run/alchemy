@@ -1,5 +1,5 @@
-import type { AssetConfig } from "../types";
-import type { ParsedRedirects } from "./types";
+import type { AssetConfig } from "../types.ts";
+import type { ParsedRedirects } from "./types.ts";
 export declare function parseRedirects(
   input: string,
   {

@@ -1,7 +1,4 @@
-import type {
-  ExportType,
-  ExportTypes,
-} from "@alchemy.run/cloudflare-runtime/rolldown/export-types";
+import type { ExportType, ExportTypes } from "../rolldown/export-types.ts";
 import type { CloudflareVitePluginOptions } from "./plugin.ts";
 
 const WRAPPER_FACTORIES = {

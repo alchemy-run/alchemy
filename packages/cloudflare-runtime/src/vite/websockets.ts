@@ -2,7 +2,7 @@ import * as NodeHttp from "node:http";
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import type * as vite from "vite";
-import { resolveForwardedHost } from "./forwarded-host.js";
+import { resolveForwardedHost } from "./forwarded-host.ts";
 
 /**
  * Handles 'upgrade' requests on the Vite HTTP server and forwards the

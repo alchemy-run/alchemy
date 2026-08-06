@@ -1,17 +1,14 @@
-import { loadInternalWorker } from "@alchemy.run/cloudflare-runtime/core/internal/internal-worker";
-import type { ExportTypes } from "@alchemy.run/cloudflare-runtime/rolldown/export-types";
-import { EXPORT_TYPES_MODULE_ID } from "@alchemy.run/cloudflare-runtime/rolldown/export-types";
-import { MODULE_REFERENCE_REGEX } from "@alchemy.run/cloudflare-runtime/rolldown/plugins";
-import type {
-  BindingHooks,
-  Module,
-} from "@alchemy.run/cloudflare-runtime/core";
-import * as Runtime from "@alchemy.run/cloudflare-runtime/core/Runtime";
-import * as RuntimeServices from "@alchemy.run/cloudflare-runtime/core/RuntimeServices";
-import * as DurableObjectNamespace from "@alchemy.run/cloudflare-runtime/core/bindings/DurableObjectNamespace";
-import * as Json from "@alchemy.run/cloudflare-runtime/core/bindings/Json";
-import * as Loopback from "@alchemy.run/cloudflare-runtime/core/bindings/Loopback";
-import * as UnsafeEval from "@alchemy.run/cloudflare-runtime/core/bindings/UnsafeEval";
+import { loadInternalWorker } from "../core/internal/internal-worker.ts";
+import type { ExportTypes } from "../rolldown/export-types.ts";
+import { EXPORT_TYPES_MODULE_ID } from "../rolldown/export-types.ts";
+import { MODULE_REFERENCE_REGEX } from "../rolldown/plugins/index.ts";
+import type { BindingHooks, Module } from "../core/index.ts";
+import * as Runtime from "../core/Runtime.ts";
+import * as RuntimeServices from "../core/RuntimeServices.ts";
+import * as DurableObjectNamespace from "../core/bindings/DurableObjectNamespace.ts";
+import * as Json from "../core/bindings/Json.ts";
+import * as Loopback from "../core/bindings/Loopback.ts";
+import * as UnsafeEval from "../core/bindings/UnsafeEval.ts";
 import * as Credentials from "@distilled.cloud/cloudflare/Credentials";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -38,11 +35,11 @@ const WrapperWorker = {
       "#cloudflare-runtime-vite-worker/module-runner/wrapper.worker",
     ),
 };
-import * as ViteAssets from "./assets/ViteAssets";
+import * as ViteAssets from "./assets/ViteAssets.ts";
 import { renderExportWrappers } from "./export-types.ts";
 import type { EntryEnvironment } from "./module-runner/constants.shared.ts";
 import { ENVIRONMENT_NAME_HEADER } from "./module-runner/constants.shared.ts";
-import type { CloudflareVitePluginOptions } from "./plugin";
+import type { CloudflareVitePluginOptions } from "./plugin.ts";
 
 export type ServerHandle = Awaited<ReturnType<typeof startServer>>;
 

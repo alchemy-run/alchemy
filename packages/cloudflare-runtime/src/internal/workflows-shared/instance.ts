@@ -1,9 +1,9 @@
-import type { ResolvedStepConfig } from "./context";
+import type { ResolvedStepConfig } from "./context.ts";
 import type {
   DatabaseInstance,
   DatabaseVersion,
   DatabaseWorkflow,
-} from "./engine";
+} from "./engine.ts";
 import type { WorkflowEvent } from "cloudflare:workers";
 
 export type Instance = {

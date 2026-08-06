@@ -1,5 +1,5 @@
-import { resolveCompatibilityOptions } from "./compatibility-flags";
-import type { AssetConfig } from "../../../shared/types";
+import { resolveCompatibilityOptions } from "./compatibility-flags.ts";
+import type { AssetConfig } from "../../../shared/types.ts";
 
 export const normalizeConfiguration = (
   configuration?: AssetConfig,

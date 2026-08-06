@@ -7,7 +7,7 @@ import type {
   QueueConsumer as RuntimeQueueConsumer,
   RuntimeServices,
 } from "@alchemy.run/cloudflare-runtime/core";
-import * as FrameworkCore from "@alchemy.run/cloudflare-frameworks/core";
+import * as FrameworkCore from "../core/index.ts";
 import type * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

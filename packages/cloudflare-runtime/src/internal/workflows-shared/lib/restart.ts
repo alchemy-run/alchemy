@@ -1,7 +1,7 @@
-import { InstanceEvent } from "../instance";
-import { MODIFIER_KEYS } from "../modifier";
-import type { RestartFromStep } from "../binding";
-import type { RawInstanceLog } from "../instance";
+import { InstanceEvent } from "../instance.ts";
+import { MODIFIER_KEYS } from "../modifier.ts";
+import type { RestartFromStep } from "../binding.ts";
+import type { RawInstanceLog } from "../instance.ts";
 
 const EVENT_MAP_PREFIX = "EVENT_MAP";
 const RESTART_FROM_STEP_KEY = "RESTART_FROM_STEP";

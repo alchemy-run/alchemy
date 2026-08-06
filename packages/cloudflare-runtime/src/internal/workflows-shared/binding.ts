@@ -1,25 +1,25 @@
 import { RpcTarget, WorkerEntrypoint } from "cloudflare:workers";
-import { InstanceEvent, instanceStatusName } from "./instance";
+import { InstanceEvent, instanceStatusName } from "./instance.ts";
 import {
   isUserTriggeredPause,
   isUserTriggeredRestart,
   isUserTriggeredTerminate,
   WorkflowError,
-} from "./lib/errors";
-import { isValidWorkflowInstanceId } from "./lib/validators";
+} from "./lib/errors.ts";
+import { isValidWorkflowInstanceId } from "./lib/validators.ts";
 import type {
   DatabaseInstance,
   DatabaseVersion,
   DatabaseWorkflow,
   Engine,
   EngineLogs,
-} from "./engine";
-import type { InstanceStatus as EngineInstanceStatus } from "./instance";
+} from "./engine.ts";
+import type { InstanceStatus as EngineInstanceStatus } from "./instance.ts";
 import type {
   WorkflowInstanceModifier,
   WorkflowIntrospectionOperation,
   WorkflowIntrospectionStreamResult,
-} from "./types";
+} from "./types.ts";
 
 type Env = {
   ENGINE: DurableObjectNamespace<Engine>;

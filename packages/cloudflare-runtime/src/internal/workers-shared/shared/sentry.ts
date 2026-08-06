@@ -1,5 +1,5 @@
 import { rewriteFramesIntegration, Toucan } from "toucan-js";
-import type { ColoMetadata } from "./types";
+import type { ColoMetadata } from "./types.ts";
 
 export function setupSentry(
   request: Request,

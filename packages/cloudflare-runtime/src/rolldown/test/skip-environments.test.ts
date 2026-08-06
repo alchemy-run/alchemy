@@ -1,12 +1,12 @@
 import type * as vite from "vite";
 import { assert, describe, expect, it, vi } from "vitest";
-import { parseViteEnvironments, type BasePluginOptions } from "../options.js";
+import { parseViteEnvironments, type BasePluginOptions } from "../options.ts";
 import {
   cloudflareExternalsPlugin,
   nodejsUnenvPlugin,
   optionsPlugin,
   virtualModulesPlugin,
-} from "../plugins/index.js";
+} from "../plugins/index.ts";
 
 const applyToEnvironment = (plugin: vite.Plugin | null, name: string) => {
   assert(plugin, "plugin is not defined");

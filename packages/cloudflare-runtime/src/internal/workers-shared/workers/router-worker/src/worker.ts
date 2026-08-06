@@ -1,23 +1,27 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
-import { generateStaticRoutingRuleMatcher } from "../../asset-worker/src/utils/rules-engine";
-import { PerformanceTimer } from "../../../shared/performance";
-import { TemporaryRedirectResponse } from "../../../shared/responses";
-import { setupSentry } from "../../../shared/sentry";
-import { mockJaegerBinding } from "../../../shared/tracing";
-import { Analytics, DISPATCH_TYPE, STATIC_ROUTING_DECISION } from "./analytics";
+import { generateStaticRoutingRuleMatcher } from "../../asset-worker/src/utils/rules-engine.ts";
+import { PerformanceTimer } from "../../../shared/performance.ts";
+import { TemporaryRedirectResponse } from "../../../shared/responses.ts";
+import { setupSentry } from "../../../shared/sentry.ts";
+import { mockJaegerBinding } from "../../../shared/tracing.ts";
+import {
+  Analytics,
+  DISPATCH_TYPE,
+  STATIC_ROUTING_DECISION,
+} from "./analytics.ts";
 import {
   applyEyeballConfigDefaults,
   applyRouterConfigDefaults,
-} from "./configuration";
-import { renderLimitedResponse } from "./limited-response";
-import type AssetWorker from "../../asset-worker";
+} from "./configuration.ts";
+import { renderLimitedResponse } from "./limited-response.ts";
+import type AssetWorker from "../../asset-worker/index.ts";
 import type {
   EyeballRouterConfig,
   JaegerTracing,
   RouterConfig,
   UnsafePerformanceTimer,
-} from "../../../shared/types";
-import type { ColoMetadata, Environment, ReadyAnalytics } from "./types";
+} from "../../../shared/types.ts";
+import type { ColoMetadata, Environment, ReadyAnalytics } from "./types.ts";
 
 export interface Env {
   ASSET_WORKER: Service<AssetWorker>;

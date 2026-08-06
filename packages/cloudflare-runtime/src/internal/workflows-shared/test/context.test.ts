@@ -1,26 +1,26 @@
 import { env, runInDurableObject } from "cloudflare:test";
 import { afterEach, describe, it, vi } from "vitest";
 import workerdUnsafe from "workerd:unsafe";
-import { InstanceEvent } from "..";
-import { computeHash } from "../lib/cache";
+import { InstanceEvent } from "../index.ts";
+import { computeHash } from "../lib/cache.ts";
 import {
   InvalidStepReadableStreamError,
   OversizedStreamChunkError,
   UnsupportedStreamChunkError,
   WorkflowTimeoutError,
   isAbortError,
-} from "../lib/errors";
+} from "../lib/errors.ts";
 import {
   STREAMING_STEP_CHUNKS_TABLE,
   getStreamOutputMetaKey,
   StreamOutputState,
   rollbackStreamOutput,
   writeStreamOutput,
-} from "../lib/streams";
-import { MODIFIER_KEYS } from "../modifier";
-import { runWorkflow, runWorkflowAndAwait } from "./utils";
-import type { Engine, EngineLogs } from "../engine";
-import type { StreamOutputMeta } from "../lib/streams";
+} from "../lib/streams.ts";
+import { MODIFIER_KEYS } from "../modifier.ts";
+import { runWorkflow, runWorkflowAndAwait } from "./utils.ts";
+import type { Engine, EngineLogs } from "../engine.ts";
+import type { StreamOutputMeta } from "../lib/streams.ts";
 
 afterEach(async () => {
   await workerdUnsafe.abortAllDurableObjects();

@@ -15,11 +15,8 @@
  * module's specifier).
  */
 import cloudflare from "@alchemy.run/cloudflare-runtime/rolldown";
-import * as FrameworkCore from "@alchemy.run/cloudflare-frameworks/core";
-import {
-  DeployTargetError,
-  makeDeployTarget,
-} from "@alchemy.run/cloudflare-frameworks/core";
+import * as FrameworkCore from "../core/index.ts";
+import { DeployTargetError, makeDeployTarget } from "../core/index.ts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as NodePath from "node:path";

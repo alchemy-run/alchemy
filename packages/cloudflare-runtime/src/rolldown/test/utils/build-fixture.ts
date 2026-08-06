@@ -7,9 +7,9 @@ import type {
   RolldownPluginOption,
 } from "rolldown";
 import { rolldown } from "rolldown";
-import type { RolldownPluginOptions } from "../../plugin.js";
-import cloudflare from "../../plugin.js";
-import { getEntryChunk } from "./output.js";
+import type { RolldownPluginOptions } from "../../plugin.ts";
+import cloudflare from "../../plugin.ts";
+import { getEntryChunk } from "./output.ts";
 
 const DEFAULT_PLUGIN_OPTIONS: RolldownPluginOptions = {
   compatibilityDate: "2025-07-01",

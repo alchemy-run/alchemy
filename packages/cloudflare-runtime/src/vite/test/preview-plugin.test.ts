@@ -13,8 +13,8 @@ import {
   it,
   vi,
 } from "vitest";
-import type { PreviewWorkerBuild } from "#/preview-server";
-import cloudflareVitePlugin from "#/plugin";
+import type { PreviewWorkerBuild } from "../preview-server.ts";
+import cloudflareVitePlugin from "../plugin.ts";
 
 // Stand-in for the workerd preview runtime: a plain HTTP server; every
 // proxied request responds with "worker".

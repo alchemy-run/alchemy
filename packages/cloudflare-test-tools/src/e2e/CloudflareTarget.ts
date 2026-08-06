@@ -3,11 +3,11 @@ import {
   type DeployTarget,
   type DeployTargetServer,
 } from "@alchemy.run/cloudflare-frameworks/core";
-import * as Miniflare from "@alchemy.run/cloudflare-test-tools/miniflare";
+import * as Miniflare from "../miniflare/miniflare.ts";
 import {
   moduleTypeFromExtension,
   type MiniflareModule,
-} from "@alchemy.run/cloudflare-test-tools/miniflare-module";
+} from "../miniflare/miniflare-module.ts";
 import * as Effect from "effect/Effect";
 import { cast } from "effect/Function";
 import * as Path from "effect/Path";

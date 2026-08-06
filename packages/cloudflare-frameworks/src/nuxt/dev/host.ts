@@ -11,7 +11,7 @@
  * the nitro dev SSR worker THREAD reconstruct the platform over HTTP
  * (`platform-proxy/connect`) with live-shared binding state.
  */
-import { DeployTargetError } from "@alchemy.run/cloudflare-frameworks/core";
+import { DeployTargetError } from "../../core/index.ts";
 import * as Effect from "effect/Effect";
 import type * as Scope from "effect/Scope";
 import { existsSync } from "node:fs";

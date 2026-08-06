@@ -1,6 +1,6 @@
-import { InternalServerErrorResponse } from "../../../../shared/responses";
-import type { PerformanceTimer } from "../../../../shared/performance";
-import type { Analytics } from "../analytics";
+import { InternalServerErrorResponse } from "../../../../shared/responses.ts";
+import type { PerformanceTimer } from "../../../../shared/performance.ts";
+import type { Analytics } from "../analytics.ts";
 import type { Toucan } from "toucan-js";
 
 export function handleError(

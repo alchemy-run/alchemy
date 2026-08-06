@@ -1,7 +1,4 @@
-import {
-  sortServerModules,
-  type OutputFile,
-} from "@alchemy.run/cloudflare-frameworks/core";
+import { sortServerModules, type OutputFile } from "../../core/index.ts";
 import { describe, expect, it } from "vitest";
 import {
   listEdgeFunctions,

@@ -1,7 +1,7 @@
-import { loadInternalWorker } from "@alchemy.run/cloudflare-runtime/core/internal/internal-worker";
-import * as Assets from "@alchemy.run/cloudflare-runtime/core/bindings/assets/Assets";
-import * as Loopback from "@alchemy.run/cloudflare-runtime/core/globals/Loopback";
-import { PluginContext } from "@alchemy.run/cloudflare-runtime/core/PluginContext";
+import { loadInternalWorker } from "../../core/internal/internal-worker.ts";
+import * as Assets from "../../core/bindings/assets/Assets.ts";
+import * as Loopback from "../../core/globals/Loopback.ts";
+import { PluginContext } from "../../core/PluginContext.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as NodeFs from "node:fs/promises";

@@ -1,4 +1,4 @@
-import { isDeployTarget } from "@alchemy.run/cloudflare-frameworks/core";
+import { isDeployTarget } from "../../core/index.ts";
 import * as Effect from "effect/Effect";
 import * as NodePath from "node:path";
 import type * as ViteModule from "vite";

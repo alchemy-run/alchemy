@@ -31,7 +31,7 @@
  *   `event.context.cloudflare = { request, env, context }` inside nitro's
  *   dev SSR worker thread (see `./dev/host.ts`).
  */
-import { makeDeployTarget } from "@alchemy.run/cloudflare-frameworks/core";
+import { makeDeployTarget } from "../core/index.ts";
 import { makeCloudflareDevPlatform } from "./dev/host.ts";
 import type { NuxtTarget, NuxtTargetConfig } from "./Nuxt.ts";
 

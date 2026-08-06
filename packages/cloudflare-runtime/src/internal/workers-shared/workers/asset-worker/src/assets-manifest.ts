@@ -5,7 +5,7 @@ import {
   HEADER_SIZE,
   PATH_HASH_OFFSET,
   PATH_HASH_SIZE,
-} from "../../../shared/constants";
+} from "../../../shared/constants.ts";
 
 export class AssetsManifest {
   private data: Uint8Array;

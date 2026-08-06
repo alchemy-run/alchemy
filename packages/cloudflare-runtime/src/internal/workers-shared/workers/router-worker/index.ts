@@ -1,2 +1,2 @@
-export * from "./src/worker";
-export { default } from "./src/worker";
+export * from "./src/worker.ts";
+export { default } from "./src/worker.ts";

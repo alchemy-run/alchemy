@@ -1,4 +1,4 @@
-import * as FrameworkCore from "@alchemy.run/cloudflare-frameworks/core";
+import * as FrameworkCore from "../core/index.ts";
 import type { AstroInlineConfig, AstroIntegration } from "astro";
 import type * as AstroNamespace from "astro";
 import * as Effect from "effect/Effect";

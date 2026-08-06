@@ -1,5 +1,5 @@
 import { test } from "vitest";
-import { parseRedirects } from "../configuration/parseRedirects";
+import { parseRedirects } from "../configuration/parseRedirects.ts";
 
 // Snapshot values
 const maxDynamicRedirectRules = 100;

@@ -1,6 +1,6 @@
 import { createMiniflareFromRolldown } from "../../../../cloudflare-test-tools/src/miniflare/miniflare.ts";
 import { assert, describe, expect, it } from "vitest";
-import { buildFixture } from "./utils/build-fixture";
+import { buildFixture } from "./utils/build-fixture.ts";
 
 describe("regression", () => {
   it.skipIf(!process.env.TEST_MYSQL_URL)("bundles mysql2", async () => {

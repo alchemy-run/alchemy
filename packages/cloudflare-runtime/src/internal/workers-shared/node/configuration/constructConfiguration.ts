@@ -4,18 +4,18 @@ import {
   PLACEHOLDER_REGEX,
   REDIRECTS_VERSION,
   SPLAT_REGEX,
-} from "../../shared/configuration/constants";
+} from "../../shared/configuration/constants.ts";
 import type {
   AssetConfig,
   MetadataHeaders,
   MetadataRedirects,
   MetadataStaticRedirects,
-} from "../../shared/types";
+} from "../../shared/types.ts";
 import type {
   Logger,
   ParsedHeaders,
   ParsedRedirects,
-} from "../../shared/configuration/types";
+} from "../../shared/configuration/types.ts";
 
 export function constructRedirects({
   redirects,

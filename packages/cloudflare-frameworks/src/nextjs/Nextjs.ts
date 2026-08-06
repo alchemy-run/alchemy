@@ -9,7 +9,7 @@ import * as DurableObjectNamespace from "@alchemy.run/cloudflare-runtime/core/bi
 import * as Service from "@alchemy.run/cloudflare-runtime/core/bindings/Service";
 import * as Assets from "@alchemy.run/cloudflare-runtime/core/bindings/assets/Assets";
 import * as Credentials from "@distilled.cloud/cloudflare/Credentials";
-import * as FrameworkCore from "@alchemy.run/cloudflare-frameworks/core";
+import * as FrameworkCore from "../core/index.ts";
 import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcessSpawner";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import type * as Context from "effect/Context";

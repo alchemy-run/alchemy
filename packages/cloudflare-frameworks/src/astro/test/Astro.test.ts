@@ -1,7 +1,4 @@
-import {
-  Framework,
-  type BuildOutput,
-} from "@alchemy.run/cloudflare-frameworks/core";
+import { Framework, type BuildOutput } from "../../core/index.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import type { AstroIntegration } from "astro";
 import * as Effect from "effect/Effect";

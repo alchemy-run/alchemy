@@ -2,7 +2,7 @@ import * as NodeFs from "node:fs/promises";
 import * as NodeOs from "node:os";
 import * as NodePath from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { readWorkerModules } from "#/preview-server";
+import { readWorkerModules } from "../preview-server.ts";
 
 describe("readWorkerModules", () => {
   let directory: string;

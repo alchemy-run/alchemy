@@ -10,21 +10,21 @@ import {
   PermanentRedirectResponse,
   SeeOtherResponse,
   TemporaryRedirectResponse,
-} from "../../../shared/responses";
-import { mockJaegerBinding } from "../../../shared/tracing";
+} from "../../../shared/responses.ts";
+import { mockJaegerBinding } from "../../../shared/tracing.ts";
 import {
   flagIsEnabled,
   SEC_FETCH_MODE_NAVIGATE_HEADER_PREFERS_ASSET_SERVING,
-} from "./compatibility-flags";
-import { attachCustomHeaders, getAssetHeaders } from "./utils/headers";
+} from "./compatibility-flags.ts";
+import { attachCustomHeaders, getAssetHeaders } from "./utils/headers.ts";
 import {
   generateRedirectsMatcher,
   staticRedirectsMatcher,
-} from "./utils/rules-engine";
-import type { AssetConfig } from "../../../shared/types";
-import type { Analytics } from "./analytics";
-import type EntrypointType from "./worker";
-import type { Env } from "./worker";
+} from "./utils/rules-engine.ts";
+import type { AssetConfig } from "../../../shared/types.ts";
+import type { Analytics } from "./analytics.ts";
+import type EntrypointType from "./worker.ts";
+import type { Env } from "./worker.ts";
 
 export const REDIRECTS_VERSION = 1;
 export const HEADERS_VERSION = 2;

@@ -1,4 +1,4 @@
-import cloudflareVitePlugin from "#/plugin";
+import cloudflareVitePlugin from "../plugin.ts";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as vite from "vite";

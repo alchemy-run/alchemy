@@ -1,6 +1,6 @@
 import { describe, it, vi } from "vitest";
-import { Analytics, EntrypointType } from "../src/analytics";
-import type { ReadyAnalyticsEvent } from "../src/types";
+import { Analytics, EntrypointType } from "../src/analytics.ts";
+import type { ReadyAnalyticsEvent } from "../src/types.ts";
 
 describe("[Asset Worker] Analytics", () => {
   function captureEvent(): {

@@ -1,8 +1,8 @@
 import { createExecutionContext } from "cloudflare:test";
 import { exports, env as runtimeEnv } from "cloudflare:workers";
 import { describe, it } from "vitest";
-import { RouterInnerEntrypoint } from "../src/worker";
-import type { Env } from "../src/worker";
+import { RouterInnerEntrypoint } from "../src/worker.ts";
+import type { Env } from "../src/worker.ts";
 
 async function fetchFromInnerEntrypoint(
   request: Request,

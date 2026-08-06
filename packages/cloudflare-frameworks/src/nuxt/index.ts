@@ -15,7 +15,7 @@
  * `cloudflare_module` preset selection and its wrangler-free config — lives
  * behind `@alchemy.run/cloudflare-frameworks/nuxt/cloudflare`.
  */
-import type { Framework } from "@alchemy.run/cloudflare-frameworks/core";
+import type { Framework } from "../core/index.ts";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Layer from "effect/Layer";
 import type * as Path from "effect/Path";

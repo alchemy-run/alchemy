@@ -1,4 +1,4 @@
-import { resolveForwardedHost } from "#/forwarded-host";
+import { resolveForwardedHost } from "../forwarded-host.ts";
 import { describe, expect, test } from "vitest";
 
 describe("resolveForwardedHost", () => {

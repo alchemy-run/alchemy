@@ -1,8 +1,8 @@
-import { InstanceEvent } from "../instance";
-import { WorkflowFatalError } from "./errors";
-import { isValidStepConfig } from "./validators";
-import type { WorkflowStepContext } from "../context";
-import type { Engine } from "../engine";
+import { InstanceEvent } from "../instance.ts";
+import { WorkflowFatalError } from "./errors.ts";
+import { isValidStepConfig } from "./validators.ts";
+import type { WorkflowStepContext } from "../context.ts";
+import type { Engine } from "../engine.ts";
 import type { WorkflowStepConfig } from "cloudflare:workers";
 
 type UserErrorField = {

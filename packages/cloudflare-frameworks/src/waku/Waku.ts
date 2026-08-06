@@ -1,9 +1,9 @@
-import * as FrameworkCore from "@alchemy.run/cloudflare-frameworks/core";
+import * as FrameworkCore from "../core/index.ts";
 import type {
   DeployTarget,
   DeployTargetError,
   DeployTargetInput,
-} from "@alchemy.run/cloudflare-frameworks/core";
+} from "../core/index.ts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";

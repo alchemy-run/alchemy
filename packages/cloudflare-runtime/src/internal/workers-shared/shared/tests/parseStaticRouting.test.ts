@@ -1,5 +1,5 @@
 import { describe, it } from "vitest";
-import { parseStaticRouting } from "../configuration/parseStaticRouting";
+import { parseStaticRouting } from "../configuration/parseStaticRouting.ts";
 
 describe("parseStaticRouting", () => {
   it("throws when given empty rules", ({ expect }) => {

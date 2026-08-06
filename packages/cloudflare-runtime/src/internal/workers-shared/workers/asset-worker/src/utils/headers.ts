@@ -1,14 +1,14 @@
-import { mockJaegerBinding } from "../../../../shared/tracing";
+import { mockJaegerBinding } from "../../../../shared/tracing.ts";
 import {
   flagIsEnabled,
   SEC_FETCH_MODE_NAVIGATE_HEADER_PREFERS_ASSET_SERVING,
-} from "../compatibility-flags";
-import { CACHE_CONTROL_BROWSER } from "../constants";
-import { HEADERS_VERSION } from "../handler";
-import { generateRulesMatcher, replacer } from "./rules-engine";
-import type { AssetConfig, JaegerTracing } from "../../../../shared/types";
-import type { AssetIntentWithResolver } from "../handler";
-import type { Env } from "../worker";
+} from "../compatibility-flags.ts";
+import { CACHE_CONTROL_BROWSER } from "../constants.ts";
+import { HEADERS_VERSION } from "../handler.ts";
+import { generateRulesMatcher, replacer } from "./rules-engine.ts";
+import type { AssetConfig, JaegerTracing } from "../../../../shared/types.ts";
+import type { AssetIntentWithResolver } from "../handler.ts";
+import type { Env } from "../worker.ts";
 
 /**
  * Returns a Headers object that contains additional headers (to those

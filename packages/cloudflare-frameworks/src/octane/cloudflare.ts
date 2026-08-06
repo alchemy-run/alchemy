@@ -29,7 +29,7 @@
  * `context.platform` (an upstream limitation), so there is no `devPlatform`
  * seam yet — Cloudflare bindings are live/preview-only.
  */
-import { makeDeployTarget } from "@alchemy.run/cloudflare-frameworks/core";
+import { makeDeployTarget } from "../core/index.ts";
 import type { OctaneTarget, OctaneTargetConfig } from "./Octane.ts";
 
 /** The `adapter.name` Octane's Cloudflare adapter declares. */

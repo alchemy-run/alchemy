@@ -1,9 +1,6 @@
-import type {
-  BindingHooks,
-  Module,
-} from "@alchemy.run/cloudflare-runtime/core";
-import * as Runtime from "@alchemy.run/cloudflare-runtime/core/Runtime";
-import * as RuntimeServices from "@alchemy.run/cloudflare-runtime/core/RuntimeServices";
+import type { BindingHooks, Module } from "../core/index.ts";
+import * as Runtime from "../core/Runtime.ts";
+import * as RuntimeServices from "../core/RuntimeServices.ts";
 import * as Credentials from "@distilled.cloud/cloudflare/Credentials";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -12,7 +9,7 @@ import * as Scope from "effect/Scope";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as NodeFs from "node:fs/promises";
 import * as NodePath from "node:path";
-import type { CloudflareVitePluginOptions } from "./plugin.js";
+import type { CloudflareVitePluginOptions } from "./plugin.ts";
 
 /**
  * The freshly built worker a preview server hosts: which directory holds the

@@ -2,7 +2,7 @@ import {
   configuredExportTypes,
   mergeExportTypes,
   renderExportWrappers,
-} from "#/export-types";
+} from "../export-types.ts";
 import { describe, expect, test } from "vitest";
 
 describe("configuredExportTypes", () => {

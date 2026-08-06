@@ -1,11 +1,11 @@
 import { createMiniflareFromRolldown } from "../../../../cloudflare-test-tools/src/miniflare/miniflare.ts";
 import { describe, expect, it } from "vitest";
-import { buildFixture } from "./utils/build-fixture";
+import { buildFixture } from "./utils/build-fixture.ts";
 import {
   getAsset,
   getEntryChunk,
   hasCloudflareModuleReferences,
-} from "./utils/output";
+} from "./utils/output.ts";
 
 describe("additional modules", async () => {
   const built = await buildFixture({

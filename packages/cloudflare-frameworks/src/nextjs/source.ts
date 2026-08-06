@@ -28,7 +28,7 @@ import type {
   BindingHooks,
   RuntimeWorker,
 } from "@alchemy.run/cloudflare-runtime/core";
-import * as FrameworkCore from "@alchemy.run/cloudflare-frameworks/core";
+import * as FrameworkCore from "../core/index.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

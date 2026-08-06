@@ -12,7 +12,7 @@ import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
 // platform; for our test harness the engine just needs a target with a
 // callable run() method.
 
-export * from "../index";
+export * from "../index.ts";
 
 type WorkflowCallback = (
   event: unknown,

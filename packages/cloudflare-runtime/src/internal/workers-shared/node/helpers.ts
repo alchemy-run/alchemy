@@ -7,7 +7,7 @@ import {
   CF_ASSETS_IGNORE_FILENAME,
   HEADERS_FILENAME,
   REDIRECTS_FILENAME,
-} from "../shared/constants";
+} from "../shared/constants.ts";
 
 /** normalises sep for windows and prefix with `/` */
 export const normalizeFilePath = (relativeFilepath: string) => {

@@ -1,4 +1,4 @@
-import { handleWebSocket } from "#/websockets";
+import { handleWebSocket } from "../websockets.ts";
 import * as NodeHttp from "node:http";
 import type { AddressInfo } from "node:net";
 import * as NodeNet from "node:net";

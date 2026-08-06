@@ -2,11 +2,11 @@ import { createExecutionContext, runInDurableObject } from "cloudflare:test";
 import type { WorkflowEvent } from "cloudflare:workers";
 import { env } from "cloudflare:workers";
 import { describe, it, vi } from "vitest";
-import { InstanceEvent, InstanceStatus } from "..";
-import type { WorkflowHandle } from "../binding";
-import { WorkflowBinding } from "../binding";
-import type { Engine, EngineLogs } from "../engine";
-import { setTestWorkflowCallback } from "./test-entry";
+import { InstanceEvent, InstanceStatus } from "../index.ts";
+import type { WorkflowHandle } from "../binding.ts";
+import { WorkflowBinding } from "../binding.ts";
+import type { Engine, EngineLogs } from "../engine.ts";
+import { setTestWorkflowCallback } from "./test-entry.ts";
 
 let instanceCounter = 0;
 function uniqueId(prefix = "instance"): string {

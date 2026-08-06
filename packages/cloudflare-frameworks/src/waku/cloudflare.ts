@@ -13,10 +13,7 @@
 import cloudflareVitePlugin, {
   type CloudflareVitePluginOptions,
 } from "@alchemy.run/cloudflare-runtime/vite";
-import {
-  DeployTargetError,
-  makeDeployTarget,
-} from "@alchemy.run/cloudflare-frameworks/core";
+import { DeployTargetError, makeDeployTarget } from "../core/index.ts";
 import * as Effect from "effect/Effect";
 import * as NodePath from "node:path";
 import { fileURLToPath } from "node:url";

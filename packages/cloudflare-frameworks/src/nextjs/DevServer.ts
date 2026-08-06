@@ -30,7 +30,7 @@ import type {
 } from "@alchemy.run/cloudflare-runtime/core";
 import * as PlatformProxy from "@alchemy.run/cloudflare-runtime/core/platform-proxy/PlatformProxy";
 import type * as Runtime from "@alchemy.run/cloudflare-runtime/core/Runtime";
-import * as FrameworkCore from "@alchemy.run/cloudflare-frameworks/core";
+import * as FrameworkCore from "../core/index.ts";
 import * as Effect from "effect/Effect";
 import type * as Scope from "effect/Scope";
 import * as NodeHttp from "node:http";

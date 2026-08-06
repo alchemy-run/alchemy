@@ -1,6 +1,6 @@
 import { createMiniflareFromRolldown } from "../../../../cloudflare-test-tools/src/miniflare/miniflare.ts";
 import { describe, expect, it } from "vitest";
-import { buildFixture } from "./utils/build-fixture";
+import { buildFixture } from "./utils/build-fixture.ts";
 
 describe("process.env", async () => {
   const built = await buildFixture({

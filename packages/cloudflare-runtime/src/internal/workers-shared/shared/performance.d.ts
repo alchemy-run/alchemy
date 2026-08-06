@@ -1,4 +1,4 @@
-import type { UnsafePerformanceTimer } from "./types";
+import type { UnsafePerformanceTimer } from "./types.ts";
 export declare class PerformanceTimer {
   private performanceTimer;
   constructor(performanceTimer?: UnsafePerformanceTimer);

@@ -1,7 +1,7 @@
 import {
   AssetWorkerInner,
   type Env as BaseEnv,
-} from "../../internal/workers-shared/workers/asset-worker";
+} from "../../internal/workers-shared/workers/asset-worker/index.ts";
 
 const UNKNOWN_HOST = "http://localhost";
 

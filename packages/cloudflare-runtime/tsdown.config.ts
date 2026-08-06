@@ -1,5 +1,8 @@
 import { defineConfig, type UserConfig } from "tsdown";
-import { InternalWorkerExportPlugin } from "./src/internal/build-tools/index.ts";
+import {
+  InternalWorkerExportPlugin,
+  RuntimeSubpathExportPlugin,
+} from "./src/internal/build-tools/index.ts";
 import cloudflare from "./src/rolldown/plugin.ts";
 
 /**
@@ -141,6 +144,7 @@ export default defineConfig([
     shims: false,
     target: "esnext",
     format: "esm",
+    plugins: [RuntimeSubpathExportPlugin()],
     deps: {
       // These are subpaths of this consolidated package. Keep them as public
       // imports so the Vite declaration bundle shares the core runtime types.
