@@ -26,35 +26,35 @@
   "dependencies": {
     "@alchemy.run/node-utils": "catalog:",
     "@cloudflare/unenv-preset": "catalog:workers",
-    "@puppeteer/browsers": "^2.10.6",
-    "magic-string": "^0.30.21",
-    "sharp": "^0.34.5",
+    "@puppeteer/browsers": "catalog:cloudflare",
+    "magic-string": "catalog:cloudflare",
+    "sharp": "catalog:cloudflare",
     "unenv": "catalog:workers",
     "workerd": "catalog:workers"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:workers",
-    "@cloudflare/vitest-pool-workers": "^0.13.0",
+    "@cloudflare/vitest-pool-workers": "catalog:cloudflare",
     "@effect/platform-bun": "catalog:effect",
     "@effect/platform-node": "catalog:effect",
     "@effect/vitest": "catalog:effect",
-    "@types/http-cache-semantics": "^4.2.0",
+    "@types/http-cache-semantics": "catalog:cloudflare",
     "@types/node": "catalog:",
-    "@types/ws": "^8.18.1",
-    "capnp-es": "^0.0.14",
-    "capnweb": "^0.8.0",
-    "http-cache-semantics": "^4.2.0",
-    "heap-js": "^2.5.0",
-    "itty-time": "^2.0.2",
-    "mime": "^4.0.7",
-    "mysql2": "^3.22.3",
-    "postal-mime": "^2.4.3",
+    "@types/ws": "catalog:cloudflare",
+    "capnp-es": "catalog:cloudflare",
+    "capnweb": "catalog:cloudflare",
+    "http-cache-semantics": "catalog:cloudflare",
+    "heap-js": "catalog:cloudflare",
+    "itty-time": "catalog:cloudflare",
+    "mime": "catalog:cloudflare",
+    "mysql2": "catalog:cloudflare",
+    "postal-mime": "catalog:cloudflare",
     "rolldown": "catalog:",
     "tsdown": "catalog:",
-    "toucan-js": "4.0.0",
+    "toucan-js": "catalog:cloudflare",
     "vite": "catalog:",
     "vitest": "catalog:",
-    "ws": "^8.21.0"
+    "ws": "catalog:cloudflare"
   },
   "peerDependencies": {
     "@distilled.cloud/cloudflare": "catalog:",
@@ -62,7 +62,7 @@
     "@effect/platform-node": "catalog:effect",
     "effect": "catalog:effect",
     "rolldown": "catalog:",
-    "vite": "^7.0.0 || ^8.0.0"
+    "vite": "catalog:cloudflare"
   },
   "peerDependenciesMeta": {
     "@effect/platform-bun": {
