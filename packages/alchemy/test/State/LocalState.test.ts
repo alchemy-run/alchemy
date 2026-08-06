@@ -1,6 +1,7 @@
 import { STATE_STORE_VERSION } from "@/State/HttpStateApi.ts";
 import { makeLocalState } from "@/State/LocalState.ts";
 import type { ResourceState } from "@/State/ResourceState.ts";
+import { initialCwd } from "@/Util/Node.ts";
 import { PlatformServices } from "@/Util/PlatformServices";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -27,12 +28,18 @@ const resource = (
     ...overrides,
   }) as ResourceState;
 
-/** Absolute path into the store's on-disk layout (`.alchemy/state/...`). */
+/**
+ * Absolute path into the store's on-disk layout (`.alchemy/state/...`).
+ *
+ * Anchored to `initialCwd` — the same anchor `makeLocalState` uses — instead
+ * of a live `process.cwd()` read: another suite's in-process build (e.g. a
+ * Waku source build) can transiently chdir the whole test process, and a
+ * live read racing that window points at an unrelated (missing) tree.
+ */
 const statePath = (...segments: string[]) =>
   Effect.gen(function* () {
     const path = yield* Path.Path;
-    const cwd = yield* Effect.sync(() => process.cwd());
-    return path.join(cwd, ".alchemy", "state", ...segments);
+    return path.join(initialCwd, ".alchemy", "state", ...segments);
   });
 
 describe("makeLocalState", () => {
