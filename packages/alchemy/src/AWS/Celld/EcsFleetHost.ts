@@ -276,13 +276,13 @@ export const EcsFleetHost = (): Layer.Layer<FleetHostService> =>
             };
           }),
 
-        callerBinding: ({ fleet }) =>
+        callerBinding: ({ target }) =>
           Effect.succeed({
             vpc: {
-              subnetIds: fleet.hostState.pipe(
+              subnetIds: target.hostState.pipe(
                 Output.map((state: any) => state?.subnetIds ?? []),
               ),
-              securityGroupIds: fleet.hostState.pipe(
+              securityGroupIds: target.hostState.pipe(
                 Output.map((state: any) => state?.securityGroupIds ?? []),
               ),
             },

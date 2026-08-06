@@ -60,12 +60,25 @@ export default class Api extends AWS.Lambda.Function<Api>()(
             );
             return yield* HttpServerResponse.json({ values: [...values] });
           }
+          case "worker": {
+            // The fleet's own worker route (`Celld.Worker` fetch) — user
+            // routes fall through the gateway unauthenticated.
+            const fleetUrl = process.env.CELLD_CellsWorker_URL;
+            const client = yield* HttpClient.HttpClient;
+            const response = yield* client
+              .get(`${fleetUrl}/hello`)
+              .pipe(Effect.orDie);
+            const body = yield* response.text.pipe(Effect.orDie);
+            return HttpServerResponse.text(body, {
+              status: response.status,
+            });
+          }
           case "probe": {
             // Raw gateway call — bypasses the stub's decode so tests can
             // observe the exact status/body the fleet returns.
             const method = url.searchParams.get("m") ?? "increment";
-            const fleetUrl = process.env.CELLD_Cells_URL;
-            const secretRaw = process.env.CELLD_Cells_SECRET;
+            const fleetUrl = process.env.CELLD_CellsWorker_URL;
+            const secretRaw = process.env.CELLD_CellsWorker_SECRET;
             const secret = (() => {
               try {
                 const parsed = JSON.parse(secretRaw ?? "");

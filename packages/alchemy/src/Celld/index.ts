@@ -1,6 +1,7 @@
 export * from "./DurableObject.ts";
 export * from "./DurableObjectState.ts";
 export * from "./Fleet.ts";
+export * from "./Worker.ts";
 export {
   FleetHost,
   findFleetHost,

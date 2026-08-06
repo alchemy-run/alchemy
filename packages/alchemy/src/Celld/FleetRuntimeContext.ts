@@ -10,7 +10,7 @@
  *    deployed Worker always has a default `fetch`.
  */
 import * as Effect from "effect/Effect";
-import { FleetTypeId } from "./FleetTypes.ts";
+import { WorkerTypeId } from "./FleetTypes.ts";
 import {
   makeWorkerRuntimeContext,
   type WorkerRuntimeContext,
@@ -32,8 +32,9 @@ export const makeFleetRuntimeContext = (id: string): FleetRuntimeContext => {
     ...base,
     // `makeWorkerRuntimeContext` stamps `Type: "Cloudflare.Worker"`; the
     // context is `Object.assign`ed onto the resource instance, so the base
-    // Type would clobber the Fleet's — and `isWorker(fleet)` must be false.
-    Type: FleetTypeId as any,
+    // Type would clobber the Celld Worker's — and Cloudflare's
+    // `isWorker(worker)` must be false.
+    Type: WorkerTypeId as any,
     serve,
     exports: Effect.gen(function* () {
       if (!served) {

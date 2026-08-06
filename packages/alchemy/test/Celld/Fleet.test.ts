@@ -11,6 +11,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import Api from "./fixtures/api.ts";
 import { Cells } from "./fixtures/cells.ts";
 import FleetLive from "./fixtures/fleet.ts";
+import { CellsWorker } from "./fixtures/worker.ts";
 
 const testOptions = {
   providers: Layer.mergeAll(AWS.providers(), Celld.providers()),
@@ -72,6 +73,7 @@ describe.skipIf(!!process.env.FAST)("Celld Fleet (live)", () => {
       const { apiUrl } = yield* sharedStack.deploy(
         Effect.gen(function* () {
           yield* Cells;
+          yield* CellsWorker;
           const api = yield* Api;
           return { apiUrl: api.functionUrl };
         }).pipe(Effect.provide(FleetLive)),
@@ -141,6 +143,23 @@ describe.skipIf(!!process.env.FAST)("Celld Fleet (live)", () => {
         values: number[];
       };
       expect(result.values).toEqual([1, 2, 3, 4, 5]);
+    }),
+    { timeout: 120_000 },
+  );
+
+  test(
+    "the fleet's own worker serves HTTP with native cell access",
+    Effect.gen(function* () {
+      const first = (yield* json(`${baseUrl}/counter/_/worker`)) as {
+        from: string;
+        value: number;
+      };
+      expect(first.from).toBe("fleet-worker");
+      expect(first.value).toBeGreaterThan(0);
+      const second = (yield* json(`${baseUrl}/counter/_/worker`)) as {
+        value: number;
+      };
+      expect(second.value).toBe(first.value + 1);
     }),
     { timeout: 120_000 },
   );

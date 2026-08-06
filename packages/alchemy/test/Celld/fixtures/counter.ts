@@ -4,13 +4,13 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { RuntimeContext } from "@/RuntimeContext";
-import { Cells } from "./cells.ts";
+import { CellsWorker } from "./worker.ts";
 
 export class CounterBoom extends Data.TaggedError("CounterBoom")<{
   readonly reason: string;
 }> {}
 
-/** The class is a pure tag — the layer below binds the impl AND the fleet. */
+/** The class is a pure tag — the layer below binds the impl to the Worker. */
 export class Counter extends Celld.DurableObject<
   Counter,
   {
@@ -22,12 +22,12 @@ export class Counter extends Celld.DurableObject<
 >()("Counter") {}
 
 /**
- * The implementation layer, bound to the {@link Cells} fleet. Provided on
- * the fleet impl (hosts the class) and on callers (resolves the remote
- * stub); a second fleet would get its own `Counter.make(OtherFleet, …)`.
+ * The implementation layer, bound to {@link CellsWorker}. Provided on the
+ * worker impl (hosts the class) and on callers (resolves the remote stub);
+ * a second worker would get its own `Counter.make(OtherWorker, …)`.
  */
 export const CounterLive = Counter.make(
-  Cells,
+  CellsWorker,
   Effect.gen(function* () {
     const state = yield* Celld.DurableObjectState;
     return Effect.gen(function* () {

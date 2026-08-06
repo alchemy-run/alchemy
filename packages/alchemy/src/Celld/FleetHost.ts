@@ -28,7 +28,7 @@ import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import type { Input } from "../Input.ts";
 import type { ResourceLike } from "../Resource.ts";
-import type { Fleet, FleetProps } from "./Fleet.ts";
+import type { FleetProps } from "./Fleet.ts";
 
 /**
  * Host-specific options carried on `FleetProps.host`, keyed by host kind
@@ -93,24 +93,39 @@ export interface FleetHostComposeResult {
   readonly hostState?: Record<string, Input<any>>;
 }
 
+/**
+ * The fleet connection material a deployment (Worker) resource carries —
+ * copied from the Fleet's attributes — as the host's `deployEnv` /
+ * `restartNodes` operations receive it, resolved to plain values.
+ */
+export interface FleetConnection {
+  readonly bucket?: FleetBucket;
+  readonly hostKind?: string;
+  readonly hostState?: Record<string, any>;
+}
+
 export interface FleetHostService {
   readonly kind: "Celld.FleetHost";
   readonly compose: (
     options: FleetHostComposeOptions,
   ) => Effect.Effect<FleetHostComposeResult, any, any>;
   readonly deployEnv: (options: {
-    /** The resolved Fleet props (including `bucket` / `hostState`). */
-    readonly news: FleetProps;
+    /** The deploying resource's resolved props (fleet connection included). */
+    readonly news: FleetConnection;
   }) => Effect.Effect<Record<string, string>, any, any>;
   readonly callerBinding: (options: {
-    /** The Fleet resource (attribute accessors are `Output`s). */
-    readonly fleet: Fleet;
+    /**
+     * The resource being connected TO (a `Celld.Worker` — its attribute
+     * accessors are `Output`s carrying the fleet connection: `fleetUrl`,
+     * `fleetSecret`, `hostState`, …).
+     */
+    readonly target: any;
     /** The caller host resource the binding lands on. */
     readonly host: ResourceLike;
   }) => Effect.Effect<Record<string, unknown>, any, any>;
   readonly restartNodes: (options: {
-    /** The resolved Fleet props (including `hostState`). */
-    readonly news: FleetProps;
+    /** The deploying resource's resolved props (fleet connection included). */
+    readonly news: FleetConnection;
   }) => Effect.Effect<void, any, any>;
 }
 

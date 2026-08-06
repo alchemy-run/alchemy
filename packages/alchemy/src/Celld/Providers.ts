@@ -3,6 +3,7 @@ import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Provider from "../Provider.ts";
 import { Fleet, FleetProvider } from "./Fleet.ts";
+import { Worker, WorkerProvider } from "./Worker.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()(
   "Celld",
@@ -21,8 +22,8 @@ export class Providers extends Provider.ProviderCollection<Providers>()(
  * ```
  */
 export const providers = () =>
-  Layer.effect(Providers, Provider.collection([Fleet])).pipe(
-    Layer.provide(FleetProvider()),
+  Layer.effect(Providers, Provider.collection([Fleet, Worker])).pipe(
+    Layer.provide(Layer.mergeAll(FleetProvider(), WorkerProvider())),
     Layer.provide(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
     Layer.orDie,
   );

@@ -8,5 +8,8 @@
 export const FleetTypeId = "Celld.Fleet";
 export type FleetTypeId = typeof FleetTypeId;
 
+export const WorkerTypeId = "Celld.Worker";
+export type WorkerTypeId = typeof WorkerTypeId;
+
 export const DurableObjectTypeId = "Celld.DurableObject";
 export type DurableObjectTypeId = typeof DurableObjectTypeId;

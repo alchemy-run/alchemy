@@ -134,8 +134,14 @@ import {
   DurableObjectState,
   fromDurableObjectState,
 } from "./DurableObjectState.ts";
-import { Fleet, isFleet, type FleetServices } from "./Fleet.ts";
 import { findFleetHost } from "./FleetHost.ts";
+import {
+  Worker,
+  isCelldWorker,
+  resolveClassRef,
+  type ClassRef,
+  type WorkerServices,
+} from "./Worker.ts";
 import { FLEET_SECRET_HEADER } from "./FleetGateway.ts";
 import { DurableObjectTypeId } from "./FleetTypes.ts";
 
@@ -145,14 +151,11 @@ type TypeId = DurableObjectTypeId;
 const TypeId = DurableObjectTypeId;
 
 /**
- * A reference to the {@link Fleet} class a layer targets: the class itself
+ * A reference to the {@link Worker} class a layer targets: the class itself
  * (a Platform class is an Effect with a static `LogicalId`), or a thunk for
  * forward references / import cycles.
  */
-export type FleetRef =
-  | Effect.Effect<any, any, any>
-  | { readonly LogicalId: string }
-  | (() => FleetRef);
+export type WorkerRef = ClassRef;
 
 export interface DurableObjectProps {
   /**
@@ -181,7 +184,7 @@ export type DurableObjectServices =
   | DurableObjectScope
   | DurableObjectState
   | WorkerEnvironment
-  | FleetServices
+  | WorkerServices
   | PlatformServices;
 
 export interface DurableObjectClass {
@@ -212,7 +215,7 @@ export interface DurableObjectClass {
     > & {
       new (_: never): [Shape] extends [never] ? ImplShape : Shape;
       /** Caller-side layer selecting the fleet that hosts this class. */
-      client(fleet: FleetRef): Layer.Layer<Self>;
+      client(worker: WorkerRef): Layer.Layer<Self>;
     };
     <Name extends string>(
       name: Name,
@@ -229,7 +232,7 @@ export interface DurableObjectClass {
        * by making another layer.
        */
       make<Req = never>(
-        fleet: FleetRef,
+        worker: WorkerRef,
         impl: Effect.Effect<
           Effect.Effect<
             [Shape] extends [never] ? MainRpc<DurableObjectState> : Shape,
@@ -244,25 +247,10 @@ export interface DurableObjectClass {
        * A caller-only layer: selects the fleet without carrying the
        * implementation into the caller's bundle. Never hosts.
        */
-      client(fleet: FleetRef): Layer.Layer<Self>;
+      client(worker: WorkerRef): Layer.Layer<Self>;
     };
   };
 }
-
-const resolveFleetRef = (ref: FleetRef, depth = 0): { LogicalId: string } => {
-  if (
-    ref !== null &&
-    typeof (ref as { LogicalId?: unknown }).LogicalId === "string"
-  ) {
-    return ref as unknown as { LogicalId: string };
-  }
-  if (typeof ref === "function" && depth < 8) {
-    return resolveFleetRef((ref as () => FleetRef)(), depth + 1);
-  }
-  throw new Error(
-    "Invalid fleet reference: pass the Fleet class (or a thunk of it).",
-  );
-};
 
 /** Unwrap a possibly-`Redacted` env value to its raw string. */
 const rawValue = (value: unknown): string | undefined =>
@@ -302,9 +290,9 @@ export const DurableObject: DurableObjectClass = taggedFunction(
      */
     const binding = () =>
       Effect.gen(function* () {
-        const fleet = yield* Fleet;
+        const worker = yield* Worker;
 
-        yield* fleet.bind`${namespace}`({
+        yield* worker.bind`${namespace}`({
           durableObjects: [{ name: namespace, className }],
         });
 
@@ -376,7 +364,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           ),
         );
       }
-      yield* (yield* Fleet).export(namespace, {
+      yield* (yield* Worker).export(namespace, {
         kind: "durableObject",
         constructor,
         services: yield* Effect.context<never>(),
@@ -390,31 +378,34 @@ export const DurableObject: DurableObjectClass = taggedFunction(
      * fragment) through the binding channel and returns a stub over the
      * fleet gateway.
      */
-    const remote = (fleetRef: FleetRef) =>
+    const remote = (workerRef: WorkerRef) =>
       Effect.gen(function* () {
-        const fleetClass = resolveFleetRef(fleetRef);
-        const urlKey = sanitizeKey(`CELLD_${fleetClass.LogicalId}_URL`);
-        const secretKey = sanitizeKey(`CELLD_${fleetClass.LogicalId}_SECRET`);
+        const workerClass = resolveClassRef(workerRef);
+        const urlKey = sanitizeKey(`CELLD_${workerClass.LogicalId}_URL`);
+        const secretKey = sanitizeKey(`CELLD_${workerClass.LogicalId}_SECRET`);
 
         if (!globalThis.__ALCHEMY_RUNTIME__) {
           const host = yield* Binding.Host;
           if (
             host !== undefined &&
             typeof (host as any).bind === "function" &&
-            !isFleet(host)
+            !isCelldWorker(host)
           ) {
-            // Yield the fleet class: resource effects memoize by logical id,
-            // so this references the stack's fleet node and orders the fleet
-            // ahead of this host in the reconcile graph.
-            const fleet = (yield* asEffect(fleetClass as any)) as any;
-            const adapter = yield* findFleetHost(fleet.Props?.hostKind);
-            const fragment = yield* adapter.callerBinding({ fleet, host });
-            yield* (host as any).bind`Allow(${host}, Celld.Call(${fleet}))`({
+            // Yield the worker class: resource effects memoize by logical id,
+            // so this references the stack's worker node and orders the
+            // worker (and its fleet) ahead of this host in the graph.
+            const worker = (yield* asEffect(workerClass as any)) as any;
+            const adapter = yield* findFleetHost(worker.Props?.hostKind);
+            const fragment = yield* adapter.callerBinding({
+              target: worker,
+              host,
+            });
+            yield* (host as any).bind`Allow(${host}, Celld.Call(${worker}))`({
               ...fragment,
               env: {
                 ...(fragment as { env?: Record<string, unknown> }).env,
-                [urlKey]: fleet.fleetUrl,
-                [secretKey]: fleet.fleetSecret,
+                [urlKey]: worker.fleetUrl,
+                [secretKey]: worker.fleetSecret,
               },
             });
           }
@@ -516,7 +507,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
      * class on a different fleet is just a different layer.
      */
     const dispatch = (
-      fleetRef: FleetRef,
+      workerRef: WorkerRef,
       impl:
         | Effect.Effect<
             Effect.Effect<DurableObjectShape>,
@@ -527,18 +518,18 @@ export const DurableObject: DurableObjectClass = taggedFunction(
     ) =>
       Effect.gen(function* () {
         const host = yield* Binding.Host;
-        const fleetClass = resolveFleetRef(fleetRef);
-        if (isFleet(host) && host.LogicalId === fleetClass.LogicalId) {
+        const workerClass = resolveClassRef(workerRef);
+        if (isCelldWorker(host) && host.LogicalId === workerClass.LogicalId) {
           if (impl === undefined) {
             return yield* Effect.die(
               new Error(
-                `DurableObject '${namespace}' is hosted by fleet '${host.LogicalId}' but only a client layer was provided — provide ${namespace}.make(${fleetClass.LogicalId}, impl) on the fleet impl.`,
+                `DurableObject '${namespace}' is hosted by worker '${host.LogicalId}' but only a client layer was provided — provide ${namespace}.make(${workerClass.LogicalId}, impl) on the worker impl.`,
               ),
             );
           }
           return yield* makeHost(impl);
         }
-        return yield* remote(fleetRef);
+        return yield* remote(workerRef);
       });
 
     if (inlineImpl !== undefined) {
@@ -547,7 +538,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
       return class extends effectClass(
         Effect.gen(function* () {
           const host = yield* Binding.Host;
-          if (isFleet(host)) {
+          if (isCelldWorker(host)) {
             return yield* makeHost(inlineImpl as any);
           }
           const provided = yield* Effect.serviceOption(tag);
@@ -556,27 +547,27 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           }
           return yield* Effect.die(
             new Error(
-              `DurableObject '${namespace}' was yielded outside a fleet ` +
-                `without a fleet selected — provide ${namespace}.client(fleet).`,
+              `DurableObject '${namespace}' was yielded outside a Celld ` +
+                `Worker without one selected — provide ${namespace}.client(worker).`,
             ),
           );
         }),
       ) {
-        static client = (fleet: FleetRef) =>
-          Layer.effect(tag, dispatch(fleet, inlineImpl as any));
+        static client = (worker: WorkerRef) =>
+          Layer.effect(tag, dispatch(worker, inlineImpl as any));
       };
     }
 
     return class extends effectClass(tag as Effect.Effect<any, never, any>) {
       static make = <Req = never>(
-        fleet: FleetRef,
+        worker: WorkerRef,
         impl: Effect.Effect<
           Effect.Effect<DurableObjectShape, never, DurableObjectState | Req>
         >,
-      ) => Layer.effect(tag, dispatch(fleet, impl as any));
+      ) => Layer.effect(tag, dispatch(worker, impl as any));
 
-      static client = (fleet: FleetRef) =>
-        Layer.effect(tag, dispatch(fleet, undefined));
+      static client = (worker: WorkerRef) =>
+        Layer.effect(tag, dispatch(worker, undefined));
     };
   },
 ) as any;
