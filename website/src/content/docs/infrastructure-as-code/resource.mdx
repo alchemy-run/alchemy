@@ -259,6 +259,11 @@ The migration is deliberately conservative:
   — migrating over it would silently abandon its cloud resource.
 - **Ambiguity fails loudly.** Two resources claiming the same former
   ID fail the plan with an error instead of racing for the row.
+- **Shifts work; swaps fail.** Renames may shift through each other
+  in one deploy (`A→B` while `B→C` — each row follows its resource,
+  and pending replacement cleanup rides along). A swap (`A ⇄ B`) is
+  a rename cycle and fails the plan — rename through a temporary ID
+  across two deploys instead.
 
 ## Physical name
 

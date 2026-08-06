@@ -418,8 +418,8 @@ export const make = <A>(
       { row: ResourceState; renamedFrom: string[]; moved: boolean }
     >();
     const migratedRowFqns = new Set<string>();
-    for (const resource of resources) {
-      if (!resource.FormerFqns?.length) continue;
+
+    const resolveRenamer = Effect.fn(function* (resource: ResourceLike) {
       const provider = Option.getOrUndefined(
         yield* tryFindProviderByType(resource.Type),
       );
@@ -435,7 +435,13 @@ export const make = <A>(
       const persistedRow = isActionState(persisted)
         ? undefined
         : (persisted as ResourceState | undefined);
+      // A row at this resource's own FQN that a PREVIOUSLY RESOLVED
+      // renamer claimed (a same-deploy shift: A→B while B→C — C took the
+      // row at B) is moving away: it is not ours to keep and it does not
+      // block the migration landing here.
+      const rowTaken = migratedRowFqns.has(resource.FQN);
       const ownRow =
+        !rowTaken &&
         persistedRow !== undefined &&
         allowedTypes.has(persistedRow.resourceType)
           ? persistedRow
@@ -444,7 +450,7 @@ export const make = <A>(
       let source: ResourceState | undefined = ownRow;
       let adopted: ResourceState | undefined = ownRow;
       const renamedFrom: string[] = [];
-      for (const formerFqn of resource.FormerFqns) {
+      for (const formerFqn of resource.FormerFqns!) {
         if (formerFqnClaims.get(formerFqn) !== resource.FQN) continue;
         // The same former id may be listed twice (or resolve identically);
         // collect each former row once.
@@ -472,8 +478,8 @@ export const make = <A>(
           renamedFrom.push(formerFqn);
         }
       }
-      if (renamedFrom.length === 0) continue;
-      if (persistedRow !== undefined && ownRow === undefined) {
+      if (renamedFrom.length === 0) return;
+      if (persistedRow !== undefined && ownRow === undefined && !rowTaken) {
         return yield* Effect.die(
           new Error(
             `Cannot migrate '${renamedFrom[0]}' to '${resource.FQN}': a ` +
@@ -490,6 +496,42 @@ export const make = <A>(
         moved: adopted !== ownRow,
       });
       for (const formerFqn of renamedFrom) migratedRowFqns.add(formerFqn);
+    });
+
+    // Resolve renamers in claim-dependency order: when resource R's OWN
+    // FQN is claimed as a former id by resource S (a same-deploy shift:
+    // A→B while B→C), S must resolve first — whether S takes R's row
+    // decides whether R still owns it, or falls back to ITS former rows.
+    // Iterate to fixpoint; anything left is a claim CYCLE (a swap: A⇄B),
+    // which cannot be persisted safely — the migrations would overwrite
+    // and delete each other's rows — and dies loudly.
+    let pendingRenamers = resources.filter((r) => r.FormerFqns?.length);
+    const resolvedRenamers = new Set<string>();
+    while (pendingRenamers.length > 0) {
+      const ready = pendingRenamers.filter((resource) => {
+        const claimant = formerFqnClaims.get(resource.FQN);
+        return claimant === undefined || resolvedRenamers.has(claimant);
+      });
+      if (ready.length === 0) {
+        return yield* Effect.die(
+          new Error(
+            `Rename cycle detected among [${pendingRenamers
+              .map((r) => `'${r.FQN}'`)
+              .join(
+                ", ",
+              )}]: their renamedFrom(...) declarations claim each other's ` +
+              "FQNs. Swapping ids in one deploy is not supported — rename " +
+              "through a temporary id across two deploys instead.",
+          ),
+        );
+      }
+      for (const resource of ready) {
+        yield* resolveRenamer(resource);
+        resolvedRenamers.add(resource.FQN);
+      }
+      pendingRenamers = pendingRenamers.filter(
+        (r) => !resolvedRenamers.has(r.FQN),
+      );
     }
 
     /**

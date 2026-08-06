@@ -115,7 +115,19 @@ export class RenamePolicy extends Context.Service<
  * yield* Bucket("Bucket");
  * ```
  *
- * Two resources claiming the same former FQN fail the plan loudly.
+ * Renames may SHIFT through each other in one deploy — each row follows
+ * its resource (resolved in claim-dependency order):
+ *
+ * ```ts
+ * // the resource at `A` is now `B`; the resource at `B` is now `C`
+ * yield* Bucket("B").pipe(renamedFrom("A"));
+ * yield* Bucket("C").pipe(renamedFrom("B"));
+ * ```
+ *
+ * A SWAP (`A` ⇄ `B`) is a rename cycle and fails the plan loudly — the two
+ * migrations would overwrite and delete each other's rows. Rename through
+ * a temporary id across two deploys instead. Two resources claiming the
+ * same former FQN also fail loudly.
  */
 export const renamedFrom =
   (...formerIds: [FormerId, ...FormerId[]]) =>

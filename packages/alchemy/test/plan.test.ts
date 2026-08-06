@@ -4797,6 +4797,65 @@ describe("renamed resources (renamedFrom)", () => {
   );
 
   test(
+    "a same-deploy rename shift (A→B while B→C) migrates both rows",
+    Effect.gen(function* () {
+      // Two existing resources shift names in ONE deploy: the resource at
+      // `A` becomes `B`, and the resource at `B` becomes `C`. Each row
+      // must follow ITS resource — B's resolution may not treat the row
+      // at `B` as its own, because C is claiming it.
+      const instanceB = "b0000000000000000000000000000000";
+      yield* seed({
+        A: bucketRow("A"),
+        B: bucketRow("B", instanceB),
+      });
+
+      const plan = yield* Effect.gen(function* () {
+        yield* Bucket("B", { name: "b" }).pipe(renamedFrom("A"));
+        yield* Bucket("C", { name: "b" }).pipe(renamedFrom("B"));
+        return {};
+      }).pipe(makePlan);
+
+      // C took B's row...
+      const c = plan.resources.C!;
+      expect(c.action).toEqual("update");
+      expect(c.renamedFrom).toEqual(["B"]);
+      expect(c.state?.instanceId).toEqual(instanceB);
+      // ...so B falls back to A's row (never a fresh create)...
+      const b = plan.resources.B!;
+      expect(b.action).toEqual("update");
+      expect(b.renamedFrom).toEqual(["A"]);
+      expect(b.state?.instanceId).toEqual(instanceId);
+      // ...and nothing is deleted.
+      expect(Object.keys(plan.deletions)).toHaveLength(0);
+    }),
+  );
+
+  test(
+    "a same-deploy rename swap (A⇄B) fails the plan loudly",
+    Effect.gen(function* () {
+      // Swapping two live resources' ids cannot be persisted safely (the
+      // two migrations would set and delete each other's rows); it must
+      // die as a rename cycle, never silently half-apply.
+      yield* seed({
+        A: bucketRow("A"),
+        B: bucketRow("B", "b0000000000000000000000000000000"),
+      });
+
+      const exit = yield* Effect.gen(function* () {
+        yield* Bucket("A", { name: "b" }).pipe(renamedFrom("B"));
+        yield* Bucket("B", { name: "b" }).pipe(renamedFrom("A"));
+        return {};
+      }).pipe(makePlan, Effect.exit);
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const die = exit.cause.reasons.find(Cause.isDieReason);
+        expect(String(die?.defect)).toContain("cycle");
+      }
+    }),
+  );
+
+  test(
     "two resources claiming the same former FQN fail the plan loudly",
     Effect.gen(function* () {
       const exit = yield* Effect.gen(function* () {

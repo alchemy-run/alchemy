@@ -6776,6 +6776,113 @@ describe("renamed resources (renamedFrom)", () => {
   );
 
   test.provider(
+    "a same-deploy rename shift (A→B while B→C) moves both rows end-to-end",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            yield* TestResource("A", { string: "a" });
+            yield* TestResource("B", { string: "b" });
+          }),
+        );
+        const oldA = yield* getState("A");
+        const oldB = yield* getState("B");
+
+        // One deploy shifts both names: A→B and B→C. B's migration write
+        // and C's former-row cleanup target the same FQN — the apply-side
+        // discipline must never let C's delete destroy B's migrated row.
+        const touched: string[] = [];
+        const track = (op: string) => (id: string) =>
+          Effect.sync(() => void touched.push(`${op}:${id}`));
+        yield* stack
+          .deploy(
+            Effect.gen(function* () {
+              yield* TestResource("B", { string: "a" }).pipe(renamedFrom("A"));
+              yield* TestResource("C", { string: "b" }).pipe(renamedFrom("B"));
+            }),
+          )
+          .pipe(
+            hook({
+              create: track("create"),
+              delete: track("delete"),
+            }),
+          );
+
+        // No physical resource was created or deleted — both rows moved.
+        expect(touched).toEqual([]);
+        expect((yield* getState("B"))?.instanceId).toEqual(oldA?.instanceId);
+        expect((yield* getState("C"))?.instanceId).toEqual(oldB?.instanceId);
+        expect(yield* getState("A")).toBeUndefined();
+
+        yield* stack.destroy();
+        expect(yield* listState()).toEqual([]);
+      }),
+  );
+
+  test.provider(
+    "a pending replacement backlog drains after a rename",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            yield* TestResource("A", { string: "x", replaceString: "1" });
+          }),
+        );
+
+        // A replacement whose old-generation delete FAILS: the new
+        // generation is live but the old one stays queued in the row's
+        // `old` chain (status `replaced`). The failed cleanup is soft at
+        // deploy time — the deploy may still report success.
+        yield* stack
+          .deploy(
+            Effect.gen(function* () {
+              yield* TestResource("A", { string: "x", replaceString: "2" });
+            }),
+          )
+          .pipe(
+            hook({
+              delete: () => Effect.fail(new ResourceFailure()),
+            }),
+            Effect.exit,
+          );
+        const mid = yield* getState("A");
+        expect(mid?.status).toEqual("replaced");
+        expect((mid as any).old).toBeDefined();
+
+        // Rename while the backlog is pending: the chain must ride the
+        // migration and STILL drain — the old generation's physical
+        // resource is deleted during the rename deploy.
+        const deleted: string[] = [];
+        yield* stack
+          .deploy(
+            Effect.gen(function* () {
+              yield* TestResource("B", {
+                string: "x",
+                replaceString: "2",
+              }).pipe(renamedFrom("A"));
+            }),
+          )
+          .pipe(
+            hook({
+              delete: (id: string) => Effect.sync(() => void deleted.push(id)),
+            }),
+          );
+
+        // Exactly one physical delete: the queued old generation.
+        expect(deleted).toHaveLength(1);
+        const after = yield* getState("B");
+        // The new generation survived under the new identity, chain drained.
+        expect(after?.instanceId).toEqual(mid?.instanceId);
+        expect(["created", "updated"]).toContain(after?.status);
+        expect((after as any).old).toBeUndefined();
+        expect(yield* getState("A")).toBeUndefined();
+
+        yield* stack.destroy();
+        expect(yield* listState()).toEqual([]);
+      }),
+  );
+
+  test.provider(
     "ignores the alias when the new FQN row exists with a different instanceId",
     (stack) =>
       Effect.gen(function* () {
