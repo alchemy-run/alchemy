@@ -1,5 +1,5 @@
 [install]
-minimumReleaseAge = 259200
+minimumReleaseAge = 0
 minimumReleaseAgeExcludes = [
   "@opentui/core",
   "@opentui/core-darwin-arm64",
@@ -12,12 +12,8 @@ minimumReleaseAgeExcludes = [
   "@opentui/core-win32-arm64",
   "@distilled.cloud/aws",
   "@distilled.cloud/axiom",
-  "@distilled.cloud/cloudflare-rolldown-plugin",
-  "@distilled.cloud/cloudflare-rolldown-plugin",
-  "@distilled.cloud/cloudflare-runtime",
-  "@distilled.cloud/cloudflare-runtime",
-  "@distilled.cloud/cloudflare-vite-plugin",
-  "@distilled.cloud/cloudflare-vite-plugin",
+  "@alchemy.run/cloudflare-runtime",
+  "@alchemy.run/cloudflare-frameworks",
   "@distilled.cloud/cloudflare",
   "@distilled.cloud/core",
   "@distilled.cloud/neon",
@@ -35,6 +31,7 @@ minimumReleaseAgeExcludes = [
   "@effect/sql-d1",
   "@effect/sql-pg",
   "@effect/vitest",
+  "miniflare",
   "typescript",
   "@typescript/typescript-win32-x64",
   "@typescript/typescript-win32-arm64",

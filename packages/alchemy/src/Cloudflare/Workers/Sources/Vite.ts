@@ -1,6 +1,6 @@
 import cloudflare, {
   type CloudflareVitePluginOptions,
-} from "@distilled.cloud/cloudflare-vite-plugin";
+} from "@alchemy.run/cloudflare-runtime/vite";
 import * as ConsoleService from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
@@ -23,7 +23,7 @@ import type { ViteOptions } from "../Worker.ts";
 import { isWorkerLoader } from "../WorkerLoader.ts";
 
 /**
- * This module statically imports `@distilled.cloud/cloudflare-vite-plugin`
+ * This module statically imports `@alchemy.run/cloudflare-runtime/vite`
  * (~0.5s to load), which is only needed for vite-based workers. Importers
  * MUST load it lazily (`Effect.promise(() => import("./Sources/Vite.ts"))`
  * from the dispatch in `Source.ts`, or the legacy vite arms in the

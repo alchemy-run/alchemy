@@ -116,6 +116,71 @@ test.provider(
 );
 
 /**
+ * Consumer `settings` reach the local broker with the field names and units
+ * the runtime expects (`batchSize` → `maxBatchSize`, `maxWaitTimeMs` (ms) →
+ * `maxBatchTimeout` (s)). With `batchSize: 2` and a 2s wait, five quick
+ * sends must arrive in batches of at most 2 — under the broker's defaults
+ * (batch of 5, 1s flush) they'd land as one batch of 5. The trailing
+ * single-message batch flushing within the poll window pins the ms→s
+ * conversion: an unconverted 2000 would stall it for over half an hour.
+ */
+test.provider(
+  "local consumer settings control broker batch size and flush timeout",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const queue = yield* Cloudflare.Queues.Queue("BatchSettingsQueue");
+          const worker = yield* Cloudflare.Worker("queue-batch-local-worker", {
+            main: pathe.resolve(
+              import.meta.dirname,
+              "fixtures/queue-local-worker.ts",
+            ),
+            env: { QUEUE: queue },
+          });
+          yield* Cloudflare.Queues.Consumer("BatchSettingsConsumer", {
+            queueId: queue.queueId,
+            scriptName: worker.workerName,
+            settings: { batchSize: 2, maxWaitTimeMs: 2000 },
+          });
+          return { queue, worker };
+        }),
+      );
+
+      expect(deployed.queue.queueId).toMatch(/^dev:/);
+
+      for (let i = 0; i < 5; i++) {
+        yield* getJsonReady(`${deployed.worker.url}/send?text=batch-${i}`);
+      }
+
+      // All five arrive: two full batches immediately, the leftover after
+      // the 2s flush timeout.
+      const received = yield* getJsonReady(
+        `${deployed.worker.url}/received`,
+      ).pipe(
+        Effect.map((body) => (body as { received: string[] }).received),
+        Effect.repeat({
+          schedule: Schedule.spaced("500 millis"),
+          until: (received) => received.length >= 5,
+          times: 30,
+        }),
+      );
+      expect(received.length).toBe(5);
+
+      const { batches } = (yield* getJsonReady(
+        `${deployed.worker.url}/batches`,
+      )) as { batches: number[] };
+      expect(Math.max(...batches)).toBe(2);
+      expect(batches.reduce((a, b) => a + b, 0)).toBe(5);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+/**
  * Regression test for #988: a consumer configured with a dead-letter queue
  * that the worker does not itself consume. The DLQ binding resolves through
  * the local runtime's registry proxy; the worker previously failed to start

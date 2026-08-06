@@ -1180,6 +1180,12 @@ export interface ModalResource extends Resource<
      * mode fallback for unstamped rows.
      */
     instance: string;
+    /**
+     * Local dev URL — returned by the LOCAL variant only, mirroring how a
+     * local Worker's attrs carry its dev-proxy URL. Apply announces it as
+     * a `ready at <url>` note on local-mode rows.
+     */
+    url?: string;
   }
 > {}
 
@@ -1256,6 +1262,7 @@ const modalVariant = (mode: ProviderMode) =>
             value: (news as ModalResourceProps).value ?? id,
             runtime: mode,
             instance: mode === "local" ? `${LOCAL_ID_PREFIX}${id}` : id,
+            ...(mode === "local" ? { url: "http://localhost:1337" } : {}),
           };
         }),
         delete: Effect.fn(function* ({ id }) {

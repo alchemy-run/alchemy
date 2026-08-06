@@ -1,6 +1,7 @@
 {
   "name": "cloudflare-solid-ssr",
   "version": "0.0.0",
+  "private": true,
   "description": "",
   "type": "module",
   "scripts": {

@@ -84,24 +84,36 @@ export const hasLocalIdentity = (value: unknown): boolean => {
 };
 
 /**
- * The provider mode a persisted row should be handled with: its stamped
+ * The mode a persisted state row was actually reconciled with: its stamped
  * `providerMode`, or — for legacy rows written before stamping existed —
- * `"local"` inferred from a {@link LOCAL_ID_PREFIX} identity marker in the
- * persisted attributes.
+ * `"local"` when the persisted attributes carry a {@link LOCAL_ID_PREFIX}
+ * identity marker, `"live"` otherwise.
  *
- * Without the inference, a legacy dev row (e.g. a queue with a `dev:<uuid>`
- * id written by `alchemy dev` on a pre-stamping version) is assumed to be
- * the current run's mode; a plain `alchemy destroy`/`deploy` then hands the
- * `dev:` identity to the live provider, which sends it to the real cloud
- * API (Cloudflare rejects it as a malformed parameter). Rows that are
- * unstamped and carry no marker keep the assume-current-mode behavior
- * (mode-agnostic providers, legacy live rows).
+ * An unstamped row without a marker predates provider modes or was written
+ * by a mode-agnostic provider — in both cases the write acted on the REAL
+ * cloud, so the row's physical resource is `"live"`. Assuming the current
+ * run's mode instead silently adopts a deployed cloud resource as a local
+ * instance during `alchemy dev`: the row noops (or restarts locally over
+ * the live attrs), gets re-stamped `"local"`, and the live resource becomes
+ * untracked — it is never deleted by a later destroy or replacement, and
+ * its deployed URL keeps serving.
+ *
+ * An unstamped row WITH a marker (e.g. a queue with a `dev:<uuid>` id
+ * written by `alchemy dev` on a pre-stamping version) is the mirror case:
+ * assuming `"live"` hands the `dev:` identity to the live provider, which
+ * sends it to the real cloud API (Cloudflare rejects it as a malformed
+ * parameter, permanently wedging the destroy). The marker proves the row
+ * was reconciled locally, so it is handled as `"local"`.
+ *
+ * For mode-agnostic providers the returned mode is harmless either way:
+ * `providerForMode` ignores the mode when the provider has a single
+ * implementation.
  */
-export const stampedProviderMode = (row: {
+export const stampedMode = (row: {
   readonly providerMode?: ProviderMode | undefined;
   readonly attr?: unknown;
-}): ProviderMode | undefined =>
-  row.providerMode ?? (hasLocalIdentity(row.attr) ? "local" : undefined);
+}): ProviderMode =>
+  row.providerMode ?? (hasLocalIdentity(row.attr) ? "local" : "live");
 
 /**
  * Run the wrapped resources **remotely (against the real cloud) even during

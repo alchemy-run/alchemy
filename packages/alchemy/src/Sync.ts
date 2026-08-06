@@ -15,7 +15,7 @@ import { deepEqual } from "./Diff.ts";
 import { InstanceId } from "./InstanceId.ts";
 import type { Apply, Plan } from "./Plan.ts";
 import { findProviderByType, Provider } from "./Provider.ts";
-import { stampedProviderMode } from "./ProviderMode.ts";
+import { stampedMode } from "./ProviderMode.ts";
 import type { ResourceLike } from "./Resource.ts";
 import {
   isActionState,
@@ -191,7 +191,7 @@ export const sync = (
       // Legacy unstamped rows infer "local" from a `dev:` identity marker.
       const provider = yield* findProviderByType(
         resourceType,
-        stampedProviderMode(old),
+        stampedMode(old),
       );
       if (!provider.read) {
         return yield* skip(
@@ -445,10 +445,9 @@ export const plan = (stack: {
       if (!persisted || isActionState(persisted)) continue;
       // Repair the row with the provider mode that created it (sync never
       // switches modes — a local ⇄ live switch is a plan-time replacement).
-      const persistedMode = stampedProviderMode(persisted);
       const provider = yield* findProviderByType(
         persisted.resourceType,
-        persistedMode,
+        stampedMode(persisted),
       );
       const action =
         r.action === "drifted"
@@ -461,7 +460,7 @@ export const plan = (stack: {
         props: persisted.props,
         state: persisted,
         provider,
-        mode: persistedMode,
+        mode: persisted.providerMode,
         // Synthetic ResourceLike reconstructed from persisted state, the
         // same way Plan.make builds its deletion nodes.
         resource: {
@@ -476,7 +475,7 @@ export const plan = (stack: {
           RemovalPolicy: persisted.removalPolicy,
           Adopt: undefined,
           FormerFqns: undefined,
-          Mode: persistedMode,
+          Mode: persisted.providerMode,
           RuntimeContext: undefined!,
           Providers: undefined,
         } as ResourceLike,

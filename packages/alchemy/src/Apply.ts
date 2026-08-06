@@ -36,7 +36,7 @@ import {
   missingProviderError,
   tryFindProviderByType,
 } from "./Provider.ts";
-import { stampedProviderMode, type ProviderMode } from "./ProviderMode.ts";
+import { stampedMode, type ProviderMode } from "./ProviderMode.ts";
 import type { ResourceBinding } from "./Resource.ts";
 import { Stack } from "./Stack.ts";
 import { Stage } from "./Stage.ts";
@@ -523,15 +523,13 @@ const executeNode = (
     } satisfies ScopedPlanStatusSession;
 
     // On a mode-switch replacement (local ⇄ live) surface the transition:
-    // the old generation's stamped (or marker-inferred) mode → the mode
-    // resolved for this run.
-    const oldRowMode =
-      node.action === "replace" ? stampedProviderMode(node.state) : undefined;
+    // the old generation's stamped mode → the mode resolved for this run.
     const fromProviderMode =
+      node.action === "replace" &&
       node.mode !== undefined &&
-      oldRowMode !== undefined &&
-      oldRowMode !== node.mode
-        ? oldRowMode
+      node.state.providerMode !== undefined &&
+      node.state.providerMode !== node.mode
+        ? node.state.providerMode
         : undefined;
 
     const report = (status: ApplyStatus) =>
@@ -552,6 +550,16 @@ const executeNode = (
           status,
           providerMode: node.mode,
         });
+        // A local dev instance announces where it's serving: any
+        // local-mode row whose fresh Attributes carry a string `url`
+        // (Workers expose their dev-proxy URL this way) gets a
+        // `[id] ready at http://localhost:1337` line.
+        if (node.mode === "local") {
+          const url = (tracker[fqn]?.output as { url?: unknown })?.url;
+          if (typeof url === "string" && url.length > 0) {
+            yield* scopedSession.note(`ready at ${url}`);
+          }
+        }
         // Emit immediately so the CLI surfaces the terminal status as soon
         // as the resource is actually done — instead of batching every
         // resource's "created"/"updated" event to the end of apply(), which
@@ -1039,12 +1047,12 @@ const executeNode = (
               // Delete each old generation with the provider variant of the
               // mode that created it — after a local ⇄ live switch,
               // `node.provider` (the new mode) cannot tear down the other
-              // runtime's instance. Legacy unstamped rows infer "local"
-              // from a `dev:` identity marker in their attrs; rows with
-              // neither resolve to the provider as registered.
+              // runtime's instance. Unstamped rows (legacy or written by a
+              // mode-agnostic provider) are physically live, unless their
+              // attrs carry the `dev:` identity marker — see stampedMode.
               const oldProvider = yield* findProviderByType(
                 node.resource.Type,
-                stampedProviderMode(old),
+                stampedMode(old),
               );
               yield* oldProvider
                 .delete({
@@ -1819,7 +1827,7 @@ const collectGarbage = Effect.fn(function* (
               // marker-inferred) `providerMode` (see the deletions builder
               // in Plan.ts).
               provider: node.provider,
-              providerMode: stampedProviderMode(node.state),
+              providerMode: node.state.providerMode,
             }
           : {
               fqn: node.fqn,
@@ -1834,12 +1842,12 @@ const collectGarbage = Effect.fn(function* (
               // rows (see the deletions builder in Plan.ts); this guards
               // the replaced-chain generations that bypass plan. The old
               // generation is torn down with the provider variant of the
-              // mode that created it (local ⇄ live replacements), inferring
-              // "local" from a `dev:` identity marker on legacy unstamped
-              // rows.
+              // mode that created it (local ⇄ live replacements);
+              // unstamped rows are physically live unless their attrs
+              // carry the `dev:` identity marker (see stampedMode).
               provider: yield* tryFindProviderByType(
                 node.old.resourceType,
-                stampedProviderMode(node.old),
+                stampedMode(node.old),
               ).pipe(
                 Effect.flatMap(
                   Option.match({
@@ -1851,7 +1859,7 @@ const collectGarbage = Effect.fn(function* (
                   }),
                 ),
               ),
-              providerMode: stampedProviderMode(node.old),
+              providerMode: node.old.providerMode,
             };
 
         // Mutable: an attr-less row (interrupted create) may recover its
