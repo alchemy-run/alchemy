@@ -100,10 +100,12 @@ export const formatPlanLines = (plan: Plan): string[] => {
     // Surface FQN migrations: `[Assets] update (renamed from Bucket)` —
     // the update exists to re-brand the moved row's physical resource, and
     // without the note the plan gives no hint why an untouched resource
-    // reconciles.
-    const renamed = item.renamedFrom?.length
-      ? ` ${dim(`(renamed from ${item.renamedFrom.join(", ")})`)}`
-      : "";
+    // reconciles. (Only apply-side nodes can carry a rename — see
+    // `ApplyNodeBase`.)
+    const renamed =
+      item.action !== "delete" && item.renamedFrom?.length
+        ? ` ${dim(`(renamed from ${item.renamedFrom.join(", ")})`)}`
+        : "";
     lines.push(`${tag(item.resource.LogicalId)} ${action}${mode}${renamed}`);
     for (const binding of item.bindings) {
       if (binding.action === "noop") continue;

@@ -115,6 +115,18 @@ export interface BaseNode<
   mode: ProviderMode | undefined;
   downstream: string[];
   bindings: BindingNode<R["Binding"]>[];
+}
+
+/**
+ * Base for the apply-side nodes (create/update/replace/noop) — the nodes a
+ * DECLARED resource plans to. Only these can carry a rename: a `Delete`
+ * node is an orphaned row with no declaration, so nothing can claim to
+ * have renamed it (migrating rows are excluded from the orphan pass
+ * entirely).
+ */
+export interface ApplyNodeBase<
+  R extends ResourceLike<string> = ResourceLike<string>,
+> extends BaseNode<R> {
   /**
    * Set when this resource's persisted row was found under former FQNs
    * (`renamedFrom(...)`) — the migration source (no row at the current FQN
@@ -129,7 +141,7 @@ export interface BaseNode<
 
 export interface Create<
   R extends ResourceLike = ResourceLike,
-> extends BaseNode<R> {
+> extends ApplyNodeBase<R> {
   action: "create";
   props: R["Props"];
   state: CreatingResourceState | undefined;
@@ -137,7 +149,7 @@ export interface Create<
 
 export interface Update<
   R extends ResourceLike = ResourceLike,
-> extends BaseNode<R> {
+> extends ApplyNodeBase<R> {
   action: "update";
   /** True while this is the first reconcile after a cold adoption. */
   adopting?: boolean;
@@ -161,14 +173,14 @@ export interface Delete<
 
 export interface NoopUpdate<
   R extends ResourceLike = ResourceLike,
-> extends BaseNode<R> {
+> extends ApplyNodeBase<R> {
   action: "noop";
   state: CreatedResourceState | UpdatedResourceState;
 }
 
 export interface Replace<
   R extends ResourceLike = ResourceLike,
-> extends BaseNode<R> {
+> extends ApplyNodeBase<R> {
   action: "replace";
   props: any;
   deleteFirst: boolean;
