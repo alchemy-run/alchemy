@@ -416,6 +416,10 @@ export default defineConfig({
                   label: "Resources",
                   link: "/infrastructure-as-code/resource",
                 },
+                {
+                  label: "Renaming Resources",
+                  link: "/infrastructure-as-code/renaming",
+                },
                 { label: "Actions", link: "/infrastructure-as-code/action" },
                 {
                   label: "Inputs & Outputs",
