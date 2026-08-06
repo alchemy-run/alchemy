@@ -2,10 +2,6 @@ import * as Effect from "effect/Effect";
 import * as NodeChildProcess from "node:child_process";
 import * as NodeNet from "node:net";
 
-export const isDockerReady =
-  NodeChildProcess.spawnSync("docker", ["info"], { stdio: "ignore" }).status ===
-  0;
-
 const swarmLocalNodeState = (): string | undefined => {
   const result = NodeChildProcess.spawnSync(
     "docker",
@@ -14,15 +10,6 @@ const swarmLocalNodeState = (): string | undefined => {
   );
   return result.status === 0 ? String(result.stdout).trim() : undefined;
 };
-
-/**
- * Swarm tests are runnable when the local engine is a swarm manager already
- * (`active`) or can become one (`inactive` — {@link ensureDockerSwarm}
- * initializes a single-node swarm on first use). `pending`/`locked`/error
- * states are not testable.
- */
-export const isDockerSwarmReady =
-  isDockerReady && ["active", "inactive"].includes(swarmLocalNodeState() ?? "");
 
 /**
  * Idempotently provision the local single-node swarm the `Docker.Service`

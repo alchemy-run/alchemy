@@ -10,7 +10,7 @@ import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import { findAvailablePort, isDockerReady } from "./Runtime.ts";
+import { findAvailablePort } from "./Runtime.ts";
 
 const { test } = Test.make({
   providers: Docker.providers(),
@@ -111,80 +111,74 @@ test.provider(
 );
 
 describe("Docker.Container", { concurrent: false }, () => {
-  test.provider.skipIf(!isDockerReady)(
-    "publishes and inspects bound host ports",
-    (stack) =>
-      Effect.gen(function* () {
-        const docker = yield* Docker.Docker;
-        const hostPort = yield* findAvailablePort();
-        // No explicit name: rely on the engine-generated physical name.
-        const container = yield* stack.deploy(
-          Docker.Container("nginx-container", {
-            image: "nginx:alpine",
-            ports: [{ external: hostPort, internal: 80 }],
-            start: true,
-          }),
-        );
-        expect(container.name.length).toBeGreaterThan(0);
-        expect(container.status).toBe("running");
+  test.provider("publishes and inspects bound host ports", (stack) =>
+    Effect.gen(function* () {
+      const docker = yield* Docker.Docker;
+      const hostPort = yield* findAvailablePort();
+      // No explicit name: rely on the engine-generated physical name.
+      const container = yield* stack.deploy(
+        Docker.Container("nginx-container", {
+          image: "nginx:alpine",
+          ports: [{ external: hostPort, internal: 80 }],
+          start: true,
+        }),
+      );
+      expect(container.name.length).toBeGreaterThan(0);
+      expect(container.status).toBe("running");
 
-        const runtime = yield* docker.container.inspect(container.name);
-        // Docker always publishes the IPv4 (`0.0.0.0`) binding; whether it also
-        // adds an IPv6 (`::`) binding depends on the daemon's IPv6 config, so
-        // assert the guaranteed IPv4 mapping is present rather than requiring
-        // both.
-        expect(runtime?.NetworkSettings.Ports?.["80/tcp"]).toEqual(
-          expect.arrayContaining([
-            { HostIp: "0.0.0.0", HostPort: `${hostPort}` },
-          ]),
-        );
-      }),
+      const runtime = yield* docker.container.inspect(container.name);
+      // Docker always publishes the IPv4 (`0.0.0.0`) binding; whether it also
+      // adds an IPv6 (`::`) binding depends on the daemon's IPv6 config, so
+      // assert the guaranteed IPv4 mapping is present rather than requiring
+      // both.
+      expect(runtime?.NetworkSettings.Ports?.["80/tcp"]).toEqual(
+        expect.arrayContaining([
+          { HostIp: "0.0.0.0", HostPort: `${hostPort}` },
+        ]),
+      );
+    }),
   );
 
-  test.provider.skipIf(!isDockerReady)(
-    "creates a stopped container when start is false",
-    (stack) =>
-      Effect.gen(function* () {
-        const container = yield* stack.deploy(
-          Docker.Container("stopped-container", {
-            image: "nginx:alpine",
-            start: false,
-          }),
-        );
-        expect(container.status).toBe("created");
-        expect(container.imageRef).toBe("nginx:alpine");
-      }),
+  test.provider("creates a stopped container when start is false", (stack) =>
+    Effect.gen(function* () {
+      const container = yield* stack.deploy(
+        Docker.Container("stopped-container", {
+          image: "nginx:alpine",
+          start: false,
+        }),
+      );
+      expect(container.status).toBe("created");
+      expect(container.imageRef).toBe("nginx:alpine");
+    }),
   );
 
-  test.provider.skipIf(!isDockerReady)(
-    "applies container labels and a stop timeout",
-    (stack) =>
-      Effect.gen(function* () {
-        const docker = yield* Docker.Docker;
-        const container = yield* stack.deploy(
-          Docker.Container("traefik-container", {
-            image: "nginx:alpine",
-            labels: {
-              "traefik.enable": "true",
-              "traefik.http.services.web.loadbalancer.server.port": "80",
-            },
-            stopTimeout: "10 minutes",
-            start: true,
-          }),
-        );
-
-        const info = yield* docker.container.inspect(container.name);
-        expect(info.Config.Labels).toEqual(
-          expect.objectContaining({
+  test.provider("applies container labels and a stop timeout", (stack) =>
+    Effect.gen(function* () {
+      const docker = yield* Docker.Docker;
+      const container = yield* stack.deploy(
+        Docker.Container("traefik-container", {
+          image: "nginx:alpine",
+          labels: {
             "traefik.enable": "true",
             "traefik.http.services.web.loadbalancer.server.port": "80",
-          }),
-        );
-        expect(info.Config.StopTimeout).toBe(600);
-      }),
+          },
+          stopTimeout: "10 minutes",
+          start: true,
+        }),
+      );
+
+      const info = yield* docker.container.inspect(container.name);
+      expect(info.Config.Labels).toEqual(
+        expect.objectContaining({
+          "traefik.enable": "true",
+          "traefik.http.services.web.loadbalancer.server.port": "80",
+        }),
+      );
+      expect(info.Config.StopTimeout).toBe(600);
+    }),
   );
 
-  test.provider.skipIf(!isDockerReady)(
+  test.provider(
     "updates network aliases without replacing the container",
     (stack) =>
       Effect.gen(function* () {
@@ -215,27 +209,25 @@ describe("Docker.Container", { concurrent: false }, () => {
       }),
   );
 
-  test.provider.skipIf(!isDockerReady)(
-    "replaces the container when published ports change",
-    (stack) =>
-      Effect.gen(function* () {
-        const firstPort = yield* findAvailablePort();
-        const secondPort = yield* findAvailablePort();
-        const first = yield* stack.deploy(
-          Docker.Container("ported-container", {
-            image: "nginx:alpine",
-            ports: [{ external: firstPort, internal: 80 }],
-          }),
-        );
-        const second = yield* stack.deploy(
-          Docker.Container("ported-container", {
-            image: "nginx:alpine",
-            ports: [{ external: secondPort, internal: 80 }],
-          }),
-        );
-        expect(second.id).not.toBe(first.id);
-        expect(second.ports["80/tcp"]).toBe(secondPort);
-      }),
+  test.provider("replaces the container when published ports change", (stack) =>
+    Effect.gen(function* () {
+      const firstPort = yield* findAvailablePort();
+      const secondPort = yield* findAvailablePort();
+      const first = yield* stack.deploy(
+        Docker.Container("ported-container", {
+          image: "nginx:alpine",
+          ports: [{ external: firstPort, internal: 80 }],
+        }),
+      );
+      const second = yield* stack.deploy(
+        Docker.Container("ported-container", {
+          image: "nginx:alpine",
+          ports: [{ external: secondPort, internal: 80 }],
+        }),
+      );
+      expect(second.id).not.toBe(first.id);
+      expect(second.ports["80/tcp"]).toBe(secondPort);
+    }),
   );
 
   // Rewrite the container's persisted row into the wedged shape an
@@ -273,7 +265,7 @@ describe("Docker.Container", { concurrent: false }, () => {
       });
     });
 
-  test.provider.skipIf(!isDockerReady)(
+  test.provider(
     "read recovers a creating-state container whose image prop was lost (#736)",
     (stack) =>
       Effect.gen(function* () {
@@ -311,7 +303,7 @@ describe("Docker.Container", { concurrent: false }, () => {
     { timeout: 240_000 },
   );
 
-  test.provider.skipIf(!isDockerReady)(
+  test.provider(
     "diff recreates a creating-state container that vanished after its image prop was lost (#736)",
     (stack) =>
       Effect.gen(function* () {
@@ -349,7 +341,7 @@ describe("Docker.Container", { concurrent: false }, () => {
     { timeout: 240_000 },
   );
 
-  test.provider.skipIf(!isDockerReady)(
+  test.provider(
     "passes environment values into the container (#1117)",
     (stack) =>
       Effect.gen(function* () {
@@ -378,37 +370,35 @@ describe("Docker.Container", { concurrent: false }, () => {
       }),
   );
 
-  test.provider.skipIf(!isDockerReady)(
-    "applies a healthcheck with unit-suffixed durations",
-    (stack) =>
-      Effect.gen(function* () {
-        const docker = yield* Docker.Docker;
-        // `normalizeDuration` used to emit a bare nanosecond count (e.g.
-        // `1000000000`), which `docker container create` rejects with "missing
-        // unit in duration" — so this deploy would fail outright before the fix.
-        const container = yield* stack.deploy(
-          Docker.Container("healthcheck-container", {
-            image: "nginx:alpine",
-            healthcheck: {
-              cmd: "true",
-              interval: "1 second",
-              timeout: "2 seconds",
-              retries: 3,
-              startPeriod: "1 second",
-            },
-            start: true,
-          }),
-        );
-        expect(container.status).toBe("running");
+  test.provider("applies a healthcheck with unit-suffixed durations", (stack) =>
+    Effect.gen(function* () {
+      const docker = yield* Docker.Docker;
+      // `normalizeDuration` used to emit a bare nanosecond count (e.g.
+      // `1000000000`), which `docker container create` rejects with "missing
+      // unit in duration" — so this deploy would fail outright before the fix.
+      const container = yield* stack.deploy(
+        Docker.Container("healthcheck-container", {
+          image: "nginx:alpine",
+          healthcheck: {
+            cmd: "true",
+            interval: "1 second",
+            timeout: "2 seconds",
+            retries: 3,
+            startPeriod: "1 second",
+          },
+          start: true,
+        }),
+      );
+      expect(container.status).toBe("running");
 
-        // Docker reports the configured durations back in nanoseconds — assert
-        // they round-tripped rather than being dropped or truncated.
-        const info = yield* docker.container.inspect(container.name);
-        const health = info?.Config.Healthcheck;
-        expect(health?.Interval).toBe(1_000_000_000);
-        expect(health?.Timeout).toBe(2_000_000_000);
-        expect(health?.Retries).toBe(3);
-        expect(health?.StartPeriod).toBe(1_000_000_000);
-      }),
+      // Docker reports the configured durations back in nanoseconds — assert
+      // they round-tripped rather than being dropped or truncated.
+      const info = yield* docker.container.inspect(container.name);
+      const health = info?.Config.Healthcheck;
+      expect(health?.Interval).toBe(1_000_000_000);
+      expect(health?.Timeout).toBe(2_000_000_000);
+      expect(health?.Retries).toBe(3);
+      expect(health?.StartPeriod).toBe(1_000_000_000);
+    }),
   );
 });
