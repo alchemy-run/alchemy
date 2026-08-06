@@ -22,11 +22,13 @@ import * as Git from "alchemy/Git";
 import * as GitHub from "alchemy/GitHub";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Ref from "effect/Ref";
+import * as S from "effect/Schema";
 import { testAlchemy } from "./Repos.ts";
 import { Ledger } from "./services/Ledger.ts";
 import { QualityAssurance } from "./skills/QualityAssurance.ts";
 import { ReadDiff, ReadIssue } from "./tools/index.ts";
-import { message } from "./Vocabulary.ts";
+import { message, path } from "./Vocabulary.ts";
 
 export class ReviewBot extends AI.Agent<ReviewBot>()("ReviewBot") {}
 
@@ -40,13 +42,45 @@ const SIGNATURE = "<!-- review-bot -->";
 /** `owner/repo#N` → N — the thread's key names its pull request. */
 const prNumber = (key: string): number => Number(key.match(/#(\d+)$/)?.[1]);
 
+/* ── review vocabulary (local to the bot) ─────────────────────── */
+
+const line = AI.Parameter("line", S.Int)`
+The line in the pull request's HEAD version of the file that the
+comment is anchored to — the LAST line when commenting a range. It
+must be a line the diff shows (added or context); GitHub rejects
+anchors outside the diff.`;
+
+const startLine = AI.Parameter("startLine", S.optionalKey(S.Int))`
+For a multi-line comment: the FIRST line of the range (strictly less
+than the anchor line). Omit for a single-line comment.`;
+
+const verdict = AI.Parameter(
+  "verdict",
+  S.Literals(["approve", "request_changes"]),
+)`
+"approve" when the diff satisfies its rubric; "request_changes" when
+the pending inline comments list what a fix round must address.`;
+
+/** One buffered inline comment, in GitHub's createReview shape. */
+interface PendingComment {
+  readonly path: string;
+  readonly line: number;
+  readonly start_line?: number;
+  readonly body: string;
+}
+
 export const ReviewBotLive = ReviewBot.make(
   Effect.gen(function* () {
     // ── INIT: once per pull request ─────────────────────────────────
     const workspaces = yield* Git.Workspaces;
     const createComment = yield* GitHub.CreateIssueComment(testAlchemy);
+    const createReview = yield* GitHub.CreatePullRequestReview(testAlchemy);
     const thread = yield* AI.Thread;
     const number = prNumber(thread.key);
+
+    // the review under construction: inline comments buffer here until
+    // submit_review posts them atomically with the verdict
+    const pending = yield* Ref.make<ReadonlyArray<PendingComment>>([]);
 
     // The PR's ACTUAL code, not just its diff: `pull/N/head` is where
     // GitHub serves every PR's tip (fork PRs included). `fresh: true`
@@ -71,9 +105,85 @@ export const ReviewBotLive = ReviewBot.make(
       }),
     );
 
+    const addComment = yield* AI.Tool("add_comment")`
+      Pin ${message} to ${path} at ${line} (optionally from
+      ${startLine}) — one concrete problem, anchored to the exact
+      lines that prove it. Comments buffer until submit_review posts
+      them as one review; nothing is visible to the author before
+      that.`(
+      Effect.fn(function* (p: {
+        message: string;
+        path: string;
+        line: number;
+        startLine?: number;
+      }) {
+        if (p.startLine !== undefined && p.startLine >= p.line) {
+          return yield* Effect.fail(
+            `startLine (${p.startLine}) must be strictly less than line (${p.line})`,
+          );
+        }
+        const count = yield* Ref.modify(pending, (buffered) => {
+          const next = [
+            ...buffered,
+            {
+              path: p.path,
+              line: p.line,
+              ...(p.startLine !== undefined && { start_line: p.startLine }),
+              body: p.message,
+            },
+          ];
+          return [next.length, next];
+        });
+        return `buffered comment ${count} on ${p.path}:${p.line}`;
+      }),
+    );
+
+    const submitReview = yield* AI.Tool("submit_review")`
+      Submit the review: your ${verdict} and ${message} — the overview
+      the author reads first — posted atomically with every buffered
+      add_comment. THIS is your verdict's one voice; a round that ends
+      without it is an unfinished review.`(
+      Effect.fn(function* (p: { verdict: string; message: string }) {
+        const comments = yield* Ref.getAndSet(pending, []);
+        const banner =
+          p.verdict === "approve" ? "**APPROVE**" : "**REQUEST CHANGES**";
+        const review = yield* createReview({
+          pull_number: number,
+          event: p.verdict === "approve" ? "APPROVE" : "REQUEST_CHANGES",
+          body: `${p.message}\n\n${SIGNATURE}`,
+          comments: [...comments],
+        }).pipe(
+          // GitHub forbids verdict reviews on the author's own pull
+          // request; the sandbox often IS author-owned. Downgrade to a
+          // COMMENT-event review with the verdict as a banner — inline
+          // comments land either way.
+          Effect.catchIf(
+            (error) => error.message.includes("own pull request"),
+            () =>
+              createReview({
+                pull_number: number,
+                event: "COMMENT",
+                body: `${banner}\n\n${p.message}\n\n${SIGNATURE}`,
+                comments: [...comments],
+              }),
+          ),
+          Effect.mapError(
+            (error) =>
+              `${error.operation} failed: ${error.message}. Your ` +
+              `${comments.length} buffered comment(s) were discarded — ` +
+              `re-add corrected comments (anchors must be lines the ` +
+              `diff shows) and submit again.`,
+          ),
+        );
+        return `review submitted (${comments.length} inline comment(s)): ${review.html_url}`;
+      }),
+    );
+
     const comment = yield* AI.Tool("comment")`
-      Post ${message} as a comment on the pull request — your one
-      voice. Markdown; complete; you will not get to clarify.`(
+      Post ${message} as a plain comment on the pull request thread —
+      conversation, not verdict: answering the author's question,
+      noting what you are waiting on. Markdown; complete; you will not
+      get to clarify.`(
       Effect.fn(function* (p: { message: string }) {
         const created = yield* createComment({
           issue_number: number,
@@ -109,15 +219,18 @@ export const ReviewBotLive = ReviewBot.make(
       anyone's claims. When the author says they pushed changes,
       ${sync} first, then verify again.
 
-      Your verdict is ONE ${comment}, complete in a single round.
-      Start it **APPROVE** or **REQUEST CHANGES**; a request lists
-      every concrete problem the author must fix, so one fix round
-      can address them all. A round that ends without the comment
-      posted is an unfinished review — never stop to "verify" or
-      "consider"; verify with tools, then post. Answer follow-up
-      questions the same way — a comment is your only voice, and you
-      hold no merge button. Comments you posted yourself may echo
-      back as events: they are your own words — never reply to them.`;
+      Your verdict is ONE REVIEW, built then submitted in a single
+      round. ${addComment} pins each concrete problem to the exact
+      lines that prove it — every problem anchored, so one fix round
+      can address them all. ${submitReview} closes with the overview
+      and the verdict: approving needs no inline comments; requesting
+      changes without them is hand-waving. A round that ends without
+      the review submitted is an unfinished review — never stop to
+      "verify" or "consider"; verify with tools, then submit. Answer
+      follow-up questions with a plain ${comment} — conversation
+      carries no verdict, and you hold no merge button. Comments you
+      posted yourself may echo back as events: they are your own
+      words — never reply to them.`;
   }),
 );
 

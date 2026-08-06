@@ -20,6 +20,7 @@ import {
   GitPullRequestArrow,
   Link2,
   MessageSquare,
+  MessageSquarePlus,
   RefreshCw,
   Reply,
   ScrollText,
@@ -313,6 +314,45 @@ const REVIEW_BOT: Renderers<typeof ReviewBotLive> = {
     icon: FileText,
     title: <>Read issue <RefLink refValue={input.issue} /></>,
     body: output === undefined ? undefined : <WindowedText text={output} />,
+  }),
+
+  add_comment: (input) => ({
+    icon: MessageSquarePlus,
+    title: (
+      <>
+        Review comment on{" "}
+        <span className="font-mono text-mist">
+          {input.path}:
+          {input.startLine !== undefined ? `${input.startLine}–` : ""}
+          {input.line}
+        </span>
+      </>
+    ),
+    badge: (
+      <span className="shrink-0 text-[11px] text-muted-foreground">
+        buffered
+      </span>
+    ),
+    body: input.message ? <Mono>{input.message}</Mono> : undefined,
+  }),
+
+  submit_review: (input, output) => ({
+    icon: input.verdict === "approve" ? CircleCheck : CircleX,
+    title: (
+      <>
+        Submit review{" "}
+        <span
+          className={cn(
+            "font-medium",
+            input.verdict === "approve" ? "text-moss" : "text-brick",
+          )}
+        >
+          {input.verdict === "approve" ? "APPROVE" : "REQUEST CHANGES"}
+        </span>
+      </>
+    ),
+    summary: output === undefined ? undefined : lastLine(output),
+    body: input.message ? <Mono>{input.message}</Mono> : undefined,
   }),
 
   comment: (input) => ({

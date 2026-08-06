@@ -17,7 +17,14 @@ import type { QualityAssuranceGeneral } from "../src/skills/QualityAssurance.ts"
 type Names = AI.ToolNames<typeof ReviewBotLive>;
 
 // the full surface: inline tools AND class-tool splices
-const _names: Names[] = ["comment", "sync_checkout", "readDiff", "readIssue"];
+const _names: Names[] = [
+  "add_comment",
+  "submit_review",
+  "comment",
+  "sync_checkout",
+  "readDiff",
+  "readIssue",
+];
 
 // @ts-expect-error — not on the wire
 const _unknown: Names = "not_a_tool";
@@ -42,6 +49,8 @@ type Registry<L> = {
 
 // @ts-expect-error — sync_checkout has no renderer
 const _incomplete: Registry<typeof ReviewBotLive> = {
+  add_comment: () => 1,
+  submit_review: () => 1,
   comment: () => 1,
   readDiff: () => 1,
   readIssue: () => 1,
@@ -49,6 +58,16 @@ const _incomplete: Registry<typeof ReviewBotLive> = {
 
 const _complete: Registry<typeof ReviewBotLive> = {
   // input is the tool's ACTUAL parameter type, not Record<string, any>
+  add_comment: (input) => (
+    input.path satisfies string,
+    input.line satisfies number,
+    input.startLine satisfies number | undefined,
+    1
+  ),
+  submit_review: (input) => (
+    input.verdict satisfies "approve" | "request_changes",
+    1
+  ),
   comment: (input) => (input.message satisfies string, 1),
   readDiff: (input) => (input.pr.number satisfies number, 1),
   readIssue: (input) => (input.issue.number satisfies number, 1),
