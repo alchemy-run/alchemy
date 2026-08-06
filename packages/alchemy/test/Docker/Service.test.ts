@@ -5,7 +5,7 @@ import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
-import { ensureDockerSwarm, isDockerSwarmReady } from "./Runtime.ts";
+import { ensureDockerSwarm } from "./Runtime.ts";
 
 const { test } = Test.make({
   providers: Docker.providers(),
@@ -18,7 +18,7 @@ const { test } = Test.make({
 // anywhere Docker runs; deactivate afterwards with `docker swarm leave
 // --force` if you don't want the node to stay a swarm manager.
 describe("Docker.Service", { concurrent: false }, () => {
-  test.provider.skipIf(!isDockerSwarmReady)(
+  test.provider(
     "creates a replicated service with labels",
     (stack) =>
       Effect.gen(function* () {
@@ -54,7 +54,7 @@ describe("Docker.Service", { concurrent: false }, () => {
     { timeout: 240_000 },
   );
 
-  test.provider.skipIf(!isDockerSwarmReady)(
+  test.provider(
     "replaces a service when replicas change",
     (stack) =>
       Effect.gen(function* () {
@@ -86,7 +86,7 @@ describe("Docker.Service", { concurrent: false }, () => {
     { timeout: 240_000 },
   );
 
-  test.provider.skipIf(!isDockerSwarmReady)(
+  test.provider(
     "replaces a service when its Docker context changes",
     (stack) =>
       Effect.gen(function* () {
@@ -120,7 +120,7 @@ describe("Docker.Service", { concurrent: false }, () => {
     { timeout: 240_000 },
   );
 
-  test.provider.skipIf(!isDockerSwarmReady)(
+  test.provider(
     "refuses a pre-existing service unless explicitly adopted",
     (stack) =>
       Effect.gen(function* () {
@@ -175,7 +175,7 @@ describe("Docker.Service", { concurrent: false }, () => {
     { timeout: 240_000 },
   );
 
-  test.provider.skipIf(!isDockerSwarmReady)(
+  test.provider(
     "replaces a service when labels change",
     (stack) =>
       Effect.gen(function* () {

@@ -14,7 +14,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
-import { expectUrlContains } from "../Utils/Http.ts";
+import { expectUrlContains, expectUrlRedirect } from "../Utils/Http.ts";
 import {
   expectWorkerExists,
   waitForWorkerToBeDeleted,
@@ -309,6 +309,289 @@ describe.concurrent("SvelteKit", () => {
     { timeout: 360_000, exclusive: true },
   );
 
+  // ─────────────────────────────────────────────────────────────────────
+  // 404-page mode: `adapter.notFoundHandling: "404-page"`
+  //
+  // The adapter writes a `404.html` fallback asset — the rendered app
+  // shell with `fallback: "spa"`, a plain `Not Found` page with
+  // `fallback: "plaintext"` (the default) — and the resource defaults the
+  // assets-layer `notFoundHandling` knob from the adapter's.
+  //
+  // Assets `404-page` semantics with a worker present: under the
+  // `assets_navigation_prefers_asset_serving` compat flag (default-on for
+  // compatibility dates >= 2025-04-01; the resource's default date is
+  // later), a navigation-shaped request (`Sec-Fetch-Mode: navigate`) that
+  // matches no asset is answered by the assets layer directly with the
+  // `404.html` body and status 404 — the worker is never invoked. Requests
+  // WITHOUT the navigate header still invoke the worker, where kit renders
+  // its own error page (the shim never defers in 404-page mode —
+  // upstream-parity, see WorkerShim.ts).
+  //
+  // Both tests share the `sveltekit-404-app` fixture: the fallback flavor
+  // is an adapter option on the resource, so each variant is its own
+  // deploy of the same source.
+  // ─────────────────────────────────────────────────────────────────────
+
+  const notFoundFixtureDir = pathe.resolve(
+    import.meta.dirname,
+    "fixtures",
+    "sveltekit-404-app",
+  );
+
+  /** app.html marker — present in every response rendered through app.html. */
+  const SHELL_404_MARKER = "sveltekit-404-shell";
+  /** Root `+error.svelte` marker — present only when KIT renders the 404. */
+  const KIT_ERROR_MARKER = "sveltekit-404-kit-error-page";
+  /** Root page marker — present only when the home page renders. */
+  const HOME_404_MARKER = "sveltekit-404-home";
+
+  test.provider(
+    "SvelteKit 404-page + spa fallback: unmatched navigations serve the app-shell 404.html from assets; matched routes SSR; non-navigations keep kit's own 404",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
+        yield* stack.destroy();
+
+        const rootDir = yield* cloneFixture(notFoundFixtureDir, {
+          prefix: "alchemy-sveltekit-404-spa-",
+          tempRoot,
+          entries: ["package.json", "src"],
+        });
+
+        const bindingMarker = "sveltekit-404-spa-binding-marker";
+
+        const site = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Website.SvelteKit("SvelteKit404SpaSite", {
+              rootDir,
+              workersDev: { enabled: true, previewsEnabled: true },
+              memo: { include: ["src/**", "package.json"] },
+              // `404-page` writes `404.html`; `fallback: "spa"` renders the
+              // app shell into it (instead of the default plaintext page).
+              // `assets.notFoundHandling` deliberately NOT set — the
+              // resource defaults it from the adapter's, same as the SPA
+              // test above pins for "single-page-application".
+              adapter: { notFoundHandling: "404-page", fallback: "spa" },
+              env: {
+                TEST_BINDING: bindingMarker,
+              },
+            });
+          }),
+        );
+
+        expect(site.url).toBeDefined();
+        expect(site.hash?.bundle).toBeDefined();
+        yield* expectWorkerExists(site.workerName, accountId);
+
+        // (a) Matched route SSRs normally: a plain (non-navigation) fetch
+        // reaches the worker and the server `load` observes platform.env.
+        const homeBody = yield* expectUrlContains(
+          `${site.url!}/`,
+          `binding:${bindingMarker}`,
+          {
+            timeout: "120 seconds",
+            label: "404-page spa: SSR home",
+          },
+        );
+        expect(homeBody).toContain(HOME_404_MARKER);
+
+        // (b) An unmatched route on a navigation-shaped request serves the
+        // generated app-shell 404.html from the assets layer with status
+        // 404 — no kit error-page markup (the worker never ran) and no
+        // page markup (the shell render has no page components).
+        const fallbackBody = yield* expectPageResponse(
+          `${site.url!}/definitely/not/a/route`,
+          {
+            label: "404-page spa: assets fallback (navigate)",
+            headers: { accept: "text/html", "sec-fetch-mode": "navigate" },
+            expected: `status 404 with app-shell marker "${SHELL_404_MARKER}" and no "${KIT_ERROR_MARKER}"`,
+            check: (res) =>
+              res.status === 404 &&
+              res.body.includes(SHELL_404_MARKER) &&
+              !res.body.includes(KIT_ERROR_MARKER),
+          },
+        );
+        expect(fallbackBody).not.toContain(HOME_404_MARKER);
+
+        // (c) The same unmatched route WITHOUT `Sec-Fetch-Mode: navigate`
+        // invokes the worker, and kit renders its own error page — the
+        // shim never defers in 404-page mode (upstream parity).
+        const kitErrorBody = yield* expectPageResponse(
+          `${site.url!}/definitely/not/a/route`,
+          {
+            label: "404-page spa: worker-rendered 404 (non-navigation)",
+            headers: { accept: "text/html" },
+            expected: `status 404 with kit error marker "${KIT_ERROR_MARKER}"`,
+            check: (res) =>
+              res.status === 404 && res.body.includes(KIT_ERROR_MARKER),
+          },
+        );
+        expect(kitErrorBody).toContain("status:404");
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+      }).pipe(logLevel),
+    // exclusive: the SvelteKit build temporarily switches process.cwd() to
+    // the project root (kit resolves config relative to the cwd).
+    { timeout: 360_000, exclusive: true },
+  );
+
+  test.provider(
+    "SvelteKit 404-page + plaintext fallback: unmatched navigations serve the plaintext 404.html from assets",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
+        yield* stack.destroy();
+
+        const rootDir = yield* cloneFixture(notFoundFixtureDir, {
+          prefix: "alchemy-sveltekit-404-plain-",
+          tempRoot,
+          entries: ["package.json", "src"],
+        });
+
+        const bindingMarker = "sveltekit-404-plain-binding-marker";
+
+        const site = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Website.SvelteKit(
+              "SvelteKit404PlainSite",
+              {
+                rootDir,
+                workersDev: { enabled: true, previewsEnabled: true },
+                memo: { include: ["src/**", "package.json"] },
+                // `fallback: "plaintext"` (also the default) writes a literal
+                // `Not Found` page instead of rendering the app shell.
+                adapter: {
+                  notFoundHandling: "404-page",
+                  fallback: "plaintext",
+                },
+                env: {
+                  TEST_BINDING: bindingMarker,
+                },
+              },
+            );
+          }),
+        );
+
+        expect(site.url).toBeDefined();
+        yield* expectWorkerExists(site.workerName, accountId);
+
+        // Matched route still SSRs with the binding.
+        yield* expectUrlContains(`${site.url!}/`, `binding:${bindingMarker}`, {
+          timeout: "120 seconds",
+          label: "404-page plaintext: SSR home",
+        });
+
+        // An unmatched navigation serves the plaintext `404.html` — the
+        // exact `Not Found` body, no app.html shell markup (the plaintext
+        // page never goes through kit's template).
+        const plainBody = yield* expectPageResponse(
+          `${site.url!}/definitely/not/a/route`,
+          {
+            label: "404-page plaintext: assets fallback (navigate)",
+            headers: { accept: "text/html", "sec-fetch-mode": "navigate" },
+            expected: `status 404 with exact plaintext body "Not Found"`,
+            check: (res) =>
+              res.status === 404 && res.body.trim() === "Not Found",
+          },
+        );
+        expect(plainBody).not.toContain(SHELL_404_MARKER);
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+      }).pipe(logLevel),
+    // exclusive: the SvelteKit build temporarily switches process.cwd() to
+    // the project root (kit resolves config relative to the cwd).
+    { timeout: 360_000, exclusive: true },
+  );
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Fully-prerendered SvelteKit (the `adapter-static` equivalent):
+  // `export const prerender = true` in the root +layout renders every
+  // page to HTML at build time and deploys them as static assets.
+  // ─────────────────────────────────────────────────────────────────────
+
+  const staticFixtureDir = pathe.resolve(
+    import.meta.dirname,
+    "fixtures",
+    "sveltekit-static-app",
+  );
+
+  test.provider(
+    "SvelteKit fully-prerendered: pages serve as static assets; the server bundle is still uploaded as a worker (behavior pin)",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
+        yield* stack.destroy();
+
+        const rootDir = yield* cloneFixture(staticFixtureDir, {
+          prefix: "alchemy-sveltekit-static-",
+          tempRoot,
+          entries: ["package.json", "src"],
+        });
+
+        const site = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Website.SvelteKit("SvelteKitStaticSite", {
+              rootDir,
+              workersDev: { enabled: true, previewsEnabled: true },
+              memo: { include: ["src/**", "package.json"] },
+            });
+          }),
+        );
+
+        expect(site.url).toBeDefined();
+
+        // ── BEHAVIOR PIN ─────────────────────────────────────────────────
+        // Even with every route prerendered, the resource TODAY still
+        // builds the kit server bundle and uploads it as a worker (the
+        // adapter always emits `_worker.js`; there is no assets-only fast
+        // path for fully-static builds). If these assertions start failing
+        // because the resource learned to skip the worker for fully-
+        // prerendered apps, update this pin to the new behavior.
+        expect(site.hash?.bundle).toBeDefined();
+        yield* expectWorkerExists(site.workerName, accountId);
+
+        // Every page serves its prerendered content.
+        yield* expectUrlContains(`${site.url!}/`, "sveltekit-static-home", {
+          timeout: "120 seconds",
+          label: "prerendered home",
+        });
+        yield* expectUrlContains(
+          `${site.url!}/about`,
+          "sveltekit-static-about",
+          {
+            timeout: "60 seconds",
+            label: "prerendered about",
+          },
+        );
+        yield* expectUrlContains(`${site.url!}/docs`, "sveltekit-static-docs", {
+          timeout: "60 seconds",
+          label: "prerendered docs",
+        });
+
+        // Proof the pages come from the ASSETS layer, not a kit render:
+        // the assets router's `auto-trailing-slash` html_handling answers
+        // `/about/` with a 307 redirect to `/about`. Both kit's server
+        // (trailingSlash "never") and the worker shim's prerendered
+        // redirect use 308 — a 307 here fingerprints the assets layer.
+        yield* expectUrlRedirect(`${site.url!}/about/`, "/about", {
+          status: 307,
+          timeout: "60 seconds",
+          label: "assets-layer trailing-slash redirect",
+        });
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+      }).pipe(logLevel),
+    // exclusive: the SvelteKit build temporarily switches process.cwd() to
+    // the project root (kit resolves config relative to the cwd).
+    { timeout: 360_000, exclusive: true },
+  );
+
   class NamespaceStillExists extends Data.TaggedError("NamespaceStillExists") {}
 
   const waitForNamespaceToBeDeleted = Effect.fn(function* (
@@ -326,6 +609,89 @@ describe.concurrent("SvelteKit", () => {
       Effect.catchTag("NamespaceNotFound", () => Effect.void),
     );
   });
+
+  class PageResponseMismatch extends Data.TaggedError("PageResponseMismatch")<{
+    url: string;
+    expected: string;
+    actual: string;
+  }> {
+    override get message() {
+      return `${this.url} :: expected ${this.expected} :: got ${this.actual}`;
+    }
+  }
+
+  interface PageResponse {
+    status: number;
+    body: string;
+    headers: Headers;
+  }
+
+  /**
+   * Fetch `url` (with optional extra request headers — e.g.
+   * `sec-fetch-mode: navigate` to exercise the assets layer's
+   * navigation-preference behavior) and assert `check` holds for the
+   * response. Retries through edge propagation with the same bounded
+   * schedule as `expectSpaShell`; returns the body for further (negative)
+   * assertions.
+   */
+  const expectPageResponse = (
+    url: string,
+    options: {
+      label: string;
+      headers?: Record<string, string>;
+      /** Human description of the expected response, for error messages. */
+      expected: string;
+      check: (res: PageResponse) => boolean;
+    },
+  ) =>
+    Effect.tryPromise({
+      try: async (signal) => {
+        const u = new URL(url);
+        u.searchParams.set("__alchemy_cb", String(Date.now()));
+        const res = await fetch(u, {
+          signal,
+          cache: "no-store",
+          headers: {
+            "cache-control": "no-cache",
+            accept: "*/*",
+            ...options.headers,
+          },
+        });
+        const body = await res.text();
+        return { status: res.status, body, headers: res.headers };
+      },
+      catch: (e) =>
+        new PageResponseMismatch({
+          url,
+          expected: options.expected,
+          actual: e instanceof Error ? e.message : String(e),
+        }),
+    }).pipe(
+      Effect.filterOrFail(
+        (res): boolean => options.check(res),
+        (res) =>
+          new PageResponseMismatch({
+            url,
+            expected: options.expected,
+            actual: `${res.status} ${res.body.slice(0, 240)}`,
+          }),
+      ),
+      Effect.map((res) => res.body),
+      Effect.retry({
+        // Same ~127s budget as `expectSpaShell` (matches the 120s
+        // first-request convention used by `expectUrlContains`).
+        schedule: Schedule.max([
+          Schedule.min([
+            Schedule.exponential("750 millis", 1.5),
+            Schedule.spaced("8 seconds"),
+          ]),
+          Schedule.recurs(20),
+        ]),
+      }),
+      Effect.tapError((error) =>
+        Effect.logError(`expectPageResponse(${options.label}) failed`, error),
+      ),
+    );
 
   class SpaShellMismatch extends Data.TaggedError("SpaShellMismatch")<{
     url: string;

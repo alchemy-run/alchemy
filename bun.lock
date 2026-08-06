@@ -52,7 +52,7 @@
     },
     "cloudflare-tools/packages/astro": {
       "name": "@distilled.cloud/astro",
-      "version": "0.13.7",
+      "version": "0.17.1",
       "dependencies": {
         "@astrojs/internal-helpers": "0.10.1",
         "@astrojs/underscore-redirects": "1.0.3",
@@ -84,7 +84,7 @@
     },
     "cloudflare-tools/packages/cloudflare-rolldown-plugin": {
       "name": "@distilled.cloud/cloudflare-rolldown-plugin",
-      "version": "0.16.1",
+      "version": "0.17.1",
       "dependencies": {
         "@cloudflare/unenv-preset": "^2.16.0",
         "magic-string": "^0.30.21",
@@ -109,7 +109,7 @@
     },
     "cloudflare-tools/packages/cloudflare-runtime": {
       "name": "@distilled.cloud/cloudflare-runtime",
-      "version": "0.16.1",
+      "version": "0.17.1",
       "dependencies": {
         "@alchemy.run/node-utils": "catalog:",
         "@puppeteer/browsers": "^2.10.6",
@@ -147,7 +147,7 @@
     },
     "cloudflare-tools/packages/cloudflare-vite-plugin": {
       "name": "@distilled.cloud/cloudflare-vite-plugin",
-      "version": "0.16.1",
+      "version": "0.17.1",
       "dependencies": {
         "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:*",
       },
@@ -178,7 +178,7 @@
     },
     "cloudflare-tools/packages/framework-core": {
       "name": "@distilled.cloud/framework-core",
-      "version": "0.13.7",
+      "version": "0.17.1",
       "devDependencies": {
         "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:*",
         "@effect/platform-node": "catalog:effect",
@@ -196,7 +196,7 @@
     },
     "cloudflare-tools/packages/nextjs": {
       "name": "@distilled.cloud/nextjs",
-      "version": "0.13.7",
+      "version": "0.17.1",
       "dependencies": {
         "@distilled.cloud/cloudflare": "catalog:",
         "@distilled.cloud/cloudflare-runtime": "workspace:*",
@@ -218,7 +218,7 @@
     },
     "cloudflare-tools/packages/nuxt": {
       "name": "@distilled.cloud/nuxt",
-      "version": "0.13.7",
+      "version": "0.17.1",
       "dependencies": {
         "@distilled.cloud/cloudflare-runtime": "workspace:*",
         "@distilled.cloud/framework-core": "workspace:*",
@@ -240,7 +240,7 @@
     },
     "cloudflare-tools/packages/octane": {
       "name": "@distilled.cloud/octane",
-      "version": "0.13.7",
+      "version": "0.17.1",
       "dependencies": {
         "@distilled.cloud/framework-core": "workspace:*",
         "fast-glob": "^3.3.2",
@@ -260,7 +260,7 @@
     },
     "cloudflare-tools/packages/sveltekit": {
       "name": "@distilled.cloud/sveltekit",
-      "version": "0.13.7",
+      "version": "0.17.1",
       "dependencies": {
         "@distilled.cloud/cloudflare-rolldown-plugin": "workspace:*",
         "@distilled.cloud/cloudflare-runtime": "workspace:*",
@@ -354,7 +354,7 @@
     },
     "cloudflare-tools/packages/waku": {
       "name": "@distilled.cloud/waku",
-      "version": "0.13.7",
+      "version": "0.17.1",
       "dependencies": {
         "@distilled.cloud/cloudflare-runtime": "workspace:*",
         "@distilled.cloud/cloudflare-vite-plugin": "workspace:*",
@@ -377,7 +377,7 @@
     },
     "distilled/packages/aws": {
       "name": "@distilled.cloud/aws",
-      "version": "1.0.0-rc.2",
+      "version": "1.0.0-rc.3",
       "dependencies": {
         "@aws-crypto/crc32": "catalog:",
         "@aws-crypto/util": "catalog:",
@@ -408,7 +408,7 @@
     },
     "distilled/packages/axiom": {
       "name": "@distilled.cloud/axiom",
-      "version": "1.0.0-rc.2",
+      "version": "1.0.0-rc.3",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -423,7 +423,7 @@
     },
     "distilled/packages/azure": {
       "name": "@distilled.cloud/azure",
-      "version": "1.0.0-rc.2",
+      "version": "1.0.0-rc.3",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -438,7 +438,7 @@
     },
     "distilled/packages/cloudflare": {
       "name": "@distilled.cloud/cloudflare",
-      "version": "1.0.0-rc.2",
+      "version": "1.0.0-rc.3",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -453,7 +453,7 @@
     },
     "distilled/packages/coinbase": {
       "name": "@distilled.cloud/coinbase",
-      "version": "1.0.0-rc.2",
+      "version": "1.0.0-rc.3",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -468,7 +468,7 @@
     },
     "distilled/packages/core": {
       "name": "@distilled.cloud/core",
-      "version": "1.0.0-rc.2",
+      "version": "1.0.0-rc.3",
       "devDependencies": {
         "@effect/platform-bun": "catalog:",
         "@types/bun": "catalog:",
@@ -481,7 +481,7 @@
     },
     "distilled/packages/expo-eas": {
       "name": "@distilled.cloud/expo-eas",
-      "version": "1.0.0-rc.2",
+      "version": "1.0.0-rc.3",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -496,7 +496,7 @@
     },
     "distilled/packages/fly-io": {
       "name": "@distilled.cloud/fly-io",
-      "version": "1.0.0-rc.2",
+      "version": "1.0.0-rc.3",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -511,7 +511,7 @@
     },
     "distilled/packages/gcp": {
       "name": "@distilled.cloud/gcp",
-      "version": "1.0.0-rc.2",
+      "version": "1.0.0-rc.3",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -526,7 +526,7 @@
     },
     "distilled/packages/kubernetes": {
       "name": "@distilled.cloud/kubernetes",
-      "version": "1.0.0-rc.2",
+      "version": "1.0.0-rc.3",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -541,7 +541,7 @@
     },
     "distilled/packages/mongodb-atlas": {
       "name": "@distilled.cloud/mongodb-atlas",
-      "version": "1.0.0-rc.2",
+      "version": "1.0.0-rc.3",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -556,7 +556,7 @@
     },
     "distilled/packages/neon": {
       "name": "@distilled.cloud/neon",
-      "version": "1.0.0-rc.2",
+      "version": "1.0.0-rc.3",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -571,7 +571,7 @@
     },
     "distilled/packages/planetscale": {
       "name": "@distilled.cloud/planetscale",
-      "version": "1.0.0-rc.2",
+      "version": "1.0.0-rc.3",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -586,7 +586,7 @@
     },
     "distilled/packages/posthog": {
       "name": "@distilled.cloud/posthog",
-      "version": "1.0.0-rc.2",
+      "version": "1.0.0-rc.3",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -601,7 +601,7 @@
     },
     "distilled/packages/prisma-postgres": {
       "name": "@distilled.cloud/prisma-postgres",
-      "version": "1.0.0-rc.2",
+      "version": "1.0.0-rc.3",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -616,7 +616,7 @@
     },
     "distilled/packages/stripe": {
       "name": "@distilled.cloud/stripe",
-      "version": "1.0.0-rc.2",
+      "version": "1.0.0-rc.3",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -631,7 +631,7 @@
     },
     "distilled/packages/supabase": {
       "name": "@distilled.cloud/supabase",
-      "version": "1.0.0-rc.2",
+      "version": "1.0.0-rc.3",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -646,7 +646,7 @@
     },
     "distilled/packages/turso": {
       "name": "@distilled.cloud/turso",
-      "version": "1.0.0-rc.2",
+      "version": "1.0.0-rc.3",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -661,7 +661,7 @@
     },
     "distilled/packages/typesense": {
       "name": "@distilled.cloud/typesense",
-      "version": "1.0.0-rc.2",
+      "version": "1.0.0-rc.3",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -676,7 +676,7 @@
     },
     "distilled/packages/workos": {
       "name": "@distilled.cloud/workos",
-      "version": "1.0.0-rc.2",
+      "version": "1.0.0-rc.3",
       "dependencies": {
         "@distilled.cloud/core": "workspace:*",
       },
@@ -1330,7 +1330,7 @@
     },
     "packages/alchemy": {
       "name": "alchemy",
-      "version": "2.0.0-beta.69",
+      "version": "2.0.0-beta.70",
       "bin": {
         "alchemy": "./bin/cli.js",
       },
@@ -1486,7 +1486,7 @@
     },
     "packages/better-auth": {
       "name": "@alchemy.run/better-auth",
-      "version": "2.0.0-beta.69",
+      "version": "2.0.0-beta.70",
       "dependencies": {
         "alchemy": "workspace:*",
         "effect": "catalog:",
@@ -1497,7 +1497,7 @@
     },
     "packages/pr-package": {
       "name": "@alchemy.run/pr-package",
-      "version": "2.0.0-beta.69",
+      "version": "2.0.0-beta.70",
       "dependencies": {
         "alchemy": "workspace:*",
         "effect": "catalog:",
