@@ -161,12 +161,12 @@ export type BucketSippy = Resource<
  *     provider: "aws",
  *     bucket: "legacy-media",
  *     region: "us-east-1",
- *     accessKeyId: alchemy.secret.env.AWS_ACCESS_KEY_ID,
- *     secretAccessKey: alchemy.secret.env.AWS_SECRET_ACCESS_KEY,
+ *     accessKeyId: yield* Config.redacted("AWS_ACCESS_KEY_ID"),
+ *     secretAccessKey: yield* Config.redacted("AWS_SECRET_ACCESS_KEY"),
  *   },
  *   destination: {
- *     accessKeyId: alchemy.secret.env.R2_ACCESS_KEY_ID,
- *     secretAccessKey: alchemy.secret.env.R2_SECRET_ACCESS_KEY,
+ *     accessKeyId: yield* Config.redacted("R2_ACCESS_KEY_ID"),
+ *     secretAccessKey: yield* Config.redacted("R2_SECRET_ACCESS_KEY"),
  *   },
  * });
  * ```
@@ -180,11 +180,11 @@ export type BucketSippy = Resource<
  *     provider: "gcs",
  *     bucket: "legacy-media",
  *     clientEmail: "sippy@my-project.iam.gserviceaccount.com",
- *     privateKey: alchemy.secret.env.GCS_PRIVATE_KEY,
+ *     privateKey: yield* Config.redacted("GCS_PRIVATE_KEY"),
  *   },
  *   destination: {
- *     accessKeyId: alchemy.secret.env.R2_ACCESS_KEY_ID,
- *     secretAccessKey: alchemy.secret.env.R2_SECRET_ACCESS_KEY,
+ *     accessKeyId: yield* Config.redacted("R2_ACCESS_KEY_ID"),
+ *     secretAccessKey: yield* Config.redacted("R2_SECRET_ACCESS_KEY"),
  *   },
  * });
  * ```

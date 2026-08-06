@@ -230,10 +230,20 @@ const web = yield* Cloudflare.Website.Vite("Website", {
 If you'd rather start from a real framework scaffold (React + TS
 with HMR, ESLint, etc.), use Vite's official template:
 
-```sh
-bun create vite@latest web -- --template react-ts
-cd web && bun install && cd ..
-```
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun create vite@latest web -- --template react-ts\ncd web && bun install && cd ..`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm create vite@latest web -- --template react-ts\ncd web && npm install && cd ..`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm create vite web --template react-ts\ncd web && pnpm install && cd ..`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn create vite web --template react-ts\ncd web && yarn install && cd ..`} lang="sh" />
+  </TabItem>
+</Tabs>
 
 That drops a complete project into `./web/` with its own
 `package.json`, `tsconfig.json`, and `vite.config.ts`.

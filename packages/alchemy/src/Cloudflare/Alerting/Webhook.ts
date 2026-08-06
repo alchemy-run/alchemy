@@ -103,7 +103,7 @@ export type NotificationWebhook = Resource<
  * const webhook = yield* Cloudflare.Alerting.NotificationWebhook("AlertsHook", {
  *   name: "production-alerts",
  *   url: "https://alerts.example.com/cf",
- *   secret: alchemy.secret.env.WEBHOOK_SECRET,
+ *   secret: yield* Config.redacted("WEBHOOK_SECRET"),
  * });
  * ```
  *
@@ -198,9 +198,11 @@ export const NotificationWebhookProvider = () =>
       //    the URL from an arbitrary PoP; when the destination is a
       //    just-deployed Worker that PoP may not have the fresh
       //    workers.dev subdomain yet and the test POST 404s even though
-      //    the URL serves elsewhere. A short bounded retry rides out edge
-      //    propagation; a genuinely broken endpoint still fails after the
-      //    budget is exhausted.
+      //    the URL serves elsewhere. A bounded retry (~2 min, capped
+      //    backoff) rides out edge propagation — fresh workers.dev URLs
+      //    have been observed to 404 for well over a minute under heavy
+      //    account-wide deploy load; a genuinely broken endpoint still
+      //    fails after the budget is exhausted.
       if (!observed) {
         const created = yield* alerting
           .createDestinationWebhook({
@@ -213,8 +215,11 @@ export const NotificationWebhookProvider = () =>
             Effect.retry({
               while: (e) => e._tag === "WebhookTestFailed",
               schedule: Schedule.max([
-                Schedule.exponential("1 second"),
-                Schedule.recurs(5),
+                Schedule.min([
+                  Schedule.exponential("1 second"),
+                  Schedule.spaced("5 seconds"),
+                ]),
+                Schedule.recurs(24),
               ]),
             }),
           );

@@ -8,8 +8,17 @@ import * as Option from "effect/Option";
 import type { Scope } from "effect/Scope";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
-import { nodeFileTrace } from "@vercel/nft";
 import { normalizeEntrypoint } from "./ComputeArchive.ts";
+
+// `@vercel/nft` is an optional peer dependency — loaded lazily so importing
+// the Prisma provider never requires it unless a NestJS artifact is traced.
+const importNft = () =>
+  import("@vercel/nft").catch((cause) => {
+    throw new Error(
+      "Failed to load '@vercel/nft'. Install the optional peer dependency '@vercel/nft' to build NestJS apps for Prisma Compute.",
+      { cause },
+    );
+  });
 
 export type ComputeAutoBuildFramework =
   | "auto"
@@ -671,9 +680,11 @@ const stageTracedNestjsArtifact = Effect.fn(function* (options: {
   const entrypoint = path.relative(sourceRoot, entry).replaceAll("\\", "/");
   const fileList = yield* Effect.tryPromise({
     try: () =>
-      nodeFileTrace([entry], { base: sourceRoot }).then((result) =>
-        Array.from(result.fileList),
-      ),
+      importNft()
+        .then(({ nodeFileTrace }) =>
+          nodeFileTrace([entry], { base: sourceRoot }),
+        )
+        .then((result) => Array.from(result.fileList)),
     catch: (cause) =>
       cause instanceof Error
         ? cause

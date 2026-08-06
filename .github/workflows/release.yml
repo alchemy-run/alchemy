@@ -12,6 +12,17 @@ on:
         required: false
         type: string
         default: ""
+      force-latest:
+        description: >-
+          Publish under npm's `latest` dist-tag regardless of channel. On
+          by default — 2.0 prereleases are the effective current release,
+          so `latest` follows whatever we publish. Uncheck to cut a release
+          that stays off `latest` (it lands on `next` instead). If the
+          version is already on npm, its `latest` tag is moved rather than
+          the publish skipped.
+        required: false
+        type: boolean
+        default: true
 
 concurrency:
   group: release-${{ github.ref }}
@@ -25,12 +36,13 @@ permissions:
 
 jobs:
   release:
-    uses: alchemy-run/actions/.github/workflows/release.yml@a18b368e044cb380a8c4904d5cfbccbc2798e768 # main
+    uses: alchemy-run/actions/.github/workflows/release.yml@7353f5e478ca98f88a03400b91cd96707711de64 # main
     with:
       # The bun workspace includes `distilled/packages/*` from the
       # distilled submodule, so consumer checkouts must fetch it.
       submodules: "true"
       version: ${{ inputs.version }}
+      force-latest: ${{ inputs.force-latest }}
       repo: alchemy-run/alchemy
       current-version: "2.0.0"
       # Each package builds in its own publish job: the tsc build pulls

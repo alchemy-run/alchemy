@@ -147,8 +147,8 @@ export const AdminAccountProvider = () =>
                 // the note on the disassociate retry in `delete` below.
                 while: (e): boolean =>
                   e._tag === "InvalidOperationException" &&
-                  (e.Message === "Operation is invalid." ||
-                    (e.Message?.includes("AWSServiceRoleForFMS") ?? false)),
+                  (e.message === "Operation is invalid." ||
+                    (e.message?.includes("AWSServiceRoleForFMS") ?? false)),
                 schedule: Schedule.spaced("5 seconds"),
                 times: 8,
               }),
@@ -179,7 +179,7 @@ export const AdminAccountProvider = () =>
               // `unknown`, which breaks the `catchTag` below.
               while: (e): boolean =>
                 e._tag === "InvalidOperationException" &&
-                (e.Message?.includes("cannot be offboarded") ?? false),
+                (e.message?.includes("cannot be offboarded") ?? false),
               schedule: Schedule.spaced("8 seconds"),
               times: 8,
             }),

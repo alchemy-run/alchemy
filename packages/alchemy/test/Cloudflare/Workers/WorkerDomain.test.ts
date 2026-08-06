@@ -88,7 +88,7 @@ const purgeDomains = (...hostnames: string[]) =>
 // explicit detach-all. The gate keys on declared intent (props), never on
 // domains persisted in state, so state written by older providers that
 // observed listDomains unconditionally cannot re-arm the destructive path.
-test.provider.skipIf(!zoneName)(
+test.provider(
   "omitted domain preserves live attachments; null detaches all",
   (stack) =>
     Effect.gen(function* () {

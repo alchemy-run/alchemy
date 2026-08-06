@@ -38,6 +38,7 @@ import { makeRpcStub } from "./Rpc.ts";
 import type { SecretKeyBinding } from "./SecretKeyBinding.ts";
 import type { VersionMetadataBinding } from "./VersionMetadataBinding.ts";
 import { Worker, WorkerEnvironment } from "./Worker.ts";
+import type { WorkerEntrypointBinding } from "./WorkerEntrypoint.ts";
 import type { WorkerLoader } from "./WorkerLoader.ts";
 
 type DistilledWorkerBinding = Exclude<
@@ -72,6 +73,22 @@ export interface SelfUrlWorkerBinding {
 }
 
 /**
+ * Alchemy-only binding: a service binding that points at the host Worker
+ * ITSELF (`Worker.Self`). The provider lowers this into a
+ * `service` binding targeting the Worker's own physical name just before
+ * the script upload — Cloudflare never sees this type. In local dev it
+ * lowers to the runtime's in-process self service (bypassing the assets
+ * middleware), matching production semantics.
+ *
+ * The canonical consumer is OpenNext's `WORKER_SELF_REFERENCE` (the ISR
+ * revalidation queue re-fetches the worker through it).
+ */
+export interface SelfServiceWorkerBinding {
+  type: "self_service";
+  name: string;
+}
+
+/**
  * The `queue` metadata binding extended with the alchemy-only `queueId`.
  * The local worker provider uses it to discriminate a locally-emulated
  * queue (`dev:` id → local broker) from an `Alchemy.remote()` queue in dev
@@ -98,19 +115,41 @@ export type QueueWorkerBinding = Extract<
 };
 
 /**
+ * The `service` metadata binding extended with workerd's `ctx.props`.
+ * `props` is what a `Cloudflare.WorkerEntrypoint(worker, { props })` env
+ * entry lowers to; the local runtime delivers it to the target entrypoint.
+ * The Cloudflare API's binding schema does not carry the field yet, so on
+ * live uploads it is dropped at encode until the distilled `workers`
+ * service adds it.
+ */
+export type ServiceWorkerBinding = Extract<
+  DistilledWorkerBinding,
+  { type: "service" }
+> & {
+  props?: Record<string, unknown>;
+};
+
+/**
  * The wire-shape binding union the Cloudflare API accepts — {@link WorkerBinding}
  * minus the alchemy-only members that must be lowered before upload.
  */
-export type WireWorkerBinding = Exclude<WorkerBinding, SelfUrlWorkerBinding>;
+export type WireWorkerBinding = Exclude<
+  WorkerBinding,
+  SelfUrlWorkerBinding | SelfServiceWorkerBinding
+>;
 
 export type WorkerBinding =
   | Exclude<
       DistilledWorkerBinding,
-      { type: "durable_object_namespace" } | { type: "queue" }
+      | { type: "durable_object_namespace" }
+      | { type: "queue" }
+      | { type: "service" }
     >
   | DurableObjectNamespaceWorkerBinding
   | QueueWorkerBinding
-  | SelfUrlWorkerBinding;
+  | ServiceWorkerBinding
+  | SelfUrlWorkerBinding
+  | SelfServiceWorkerBinding;
 
 export type WorkerSettingsBinding = Exclude<
   workers.GetScriptScriptAndVersionSettingResponse["bindings"],
@@ -153,6 +192,7 @@ export type WorkerBindingResource =
   | VectorizeIndex
   | Secret
   | Worker
+  | WorkerEntrypointBinding
   | WorkerLoader
   | VersionMetadataBinding
   // The Worker's own URL (`Worker.URL`).

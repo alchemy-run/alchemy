@@ -1,6 +1,6 @@
 {
   "name": "alchemy",
-  "version": "2.0.0-beta.67",
+  "version": "2.0.0-beta.69",
   "homepage": "https://alchemy.run",
   "license": "Apache-2.0",
   "author": "Sam Goodwin <sam@alchemy.run>",
@@ -397,7 +397,6 @@
     "@smithy/shared-ini-file-loader": "catalog:",
     "@smithy/types": "catalog:",
     "@types/aws-lambda": "catalog:",
-    "@vercel/nft": "^1.10.2",
     "ai": "catalog:",
     "aws4fetch": "catalog:",
     "capnweb": "^0.6.1",
@@ -406,10 +405,7 @@
     "ink": "^6.3.1",
     "jszip": "^3.10.1",
     "libsodium-wrappers": "^0.8.3",
-    "mongodb": "^6.10.0",
-    "mysql2": "^3.15.3",
     "pathe": "^2.0.3",
-    "pg": "^8.13.0",
     "picomatch": "^4.0.4",
     "react": "^19.2.0",
     "rolldown": "catalog:",
@@ -428,6 +424,26 @@
     "@foldkit/vite-plugin": "catalog:fixtures",
     "@oxc-project/types": "^0.139.0",
     "@tanstack/react-router": "catalog:fixtures",
+    "@distilled.cloud/astro": "workspace:*",
+    "astro": "7.1.0",
+    "@distilled.cloud/nextjs": "workspace:*",
+    "next": "16.2.10",
+    "@opennextjs/cloudflare": "1.20.1",
+    "@distilled.cloud/nuxt": "workspace:*",
+    "nuxt": "catalog:fixtures",
+    "nitropack": "catalog:fixtures",
+    "@distilled.cloud/octane": "workspace:*",
+    "octane": "catalog:fixtures",
+    "@octanejs/vite-plugin": "catalog:fixtures",
+    "@octanejs/adapter-cloudflare": "catalog:fixtures",
+    "@distilled.cloud/sveltekit": "workspace:*",
+    "@distilled.cloud/waku": "workspace:*",
+    "waku": "catalog:fixtures",
+    "react-server-dom-webpack": "catalog:fixtures",
+    "hono": "catalog:fixtures",
+    "@sveltejs/kit": "catalog:fixtures",
+    "@sveltejs/vite-plugin-svelte": "catalog:fixtures",
+    "svelte": "catalog:fixtures",
     "@tanstack/react-start": "catalog:fixtures",
     "@types/aws-lambda": "catalog:",
     "@types/bun": "catalog:",
@@ -437,6 +453,7 @@
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "@types/ws": "^8.18.1",
+    "@vercel/nft": "^1.10.2",
     "@vitejs/plugin-react": "catalog:fixtures",
     "@vitejs/plugin-rsc": "catalog:fixtures",
     "alchemy-test": "workspace:*",
@@ -444,6 +461,9 @@
     "effect": "catalog:",
     "foldkit": "catalog:fixtures",
     "iovalkey": "^0.3.3",
+    "mongodb": "^6.10.0",
+    "mysql2": "^3.15.3",
+    "pg": "^8.13.0",
     "react-devtools-core": "^7.0.1",
     "react-dom": "catalog:fixtures",
     "react-router": "catalog:fixtures",
@@ -463,9 +483,13 @@
     "@effect/platform-node": "catalog:",
     "@effect/sql-mysql2": "catalog:",
     "@effect/sql-pg": "catalog:",
+    "@vercel/nft": "^1.10.2",
     "drizzle-kit": "catalog:",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
+    "mongodb": "^6.10.0",
+    "mysql2": "^3.15.3",
+    "pg": "^8.13.0",
     "vite": "catalog:",
     "ws": "catalog:"
   },
@@ -485,10 +509,22 @@
     "@effect/sql-pg": {
       "optional": true
     },
+    "@vercel/nft": {
+      "optional": true
+    },
     "drizzle-kit": {
       "optional": true
     },
     "drizzle-orm": {
+      "optional": true
+    },
+    "mongodb": {
+      "optional": true
+    },
+    "mysql2": {
+      "optional": true
+    },
+    "pg": {
       "optional": true
     },
     "vite": {

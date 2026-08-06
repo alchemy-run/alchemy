@@ -373,7 +373,7 @@ export default defineConfig({
         !page.endsWith(".mdx"),
     }),
     starlight({
-      title: "alchemy",
+      title: "Alchemy",
       favicon: "/favicon.svg",
       customCss: ["./src/styles/global.css", "./src/styles/custom.css"],
       components: {
@@ -415,6 +415,10 @@ export default defineConfig({
                 {
                   label: "Resources",
                   link: "/infrastructure-as-code/resource",
+                },
+                {
+                  label: "Renaming Resources",
+                  link: "/infrastructure-as-code/renaming",
                 },
                 { label: "Actions", link: "/infrastructure-as-code/action" },
                 {
@@ -756,7 +760,13 @@ export default defineConfig({
                   link: "/cloudflare/frontend/solidstart",
                 },
                 { label: "Astro", link: "/cloudflare/frontend/astro" },
+                { label: "Next.js", link: "/cloudflare/frontend/nextjs" },
                 { label: "Nuxt", link: "/cloudflare/frontend/nuxt" },
+                {
+                  label: "SvelteKit",
+                  link: "/cloudflare/frontend/sveltekit",
+                },
+                { label: "Waku", link: "/cloudflare/frontend/waku" },
               ],
             },
             {
@@ -955,6 +965,10 @@ export default defineConfig({
             {
               label: "Email",
               items: [
+                {
+                  label: "Sending & managing email",
+                  link: "/aws/email/sending",
+                },
                 {
                   label: "Receiving inbound email",
                   link: "/aws/email/receiving",

@@ -27,7 +27,7 @@ import {
 } from "../../Resource.ts";
 import type { Rpc } from "../../Rpc.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import type { Self } from "../../Self.ts";
+import type { Self as SelfService } from "../../Self.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Container } from "../Containers/Container.ts";
 import type { DevContainerImage } from "../Containers/ContainerApplication.ts";
@@ -45,7 +45,8 @@ import type {
   WorkerBindingResource,
   WorkerBindings,
 } from "./WorkerBinding.ts";
-import { type ModuleRule, type WorkerBuildOptions } from "./WorkerBundle.ts";
+import type { ModuleRule } from "./Sources/Prebuilt.ts";
+import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
 import {
   makeWorkerRuntimeContext,
   type WorkerRuntimeContext,
@@ -257,7 +258,7 @@ export type WorkerServices =
   | WorkerEnvironment
   | CloudflareEnvironment
   | Container.Application<any>
-  | Self;
+  | SelfService;
 
 export type WorkerShape<Req = never> = Main<WorkerServices | Req> &
   MainRpc<WorkerServices | Req>;
@@ -635,6 +636,22 @@ export interface WorkerProps<
   assets?: Assets;
   /** @internal used by Cloudflare.Website.Vite resource */
   vite?: ViteOptions;
+  /**
+   * An external source provider for this Worker — a package that builds
+   * the assets and server bundle (and serves local dev) in place of the
+   * built-in bundling pipeline. Used by framework integrations
+   * (Next/OpenNext, Astro, SvelteKit, Waku); most users configure it
+   * through the framework's `Website.*` wrapper rather than directly.
+   *
+   * The named package must be installed in your project — it is loaded
+   * with a dynamic `import()` and its default export must satisfy the
+   * `WorkerSourceModule` contract (`{ make(options) }`).
+   *
+   * Mutually exclusive with {@link script}, {@link vite}, and
+   * {@link main} — a source is self-contained; a provider that needs a
+   * custom entry takes it in its own `options`.
+   */
+  source?: WorkerSourceDescriptor;
   logpush?: boolean;
   /**
    * Cloudflare Workers Observability settings. Controls Workers Logs
@@ -775,6 +792,13 @@ export interface WorkerProps<
    * Changing the list is an in-place update. Omitting the prop (or passing
    * `[]`) deploys this Worker with no streaming tail consumers attached.
    *
+   * Streaming tail workers are experimental on Cloudflare's cloud: the
+   * configuration deploys, but production does not yet deliver events —
+   * Cloudflare rejects the `streaming_tail_worker` compatibility flag as
+   * "experimental and cannot yet be used in Workers deployed to
+   * Cloudflare", so a deployed consumer cannot enable its `tailStream()`
+   * handler. Under `alchemy dev`, local delivery is fully emulated.
+   *
    * @see https://developers.cloudflare.com/workers/observability/logs/tail-workers/
    */
   streamingTailConsumers?: (string | Worker)[];
@@ -901,6 +925,34 @@ export interface WorkerProps<
          */
         url?: string;
       };
+}
+
+/**
+ * A serializable reference to an external Worker source provider.
+ * Persists in state (`olds`) and crosses the local-provider RPC
+ * boundary, so it must stay plain JSON data — the implementation is
+ * resolved by dynamically importing {@link provider}.
+ */
+export interface WorkerSourceDescriptor {
+  /**
+   * Module specifier resolved with `import()`, e.g.
+   * `"@alchemy.run/cloudflare-next"`. The module's default export must
+   * satisfy the `WorkerSourceModule` contract.
+   */
+  readonly provider: string;
+  /**
+   * How the source serves local development. Server-mode sources run in an
+   * isolated child process; bundle-mode sources stream rebuilds back to the
+   * local Worker host.
+   */
+  readonly devMode: "server" | "bundle";
+  /**
+   * Provider-specific options (rootDir, memo, framework config, ...).
+   * Must be JSON-serializable AND JSON-stable: the descriptor persists
+   * in state and participates in the metadata hash, so non-deterministic
+   * values here cause perpetual redeploys.
+   */
+  readonly options?: unknown;
 }
 
 export interface ViteOptions {
@@ -1190,6 +1242,36 @@ export const isSelfUrl = (value: unknown): value is URLEffect =>
   value !== null &&
   "~alchemy/Kind" in value &&
   (value as URLEffect)["~alchemy/Kind"] === "Cloudflare.Workers.URL";
+
+/**
+ * A service binding that points at this Worker ITSELF. Declare it on `env`
+ * to give the Worker a self-referencing service binding — the provider
+ * lowers it into a `service` binding targeting the Worker's own physical
+ * name at upload, and local dev serves it with the runtime's in-process
+ * self service.
+ *
+ * The canonical consumer is OpenNext's `WORKER_SELF_REFERENCE` (the ISR
+ * revalidation queue re-fetches the worker through it):
+ *
+ * ```typescript
+ * const site = yield* Cloudflare.Website.Nextjs("Site", {
+ *   env: {
+ *     WORKER_SELF_REFERENCE: Cloudflare.Workers.Self,
+ *   },
+ * });
+ * ```
+ */
+export const Self = {
+  "~alchemy/Kind": "Cloudflare.Workers.Self",
+} as const;
+export type Self = typeof Self;
+
+/** Returns true when the value is the {@link Self} marker. */
+export const isSelf = (value: unknown): value is Self =>
+  typeof value === "object" &&
+  value !== null &&
+  "~alchemy/Kind" in value &&
+  (value as Self)["~alchemy/Kind"] === "Cloudflare.Workers.Self";
 
 /**
  * A Cloudflare Worker host with deploy-time binding support and runtime export

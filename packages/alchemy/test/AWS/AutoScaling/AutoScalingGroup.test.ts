@@ -8,7 +8,7 @@ import * as ec2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { getAutoScalingTestSubnetId } from "./TestNetwork.ts";
+import { getAutoScalingTestSubnetId, getTestAmiId } from "./TestNetwork.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -52,7 +52,10 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const imageId = amazonLinux2023();
+      // The launch template is created out-of-band with the raw SDK, so the
+      // AMI id must be a plain string — `amazonLinux2023()` returns an
+      // Output, which only resolves inside `stack.deploy`.
+      const imageId = yield* getTestAmiId;
 
       yield* cleanupLaunchTemplate;
       yield* ec2.createLaunchTemplate({

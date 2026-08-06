@@ -1,0 +1,29 @@
+{
+  "name": "example-cloudflare-octane",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "deploy": "alchemy deploy",
+    "destroy": "alchemy destroy"
+  },
+  "dependencies": {
+    "@distilled.cloud/octane": "workspace:*",
+    "@octanejs/adapter-cloudflare": "catalog:fixtures",
+    "@octanejs/vite-plugin": "catalog:fixtures",
+    "alchemy": "workspace:*",
+    "effect": "catalog:",
+    "octane": "catalog:fixtures",
+    "vite": "^8.0.0"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "examples/cloudflare-octane"
+  }
+}

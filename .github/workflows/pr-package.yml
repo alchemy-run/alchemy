@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   pr-package:
-    uses: alchemy-run/actions/.github/workflows/pr-package.yml@a18b368e044cb380a8c4904d5cfbccbc2798e768 # main
+    uses: alchemy-run/actions/.github/workflows/pr-package.yml@7353f5e478ca98f88a03400b91cd96707711de64 # main
     with:
       # The bun workspace includes `distilled/packages/*` from the
       # distilled submodule, so the publish jobs must check it out.

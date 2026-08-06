@@ -25,6 +25,7 @@ import * as Provider from "../../Provider.ts";
 import { type ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { cachedFunction } from "../../Util/cached-function.ts";
+import { initialCwd } from "../../Util/Node.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { localRuntimeServices } from "../LocalRuntime.ts";
@@ -40,6 +41,7 @@ import {
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
+import { makeSourceContext, resolveSource } from "./Source.ts";
 import {
   isSelfUrl,
   Worker,
@@ -58,8 +60,9 @@ import type {
   WorkerBinding,
   WorkerSettingsBinding,
 } from "./WorkerBinding.ts";
-import { isPythonMain, readPythonWorkerBundle } from "./PythonWorkerBundle.ts";
-import { readPrebuiltWorkerBundle, WorkerBundle } from "./WorkerBundle.ts";
+import { readPrebuiltWorkerBundle } from "./Sources/Prebuilt.ts";
+import { isPythonMain, readPythonWorkerBundle } from "./Sources/Python.ts";
+import { WorkerBundle } from "./Sources/Rolldown.ts";
 import { isWorkerLoader } from "./WorkerLoader.ts";
 import { createWorkerName } from "./WorkerName.ts";
 class MissingDurableObjects extends Data.TaggedError("MissingDurableObjects")<{
@@ -995,6 +998,10 @@ const resolveWorkerMetadataHash = ({
     logpush: props.logpush,
     observability: props.observability,
     placement: props.placement,
+    // The source descriptor is plain JSON data; hashing it means
+    // switching providers (or changing provider options) triggers an
+    // update even when no hash slot the new source computes differs.
+    source: props.source,
     tags: props.tags,
     // Reduce each consumer to its script name: a referenced Worker's other
     // attributes (hash, url, ...) change on every consumer deploy, which
@@ -2115,10 +2122,7 @@ export const LiveWorkerProvider = () =>
         selfUrl?: string,
       ) {
         const compatibility = getCompatibility(props);
-        // Loaded lazily: `./Vite.ts` pulls in `@distilled.cloud/cloudflare-vite-plugin`
-        // (~0.5s), which is only needed for vite-based workers at build time —
-        // not for every Worker definition at module-load time.
-        const Vite = yield* Effect.promise(() => import("./Vite.ts"));
+        const Vite = yield* loadVite;
         const { clientDirectory, base, serverBundle, externalWorkspaces } =
           yield* Vite.viteBuild(
             props.vite?.rootDir,
@@ -2167,7 +2171,8 @@ export const LiveWorkerProvider = () =>
               // package) — absolutize before handing it over (#796).
               main: props.vite?.main
                 ? path.resolve(
-                    props.vite.rootDir ?? process.cwd(),
+                    initialCwd,
+                    props.vite.rootDir ?? ".",
                     props.vite.main,
                   )
                 : undefined,
@@ -2183,8 +2188,11 @@ export const LiveWorkerProvider = () =>
                   ...(props.assets && typeof props.assets !== "string"
                     ? props.assets
                     : undefined),
+                  // `clientDirectory` from the build child is absolute;
+                  // the base only matters as a legacy fallback.
                   directory: path.resolve(
-                    props.vite?.rootDir ?? process.cwd(),
+                    initialCwd,
+                    props.vite?.rootDir ?? ".",
                     clientDirectory,
                   ),
                   // The resolved Vite `base` is what rewrote the URLs in
@@ -2194,7 +2202,7 @@ export const LiveWorkerProvider = () =>
                 })
               : Effect.undefined,
             serverBundle,
-            hashViteInput(
+            Vite.hashViteInput(
               props.vite?.rootDir,
               props.vite?.memo,
               externalWorkspaces,
@@ -2215,58 +2223,49 @@ export const LiveWorkerProvider = () =>
         };
       });
 
-      const hashViteInput = Effect.fn(function* <E>(
-        rootDir: string = process.cwd(),
-        options: ViteOptions["memo"],
-        additionalWorkspaces: Effect.Effect<Iterable<string>, E>,
-      ) {
-        // Relative paths participate in memo hashes and surface in outputs;
-        // keep them POSIX so Windows and CI agree.
-        const relativeToRoot = (cwd: string) =>
-          path.relative(rootDir, cwd).replaceAll("\\", "/");
-        const hashWorkspaceDirectory = (cwd: string, memo?: MemoOptions) =>
-          hashDirectory({ cwd: path.resolve(rootDir, cwd), memo }).pipe(
-            Effect.map((hash) => `${relativeToRoot(cwd)}:${hash}`),
-          );
-        const hashRoot = hashWorkspaceDirectory(rootDir, options);
-        if (Array.isArray(options?.workspaces)) {
-          return yield* Effect.all(
-            [
-              hashRoot,
-              ...options.workspaces.map(({ cwd, ...options }) =>
-                hashWorkspaceDirectory(cwd, options),
-              ),
-            ],
-            { concurrency: "unbounded" },
-          ).pipe(
-            Effect.flatMap(([root, ...workspaces]) =>
-              sha256Object([root, ...workspaces.sort()]),
-            ),
-            Effect.map((hash) => ({ hash, workspaces: undefined })),
-          );
-        }
-        const [root, workspaces] = yield* Effect.all(
-          [hashRoot, additionalWorkspaces],
-          { concurrency: "unbounded" },
-        );
-        const workspaceHashes = yield* Effect.forEach(
-          workspaces,
-          (cwd) => hashWorkspaceDirectory(cwd),
-          { concurrency: "unbounded" },
-        );
-        const hash = yield* sha256Object([root, ...workspaceHashes.sort()]);
-        return {
-          hash,
-          workspaces: Array.from(workspaces).map(relativeToRoot),
-        };
-      });
+      // Loaded lazily: `./Sources/Vite.ts` pulls in
+      // `@distilled.cloud/cloudflare-vite-plugin` (~0.5s), which is only
+      // needed for vite-based workers at build time — not for every Worker
+      // definition at module-load time.
+      const loadVite = Effect.promise(() => import("./Sources/Vite.ts"));
 
       const prepareAssetsAndBundle = (
         id: string,
+        workerName: string,
         props: WorkerProps,
         opts: { skipAssetsRead?: boolean; selfUrl?: string } = {},
       ) =>
         Effect.gen(function* () {
+          // External source provider (`props.source`): the provider is
+          // self-contained — it supplies the bundle, optionally its own
+          // assets (framework builds), and the hash slots it owns. The
+          // props-level `assets` directory is still read here for sources
+          // that don't own assets.
+          if (props.source) {
+            const source = yield* resolveSource(props);
+            const ctx = makeSourceContext({
+              id,
+              workerName,
+              props,
+              compatibility: getCompatibility(props),
+              stack: { name: stack.name, stage: stack.stage },
+            });
+            const [output, propsAssets] = yield* Effect.all(
+              [
+                source.build(ctx),
+                source.ownsAssets || opts.skipAssetsRead
+                  ? Effect.undefined
+                  : prepareAssets(props.assets),
+              ],
+              { concurrency: "unbounded" },
+            );
+            return {
+              assets: output.assets ?? propsAssets,
+              bundle: output.bundle,
+              input: output.hash.input,
+              additionalWorkspaces: output.hash.additionalWorkspaces,
+            };
+          }
           if (props.script !== undefined) {
             const [assets, bundleHash] = yield* Effect.all(
               [
@@ -2715,6 +2714,7 @@ export const LiveWorkerProvider = () =>
         );
         const { bundle, hash: preparedHash } = yield* prepareAssetsAndBundle(
           id,
+          parentName,
           news,
           { skipAssetsRead: true },
         );
@@ -2731,12 +2731,20 @@ export const LiveWorkerProvider = () =>
         } satisfies Worker["Attributes"]["hash"];
         // Lower the `Worker.URL` sentinel into the aliased preview URL —
         // same lowering `putWorker` performs, with the alias standing in
-        // for the script's own URL.
+        // for the script's own URL. `Worker.Self` lowers to a
+        // service binding on the parent script (versions have no name of
+        // their own).
         const metadataBindings = bindings.flatMap((b) =>
           (b.data.bindings ?? []).map((item) =>
             item.type === "self_url"
               ? { type: "plain_text" as const, name: item.name, text: selfUrl! }
-              : item,
+              : item.type === "self_service"
+                ? {
+                    type: "service" as const,
+                    name: item.name,
+                    service: parentName,
+                  }
+                : item,
           ),
         );
         appendAlchemyAndEnvBindings(
@@ -2951,7 +2959,7 @@ export const LiveWorkerProvider = () =>
           assets,
           bundle,
           hash: preparedHash,
-        } = yield* prepareAssetsAndBundle(id, news, {
+        } = yield* prepareAssetsAndBundle(id, name, news, {
           skipAssetsRead: prebuiltAssets?.skip,
           selfUrl,
         });
@@ -2983,6 +2991,11 @@ export const LiveWorkerProvider = () =>
             // Cloudflare has no native binding for it.
             if (item.type === "self_url") {
               return { type: "plain_text", name: item.name, text: selfUrl! };
+            }
+            // Lower the `Worker.Self` sentinel into a service
+            // binding targeting this Worker's own physical name.
+            if (item.type === "self_service") {
+              return { type: "service", name: item.name, service: name };
             }
             if (
               item.type === "durable_object_namespace" &&
@@ -3044,7 +3057,15 @@ export const LiveWorkerProvider = () =>
               `Cloudflare Worker update: assets unchanged for ${name}, keeping existing`,
             );
             keepAssets = true;
-            metadataAssets = { config: assets.config };
+            // Fold the build-emitted `_headers`/`_redirects` into the PUT
+            // config: source providers (Astro/SvelteKit/Waku/Nuxt) hash the
+            // files and carry them on the read result, but only `readAssets`
+            // pre-merges them — without this, framework header/redirect
+            // rules never reach Cloudflare. Idempotent for pre-merged
+            // configs (explicit config wins).
+            metadataAssets = {
+              config: mergeAssetsConfigFiles(assets.config, assets),
+            };
           } else {
             yield* Effect.logInfo(
               `Cloudflare Worker ${olds ? "update" : "create"}: uploading assets for ${name}`,
@@ -3057,7 +3078,8 @@ export const LiveWorkerProvider = () =>
             );
             metadataAssets = {
               jwt,
-              config: assets.config,
+              // Same `_headers`/`_redirects` fold as the keep path above.
+              config: mergeAssetsConfigFiles(assets.config, assets),
             };
           }
           metadataBindings.push({
@@ -3949,6 +3971,45 @@ export const LiveWorkerProvider = () =>
             return true;
           }
         }
+        // External source provider: the source recomputes the hash slots
+        // it owns (without building where it can) and any defined slot
+        // that differs from state means an update. `additionalWorkspaces`
+        // is auxiliary metadata for the input hash, never a change signal.
+        if (props.source) {
+          const source = yield* resolveSource(props);
+          const slots = yield* source.hash(
+            makeSourceContext({
+              id,
+              workerName: output.workerName,
+              props,
+              compatibility: getCompatibility(props),
+              stack: { name: stack.name, stage: stack.stage },
+            }),
+            output.hash,
+          );
+          for (const slot of ["bundle", "input", "assets"] as const) {
+            if (
+              slots[slot] !== undefined &&
+              slots[slot] !== output.hash?.[slot]
+            ) {
+              return true;
+            }
+          }
+          if (source.ownsAssets) {
+            // Source-owned assets are covered by the `input` hash.
+            return false;
+          }
+          if (!props.assets) {
+            return false;
+          }
+          const assetsHash = Predicate.hasProperty(props.assets, "hash")
+            ? props.assets.hash
+            : undefined;
+          if (assetsHash === undefined) {
+            return true;
+          }
+          return assetsHash !== output.hash?.assets;
+        }
         if (props.script !== undefined) {
           const scriptHash = yield* hashScript(props.script);
           if (scriptHash !== output.hash?.bundle) {
@@ -3957,7 +4018,8 @@ export const LiveWorkerProvider = () =>
           return yield* assetsChanged(props.assets, output);
         }
         if (props.vite) {
-          const { hash } = yield* hashViteInput(
+          const Vite = yield* loadVite;
+          const { hash } = yield* Vite.hashViteInput(
             props.vite.rootDir,
             props.vite.memo,
             Effect.succeed(output.hash?.additionalWorkspaces ?? []),

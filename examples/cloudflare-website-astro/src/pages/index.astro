@@ -1,0 +1,21 @@
+---
+import { env } from "cloudflare:workers";
+
+// Server-rendered on every request inside the Cloudflare Worker.
+// Bindings declared in alchemy.run.ts are available on `env`.
+const greeting = (env as Record<string, unknown>).GREETING ?? "Hello!";
+const now = new Date().toISOString();
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Astro on Cloudflare</title>
+  </head>
+  <body>
+    <h1>{greeting}</h1>
+    <p>This page is server-rendered in a Cloudflare Worker at {now}.</p>
+    <p><a href="/about/">A prerendered page</a></p>
+  </body>
+</html>

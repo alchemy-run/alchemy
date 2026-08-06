@@ -1,48 +1,14 @@
 import {
   Runtime,
+  type RuntimeServices,
   type BindingHook,
   type BindingServices,
   type HyperdriveOrigin,
   type Module,
   type DurableObjectNamespace as RuntimeDurableObject,
   type QueueConsumer as RuntimeQueueConsumer,
-  type RuntimeServices,
   type Workflow as RuntimeWorkflow,
 } from "@distilled.cloud/cloudflare-runtime";
-import {
-  Ai,
-  AiSearch,
-  AnalyticsEngine,
-  Artifacts,
-  Assets,
-  Browser,
-  D1,
-  Data,
-  DispatchNamespace,
-  DurableObjectNamespace,
-  Flagship,
-  Hyperdrive,
-  Images,
-  Json,
-  KvNamespace,
-  MtlsCertificate,
-  Pipelines,
-  Queue,
-  R2Bucket,
-  RateLimit,
-  SecretKey,
-  SecretsStore,
-  SendEmail,
-  Service,
-  Stream as StreamSim,
-  Text,
-  Vectorize,
-  VersionMetadata,
-  VpcService,
-  WasmModule,
-  WorkerLoader,
-  Workflows,
-} from "@distilled.cloud/cloudflare-runtime/bindings";
 import type { ContainerImage } from "@distilled.cloud/cloudflare-runtime/Docker";
 import * as WorkerProxy from "@distilled.cloud/cloudflare-runtime/proxy/WorkerProxy";
 import * as Cause from "effect/Cause";
@@ -53,9 +19,7 @@ import type * as FileSystem from "effect/FileSystem";
 import * as MutableHashMap from "effect/MutableHashMap";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
@@ -68,20 +32,33 @@ import { unwrapRedacted } from "../../Util/index.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import {
   isLiveId,
-  isLocalId,
   LOCAL_ENTRY_URL,
   LocalRuntimeState,
+  localStorageDirectory,
 } from "../LocalRuntime.ts";
 import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
 import { readAssetsConfigFiles } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
-import { isPythonMain, watchPythonWorkerBundle } from "./PythonWorkerBundle.ts";
+import { watchPrebuiltWorkerBundle } from "./Sources/Prebuilt.ts";
+import { isPythonMain, watchPythonWorkerBundle } from "./Sources/Python.ts";
+import {
+  Artifacts as AlchemyArtifacts,
+  createArtifactStore,
+  makeScopedArtifacts,
+} from "../../Artifacts.ts";
+import { loadSource, SourceProviderError, type DevContext } from "./Source.ts";
 import { isSelfUrl, Worker } from "./Worker.ts";
 import { getCronBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
-import { WorkerBundle, type WorkerBundleOptions } from "./WorkerBundle.ts";
+import { WorkerBundle, type WorkerBundleOptions } from "./Sources/Rolldown.ts";
 import { createWorkerName } from "./WorkerName.ts";
 import { resolveTailConsumers } from "./WorkerProvider.ts";
+import {
+  materializeRuntimeBindings,
+  WorkerValidationError,
+} from "./RuntimeBindings.ts";
+import { startViteChild } from "./ViteChild.ts";
+import { DEFAULT_DEV_PORT, type ViteChildConfig } from "./ViteChild.shared.ts";
 
 /** Local dev-server options (the worker-mode arm of `WorkerProps["dev"]`). */
 type DevServerOptions = Extract<WorkerProps["dev"], { mode?: "worker" }> & {
@@ -121,15 +98,6 @@ const resolveLocalUrls = (serverUrl: URL): Effect.Effect<string[]> =>
     ];
   });
 
-export class WorkerValidationError extends Schema.TaggedErrorClass<WorkerValidationError>()(
-  "WorkerValidationError",
-  {
-    message: Schema.String,
-    hint: Schema.optional(Schema.String),
-    value: Schema.Unknown,
-  },
-) {}
-
 export const LocalWorkerProvider = () =>
   LocalProvider.make(
     Worker,
@@ -138,6 +106,7 @@ export const LocalWorkerProvider = () =>
       const bundler = yield* WorkerBundle;
       const runtime = yield* Runtime;
       const stack = yield* Stack;
+      const storageDirectory = yield* localStorageDirectory;
       const path = yield* Path.Path;
       const localRuntimeState = yield* LocalRuntimeState;
       const workerProxy = yield* WorkerProxy.WorkerProxy;
@@ -287,16 +256,17 @@ export const LocalWorkerProvider = () =>
               content: file.content,
             });
           } else {
-            if (typeof file.content !== "string") {
-              return yield* new WorkerValidationError({
-                message: `Expected string for ${file.path} (${type})`,
-                value: file.content,
-              });
-            }
+            // Prebuilt (`bundle: false`) workers read every module as raw
+            // bytes; string-typed workerd modules (ESModule, Text, ...)
+            // are decoded here, mirroring the deploy path which uploads
+            // the same bytes with a text content type.
             modules.push({
               name: file.path,
               type,
-              content: file.content,
+              content:
+                typeof file.content === "string"
+                  ? file.content
+                  : new TextDecoder().decode(file.content),
             });
           }
         }
@@ -422,7 +392,7 @@ export const LocalWorkerProvider = () =>
                 mode: "worker" as const,
                 // This is the default. Vite and cloudflare-runtime will retry
                 // if unavailable, unless `strictPort` is true.
-                port: props.dev?.port ?? 1337,
+                port: props.dev?.port ?? DEFAULT_DEV_PORT,
               };
         return {
           id,
@@ -436,7 +406,13 @@ export const LocalWorkerProvider = () =>
            * editing the script restarts the instance.
            */
           script: props.script,
-          hasAssets: !!(props.assets || props.vite),
+          // External source providers (`props.source`) own their asset
+          // wiring: their dev servers either serve assets natively or add
+          // their own ASSETS hook against a runtime that configures
+          // `worker.assets`. Auto-injecting the hook here would fail in
+          // proxy-hosted dev modes with no assets directory (the hook
+          // errors when the Assets service is unconfigured).
+          hasAssets: !!(props.assets || props.vite) && !props.source,
           /**
            * Assets-only Worker (no entry module at all): served locally by
            * a stub that delegates every request to the ASSETS binding.
@@ -450,6 +426,19 @@ export const LocalWorkerProvider = () =>
           durableObjectNamespaces: Object.values(durableObjectNamespaces),
           workflows: Object.values(workflows),
           hyperdrives,
+          /**
+           * External source-provider descriptor (plain JSON). Part of the
+           * hashed config so changing the provider or its options restarts
+           * the instance.
+           */
+          source: props.source,
+          /**
+           * Prebuilt worker (`bundle: false`): local dev must serve the
+           * entry + rule-matched sibling modules byte-for-byte (fs-watch +
+           * re-read) — never re-bundle the prebuilt artifact with rolldown.
+           */
+          prebuilt: props.bundle === false,
+          rules: props.rules,
           devRemote,
           vite: !!props.vite,
           // Relative `vite.main` resolves from the Vite root (see the
@@ -508,45 +497,11 @@ export const LocalWorkerProvider = () =>
         selfUrl: string | undefined,
       ) {
         const { accountId } = yield* cloudflareEnv;
-        // Resource-backed env entries (e.g. `env: { KV: namespace }`) are
-        // represented by their binding descriptor (same name) — don't ALSO
-        // serialize the resolved attributes as a duplicate json binding.
-        const descriptorNames = new Set(
-          config.bindingDescriptors.map((descriptor) => descriptor.name),
-        );
-        const workerBindings: BindingHook<BindingServices>[] = [
-          Text.local("ALCHEMY_PHASE", "runtime"),
-          Text.local("ALCHEMY_WORKER_NAME", config.name),
-          Text.local("ALCHEMY_STACK_NAME", stack.name),
-          Text.local("ALCHEMY_STAGE", stack.stage),
-          Text.local("ALCHEMY_CLOUDFLARE_ACCOUNT_ID", accountId),
-          ...Object.entries(config.env ?? {})
-            .filter(([key]) => !descriptorNames.has(key))
-            .map(([key, value]) => {
-              if (isSelfUrl(value)) {
-                return Text.local(key, selfUrl!);
-              }
-              const unredacted = Redacted.isRedacted(value)
-                ? Redacted.value(value)
-                : value;
-              return typeof unredacted === "string"
-                ? Text.local(key, unredacted)
-                : Json.local(key, unredacted);
-            }),
-          ...(config.hasAssets ? [Assets.local("ASSETS")] : []),
-        ];
-        for (const descriptor of config.bindingDescriptors) {
-          if (descriptor.type === "self_url") {
-            // Lowered here rather than in `toRuntimeBinding` — only this
-            // scope knows the worker's own dev-proxy URL.
-            workerBindings.push(Text.local(descriptor.name, selfUrl!));
-            continue;
-          }
-          workerBindings.push(
-            yield* toRuntimeBinding(descriptor, config.devRemote),
-          );
-        }
-        return workerBindings;
+        return yield* materializeRuntimeBindings(config, {
+          accountId,
+          selfUrl,
+          stack: { name: stack.name, stage: stack.stage },
+        });
       });
 
       // Latest successful serve per worker id, so runtime wiring changes
@@ -766,44 +721,32 @@ export const LocalWorkerProvider = () =>
         }
       };
 
-      const runWorker = Effect.fn(function* (worker: RunnableWorkerConfig) {
+      /**
+       * Drain a stream of bundle-watch events into the make-before-break
+       * `serveWith` path, forked into the instance scope: queue requests
+       * while a rebuild is in flight, serve every successful bundle, and
+       * log build/serve errors without tearing the instance down.
+       *
+       * Shared by the built-in bundler (`runWorker`) and bundle-mode
+       * external source providers (`runSource`) — both speak the same
+       * {@link Bundle.BundleWatchEvent} protocol.
+       */
+      const serveBundleStream = Effect.fn(function* <E, R>(
+        worker: RunnableWorkerConfig,
+        proxy: WorkerProxy.WorkerProxyInstance,
+        bundles: Stream.Stream<Bundle.BundleWatchEvent, E, R>,
+      ) {
         let start = Date.now();
         let status: "start" | "update" = "start";
-        const proxy = yield* maybeStartProxy(worker.id, worker.dev);
-        // Inline `script` workers bypass the bundler entirely — the string
-        // IS the module (mirroring the deploy path, which uploads it as a
-        // single `main.js`). There is nothing to watch: script changes flow
-        // through the hashed config and restart the instance.
-        if (worker.script !== undefined) {
-          yield* serveWith(
-            worker,
-            {
-              files: [{ path: "main.js", content: worker.script, hash: "" }],
-              hash: "",
-            },
-            proxy,
-          );
-          yield* Effect.log(
-            `[${worker.id}] Started in ${Math.round(Date.now() - start)}ms`,
-          );
-          return proxy.url;
-        }
-        yield* (
-          isPythonMain(worker.bundleOptions.main)
-            ? watchPythonWorkerBundle({
-                id: worker.bundleOptions.id,
-                main: worker.bundleOptions.main,
-                compatibility: worker.compatibility,
-              })
-            : bundler.watch(worker.bundleOptions)
-        ).pipe(
+        yield* bundles.pipe(
           Stream.tap((event) => {
             if (event._tag === "Start") {
               start = Date.now();
               if (status === "update") {
                 return Effect.all([
                   Effect.log(`[${worker.id}] Rebuilding`),
-                  // This tells the proxy to queue requests until the updated worker is ready.
+                  // Tells the proxy to queue requests until the updated
+                  // worker is ready.
                   Effect.forkChild(proxy.unset()),
                 ]);
               }
@@ -842,6 +785,53 @@ export const LocalWorkerProvider = () =>
           Stream.runDrain,
           Effect.forkScoped,
         );
+      });
+
+      const runWorker = Effect.fn(function* (worker: RunnableWorkerConfig) {
+        const start = Date.now();
+        const proxy = yield* maybeStartProxy(worker.id, worker.dev);
+        // Inline `script` workers bypass the bundler entirely — the string
+        // IS the module (mirroring the deploy path, which uploads it as a
+        // single `main.js`). There is nothing to watch: script changes flow
+        // through the hashed config and restart the instance.
+        if (worker.script !== undefined) {
+          yield* serveWith(
+            worker,
+            {
+              files: [{ path: "main.js", content: worker.script, hash: "" }],
+              hash: "",
+            },
+            proxy,
+          );
+          yield* Effect.log(
+            `[${worker.id}] Started in ${Math.round(Date.now() - start)}ms → ${proxy.url}`,
+          );
+          return proxy.url;
+        }
+        const bundles: Stream.Stream<
+          Bundle.BundleWatchEvent,
+          Bundle.BundleError,
+          | ChildProcessSpawner.ChildProcessSpawner
+          | FileSystem.FileSystem
+          | Path.Path
+          | Scope.Scope
+        > = isPythonMain(worker.bundleOptions.main)
+          ? watchPythonWorkerBundle({
+              id: worker.bundleOptions.id,
+              main: worker.bundleOptions.main,
+              compatibility: worker.compatibility,
+            })
+          : worker.prebuilt
+            ? // Prebuilt (`bundle: false`): fs-watch the entry directory
+              // and re-read the module graph byte-for-byte — running the
+              // rolldown watcher would re-bundle the prebuilt artifact
+              // and violate the deploy path's byte-for-byte contract.
+              watchPrebuiltWorkerBundle({
+                main: worker.bundleOptions.main,
+                rules: worker.rules,
+              })
+            : bundler.watch(worker.bundleOptions);
+        yield* serveBundleStream(worker, proxy, bundles);
         return proxy.url;
       });
 
@@ -876,34 +866,112 @@ export const LocalWorkerProvider = () =>
       const runVite = Effect.fn(function* (
         worker: RunnableWorkerConfig,
         rootDir: string | undefined,
+        invalidate: Effect.Effect<void>,
+        source?: NonNullable<ViteChildConfig["source"]>,
       ) {
         const proxy = yield* maybeStartProxy(worker.id, worker.dev);
         yield* proxy.unset().pipe(Effect.forkChild);
-        // Loaded lazily: `./Vite.ts` pulls in `@distilled.cloud/cloudflare-vite-plugin`
-        // (~0.5s); only needed when running a vite dev server.
-        const Vite = yield* Effect.promise(() => import("./Vite.ts"));
-        const devServer = yield* Vite.viteDev(
-          rootDir,
-          worker.env ?? {},
+        // The dev server and its workerd run in a child process rooted at
+        // the app.
+        const root = path.resolve(rootDir ?? process.cwd());
+        const { accountId } = yield* cloudflareEnv;
+        const child = yield* startViteChild(
           {
-            main: worker.viteMain,
-            compatibilityDate: worker.compatibility.date,
-            compatibilityFlags: worker.compatibility.flags,
-            viteEnvironments: worker.viteEnvironments,
+            rootDir: root,
+            publicUrl: proxy.url.toString().replace(/\/$/, ""),
+            accountId,
+            storageDirectory,
+            stack: { name: stack.name, stage: stack.stage },
+            // Already resolved to plain values by `start` (`Worker.URL`
+            // sentinels substituted); Redacted unwraps at the process
+            // boundary inside `startViteChild`.
+            env: worker.env ?? {},
+            source,
             worker: {
               name: worker.name,
-              bindings: worker.workerBindings,
+              compatibility: worker.compatibility,
+              main: worker.viteMain,
+              viteEnvironments: worker.viteEnvironments,
+              hasAssets: worker.hasAssets,
+              bindingDescriptors: worker.bindingDescriptors,
+              devRemote: worker.devRemote,
               durableObjectNamespaces: worker.durableObjectNamespaces,
               workflows: worker.workflows,
               hyperdrives: worker.hyperdrives,
               queueConsumers: yield* getQueueConsumers(worker.name),
               assets: yield* toRuntimeAssets(worker.assets),
             },
-            context,
           },
-          { port: 0 },
+          (channel, line) => {
+            process[channel].write(`${worker.id} | ${line}\n`);
+          },
         );
-        yield* proxy.set(new URL(devServer.resolvedUrls!.local[0]));
+        yield* proxy.set(child.url);
+        yield* child.exitCode.pipe(
+          Effect.flatMap((exitCode) =>
+            Effect.logWarning(
+              `[${worker.id}] Dev server child exited unexpectedly with code ${exitCode}`,
+            ),
+          ),
+          Effect.andThen(proxy.unset().pipe(Effect.ignore)),
+          Effect.andThen(invalidate),
+          Effect.forkScoped,
+        );
+        return proxy.url;
+      });
+
+      // External source provider (`props.source`): the provider owns the
+      // dev story. Two modes (see `SourceDevHandle`):
+      // - `server`: the source runs its own dev server (framework dev);
+      //   the proxy is pointed at its URL.
+      // - `bundle`: the source supplies rebuild events; each successful
+      //   bundle is served through the same make-before-break `serveWith`
+      //   path the built-in bundler uses.
+      const runSource = Effect.fn(function* (worker: RunnableWorkerConfig) {
+        const proxy = yield* maybeStartProxy(worker.id, worker.dev);
+        // Queue requests until the source's first output is served —
+        // whether that's the first workerd serve (bundle mode) or the dev
+        // server URL (server mode).
+        yield* proxy.unset().pipe(Effect.forkChild);
+        // `loadSource` is typed against the full `SourceServices` union
+        // (which includes the per-run Artifacts cache the live provider
+        // supplies); local dev has no run-scoped cache, so hand the
+        // module a fresh in-memory one.
+        const source = yield* loadSource(worker.source!).pipe(
+          Effect.provideService(
+            AlchemyArtifacts,
+            makeScopedArtifacts(createArtifactStore(), worker.id),
+          ),
+        );
+        const devCtx: DevContext = {
+          id: worker.id,
+          workerName: worker.name,
+          compatibility: worker.compatibility,
+          entry: worker.bundleOptions.entry,
+          stack: { name: stack.name, stage: stack.stage },
+          env: worker.env,
+          extraOptions: worker.bundleOptions.extraOptions,
+          assets: worker.assets,
+          worker: {
+            bindings: worker.workerBindings,
+            durableObjectNamespaces: worker.durableObjectNamespaces,
+            hyperdrives: worker.hyperdrives,
+            queueConsumers: getQueueConsumers(worker.name),
+            assets: yield* toRuntimeAssets(worker.assets),
+          },
+          runtimeContext: context,
+        };
+        const handle = yield* source.dev(devCtx);
+        if (handle.mode !== "bundle") {
+          return yield* Effect.fail(
+            new SourceProviderError({
+              provider: worker.source!.provider,
+              message:
+                "A source declared devMode 'bundle' but returned a server-mode dev handle.",
+            }),
+          );
+        }
+        yield* serveBundleStream(worker, proxy, handle.bundles);
         return proxy.url;
       });
 
@@ -940,7 +1008,7 @@ export const LocalWorkerProvider = () =>
               : yield* maybeStartProxy(id, {
                   ...news.dev,
                   mode: "worker" as const,
-                  port: news.dev?.port ?? 1337,
+                  port: news.dev?.port ?? DEFAULT_DEV_PORT,
                 }).pipe(Effect.flatMap((proxy) => resolveLocalUrls(proxy.url)));
           return {
             workerId: name,
@@ -960,7 +1028,7 @@ export const LocalWorkerProvider = () =>
           };
         }),
 
-        start: Effect.fn(function* ({ id, config }) {
+        start: Effect.fn(function* ({ id, config, invalidate }) {
           const { accountId } = yield* cloudflareEnv;
 
           // `dev: { mode: "external" }` opts out of running a local Worker
@@ -1005,31 +1073,41 @@ export const LocalWorkerProvider = () =>
                 .toString()
                 .replace(/\/$/, "")
             : undefined;
+          // Substitute `Worker.URL` sentinels once, up front — the runtime
+          // bindings, the Vite define entries, and the child-process config
+          // all consume the resolved URL as a plain string.
+          const env =
+            config.env && selfUrl !== undefined
+              ? Object.fromEntries(
+                  Object.entries(config.env).map(([key, value]) => [
+                    key,
+                    isSelfUrl(value) ? selfUrl : value,
+                  ]),
+                )
+              : config.env;
           const workerBindings = yield* materializeWorkerBindings(
-            config,
+            { ...config, env },
             selfUrl,
           );
           const worker: RunnableWorkerConfig = {
             ...config,
-            // Substitute `Worker.URL` sentinels so the Vite dev server
-            // inlines the local URL into VITE_*-prefixed define entries.
-            env:
-              config.env && selfUrl !== undefined
-                ? Object.fromEntries(
-                    Object.entries(config.env).map(([key, value]) => [
-                      key,
-                      isSelfUrl(value) ? selfUrl : value,
-                    ]),
-                  )
-                : config.env,
+            env,
             dev: config.dev,
             workerBindings,
           };
-          const serverUrl = yield* config.vite
-            ? runVite(worker, config.viteRootDir)
-            : config.assetsOnly
-              ? runAssetsOnly(worker)
-              : runWorker(worker);
+          const serverUrl = yield* config.source
+            ? config.source.devMode === "server"
+              ? runVite(worker, undefined, invalidate, {
+                  descriptor: config.source,
+                  id: worker.id,
+                  assets: worker.assets,
+                })
+              : runSource(worker)
+            : config.vite
+              ? runVite(worker, config.viteRootDir, invalidate)
+              : config.assetsOnly
+                ? runAssetsOnly(worker)
+                : runWorker(worker);
           // In dev, `urls` is the dev server's actual surface — localhost
           // first, then LAN addresses for wildcard hosts. Deployed domains
           // are not served by this session, so they don't appear.
@@ -1079,214 +1157,6 @@ export const LocalWorkerProvider = () =>
       >;
     }),
   );
-
-export const toRuntimeBinding = Effect.fn(function* (
-  b: WorkerBinding,
-  /**
-   * Dev-only channel from the Worker's binding data (see the `devRemote`
-   * member of the Worker binding contract): binding name → opt-out of local
-   * emulation for the capabilities that support it (browser / images /
-   * stream / send_email).
-   */
-  devRemote?: Record<string, boolean>,
-) {
-  const unsupported = () =>
-    new WorkerValidationError({
-      message: `${b.type} bindings are not supported in local mode`,
-      value: b,
-    });
-  switch (b.type) {
-    case "ai":
-      return Ai.remote(b.name);
-    case "ai_search":
-      return AiSearch.remote(b.name, b.instanceName);
-    case "ai_search_namespace":
-      return AiSearch.remoteNamespace(b.name, b.namespace);
-    case "analytics_engine":
-      return AnalyticsEngine.local(b.name, b.dataset);
-    case "artifacts":
-      return Artifacts.remote(b.name, b.namespace);
-    case "assets":
-      return Assets.local(b.name);
-    case "browser":
-      // Local emulation launches a real headless Chrome on this machine and
-      // proxies the Browser Rendering session protocol to its CDP endpoint;
-      // `Alchemy.remote()` opts into the real service instead.
-      return devRemote?.[b.name]
-        ? Browser.remote(b.name)
-        : Browser.local({ binding: b.name });
-    case "d1":
-      // A `dev:` id belongs to a locally-emulated database (local D1
-      // provider); a real id is a live database the dev worker proxies to
-      // (e.g. the resource opted out of emulation via `Alchemy.remote()`).
-      return isLocalId(b.databaseId)
-        ? D1.local({ binding: b.name, id: b.databaseId })
-        : D1.remote(b.name, b.databaseId);
-    case "data_blob":
-      return Data.local(b.name, Buffer.from(b.part));
-    case "dispatch_namespace":
-      return DispatchNamespace.remote({
-        binding: b.name,
-        namespace: b.namespace,
-      });
-    case "durable_object_namespace":
-      return DurableObjectNamespace.local({
-        binding: b.name,
-        className: b.className,
-        scriptName: b.scriptName,
-        uniqueKey:
-          b.namespaceId ??
-          encodeURIComponent(`${b.scriptName!}-${b.className}`),
-      });
-    case "flagship":
-      return Flagship.remote(b.name, b.appId);
-    case "hyperdrive":
-      return Hyperdrive.local(b.name, b.id);
-    case "images":
-      // Local emulation runs transforms via Sharp on this machine and stores
-      // hosted images in a local KV-backed store; `Alchemy.remote()`
-      // opts into the real Images service instead.
-      return devRemote?.[b.name]
-        ? Images.remote(b.name)
-        : Images.local({ binding: b.name });
-    case "inherit":
-      return yield* unsupported();
-    case "json":
-      return Json.local(b.name, b.json);
-    case "kv_namespace":
-      // A `dev:` id belongs to a locally-emulated namespace; a real id is
-      // a live namespace the dev worker proxies to.
-      return isLocalId(b.namespaceId)
-        ? KvNamespace.local({ binding: b.name, id: b.namespaceId })
-        : KvNamespace.remote(b.name, b.namespaceId);
-    case "mtls_certificate":
-      return MtlsCertificate.remote(b.name, b.certificateId);
-    case "pipelines":
-      return Pipelines.remote(b.name, b.pipeline);
-    case "plain_text":
-      return Text.local(b.name, b.text);
-    case "queue": {
-      // A real queueId belongs to an `Alchemy.remote()` queue. Queue bindings
-      // are NOT supported in Cloudflare's remote/preview sessions — a
-      // platform limitation (cloudflare/workers-sdk#9929) — so live
-      // production goes through the deployed shim worker registered at
-      // eval time (see `Queues/QueueShim.ts`): the local binding targets a
-      // forwarder service that relays the queue wire protocol to the shim
-      // over HTTPS with a bearer token.
-      if (b.queueId !== undefined && !isLocalId(b.queueId)) {
-        const url = b.shim?.url;
-        const token = b.shim?.token;
-        if (url === undefined || token === undefined) {
-          // Defensive: binding data produced by current eval always carries
-          // the shim for this mode combination.
-          return yield* new WorkerValidationError({
-            message:
-              `Queue binding "${b.name}" targets a live queue ` +
-              "(Alchemy.remote()) but no producer shim was registered for it — " +
-              "re-deploy, or remove remote() from the queue (local emulation).",
-            value: b,
-          });
-        }
-        return Queue.remote({
-          binding: b.name,
-          queueName: b.queueName,
-          url,
-          token: typeof token === "string" ? token : Redacted.value(token),
-        });
-      }
-      return Queue.local({
-        binding: b.name,
-        queueName: b.queueName,
-      });
-    }
-    case "r2_bucket":
-      // A `dev:`-prefixed bucket name belongs to a locally-emulated bucket
-      // (R2 has no opaque id — the name is the identity); a real name is a
-      // live bucket the dev worker proxies to.
-      return isLocalId(b.bucketName)
-        ? R2Bucket.local({ binding: b.name, id: b.bucketName })
-        : R2Bucket.remote(b.name, b.bucketName, b.jurisdiction);
-    case "ratelimit":
-      return RateLimit.local({
-        binding: b.name,
-        simple: b.simple,
-        namespaceId: b.namespaceId,
-      });
-    case "secret_key":
-      // workerd imports the key natively: raw material passes through as
-      // base64, pkcs8/spki base64 DER is PEM-wrapped, and JWK objects are
-      // serialized — all handled by the hook.
-      return SecretKey.local({
-        binding: b.name,
-        format: b.format,
-        algorithm: b.algorithm,
-        usages: b.usages,
-        keyBase64: b.keyBase64,
-        keyJwk: b.keyJwk,
-      });
-    case "secret_text":
-      return Text.local(b.name, b.text);
-    case "secrets_store_secret":
-      // A `dev:` store id belongs to a locally-emulated Secrets Store
-      // (local Store/Secret providers seed the simulator); a real id is a
-      // live secret the dev worker proxies to (`Alchemy.remote()`).
-      return isLocalId(b.storeId)
-        ? SecretsStore.local({
-            binding: b.name,
-            storeId: b.storeId,
-            secretName: b.secretName,
-          })
-        : SecretsStore.remote(b.name, b.storeId, b.secretName);
-    case "send_email":
-      // Local emulation validates and persists sent mail as `.eml` files
-      // under the local storage's `email/` dir; `Alchemy.remote()` on the
-      // descriptor opts into the real Email service instead.
-      return SendEmail[devRemote?.[b.name] ? "remote" : "local"]({
-        binding: b.name,
-        destinationAddress: b.destinationAddress,
-        allowedDestinationAddresses: b.allowedDestinationAddresses,
-        allowedSenderAddresses: b.allowedSenderAddresses,
-      });
-    case "service":
-      return Service.local({
-        binding: b.name,
-        scriptName: b.service,
-        entrypoint: b.entrypoint,
-      });
-    case "stream":
-      // Local emulation stores videos in a local simulator (no transcoding,
-      // no signed URLs) and serves each video's `preview` URL at
-      // /cdn-cgi/mf/stream/<id>/watch on the dev URL; `Alchemy.remote()`
-      // opts into the real Stream service instead.
-      return devRemote?.[b.name]
-        ? StreamSim.remote(b.name)
-        : StreamSim.local({ binding: b.name });
-    case "text_blob":
-      return Data.local(b.name, Buffer.from(b.part));
-    case "vectorize":
-      return Vectorize.remote(b.name, b.indexName);
-    case "version_metadata":
-      return VersionMetadata.local(b.name);
-    case "vpc_service":
-      // A VPC service tunnels into a private network — nothing to emulate
-      // locally, so the dev worker always proxies to the real service
-      // through the remote-binding bridge.
-      return VpcService.remote(b.name, b.serviceId);
-    case "wasm_module":
-      return WasmModule.local(b.name, Buffer.from(b.part));
-    case "worker_loader":
-      return WorkerLoader.local(b.name);
-    case "workflow":
-      return Workflows.local({
-        binding: b.name,
-        workflowName: b.workflowName,
-        className: b.className,
-        scriptName: b.scriptName,
-      });
-    default:
-      return yield* unsupported();
-  }
-});
 
 const toRuntimeAssets = Effect.fn(function* (
   assets: WorkerAssetsConfig | undefined,

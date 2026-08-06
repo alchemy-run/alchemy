@@ -124,10 +124,6 @@ const Website = Cloudflare.Website.StaticSite(
         "../bun.lock",
       ],
     },
-    compatibility: {
-      date: "2026-04-02",
-      flags: ["nodejs_compat"],
-    },
     assets: {
       runWorkerFirst: true,
     },
@@ -138,8 +134,7 @@ const Website = Cloudflare.Website.StaticSite(
 `main` points at a Worker that runs *before* asset serving thanks to
 `assets: { runWorkerFirst: true }` — the docs site uses it to rewrite OG and
 canonical tags with `HTMLRewriter` and serve 301 redirects, then delegates
-everything else to `env.ASSETS.fetch(request)`. For the Astro-specific
-framing of this setup, see [Astro on Cloudflare](/cloudflare/frontend/astro).
+everything else to `env.ASSETS.fetch(request)`.
 
 ## Local dev
 
@@ -163,15 +158,15 @@ the dev server's URL, detected from the command's stdout. `dev` also accepts
 explicitly when stdout detection fails. The sidecar mechanics — spawn, URL
 detection, teardown — are covered in [Dev servers](/command/dev-servers).
 
-## Frameworks the Vite resource doesn't support yet
+## When to use a framework resource instead
 
-`StaticSite` is the documented workaround for frameworks whose build isn't
-pure Vite. [Astro](/cloudflare/frontend/astro) is the verified case — its
-build is driven by the `astro` CLI, so the Vite resource can't build it, but
-`command: "astro build"` + `outdir: "dist"` deploys it exactly as shown
-above. [Nuxt](/cloudflare/frontend/nuxt) has no example or test in the repo
-yet; deploying a statically generated (`nuxt generate`) output through
-`StaticSite` is an untested suggestion, not a verified path. If your app
-*is* pure Vite — `vite build` with framework plugins in `vite.config.ts` —
-use [`Cloudflare.Website.Vite`](/cloudflare/frontend/vite) instead and skip
-the build contract entirely.
+`StaticSite` is the general fallback for any build command that produces a
+directory of files. Frameworks with dedicated resources have a better path:
+[Vite](/cloudflare/frontend/vite) for pure-Vite apps,
+[Astro](/cloudflare/frontend/astro),
+[Nuxt](/cloudflare/frontend/nuxt),
+[SvelteKit](/cloudflare/frontend/sveltekit), and
+[Waku](/cloudflare/frontend/waku) for their frameworks. Those resources run
+the framework's own programmatic build, deploy server-rendered routes, and
+skip the build contract entirely. Reach for `StaticSite` when there is no
+dedicated resource — Zola, Hugo, or any other generator.

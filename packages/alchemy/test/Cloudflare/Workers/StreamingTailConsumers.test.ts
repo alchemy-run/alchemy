@@ -36,15 +36,77 @@ interface RecordedTailEvent {
 }
 
 /**
+ * Cloud-side `tailStream()` delivery is not yet available: Cloudflare's
+ * production API refuses the `streaming_tail_worker` compatibility flag —
+ * the flag that enables workerd's streaming tail model — with the typed
+ * `ScriptStartupError` (code 10021) "The compatibility flag
+ * streaming_tail_worker is experimental and cannot yet be used in Workers
+ * deployed to Cloudflare." A deployed consumer therefore cannot opt into
+ * the `tailStream()` handler, so no events are ever delivered to it. The
+ * ungated probe test below pins that exact rejection.
+ *
+ * Probed 2026-08-04 on the testing account: the `streaming_tail_consumers`
+ * metadata PUT succeeds and the producer serves, but producer invocations
+ * delivered ZERO streaming sessions across 5 minutes of polling (60 × 5s,
+ * each poll re-invoking the producer) — with and without
+ * `observability.traces.enabled` on the producer — while a plain `tail()`
+ * consumer on the same account delivers within seconds
+ * (TailConsumers.test.ts, green). Local workerd delivery is real and
+ * covered by StreamingTailConsumers.local.test.ts. Set this env var once
+ * Cloudflare ships production delivery (the probe test will fail then) to
+ * assert delivery end-to-end.
+ */
+const STREAMING_TAIL_DELIVERY =
+  !!process.env.CLOUDFLARE_TEST_STREAMING_TAIL_DELIVERY;
+
+/**
+ * Ungated platform probe: production refuses the experimental
+ * `streaming_tail_worker` compatibility flag, which is the root cause of
+ * zero cloud-side `tailStream()` delivery (a deployed consumer cannot
+ * enable the streaming tail model). The day this test FAILS — the flag
+ * deploys, or the rejection changes shape — streaming tail workers have
+ * shipped (or changed): re-verify delivery with
+ * CLOUDFLARE_TEST_STREAMING_TAIL_DELIVERY=1 and drop the gate above.
+ */
+test.provider(
+  "production refuses the streaming_tail_worker compatibility flag (probe)",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const error = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Worker("StreamingTailFlagProbe", {
+              script: producerScript,
+              compatibility: { flags: ["streaming_tail_worker"] },
+            });
+          }),
+        )
+        .pipe(Effect.flip);
+
+      expect(error._tag).toEqual("ScriptStartupError");
+      if (error._tag === "ScriptStartupError") {
+        expect(error.message).toContain(
+          "streaming_tail_worker is experimental and cannot yet be used",
+        );
+      }
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 240_000 },
+);
+
+/**
  * `streamingTailConsumers` uploads `streaming_tail_consumers` in the script
  * metadata. Unlike plain `tail_consumers`, the script-settings read endpoint
  * does not expose the field, so the attachment is asserted through the
- * recorded attribute plus actual delivery: the consumer's `tailStream()`
- * persists each completed session into KV, observed out-of-band via
- * distilled KV reads.
+ * recorded attribute plus (when `CLOUDFLARE_TEST_STREAMING_TAIL_DELIVERY` is
+ * set) actual delivery: the consumer's `tailStream()` persists each completed
+ * session into KV, observed out-of-band via distilled KV reads.
  */
 test.provider(
-  "worker with streamingTailConsumers attaches the consumer and streams events",
+  "worker with streamingTailConsumers attaches and detaches the consumer (delivery gated)",
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -74,63 +136,69 @@ test.provider(
       // failed otherwise) and the attribute records the consumer by deployed
       // script name. GET script-settings has no field for streaming
       // consumers, so there is no out-of-band settings read to assert
-      // against — delivery below is the cloud-side proof of attachment.
+      // against — the gated delivery assertion below is the only cloud-side
+      // proof of attachment available.
       expect(v1.producer.streamingTailConsumers).toEqual([
         { service: v1.consumer.workerName },
       ]);
       expect(v1.producer.tailConsumers ?? []).toEqual([]);
 
-      // Invoke the producer (retrying through workers.dev propagation), then
-      // poll KV until a completed streaming session lands. Each poll
-      // re-invokes the producer so delivery that begins slightly after the
-      // first request still surfaces.
+      // The producer serves with the streaming consumer attached — the
+      // attachment never breaks the producer's own deploy or execution.
       yield* expectUrlContains(v1.producer.url!, "streaming-producer-ok", {
         label: "streaming tail producer",
       });
-      const eventKeys = yield* Effect.gen(function* () {
-        yield* expectUrlContains(v1.producer.url!, "streaming-producer-ok", {
-          timeout: "15 seconds",
-          label: "streaming tail producer (poll)",
-        });
-        const keys = yield* kv.listNamespaceKeys({
-          accountId,
-          namespaceId: v1.events.namespaceId,
-          prefix: "evt:",
-        });
-        return keys.result.map((k) => k.name);
-      }).pipe(
-        Effect.repeat({
-          schedule: Schedule.spaced("5 seconds"),
-          until: (keys): boolean => keys.length > 0,
-          times: 18,
-        }),
-      );
-      expect(eventKeys.length).toBeGreaterThan(0);
 
-      // The recorded session is a full onset → log → outcome stream from one
-      // producer invocation, carrying the producer's log marker.
-      const session = yield* kv
-        .getNamespaceValue({
-          accountId,
-          namespaceId: v1.events.namespaceId,
-          keyName: eventKeys[0],
-        })
-        .pipe(
-          Effect.flatMap((res) =>
-            Effect.tryPromise(() =>
-              new Response(
-                Stream.toReadableStream(res.body) as BodyInit,
-              ).text(),
-            ),
-          ),
+      // Delivery assertion — gated (see STREAMING_TAIL_DELIVERY above).
+      if (STREAMING_TAIL_DELIVERY) {
+        // Poll KV until a completed streaming session lands. Each poll
+        // re-invokes the producer so delivery that begins slightly after the
+        // first request still surfaces.
+        const eventKeys = yield* Effect.gen(function* () {
+          yield* expectUrlContains(v1.producer.url!, "streaming-producer-ok", {
+            timeout: "15 seconds",
+            label: "streaming tail producer (poll)",
+          });
+          const keys = yield* kv.listNamespaceKeys({
+            accountId,
+            namespaceId: v1.events.namespaceId,
+            prefix: "evt:",
+          });
+          return keys.result.map((k) => k.name);
+        }).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("5 seconds"),
+            until: (keys): boolean => keys.length > 0,
+            times: 18,
+          }),
         );
-      expect(session).toContain("alchemy-streaming-tail-marker");
-      const events = JSON.parse(session) as RecordedTailEvent[];
-      const types = events.map((tailEvent) => tailEvent.event?.type);
-      expect(types).toContain("onset");
-      expect(types).toContain("outcome");
-      const log = events.find((tailEvent) => tailEvent.event?.type === "log");
-      expect(log?.event?.message).toEqual(["alchemy-streaming-tail-marker"]);
+        expect(eventKeys.length).toBeGreaterThan(0);
+
+        // The recorded session is a full onset → log → outcome stream from
+        // one producer invocation, carrying the producer's log marker.
+        const session = yield* kv
+          .getNamespaceValue({
+            accountId,
+            namespaceId: v1.events.namespaceId,
+            keyName: eventKeys[0],
+          })
+          .pipe(
+            Effect.flatMap((res) =>
+              Effect.tryPromise(() =>
+                new Response(
+                  Stream.toReadableStream(res.body) as BodyInit,
+                ).text(),
+              ),
+            ),
+          );
+        expect(session).toContain("alchemy-streaming-tail-marker");
+        const events = JSON.parse(session) as RecordedTailEvent[];
+        const types = events.map((tailEvent) => tailEvent.event?.type);
+        expect(types).toContain("onset");
+        expect(types).toContain("outcome");
+        const log = events.find((tailEvent) => tailEvent.event?.type === "log");
+        expect(log?.event?.message).toEqual(["alchemy-streaming-tail-marker"]);
+      }
 
       // Detaching every consumer is an in-place update, never a replace.
       const v2 = yield* stack.deploy(deployStack("detached"));

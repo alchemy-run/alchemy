@@ -19,6 +19,7 @@ import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import { fileURLToPath } from "node:url";
 import { killProcessGroup } from "../Util/killProcessGroup.ts";
+import { transformTypesFlags } from "../Util/Node.ts";
 import { httpServer } from "../Util/PlatformServices.ts";
 import { SPAWNER_URL_ENV_KEY } from "./RpcProviderProxy.ts";
 import {
@@ -113,13 +114,7 @@ export const make = Effect.fn(function* ({
         // `dev.ts` already does for the outer process, so the dev experience
         // is symmetric on both runtimes whether the entry came from `src/`
         // (dev/tests) or `lib/` (published packages).
-        node: main.endsWith(".ts")
-          ? [
-              "--experimental-transform-types",
-              "--no-warnings=ExperimentalWarning",
-              main,
-            ]
-          : [main],
+        node: main.endsWith(".ts") ? [...transformTypesFlags(), main] : [main],
       }[bin],
       {
         stdout: "pipe",

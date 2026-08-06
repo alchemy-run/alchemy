@@ -16,6 +16,7 @@ import {
 } from "./ProviderMode.ts";
 import { ref as makeRef } from "./Ref.ts";
 import { RemovalPolicy } from "./RemovalPolicy.ts";
+import { RenamePolicy } from "./Rename.ts";
 import { Self } from "./Self.ts";
 import { Stack } from "./Stack.ts";
 
@@ -136,6 +137,15 @@ export interface ResourceLike<
    * during dev); `undefined` means the run default (`AlchemyContext.dev`).
    */
   Mode: ProviderMode | undefined;
+  /**
+   * Former FQNs this resource's state may still be persisted under,
+   * captured from the ambient {@link RenamePolicy} at registration (via
+   * `.pipe(renamedFrom("OldId"))`) and resolved against the same namespace
+   * as the resource's own FQN. The planner migrates a state row found at a
+   * former FQN to {@link FQN} instead of planning a create+delete
+   * replacement — see `renamedFrom` in Rename.ts for the full semantics.
+   */
+  FormerFqns: readonly string[] | undefined;
   /** @internal phantom */
   Attributes: Attributes;
   /** @internal phantom */
@@ -425,6 +435,23 @@ export function Resource<R extends ResourceLike>(
           Effect.map(Option.getOrUndefined),
         ),
         Mode: ambientMode,
+        // Bare-string former ids resolve against the SAME namespace as the
+        // resource's own id, so `renamedFrom("Site/Worker")` declared at the
+        // caller's level claims `<callerNs>/Site/Worker`; the `{ fqn }` form
+        // is absolute (cross-namespace moves).
+        FormerFqns: yield* Effect.serviceOption(RenamePolicy).pipe(
+          Effect.map(
+            Option.match({
+              onNone: () => undefined,
+              onSome: (formerIds) =>
+                formerIds.map((formerId) =>
+                  typeof formerId === "string"
+                    ? toFqn(namespace, formerId)
+                    : formerId.fqn,
+                ),
+            }),
+          ),
+        ),
         bind,
         toString(this: typeof target) {
           return `Resource<${this.Type}>(${this.LogicalId})`;

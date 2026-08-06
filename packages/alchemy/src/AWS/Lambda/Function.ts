@@ -1392,7 +1392,11 @@ export default handler;
 
         const buildArchive = Effect.gen(function* () {
           const installedPackageFiles = hasInstalledPackages
-            ? yield* installResolvedPackages({ resolved, architecture })
+            ? yield* installResolvedPackages({
+                resolved,
+                overrides: installIdentity.overrides,
+                architecture,
+              })
             : [];
           const archiveFiles = [...extraFiles, ...installedPackageFiles];
           const archive = yield* zipCode(

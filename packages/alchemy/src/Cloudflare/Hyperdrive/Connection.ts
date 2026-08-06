@@ -145,7 +145,7 @@ export type Connection = Resource<
  *     port: 5432,
  *     database: "app",
  *     user: "app",
- *     password: alchemy.secret.env.DB_PASSWORD,
+ *     password: yield* Config.redacted("DB_PASSWORD"),
  *   },
  * });
  * ```

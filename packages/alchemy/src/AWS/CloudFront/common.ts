@@ -57,6 +57,5 @@ export const getKvsEtag = Effect.fn(function* (store: string) {
 });
 
 export const isKvsPreconditionFailed = (err: kvs.ValidationException) =>
-  "Message" in err &&
-  typeof err.Message === "string" &&
-  err.Message.includes("Pre-Condition failed");
+  typeof err.message === "string" &&
+  err.message.includes("Pre-Condition failed");

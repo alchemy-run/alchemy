@@ -139,6 +139,21 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * });
  * ```
  *
+ * @example Octane SPA
+ * A client-only [OctaneJS](https://octanejs.dev) app (no `octane.config.ts`
+ * routes) is a plain Vite SPA — the `octane()` compiler plugin in the app's
+ * own `vite.config.ts` composes with the injected Cloudflare plugin:
+ * ```typescript
+ * const app = yield* Cloudflare.Website.Vite("Octane", {
+ *   assets: {
+ *     notFoundHandling: "single-page-application",
+ *   },
+ * });
+ * ```
+ * Fullstack Octane apps (routes + SSR in `octane.config.ts`) run their own
+ * two-pass build through Octane's Cloudflare adapter — deploy those with
+ * `Cloudflare.Website.Octane` instead.
+ *
  * @section Serving on a Zone Route with a Path Prefix
  * Cloudflare matches static assets against the full request pathname,
  * so a site attached to a route like `example.com/docs*` only serves

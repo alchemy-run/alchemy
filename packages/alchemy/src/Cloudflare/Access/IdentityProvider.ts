@@ -1,8 +1,7 @@
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
-import * as Redacted from "effect/Redacted";
+import type * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -13,6 +12,14 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
+import {
+  findByName,
+  findByType,
+  getIdp,
+  isSingletonType,
+  type ObservedIdp,
+  toAttributes,
+} from "./IdentityProviderLookup.ts";
 
 const TypeId = "Cloudflare.Access.IdentityProvider" as const;
 type TypeId = typeof TypeId;
@@ -639,7 +646,15 @@ export const IdentityProviderProvider = () =>
       // Cold read — locate by deterministic name. Access IdPs carry no
       // ownership markers, so report the match as Unowned to gate adoption.
       const name = yield* resolveName(id, olds?.name ?? output?.name);
-      const match = yield* findByName(zoneId, acct, name);
+      let match = yield* findByName(zoneId, acct, name);
+      // The singleton types (`cloudflare`, `onetimepin`) exist at most once
+      // per scope and their display name is user-irrelevant (the managed
+      // WARP IdP's is often "") — locate them by type when the name scan
+      // misses so adoption works regardless of the declared name.
+      const type = olds?.type ?? output?.type;
+      if (!match && isSingletonType(type)) {
+        match = yield* findByType(zoneId, acct, type);
+      }
       if (match) {
         return Unowned(toAttributes(match, zoneId, acct, output?.scimSecret));
       }
@@ -712,22 +727,44 @@ export const IdentityProviderProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       // A scope change replaces (see diff), so news' scope is the scope.
       const zoneId = news.zoneId as string | undefined;
-      const name = yield* resolveName(id, news.name);
+      const generatedName = yield* createPhysicalName({ id });
 
-      // 1. Observe — the cached id is a hint; fall back to a name scan so
-      //    out-of-band deletes / lost state converge.
+      // 1. Observe — the cached id is a hint; fall back to a name scan
+      //    (and, for the singleton types, a type scan) so out-of-band
+      //    deletes / lost state converge.
       let observed = output?.identityProviderId
         ? yield* getIdp(zoneId, accountId, output.identityProviderId)
         : undefined;
       if (!observed) {
-        observed = yield* findByName(zoneId, accountId, name);
+        observed = yield* findByName(
+          zoneId,
+          accountId,
+          news.name ?? generatedName,
+        );
       }
+      // Singleton types (`cloudflare`, `onetimepin`) exist at most once per
+      // scope — creating a second one is rejected by the API, so an
+      // existing one found by type is ours to converge (ownership is gated
+      // upstream: `read` reports it as Unowned and the engine only lets
+      // reconcile run once adoption is approved).
+      if (!observed && isSingletonType(news.type)) {
+        observed = yield* findByType(zoneId, accountId, news.type);
+      }
+
+      // Singletons keep their observed display name when none is declared —
+      // renaming the managed WARP IdP to a generated physical name on
+      // adoption would be surprising. Everything else defaults to the
+      // deterministic physical name (the resource's cold-read identity).
+      const name =
+        news.name ??
+        (isSingletonType(news.type) && observed
+          ? observed.name
+          : generatedName);
 
       // 2. Ensure — create with the full desired body when missing. Names
       //    are not unique on Cloudflare's side, so there is no
-      //    AlreadyExists race to tolerate (except `onetimepin`, of which
-      //    only one may exist — that conflict propagates as a clear API
-      //    error rather than being silently adopted).
+      //    AlreadyExists race to tolerate for the non-singleton types (a
+      //    singleton conflict is caught by the type scan above).
       if (!observed) {
         const created = yield* createIdp(zoneId, accountId, {
           name,
@@ -789,20 +826,6 @@ export const IdentityProviderProvider = () =>
     }),
   });
 
-interface ObservedIdp {
-  readonly id?: string | null;
-  readonly name: string;
-  readonly type: string;
-  readonly scimConfig?: {
-    readonly enabled?: boolean | null;
-    readonly identityUpdateBehavior?: string | null;
-    readonly scimBaseUrl?: string | null;
-    readonly seatDeprovision?: boolean | null;
-    readonly secret?: string | null;
-    readonly userDeprovision?: boolean | null;
-  } | null;
-}
-
 /**
  * The request body shared by the scoped create/update helpers.
  */
@@ -823,48 +846,6 @@ const samlCertificateSetIdOf = (
   props: IdentityProviderProps | undefined,
 ): string | undefined =>
   props?.type === "saml" ? props.samlCertificateSetId : undefined;
-
-/**
- * Read an identity provider by id, mapping "gone"
- * (`AccessIdentityProviderNotFound`, Cloudflare error code 12135 —
- * `access.api.error.not_found`) to `undefined`. Zone-level when `zoneId`
- * is set, account-level otherwise.
- */
-const getIdp = (
-  zoneId: string | undefined,
-  accountId: string,
-  identityProviderId: string,
-) =>
-  (zoneId !== undefined
-    ? zeroTrust.getIdentityProviderForZone({ zoneId, identityProviderId })
-    : zeroTrust.getIdentityProviderForAccount({ accountId, identityProviderId })
-  ).pipe(
-    Effect.map((idp): ObservedIdp | undefined => idp as ObservedIdp),
-    Effect.catchTag("AccessIdentityProviderNotFound", () =>
-      Effect.succeed(undefined),
-    ),
-  );
-
-/**
- * Find an identity provider by exact name within the scope. Names are
- * not unique on Cloudflare's side; pick the first match.
- */
-const findByName = (
-  zoneId: string | undefined,
-  accountId: string,
-  name: string,
-) =>
-  (zoneId !== undefined
-    ? zeroTrust.listIdentityProvidersForZone.items({ zoneId })
-    : zeroTrust.listIdentityProvidersForAccount.items({ accountId })
-  ).pipe(
-    Stream.filter((idp) => idp.name === name),
-    Stream.runHead,
-    Effect.map(Option.getOrUndefined),
-    Effect.map(
-      (idp): ObservedIdp | undefined => idp as ObservedIdp | undefined,
-    ),
-  );
 
 const createIdp = (
   zoneId: string | undefined,
@@ -907,7 +888,9 @@ const deleteIdp = (
 
 const resolveName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {
-    if (name) return name;
+    // `""` is a legitimate declared name (the managed `cloudflare` IdP's
+    // display name is empty) — only generate when no name was declared.
+    if (name !== undefined) return name;
     return yield* createPhysicalName({ id });
   });
 
@@ -927,23 +910,3 @@ const sameScim = (
         desired.identityUpdateBehavior)
   );
 };
-
-const toAttributes = (
-  idp: ObservedIdp,
-  zoneId: string | undefined,
-  accountId: string,
-  priorSecret: Redacted.Redacted<string> | undefined,
-): IdentityProviderAttributes => ({
-  identityProviderId: idp.id ?? "",
-  accountId,
-  zoneId,
-  name: idp.name,
-  type: idp.type as IdentityProviderType,
-  scimBaseUrl: idp.scimConfig?.scimBaseUrl ?? undefined,
-  // The SCIM secret is returned once when SCIM is enabled; afterwards the
-  // API masks it — carry the prior value forward.
-  scimSecret: idp.scimConfig?.secret
-    ? Redacted.make(idp.scimConfig.secret)
-    : priorSecret,
-  scimEnabled: idp.scimConfig?.enabled ?? false,
-});

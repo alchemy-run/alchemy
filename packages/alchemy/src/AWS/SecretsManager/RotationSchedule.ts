@@ -145,7 +145,7 @@ const retryWhileInvokePermissionPropagates = <A, E extends { _tag: string }, R>(
   Effect.retry(self, {
     while: (e) =>
       e._tag === "InvalidRequestException" &&
-      ((e as { Message?: string }).Message?.includes("Lambda") ?? false),
+      ((e as { message?: string }).message?.includes("Lambda") ?? false),
     schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
   });
 
