@@ -52,6 +52,17 @@ export interface WorkerBundleOptions {
     | {
         kind: "effect";
         exports: Record<string, DurableObjectExport | WorkflowExport>;
+        /**
+         * Override the generated virtual entry module. Defaults to
+         * {@link makeEffectVirtualEntry} (the Cloudflare Workers entry);
+         * other Worker-bundle runtimes (e.g. Celld fleets, whose loader
+         * requires the object-form `export default { fetch }`) substitute
+         * their own generator.
+         */
+        makeVirtualEntry?: (
+          exports: Record<string, DurableObjectExport | WorkflowExport>,
+          stack: { name: string; stage: string },
+        ) => (importPath: string) => string;
       };
   stack: { name: string; stage: string };
   extraOptions: WorkerBuildOptions | undefined;
@@ -140,7 +151,10 @@ export const WorkerBundle = Effect.gen(function* () {
         options.entry.kind === "effect"
           ? [
               virtualEntryPlugin(
-                makeEffectVirtualEntry(options.entry.exports, options.stack),
+                (options.entry.makeVirtualEntry ?? makeEffectVirtualEntry)(
+                  options.entry.exports,
+                  options.stack,
+                ),
               ),
             ]
           : undefined,

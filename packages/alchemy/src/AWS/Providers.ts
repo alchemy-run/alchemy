@@ -54,6 +54,7 @@ import * as Bedrock from "./Bedrock/index.ts";
 import * as BedrockAgentCore from "./BedrockAgentCore/index.ts";
 import * as BedrockDataAutomation from "./BedrockDataAutomation/index.ts";
 import * as Budgets from "./Budgets/index.ts";
+import * as Celld from "./Celld/index.ts";
 import * as Chatbot from "./Chatbot/index.ts";
 import * as CloudControl from "./CloudControl/index.ts";
 import * as CloudFormation from "./CloudFormation/index.ts";
@@ -1676,6 +1677,9 @@ export const providers = () =>
     // provided) so the cluster-agnostic `Kubernetes.*` workload providers
     // can resolve it dynamically from the ambient stack context.
     Layer.provideMerge(EKS.EksKubernetesAdapter()),
+    // The `aws-ecs` Celld fleet host — same seam pattern: `Celld.Fleet`
+    // resolves it dynamically from the ambient stack context.
+    Layer.provideMerge(Celld.EcsFleetHost()),
     Layer.provideMerge(
       Layer.mergeAll(
         Command.providers(),

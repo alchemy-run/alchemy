@@ -18,6 +18,7 @@ import {
   DurableObjectState,
   fromDurableObjectState,
 } from "./DurableObjectState.ts";
+import { RPC_PATH_PREFIX, serveRpc } from "../../Rpc.ts";
 import { isScopeEjected, makeRequestEffect } from "./HttpServer.ts";
 import { fromWebSocket } from "./WebSocket.ts";
 import { getWorkerExport, handleRpcExit } from "./WorkerBridge.ts";
@@ -43,7 +44,7 @@ export const makeDurableObjectBridge =
       };
     },
   ) =>
-  (className: string) => {
+  (className: string, methods?: string[]) => {
     // One isolate-lifetime layer build shared by every activation of this DO
     // class: `build` memoizes the built context, so re-activations (including
     // hibernatable WebSocket wakes, which re-run the constructor) reuse it
@@ -62,8 +63,8 @@ export const makeDurableObjectBridge =
         this.#state = state;
 
         this.#instance = state.blockConcurrencyWhile(() =>
-          build((promise) => void (state as any).waitUntil?.(promise)).then(
-            ({ context, export: exported, telemetry }) => {
+          build((promise) => void (state as any).waitUntil?.(promise))
+            .then(({ context, export: exported, telemetry }) => {
               const { constructor, services } = exported;
               const doContext = Layer.succeed(
                 DurableObjectState,
@@ -85,9 +86,62 @@ export const makeDurableObjectBridge =
                 })),
                 Effect.runPromise,
               );
-            },
-          ),
+            })
+            .then((built) => {
+              if (methods !== undefined) {
+                // Static-dispatch mode: materialize the built shape's RPC
+                // surface as real instance methods. `blockConcurrencyWhile`
+                // gates event delivery until this settles, so every RPC call
+                // observes the assigned methods.
+                for (const name of Object.keys(built.instance)) {
+                  if (!(name in this)) {
+                    (this as any)[name] = dispatch(name);
+                  }
+                }
+              }
+              return built;
+            }),
         );
+
+        const dispatch =
+          (prop: string) =>
+          (...args: any[]) =>
+            this.#execute((instance) => {
+              const method = instance[prop as keyof DurableObjectShape];
+              if (typeof method === "function") {
+                const result = (method as any)(...args);
+                // Effects (including nested-RPC values built by
+                // `asEffectOrStream`, which are Effects *branded* as Streams)
+                // must be run as effects — their resolved value may itself be
+                // a `Stream`, which `handleRpcExit` then encodes. Only a
+                // *genuine* `Stream` (not an Effect) is lifted into the
+                // success channel so `handleRpcExit` encodes it directly.
+                return Effect.isEffect(result)
+                  ? result
+                  : Stream.isStream(result)
+                    ? Effect.succeed(result)
+                    : result;
+              } else if (Effect.isEffect(method)) {
+                return method;
+              } else {
+                return Effect.succeed(method);
+              }
+            }, handleRpcExit);
+
+        if (methods !== undefined) {
+          // Static-dispatch mode (Celld fleets): celld's JSRPC stalls on
+          // constructors that return a `Proxy` ("handler stalled: awaited
+          // work with no pending op"), so the RPC surface is materialized as
+          // real instance methods instead — any names known up front here,
+          // and the built shape's methods in the `blockConcurrencyWhile`
+          // continuation above.
+          for (const method of methods) {
+            if (!(method in this)) {
+              (this as any)[method] = dispatch(method);
+            }
+          }
+          return this;
+        }
 
         return new Proxy(this, {
           get: (target, prop) => {
@@ -95,28 +149,7 @@ export const makeDurableObjectBridge =
               typeof f === "function" ? f.bind(target) : f;
             if (typeof prop !== "string") return bind((target as any)[prop]);
             if (prop in target) return bind((target as any)[prop]);
-            return async (...args: any[]) =>
-              this.#execute((instance) => {
-                const method = instance[prop as keyof DurableObjectShape];
-                if (typeof method === "function") {
-                  const result = (method as any)(...args);
-                  // Effects (including nested-RPC values built by
-                  // `asEffectOrStream`, which are Effects *branded* as Streams)
-                  // must be run as effects — their resolved value may itself be
-                  // a `Stream`, which `handleRpcExit` then encodes. Only a
-                  // *genuine* `Stream` (not an Effect) is lifted into the
-                  // success channel so `handleRpcExit` encodes it directly.
-                  return Effect.isEffect(result)
-                    ? result
-                    : Stream.isStream(result)
-                      ? Effect.succeed(result)
-                      : result;
-                } else if (Effect.isEffect(method)) {
-                  return method;
-                } else {
-                  return Effect.succeed(method);
-                }
-              }, handleRpcExit);
+            return dispatch(prop);
           },
         });
       }
@@ -177,15 +210,49 @@ export const makeDurableObjectBridge =
       }
 
       async fetch(request: Request): Promise<any> {
-        return this.#execute((instance) =>
-          instance.fetch
+        return this.#execute((instance) => {
+          // Pre-declared-surface mode (Celld fleets): serve the RPC protocol
+          // over the instance's own `fetch` so streaming results ride HTTP
+          // chunked bodies end-to-end — celld's JSRPC cannot transfer
+          // `ReadableStream`s across the cell boundary.
+          if (methods !== undefined && request.url.includes(RPC_PATH_PREFIX)) {
+            const reserved = new Set([
+              "fetch",
+              "alarm",
+              "webSocketMessage",
+              "webSocketClose",
+            ]);
+            const shape: Record<string, unknown> = {};
+            for (const name of new Set([
+              ...methods,
+              ...Object.keys(instance),
+            ])) {
+              if (reserved.has(name)) continue;
+              const member = (instance as any)[name];
+              shape[name] =
+                typeof member === "function" ? member : () => member;
+            }
+            return makeRequestEffect(
+              request as any,
+              serveRpc(
+                shape,
+                instance.fetch ??
+                  Effect.succeed(
+                    HttpServerResponse.text("Not implemented", {
+                      status: 404,
+                    }),
+                  ),
+              ),
+            );
+          }
+          return instance.fetch
             ? makeRequestEffect(request as any, instance.fetch)
             : Effect.succeed(
                 HttpServerResponse.text("Not implemented", {
                   status: 404,
                 }),
-              ),
-        );
+              );
+        });
       }
 
       async alarm(alarmInfo?: cf.AlarmInvocationInfo) {

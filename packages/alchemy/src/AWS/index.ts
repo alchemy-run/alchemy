@@ -36,6 +36,7 @@ export * as Bedrock from "./Bedrock/index.ts";
 export * as BedrockAgentCore from "./BedrockAgentCore/index.ts";
 export * as BedrockDataAutomation from "./BedrockDataAutomation/index.ts";
 export * as Budgets from "./Budgets/index.ts";
+export * as Celld from "./Celld/index.ts";
 export * as Chatbot from "./Chatbot/index.ts";
 export * as CloudControl from "./CloudControl/index.ts";
 export * as CloudFormation from "./CloudFormation/index.ts";

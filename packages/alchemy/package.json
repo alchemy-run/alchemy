@@ -372,6 +372,7 @@
     "@types/aws-lambda": "catalog:",
     "aws4fetch": "catalog:",
     "capnweb": "^0.6.1",
+    "esbuild": "^0.25.0",
     "fast-glob": "^3.3.2",
     "fast-xml-parser": "catalog:",
     "ink": "^6.3.1",

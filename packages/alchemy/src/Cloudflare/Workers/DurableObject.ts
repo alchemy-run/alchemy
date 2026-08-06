@@ -37,6 +37,13 @@ export interface DurableObjectExport {
     DurableObjectState
   >;
   readonly services: Context.Context<never>;
+  /**
+   * RPC method names discovered from the plan-time shape. Only populated by
+   * hosts whose runtime cannot dispatch dynamic properties (Celld fleets —
+   * celld's JSRPC stalls on Proxy-returning constructors), where the
+   * generated entry bakes them into the bridge as real methods.
+   */
+  readonly methods?: readonly string[];
 }
 
 export const isDurableObjectExport = (
