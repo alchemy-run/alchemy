@@ -50,6 +50,21 @@ export interface HttpStateStoreProps extends HttpStateStoreCredentials {
   transformClient?: (
     client: HttpClientRequest.HttpClientRequest,
   ) => HttpClientRequest.HttpClientRequest;
+  /**
+   * Optional features the DEPLOYED store advertised on `/version`.
+   *
+   * Only meaningful for a store whose deployment alchemy manages and can
+   * therefore find stale — the Cloudflare worker, which already probes
+   * `/version` before building this client and passes what it saw. Omit
+   * it and the store is assumed to implement the full current API, which
+   * is the right default for a store someone else operates.
+   *
+   * This is how additive features (deployment history) reach an older
+   * deployed copy without a `STATE_STORE_VERSION` bump — a bump stops
+   * the next deploy of every existing project to upgrade its worker in
+   * place, whereas a missing capability just turns the feature off.
+   */
+  capabilities?: ReadonlyArray<string>;
 }
 
 export const checkHttpStateStoreAuth = ({
@@ -90,6 +105,7 @@ export const makeHttpStateStore = ({
   authToken,
   transformClient,
   id,
+  capabilities,
 }: HttpStateStoreProps) =>
   Effect.gen(function* () {
     const apiClient = yield* HttpApiClient.make(StateApi, {
@@ -102,6 +118,12 @@ export const makeHttpStateStore = ({
       ),
     });
     const state = apiClient.state;
+
+    // No capability list supplied → assume the store implements the whole
+    // current API. Only a caller that actually probed `/version` (and so
+    // knows the deployed copy predates deployment history) turns it off.
+    const supportsDeployments =
+      capabilities === undefined || capabilities.includes("deployments");
 
     const service: StateService = {
       id,
@@ -452,7 +474,11 @@ export const makeHttpStateStore = ({
             ),
       } satisfies DeploymentStore,
     };
-    return service;
+    // Drop the whole facet on a store that never advertised it, so callers
+    // see the same shape they would get from any pre-history store.
+    return supportsDeployments
+      ? service
+      : ({ ...service, deployments: undefined } satisfies StateService);
   });
 
 /**

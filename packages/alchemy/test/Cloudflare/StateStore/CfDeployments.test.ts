@@ -379,8 +379,10 @@ describe("Deployment wire schemas", () => {
 //
 // Gated behind ALCHEMY_TEST_STATE_CF because it talks to the real
 // `alchemy-state-store` worker on the configured profile's account. The
-// operator must have bootstrapped the store at STATE_STORE_VERSION >= 8
-// (`alchemy bootstrap cloudflare`) before running:
+// operator must have bootstrapped the store from a build that advertises
+// the `deployments` capability on `/version` (`alchemy bootstrap
+// cloudflare`) before running — history is capability-negotiated, not
+// version-gated, so an older store simply reports it off:
 //
 //   ALCHEMY_TEST_STATE_CF=1 ALCHEMY_PROFILE=testing \
 //     bun vitest run test/Cloudflare/StateStore/CfDeployments.test.ts

@@ -18,6 +18,7 @@ import {
   type DeploymentInProgressWire,
   type DeploymentNotFoundWire,
   type DeploymentTokenInvalidWire,
+  type StateStoreCapability,
   type StateWriteFencedWire,
 } from "../../State/HttpStateApi.ts";
 import { ReadSecret } from "../SecretsStore/ReadSecret.ts";
@@ -36,8 +37,23 @@ export const STATE_STORE_SCRIPT_NAME = "alchemy-state-store" as const;
  * satisfy. Clients query `/version` on the deployed worker and
  * compare against this constant; a mismatch (or 404) triggers a
  * forced redeploy via the bootstrap flow.
+ *
+ * A bump is a BREAKING change for everyone with a deployed store: the
+ * next deploy stops to upgrade the worker in place before it can run.
+ * Purely additive endpoints (deployment history) therefore advertise
+ * themselves through `capabilities` on `/version` instead, so an
+ * un-upgraded store keeps serving and simply reports the feature off.
  */
-export const STATE_STORE_VERSION = 10 as const;
+export const STATE_STORE_VERSION = 7 as const;
+
+/**
+ * Optional features THIS worker build serves, over and above the
+ * contract pinned by `STATE_STORE_VERSION`. Clients feature-detect
+ * from this list rather than inferring support from the version.
+ */
+export const STATE_STORE_CAPABILITIES: ReadonlyArray<StateStoreCapability> = [
+  "deployments",
+];
 
 /**
  * Hard-coded OTLP/HTTP endpoints. Point at the public ingest relay
@@ -136,7 +152,10 @@ export default Worker(
 
     const versionApi = HttpApiBuilder.group(StateApi, "version", (handlers) =>
       handlers.handle("getVersion", () =>
-        Effect.succeed({ version: STATE_STORE_VERSION }).pipe(
+        Effect.succeed({
+          version: STATE_STORE_VERSION,
+          capabilities: STATE_STORE_CAPABILITIES,
+        }).pipe(
           Effect.withSpan("state_store.getVersion", {
             attributes: { "alchemy.state_store.op": "getVersion" },
           }),

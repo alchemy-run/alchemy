@@ -437,11 +437,29 @@ export const GetAllStates = HttpApiEndpoint.get(
  * compare against this constant; a mismatch (or 404) triggers a
  * forced redeploy via the bootstrap flow.
  */
-export const STATE_STORE_VERSION = 6 as const;
+export const STATE_STORE_VERSION = 5 as const;
+
+/**
+ * Optional capabilities a deployed store advertises on `/version`.
+ *
+ * Additive features negotiate through this list INSTEAD of bumping
+ * `STATE_STORE_VERSION`. A bump forces every deployed store to upgrade
+ * before the next deploy can run; a capability is just absent on an
+ * older store, and the client turns the feature off for that store.
+ * Only a change an older copy can no longer *safely* satisfy (an
+ * altered or removed endpoint) justifies a version bump.
+ */
+export type StateStoreCapability = "deployments";
 
 /** Response shape for the unauthenticated `/version` probe. */
 export const VersionResponse = Schema.Struct({
   version: Schema.Number,
+  /**
+   * Absent on stores deployed before capability negotiation existed —
+   * `Schema.optional` so those responses still decode, and an absent
+   * list reads as "no optional features".
+   */
+  capabilities: Schema.optional(Schema.Array(Schema.String)),
 });
 
 /**
