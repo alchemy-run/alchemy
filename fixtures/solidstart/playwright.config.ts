@@ -1,6 +1,7 @@
 import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
+  tsconfig: "../tsconfig.playwright.json",
   testDir: "./test",
   timeout: 60_000,
   // The dev-mode smoke test is flaky on CI (it also fails intermittently on

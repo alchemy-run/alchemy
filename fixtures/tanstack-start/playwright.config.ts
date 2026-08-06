@@ -5,6 +5,7 @@ import { defineConfig } from "@playwright/test";
 // which every worker process loads before vite touches tailwind.
 
 export default defineConfig({
+  tsconfig: "../tsconfig.playwright.json",
   testDir: "./test",
   // Windows CI runs every fixture e2e concurrently; absorb runner flakiness.
   retries: process.env.CI ? 2 : 0,

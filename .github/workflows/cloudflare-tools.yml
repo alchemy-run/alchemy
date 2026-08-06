@@ -15,6 +15,12 @@ env:
 
 jobs:
   test:
+    # GitHub does not expose repository secrets to fork pull requests. Keep
+    # the secret-backed test matrix on trusted refs while still running it for
+    # pushes, manual dispatches, and pull requests from this repository.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     name: Cloudflare tools (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
