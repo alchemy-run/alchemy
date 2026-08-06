@@ -425,11 +425,11 @@ export const make = <A>(
         stage: stage,
         fqn: resource.FQN,
       });
-      const row = isActionState(persisted)
+      const persistedRow = isActionState(persisted)
         ? undefined
         : (persisted as ResourceState | undefined);
       if (!resource.FormerFqns?.length) {
-        return { row, renamedFrom: undefined };
+        return { row: persistedRow, renamedFrom: undefined };
       }
 
       const provider = Option.getOrUndefined(
@@ -440,11 +440,27 @@ export const make = <A>(
         ...(provider?.aliases ?? []),
       ]);
 
+      // A row at the resource's own FQN only counts as a claim when it is
+      // actually this resource's row — its resourceType matches. A
+      // foreign-typed row (e.g. a different resource type occupied this
+      // FQN before a same-release shuffle) cannot be ours, so a
+      // type-matching former row takes precedence as the migration source.
+      // The foreign row is overwritten by the migration commit — the same
+      // silent clobber the resource's first terminal commit would perform
+      // without the rename, but the resource plans against its REAL
+      // predecessor's state instead of a foreign type's.
+      const ownRow =
+        persistedRow !== undefined &&
+        allowedTypes.has(persistedRow.resourceType)
+          ? persistedRow
+          : undefined;
+
       // `source` is the row whose instanceId defines this resource's
-      // physical identity: the row at the current FQN if present, otherwise
-      // the first (most recent) matching former row.
-      let source: ResourceState | undefined = row;
-      let adopted: ResourceState | undefined = row;
+      // physical identity: the row at the current FQN if present (and
+      // type-matching), otherwise the first (most recent) matching former
+      // row.
+      let source: ResourceState | undefined = ownRow;
+      let adopted: ResourceState | undefined = ownRow;
       const renamedFrom: string[] = [];
       for (const formerFqn of resource.FormerFqns) {
         if (formerFqnClaims.get(formerFqn) !== resource.FQN) continue;
@@ -472,7 +488,10 @@ export const make = <A>(
         }
       }
       return {
-        row: adopted,
+        // No migration happened: fall back to whatever sits at the FQN
+        // (even a foreign-typed row — pre-existing engine behavior for
+        // type collisions is unchanged when no rename resolves it).
+        row: adopted ?? persistedRow,
         renamedFrom: renamedFrom.length > 0 ? renamedFrom : undefined,
       };
     });

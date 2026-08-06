@@ -225,10 +225,12 @@ yield* Cloudflare.R2.Bucket("Assets").pipe(
 
 The migration is deliberately conservative:
 
-- **Only unclaimed rows migrate.** If state already exists under the
-  new ID, the former ID is ignored — a row there is treated as a
-  different resource (e.g. a new resource reusing the old name) and
-  follows normal lifecycle rules.
+- **Only unclaimed rows migrate.** If state of the same resource
+  type already exists under the new ID, the former ID is ignored —
+  a row there is treated as a different resource (e.g. a new
+  resource reusing the old name) and follows normal lifecycle rules.
+  A row of a *different* type doesn't claim the ID: it can't be this
+  resource's state, so the type-matching former row still migrates.
 - **Identity is proven, not assumed.** Leftover rows from an
   interrupted migration are recognized by their instance ID and
   cleaned up state-only — the physical resource is never touched. A

@@ -68,20 +68,36 @@ export class RenamePolicy extends Context.Service<
  * `new` = the row at the resource's FQN, `old` = a row at a former FQN):
  *
  * ```text
- * new  old                     → outcome
+ * new                     old                     → outcome
  * ──────────────────────────────────────────────────────────────────────
- * —    row                     → migrate: the old row IS the resource's
- *                                state (noop/update, never a create);
- *                                apply moves it before any lifecycle op
- * row  row, same instanceId    → interrupted migration: leftovers are
- *                                dropped state-only — ALL of them in one
- *                                apply — the physical resource is never
- *                                touched
- * row  row, diff instanceId    → someone else's row (a new resource
- *                                reusing the old name): ignored, normal
- *                                orphan handling
- * any  row, diff resourceType  → never migrated — cannot be this
- *                                resource's row, whatever its FQN says
+ * —                       row                     → migrate: the old row
+ *                                                   IS the resource's
+ *                                                   state (noop/update,
+ *                                                   never a create);
+ *                                                   apply moves it before
+ *                                                   any lifecycle op
+ * row, same instanceId    row                     → interrupted
+ *                                                   migration: leftovers
+ *                                                   dropped state-only —
+ *                                                   ALL of them in one
+ *                                                   apply — the physical
+ *                                                   resource is never
+ *                                                   touched
+ * row, diff instanceId    row                     → someone else's row (a
+ *                                                   new resource reusing
+ *                                                   the old name):
+ *                                                   ignored, normal
+ *                                                   orphan handling
+ * row, diff resourceType  row                     → the new-FQN row is
+ *                                                   not a claim (it
+ *                                                   cannot be this
+ *                                                   resource's row); the
+ *                                                   type-matching old row
+ *                                                   migrates over it
+ * any                     row, diff resourceType  → never migrated —
+ *                                                   cannot be this
+ *                                                   resource's row,
+ *                                                   whatever its FQN says
  * ```
  *
  * A former FQN that is still actively declared is not a rename and is

@@ -4599,6 +4599,38 @@ describe("renamed resources (renamedFrom)", () => {
   );
 
   test(
+    "a foreign-typed row at the NEW FQN does not block the migration",
+    Effect.gen(function* () {
+      // A different resource type occupied `NewBucket` before this
+      // deploy's shuffle. It cannot be the Bucket's row, so the
+      // type-matching former row still migrates (and plans against the
+      // real predecessor's state, not the foreign type's).
+      yield* seed({
+        NewBucket: {
+          ...bucketRow("NewBucket", "f0re1gn0000000000000000000000000"),
+          resourceType: "Test.Queue",
+          attr: { name: "q", queueUrl: "https://test.queue.com/q" },
+        },
+        OldBucket: bucketRow("OldBucket"),
+      });
+
+      const plan = yield* Effect.gen(function* () {
+        yield* Bucket("NewBucket", { name: "b" }).pipe(
+          renamedFrom("OldBucket"),
+        );
+        return {};
+      }).pipe(makePlan);
+
+      const node = plan.resources.NewBucket!;
+      expect(node.action).toEqual("noop");
+      expect(node.renamedFrom).toEqual(["OldBucket"]);
+      expect(node.state?.instanceId).toEqual(instanceId);
+      expect(node.state?.resourceType).toEqual("Test.Bucket");
+      expect(Object.keys(plan.deletions)).toHaveLength(0);
+    }),
+  );
+
+  test(
     "two resources claiming the same former FQN fail the plan loudly",
     Effect.gen(function* () {
       const exit = yield* Effect.gen(function* () {
