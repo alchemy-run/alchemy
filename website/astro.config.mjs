@@ -373,7 +373,7 @@ export default defineConfig({
         !page.endsWith(".mdx"),
     }),
     starlight({
-      title: "alchemy",
+      title: "Alchemy",
       favicon: "/favicon.svg",
       customCss: ["./src/styles/global.css", "./src/styles/custom.css"],
       components: {
