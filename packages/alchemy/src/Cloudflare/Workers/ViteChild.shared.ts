@@ -5,6 +5,7 @@ import type {
   RuntimeWorker,
   Workflow,
 } from "@distilled.cloud/cloudflare-runtime";
+import type { BundleOutput } from "../../Bundle/Bundle.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
 import type { WorkerAssetsConfig, WorkerSourceDescriptor } from "./Worker.ts";
 
@@ -49,3 +50,33 @@ export interface ViteChildConfig {
 
 export const VITE_CHILD_READY_PREFIX = "<ALCHEMY_VITE_ADDRESS>";
 export const VITE_CHILD_READY_SUFFIX = "</ALCHEMY_VITE_ADDRESS>";
+
+/**
+ * Plain-data configuration transferred from the provider to a one-shot
+ * Vite *build* child (`ViteBuildChildRunner.ts`). Deliberately much
+ * smaller than {@link ViteChildConfig}: a production build needs no
+ * workerd runtime, credentials, or binding materialization.
+ */
+export interface ViteBuildChildConfig {
+  /** Absolute project root; also the child process's working directory. */
+  rootDir: string;
+  /**
+   * `VITE_`-prefixed env entries — the only ones the build consumes
+   * (inlined as `import.meta.env.*` defines).
+   */
+  env: Record<string, unknown>;
+  main: string | undefined;
+  compatibilityDate: string | undefined;
+  compatibilityFlags: string[] | undefined;
+  viteEnvironments: { entry?: string; children?: string[] } | undefined;
+  /** Absolute path the child writes the V8-serialized result to. */
+  outputPath: string;
+}
+
+/** Result the build child writes to `outputPath` (V8-serialized). */
+export interface ViteBuildChildResult {
+  clientDirectory: string | undefined;
+  base: string | undefined;
+  serverBundle: BundleOutput | undefined;
+  externalWorkspaces: string[];
+}

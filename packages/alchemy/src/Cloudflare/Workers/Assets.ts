@@ -8,6 +8,7 @@ import * as Schedule from "effect/Schedule";
 import type { PlatformError } from "effect/PlatformError";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { sha256, sha256Object } from "../../Util/index.ts";
+import { initialCwd } from "../../Util/Node.ts";
 
 const MAX_ASSET_SIZE = 1024 * 1024 * 25; // 25MB
 const MAX_ASSET_COUNT = 20_000;
@@ -170,7 +171,9 @@ export const readAssetsConfigFiles = Effect.fn(function* (
     return { _headers: undefined, _redirects: undefined };
   }
   const path = yield* Path.Path;
-  const resolvedDirectory = path.resolve(directory);
+  // Anchored: see `readAssets` — the directory may be initial-cwd-relative
+  // and live cwd reads race concurrent tools' transient chdir.
+  const resolvedDirectory = path.resolve(initialCwd, directory);
   const [_headers, _redirects] = yield* Effect.all([
     maybeReadString(path.join(resolvedDirectory, "_headers")),
     maybeReadString(path.join(resolvedDirectory, "_redirects")),
@@ -211,7 +214,10 @@ export const readAssets = Effect.fn(function* ({
   // It is deliberately excluded from the `config` sent to Cloudflare — it
   // is not part of the API's asset config shape.
   const pathPrefix = getAssetsPathPrefix(base);
-  const resolvedDirectory = path.resolve(directory);
+  // Anchored: `directory` may be a relative path persisted by
+  // `Command.Build` (relative to the initial cwd), and a live
+  // `process.cwd()` read can race a concurrent tool's transient chdir.
+  const resolvedDirectory = path.resolve(initialCwd, directory);
   const [files, ignore, _headers, _redirects] = yield* Effect.all([
     fs.readDirectory(resolvedDirectory, { recursive: true }),
     maybeReadString(path.join(resolvedDirectory, ".assetsignore")),
@@ -339,7 +345,10 @@ export const uploadAssets = Effect.fn(function* (
   for (const [name, { hash }] of Object.entries(assets.manifest)) {
     assetsByHash.set(hash, toDiskPath(name));
   }
-  const directory = path.resolve(assets.directory);
+  // Anchored: `assets.directory` may be relative to the initial cwd (a
+  // `Command.Build` outdir), and a live `process.cwd()` read can race a
+  // concurrent tool's transient chdir (framework source builds).
+  const directory = path.resolve(initialCwd, assets.directory);
 
   // One full upload session: ask Cloudflare which assets are missing,
   // upload each bucket, and return the completion JWT that putWorker

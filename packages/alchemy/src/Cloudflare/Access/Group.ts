@@ -24,6 +24,20 @@ import type { Providers } from "../Providers.ts";
 export type GroupRule =
   zeroTrust.CreateAccessGroupForAccountRequest["include"][number];
 
+/**
+ * One arm of the exclude-side rule union, and its require-side twin.
+ * Cloudflare's spec types the exclude/require rule lists separately from
+ * include — a few rule kinds (e.g. the GitHub-organization rule) carry the
+ * raw wire shape there — so these props use the SDK's own unions rather
+ * than reusing {@link GroupRule}.
+ */
+export type GroupExcludeRule = NonNullable<
+  zeroTrust.CreateAccessGroupForAccountRequest["exclude"]
+>[number];
+export type GroupRequireRule = NonNullable<
+  zeroTrust.CreateAccessGroupForAccountRequest["require"]
+>[number];
+
 export type GroupProps = {
   /**
    * Display name for the group. Used as a stable identifier so the provider
@@ -42,12 +56,12 @@ export type GroupProps = {
    * Rules combined with logical NOT. A user matching any Exclude rule does
    * not match the group, even if they satisfied an Include rule.
    */
-  exclude?: GroupRule[];
+  exclude?: GroupExcludeRule[];
   /**
    * Rules combined with logical AND. A user must satisfy every Require rule
    * in addition to an Include rule.
    */
-  require?: GroupRule[];
+  require?: GroupRequireRule[];
   /**
    * Whether this is the default group for the Zero Trust organization.
    *

@@ -22,6 +22,20 @@ import type { Providers } from "../Providers.ts";
 export type PolicyRule = zeroTrust.CreateAccessPolicyRequest["include"][number];
 
 /**
+ * One arm of the exclude-side rule union, and its require-side twin.
+ * Cloudflare's spec types the exclude/require rule lists separately from
+ * include — a few rule kinds (e.g. the GitHub-organization rule) carry the
+ * raw wire shape there — so these props use the SDK's own unions rather
+ * than reusing {@link PolicyRule}.
+ */
+export type PolicyExcludeRule = NonNullable<
+  zeroTrust.CreateAccessPolicyRequest["exclude"]
+>[number];
+export type PolicyRequireRule = NonNullable<
+  zeroTrust.CreateAccessPolicyRequest["require"]
+>[number];
+
+/**
  * Decision Cloudflare Access takes when a request matches this policy.
  *
  * - `"allow"` — admit the user.
@@ -61,12 +75,12 @@ export type PolicyProps = {
    * Rules combined with logical NOT. A request matching any exclude rule is
    * rejected by the policy even if it satisfied an include rule.
    */
-  exclude?: Policy.RuleGroup[];
+  exclude?: PolicyExcludeRule[];
   /**
    * Rules combined with logical AND. A request must satisfy every require
    * rule in addition to an include rule.
    */
-  require?: Policy.RuleGroup[];
+  require?: PolicyRequireRule[];
   /**
    * Duration of issued session tokens. Format: `300ms`, `2h45m`, etc. When
    * unset, applications using this policy fall back to their own configured

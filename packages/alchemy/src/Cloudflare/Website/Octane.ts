@@ -134,7 +134,7 @@ export interface OctaneProps<
  *
  * const site = yield* Cloudflare.Website.Octane("Website", {
  *   env: {
- *     API_KEY: Alchemy.secret("API_KEY"),
+ *     API_KEY: Config.redacted("API_KEY"),
  *   },
  * });
  * ```

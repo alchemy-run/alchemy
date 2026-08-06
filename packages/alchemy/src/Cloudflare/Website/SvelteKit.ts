@@ -119,7 +119,7 @@ export interface SvelteKitProps<
  * ```typescript
  * const site = yield* Cloudflare.Website.SvelteKit("Website", {
  *   env: {
- *     API_KEY: Alchemy.secret("API_KEY"),
+ *     API_KEY: Config.redacted("API_KEY"),
  *   },
  * });
  *
