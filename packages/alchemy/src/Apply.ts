@@ -503,6 +503,16 @@ const executeNode = (
           status,
           providerMode: node.mode,
         });
+        // A local dev instance announces where it's serving: any
+        // local-mode row whose fresh Attributes carry a string `url`
+        // (Workers expose their dev-proxy URL this way) gets a
+        // `[id] ready at http://localhost:1337` line.
+        if (node.mode === "local") {
+          const url = (tracker[fqn]?.output as { url?: unknown })?.url;
+          if (typeof url === "string" && url.length > 0) {
+            yield* scopedSession.note(`ready at ${url}`);
+          }
+        }
         // Emit immediately so the CLI surfaces the terminal status as soon
         // as the resource is actually done — instead of batching every
         // resource's "created"/"updated" event to the end of apply(), which

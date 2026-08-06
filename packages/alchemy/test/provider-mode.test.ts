@@ -16,7 +16,7 @@
  * provider service directly.
  */
 import { Cli } from "@/Cli/Cli.ts";
-import type { StatusChangeEvent } from "@/Cli/Event.ts";
+import type { AnnotateEvent, StatusChangeEvent } from "@/Cli/Event.ts";
 import * as LocalProvider from "@/Local/LocalProvider.ts";
 import * as Provider from "@/Provider.ts";
 import { remote, type ProviderMode } from "@/ProviderMode.ts";
@@ -307,6 +307,7 @@ describe("provider modes", () => {
     (stack) =>
       Effect.gen(function* () {
         const events: StatusChangeEvent[] = [];
+        const notes: AnnotateEvent[] = [];
         let planDefaultMode: ProviderMode | undefined;
         const cli = Cli.of({
           approvePlan: () => Effect.succeed(true),
@@ -319,6 +320,7 @@ describe("provider modes", () => {
                 emit: (event) =>
                   Effect.sync(() => {
                     if (event.kind === "status-change") events.push(event);
+                    if (event.kind === "annotate") notes.push(event);
                   }),
               };
             }),
@@ -335,6 +337,8 @@ describe("provider modes", () => {
         expect(liveEvents.every((e) => e.fromProviderMode === undefined)).toBe(
           true,
         );
+        // Live rows never announce a ready-at URL.
+        expect(notes.some((n) => n.message.startsWith("ready at"))).toBe(false);
 
         // 2. dev run: default flips to "local"; the mode switch is planned
         //    as a replacement whose events carry the transition
@@ -342,6 +346,7 @@ describe("provider modes", () => {
         //    generation's GC is deliberately silent (progress stays anchored
         //    on the live replacement), so no delete-status assertions here.
         events.length = 0;
+        notes.length = 0;
         yield* inDev(modal("A", "v1").pipe(stack.deploy, withCli));
         expect(planDefaultMode).toEqual("local");
         const transitions = events.filter(
@@ -353,6 +358,12 @@ describe("provider modes", () => {
             (e) => e.providerMode === "local" && e.fromProviderMode === "live",
           ),
         ).toBe(true);
+        // A local instance whose attrs carry a `url` announces it.
+        expect(notes).toContainEqual({
+          kind: "annotate",
+          id: "A",
+          message: "ready at http://localhost:1337",
+        });
 
         // 3. destroy while stamped local: delete events carry the row's
         //    stamped mode even though the run default is live.

@@ -1173,6 +1173,12 @@ export interface ModalResource extends Resource<
     value: string;
     /** Which provider variant reconciled this instance. */
     runtime: ProviderMode;
+    /**
+     * Local dev URL — returned by the LOCAL variant only, mirroring how a
+     * local Worker's attrs carry its dev-proxy URL. Apply announces it as
+     * a `ready at <url>` note on local-mode rows.
+     */
+    url?: string;
   }
 > {}
 
@@ -1248,6 +1254,7 @@ const modalVariant = (mode: ProviderMode) =>
           return {
             value: (news as ModalResourceProps).value ?? id,
             runtime: mode,
+            ...(mode === "local" ? { url: "http://localhost:1337" } : {}),
           };
         }),
         delete: Effect.fn(function* ({ id }) {
