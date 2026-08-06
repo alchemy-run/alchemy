@@ -167,6 +167,37 @@ export const apply = <P extends Plan>(
       }
     >();
 
+    // ── FQN migrations (renamedFrom) ──
+    // Persist renames before any lifecycle operation runs: a node whose row
+    // was found under a former FQN carries that row pre-remapped in
+    // `node.state` (see Plan's `getPersistedRow`). Commit it at the current
+    // FQN FIRST, then drop the former row — in that order, so an
+    // interruption leaves rows at both FQNs with the same instanceId, which
+    // the next plan recognizes as an in-flight migration (and never as an
+    // orphan to delete).
+    yield* Effect.forEach(
+      Object.values(plan.resources),
+      (node) => {
+        const { renamedFrom, state: row } = node;
+        return renamedFrom === undefined || row === undefined
+          ? Effect.void
+          : Effect.gen(function* () {
+              yield* state.set({
+                stack: stackName,
+                stage,
+                fqn: node.resource.FQN,
+                value: row,
+              });
+              yield* state.delete({
+                stack: stackName,
+                stage,
+                fqn: renamedFrom,
+              });
+            });
+      },
+      { concurrency: "unbounded" },
+    );
+
     yield* executePlan(
       plan,
       tracker,

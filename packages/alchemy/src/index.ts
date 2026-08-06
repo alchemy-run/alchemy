@@ -30,6 +30,7 @@ export { remote } from "./ProviderMode.ts";
 export * from "./Random.ts";
 export * from "./Ref.ts";
 export * as RemovalPolicy from "./RemovalPolicy.ts";
+export { renamedFrom } from "./Rename.ts";
 export * from "./Resource.ts";
 export * as Schema from "./Schema.ts";
 export * as Server from "./Server/index.ts";
