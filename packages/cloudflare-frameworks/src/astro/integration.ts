@@ -58,8 +58,10 @@ export const SERVER_ENTRYPOINT =
   "@alchemy.run/cloudflare-frameworks/astro/entrypoints/server";
 
 /** The production endpoint of the passthrough image service. */
-export const IMAGE_PASSTHROUGH_ENDPOINT =
-  "@alchemy.run/cloudflare-frameworks/astro/image-passthrough-endpoint";
+export const IMAGE_PASSTHROUGH_ENDPOINT = fileURLToPath(
+  import.meta
+    .resolve("@alchemy.run/cloudflare-frameworks/astro/image-passthrough-endpoint"),
+);
 
 export interface DistilledCloudflareOptions {
   /**

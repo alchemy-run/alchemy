@@ -14,6 +14,9 @@ dist/
 
 .repomix-output.txt
 wrangler.jsonc
+!packages/cloudflare-runtime/internal/workflows-shared/wrangler.jsonc
+!packages/cloudflare-runtime/src/internal/workers-shared/workers/asset-worker/wrangler.jsonc
+!packages/cloudflare-runtime/src/internal/workers-shared/workers/router-worker/wrangler.jsonc
 
 # Husky - ignore generated files but keep hooks
 .husky/_

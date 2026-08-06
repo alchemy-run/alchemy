@@ -1,5 +1,4 @@
+* text=auto eol=lf
+
 .vendor/** linguist-vendored
 distilled/** linguist-vendored
-packages/cloudflare-runtime/rolldown/test/fixtures/additional-modules/modules/*.html text eol=lf
-packages/cloudflare-runtime/rolldown/test/fixtures/additional-modules/modules/*.sql text eol=lf
-packages/cloudflare-runtime/rolldown/test/fixtures/additional-modules/modules/*.txt text eol=lf
