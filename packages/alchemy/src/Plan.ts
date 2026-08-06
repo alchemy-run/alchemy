@@ -366,6 +366,16 @@ export const make = <A>(
       { concurrency: "unbounded" },
     );
 
+    // Snapshot of every persisted row, keyed by FQN. The rename resolution
+    // below reads from this map instead of issuing per-FQN `state.get`s —
+    // every renamedFrom-decorated resource (each StaticSite carries one
+    // forever) would otherwise add two round-trips per resource to every
+    // plan against a remote state store. Plan is read-only, so the
+    // snapshot cannot go stale within this run.
+    const persistedRows = new Map(
+      resourceFqns.map((fqn, i) => [fqn, oldResources[i]]),
+    );
+
     // ── FQN renames ──────────────────────────────────────────────────────
     // Map every former FQN claimed via `renamedFrom(...)` to its claimant's
     // current FQN. Two resources claiming the same former FQN is ambiguous
@@ -427,11 +437,7 @@ export const make = <A>(
         resource.Type,
         ...(provider?.aliases ?? []),
       ]);
-      const persisted = yield* state.get({
-        stack: stackName,
-        stage: stage,
-        fqn: resource.FQN,
-      });
+      const persisted = persistedRows.get(resource.FQN);
       const persistedRow = isActionState(persisted)
         ? undefined
         : (persisted as ResourceState | undefined);
@@ -455,11 +461,7 @@ export const make = <A>(
         // The same former id may be listed twice (or resolve identically);
         // collect each former row once.
         if (renamedFrom.includes(formerFqn)) continue;
-        const formerPersisted = yield* state.get({
-          stack: stackName,
-          stage: stage,
-          fqn: formerFqn,
-        });
+        const formerPersisted = persistedRows.get(formerFqn);
         if (formerPersisted === undefined || isActionState(formerPersisted)) {
           continue;
         }
