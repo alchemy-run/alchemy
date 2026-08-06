@@ -163,6 +163,12 @@
       "worker": "./src/Cloudflare/*/index.ts",
       "import": "./lib/Cloudflare/*/index.js"
     },
+    "./Drizzle": {
+      "types": "./lib/Drizzle/index.d.ts",
+      "bun": "./src/Drizzle/index.ts",
+      "worker": "./src/Drizzle/index.ts",
+      "import": "./lib/Drizzle/index.js"
+    },
     "./Drizzle/*": {
       "types": "./lib/Drizzle/*.d.ts",
       "bun": "./src/Drizzle/*.ts",

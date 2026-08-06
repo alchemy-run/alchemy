@@ -1,5 +1,5 @@
 // `@effect/sql-pg` (and pg underneath) are optional peers — value imports
-// are deferred to first use so `alchemy/Drizzle/Postgres` resolves without them
+// are deferred to first use so `alchemy/Drizzle` resolves without them
 // installed.
 import type * as PgClient from "@effect/sql-pg/PgClient";
 import type { AnyRelations, EmptyRelations } from "drizzle-orm";

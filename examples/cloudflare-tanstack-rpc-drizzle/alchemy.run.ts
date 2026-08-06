@@ -1,6 +1,6 @@
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as Drizzle from "alchemy/Drizzle/Providers";
+import * as Drizzle from "alchemy/Drizzle";
 import * as Neon from "alchemy/Neon";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

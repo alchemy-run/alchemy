@@ -1,6 +1,6 @@
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as Drizzle from "alchemy/Drizzle/Providers";
+import * as Drizzle from "alchemy/Drizzle";
 import * as Planetscale from "alchemy/Planetscale";
 import * as Test from "alchemy/Test/Bun";
 import { expect } from "bun:test";
