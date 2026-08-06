@@ -16,6 +16,7 @@ interface MessageLike {
 }
 
 const received: string[] = [];
+const batches: number[] = [];
 
 export default {
   fetch: async (request: Request, env: Env) => {
@@ -39,9 +40,13 @@ export default {
     if (url.pathname === "/received") {
       return Response.json({ received });
     }
+    if (url.pathname === "/batches") {
+      return Response.json({ batches });
+    }
     return new Response("not found", { status: 404 });
   },
   queue: async (batch: { messages: MessageLike[] }) => {
+    batches.push(batch.messages.length);
     for (const message of batch.messages) {
       received.push(String(message.body));
     }
