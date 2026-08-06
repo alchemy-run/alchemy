@@ -116,14 +116,15 @@ export interface BaseNode<
   downstream: string[];
   bindings: BindingNode<R["Binding"]>[];
   /**
-   * Set when this resource's persisted row was found under a former FQN
-   * (`renamedFrom(...)`) — either adopted in-memory as `state` (no row at
-   * the current FQN yet) or as a stale leftover from an interrupted
-   * migration (same `instanceId` as the row at the current FQN). Apply
-   * persists the move up-front, before any lifecycle operation runs:
-   * commit `state` at the current FQN, then delete the former row.
+   * Set when this resource's persisted row was found under former FQNs
+   * (`renamedFrom(...)`) — the migration source (no row at the current FQN
+   * yet) and/or stale leftovers from interrupted migrations (same
+   * `instanceId` as the resource's row; a rename chain with repeated
+   * partial failures can leave several). Apply persists the move up-front,
+   * before any lifecycle operation runs: commit `state` at the current
+   * FQN, then delete every former row.
    */
-  renamedFrom?: string | undefined;
+  renamedFrom?: string[] | undefined;
 }
 
 export interface Create<
@@ -385,7 +386,8 @@ export const make = <A>(
 
     /**
      * Fetch the persisted row for a declared resource, falling back to its
-     * former FQNs (`renamedFrom(...)`):
+     * former FQNs (`renamedFrom(...)`, checked in declaration order — list
+     * the most recent former id first):
      *
      * - No row at the current FQN, a row at a former FQN → the row IS this
      *   resource's state. It is adopted under the new identity in-memory
@@ -398,12 +400,24 @@ export const make = <A>(
      * - Rows at both with different `instanceId`s → the former row belongs
      *   to some other resource (e.g. a new resource reusing the old name
      *   after the rename shipped). Ignore it — normal orphan handling
-     *   applies.
+     *   applies (see the `formerFqnClaims` guard in `deletions`).
+     *
+     * Hardened against the messy multi-rename histories:
+     *
+     * - EVERY former row sharing the source row's `instanceId` is collected
+     *   into `renamedFrom` (a rename chain with repeated partial failures
+     *   can leave several same-instance leftovers — migration always
+     *   preserved the instanceId, so they are provably copies of this
+     *   resource's row, never someone else's). One apply drops them all.
+     * - A former row whose `resourceType` is neither the resource's type
+     *   nor one of its registered type-aliases is never migrated — it
+     *   cannot be this resource's row, whatever its FQN says. It falls
+     *   through to normal orphan handling.
      */
     const getPersistedRow = Effect.fn(function* (
       resource: Pick<
         ResourceLike,
-        "FQN" | "LogicalId" | "Namespace" | "FormerFqns"
+        "FQN" | "LogicalId" | "Namespace" | "FormerFqns" | "Type"
       >,
     ) {
       const persisted = yield* state.get({
@@ -414,7 +428,25 @@ export const make = <A>(
       const row = isActionState(persisted)
         ? undefined
         : (persisted as ResourceState | undefined);
-      for (const formerFqn of resource.FormerFqns ?? []) {
+      if (!resource.FormerFqns?.length) {
+        return { row, renamedFrom: undefined };
+      }
+
+      const provider = Option.getOrUndefined(
+        yield* tryFindProviderByType(resource.Type),
+      );
+      const allowedTypes = new Set([
+        resource.Type,
+        ...(provider?.aliases ?? []),
+      ]);
+
+      // `source` is the row whose instanceId defines this resource's
+      // physical identity: the row at the current FQN if present, otherwise
+      // the first (most recent) matching former row.
+      let source: ResourceState | undefined = row;
+      let adopted: ResourceState | undefined = row;
+      const renamedFrom: string[] = [];
+      for (const formerFqn of resource.FormerFqns) {
         if (formerFqnClaims.get(formerFqn) !== resource.FQN) continue;
         const formerPersisted = yield* state.get({
           stack: stackName,
@@ -425,22 +457,24 @@ export const make = <A>(
           continue;
         }
         const formerRow = formerPersisted as ResourceState;
-        if (row === undefined) {
-          return {
-            row: {
-              ...formerRow,
-              fqn: resource.FQN,
-              logicalId: resource.LogicalId,
-              namespace: resource.Namespace,
-            } as ResourceState,
-            renamedFrom: formerFqn,
-          };
-        }
-        if (row.instanceId === formerRow.instanceId) {
-          return { row, renamedFrom: formerFqn };
+        if (!allowedTypes.has(formerRow.resourceType)) continue;
+        if (source === undefined) {
+          source = formerRow;
+          adopted = {
+            ...formerRow,
+            fqn: resource.FQN,
+            logicalId: resource.LogicalId,
+            namespace: resource.Namespace,
+          } as ResourceState;
+          renamedFrom.push(formerFqn);
+        } else if (source.instanceId === formerRow.instanceId) {
+          renamedFrom.push(formerFqn);
         }
       }
-      return { row, renamedFrom: undefined };
+      return {
+        row: adopted,
+        renamedFrom: renamedFrom.length > 0 ? renamedFrom : undefined,
+      };
     });
 
     const resolvedResources: Record<string, Effect.Effect<any>> = {};
@@ -1612,27 +1646,23 @@ export const make = <A>(
             const oldState = persisted as ResourceState | undefined;
             if (oldState) {
               // A row at a former FQN claimed by a renamed resource is not
-              // an orphan while its migration is in flight: the claimant
-              // either has no row yet (this row IS its state, pre-move) or
-              // a row with the same instanceId (interrupted move — the
-              // leftover is dropped state-only by apply). Only a claimed
-              // row with a DIFFERENT instanceId is a genuinely distinct
-              // resource and falls through to normal orphan deletion.
+              // an orphan while its migration is in flight. Compare against
+              // the claimant's PLANNED node state (which reflects the
+              // in-memory migration) rather than re-reading persisted
+              // state: a row sharing the claimant's instanceId is provably
+              // a pre-move copy of the claimant's own row (migration
+              // preserves instanceIds) and is dropped state-only by apply.
+              // A claimed row with a DIFFERENT instanceId — or one the
+              // claimant never adopted (e.g. wrong resourceType) — is a
+              // genuinely distinct resource and falls through to normal
+              // orphan deletion.
               const claimant = formerFqnClaims.get(fqn);
-              if (claimant !== undefined) {
-                const claimantRow = yield* state.get({
-                  stack: stackName,
-                  stage: stage,
-                  fqn: claimant,
-                });
-                if (
-                  claimantRow === undefined ||
-                  (!isActionState(claimantRow) &&
-                    (claimantRow as ResourceState).instanceId ===
-                      oldState.instanceId)
-                ) {
-                  return;
-                }
+              if (
+                claimant !== undefined &&
+                resourceGraph[claimant]?.state?.instanceId ===
+                  oldState.instanceId
+              ) {
+                return;
               }
               const { logicalId } = parseFqn(fqn);
               const resourceType = oldState.resourceType;

@@ -4370,7 +4370,7 @@ describe("renamed resources (renamedFrom)", () => {
 
       const node = plan.resources.NewBucket!;
       expect(node.action).toEqual("noop");
-      expect(node.renamedFrom).toEqual("OldBucket");
+      expect(node.renamedFrom).toEqual(["OldBucket"]);
       // The row rides on the node under its NEW identity (apply persists
       // the move before any lifecycle runs).
       expect(node.state?.fqn).toEqual("NewBucket");
@@ -4427,7 +4427,7 @@ describe("renamed resources (renamedFrom)", () => {
       // state-only cleanup at apply; no delete of the physical resource.
       const node = plan.resources.NewBucket!;
       expect(node.action).toEqual("noop");
-      expect(node.renamedFrom).toEqual("OldBucket");
+      expect(node.renamedFrom).toEqual(["OldBucket"]);
       expect(Object.keys(plan.deletions)).toHaveLength(0);
     }),
   );
@@ -4481,10 +4481,112 @@ describe("renamed resources (renamedFrom)", () => {
 
       const node = plan.resources["App/Site"]!;
       expect(node.action).toEqual("noop");
-      expect(node.renamedFrom).toEqual("App/Site/Worker");
+      expect(node.renamedFrom).toEqual(["App/Site/Worker"]);
       expect(node.state?.fqn).toEqual("App/Site");
       expect(node.state?.namespace).toEqual({ Id: "App" });
       expect(Object.keys(plan.deletions)).toHaveLength(0);
+    }),
+  );
+
+  test(
+    "a rename chain with several same-instanceId leftovers is cleaned in one plan",
+    Effect.gen(function* () {
+      // A → B → C rename history with repeated partial failures: rows
+      // linger at BOTH former FQNs, all copies of the same row (migration
+      // preserves the instanceId).
+      yield* seed({
+        OldA: bucketRow("OldA"),
+        OldB: bucketRow("OldB"),
+      });
+
+      const plan = yield* Effect.gen(function* () {
+        // Most recent former id first.
+        yield* Bucket("NewBucket", { name: "b" }).pipe(
+          renamedFrom("OldA", "OldB"),
+        );
+        return {};
+      }).pipe(makePlan);
+
+      const node = plan.resources.NewBucket!;
+      expect(node.action).toEqual("noop");
+      // The migration source AND the same-instance leftover are both
+      // collected — one apply drops them all.
+      expect(node.renamedFrom).toEqual(["OldA", "OldB"]);
+      expect(node.state?.instanceId).toEqual(instanceId);
+      expect(Object.keys(plan.deletions)).toHaveLength(0);
+    }),
+  );
+
+  test(
+    "a foreign row at a later former FQN is orphan-deleted, not adopted",
+    Effect.gen(function* () {
+      // `OldA` is the real predecessor; `OldB` is someone else's row
+      // (different instanceId) that happens to sit at an older former FQN.
+      yield* seed({
+        OldA: bucketRow("OldA"),
+        OldB: bucketRow("OldB", "f0re1gn0000000000000000000000000"),
+      });
+
+      const plan = yield* Effect.gen(function* () {
+        yield* Bucket("NewBucket", { name: "b" }).pipe(
+          renamedFrom("OldA", "OldB"),
+        );
+        return {};
+      }).pipe(makePlan);
+
+      const node = plan.resources.NewBucket!;
+      expect(node.renamedFrom).toEqual(["OldA"]);
+      expect(node.state?.instanceId).toEqual(instanceId);
+      // The foreign row is a normal orphan — deleted in the SAME plan (the
+      // deletions guard compares against the claimant's PLANNED state, so
+      // the in-memory migration doesn't shield it).
+      expect(plan.deletions.OldB?.action).toEqual("delete");
+      expect(plan.deletions.OldA).toBeUndefined();
+    }),
+  );
+
+  test(
+    "a former row with a different resourceType is never migrated",
+    Effect.gen(function* () {
+      // The row at the former FQN was written by a DIFFERENT resource type
+      // — it cannot be this resource's row, whatever its FQN says.
+      yield* seed({
+        OldBucket: {
+          ...bucketRow("OldBucket"),
+          resourceType: "Test.Queue",
+          attr: { name: "b", queueUrl: "https://test.queue.com/b" },
+        },
+      });
+
+      const plan = yield* Effect.gen(function* () {
+        yield* Bucket("NewBucket", { name: "b" }).pipe(
+          renamedFrom("OldBucket"),
+        );
+        return {};
+      }).pipe(makePlan);
+
+      // Fresh create; the type-mismatched row is a normal orphan.
+      const node = plan.resources.NewBucket!;
+      expect(node.action).toEqual("create");
+      expect(node.renamedFrom).toBeUndefined();
+      expect(plan.deletions.OldBucket?.action).toEqual("delete");
+    }),
+  );
+
+  test(
+    "two resources claiming the same former FQN fail the plan loudly",
+    Effect.gen(function* () {
+      const exit = yield* Effect.gen(function* () {
+        yield* Bucket("A", { name: "a" }).pipe(renamedFrom("Shared"));
+        yield* Bucket("B", { name: "b" }).pipe(renamedFrom("Shared"));
+        return {};
+      }).pipe(makePlan, Effect.exit);
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const die = exit.cause.reasons.find(Cause.isDieReason);
+        expect(String(die?.defect)).toContain("both claim former FQN 'Shared'");
+      }
     }),
   );
 });

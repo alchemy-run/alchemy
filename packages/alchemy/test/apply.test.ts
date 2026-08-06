@@ -6650,6 +6650,57 @@ describe("renamed resources (renamedFrom)", () => {
   );
 
   test.provider(
+    "a rename chain with repeated partial failures converges in one deploy",
+    (stack) =>
+      Effect.gen(function* () {
+        // A → B rename, then B → C, with the A→B migration's delete having
+        // failed (a leftover copy of the row remains at A).
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            yield* TestResource("A", { string: "v1" });
+          }),
+        );
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            yield* TestResource("B", { string: "v1" }).pipe(renamedFrom("A"));
+          }),
+        );
+        const row = yield* getState("B");
+        yield* setState("A", { ...row!, fqn: "A", logicalId: "A" });
+
+        const touched: string[] = [];
+        const track = (op: string) => (id: string) =>
+          Effect.sync(() => void touched.push(`${op}:${id}`));
+        yield* stack
+          .deploy(
+            Effect.gen(function* () {
+              // Most recent former id first.
+              yield* TestResource("C", { string: "v1" }).pipe(
+                renamedFrom("B", "A"),
+              );
+            }),
+          )
+          .pipe(
+            hook({
+              create: track("create"),
+              update: track("update"),
+              delete: track("delete"),
+            }),
+          );
+
+        // One deploy: migrated from B AND dropped the stale copy at A,
+        // without any lifecycle operation.
+        expect(touched).toEqual([]);
+        expect((yield* getState("C"))?.instanceId).toEqual(row?.instanceId);
+        expect(yield* getState("B")).toBeUndefined();
+        expect(yield* getState("A")).toBeUndefined();
+
+        yield* stack.destroy();
+        expect(yield* listState()).toEqual([]);
+      }),
+  );
+
+  test.provider(
     "ignores the alias when the new FQN row exists with a different instanceId",
     (stack) =>
       Effect.gen(function* () {

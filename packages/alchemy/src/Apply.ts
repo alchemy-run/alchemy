@@ -179,7 +179,9 @@ export const apply = <P extends Plan>(
       Object.values(plan.resources),
       (node) => {
         const { renamedFrom, state: row } = node;
-        return renamedFrom === undefined || row === undefined
+        return renamedFrom === undefined ||
+          renamedFrom.length === 0 ||
+          row === undefined
           ? Effect.void
           : Effect.gen(function* () {
               yield* state.set({
@@ -188,11 +190,12 @@ export const apply = <P extends Plan>(
                 fqn: node.resource.FQN,
                 value: row,
               });
-              yield* state.delete({
-                stack: stackName,
-                stage,
-                fqn: renamedFrom,
-              });
+              yield* Effect.forEach(
+                renamedFrom,
+                (formerFqn) =>
+                  state.delete({ stack: stackName, stage, fqn: formerFqn }),
+                { concurrency: "unbounded" },
+              );
             });
       },
       { concurrency: "unbounded" },
