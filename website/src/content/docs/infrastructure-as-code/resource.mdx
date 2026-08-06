@@ -245,25 +245,76 @@ what's happening: `[Assets] update (renamed from Bucket)`.
 
 ### Safety semantics
 
-The migration is deliberately conservative:
+The migration is deliberately conservative. The examples below all
+assume this rename:
 
-- **Identity is proven, not assumed.** Leftover rows from an
-  interrupted migration are recognized by their instance ID and
-  cleaned up state-only — the physical resource is never touched. A
-  former row with a different instance ID (a resource that reused
-  the old name after the rename shipped) is never adopted and
-  follows normal lifecycle rules.
-- **Types must match.** A former row written by a different resource
-  type is never migrated, whatever its FQN says. And a
-  different-typed row sitting at the *new* ID fails the plan loudly
-  — migrating over it would silently abandon its cloud resource.
-- **Ambiguity fails loudly.** Two resources claiming the same former
-  ID fail the plan with an error instead of racing for the row.
-- **Shifts work; swaps fail.** Renames may shift through each other
-  in one deploy (`A→B` while `B→C` — each row follows its resource,
-  and pending replacement cleanup rides along). A swap (`A ⇄ B`) is
-  a rename cycle and fails the plan — rename through a temporary ID
-  across two deploys instead.
+```typescript
+yield* Cloudflare.R2.Bucket("Assets").pipe(Alchemy.renamedFrom("Bucket"));
+```
+
+**Identity is proven, not assumed.** Only a migration ever copies an
+instance ID, so a leftover row from an interrupted move is provably
+a copy — it's dropped state-only, the physical resource untouched:
+
+```text
+state:  Bucket (instance a3f1)  +  Assets (instance a3f1)
+plan:   [Assets] update (renamed from Bucket)   ← drops the copy
+```
+
+A former row with a *different* instance ID is someone else's — the
+old name was reused after the rename shipped — and follows normal
+lifecycle rules:
+
+```text
+state:  Bucket (instance 9c2e)  +  Assets (instance a3f1)
+plan:   [Assets] noop            ← alias ignored
+        [Bucket] delete          ← normal orphan, if undeclared
+```
+
+**Types must match.** A former row written by a different resource
+type can't be this resource's state, whatever its FQN says — it is
+never migrated:
+
+```text
+state:  Bucket (a KV.Namespace row)
+plan:   [Assets] create          ← nothing to migrate
+```
+
+And a different-typed row sitting at the *new* ID fails the plan —
+migrating over it would silently abandon its cloud resource:
+
+```text
+state:  Assets (a KV.Namespace row)  +  Bucket (an R2.Bucket row)
+plan:   ✗ a state row of a different type already occupies 'Assets'
+```
+
+**Ambiguity fails loudly.** Two resources claiming the same former
+ID fail instead of racing for the row:
+
+```typescript
+yield* Cloudflare.R2.Bucket("Assets").pipe(Alchemy.renamedFrom("Bucket"));
+yield* Cloudflare.R2.Bucket("Files").pipe(Alchemy.renamedFrom("Bucket"));
+// ✗ 'Assets' and 'Files' both claim former FQN 'Bucket'
+```
+
+**Shifts work.** Renames may pass through each other in one deploy —
+each row follows its resource, and pending replacement cleanup rides
+along:
+
+```typescript
+yield* Cloudflare.R2.Bucket("B").pipe(Alchemy.renamedFrom("A")); // row at A → B
+yield* Cloudflare.R2.Bucket("C").pipe(Alchemy.renamedFrom("B")); // row at B → C
+```
+
+**Swaps fail.** Exchanging two live IDs is a rename cycle — the two
+migrations would overwrite each other's rows — so the plan fails;
+rename through a temporary ID across two deploys instead:
+
+```typescript
+yield* Cloudflare.R2.Bucket("A").pipe(Alchemy.renamedFrom("B"));
+yield* Cloudflare.R2.Bucket("B").pipe(Alchemy.renamedFrom("A"));
+// ✗ rename cycle detected among ['A', 'B']
+```
 
 ## Physical name
 
