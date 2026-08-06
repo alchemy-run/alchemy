@@ -1,6 +1,6 @@
 import type * as rolldown from "rolldown";
 import { esmExternalRequirePlugin } from "rolldown/plugins";
-import type { BasePluginOptions } from "./options.js";
+import type { BasePluginOptions } from "./options.ts";
 import {
   additionalModulesPlugin,
   cloudflareExternalsPlugin,
@@ -11,8 +11,8 @@ import {
   optionsPlugin,
   virtualModulesPlugin,
   wasmInitPlugin,
-} from "./plugins/index.js";
-import { hasNodejsCompat } from "./utils.js";
+} from "./plugins/index.ts";
+import { hasNodejsCompat } from "./utils.ts";
 
 export type RolldownPluginOptions = Omit<BasePluginOptions, "viteEnvironment">;
 

@@ -1,5 +1,5 @@
-import { createPlugin } from "../factory.js";
-import { sanitizePath, toPosixPath } from "../utils.js";
+import { createPlugin } from "../factory.ts";
+import { sanitizePath, toPosixPath } from "../utils.ts";
 
 const WASM_INIT_QUERY = /\.wasm\?init$/;
 

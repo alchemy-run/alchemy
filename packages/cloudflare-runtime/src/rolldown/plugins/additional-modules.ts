@@ -7,8 +7,8 @@ import type {
   RolldownMagicString,
   SourceMap,
 } from "rolldown";
-import { createPlugin } from "../factory.js";
-import { sanitizePath, toPosixPath } from "../utils.js";
+import { createPlugin } from "../factory.ts";
+import { sanitizePath, toPosixPath } from "../utils.ts";
 
 export const MODULE_RULES = [
   { type: "CompiledWasm", pattern: /\.wasm(\?module)?$/ },

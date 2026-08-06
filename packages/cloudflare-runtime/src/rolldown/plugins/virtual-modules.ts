@@ -3,10 +3,10 @@ import {
   exportTypesModuleSource,
   RESOLVED_EXPORT_TYPES_MODULE_ID,
   WORKER_EXPORT_TYPES_EVENT,
-} from "../export-types.js";
-import { createPlugin } from "../factory.js";
-import { resolvePluginApi } from "../utils.js";
-import type { UnenvApi } from "./nodejs-compat.js";
+} from "../export-types.ts";
+import { createPlugin } from "../factory.ts";
+import { resolvePluginApi } from "../utils.ts";
+import type { UnenvApi } from "./nodejs-compat.ts";
 
 // The export-types module is the one virtual module that is imported by
 // specifier (both from the Worker entry and, in dev, by the module runner), so

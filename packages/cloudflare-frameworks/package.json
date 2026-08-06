@@ -13,7 +13,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsc -b tsconfig.json && cp src/nextjs/runner.mjs dist/nextjs/runner.mjs",
+    "build": "tsc -b --force tsconfig.json && cp src/nextjs/runner.mjs dist/nextjs/runner.mjs",
     "clean": "rm -rf dist",
     "test": "vitest run",
     "test:core": "vitest run src/core/test",

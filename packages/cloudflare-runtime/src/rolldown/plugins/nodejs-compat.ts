@@ -6,10 +6,10 @@ import assert from "node:assert";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { defineEnv } from "unenv";
-import { createPlugin } from "../factory.js";
-import { isSkippedEnvironment } from "../options.js";
-import type { BasePluginOptions } from "../options.js";
-import { hasNodejsAls, hasNodejsCompat, toPosixPath } from "../utils.js";
+import { createPlugin } from "../factory.ts";
+import { isSkippedEnvironment } from "../options.ts";
+import type { BasePluginOptions } from "../options.ts";
+import { hasNodejsAls, hasNodejsCompat, toPosixPath } from "../utils.ts";
 
 const ASYNC_HOOKS_REGEXP = /^(node:)?async_hooks$/;
 const NODE_BUILTIN_MODULES_REGEXP = new RegExp(

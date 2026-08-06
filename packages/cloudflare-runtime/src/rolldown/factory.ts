@@ -1,6 +1,6 @@
 import type * as rolldown from "rolldown";
 import type * as vite from "vite";
-import { isSkippedEnvironment, type BasePluginOptions } from "./options.js";
+import { isSkippedEnvironment, type BasePluginOptions } from "./options.ts";
 
 export interface PluginInput<A = any> {
   shared?: Omit<rolldown.Plugin<A>, "name">;

@@ -1,10 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import type * as vite from "vite";
-import { createPlugin } from "../factory.js";
-import { parseViteEnvironments, type BasePluginOptions } from "../options.js";
-import { hasNodejsCompat } from "../utils.js";
-import { workerEntryId } from "./virtual-modules.js";
+import { createPlugin } from "../factory.ts";
+import { parseViteEnvironments, type BasePluginOptions } from "../options.ts";
+import { hasNodejsCompat } from "../utils.ts";
+import { workerEntryId } from "./virtual-modules.ts";
 
 const DEFAULT_RESOLVE_CONDITION_NAMES = [
   "workerd",

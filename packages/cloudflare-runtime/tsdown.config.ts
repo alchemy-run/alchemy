@@ -1,6 +1,6 @@
-import cloudflare from "@alchemy.run/cloudflare-runtime/rolldown";
 import { defineConfig, type UserConfig } from "tsdown";
 import { InternalWorkerExportPlugin } from "./src/internal/build-tools/index.ts";
+import cloudflare from "./src/rolldown/plugin.ts";
 
 /**
  * Internal workers are built per compatibility-flag set: the `cloudflare`

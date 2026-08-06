@@ -1,4 +1,4 @@
-import { createPlugin } from "../factory.js";
+import { createPlugin } from "../factory.ts";
 
 const CLOUDFLARE_BUILT_IN_MODULES = [
   "cloudflare:email",
