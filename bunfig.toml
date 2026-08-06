@@ -1,5 +1,5 @@
 [install]
-minimumReleaseAge = 259200
+minimumReleaseAge = 0
 minimumReleaseAgeExcludes = [
   "@opentui/core",
   "@opentui/core-darwin-arm64",

@@ -182,7 +182,7 @@
         "@opennextjs/cloudflare": "1.20.1",
         "@sveltejs/kit": "3.0.0-next.9",
         "@sveltejs/vite-plugin-svelte": "^7.2.0",
-        "astro": "7.1.0",
+        "astro": "7.2.0",
         "hono": "^4.12.14",
         "next": "16.2.10",
         "nitropack": "2.13.4",
@@ -240,5 +240,9 @@
       "version": "1.3.13",
       "onFail": "warn"
     }
+  },
+  "patchedDependencies": {
+    "@astrojs/starlight@0.41.7": "patches/@astrojs%2Fstarlight@0.41.7.patch",
+    "starlight-blog@0.28.0": "patches/starlight-blog@0.28.0.patch"
   }
 }

@@ -25,11 +25,11 @@
     "astro": "astro"
   },
   "dependencies": {
-    "@astrojs/check": "^0.9.9",
-    "@astrojs/mdx": "^7.0.3",
-    "@astrojs/react": "^6.0.1",
+    "@astrojs/check": "0.9.10",
+    "@astrojs/mdx": "7.0.5",
+    "@astrojs/react": "6.0.2",
     "@astrojs/sitemap": "^3.7.3",
-    "@astrojs/starlight": "^0.41.3",
+    "@astrojs/starlight": "0.41.7",
     "@astrojs/starlight-tailwind": "^5.0.0",
     "@effect/platform-node": "catalog:",
     "@iconify-json/logos": "^1.2.11",
