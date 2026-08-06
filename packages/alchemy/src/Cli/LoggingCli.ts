@@ -97,7 +97,14 @@ export const formatPlanLines = (plan: Plan): string[] => {
         item.action === "replace" ? item.state.providerMode : undefined,
       defaultMode: plan.defaultMode,
     });
-    lines.push(`${tag(item.resource.LogicalId)} ${action}${mode}`);
+    // Surface FQN migrations: `[Assets] update (renamed from Bucket)` —
+    // the update exists to re-brand the moved row's physical resource, and
+    // without the note the plan gives no hint why an untouched resource
+    // reconciles.
+    const renamed = item.renamedFrom?.length
+      ? ` ${dim(`(renamed from ${item.renamedFrom.join(", ")})`)}`
+      : "";
+    lines.push(`${tag(item.resource.LogicalId)} ${action}${mode}${renamed}`);
     for (const binding of item.bindings) {
       if (binding.action === "noop") continue;
       const bindingAction = actionColor[binding.action](binding.action);

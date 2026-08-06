@@ -64,7 +64,7 @@ export class RenamePolicy extends Context.Service<
  * yield* Bucket("Assets").pipe(renamedFrom("StaticAssets", "Bucket"));
  * ```
  *
- * Migration semantics, by state-row shape (see Plan's `getPersistedRow`;
+ * Migration semantics, by state-row shape (see Plan's rename resolution;
  * `new` = the row at the resource's FQN, `old` = a row at a former FQN):
  *
  * ```text
@@ -72,10 +72,13 @@ export class RenamePolicy extends Context.Service<
  * ──────────────────────────────────────────────────────────────────────
  * —                       row                     → migrate: the old row
  *                                                   IS the resource's
- *                                                   state (noop/update,
- *                                                   never a create);
- *                                                   apply moves it before
- *                                                   any lifecycle op
+ *                                                   state; apply moves it
+ *                                                   before any lifecycle
+ *                                                   op, and ONE update
+ *                                                   reconcile re-brands
+ *                                                   the physical resource
+ *                                                   under the new logical
+ *                                                   id (never a create)
  * row, same instanceId    row                     → interrupted
  *                                                   migration: leftovers
  *                                                   dropped state-only —
@@ -84,25 +87,35 @@ export class RenamePolicy extends Context.Service<
  *                                                   resource is never
  *                                                   touched
  * row, diff instanceId    row                     → someone else's row (a
- *                                                   new resource reusing
- *                                                   the old name):
+ *                                                   resource reused the
+ *                                                   old name after the
+ *                                                   rename shipped):
  *                                                   ignored, normal
  *                                                   orphan handling
- * row, diff resourceType  row                     → the new-FQN row is
- *                                                   not a claim (it
- *                                                   cannot be this
- *                                                   resource's row); the
- *                                                   type-matching old row
- *                                                   migrates over it
+ * row, diff resourceType  row                     → FATAL: migrating over
+ *                                                   the foreign-typed row
+ *                                                   would silently
+ *                                                   abandon its cloud
+ *                                                   resource — resolve
+ *                                                   the collision first
  * any                     row, diff resourceType  → never migrated —
  *                                                   cannot be this
  *                                                   resource's row,
  *                                                   whatever its FQN says
  * ```
  *
- * A former FQN that is still actively declared is not a rename and is
- * ignored; two resources claiming the same former FQN fail the plan
- * loudly.
+ * The old id can be REUSED by a new resource in the same deploy — the
+ * rename claim wins the row (it is an explicit statement that the row was
+ * the renamer's), and the reusing resource is created fresh:
+ *
+ * ```ts
+ * // `Assets` keeps the physical resource previously known as `Bucket`;
+ * // this `Bucket` is a brand-new one.
+ * yield* Bucket("Assets").pipe(renamedFrom("Bucket"));
+ * yield* Bucket("Bucket");
+ * ```
+ *
+ * Two resources claiming the same former FQN fail the plan loudly.
  */
 export const renamedFrom =
   (...formerIds: [FormerId, ...FormerId[]]) =>

@@ -6513,7 +6513,7 @@ describe("renamed resources (renamedFrom)", () => {
   });
 
   test.provider(
-    "migrates the state row from a former FQN without touching the resource",
+    "migrates the state row from a former FQN without recreating the resource",
     (stack) =>
       Effect.gen(function* () {
         yield* stack.deploy(
@@ -6524,8 +6524,9 @@ describe("renamed resources (renamedFrom)", () => {
         const before = yield* getState("Old");
         expect(before?.status).toEqual("created");
 
-        // Redeploy under the new id: no create, no update, no delete —
-        // only the state row moves.
+        // Redeploy under the new id: no create, no delete — the state row
+        // moves and exactly ONE update reconcile runs to re-brand the
+        // physical resource (its tags still carry the old logical id).
         const touched: string[] = [];
         const track = (op: string) => (id: string) =>
           Effect.sync(() => void touched.push(`${op}:${id}`));
@@ -6544,13 +6545,87 @@ describe("renamed resources (renamedFrom)", () => {
               delete: track("delete"),
             }),
           );
-        expect(touched).toEqual([]);
+        expect(touched).toEqual(["update:New"]);
 
         const after = yield* getState("New");
         expect(after?.instanceId).toEqual(before?.instanceId);
-        expect(after?.attr).toEqual(before?.attr);
         expect(after?.logicalId).toEqual("New");
         expect(yield* getState("Old")).toBeUndefined();
+
+        // A second deploy is a clean noop — the migration is done.
+        const touchedAgain: string[] = [];
+        const trackAgain = (op: string) => (id: string) =>
+          Effect.sync(() => void touchedAgain.push(`${op}:${id}`));
+        yield* stack
+          .deploy(
+            Effect.gen(function* () {
+              yield* TestResource("New", { string: "v1" }).pipe(
+                renamedFrom("Old"),
+              );
+            }),
+          )
+          .pipe(
+            hook({
+              create: trackAgain("create"),
+              update: trackAgain("update"),
+              delete: trackAgain("delete"),
+            }),
+          );
+        expect(touchedAgain).toEqual([]);
+
+        yield* stack.destroy();
+        expect(yield* listState()).toEqual([]);
+      }),
+  );
+
+  test.provider(
+    "the old id can be reused by a new resource without stealing the migrated physical",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            yield* TestResource("Old", { string: "v1" });
+          }),
+        );
+        const before = yield* getState("Old");
+
+        // One deploy renames Old → New AND declares a brand-new resource
+        // reusing the id `Old`. The read hook simulates a tag-based
+        // adoption probe that would FIND the migrated physical resource
+        // (its cloud tags still say `Old`) — the engine must not consult
+        // it for the reuser.
+        const touched: string[] = [];
+        const track = (op: string) => (id: string) =>
+          Effect.sync(() => void touched.push(`${op}:${id}`));
+        yield* stack
+          .deploy(
+            Effect.gen(function* () {
+              yield* TestResource("New", { string: "v1" }).pipe(
+                renamedFrom("Old"),
+              );
+              yield* TestResource("Old", { string: "fresh" });
+            }),
+          )
+          .pipe(
+            hook({
+              create: track("create"),
+              update: track("update"),
+              delete: track("delete"),
+              read: () =>
+                Effect.succeed({ string: "v1", urn: "stolen-physical" }),
+            }),
+          );
+
+        // The renamed resource kept its identity...
+        const renamed = yield* getState("New");
+        expect(renamed?.instanceId).toEqual(before?.instanceId);
+        // ...and the reuser was created FRESH: new instanceId, a real
+        // create call, and no adoption of the migrated physical.
+        const reuser = yield* getState("Old");
+        expect(reuser?.instanceId).not.toEqual(before?.instanceId);
+        expect(touched).toContain("create:Old");
+        expect(touched).toContain("update:New");
+        expect(touched.filter((t) => t.startsWith("delete"))).toEqual([]);
 
         yield* stack.destroy();
         expect(yield* listState()).toEqual([]);
@@ -6595,7 +6670,7 @@ describe("renamed resources (renamedFrom)", () => {
               delete: track("delete"),
             }),
           );
-        expect(touched).toEqual([]);
+        expect(touched).toEqual(["update:Site"]);
 
         const after = yield* getState("App/Site");
         expect(after?.instanceId).toEqual(before?.instanceId);
@@ -6688,9 +6763,9 @@ describe("renamed resources (renamedFrom)", () => {
             }),
           );
 
-        // One deploy: migrated from B AND dropped the stale copy at A,
-        // without any lifecycle operation.
-        expect(touched).toEqual([]);
+        // One deploy: migrated from B AND dropped the stale copy at A —
+        // one re-branding update, no create, no delete.
+        expect(touched).toEqual(["update:C"]);
         expect((yield* getState("C"))?.instanceId).toEqual(row?.instanceId);
         expect(yield* getState("B")).toBeUndefined();
         expect(yield* getState("A")).toBeUndefined();

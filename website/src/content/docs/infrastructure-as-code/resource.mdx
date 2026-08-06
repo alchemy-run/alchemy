@@ -221,22 +221,42 @@ yield* Cloudflare.R2.Bucket("Assets").pipe(
 );
 ```
 
+### Reusing the old ID
+
+The old ID can be reused by a **new** resource in the same deploy.
+The rename claim wins the state row — it's an explicit statement
+that the row was the renamed resource's — and the reusing resource
+is created fresh:
+
+```typescript
+// `Assets` keeps the physical resource previously known as
+// `Bucket`; this `Bucket` is a brand-new one.
+const assets = yield* Cloudflare.R2.Bucket("Assets").pipe(
+  Alchemy.renamedFrom("Bucket"),
+);
+const bucket = yield* Cloudflare.R2.Bucket("Bucket");
+```
+
+The migration deploy plans one **update** for the renamed resource
+(not a noop) — the reconcile re-brands the physical resource's
+ownership tags under the new logical ID, so the reused ID can never
+accidentally adopt the wrong cloud resource. The plan output shows
+what's happening: `[Assets] update (renamed from Bucket)`.
+
 ### Safety semantics
 
 The migration is deliberately conservative:
 
-- **Only unclaimed rows migrate.** If state of the same resource
-  type already exists under the new ID, the former ID is ignored —
-  a row there is treated as a different resource (e.g. a new
-  resource reusing the old name) and follows normal lifecycle rules.
-  A row of a *different* type doesn't claim the ID: it can't be this
-  resource's state, so the type-matching former row still migrates.
 - **Identity is proven, not assumed.** Leftover rows from an
   interrupted migration are recognized by their instance ID and
   cleaned up state-only — the physical resource is never touched. A
-  row with a different instance ID is never adopted.
+  former row with a different instance ID (a resource that reused
+  the old name after the rename shipped) is never adopted and
+  follows normal lifecycle rules.
 - **Types must match.** A former row written by a different resource
-  type is never migrated, whatever its FQN says.
+  type is never migrated, whatever its FQN says. And a
+  different-typed row sitting at the *new* ID fails the plan loudly
+  — migrating over it would silently abandon its cloud resource.
 - **Ambiguity fails loudly.** Two resources claiming the same former
   ID fail the plan with an error instead of racing for the row.
 
