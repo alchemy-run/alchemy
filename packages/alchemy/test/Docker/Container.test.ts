@@ -9,6 +9,7 @@ import {
 import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import { findAvailablePort, isDockerReady } from "./Runtime.ts";
 
 const { test } = Test.make({
@@ -346,6 +347,35 @@ describe("Docker.Container", { concurrent: false }, () => {
         yield* stack.destroy();
       }),
     { timeout: 240_000 },
+  );
+
+  test.provider.skipIf(!isDockerReady)(
+    "passes environment values into the container (#1117)",
+    (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        // Environment values ride the Docker CLI's process environment (the
+        // create args carry name-only `--env KEY` flags to keep secrets off
+        // the command line) — before the fix every entry resolved empty.
+        const container = yield* stack.deploy(
+          Docker.Container("env-container", {
+            image: "nginx:alpine",
+            environment: {
+              PLAIN_VALUE: "plain-value",
+              SECRET_VALUE: Redacted.make("secret-value"),
+            },
+            start: false,
+          }),
+        );
+
+        const info = yield* docker.container.inspect(container.name);
+        expect(info.Config.Env).toEqual(
+          expect.arrayContaining([
+            "PLAIN_VALUE=plain-value",
+            "SECRET_VALUE=secret-value",
+          ]),
+        );
+      }),
   );
 
   test.provider.skipIf(!isDockerReady)(
