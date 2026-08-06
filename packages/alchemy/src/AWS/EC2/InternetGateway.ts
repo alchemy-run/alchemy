@@ -16,6 +16,7 @@ import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { getDefaultVpcScope } from "./defaultVpcScope.ts";
+import { retryWhileLingeringEnis } from "./LingeringEnis.ts";
 import type { VpcId } from "./Vpc.ts";
 
 export type InternetGatewayId<ID extends string = string> = `igw-${ID}`;
@@ -376,41 +377,36 @@ export const InternetGatewayProvider = () =>
           }
           const attachments = igw.Attachments ?? [];
 
-          // 1. Detach from all VPCs first
+          // 1. Detach from all VPCs first. DetachInternetGateway fails with
+          // DependencyViolation ("has some mapped public address(es)") while
+          // any ENI in the VPC still holds a public IP — a just-deleted VPC
+          // Lambda's Hyperplane ENIs or draining Fargate task ENIs can hold
+          // theirs for 5-20 minutes after the owner is gone. Ride that
+          // window out on the same budget the subnet delete uses, reaping
+          // detached Lambda ENIs between attempts to accelerate the release.
           if (attachments.length > 0) {
             for (const attachment of attachments) {
-              yield* ec2
-                .detachInternetGateway({
-                  InternetGatewayId: internetGatewayId,
-                  VpcId: attachment.VpcId!,
-                })
-                .pipe(
-                  Effect.tapError(Effect.logDebug),
-                  Effect.catchTag("Gateway.NotAttached", () => Effect.void),
-                  Effect.catchTag(
-                    "InvalidInternetGatewayID.NotFound",
-                    () => Effect.void,
-                  ),
-                  // Retry on dependency violations (e.g., NAT Gateway with EIP still attached)
-                  Effect.retry({
-                    while: (e) => {
-                      return e._tag === "DependencyViolation";
-                    },
-                    // Public addresses on a draining EKS/HyperPod control
-                    // plane's ENIs can take several minutes to release —
-                    // 5s x 60 = ~5 min.
-                    schedule: Schedule.max([
-                      Schedule.fixed(5000),
-                      Schedule.recurs(60),
-                    ]).pipe(
-                      Schedule.tap(({ attempt }) =>
-                        session.note(
-                          `Waiting for VPC dependencies to clear before detaching... (attempt ${attempt})`,
-                        ),
-                      ),
+              yield* retryWhileLingeringEnis(
+                ec2
+                  .detachInternetGateway({
+                    InternetGatewayId: internetGatewayId,
+                    VpcId: attachment.VpcId!,
+                  })
+                  .pipe(
+                    Effect.tapError(Effect.logDebug),
+                    Effect.catchTag("Gateway.NotAttached", () => Effect.void),
+                    Effect.catchTag(
+                      "InvalidInternetGatewayID.NotFound",
+                      () => Effect.void,
                     ),
-                  }),
-                );
+                  ),
+                {
+                  scope: { name: "vpc-id", value: attachment.VpcId! },
+                  isDependencyViolation: (e) =>
+                    e._tag === "DependencyViolation",
+                  session,
+                },
+              );
               yield* session.note(`Detached from VPC: ${attachment.VpcId}`);
             }
           }

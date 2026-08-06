@@ -36,6 +36,7 @@ import {
   LocalRuntimeState,
   localStorageDirectory,
 } from "../LocalRuntime.ts";
+import type { ConsumerSettings } from "../Queues/Consumer.ts";
 import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
 import { readAssetsConfigFiles } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
@@ -126,6 +127,25 @@ export const LocalWorkerProvider = () =>
         }
       >();
 
+      // ConsumerSettings speaks the Cloudflare API's dialect (batchSize,
+      // maxWaitTimeMs in milliseconds); the runtime's QueueConsumer speaks
+      // wrangler's (maxBatchSize, maxBatchTimeout in seconds). Map
+      // explicitly — a spread silently drops the mismatched fields.
+      const toRuntimeConsumerSettings = (
+        settings: ConsumerSettings | undefined,
+      ): Pick<
+        RuntimeQueueConsumer,
+        "maxBatchSize" | "maxBatchTimeout" | "maxRetries" | "retryDelay"
+      > => ({
+        maxBatchSize: settings?.batchSize,
+        maxBatchTimeout:
+          settings?.maxWaitTimeMs !== undefined
+            ? settings.maxWaitTimeMs / 1000
+            : undefined,
+        maxRetries: settings?.maxRetries,
+        retryDelay: settings?.retryDelay,
+      });
+
       const getQueueConsumers = Effect.fn(function* (scriptName: string) {
         const consumers: RuntimeQueueConsumer[] = [];
         for (const consumer of MutableHashMap.values(
@@ -146,7 +166,7 @@ export const LocalWorkerProvider = () =>
               consumers.push({
                 queueName: consumer.queueName,
                 deadLetterQueue: consumer.deadLetterQueue,
-                ...consumer.settings,
+                ...toRuntimeConsumerSettings(consumer.settings),
                 pull: {
                   queueId: consumer.queueId,
                   accountId: consumer.accountId,
@@ -162,7 +182,7 @@ export const LocalWorkerProvider = () =>
               consumers.push({
                 queueName: queue.queueName,
                 deadLetterQueue: consumer.deadLetterQueue,
-                ...consumer.settings,
+                ...toRuntimeConsumerSettings(consumer.settings),
               });
             } else {
               return yield* Effect.die(`Queue ${consumer.queueId} not found`);

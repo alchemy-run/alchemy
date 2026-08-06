@@ -169,6 +169,12 @@
       "worker": "./src/Drizzle/index.ts",
       "import": "./lib/Drizzle/index.js"
     },
+    "./Drizzle/*": {
+      "types": "./lib/Drizzle/*.d.ts",
+      "bun": "./src/Drizzle/*.ts",
+      "worker": "./src/Drizzle/*.ts",
+      "import": "./lib/Drizzle/*.js"
+    },
     "./Axiom": {
       "types": "./lib/Axiom/index.d.ts",
       "bun": "./src/Axiom/index.ts",
