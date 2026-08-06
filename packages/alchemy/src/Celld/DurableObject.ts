@@ -21,7 +21,39 @@
  * decides hosting vs remote and which fleet.
  *
  * @section Defining a Durable Object
- * @example Counter
+ * @example Inline
+ * ```typescript
+ * // fleet.ts — a single file: the fleet and an inline cell class
+ * export class Cells extends Celld.Fleet<Cells>()("Cells") {}
+ *
+ * export class Counter extends Celld.DurableObject<Counter>()(
+ *   "Counter",
+ *   Effect.gen(function* () {
+ *     const state = yield* Celld.DurableObjectState;
+ *     return Effect.gen(function* () {
+ *       const count = (yield* state.storage.get<number>("count")) ?? 0;
+ *       return {
+ *         increment: () =>
+ *           Effect.gen(function* () {
+ *             const next = count + 1;
+ *             yield* state.storage.put("count", next);
+ *             return next;
+ *           }),
+ *       };
+ *     });
+ *   }),
+ * ) {}
+ *
+ * export default Cells.make(
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     yield* Counter;
+ *     return {};
+ *   }),
+ * );
+ * ```
+ *
+ * @example Tagged class with a separate layer
  * ```typescript
  * // cells.ts — tag-only fleet class
  * export class Cells extends Celld.Fleet<Cells>()("Cells") {}
@@ -154,6 +186,34 @@ export type DurableObjectServices =
 
 export interface DurableObjectClass {
   <Self, Shape = never>(): {
+    /**
+     * Inline form: the implementation is coupled to the class. Hosted by
+     * whichever fleet yields it; callers select the fleet with
+     * `.client(fleet)`.
+     */
+    <
+      ImplShape extends MainRpc<DurableObjectState>,
+      Req extends DurableObjectServices = never,
+    >(
+      name: string,
+      impl: Effect.Effect<
+        Effect.Effect<
+          ImplShape,
+          never,
+          RuntimeContext | DurableObjectState | Scope
+        >,
+        never,
+        Req
+      >,
+    ): Effect.Effect<
+      DurableObject<[Shape] extends [never] ? ImplShape : Shape>,
+      never,
+      never
+    > & {
+      new (_: never): [Shape] extends [never] ? ImplShape : Shape;
+      /** Caller-side layer selecting the fleet that hosts this class. */
+      client(fleet: FleetRef): Layer.Layer<Self>;
+    };
     <Name extends string>(
       name: Name,
       props?: DurableObjectProps,
@@ -214,13 +274,21 @@ const rawValue = (value: unknown): string | undefined =>
 
 export const DurableObject: DurableObjectClass = taggedFunction(
   DurableObjectScope,
-  function (...args: [] | [name: string, props?: DurableObjectProps]) {
+  function (
+    ...args:
+      | []
+      | [name: string, props?: DurableObjectProps | Effect.Effect<any>]
+  ) {
     if (args.length === 0) {
-      return (name: string, props?: DurableObjectProps) =>
+      return (name: string, props?: DurableObjectProps | Effect.Effect<any>) =>
         (DurableObject as any)(name, props);
     }
     const namespace = args[0];
-    const props = args[1];
+    const inlineImpl = Effect.isEffect(args[1])
+      ? (args[1] as Effect.Effect<any>)
+      : undefined;
+    const props =
+      inlineImpl === undefined ? (args[1] as DurableObjectProps) : undefined;
     const className = props?.className ?? namespace;
     const tag = Context.Service(namespace) as Effect.Effect<any, never, any> &
       Context.Service<any, any>;
@@ -472,6 +540,32 @@ export const DurableObject: DurableObjectClass = taggedFunction(
         }
         return yield* remote(fleetRef);
       });
+
+    if (inlineImpl !== undefined) {
+      // Inline form: hosted by whichever fleet yields the class; outside a
+      // fleet the caller selects the fleet with `.client(fleet)`.
+      return class extends effectClass(
+        Effect.gen(function* () {
+          const host = yield* Binding.Host;
+          if (isFleet(host)) {
+            return yield* makeHost(inlineImpl as any);
+          }
+          const provided = yield* Effect.serviceOption(tag);
+          if (Option.isSome(provided)) {
+            return provided.value;
+          }
+          return yield* Effect.die(
+            new Error(
+              `DurableObject '${namespace}' was yielded outside a fleet ` +
+                `without a fleet selected — provide ${namespace}.client(fleet).`,
+            ),
+          );
+        }),
+      ) {
+        static client = (fleet: FleetRef) =>
+          Layer.effect(tag, dispatch(fleet, inlineImpl as any));
+      };
+    }
 
     return class extends effectClass(tag as Effect.Effect<any, never, any>) {
       static make = <Req = never>(
