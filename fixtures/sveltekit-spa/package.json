@@ -15,11 +15,11 @@
     "@alchemy.run/cloudflare-test-tools": "workspace:*",
     "@alchemy.run/cloudflare-frameworks": "workspace:*",
     "@playwright/test": "catalog:",
-    "@sveltejs/kit": "3.0.0-next.9",
-    "@sveltejs/vite-plugin-svelte": "^7.2.0",
+    "@sveltejs/kit": "catalog:frameworks",
+    "@sveltejs/vite-plugin-svelte": "catalog:frameworks",
     "@types/node": "^24.12.0",
     "effect": "catalog:effect",
-    "svelte": "^5.56.6",
+    "svelte": "catalog:frameworks",
     "vite": "catalog:"
   }
 }

@@ -147,13 +147,25 @@
         "miniflare": "^4.20260701.0",
         "workerd": "1.20260704.1"
       },
-      "fixtures": {
-        "waku": "1.0.0-beta.7",
-        "react-server-dom-webpack": "~19.2.6",
-        "hono": "^4.12.14",
+      "frameworks": {
+        "@astrojs/internal-helpers": "0.10.1",
+        "@astrojs/underscore-redirects": "1.0.3",
+        "@octanejs/adapter-cloudflare": "0.0.12",
+        "@octanejs/vite-plugin": "0.1.22",
+        "@opennextjs/cloudflare": "1.20.1",
         "@sveltejs/kit": "3.0.0-next.9",
         "@sveltejs/vite-plugin-svelte": "^7.2.0",
+        "astro": "7.1.0",
+        "hono": "^4.12.14",
+        "next": "16.2.10",
+        "nitropack": "2.13.4",
+        "nuxt": "4.5.1",
+        "octane": "0.1.22",
         "svelte": "^5.56.6",
+        "waku": "1.0.0-beta.7"
+      },
+      "fixtures": {
+        "react-server-dom-webpack": "~19.2.6",
         "@foldkit/vite-plugin": "^0.11.3",
         "@tanstack/react-router": "^1.167.4",
         "@vitejs/plugin-react": "^6.0.2",
@@ -161,12 +173,7 @@
         "@tanstack/react-start": "^1.166.15",
         "foldkit": "^0.137.0",
         "react-dom": "^19.2.7",
-        "react-router": "7.16.0",
-        "nuxt": "4.5.1",
-        "nitropack": "2.13.4",
-        "octane": "0.1.22",
-        "@octanejs/vite-plugin": "0.1.22",
-        "@octanejs/adapter-cloudflare": "0.0.12"
+        "react-router": "7.16.0"
       }
     }
   },

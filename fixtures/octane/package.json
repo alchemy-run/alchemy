@@ -10,9 +10,9 @@
     "pretest": "playwright install chromium && bun run build"
   },
   "dependencies": {
-    "@octanejs/adapter-cloudflare": "0.0.12",
-    "@octanejs/vite-plugin": "0.1.22",
-    "octane": "0.1.22",
+    "@octanejs/adapter-cloudflare": "catalog:frameworks",
+    "@octanejs/vite-plugin": "catalog:frameworks",
+    "octane": "catalog:frameworks",
     "vite": "catalog:"
   },
   "devDependencies": {

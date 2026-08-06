@@ -14,7 +14,6 @@
 import { DeployTargetError } from "../../core/index.ts";
 import * as Effect from "effect/Effect";
 import type * as Scope from "effect/Scope";
-import { existsSync } from "node:fs";
 import * as NodePath from "node:path";
 import { fileURLToPath } from "node:url";
 import type { NuxtDevPlatform, NuxtDevPlatformContext } from "../Nuxt.ts";
@@ -32,28 +31,16 @@ export const CLIENT_MODULE_SPECIFIER =
 
 /** Resolve the absolute path of the shipped dev-only nitro plugin. */
 export const resolveDevPluginPath = (): string => {
-  const here = fileURLToPath(import.meta.url);
-  const dir = NodePath.dirname(here);
-  if (here.endsWith(".ts")) {
-    // Running from src (bun resolves the `bun` export condition). Nitro's
-    // rollup parses injected plugins as JavaScript before any TS transform,
-    // so raw `plugin.ts` (`import type *`, interfaces) fails to parse.
-    // Prefer the compiled plugin whenever the package ships one; fall back
-    // to the TS source only for an unbuilt in-repo checkout.
-    const compiled = NodePath.join(
-      dir,
-      "..",
-      "..",
-      "..",
-      "dist",
-      "nuxt",
-      "dev",
-      "plugin.js",
-    );
-    if (existsSync(compiled)) return compiled;
-    return NodePath.join(dir, "plugin.ts");
-  }
-  return NodePath.join(dir, "plugin.js");
+  const packageJson = fileURLToPath(
+    import.meta.resolve("@alchemy.run/cloudflare-frameworks/package.json"),
+  );
+  return NodePath.join(
+    NodePath.dirname(packageJson),
+    "dist",
+    "nuxt",
+    "dev",
+    "plugin.js",
+  );
 };
 
 /** Resolve {@link CLIENT_MODULE_SPECIFIER} to an absolute file path. */

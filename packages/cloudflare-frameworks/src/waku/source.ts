@@ -230,7 +230,7 @@ const sha256Object = (value: unknown): string =>
 /** The integration's own version — included in the input hash so upgrading the
  * adapter busts the build memo even when project sources are unchanged. */
 const PACKAGE_VERSION: string = (
-  createRequire(import.meta.url)("../package.json") as { version: string }
+  createRequire(import.meta.url)("../../package.json") as { version: string }
 ).version;
 
 // ─────────────────────────────────────────────────────────────────────────────

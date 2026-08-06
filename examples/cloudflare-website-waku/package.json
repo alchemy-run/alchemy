@@ -12,11 +12,11 @@
   "dependencies": {
     "alchemy": "workspace:*",
     "effect": "catalog:",
-    "hono": "^4.12.14",
+    "hono": "catalog:frameworks",
     "react": "~19.2.6",
     "react-dom": "~19.2.6",
     "react-server-dom-webpack": "~19.2.6",
-    "waku": "1.0.0-beta.7"
+    "waku": "catalog:frameworks"
   },
   "devDependencies": {
     "@alchemy.run/cloudflare-frameworks": "workspace:*",

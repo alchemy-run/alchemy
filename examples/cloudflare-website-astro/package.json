@@ -10,7 +10,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "astro": "7.1.0"
+    "astro": "catalog:frameworks"
   },
   "devDependencies": {
     "@alchemy.run/cloudflare-frameworks": "workspace:*",

@@ -40,7 +40,7 @@ import { createRequire } from "node:module";
 import * as Nextjs from "./Nextjs.ts";
 
 const packageVersion: string = createRequire(import.meta.url)(
-  "../package.json",
+  "../../package.json",
 ).version;
 
 const PROVIDER = "@alchemy.run/cloudflare-frameworks/nextjs/source";

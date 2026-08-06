@@ -245,7 +245,7 @@ const PROVIDER = "@alchemy.run/cloudflare-frameworks/astro/source";
 const packageMeta: { version: string; root: string | undefined } = (() => {
   try {
     const require = createRequire(import.meta.url);
-    const path = require.resolve("../package.json");
+    const path = require.resolve("../../package.json");
     return {
       version: (require(path) as { version: string }).version,
       root: path.slice(0, path.length - "package.json".length - 1),

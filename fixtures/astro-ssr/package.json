@@ -11,7 +11,7 @@
     "pretest": "playwright install chromium"
   },
   "dependencies": {
-    "astro": "7.1.0"
+    "astro": "catalog:frameworks"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:workers",

@@ -38,9 +38,9 @@ export interface RunnerConfig {
   readonly buildCommand?: string | undefined;
 }
 
-/** Absolute path of the runner script (`runner.mjs` sibling of this module). */
+/** Absolute path of the runner script in the package's `nextjs` directory. */
 export const runnerPath = (): string =>
-  fileURLToPath(new URL("./runner.mjs", import.meta.url));
+  fileURLToPath(new URL("../nextjs/runner.mjs", import.meta.url));
 
 /**
  * Run the programmatic `@opennextjs/cloudflare` build pipeline in a

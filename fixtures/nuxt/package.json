@@ -12,8 +12,8 @@
     "test:update-snapshots": "playwright test --update-snapshots"
   },
   "dependencies": {
-    "nitropack": "2.13.4",
-    "nuxt": "4.5.1"
+    "nitropack": "catalog:frameworks",
+    "nuxt": "catalog:frameworks"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:workers",

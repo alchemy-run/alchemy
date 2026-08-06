@@ -16,8 +16,8 @@
   "devDependencies": {
     "@alchemy.run/cloudflare-frameworks": "workspace:*",
     "@types/node": "^24.12.0",
-    "nitropack": "2.13.4",
-    "nuxt": "4.5.1",
+    "nitropack": "catalog:frameworks",
+    "nuxt": "catalog:frameworks",
     "typescript": "catalog:"
   },
   "repository": {

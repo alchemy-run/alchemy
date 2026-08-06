@@ -362,7 +362,7 @@ const packageVersion = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const dir = NodePath.dirname(fileURLToPath(import.meta.url));
   const content = yield* fs.readFileString(
-    NodePath.join(dir, "../package.json"),
+    NodePath.join(dir, "../../package.json"),
   );
   return (JSON.parse(content) as { version: string }).version;
 });

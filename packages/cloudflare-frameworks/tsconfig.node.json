@@ -4,6 +4,7 @@
   "exclude": ["src/**/test/**", "src/astro/runtime"],
   "compilerOptions": {
     "tsBuildInfoFile": ".cache/tsconfig.node.tsbuildinfo",
+    "emitDeclarationOnly": true,
     "outDir": "dist",
     "rootDir": "src",
     "types": ["node"]
