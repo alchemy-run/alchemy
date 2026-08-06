@@ -14,6 +14,7 @@ const workflowsSharedRoot = sourceRoot("internal/workflows-shared");
 
 export default defineConfig({
   test: {
+    maxWorkers: process.platform === "win32" ? 2 : undefined,
     projects: [
       {
         root: coreRoot,
@@ -25,7 +26,6 @@ export default defineConfig({
           testTimeout: 30_000,
           hookTimeout: 30_000,
           retry: process.env.CI ? 2 : 0,
-          maxWorkers: process.platform === "win32" ? 2 : undefined,
         },
       },
       {
