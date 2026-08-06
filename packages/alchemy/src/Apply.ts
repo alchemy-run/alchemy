@@ -36,7 +36,7 @@ import {
   missingProviderError,
   tryFindProviderByType,
 } from "./Provider.ts";
-import type { ProviderMode } from "./ProviderMode.ts";
+import { stampedMode, type ProviderMode } from "./ProviderMode.ts";
 import type { ResourceBinding } from "./Resource.ts";
 import { Stack } from "./Stack.ts";
 import { Stage } from "./Stage.ts";
@@ -990,12 +990,12 @@ const executeNode = (
               // Delete each old generation with the provider variant of the
               // mode that created it — after a local ⇄ live switch,
               // `node.provider` (the new mode) cannot tear down the other
-              // runtime's instance. `providerMode: undefined` (legacy row or
-              // mode-agnostic provider) resolves to the provider as
-              // registered.
+              // runtime's instance. Unstamped rows (legacy or written by a
+              // mode-agnostic provider) are physically live — see
+              // stampedMode.
               const oldProvider = yield* findProviderByType(
                 node.resource.Type,
-                old.providerMode,
+                stampedMode(old.providerMode),
               );
               yield* oldProvider
                 .delete({
@@ -1784,10 +1784,11 @@ const collectGarbage = Effect.fn(function* (
               // rows (see the deletions builder in Plan.ts); this guards
               // the replaced-chain generations that bypass plan. The old
               // generation is torn down with the provider variant of the
-              // mode that created it (local ⇄ live replacements).
+              // mode that created it (local ⇄ live replacements);
+              // unstamped rows are physically live (see stampedMode).
               provider: yield* tryFindProviderByType(
                 node.old.resourceType,
-                node.old.providerMode,
+                stampedMode(node.old.providerMode),
               ).pipe(
                 Effect.flatMap(
                   Option.match({

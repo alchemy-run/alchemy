@@ -15,6 +15,7 @@ import { deepEqual } from "./Diff.ts";
 import { InstanceId } from "./InstanceId.ts";
 import type { Apply, Plan } from "./Plan.ts";
 import { findProviderByType, Provider } from "./Provider.ts";
+import { stampedMode } from "./ProviderMode.ts";
 import type { ResourceLike } from "./Resource.ts";
 import {
   isActionState,
@@ -189,7 +190,7 @@ export const sync = (
       // a local dev worker's state must be read by the local provider.
       const provider = yield* findProviderByType(
         resourceType,
-        old.providerMode,
+        stampedMode(old.providerMode),
       );
       if (!provider.read) {
         return yield* skip(
@@ -445,7 +446,7 @@ export const plan = (stack: {
       // switches modes — a local ⇄ live switch is a plan-time replacement).
       const provider = yield* findProviderByType(
         persisted.resourceType,
-        persisted.providerMode,
+        stampedMode(persisted.providerMode),
       );
       const action =
         r.action === "drifted"

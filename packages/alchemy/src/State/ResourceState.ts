@@ -68,8 +68,9 @@ interface BaseResourceState {
    *
    * `undefined` means either a mode-agnostic provider (single
    * implementation serves both dev and deploy) or a legacy row written
-   * before modes were persisted — both are treated as "whatever the
-   * current run's mode is" (no replacement churn).
+   * before modes were persisted — both acted on the real cloud, so an
+   * unstamped row is assumed **live** (see `stampedMode`). Live runs see
+   * no churn; a dev run replaces it like any stamped live row.
    */
   providerMode?: ProviderMode;
 }

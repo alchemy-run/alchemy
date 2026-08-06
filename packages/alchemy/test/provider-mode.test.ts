@@ -7,7 +7,7 @@
  *     local emulation; mode-agnostic providers satisfy any requested mode
  *   - switching modes plans a REPLACEMENT; the old generation / orphan row
  *     is deleted with the provider variant of the mode that created it
- *   - unstamped rows are assumed to be the current run's mode
+ *   - unstamped (legacy) rows are assumed live
  *   - conflicting mode decorations on the same FQN die loudly
  *   - the non-default variant is only constructed when demanded (laziness)
  *
@@ -212,23 +212,40 @@ describe("provider modes", () => {
       }),
   );
 
-  test.provider(
-    "unstamped (legacy) rows are assumed to be the current run's mode",
-    (stack) =>
-      Effect.gen(function* () {
-        yield* modal("A", "v1").pipe(stack.deploy);
-        const row = yield* getState("A");
-        expect(row?.providerMode).toEqual("live");
+  test.provider("unstamped (legacy) rows are assumed live", (stack) =>
+    Effect.gen(function* () {
+      yield* modal("A", "v1").pipe(stack.deploy);
+      const row = yield* getState("A");
+      expect(row?.providerMode).toEqual("live");
 
-        // Simulate a row written before providerMode existed.
-        yield* setState("A", { ...row!, providerMode: undefined });
+      // Simulate a row written before providerMode existed.
+      yield* setState("A", { ...row!, providerMode: undefined });
 
-        // Same mode (default live) → no replacement churn.
-        const plan = yield* modal("A", "v1").pipe(stack.plan);
-        expect(plan.resources["A"].action).toEqual("noop");
+      // A live run sees no churn: unstamped = live.
+      const plan = yield* modal("A", "v1").pipe(stack.plan);
+      expect(plan.resources["A"].action).toEqual("noop");
 
-        yield* stack.destroy();
-      }),
+      // A dev run must treat the unstamped row exactly like a stamped
+      // live row: replacement, with the old generation deleted by the
+      // LIVE provider. Assuming "current run's mode" instead silently
+      // adopts the deployed live resource as a local instance — the
+      // row re-stamps local and the live resource leaks untracked.
+      const devPlan = yield* inDev(modal("A", "v1").pipe(stack.plan));
+      expect(devPlan.resources["A"].action).toEqual("replace");
+
+      const before = callsFor(stack.name).length;
+      const output = yield* inDev(modal("A", "v1").pipe(stack.deploy));
+      expect(output.runtime).toEqual("local");
+      expect((yield* getState("A"))?.providerMode).toEqual("local");
+      expect(callsFor(stack.name).slice(before)).toContainEqual({
+        stack: stack.name,
+        mode: "live",
+        op: "delete",
+        id: "A",
+      });
+
+      yield* stack.destroy();
+    }),
   );
 
   test.provider(

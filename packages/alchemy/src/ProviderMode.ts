@@ -21,6 +21,24 @@ import { AlchemyContext } from "./AlchemyContext.ts";
 export type ProviderMode = "live" | "local";
 
 /**
+ * The mode a persisted state row was actually reconciled with.
+ *
+ * An unstamped row (`providerMode: undefined`) predates provider modes or
+ * was written by a mode-agnostic provider — in both cases the write acted
+ * on the REAL cloud, so the row's physical resource is `"live"`. Assuming
+ * the current run's mode instead silently adopts a deployed cloud resource
+ * as a local instance during `alchemy dev`: the row noops (or restarts
+ * locally over the live attrs), gets re-stamped `"local"`, and the live
+ * resource becomes untracked — it is never deleted by a later destroy or
+ * replacement, and its deployed URL keeps serving.
+ *
+ * For mode-agnostic providers `"live"` is harmless: `providerForMode`
+ * ignores the mode when the provider has a single implementation.
+ */
+export const stampedMode = (mode: ProviderMode | undefined): ProviderMode =>
+  mode ?? "live";
+
+/**
  * ProviderModePolicy opts resources OUT of local emulation: when `true`,
  * resources registered while it is in context resolve the **live**
  * provider even during `alchemy dev`.
