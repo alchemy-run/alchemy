@@ -40,7 +40,11 @@ import {
   tryFindProviderByType,
   type ProviderService,
 } from "./Provider.ts";
-import { defaultProviderMode, type ProviderMode } from "./ProviderMode.ts";
+import {
+  defaultProviderMode,
+  stampedProviderMode,
+  type ProviderMode,
+} from "./ProviderMode.ts";
 import {
   isResource,
   type ResourceBinding,
@@ -343,17 +347,21 @@ export const make = <A>(
 
     /**
      * Has this resource switched provider modes since it was last
-     * reconciled? Rows without a persisted mode (legacy rows, or rows
-     * written by a mode-agnostic provider) are assumed to already be in
-     * the current run's mode — no replacement churn.
+     * reconciled? The row's mode is its stamp, or — for legacy rows
+     * written before stamping — `"local"` inferred from a `dev:` identity
+     * marker in the persisted attrs (see {@link stampedProviderMode}).
+     * Rows with neither (mode-agnostic providers, legacy live rows) are
+     * assumed to already be in the current run's mode — no replacement
+     * churn.
      */
     const hasModeSwitched = (
       mode: ProviderMode | undefined,
       oldState: ResourceState | undefined,
-    ): boolean =>
-      mode !== undefined &&
-      oldState?.providerMode !== undefined &&
-      oldState.providerMode !== mode;
+    ): boolean => {
+      if (mode === undefined || oldState === undefined) return false;
+      const rowMode = stampedProviderMode(oldState);
+      return rowMode !== undefined && rowMode !== mode;
+    };
 
     const resourceFqns = yield* state.list({
       stack: stackName,
@@ -1781,12 +1789,14 @@ export const make = <A>(
               // and the remediation instead of limping into a partial apply.
               //
               // Orphan deletes resolve the provider variant for the mode
-              // that created the row (`providerMode`), so e.g. a local dev
+              // that created the row (`providerMode`, or the `dev:` marker
+              // inference for legacy unstamped rows), so e.g. a local dev
               // worker's row is deleted by the local provider even during a
               // live deploy — and vice versa.
+              const rowMode = stampedProviderMode(oldState);
               const providerOption = yield* tryFindProviderByType(
                 resourceType,
-                oldState.providerMode,
+                rowMode,
               );
               if (Option.isNone(providerOption)) {
                 return yield* Effect.die(
@@ -1805,7 +1815,7 @@ export const make = <A>(
                   action: "delete",
                   state: oldState,
                   provider: provider,
-                  mode: oldState.providerMode,
+                  mode: rowMode,
                   resource: {
                     Namespace: oldState.namespace,
                     FQN: fqn,
@@ -1817,7 +1827,7 @@ export const make = <A>(
                     Provider: Provider(resourceType),
                     RemovalPolicy: oldState.removalPolicy,
                     Adopt: undefined,
-                    Mode: oldState.providerMode,
+                    Mode: rowMode,
                     FormerFqns: undefined,
                     RuntimeContext: undefined!,
                     Providers: undefined,

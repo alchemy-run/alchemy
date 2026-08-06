@@ -36,7 +36,7 @@ import {
   missingProviderError,
   tryFindProviderByType,
 } from "./Provider.ts";
-import type { ProviderMode } from "./ProviderMode.ts";
+import { stampedProviderMode, type ProviderMode } from "./ProviderMode.ts";
 import type { ResourceBinding } from "./Resource.ts";
 import { Stack } from "./Stack.ts";
 import { Stage } from "./Stage.ts";
@@ -523,13 +523,15 @@ const executeNode = (
     } satisfies ScopedPlanStatusSession;
 
     // On a mode-switch replacement (local ⇄ live) surface the transition:
-    // the old generation's stamped mode → the mode resolved for this run.
+    // the old generation's stamped (or marker-inferred) mode → the mode
+    // resolved for this run.
+    const oldRowMode =
+      node.action === "replace" ? stampedProviderMode(node.state) : undefined;
     const fromProviderMode =
-      node.action === "replace" &&
       node.mode !== undefined &&
-      node.state.providerMode !== undefined &&
-      node.state.providerMode !== node.mode
-        ? node.state.providerMode
+      oldRowMode !== undefined &&
+      oldRowMode !== node.mode
+        ? oldRowMode
         : undefined;
 
     const report = (status: ApplyStatus) =>
@@ -1037,12 +1039,12 @@ const executeNode = (
               // Delete each old generation with the provider variant of the
               // mode that created it — after a local ⇄ live switch,
               // `node.provider` (the new mode) cannot tear down the other
-              // runtime's instance. `providerMode: undefined` (legacy row or
-              // mode-agnostic provider) resolves to the provider as
-              // registered.
+              // runtime's instance. Legacy unstamped rows infer "local"
+              // from a `dev:` identity marker in their attrs; rows with
+              // neither resolve to the provider as registered.
               const oldProvider = yield* findProviderByType(
                 node.resource.Type,
-                old.providerMode,
+                stampedProviderMode(old),
               );
               yield* oldProvider
                 .delete({
@@ -1813,10 +1815,11 @@ const collectGarbage = Effect.fn(function* (
               downstream: node.downstream,
               props: node.state.props,
               attr: node.state.attr,
-              // Plan resolved this provider for the row's persisted
-              // `providerMode` (see the deletions builder in Plan.ts).
+              // Plan resolved this provider for the row's persisted (or
+              // marker-inferred) `providerMode` (see the deletions builder
+              // in Plan.ts).
               provider: node.provider,
-              providerMode: node.state.providerMode,
+              providerMode: stampedProviderMode(node.state),
             }
           : {
               fqn: node.fqn,
@@ -1831,10 +1834,12 @@ const collectGarbage = Effect.fn(function* (
               // rows (see the deletions builder in Plan.ts); this guards
               // the replaced-chain generations that bypass plan. The old
               // generation is torn down with the provider variant of the
-              // mode that created it (local ⇄ live replacements).
+              // mode that created it (local ⇄ live replacements), inferring
+              // "local" from a `dev:` identity marker on legacy unstamped
+              // rows.
               provider: yield* tryFindProviderByType(
                 node.old.resourceType,
-                node.old.providerMode,
+                stampedProviderMode(node.old),
               ).pipe(
                 Effect.flatMap(
                   Option.match({
@@ -1846,7 +1851,7 @@ const collectGarbage = Effect.fn(function* (
                   }),
                 ),
               ),
-              providerMode: node.old.providerMode,
+              providerMode: stampedProviderMode(node.old),
             };
 
         // Mutable: an attr-less row (interrupted create) may recover its

@@ -232,6 +232,74 @@ describe("provider modes", () => {
   );
 
   test.provider(
+    "a legacy unstamped row with dev:-marker identity is deleted by the local provider",
+    (stack) =>
+      Effect.gen(function* () {
+        // Simulate a row written by `alchemy dev` on a pre-stamping version
+        // (e.g. 2.0.0-beta.64): reconciled by the local provider (so its
+        // attrs carry the `dev:` identity marker) but persisted without a
+        // providerMode stamp.
+        yield* inDev(modal("A", "v1").pipe(stack.deploy));
+        const row = yield* getState("A");
+        expect(row?.providerMode).toEqual("local");
+        expect((row?.attr as { instance: string }).instance).toMatch(/^dev:/);
+        yield* setState("A", { ...row!, providerMode: undefined });
+
+        // A plain (live-mode) destroy must infer "local" from the marker
+        // and route the delete to the local variant — never hand the `dev:`
+        // identity to the live provider (the cloud API rejects it).
+        const before = callsFor(stack.name).length;
+        yield* stack.destroy();
+
+        expect(yield* getState("A")).toBeUndefined();
+        const deletes = callsFor(stack.name)
+          .slice(before)
+          .filter((c) => c.op === "delete");
+        expect(deletes).toEqual([
+          { stack: stack.name, mode: "local", op: "delete", id: "A" },
+        ]);
+      }),
+  );
+
+  test.provider(
+    "a live deploy over a legacy unstamped local row replaces via the marker-inferred mode",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* inDev(modal("A", "v1").pipe(stack.deploy));
+        const row = yield* getState("A");
+        yield* setState("A", { ...row!, providerMode: undefined });
+
+        // Identical props, but the marker infers the row is local and this
+        // run resolves live → mode-switch replacement, not a live
+        // reconcile against the `dev:` identity.
+        const plan = yield* modal("A", "v1").pipe(stack.plan);
+        expect(plan.resources["A"].action).toEqual("replace");
+
+        const before = callsFor(stack.name).length;
+        const output = yield* modal("A", "v1").pipe(stack.deploy);
+        expect(output.runtime).toEqual("live");
+        expect((yield* getState("A"))?.providerMode).toEqual("live");
+
+        const calls = callsFor(stack.name).slice(before);
+        expect(calls).toContainEqual({
+          stack: stack.name,
+          mode: "live",
+          op: "reconcile",
+          id: "A",
+        });
+        // The old (legacy dev) generation is torn down by the LOCAL variant.
+        expect(calls).toContainEqual({
+          stack: stack.name,
+          mode: "local",
+          op: "delete",
+          id: "A",
+        });
+
+        yield* stack.destroy();
+      }),
+  );
+
+  test.provider(
     "mode-agnostic providers never replace on a mode switch",
     (stack) =>
       Effect.gen(function* () {

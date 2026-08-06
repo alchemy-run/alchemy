@@ -60,6 +60,50 @@ export class ConflictingProviderModeError extends Data.TaggedError(
 }> {}
 
 /**
+ * Prefix marking a locally-emulated resource's physical identity. Local
+ * providers fabricate ids/names with this prefix (`dev:<uuid>` queue and
+ * namespace ids, `dev:`-prefixed bucket names, ...) so a resource's
+ * persisted attributes reveal which runtime hosts it even without the
+ * `providerMode` stamp.
+ */
+export const LOCAL_ID_PREFIX = "dev:";
+
+/**
+ * Does a persisted attributes value carry a local identity marker — any
+ * string value (at any depth) with the {@link LOCAL_ID_PREFIX}? Persisted
+ * attrs are plain JSON (state commits strip unresolved values), so a
+ * structural scan is safe.
+ */
+export const hasLocalIdentity = (value: unknown): boolean => {
+  if (typeof value === "string") return value.startsWith(LOCAL_ID_PREFIX);
+  if (Array.isArray(value)) return value.some(hasLocalIdentity);
+  if (typeof value === "object" && value !== null) {
+    return Object.values(value).some(hasLocalIdentity);
+  }
+  return false;
+};
+
+/**
+ * The provider mode a persisted row should be handled with: its stamped
+ * `providerMode`, or — for legacy rows written before stamping existed —
+ * `"local"` inferred from a {@link LOCAL_ID_PREFIX} identity marker in the
+ * persisted attributes.
+ *
+ * Without the inference, a legacy dev row (e.g. a queue with a `dev:<uuid>`
+ * id written by `alchemy dev` on a pre-stamping version) is assumed to be
+ * the current run's mode; a plain `alchemy destroy`/`deploy` then hands the
+ * `dev:` identity to the live provider, which sends it to the real cloud
+ * API (Cloudflare rejects it as a malformed parameter). Rows that are
+ * unstamped and carry no marker keep the assume-current-mode behavior
+ * (mode-agnostic providers, legacy live rows).
+ */
+export const stampedProviderMode = (row: {
+  readonly providerMode?: ProviderMode | undefined;
+  readonly attr?: unknown;
+}): ProviderMode | undefined =>
+  row.providerMode ?? (hasLocalIdentity(row.attr) ? "local" : undefined);
+
+/**
  * Run the wrapped resources **remotely (against the real cloud) even during
  * `alchemy dev`** — the opt-out from local emulation. During `alchemy deploy`
  * this is a no-op (everything is remote).

@@ -68,8 +68,10 @@ interface BaseResourceState {
    *
    * `undefined` means either a mode-agnostic provider (single
    * implementation serves both dev and deploy) or a legacy row written
-   * before modes were persisted — both are treated as "whatever the
-   * current run's mode is" (no replacement churn).
+   * before modes were persisted. Unstamped rows whose attrs carry a local
+   * identity marker (`dev:`-prefixed ids — see `stampedProviderMode` in
+   * ProviderMode.ts) are treated as `"local"`; the rest are treated as
+   * "whatever the current run's mode is" (no replacement churn).
    */
   providerMode?: ProviderMode;
 }
