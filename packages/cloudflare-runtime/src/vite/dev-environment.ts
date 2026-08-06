@@ -2,6 +2,7 @@ import type { ExportTypes } from "@alchemy.run/cloudflare-runtime/rolldown/expor
 import { isExportTypes } from "@alchemy.run/cloudflare-runtime/rolldown/export-types";
 import { MODULE_REFERENCE_REGEX } from "@alchemy.run/cloudflare-runtime/rolldown/plugins";
 import assert from "node:assert";
+import { URL as NodeURL } from "node:url";
 import * as vite from "vite";
 import type { FetchFunctionOptions } from "vite/module-runner";
 import {
@@ -26,14 +27,19 @@ export class DistilledDevEnvironment extends vite.DevEnvironment {
     this.transport = transport;
   }
 
-  async connect(address: string | URL) {
-    const url = new URL(address);
+  async connect(address: string | globalThis.URL) {
+    const url = new NodeURL(address.toString());
     url.protocol = "ws";
     url.pathname = INIT_PATH;
-    const ws = new WebSocket(url, {
-      headers: {
-        [ENVIRONMENT_NAME_HEADER]: this.name,
-      },
+    // The Worker ambient declaration hides Bun's headers overload when both
+    // runtime type libraries are loaded by the consolidated package config.
+    const ws = new (WebSocket as unknown as {
+      new (
+        url: string,
+        options: { headers: Record<string, string> },
+      ): WebSocket;
+    })(url.toString(), {
+      headers: { [ENVIRONMENT_NAME_HEADER]: this.name },
     });
     await new Promise<void>((resolve, reject) => {
       ws.addEventListener("open", () => {

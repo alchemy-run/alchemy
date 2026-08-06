@@ -4,12 +4,7 @@
     "composite": true
   },
   "references": [
-    { "path": "./core" },
-    { "path": "./astro" },
-    { "path": "./nextjs" },
-    { "path": "./nuxt" },
-    { "path": "./octane" },
-    { "path": "./sveltekit" },
-    { "path": "./waku" }
+    { "path": "./tsconfig.runtime.json" },
+    { "path": "./tsconfig.node.json" }
   ]
 }

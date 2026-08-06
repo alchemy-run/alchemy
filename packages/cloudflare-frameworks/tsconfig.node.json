@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.cloudflare.json",
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/test/**", "src/astro/runtime"],
+  "compilerOptions": {
+    "tsBuildInfoFile": ".cache/tsconfig.node.tsbuildinfo",
+    "outDir": "dist",
+    "rootDir": "src",
+    "types": ["node"],
+    "paths": {
+      "vite": ["./node_modules/vite/dist/node/index.d.ts"],
+      "vite/module-runner": ["./node_modules/vite/dist/node/module-runner.d.ts"]
+    }
+  },
+  "references": [{ "path": "./tsconfig.runtime.json" }]
+}

@@ -3,9 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun run ../../packages/cloudflare-test-tools/e2e/src/Cli.ts dev --port 3104",
-    "build": "bun run ../../packages/cloudflare-test-tools/e2e/src/Cli.ts build",
-    "preview": "bun run ../../packages/cloudflare-test-tools/e2e/src/Cli.ts preview",
+    "dev": "bun run ../../packages/cloudflare-test-tools/src/e2e/Cli.ts dev --port 3104",
+    "build": "bun run ../../packages/cloudflare-test-tools/src/e2e/Cli.ts build",
+    "preview": "bun run ../../packages/cloudflare-test-tools/src/e2e/Cli.ts preview",
     "test": "node scripts/e2e.mjs",
     "pretest": "playwright install chromium",
     "test:e2e": "bun run build && playwright test"

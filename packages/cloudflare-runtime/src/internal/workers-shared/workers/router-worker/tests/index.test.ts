@@ -16,10 +16,10 @@ describe("runtime loopback", () => {
   it("routes through outer->inner loopback at runtime boundary", async ({
     expect,
   }) => {
-    (runtimeEnv as Env).CONFIG = {
+    (runtimeEnv as unknown as Env).CONFIG = {
       has_user_worker: false,
     };
-    (runtimeEnv as Env).ASSET_WORKER = {
+    (runtimeEnv as unknown as Env).ASSET_WORKER = {
       async fetch(_request: Request): Promise<Response> {
         return new Response("loopback asset worker");
       },

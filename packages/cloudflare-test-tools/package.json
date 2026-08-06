@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -p miniflare/tsconfig.json && tsc -p e2e/tsconfig.json",
-    "e2e": "bun run e2e/src/Cli.ts",
+    "build": "tsc -p tsconfig.json",
+    "e2e": "bun run src/e2e/Cli.ts",
     "typecheck": "bun run build"
   },
   "dependencies": {
@@ -21,10 +21,10 @@
     "vite": "catalog:"
   },
   "exports": {
-    "./e2e/Framework": "./e2e/src/Framework.ts",
-    "./e2e/Options": "./e2e/src/Options.ts",
-    "./e2e/Playwright": "./e2e/src/Playwright.ts",
-    "./miniflare": "./miniflare/src/miniflare.ts",
-    "./miniflare-module": "./miniflare/src/miniflare-module.ts"
+    "./e2e/Framework": "./src/e2e/Framework.ts",
+    "./e2e/Options": "./src/e2e/Options.ts",
+    "./e2e/Playwright": "./src/e2e/Playwright.ts",
+    "./miniflare": "./src/miniflare/miniflare.ts",
+    "./miniflare-module": "./src/miniflare/miniflare-module.ts"
   }
 }

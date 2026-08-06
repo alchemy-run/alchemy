@@ -1,14 +1,30 @@
 {
-  "files": [],
+  "extends": "../../tsconfig.cloudflare.json",
+  "include": ["src/**/*.ts"],
+  "exclude": [
+    "src/core/test/**",
+    "src/rolldown/test/**",
+    "src/**/fixtures/**",
+    "src/core/scripts/**"
+  ],
   "compilerOptions": {
-    "composite": true
-  },
-  "references": [
-    { "path": "./internal/build-tools" },
-    { "path": "./internal/workers-shared" },
-    { "path": "./internal/workflows-shared" },
-    { "path": "./rolldown" },
-    { "path": "./core" },
-    { "path": "./vite" }
-  ]
+    "tsBuildInfoFile": ".cache/tsconfig.tsbuildinfo",
+    "outDir": ".cache/types",
+    "rootDir": "src",
+    "emitDeclarationOnly": true,
+    "types": [
+      "bun",
+      "@cloudflare/workers-types/experimental",
+      "@cloudflare/vitest-pool-workers/types"
+    ],
+    "paths": {
+      "@alchemy.run/cloudflare-runtime/core": ["./src/core/index.ts"],
+      "@alchemy.run/cloudflare-runtime/core/*": ["./src/core/*"],
+      "@alchemy.run/cloudflare-runtime/rolldown": ["./src/rolldown/plugin.ts"],
+      "@alchemy.run/cloudflare-runtime/rolldown/*": ["./src/rolldown/*"],
+      "@alchemy.run/cloudflare-runtime/vite": ["./src/vite/plugin.ts"],
+      "@alchemy.run/cloudflare-runtime/vite/*": ["./src/vite/*"],
+      "#/*": ["./src/vite/*"]
+    }
+  }
 }

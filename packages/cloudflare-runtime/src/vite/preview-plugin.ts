@@ -4,6 +4,7 @@ import { resolvePluginApi } from "@alchemy.run/cloudflare-runtime/rolldown/utils
 import * as NodeFs from "node:fs";
 import * as NodeHttp from "node:http";
 import * as NodePath from "node:path";
+import { URL as NodeURL } from "node:url";
 import type * as vite from "vite";
 import { resolveForwardedHost } from "./forwarded-host.js";
 import type { CloudflareVitePluginOptions } from "./plugin.js";
@@ -95,7 +96,7 @@ export function preview(options: CloudflareVitePluginOptions): vite.Plugin {
       // fallback) — the worker handles every request, like in production.
       server.middlewares.use(
         function distilledCloudflarePreviewMiddleware(req, res) {
-          const url = new URL(req.url ?? "/", address);
+          const url = new NodeURL(req.url ?? "/", address.toString());
           const request = NodeHttp.request(url, {
             method: req.method,
             headers: {

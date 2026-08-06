@@ -13,18 +13,15 @@
     "access": "public"
   },
   "scripts": {
-    "build": "bun run build:rolldown && bun run build:core && bun run build:vite",
-    "build:rolldown": "tsc -p rolldown/tsconfig.json",
-    "build:core": "cd core && tsdown",
-    "build:vite": "cd vite && tsdown",
+    "build": "tsdown",
     "clean": "rm -rf dist",
-    "test": "bun run test:rolldown && bun run test:core && bun run test:vite && bun run test:workers-shared && bun run test:workflows-shared",
-    "test:rolldown": "cd rolldown && vitest run",
-    "test:core": "cd core && vitest run",
-    "test:vite": "cd vite && vitest run",
-    "test:workers-shared": "cd internal/workers-shared && vitest run",
-    "test:workflows-shared": "cd internal/workflows-shared && vitest run",
-    "typecheck": "tsc -b internal/build-tools/tsconfig.json internal/workers-shared/tsconfig.json internal/workflows-shared/tsconfig.json && tsc --noEmit -p rolldown/tsconfig.json && tsc -p rolldown/tsconfig.test.json && tsc -b core/tsconfig.json && tsc -b vite/tsconfig.json"
+    "test": "vitest run",
+    "test:rolldown": "vitest run --project rolldown",
+    "test:core": "vitest run --project core",
+    "test:vite": "vitest run --project vite",
+    "test:workers-shared": "vitest run --project 'workers-shared-*'",
+    "test:workflows-shared": "vitest run --project workflows-shared",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@alchemy.run/node-utils": "catalog:",

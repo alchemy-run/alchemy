@@ -1,7 +1,11 @@
 {
-  "files": [],
+  "extends": "../../tsconfig.cloudflare.json",
+  "include": ["src/**/*.ts"],
   "compilerOptions": {
-    "composite": true
-  },
-  "references": [{ "path": "./miniflare" }, { "path": "./e2e" }]
+    "tsBuildInfoFile": ".cache/tsconfig.tsbuildinfo",
+    "outDir": ".cache/types",
+    "rootDir": "src",
+    "emitDeclarationOnly": true,
+    "types": ["node"]
+  }
 }

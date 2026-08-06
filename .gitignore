@@ -14,9 +14,7 @@ dist/
 
 .repomix-output.txt
 wrangler.jsonc
-!packages/cloudflare-runtime/internal/workflows-shared/wrangler.jsonc
-!packages/cloudflare-runtime/src/internal/workers-shared/workers/asset-worker/wrangler.jsonc
-!packages/cloudflare-runtime/src/internal/workers-shared/workers/router-worker/wrangler.jsonc
+!packages/cloudflare-*/src/**/wrangler.jsonc
 
 # Husky - ignore generated files but keep hooks
 .husky/_
@@ -41,16 +39,13 @@ pnpm-workspace.yaml
 !packages/alchemy/test/Cloudflare/Workers/fixtures/drizzle-do/drizzle/migrations.js
 *.map
 
-# Checked-in package-resolution fixtures for the consolidated Rolldown plugin.
-!packages/cloudflare-runtime/rolldown/test/fixtures/cloudflare-imports/node_modules/
-!packages/cloudflare-runtime/rolldown/test/fixtures/cloudflare-imports/node_modules/**
-!packages/cloudflare-runtime/rolldown/test/fixtures/module-resolution/node_modules/
-!packages/cloudflare-runtime/rolldown/test/fixtures/module-resolution/node_modules/**
-!packages/cloudflare-runtime/rolldown/test/fixtures/**/*.js
-!packages/cloudflare-runtime/**/*.d.ts
-!packages/cloudflare-frameworks/**/*.d.ts
-!packages/cloudflare-frameworks/nextjs/wrangler-stub/*.js
-!packages/cloudflare-test-tools/**/*.d.ts
+packages/cloudflare-runtime/src/rolldown/.env.test
+packages/cloudflare-runtime/src/rolldown/out/
+!packages/cloudflare-runtime/src/rolldown/test/fixtures/**/node_modules/
+!packages/cloudflare-runtime/src/rolldown/test/fixtures/**/node_modules/**
+!packages/cloudflare-runtime/src/rolldown/test/fixtures/**/*.js
+!packages/cloudflare-frameworks/src/nextjs/wrangler-stub/*.js
+!packages/cloudflare-*/src/**/*.d.ts
 !fixtures/**/*.d.ts
 !fixtures/**/*.js
 

@@ -105,7 +105,7 @@ export interface NextjsProps<
  * A Cloudflare Worker deployed from a Next.js project.
  *
  * `Nextjs` builds the app with the wrangler-free OpenNext pipeline from
- * [`@alchemy.run/cloudflare-frameworks/nextjs`](https://github.com/alchemy-run/alchemy/tree/main/packages/cloudflare-frameworks/nextjs):
+ * [`@alchemy.run/cloudflare-frameworks/nextjs`](https://github.com/alchemy-run/alchemy/tree/main/packages/cloudflare-frameworks/src/nextjs):
  * `next build` runs through `@opennextjs/cloudflare`, the resulting worker
  * is bundled into a self-contained ES module set, and the static assets
  * (including prerendered pages and the read-only incremental cache) deploy

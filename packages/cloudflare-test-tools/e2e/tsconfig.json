@@ -1,9 +1,0 @@
-{
-  "extends": "../../../tsconfig.cloudflare.json",
-  "include": ["src/**/*"],
-  "exclude": ["dist"],
-  "compilerOptions": {
-    "composite": false,
-    "noEmit": true
-  }
-}

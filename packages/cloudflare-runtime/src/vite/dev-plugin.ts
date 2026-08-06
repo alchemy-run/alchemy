@@ -11,6 +11,7 @@ import { resolvePluginApi } from "@alchemy.run/cloudflare-runtime/rolldown/utils
 import type { RuntimeServices } from "@alchemy.run/cloudflare-runtime/core";
 import type * as Context from "effect/Context";
 import * as NodeHttp from "node:http";
+import { URL as NodeURL } from "node:url";
 import * as vite from "vite";
 import { DistilledDevEnvironment } from "./dev-environment.js";
 import type { ServerHandle } from "./dev-server.js";
@@ -143,7 +144,7 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
             (environment) => environment instanceof DistilledDevEnvironment,
           );
 
-      const connect = async (address: string | URL) => {
+      const connect = async (address: ServerHandle["address"]) => {
         for (const environment of entryEnvironments()) {
           await environment.depsOptimizer?.init();
           await environment.connect(address);
@@ -250,7 +251,10 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
       return () => {
         server.middlewares.use(
           function distilledCloudflareProxyMiddleware(req, res) {
-            const url = new URL(req.originalUrl ?? req.url ?? "/", address);
+            const url = new NodeURL(
+              req.originalUrl ?? req.url ?? "/",
+              address.toString(),
+            );
             const request = NodeHttp.request(url, {
               method: req.method,
               headers: {

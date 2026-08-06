@@ -13,17 +13,17 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsc -p core/tsconfig.json && tsc -b astro/tsconfig.json && tsc -p nextjs/tsconfig.json && cp src/nextjs/runner.mjs dist/nextjs/runner.mjs && tsc -p nuxt/tsconfig.json && tsc -p octane/tsconfig.json && tsc -p sveltekit/tsconfig.json && tsc -p waku/tsconfig.json",
+    "build": "tsc -b tsconfig.json && cp src/nextjs/runner.mjs dist/nextjs/runner.mjs",
     "clean": "rm -rf dist",
-    "test": "bun run test:core && bun run test:astro && bun run test:nextjs && bun run test:nuxt && bun run test:octane && bun run test:sveltekit && bun run test:waku",
-    "test:core": "cd core && vitest run",
-    "test:astro": "cd astro && vitest run",
-    "test:nextjs": "cd nextjs && vitest run",
-    "test:nuxt": "cd nuxt && vitest run",
-    "test:octane": "cd octane && vitest run",
-    "test:sveltekit": "cd sveltekit && vitest run",
-    "test:waku": "cd waku && vitest run",
-    "typecheck": "tsc --noEmit -p core/tsconfig.json && tsc --noEmit -p core/tsconfig.test.json && tsc --noEmit -p astro/tsconfig.test.json && tsc --noEmit -p nextjs/tsconfig.json && tsc --noEmit -p nextjs/tsconfig.test.json && tsc --noEmit -p nuxt/tsconfig.json && tsc --noEmit -p nuxt/tsconfig.test.json && tsc --noEmit -p octane/tsconfig.json && tsc --noEmit -p octane/tsconfig.test.json && tsc --noEmit -p sveltekit/tsconfig.json && tsc --noEmit -p sveltekit/tsconfig.test.json && tsc --noEmit -p waku/tsconfig.json && tsc --noEmit -p waku/tsconfig.test.json"
+    "test": "vitest run",
+    "test:core": "vitest run src/core/test",
+    "test:astro": "vitest run src/astro/test",
+    "test:nextjs": "vitest run src/nextjs/test",
+    "test:nuxt": "vitest run src/nuxt/test",
+    "test:octane": "vitest run src/octane/test",
+    "test:sveltekit": "vitest run src/sveltekit/test",
+    "test:waku": "vitest run src/waku/test",
+    "typecheck": "tsc -b tsconfig.json && tsc --noEmit -p tsconfig.test.json"
   },
   "dependencies": {
     "@alchemy.run/cloudflare-runtime": "workspace:*",
