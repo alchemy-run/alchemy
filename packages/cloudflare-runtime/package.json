@@ -25,11 +25,11 @@
   },
   "dependencies": {
     "@alchemy.run/node-utils": "catalog:",
-    "@cloudflare/unenv-preset": "^2.16.0",
+    "@cloudflare/unenv-preset": "catalog:workers",
     "@puppeteer/browsers": "^2.10.6",
     "magic-string": "^0.30.21",
     "sharp": "^0.34.5",
-    "unenv": "^2.0.0-rc.24",
+    "unenv": "catalog:workers",
     "workerd": "catalog:workers"
   },
   "devDependencies": {
