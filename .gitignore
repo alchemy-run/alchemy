@@ -1,3 +1,4 @@
+.turbo
 node_modules/
 dist/
 /lib/
@@ -57,3 +58,6 @@ pnpm-lock.yaml
 .ai-workspace/
 /processes/
 .probe
+
+# research clones (analyzed, never committed)
+/vendor/
