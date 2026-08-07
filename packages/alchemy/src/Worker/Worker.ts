@@ -99,6 +99,26 @@ export type WorkerShape =
 
 export interface WorkerClass extends Effect.Effect<Worker, never, Worker> {
   <Self, Shape = never>(): {
+    /**
+     * Inline form: the deployable class in one declaration — the impl
+     * (carrying its capability layers and deployment target in its own
+     * provide chain) sits right on the class.
+     */
+    <
+      const Id extends string,
+      ImplShape extends ([Shape] extends [never] ? WorkerShape : Shape),
+      Req extends WorkerServices | PlatformServices = never,
+    >(
+      id: Id,
+      impl: Effect.Effect<ImplShape, ConfigError.ConfigError, Req>,
+    ): Effect.Effect<Worker & Rpc<Self>, never, Providers> &
+      Named<Id> & {
+        new (
+          _: never,
+        ): ([Shape] extends [never] ? ImplShape : Shape) &
+          Named<Id> &
+          Tag<WorkerTypeId>;
+      };
     <const Id extends string>(
       id: Id,
     ): Effect.Effect<Worker & Rpc<Self>, never, Providers> &
@@ -129,12 +149,18 @@ const platform = Platform(WorkerTypeId, {
 
 const workerConstructor = (...args: any[]): any => {
   if (args.length === 0) {
-    return (id: string) => {
-      const cls = (platform as any)()(id);
+    const tagged = (platform as any)();
+    return (id: string, impl?: unknown) => {
+      if (Effect.isEffect(impl)) {
+        // Inline form: the class IS the deployable — props are empty; the
+        // deployment target arrives via the impl's own provide chain.
+        return tagged(id, {}, impl);
+      }
+      const cls = tagged(id);
       // The portable surface takes the impl ONLY — deployment config
       // arrives via the target layer inside the impl's provide chain.
       const platformMake = cls.make;
-      cls.make = (impl: unknown) => platformMake.call(cls, {}, impl);
+      cls.make = (implOnly: unknown) => platformMake.call(cls, {}, implOnly);
       return cls;
     };
   }

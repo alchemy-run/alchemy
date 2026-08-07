@@ -27,9 +27,8 @@ export class Counter extends Alchemy.DurableObject<Counter>()(
   }),
 ) {}
 
-export class CellsWorker extends Alchemy.Worker<CellsWorker>()("CellsWorker") {}
-
-export default CellsWorker.make(
+export default class CellsWorker extends Alchemy.Worker<CellsWorker>()(
+  "CellsWorker",
   Effect.gen(function* () {
     const counters = yield* Counter;
     return {
@@ -42,6 +41,8 @@ export default CellsWorker.make(
       }),
     };
   }).pipe(
+    // The deployment target is a layer IN the impl — this is what makes it
+    // a celld deployment.
     Effect.provide(Celld.Worker({ fleet: () => Cells, main: import.meta.url })),
   ),
-);
+) {}
