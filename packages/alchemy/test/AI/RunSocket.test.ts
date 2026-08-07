@@ -1,13 +1,13 @@
 /**
- * The run-socket protocol on the IN-MEMORY kernel: the same four
- * frames the Cloudflare kernel speaks from a Durable Object, served
+ * The run-socket protocol on the IN-MEMORY driver: the same four
+ * frames the Cloudflare driver speaks from a Durable Object, served
  * in-process — `AgentGateway.attach` upgrades a WebSocket on a local
  * Bun HTTP server, replays the run's own observation log from a
  * cursor, and broadcasts live facts as they happen. No cloud, no
  * network beyond localhost, sub-second.
  */
 import * as AI from "@/AI/index.ts";
-import { KernelMemory } from "@/AI/KernelMemory.ts";
+import { DriverMemory } from "@/AI/DriverMemory.ts";
 import { RuntimeContext } from "@/RuntimeContext.ts";
 import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
 import { describe, expect, it } from "alchemy-test";
@@ -74,9 +74,9 @@ const readAll = (stream: ReadableStream<unknown>) =>
     }
   });
 
-describe("RunSocket (KernelMemory)", () => {
+describe("RunSocket (DriverMemory)", () => {
   it.live(
-    "the memory kernel serves the identical protocol: submit, live deltas, cursor resume",
+    "the memory driver serves the identical protocol: submit, live deltas, cursor resume",
     () => {
       const model = Model.make([
         () => [Model.text("hello from memory"), Model.finish()],
@@ -187,7 +187,7 @@ describe("RunSocket (KernelMemory)", () => {
         // platform-bun wart (v4 beta): a request that carried a
         // WebSocket upgrade leaks a ClientAbort interrupt into the
         // scope's close exit — reproducible with a BARE
-        // `request.upgrade` + response and no kernel code at all.
+        // `request.upgrade` + response and no driver code at all.
         // Every assertion has already run by the time this fires;
         // swallow interrupt-only teardown causes, nothing else.
         Effect.catchCause((cause) =>
@@ -199,7 +199,7 @@ describe("RunSocket (KernelMemory)", () => {
           Researcher.make(ResearcherCharter).pipe(
             Layer.provideMerge(
               Layer.mergeAll(
-                KernelMemory.pipe(Layer.provide(model.layer)),
+                DriverMemory.pipe(Layer.provide(model.layer)),
                 search,
                 RuntimeContext.phantom,
               ),
@@ -324,7 +324,7 @@ describe("RunSocket (KernelMemory)", () => {
           Researcher.make(ResearcherCharter).pipe(
             Layer.provideMerge(
               Layer.mergeAll(
-                KernelMemory.pipe(Layer.provide(model.layer)),
+                DriverMemory.pipe(Layer.provide(model.layer)),
                 search,
                 RuntimeContext.phantom,
               ),

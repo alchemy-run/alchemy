@@ -18,7 +18,7 @@
  *   like `assistant-delta` do not), and a `live` marker ending a
  *   replay.
  *
- * The wire carries KERNEL vocabulary — {@link KernelObservation} —
+ * The wire carries DRIVER vocabulary — {@link RunObservation} —
  * not any UI protocol's: translation to AI SDK `UIMessageChunk`s
  * happens client-side ({@link makeChunkTranslator}), so the server
  * never learns about UIMessage.
@@ -29,7 +29,7 @@ import * as Effect from "effect/Effect";
 import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import type * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type { RuntimeContext } from "../RuntimeContext.ts";
-import type { KernelObservation } from "./Observer.ts";
+import type { RunObservation } from "./Observer.ts";
 import { makeChunkTranslator } from "./UIMessage.ts";
 
 /** Frames a client sends to an attached run. */
@@ -61,7 +61,7 @@ export type RunSocketServerFrame =
        * and the durable `assistant` restatement covers the gap.
        */
       readonly durable: boolean;
-      readonly observation: KernelObservation;
+      readonly observation: RunObservation;
     }
   | {
       /** Replay complete — delivery is live from here; `seq` is the
@@ -78,11 +78,11 @@ export type RunSocketServerFrame =
  * projection uses (`ChatsMemory` accumulates exactly these into its
  * transient streaming sample).
  */
-export const isLiveObservation = (type: KernelObservation["type"]): boolean =>
+export const isLiveObservation = (type: RunObservation["type"]): boolean =>
   type === "assistant-delta" || type === "tool-call";
 
 /**
- * What a kernel must expose for one run to speak the socket protocol
+ * What a driver must expose for one run to speak the socket protocol
  * — the substrate differences (DO storage rows vs in-memory log)
  * disappear behind these three capabilities.
  */
@@ -90,7 +90,7 @@ export interface RunSocketHost {
   /** Durable observations with `seq >= fromSeq`, oldest first. */
   readonly replay: (
     fromSeq: number,
-  ) => Effect.Effect<ReadonlyArray<KernelObservation>>;
+  ) => Effect.Effect<ReadonlyArray<RunObservation>>;
   /** The next durable seq — what a completed replay reports as `live`. */
   readonly watermark: Effect.Effect<number>;
   /** Admit one input to the run (the socket's steer). */
@@ -98,7 +98,7 @@ export interface RunSocketHost {
 }
 
 /**
- * The protocol, in one place: both kernels delegate their inbound
+ * The protocol, in one place: both drivers delegate their inbound
  * frames here so the wire can never drift between substrates.
  */
 export const handleRunSocketFrame =
@@ -130,8 +130,8 @@ export const handleRunSocketFrame =
  * The Worker/server-side door to a run's live view: routes an
  * `Upgrade: websocket` request to the run named `term/key`, where the
  * {@link RunSocketServerFrame} protocol is spoken. Provided BY the
- * kernel Layer — `KernelCloudflare` routes into the run's own Durable
- * Object; `KernelMemory` serves the socket in-process.
+ * driver Layer — `DriverCloudflare` routes into the run's own Durable
+ * Object; `DriverMemory` serves the socket in-process.
  *
  * ```ts
  * const gateway = yield* AI.AgentGateway;

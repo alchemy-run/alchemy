@@ -1,5 +1,5 @@
 /**
- * The Vercel AI SDK adapter — kernel vocabulary rendered into the
+ * The Vercel AI SDK adapter — driver vocabulary rendered into the
  * `useChat` wire protocol (designs/ai/streaming.md). The projection
  * ({@link Chats}) stays protocol-neutral; this module is where AI SDK
  * shapes are minted:
@@ -16,8 +16,8 @@
  */
 import type { UIMessage, UIMessageChunk, UIMessagePart } from "ai";
 import type { StreamingSample } from "./Chats.ts";
-import { renderCrash } from "./KernelShared.ts";
-import type { KernelObservation } from "./Observer.ts";
+import { renderCrash } from "./DriverShared.ts";
+import type { RunObservation } from "./Observer.ts";
 
 /**
  * Reduce a run's observation log into AI SDK UIMessages: inputs are
@@ -29,7 +29,7 @@ import type { KernelObservation } from "./Observer.ts";
  * as they accumulate.
  */
 export const toUIMessages = (
-  log: ReadonlyArray<KernelObservation>,
+  log: ReadonlyArray<RunObservation>,
   streaming?: StreamingSample | undefined,
 ): Array<UIMessage> => {
   const messages: Array<UIMessage> = [];
@@ -208,7 +208,7 @@ export const makeChunkTranslator = () => {
   const knownCalls = new Set<string>();
 
   return (
-    observation: KernelObservation,
+    observation: RunObservation,
   ): { chunks: Array<UIMessageChunk>; done: boolean } => {
     const chunks: Array<UIMessageChunk> = [];
     let done = false;

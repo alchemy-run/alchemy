@@ -19,7 +19,7 @@
  *   run ignores further input.
  */
 import * as AI from "@/AI/index.ts";
-import { KernelMemory } from "@/AI/KernelMemory.ts";
+import { DriverMemory } from "@/AI/DriverMemory.ts";
 import { RuntimeContext } from "@/RuntimeContext.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Deferred from "effect/Deferred";
@@ -64,23 +64,23 @@ const testLayer = (
   capabilities: Layer.Layer<never, any, any>,
 ) =>
   Layer.mergeAll(
-    KernelMemory.pipe(Layer.provide(model.layer)),
+    DriverMemory.pipe(Layer.provide(model.layer)),
     capabilities,
     RuntimeContext.phantom,
   );
 
 /**
  * These tests exercise the KERNEL CONTRACT directly —
- * `Kernel.interpret(term, charter)` — the primitive that
+ * `Driver.interpret(term, charter)` — the primitive that
  * `Agent.make(charter)` packages as a Layer. Application code never
  * calls this; it resolves the agent's tag.
  */
 const interpret = (term: AI.Interpretable, charter: AI.Charter) =>
   Effect.orDie(
-    Effect.flatMap(AI.Kernel, (kernel) => kernel.interpret(term, charter)),
+    Effect.flatMap(AI.Driver, (driver) => driver.interpret(term, charter)),
   );
 
-describe("KernelMemory", () => {
+describe("DriverMemory", () => {
   it.effect("dispatch admits one item and resolves at quiescence", () => {
     const model = Model.make([
       () => [
@@ -166,7 +166,7 @@ describe("KernelMemory", () => {
       }).pipe(
         Effect.provide(
           Layer.mergeAll(
-            KernelMemory.pipe(Layer.provide(model.layer)),
+            DriverMemory.pipe(Layer.provide(model.layer)),
             search,
             RuntimeContext.phantom,
           ),
@@ -289,7 +289,7 @@ describe("KernelMemory", () => {
       // call 2: the lead reports
       () => [Model.text("Engineer patched the parser."), Model.finish()],
     ]);
-    const kernel = KernelMemory.pipe(Layer.provide(model.layer));
+    const driver = DriverMemory.pipe(Layer.provide(model.layer));
     return Effect.gen(function* () {
       const lead = yield* interpret(Lead, LeadCharter);
       const answer = yield* lead.dispatch("The parser is broken");
@@ -316,10 +316,10 @@ describe("KernelMemory", () => {
       Effect.scoped,
       Effect.provide(
         Layer.mergeAll(
-          kernel,
-          // the Engineer is an ordinary Layer — the kernel-default
-          // implementation over the same kernel
-          Engineer.make(EngineerCharter).pipe(Layer.provide(kernel)),
+          driver,
+          // the Engineer is an ordinary Layer — the driver-default
+          // implementation over the same driver
+          Engineer.make(EngineerCharter).pipe(Layer.provide(driver)),
           RuntimeContext.phantom,
         ),
       ),
@@ -331,7 +331,7 @@ describe("KernelMemory", () => {
     () => {
       const model = Model.make([
         // call 0: the lead fans out TWO sessions in ONE sampling —
-        // the kernel executes the handlers concurrently
+        // the driver executes the handlers concurrently
         () => [
           Model.toolCall(
             "dispatch",
@@ -358,11 +358,11 @@ describe("KernelMemory", () => {
         ],
         // call 3: the lead concludes — REPLAYED step must handle it too
       ]);
-      const seen: Array<AI.KernelObservation> = [];
-      const ObserverLive = Layer.succeed(AI.KernelObserver, {
+      const seen: Array<AI.RunObservation> = [];
+      const ObserverLive = Layer.succeed(AI.RunObserver, {
         emit: (observation) => Effect.sync(() => void seen.push(observation)),
       });
-      const kernel = KernelMemory.pipe(Layer.provide(model.layer));
+      const driver = DriverMemory.pipe(Layer.provide(model.layer));
       return Effect.gen(function* () {
         const lead = yield* interpret(Lead, LeadCharter);
         // the lead's final sampling is the replayed engineer step — its
@@ -390,9 +390,9 @@ describe("KernelMemory", () => {
         Effect.scoped,
         Effect.provide(
           Layer.mergeAll(
-            kernel,
+            driver,
             Engineer.make(EngineerCharter).pipe(
-              Layer.provide(kernel),
+              Layer.provide(driver),
               Layer.provide(ObserverLive),
             ),
             ObserverLive,
@@ -778,11 +778,11 @@ Record the final ${result}.`((p) =>
       // call 4: the lead concludes
       () => [Model.text("All done."), Model.finish()],
     ]);
-    const seen: Array<AI.KernelObservation> = [];
-    const ObserverLive = Layer.succeed(AI.KernelObserver, {
+    const seen: Array<AI.RunObservation> = [];
+    const ObserverLive = Layer.succeed(AI.RunObserver, {
       emit: (observation) => Effect.sync(() => void seen.push(observation)),
     });
-    const kernel = KernelMemory.pipe(Layer.provide(model.layer));
+    const driver = DriverMemory.pipe(Layer.provide(model.layer));
     return Effect.gen(function* () {
       const lead = yield* interpret(Lead, LeadCharter);
       const answer = yield* lead.dispatch("Widget needed", { key: "job#1" });
@@ -824,9 +824,9 @@ Record the final ${result}.`((p) =>
       Effect.scoped,
       Effect.provide(
         Layer.mergeAll(
-          kernel,
+          driver,
           Engineer.make(EngineerCharter).pipe(
-            Layer.provide(kernel),
+            Layer.provide(driver),
             Layer.provide(ObserverLive),
           ),
           ObserverLive,
@@ -856,11 +856,11 @@ Record the final ${result}.`((p) =>
       // call 4: the lead concludes
       () => [Model.text("All done."), Model.finish()],
     ]);
-    const seen: Array<AI.KernelObservation> = [];
-    const ObserverLive = Layer.succeed(AI.KernelObserver, {
+    const seen: Array<AI.RunObservation> = [];
+    const ObserverLive = Layer.succeed(AI.RunObserver, {
       emit: (observation) => Effect.sync(() => void seen.push(observation)),
     });
-    const kernel = KernelMemory.pipe(Layer.provide(model.layer));
+    const driver = DriverMemory.pipe(Layer.provide(model.layer));
     const doorCharter = Effect.gen(function* () {
       const task = AI.Parameter("task", S.String)`The work, standing alone.`;
       const handToEngineer = yield* AI.Dispatch(Engineer, "hand_to_engineer")`
@@ -925,9 +925,9 @@ Route every request through ${handToEngineer}; report when done.`;
       Effect.scoped,
       Effect.provide(
         Layer.mergeAll(
-          kernel,
+          driver,
           Engineer.make(EngineerCharter).pipe(
-            Layer.provide(kernel),
+            Layer.provide(driver),
             Layer.provide(ObserverLive),
           ),
           ObserverLive,
@@ -1228,8 +1228,8 @@ ${
         () => [Model.text("answer"), Model.finish()],
       ]);
       return Effect.gen(function* () {
-        const seen: Array<AI.KernelObservation> = [];
-        const ObserverLive = Layer.succeed(AI.KernelObserver, {
+        const seen: Array<AI.RunObservation> = [];
+        const ObserverLive = Layer.succeed(AI.RunObserver, {
           emit: (observation) => Effect.sync(() => void seen.push(observation)),
         });
         const search = recordingSearch();
@@ -1345,7 +1345,7 @@ ${
     );
   });
 
-  it.effect("codemode(effect): the program stays on the kernel fiber", () => {
+  it.effect("codemode(effect): the program stays on the driver fiber", () => {
     const model = Model.make([
       () => [
         Model.toolCall("eval", {

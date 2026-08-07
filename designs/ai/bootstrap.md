@@ -9,7 +9,7 @@ the next tick runs the code it just wrote. Locally this is the whole
 mechanism. In the cloud it becomes worker-loader hot-swap for behavior
 and PR-staged deploys for infrastructure — documented in §7, built
 later. Once bootstrapped, nothing fences the agent off from the
-kernels themselves: the harness is in the same repo, behind the same
+drivers themselves: the harness is in the same repo, behind the same
 typechecker.
 
 ## The mission: alchemy's development is the feedback substrate
@@ -29,7 +29,7 @@ supervision**, and to improve by doing that work:
   FLE reward-hack (prime-agent report §1c) is what happens when the
   improvement loop grades its own homework; this loop can't.
 - **The recursion is material, not metaphorical:** the org is built ON
-  alchemy. Fixing an alchemy bug improves the agent's own kernel,
+  alchemy. Fixing an alchemy bug improves the agent's own driver,
   bindings, and deploy machinery; reviewing an alchemy PR is quality
   control on its own substrate. Work product and self-improvement are
   the same artifact.
@@ -97,7 +97,7 @@ Two candidate mechanisms:
 charter module, rebuild the Layer graph in place. Rejected for the
 bootstrap. We already met its failure mode in production this week:
 an in-process layer rebuild that didn't tear down its predecessor left
-two kernels and two GitHub pollers running in one process (double
+two drivers and two GitHub pollers running in one process (double
 reviews on one PR). Module identity makes it worse: a re-imported
 module re-evaluates the graph, minting NEW term objects and closures
 while the old Layer graph still holds the old ones. Getting this right
@@ -133,8 +133,8 @@ later as a capability of the bootstrapped org, not its identity).
   agent's file tools operate on this repository's working tree,
   scoped by containment root to the repo. The stance directs
   attention to `services/alchemy-org/**` first; `packages/alchemy/**`
-  (the kernels) is reachable — the endgame is explicitly that it can
-  modify its own kernel — with the stance teaching escalating care,
+  (the drivers) is reachable — the endgame is explicitly that it can
+  modify its own driver — with the stance teaching escalating care,
   not a hard fence. The typechecker and git are the fences.
 - **Toolkit:** the read/run set (grep, glob, listDirectory, readFile,
   readOutput, bash) plus the write set restored from the pre-trim
@@ -163,16 +163,16 @@ later as a capability of the bootstrapped org, not its identity).
 | Event ledger | sqlite | unchanged | — |
 | `PersistentRef` (local) | in-memory backend | **`PersistentRefStoreSqlite`** (bun:sqlite over the existing `Store` seam — same contract as the DO store) | small, new |
 | Chats (UI transcripts) | in-memory ring | **`ChatsSqlite`** behind the existing `Chats` contract (its docstring already promises this) | medium, new |
-| **Kernel run state** (thread log, parked runs) | dies with process | **run journal + restore**: KernelMemory journals each run's thread through the run's `PersistentRef.Store` (the seam already provided per-run); on boot, persisted runs are restored PARKED with their thread primed | the real work |
+| **Driver run state** (thread log, parked runs) | dies with process | **run journal + restore**: DriverMemory journals each run's thread through the run's `PersistentRef.Store` (the seam already provided per-run); on boot, persisted runs are restored PARKED with their thread primed | the real work |
 | In-flight rounds | — | never restarted over: reload is **scheduled at park** (§4) | part of reload |
 | Worktrees / checkout | disk | live checkout, untouched by restart | — |
 | The UI's socket | reconnects | board/SSE + RunSocket already re-subscribe with cursors; a restart is a reconnect | verify only |
 
-The kernel-journal design rides the seam we already built for
+The driver-journal design rides the seam we already built for
 PersistentRef rather than inventing a second persistence path: the
 thread is run-scoped durable state like any other. Restore semantics:
 every persisted run comes back parked (never mid-round — reload waits
-for park), with a kernel-minted note as its next wake context:
+for park), with a driver-minted note as its next wake context:
 `"[note] you reloaded; the process restarted into the code you wrote —
 verify the change behaves"`.
 
@@ -303,7 +303,7 @@ self-edit or prompt injection can reach them:
 - **The typechecker** — nothing reloads on red. This is the analog of
   Prime Agent's "immutable base prompt", except it guards *coherence*
   rather than a text region: the agent can edit anything, including
-  eventually the kernel, but never into a state that doesn't compile.
+  eventually the driver, but never into a state that doesn't compile.
   (The wire types make several mistakes uncompilable: a tool mentioned
   in the stance without a renderer, an input field that doesn't
   exist.)
@@ -320,8 +320,8 @@ self-edit or prompt injection can reach them:
 ## 6. Build plan
 
 1. **Durability substrate**: `PersistentRefStoreSqlite`; `ChatsSqlite`;
-   KernelMemory run journal + parked-restore (through the
-   `PersistentRef.Store` seam); quiescent-exit hook on the kernel
+   DriverMemory run journal + parked-restore (through the
+   `PersistentRef.Store` seam); quiescent-exit hook on the driver
    (`onIdle` or drain-then-run callback).
 2. **The Bootstrap agent (generation 0)**: `Bootstrap.ts` (charter
    above), restore `EditFile`/`WriteFile` from `bed14a933^`,
@@ -355,7 +355,7 @@ deploys:
 - **Behavior hot-swap: Cloudflare Worker Loaders.** The Worker Loader
   API loads worker code dynamically (isolate-per-code-version, same
   machinery Cloudflare built for user-code platforms). The cloud
-  analog of §1(b): the kernel DO stays resident (threads/journals in
+  analog of §1(b): the driver DO stays resident (threads/journals in
   DO storage — already durable there), while the CHARTER bundle is
   loaded through a loader keyed by content hash. `reload` compiles
   (typecheck in a sandbox or CI-lite), uploads the bundle, flips the

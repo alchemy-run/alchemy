@@ -32,7 +32,7 @@ export type ToolParameters<Refs> = {
 
 /**
  * A `Tool` term is a **capability term** (with `Parameter` — design §1
- * taxonomy): never interpreted by the Kernel, it is compiled *into* its
+ * taxonomy): never interpreted by the Driver, it is compiled *into* its
  * host process term's turns — the template becomes the toolkit
  * description, the interpolated `Parameter` refs become the schema, and
  * the `<Self>()` tag resolves its implementation (the physics) from
@@ -67,7 +67,7 @@ export interface Tool<
    * the init's requirement channel, making the tool's dependencies a
    * type-level fact of the Layer. The yielded {@link ToolImpl} is then
    * spliced into prose; the HANDLER's requirements ride the splice
-   * (they are turn-time, satisfied by the kernel at call time).
+   * (they are turn-time, satisfied by the driver at call time).
    */
   <Err = never, Req = never>(
     impl: Effect.Effect<

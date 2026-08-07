@@ -1,7 +1,7 @@
 /**
  * `AI.Chats` over bun:sqlite — the transcript half of the bootstrap's
  * restart surface (designs/ai/bootstrap.md §3), and the documentary's
- * dialogue track (§4b): every durable kernel observation persists, so
+ * dialogue track (§4b): every durable driver observation persists, so
  * any past conversation replays in whatever UI exists later.
  *
  * Deliberately a WRAPPER around {@link AI.ChatsMemory}, not a
@@ -69,11 +69,11 @@ export const ChatsSqlite = (
             .all() as Array<{ data: string }>,
       );
       for (const row of rows) {
-        yield* memory.ingest(JSON.parse(row.data) as AI.KernelObservation);
+        yield* memory.ingest(JSON.parse(row.data) as AI.RunObservation);
       }
 
       // ── write-through ingest ──────────────────────────────────────
-      const persist = (observation: AI.KernelObservation) =>
+      const persist = (observation: AI.RunObservation) =>
         Effect.sync(() => {
           db.query(
             "INSERT INTO observations (chat_id, seq, at, data) VALUES (?, ?, ?, ?)",

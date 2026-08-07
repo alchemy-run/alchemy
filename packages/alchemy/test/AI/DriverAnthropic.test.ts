@@ -1,10 +1,10 @@
 /**
- * The SAME kernel, a REAL model: swap the scripted LanguageModel for
+ * The SAME driver, a REAL model: swap the scripted LanguageModel for
  * Anthropic and nothing else changes — that is the whole point of the
- * layered kernel. One smoke test, gated on `ANTHROPIC_API_KEY` (run
+ * layered driver. One smoke test, gated on `ANTHROPIC_API_KEY` (run
  * via `doppler run -p alchemy-v2 -c dev -- bun run test …`).
  */
-import { KernelMemory } from "@/AI/KernelMemory.ts";
+import { DriverMemory } from "@/AI/DriverMemory.ts";
 import { RuntimeContext } from "@/RuntimeContext.ts";
 import { AnthropicClient, AnthropicLanguageModel } from "@effect/ai-anthropic";
 import { describe, expect, it } from "alchemy-test";
@@ -32,7 +32,7 @@ const Anthropic = AnthropicLanguageModel.layer({
   Layer.provide(FetchHttpClient.layer),
 );
 
-describe("KernelMemory ⨯ Anthropic", () => {
+describe("DriverMemory ⨯ Anthropic", () => {
   it.live.skipIf(!process.env.ANTHROPIC_API_KEY)(
     "runs the real loop: dispatch → tool → answer",
     () => {
@@ -60,7 +60,7 @@ describe("KernelMemory ⨯ Anthropic", () => {
           Researcher.make(ResearcherCharter).pipe(
             Layer.provideMerge(
               Layer.mergeAll(
-                KernelMemory.pipe(Layer.provide(Anthropic)),
+                DriverMemory.pipe(Layer.provide(Anthropic)),
                 search,
                 RuntimeContext.phantom,
               ),

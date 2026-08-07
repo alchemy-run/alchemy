@@ -5,9 +5,9 @@
  * init, it binds as a `secret_text`; at runtime the same Config
  * resolves from the binding — the key never enters the bundle).
  *
- * The kernel annotates every compiled tool `Strict: false` —
+ * The driver annotates every compiled tool `Strict: false` —
  * Anthropic's strict tool-calling grammar caps union-typed parameters
- * per request and a real toolkit cannot fit (KernelShared.compileTool).
+ * per request and a real toolkit cannot fit (DriverShared.compileTool).
  */
 import { AnthropicClient, AnthropicLanguageModel } from "@effect/ai-anthropic";
 import * as Config from "effect/Config";

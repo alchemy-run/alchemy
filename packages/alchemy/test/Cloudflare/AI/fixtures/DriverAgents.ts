@@ -1,6 +1,6 @@
 /**
- * The org under test on the Cloudflare kernel: two agents, two tools,
- * and a DETERMINISTIC model — so every assertion lands on kernel
+ * The org under test on the Cloudflare driver: two agents, two tools,
+ * and a DETERMINISTIC model — so every assertion lands on driver
  * mechanics (run identity, durable threads, `AI.reply`, cross-DO
  * delegation, the alarm clock) instead of on model behavior.
  *
@@ -59,7 +59,7 @@ const respond = (prompt: Prompt.Prompt): Array<Response.PartEncoded> => {
           toolCall("remind", { seconds: Number(argument) || 2 }),
           finish("tool-calls"),
         ];
-      // the kernel's own delegation tool — `agent` must name an agent
+      // the driver's own delegation tool — `agent` must name an agent
       // the charter mentions, `session` makes the child resumable
       case "delegate":
         return [
@@ -100,7 +100,7 @@ const respond = (prompt: Prompt.Prompt): Array<Response.PartEncoded> => {
  * The CRASH directive, for the durability tests: while a directive
  * `call:crash:<id>:<n>` is the last REAL user message and its budget
  * `n` is not spent, the sampling DIES — the way an eviction, deploy,
- * or defect kills a burst mid-round. Kernel-authored `<note>` rows
+ * or defect kills a burst mid-round. Driver-authored `<note>` rows
  * (recovery notices, abandonment) are skipped when finding it, so a
  * recovery re-sample crashes again until the budget is spent — but
  * any later ordinary message (a post-mortem poll) shields it. The
@@ -161,7 +161,7 @@ export const DeterministicModel = Layer.effect(
       }),
     streamText: (options) => {
       const crash = crashRequested(options.prompt);
-      // a DEFECT, not a failure: it skips the kernel's in-round retry
+      // a DEFECT, not a failure: it skips the driver's in-round retry
       // the way an eviction would, and lands in the crash path
       return crash !== undefined
         ? Stream.fromEffect(Effect.die(new Error(`scripted crash '${crash}'`)))
@@ -232,7 +232,7 @@ export const ScribeLive = Scribe.make(
 
 export class Supervisor extends AI.Agent<Supervisor>()("Supervisor") {}
 
-/** Mentioning ${Scribe} compiles the kernel's delegation tool — whose
+/** Mentioning ${Scribe} compiles the driver's delegation tool — whose
  *  handler RPCs into the Scribe's OWN Durable Object. */
 export const SupervisorLive = Supervisor.make(
   AI.prose`
@@ -242,36 +242,36 @@ export const SupervisorLive = Supervisor.make(
 );
 
 /**
- * Every kernel observation into the Worker's log, which is what makes
+ * Every driver observation into the Worker's log, which is what makes
  * a hang legible in `wrangler tail`: the last phase logged is the
  * phase that stalled.
  */
-export const LoggingObserver = Layer.succeed(AI.KernelObserver, {
+export const LoggingObserver = Layer.succeed(AI.RunObserver, {
   emit: (observation) =>
     Effect.log(
-      `[kernel] ${observation.term}/${observation.key} #${observation.seq} ${observation.type}`,
+      `[driver] ${observation.term}/${observation.key} #${observation.seq} ${observation.type}`,
     ),
 });
 
 /**
  * The org as ONE layer, exactly as an app composes it: the agents over
- * the kernel over the model. This is what the Worker provides to its
+ * the driver over the model. This is what the Worker provides to its
  * constructor's init effect.
  */
 export const Agents = SupervisorLive.pipe(
   Layer.provideMerge(ScribeLive),
-  Layer.provideMerge(Cloudflare.AI.KernelCloudflare),
+  Layer.provideMerge(Cloudflare.AI.DriverCloudflare),
   Layer.provideMerge(
     Layer.mergeAll(
       DeterministicModel,
       LoggingObserver,
       // recovery in SECONDS, not the production half-minute, so the
       // durability tests can watch the alarm re-enter a broken round
-      Layer.succeed(Cloudflare.AI.KernelDurability, {
+      Layer.succeed(Cloudflare.AI.DriverDurability, {
         recoverAfterMillis: 3_000,
         maxAttempts: 2,
       }),
-      // the kernel's own breadcrumbs are Debug — a deployed test that
+      // the driver's own breadcrumbs are Debug — a deployed test that
       // can't be attached to is only as debuggable as its log level
       Layer.succeed(MinimumLogLevel, "Debug"),
     ),

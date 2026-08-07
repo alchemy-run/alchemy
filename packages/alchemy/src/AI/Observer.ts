@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 
 /**
  * The ENCODED form of a round failure — what a `crashed` observation
- * carries across storage and RPC. The kernel never renders errors
+ * carries across storage and RPC. The driver never renders errors
  * (spec §11b): projections, boards, and UIs own presentation.
  * JSON-serializable by construction, like every observation.
  */
@@ -54,15 +54,15 @@ export interface ObservationEnvelope {
 }
 
 /**
- * One structured fact about a kernel's execution — enough to
+ * One structured fact about a driver's execution — enough to
  * reconstruct every run's TRANSCRIPT (inputs, assistant text, tool
  * calls and their results) and to stream it live. Deliberately the
- * KERNEL's vocabulary, not any UI protocol's: every surveyed harness
+ * DRIVER's vocabulary, not any UI protocol's: every surveyed harness
  * (Codex, OpenCode, Mastra, flue) keeps a canonical internal event log
  * and translates at the edge (see designs/ai/streaming.md).
  * JSON-serializable by construction.
  */
-export type KernelObservation = ObservationEnvelope &
+export type RunObservation = ObservationEnvelope &
   (
     | {
         readonly type: "admitted";
@@ -74,7 +74,7 @@ export type KernelObservation = ObservationEnvelope &
         readonly type: "input";
         readonly text: string;
         /**
-         * PROVENANCE, structural: `note` = kernel-authored aside
+         * PROVENANCE, structural: `note` = driver-authored aside
          * (`AI.say`, recovery notes); `reminder` = a `Thread.remind`
          * delivery (the run's own past self). Absent = an ordinary
          * message (world event or steer). The in-band text markers
@@ -175,15 +175,15 @@ export type KernelObservation = ObservationEnvelope &
   );
 
 /**
- * The kernel's OBSERVABILITY seam — an optional service (the same
- * pattern as `WireMode`): when present in the context a kernel is
+ * The driver's OBSERVABILITY seam — an optional service (the same
+ * pattern as `WireMode`): when present in the context a driver is
  * interpreted in, every run lifecycle fact is emitted into it;
- * absent, the kernel spends nothing. Emission is fire-and-forget —
+ * absent, the driver spends nothing. Emission is fire-and-forget —
  * an observer can never fail or slow a run.
  */
-export class KernelObserver extends Context.Service<
-  KernelObserver,
+export class RunObserver extends Context.Service<
+  RunObserver,
   {
-    readonly emit: (observation: KernelObservation) => Effect.Effect<void>;
+    readonly emit: (observation: RunObservation) => Effect.Effect<void>;
   }
->()("alchemy/AI/KernelObserver") {}
+>()("alchemy/AI/RunObserver") {}

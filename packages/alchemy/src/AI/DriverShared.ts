@@ -1,16 +1,16 @@
 /**
- * Substrate-INDEPENDENT kernel internals — the pieces every `Kernel`
+ * Substrate-INDEPENDENT driver internals — the pieces every `Driver`
  * implementation shares regardless of where its runs live (an
- * in-process `Map` for {@link KernelMemory}, Durable Objects for
- * `KernelCloudflare`). These are pure functions of a charter's terms:
+ * in-process `Map` for {@link DriverMemory}, Durable Objects for
+ * `DriverCloudflare`). These are pure functions of a charter's terms:
  * rendering a capability's tagged template, compiling `AI.Tool`s and
  * the intrinsics into effect-AI tools, and the message shapes the
  * thread is built from.
  *
- * Kept here (not duplicated per kernel) so the two implementations
+ * Kept here (not duplicated per driver) so the two implementations
  * diverge ONLY where the substrate forces them to — the loop's
  * concurrency and the run's persistence — never in how a stance
- * becomes a toolkit. See designs/ai/kernel-cloudflare.md.
+ * becomes a toolkit. See designs/ai/driver-cloudflare.md.
  */
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -28,7 +28,7 @@ import { isSkill, type Skill } from "./Skill.ts";
 import { isTool, isToolImpl, type Tool } from "./Tool.ts";
 
 /**
- * A burst failure, described for the kernel's two consumers (spec
+ * A burst failure, described for the driver's two consumers (spec
  * §11b): `error` is the ORIGINAL value — waiters fail with it, typed
  * and catchable — and `encoded` is the serializable summary the
  * `crashed` observation carries.
@@ -84,7 +84,7 @@ export const describeCrash = (cause: Cause.Cause<unknown>): CrashInfo => {
 
 /**
  * Render an {@link EncodedCrash} (or a legacy string row) into one
- * line — a convenience for PROJECTIONS; the kernel itself never calls
+ * line — a convenience for PROJECTIONS; the driver itself never calls
  * this.
  */
 export const renderCrash = (error: EncodedCrash | string): string =>
@@ -95,7 +95,7 @@ export const renderCrash = (error: EncodedCrash | string): string =>
       : error.message;
 
 /**
- * Inbox ENVELOPE for kernel-minted inputs that carry provenance (a
+ * Inbox ENVELOPE for driver-minted inputs that carry provenance (a
  * `Thread.remind` delivery). Unwrapped at drain: the thread and the
  * turn's `inputs` see only `text` — the in-band `[reminder]` marker
  * stays model-facing — while the `input` observation gets a
@@ -161,13 +161,13 @@ export const render = (
  * handler's `Effect.fail(text)` is a MODEL-VISIBLE tool result the
  * agent reacts to, never a loop crash.
  *
- * Every kernel-compiled tool is annotated `Strict: false`: providers
+ * Every driver-compiled tool is annotated `Strict: false`: providers
  * that default to strict structured-output tool calling (Anthropic)
  * compile each schema through a grammar whose codec rewrites every
  * optional parameter into a required nullable union AND caps
  * union-typed parameters per request (16) — a working toolkit (the
  * Coding skill alone carries ~20 optional params) cannot fit. The
- * kernel's toolkits are dynamic and open-ended, so strict grammars
+ * driver's toolkits are dynamic and open-ended, so strict grammars
  * are the wrong trade; non-strict tool calling has no such limit.
  */
 export const compileTool = (term: Tool<any, any[]>) => {
@@ -210,7 +210,7 @@ export const compileTool = (term: Tool<any, any[]>) => {
  *
  * `session` is the CALL/REPLY seam (the gen_server pattern): a
  * repeated dispatch with the same session continues the SAME worker
- * run — full context, same worktree — via the kernel's
+ * run — full context, same worktree — via the driver's
  * admit-or-enqueue semantics. Sessions are namespaced under the
  * dispatching run's key, so two issues' "fix" sessions never collide.
  */
@@ -331,7 +331,7 @@ export const noteMessage = (body: string): Prompt.MessageEncoded => ({
 });
 
 /**
- * Appended to every system prompt: how to read the one kernel-authored
+ * Appended to every system prompt: how to read the one driver-authored
  * channel. Constant text — a static charter's system prompt stays
  * byte-stable for prompt caching.
  */

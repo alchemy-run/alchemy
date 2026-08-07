@@ -1,7 +1,7 @@
 /**
- * The SAME org as {@link KernelAgents}, a REAL model: Scribe over
+ * The SAME org as {@link DriverAgents}, a REAL model: Scribe over
  * Anthropic instead of the deterministic prompt-reader — nothing else
- * changes, which is the point of the layered kernel.
+ * changes, which is the point of the layered driver.
  *
  * The API key rides the secrets seam (see
  * https://alchemy.run/environments/secrets/): `Config.redacted` is
@@ -19,7 +19,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { LoggingObserver, Scribe, ScribeLive } from "./KernelAgents.ts";
+import { LoggingObserver, Scribe, ScribeLive } from "./DriverAgents.ts";
 
 const Anthropic = AnthropicLanguageModel.layer({
   model: "claude-haiku-4-5",
@@ -33,7 +33,7 @@ const Anthropic = AnthropicLanguageModel.layer({
 );
 
 const Agents = ScribeLive.pipe(
-  Layer.provideMerge(Cloudflare.AI.KernelCloudflare),
+  Layer.provideMerge(Cloudflare.AI.DriverCloudflare),
   Layer.provideMerge(
     Layer.mergeAll(
       Anthropic,

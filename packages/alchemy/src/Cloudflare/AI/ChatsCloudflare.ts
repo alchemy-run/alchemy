@@ -16,7 +16,7 @@ import {
   type ChatSummary,
   type StreamingSample,
 } from "../../AI/Chats.ts";
-import type { KernelObservation } from "../../AI/Observer.ts";
+import type { RunObservation } from "../../AI/Observer.ts";
 import { RuntimeContext } from "../../RuntimeContext.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -39,7 +39,7 @@ interface StoredChat {
   parent: string | undefined;
   firstInput: string | undefined;
   streaming: StreamingSample | undefined;
-  log: Array<KernelObservation>;
+  log: Array<RunObservation>;
 }
 
 const MAX_LOG = 2000;
@@ -47,7 +47,7 @@ const FIRST_INPUT_BYTES = 4000;
 
 const applyObservation = (
   chat: StoredChat,
-  observation: KernelObservation,
+  observation: RunObservation,
 ): StoredChat => {
   const next: StoredChat = {
     ...chat,
@@ -138,7 +138,7 @@ const toSummary = (id: string, chat: StoredChat): ChatSummary => ({
 });
 
 interface ChatsRpc extends MainRpc<DurableObjectState> {
-  readonly ingest: (observation: KernelObservation) => Effect.Effect<void>;
+  readonly ingest: (observation: RunObservation) => Effect.Effect<void>;
   readonly list: () => Effect.Effect<ReadonlyArray<ChatSummary>>;
   readonly snapshot: (id: string) => Effect.Effect<ChatSnapshot | undefined>;
 }
@@ -244,7 +244,7 @@ export const ChatsCloudflare: Layer.Layer<Chats, never, Worker> = Layer.effect(
       // backlog and an inert queue (no cross-isolate Queue).
       subscribe: (id, since) =>
         Effect.gen(function* () {
-          const queue = yield* Queue.unbounded<KernelObservation>();
+          const queue = yield* Queue.unbounded<RunObservation>();
           const snap = yield* board().snapshot(id).pipe(Effect.orDie);
           const backlog =
             snap === undefined

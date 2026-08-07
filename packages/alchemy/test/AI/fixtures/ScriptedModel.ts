@@ -1,5 +1,5 @@
 /**
- * A SCRIPTED LanguageModel for kernel tests — no network, no mocking
+ * A SCRIPTED LanguageModel for driver tests — no network, no mocking
  * framework: `LanguageModel.make` accepts a plain function, so the
  * "model" is a list of steps, one per call, each returning the encoded
  * response parts the provider would have produced. Every call's
@@ -37,7 +37,7 @@ export const make = (script: ReadonlyArray<Step>): ScriptedModel => {
     LanguageModel.LanguageModel,
     LanguageModel.make({
       generateText: (options) => Effect.sync(() => nextStep(options)),
-      // the kernel samples over the STREAMING wire: serve the same
+      // the driver samples over the STREAMING wire: serve the same
       // script, whole parts re-cut as start/delta/end triples the way
       // a real provider streams them
       streamText: (options) =>

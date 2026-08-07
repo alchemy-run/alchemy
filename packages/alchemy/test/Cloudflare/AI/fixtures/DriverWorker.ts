@@ -1,8 +1,8 @@
 /**
- * The kernel under test, exposed over HTTP: one route per actor verb.
+ * The driver under test, exposed over HTTP: one route per actor verb.
  *
  * Note what the Worker does NOT contain — no Durable Object class, no
- * namespace wiring, no run registry. `Cloudflare.AI.KernelCloudflare`
+ * namespace wiring, no run registry. `Cloudflare.AI.DriverCloudflare`
  * declares the runs DO inside itself and is discovered as a binding
  * because the layer yields it while building, and the whole org is ONE
  * layer provided to the init effect. A Durable Object activation
@@ -15,10 +15,10 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { Agents, Scribe, Supervisor } from "./KernelAgents.ts";
+import { Agents, Scribe, Supervisor } from "./DriverAgents.ts";
 
 export default class KernelTestWorker extends Cloudflare.Worker<KernelTestWorker>()(
-  "KernelCloudflareTestWorker",
+  "DriverCloudflareTestWorker",
   {
     main: import.meta.url,
   },

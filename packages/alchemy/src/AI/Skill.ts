@@ -53,7 +53,7 @@ export interface SkillService {
  *
  * At runtime the skill is DORMANT: its prose is not in context and
  * its tools are not in the toolkit until the agent ACTIVATES it (the
- * kernel's intrinsic `skill` tool). Activation returns the skill's
+ * driver's intrinsic `skill` tool). Activation returns the skill's
  * prose as the tool result — the documentation enters the
  * conversation exactly when it is needed — and enables the skill's
  * tools for the rest of that run. Deactivation retires them. A

@@ -1,13 +1,13 @@
 /**
- * The CHAT PROJECTION of kernel runs — the materialized view every UI
- * over the kernel needs (designs/ai/streaming.md): one kernel RUN
- * (term + key) = one CHAT, id `${term}:${key}`; the kernel's
- * {@link KernelObservation} log is the canonical record — per-run,
+ * The CHAT PROJECTION of driver runs — the materialized view every UI
+ * over the driver needs (designs/ai/streaming.md): one driver RUN
+ * (term + key) = one CHAT, id `${term}:${key}`; the driver's
+ * {@link RunObservation} log is the canonical record — per-run,
  * seq-ordered, ring-buffered; `subscribe` is the snapshot+tail
  * pattern every surveyed harness uses.
  *
  * The projection is deliberately PROTOCOL-NEUTRAL: it stores and
- * serves kernel vocabulary (observations, summaries, the in-flight
+ * serves driver vocabulary (observations, summaries, the in-flight
  * sampling). Rendering into a UI protocol is an adapter's job — see
  * `UIMessage.ts` for the Vercel AI SDK shaping.
  *
@@ -20,9 +20,9 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
-import { KernelObserver, type KernelObservation } from "./Observer.ts";
+import { RunObserver, type RunObservation } from "./Observer.ts";
 
-/** Chat identity: one kernel run. */
+/** Chat identity: one driver run. */
 export interface ChatSummary {
   readonly id: string;
   readonly term: string;
@@ -60,7 +60,7 @@ export interface StreamingSample {
 
 /** A chat's full state: the canonical log + the in-flight sampling. */
 export interface ChatSnapshot {
-  readonly log: ReadonlyArray<KernelObservation>;
+  readonly log: ReadonlyArray<RunObservation>;
   readonly streaming: StreamingSample | undefined;
 }
 
@@ -69,8 +69,8 @@ export const chatId = (term: string, key: string) => `${term}:${key}`;
 export class Chats extends Context.Service<
   Chats,
   {
-    /** Feed one kernel observation into the projection. */
-    readonly ingest: (observation: KernelObservation) => Effect.Effect<void>;
+    /** Feed one driver observation into the projection. */
+    readonly ingest: (observation: RunObservation) => Effect.Effect<void>;
     readonly list: () => Effect.Effect<ReadonlyArray<ChatSummary>>;
     /** The chat's canonical log + in-flight sampling, or undefined. */
     readonly snapshot: (id: string) => Effect.Effect<ChatSnapshot | undefined>;
@@ -85,22 +85,22 @@ export class Chats extends Context.Service<
       id: string,
       since?: number,
     ) => Effect.Effect<{
-      readonly backlog: ReadonlyArray<KernelObservation>;
-      readonly queue: Queue.Queue<KernelObservation>;
+      readonly backlog: ReadonlyArray<RunObservation>;
+      readonly queue: Queue.Queue<RunObservation>;
       readonly unsubscribe: Effect.Effect<void>;
     }>;
   }
 >()("alchemy/AI/Chats") {}
 
 /**
- * The kernel seam: observations flow straight into the projection.
- * Provide alongside the kernel Layer, over ONE shared {@link Chats}
+ * The driver seam: observations flow straight into the projection.
+ * Provide alongside the driver Layer, over ONE shared {@link Chats}
  * instance (the same const the HTTP surface reads — layers memoize by
  * reference).
  */
-export const ChatsObserver: Layer.Layer<KernelObserver, never, Chats> =
+export const ChatsObserver: Layer.Layer<RunObserver, never, Chats> =
   Layer.effect(
-    KernelObserver,
+    RunObserver,
     Effect.gen(function* () {
       const chats = yield* Chats;
       return { emit: chats.ingest };
@@ -131,8 +131,8 @@ interface ChatState {
         toolCalls: Array<{ id: string; name: string; input: unknown }>;
       }
     | undefined;
-  log: Array<KernelObservation>;
-  readonly subscribers: Set<Queue.Queue<KernelObservation>>;
+  log: Array<RunObservation>;
+  readonly subscribers: Set<Queue.Queue<RunObservation>>;
 }
 
 /** In-memory physics: a single process's projection. */
@@ -250,7 +250,7 @@ export const ChatsMemory = (options?: ChatsMemoryOptions): Layer.Layer<Chats> =>
           }),
         subscribe: (id, since) =>
           Effect.gen(function* () {
-            const queue = yield* Queue.unbounded<KernelObservation>();
+            const queue = yield* Queue.unbounded<RunObservation>();
             const at = id.indexOf(":");
             const chat =
               chats.get(id) ??

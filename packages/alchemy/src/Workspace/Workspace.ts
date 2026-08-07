@@ -185,7 +185,7 @@ export const perRun = (options?: {
       const fs = yield* FileSystem.FileSystem;
       const workspaces = yield* Git.Workspaces;
 
-      // AI.Thread is a runtime fact the kernel provides to handlers;
+      // AI.Thread is a runtime fact the driver provides to handlers;
       // the Workspace interface deliberately hides the requirement
       // (the same doctrine as tool handlers reading AI.Thread).
       const root = Effect.gen(function* () {

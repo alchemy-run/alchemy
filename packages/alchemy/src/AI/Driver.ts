@@ -7,7 +7,7 @@ import type * as PersistentRef from "../PersistentRef.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Actor } from "./Actor.ts";
 import type { Agent } from "./Agent.ts";
-import type { KernelError } from "./Errors.ts";
+import type { DriverError } from "./Errors.ts";
 import type { Fragment } from "./Prose.ts";
 import type { Thread, Tick } from "./Thread.ts";
 import type { Services } from "./Services.ts";
@@ -15,7 +15,7 @@ import { isSkill, type Skill, type SkillService } from "./Skill.ts";
 import { isTool } from "./Tool.ts";
 
 /**
- * The one term kind the Kernel can interpret: an {@link Agent}.
+ * The one term kind the Driver can interpret: an {@link Agent}.
  * Capability terms (`Tool`/`Parameter`) are compiled *into* their
  * host's turns — they have no runs and no loop of their own. A
  * domain-shaped surface (a process) is not a term at all: it is a
@@ -25,7 +25,7 @@ import { isTool } from "./Tool.ts";
 export type Interpretable = Agent<any, any>;
 
 /**
- * The TURN half of a charter: re-entrant, evaluated by the kernel
+ * The TURN half of a charter: re-entrant, evaluated by the driver
  * before EVERY sampling of every run. Its result is what the run IS
  * right now:
  *
@@ -35,7 +35,7 @@ export type Interpretable = Agent<any, any>;
  *   The turn returns the stance and NOTHING ELSE — answering a caller
  *   is the explicit {@link reply} act (from a tool handler or turn
  *   code), never a return value.
- * - a failure — retried by the kernel with capped backoff; a typed
+ * - a failure — retried by the driver with capped backoff; a typed
  *   `AI.Refused` is the run giving up, riding the error channel.
  *
  * Returning an un-yielded Effect (a forgotten `yield*` on `AI.prose`)
@@ -73,7 +73,7 @@ export type TurnFn<In = unknown, E = any, R = any> = (
  * A charter is the BEHAVIOR of an Agent or Process: an INIT effect
  * that runs once per RUN (the closure is the component instance —
  * allocate `Ref`s, resolve bindings for tools, define inline tools
- * over both) and returns the {@link Turn} the kernel re-evaluates at
+ * over both) and returns the {@link Turn} the driver re-evaluates at
  * every sampling boundary of that run.
  *
  * Init IS thread-scoped: it runs at admit, when the run's thread
@@ -117,14 +117,14 @@ export type TurnFn<In = unknown, E = any, R = any> = (
 export type Charter = Effect.Effect<Fragment | Turn | TurnFn, any, any>;
 
 /**
- * The services the kernel itself provides while evaluating a run's
+ * The services the driver itself provides while evaluating a run's
  * TURN and its tool handlers — excluded from a charter's inferred
  * requirements because no user Layer could ever provide them.
  *
  * These are RUNTIME facts and affordances: `Thread` (the run's
  * identity and conversation), `Tick` (this sampling), and the
  * `PersistentRef.Store` (durable named state, framed by the run's
- * identity — the opt-in named-state capability both kernels provide).
+ * identity — the opt-in named-state capability both drivers provide).
  * Init runs ONCE PER RUN at admit — the thread already exists, so
  * init MAY read `Thread` for thread-scoped setup (a `PersistentRef`
  * keyed by the run, a workspace checkout addressed by `thread.key`).
@@ -135,12 +135,12 @@ export type TurnServices = Thread | Tick | RuntimeContext | PersistentRef.Store;
 
 /**
  * A charter's requirement union: the init effect's own requirements
- * (`Thread` excluded — init is per-run and the kernel provides the
+ * (`Thread` excluded — init is per-run and the driver provides the
  * thread at admit; `Tick` NOT excluded, so an init that yields it
  * surfaces an unprovideable requirement here and fails to compose)
  * plus everything any turn could mention (splices accumulate through
  * `AI.prose`'s requirement channel — including branches that did not
- * render this tick), minus the kernel-provided {@link TurnServices}.
+ * render this tick), minus the driver-provided {@link TurnServices}.
  */
 export type CharterServices<C> =
   C extends Effect.Effect<infer A, any, infer RInit>
@@ -154,7 +154,7 @@ export type CharterServices<C> =
     : never;
 
 /**
- * The Kernel is the interpreter of {@link Agent} terms — one method.
+ * The Driver is the interpreter of {@link Agent} terms — one method.
  *
  * `interpret` turns a term (a bare tag) plus its CHARTER (init → turn)
  * into the live {@link Actor} verbs, resolving every capability the
@@ -171,29 +171,29 @@ export type CharterServices<C> =
  *
  * Note the vocabulary that is absent: memory, compaction, context,
  * sandbox, session-store, sub-agent, model, event bus, trace. Those
- * are COMPONENT Layers a particular kernel *implementation* requires
+ * are COMPONENT Layers a particular driver *implementation* requires
  * by name — invisible to this contract.
  */
-export interface KernelService {
+export interface DriverService {
   readonly interpret: (
     term: Interpretable,
     charter: Charter,
-  ) => Effect.Effect<Actor, KernelError, Scope.Scope>;
+  ) => Effect.Effect<Actor, DriverError, Scope.Scope>;
 }
 
-export class Kernel extends Context.Service<Kernel, KernelService>()(
-  "alchemy/AI/Kernel",
+export class Driver extends Context.Service<Driver, DriverService>()(
+  "alchemy/AI/Driver",
 ) {}
 
 /**
- * The kernel-default implementation Layer for an AGENT term — spelled
- * `Engineer.make(charter)` — the term's tag out; `Kernel` plus
+ * The driver-default implementation Layer for an AGENT term — spelled
+ * `Engineer.make(charter)` — the term's tag out; `Driver` plus
  * everything the charter's fragments mention in. Transitive
  * elimination is Layer composition — each agent gets its own
  * capability provisioning via `Layer.provide`.
  *
  * Agent-only, by design: an agent's tag IS the {@link Actor} verbs
- * `interpret` returns, so the kernel can implement it mechanically. A
+ * `interpret` returns, so the driver can implement it mechanically. A
  * sealed domain Shape (a business process) is a plain
  * `Context.Service` — its hand-written Layer resolves a PRIVATE
  * agent's tag and hides the verbs behind the declared Shape:
@@ -246,7 +246,7 @@ export const layer: {
   <A extends Agent<any, any> & Context.Service<any, any>, C extends Charter>(
     term: A,
     charter: C,
-  ): Layer.Layer<A["Identifier"], never, Kernel | CharterServices<C>>;
+  ): Layer.Layer<A["Identifier"], never, Driver | CharterServices<C>>;
 } = ((term: any, charterOrTemplate?: any, ...refs: any[]) =>
   isSkill(term)
     ? Layer.effect(
@@ -274,8 +274,8 @@ export const layer: {
     : Layer.effect(
         term,
         Effect.orDie(
-          Effect.flatMap(Kernel, (kernel) =>
-            kernel.interpret(term, charterOrTemplate),
+          Effect.flatMap(Driver, (driver) =>
+            driver.interpret(term, charterOrTemplate),
           ),
         ) as any,
       )) as any;

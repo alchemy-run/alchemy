@@ -1,5 +1,5 @@
 /**
- * The Cloudflare kernel with a REAL model: one smoke test that proves
+ * The Cloudflare driver with a REAL model: one smoke test that proves
  * the full production shape end to end — the Anthropic key bound onto
  * the Worker as a secret via `Config.redacted` at init (see
  * https://alchemy.run/environments/secrets/), the Durable Object run
@@ -17,7 +17,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import KernelAnthropicTestWorker from "./fixtures/KernelAnthropicWorker.ts";
+import KernelAnthropicTestWorker from "./fixtures/DriverAnthropicWorker.ts";
 
 const hasKey = !!process.env.ANTHROPIC_API_KEY;
 
@@ -31,7 +31,7 @@ const logLevel = Effect.provideService(
 );
 
 const Stack = Alchemy.Stack(
-  "KernelCloudflareAnthropicStack",
+  "DriverCloudflareAnthropicStack",
   {
     providers: Cloudflare.providers(),
     state: Cloudflare.state(),

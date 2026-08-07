@@ -4,9 +4,9 @@ import {
   layer,
   type Charter,
   type CharterServices,
-  type Kernel,
+  type Driver,
   type TurnServices,
-} from "./Kernel.ts";
+} from "./Driver.ts";
 import { prose } from "./Prose.ts";
 import type { Services } from "./Services.ts";
 import type { CharterTools, FragmentTools, WiredLayer } from "./Wire.ts";
@@ -58,7 +58,7 @@ export interface Agent<Name extends string = string, Self = unknown> {
   /** Phantom carrier for the tag identifier (`Self` in the `<Self>()` form). */
   "~alchemy/Self": Self;
   /**
-   * The kernel-default implementation Layer: interpret the CHARTER
+   * The driver-default implementation Layer: interpret the CHARTER
    * (init → turn), publish the resulting actor verbs as this tag's
    * service.
    *
@@ -95,12 +95,12 @@ export interface Agent<Name extends string = string, Self = unknown> {
       ...refs: Refs
     ): WiredLayer<
       Self,
-      Kernel | Exclude<Services<Refs>, TurnServices>,
+      Driver | Exclude<Services<Refs>, TurnServices>,
       FragmentTools<Refs>
     >;
     <C extends Charter>(
       charter: C,
-    ): WiredLayer<Self, Kernel | CharterServices<C>, CharterTools<C>>;
+    ): WiredLayer<Self, Driver | CharterServices<C>, CharterTools<C>>;
   };
   /**
    * Instances are branded with the agent's name so distinct agents

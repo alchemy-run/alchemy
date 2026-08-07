@@ -35,7 +35,7 @@ type Ops = typeof Ops;
  * segments plus its `name`. The chain is private to this module; the
  * two ways onto it:
  *
- * - **Hosts** (the AI kernels) frame every run automatically:
+ * - **Hosts** (the AI drivers) frame every run automatically:
  *   `["IssueOwner", "sam-goodwin/test-alchemy#123"]`. Charter code
  *   gets per-instance isolation without ever naming itself.
  * - **Libraries** scope their own state with {@link within}:
@@ -135,7 +135,7 @@ const Chain = Context.Reference<ReadonlyArray<string>>(
  * - Library code isolates its private state:
  *   `myHelpers.pipe(PersistentRef.within("coding"))` — its
  *   `"progress"` and the charter's `"progress"` are different rows.
- * - Hosts (the AI kernels) frame each run with its durable identity
+ * - Hosts (the AI drivers) frame each run with its durable identity
  *   (`within(agent, runKey)`), which is why the same charter's
  *   `make("phase")` is isolated per instance on any store — including
  *   shared ones. Segments are arbitrary strings; run keys with `/`
@@ -315,7 +315,7 @@ export const make = <A, I = A, E = never, R = never>(
 /**
  * An in-memory store: durability equals the Layer's lifetime. The
  * right store for tests and for substrates whose process lifetime IS
- * the run lifetime (e.g. the in-memory AI kernel).
+ * the run lifetime (e.g. the in-memory AI driver).
  */
 export const layerMemory: Layer.Layer<Store> = Layer.sync(Store, () =>
   makeMemoryStore(),

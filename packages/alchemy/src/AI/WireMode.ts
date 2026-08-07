@@ -5,14 +5,14 @@
  * grants appear on the wire.
  *
  * Absent (the default): direct tool-calling — every grant is its own
- * provider tool. Present (an optional service the kernel resolves from
+ * provider tool. Present (an optional service the driver resolves from
  * the interpret context): the mode transforms the grants — CODEMODE
  * collapses them into one `eval` tool whose description carries
  * generated type signatures, and whose handler evaluates the model's
  * code against the SAME granted handlers (the bridge is the
  * enforcement point: only this tick's grants exist inside the code).
  *
- * Kernel intrinsics (`dispatch`, `spawn`, `skill`) stay direct tools —
+ * Driver intrinsics (`dispatch`, `spawn`, `skill`) stay direct tools —
  * they are conversation control, not capabilities.
  *
  * ```ts

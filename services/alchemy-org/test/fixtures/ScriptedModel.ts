@@ -20,7 +20,7 @@ export const make = (steps: ReadonlyArray<Step>) => {
     LanguageModel.LanguageModel,
     LanguageModel.make({
       generateText: (options) => Effect.sync(() => nextStep(options)),
-      // the kernel samples over the STREAMING wire: serve the same
+      // the driver samples over the STREAMING wire: serve the same
       // script, whole parts re-cut as start/delta/end triples the way
       // a real provider streams them
       streamText: (options) =>

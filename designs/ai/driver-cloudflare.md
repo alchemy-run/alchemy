@@ -1,8 +1,8 @@
-# KernelCloudflare — working notes
+# DriverCloudflare — working notes
 
-The second kernel: the same `Kernel.interpret(term, charter)` contract
-as `KernelMemory`, hosted on Cloudflare Durable Objects. This is the
-DIRECT implementation (v1) — deliberately a fork of KernelMemory's
+The second driver: the same `Driver.interpret(term, charter)` contract
+as `DriverMemory`, hosted on Cloudflare Durable Objects. This is the
+DIRECT implementation (v1) — deliberately a fork of DriverMemory's
 internals where they transfer, restructured where the substrate
 demands it. The generalization into swappable layers comes AFTER this
 works and has taught us where the true seams are (tracked at the
@@ -10,23 +10,23 @@ bottom).
 
 ## The mapping
 
-| KernelMemory | KernelCloudflare v1 |
+| DriverMemory | DriverCloudflare v1 |
 |---|---|
 | Actor = keyed map of RunStates in one process | Actor = a DO NAMESPACE; one DO instance per RUN, named `${term}/${key}` |
 | run loop = perpetual fiber per run | BURST per event: drain → tick → sample → tools → repeat until quiescent, then return (DO may hibernate) |
 | inbox = `Queue` | inbox = storage rows (`inbox:{seq}`), drained per burst |
 | thread = `Prompt` in memory | thread = storage rows (`msg:{seq}`), one per message; rebuilt into a Prompt per burst |
-| waiters ride inputs (Deferred) | v1: the dispatch RPC is HELD OPEN (parent pinned while child works — exact KernelMemory semantics). v2 (layering phase): durable continuations — the burst parks on outstanding tool results; replies arrive by `deliverReply` RPC and resume it |
-| `Thread.remind` = kernel-scoped fiber | reminder rows + `storage.setAlarm(min fireAt)`; the `alarm()` handler enqueues due notes and re-arms |
+| waiters ride inputs (Deferred) | v1: the dispatch RPC is HELD OPEN (parent pinned while child works — exact DriverMemory semantics). v2 (layering phase): durable continuations — the burst parks on outstanding tool results; replies arrive by `deliverReply` RPC and resume it |
+| `Thread.remind` = driver-scoped fiber | reminder rows + `storage.setAlarm(min fireAt)`; the `alarm()` handler enqueues due notes and re-arms |
 | charter init once per RUN (closures live forever) | init once per ACTIVATION: re-runs after eviction, so `Ref`s made in init are ISOLATE state, not run state. Run-durable state lives in the thread (where the org already keeps it since the reply refactor removed the Ref dance) or in DO storage. The spec's "named-state Ref" is the eventual affordance |
 | supervision children map | `children:{agent}:{key}` rows; cascade on settle/crash RPCs the children's DOs |
-| `KernelObserver` per-run seq | same observations, seq persisted; sink = observer layer provided in the DO (log/Analytics/Chats-DO later) |
+| `RunObserver` per-run seq | same observations, seq persisted; sink = observer layer provided in the DO (log/Analytics/Chats-DO later) |
 
 ## The user surface (DECIDED 2026-07-27)
 
-`KernelCloudflare` is a BARE CONST layer, the exact silhouette of
-`KernelMemory` — no class to declare, no thunk, no `host` return.
-Agents flow through the class-level `layers` slot; kernel ↔ agents is
+`DriverCloudflare` is a BARE CONST layer, the exact silhouette of
+`DriverMemory` — no class to declare, no thunk, no `host` return.
+Agents flow through the class-level `layers` slot; driver ↔ agents is
 one composed layer, provided once:
 
 ```ts
@@ -41,11 +41,11 @@ export default class OrgWorker extends Cloudflare.Worker<OrgWorker>()(
     yield* GitHub.consumeRepositoryEvents(testAlchemy, { events }, route(owner));
     return { fetch: /* status/board */ };
   }),
-  OrgAgents.pipe(Layer.provideMerge(Cloudflare.AI.KernelCloudflare)),  // ← layers slot
+  OrgAgents.pipe(Layer.provideMerge(Cloudflare.AI.DriverCloudflare)),  // ← layers slot
 ) {}
 ```
 
-Swapping kernels is one line: `KernelMemory` ↔ `KernelCloudflare`.
+Swapping drivers is one line: `DriverMemory` ↔ `DriverCloudflare`.
 
 ### Why no argument, no user class
 
@@ -57,12 +57,12 @@ work:
 1. **The `layers` slot is the isolate-shared build.** A Worker and its
    DO classes share one memoized layer build (WorkerBridge
    `getSharedBuild`); the class-level `layers` argument IS that build.
-   Put `agents ⊕ kernel` there and the internal runs-DO resolves the
-   SAME kernel service instance — charter registrations included —
+   Put `agents ⊕ driver` there and the internal runs-DO resolves the
+   SAME driver service instance — charter registrations included —
    from its own init. (An `Effect.provide` inside the init effect is
    handler-local and invisible to DOs; the slot is the seam.)
 2. **Charter registration rides the service instance.** `interpret`
-   records `term → {charter, captured context}` on the kernel service
+   records `term → {charter, captured context}` on the driver service
    (a symbol field, not module state). The DO reads it back via the
    same tag and becomes the run its name (`${term}/${key}`) addresses.
 
@@ -78,12 +78,12 @@ user-authored class body, no circularity.
 
 ## Progress
 
-- **KernelShared.ts** — the substrate-free helpers (`render`,
+- **DriverShared.ts** — the substrate-free helpers (`render`,
   `compile*`, message shapes, `Stance`/`CompiledToolRef`) extracted
-  and imported by KernelMemory; 27 kernel tests green. The next
+  and imported by DriverMemory; 27 driver tests green. The next
   shared tier (`renderStance`, `step`, `buildToolkit`, skill-graph
   fixpoint) parameterizes on `{model, provideRun}` — extract once the
-  CF engine confirms the signatures (the "diff the two kernels" step).
+  CF engine confirms the signatures (the "diff the two drivers" step).
 
 ## The burst (the loop, event-shaped)
 
@@ -153,7 +153,7 @@ to the burst loop — same mechanics, smaller surface:
   settled tool results), NOT partial persistence — full think-style
   within-step checkpointing + repair only earns its keep when
   streaming clients need resumption.
-- `KernelDurability` (optional layer) tunes `recoverAfterMillis` /
+- `DriverDurability` (optional layer) tunes `recoverAfterMillis` /
   `maxAttempts`; tests run recovery at seconds.
 
 Deliberately NOT taken from think: durable submissions/idempotency
@@ -182,7 +182,7 @@ chunk-buffer machinery all compensate for the absence of a cursor:
   client → `subscribe {fromSeq}` (the ENTIRE resume story: replay
   rows ≥ cursor, then a `live` marker) and `submit {input}` (the
   socket's steer); server → `observation {durable, observation}`.
-  The wire carries kernel vocabulary — UIMessage translation happens
+  The wire carries driver vocabulary — UIMessage translation happens
   client-side (`RunSocketTransport`, an AI SDK `ChatTransport` for
   `useChat`, using `makeChunkTranslator`; step-granular in v1).
 - **Hibernation-safe by construction**: no in-memory session map —
@@ -190,10 +190,10 @@ chunk-buffer machinery all compensate for the absence of a cursor:
   DO woken by a frame has nothing to rehydrate. Sends are
   ignore-on-failure (`sendIfOpen` discipline): a dropped frame is a
   gap the client's cursor closes, never an error.
-- **`AgentGateway`** (a CORE `AI` service, provided by BOTH kernels):
+- **`AgentGateway`** (a CORE `AI` service, provided by BOTH drivers):
   the server-side door — `gateway.attach(term, key, request)` routes
-  an `Upgrade: websocket` request to the run. `KernelCloudflare`
-  forwards into the run's own DO; `KernelMemory` serves the socket
+  an `Upgrade: websocket` request to the run. `DriverCloudflare`
+  forwards into the run's own DO; `DriverMemory` serves the socket
   in-process (each run keeps a ring-buffered observation log and a
   live socket set), so a local host speaks the IDENTICAL protocol.
   The frame handler itself is shared (`handleRunSocketFrame`) — the
@@ -202,7 +202,7 @@ chunk-buffer machinery all compensate for the absence of a cursor:
   `react` never enters a Worker bundle): `useAgent({ url })` connects
   to a run; `useChat({ agent })` IS the AI SDK's `useChat` pre-wired
   with the run-socket transport — same return shape, ai-elements
-  compatible, kernel-agnostic.
+  compatible, driver-agnostic.
 
 Kept from their scar tissue: sendIfOpen, cursor-only progress (no
 protocol state in isolate memory). Deliberately dropped: resume
@@ -228,7 +228,7 @@ server-side UIMessage minting.
 ## What we expect to extract in the layering phase
 
 Candidates that look substrate-independent already (verify by diffing
-the two kernels once v1 runs):
+the two drivers once v1 runs):
 
 - stance rendering + skill-graph fixpoint (`renderStance`, resolve*)
 - tool compilation (`compileTool`/doors/intrinsics) + wire modes

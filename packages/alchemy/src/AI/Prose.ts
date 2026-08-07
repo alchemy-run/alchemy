@@ -5,7 +5,7 @@ import type { Services } from "./Services.ts";
  * A `Fragment` is one rendered unit of a charter's document: a tagged
  * template plus its splices, captured as pure data. Fragments are what
  * {@link prose} constructs and what a charter's TURN effect returns —
- * the kernel renders them into the model's context at every sampling
+ * the driver renders them into the model's context at every sampling
  * boundary (the "tick").
  *
  * A fragment's splices are the charter's dependency declarations:
@@ -16,7 +16,7 @@ import type { Services } from "./Services.ts";
  *   its implementation carried in the splice;
  * - a nested fragment effect (another `AI.prose`, or a component's
  *   turn value) composes documents — each nested fragment is one
- *   BLOCK, the granularity at which the kernel diffs ticks;
+ *   BLOCK, the granularity at which the driver diffs ticks;
  * - plain values render as text.
  *
  * Blocks are the change-detection unit: on the first tick every block
@@ -50,10 +50,10 @@ export interface Fragment<
  * ```
  *
  * The effect itself performs no I/O — construction is pure; the
- * requirements are phantom, resolved by the kernel from the interpret
+ * requirements are phantom, resolved by the driver from the interpret
  * context when the fragment's mentions are compiled. Effect-valued
  * splices (nested `AI.prose`, component turn values) are evaluated by
- * the kernel at render time, every tick.
+ * the driver at render time, every tick.
  */
 export const prose = <const Refs extends any[]>(
   template: TemplateStringsArray,
@@ -93,7 +93,7 @@ export const isFragment = (value: unknown): value is Fragment =>
  * - splice VALUES are never dedented and never influence the margin —
  *   a nested `AI.prose` dedents itself.
  *
- * Applied by the kernel's renderer to every term template (prose,
+ * Applied by the driver's renderer to every term template (prose,
  * tool/skill/parameter/event descriptions).
  */
 export const dedentTemplate = (parts: readonly string[]): readonly string[] => {

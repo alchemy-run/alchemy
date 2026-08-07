@@ -378,8 +378,8 @@ const CODER: Renderers<typeof CoderLive> = {
 };
 
 /**
- * The remainder: kernel intrinsics (`skill`, `remind_me` — their
- * schemas live in the kernel, not on any agent's wire). Unknown names
+ * The remainder: driver intrinsics (`skill`, `remind_me` — their
+ * schemas live in the driver, not on any agent's wire). Unknown names
  * fall back to the generic collapsible card.
  */
 const EXTRAS: Record<string, Renderer> = {

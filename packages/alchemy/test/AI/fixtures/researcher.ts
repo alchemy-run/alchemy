@@ -1,11 +1,11 @@
 /**
- * The kernel test org: ONE agent, ONE tool, ONE parameter — the
+ * The driver test org: ONE agent, ONE tool, ONE parameter — the
  * smallest charter that exercises every seam of the loop (system
  * prompt from prose, tool schema from parameter splices, tool physics
  * from a Layer).
  *
  * Declarations are bare tags; behavior lives in the CHARTERS exported
- * alongside them — the tests hand `Kernel.interpret(Researcher,
+ * alongside them — the tests hand `Driver.interpret(Researcher,
  * ResearcherCharter)` the pair `Researcher.make(ResearcherCharter)`
  * would.
  */

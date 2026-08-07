@@ -1,12 +1,12 @@
 /**
  * The coder, running on your machine — an Effectful
  * {@link LocalService.Vite} service hosting the agent as a detached
- * local process: the {@link Local} provide-list (KernelMemory with
+ * local process: the {@link Local} provide-list (DriverMemory with
  * sqlite durability, the read/run/write toolbox) under the HTTP
  * surface (Routes.ts), with the UI built by Vite and served from the
  * same address.
  *
- * Long-lived machinery (kernel run loops) registers on the process
+ * Long-lived machinery (driver run loops) registers on the process
  * Scope — so plain `Effect.provide(Local)` is enough; the fibers
  * survive init returning. Running needs `ANTHROPIC_API_KEY` in the
  * operator's environment (the reconciler passes the shell env

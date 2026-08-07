@@ -6,7 +6,7 @@ import type { Fragment } from "./Prose.ts";
 
 /**
  * A compaction request — the ONE mutation a charter may ask of its
- * thread. Applied by the kernel at the next sampling boundary, never
+ * thread. Applied by the driver at the next sampling boundary, never
  * mid-assembly; always recorded, never silent. The frozen head is
  * untouched either way.
  */
@@ -24,7 +24,7 @@ export type CompactPlan =
        * Restart the thread from `summary` alone — the
        * reset-with-handoff pattern. Prefer summaries the MODEL wrote
        * (a `handoff` inline tool): self-authored restatements commit
-       * better than kernel-authored ones. A reset clears the thread's
+       * better than driver-authored ones. A reset clears the thread's
        * say log, so still-true notes re-deliver into the fresh thread;
        * the system prompt (the turn's render) needs no restating — it
        * is delivered whole at every sampling.
@@ -34,20 +34,20 @@ export type CompactPlan =
 
 /**
  * The RUN a charter is executing inside — its world identity and its
- * thread (the conversation). The kernel provides it to INIT (which
+ * thread (the conversation). The driver provides it to INIT (which
  * runs once per run at admit, when the thread already exists — so
  * thread-scoped setup like a workspace checkout keyed by `thread.key`
  * belongs there), to the charter's TURN, and to tool handlers.
  * `AI.Tick` is the one runtime fact init never sees.
  *
  * The asymmetry is the design: `entries` is READ-ONLY and `compact` is
- * the only mutation — the thread stays kernel-owned; the loop gets a
+ * the only mutation — the thread stays driver-owned; the loop gets a
  * lever, not a pen.
  */
 export interface ThreadService {
   /**
    * The run's key — caller-chosen world identity (`owner/repo#7`) when
-   * admitted with one, kernel-minted otherwise.
+   * admitted with one, driver-minted otherwise.
    */
   readonly key: string;
   /**
@@ -74,10 +74,10 @@ export interface ThreadService {
    * Schedule a note to THIS run's future self. Returns immediately —
    * the note is DATA `(fireAt, text)`, delivered as an ordinary inbox
    * message at fireAt: a wake if the run is parked by then, a queued
-   * message if busy, dropped if settled. The clock is the KERNEL's
+   * message if busy, dropped if settled. The clock is the DRIVER's
    * and lives exactly as long as the run does: a fiber on the
-   * in-memory kernel (runs are process-lifetime there), a Durable
-   * Object alarm on a durable kernel.
+   * in-memory driver (runs are process-lifetime there), a Durable
+   * Object alarm on a durable driver.
    */
   readonly remind: (delay: Duration.Input, note: string) => Effect.Effect<void>;
 }
@@ -88,7 +88,7 @@ export class Thread extends Context.Service<Thread, ThreadService>()(
 
 /**
  * The current TICK — the sampling iteration of the loop. Provided by
- * the kernel alongside {@link Thread}; carries per-tick facts and the
+ * the driver alongside {@link Thread}; carries per-tick facts and the
  * note collector behind {@link say}.
  */
 export interface TickService {
@@ -96,7 +96,7 @@ export interface TickService {
   readonly count: number;
   /**
    * Register a note for delivery (usually via {@link say}). Notes are
-   * COLLECTED, not appended: the kernel dedupes them by rendered text
+   * COLLECTED, not appended: the driver dedupes them by rendered text
    * against the thread's delivered log, so re-entrant turns never
    * double-say.
    */
@@ -110,7 +110,7 @@ export class Tick extends Context.Service<Tick, TickService>()(
 /**
  * Say something — append one message to the thread, delivered before
  * this tick's sampling. A PLAIN effect: no dedupe, no memory, no
- * kernel judgment — calling it is delivering it, so the author's
+ * driver judgment — calling it is delivering it, so the author's
  * CONDITION is the whole delivery policy. Guard it like any other
  * side effect:
  *
@@ -125,7 +125,7 @@ export class Tick extends Context.Service<Tick, TickService>()(
  * ```
  *
  * (An unguarded `say` in a turn delivers EVERY tick — occasionally
- * what you want, usually not. The kernel clears collected says on a
+ * what you want, usually not. The driver clears collected says on a
  * retried turn attempt, so transient retries never double-deliver.)
  *
  * Notes arrive as `<note>` user messages, in emission order — the ONE

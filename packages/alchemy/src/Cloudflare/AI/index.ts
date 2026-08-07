@@ -4,7 +4,7 @@ export * from "./Dataset.ts";
 export * from "./DurableObjectChatPersistence.ts";
 export * from "./Evaluation.ts";
 export * from "./Gateway.ts";
-export * from "./KernelCloudflare.ts";
+export * from "./DriverCloudflare.ts";
 export * from "./GatewayDynamicRouting.ts";
 export * from "./GatewayProvider.ts";
 export * from "./LanguageModel.ts";

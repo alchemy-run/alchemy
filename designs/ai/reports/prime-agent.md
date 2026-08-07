@@ -171,8 +171,8 @@ and the IPython runtime. Three subsystems matter.
 | `rlm()` returns at admission; results via messages/files; children retained; depth 1 | `spawn`/`dispatch`: keyed runs, waiters-ride-inputs, "workers are leaves" (rlm.md REJECT of depth>1) | Their no-return-value contract is our waiters pattern made total. We additionally have TYPED replies (doors) — they explicitly ban typed wrappers ("don't invent `run_subagent(...)`"). |
 | Heartbeats/cron claim-before-deliver into the prompt queue | `Thread.remind` (§9e), ledger dedupe in routers | Same at-most-once bias we chose for event delivery. |
 | Kernel survives compaction; summary indexes variable NAMES | rlm.md STEAL: `ContextStore` spans + restorable eviction; PersistentRef | Their `<ipython_state>` notice is our restorable-marker message, weaker (names only, no grep/read of evicted content). |
-| Goals = state blob + continuation injections | Stance re-render + `TurnFn` + PersistentRef; budgets in kernel options (§13) | Theirs is imperative state the host replays into prompts; ours is level-triggered re-derivation. Same need, our §6 "exit, goals, budgets are patterns" holds. |
-| Daemon residency; TUI is a client; attach replays cursors | DO kernel / RunSocket (`fromSeq` replay, watermark), local sidecar | We already run this topology across process AND cloud. |
+| Goals = state blob + continuation injections | Stance re-render + `TurnFn` + PersistentRef; budgets in driver options (§13) | Theirs is imperative state the host replays into prompts; ours is level-triggered re-derivation. Same need, our §6 "exit, goals, budgets are patterns" holds. |
+| Daemon residency; TUI is a client; attach replays cursors | DO driver / RunSocket (`fromSeq` replay, watermark), local sidecar | We already run this topology across process AND cloud. |
 | JSONL tree transcript, branch summaries | Thread + observations (seq'd, replayable) | Their in-file tree branching is neat but orthogonal. |
 
 ### Genuinely new (to us) and worth reacting to

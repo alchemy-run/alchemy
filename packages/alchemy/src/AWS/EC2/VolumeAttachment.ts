@@ -111,7 +111,7 @@ export interface VolumeAttachment extends Resource<
  * ```
  *
  * The volume appears to the instance as a block device at `device`. On modern
- * Linux AMIs the kernel may rename `/dev/sdf` to `/dev/xvdf` — check
+ * Linux AMIs the driver may rename `/dev/sdf` to `/dev/xvdf` — check
  * `lsblk` inside the instance. The volume and instance must share an AZ.
  */
 export const VolumeAttachment = Resource<VolumeAttachment>(

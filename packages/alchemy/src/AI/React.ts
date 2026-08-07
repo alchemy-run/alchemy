@@ -18,8 +18,8 @@
  * `useChat` IS the Vercel AI SDK's `useChat` — same return shape,
  * same ecosystem compatibility (ai-elements etc.) — pre-wired with
  * the agent's socket transport instead of HTTP POST + SSE. It works
- * against ANY kernel that provides `AI.AgentGateway`: the in-memory
- * kernel serving from a local process and the Cloudflare kernel
+ * against ANY driver that provides `AI.AgentGateway`: the in-memory
+ * driver serving from a local process and the Cloudflare driver
  * serving from a run's own Durable Object speak the identical
  * protocol.
  *

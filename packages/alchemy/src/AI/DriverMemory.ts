@@ -22,15 +22,15 @@ import { isAgent, type Agent } from "./Agent.ts";
 import { Refused } from "./Errors.ts";
 import { isEvent } from "./Event.ts";
 import {
-  Kernel,
+  Driver,
   type Charter,
   type TurnFn,
   type Interpretable,
   type Turn,
-} from "./Kernel.ts";
+} from "./Driver.ts";
 import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { KernelObserver, type KernelObservation } from "./Observer.ts";
+import { RunObserver, type RunObservation } from "./Observer.ts";
 import { RunJournal } from "./RunJournal.ts";
 import {
   AgentGateway,
@@ -58,7 +58,7 @@ import {
   reminderInput,
   render,
   type Stance,
-} from "./KernelShared.ts";
+} from "./DriverShared.ts";
 import {
   Thread,
   Tick,
@@ -99,7 +99,7 @@ interface RunState {
   readonly waiters: Array<Deferred.Deferred<unknown>>;
   /** The run's ending: `settle` from outside, or a turn Outcome. */
   readonly settled: Deferred.Deferred<unknown>;
-  /** World identity (`owner/repo#7`) or kernel-minted. */
+  /** World identity (`owner/repo#7`) or driver-minted. */
   readonly key: string;
   /** Skills this run has activated (effective when also mentioned). */
   readonly active: Set<string>;
@@ -118,7 +118,7 @@ interface RunState {
   observed: number;
   /** The DURABLE observation log — this run's own projection, what a
    *  socket's `subscribe {fromSeq}` replays (ring-buffered). */
-  readonly log: Array<KernelObservation>;
+  readonly log: Array<RunObservation>;
   /** Attached run sockets — each entry sends one wire frame. */
   readonly sockets: Set<(frame: RunSocketServerFrame) => Effect.Effect<void>>;
   /** The last rendered stance — what `spawn`/`skill` grant from. */
@@ -136,9 +136,9 @@ interface RunState {
     { readonly key: string; readonly actor: Actor }
   >;
   /**
-   * The run's `PersistentRef.Store` — on this in-memory kernel a
+   * The run's `PersistentRef.Store` — on this in-memory driver a
    * plain Map, exactly as durable as the run itself (the substrate's
-   * durability IS its lifetime). The durable kernel implements the
+   * durability IS its lifetime). The durable driver implements the
    * same contract over DO storage.
    */
   readonly stateStore: PersistentRef.StoreService;
@@ -151,7 +151,7 @@ interface TickResult {
 }
 
 /**
- * The in-memory Kernel: the smallest interpreter that makes a charter
+ * The in-memory Driver: the smallest interpreter that makes a charter
  * LIVE. One Layer, one requirement (`LanguageModel`) — every other
  * capability (durability, tracing, passivation, scheduling) is a Layer
  * to be added around it later, never a feature of the loop.
@@ -172,7 +172,7 @@ interface TickResult {
  *   notes, tool results, and steers. Answering a caller is the
  *   explicit `AI.reply` act (a tool handler, usually); a `Refused`
  *   failure is the run giving up.
- * - `AI.Run` is provided to init, turn, and tool handlers: kernel
+ * - `AI.Run` is provided to init, turn, and tool handlers: driver
  *   facts (key, tick, tokens) plus read-only thread access and the one
  *   thread mutation — `compact`, applied at tick boundaries only.
  *
@@ -197,8 +197,8 @@ interface TickResult {
  * dispatches with its outcome. Transient sampling/turn failures retry
  * with capped backoff before failing the run.
  */
-export const KernelMemory: Layer.Layer<
-  Kernel | AgentGateway,
+export const DriverMemory: Layer.Layer<
+  Driver | AgentGateway,
   never,
   LanguageModel.LanguageModel
 > = Layer.effectContext(
@@ -227,7 +227,7 @@ export const KernelMemory: Layer.Layer<
         // fire-and-forget, an observer can never fail or slow a run.
         // Each run's observations carry a monotonic `seq`, the
         // catch-up cursor consumers dedupe and resume by.
-        const observer = Context.getOption(context, KernelObserver);
+        const observer = Context.getOption(context, RunObserver);
         // the durability seams (both optional — see RunJournal.ts):
         // an ambient PersistentRef.Store makes charter refs durable
         // (the run frame isolates keys); a RunJournal makes THREADS
@@ -261,13 +261,13 @@ export const KernelMemory: Layer.Layer<
         const observe = (
           run: RunState,
           observation: DistributiveOmit<
-            KernelObservation,
+            RunObservation,
             "term" | "key" | "seq" | "at"
           >,
         ): Effect.Effect<void> =>
           Effect.gen(function* () {
             // live facts (deltas, in-flight tool calls) never log and
-            // never advance the cursor — same split as the CF kernel
+            // never advance the cursor — same split as the CF driver
             const live = isLiveObservation(observation.type);
             const full = {
               ...observation,
@@ -275,7 +275,7 @@ export const KernelMemory: Layer.Layer<
               key: run.key,
               seq: live ? run.observed : run.observed++,
               at: Date.now(),
-            } as KernelObservation;
+            } as RunObservation;
             if (!live) {
               run.log.push(full);
               // ring: mirror ChatsMemory's eviction policy
@@ -316,10 +316,10 @@ export const KernelMemory: Layer.Layer<
                 yield* Deferred.succeed(waiter, value);
               }
             }),
-          // the kernel's CLOCK, fused to the run's lifetime: on this
-          // in-memory kernel runs live as long as the process, so a
+          // the driver's CLOCK, fused to the run's lifetime: on this
+          // in-memory driver runs live as long as the process, so a
           // process-scoped fiber is exactly as durable as the run —
-          // a DO-backed kernel implements the same contract with an
+          // a DO-backed driver implements the same contract with an
           // alarm. Delivery is an ordinary inbox message: a wake if
           // parked, queued if busy, dropped if settled.
           remind: (delay, note) =>
@@ -347,7 +347,7 @@ export const KernelMemory: Layer.Layer<
         });
 
         /**
-         * Provide the kernel-owned services to RUNTIME charter code
+         * Provide the driver-owned services to RUNTIME charter code
          * (turns, splices, tool handlers): `AI.Thread`/`AI.Tick` for
          * THIS run, the captured interpret context (so charter
          * dependencies resolve no matter which fiber the code runs
@@ -406,7 +406,7 @@ export const KernelMemory: Layer.Layer<
             provideRun(run)(fn(input)).pipe(
               Effect.tapError((error) =>
                 Effect.logWarning(
-                  `Kernel run '${run.key}' of '${termName}': tool '${name}' failed: ${String(error).slice(0, 500)}`,
+                  `Driver run '${run.key}' of '${termName}': tool '${name}' failed: ${String(error).slice(0, 500)}`,
                 ),
               ),
             );
@@ -425,7 +425,7 @@ export const KernelMemory: Layer.Layer<
             const service = Context.getOption(context, compiled.term as any);
             if (Option.isNone(service)) {
               return yield* Effect.die(
-                `KernelMemory: no implementation provided for tool '${name}' of '${termName}' — provide the tool's Layer or splice an inline impl`,
+                `DriverMemory: no implementation provided for tool '${name}' of '${termName}' — provide the tool's Layer or splice an inline impl`,
               );
             }
             // the tool contract: the service IS the callable (a Layer
@@ -456,7 +456,7 @@ export const KernelMemory: Layer.Layer<
             const service = Context.getOption(context, skill as any);
             if (Option.isNone(service)) {
               return yield* Effect.die(
-                `KernelMemory: no implementation provided for skill '${skillName}' referenced by '${termName}'`,
+                `DriverMemory: no implementation provided for skill '${skillName}' referenced by '${termName}'`,
               );
             }
             // the IMPLEMENTATION carries the teaching: prose, spliced
@@ -470,7 +470,7 @@ export const KernelMemory: Layer.Layer<
               const resolved = impl.tools[name];
               if (resolved === undefined) {
                 return yield* Effect.die(
-                  `KernelMemory: skill '${skillName}' implementation provides no tool '${name}'`,
+                  `DriverMemory: skill '${skillName}' implementation provides no tool '${name}'`,
                 );
               }
               handlers[name] = resolved;
@@ -496,7 +496,7 @@ export const KernelMemory: Layer.Layer<
             const service = Context.getOption(context, agent as any);
             if (Option.isNone(service)) {
               return yield* Effect.die(
-                `KernelMemory: no implementation provided for agent '${name}' referenced by '${termName}'`,
+                `DriverMemory: no implementation provided for agent '${name}' referenced by '${termName}'`,
               );
             }
             const actor = service.value as Actor;
@@ -531,7 +531,7 @@ export const KernelMemory: Layer.Layer<
                   // (Effect.isEffect is true for every Service class)
                   if (isDispatchTool(ref)) {
                     // a DOOR: policy-constrained dispatch — renders as
-                    // its tool name; the kernel builds its handler
+                    // its tool name; the driver builds its handler
                     doors.set(ref["~alchemy/Name"], ref);
                     buffer += `\`${ref["~alchemy/Name"]}\``;
                   } else if (isToolImpl(ref)) {
@@ -745,7 +745,7 @@ export const KernelMemory: Layer.Layer<
           );
 
         const runs = new Map<string, RunState>();
-        // Minted keys are PROCESS-UNIQUE, not just kernel-unique: run
+        // Minted keys are PROCESS-UNIQUE, not just driver-unique: run
         // identity leaks into the world (workspace checkouts key on
         // `AI.Thread.key`), so a bare counter would collide across
         // restarts — a fresh process's `run-0` would inherit the
@@ -931,12 +931,12 @@ export const KernelMemory: Layer.Layer<
             );
             if (Effect.isEffect(result)) {
               return yield* Effect.die(
-                `KernelMemory: the turn of '${termName}' (run '${run.key}') returned an Effect — did you forget to yield* an AI.prose?`,
+                `DriverMemory: the turn of '${termName}' (run '${run.key}') returned an Effect — did you forget to yield* an AI.prose?`,
               );
             }
             if (!isFragment(result)) {
               return yield* Effect.die(
-                `KernelMemory: the turn of '${termName}' (run '${run.key}') returned a non-Fragment value — turns return the stance; answer callers with AI.reply`,
+                `DriverMemory: the turn of '${termName}' (run '${run.key}') returned a non-Fragment value — turns return the stance; answer callers with AI.reply`,
               );
             }
             const stance = yield* renderStance(run, result);
@@ -996,7 +996,7 @@ export const KernelMemory: Layer.Layer<
             }
 
             // DOORS: policy-constrained dispatches (`AI.Dispatch`) —
-            // presented as the org's own tools, EXECUTED by the kernel:
+            // presented as the org's own tools, EXECUTED by the driver:
             // the policy derives {task, key}, the child registers for
             // the supervision cascade, the parentage edge is stamped,
             // and the observation carries the delegation identity.
@@ -1287,7 +1287,7 @@ export const KernelMemory: Layer.Layer<
               // round-trip INCLUDING the tool handlers that ran
               // inside it) — the timing profile of every run
               yield* Effect.logInfo(
-                `Kernel run '${run.key}' of '${termName}': sampling #${run.tick} took ${Date.now() - startedAt}ms` +
+                `Driver run '${run.key}' of '${termName}': sampling #${run.tick} took ${Date.now() - startedAt}ms` +
                   (response.toolCalls.length > 0
                     ? ` [${response.toolCalls.map((call) => call.name).join(", ")}]`
                     : " [quiesced]"),
@@ -1380,7 +1380,7 @@ export const KernelMemory: Layer.Layer<
                       // fire-and-forget deliveries (`send`) have no waiter
                       // to die with — the log is their only witness
                       yield* Effect.logError(
-                        `Kernel run '${run.key}' of '${termName}' crashed`,
+                        `Driver run '${run.key}' of '${termName}' crashed`,
                         exit.cause,
                       );
                       const crash = describeCrash(exit.cause);
@@ -1444,7 +1444,7 @@ export const KernelMemory: Layer.Layer<
                   : typeof initResult === "function"
                     ? (initResult as TurnFn)
                     : yield* Effect.die(
-                        `KernelMemory: the charter for '${termName}' returned neither prose, a turn effect, nor a turn function`,
+                        `DriverMemory: the charter for '${termName}' returned neither prose, a turn effect, nor a turn function`,
                       );
               yield* startLoop(run, actorTick);
               runs.set(runKey, run);
@@ -1562,7 +1562,7 @@ export const KernelMemory: Layer.Layer<
             );
           if (snapshots.length > 0) {
             yield* Effect.logInfo(
-              `Kernel '${termName}': restoring ${snapshots.length} run(s) from the journal`,
+              `Driver '${termName}': restoring ${snapshots.length} run(s) from the journal`,
             );
           }
           for (const snapshot of snapshots) {
@@ -1598,7 +1598,7 @@ export const KernelMemory: Layer.Layer<
                 : typeof initResult === "function"
                   ? (initResult as TurnFn)
                   : yield* Effect.die(
-                      `KernelMemory: the charter for '${termName}' returned neither prose, a turn effect, nor a turn function`,
+                      `DriverMemory: the charter for '${termName}' returned neither prose, a turn effect, nor a turn function`,
                     );
             // The run is REGISTERED synchronously (admits/ensures find
             // its inbox and queue into it), but the loop start must
@@ -1614,7 +1614,7 @@ export const KernelMemory: Layer.Layer<
             ) as Effect.Effect<void>;
             runs.set(snapshot.key, run);
             yield* Effect.logInfo(
-              `Kernel '${termName}': restored run '${snapshot.key}' parked at tick ${snapshot.tick}`,
+              `Driver '${termName}': restored run '${snapshot.key}' parked at tick ${snapshot.tick}`,
             );
           }
         }
@@ -1623,7 +1623,7 @@ export const KernelMemory: Layer.Layer<
 
     /**
      * The local {@link AgentGateway}: the SAME protocol the Cloudflare
-     * kernel speaks from its Durable Objects, served in-process — a
+     * driver speaks from its Durable Objects, served in-process — a
      * WebSocket upgrade on the host's own HTTP server, replay from
      * the run's in-memory log, live broadcast from `observe`.
      */
@@ -1640,7 +1640,7 @@ export const KernelMemory: Layer.Layer<
         const host = socketHosts.get(term);
         if (host === undefined) {
           return yield* Effect.die(
-            `KernelMemory: no interpreted term '${term}' to attach to — has its Layer been built?`,
+            `DriverMemory: no interpreted term '${term}' to attach to — has its Layer been built?`,
           );
         }
         const run = yield* host.ensure(key);
@@ -1681,9 +1681,9 @@ export const KernelMemory: Layer.Layer<
       });
 
     return Context.add(
-      Context.make(Kernel, {
+      Context.make(Driver, {
         interpret,
-      } as Context.Service.Shape<typeof Kernel>),
+      } as Context.Service.Shape<typeof Driver>),
       AgentGateway,
       { attach },
     );

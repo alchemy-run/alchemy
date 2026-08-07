@@ -1,5 +1,5 @@
 /**
- * The Cloudflare kernel, live: one Worker, one Durable Object
+ * The Cloudflare driver, live: one Worker, one Durable Object
  * namespace it never declares, and a deterministic model so each
  * assertion is about the KERNEL.
  *
@@ -29,7 +29,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as Socket from "effect/unstable/socket/Socket";
-import KernelTestWorker from "./fixtures/KernelWorker.ts";
+import KernelTestWorker from "./fixtures/DriverWorker.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
@@ -41,7 +41,7 @@ const logLevel = Effect.provideService(
 );
 
 const Stack = Alchemy.Stack(
-  "KernelCloudflareStack",
+  "DriverCloudflareStack",
   {
     providers: Cloudflare.providers(),
     state: Cloudflare.state(),
@@ -216,7 +216,7 @@ test(
     const { url } = yield* stack;
     const key = runKey("delegate");
 
-    // the Supervisor's charter mentions ${Scribe}, so the kernel gives
+    // the Supervisor's charter mentions ${Scribe}, so the driver gives
     // it a dispatch tool whose handler calls the Scribe's own DO; the
     // child's answer comes back as the tool result, and the
     // Supervisor's report quotes it
@@ -364,7 +364,7 @@ const framesUntil = (
 
 const isDurable = (
   frame: AI.RunSocketServerFrame,
-  type: AI.KernelObservation["type"],
+  type: AI.RunObservation["type"],
 ) =>
   frame.type === "observation" &&
   frame.durable &&

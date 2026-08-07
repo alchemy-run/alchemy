@@ -1,5 +1,5 @@
 /**
- * The coder over LOCAL physics — the laptop provide-list: KernelMemory
+ * The coder over LOCAL physics — the laptop provide-list: DriverMemory
  * fibers with sqlite durability (threads, transcripts, refs), and the
  * read/run/write toolbox on the process's own FileSystem/shell over
  * ONE fixed workspace.
@@ -7,7 +7,7 @@
 import * as Layer from "effect/Layer";
 import * as Workspace from "alchemy/Workspace";
 import { Coder, CoderLive } from "./Coder.ts";
-import { CoderChats, KernelLocal } from "./services/Kernel.ts";
+import { CoderChats, DriverLocal } from "./services/Driver.ts";
 import {
   ReadToolsLocal,
   RunToolsLocal,
@@ -31,9 +31,9 @@ export const Local = CoderLive.pipe(
   Layer.provide([ReadToolsLocal, RunToolsLocal, WriteToolsLocal]),
   Layer.provide(WorkspaceLive),
   // provideMERGE: the HTTP edge (Server.ts) consumes AgentGateway for
-  // the run-socket `/attach` door, so the kernel bundle must be exported
-  Layer.provideMerge(KernelLocal),
-  // the chat projection (same const the kernel bundle observes into)
+  // the run-socket `/attach` door, so the driver bundle must be exported
+  Layer.provideMerge(DriverLocal),
+  // the chat projection (same const the driver bundle observes into)
   // — consumed by the HTTP edge for the transcript
   Layer.provideMerge(CoderChats),
   Layer.orDie,

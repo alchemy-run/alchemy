@@ -1,6 +1,6 @@
 /**
- * The Cloudflare kernel — the same `AI.Kernel` contract as
- * `AI.KernelMemory`, with runs hosted on Durable Objects: ONE DO
+ * The Cloudflare driver — the same `AI.Driver` contract as
+ * `AI.DriverMemory`, with runs hosted on Durable Objects: ONE DO
  * instance per run (named `${term}/${key}`), the thread and inbox in
  * DO storage, `Thread.remind` on the DO alarm, actor verbs as RPC.
  *
@@ -8,7 +8,7 @@
  *
  * ```ts
  * const OrgAgents = Layer.mergeAll(IssueOwnerLive, EngineerLayer).pipe(
- *   Layer.provideMerge(Cloudflare.AI.KernelCloudflare),   // ← or AI.KernelMemory
+ *   Layer.provideMerge(Cloudflare.AI.DriverCloudflare),   // ← or AI.DriverMemory
  *   Layer.provideMerge(Model),
  * );
  *
@@ -31,7 +31,7 @@
  * isolate (`WorkerBridge.getSharedBuild`), and the class-level
  * `layers` slot IS that build. So the agent layers build on the DO
  * side too, their `interpret` calls record `term → {charter, captured
- * context}` in this kernel's registrations, and the `AgentRuns` DO —
+ * context}` in this driver's registrations, and the `AgentRuns` DO —
  * declared here, discovered as a binding because the layer yields it
  * during init — closes over that same map. An activating DO parses its
  * own name and becomes that run.
@@ -40,8 +40,8 @@
  * to the delegate's own DO: cross-run delegation is cross-DO by
  * construction.
  *
- * v1 (direct implementation — see designs/ai/kernel-cloudflare.md):
- * `dispatch` holds its RPC open for the round (KernelMemory's exact
+ * v1 (direct implementation — see designs/ai/driver-cloudflare.md):
+ * `dispatch` holds its RPC open for the round (DriverMemory's exact
  * call/reply semantics); durable continuations, compaction, and wire
  * modes come with the layering phase.
  */
@@ -66,15 +66,15 @@ import * as Toolkit from "effect/unstable/ai/Toolkit";
 import type { Actor, RunRef } from "../../AI/Actor.ts";
 import { isAgent, type Agent } from "../../AI/Agent.ts";
 import { isDispatchTool, type DispatchTool } from "../../AI/Dispatch.ts";
-import { Refused, type KernelError } from "../../AI/Errors.ts";
+import { Refused, type DriverError } from "../../AI/Errors.ts";
 import { isEvent } from "../../AI/Event.ts";
 import {
-  Kernel,
+  Driver,
   type Charter,
   type Interpretable,
   type Turn,
   type TurnFn,
-} from "../../AI/Kernel.ts";
+} from "../../AI/Driver.ts";
 import {
   asUserMessage,
   compileDispatch,
@@ -90,11 +90,11 @@ import {
   render,
   type CompiledToolRef,
   type Stance,
-} from "../../AI/KernelShared.ts";
+} from "../../AI/DriverShared.ts";
 import {
-  KernelObserver,
+  RunObserver,
   RoundAbandoned,
-  type KernelObservation,
+  type RunObservation,
 } from "../../AI/Observer.ts";
 import { isParameter } from "../../AI/Parameter.ts";
 import * as PersistentRef from "../../PersistentRef.ts";
@@ -127,7 +127,7 @@ import { Worker } from "../Workers/Worker.ts";
 interface RegisteredCharter {
   readonly charter: Charter;
   /** The charter's own Layer graph, captured at interpret — tools,
-   *  doors, and delegates resolve from it as on KernelMemory. */
+   *  doors, and delegates resolve from it as on DriverMemory. */
   readonly context: Context.Context<never>;
   /** The delegate actors this term may reach (resolved lazily). */
   readonly term: Interpretable;
@@ -204,8 +204,8 @@ const emptyMeta: RunMeta = {
  * Tuning for the recovery machinery — optional; tests shrink it so
  * recovery is observable in seconds.
  */
-export class KernelDurability extends Context.Service<
-  KernelDurability,
+export class DriverDurability extends Context.Service<
+  DriverDurability,
   {
     /** Base delay before the recovery alarm re-enters a silent round
      *  (doubles per attempt, capped at 8×). @default 30 seconds */
@@ -214,7 +214,7 @@ export class KernelDurability extends Context.Service<
      *  interruption note. @default 5 */
     readonly maxAttempts?: number;
   }
->()("alchemy/Cloudflare/AI/KernelDurability") {}
+>()("alchemy/Cloudflare/AI/DriverDurability") {}
 
 /** The thread crosses storage in its ENCODED form — rows are JSON. */
 const encodeMessages = S.encodeSync(S.Array(Prompt.Message));
@@ -262,18 +262,18 @@ interface RunRpc extends MainRpc<DurableObjectState> {
 export { AgentGateway } from "../../AI/RunSocket.ts";
 
 /**
- * The `AI.Kernel` for Cloudflare — no argument, and no class for the
+ * The `AI.Driver` for Cloudflare — no argument, and no class for the
  * user to declare: the runs DO is declared in this module and
  * discovered as a binding because this layer YIELDS it while building.
  *
  * It requires `Worker` for exactly that reason: the binding attaches
  * to the host whose bundle carries the class, so this layer only
  * builds inside a Worker (or a DO of one). That is the whole
- * difference from `AI.KernelMemory`'s `Layer<Kernel, never,
+ * difference from `AI.DriverMemory`'s `Layer<Driver, never,
  * LanguageModel>` — the substrate is in the type.
  */
-export const KernelCloudflare: Layer.Layer<
-  Kernel | AgentGateway,
+export const DriverCloudflare: Layer.Layer<
+  Driver | AgentGateway,
   never,
   LanguageModel.LanguageModel | Worker
 > = Layer.effectContext(
@@ -346,10 +346,10 @@ export const KernelCloudflare: Layer.Layer<
 
         // ── observations ────────────────────────────────────────────
         const captured = yield* Effect.context<never>();
-        const observer = Context.getOption(captured, KernelObserver);
+        const observer = Context.getOption(captured, RunObserver);
         const durability = Option.getOrElse(
-          Context.getOption(captured, KernelDurability),
-          () => ({}) as (typeof KernelDurability)["Service"],
+          Context.getOption(captured, DriverDurability),
+          () => ({}) as (typeof DriverDurability)["Service"],
         );
         const recoverAfter = durability.recoverAfterMillis ?? 30_000;
         const maxAttempts = durability.maxAttempts ?? 5;
@@ -407,7 +407,7 @@ export const KernelCloudflare: Layer.Layer<
          */
         const observe = (
           observation: DistributiveOmit<
-            KernelObservation,
+            RunObservation,
             "term" | "key" | "seq" | "at"
           >,
         ) =>
@@ -419,7 +419,7 @@ export const KernelCloudflare: Layer.Layer<
               key: me.key,
               seq: meta.observed,
               at: Date.now(),
-            } as KernelObservation;
+            } as RunObservation;
             yield* storage
               .put({
                 [seqKey(OBS, meta.observed)]: full,
@@ -445,7 +445,7 @@ export const KernelCloudflare: Layer.Layer<
          */
         const observeLive = (
           observation: DistributiveOmit<
-            KernelObservation,
+            RunObservation,
             "term" | "key" | "seq" | "at"
           >,
         ) =>
@@ -457,7 +457,7 @@ export const KernelCloudflare: Layer.Layer<
               key: me.key,
               seq: meta.observed,
               at: Date.now(),
-            } as KernelObservation;
+            } as RunObservation;
             yield* broadcast({
               type: "observation",
               durable: false,
@@ -490,7 +490,7 @@ export const KernelCloudflare: Layer.Layer<
 
         // ── the run-scoped AI.Thread / AI.Tick services ─────────────
         // storage is a RUNTIME capability; the run-scoped services the
-        // kernel hands userland are plain effects, so seal it here
+        // driver hands userland are plain effects, so seal it here
         const sealed = <A>(
           effect: Effect.Effect<A, never, RuntimeContext>,
         ): Effect.Effect<A> => Effect.provide(effect, RuntimeContext.phantom);
@@ -510,7 +510,7 @@ export const KernelCloudflare: Layer.Layer<
           // phase). Recording the request keeps the contract honest.
           compact: () => Effect.void,
           reply: (value) => resolveWaiters(value),
-          // the KERNEL's clock, durable by construction: a row plus
+          // the DRIVER's clock, durable by construction: a row plus
           // the DO alarm. Delivery is an ordinary inbox message — a
           // wake if parked, queued if busy, dropped if settled.
           remind: (delay, note) =>
@@ -567,7 +567,7 @@ export const KernelCloudflare: Layer.Layer<
             );
             if (Option.isNone(service)) {
               return yield* Effect.die(
-                `KernelCloudflare: no implementation provided for tool '${name}' of '${me.term}'`,
+                `DriverCloudflare: no implementation provided for tool '${name}' of '${me.term}'`,
               );
             }
             return service.value as (
@@ -587,7 +587,7 @@ export const KernelCloudflare: Layer.Layer<
             );
             if (Option.isNone(service)) {
               return yield* Effect.die(
-                `KernelCloudflare: no implementation provided for skill '${name}'`,
+                `DriverCloudflare: no implementation provided for skill '${name}'`,
               );
             }
             // the IMPLEMENTATION carries the teaching: prose, spliced
@@ -604,7 +604,7 @@ export const KernelCloudflare: Layer.Layer<
               const resolved = impl.tools[toolName];
               if (resolved === undefined) {
                 return yield* Effect.die(
-                  `KernelCloudflare: skill '${name}' implementation provides no tool '${toolName}'`,
+                  `DriverCloudflare: skill '${name}' implementation provides no tool '${toolName}'`,
                 );
               }
               handlers[toolName] = resolved;
@@ -631,7 +631,7 @@ export const KernelCloudflare: Layer.Layer<
             );
             if (Option.isNone(service)) {
               return yield* Effect.die(
-                `KernelCloudflare: no implementation provided for agent '${name}'`,
+                `DriverCloudflare: no implementation provided for agent '${name}'`,
               );
             }
             return service.value as Actor;
@@ -874,14 +874,14 @@ export const KernelCloudflare: Layer.Layer<
         // dispatch) each kick a burst, so the loop is SERIALIZED: the
         // second waits, then finds its input already drained by the
         // first and returns at once. One serial loop per run is the
-        // kernel's contract, on this substrate too.
+        // driver's contract, on this substrate too.
         const gate = yield* Semaphore.make(1);
 
         const burstOnce = Effect.gen(function* () {
           const registration = registrations.get(me.term);
           if (registration === undefined) {
             return yield* Effect.die(
-              `KernelCloudflare: no charter registered for '${me.term}' — is its Layer in the worker's layers slot?`,
+              `DriverCloudflare: no charter registered for '${me.term}' — is its Layer in the worker's layers slot?`,
             );
           }
 
@@ -952,7 +952,7 @@ export const KernelCloudflare: Layer.Layer<
                 kind: "note",
               });
               yield* Effect.logInfo(
-                `KernelCloudflare run '${me.term}/${me.key}': recovering an interrupted round (attempt ${attempts}/${maxAttempts})`,
+                `DriverCloudflare run '${me.term}/${me.key}': recovering an interrupted round (attempt ${attempts}/${maxAttempts})`,
               );
             }
           }
@@ -1061,7 +1061,7 @@ export const KernelCloudflare: Layer.Layer<
             );
             if (!isFragment(result)) {
               return yield* Effect.die(
-                `KernelCloudflare: the turn of '${me.term}' returned a non-Fragment — turns return the stance; answer callers with AI.reply`,
+                `DriverCloudflare: the turn of '${me.term}' returned a non-Fragment — turns return the stance; answer callers with AI.reply`,
               );
             }
             const stance = yield* renderStance(registration, result, tick);
@@ -1213,7 +1213,7 @@ export const KernelCloudflare: Layer.Layer<
               // substrate (each would be its own DO run) — the model
               // sees an honest refusal rather than a silent no-op
               Effect.succeed(
-                "spawn is not available on this kernel yet — do the work yourself or dispatch a named agent",
+                "spawn is not available on this driver yet — do the work yourself or dispatch a named agent",
               );
 
             const system = stance.blocks.join("\n\n") + NOTE_CODA;
@@ -1328,7 +1328,7 @@ export const KernelCloudflare: Layer.Layer<
           Effect.tapCause((cause) =>
             Effect.gen(function* () {
               yield* Effect.logError(
-                `KernelCloudflare run '${me.term}/${me.key}' crashed`,
+                `DriverCloudflare run '${me.term}/${me.key}' crashed`,
                 cause,
               );
               const crash = describeCrash(cause);
@@ -1410,7 +1410,7 @@ export const KernelCloudflare: Layer.Layer<
                 {
                   replay: (fromSeq) =>
                     sealed(
-                      Effect.map(listRows<KernelObservation>(OBS), (rows) =>
+                      Effect.map(listRows<RunObservation>(OBS), (rows) =>
                         rows.flatMap(([k, observation]) =>
                           seqOf(OBS, k) >= fromSeq ? [observation] : [],
                         ),
@@ -1578,7 +1578,7 @@ export const KernelCloudflare: Layer.Layer<
             second === undefined
               ? Effect.die(
                   new Error(
-                    "KernelCloudflare: steer requires a key — steer(key, input)",
+                    "DriverCloudflare: steer requires a key — steer(key, input)",
                   ),
                 )
               : stub(first as string)
@@ -1589,11 +1589,11 @@ export const KernelCloudflare: Layer.Layer<
           interrupt: () =>
             Effect.die(
               new Error(
-                "KernelCloudflare: interrupt() is process-local; settle runs by key instead",
+                "DriverCloudflare: interrupt() is process-local; settle runs by key instead",
               ),
             ),
         } as Actor;
-      }) as Effect.Effect<Actor, KernelError, never>;
+      }) as Effect.Effect<Actor, DriverError, never>;
 
     /** The gateway: route a WebSocket upgrade into the run's own DO. */
     const attach = (
@@ -1610,7 +1610,7 @@ export const KernelCloudflare: Layer.Layer<
         RuntimeContext
       >;
 
-    return Context.add(Context.make(Kernel, { interpret }), AgentGateway, {
+    return Context.add(Context.make(Driver, { interpret }), AgentGateway, {
       attach,
     });
   }),

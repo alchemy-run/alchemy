@@ -200,7 +200,7 @@ describe("PersistentRef", () => {
       Effect.gen(function* () {
         const rows = new Map<string, unknown>();
         const store = PersistentRef.makeMemoryStore(rows);
-        // the host's frame: what a kernel wraps around each run — run
+        // the host's frame: what a driver wraps around each run — run
         // keys are arbitrary strings, "/" and "#" included
         const inRun = (key: string) => PersistentRef.within("IssueOwner", key);
 

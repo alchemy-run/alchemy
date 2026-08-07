@@ -113,7 +113,7 @@ export interface Service extends Resource<
     /** Path the process's stdout/stderr are appended to. */
     logFile: string;
     /**
-     * The OBSERVED port the server bound — the kernel-assigned one when
+     * The OBSERVED port the server bound — the driver-assigned one when
      * no `port` prop pinned it (Effectful form), or the pinned/declared
      * one otherwise. `undefined` when the program has no HTTP surface.
      */

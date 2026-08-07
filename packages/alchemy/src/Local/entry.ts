@@ -14,7 +14,7 @@
  * Startup handshake: the reconciler passes `ALCHEMY_SERVICE_READY_FILE`
  * and waits for it. When the program serves HTTP, the file is written
  * the moment the server BINDS — carrying the OBSERVED port (the
- * kernel-assigned one when `PORT=0` asked for an ephemeral port).
+ * driver-assigned one when `PORT=0` asked for an ephemeral port).
  * Programs with no HTTP surface report ready as soon as the program is
  * resolved. Either way the reconciler learns "the process came up" and
  * (when applicable) which port it serves on.
@@ -34,7 +34,7 @@ import { Stack } from "../Stack.ts";
 // guards no-op, and `provideClassLayer` builds the instance's layers
 // against the AMBIENT scope (the program root below) instead of a
 // transient region — background fibers forked in layer scopes (event
-// pollers, kernel loops) live for the process. Must be set BEFORE the
+// pollers, driver loops) live for the process. Must be set BEFORE the
 // user's module is imported.
 (globalThis as any).__ALCHEMY_RUNTIME__ = true;
 

@@ -1,7 +1,7 @@
 /**
- * The RUN JOURNAL — the kernel's durability seam for run state, and
+ * The RUN JOURNAL — the driver's durability seam for run state, and
  * the heart of the bootstrap's restart surface
- * (designs/ai/bootstrap.md §3): a kernel that finds a `RunJournal` in
+ * (designs/ai/bootstrap.md §3): a driver that finds a `RunJournal` in
  * its interpret context SAVES each run's thread at every park (and on
  * crash), REMOVES it on settle, and RESTORES persisted runs — parked,
  * threads primed — when the agent's actor is interpreted at boot.
@@ -11,8 +11,8 @@
  * level-triggered stances re-render from the new code at the next
  * tick; the thread neither knows nor cares that the process died.
  *
- * OPTIONAL by design (same seam pattern as `KernelObserver` and
- * `WireMode`): absent, the in-memory kernel behaves exactly as
+ * OPTIONAL by design (same seam pattern as `RunObserver` and
+ * `WireMode`): absent, the in-memory driver behaves exactly as
  * before — runs live as long as the process.
  *
  * The journal stores the prompt ENCODED (via the `Prompt` schema, so
@@ -21,7 +21,7 @@
  */
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
-import type { KernelObservation } from "./Observer.ts";
+import type { RunObservation } from "./Observer.ts";
 
 export interface RunSnapshot {
   readonly term: string;
@@ -36,7 +36,7 @@ export interface RunSnapshot {
   /** The thread, encoded with the `Prompt` schema (JSON-safe). */
   readonly prompt: unknown;
   /** The run's durable observation log tail (socket replay window). */
-  readonly log: ReadonlyArray<KernelObservation>;
+  readonly log: ReadonlyArray<RunObservation>;
 }
 
 export class RunJournal extends Context.Service<

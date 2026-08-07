@@ -1,6 +1,6 @@
 /**
  * E2E composition smoke: the WHOLE coder Layer graph — the charter,
- * the read/run/write toolbox over a fixed workspace, kernel + model,
+ * the read/run/write toolbox over a fixed workspace, driver + model,
  * sqlite durability — builds against real physics, the charter
  * interprets, and the chat projection is readable.
  *

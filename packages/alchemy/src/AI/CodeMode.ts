@@ -7,7 +7,7 @@
  *
  * - {@link CodeModeEffect} — the code returns an `Effect`; tools are
  *   Effect-returning functions, so the whole program stays on the
- *   kernel's fiber (interruption and tracing intact).
+ *   driver's fiber (interruption and tracing intact).
  * - {@link CodeModeAsync} — the code is an async function body; tools
  *   return Promises.
  *
@@ -31,7 +31,7 @@ import { WireMode, type WireGrant, type WirePresentation } from "./WireMode.ts";
  * Codemode, EFFECT flavor: the model's code is the body of a function
  * `(Effect, tools) => Effect<A>` — tools are Effect-returning, the
  * program composes with `Effect.gen`/`pipe`, and evaluation stays on
- * the kernel's fiber (a failed tool call is a typed failure the
+ * the driver's fiber (a failed tool call is a typed failure the
  * program can catch or let propagate as the eval result).
  */
 export const CodeModeEffect = (options?: CodeModeOptions) =>

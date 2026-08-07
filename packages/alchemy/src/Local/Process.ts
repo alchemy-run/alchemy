@@ -69,7 +69,7 @@ export const runOnHost = <R>(
 
 /**
  * A Scope that outlives an `Effect.provide` of the constructing layer —
- * for fibers that start AFTER init (kernel run loops, socket serves,
+ * for fibers that start AFTER init (driver run loops, socket serves,
  * deferred reviews).
  *
  * When {@link Host} is present, registers a keeper on the host at build

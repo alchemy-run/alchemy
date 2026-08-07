@@ -134,7 +134,7 @@ export const resolvePort = (options: { port?: number } | undefined) =>
 export interface HttpServerFactoryOptions {
   /**
    * Called once the server is listening, with the BOUND address — the
-   * kernel-assigned port when `PORT=0` requested an ephemeral one. Host
+   * driver-assigned port when `PORT=0` requested an ephemeral one. Host
    * entrypoints use this to report the actual port back to whoever
    * launched the process (e.g. `Local.Service`'s ready file).
    */

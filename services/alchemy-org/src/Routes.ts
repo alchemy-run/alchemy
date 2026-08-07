@@ -28,7 +28,7 @@ export const coderRoutes = Effect.gen(function* () {
     Effect.gen(function* () {
       const params = yield* HttpRouter.params;
       const id = decodeURIComponent(String(params.id ?? ""));
-      // snapshot is kernel vocabulary; the AI SDK shaping is the
+      // snapshot is driver vocabulary; the AI SDK shaping is the
       // adapter's (`AI.toUIMessages`). An unknown chat is an EMPTY
       // one — the single chat exists from the first visit, before
       // any message has been sent.
@@ -41,7 +41,7 @@ export const coderRoutes = Effect.gen(function* () {
     }),
   );
 
-  // the RAW observation log — kernel vocabulary, crashes included.
+  // the RAW observation log — driver vocabulary, crashes included.
   // The debugging poll: `messages` shapes for the UI, this tells the
   // truth (`?limit=N` tails the last N observations).
   const chatLog = HttpRouter.add(

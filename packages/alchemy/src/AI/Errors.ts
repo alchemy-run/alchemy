@@ -1,11 +1,11 @@
 import * as Data from "effect/Data";
 
 /**
- * The typed abnormal exit of an agent run: raised by the kernel
+ * The typed abnormal exit of an agent run: raised by the driver
  * when a run exceeds one of its budget ceilings — a hard limit (tokens,
  * wall-clock, iterations, dollars) or the no-progress detector
  * (`stall`). Ceilings come from the provided `AI.budget({...})` Layer,
- * or from the kernel's own default guards when none is given — so
+ * or from the driver's own default guards when none is given — so
  * `BudgetExceeded` rides EVERY agent's error channel; parents catch
  * it as escalation policy.
  *
@@ -34,7 +34,7 @@ export class BudgetExceeded extends Data.TaggedError("AI.BudgetExceeded")<{
  *
  * The evidence bar is Codex's shipped `Blocked` semantics (§9.3): a
  * repeat-observed blocker across consecutive iterations, claimed by the
- * run and ratified by the kernel/check — never the model's bare refusal.
+ * run and ratified by the driver/check — never the model's bare refusal.
  * Only `until`-halted loops can refuse (a perpetual ring has nothing to
  * give up on), so `Refused` joins the `Err` channel exactly when the
  * charter declares a bounded exit.
@@ -49,11 +49,11 @@ export class Refused extends Data.TaggedError("AI.Refused")<{
 }> {}
 
 /**
- * Raised by a Kernel implementation when a term cannot be interpreted —
+ * Raised by a Driver implementation when a term cannot be interpreted —
  * an invalid charter (see `AI.lint`), a missing seam, or a harness
  * failure surfaced at interpretation time.
  */
-export class KernelError extends Data.TaggedError("AI.KernelError")<{
+export class DriverError extends Data.TaggedError("AI.DriverError")<{
   readonly term: string;
   readonly message: string;
 }> {}

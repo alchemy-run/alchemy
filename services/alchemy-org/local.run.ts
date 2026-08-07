@@ -1,6 +1,6 @@
 /**
  * The coder's LOCAL deploy: {@link CoderServer} as a detached local
- * process — KernelMemory with sqlite durability, per-machine
+ * process — DriverMemory with sqlite durability, per-machine
  * workspace, UI included. Nothing in the cloud.
  *
  * Run with the operator's shell env carrying `ANTHROPIC_API_KEY`

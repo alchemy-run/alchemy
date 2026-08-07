@@ -21,7 +21,7 @@ export interface DispatchDerived {
 
 /**
  * A DOOR: a policy-constrained dispatch presented as the org's own
- * tool. The framework keeps the MECHANISM (the kernel executes the
+ * tool. The framework keeps the MECHANISM (the driver executes the
  * call — parentage stamped, child registered for the supervision
  * cascade, the observation carries its delegation identity); userland
  * keeps the PRESENTATION and POLICY (the tool's name, its prose, its

@@ -1,14 +1,14 @@
 import type * as Effect from "effect/Effect";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 
-/** A reference to a kernel run: which term, which key. */
+/** A reference to a driver run: which term, which key. */
 export interface RunRef {
   readonly term: string;
   readonly key: string;
 }
 
 /**
- * The Actor — what the kernel returns when it interprets any term's
+ * The Actor — what the driver returns when it interprets any term's
  * charter: a mailbox with a serial run loop, spoken to only in the
  * actor verbs. Hand it work (`dispatch`/`send`), talk to a run
  * mid-flight (`steer`), resolve a run from the outside (`settle`).
@@ -46,10 +46,10 @@ export interface Actor<In = unknown> {
    * `options.key` is the run's CALLER-CHOSEN name — the world identity
    * to correlate by (`owner/repo#7`). Naming the run is what makes
    * `steer(key, …)` and `settle(key, …)` addressable from code that
-   * never saw a kernel-minted session.
+   * never saw a driver-minted session.
    *
    * `options.parent` records WHICH RUN caused this admission — the
-   * kernel's own `dispatch` intrinsic stamps it automatically, so
+   * driver's own `dispatch` intrinsic stamps it automatically, so
    * observability can reconstruct the delegation tree (issue desk →
    * engineer → …). Purely observational: it never affects routing.
    */
@@ -81,7 +81,7 @@ export interface Actor<In = unknown> {
   /**
    * End a SPECIFIC run from the outside: the run resolves with `event`
    * as its outcome. The caller that consumed the wire owns run endings
-   * — the kernel just runs the loop. Settling a key with no live run
+   * — the driver just runs the loop. Settling a key with no live run
    * is an idempotent no-op (the run may have settled already — the
    * world outranks the org's beliefs).
    */

@@ -567,7 +567,7 @@ export const Platform = <
 
               // The constructor's declared LAYERS build here, anchored to
               // the build scope — the home for layers that OWN machinery
-              // (event pollers, kernel loops): their background fibers live
+              // (event pollers, driver loops): their background fibers live
               // for the instance (`Effect.provide` inside init would tear
               // them down the moment init returns — its `scopedWith` region
               // holds the only reference).
