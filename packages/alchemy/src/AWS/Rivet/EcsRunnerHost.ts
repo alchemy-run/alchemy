@@ -37,6 +37,7 @@ import {
 } from "../../Rivet/RunnerHost.ts";
 import type { BundledImageSource } from "../ECR/ImageSource.ts";
 import { makeImageSource, type ImageSource } from "../ECR/ImageSource.ts";
+import { waitForServiceConvergence } from "../ECS/Service.ts";
 import {
   createTaskRoleIfNotExists,
   deleteTaskDefinitionInfrastructure,
@@ -222,6 +223,21 @@ const deployRunner = (imageSource: ImageSource, options: RunnerDeployOptions) =>
       yield* session.note(`Rolling ECS runner service ${names.serviceName}`);
       yield* update;
     }
+
+    // Deploy is not done until the new runner generation is actually
+    // running: the generated entry exits nonzero unless its envoy registers
+    // with the engine (startAndWait), so a runner that cannot reach or
+    // register with the engine crash-loops and this wait surfaces the fault
+    // instead of reporting success while the gateway 400s.
+    yield* session.note(
+      `Waiting for ECS runner service ${names.serviceName} to stabilize`,
+    );
+    yield* waitForServiceConvergence({
+      clusterArn: state.clusterArn,
+      serviceName: names.serviceName,
+      expectedTaskDefinitionArn: taskDefinitionArn,
+      mode: "stable",
+    });
 
     yield* reapSupersededTaskDefinitionRevision({
       previousArn: output?.taskDefinitionArn,

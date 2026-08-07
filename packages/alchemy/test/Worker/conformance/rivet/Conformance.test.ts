@@ -12,6 +12,14 @@ import ConformanceWorkerLive from "./worker.ts";
 
 const testOptions = {
   providers: Layer.mergeAll(AWS.providers(), Rivet.providers()),
+  // The scratch state is in-memory, so a run in a fresh process cannot
+  // destroy a previous process's NO_DESTROY-kept deployment — and several
+  // physical names carry a per-instance suffix minted into that lost state,
+  // so redeploying the same stage collides with the leaked generation via
+  // tag recovery (e.g. the old IGW gets dragged toward the new VPC). Point
+  // this at a virgin stage to iterate while a leaked generation awaits
+  // `bun nuke`.
+  stage: process.env.RIVET_CONFORMANCE_STAGE,
 };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "RivetConformance");

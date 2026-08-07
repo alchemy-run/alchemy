@@ -2731,7 +2731,7 @@ const observeServiceConvergence = (input: {
     };
   });
 
-const waitForServiceConvergence = (input: {
+export const waitForServiceConvergence = (input: {
   clusterArn: string;
   serviceName: string;
   expectedTaskDefinitionArn?: string;

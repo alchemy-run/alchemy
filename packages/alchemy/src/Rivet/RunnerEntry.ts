@@ -91,7 +91,80 @@ ${doClasses
   .join("\n")}
 };
 
-// Connects to RIVET_ENDPOINT and serves the registered actors.
-setup({ use }).start();
+// The engine only routes gateway \`getOrCreate\` calls for pools that have a
+// runner config registered ("no_runner_config_configured" otherwise), and
+// rivetkit's native runtime auto-upserts the serverful ("normal") config
+// ONLY for local engine endpoints — against a remote engine the pool must
+// be registered explicitly. The runner is the one component that always
+// runs inside the engine's network with the admin token in hand, so it
+// registers the config on every boot: an idempotent PUT that also restores
+// the pool after an engine redeploy wiped its ephemeral store (on the next
+// runner restart). Bounded retry (10 x 3s); a persistent failure exits the
+// process so the supervisor (ECS) restarts it and the deploy's
+// service-stability wait surfaces the fault instead of a silent hang.
+const ensureRunnerConfig = async () => {
+  const raw = process.env.RIVET_ENDPOINT;
+  if (raw === undefined) return;
+  const url = new URL(raw);
+  const namespace = url.username
+    ? decodeURIComponent(url.username)
+    : "default";
+  const token = url.password ? decodeURIComponent(url.password) : "";
+  const pool = process.env.RIVET_POOL ?? "default";
+  const headers = {
+    "content-type": "application/json",
+    ...(token !== "" ? { authorization: \`Bearer \${token}\` } : {}),
+  };
+  const query = \`namespace=\${encodeURIComponent(namespace)}\`;
+  let lastError;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    try {
+      const dcsResponse = await fetch(
+        \`\${url.origin}/datacenters?\${query}\`,
+        { headers },
+      );
+      if (!dcsResponse.ok) {
+        throw new Error(\`GET /datacenters -> \${dcsResponse.status}\`);
+      }
+      const { datacenters } = await dcsResponse.json();
+      const response = await fetch(
+        \`\${url.origin}/runner-configs/\${encodeURIComponent(pool)}?\${query}\`,
+        {
+          method: "PUT",
+          headers,
+          body: JSON.stringify({
+            // Serverful pool: the "normal" variant with engine defaults.
+            datacenters: Object.fromEntries(
+              datacenters.map((dc) => [dc.name, { normal: {} }]),
+            ),
+          }),
+        },
+      );
+      if (!response.ok) {
+        const body = await response.text().catch(() => "");
+        throw new Error(
+          \`PUT /runner-configs/\${pool} -> \${response.status}: \${body.slice(0, 256)}\`,
+        );
+      }
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 3_000));
+    }
+  }
+  throw lastError;
+};
+
+try {
+  await ensureRunnerConfig();
+  // Connects to RIVET_ENDPOINT and serves the registered actors.
+  // startAndWait (30s internal deadline) resolves only once the envoy has
+  // registered with the engine — a runner that cannot register exits
+  // nonzero rather than sitting "healthy" while serving nothing.
+  await setup({ use }).startAndWait();
+} catch (error) {
+  console.error("rivet runner failed to register with the engine", error);
+  process.exit(1);
+}
 `;
 };
