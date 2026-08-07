@@ -8,7 +8,7 @@ import * as Schema from "effect/Schema";
  * Examples: an unsupported binding type, a missing hyperdrive origin, a
  * syntax error in the user's script.
  */
-export class ConfigError extends Schema.TaggedErrorClass<ConfigError>()(
+export class ConfigError extends Schema.TaggedError<ConfigError>()(
   "ConfigError",
   {
     subtag: Schema.String,
@@ -25,7 +25,7 @@ export class ConfigError extends Schema.TaggedErrorClass<ConfigError>()(
  * filesystem, network sockets). The user may be able to fix the problem,
  * but it is not a bug in their worker.
  */
-export class SystemError extends Schema.TaggedErrorClass<SystemError>()(
+export class SystemError extends Schema.TaggedError<SystemError>()(
   "SystemError",
   {
     subtag: Schema.String,
@@ -43,7 +43,7 @@ export class SystemError extends Schema.TaggedErrorClass<SystemError>()(
  * authentication / permissions issue; can also be a bug in this package's
  * usage of the API.
  */
-export class ApiError extends Schema.TaggedErrorClass<ApiError>()("ApiError", {
+export class ApiError extends Schema.TaggedError<ApiError>()("ApiError", {
   subtag: Schema.String,
   message: Schema.String,
   hint: Schema.optional(Schema.String),

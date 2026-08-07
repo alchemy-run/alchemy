@@ -142,7 +142,7 @@ const teardownCommand = Command.make(
     }),
   ),
 ).pipe(
-  Command.withHidden,
+  Command.unlisted,
   Command.withDescription("Tear down the cloudflare state store"),
 );
 
