@@ -18,6 +18,7 @@ import * as S from "effect/Schema";
 import { isAiError } from "effect/unstable/ai/AiError";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import * as AiTool from "effect/unstable/ai/Tool";
+import * as Toolkit from "effect/unstable/ai/Toolkit";
 import { isAgent, type Agent } from "./Agent.ts";
 import type { DispatchTool } from "./Dispatch.ts";
 import { isEvent } from "./Event.ts";
@@ -369,3 +370,40 @@ export interface Stance {
   /** Policy-constrained dispatches (`AI.Dispatch`) mentioned this tick. */
   readonly doors: Map<string, DispatchTool<string, any[]>>;
 }
+
+/**
+ * Assemble a toolkit from compiled tools + this tick's handlers —
+ * shared by both drivers. `toHandlers` dies on keys that name no tool
+ * in the kit, so exactly the kit's handlers are passed. `wrapHandler`
+ * lets a driver seal every handler once (the DO driver provides the
+ * runtime capability here — handlers run inside its event — rather
+ * than at every construction site).
+ */
+export const buildToolkit = (
+  tools: ReadonlyArray<AiTool.Any>,
+  handlers: Record<string, (params: any) => Effect.Effect<any, any, any>>,
+  options?: {
+    readonly wrapHandler?: (
+      handler: (params: any) => Effect.Effect<any, any, any>,
+    ) => (params: any) => Effect.Effect<any, any>;
+  },
+): Effect.Effect<Toolkit.WithHandler<any> | undefined> =>
+  tools.length === 0
+    ? Effect.succeed(undefined)
+    : (Effect.gen(function* () {
+        const kit = Toolkit.make(...tools) as Toolkit.Toolkit<any>;
+        const subset: Record<string, unknown> = {};
+        for (const tool of tools) {
+          const handler = handlers[tool.name];
+          if (handler === undefined) continue;
+          subset[tool.name] =
+            options?.wrapHandler === undefined
+              ? handler
+              : options.wrapHandler(handler);
+        }
+        const handlerContext = yield* kit.toHandlers(subset as any);
+        return (yield* Effect.provide(
+          kit as Effect.Effect<Toolkit.WithHandler<any>, never, any>,
+          handlerContext,
+        )) as Toolkit.WithHandler<any>;
+      }) as Effect.Effect<Toolkit.WithHandler<any> | undefined>);

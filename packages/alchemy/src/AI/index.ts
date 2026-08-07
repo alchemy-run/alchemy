@@ -10,6 +10,7 @@ export * from "./Chats.ts";
 export * from "./Observer.ts";
 export * from "./RunJournal.ts";
 export * from "./RunSocket.ts";
+export * from "./Sampler.ts";
 export * from "./UIMessage.ts";
 export * from "./Parameter.ts";
 export * from "./Prose.ts";

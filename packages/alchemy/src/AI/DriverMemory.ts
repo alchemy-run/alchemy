@@ -45,6 +45,7 @@ import { isDispatchTool, type DispatchTool } from "./Dispatch.ts";
 import { isSkill, type Skill, type SkillService } from "./Skill.ts";
 import {
   asUserMessage,
+  buildToolkit,
   compileDispatch,
   compileSkillTool,
   compileSpawn,
@@ -59,6 +60,7 @@ import {
   render,
   type Stance,
 } from "./DriverShared.ts";
+import { makeSampler, Sampler } from "./Sampler.ts";
 import {
   Thread,
   Tick,
@@ -235,6 +237,13 @@ export const DriverMemory: Layer.Layer<
         // parked at interpret.
         const ambientStore = Context.getOption(context, PersistentRef.Store);
         const journal = Context.getOption(context, RunJournal);
+        // the SAMPLER seam (driver-assembly.md §3): a user driver
+        // provides its own (retry/budget/tiering policy lives inside
+        // it); absent, the default over this driver's LanguageModel.
+        const sampler = Option.getOrElse(
+          Context.getOption(context, Sampler),
+          () => makeSampler(model),
+        );
         const saveSnapshot = (run: RunState): Effect.Effect<void> =>
           Option.isNone(journal)
             ? Effect.void
@@ -586,163 +595,6 @@ export const DriverMemory: Layer.Layer<
             flush();
             return { blocks, tools, skills, delegates, doors };
           });
-
-        /**
-         * Assemble a toolkit from compiled tools + this tick's
-         * handlers. `toHandlers` dies on keys that name no tool in the
-         * kit, so exactly the kit's handlers are passed.
-         */
-        const buildToolkit = (
-          tools: ReadonlyArray<AiTool.Any>,
-          handlers: Record<string, (params: any) => Effect.Effect<any, any>>,
-        ): Effect.Effect<Toolkit.WithHandler<any> | undefined> =>
-          tools.length === 0
-            ? Effect.succeed(undefined)
-            : (Effect.gen(function* () {
-                const kit = Toolkit.make(...tools) as Toolkit.Toolkit<any>;
-                const subset: Record<string, unknown> = {};
-                for (const tool of tools) {
-                  subset[tool.name] = handlers[tool.name];
-                }
-                const handlerContext = yield* kit.toHandlers(subset as any);
-                return (yield* Effect.provide(
-                  kit as Effect.Effect<Toolkit.WithHandler<any>, never, any>,
-                  handlerContext,
-                )) as Toolkit.WithHandler<any>;
-              }) as Effect.Effect<Toolkit.WithHandler<any> | undefined>);
-
-        // one model step: everything the provider + toolkit do for one
-        // sampling — tool handlers execute INSIDE this call. The wire is
-        // STREAMED so an observer sees text/thinking tokens as they
-        // arrive (`onDelta`); the parts are consolidated back into the
-        // non-streaming response shape the loop consumes, block metadata
-        // merged across deltas (Anthropic's thinking SIGNATURE arrives
-        // as a late empty delta and must survive onto the consolidated
-        // reasoning part, or the next request fails). Transient provider
-        // failures retry with capped backoff before dying: a 429 must
-        // never poison a run key. A retry may replay deltas — the final
-        // `assistant` observation is the canonical record.
-        const step = (
-          prompt: Prompt.Prompt,
-          toolkit: Toolkit.WithHandler<any> | undefined,
-          onLive: (
-            part:
-              | { kind: "text" | "reasoning"; delta: string }
-              | {
-                  kind: "tool-call";
-                  id: string;
-                  name: string;
-                  params: unknown;
-                },
-          ) => Effect.Effect<void> = () => Effect.void,
-        ) =>
-          Effect.gen(function* () {
-            const parts: Array<unknown> = [];
-            // open blocks by stream id (providers interleave by index)
-            const open = new Map<
-              string,
-              { type: "text" | "reasoning"; text: string; metadata: any }
-            >();
-            yield* Stream.runForEach(
-              (
-                model.streamText as (
-                  options: unknown,
-                ) => Stream.Stream<any, unknown>
-              )({ prompt, toolkit }),
-              (part: any) =>
-                Effect.gen(function* () {
-                  switch (part.type) {
-                    case "text-start":
-                    case "reasoning-start": {
-                      open.set(part.id, {
-                        type: part.type === "text-start" ? "text" : "reasoning",
-                        text: "",
-                        metadata: { ...part.metadata },
-                      });
-                      return;
-                    }
-                    case "text-delta":
-                    case "reasoning-delta": {
-                      const kind =
-                        part.type === "text-delta" ? "text" : "reasoning";
-                      const block = open.get(part.id) ?? {
-                        type: kind as "text" | "reasoning",
-                        text: "",
-                        metadata: {},
-                      };
-                      open.set(part.id, block);
-                      block.text += part.delta;
-                      Object.assign(block.metadata, part.metadata);
-                      if (part.delta.length > 0) {
-                        yield* onLive({ kind, delta: part.delta });
-                      }
-                      return;
-                    }
-                    case "text-end":
-                    case "reasoning-end": {
-                      const block = open.get(part.id);
-                      if (block === undefined) return;
-                      open.delete(part.id);
-                      Object.assign(block.metadata, part.metadata);
-                      parts.push(
-                        Response.makePart(block.type, {
-                          text: block.text,
-                          metadata: block.metadata,
-                        } as never),
-                      );
-                      return;
-                    }
-                    case "tool-call": {
-                      parts.push(part);
-                      // surface the call NOW — its handler may run for
-                      // minutes before the sampling completes
-                      yield* onLive({
-                        kind: "tool-call",
-                        id: part.id,
-                        name: part.name,
-                        params: part.params,
-                      });
-                      return;
-                    }
-                    case "tool-result":
-                    case "finish": {
-                      parts.push(part);
-                      return;
-                    }
-                    default:
-                      return;
-                  }
-                }),
-            );
-            // a provider that never closed a block still yields its text
-            for (const block of open.values()) {
-              parts.push(
-                Response.makePart(block.type, {
-                  text: block.text,
-                  metadata: block.metadata,
-                } as never),
-              );
-            }
-            return new LanguageModel.GenerateTextResponse<any>(parts as never);
-          }).pipe(
-            // retryability is the error's own testimony (spec §11b):
-            // a deterministic failure (billing, auth, content policy)
-            // must not be re-sampled — it propagates TYPED to the
-            // loop, whose exit fails every waiter with the real cause.
-            // A MALFORMED TOOL CALL is excluded from blind re-sampling:
-            // the loop feeds it back to the model as a corrective note
-            // (the model can fix its own parameters; a re-sample of the
-            // identical prompt usually just repeats the mistake).
-            Effect.retry({
-              while: (error) =>
-                isAiError(error)
-                  ? error.isRetryable &&
-                    error.reason._tag !== "ToolParameterValidationError"
-                  : true,
-              schedule: Schedule.exponential("1 second"),
-              times: 3,
-            }),
-          );
 
         const runs = new Map<string, RunState>();
         // Minted keys are PROCESS-UNIQUE, not just driver-unique: run
@@ -1230,43 +1082,47 @@ export const DriverMemory: Layer.Layer<
                 });
               }
               const startedAt = yield* Effect.sync(() => Date.now());
-              const response = yield* step(
-                Prompt.concat(
-                  Prompt.make([{ role: "system", content: tick.system }]),
-                  run.prompt,
-                ),
-                tick.toolkit,
-                (part) =>
-                  part.kind === "tool-call"
-                    ? observe(run, {
-                        type: "tool-call",
-                        tick: run.tick,
-                        toolCallId: part.id,
-                        toolName: part.name,
-                        input: part.params,
-                      })
-                    : observe(run, {
-                        type: "assistant-delta",
-                        tick: run.tick,
-                        channel: part.kind,
-                        delta: part.delta,
-                      }),
-              ).pipe(
-                // A MALFORMED TOOL CALL is a model-visible fact, not a
-                // crash: nothing was executed, so tell the model what
-                // was wrong and let it re-issue. Bounded — a model that
-                // keeps emitting invalid calls crashes with the real
-                // error after the streak budget.
-                Effect.catchIf(
-                  (error): error is AiError =>
-                    isAiError(error) &&
-                    error.reason._tag === "ToolParameterValidationError",
-                  (error) =>
-                    malformed >= 3
-                      ? Effect.fail(error)
-                      : Effect.succeed({ malformed: error.message } as const),
-                ),
-              );
+              const response = yield* sampler
+                .step({
+                  prompt: Prompt.concat(
+                    Prompt.make([{ role: "system", content: tick.system }]),
+                    run.prompt,
+                  ),
+                  toolkit: tick.toolkit,
+                  onLive: (part) =>
+                    part.kind === "tool-call"
+                      ? observe(run, {
+                          type: "tool-call",
+                          tick: run.tick,
+                          toolCallId: part.id,
+                          toolName: part.name,
+                          input: part.params,
+                        })
+                      : observe(run, {
+                          type: "assistant-delta",
+                          tick: run.tick,
+                          channel: part.kind,
+                          delta: part.delta,
+                        }),
+                })
+                .pipe(
+                  // A MALFORMED TOOL CALL is a model-visible fact, not a
+                  // crash: nothing was executed, so tell the model what
+                  // was wrong and let it re-issue. Bounded — a model that
+                  // keeps emitting invalid calls crashes with the real
+                  // error after the sampler's streak budget.
+                  Effect.catchIf(
+                    (error): error is AiError =>
+                      isAiError(error) &&
+                      error.reason._tag === "ToolParameterValidationError",
+                    (error) =>
+                      malformed >= sampler.malformedBudget
+                        ? Effect.fail(error)
+                        : Effect.succeed({
+                            malformed: error.message,
+                          } as const),
+                  ),
+                );
               if ("malformed" in response) {
                 malformed++;
                 const text =
