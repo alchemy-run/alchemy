@@ -124,21 +124,31 @@ const withSpaFallback = (assets: unknown): unknown => {
  * the Vite `ssr` environment and becomes the deployed Worker entry, with
  * the client build still served as assets through its `ASSETS` binding.
  *
- * @example Worker entry serving an API route alongside the app
+ * @example src/worker.ts
  * ```typescript
- * // src/worker.ts
- * // export default {
- * //   fetch(request: Request, env: { TICKER: KVNamespace; ASSETS: Fetcher }) {
- * //     const url = new URL(request.url);
- * //     if (url.pathname === "/api/ticker") {
- * //       return env.TICKER.get("ticker:clubs").then((body) =>
- * //         new Response(body, { headers: { "content-type": "application/json" } }),
- * //       );
- * //     }
- * //     return env.ASSETS.fetch(request);
- * //   },
- * // };
+ * type Env = {
+ *   ASSETS: { fetch(request: Request): Promise<Response> };
+ *   TICKER: KVNamespace;
+ * };
  *
+ * export default {
+ *   async fetch(request: Request, env: Env): Promise<Response> {
+ *     const url = new URL(request.url);
+ *
+ *     if (url.pathname === "/api/ticker") {
+ *       const body = await env.TICKER.get("ticker:clubs");
+ *       return new Response(body, {
+ *         headers: { "content-type": "application/json" },
+ *       });
+ *     }
+ *
+ *     return env.ASSETS.fetch(request);
+ *   },
+ * };
+ * ```
+ *
+ * @example alchemy.run.ts
+ * ```typescript
  * const ticker = yield* Cloudflare.KV.Namespace("Ticker");
  *
  * const app = yield* Cloudflare.Website.Foldkit("Platform", {
