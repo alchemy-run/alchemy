@@ -101,8 +101,10 @@ export type Consumer = Resource<
  *
  * Cloudflare allows at most one Worker consumer per queue (HTTP-pull
  * consumers can coexist). The reconciler enforces this: if the queue
- * already has a Worker consumer pointing at a different script, the
- * deploy fails with a clear error rather than silently adopting it.
+ * already has a Worker consumer pointing at a different logical Worker's
+ * script, the deploy fails with a clear error rather than silently
+ * adopting it. A stranded consumer from a prior generation of the *same*
+ * Worker (identified by the scripts' ownership tags) is rebuilt in place.
  * @resource
  * @product Queues
  * @category Storage & Databases
