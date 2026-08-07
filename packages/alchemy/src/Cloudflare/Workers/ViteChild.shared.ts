@@ -4,7 +4,7 @@ import type {
   QueueConsumer,
   RuntimeWorker,
   Workflow,
-} from "@distilled.cloud/cloudflare-runtime";
+} from "@alchemy.run/cloudflare-runtime/core";
 import type { BundleOutput } from "../../Bundle/Bundle.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
 import type { WorkerAssetsConfig, WorkerSourceDescriptor } from "./Worker.ts";

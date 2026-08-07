@@ -26,17 +26,21 @@ jobs:
       # it changes what gets bundled — republish everything.
       rebuild-all-paths: |
         distilled
-        cloudflare-tools
       # `|| true` keeps the cp harmless in packages whose pkg dir is
       # nested differently or that don't need the root README.
-      build-command: "cp ../../README.md . 2>/dev/null || true; bun run build"
-      # Every package's tsc build pulls in the alchemy -> distilled
-      # project-reference chain (distilled/aws is huge), so all three
-      # need the larger runner — same as distilled's own CI.
+      build-command: >-
+        cp ../../README.md . 2>/dev/null || true;
+        PKG_NAME=$(node -p "require('./package.json').name");
+        cd ../..;
+        bun turbo run build --filter="$PKG_NAME"
+      # Package builds can pull in the alchemy -> distilled project-reference
+      # chain (distilled/aws is huge), so use the larger runner throughout.
       packages: |
         [
           { "dir": "packages/alchemy",     "name": "alchemy",                   "runner": "ubuntu-22-large" },
           { "dir": "packages/better-auth", "name": "@alchemy.run/better-auth",  "runner": "ubuntu-22-large" },
+          { "dir": "packages/cloudflare-runtime", "name": "@alchemy.run/cloudflare-runtime", "runner": "ubuntu-22-large" },
+          { "dir": "packages/cloudflare-frameworks",         "name": "@alchemy.run/cloudflare-frameworks",         "runner": "ubuntu-22-large" },
           { "dir": "packages/pr-package",  "name": "@alchemy.run/pr-package",   "runner": "ubuntu-22-large" }
         ]
     secrets: inherit

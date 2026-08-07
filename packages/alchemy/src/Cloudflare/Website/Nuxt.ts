@@ -17,7 +17,7 @@ import {
  * installed in the user's project — `loadSource` fails with a
  * `SourceProviderError` naming it otherwise.
  */
-const NUXT_SOURCE_PROVIDER = "@distilled.cloud/nuxt/source";
+const NUXT_SOURCE_PROVIDER = "@alchemy.run/cloudflare-frameworks/nuxt/source";
 
 export interface NuxtProps<
   Bindings extends WorkerBindingProps = {},
@@ -84,8 +84,9 @@ export interface NuxtProps<
  * deploys as the Worker script; client assets and prerendered pages
  * (`.output/public`) deploy as Worker static assets.
  *
- * Requires the `@distilled.cloud/nuxt` package to be installed in your
- * project (alongside `nuxt` itself). Input files are content-hashed
+ * Requires the `@alchemy.run/cloudflare-frameworks` package to be installed in
+ * your project; the integration is loaded from its `/nuxt` export. Input files
+ * are content-hashed
  * (respecting `.gitignore` by default) so unchanged projects skip the
  * build and deploy entirely.
  *

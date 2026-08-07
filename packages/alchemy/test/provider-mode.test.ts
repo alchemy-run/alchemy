@@ -7,7 +7,7 @@
  *     local emulation; mode-agnostic providers satisfy any requested mode
  *   - switching modes plans a REPLACEMENT; the old generation / orphan row
  *     is deleted with the provider variant of the mode that created it
- *   - unstamped rows are assumed to be the current run's mode
+ *   - unstamped (legacy) rows are assumed live
  *   - conflicting mode decorations on the same FQN die loudly
  *   - the non-default variant is only constructed when demanded (laziness)
  *
@@ -16,7 +16,7 @@
  * provider service directly.
  */
 import { Cli } from "@/Cli/Cli.ts";
-import type { StatusChangeEvent } from "@/Cli/Event.ts";
+import type { AnnotateEvent, StatusChangeEvent } from "@/Cli/Event.ts";
 import * as LocalProvider from "@/Local/LocalProvider.ts";
 import * as Provider from "@/Provider.ts";
 import { remote, type ProviderMode } from "@/ProviderMode.ts";
@@ -212,23 +212,40 @@ describe("provider modes", () => {
       }),
   );
 
-  test.provider(
-    "unstamped (legacy) rows are assumed to be the current run's mode",
-    (stack) =>
-      Effect.gen(function* () {
-        yield* modal("A", "v1").pipe(stack.deploy);
-        const row = yield* getState("A");
-        expect(row?.providerMode).toEqual("live");
+  test.provider("unstamped (legacy) rows are assumed live", (stack) =>
+    Effect.gen(function* () {
+      yield* modal("A", "v1").pipe(stack.deploy);
+      const row = yield* getState("A");
+      expect(row?.providerMode).toEqual("live");
 
-        // Simulate a row written before providerMode existed.
-        yield* setState("A", { ...row!, providerMode: undefined });
+      // Simulate a row written before providerMode existed.
+      yield* setState("A", { ...row!, providerMode: undefined });
 
-        // Same mode (default live) → no replacement churn.
-        const plan = yield* modal("A", "v1").pipe(stack.plan);
-        expect(plan.resources["A"].action).toEqual("noop");
+      // A live run sees no churn: unstamped = live.
+      const plan = yield* modal("A", "v1").pipe(stack.plan);
+      expect(plan.resources["A"].action).toEqual("noop");
 
-        yield* stack.destroy();
-      }),
+      // A dev run must treat the unstamped row exactly like a stamped
+      // live row: replacement, with the old generation deleted by the
+      // LIVE provider. Assuming "current run's mode" instead silently
+      // adopts the deployed live resource as a local instance — the
+      // row re-stamps local and the live resource leaks untracked.
+      const devPlan = yield* inDev(modal("A", "v1").pipe(stack.plan));
+      expect(devPlan.resources["A"].action).toEqual("replace");
+
+      const before = callsFor(stack.name).length;
+      const output = yield* inDev(modal("A", "v1").pipe(stack.deploy));
+      expect(output.runtime).toEqual("local");
+      expect((yield* getState("A"))?.providerMode).toEqual("local");
+      expect(callsFor(stack.name).slice(before)).toContainEqual({
+        stack: stack.name,
+        mode: "live",
+        op: "delete",
+        id: "A",
+      });
+
+      yield* stack.destroy();
+    }),
   );
 
   test.provider(
@@ -290,6 +307,7 @@ describe("provider modes", () => {
     (stack) =>
       Effect.gen(function* () {
         const events: StatusChangeEvent[] = [];
+        const notes: AnnotateEvent[] = [];
         let planDefaultMode: ProviderMode | undefined;
         const cli = Cli.of({
           approvePlan: () => Effect.succeed(true),
@@ -302,6 +320,7 @@ describe("provider modes", () => {
                 emit: (event) =>
                   Effect.sync(() => {
                     if (event.kind === "status-change") events.push(event);
+                    if (event.kind === "annotate") notes.push(event);
                   }),
               };
             }),
@@ -318,6 +337,8 @@ describe("provider modes", () => {
         expect(liveEvents.every((e) => e.fromProviderMode === undefined)).toBe(
           true,
         );
+        // Live rows never announce a ready-at URL.
+        expect(notes.some((n) => n.message.startsWith("ready at"))).toBe(false);
 
         // 2. dev run: default flips to "local"; the mode switch is planned
         //    as a replacement whose events carry the transition
@@ -325,6 +346,7 @@ describe("provider modes", () => {
         //    generation's GC is deliberately silent (progress stays anchored
         //    on the live replacement), so no delete-status assertions here.
         events.length = 0;
+        notes.length = 0;
         yield* inDev(modal("A", "v1").pipe(stack.deploy, withCli));
         expect(planDefaultMode).toEqual("local");
         const transitions = events.filter(
@@ -336,6 +358,12 @@ describe("provider modes", () => {
             (e) => e.providerMode === "local" && e.fromProviderMode === "live",
           ),
         ).toBe(true);
+        // A local instance whose attrs carry a `url` announces it.
+        expect(notes).toContainEqual({
+          kind: "annotate",
+          id: "A",
+          message: "ready at http://localhost:1337",
+        });
 
         // 3. destroy while stamped local: delete events carry the row's
         //    stamped mode even though the run default is live.

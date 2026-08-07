@@ -5,33 +5,12 @@ import sitemap from "@astrojs/sitemap";
 import starlight from "@astrojs/starlight";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "astro/config";
-import { promises as fs, readFileSync } from "node:fs";
+import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import starlightBlog from "starlight-blog";
 import { pagefindIgnoreNoise } from "./plugins/pagefind-ignore-noise.mjs";
-
-/**
- * The Providers sidebar (Provider → Category → Service → Resource) is generated
- * by `scripts/generate-api-reference.ts` from `@category` JSDoc annotations and
- * written to `src/generated/providers-sidebar.json`. `bun run build:reference`
- * regenerates it before every build. If it hasn't been generated yet (e.g. a
- * fresh `astro dev` before running the generator), fall back to autogenerating
- * from the directory tree so the docs still build.
- */
-function providersSidebar() {
-  try {
-    const json = readFileSync(
-      fileURLToPath(
-        new URL("./src/generated/providers-sidebar.json", import.meta.url),
-      ),
-      "utf8",
-    );
-    return JSON.parse(json);
-  } catch {
-    return undefined;
-  }
-}
+import providersSidebar from "./src/generated/providers-sidebar.json" with { type: "json" };
 
 /**
  * Every provider has a docs hub: its reference tree renders inside the
@@ -68,9 +47,8 @@ function providersSidebarEntry() {
  * @param {...string} providers Provider labels / directory names (e.g. "Cloudflare")
  */
 function providerResourcesEntry(...providers) {
-  const sidebar = providersSidebar();
-  const entryItems = (provider) => {
-    const group = sidebar?.find((p) => p.label === provider);
+  const entryItems = (/** @type {string} */ provider) => {
+    const group = providersSidebar.find((p) => p.label === provider);
     if (group) return group.items;
     return [
       { autogenerate: { directory: `providers/${provider}`, collapsed: true } },
@@ -185,7 +163,12 @@ function buildOutputChecks() {
   return {
     name: "build-output-checks",
     hooks: {
-      "astro:build:done": async ({ dir, logger }) => {
+      "astro:build:done": async (
+        /** @type {{ dir: URL, logger: import("astro").AstroRuntimeLogger }} */ {
+          dir,
+          logger,
+        },
+      ) => {
         const distPath = fileURLToPath(dir);
 
         /** @type {Set<string>} */
@@ -1147,5 +1130,8 @@ export default defineConfig({
       // (declared as a direct dependency) instead.
       external: ["satteri"],
     },
+  },
+  experimental: {
+    incrementalBuild: true,
   },
 });
