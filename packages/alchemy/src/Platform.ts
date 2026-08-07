@@ -628,7 +628,7 @@ export const Platform = <
               );
 
               instance.Props = {
-                ...props,
+                ...(runtimeContext.foldProps?.(props ?? {}) ?? props),
                 env: {
                   ...props?.env,
                   ...runtimeContext.env,

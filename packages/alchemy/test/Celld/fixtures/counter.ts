@@ -1,4 +1,4 @@
-import * as Celld from "@/Celld";
+import * as Alchemy from "@/index.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -11,7 +11,7 @@ export class CounterBoom extends Data.TaggedError("CounterBoom")<{
 }> {}
 
 /** The class is a pure tag — the layer below binds the impl to the Worker. */
-export class Counter extends Celld.DurableObject<
+export class Counter extends Alchemy.DurableObject<
   Counter,
   {
     increment: () => Effect.Effect<number, never, RuntimeContext>;
@@ -29,7 +29,7 @@ export class Counter extends Celld.DurableObject<
 export const CounterLive = Counter.make(
   CellsWorker,
   Effect.gen(function* () {
-    const state = yield* Celld.DurableObjectState;
+    const state = yield* Alchemy.DurableObjectState;
     return Effect.gen(function* () {
       return {
         increment: () =>

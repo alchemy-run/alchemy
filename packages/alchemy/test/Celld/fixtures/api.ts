@@ -63,7 +63,7 @@ export default class Api extends AWS.Lambda.Function<Api>()(
           case "worker": {
             // The fleet's own worker route (`Celld.Worker` fetch) — user
             // routes fall through the gateway unauthenticated.
-            const fleetUrl = process.env.CELLD_CellsWorker_URL;
+            const fleetUrl = process.env.ALCHEMY_WORKER_CellsWorker_URL;
             const client = yield* HttpClient.HttpClient;
             const response = yield* client
               .get(`${fleetUrl}/hello`)
@@ -77,8 +77,8 @@ export default class Api extends AWS.Lambda.Function<Api>()(
             // Raw gateway call — bypasses the stub's decode so tests can
             // observe the exact status/body the fleet returns.
             const method = url.searchParams.get("m") ?? "increment";
-            const fleetUrl = process.env.CELLD_CellsWorker_URL;
-            const secretRaw = process.env.CELLD_CellsWorker_SECRET;
+            const fleetUrl = process.env.ALCHEMY_WORKER_CellsWorker_URL;
+            const secretRaw = process.env.ALCHEMY_WORKER_CellsWorker_SECRET;
             const secret = (() => {
               try {
                 const parsed = JSON.parse(secretRaw ?? "");

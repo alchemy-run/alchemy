@@ -35,6 +35,23 @@ export * as Schema from "./Schema.ts";
 export * as Server from "./Server/index.ts";
 export * as Serverless from "./Serverless/index.ts";
 export { Stack } from "./Stack.ts";
+export {
+  DurableObject,
+  DurableObjectScope,
+  DurableObjectState,
+  Worker,
+  WorkerEngine,
+  WorkerTarget,
+  findWorkerEngine,
+  isAlchemyWorker,
+  type DurableObjectServices,
+  type DurableObjectStub,
+  type WorkerBindingContract,
+  type WorkerEngineService,
+  type WorkerRef,
+  type WorkerShape,
+  type WorkerTargetService,
+} from "./Worker/index.ts";
 export * from "./Stage.ts";
 export { inMemoryState, localState } from "./State/index.ts";
 export * as Sync from "./Sync.ts";

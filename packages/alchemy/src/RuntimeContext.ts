@@ -21,6 +21,13 @@ export interface BaseRuntimeContext {
    */
   set(id: string, output: Output): Effect.Effect<string>;
   exports?: Effect.Effect<Record<string, any>>;
+  /**
+   * Fold context-collected state into the resource's persisted Props after
+   * the init effect ran (alongside the standard `env`/`exports` stamping) —
+   * e.g. an `Alchemy.Worker`'s deployment target, which is only known once
+   * the impl's layers have built.
+   */
+  foldProps?(props: Record<string, unknown>): Record<string, unknown>;
   serve?<Req = never>(
     handler: HttpEffect<Req>,
     options?: { shape?: Record<string, unknown> },

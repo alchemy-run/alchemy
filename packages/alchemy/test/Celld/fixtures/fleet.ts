@@ -1,4 +1,6 @@
+import * as Celld from "@/Celld";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Cells } from "./cells.ts";
@@ -6,12 +8,12 @@ import { Counter, CounterLive } from "./counter.ts";
 import { CellsWorker } from "./worker.ts";
 
 /**
- * The deployable Worker module: deploys onto the {@link Cells} fleet, hosts
- * the Counter implementation, AND serves HTTP on the fleet's endpoint
- * (`fetch` runs on the nodes with native access to the cells).
+ * The deployable Worker module. The impl carries its capability layers AND
+ * its deployment target in one provide chain — `Celld.Worker({ fleet })`
+ * is what makes this a celld deployment; a different target layer would
+ * deploy the same worker elsewhere.
  */
 export default CellsWorker.make(
-  { fleet: Cells, main: import.meta.url },
   Effect.gen(function* () {
     const counters = yield* Counter;
     return {
@@ -31,5 +33,13 @@ export default CellsWorker.make(
         return HttpServerResponse.text("Not Found", { status: 404 });
       }),
     };
-  }).pipe(Effect.provide(CounterLive)),
+  }).pipe(
+    Effect.provide(
+      CounterLive.pipe(
+        Layer.provideMerge(
+          Celld.Worker({ fleet: Cells, main: import.meta.url }),
+        ),
+      ),
+    ),
+  ),
 );

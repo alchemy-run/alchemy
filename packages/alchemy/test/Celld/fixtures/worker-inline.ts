@@ -1,4 +1,5 @@
-/** Compile-pin for the single-file Fleet + `Celld.Worker` + inline cell DX (the PR/docs sample). Not deployed by tests. */
+/** Compile-pin for the single-file Fleet + Alchemy.Worker + inline cell DX (the PR/docs sample). Not deployed by tests. */
+import * as Alchemy from "@/index.ts";
 import * as Celld from "@/Celld";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -8,10 +9,10 @@ export class Cells extends Celld.Fleet<Cells>()("Cells", {
   instances: 2,
 }) {}
 
-export class Counter extends Celld.DurableObject<Counter>()(
+export class Counter extends Alchemy.DurableObject<Counter>()(
   "Counter",
   Effect.gen(function* () {
-    const state = yield* Celld.DurableObjectState;
+    const state = yield* Alchemy.DurableObjectState;
     return Effect.gen(function* () {
       const count = (yield* state.storage.get<number>("count")) ?? 0;
       return {
@@ -26,9 +27,9 @@ export class Counter extends Celld.DurableObject<Counter>()(
   }),
 ) {}
 
-export default class CellsWorker extends Celld.Worker<CellsWorker>()(
-  "CellsWorker",
-  { fleet: () => Cells, main: import.meta.url },
+export class CellsWorker extends Alchemy.Worker<CellsWorker>()("CellsWorker") {}
+
+export default CellsWorker.make(
   Effect.gen(function* () {
     const counters = yield* Counter;
     return {
@@ -40,5 +41,7 @@ export default class CellsWorker extends Celld.Worker<CellsWorker>()(
         return yield* HttpServerResponse.json({ room, value });
       }),
     };
-  }),
-) {}
+  }).pipe(
+    Effect.provide(Celld.Worker({ fleet: () => Cells, main: import.meta.url })),
+  ),
+);

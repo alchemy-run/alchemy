@@ -1,109 +1,20 @@
 /**
- * Durable Objects hosted on a Celld {@link Fleet}.
+ * The portable **`Alchemy.DurableObject`** — the two-phase authoring
+ * doctrine (init resolves shared dependencies; the returned inner Effect
+ * runs per-instance with {@link DurableObjectState}) with the hosting
+ * platform selected by the worker's target layer.
  *
- * The authoring DX mirrors `Cloudflare.DurableObject` — a two-phase Effect
- * (init resolves shared dependencies; the returned inner Effect runs
- * per-instance with {@link DurableObjectState}) whose returned object's
- * methods ARE the RPC surface. The class itself is a pure tag; **the fleet
- * is specified by the layer** (`Counter.make(Cells, impl)`), so the same
- * class runs against a different fleet by providing a different layer.
+ * The class is a pure tag; **the layer binds impl + hosting worker**
+ * (`Counter.make(Api, impl)`). Building the layer inside the hosting
+ * worker's impl registers the class; building it anywhere else yields a
+ * remote stub speaking the alchemy fetch-RPC protocol against the worker's
+ * gateway (engine-neutral at runtime — engines only differ in the
+ * deploy-time caller binding).
  *
- * The layer dual-dispatches on where it is built:
- *
- * - inside its fleet's impl, it registers the class + native binding and
- *   resolves the namespace over the fleet's own runtime;
- * - inside any other host (Lambda Function, ECS task, …), it registers the
- *   fleet connection (URL + secret env, plus the fleet host's
- *   network/credential fragment) on the host and resolves a typed remote
- *   stub speaking the alchemy RPC protocol over the fleet gateway.
- *
- * `yield* Counter` is identical everywhere — only the provided layer
- * decides hosting vs remote and which fleet.
- *
- * @section Defining a Durable Object
- * @example Inline
- * ```typescript
- * // fleet.ts — a single file: the fleet and an inline cell class
- * export class Cells extends Celld.Fleet<Cells>()("Cells") {}
- *
- * export class Counter extends Celld.DurableObject<Counter>()(
- *   "Counter",
- *   Effect.gen(function* () {
- *     const state = yield* Celld.DurableObjectState;
- *     return Effect.gen(function* () {
- *       const count = (yield* state.storage.get<number>("count")) ?? 0;
- *       return {
- *         increment: () =>
- *           Effect.gen(function* () {
- *             const next = count + 1;
- *             yield* state.storage.put("count", next);
- *             return next;
- *           }),
- *       };
- *     });
- *   }),
- * ) {}
- *
- * export default Cells.make(
- *   { main: import.meta.url },
- *   Effect.gen(function* () {
- *     yield* Counter;
- *     return {};
- *   }),
- * );
- * ```
- *
- * @example Tagged class with a separate layer
- * ```typescript
- * // cells.ts — tag-only fleet class
- * export class Cells extends Celld.Fleet<Cells>()("Cells") {}
- *
- * // counter.ts — the class is a pure tag; the layer binds impl + fleet
- * export class Counter extends Celld.DurableObject<Counter>()("Counter") {}
- *
- * export const CounterLive = Counter.make(
- *   Cells,
- *   Effect.gen(function* () {
- *     const state = yield* Celld.DurableObjectState;
- *     return Effect.gen(function* () {
- *       const count = (yield* state.storage.get<number>("count")) ?? 0;
- *       return {
- *         increment: () =>
- *           Effect.gen(function* () {
- *             const next = count + 1;
- *             yield* state.storage.put("count", next);
- *             return next;
- *           }),
- *         get: () => Effect.succeed(count),
- *       };
- *     });
- *   }),
- * );
- * ```
- *
- * @section Calling cells
- * @example From an AWS Lambda Function
- * ```typescript
- * export default class Api extends AWS.Lambda.Function<Api>()(
- *   "Api",
- *   { main: import.meta.url },
- *   Effect.gen(function* () {
- *     const counters = yield* Counter;
- *     return {
- *       fetch: Effect.gen(function* () {
- *         const n = yield* counters.getByName("room-1").increment();
- *         return HttpServerResponse.text(String(n));
- *       }),
- *     };
- *   }).pipe(Effect.provide(CounterLive)),
- * ) {}
- * ```
- *
- * @example Bundle-lean callers
- * ```typescript
- * // `client` selects the fleet without pulling the implementation (and its
- * // dependencies) into the caller's bundle.
- * Effect.provide(Counter.client(Cells))
+ * ```ts
+ * export class Counter extends Alchemy.DurableObject<Counter, Shape>()("Counter") {}
+ * export const CounterLive = Counter.make(Api, impl);
+ * // callers: Effect.provide(CounterLive) — or Counter.client(Api) without the impl
  * ```
  */
 import * as Context from "effect/Context";
@@ -123,7 +34,6 @@ import { CurrentRuntimeContext, sanitizeKey } from "../RuntimeContext.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import { effectClass, taggedFunction } from "../Util/effect.ts";
 import { asEffect } from "../Util/types.ts";
-import { fromCloudflareFetcher } from "../Cloudflare/Fetcher.ts";
 import type {
   DurableObjectExport,
   DurableObjectShape,
@@ -134,28 +44,52 @@ import {
   DurableObjectState,
   fromDurableObjectState,
 } from "./DurableObjectState.ts";
-import { findFleetHost } from "./FleetHost.ts";
-import {
-  Worker,
-  isCelldWorker,
-  resolveClassRef,
-  type ClassRef,
-  type WorkerServices,
-} from "./Worker.ts";
-import { FLEET_SECRET_HEADER } from "./FleetGateway.ts";
-import { DurableObjectTypeId } from "./FleetTypes.ts";
+import { WorkerTarget, findWorkerEngine } from "./Engine.ts";
+import { Worker, isAlchemyWorker, type WorkerServices } from "./Worker.ts";
 
 export type { DurableObjectStub };
 
-type TypeId = DurableObjectTypeId;
+export const DurableObjectTypeId = "Alchemy.DurableObject";
+type TypeId = typeof DurableObjectTypeId;
 const TypeId = DurableObjectTypeId;
 
+/** The secret header the worker gateways check (engine-neutral). */
+export const WORKER_SECRET_HEADER = "x-alchemy-fleet-secret";
+
+/** The standard env keys a caller binding stores the connection under. */
+export const workerConnectionKeys = (workerLogicalId: string) => ({
+  urlKey: sanitizeKey(`ALCHEMY_WORKER_${workerLogicalId}_URL`),
+  secretKey: sanitizeKey(`ALCHEMY_WORKER_${workerLogicalId}_SECRET`),
+});
+
 /**
- * A reference to the {@link Worker} class a layer targets: the class itself
- * (a Platform class is an Effect with a static `LogicalId`), or a thunk for
+ * A reference to the hosting {@link Worker} class: the class itself (a
+ * Platform class is an Effect with a static `LogicalId`), or a thunk for
  * forward references / import cycles.
  */
-export type WorkerRef = ClassRef;
+export type WorkerRef =
+  | Effect.Effect<any, any, any>
+  | { readonly LogicalId: string }
+  | (() => WorkerRef);
+
+/** @internal */
+export const resolveWorkerRef = (
+  ref: WorkerRef,
+  depth = 0,
+): { LogicalId: string } => {
+  if (
+    ref !== null &&
+    typeof (ref as { LogicalId?: unknown }).LogicalId === "string"
+  ) {
+    return ref as unknown as { LogicalId: string };
+  }
+  if (typeof ref === "function" && depth < 8) {
+    return resolveWorkerRef((ref as () => WorkerRef)(), depth + 1);
+  }
+  throw new Error(
+    "Invalid worker reference: pass the Alchemy.Worker class (or a thunk of it).",
+  );
+};
 
 export interface DurableObjectProps {
   /**
@@ -176,7 +110,7 @@ export interface DurableObject<Shape = unknown> {
 export class DurableObjectScope extends Context.Service<
   DurableObjectScope,
   DurableObject<any>
->()("Celld.DurableObjectScope") {}
+>()("Alchemy.DurableObjectScope") {}
 
 /** Services available to a Durable Object impl's init effect. */
 export type DurableObjectServices =
@@ -191,8 +125,8 @@ export interface DurableObjectClass {
   <Self, Shape = never>(): {
     /**
      * Inline form: the implementation is coupled to the class. Hosted by
-     * whichever fleet yields it; callers select the fleet with
-     * `.client(fleet)`.
+     * whichever worker yields it; callers select the worker with
+     * `.client(worker)`.
      */
     <
       ImplShape extends MainRpc<DurableObjectState>,
@@ -214,7 +148,7 @@ export interface DurableObjectClass {
       never
     > & {
       new (_: never): [Shape] extends [never] ? ImplShape : Shape;
-      /** Caller-side layer selecting the fleet that hosts this class. */
+      /** Caller-side layer selecting the worker that hosts this class. */
       client(worker: WorkerRef): Layer.Layer<Self>;
     };
     <Name extends string>(
@@ -226,10 +160,10 @@ export interface DurableObjectClass {
         "~alchemy/name": Name;
       };
       /**
-       * The implementation layer, bound to the fleet that hosts this class.
-       * Provide it on the fleet's impl (hosts the class) and on callers
-       * (resolves the remote stub); run the same class on a different fleet
-       * by making another layer.
+       * The implementation layer, bound to the worker that hosts this
+       * class. Provide it on the worker impl (hosts the class) and on
+       * callers (resolves the remote stub); run the same class on a
+       * different worker by making another layer.
        */
       make<Req = never>(
         worker: WorkerRef,
@@ -244,7 +178,7 @@ export interface DurableObjectClass {
         >,
       ): Layer.Layer<Self, never, Exclude<Req, DurableObjectServices>>;
       /**
-       * A caller-only layer: selects the fleet without carrying the
+       * A caller-only layer: selects the worker without carrying the
        * implementation into the caller's bundle. Never hosts.
        */
       client(worker: WorkerRef): Layer.Layer<Self>;
@@ -282,15 +216,20 @@ export const DurableObject: DurableObjectClass = taggedFunction(
       Context.Service<any, any>;
 
     /**
-     * Hosting path — runs while the layer builds inside its fleet's init.
+     * Hosting path — runs while the layer builds inside its worker's init.
      * Registers the class declaration through the binding channel and
-     * returns the namespace handle over the native binding, speaking the
-     * alchemy RPC protocol over the instance's `fetch` (streaming-safe on
-     * celld).
+     * returns the namespace handle over the native binding, using the
+     * ambient target's engine-specific stub flavor.
      */
     const binding = () =>
       Effect.gen(function* () {
         const worker = yield* Worker;
+        // The target is ambient inside the impl's provide chain (the DO
+        // layer sits above it). Its absence here means the deployable
+        // module provided no target — surfaced with guidance.
+        const target = yield* Effect.serviceOption(WorkerTarget).pipe(
+          Effect.map(Option.getOrUndefined),
+        );
 
         yield* worker.bind`${namespace}`({
           durableObjects: [{ name: namespace, className }],
@@ -312,7 +251,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
             }
             return Effect.die(
               new Error(
-                `DurableObject '${namespace}' not found in the fleet environment`,
+                `DurableObject '${namespace}' not found in the worker environment`,
               ),
             );
           }),
@@ -328,13 +267,15 @@ export const DurableObject: DurableObjectClass = taggedFunction(
                 `DurableObject '${namespace}' can only be called at runtime`,
               );
             }
-            const fetcher = fromCloudflareFetcher(native.getByName(name));
-            return makeFetchRpcStub<DurableObjectStub<any>>({
-              fetch: (request) => fetcher.fetch(request),
-              base: {
-                fetch: (request: unknown) => fetcher.fetch(request as any),
-              },
-            });
+            if (target === undefined) {
+              throw new Error(
+                `DurableObject '${namespace}' has no deployment target — provide one inside the worker impl's layer stack (e.g. Celld.Worker({ fleet, main })).`,
+              );
+            }
+            return target.localDurableObject(
+              native.getByName(name),
+              namespace,
+            ) as unknown as DurableObjectStub<any>;
           },
         } satisfies DurableObject<any>;
       });
@@ -354,7 +295,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
       if (phase === "plan") {
         // Evaluate the init phase with a mock state at plan time so
         // transitive bindings the object depends on are discovered and
-        // registered on the fleet.
+        // registered on the worker.
         yield* constructor.pipe(
           Effect.provide(
             Layer.succeed(
@@ -364,7 +305,9 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           ),
         );
       }
-      yield* (yield* Worker).export(namespace, {
+      // `export` lives on the runtime context assigned onto the instance —
+      // present at both plan and runtime, but not part of the resource type.
+      yield* ((yield* Worker) as any).export(namespace, {
         kind: "durableObject",
         constructor,
         services: yield* Effect.context<never>(),
@@ -373,41 +316,38 @@ export const DurableObject: DurableObjectClass = taggedFunction(
     });
 
     /**
-     * Remote-caller path — runs while the layer builds inside any non-fleet
-     * host. Registers the fleet connection env (+ the fleet host's caller
-     * fragment) through the binding channel and returns a stub over the
-     * fleet gateway.
+     * Remote-caller path — runs while the layer builds inside any non-worker
+     * host. At plan, delegates the caller binding to the worker's engine; at
+     * runtime, speaks the engine-neutral fetch-RPC protocol against the
+     * standard connection env keys.
      */
     const remote = (workerRef: WorkerRef) =>
       Effect.gen(function* () {
-        const workerClass = resolveClassRef(workerRef);
-        const urlKey = sanitizeKey(`CELLD_${workerClass.LogicalId}_URL`);
-        const secretKey = sanitizeKey(`CELLD_${workerClass.LogicalId}_SECRET`);
+        const workerClass = resolveWorkerRef(workerRef);
+        const { urlKey, secretKey } = workerConnectionKeys(
+          workerClass.LogicalId,
+        );
 
         if (!globalThis.__ALCHEMY_RUNTIME__) {
           const host = yield* Binding.Host;
           if (
             host !== undefined &&
             typeof (host as any).bind === "function" &&
-            !isCelldWorker(host)
+            !isAlchemyWorker(host)
           ) {
-            // Yield the worker class: resource effects memoize by logical id,
-            // so this references the stack's worker node and orders the
-            // worker (and its fleet) ahead of this host in the graph.
+            // Yield the worker class: resource effects memoize by logical
+            // id, so this references the stack's worker node and orders it
+            // (and its infrastructure) ahead of this host in the graph.
             const worker = (yield* asEffect(workerClass as any)) as any;
-            const adapter = yield* findFleetHost(worker.Props?.hostKind);
-            const fragment = yield* adapter.callerBinding({
-              target: worker,
+            const engine = yield* findWorkerEngine(worker.Props?.target?.kind);
+            const data = yield* engine.callerBinding({
+              worker,
               host,
+              urlKey,
+              secretKey,
             });
-            yield* (host as any).bind`Allow(${host}, Celld.Call(${worker}))`({
-              ...fragment,
-              env: {
-                ...(fragment as { env?: Record<string, unknown> }).env,
-                [urlKey]: worker.fleetUrl,
-                [secretKey]: worker.fleetSecret,
-              },
-            });
+            yield* (host as any)
+              .bind`Allow(${host}, Alchemy.Worker.Call(${worker}))`(data);
           }
         }
 
@@ -432,22 +372,25 @@ export const DurableObject: DurableObjectClass = taggedFunction(
               if (url === undefined || secret === undefined) {
                 return yield* Effect.die(
                   new Error(
-                    `DurableObject '${namespace}' is not bound to this host — the fleet connection env (${urlKey}) is missing`,
+                    `DurableObject '${namespace}' is not bound to this host — the worker connection env (${urlKey}) is missing`,
                   ),
                 );
               }
+              // The stub builds requests against its dummy default base —
+              // graft the RPC path onto the worker's gateway URL.
+              const rpcPath = new URL(request.url, "http://alchemy-rpc")
+                .pathname;
               const target = request.pipe(
-                HttpClientRequest.prependUrl(
-                  `${url}/${encodeURIComponent(namespace)}/${encodeURIComponent(instanceName)}`,
+                HttpClientRequest.setUrl(
+                  `${url}/${encodeURIComponent(namespace)}/${encodeURIComponent(instanceName)}${rpcPath}`,
                 ),
-                HttpClientRequest.setHeader(FLEET_SECRET_HEADER, secret),
+                HttpClientRequest.setHeader(WORKER_SECRET_HEADER, secret),
               );
               // Bounded retry over transport errors and not-reached
-              // gateway statuses (502/503/504) — fleet nodes restart on
-              // deploys and DNS may race task churn. A 500 is NOT retried
-              // (the request may have reached the cell) but still FAILS the
-              // call — the RPC protocol answers 200 with an envelope, so any
-              // other status is an infrastructure error, never a value.
+              // gateway statuses (502/503/504). A 500 is NOT retried (the
+              // request may have reached the cell) but still FAILS the
+              // call — the RPC protocol answers 200 with an envelope, so
+              // any other status is an infrastructure error, never a value.
               return yield* client.execute(target).pipe(
                 Effect.flatMap((response) =>
                   response.status >= 300
@@ -457,7 +400,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
                           Effect.fail(
                             Object.assign(
                               new Error(
-                                `fleet gateway returned ${response.status}${body ? `: ${body.slice(0, 256)}` : ""}`,
+                                `worker gateway returned ${response.status}${body ? `: ${body.slice(0, 256)}` : ""}`,
                               ),
                               { status: response.status },
                             ),
@@ -493,7 +436,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
                 fetch: () =>
                   Effect.die(
                     new Error(
-                      "HTTP fetch pass-through on a remote Celld stub is not supported yet — call RPC methods, or send requests to the fleet URL directly",
+                      "HTTP fetch pass-through on a remote stub is not supported yet — call RPC methods, or send requests to the worker URL directly",
                     ),
                   ),
               },
@@ -502,9 +445,9 @@ export const DurableObject: DurableObjectClass = taggedFunction(
       });
 
     /**
-     * The layer body: hosting when built inside the target fleet, remote
-     * everywhere else. The fleet is a property of the LAYER — running the
-     * class on a different fleet is just a different layer.
+     * The layer body: hosting when built inside the target worker, remote
+     * everywhere else. The worker is a property of the LAYER — running the
+     * class on a different worker is just a different layer.
      */
     const dispatch = (
       workerRef: WorkerRef,
@@ -518,8 +461,8 @@ export const DurableObject: DurableObjectClass = taggedFunction(
     ) =>
       Effect.gen(function* () {
         const host = yield* Binding.Host;
-        const workerClass = resolveClassRef(workerRef);
-        if (isCelldWorker(host) && host.LogicalId === workerClass.LogicalId) {
+        const workerClass = resolveWorkerRef(workerRef);
+        if (isAlchemyWorker(host) && host.LogicalId === workerClass.LogicalId) {
           if (impl === undefined) {
             return yield* Effect.die(
               new Error(
@@ -533,12 +476,12 @@ export const DurableObject: DurableObjectClass = taggedFunction(
       });
 
     if (inlineImpl !== undefined) {
-      // Inline form: hosted by whichever fleet yields the class; outside a
-      // fleet the caller selects the fleet with `.client(fleet)`.
+      // Inline form: hosted by whichever worker yields the class; outside a
+      // worker the caller selects the worker with `.client(worker)`.
       return class extends effectClass(
         Effect.gen(function* () {
           const host = yield* Binding.Host;
-          if (isCelldWorker(host)) {
+          if (isAlchemyWorker(host)) {
             return yield* makeHost(inlineImpl as any);
           }
           const provided = yield* Effect.serviceOption(tag);
@@ -547,8 +490,8 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           }
           return yield* Effect.die(
             new Error(
-              `DurableObject '${namespace}' was yielded outside a Celld ` +
-                `Worker without one selected — provide ${namespace}.client(worker).`,
+              `DurableObject '${namespace}' was yielded outside a worker ` +
+                `without one selected — provide ${namespace}.client(worker).`,
             ),
           );
         }),
