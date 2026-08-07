@@ -122,7 +122,7 @@ export class WorkerProxy extends DurableObject<Env> {
   }
 }
 
-class ProxyError extends Schema.TaggedErrorClass<ProxyError>()("ProxyError", {
+class ProxyError extends Schema.TaggedError<ProxyError>()("ProxyError", {
   message: Schema.String,
   hint: Schema.optional(Schema.String),
   retryable: Schema.optional(Schema.Boolean),

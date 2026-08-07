@@ -42,7 +42,7 @@ import * as Schema from "effect/Schema";
 import { isLocalId } from "../LocalRuntime.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
 
-export class WorkerValidationError extends Schema.TaggedErrorClass<WorkerValidationError>()(
+export class WorkerValidationError extends Schema.TaggedError<WorkerValidationError>()(
   "WorkerValidationError",
   {
     message: Schema.String,

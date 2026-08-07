@@ -343,8 +343,10 @@ export function distilledCloudflare(
         // Zero-config sessions (mirrors upstream): default the session
         // driver to Cloudflare KV against `sessionKVBindingName` when the
         // user hasn't configured one.
+        // `session: false` is the user explicitly disabling sessions —
+        // respect it and skip the zero-config defaulting.
         let session = config.session;
-        if (sessions && !session?.driver) {
+        if (sessions && session !== false && !session?.driver) {
           logger.info(
             `Enabling sessions with Cloudflare KV with the "${sessionKVBindingName}" KV binding.`,
           );
@@ -357,7 +359,9 @@ export function distilledCloudflare(
           } as typeof config.session;
         }
         const needsSessionKVBinding =
-          sessions && usesCloudflareKVSessionDriver(session);
+          sessions &&
+          session !== false &&
+          usesCloudflareKVSessionDriver(session);
         _needsSessionKVBinding = needsSessionKVBinding;
 
         // In dev, satisfy the session KV binding with an in-memory local KV
