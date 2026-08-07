@@ -38,6 +38,15 @@ jobs:
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
 
+      - name: Restore Astro build cache
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: website/node_modules/.astro
+          key: astro-${{ runner.os }}-${{ github.event.pull_request.number || 'main' }}-${{ github.sha }}
+          restore-keys: |
+            astro-${{ runner.os }}-${{ github.event.pull_request.number || 'main' }}-
+            astro-${{ runner.os }}-main-
+
       - run: bun install
       - run: bun tsc -b
       # An internal PR carrying `deploy-website` gets a full Astro build in
