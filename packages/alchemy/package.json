@@ -470,6 +470,7 @@
     "mongodb": "^6.10.0",
     "mysql2": "^3.15.3",
     "pg": "^8.13.0",
+    "rivetkit": "^2.3.10",
     "vite": "catalog:",
     "ws": "catalog:"
   },

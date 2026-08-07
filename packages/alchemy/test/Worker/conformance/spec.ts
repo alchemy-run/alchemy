@@ -76,7 +76,10 @@ const get = (url: string) =>
  * Engine suites call this from `beforeAll` so propagation delay surfaces
  * as one slow hook rather than a wall of 404s across every test.
  */
-export const waitForReady = (baseUrl: string) =>
+export const waitForReady = (
+  baseUrl: string,
+  options?: { attempts?: number; base?: string },
+) =>
   HttpClient.get(`${baseUrl}/kv/__readiness/get`).pipe(
     Effect.flatMap((response) =>
       warming(response.status)
@@ -84,8 +87,11 @@ export const waitForReady = (baseUrl: string) =>
         : Effect.succeed(response.status),
     ),
     Effect.retry({
-      schedule: Schedule.exponential("1 second", 1.4),
-      times: 15,
+      schedule:
+        options?.base === undefined
+          ? Schedule.exponential("1 second", 1.4)
+          : Schedule.fixed(options.base as any),
+      times: options?.attempts ?? 15,
     }),
   );
 
