@@ -64,6 +64,29 @@ export interface WorkerTargetService {
     nativeBinding: any,
     namespace: string,
   ) => DurableObjectNamespaceClient;
+  /**
+   * Build the namespace client a REMOTE caller (an AWS Lambda, an ECS task)
+   * uses to reach this engine's Durable Objects, from the connection
+   * material the engine's `callerBinding` bound into the caller's
+   * environment.
+   *
+   * This lives on the TARGET rather than the engine deliberately. Engines
+   * are deploy-time provider layers and do not exist inside a deployed
+   * caller's bundle, so resolving the protocol through
+   * {@link findWorkerEngine} at runtime would typecheck and then die in
+   * production. The target layer is provided in the caller's own
+   * `Effect.provide` chain, so it is present in both phases — and a caller
+   * that forgets it fails to COMPILE.
+   *
+   * Engines differ here: celld and Cloudflare serve alchemy's fetch-RPC on
+   * the worker gateway (`POST {url}/{ns}/{instance}/__rpc__/{method}`);
+   * Rivet speaks its own gateway protocol.
+   */
+  readonly remoteDurableObject: (options: {
+    readonly url: string;
+    readonly secret: string;
+    readonly namespace: string;
+  }) => DurableObjectNamespaceClient;
 }
 
 export class WorkerTarget extends Context.Service<

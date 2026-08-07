@@ -6,6 +6,8 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Celld from "@/Celld";
+import * as Layer from "effect/Layer";
 import { Counter, CounterLive } from "./counter.ts";
 
 /**
@@ -112,5 +114,9 @@ export default class Api extends AWS.Lambda.Function<Api>()(
         }
       }),
     };
-  }).pipe(Effect.provide(CounterLive)),
+  }).pipe(
+    // The engine layer supplies the remote transport — `Celld.Worker()`
+    // with no props is client mode (this Lambda deploys nothing).
+    Effect.provide(CounterLive.pipe(Layer.provideMerge(Celld.Worker()))),
+  ),
 ) {}

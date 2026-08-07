@@ -37,6 +37,9 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as Redacted from "effect/Redacted";
 import * as Artifacts from "../Artifacts.ts";
 import * as Output from "../Output.ts";
@@ -60,6 +63,7 @@ import type { Fleet } from "./Fleet.ts";
 import { makeCelldVirtualEntry } from "./FleetEntry.ts";
 import {
   FLEET_DEPLOYMENT_VAR,
+  FLEET_SECRET_HEADER,
   FLEET_SECRET_VAR,
   makeGatewayFetch,
 } from "./FleetGateway.ts";
@@ -131,25 +135,107 @@ const localDurableObject = (nativeBinding: any) => {
 };
 
 /**
+ * The celld REMOTE transport: alchemy's fetch-RPC against the worker's
+ * gateway — `POST {url}/{namespace}/{instance}/__rpc__/{method}` with the
+ * fleet secret header. Bounded retry over transport errors and
+ * not-reached gateway statuses (502/503/504); a 500 is NOT retried (the
+ * request may have reached the cell) but still fails the call, since the
+ * RPC protocol answers 200 with an envelope and any other status is
+ * infrastructure, never a value.
+ */
+const remoteDurableObject = ({
+  url,
+  secret,
+  namespace,
+}: {
+  url: string;
+  secret: string;
+  namespace: string;
+}) => ({
+  getByName: (name: string) =>
+    makeFetchRpcStub<any>({
+      fetch: (request) =>
+        Effect.gen(function* () {
+          const client = yield* HttpClient.HttpClient;
+          // The stub builds requests against its dummy default base —
+          // graft the RPC path onto the worker's gateway URL.
+          const rpcPath = new URL(request.url, "http://alchemy-rpc").pathname;
+          return yield* client
+            .execute(
+              request.pipe(
+                HttpClientRequest.setUrl(
+                  `${url}/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}${rpcPath}`,
+                ),
+                HttpClientRequest.setHeader(FLEET_SECRET_HEADER, secret),
+              ),
+            )
+            .pipe(
+              Effect.flatMap((response) =>
+                response.status >= 300
+                  ? response.text.pipe(
+                      Effect.orElseSucceed(() => ""),
+                      Effect.flatMap((body) =>
+                        Effect.fail(
+                          Object.assign(
+                            new Error(
+                              `worker gateway returned ${response.status}${body ? `: ${body.slice(0, 256)}` : ""}`,
+                            ),
+                            { status: response.status },
+                          ),
+                        ),
+                      ),
+                    )
+                  : Effect.succeed(response),
+              ),
+              Effect.retry({
+                while: (error): boolean =>
+                  !(
+                    typeof error === "object" &&
+                    error !== null &&
+                    "status" in error
+                  ) ||
+                  (error as { status: number }).status === 502 ||
+                  (error as { status: number }).status === 503 ||
+                  (error as { status: number }).status === 504,
+                schedule: Schedule.exponential("500 millis"),
+                times: 5,
+              }),
+            );
+        }) as any,
+      base: {
+        fetch: () =>
+          Effect.die(
+            new Error(
+              "HTTP fetch pass-through on a remote stub is not supported yet — call RPC methods, or send requests to the worker URL directly",
+            ),
+          ),
+      },
+    }),
+});
+
+/**
  * The celld target layer. Resolves the fleet's connection material at plan
  * (a no-op at runtime — the bundle re-executes this layer, where only the
  * runtime behaviors matter) and records the target on the worker's runtime
  * context.
  */
-export const Worker = (props: CelldWorkerProps): Layer.Layer<WorkerTarget> =>
+export const Worker = (props?: CelldWorkerProps): Layer.Layer<WorkerTarget> =>
   Layer.effect(
     WorkerTarget,
     Effect.gen(function* () {
+      // No props = CLIENT mode: the layer supplies only the runtime
+      // behaviors (transport, stub flavors) so a caller can reach a celld
+      // worker. With props it can additionally deploy one.
       let targetProps: Record<string, unknown> = {
         engine: CELLD_ENGINE,
-        main: props.main,
-        celldVersion: props.celldVersion,
-        compatibilityDate: props.compatibilityDate,
-        compatibilityFlags: props.compatibilityFlags,
-        build: props.build,
+        main: props?.main,
+        celldVersion: props?.celldVersion,
+        compatibilityDate: props?.compatibilityDate,
+        compatibilityFlags: props?.compatibilityFlags,
+        build: props?.build,
       };
 
-      if (!globalThis.__ALCHEMY_RUNTIME__) {
+      if (!globalThis.__ALCHEMY_RUNTIME__ && props !== undefined) {
         // Resolve the fleet and copy its connection material. Yielding the
         // fleet class references the stack's fleet node (memoized by
         // logical id) and orders it ahead of the worker in the graph. The
@@ -176,6 +262,7 @@ export const Worker = (props: CelldWorkerProps): Layer.Layer<WorkerTarget> =>
         props: targetProps,
         wrapServe: (handler) => makeGatewayFetch(handler),
         localDurableObject,
+        remoteDurableObject,
       };
 
       // Record the target on the ambient worker runtime context so the

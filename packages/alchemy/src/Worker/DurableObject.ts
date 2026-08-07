@@ -14,7 +14,7 @@
  * ```ts
  * export class Counter extends Alchemy.DurableObject<Counter, Shape>()("Counter") {}
  * export const CounterLive = Counter.make(Api, impl);
- * // callers: Effect.provide(CounterLive) — or Counter.client(Api) without the impl
+ * // callers: Effect.provide(CounterLive.pipe(Layer.provideMerge(Celld.Worker())))
  * ```
  */
 import * as Context from "effect/Context";
@@ -22,14 +22,10 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
-import * as Schedule from "effect/Schedule";
 import type { Scope } from "effect/Scope";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as Binding from "../Binding.ts";
 import { ALCHEMY_PHASE } from "../Phase.ts";
 import type { MainRpc, PlatformServices } from "../Platform.ts";
-import { makeFetchRpcStub } from "../Rpc.ts";
 import { CurrentRuntimeContext, sanitizeKey } from "../RuntimeContext.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import { effectClass, taggedFunction } from "../Util/effect.ts";
@@ -125,8 +121,7 @@ export interface DurableObjectClass {
   <Self, Shape = never>(): {
     /**
      * Inline form: the implementation is coupled to the class. Hosted by
-     * whichever worker yields it; callers select the worker with
-     * `.client(worker)`.
+     * whichever worker yields it.
      */
     <
       ImplShape extends MainRpc<DurableObjectState>,
@@ -148,8 +143,6 @@ export interface DurableObjectClass {
       never
     > & {
       new (_: never): [Shape] extends [never] ? ImplShape : Shape;
-      /** Caller-side layer selecting the worker that hosts this class. */
-      client(worker: WorkerRef): Layer.Layer<Self>;
     };
     <Name extends string>(
       name: Name,
@@ -177,11 +170,6 @@ export interface DurableObjectClass {
           DurableObjectServices | Req
         >,
       ): Layer.Layer<Self, never, Exclude<Req, DurableObjectServices>>;
-      /**
-       * A caller-only layer: selects the worker without carrying the
-       * implementation into the caller's bundle. Never hosts.
-       */
-      client(worker: WorkerRef): Layer.Layer<Self>;
     };
   };
 }
@@ -351,96 +339,35 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           }
         }
 
-        const client = yield* Effect.serviceOption(HttpClient.HttpClient).pipe(
-          Effect.map(Option.getOrUndefined),
-        );
+        // The TARGET is a real requirement (see Engine.ts): it propagates
+        // into the caller's `R`, so a host that never provides an engine's
+        // layer fails to compile instead of dying in production.
+        const target = yield* WorkerTarget;
         const ctx = yield* CurrentRuntimeContext;
 
-        const call =
-          (instanceName: string) =>
-          (request: HttpClientRequest.HttpClientRequest) =>
-            Effect.gen(function* () {
-              if (client === undefined || ctx === undefined) {
-                return yield* Effect.die(
-                  new Error(
-                    `DurableObject '${namespace}' can only be called at runtime inside a deployed host`,
-                  ),
-                );
-              }
-              const url = rawValue(yield* ctx.get(urlKey));
-              const secret = rawValue(yield* ctx.get(secretKey));
-              if (url === undefined || secret === undefined) {
-                return yield* Effect.die(
-                  new Error(
-                    `DurableObject '${namespace}' is not bound to this host — the worker connection env (${urlKey}) is missing`,
-                  ),
-                );
-              }
-              // The stub builds requests against its dummy default base —
-              // graft the RPC path onto the worker's gateway URL.
-              const rpcPath = new URL(request.url, "http://alchemy-rpc")
-                .pathname;
-              const target = request.pipe(
-                HttpClientRequest.setUrl(
-                  `${url}/${encodeURIComponent(namespace)}/${encodeURIComponent(instanceName)}${rpcPath}`,
-                ),
-                HttpClientRequest.setHeader(WORKER_SECRET_HEADER, secret),
-              );
-              // Bounded retry over transport errors and not-reached
-              // gateway statuses (502/503/504). A 500 is NOT retried (the
-              // request may have reached the cell) but still FAILS the
-              // call — the RPC protocol answers 200 with an envelope, so
-              // any other status is an infrastructure error, never a value.
-              return yield* client.execute(target).pipe(
-                Effect.flatMap((response) =>
-                  response.status >= 300
-                    ? response.text.pipe(
-                        Effect.orElseSucceed(() => ""),
-                        Effect.flatMap((body) =>
-                          Effect.fail(
-                            Object.assign(
-                              new Error(
-                                `worker gateway returned ${response.status}${body ? `: ${body.slice(0, 256)}` : ""}`,
-                              ),
-                              { status: response.status },
-                            ),
-                          ),
-                        ),
-                      )
-                    : Effect.succeed(response),
-                ),
-                Effect.retry({
-                  while: (error): boolean =>
-                    !(
-                      typeof error === "object" &&
-                      error !== null &&
-                      "status" in error
-                    ) ||
-                    (error as { status: number }).status === 502 ||
-                    (error as { status: number }).status === 503 ||
-                    (error as { status: number }).status === 504,
-                  schedule: Schedule.exponential("500 millis"),
-                  times: 5,
-                }),
-              );
-            });
+        // Read the bound connection once: empty at plan (nothing to call
+        // yet), populated inside the deployed host by `callerBinding`.
+        const url = ctx ? rawValue(yield* ctx.get(urlKey)) : undefined;
+        const secret = ctx ? rawValue(yield* ctx.get(secretKey)) : undefined;
+        const remoteClient =
+          url !== undefined && secret !== undefined
+            ? target.remoteDurableObject({ url, secret, namespace })
+            : undefined;
 
         return {
           Type: TypeId,
           LogicalId: namespace,
           name: namespace,
-          getByName: (name: string) =>
-            makeFetchRpcStub<DurableObjectStub<any>>({
-              fetch: call(name),
-              base: {
-                fetch: () =>
-                  Effect.die(
-                    new Error(
-                      "HTTP fetch pass-through on a remote stub is not supported yet — call RPC methods, or send requests to the worker URL directly",
-                    ),
-                  ),
-              },
-            }),
+          getByName: (name: string) => {
+            if (remoteClient === undefined) {
+              throw new Error(
+                `DurableObject '${namespace}' is not reachable from this host — ` +
+                  `it can only be called at runtime, and the worker connection ` +
+                  `env (${urlKey}) must be bound by the engine's caller binding.`,
+              );
+            }
+            return remoteClient.getByName(name) as DurableObjectStub<any>;
+          },
         } satisfies DurableObject<any>;
       });
 
@@ -466,7 +393,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           if (impl === undefined) {
             return yield* Effect.die(
               new Error(
-                `DurableObject '${namespace}' is hosted by worker '${host.LogicalId}' but only a client layer was provided — provide ${namespace}.make(${workerClass.LogicalId}, impl) on the worker impl.`,
+                `DurableObject '${namespace}' is hosted by worker '${host.LogicalId}' but no implementation was provided — provide ${namespace}.make(${workerClass.LogicalId}, impl) on the worker impl.`,
               ),
             );
           }
@@ -476,8 +403,8 @@ export const DurableObject: DurableObjectClass = taggedFunction(
       });
 
     if (inlineImpl !== undefined) {
-      // Inline form: hosted by whichever worker yields the class; outside a
-      // worker the caller selects the worker with `.client(worker)`.
+      // Inline form: hosted by whichever worker yields the class; outside
+      // a worker it resolves the remote stub through the provided target.
       return class extends effectClass(
         Effect.gen(function* () {
           const host = yield* Binding.Host;
@@ -491,14 +418,12 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           return yield* Effect.die(
             new Error(
               `DurableObject '${namespace}' was yielded outside a worker ` +
-                `without one selected — provide ${namespace}.client(worker).`,
+                "without a deployment target — provide the engine's layer " +
+                "(e.g. `Celld.Worker()` / `Rivet.Worker()`).",
             ),
           );
         }),
-      ) {
-        static client = (worker: WorkerRef) =>
-          Layer.effect(tag, dispatch(worker, inlineImpl as any));
-      };
+      ) {};
     }
 
     return class extends effectClass(tag as Effect.Effect<any, never, any>) {
@@ -508,9 +433,6 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           Effect.Effect<DurableObjectShape, never, DurableObjectState | Req>
         >,
       ) => Layer.effect(tag, dispatch(worker, impl as any));
-
-      static client = (worker: WorkerRef) =>
-        Layer.effect(tag, dispatch(worker, undefined));
     };
   },
 ) as any;
