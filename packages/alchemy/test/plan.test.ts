@@ -3883,8 +3883,8 @@ describe("provider modes (local ⇄ live)", () => {
   //   - the resolved mode lands on the plan node (`node.mode`)
   //   - a persisted mode different from the resolved mode forces a
   //     REPLACEMENT, overriding whatever the provider diff would say
-  //   - legacy rows (no persisted mode) are assumed to be the current run's
-  //     mode — no replacement churn
+  //   - legacy rows (no persisted mode) are assumed live, unless their
+  //     attrs carry the `dev:` identity marker (then local)
   //   - deletions carry the persisted mode so orphans are torn down by the
   //     provider that created them
   //   - a mode-switching upstream invalidates its attrs for downstream diffs

@@ -349,9 +349,10 @@ export const make = <A>(
      * Has this resource switched provider modes since it was last
      * reconciled? Rows without a persisted mode were written by a
      * pre-provider-mode engine (or a provider that only became dual-mode
-     * later) — their physical resource is LIVE (see {@link stampedMode}),
-     * so a dev run replaces them exactly like a stamped live row. Live
-     * runs see no churn: `stampedMode(undefined) === "live"`.
+     * later) — their physical resource is LIVE unless its attrs carry a
+     * `dev:` identity marker proving it was reconciled locally (see
+     * {@link stampedMode}). A dev run replaces unstamped live rows exactly
+     * like stamped live rows; live runs replace unstamped marker rows.
      */
     const hasModeSwitched = (
       mode: ProviderMode | undefined,
@@ -359,7 +360,7 @@ export const make = <A>(
     ): boolean =>
       mode !== undefined &&
       oldState !== undefined &&
-      stampedMode(oldState.providerMode) !== mode;
+      stampedMode(oldState) !== mode;
 
     const resourceFqns = yield* state.list({
       stack: stackName,
@@ -1787,13 +1788,16 @@ export const make = <A>(
               // and the remediation instead of limping into a partial apply.
               //
               // Orphan deletes resolve the provider variant for the mode
-              // that created the row (`providerMode`), so e.g. a local dev
+              // that created the row (`providerMode`, or the `dev:` marker
+              // inference for legacy unstamped rows), so e.g. a local dev
               // worker's row is deleted by the local provider even during a
               // live deploy — and vice versa. Unstamped rows are physically
-              // live (see stampedMode), never the run default.
+              // live unless their attrs carry the marker (see stampedMode),
+              // never the run default.
+              const rowMode = stampedMode(oldState);
               const providerOption = yield* tryFindProviderByType(
                 resourceType,
-                stampedMode(oldState.providerMode),
+                rowMode,
               );
               if (Option.isNone(providerOption)) {
                 return yield* Effect.die(

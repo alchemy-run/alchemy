@@ -1388,11 +1388,11 @@ const executeNode = (
               // mode that created it — after a local ⇄ live switch,
               // `node.provider` (the new mode) cannot tear down the other
               // runtime's instance. Unstamped rows (legacy or written by a
-              // mode-agnostic provider) are physically live — see
-              // stampedMode.
+              // mode-agnostic provider) are physically live, unless their
+              // attrs carry the `dev:` identity marker — see stampedMode.
               const oldProvider = yield* findProviderByType(
                 node.resource.Type,
-                stampedMode(old.providerMode),
+                stampedMode(old),
               );
               yield* oldProvider
                 .delete({
@@ -2199,8 +2199,9 @@ const collectGarbage = Effect.fn(function* (
               downstream: node.downstream,
               props: node.state.props,
               attr: node.state.attr,
-              // Plan resolved this provider for the row's persisted
-              // `providerMode` (see the deletions builder in Plan.ts).
+              // Plan resolved this provider for the row's persisted (or
+              // marker-inferred) `providerMode` (see the deletions builder
+              // in Plan.ts).
               provider: node.provider,
               providerMode: node.state.providerMode,
             }
@@ -2218,10 +2219,11 @@ const collectGarbage = Effect.fn(function* (
               // the replaced-chain generations that bypass plan. The old
               // generation is torn down with the provider variant of the
               // mode that created it (local ⇄ live replacements);
-              // unstamped rows are physically live (see stampedMode).
+              // unstamped rows are physically live unless their attrs
+              // carry the `dev:` identity marker (see stampedMode).
               provider: yield* tryFindProviderByType(
                 node.old.resourceType,
-                stampedMode(node.old.providerMode),
+                stampedMode(node.old),
               ).pipe(
                 Effect.flatMap(
                   Option.match({

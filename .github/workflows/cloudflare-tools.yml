@@ -45,10 +45,21 @@ jobs:
           bun-version: latest
 
       - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        id: bun-cache
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
+
+      # bun on Windows cannot rename a freshly patched package over a stale
+      # cache entry (ENOTEMPTY, oven-sh/bun#18248), and a failed job never
+      # saves its cache — so once a `patchedDependencies` change lands, the
+      # restore-keys fallback keeps restoring the pre-patch cache and every
+      # install wedges. On an exact-key miss (lockfile changed), start from
+      # a clean install cache; exact hits skip this and stay warm.
+      - if: runner.os == 'Windows' && steps.bun-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: bun pm cache rm
 
       - run: bun install
       - run: bun run typecheck:cloudflare-packages

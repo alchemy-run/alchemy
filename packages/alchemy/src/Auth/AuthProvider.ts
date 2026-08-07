@@ -40,13 +40,10 @@ const LOCKED_METHODS = new Set(["read", "login", "logout", "configure"]);
 const INTERACTIVE_METHODS = new Set(["login", "configure"]);
 const interactiveMutex = Semaphore.makeUnsafe(1);
 
-export class AuthError extends Schema.TaggedErrorClass<AuthError>()(
-  "AuthError",
-  {
-    message: Schema.String,
-    cause: Schema.optional(Schema.Defect()),
-  },
-) {}
+export class AuthError extends Schema.TaggedError<AuthError>()("AuthError", {
+  message: Schema.String,
+  cause: Schema.optional(Schema.Defect()),
+}) {}
 
 export class AuthProviders extends Context.Service<
   AuthProviders,

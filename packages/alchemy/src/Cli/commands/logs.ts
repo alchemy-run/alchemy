@@ -126,7 +126,7 @@ export const logsCommand = Command.make(
             // row (a local dev worker's logs come from the local provider).
             const provider = yield* findProviderByType(
               resource.Type,
-              stampedMode((resourceState as any).providerMode),
+              stampedMode(resourceState as any),
             );
             if (!provider.logs) continue;
 

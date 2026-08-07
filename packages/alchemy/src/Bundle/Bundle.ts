@@ -95,7 +95,7 @@ export interface BundleFile {
   readonly hash: string;
 }
 
-export class BundleError extends Schema.TaggedErrorClass<BundleError>()(
+export class BundleError extends Schema.TaggedError<BundleError>()(
   "BundleError",
   {
     message: Schema.String,

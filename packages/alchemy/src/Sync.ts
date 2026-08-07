@@ -202,9 +202,10 @@ export const sync = (
 
       // Observe with the provider variant of the mode that created the row —
       // a local dev worker's state must be read by the local provider.
+      // Legacy unstamped rows infer "local" from a `dev:` identity marker.
       const provider = yield* findProviderByType(
         resourceType,
-        stampedMode(old.providerMode),
+        stampedMode(old),
       );
       if (!provider.read) {
         return yield* skip(
@@ -461,7 +462,7 @@ export const plan = (stack: {
       // switches modes — a local ⇄ live switch is a plan-time replacement).
       const provider = yield* findProviderByType(
         persisted.resourceType,
-        stampedMode(persisted.providerMode),
+        stampedMode(persisted),
       );
       const action =
         r.action === "drifted"

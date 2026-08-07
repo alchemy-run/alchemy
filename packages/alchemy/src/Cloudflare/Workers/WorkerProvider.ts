@@ -29,6 +29,7 @@ import { initialCwd } from "../../Util/Node.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { localRuntimeServices } from "../LocalRuntime.ts";
+import { detachQueueConsumersOfScript } from "../Queues/Consumer.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import { resolveZoneId } from "../Zone/lookup.ts";
 import {
@@ -762,7 +763,23 @@ const deleteWorkerScript = (
         force: true,
       });
     }
-    return yield* workers.deleteScript({ accountId, scriptName, force: true });
+    return yield* workers
+      .deleteScript({ accountId, scriptName, force: true })
+      .pipe(
+        // The script is still registered as a queue consumer (even with
+        // `force`). Normally the sibling Consumer resource detaches first,
+        // but state loss (e.g. a consumer row rewritten by a pre-stamping
+        // dev run) can strand a live consumer pointing at this script with
+        // nothing left to delete it. The script is going away, so any
+        // consumer wiring pointing at it is dead — detach and retry.
+        Effect.catchTag("QueueConsumerConflict", () =>
+          detachQueueConsumersOfScript(accountId, scriptName).pipe(
+            Effect.andThen(
+              workers.deleteScript({ accountId, scriptName, force: true }),
+            ),
+          ),
+        ),
+      );
   });
 
 /**
