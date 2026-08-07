@@ -4,6 +4,7 @@ export * from "./EdgeSession.ts";
 export * from "./Fetcher.ts";
 export * from "./Providers.ts";
 export * from "./StateStore/index.ts";
+export * from "./WorkerEngine.ts";
 export * from "./Workers/RpcAsync.ts";
 
 // ── services (namespaced) ──

@@ -4,6 +4,7 @@
  *
  * Like `counter.ts`, this file must stay engine-neutral.
  */
+import type { HttpEffect } from "@/Http";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -13,7 +14,7 @@ import type { Counter } from "./counter.ts";
 type Namespace = { getByName: (name: string) => any };
 
 /** Build the conformance `fetch` handler over a Durable Object namespace. */
-export const conformanceFetch = (counters: Namespace) =>
+export const conformanceFetch = (counters: Namespace): HttpEffect<any> =>
   Effect.gen(function* () {
     const request = yield* HttpServerRequest;
     const url = new URL(request.url, "http://conformance");
@@ -96,6 +97,6 @@ export const conformanceFetch = (counters: Namespace) =>
       return yield* HttpServerResponse.json(result);
     }
     return HttpServerResponse.text("Not Found", { status: 404 });
-  });
+  }) as HttpEffect<any>;
 
 export type { Counter };

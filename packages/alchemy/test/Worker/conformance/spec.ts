@@ -47,11 +47,20 @@ export interface ConformanceContext {
   readonly capabilities: EngineCapabilities;
 }
 
-/** GET a route, retrying only transport/5xx while the deployment warms. */
+/**
+ * GET a route, retrying while the deployment warms.
+ *
+ * 404 is retryable here: every conformance route is a real route, so a
+ * 404 means the edge has not yet mapped the hostname to the freshly
+ * deployed worker (workers.dev propagation answers `404 error code:
+ * 1042` for up to a minute after a first deploy).
+ */
+const warming = (status: number) => status >= 500 || status === 404;
+
 const get = (url: string) =>
   HttpClient.get(url).pipe(
     Effect.flatMap((response) =>
-      response.status >= 500
+      warming(response.status)
         ? Effect.fail(new Error(`upstream ${response.status}`))
         : Effect.succeed(response),
     ),
@@ -60,6 +69,24 @@ const get = (url: string) =>
       times: 6,
     }),
     Effect.flatMap((response) => response.json),
+  );
+
+/**
+ * Block until the deployed worker actually serves a conformance route.
+ * Engine suites call this from `beforeAll` so propagation delay surfaces
+ * as one slow hook rather than a wall of 404s across every test.
+ */
+export const waitForReady = (baseUrl: string) =>
+  HttpClient.get(`${baseUrl}/kv/__readiness/get`).pipe(
+    Effect.flatMap((response) =>
+      warming(response.status)
+        ? Effect.fail(new Error(`not ready: ${response.status}`))
+        : Effect.succeed(response.status),
+    ),
+    Effect.retry({
+      schedule: Schedule.exponential("1 second", 1.4),
+      times: 15,
+    }),
   );
 
 /**

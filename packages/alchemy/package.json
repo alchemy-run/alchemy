@@ -249,6 +249,12 @@
       "worker": "./src/Planetscale/*/index.ts",
       "import": "./lib/Planetscale/*/index.js"
     },
+    "./Rivet": {
+      "types": "./lib/Rivet/index.d.ts",
+      "bun": "./src/Rivet/index.ts",
+      "worker": "./src/Rivet/index.ts",
+      "import": "./lib/Rivet/index.js"
+    },
     "./Runtime": {
       "types": "./lib/Runtime.d.ts",
       "bun": "./src/Runtime.ts",
@@ -439,6 +445,7 @@
     "react-devtools-core": "^7.0.1",
     "react-dom": "catalog:fixtures",
     "react-router": "catalog:fixtures",
+    "rivetkit": "2.3.10",
     "solid-js": "catalog:",
     "tsconfig-paths": "^4.2.0",
     "tsdown": "^0.15.4",
