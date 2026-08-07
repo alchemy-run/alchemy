@@ -1,6 +1,11 @@
 [install]
-minimumReleaseAge = 0
+minimumReleaseAge = 259200
 minimumReleaseAgeExcludes = [
+  "astro",
+  "@astrojs/check",
+  "@astrojs/mdx",
+  "@astrojs/react",
+  "@astrojs/starlight",
   "@opentui/core",
   "@opentui/core-darwin-arm64",
   "@opentui/core-darwin-x64",
