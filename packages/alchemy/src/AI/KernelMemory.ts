@@ -1162,16 +1162,16 @@ export const KernelMemory: Layer.Layer<
               if (yield* Deferred.isDone(run.settled)) break;
               let items: Array<InboxItem> = yield* Queue.clear(run.inbox);
               if (items.length === 0 && quiescent) {
-                // the durability point of the restart surface: a
-                // parked thread survives the process (bootstrap §3).
-                // Saved BEFORE the parked observation goes out — a
-                // subscriber reacting to `parked` (the reload tool
-                // exiting the process) must find the snapshot on disk.
-                yield* saveSnapshot(run);
                 // PARKED: the run's work is done until the world moves.
                 // Quiet inputs deliberately DON'T factor in — they
                 // accumulate as context and never wake a parked run.
                 yield* observe(run, { type: "parked" });
+                // the durability point of the restart surface: a
+                // parked thread survives the process. Saved AFTER the
+                // parked observation so the snapshot's seq cursor
+                // includes it — a restored run must never re-issue an
+                // already-used seq (consumers dedupe by seq).
+                yield* saveSnapshot(run);
                 const wake = yield* Effect.raceFirst(
                   Effect.map(Queue.take(run.inbox), (item) => ({
                     settled: false as const,

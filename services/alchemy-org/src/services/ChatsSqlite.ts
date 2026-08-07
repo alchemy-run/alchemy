@@ -59,10 +59,13 @@ export const ChatsSqlite = (
       const memory = Context.get(context, AI.Chats);
 
       // ── replay: rebuild the projection from the persisted log ────
+      // ORDER BY (chat, seq), not rowid: an ON CONFLICT REPLACE gives
+      // the replacing row a fresh rowid, which would replay it out of
+      // order; seq is the canonical per-chat order.
       const rows = yield* Effect.sync(
         () =>
           db
-            .query("SELECT data FROM observations ORDER BY rowid ASC")
+            .query("SELECT data FROM observations ORDER BY chat_id, seq ASC")
             .all() as Array<{ data: string }>,
       );
       for (const row of rows) {
