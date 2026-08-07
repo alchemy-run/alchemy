@@ -1,9 +1,9 @@
 /**
- * The LOCAL toolbox, grouped by ACCESS LEVEL. The review bot composes
- * least privilege: QualityAssurance = Read + Run — verify, never
- * author (there is deliberately no Write group here).
+ * The LOCAL toolbox, grouped by ACCESS LEVEL — least privilege by
+ * composition: QualityAssurance = Read + Run (verify, never author);
+ * the Bootstrap = Read + Run + Write (it authors ITSELF).
  *
- * Both groups share ONE support layer (module const — Layer
+ * All groups share ONE support layer (module const — Layer
  * memoization by reference dedupes it across groups in a composition).
  */
 import * as Layer from "effect/Layer";
@@ -11,11 +11,13 @@ import { WorkspaceFilesLive } from "alchemy/Workspace";
 import { ToolOutputStoreLive } from "../lib/ToolOutputStore.ts";
 import {
   BashLocal,
+  EditFileLocal,
   GlobLocal,
   GrepLocal,
   ListDirectoryLocal,
   ReadFileLocal,
   ReadOutputLocal,
+  WriteFileLocal,
 } from "./index.ts";
 
 const LocalSupport = Layer.mergeAll(WorkspaceFilesLive, ToolOutputStoreLive);
@@ -34,3 +36,9 @@ export const ReadToolsLocal = Layer.mergeAll(
 export const RunToolsLocal = Layer.mergeAll(BashLocal, ReadOutputLocal).pipe(
   Layer.provide(LocalSupport),
 );
+
+/** Author files: the pen — digest-guarded edits and whole-file writes. */
+export const WriteToolsLocal = Layer.mergeAll(
+  EditFileLocal,
+  WriteFileLocal,
+).pipe(Layer.provide(LocalSupport));

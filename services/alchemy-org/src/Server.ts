@@ -1,17 +1,16 @@
 /**
- * The review bot, running on your machine — an Effectful
- * {@link LocalService.Vite} service hosting the bot as a detached
- * local process: the {@link Local} provide-list (KernelMemory,
- * profile credentials, REST polling, bun:sqlite, the read/run
- * toolbox) under the HTTP surface (Routes.ts), with the UI built by
- * Vite and served from the same address.
+ * The coder, running on your machine — an Effectful
+ * {@link LocalService.Vite} service hosting the agent as a detached
+ * local process: the {@link Local} provide-list (KernelMemory with
+ * sqlite durability, the read/run/write toolbox) under the HTTP
+ * surface (Routes.ts), with the UI built by Vite and served from the
+ * same address.
  *
- * Long-lived machinery (the GitHub poller, kernel run loops)
- * registers on the process Scope — so plain `Effect.provide(Local)`
- * is enough; the fibers survive init returning. GitHub credentials
- * resolve from the ALCHEMY PROFILE (`alchemy login`); running
- * additionally needs `ANTHROPIC_API_KEY` in the operator's
- * environment (the reconciler passes the shell env through).
+ * Long-lived machinery (kernel run loops) registers on the process
+ * Scope — so plain `Effect.provide(Local)` is enough; the fibers
+ * survive init returning. Running needs `ANTHROPIC_API_KEY` in the
+ * operator's environment (the reconciler passes the shell env
+ * through).
  */
 import * as AI from "alchemy/AI";
 import * as LocalService from "alchemy/Local";
@@ -20,10 +19,10 @@ import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Local } from "./Local.ts";
-import { orgRoutes } from "./Routes.ts";
+import { coderRoutes } from "./Routes.ts";
 
-export default class ReviewBotServer extends LocalService.Vite<ReviewBotServer>()(
-  "ReviewBot",
+export default class CoderServer extends LocalService.Vite<CoderServer>()(
+  "Coder",
   {
     // no port pinned: the runtime binds an ephemeral one and reports it
     // back through the startup handshake — it lands in the `url` output.
@@ -36,7 +35,7 @@ export default class ReviewBotServer extends LocalService.Vite<ReviewBotServer>(
   },
   Effect.gen(function* () {
     const gateway = yield* AI.AgentGateway;
-    const api = yield* HttpRouter.toHttpEffect(yield* orgRoutes);
+    const api = yield* HttpRouter.toHttpEffect(yield* coderRoutes);
 
     return {
       fetch: Effect.gen(function* () {

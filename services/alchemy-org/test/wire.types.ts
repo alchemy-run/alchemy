@@ -1,5 +1,5 @@
 /**
- * Type-level regression tests for the ReviewBot's WIRE surface
+ * Type-level regression tests for the Coder's WIRE surface
  * (alchemy/AI/Wire.ts): the charter's Layer type carries every tool
  * its prose can mention, so renderer coverage is compiler-checked.
  *
@@ -11,35 +11,32 @@
  * breaks.
  */
 import type * as AI from "alchemy/AI";
-import type { ReviewBotLive } from "../src/ReviewBot.ts";
-import type { QualityAssuranceGeneral } from "../src/skills/QualityAssurance.ts";
+import type { CoderLive } from "../src/Coder.ts";
 
-type Names = AI.ToolNames<typeof ReviewBotLive>;
+type Names = AI.ToolNames<typeof CoderLive>;
 
-// the full surface: inline tools AND class-tool splices
+// the full surface: every tool the stance mentions
 const _names: Names[] = [
-  "add_comment",
-  "submit_review",
-  "comment",
-  "sync_checkout",
-  "readDiff",
-  "readIssue",
+  "bash",
+  "editFile",
+  "glob",
+  "grep",
+  "listDirectory",
+  "readFile",
+  "readOutput",
+  "writeFile",
 ];
 
 // @ts-expect-error — not on the wire
 const _unknown: Names = "not_a_tool";
 
 // inputs are typed per tool, from the template's Parameter splices
-const _comment: AI.ToolInput<typeof ReviewBotLive, "comment"> = {
-  message: "looks good",
+const _grep: AI.ToolInput<typeof CoderLive, "grep"> = {
+  pattern: "log.*Error",
 };
 
-// @ts-expect-error — message is a string
-const _bad: AI.ToolInput<typeof ReviewBotLive, "comment"> = { message: 42 };
-
-const _readDiff: AI.ToolInput<typeof ReviewBotLive, "readDiff"> = {
-  pr: { owner: "o", repository: "r", number: 1, url: "https://x" },
-};
+// @ts-expect-error — pattern is a string
+const _bad: AI.ToolInput<typeof CoderLive, "grep"> = { pattern: 42 };
 
 // the registry contract is USERLAND — apps derive their own shape from
 // the core facts (this mirrors ui/components/tool-card.tsx's Renderers)
@@ -47,45 +44,25 @@ type Registry<L> = {
   [Name in AI.ToolNames<L> & string]: (input: AI.ToolInput<L, Name>) => 1;
 };
 
-// @ts-expect-error — sync_checkout has no renderer
-const _incomplete: Registry<typeof ReviewBotLive> = {
-  add_comment: () => 1,
-  submit_review: () => 1,
-  comment: () => 1,
-  readDiff: () => 1,
-  readIssue: () => 1,
+// @ts-expect-error — writeFile has no renderer
+const _incomplete: Registry<typeof CoderLive> = {
+  bash: () => 1,
+  editFile: () => 1,
+  glob: () => 1,
+  grep: () => 1,
+  listDirectory: () => 1,
+  readFile: () => 1,
+  readOutput: () => 1,
 };
 
-const _complete: Registry<typeof ReviewBotLive> = {
-  // input is the tool's ACTUAL parameter type, not Record<string, any>
-  add_comment: (input) => (
-    input.path satisfies string,
-    input.line satisfies number,
-    input.startLine satisfies number | undefined,
-    1
-  ),
-  submit_review: (input) => (
-    input.verdict satisfies "approve" | "request_changes",
-    1
-  ),
-  comment: (input) => (input.message satisfies string, 1),
-  readDiff: (input) => (input.pr.number satisfies number, 1),
-  readIssue: (input) => (input.issue.number satisfies number, 1),
-  sync_checkout: () => 1,
+const _complete: Registry<typeof CoderLive> = {
+  bash: (input) => (input.command satisfies string, 1),
+  editFile: (input) => (input.path satisfies string, 1),
+  glob: (input) => (input.pattern satisfies string, 1),
+  grep: (input) => (input.pattern satisfies string, 1),
+  // optionalKey params surface as OPTIONAL keys (the Tool.ts split)
+  listDirectory: (input) => (input.path satisfies string | undefined, 1),
+  readFile: (input) => (input.path satisfies string, 1),
+  readOutput: (input) => (input.outputId satisfies string, 1),
+  writeFile: (input) => (input.content satisfies string, 1),
 };
-
-// a SKILL's teaching carries its own wire — its tools never surface on
-// the host agent's type (encapsulation, mirroring the R channel), so
-// coverage for the pack is checked against the skill's make Layer
-type SkillNames = AI.ToolNames<typeof QualityAssuranceGeneral>;
-const _skillNames: SkillNames[] = [
-  "bash",
-  "grep",
-  "glob",
-  "listDirectory",
-  "readFile",
-  "readOutput",
-];
-
-// @ts-expect-error — the QA skill grants no editor (judge, not author)
-const _noEditor: SkillNames = "editFile";

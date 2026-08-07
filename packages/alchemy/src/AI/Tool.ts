@@ -5,13 +5,29 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Parameter } from "./Parameter.ts";
 import type { Services } from "./Services.ts";
 
+type ParamOf<Refs, N> = Extract<
+  Refs,
+  Parameter & { readonly "~alchemy/Name": N }
+>;
+
+// per-key PRECISE: each parameter name maps to ITS schema's type (not
+// the union of every parameter's type in the template), and a
+// `S.optionalKey` schema makes the KEY optional — mirroring exactly
+// what the compiled S.Struct does at runtime.
 export type ToolParameters<Refs> = {
-  // per-key PRECISE: each parameter name maps to ITS schema's type,
-  // not the union of every parameter's type in the template
-  [N in Extract<Refs, Parameter>["~alchemy/Name"]]: Extract<
+  [N in Extract<Refs, Parameter>["~alchemy/Name"] as ParamOf<
     Refs,
-    Parameter & { readonly "~alchemy/Name": N }
-  >["schema"]["Type"];
+    N
+  >["schema"]["~type.optionality"] extends "optional"
+    ? never
+    : N]: ParamOf<Refs, N>["schema"]["Type"];
+} & {
+  [N in Extract<Refs, Parameter>["~alchemy/Name"] as ParamOf<
+    Refs,
+    N
+  >["schema"]["~type.optionality"] extends "optional"
+    ? N
+    : never]?: ParamOf<Refs, N>["schema"]["Type"];
 };
 
 /**

@@ -14,7 +14,7 @@ import * as Prompt from "effect/unstable/ai/Prompt";
 import * as Response from "effect/unstable/ai/Response";
 import * as AiTool from "effect/unstable/ai/Tool";
 import * as Toolkit from "effect/unstable/ai/Toolkit";
-import { makeProcessScope } from "../Local/Process.ts";
+import { makeProcessScope, runOnHost } from "../Local/Process.ts";
 import * as PersistentRef from "../PersistentRef.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
 import type { Actor } from "./Actor.ts";
@@ -31,6 +31,7 @@ import {
 import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { KernelObserver, type KernelObservation } from "./Observer.ts";
+import { RunJournal } from "./RunJournal.ts";
 import {
   AgentGateway,
   handleRunSocketFrame,
@@ -227,6 +228,36 @@ export const KernelMemory: Layer.Layer<
         // Each run's observations carry a monotonic `seq`, the
         // catch-up cursor consumers dedupe and resume by.
         const observer = Context.getOption(context, KernelObserver);
+        // the durability seams (both optional — see RunJournal.ts):
+        // an ambient PersistentRef.Store makes charter refs durable
+        // (the run frame isolates keys); a RunJournal makes THREADS
+        // durable — saved at park/crash, removed at settle, restored
+        // parked at interpret.
+        const ambientStore = Context.getOption(context, PersistentRef.Store);
+        const journal = Context.getOption(context, RunJournal);
+        const saveSnapshot = (run: RunState): Effect.Effect<void> =>
+          Option.isNone(journal)
+            ? Effect.void
+            : Effect.suspend(() =>
+                journal.value.save({
+                  term: termName,
+                  key: run.key,
+                  tick: run.tick,
+                  observed: run.observed,
+                  active: [...run.active],
+                  prompt: S.encodeSync(Prompt.Prompt)(run.prompt),
+                  log: [...run.log],
+                }),
+              ).pipe(
+                // persistence must never crash or slow a run — a
+                // failed save costs restart fidelity, not the round
+                Effect.catchCause((cause) =>
+                  Effect.logWarning(
+                    `RunJournal save failed for '${run.key}' of '${termName}'`,
+                    cause,
+                  ),
+                ),
+              );
         const observe = (
           run: RunState,
           observation: DistributiveOmit<
@@ -739,7 +770,13 @@ export const KernelMemory: Layer.Layer<
               log: [],
               sockets: new Set(),
               children: new Map(),
-              stateStore: PersistentRef.makeMemoryStore(),
+              // an ambient store (org-provided sqlite, DO storage)
+              // makes charter refs durable; the run frame
+              // (within(term, key)) keeps per-run isolation on the
+              // shared store. Absent: exactly as durable as the run.
+              stateStore: Option.isSome(ambientStore)
+                ? ambientStore.value
+                : PersistentRef.makeMemoryStore(),
             };
           });
 
@@ -1125,6 +1162,12 @@ export const KernelMemory: Layer.Layer<
               if (yield* Deferred.isDone(run.settled)) break;
               let items: Array<InboxItem> = yield* Queue.clear(run.inbox);
               if (items.length === 0 && quiescent) {
+                // the durability point of the restart surface: a
+                // parked thread survives the process (bootstrap §3).
+                // Saved BEFORE the parked observation goes out — a
+                // subscriber reacting to `parked` (the reload tool
+                // exiting the process) must find the snapshot on disk.
+                yield* saveSnapshot(run);
                 // PARKED: the run's work is done until the world moves.
                 // Quiet inputs deliberately DON'T factor in — they
                 // accumulate as context and never wake a parked run.
@@ -1286,6 +1329,12 @@ export const KernelMemory: Layer.Layer<
             // current round's waiters AND undrained arrivals alike
             const outcome = yield* Deferred.await(run.settled);
             yield* observe(run, { type: "settled" });
+            // settled runs are never restored — drop the journal row
+            if (Option.isSome(journal)) {
+              yield* journal.value
+                .remove(termName, run.key)
+                .pipe(Effect.ignore);
+            }
             for (const item of yield* Queue.clear(run.inbox)) {
               if (item.waiter !== undefined) run.waiters.push(item.waiter);
             }
@@ -1340,6 +1389,9 @@ export const KernelMemory: Layer.Layer<
                         error: crash.encoded,
                         fatal: !crash.encoded.retryable,
                       });
+                      // crashed threads restore parked — the crash
+                      // note is in the log; the next input resumes
+                      yield* saveSnapshot(run);
                       for (const waiter of run.waiters.splice(0)) {
                         yield* Deferred.done(waiter, exit as Exit.Exit<never>);
                       }
@@ -1488,6 +1540,84 @@ export const KernelMemory: Layer.Layer<
           submit: (key: string, input: unknown) =>
             Effect.asVoid(admit({ input }, key)),
         });
+        // ── RESTORE (bootstrap §3): persisted runs come back PARKED,
+        // threads primed, seq cursor continued. Init re-runs — the
+        // charter closure is the instance, rebuilt from CURRENT code
+        // (level-triggered: the next tick renders the new stance).
+        // No `admitted` observation: the projection already has the
+        // run's history; restored runs emit nothing until they wake.
+        if (Option.isSome(journal)) {
+          const snapshots = yield* journal.value
+            .restore(termName)
+            .pipe(
+              Effect.catchCause((cause) =>
+                Effect.as(
+                  Effect.logWarning(
+                    `RunJournal restore failed for '${termName}'`,
+                    cause,
+                  ),
+                  [],
+                ),
+              ),
+            );
+          if (snapshots.length > 0) {
+            yield* Effect.logInfo(
+              `Kernel '${termName}': restoring ${snapshots.length} run(s) from the journal`,
+            );
+          }
+          for (const snapshot of snapshots) {
+            if (runs.has(snapshot.key)) continue;
+            const restored = yield* Effect.try({
+              try: () => ({
+                prompt: S.decodeUnknownSync(Prompt.Prompt)(snapshot.prompt),
+              }),
+              catch: (error) => error,
+            }).pipe(
+              Effect.tapCause((cause) =>
+                Effect.logWarning(
+                  `RunJournal: snapshot for '${snapshot.key}' of '${termName}' failed to decode — starting without it`,
+                  cause,
+                ),
+              ),
+              Effect.option,
+            );
+            if (Option.isNone(restored)) continue;
+            const run = yield* makeRunState(snapshot.key);
+            run.tick = snapshot.tick;
+            run.observed = snapshot.observed;
+            run.prompt = restored.value.prompt;
+            for (const skill of snapshot.active) run.active.add(skill);
+            run.log.push(...snapshot.log);
+            const initResult = yield* provideInit(run)(
+              charter as Effect.Effect<unknown, unknown>,
+            ).pipe(Effect.orDie);
+            run.turn = isFragment(initResult)
+              ? Effect.succeed(initResult)
+              : Effect.isEffect(initResult)
+                ? (initResult as Turn)
+                : typeof initResult === "function"
+                  ? (initResult as TurnFn)
+                  : yield* Effect.die(
+                      `KernelMemory: the charter for '${termName}' returned neither prose, a turn effect, nor a turn function`,
+                    );
+            // The run is REGISTERED synchronously (admits/ensures find
+            // its inbox and queue into it), but the loop start must
+            // not block the BUILD: `startLoop` awaits the Host
+            // program starting, which a plan-time build never does.
+            // `runOnHost` registers it as a program runner — a
+            // planner registers-and-discards (no restore in a
+            // planner, no hang); the real runtime starts the loop the
+            // moment `exports.program` runs, draining anything the
+            // inbox queued meanwhile.
+            yield* runOnHost(startLoop(run, actorTick)).pipe(
+              Effect.asVoid,
+            ) as Effect.Effect<void>;
+            runs.set(snapshot.key, run);
+            yield* Effect.logInfo(
+              `Kernel '${termName}': restored run '${snapshot.key}' parked at tick ${snapshot.tick}`,
+            );
+          }
+        }
         return actor;
       });
 

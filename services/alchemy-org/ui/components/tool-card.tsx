@@ -7,22 +7,11 @@
  */
 import {
   AlarmClock,
-  CircleCheck,
-  CirclePlus,
-  CircleX,
-  FileDiff,
   FilePen,
   FilePlus2,
   FileText,
   FolderSearch,
   FolderTree,
-  GitMerge,
-  GitPullRequestArrow,
-  Link2,
-  MessageSquare,
-  MessageSquarePlus,
-  RefreshCw,
-  Reply,
   ScrollText,
   Search,
   Sparkles,
@@ -31,10 +20,7 @@ import {
 } from "lucide-react";
 import type * as AI from "alchemy/AI";
 import { useState, type ReactNode } from "react";
-import type { ReviewBotLive } from "../../src/ReviewBot.ts";
-import type { QualityAssuranceGeneral } from "../../src/skills/QualityAssurance.ts";
-import { DiffCard, splitDiffOutput } from "@/components/code";
-import { RefHoverCard } from "@/components/ref-hover-card";
+import type { CoderLive } from "../../src/Coder.ts";
 import { useAnchoredToggle } from "@/lib/anchor";
 import { cn } from "@/lib/utils";
 
@@ -159,9 +145,16 @@ const lastLine = (text: string): string | undefined => {
   return lines.length > 0 ? lines[lines.length - 1] : undefined;
 };
 
+const outputText = (output: unknown): string | undefined =>
+  output === undefined
+    ? undefined
+    : typeof output === "string"
+      ? output
+      : JSON.stringify(output, null, 2);
+
 /** A renderer as the transcript sees it — the wire is untyped JSON, so
- *  `input` is `any` here; the ReviewBot's own cards are authored against
- *  their PRECISE input types (see {@link REVIEW_BOT}) and merge in. */
+ *  `input` is `any` here; the Coder's own cards are authored against
+ *  their PRECISE input types (see {@link CODER}) and merge in. */
 type Renderer = (
   input: any,
   output: string | undefined,
@@ -184,200 +177,19 @@ type Renderers<L> = {
   ) => ToolCallView;
 };
 
-/** `#N` as a link into GitHub — issues and PRs share the /issues/N
- *  door (GitHub redirects PR numbers), and PullRequestRefs carry an
- *  explicit `url`. */
-const RefLink = ({ refValue }: { refValue: any }) => {
-  if (
-    !refValue ||
-    typeof refValue !== "object" ||
-    typeof refValue.number !== "number"
-  ) {
-    return null;
-  }
-  const href =
-    typeof refValue.url === "string" && refValue.url.startsWith("http")
-      ? refValue.url
-      : typeof refValue.owner === "string" &&
-          typeof refValue.repository === "string"
-        ? `https://github.com/${refValue.owner}/${refValue.repository}/issues/${refValue.number}`
-        : undefined;
-  if (href === undefined) return <>#{refValue.number}</>;
-  const repo =
-    typeof refValue.owner === "string" && typeof refValue.repository === "string"
-      ? `${refValue.owner}/${refValue.repository}`
-      : href.match(/github\.com\/([\w.-]+\/[\w.-]+)\//)?.[1];
-  const anchor = (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-      onClick={(event) => event.stopPropagation()}
-      className="underline decoration-border underline-offset-2 hover:text-foreground hover:decoration-foreground"
-    >
-      #{refValue.number}
-    </a>
-  );
-  return repo ? (
-    <RefHoverCard repo={repo} number={refValue.number}>
-      {anchor}
-    </RefHoverCard>
-  ) : (
-    anchor
-  );
-};
-
-const outputText = (output: unknown): string | undefined =>
-  output === undefined
-    ? undefined
-    : typeof output === "string"
-      ? output
-      : JSON.stringify(output, null, 2);
-
-/** Shared by `openPullRequest` and the Engineer's snake_cased inline
- *  wrapper — one renderer, two registry keys. */
-const renderOpenPullRequest: Renderer = (input, output) => {
-  let pr: { number?: number; url?: string } | undefined;
-  try {
-    const parsed =
-      typeof output === "string" ? JSON.parse(output) : (output as any);
-    pr = parsed?.pr;
-  } catch {
-    // output not JSON — fall through to plain rendering
-  }
-  return {
-    icon: GitPullRequestArrow,
-    title: (
-      <>
-        Open PR{pr?.number !== undefined ? ` #${pr.number}` : ""}:{" "}
-        <span className="font-medium">
-          {clamp(String(input.title ?? ""), 80)}
-        </span>
-      </>
-    ),
-    badge: pr?.url ? (
-      <a
-        href={pr.url}
-        target="_blank"
-        rel="noreferrer"
-        className="shrink-0 text-[11px] text-muted-foreground underline hover:text-foreground"
-        onClick={(event) => event.stopPropagation()}
-      >
-        open ↗
-      </a>
-    ) : undefined,
-    body: input.body ? <Mono>{clamp(String(input.body), 2000)}</Mono> : undefined,
-  };
-};
 
 /**
- * Cards for the ReviewBot's OWN wire, typed straight off the charter:
- * `ReviewBotLive`'s TYPE carries every tool its prose can mention
+ * Cards for the Coder's wire, typed straight off the charter:
+ * `CoderLive`'s TYPE carries every tool its prose can mention
  * (mention-is-presence, lifted into the type system — alchemy/AI/Wire.ts),
  * and the annotation holds this object to it. Two guarantees, both
- * compiler-enforced, both visible right here:
- *
- * - mention a new tool in the charter without adding its card → this
- *   object errors, naming the missing tool;
- * - each renderer's `input` is that tool's ACTUAL parameter type
- *   (`comment` gets `{ message: string }`, `readDiff` gets a typed
- *   PR ref) — touch a field the tool doesn't have and it won't compile.
- *
- * The import of `ReviewBotLive` is type-only: erased at build, no
- * server code reaches the browser bundle.
+ * compiler-enforced: mention a new tool in the charter without adding
+ * its card → this object errors, naming the missing tool; each
+ * renderer's `input` is that tool's ACTUAL parameter type. The import
+ * of `CoderLive` is type-only: erased at build, no server code
+ * reaches the browser bundle.
  */
-const REVIEW_BOT: Renderers<typeof ReviewBotLive> = {
-  readDiff: (input, output) => {
-    const stat = output === undefined ? undefined : diffStat(output);
-    const split = output === undefined ? undefined : splitDiffOutput(output);
-    return {
-      icon: FileDiff,
-      title: <>Read diff of PR <RefLink refValue={input.pr} /></>,
-      badge: stat && <DiffStatBadge added={stat.added} removed={stat.removed} />,
-      body:
-        split === undefined ? undefined : (
-          <div>
-            {split.header.length > 0 && (
-              <Mono>{clamp(split.header, 1200)}</Mono>
-            )}
-            {split.patch !== undefined ? (
-              <DiffCard patch={split.patch} />
-            ) : (
-              <DiffText text={output ?? ""} />
-            )}
-          </div>
-        ),
-    };
-  },
-
-  readIssue: (input, output) => ({
-    icon: FileText,
-    title: <>Read issue <RefLink refValue={input.issue} /></>,
-    body: output === undefined ? undefined : <WindowedText text={output} />,
-  }),
-
-  add_comment: (input) => ({
-    icon: MessageSquarePlus,
-    title: (
-      <>
-        Review comment on{" "}
-        <span className="font-mono text-mist">
-          {input.path}:
-          {input.startLine !== undefined ? `${input.startLine}–` : ""}
-          {input.line}
-        </span>
-      </>
-    ),
-    badge: (
-      <span className="shrink-0 text-[11px] text-muted-foreground">
-        buffered
-      </span>
-    ),
-    body: input.message ? <Mono>{input.message}</Mono> : undefined,
-  }),
-
-  submit_review: (input, output) => ({
-    icon: input.verdict === "approve" ? CircleCheck : CircleX,
-    title: (
-      <>
-        Submit review{" "}
-        <span
-          className={cn(
-            "font-medium",
-            input.verdict === "approve" ? "text-moss" : "text-brick",
-          )}
-        >
-          {input.verdict === "approve" ? "APPROVE" : "REQUEST CHANGES"}
-        </span>
-      </>
-    ),
-    summary: output === undefined ? undefined : lastLine(output),
-    body: input.message ? <Mono>{input.message}</Mono> : undefined,
-  }),
-
-  comment: (input) => ({
-    icon: MessageSquare,
-    title: <>Comment on the pull request</>,
-    body: input.message ? <Mono>{input.message}</Mono> : undefined,
-  }),
-
-  sync_checkout: (_input, output, running) => ({
-    icon: RefreshCw,
-    title: <>Sync checkout to the pull request&apos;s head</>,
-    summary: running || output === undefined ? undefined : lastLine(output),
-  }),
-};
-
-/**
- * Cards for the {@link QualityAssurance} skill's wire — a skill's
- * tools are encapsulated behind its tag (never on the HOST agent's
- * wire type, mirroring the requirement channel), so coverage is
- * checked against the skill's OWN layer: the teaching's prose splices
- * are the tool list. Same guarantees as {@link REVIEW_BOT}: miss a
- * card → compile error naming the tool; each `input` is the tool's
- * actual parameter type.
- */
-const QUALITY_ASSURANCE: Renderers<typeof QualityAssuranceGeneral> = {
+const CODER: Renderers<typeof CoderLive> = {
   bash: (input, output, running) => {
     const parsed = output === undefined ? undefined : parseBashOutput(output);
     return {
@@ -498,15 +310,7 @@ const QUALITY_ASSURANCE: Renderers<typeof QualityAssuranceGeneral> = {
     ),
     body: output === undefined ? undefined : <WindowedText text={output} />,
   }),
-};
 
-/**
- * The remainder: kernel intrinsics (`skill`, `remind_me` — their
- * schemas live in the kernel, not on any agent's wire) and verbs from
- * OLDER transcripts (the org days: editors, GitHub write tools).
- * Unknown names fall back to the generic collapsible card.
- */
-const EXTRAS: Record<string, Renderer> = {
   writeFile: (input, output) => ({
     icon: FilePlus2,
     title: (
@@ -571,92 +375,14 @@ const EXTRAS: Record<string, Renderer> = {
       ),
     };
   },
+};
 
-  applyPatch: (input) => {
-    const patch = String(input.patchText ?? "");
-    const files = [...patch.matchAll(/^\*\*\* (?:Add|Update|Delete) File: (.+)$/gm)]
-      .map((m) => m[1]);
-    const { added, removed } = diffStat(patch);
-    return {
-      icon: FileDiff,
-      title: (
-        <>
-          Patch{" "}
-          <span className="font-mono text-mist">
-            {files.length === 1 ? files[0] : `${files.length} files`}
-          </span>
-        </>
-      ),
-      badge: <DiffStatBadge added={added} removed={removed} />,
-      body: <DiffText text={patch} />,
-    };
-  },
-
-  /* ── GitHub verbs ──────────────────────────────────────────── */
-
-  openPullRequest: renderOpenPullRequest,
-  // the Engineer's inline wrapper over the same PR physics — identical
-  // input/output shape, snake_cased on the wire (see processes/Issues.ts)
-  open_pull_request: renderOpenPullRequest,
-
-  mergePullRequest: (input) => ({
-    icon: GitMerge,
-    title: <>Merge PR <RefLink refValue={input.pr} /></>,
-  }),
-
-  approve: (input, output) => ({
-    icon: CircleCheck,
-    title: <>Approve PR <RefLink refValue={input.pr} /></>,
-    body: outputText(output) && <Mono>{outputText(output)}</Mono>,
-  }),
-
-  closeIssue: (input) => ({
-    icon: CircleX,
-    title: <>Close issue <RefLink refValue={input.issue} /></>,
-    body: input.reason ? <Mono>{String(input.reason)}</Mono> : undefined,
-  }),
-
-  openIssue: (input) => ({
-    icon: CirclePlus,
-    title: (
-      <>
-        Open issue: <span className="font-medium">{clamp(String(input.title ?? ""), 80)}</span>
-      </>
-    ),
-    body: input.body ? <Mono>{clamp(String(input.body), 2000)}</Mono> : undefined,
-  }),
-
-  searchIssues: (input, output) => ({
-    icon: Search,
-    title: (
-      <>
-        Search issues{" "}
-        <span className="font-mono text-honey">
-          {clamp(String(input.pattern ?? ""), 60)}
-        </span>
-      </>
-    ),
-    body: output === undefined ? undefined : <WindowedText text={output} />,
-  }),
-
-  linkIssues: (input) => ({
-    icon: Link2,
-    title: (
-      <>
-        Link <RefLink refValue={input.issue} /> → <RefLink refValue={input.related} />
-      </>
-    ),
-    body: input.reason ? <Mono>{String(input.reason)}</Mono> : undefined,
-  }),
-
-  reply: (input) => ({
-    icon: Reply,
-    title: <>Reply</>,
-    body: input.message ? <Mono>{String(input.message)}</Mono> : undefined,
-  }),
-
-  /* ── intrinsics ────────────────────────────────────────────── */
-
+/**
+ * The remainder: kernel intrinsics (`skill`, `remind_me` — their
+ * schemas live in the kernel, not on any agent's wire). Unknown names
+ * fall back to the generic collapsible card.
+ */
+const EXTRAS: Record<string, Renderer> = {
   skill: (input, output) => ({
     icon: Sparkles,
     title: (
@@ -680,12 +406,11 @@ const EXTRAS: Record<string, Renderer> = {
   }),
 };
 
-/** The transcript's lookup table: the typed, charter-checked packs
+/** The transcript's lookup table: the typed, charter-checked pack
  *  layered over the untyped remainder. */
 const RENDERERS: Record<string, Renderer> = {
   ...EXTRAS,
-  ...QUALITY_ASSURANCE,
-  ...REVIEW_BOT,
+  ...CODER,
 };
 
 /** Whether a compact per-tool card exists for this tool name. */
