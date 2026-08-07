@@ -30,10 +30,13 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Scope from "effect/Scope";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import type { DurableObjectExport } from "../Cloudflare/Workers/DurableObject.ts";
+import { DurableObjectState } from "../Cloudflare/Workers/DurableObjectState.ts";
 import { WorkerEnvironment } from "../Cloudflare/Workers/Worker.ts";
 import { makeEntrypointLayer, reifyBoundConfigProvider } from "../Runtime.ts";
 import { Self } from "../Self.ts";
 import { Stack } from "../Stack.ts";
+import { fromRivetState } from "./ActorState.ts";
 import {
   makeRivetActorClient,
   parseRivetEndpoint,
@@ -69,6 +72,69 @@ const makeRunnerEnvironment = (
   }
   return env;
 };
+
+/** Lifecycle handlers dispatched by the bridge itself — never actions. */
+const RESERVED_HANDLERS = new Set([
+  "fetch",
+  "alarm",
+  "webSocketMessage",
+  "webSocketClose",
+]);
+
+/** A detached, throwaway `DurableObjectState` for method discovery. */
+const makeProbeState = (): any => ({
+  id: { toString: () => "__alchemy_method_probe" },
+  storage: fromRivetState({ state: { kv: {} } }),
+  raw: undefined,
+  waitUntil: () => Effect.void,
+  blockConcurrencyWhile: (callback: () => Effect.Effect<any>) => callback(),
+  acceptWebSocket: () => Effect.void,
+  getWebSockets: () => Effect.succeed([]),
+  getTags: () => Effect.succeed([]),
+  setWebSocketAutoResponse: () => Effect.void,
+  getWebSocketAutoResponse: () => Effect.succeed(undefined),
+  getWebSocketAutoResponseTimestamp: () => Effect.succeed(undefined),
+  setHibernatableWebSocketEventTimeout: () => Effect.void,
+  getHibernatableWebSocketEventTimeout: () => Effect.succeed(undefined),
+  abort: () => Effect.void,
+});
+
+/**
+ * Discover a Durable Object export's RPC surface by building ONE throwaway
+ * instance against a detached in-memory state and reading the shape's keys.
+ *
+ * Rivet reads an actor's `actions` map once at registration, so the method
+ * names must be known before any real instance exists. The plan-time
+ * export carries `methods` when the platform discovered them; this is the
+ * runner-side fallback for exports that don't (the portable
+ * `Alchemy.DurableObject` today). Instances that perform storage-dependent
+ * init in their per-instance effect may fail the probe — the generated
+ * entry then falls back to the baked list and logs the failure.
+ */
+export const discoverDurableObjectMethods = (
+  exported: DurableObjectExport,
+): Promise<string[]> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const doContext = Layer.succeed(
+        DurableObjectState,
+        makeProbeState(),
+      ).pipe(Layer.provideMerge(Layer.succeedContext(exported.services)));
+      const shape = yield* (
+        exported.constructor as Effect.Effect<any, never, any>
+      ).pipe(
+        Effect.provide(doContext),
+        Effect.flatMap((instance: any) =>
+          Effect.isEffect(instance)
+            ? instance.pipe(Effect.provide(doContext))
+            : Effect.succeed(instance),
+        ),
+      );
+      return Object.keys((shape as Record<string, unknown>) ?? {}).filter(
+        (name) => !RESERVED_HANDLERS.has(name),
+      );
+    }) as Effect.Effect<string[]>,
+  );
 
 /**
  * Build the deployable module's layer stack once and return the resolved

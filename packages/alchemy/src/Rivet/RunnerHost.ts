@@ -25,6 +25,12 @@ export interface RunnerSource {
    * @default "oven/bun:1"
    */
   readonly image?: string;
+  /**
+   * The rivetkit release installed into the runner image (kept external to
+   * the bundle — it ships unbundleable wasm/napi sidecars).
+   * @default DEFAULT_RIVETKIT_VERSION
+   */
+  readonly rivetkitVersion?: string;
   /** Runner task CPU units. @default 512 */
   readonly cpu?: number;
   /** Runner task memory (MiB). @default 1024 */

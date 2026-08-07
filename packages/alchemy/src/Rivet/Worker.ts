@@ -110,6 +110,11 @@ export interface RivetWorkerProps {
    * @default "oven/bun:1"
    */
   image?: string;
+  /**
+   * The rivetkit release installed into the runner image.
+   * @default DEFAULT_RIVETKIT_VERSION (see the aws-ecs runner host)
+   */
+  rivetkitVersion?: string;
   /** Runner task CPU units. @default 512 */
   cpu?: number;
   /** Runner task memory (MiB). @default 1024 */
@@ -166,6 +171,7 @@ export const Worker = (props?: RivetWorkerProps): Layer.Layer<WorkerTarget> =>
         engine: RIVET_ENGINE,
         main: props?.main,
         image: props?.image,
+        rivetkitVersion: props?.rivetkitVersion,
         cpu: props?.cpu,
         memory: props?.memory,
         desiredCount: props?.desiredCount,
@@ -229,6 +235,7 @@ interface RivetTargetProps {
   cluster?: string;
   main?: string;
   image?: string;
+  rivetkitVersion?: string;
   cpu?: number;
   memory?: number;
   desiredCount?: number;
@@ -272,6 +279,7 @@ export const RivetWorkerEngine = (): Layer.Layer<WorkerEngineService> =>
         main: target.main!,
         build: target.build,
         image: target.image,
+        rivetkitVersion: target.rivetkitVersion,
         cpu: target.cpu,
         memory: target.memory,
         desiredCount: target.desiredCount,

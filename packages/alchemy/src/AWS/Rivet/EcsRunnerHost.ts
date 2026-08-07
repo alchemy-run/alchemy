@@ -61,11 +61,43 @@ const runnerRuntimePlatform = (): ecs.RuntimePlatform => ({
   operatingSystemFamily: "LINUX",
 });
 
-const toBundledSource = (source: RunnerSource): BundledImageSource => ({
-  main: source.main,
-  image: source.image,
-  build: source.build as BundledImageSource["build"],
-});
+/** The rivetkit release installed into the runner image. */
+export const DEFAULT_RIVETKIT_VERSION = "2.3.10";
+
+/**
+ * rivetkit ships wasm/napi engine sidecars (`@rivetkit/rivetkit-wasm`,
+ * `@rivetkit/rivetkit-napi`) that cannot be bundled — the runner keeps
+ * `rivetkit` external and the image environment installs it with `bun add`
+ * (its transitive deps included).
+ */
+const RIVETKIT_EXTERNAL = /^rivetkit(\/|$)|^@rivetkit\//;
+
+const environmentDockerfile = (source: RunnerSource): string =>
+  [
+    `FROM ${source.image ?? "oven/bun:1"}`,
+    "WORKDIR /app",
+    `RUN bun add rivetkit@${source.rivetkitVersion ?? DEFAULT_RIVETKIT_VERSION} ws eventsource`,
+  ].join("\n");
+
+const toBundledSource = (source: RunnerSource): BundledImageSource => {
+  const build = (source.build ?? {}) as NonNullable<
+    BundledImageSource["build"]
+  >;
+  return {
+    main: source.main,
+    dockerfile: { content: environmentDockerfile(source) },
+    build: {
+      ...build,
+      input: {
+        ...build.input,
+        external: [
+          RIVETKIT_EXTERNAL,
+          ...((build.input?.external as (string | RegExp)[] | undefined) ?? []),
+        ],
+      },
+    },
+  };
+};
 
 const deployRunner = (imageSource: ImageSource, options: RunnerDeployOptions) =>
   Effect.gen(function* () {

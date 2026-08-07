@@ -43,7 +43,10 @@ export {
 // (`import { makeRivetActor, resolveWorkerExports } from "alchemy/Rivet"`),
 // not by user code.
 export { makeRivetActor, type RivetActorFactory } from "./ActorBridge.ts";
-export { resolveWorkerExports } from "./Runner.ts";
+export {
+  discoverDurableObjectMethods,
+  resolveWorkerExports,
+} from "./Runner.ts";
 export { providers, Providers } from "./Providers.ts";
 // Internal scaffolding stays un-exported: RunnerEntry (entry generation),
 // ActorState (storage/alarm adapters), the Gateway stub internals.

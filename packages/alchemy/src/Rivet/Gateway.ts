@@ -32,10 +32,13 @@
  */
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { asEffectOrStream, decodeRpcResult } from "../Rpc.ts";
+import { decodeRpcResult } from "../Rpc.ts";
 import type { DurableObjectNamespaceClient } from "../Worker/Engine.ts";
 
 /** The engine namespace actors are created in. */
@@ -105,10 +108,57 @@ const transientStatus = (status: number): boolean =>
   status === 429 || status === 502 || status === 503 || status === 504;
 
 /**
+ * Satisfy the call's `HttpClient` requirement: the ambient client when the
+ * surrounding runtime provides one (Lambda, workers), a fetch-backed client
+ * otherwise (bare runner processes).
+ */
+const withHttpClient = <A, E>(
+  effect: Effect.Effect<A, E, HttpClient.HttpClient>,
+): Effect.Effect<A, E> =>
+  Effect.serviceOption(HttpClient.HttpClient).pipe(
+    Effect.flatMap(
+      (ambient): Effect.Effect<A, E> =>
+        Option.isSome(ambient)
+          ? Effect.provideService(effect, HttpClient.HttpClient, ambient.value)
+          : Effect.provide(effect, FetchHttpClient.layer),
+    ),
+  );
+
+// Effect's internal Stream brand — see `asEffectOrStream` in Rpc.ts for the
+// dual-form trick this replicates.
+const StreamTypeId = "~effect/Stream";
+
+/**
+ * The Rivet flavor of `asEffectOrStream`: the call is BOTH an `Effect`
+ * (value methods) and a `Stream` (streaming methods). The actor bridge
+ * COLLECTS server-side streams to arrays (Rivet actions cannot stream), so
+ * the stream form re-expands an array result into its elements — a caller
+ * piping `Stream.runCollect(stub.tick(n))` sees the original elements, not
+ * a single array chunk.
+ */
+const asRemoteEffectOrStream = (
+  call: Effect.Effect<unknown, unknown>,
+): Effect.Effect<unknown, unknown> => {
+  const streamForm = Stream.unwrap(
+    Effect.map(call, (value) =>
+      Stream.isStream(value)
+        ? (value as Stream.Stream<unknown, unknown>)
+        : Array.isArray(value)
+          ? Stream.fromIterable(value)
+          : Stream.succeed(value),
+    ),
+  );
+  return Object.assign(call, {
+    [StreamTypeId]: (streamForm as any)[StreamTypeId],
+    channel: (streamForm as any).channel,
+  });
+};
+
+/**
  * The per-instance stub: every property access is a remote action call. The
  * returned value is BOTH an `Effect` (value methods) and a `Stream`
- * (streaming methods — collected to an array by the actor bridge, delivered
- * as a single element here).
+ * (streaming methods — collected to an array by the actor bridge,
+ * re-expanded to elements by the stream form above).
  */
 const makeRivetActorStub = (
   connection: RivetGatewayConnection,
@@ -124,71 +174,74 @@ const makeRivetActorStub = (
         // Guard against thenable/inspection probing on the Proxy.
         if (prop === "then" || prop === "toJSON") return undefined;
         return (...args: unknown[]) =>
-          asEffectOrStream(
-            Effect.gen(function* () {
-              const client = yield* HttpClient.HttpClient;
-              const params = new URLSearchParams({
-                "rvt-namespace": connection.namespace ?? RIVET_ACTOR_NAMESPACE,
-                "rvt-method": "getOrCreate",
-                "rvt-key": key,
-                "rvt-runner": connection.pool ?? RIVET_RUNNER_POOL,
-                "rvt-token": connection.token,
-              });
-              const endpoint = connection.endpoint.replace(/\/+$/, "");
-              const url = `${endpoint}/gateway/${encodeURIComponent(
-                actorName,
-              )}/action/${encodeURIComponent(prop)}?${params.toString()}`;
+          asRemoteEffectOrStream(
+            withHttpClient(
+              Effect.gen(function* () {
+                const client = yield* HttpClient.HttpClient;
+                const params = new URLSearchParams({
+                  "rvt-namespace":
+                    connection.namespace ?? RIVET_ACTOR_NAMESPACE,
+                  "rvt-method": "getOrCreate",
+                  "rvt-key": key,
+                  "rvt-runner": connection.pool ?? RIVET_RUNNER_POOL,
+                  "rvt-token": connection.token,
+                });
+                const endpoint = connection.endpoint.replace(/\/+$/, "");
+                const url = `${endpoint}/gateway/${encodeURIComponent(
+                  actorName,
+                )}/action/${encodeURIComponent(prop)}?${params.toString()}`;
 
-              const response = yield* client
-                .execute(
-                  HttpClientRequest.post(url).pipe(
-                    HttpClientRequest.bodyText(
-                      JSON.stringify({ args }),
-                      "application/json",
+                const response = yield* client
+                  .execute(
+                    HttpClientRequest.post(url).pipe(
+                      HttpClientRequest.bodyText(
+                        JSON.stringify({ args }),
+                        "application/json",
+                      ),
                     ),
-                  ),
-                )
-                .pipe(
-                  Effect.flatMap((response) =>
-                    response.status >= 300
-                      ? response.text.pipe(
-                          Effect.orElseSucceed(() => ""),
-                          Effect.flatMap((body) => {
-                            let code: string | undefined;
-                            try {
-                              code = (JSON.parse(body) as { code?: string })
-                                .code;
-                            } catch {
-                              // non-JSON error body
-                            }
-                            return Effect.fail(
-                              new RivetGatewayError({
-                                status: response.status,
-                                code,
-                                body,
-                              }),
-                            );
-                          }),
-                        )
-                      : Effect.succeed(response),
-                  ),
-                  // Transport failures and engine wake races are transient —
-                  // bounded backoff, then surface.
-                  Effect.retry({
-                    while: (error): boolean =>
-                      !(error instanceof RivetGatewayError) ||
-                      transientStatus(error.status),
-                    schedule: Schedule.exponential("500 millis"),
-                    times: 5,
-                  }),
-                );
+                  )
+                  .pipe(
+                    Effect.flatMap((response) =>
+                      response.status >= 300
+                        ? response.text.pipe(
+                            Effect.orElseSucceed(() => ""),
+                            Effect.flatMap((body) => {
+                              let code: string | undefined;
+                              try {
+                                code = (JSON.parse(body) as { code?: string })
+                                  .code;
+                              } catch {
+                                // non-JSON error body
+                              }
+                              return Effect.fail(
+                                new RivetGatewayError({
+                                  status: response.status,
+                                  code,
+                                  body,
+                                }),
+                              );
+                            }),
+                          )
+                        : Effect.succeed(response),
+                    ),
+                    // Transport failures and engine wake races are transient —
+                    // bounded backoff, then surface.
+                    Effect.retry({
+                      while: (error): boolean =>
+                        !(error instanceof RivetGatewayError) ||
+                        transientStatus(error.status),
+                      schedule: Schedule.exponential("500 millis"),
+                      times: 5,
+                    }),
+                  );
 
-              const value = (yield* response.json) as
-                | { output?: unknown }
-                | null
-                | undefined;
-              return yield* decodeRpcResult(value?.output);
-            }),
+                const value = (yield* response.json) as
+                  | { output?: unknown }
+                  | null
+                  | undefined;
+                return yield* decodeRpcResult(value?.output);
+              }) as Effect.Effect<unknown, unknown, HttpClient.HttpClient>,
+            ),
           );
       },
     },
