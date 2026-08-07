@@ -30,8 +30,10 @@ import {
 } from "./Kernel.ts";
 import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { defaultGovernor, Governor } from "./Governor.ts";
 import { KernelObserver, type KernelObservation } from "./Observer.ts";
 import { RunJournal } from "./RunJournal.ts";
+import { defaultSamplingPolicy, SamplingPolicy } from "./SamplingPolicy.ts";
 import {
   AgentGateway,
   handleRunSocketFrame,
@@ -235,6 +237,17 @@ export const KernelMemory: Layer.Layer<
         // parked at interpret.
         const ambientStore = Context.getOption(context, PersistentRef.Store);
         const journal = Context.getOption(context, RunJournal);
+        // the CONTROL-PLANE hooks (kernel-assembly.md §4), with the
+        // shipped defaults when the composition provides nothing —
+        // policy decisions the driver consults, never owns.
+        const policy = Option.getOrElse(
+          Context.getOption(context, SamplingPolicy),
+          () => defaultSamplingPolicy,
+        );
+        const governor = Option.getOrElse(
+          Context.getOption(context, Governor),
+          () => defaultGovernor,
+        );
         const saveSnapshot = (run: RunState): Effect.Effect<void> =>
           Option.isNone(journal)
             ? Effect.void
@@ -724,25 +737,12 @@ export const KernelMemory: Layer.Layer<
               );
             }
             return new LanguageModel.GenerateTextResponse<any>(parts as never);
-          }).pipe(
-            // retryability is the error's own testimony (spec §11b):
-            // a deterministic failure (billing, auth, content policy)
-            // must not be re-sampled — it propagates TYPED to the
-            // loop, whose exit fails every waiter with the real cause.
-            // A MALFORMED TOOL CALL is excluded from blind re-sampling:
-            // the loop feeds it back to the model as a corrective note
-            // (the model can fix its own parameters; a re-sample of the
-            // identical prompt usually just repeats the mistake).
-            Effect.retry({
-              while: (error) =>
-                isAiError(error)
-                  ? error.isRetryable &&
-                    error.reason._tag !== "ToolParameterValidationError"
-                  : true,
-              schedule: Schedule.exponential("1 second"),
-              times: 3,
-            }),
-          );
+          });
+        // retry/budget policy belongs to the SamplingPolicy hook —
+        // the loop wraps each `step` with `policy.step` (the shipped
+        // default reproduces the classic behavior: retryability is
+        // the error's own testimony per spec §11b, malformed tool
+        // calls excluded from blind re-sampling).
 
         const runs = new Map<string, RunState>();
         // Minted keys are PROCESS-UNIQUE, not just kernel-unique: run
@@ -1162,27 +1162,41 @@ export const KernelMemory: Layer.Layer<
               if (yield* Deferred.isDone(run.settled)) break;
               let items: Array<InboxItem> = yield* Queue.clear(run.inbox);
               if (items.length === 0 && quiescent) {
-                // PARKED: the run's work is done until the world moves.
-                // Quiet inputs deliberately DON'T factor in — they
-                // accumulate as context and never wake a parked run.
-                yield* observe(run, { type: "parked" });
-                // the durability point of the restart surface: a
-                // parked thread survives the process. Saved AFTER the
-                // parked observation so the snapshot's seq cursor
-                // includes it — a restored run must never re-issue an
-                // already-used seq (consumers dedupe by seq).
-                yield* saveSnapshot(run);
-                const wake = yield* Effect.raceFirst(
-                  Effect.map(Queue.take(run.inbox), (item) => ({
-                    settled: false as const,
-                    item,
-                  })),
-                  Effect.map(Deferred.await(run.settled), () => ({
-                    settled: true as const,
-                  })),
-                );
-                if (wake.settled) break;
-                items = [wake.item, ...(yield* Queue.clear(run.inbox))];
+                // the GOVERNOR's quiescence verdict (kernel-assembly.md
+                // §4): a Continue injects work and the round keeps
+                // going — goals and autonomous modes live here. The
+                // default parks.
+                const verdict = yield* governor.onQuiesce({
+                  term: termName,
+                  key: run.key,
+                  tick: run.tick,
+                });
+                if (verdict._tag === "Continue" && verdict.inputs.length > 0) {
+                  items = verdict.inputs.map((input) => ({ input }));
+                } else {
+                  // PARKED: the run's work is done until the world
+                  // moves. Quiet inputs deliberately DON'T factor in —
+                  // they accumulate as context and never wake a parked
+                  // run.
+                  yield* observe(run, { type: "parked" });
+                  // the durability point of the restart surface: a
+                  // parked thread survives the process. Saved AFTER the
+                  // parked observation so the snapshot's seq cursor
+                  // includes it — a restored run must never re-issue an
+                  // already-used seq (consumers dedupe by seq).
+                  yield* saveSnapshot(run);
+                  const wake = yield* Effect.raceFirst(
+                    Effect.map(Queue.take(run.inbox), (item) => ({
+                      settled: false as const,
+                      item,
+                    })),
+                    Effect.map(Deferred.await(run.settled), () => ({
+                      settled: true as const,
+                    })),
+                  );
+                  if (wake.settled) break;
+                  items = [wake.item, ...(yield* Queue.clear(run.inbox))];
+                }
               }
               // quiet inputs JOIN whatever round is happening anyway —
               // prepended (they arrived earlier), never a wake themselves
@@ -1210,6 +1224,31 @@ export const KernelMemory: Layer.Layer<
                   kind,
                 });
               }
+              // the GOVERNOR's gate (kernel-assembly.md §4): budgets
+              // and rate limits may refuse the round — the inputs are
+              // already on the thread (they happened), the reason
+              // joins as a note, waiters resolve with it, and no
+              // sampling runs
+              const gate = yield* governor.beforeRound({
+                term: termName,
+                key: run.key,
+                tick: run.tick,
+                inputs,
+              });
+              if (gate._tag === "Refuse") {
+                const text = `this round was refused by the kernel's governor: ${gate.reason}`;
+                run.prompt = Prompt.concat(run.prompt, [noteMessage(text)]);
+                yield* observe(run, {
+                  type: "input",
+                  text: `<note>\n${text}\n</note>`,
+                  kind: "note",
+                });
+                for (const waiter of run.waiters.splice(0)) {
+                  yield* Deferred.succeed(waiter, gate.reason);
+                }
+                quiescent = true;
+                continue;
+              }
               // TICK: re-evaluate the stance before every sampling —
               // function turns receive the tick event ({count, inputs})
               const tick = yield* prepare(run, inputs);
@@ -1230,43 +1269,48 @@ export const KernelMemory: Layer.Layer<
                 });
               }
               const startedAt = yield* Effect.sync(() => Date.now());
-              const response = yield* step(
-                Prompt.concat(
-                  Prompt.make([{ role: "system", content: tick.system }]),
-                  run.prompt,
-                ),
-                tick.toolkit,
-                (part) =>
-                  part.kind === "tool-call"
-                    ? observe(run, {
-                        type: "tool-call",
-                        tick: run.tick,
-                        toolCallId: part.id,
-                        toolName: part.name,
-                        input: part.params,
-                      })
-                    : observe(run, {
-                        type: "assistant-delta",
-                        tick: run.tick,
-                        channel: part.kind,
-                        delta: part.delta,
-                      }),
-              ).pipe(
-                // A MALFORMED TOOL CALL is a model-visible fact, not a
-                // crash: nothing was executed, so tell the model what
-                // was wrong and let it re-issue. Bounded — a model that
-                // keeps emitting invalid calls crashes with the real
-                // error after the streak budget.
-                Effect.catchIf(
-                  (error): error is AiError =>
-                    isAiError(error) &&
-                    error.reason._tag === "ToolParameterValidationError",
-                  (error) =>
-                    malformed >= 3
-                      ? Effect.fail(error)
-                      : Effect.succeed({ malformed: error.message } as const),
-                ),
-              );
+              const response = yield* policy
+                .step(
+                  { term: termName, key: run.key, tick: run.tick },
+                  step(
+                    Prompt.concat(
+                      Prompt.make([{ role: "system", content: tick.system }]),
+                      run.prompt,
+                    ),
+                    tick.toolkit,
+                    (part) =>
+                      part.kind === "tool-call"
+                        ? observe(run, {
+                            type: "tool-call",
+                            tick: run.tick,
+                            toolCallId: part.id,
+                            toolName: part.name,
+                            input: part.params,
+                          })
+                        : observe(run, {
+                            type: "assistant-delta",
+                            tick: run.tick,
+                            channel: part.kind,
+                            delta: part.delta,
+                          }),
+                  ),
+                )
+                .pipe(
+                  // A MALFORMED TOOL CALL is a model-visible fact, not a
+                  // crash: nothing was executed, so tell the model what
+                  // was wrong and let it re-issue. Bounded — a model that
+                  // keeps emitting invalid calls crashes with the real
+                  // error after the policy's streak budget.
+                  Effect.catchIf(
+                    (error): error is AiError =>
+                      isAiError(error) &&
+                      error.reason._tag === "ToolParameterValidationError",
+                    (error) =>
+                      malformed >= policy.malformedBudget
+                        ? Effect.fail(error)
+                        : Effect.succeed({ malformed: error.message } as const),
+                  ),
+                );
               if ("malformed" in response) {
                 malformed++;
                 const text =
