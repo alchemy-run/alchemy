@@ -7,7 +7,7 @@
  *
  * The driver annotates every compiled tool `Strict: false` —
  * Anthropic's strict tool-calling grammar caps union-typed parameters
- * per request and a real toolkit cannot fit (DriverShared.compileTool).
+ * per request and a real toolkit cannot fit (DriverCore.compileTool).
  */
 import { AnthropicClient, AnthropicLanguageModel } from "@effect/ai-anthropic";
 import * as Config from "effect/Config";

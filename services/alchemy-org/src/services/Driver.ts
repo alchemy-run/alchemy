@@ -31,7 +31,7 @@ export const CoderChats = ChatsSqlite(".alchemy/coder-chats.sqlite");
  *  PersistentRef store ride the merge so each AGENT layer's interpret
  *  context finds them. */
 export const DriverLocal = Layer.mergeAll(
-  AI.DriverCore.pipe(
+  AI.DriverLocal.pipe(
     Layer.provide(SqliteThreadStorage(".alchemy/coder-runs.sqlite")),
     Layer.provide(Model),
   ),

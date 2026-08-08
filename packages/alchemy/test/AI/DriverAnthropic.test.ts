@@ -4,10 +4,10 @@
  * layered driver. One smoke test, gated on `ANTHROPIC_API_KEY` (run
  * via `doppler run -p alchemy-v2 -c dev -- bun run test …`).
  */
-import { DriverCore } from "@/AI/DriverCore.ts";
+import { DriverLocal } from "@/AI/DriverLocal.ts";
 import { MemoryThreadStorage } from "@/AI/ThreadStorage.ts";
 
-const InMemoryDriver = DriverCore.pipe(Layer.provide(MemoryThreadStorage));
+const InMemoryDriver = DriverLocal.pipe(Layer.provide(MemoryThreadStorage));
 import { RuntimeContext } from "@/RuntimeContext.ts";
 import { AnthropicClient, AnthropicLanguageModel } from "@effect/ai-anthropic";
 import { describe, expect, it } from "alchemy-test";

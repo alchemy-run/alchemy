@@ -6,6 +6,7 @@ export * from "./Errors.ts";
 export * from "./Event.ts";
 export * from "./Driver.ts";
 export * from "./DriverCore.ts";
+export * from "./DriverLocal.ts";
 export * from "./Chats.ts";
 export * from "./Observer.ts";
 export * from "./SessionSocket.ts";

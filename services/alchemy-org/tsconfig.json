@@ -6,7 +6,8 @@
     "src/**/*.ts",
     "test/**/*.ts",
     "ui/**/*.ts",
-    "ui/**/*.tsx"
+    "ui/**/*.tsx",
+    "Untitled-1.ts"
   ],
   "compilerOptions": {
     "noEmit": true,

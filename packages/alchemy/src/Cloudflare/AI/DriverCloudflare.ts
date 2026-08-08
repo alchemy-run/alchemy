@@ -6,7 +6,7 @@
  *
  * The ALGORITHM is not here: turn evaluation, stance rendering, the
  * skill graph, toolkit assembly, and sampling are the shared
- * `compileTick`/`sampleTick` from `AI/DriverShared` — the same code
+ * `compileTick`/`sampleTick` from `AI/DriverCore` — the same code
  * the resident host (`AI.DriverCore`) runs. This module contributes
  * what the substrate forces:
  *
@@ -76,7 +76,7 @@ import {
   type ObservationDraft,
   type SessionOps,
   type Stance,
-} from "../../AI/DriverShared.ts";
+} from "../../AI/DriverCore.ts";
 import type { DriverError } from "../../AI/Errors.ts";
 import { makeModel, Model } from "../../AI/Model.ts";
 import {

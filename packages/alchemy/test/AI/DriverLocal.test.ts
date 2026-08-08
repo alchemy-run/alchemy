@@ -19,10 +19,10 @@
  *   run ignores further input.
  */
 import * as AI from "@/AI/index.ts";
-import { DriverCore } from "@/AI/DriverCore.ts";
+import { DriverLocal } from "@/AI/DriverLocal.ts";
 import { MemoryThreadStorage } from "@/AI/ThreadStorage.ts";
 
-const InMemoryDriver = DriverCore.pipe(Layer.provide(MemoryThreadStorage));
+const InMemoryDriver = DriverLocal.pipe(Layer.provide(MemoryThreadStorage));
 import { RuntimeContext } from "@/RuntimeContext.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Deferred from "effect/Deferred";
@@ -83,7 +83,7 @@ const interpret = (term: AI.Interpretable, charter: AI.Charter) =>
     Effect.flatMap(AI.Driver, (driver) => driver.interpret(term, charter)),
   );
 
-describe("DriverCore (in-memory)", () => {
+describe("DriverLocal (in-memory)", () => {
   it.effect("dispatch admits one item and resolves at quiescence", () => {
     const model = Model.make([
       () => [

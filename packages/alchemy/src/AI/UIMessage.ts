@@ -16,7 +16,7 @@
  */
 import type { UIMessage, UIMessageChunk, UIMessagePart } from "ai";
 import type { StreamingSample } from "./Chats.ts";
-import { renderCrash } from "./DriverShared.ts";
+import { renderCrash } from "./DriverCore.ts";
 import type { SessionObservation } from "./Observer.ts";
 
 /**
