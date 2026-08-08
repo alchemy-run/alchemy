@@ -1,6 +1,6 @@
 /**
  * The engineer, running on your machine — an Effectful
- * {@link LocalService.Vite} service hosting the agent as a detached
+ * {@link Local.Vite} service hosting the agent as a detached
  * local process: the {@link Local} provide-list (DriverCore with
  * sqlite durability, the read/run/write toolbox) under the HTTP
  * surface (Routes.ts), with the UI built by Vite and served from the
@@ -13,7 +13,7 @@
  * through).
  */
 import * as AI from "alchemy/AI";
-import * as LocalService from "alchemy/Local";
+import * as Local from "alchemy/Local";
 import * as Workspace from "alchemy/Workspace";
 import { Layer } from "effect";
 import * as Effect from "effect/Effect";
@@ -22,7 +22,7 @@ import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { GeneralEngineer } from "./Engineer.ts";
 import { engineerRoutes } from "./Routes.ts";
-import { EngineerChats, DriverLocal } from "./services/Driver.ts";
+import { DriverLocal, EngineerChats } from "./services/Driver.ts";
 import {
   ReadToolsLocal,
   RunToolsLocal,
@@ -53,7 +53,7 @@ export const EngineerLocal = GeneralEngineer.pipe(
   Layer.orDie,
 );
 
-export default class EngineerServer extends LocalService.Vite<EngineerServer>()(
+export default class EngineerServer extends Local.Vite<EngineerServer>()(
   "Engineer",
   {
     // no port pinned: the runtime binds an ephemeral one and reports it
