@@ -21,6 +21,7 @@ import {
   type Turn,
 } from "./Driver.ts";
 import {
+  applyCompactionPlan,
   asUserMessage,
   buildToolkit,
   compileTick,
@@ -465,43 +466,14 @@ export const DriverCore: Layer.Layer<
             };
           });
 
-        /**
-         * Apply a requested compaction at the tick boundary. The
-         * system prompt is untouched; drops leave an archived marker
-         * (restorable eviction — nothing is silently rewritten); reset
-         * restarts the thread from one summary note.
-         */
+        /** Apply a requested compaction at the tick boundary —
+         *  the shared plan application over this session's handle. */
         const applyCompaction = (session: SessionState): Effect.Effect<void> =>
-          Effect.gen(function* () {
+          Effect.suspend(() => {
             const plan = session.pendingCompaction;
-            if (plan === undefined) return;
+            if (plan === undefined) return Effect.void;
             session.pendingCompaction = undefined;
-            if ("reset" in plan) {
-              yield* session.handle.replaceMessages([
-                noteMessage(
-                  `The thread was compacted; it restarts from this summary of prior work:\n${plan.reset.summary}`,
-                ),
-              ]);
-              return;
-            }
-            const rows = yield* session.handle.messages;
-            const decoded = Prompt.make([...rows]).content;
-            const kept: Array<Prompt.MessageEncoded> = [];
-            let dropped = 0;
-            for (let index = 0; index < decoded.length; index++) {
-              if (plan.drop(decoded[index]!, index)) {
-                dropped++;
-              } else {
-                kept.push(rows[index]!);
-              }
-            }
-            if (dropped === 0) return;
-            yield* session.handle.replaceMessages([
-              asUserMessage(
-                `[${dropped} earlier message${dropped === 1 ? "" : "s"} archived by compaction]`,
-              ),
-              ...kept,
-            ]);
+            return applyCompactionPlan(session.handle, plan);
           });
 
         // the intrinsic spawn: an ANONYMOUS session with the spawner's

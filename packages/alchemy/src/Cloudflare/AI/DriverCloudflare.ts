@@ -63,6 +63,7 @@ import {
   type TurnFn,
 } from "../../AI/Driver.ts";
 import {
+  applyCompactionPlan,
   asUserMessage,
   compileTick,
   describeCrash,
@@ -468,41 +469,13 @@ export const DurableObjectHost: Layer.Layer<
             Effect.provide(registration.context),
           ) as Effect.Effect<A, E>;
 
-        /**
-         * Apply a requested compaction at the round boundary — same
-         * semantics as the resident host: drops leave an archived
-         * marker; reset restarts the thread from one summary note.
-         */
-        const applyCompaction = Effect.gen(function* () {
+        /** Apply a requested compaction at the round boundary —
+         *  the shared plan application over this session's handle. */
+        const applyCompaction = Effect.suspend(() => {
           const plan = pendingCompaction;
-          if (plan === undefined) return;
+          if (plan === undefined) return Effect.void;
           pendingCompaction = undefined;
-          if ("reset" in plan) {
-            yield* handle.replaceMessages([
-              noteMessage(
-                `The thread was compacted; it restarts from this summary of prior work:\n${plan.reset.summary}`,
-              ),
-            ]);
-            return;
-          }
-          const rows = yield* handle.messages;
-          const decoded = Prompt.make([...rows]).content;
-          const kept: Array<Prompt.MessageEncoded> = [];
-          let dropped = 0;
-          for (let index = 0; index < decoded.length; index++) {
-            if (plan.drop(decoded[index]!, index)) {
-              dropped++;
-            } else {
-              kept.push(rows[index]!);
-            }
-          }
-          if (dropped === 0) return;
-          yield* handle.replaceMessages([
-            asUserMessage(
-              `[${dropped} earlier message${dropped === 1 ? "" : "s"} archived by compaction]`,
-            ),
-            ...kept,
-          ]);
+          return applyCompactionPlan(handle, plan);
         });
 
         // ── the BURST: drain → tick → sample → append, until quiescent

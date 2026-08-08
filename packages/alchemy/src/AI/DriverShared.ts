@@ -31,6 +31,7 @@ import type { Turn, TurnFn } from "./Driver.ts";
 import { Refused } from "./Errors.ts";
 import { isEvent } from "./Event.ts";
 import type { ModelService } from "./Model.ts";
+import type { CompactPlan } from "./Thread.ts";
 import type { EncodedCrash, SessionObservation } from "./Observer.ts";
 import { isParameter } from "./Parameter.ts";
 import { dedentTemplate, isFragment, type Fragment } from "./Prose.ts";
@@ -476,6 +477,46 @@ export interface SessionOps {
     handler: (params: any) => Effect.Effect<any, any, any>,
   ) => (params: any) => Effect.Effect<any, any>;
 }
+
+/**
+ * Apply one requested compaction to a session's thread — shared by
+ * every host because it operates purely on the {@link ThreadHandle}.
+ * The system prompt is untouched; drops leave an archived marker
+ * (restorable eviction — nothing is silently rewritten); reset
+ * restarts the thread from one summary note.
+ */
+export const applyCompactionPlan = (
+  handle: ThreadHandle,
+  plan: CompactPlan,
+): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    if ("reset" in plan) {
+      yield* handle.replaceMessages([
+        noteMessage(
+          `The thread was compacted; it restarts from this summary of prior work:\n${plan.reset.summary}`,
+        ),
+      ]);
+      return;
+    }
+    const rows = yield* handle.messages;
+    const decoded = Prompt.make([...rows]).content;
+    const kept: Array<Prompt.MessageEncoded> = [];
+    let dropped = 0;
+    for (let index = 0; index < decoded.length; index++) {
+      if (plan.drop(decoded[index]!, index)) {
+        dropped++;
+      } else {
+        kept.push(rows[index]!);
+      }
+    }
+    if (dropped === 0) return;
+    yield* handle.replaceMessages([
+      asUserMessage(
+        `[${dropped} earlier message${dropped === 1 ? "" : "s"} archived by compaction]`,
+      ),
+      ...kept,
+    ]);
+  });
 
 /**
  * Capability resolution from the charter's captured context, memoized
