@@ -6,7 +6,6 @@ import { describe, expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { isDockerReady } from "./Runtime.ts";
 
 const { test } = Test.make({
   providers: Docker.providers(),
@@ -48,7 +47,7 @@ const startDind = Effect.fn(function* (name: string, port: number) {
 });
 
 describe("Docker.Swarm", { concurrent: false }, () => {
-  test.provider.skipIf(!isDockerReady || !!process.env.FAST)(
+  test.provider.skipIf(!!process.env.FAST)(
     "initializes a swarm on a fresh engine and deploys a service into it",
     (stack) =>
       Effect.gen(function* () {
@@ -114,7 +113,7 @@ describe("Docker.Swarm", { concurrent: false }, () => {
     { timeout: 300_000 },
   );
 
-  test.provider.skipIf(!isDockerReady || !!process.env.FAST)(
+  test.provider.skipIf(!!process.env.FAST)(
     "refuses an already-initialized engine unless explicitly adopted",
     (stack) =>
       Effect.gen(function* () {

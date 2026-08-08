@@ -1,11 +1,13 @@
 name: check
 
-# Runs the website docs validator (`bun run docs:check`) on every PR
-# so broken links / missing API references fail fast before merge.
+# Validates the repository type graph and website docs.
 
 on:
+  push:
+    branches: [main]
   pull_request:
     types: [opened, reopened, synchronize]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -36,6 +38,23 @@ jobs:
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
 
+      - name: Restore Astro build cache
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: website/node_modules/.astro
+          key: astro-${{ runner.os }}-${{ github.event.pull_request.number || 'main' }}-${{ github.sha }}
+          restore-keys: |
+            astro-${{ runner.os }}-${{ github.event.pull_request.number || 'main' }}-
+            astro-${{ runner.os }}-main-
+
       - run: bun install
       - run: bun tsc -b
-      - run: bun run docs:check
+      # An internal PR carrying `deploy-website` gets a full Astro build in
+      # website.yml via StaticSite. That build runs the same output validators,
+      # so avoid building the site a second time here. Forks still run this
+      # check because they cannot access the preview deployment secrets.
+      - name: Check website docs
+        if: >-
+          github.event.pull_request.head.repo.full_name != github.repository ||
+          !contains(github.event.pull_request.labels.*.name, 'deploy-website')
+        run: bun run docs:check

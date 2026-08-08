@@ -8,9 +8,9 @@ import {
   type DurableObjectNamespace as RuntimeDurableObject,
   type QueueConsumer as RuntimeQueueConsumer,
   type Workflow as RuntimeWorkflow,
-} from "@distilled.cloud/cloudflare-runtime";
-import type { ContainerImage } from "@distilled.cloud/cloudflare-runtime/Docker";
-import * as WorkerProxy from "@distilled.cloud/cloudflare-runtime/proxy/WorkerProxy";
+} from "@alchemy.run/cloudflare-runtime/core";
+import type { ContainerImage } from "@alchemy.run/cloudflare-runtime/core/Docker";
+import * as WorkerProxy from "@alchemy.run/cloudflare-runtime/core/proxy/WorkerProxy";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
@@ -36,6 +36,7 @@ import {
   LocalRuntimeState,
   localStorageDirectory,
 } from "../LocalRuntime.ts";
+import type { ConsumerSettings } from "../Queues/Consumer.ts";
 import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
 import { readAssetsConfigFiles } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
@@ -126,6 +127,25 @@ export const LocalWorkerProvider = () =>
         }
       >();
 
+      // ConsumerSettings speaks the Cloudflare API's dialect (batchSize,
+      // maxWaitTimeMs in milliseconds); the runtime's QueueConsumer speaks
+      // wrangler's (maxBatchSize, maxBatchTimeout in seconds). Map
+      // explicitly — a spread silently drops the mismatched fields.
+      const toRuntimeConsumerSettings = (
+        settings: ConsumerSettings | undefined,
+      ): Pick<
+        RuntimeQueueConsumer,
+        "maxBatchSize" | "maxBatchTimeout" | "maxRetries" | "retryDelay"
+      > => ({
+        maxBatchSize: settings?.batchSize,
+        maxBatchTimeout:
+          settings?.maxWaitTimeMs !== undefined
+            ? settings.maxWaitTimeMs / 1000
+            : undefined,
+        maxRetries: settings?.maxRetries,
+        retryDelay: settings?.retryDelay,
+      });
+
       const getQueueConsumers = Effect.fn(function* (scriptName: string) {
         const consumers: RuntimeQueueConsumer[] = [];
         for (const consumer of MutableHashMap.values(
@@ -146,7 +166,7 @@ export const LocalWorkerProvider = () =>
               consumers.push({
                 queueName: consumer.queueName,
                 deadLetterQueue: consumer.deadLetterQueue,
-                ...consumer.settings,
+                ...toRuntimeConsumerSettings(consumer.settings),
                 pull: {
                   queueId: consumer.queueId,
                   accountId: consumer.accountId,
@@ -162,7 +182,7 @@ export const LocalWorkerProvider = () =>
               consumers.push({
                 queueName: queue.queueName,
                 deadLetterQueue: consumer.deadLetterQueue,
-                ...consumer.settings,
+                ...toRuntimeConsumerSettings(consumer.settings),
               });
             } else {
               return yield* Effect.die(`Queue ${consumer.queueId} not found`);
@@ -675,24 +695,41 @@ export const LocalWorkerProvider = () =>
         );
 
       /**
-       * Restart a running worker with its latest bundle so start-time
-       * runtime wiring (queue consumers) is re-read from
-       * {@link LocalRuntimeState}. No-op if the worker hasn't served yet —
-       * the pending first serve will already observe the updated state.
+       * Restart a running worker with its latest bundle (or its latest Vite
+       * dev-server child) so start-time runtime wiring (queue consumers) is
+       * re-read from {@link LocalRuntimeState}. No-op if the worker hasn't
+       * served yet — the pending first serve will already observe the
+       * updated state.
        */
+      const logRestartFailure = (id: string) =>
+        Effect.catchCause((cause: Cause.Cause<unknown>) =>
+          Effect.logWarning(
+            `[${id}] Failed to restart local worker`,
+            Cause.squash(cause),
+          ),
+        );
+
       const restartWorker = (id: string) =>
         Effect.suspend(() => {
           const latest = latestServes.get(id);
-          if (!latest) return Effect.void;
-          return serveWith(latest.worker, latest.bundle, latest.proxy).pipe(
-            Effect.asVoid,
-            Effect.catchCause((cause) =>
-              Effect.logWarning(
-                `[${id}] Failed to restart local worker`,
-                Cause.squash(cause),
-              ),
-            ),
-          );
+          if (latest) {
+            return serveWith(latest.worker, latest.bundle, latest.proxy).pipe(
+              Effect.asVoid,
+              logRestartFailure(id),
+            );
+          }
+          const vite = latestViteServes.get(id);
+          if (vite) {
+            // A Vite boot is expensive, so skip the restart if the running
+            // child already serves the current wiring (the in-flight serve's
+            // re-check loop may have picked it up while this restart waited
+            // on the serve lock).
+            return serveVite(vite, { onlyIfConsumersChanged: true }).pipe(
+              Effect.asVoid,
+              logRestartFailure(id),
+            );
+          }
+          return Effect.void;
         });
 
       // Tear down the running workerd for a worker id, if any. Used when the
@@ -711,13 +748,15 @@ export const LocalWorkerProvider = () =>
       // in-flight restart may still hold the semaphore when the instance
       // is torn down, and a same-id re-create must serialize against it.
       const dropServeState = (id: string) => {
-        const latest = latestServes.get(id);
+        const latest = latestServes.get(id) ?? latestViteServes.get(id);
         if (latest) {
           MutableHashMap.remove(
             localRuntimeState.workerRestarts,
             latest.worker.name,
           );
           latestServes.delete(id);
+          latestViteServes.delete(id);
+          servedViteConsumers.delete(id);
         }
       };
 
@@ -863,6 +902,165 @@ export const LocalWorkerProvider = () =>
         return proxy.url;
       });
 
+      /** Everything needed to serve (or re-serve) a Vite dev-server child. */
+      interface ViteServeArgs {
+        worker: RunnableWorkerConfig;
+        rootDir: string | undefined;
+        invalidate: Effect.Effect<void>;
+        source: NonNullable<ViteChildConfig["source"]> | undefined;
+        proxy: WorkerProxy.WorkerProxyInstance;
+      }
+
+      /** The Vite analogue of `latestServes`: everything needed to restart
+       * the dev-server child when a sibling `Consumer` reconcile changes the
+       * queue-consumer wiring (see `workerRestarts`). */
+      const latestViteServes = new Map<string, ViteServeArgs>();
+
+      /** The queue-consumer wiring (canonical JSON) each running Vite child
+       * was started with, for the restart path's changed-wiring check. */
+      const servedViteConsumers = new Map<string, string>();
+
+      // Serve a Vite dev-server child with the same two guarantees
+      // `serveWith` gives a plain worker: a `workerRestarts` hook so sibling
+      // `Consumer` reconciles can restart the child with fresh queue-consumer
+      // wiring, and a post-start re-check so wiring that lands while the
+      // child is starting is not lost. Unlike `serveWith` this is
+      // break-before-make — two Vite dev servers rooted at the same app
+      // would race file watchers and Durable Object storage — so the proxy
+      // queues requests across the gap. The child's scope is forked from
+      // `rootScope` and tracked in `workerdScopes`, so it survives instance
+      // restarts and is reclaimed by `stop`/handoff/`serveWith` like any
+      // other running instance.
+      const serveVite = (
+        args: ViteServeArgs,
+        options?: { onlyIfConsumersChanged?: boolean },
+      ) =>
+        Semaphore.withPermits(
+          serveLock(args.worker.id),
+          1,
+        )(
+          // The bookkeeping around `startViteChild` must not be torn in half
+          // by an interrupt: once a replacement child is up it must be
+          // recorded in `workerdScopes`, or it would leak until provider
+          // shutdown while holding the worker's registry key.
+          Effect.uninterruptibleMask((restore) =>
+            Effect.gen(function* () {
+              const { worker, rootDir, invalidate, source, proxy } = args;
+              if (options?.onlyIfConsumersChanged) {
+                const current = yield* getQueueConsumers(worker.name);
+                if (
+                  workerdScopes.has(worker.id) &&
+                  JSON.stringify(current) === servedViteConsumers.get(worker.id)
+                ) {
+                  return;
+                }
+              }
+              // Queue requests while the child is (re)starting.
+              yield* proxy.unset().pipe(Effect.forkChild);
+              // The dev server and its workerd run in a child process rooted
+              // at the app.
+              const root = path.resolve(rootDir ?? process.cwd());
+              const { accountId } = yield* cloudflareEnv;
+              // Queue-consumer wiring can change while the child is starting
+              // (a sibling `Consumer` reconcile), before the restart hook
+              // below exists to pick it up. We hold the serve lock, so a
+              // restart would deadlock — instead, loop and serve again until
+              // the wiring is stable across a start.
+              while (true) {
+                const queueConsumers = yield* getQueueConsumers(worker.name);
+                // Break-before-make: tear the previous child down before
+                // starting its replacement (also covers a superseded child
+                // from the previous loop iteration).
+                yield* closeWorkerd(worker.id);
+                const scope = yield* Scope.fork(rootScope);
+                const child = yield* restore(
+                  startViteChild(
+                    {
+                      rootDir: root,
+                      publicUrl: proxy.url.toString().replace(/\/$/, ""),
+                      accountId,
+                      storageDirectory,
+                      stack: { name: stack.name, stage: stack.stage },
+                      // Already resolved to plain values by `start`
+                      // (`Worker.URL` sentinels substituted); Redacted
+                      // unwraps at the process boundary inside
+                      // `startViteChild`.
+                      env: worker.env ?? {},
+                      source,
+                      worker: {
+                        name: worker.name,
+                        compatibility: worker.compatibility,
+                        main: worker.viteMain,
+                        viteEnvironments: worker.viteEnvironments,
+                        hasAssets: worker.hasAssets,
+                        bindingDescriptors: worker.bindingDescriptors,
+                        devRemote: worker.devRemote,
+                        durableObjectNamespaces: worker.durableObjectNamespaces,
+                        workflows: worker.workflows,
+                        hyperdrives: worker.hyperdrives,
+                        queueConsumers,
+                        assets: yield* toRuntimeAssets(worker.assets),
+                      },
+                    },
+                    (channel, line) => {
+                      process[channel].write(`${worker.id} | ${line}\n`);
+                    },
+                  ).pipe(Scope.provide(scope)),
+                ).pipe(
+                  // The scope hangs off `rootScope`, so a failed or
+                  // interrupted start must close it here — nothing else owns
+                  // it yet.
+                  Effect.onExit((exit) =>
+                    exit._tag === "Failure"
+                      ? Scope.close(scope, exit)
+                      : Effect.void,
+                  ),
+                );
+                workerdScopes.set(worker.id, scope);
+                latestViteServes.set(worker.id, args);
+                // Unexpected child death: log, park the proxy, and mark the
+                // instance for update on the next plan. Forked into the
+                // child's scope so a deliberate restart or teardown
+                // interrupts the watcher before the process is killed.
+                yield* child.exitCode.pipe(
+                  Effect.flatMap((exitCode) =>
+                    Effect.logWarning(
+                      `[${worker.id}] Dev server child exited unexpectedly with code ${exitCode}`,
+                    ),
+                  ),
+                  Effect.andThen(proxy.unset().pipe(Effect.ignore)),
+                  Effect.andThen(invalidate),
+                  Effect.forkIn(scope),
+                );
+                // Register the restart hook before the re-check below:
+                // changes landing after the re-check find the hook; changes
+                // before it are caught by the re-check. Nothing falls in
+                // between.
+                MutableHashMap.set(
+                  localRuntimeState.workerRestarts,
+                  worker.name,
+                  restartWorker(worker.id),
+                );
+                const currentConsumers = yield* getQueueConsumers(worker.name);
+                if (
+                  JSON.stringify(currentConsumers) !==
+                  JSON.stringify(queueConsumers)
+                ) {
+                  // Wiring changed while the child was starting — serve
+                  // again with the fresh consumers before exposing it.
+                  continue;
+                }
+                servedViteConsumers.set(
+                  worker.id,
+                  JSON.stringify(queueConsumers),
+                );
+                yield* proxy.set(child.url);
+                return;
+              }
+            }),
+          ),
+        );
+
       const runVite = Effect.fn(function* (
         worker: RunnableWorkerConfig,
         rootDir: string | undefined,
@@ -870,53 +1068,7 @@ export const LocalWorkerProvider = () =>
         source?: NonNullable<ViteChildConfig["source"]>,
       ) {
         const proxy = yield* maybeStartProxy(worker.id, worker.dev);
-        yield* proxy.unset().pipe(Effect.forkChild);
-        // The dev server and its workerd run in a child process rooted at
-        // the app.
-        const root = path.resolve(rootDir ?? process.cwd());
-        const { accountId } = yield* cloudflareEnv;
-        const child = yield* startViteChild(
-          {
-            rootDir: root,
-            publicUrl: proxy.url.toString().replace(/\/$/, ""),
-            accountId,
-            storageDirectory,
-            stack: { name: stack.name, stage: stack.stage },
-            // Already resolved to plain values by `start` (`Worker.URL`
-            // sentinels substituted); Redacted unwraps at the process
-            // boundary inside `startViteChild`.
-            env: worker.env ?? {},
-            source,
-            worker: {
-              name: worker.name,
-              compatibility: worker.compatibility,
-              main: worker.viteMain,
-              viteEnvironments: worker.viteEnvironments,
-              hasAssets: worker.hasAssets,
-              bindingDescriptors: worker.bindingDescriptors,
-              devRemote: worker.devRemote,
-              durableObjectNamespaces: worker.durableObjectNamespaces,
-              workflows: worker.workflows,
-              hyperdrives: worker.hyperdrives,
-              queueConsumers: yield* getQueueConsumers(worker.name),
-              assets: yield* toRuntimeAssets(worker.assets),
-            },
-          },
-          (channel, line) => {
-            process[channel].write(`${worker.id} | ${line}\n`);
-          },
-        );
-        yield* proxy.set(child.url);
-        yield* child.exitCode.pipe(
-          Effect.flatMap((exitCode) =>
-            Effect.logWarning(
-              `[${worker.id}] Dev server child exited unexpectedly with code ${exitCode}`,
-            ),
-          ),
-          Effect.andThen(proxy.unset().pipe(Effect.ignore)),
-          Effect.andThen(invalidate),
-          Effect.forkScoped,
-        );
+        yield* serveVite({ worker, rootDir, invalidate, source, proxy });
         return proxy.url;
       });
 
@@ -1205,7 +1357,13 @@ const toRuntimeAssets = Effect.fn(function* (
       | "404-page"
       | "single-page-application"
       | undefined,
-    runWorkerFirst: assets.runWorkerFirst,
+    // The deployed default is assets-first (`run_worker_first` omitted =
+    // false on the cloud API), but the runtime's router inverts it — it
+    // treats anything `!== false` (including `undefined`) as worker-first.
+    // Pin the cloud default explicitly so a Worker with an assets directory
+    // and a `main` serves asset paths from the asset layer locally exactly
+    // like it does deployed.
+    runWorkerFirst: assets.runWorkerFirst ?? false,
     serveDirectly: assets.serveDirectly,
   };
 });

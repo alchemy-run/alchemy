@@ -10,9 +10,11 @@
     // types a nuxt build generates.
     "test/Cloudflare/Website/fixtures/nuxt-app",
     "test/AWS/Website/fixtures/nuxt-app",
+    "test/Cloudflare/Website/fixtures/nuxt-spa-app",
     // Octane fixture: `.tsx` components use octane's JSX runtime, which
     // conflicts with this package's default `@opentui/solid` jsxImportSource.
-    "test/Cloudflare/Website/fixtures/octane-app"
+    "test/Cloudflare/Website/fixtures/octane-app",
+    "test/Cloudflare/Website/fixtures/octane-spa-app"
   ],
   "compilerOptions": {
     "composite": true,

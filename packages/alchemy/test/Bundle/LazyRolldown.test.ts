@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
  * can only be made in an isolated module registry. `process.dlopen` is
  * the choke point every native-addon load goes through, so intercepting
  * it detects the binding no matter which package (`rolldown`,
- * `rolldown/parseAst`, `@distilled.cloud/cloudflare-rolldown-plugin`)
+ * `rolldown/parseAst`, `@alchemy.run/cloudflare-runtime/rolldown`)
  * pulled it in.
  */
 

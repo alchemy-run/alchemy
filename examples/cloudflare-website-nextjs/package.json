@@ -10,13 +10,13 @@
     "test": "bun test"
   },
   "dependencies": {
-    "next": "16.2.10",
+    "next": "catalog:frameworks",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
-    "@distilled.cloud/nextjs": "workspace:*",
-    "@opennextjs/cloudflare": "1.20.1",
+    "@alchemy.run/cloudflare-frameworks": "workspace:*",
+    "@opennextjs/cloudflare": "catalog:frameworks",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "alchemy": "workspace:*",

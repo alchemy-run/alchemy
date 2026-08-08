@@ -95,7 +95,7 @@ export interface BundleFile {
   readonly hash: string;
 }
 
-export class BundleError extends Schema.TaggedErrorClass<BundleError>()(
+export class BundleError extends Schema.TaggedError<BundleError>()(
   "BundleError",
   {
     message: Schema.String,
@@ -407,7 +407,7 @@ export function bundleOutputFromRolldownOutputBundle(
  *
  * These run LAST so they see module ids that have already been resolved into
  * `node_modules/<pkg>/...` by upstream resolver plugins such as
- * `@distilled.cloud/cloudflare-rolldown-plugin`.
+ * `@alchemy.run/cloudflare-runtime/rolldown`.
  */
 async function builtInPlugins(
   extra?: BundleExtraOptions,

@@ -460,11 +460,41 @@ export const LiveContainerProvider = () =>
           );
         }
 
-        yield* docker.image.push(imageRef, {
-          username,
-          password: credentials.password,
-          server: registryId,
-        });
+        // Cloudflare's container registry intermittently answers blob HEAD
+        // probes with 500 under concurrent suite push load. Ride that out
+        // with a bounded retry rather than failing the whole deploy.
+        //
+        // Push the SAME platform we pulled/built. With Docker's containerd
+        // image store a tag can hold several platform variants (e.g. a stray
+        // host-arch `docker pull` adds arm64 next to our amd64), and an
+        // un-scoped push then ships the wrong variant — Cloudflare's amd64
+        // hosts never boot it and the app 503s "provisioning" forever.
+        yield* docker.image
+          .push(
+            imageRef,
+            {
+              username,
+              password: credentials.password,
+              server: registryId,
+            },
+            platform,
+          )
+          .pipe(
+            Effect.retry({
+              while: (e) => {
+                const msg = String(e).toLowerCase();
+                return (
+                  msg.includes("500") ||
+                  msg.includes("internal server error") ||
+                  msg.includes("unexpected status")
+                );
+              },
+              schedule: Schedule.max([
+                Schedule.spaced("3 seconds"),
+                Schedule.recurs(5),
+              ]),
+            }),
+          );
       });
 
       const maybeCreateRollout = Effect.fn(function* ({
