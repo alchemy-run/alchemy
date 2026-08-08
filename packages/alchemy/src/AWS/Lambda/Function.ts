@@ -340,8 +340,11 @@ export interface FunctionProps extends PlatformProps {
  */
 const handlerStringOf = (props: FunctionProps): string => {
   const externalMode = props.isExternal || props.bundle === false;
+  // `main` may be an unresolved Output during precreate (the stub's mock
+  // code exports `index.*` anyway); the real Handler is applied at
+  // reconcile, where props are resolved.
   const base =
-    props.bundle === false
+    props.bundle === false && typeof props.main === "string"
       ? props.main
           .slice(
             Math.max(
