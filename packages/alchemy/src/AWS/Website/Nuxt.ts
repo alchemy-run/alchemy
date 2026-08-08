@@ -1,12 +1,14 @@
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import { AlchemyContext } from "../../AlchemyContext.ts";
 import type { MemoOptions } from "../../Command/Memo.ts";
 import type { Input } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
+import { ProviderModePolicy } from "../../ProviderMode.ts";
 import { Function as LambdaFunction } from "../Lambda/Function.ts";
 import type { AssetFileOption } from "./AssetDeployment.ts";
-import { FrameworkBuild } from "./FrameworkBuild.ts";
+import { Server } from "./Server.ts";
 import {
   makeKvSite,
   type StaticSiteProps,
@@ -152,13 +154,35 @@ export interface NuxtProps {
  */
 export const Nuxt = (id: string, props: NuxtProps = {}) =>
   Effect.gen(function* () {
-    const build = yield* FrameworkBuild("Build", {
+    const ctx = yield* AlchemyContext;
+    const remoted = yield* ProviderModePolicy;
+    // Mirrors the Cloudflare Website composites: during `alchemy dev` the
+    // site is the framework's own dev server (native HMR) and no cloud
+    // resources are declared; `Alchemy.remote()` opts back into the full
+    // live deployment.
+    const isLocal = ctx.dev && remoted !== true;
+
+    const build = yield* Server("Build", {
       framework: NUXT_FRAMEWORK_SPECIFIER,
       target: NUXT_AWS_TARGET_SPECIFIER,
       root: props.rootDir,
       options: props.nuxt ? { nuxt: props.nuxt } : undefined,
       memo: props.memo,
     });
+
+    if (isLocal) {
+      return {
+        bucket: undefined,
+        build,
+        files: undefined,
+        distribution: undefined,
+        invalidation: undefined,
+        kvNamespace: undefined,
+        server: undefined,
+        serverUrl: undefined,
+        url: build.url,
+      };
+    }
 
     const server = yield* LambdaFunction("Server", {
       main: build.serverEntry as unknown as string,

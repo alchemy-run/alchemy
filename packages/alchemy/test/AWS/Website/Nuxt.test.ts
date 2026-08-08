@@ -56,6 +56,20 @@ describe.skipIf(!runLive)("AWS.Website.Nuxt", () => {
         const url = deployed.site.url! as string;
         expect(url).toMatch(/^https:\/\//);
         expect(deployed.site.serverUrl).toBeDefined();
+        yield* Effect.log(
+          `site url: ${url} | server url: ${deployed.site.serverUrl}`,
+        );
+
+        // The Lambda Function URL serves the SSR page directly — isolates
+        // server-function health from the CloudFront edge routing.
+        yield* expectUrlContains(
+          `${deployed.site.serverUrl!}`,
+          "NUXT_AWS_PAGE_MARKER",
+          {
+            timeout: "120 seconds",
+            label: "SSR direct from Lambda URL",
+          },
+        );
 
         // SSR page rendered by the Lambda through CloudFront.
         yield* expectUrlContains(`${url}/`, "NUXT_AWS_PAGE_MARKER", {
@@ -99,8 +113,10 @@ describe.skipIf(!runLive)("AWS.Website.Nuxt", () => {
 
         const distributionId = deployed.site.distribution!.distributionId;
 
-        yield* stack.destroy();
-        yield* assertDistributionDeleted(distributionId);
+        if (!process.env.NO_DESTROY) {
+          yield* stack.destroy();
+          yield* assertDistributionDeleted(distributionId);
+        }
       }),
     { timeout: 2_400_000 },
   );
