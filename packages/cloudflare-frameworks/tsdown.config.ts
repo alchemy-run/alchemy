@@ -5,6 +5,9 @@ export default defineConfig([
     cwd: ".",
     entry: {
       "core/index": "src/core/index.ts",
+      // Standalone child-process entry (spawned by BuildChild.ts, never
+      // imported) — must keep its own stable file at dist/core/.
+      "core/BuildChildRunner": "src/core/BuildChildRunner.ts",
       "astro/index": "src/astro/index.ts",
       "astro/cloudflare": "src/astro/cloudflare.ts",
       "astro/source": "src/astro/source.ts",

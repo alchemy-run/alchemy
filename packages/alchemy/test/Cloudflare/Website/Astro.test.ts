@@ -325,7 +325,10 @@ const waitForNamespaceToBeDeleted = Effect.fn(function* (
     Effect.retry({
       while: (e): e is NamespaceStillExists =>
         e instanceof NamespaceStillExists,
-      schedule: Schedule.exponential(250),
+      schedule: Schedule.min([
+        Schedule.exponential(250),
+        Schedule.spaced("2 seconds"),
+      ]),
       times: 10,
     }),
     Effect.catchTag("NamespaceNotFound", () => Effect.void),

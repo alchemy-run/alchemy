@@ -87,9 +87,9 @@ const fetchJsonReady = <T>(url: string) =>
     );
   });
 
-// Concurrent for consistency with the other Website suites; both tests
-// are `exclusive: true` (the kit dev server is cwd-sensitive), so the
-// runner's whole-process lock still serializes them globally.
+// Concurrent like the other Website suites: the kit dev server never
+// chdirs (the kit-runtime realign plugin handles cwd != root), so
+// nothing here mutates process-global state.
 describe.concurrent("SvelteKit dev", () => {
   test.provider(
     "SvelteKit dev: local dev server renders SSR with platform.env bindings, local KV, and HMR",
@@ -190,10 +190,7 @@ describe.concurrent("SvelteKit dev", () => {
 
         yield* stack.destroy();
       }).pipe(logLevel),
-    // The kit dev server is cwd-sensitive (same reason the live test is
-    // exclusive): `svelte-kit sync` and the config loader resolve from the
-    // process working directory.
-    { timeout: 300_000, exclusive: true },
+    { timeout: 300_000 },
   );
 
   /**
@@ -291,7 +288,7 @@ describe.concurrent("SvelteKit dev", () => {
           );
         expect(gone).toBe(true);
       }).pipe(logLevel),
-    { timeout: 300_000, exclusive: true },
+    { timeout: 300_000 },
   );
 
   // ─────────────────────────────────────────────────────────────────────
@@ -378,8 +375,6 @@ describe.concurrent("SvelteKit dev", () => {
 
         yield* stack.destroy();
       }).pipe(logLevel),
-    // The kit dev server is cwd-sensitive (same reason the other dev
-    // tests are exclusive).
-    { timeout: 300_000, exclusive: true },
+    { timeout: 300_000 },
   );
 });

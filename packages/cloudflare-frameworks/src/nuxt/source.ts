@@ -40,6 +40,7 @@ import fg from "fast-glob";
 import * as NodeCrypto from "node:crypto";
 import * as NodePath from "node:path";
 import { fileURLToPath } from "node:url";
+import { runBuildChild } from "../core/BuildChild.ts";
 import { makeCloudflareTarget } from "./cloudflare.ts";
 import { make as makeNuxt, type NuxtOptions } from "./Nuxt.ts";
 
@@ -545,6 +546,36 @@ const resolveDevEnvOverrides = (
   return out;
 };
 
+/**
+ * The production build runs in a disposable child process with
+ * `cwd = project root` (see `core/BuildChild.ts`): `loadNuxt` executes the
+ * user's `nuxt.config.ts` and modules, which may read the cwd, mutate
+ * `process.env`, or `process.chdir` — none of which may touch the engine
+ * process. The shared `core/BuildChildRunner`
+ * entry imports this module in the child and calls the exported
+ * {@link buildInChild}.
+ */
+export interface NuxtBuildChildConfig {
+  readonly rootDir: string;
+  readonly compatibilityDate: string;
+  readonly compatibilityFlags: Array<string>;
+  readonly main: string | undefined;
+  readonly nuxt: Record<string, unknown> | undefined;
+}
+
+export const buildInChild = (config: NuxtBuildChildConfig) =>
+  Effect.gen(function* () {
+    const framework = yield* makeNuxt({
+      root: config.rootDir,
+      target: makeCloudflareTarget,
+      compatibilityDate: config.compatibilityDate,
+      compatibilityFlags: config.compatibilityFlags,
+      main: config.main,
+      nuxt: config.nuxt,
+    });
+    return yield* framework.build({ root: config.rootDir });
+  });
+
 export const makeNuxtSource = (options: NuxtSourceOptions): SourceProvider => {
   const rootDir = NodePath.resolve(options.rootDir ?? process.cwd());
   const frameworkOptions = (
@@ -566,10 +597,18 @@ export const makeNuxtSource = (options: NuxtSourceOptions): SourceProvider => {
   return {
     ownsAssets: true,
     build: Effect.fnUntraced(function* (ctx) {
-      const framework = yield* makeNuxt(frameworkOptions(ctx));
-      const output = yield* framework
-        .build({ root: rootDir })
-        .pipe(Effect.mapError(wrapFrameworkError));
+      const output = yield* runBuildChild({
+        module: import.meta.url,
+        rootDir,
+        framework: "nuxt",
+        config: {
+          rootDir,
+          compatibilityDate: ctx.compatibility.date,
+          compatibilityFlags: ctx.compatibility.flags,
+          main: options.main,
+          nuxt: options.nuxt,
+        } satisfies NuxtBuildChildConfig,
+      }).pipe(Effect.mapError(wrapFrameworkError));
       if (
         output.serverModules === undefined ||
         output.serverModules.length === 0

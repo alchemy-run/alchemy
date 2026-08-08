@@ -93,9 +93,9 @@ const kvRoundTrip = Effect.fn(function* (
  * waku's own dev server serves the app behind the alchemy dev proxy, with
  * the `kv_namespace` binding lowered onto the local workerd simulator.
  */
-// Concurrent for consistency with the other Website suites; both tests
-// are `exclusive: true` (the Waku source build/dev chdirs in-process), so
-// the runner's whole-process lock still serializes them globally.
+// Concurrent like the other Website suites: the Waku build runs in a
+// child process with cwd = project root (core/BuildChild.ts), and the
+// dev server only chdirs briefly inside the RPC sidecar during startup.
 describe.concurrent("Waku dev", () => {
   test.provider(
     "Waku dev: local dev server renders RSC SSR with bindings, local KV, and HMR",
@@ -210,10 +210,7 @@ describe.concurrent("Waku dev", () => {
 
         yield* stack.destroy();
       }).pipe(logLevel),
-    // exclusive: the Waku build/dev server temporarily switches
-    // process.cwd() to the project root (waku resolves inputs relative to
-    // the cwd); concurrent fibers resolving relative paths would race it.
-    { timeout: 300_000, exclusive: true },
+    { timeout: 300_000 },
   );
 
   /**
@@ -319,9 +316,6 @@ describe.concurrent("Waku dev", () => {
           );
         expect(gone).toBe(true);
       }).pipe(logLevel),
-    // exclusive: the Waku build/dev server temporarily switches
-    // process.cwd() to the project root (waku resolves inputs relative to
-    // the cwd); concurrent fibers resolving relative paths would race it.
-    { timeout: 300_000, exclusive: true },
+    { timeout: 300_000 },
   );
 });

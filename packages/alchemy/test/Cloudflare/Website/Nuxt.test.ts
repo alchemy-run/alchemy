@@ -73,7 +73,10 @@ const waitForNamespaceToBeDeleted = Effect.fn(function* (
     Effect.retry({
       while: (e): e is NamespaceStillExists =>
         e instanceof NamespaceStillExists,
-      schedule: Schedule.exponential(250),
+      schedule: Schedule.min([
+        Schedule.exponential(250),
+        Schedule.spaced("2 seconds"),
+      ]),
       times: 10,
     }),
     Effect.catchTag("NamespaceNotFound", () => Effect.void),
@@ -93,7 +96,10 @@ const readNamespaceValue = Effect.fn(function* (options: {
   const res = yield* kv.getNamespaceValue(options).pipe(
     Effect.retry({
       while: (e): boolean => e._tag === "KeyNotFound",
-      schedule: Schedule.exponential("1 second"),
+      schedule: Schedule.min([
+        Schedule.exponential("1 second"),
+        Schedule.spaced("3 seconds"),
+      ]),
       times: 8,
     }),
   );
@@ -508,8 +514,14 @@ const fetchJsonReady = <T>(url: string) =>
           : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
       ),
       Effect.retry({
-        schedule: Schedule.exponential("500 millis"),
-        times: 15,
+        // Capped interval, ~90s total budget: fresh workers.dev subdomains and
+        // DO namespaces can take over a minute to start serving under
+        // concurrent deploys.
+        schedule: Schedule.min([
+          Schedule.exponential("500 millis"),
+          Schedule.spaced("2 seconds"),
+        ]),
+        times: 45,
       }),
     );
   });
@@ -530,8 +542,12 @@ const postJsonReady = <T>(url: string, body: unknown) =>
         : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
     ),
     Effect.retry({
-      schedule: Schedule.exponential("500 millis"),
-      times: 15,
+      // Capped interval, ~90s total budget (workers.dev / DO propagation).
+      schedule: Schedule.min([
+        Schedule.exponential("500 millis"),
+        Schedule.spaced("2 seconds"),
+      ]),
+      times: 45,
     }),
   );
 
@@ -549,7 +565,11 @@ const putJsonReady = <T>(url: string) =>
         : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
     ),
     Effect.retry({
-      schedule: Schedule.exponential("500 millis"),
-      times: 15,
+      // Capped interval, ~90s total budget (workers.dev / DO propagation).
+      schedule: Schedule.min([
+        Schedule.exponential("500 millis"),
+        Schedule.spaced("2 seconds"),
+      ]),
+      times: 45,
     }),
   );

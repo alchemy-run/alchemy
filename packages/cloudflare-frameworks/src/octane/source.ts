@@ -40,6 +40,7 @@ import fg from "fast-glob";
 import * as NodeCrypto from "node:crypto";
 import * as NodePath from "node:path";
 import { fileURLToPath } from "node:url";
+import { runBuildChild } from "../core/BuildChild.ts";
 import { makeCloudflareTarget } from "./cloudflare.ts";
 import { make as makeOctane, type OctaneOptions } from "./Octane.ts";
 
@@ -505,6 +506,32 @@ const assetsConfig = (
   return Object.keys(config).length > 0 ? config : undefined;
 };
 
+/**
+ * The production build runs in a disposable child process with
+ * `cwd = project root` (see `core/BuildChild.ts`): the natively-loaded
+ * `vite.config.*` executes user plugins that may read the cwd, mutate
+ * `process.env`, or `process.chdir` — none of which may touch the engine
+ * process. The shared `core/BuildChildRunner`
+ * entry imports this module in the child and calls the exported
+ * {@link buildInChild}.
+ */
+export interface OctaneBuildChildConfig {
+  readonly rootDir: string;
+  readonly compatibilityDate: string;
+  readonly compatibilityFlags: Array<string>;
+}
+
+export const buildInChild = (config: OctaneBuildChildConfig) =>
+  Effect.gen(function* () {
+    const framework = yield* makeOctane({
+      root: config.rootDir,
+      target: makeCloudflareTarget,
+      compatibilityDate: config.compatibilityDate,
+      compatibilityFlags: config.compatibilityFlags,
+    });
+    return yield* framework.build({ root: config.rootDir });
+  });
+
 export const makeOctaneSource = (
   options: OctaneSourceOptions,
 ): SourceProvider => {
@@ -522,10 +549,16 @@ export const makeOctaneSource = (
   return {
     ownsAssets: true,
     build: Effect.fnUntraced(function* (ctx) {
-      const framework = yield* makeOctane(frameworkOptions(ctx));
-      const output = yield* framework
-        .build({ root: rootDir })
-        .pipe(Effect.mapError(wrapFrameworkError));
+      const output = yield* runBuildChild({
+        module: import.meta.url,
+        rootDir,
+        framework: "octane",
+        config: {
+          rootDir,
+          compatibilityDate: ctx.compatibility.date,
+          compatibilityFlags: ctx.compatibility.flags,
+        } satisfies OctaneBuildChildConfig,
+      }).pipe(Effect.mapError(wrapFrameworkError));
       if (
         output.serverModules === undefined ||
         output.serverModules.length === 0

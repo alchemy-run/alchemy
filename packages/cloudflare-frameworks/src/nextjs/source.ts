@@ -37,6 +37,7 @@ import type { PlatformError } from "effect/PlatformError";
 import type * as Scope from "effect/Scope";
 import * as NodeCrypto from "node:crypto";
 import { createRequire } from "node:module";
+import { runBuildChild } from "../core/BuildChild.ts";
 import * as Nextjs from "./Nextjs.ts";
 
 const packageVersion: string = createRequire(import.meta.url)(
@@ -532,6 +533,46 @@ const withFramework = <A, E, R>(
     return yield* use(framework);
   }).pipe(Effect.provide(Nextjs.make(options)));
 
+/**
+ * The production build runs in a disposable child process with
+ * `cwd = project root` (see `core/BuildChild.ts`). The OpenNext pipeline
+ * itself already runs in its own child (`runner.mjs`, nested inside this
+ * one), but the surrounding steps — `open-next.config.ts` handling, the
+ * final bundle pass, cache population — execute framework/user code that
+ * must not run in the engine process either. The shared `core/BuildChildRunner`
+ * entry imports this module in the child and calls the exported
+ * {@link buildInChild}.
+ */
+export interface NextjsBuildChildConfig {
+  readonly rootDir: string;
+  readonly compatibilityDate: string;
+  readonly compatibilityFlags: Array<string>;
+  readonly configPath: string | undefined;
+  readonly buildCommand: string | undefined;
+  readonly skipNextBuild: boolean | undefined;
+  readonly minify: boolean | undefined;
+  readonly debug: boolean | undefined;
+}
+
+export const buildInChild = (config: NextjsBuildChildConfig) =>
+  withFramework(
+    {
+      root: config.rootDir,
+      vite: {
+        compatibilityDate: config.compatibilityDate,
+        compatibilityFlags: config.compatibilityFlags,
+      },
+      nextjs: {
+        configPath: config.configPath,
+        buildCommand: config.buildCommand,
+        skipNextBuild: config.skipNextBuild,
+        minify: config.minify,
+        debug: config.debug,
+      },
+    },
+    (framework) => framework.build({ root: config.rootDir }),
+  );
+
 const makeProvider = (options: NextjsSourceOptions): SourceProvider => {
   const frameworkOptions = (
     ctx: SourceContext,
@@ -563,9 +604,21 @@ const makeProvider = (options: NextjsSourceOptions): SourceProvider => {
 
     build: Effect.fn(function* (ctx) {
       const root = yield* resolveRoot();
-      const output = yield* withFramework(frameworkOptions(ctx), (framework) =>
-        framework.build({ root }),
-      ).pipe(Effect.mapError(frameworkError));
+      const output = yield* runBuildChild({
+        module: import.meta.url,
+        rootDir: root,
+        framework: "nextjs",
+        config: {
+          rootDir: root,
+          compatibilityDate: ctx.compatibility.date,
+          compatibilityFlags: ctx.compatibility.flags,
+          configPath: options.configPath,
+          buildCommand: options.buildCommand,
+          skipNextBuild: options.skipNextBuild,
+          minify: options.minify,
+          debug: options.debug,
+        } satisfies NextjsBuildChildConfig,
+      }).pipe(Effect.mapError(frameworkError));
       if (
         output.serverModules === undefined ||
         output.serverModules.length === 0

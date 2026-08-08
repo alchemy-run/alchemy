@@ -37,11 +37,11 @@ import type * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import type * as Scope from "effect/Scope";
-import * as Semaphore from "effect/Semaphore";
 import fg from "fast-glob";
 import * as NodeCrypto from "node:crypto";
 import * as NodePath from "node:path";
 import { fileURLToPath } from "node:url";
+import { runBuildChild } from "../core/BuildChild.ts";
 import { makeCloudflareTarget } from "./cloudflare.ts";
 import {
   make as makeSvelteKit,
@@ -553,29 +553,32 @@ const resolveDevEnvOverrides = (
  * threads re-derive `outDir`) relative to `process.cwd()` — with the
  * in-memory config there is no `vite.config` file for the workers to
  * re-load, so their fallback resolves against the cwd. The build therefore
- * runs with the cwd temporarily switched to the project root, serialized
- * through a process-level lock (cwd is process-global state).
+ * runs in a disposable child process whose working directory IS the project
+ * root (see `core/BuildChild.ts`) — no in-process `chdir`, no process-level
+ * lock, unbounded build concurrency. The shared `core/BuildChildRunner`
+ * entry imports this module in the child and calls the exported
+ * {@link buildInChild}.
  */
-const cwdLock = Semaphore.makeUnsafe(1);
+export interface SvelteKitBuildChildConfig {
+  readonly rootDir: string;
+  readonly compatibilityDate: string;
+  readonly compatibilityFlags: Array<string>;
+  readonly kit: Record<string, unknown> | undefined;
+  readonly adapter: SvelteKitAdapterOptions | undefined;
+}
 
-const withRootCwd = <A, E, R>(
-  rootDir: string,
-  effect: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E, R> =>
-  Semaphore.withPermits(
-    cwdLock,
-    1,
-  )(
-    Effect.acquireUseRelease(
-      Effect.sync(() => {
-        const previous = process.cwd();
-        process.chdir(rootDir);
-        return previous;
-      }),
-      () => effect,
-      (previous) => Effect.sync(() => process.chdir(previous)),
-    ),
-  );
+export const buildInChild = (config: SvelteKitBuildChildConfig) =>
+  Effect.gen(function* () {
+    const framework = yield* makeSvelteKit({
+      root: config.rootDir,
+      target: makeCloudflareTarget,
+      compatibilityDate: config.compatibilityDate,
+      compatibilityFlags: config.compatibilityFlags,
+      kit: config.kit,
+      adapter: config.adapter,
+    });
+    return yield* framework.build({ root: config.rootDir });
+  });
 
 export const makeSvelteKitSource = (
   options: SvelteKitSourceOptions,
@@ -600,13 +603,18 @@ export const makeSvelteKitSource = (
   return {
     ownsAssets: true,
     build: Effect.fnUntraced(function* (ctx) {
-      const framework = yield* makeSvelteKit(frameworkOptions(ctx));
-      const output = yield* withRootCwd(
+      const output = yield* runBuildChild({
+        module: import.meta.url,
         rootDir,
-        framework
-          .build({ root: rootDir })
-          .pipe(Effect.mapError(wrapFrameworkError)),
-      );
+        framework: "sveltekit",
+        config: {
+          rootDir,
+          compatibilityDate: ctx.compatibility.date,
+          compatibilityFlags: ctx.compatibility.flags,
+          kit: options.kit,
+          adapter: options.adapter,
+        } satisfies SvelteKitBuildChildConfig,
+      }).pipe(Effect.mapError(wrapFrameworkError));
       if (
         output.serverModules === undefined ||
         output.serverModules.length === 0

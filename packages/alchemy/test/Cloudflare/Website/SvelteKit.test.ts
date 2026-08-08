@@ -43,9 +43,9 @@ const svelteKitProps = (rootDir: string) => ({
   memo: { include: ["src/**", "static/**", "package.json"] },
 });
 
-// Concurrent for consistency with the other Website suites; both tests
-// are `exclusive: true` (the SvelteKit source build chdirs in-process),
-// so the runner's whole-process lock still serializes them globally.
+// Concurrent like the other Website suites: the SvelteKit source build
+// runs in a child process with cwd = project root (core/BuildChild.ts),
+// so nothing here mutates process-global state.
 describe.concurrent("SvelteKit", () => {
   test.provider(
     "SvelteKit: deploys SSR + bindings + static assets and memoizes unchanged rebuilds",
@@ -209,9 +209,7 @@ describe.concurrent("SvelteKit", () => {
         // Destroy must also delete the bound KV namespace from the cloud.
         yield* waitForNamespaceToBeDeleted(siteKv.namespaceId, accountId);
       }).pipe(logLevel),
-    // exclusive: the SvelteKit build temporarily switches process.cwd() to
-    // the project root (kit resolves config relative to the cwd).
-    { timeout: 360_000, exclusive: true },
+    { timeout: 360_000 },
   );
 
   // ─────────────────────────────────────────────────────────────────────
@@ -304,9 +302,7 @@ describe.concurrent("SvelteKit", () => {
         yield* stack.destroy();
         yield* waitForWorkerToBeDeleted(site.workerName, accountId);
       }).pipe(logLevel),
-    // exclusive: the SvelteKit build temporarily switches process.cwd() to
-    // the project root (kit resolves config relative to the cwd).
-    { timeout: 360_000, exclusive: true },
+    { timeout: 360_000 },
   );
 
   // ─────────────────────────────────────────────────────────────────────
@@ -432,9 +428,7 @@ describe.concurrent("SvelteKit", () => {
         yield* stack.destroy();
         yield* waitForWorkerToBeDeleted(site.workerName, accountId);
       }).pipe(logLevel),
-    // exclusive: the SvelteKit build temporarily switches process.cwd() to
-    // the project root (kit resolves config relative to the cwd).
-    { timeout: 360_000, exclusive: true },
+    { timeout: 360_000 },
   );
 
   test.provider(
@@ -502,9 +496,7 @@ describe.concurrent("SvelteKit", () => {
         yield* stack.destroy();
         yield* waitForWorkerToBeDeleted(site.workerName, accountId);
       }).pipe(logLevel),
-    // exclusive: the SvelteKit build temporarily switches process.cwd() to
-    // the project root (kit resolves config relative to the cwd).
-    { timeout: 360_000, exclusive: true },
+    { timeout: 360_000 },
   );
 
   // ─────────────────────────────────────────────────────────────────────
@@ -587,9 +579,7 @@ describe.concurrent("SvelteKit", () => {
         yield* stack.destroy();
         yield* waitForWorkerToBeDeleted(site.workerName, accountId);
       }).pipe(logLevel),
-    // exclusive: the SvelteKit build temporarily switches process.cwd() to
-    // the project root (kit resolves config relative to the cwd).
-    { timeout: 360_000, exclusive: true },
+    { timeout: 360_000 },
   );
 
   class NamespaceStillExists extends Data.TaggedError("NamespaceStillExists") {}
@@ -603,7 +593,10 @@ describe.concurrent("SvelteKit", () => {
       Effect.retry({
         while: (e): e is NamespaceStillExists =>
           e instanceof NamespaceStillExists,
-        schedule: Schedule.exponential(250),
+        schedule: Schedule.min([
+          Schedule.exponential(250),
+          Schedule.spaced("2 seconds"),
+        ]),
         times: 10,
       }),
       Effect.catchTag("NamespaceNotFound", () => Effect.void),
@@ -835,8 +828,12 @@ describe.concurrent("SvelteKit", () => {
             : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
         ),
         Effect.retry({
-          schedule: Schedule.exponential("500 millis"),
-          times: 15,
+          // Capped interval, ~90s total budget (workers.dev / DO propagation).
+          schedule: Schedule.min([
+            Schedule.exponential("500 millis"),
+            Schedule.spaced("2 seconds"),
+          ]),
+          times: 45,
         }),
       );
     });

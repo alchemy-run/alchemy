@@ -32,16 +32,22 @@ interface Session {
 }
 
 /**
- * An expired/invalidated preview session surfaces in (at least) two shapes:
+ * An expired/invalidated preview session surfaces in (at least) three
+ * shapes:
  *
  *  - HTTP 400 with an HTML body containing "Invalid Workers Preview
  *    configuration" — the classic expired-preview-token page.
  *  - HTTP 400 with a text/plain body containing "error code: 1031" —
  *    returned by remote bindings (D1, R2, Workers AI, ...) when their
  *    underlying session has timed out.
+ *  - HTTP 400 from OUR OWN uploaded remote worker: a `BindingNotFound`
+ *    ConfigError means the edge routed the preview token to a deployment
+ *    with a stale binding set (the edge preview dedupes deployments by
+ *    script content and can serve an older deployment's env). A fresh
+ *    deploy re-uploads with the current bindings.
  *
- * Both mean the cached session must be discarded and recreated. The string
- * matching mirrors wrangler's `checkForPreviewTokenError`.
+ * All mean the cached session must be discarded and recreated. The first
+ * two matchers mirror wrangler's `checkForPreviewTokenError`.
  */
 async function isStaleSessionResponse(response: Response): Promise<boolean> {
   if (response.status !== 400) {
@@ -50,7 +56,8 @@ async function isStaleSessionResponse(response: Response): Promise<boolean> {
   const text = await response.clone().text();
   return (
     text.includes("Invalid Workers Preview configuration") ||
-    text.includes("error code: 1031")
+    text.includes("error code: 1031") ||
+    (text.includes('"BindingNotFound"') && text.includes('"ConfigError"'))
   );
 }
 

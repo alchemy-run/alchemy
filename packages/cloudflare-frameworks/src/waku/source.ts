@@ -18,6 +18,7 @@ import type * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as NodeCrypto from "node:crypto";
 import { createRequire } from "node:module";
+import { runBuildChild } from "../core/BuildChild.ts";
 import { makeWakuCloudflareTarget } from "./cloudflare.ts";
 import { make as makeWakuFramework } from "./Waku.ts";
 
@@ -602,10 +603,18 @@ const PROVIDER = "@alchemy.run/cloudflare-frameworks/waku/source";
  * Waku assumes `process.cwd()` is the project root in several places (the
  * html-shell plugin's `index.html` input resolves against the cwd, and
  * rolldown resolves relative inputs from the cwd), exactly like its CLI,
- * which always runs from the project. Build/dev therefore run with the cwd
- * temporarily switched to the project root, serialized through a
- * process-level lock (cwd is process-global state). Same pattern as the
- * SvelteKit source provider.
+ * which always runs from the project.
+ *
+ * The production **build** therefore runs in a disposable child process
+ * whose working directory IS the project root (see `core/BuildChild.ts`) —
+ * no in-process `chdir`, no lock, unbounded build concurrency. The shared `core/BuildChildRunner`
+ * entry imports this module in the child and calls the exported
+ * {@link buildInChild}.
+ *
+ * The **dev server** cannot cross a process boundary (its inputs —
+ * `ctx.worker.bindings` hooks and `ctx.runtimeContext` — are live objects),
+ * so only its startup window still chdirs in-process, serialized through
+ * {@link cwdLock}; the cwd is restored as soon as the server is listening.
  */
 const cwdLock = Semaphore.makeUnsafe(1);
 
@@ -625,6 +634,37 @@ const withRootCwd = <A, E, R>(
       }),
       () => effect,
       (previous) => Effect.sync(() => process.chdir(previous)),
+    ),
+  );
+
+/** JSON config the build child reconstructs the waku framework from. */
+export interface WakuBuildChildConfig {
+  readonly rootDir: string;
+  readonly compatibilityDate: string;
+  readonly compatibilityFlags: Array<string>;
+  readonly main: string | undefined;
+  readonly waku: {
+    readonly srcDir?: string;
+    readonly distDir?: string;
+    readonly basePath?: string;
+  };
+}
+
+export const buildInChild = (config: WakuBuildChildConfig) =>
+  Effect.gen(function* () {
+    const waku = yield* FrameworkCore.Framework;
+    return yield* waku.build({ root: config.rootDir });
+  }).pipe(
+    Effect.provide(
+      makeWakuFramework({
+        root: config.rootDir,
+        waku: config.waku,
+        target: makeWakuCloudflareTarget({
+          compatibilityDate: config.compatibilityDate,
+          compatibilityFlags: config.compatibilityFlags,
+          ...(config.main !== undefined ? { main: config.main } : undefined),
+        }),
+      }),
     ),
   );
 
@@ -673,29 +713,26 @@ export const makeWakuSourceProvider = (
     build: Effect.fn(function* (ctx) {
       const path = yield* Path.Path;
       const rootDir = rootDirOf(path);
-      const framework = makeWakuFramework({
-        root: rootDir,
-        waku: wakuConfig,
-        // The target is passed as a value (not the module-specifier default):
-        // the provider runs inside alchemy's process, where resolving the
-        // subpath from the project's node_modules is unnecessary indirection.
-        target: makeWakuCloudflareTarget({
+      // The build runs in a child process with cwd = rootDir (waku resolves
+      // inputs relative to the cwd); `buildInChild` reconstructs the
+      // framework + cloudflare target from this JSON config on the far side.
+      const output = yield* runBuildChild({
+        module: import.meta.url,
+        rootDir,
+        framework: "waku",
+        config: {
+          rootDir,
           compatibilityDate: ctx.compatibility.date,
           compatibilityFlags: ctx.compatibility.flags,
           // The user-entry seam: surfaced as `DeployTarget.entry` and made
           // the vite plugin's `main` (resolved against the root by
           // `makeWakuPluginOptions`).
-          ...(options.main !== undefined ? { main: options.main } : undefined),
-        }),
-      });
-      const output = yield* withRootCwd(
-        rootDir,
-        Effect.gen(function* () {
-          const waku = yield* FrameworkCore.Framework;
-          return yield* waku.build({ root: rootDir });
-        }).pipe(
-          Effect.provide(framework),
-          Effect.mapError(asProviderError("Waku build failed")),
+          main: options.main,
+          waku: wakuConfig,
+        } satisfies WakuBuildChildConfig,
+      }).pipe(
+        Effect.mapError((error) =>
+          asProviderError("Waku build failed")(error.cause ?? error),
         ),
       );
 

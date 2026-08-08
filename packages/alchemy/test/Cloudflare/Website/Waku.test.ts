@@ -52,9 +52,9 @@ const wakuProps = (rootDir: string) => ({
   },
 });
 
-// Concurrent for consistency with the other Website suites; both tests
-// are `exclusive: true` (the Waku source build chdirs in-process), so the
-// runner's whole-process lock still serializes them globally.
+// Concurrent like the other Website suites: the Waku source build runs
+// in a child process with cwd = project root (core/BuildChild.ts), so
+// nothing here mutates process-global state.
 describe.concurrent("Waku", () => {
   test.provider(
     "Waku: deploys RSC SSR + binding + static assets and memoizes unchanged rebuilds",
@@ -257,10 +257,7 @@ describe.concurrent("Waku", () => {
         // Destroy must also delete the bound KV namespace from the cloud.
         yield* waitForNamespaceToBeDeleted(siteKv.namespaceId, accountId);
       }).pipe(logLevel),
-    // exclusive: the Waku build temporarily switches process.cwd() to the
-    // project root (waku resolves inputs relative to the cwd); concurrent
-    // fibers resolving relative paths would race that window.
-    { timeout: 600_000, exclusive: true },
+    { timeout: 360_000 },
   );
 
   // ─────────────────────────────────────────────────────────────────────
@@ -368,10 +365,7 @@ describe.concurrent("Waku", () => {
         yield* stack.destroy();
         yield* waitForWorkerToBeDeleted(site.workerName, accountId);
       }).pipe(logLevel),
-    // exclusive: the Waku build temporarily switches process.cwd() to the
-    // project root (waku resolves inputs relative to the cwd); concurrent
-    // fibers resolving relative paths would race that window.
-    { timeout: 600_000, exclusive: true },
+    { timeout: 360_000 },
   );
 });
 
@@ -396,8 +390,12 @@ const requestJsonReady = <T>(request: HttpClientRequest.HttpClientRequest) =>
           : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
       ),
       Effect.retry({
-        schedule: Schedule.exponential("500 millis"),
-        times: 15,
+        // Capped interval, ~90s total budget (workers.dev / DO propagation).
+        schedule: Schedule.min([
+          Schedule.exponential("500 millis"),
+          Schedule.spaced("2 seconds"),
+        ]),
+        times: 45,
       }),
     );
   });
@@ -420,7 +418,10 @@ const waitForNamespaceToBeDeleted = Effect.fn(function* (
     Effect.retry({
       while: (e): e is NamespaceStillExists =>
         e instanceof NamespaceStillExists,
-      schedule: Schedule.exponential(250),
+      schedule: Schedule.min([
+        Schedule.exponential(250),
+        Schedule.spaced("2 seconds"),
+      ]),
       times: 10,
     }),
     Effect.catchTag("NamespaceNotFound", () => Effect.void),

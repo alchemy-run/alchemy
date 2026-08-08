@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as NodeCrypto from "node:crypto";
 const RemoteWorkerScript = {
   worker: () =>
     loadInternalWorker(
@@ -95,13 +96,32 @@ export const make: (
     options: RemoteWorkerConfig,
     cfPreviewUploadConfigToken: string,
   ) {
+    // Salt the main module with a hash of the session's CONFIG. The edge
+    // preview dedupes deployments by script content and IGNORES changed
+    // bindings metadata: re-uploading byte-identical files under the same
+    // script name returns a preview token routed to the FIRST deployment
+    // of those bytes — whose env carries a stale binding set (its resources
+    // may no longer exist), so every proxied call 400s with our own
+    // BindingNotFound. A deterministic config hash keeps caching intact for
+    // an unchanged session while forcing a distinct deployment whenever the
+    // binding set differs. Appended as a TRAILING comment so the module's
+    // line numbers (stack traces) are untouched.
+    const configSalt = yield* Effect.sync(() =>
+      NodeCrypto.createHash("sha256")
+        .update(JSON.stringify(options))
+        .digest("hex"),
+    );
     const files = yield* Effect.promise(RemoteWorkerScript.worker).pipe(
       Effect.map(({ modules }) =>
         Object.entries(modules).map(
-          ([name, content]) =>
-            new File([content], name, {
-              type: "application/javascript+module",
-            }),
+          ([name, content], index) =>
+            new File(
+              index === 0
+                ? [content, `\n// alchemy-remote-config:${configSalt}\n`]
+                : [content],
+              name,
+              { type: "application/javascript+module" },
+            ),
         ),
       ),
     );

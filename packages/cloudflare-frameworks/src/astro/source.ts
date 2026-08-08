@@ -28,6 +28,7 @@
  * project sources are unchanged.
  */
 import type { CloudflareVitePluginOptions } from "@alchemy.run/cloudflare-runtime/vite";
+import { runBuildChild } from "../core/BuildChild.ts";
 import * as FrameworkCore from "../core/index.ts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -794,6 +795,79 @@ const assetConfigFromProps = (
   return Object.keys(config).length > 0 ? config : undefined;
 };
 
+/**
+ * Resolve the Worker env into the plain strings the build child applies to
+ * its `process.env` — same filter as {@link applyWorkerEnvToProcess}, but
+ * producing JSON-safe data that can cross the process boundary.
+ */
+const resolveBuildEnv = (
+  env: Record<string, unknown> | undefined,
+): Record<string, string> => {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(env ?? {})) {
+    if (typeof value === "string") {
+      out[key] = value;
+    } else if (
+      Redacted.isRedacted(value) &&
+      typeof Redacted.value(value) === "string"
+    ) {
+      out[key] = Redacted.value(value) as string;
+    } else if (typeof value === "number" || typeof value === "boolean") {
+      out[key] = String(value);
+    }
+  }
+  return out;
+};
+
+/**
+ * The production build runs in a disposable child process with
+ * `cwd = project root` (see `core/BuildChild.ts`): the natively-loaded
+ * `astro.config.*` executes user plugins/integrations that may read the
+ * cwd, mutate `process.env`, or `process.chdir` — none of which may touch
+ * the engine process. The shared `core/BuildChildRunner`
+ * entry imports this module in the child and calls the exported
+ * {@link buildInChild}.
+ */
+export interface AstroBuildChildConfig {
+  readonly rootDir: string;
+  readonly compatibilityDate: string;
+  readonly compatibilityFlags: Array<string>;
+  readonly env: Record<string, string>;
+  readonly sessionKVBindingName: string | undefined;
+  readonly sessions: boolean | undefined;
+  readonly sessionDevKV: boolean | undefined;
+  readonly astro: AstroSourceOptions["astro"];
+}
+
+export const buildInChild = (config: AstroBuildChildConfig) =>
+  Effect.gen(function* () {
+    // Worker env → process.env, confined to this disposable child (astro's
+    // config loading and integrations read env at build time).
+    yield* Effect.sync(() => {
+      for (const [key, value] of Object.entries(config.env)) {
+        process.env[key] = value;
+      }
+    });
+    const astro = yield* FrameworkCore.Framework.pipe(
+      Effect.provide(
+        Astro.make({
+          root: config.rootDir,
+          target: cloudflareTarget({
+            worker: {
+              compatibilityDate: config.compatibilityDate,
+              compatibilityFlags: config.compatibilityFlags,
+            },
+            sessionKVBindingName: config.sessionKVBindingName,
+            sessions: config.sessions,
+            sessionDevKV: config.sessionDevKV,
+          }),
+          astro: config.astro,
+        }),
+      ),
+    );
+    return yield* astro.build({ root: config.rootDir });
+  });
+
 const makeAstroSourceProvider = (
   options: AstroSourceOptions,
 ): SourceProvider => {
@@ -828,14 +902,25 @@ const makeAstroSourceProvider = (
       Effect.gen(function* () {
         const path = yield* Path.Path;
         const rootDir = yield* resolveRoot;
-        yield* applyWorkerEnvToProcess(ctx.env);
-        const astro = yield* framework(rootDir, {
-          compatibilityDate: ctx.compatibility.date,
-          compatibilityFlags: ctx.compatibility.flags,
-        });
-        const output = yield* astro
-          .build({ root: rootDir })
-          .pipe(Effect.mapError(failWith("Astro build failed")));
+        const output = yield* runBuildChild({
+          module: import.meta.url,
+          rootDir,
+          framework: "astro",
+          config: {
+            rootDir,
+            compatibilityDate: ctx.compatibility.date,
+            compatibilityFlags: ctx.compatibility.flags,
+            env: resolveBuildEnv(ctx.env),
+            sessionKVBindingName: options.sessionKVBindingName,
+            sessions: options.sessions,
+            sessionDevKV: options.sessionDevKV,
+            astro: options.astro,
+          } satisfies AstroBuildChildConfig,
+        }).pipe(
+          Effect.mapError((error) =>
+            failWith("Astro build failed")(error.cause ?? error),
+          ),
+        );
         const files = (output.serverModules ?? []).map(
           (module): BundleFile => ({
             path: module.name,
