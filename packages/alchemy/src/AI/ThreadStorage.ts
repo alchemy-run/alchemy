@@ -57,6 +57,10 @@ export interface SessionMeta {
 export interface InboxRow {
   readonly seq: number;
   readonly input: unknown;
+  /** QUIET inputs (`send(…, { wake: false })`) join whatever round
+   *  happens anyway but never open one — a parked session stays
+   *  parked with these accumulating as context. */
+  readonly quiet?: boolean;
 }
 
 /** One session's storage — all reads and writes for `${term}/${key}`. */
@@ -68,7 +72,10 @@ export interface ThreadHandle {
    * Durably queue one input, returning its inbox seq — the engine
    * pairs in-flight waiters to their inputs by this seq.
    */
-  readonly putInbox: (input: unknown) => Effect.Effect<number>;
+  readonly putInbox: (
+    input: unknown,
+    options?: { readonly quiet?: boolean },
+  ) => Effect.Effect<number>;
   /** Pending inbox rows at or above the drain watermark, in order. */
   readonly listInbox: Effect.Effect<ReadonlyArray<InboxRow>>;
   /** Drop consumed inbox rows (best-effort — the watermark already
@@ -172,10 +179,14 @@ export const MemoryThreadStorage: Layer.Layer<ThreadStorage> = Layer.sync(
               Effect.sync(() => {
                 session.meta = meta;
               }),
-            putInbox: (input) =>
+            putInbox: (input, inboxOptions) =>
               Effect.sync(() => {
                 const seq = session.inboxSeq++;
-                session.inbox.push({ seq, input });
+                session.inbox.push({
+                  seq,
+                  input,
+                  quiet: inboxOptions?.quiet === true,
+                });
                 return seq;
               }),
             listInbox: Effect.sync(() =>

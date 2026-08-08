@@ -79,6 +79,19 @@ export const emptyMeta: DurableSessionMeta = {
   drained: 0,
 };
 
+/** Inbox row envelope — carries the quiet flag beside the input. */
+interface InboxEnvelope {
+  readonly input: unknown;
+  readonly quiet: boolean;
+}
+
+const isInboxEnvelope = (row: unknown): row is InboxEnvelope =>
+  typeof row === "object" &&
+  row !== null &&
+  "input" in row &&
+  "quiet" in row &&
+  typeof (row as InboxEnvelope).quiet === "boolean";
+
 export interface DurableObjectSessionStorage {
   readonly readMeta: Effect.Effect<DurableSessionMeta>;
   readonly writeMeta: (meta: DurableSessionMeta) => Effect.Effect<void>;
@@ -159,7 +172,7 @@ export const makeDurableObjectSessionStorage = (
         const full = yield* readMeta;
         yield* writeMeta({ ...meta, seq: full.seq, drained: full.drained });
       }),
-    putInbox: (input) =>
+    putInbox: (input, inboxOptions) =>
       sealed(
         Effect.gen(function* () {
           const full = yield* readMeta;
@@ -167,7 +180,10 @@ export const makeDurableObjectSessionStorage = (
           // counter would overwrite
           yield* storage
             .put({
-              [seqKey(INBOX, full.seq)]: input,
+              [seqKey(INBOX, full.seq)]: {
+                input,
+                quiet: inboxOptions?.quiet === true,
+              } satisfies InboxEnvelope,
               [META]: {
                 ...full,
                 seq: full.seq + 1,
@@ -180,10 +196,15 @@ export const makeDurableObjectSessionStorage = (
     listInbox: sealed(
       Effect.gen(function* () {
         const full = yield* readMeta;
-        const rows = yield* listRows<unknown>(INBOX);
-        return rows.flatMap(([k, input]) => {
+        const rows = yield* listRows<InboxEnvelope | unknown>(INBOX);
+        return rows.flatMap(([k, row]) => {
           const seq = seqOf(INBOX, k);
-          return seq >= full.drained ? [{ seq, input }] : [];
+          if (seq < full.drained) return [];
+          // envelope rows carry the quiet flag; legacy raw rows are
+          // waking inputs
+          return isInboxEnvelope(row)
+            ? [{ seq, input: row.input, quiet: row.quiet }]
+            : [{ seq, input: row }];
         });
       }),
     ),

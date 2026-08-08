@@ -1604,12 +1604,17 @@ export const makeSessionEngine = (
   const enqueue = (
     s: EngineSession,
     input: unknown,
-    waiter?: Deferred.Deferred<unknown, unknown>,
+    enqueueOptions?: {
+      readonly waiter?: Deferred.Deferred<unknown, unknown>;
+      readonly quiet?: boolean;
+    },
   ): Effect.Effect<void> =>
     Effect.gen(function* () {
-      const seq = yield* s.handle.putInbox(input);
-      if (waiter !== undefined) {
-        s.pendingWaiters.push({ seq, waiter });
+      const seq = yield* s.handle.putInbox(input, {
+        quiet: enqueueOptions?.quiet,
+      });
+      if (enqueueOptions?.waiter !== undefined) {
+        s.pendingWaiters.push({ seq, waiter: enqueueOptions.waiter });
       }
     });
 
@@ -1698,7 +1703,7 @@ export const makeSessionEngine = (
       );
       worker.fixedTick = { system, toolkit };
       const waiter = yield* Deferred.make<unknown, unknown>();
-      yield* enqueue(worker, params.task, waiter);
+      yield* enqueue(worker, params.task, { waiter });
       // the spawn call DRIVES the worker — its rounds run inside this
       // handler, and the waiter resolves at the worker's quiescence
       yield* burst(worker.key);
@@ -1815,7 +1820,11 @@ export const makeSessionEngine = (
       while (true) {
         if (s.settledOutcome !== undefined) break;
         const rows = yield* s.handle.listInbox;
-        if (rows.length === 0 && quiescent) {
+        // QUIET rows never open a round: a parked session with only
+        // quiet inputs queued stays parked — they join whichever
+        // round a WAKING input (or an already-open round) drains
+        const waking = rows.some((row) => row.quiet !== true);
+        if (!waking && quiescent) {
           // PARKED: the session's work is done until the world moves.
           // Everything durable is already written through the handle,
           // so parking is just returning — the placement decides who
@@ -2002,11 +2011,13 @@ export const makeSessionEngine = (
     Effect.gen(function* () {
       const s = yield* ensureSession(sendOptions?.key, sendOptions?.parent);
       if (s.settledOutcome !== undefined) return;
-      yield* enqueue(s, input);
       // QUIET delivery (`wake: false`): the row is durable in the
-      // inbox but nothing is kicked — a parked session stays parked,
-      // and whatever wakes it next drains everything accumulated
-      if (sendOptions?.wake !== false) {
+      // inbox but marked quiet and nothing is kicked — a parked
+      // session stays parked; whatever opens the next round drains
+      // everything accumulated
+      const quiet = sendOptions?.wake === false;
+      yield* enqueue(s, input, { quiet });
+      if (!quiet) {
         yield* kick(s.key);
       }
     });
@@ -2022,7 +2033,7 @@ export const makeSessionEngine = (
       // the answerable round only when its own message is drained, so
       // an in-flight earlier round can never answer it
       const waiter = yield* Deferred.make<unknown, unknown>();
-      yield* enqueue(s, input, waiter);
+      yield* enqueue(s, input, { waiter });
       yield* kick(s.key);
       return yield* Deferred.await(waiter);
     });

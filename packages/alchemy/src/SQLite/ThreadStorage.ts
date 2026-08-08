@@ -49,10 +49,11 @@ CREATE TABLE IF NOT EXISTS session_messages (
   PRIMARY KEY (term, key, seq)
 );
 CREATE TABLE IF NOT EXISTS session_inbox (
-  term TEXT NOT NULL,
-  key  TEXT NOT NULL,
-  seq  INTEGER NOT NULL,
-  data TEXT NOT NULL,
+  term  TEXT NOT NULL,
+  key   TEXT NOT NULL,
+  seq   INTEGER NOT NULL,
+  data  TEXT NOT NULL,
+  quiet INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (term, key, seq)
 );
 CREATE TABLE IF NOT EXISTS session_observations (
@@ -134,14 +135,20 @@ export const SqliteThreadStorage = (path: string): Layer.Layer<ThreadStorage> =>
                 );
               }),
               putMeta: (meta) => Effect.sync(() => putMeta(meta)),
-              putInbox: (input) =>
+              putInbox: (input, inboxOptions) =>
                 Effect.sync(() =>
                   db.transaction(() => {
                     ensureRow();
                     const seq = (readRow()?.inbox_seq ?? 0) as number;
                     db.query(
-                      "INSERT INTO session_inbox (term, key, seq, data) VALUES (?, ?, ?, ?)",
-                    ).run(term, key, seq, JSON.stringify(input ?? null));
+                      "INSERT INTO session_inbox (term, key, seq, data, quiet) VALUES (?, ?, ?, ?, ?)",
+                    ).run(
+                      term,
+                      key,
+                      seq,
+                      JSON.stringify(input ?? null),
+                      inboxOptions?.quiet === true ? 1 : 0,
+                    );
                     db.query(
                       "UPDATE session_meta SET inbox_seq = ? WHERE term = ? AND key = ?",
                     ).run(seq + 1, term, key);
@@ -153,16 +160,18 @@ export const SqliteThreadStorage = (path: string): Layer.Layer<ThreadStorage> =>
                 return (
                   db
                     .query(
-                      "SELECT seq, data FROM session_inbox WHERE term = ? AND key = ? AND seq >= ? ORDER BY seq",
+                      "SELECT seq, data, quiet FROM session_inbox WHERE term = ? AND key = ? AND seq >= ? ORDER BY seq",
                     )
                     .all(term, key, drained) as Array<{
                     seq: number;
                     data: string;
+                    quiet: number;
                   }>
                 ).map(
                   (inboxRow): InboxRow => ({
                     seq: inboxRow.seq,
                     input: JSON.parse(inboxRow.data),
+                    quiet: inboxRow.quiet === 1,
                   }),
                 );
               }),
