@@ -13,19 +13,30 @@
  * becomes a toolkit. See designs/ai/driver-cloudflare.md.
  */
 import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Schedule from "effect/Schedule";
 import * as S from "effect/Schema";
-import { isAiError } from "effect/unstable/ai/AiError";
-import type * as Prompt from "effect/unstable/ai/Prompt";
+import { isAiError, type AiError } from "effect/unstable/ai/AiError";
+import type * as LanguageModel from "effect/unstable/ai/LanguageModel";
+import * as Prompt from "effect/unstable/ai/Prompt";
 import * as AiTool from "effect/unstable/ai/Tool";
 import * as Toolkit from "effect/unstable/ai/Toolkit";
+import { RuntimeContext } from "../RuntimeContext.ts";
+import type { Actor } from "./Actor.ts";
 import { isAgent, type Agent } from "./Agent.ts";
-import type { DispatchTool } from "./Dispatch.ts";
+import { isDispatchTool, type DispatchTool } from "./Dispatch.ts";
+import type { Turn, TurnFn } from "./Driver.ts";
+import { Refused } from "./Errors.ts";
 import { isEvent } from "./Event.ts";
-import type { EncodedCrash } from "./Observer.ts";
+import type { ModelService } from "./Model.ts";
+import type { EncodedCrash, SessionObservation } from "./Observer.ts";
 import { isParameter } from "./Parameter.ts";
-import { dedentTemplate } from "./Prose.ts";
-import { isSkill, type Skill } from "./Skill.ts";
+import { dedentTemplate, isFragment, type Fragment } from "./Prose.ts";
+import { isSkill, type Skill, type SkillService } from "./Skill.ts";
+import type { ThreadHandle } from "./ThreadStorage.ts";
+import { ToolCalling, type ToolPresentation } from "./ToolCalling.ts";
 import { isTool, isToolImpl, type Tool } from "./Tool.ts";
 
 /**
@@ -370,6 +381,689 @@ export interface Stance {
   /** Policy-constrained dispatches (`AI.Dispatch`) mentioned this tick. */
   readonly doors: Map<string, DispatchTool<string, any[]>>;
 }
+
+/** `Omit` distributed over a union (plain `Omit` collapses it). */
+type DistributiveOmit<T, K extends PropertyKey> = T extends any
+  ? Omit<T, K>
+  : never;
+
+/** An observation as a host emits it — the envelope (term, key, seq,
+ *  at) is the host's to stamp. */
+export type ObservationDraft = DistributiveOmit<
+  SessionObservation,
+  "term" | "key" | "seq" | "at"
+>;
+
+/** What one tick hands the loop: the rendered system prompt and the
+ *  assembled toolkit. */
+export interface TickResult {
+  readonly system: string;
+  readonly toolkit: Toolkit.WithHandler<any> | undefined;
+}
+
+/** The `spawn` intrinsic's parameters. */
+export interface SpawnParams {
+  readonly instructions: string;
+  readonly task: string;
+  readonly tools?: ReadonlyArray<string>;
+  readonly skills?: ReadonlyArray<string>;
+}
+
+/** A skill implementation, resolved from the charter's context. */
+export interface ResolvedSkill {
+  readonly prose: string;
+  readonly tools: ReadonlyArray<AiTool.Any>;
+  readonly handlers: Record<
+    string,
+    (params: any) => Effect.Effect<any, any, any>
+  >;
+  /** Skills the teaching references — exposed on activation. */
+  readonly skills: ReadonlyArray<Skill<string, any>>;
+}
+
+/** The thread crosses storage in its ENCODED form — rows are JSON. */
+export const encodeMessages = S.encodeSync(S.Array(Prompt.Message));
+
+/**
+ * WHAT A HOST LENDS THE ALGORITHM about one session — the adapter
+ * both hosts implement. The resident host (DriverCore) backs it with
+ * an in-process SessionState; the Durable Object host backs it with
+ * its own storage rows. Everything else — turn evaluation, stance
+ * rendering, the skill graph, toolkit assembly, sampling — is the
+ * shared functions below, written once.
+ */
+export interface SessionOps {
+  /** The driver's name, for error/log prefixes. */
+  readonly driver: string;
+  readonly term: string;
+  readonly key: string;
+  /** The charter's captured Layer context: capability resolution and
+   *  the optional seams (`ToolCalling`). */
+  readonly context: Context.Context<never>;
+  /** Provide the session-scoped services (`AI.Thread`, `AI.Tick`,
+   *  refs, the captured context, the runtime color) to charter code. */
+  readonly provide: <A, E>(
+    effect: Effect.Effect<A, E, any>,
+  ) => Effect.Effect<A, E>;
+  /** The session's TURN, produced by its charter init. */
+  readonly turn: () => Turn | TurnFn;
+  /** Samplings performed so far. */
+  readonly tick: () => number;
+  /** Reset the say buffer — each turn ATTEMPT starts clean. */
+  readonly clearNotes: () => void;
+  /** A durable observation (persisted, cursor advances). */
+  readonly observe: (observation: ObservationDraft) => Effect.Effect<void>;
+  /** A live observation (broadcast only — deltas, in-flight calls). */
+  readonly observeLive: (observation: ObservationDraft) => Effect.Effect<void>;
+  /** Activated skills; activation is persisted by the host. */
+  readonly activeSkills: () => ReadonlySet<string>;
+  readonly setSkill: (name: string, active: boolean) => Effect.Effect<void>;
+  /** The last rendered stance — what `spawn`/`skill` grant from. */
+  readonly lastStance: () => Stance | undefined;
+  readonly setLastStance: (stance: Stance) => void;
+  /** Remember a dispatched child for the supervision cascade. */
+  readonly registerChild: (
+    agent: string,
+    childKey: string,
+    actor: Actor,
+  ) => void;
+  /** The spawn intrinsic — host-specific (the resident host runs an
+   *  anonymous worker session; a host may refuse). */
+  readonly spawn: (params: SpawnParams) => Effect.Effect<unknown>;
+  /** Optional sealing applied to every toolkit handler (the DO host
+   *  provides the runtime capability once here). */
+  readonly wrapHandler?: (
+    handler: (params: any) => Effect.Effect<any, any, any>,
+  ) => (params: any) => Effect.Effect<any, any>;
+}
+
+/**
+ * Capability resolution from the charter's captured context, memoized
+ * per interpret — the term is the name; the SERVICE is the physics.
+ */
+export const makeResolvers = (
+  driver: string,
+  term: string,
+  context: Context.Context<never>,
+) => {
+  const handlerCache = new Map<
+    string,
+    (params: any) => Effect.Effect<any, any, any>
+  >();
+  const resolveHandler = (compiled: CompiledToolRef) =>
+    Effect.gen(function* () {
+      const name = compiled.term["~alchemy/Name"];
+      if (compiled.impl !== undefined) return compiled.impl;
+      const cached = handlerCache.get(name);
+      if (cached !== undefined) return cached;
+      const service = Context.getOption(context, compiled.term as any);
+      if (Option.isNone(service)) {
+        return yield* Effect.die(
+          `${driver}: no implementation provided for tool '${name}' of '${term}' — provide the tool's Layer or splice an inline impl`,
+        );
+      }
+      // the tool contract: the service IS the callable (a Layer
+      // needing runtime setup unwraps inside its own build)
+      const resolved = service.value as (
+        params: any,
+      ) => Effect.Effect<any, any, any>;
+      handlerCache.set(name, resolved);
+      return resolved;
+    });
+
+  const skillCache = new Map<string, ResolvedSkill>();
+  const resolveSkill = (skill: Skill<string, any>) =>
+    Effect.gen(function* () {
+      const skillName = skill["~alchemy/Name"];
+      const cached = skillCache.get(skillName);
+      if (cached !== undefined) return cached;
+      const service = Context.getOption(context, skill as any);
+      if (Option.isNone(service)) {
+        return yield* Effect.die(
+          `${driver}: no implementation provided for skill '${skillName}' referenced by '${term}'`,
+        );
+      }
+      // the IMPLEMENTATION carries the teaching: prose, spliced
+      // tools, and their physics all come from the resolved
+      // service — the term is only the name
+      const impl = service.value as SkillService;
+      const skillTools = impl.refs.filter(isTool);
+      const handlers: ResolvedSkill["handlers"] = {};
+      for (const tool of skillTools) {
+        const name = tool["~alchemy/Name"];
+        const resolved = impl.tools[name];
+        if (resolved === undefined) {
+          return yield* Effect.die(
+            `${driver}: skill '${skillName}' implementation provides no tool '${name}'`,
+          );
+        }
+        handlers[name] = resolved;
+      }
+      const entry: ResolvedSkill = {
+        prose: render(impl.template, impl.refs),
+        tools: skillTools.map(compileTool),
+        handlers,
+        // a teaching may reference DEEPER skills: activating this
+        // one exposes them for activation — the skill GRAPH
+        skills: impl.refs.filter(isSkill),
+      };
+      skillCache.set(skillName, entry);
+      return entry;
+    });
+
+  const delegateCache = new Map<string, Actor>();
+  const resolveDelegate = (agent: Agent<any, any>) =>
+    Effect.gen(function* () {
+      const name = agent["~alchemy/Name"];
+      const cached = delegateCache.get(name);
+      if (cached !== undefined) return cached;
+      const service = Context.getOption(context, agent as any);
+      if (Option.isNone(service)) {
+        return yield* Effect.die(
+          `${driver}: no implementation provided for agent '${name}' referenced by '${term}'`,
+        );
+      }
+      const actor = service.value as Actor;
+      delegateCache.set(name, actor);
+      return actor;
+    });
+
+  return { resolveHandler, resolveSkill, resolveDelegate };
+};
+
+export type Resolvers = ReturnType<typeof makeResolvers>;
+
+/**
+ * Render a stance's fragment tree into blocks + mentions. Effect
+ * splices evaluate through `ops.provide` at render time, EVERY tick.
+ */
+export const renderStance = (
+  ops: SessionOps,
+  root: Fragment,
+): Effect.Effect<Stance> =>
+  Effect.gen(function* () {
+    const blocks: Array<string> = [];
+    const tools = new Map<string, CompiledToolRef>();
+    const skills = new Map<string, Skill<string, any>>();
+    const delegates = new Map<string, Agent<any, any>>();
+    const doors = new Map<string, DispatchTool<string, any[]>>();
+    let buffer = "";
+    const flush = () => {
+      const text = buffer.trim();
+      if (text.length > 0) blocks.push(text);
+      buffer = "";
+    };
+    const walk = (fragment: Fragment): Effect.Effect<void> =>
+      Effect.gen(function* () {
+        const parts = dedentTemplate(fragment.template);
+        buffer += parts[0] ?? "";
+        for (let index = 0; index < fragment.refs.length; index++) {
+          const ref = fragment.refs[index];
+          // term guards FIRST: tags are themselves yieldable
+          // (Effect.isEffect is true for every Service class)
+          if (isDispatchTool(ref)) {
+            // a DOOR: policy-constrained dispatch — renders as
+            // its tool name; the driver builds its handler
+            doors.set(ref["~alchemy/Name"], ref);
+            buffer += `\`${ref["~alchemy/Name"]}\``;
+          } else if (isToolImpl(ref)) {
+            const name = ref.tool["~alchemy/Name"];
+            tools.set(name, { term: ref.tool, impl: ref.impl });
+            buffer += `\`${name}\``;
+          } else if (isTool(ref)) {
+            const name = ref["~alchemy/Name"];
+            if (!tools.has(name)) tools.set(name, { term: ref });
+            buffer += `\`${name}\``;
+          } else if (isSkill(ref)) {
+            skills.set(ref["~alchemy/Name"], ref);
+            buffer += `\`${ref["~alchemy/Name"]}\``;
+          } else if (isAgent(ref)) {
+            delegates.set(ref["~alchemy/Name"], ref as Agent<any, any>);
+            buffer += ref["~alchemy/Name"];
+          } else if (isEvent(ref) || isParameter(ref)) {
+            buffer += `\`${ref["~alchemy/Name"]}\``;
+          } else if (isFragment(ref)) {
+            flush();
+            yield* walk(ref);
+            flush();
+          } else if (Effect.isEffect(ref)) {
+            // evaluated at render time, EVERY tick — a nested
+            // AI.prose, a component's turn value
+            const value = yield* ops.provide(ref as Effect.Effect<unknown>);
+            if (isFragment(value)) {
+              flush();
+              yield* walk(value);
+              flush();
+            } else if (isToolImpl(value)) {
+              // an inline tool spliced without its init yield*
+              // still grants — same as the direct splice
+              const name = value.tool["~alchemy/Name"];
+              tools.set(name, { term: value.tool, impl: value.impl });
+              buffer += `\`${name}\``;
+            } else if (isDispatchTool(value)) {
+              doors.set(value["~alchemy/Name"], value);
+              buffer += `\`${value["~alchemy/Name"]}\``;
+            } else {
+              buffer += String(value);
+            }
+          } else {
+            buffer += String(ref);
+          }
+          buffer += parts[index + 1] ?? "";
+        }
+      });
+    yield* walk(root);
+    flush();
+    return { blocks, tools, skills, delegates, doors };
+  });
+
+/**
+ * One TICK, written once for every host: evaluate the session's turn
+ * (function turns receive `{count, inputs}`), render the stance,
+ * walk the skill graph to its active fixpoint, and assemble this
+ * sampling's system prompt + toolkit — capabilities through the
+ * optional `ToolCalling` seam, intrinsics always direct.
+ */
+export const compileTick = (
+  ops: SessionOps,
+  resolvers: Resolvers,
+  inputs: ReadonlyArray<unknown>,
+): Effect.Effect<TickResult> =>
+  Effect.gen(function* () {
+    const result = yield* ops.provide(
+      Effect.suspend(() => {
+        // each ATTEMPT starts with a clean say buffer, so a
+        // retried turn delivers only the successful
+        // evaluation's notes — never a failed attempt's
+        ops.clearNotes();
+        const turn = ops.turn();
+        return typeof turn === "function"
+          ? turn({ count: ops.tick(), inputs })
+          : turn;
+      }).pipe(
+        // transient turn failures (an observation fetch, a
+        // flaky service) retry; a typed Refused is the session
+        // GIVING UP and propagates immediately
+        Effect.retry({
+          while: (error) => !(error instanceof Refused),
+          schedule: Schedule.exponential("1 second"),
+          times: 3,
+        }),
+      ) as Effect.Effect<unknown>,
+    );
+    if (Effect.isEffect(result)) {
+      return yield* Effect.die(
+        `${ops.driver}: the turn of '${ops.term}' (session '${ops.key}') returned an Effect — did you forget to yield* an AI.prose?`,
+      );
+    }
+    if (!isFragment(result)) {
+      return yield* Effect.die(
+        `${ops.driver}: the turn of '${ops.term}' (session '${ops.key}') returned a non-Fragment value — turns return the stance; answer callers with AI.reply`,
+      );
+    }
+    const stance = yield* renderStance(ops, result);
+
+    // the SKILL GRAPH: a stance mention is access at the root;
+    // an ACTIVE skill's teaching exposes the skills it
+    // references (access, one level per activation) — walk the
+    // active frontier to a fixpoint so nested doctrine trees
+    // resolve however deep the activations go
+    const active = ops.activeSkills();
+    const effectiveSkills = new Map(stance.skills);
+    {
+      const frontier = [...active];
+      const visited = new Set<string>();
+      while (frontier.length > 0) {
+        const name = frontier.pop()!;
+        if (visited.has(name)) continue;
+        visited.add(name);
+        const term = effectiveSkills.get(name);
+        if (term === undefined) continue; // not reachable now
+        const resolved = yield* resolvers.resolveSkill(term);
+        for (const sub of resolved.skills) {
+          const subName = sub["~alchemy/Name"];
+          if (!effectiveSkills.has(subName)) {
+            effectiveSkills.set(subName, sub);
+          }
+          if (active.has(subName)) frontier.push(subName);
+        }
+      }
+    }
+    ops.setLastStance({ ...stance, skills: effectiveSkills });
+
+    /**
+     * Wrap a tool handler so its FAILURES are observable in the
+     * process log: a failing tool result is model-visible (the
+     * agent reacts), but without this the operator sees nothing —
+     * a session burning its budget against a broken tool looks
+     * like silence from the outside.
+     */
+    const observedHandler =
+      (name: string, fn: (params: any) => Effect.Effect<any, any, any>) =>
+      (input: any) =>
+        ops
+          .provide(fn(input))
+          .pipe(
+            Effect.tapError((error) =>
+              Effect.logWarning(
+                `Driver session '${ops.key}' of '${ops.term}': tool '${name}' failed: ${String(error).slice(0, 500)}`,
+              ),
+            ),
+          );
+
+    // this tick's CAPABILITIES: mentioned tools + active∩reachable
+    // skills' tools, with their handlers
+    const capabilityHandlers: Record<
+      string,
+      (params: any) => Effect.Effect<any, any>
+    > = {};
+    const charterTools: Array<AiTool.Any> = [];
+    for (const [name, compiled] of stance.tools) {
+      charterTools.push(compileTool(compiled.term));
+      const resolved = yield* resolvers.resolveHandler(compiled);
+      capabilityHandlers[name] = observedHandler(name, resolved);
+    }
+    const activeTools: Array<AiTool.Any> = [];
+    for (const name of active) {
+      const skillTerm = effectiveSkills.get(name);
+      if (skillTerm === undefined) continue; // not reachable now
+      const resolved = yield* resolvers.resolveSkill(skillTerm);
+      activeTools.push(...resolved.tools);
+      for (const [toolName, fn] of Object.entries(resolved.handlers)) {
+        capabilityHandlers[toolName] ??= observedHandler(toolName, fn);
+      }
+    }
+
+    // DOORS: policy-constrained dispatches (`AI.Dispatch`) —
+    // presented as the org's own tools, EXECUTED by the driver:
+    // the policy derives {task, key}, the child registers for
+    // the supervision cascade, the parentage edge is stamped,
+    // and the observation carries the delegation identity.
+    // Deliberately NOT in stance.tools: spawn must never hand a
+    // door to a worker (workers are leaves).
+    const doorTools: Array<AiTool.Any> = [];
+    for (const [name, door] of stance.doors) {
+      doorTools.push(compileTool(door as never));
+      const doorHandler = (params: any) =>
+        Effect.gen(function* () {
+          const derived = yield* door.policy(params, { key: ops.key });
+          const actor = yield* resolvers.resolveDelegate(door.agent);
+          const agentName = door.agent["~alchemy/Name"];
+          if (derived.key !== undefined) {
+            ops.registerChild(agentName, derived.key, actor);
+          }
+          yield* ops.observe({
+            type: "dispatched",
+            tick: ops.tick(),
+            toolName: name,
+            agent: agentName,
+            child: derived.key,
+          });
+          return yield* actor
+            .dispatch(derived.task, {
+              key: derived.key,
+              parent: { term: ops.term, key: ops.key },
+            })
+            .pipe(Effect.provide(RuntimeContext.phantom));
+        });
+      capabilityHandlers[name] = observedHandler(name, doorHandler);
+    }
+
+    // the TOOL-CALLING seam: an optional convention transforms how
+    // the capabilities are PRESENTED (e.g. codemode collapses them
+    // into one `eval` tool) — mention-is-presence unchanged;
+    // absent, every grant is its own provider tool
+    const capabilityTools = dedupeByName([
+      ...charterTools,
+      ...activeTools,
+      ...doorTools,
+    ]);
+    const toolCalling = Context.getOption(ops.context, ToolCalling);
+    const wire: ToolPresentation =
+      Option.isSome(toolCalling) && capabilityTools.length > 0
+        ? yield* toolCalling.value.present(
+            capabilityTools.map((tool) => ({
+              name: tool.name,
+              description: AiTool.getDescription(tool) ?? "",
+              parameters: AiTool.getJsonSchema(tool),
+              returns: AiTool.getJsonSchemaFromSchema(
+                (tool as any).successSchema,
+              ),
+              handler: capabilityHandlers[tool.name]!,
+            })),
+          )
+        : { tools: capabilityTools, handlers: capabilityHandlers };
+
+    // intrinsics stay DIRECT tools in every convention — they are
+    // conversation control, not capabilities
+    const handlers: Record<string, (params: any) => Effect.Effect<any, any>> = {
+      ...wire.handlers,
+    };
+    const delegates = new Map<string, Actor>();
+    for (const [name, agent] of stance.delegates) {
+      delegates.set(name, yield* resolvers.resolveDelegate(agent));
+    }
+    if (delegates.size > 0) {
+      // stamp the DELEGATION EDGE: the child session's `admitted`
+      // observation records who dispatched it, so observers can
+      // reconstruct the tree (issue desk → engineer → …). A
+      // `session` name derives a DETERMINISTIC child key namespaced
+      // under this session — the call/reply seam: same name,
+      // same worker, same context — and the child is REMEMBERED
+      // for the supervision cascade (settle propagates down).
+      handlers.dispatch = (params: {
+        agent: string;
+        task: string;
+        session?: string;
+      }) =>
+        Effect.gen(function* () {
+          const actor = delegates.get(params.agent)!;
+          const key =
+            params.session === undefined
+              ? undefined
+              : `${ops.key}/${params.agent}/${params.session}`;
+          if (key !== undefined) {
+            ops.registerChild(params.agent, key, actor);
+          }
+          yield* ops.observe({
+            type: "dispatched",
+            tick: ops.tick(),
+            toolName: "dispatch",
+            agent: params.agent,
+            child: key,
+          });
+          return yield* actor
+            .dispatch(params.task, {
+              key,
+              parent: { term: ops.term, key: ops.key },
+            })
+            .pipe(Effect.provide(RuntimeContext.phantom));
+        });
+    }
+    handlers.spawn = (params) => ops.spawn(params as SpawnParams);
+    /** The per-session `skill` switch — activation is the session's
+     *  act, persisted by the host. */
+    handlers.skill = (params: {
+      action: "activate" | "deactivate";
+      skill: string;
+    }) =>
+      Effect.gen(function* () {
+        if (params.action === "deactivate") {
+          yield* ops.setSkill(params.skill, false);
+          return `deactivated ${params.skill}`;
+        }
+        const skillTerm = ops.lastStance()?.skills.get(params.skill);
+        if (skillTerm === undefined) {
+          // model-visible: the stance no longer mentions it
+          return `no skill named '${params.skill}' is available right now`;
+        }
+        const resolved = yield* resolvers.resolveSkill(skillTerm);
+        yield* ops.setSkill(params.skill, true);
+        return resolved.prose;
+      });
+
+    const intrinsics: Array<AiTool.Any> = [
+      ...(delegates.size > 0 ? [compileDispatch([...delegates.keys()])] : []),
+      compileSpawn([...stance.tools.keys()], [...effectiveSkills.keys()]),
+      ...(effectiveSkills.size > 0
+        ? [compileSkillTool([...effectiveSkills.keys()])]
+        : []),
+    ];
+    const toolkit = yield* buildToolkit(
+      dedupeByName([...wire.tools, ...intrinsics]),
+      handlers,
+      ops.wrapHandler === undefined
+        ? undefined
+        : { wrapHandler: ops.wrapHandler },
+    );
+
+    // the render IS the system prompt, verbatim — no diffing,
+    // no derived messages. A static charter is byte-stable
+    // (prompt cache); a changed render simply changes the
+    // system prompt, on the author's head. Everything dynamic
+    // reaches the thread explicitly: says, tool results, steers.
+    return {
+      system: stance.blocks.join("\n\n") + NOTE_CODA,
+      toolkit,
+    };
+  });
+
+/**
+ * ONE SAMPLING, written once for every host: read the thread from
+ * the handle, call the `Model`, surface live parts as observations,
+ * and either append the response (with its durable `assistant` and
+ * `tool-result` observations) or — on a malformed tool call within
+ * budget — append the corrective note and report `malformed` so the
+ * host comes straight back around.
+ */
+export const sampleTick = (options: {
+  readonly ops: SessionOps;
+  readonly model: ModelService;
+  readonly handle: ThreadHandle;
+  readonly tick: TickResult;
+  /** True once the host's malformed streak exceeds the budget — the
+   *  validation error then propagates as the round's real failure. */
+  readonly exhausted: boolean;
+}): Effect.Effect<
+  | { readonly kind: "malformed" }
+  | {
+      readonly kind: "response";
+      readonly response: LanguageModel.GenerateTextResponse<any>;
+    },
+  unknown
+> =>
+  Effect.gen(function* () {
+    const { ops, model, handle, tick } = options;
+    // persistence must never crash or slow a round — a failed
+    // append costs restart fidelity, not the sampling
+    const append = (
+      messages: ReadonlyArray<Prompt.MessageEncoded>,
+    ): Effect.Effect<void> =>
+      handle
+        .appendMessages(messages)
+        .pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning(
+              `ThreadStorage append failed for '${ops.key}' of '${ops.term}'`,
+              cause,
+            ),
+          ),
+        );
+    const startedAt = yield* Effect.sync(() => Date.now());
+    const thread = Prompt.make([...(yield* handle.messages)]);
+    const response = yield* model
+      .step({
+        prompt: Prompt.concat(
+          Prompt.make([{ role: "system", content: tick.system }]),
+          thread,
+        ),
+        toolkit: tick.toolkit,
+        onLive: (part) =>
+          part.kind === "tool-call"
+            ? ops.observeLive({
+                type: "tool-call",
+                tick: ops.tick(),
+                toolCallId: part.id,
+                toolName: part.name,
+                input: part.params,
+              })
+            : ops.observeLive({
+                type: "assistant-delta",
+                tick: ops.tick(),
+                channel: part.kind,
+                delta: part.delta,
+              }),
+      })
+      .pipe(
+        // A MALFORMED TOOL CALL is a model-visible fact, not a
+        // crash: nothing was executed, so tell the model what
+        // was wrong and let it re-issue. Bounded — a model that
+        // keeps emitting invalid calls crashes with the real
+        // error after the Model's streak budget.
+        Effect.catchIf(
+          (error): error is AiError =>
+            isAiError(error) &&
+            error.reason._tag === "ToolParameterValidationError",
+          (error) =>
+            options.exhausted
+              ? Effect.fail(error)
+              : Effect.succeed({ malformed: error.message } as const),
+        ),
+      );
+    if ("malformed" in response) {
+      const text =
+        `your last response included a tool call with INVALID ` +
+        `parameters — NOTHING was executed:\n${response.malformed}\n` +
+        `Re-issue the call with parameters matching the tool's schema.`;
+      yield* append([noteMessage(text)]);
+      yield* ops.observe({
+        type: "input",
+        text: `<note>\n${text}\n</note>`,
+        kind: "note",
+      });
+      return { kind: "malformed" } as const;
+    }
+    // durable response rows FIRST, then the observations that
+    // restate them — a crash between the two loses commentary,
+    // never the thread
+    yield* append(
+      encodeMessages(Prompt.fromResponseParts(response.content).content),
+    );
+    // where the time goes: one line per sampling (model
+    // round-trip INCLUDING the tool handlers that ran
+    // inside it) — the timing profile of every session
+    yield* Effect.logInfo(
+      `Driver session '${ops.key}' of '${ops.term}': sampling #${ops.tick()} took ${Date.now() - startedAt}ms` +
+        (response.toolCalls.length > 0
+          ? ` [${response.toolCalls.map((call) => call.name).join(", ")}]`
+          : " [quiesced]"),
+    );
+    yield* ops.observe({
+      type: "assistant",
+      tick: ops.tick(),
+      ms: Date.now() - startedAt,
+      text: response.text,
+      reasoning: response.reasoningText,
+      toolCalls: response.toolCalls.map((call) => ({
+        id: call.id,
+        name: call.name,
+        input: call.params,
+      })),
+    });
+    // tool OUTPUTS are not restated by `assistant` — they are
+    // their own durable rows, upgrading the call's state in
+    // any projection that replays this session
+    for (const result of response.toolResults) {
+      yield* ops.observe({
+        type: "tool-result",
+        toolCallId: result.id,
+        toolName: result.name,
+        output: result.result,
+        isFailure: result.isFailure,
+      });
+    }
+    return { kind: "response", response } as const;
+  });
 
 /**
  * Assemble a toolkit from compiled tools + this tick's handlers —
