@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import type * as AI from "alchemy/AI";
 import { useState, type ReactNode } from "react";
-import type { CoderLive } from "../../src/Coder.ts";
+import type { GeneralEngineer } from "../../src/Engineer.ts";
 import { useAnchoredToggle } from "@/lib/anchor";
 import { cn } from "@/lib/utils";
 
@@ -153,7 +153,7 @@ const outputText = (output: unknown): string | undefined =>
       : JSON.stringify(output, null, 2);
 
 /** A renderer as the transcript sees it — the wire is untyped JSON, so
- *  `input` is `any` here; the Coder's own cards are authored against
+ *  `input` is `any` here; the Engineer's own cards are authored against
  *  their PRECISE input types (see {@link CODER}) and merge in. */
 type Renderer = (
   input: any,
@@ -179,17 +179,17 @@ type Renderers<L> = {
 
 
 /**
- * Cards for the Coder's wire, typed straight off the charter:
- * `CoderLive`'s TYPE carries every tool its prose can mention
+ * Cards for the Engineer's wire, typed straight off the charter:
+ * `GeneralEngineer`'s TYPE carries every tool its prose can mention
  * (mention-is-presence, lifted into the type system — alchemy/AI/Wire.ts),
  * and the annotation holds this object to it. Two guarantees, both
  * compiler-enforced: mention a new tool in the charter without adding
  * its card → this object errors, naming the missing tool; each
  * renderer's `input` is that tool's ACTUAL parameter type. The import
- * of `CoderLive` is type-only: erased at build, no server code
+ * of `GeneralEngineer` is type-only: erased at build, no server code
  * reaches the browser bundle.
  */
-const CODER: Renderers<typeof CoderLive> = {
+const CODER: Renderers<typeof GeneralEngineer> = {
   bash: (input, output, running) => {
     const parsed = output === undefined ? undefined : parseBashOutput(output);
     return {

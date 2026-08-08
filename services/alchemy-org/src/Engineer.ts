@@ -8,8 +8,9 @@
  * re-rendered every tick — so improving this agent is editing this
  * file and restarting.
  *
- * - {@link Coder}     — the agent: a bare tag.
- * - {@link CoderLive} — the charter: the stance and the toolkit it
+ * - {@link Engineer}     — the agent: a bare tag.
+ * - {@link GeneralEngineer} — the GENERAL implementation of the agent: the
+ *   stance and the toolkit it
  *   mentions (mention-is-presence — these eight tools ARE the agent's
  *   capability envelope; there is no merge button, no GitHub write,
  *   no network beyond what bash reaches).
@@ -27,9 +28,9 @@ import {
   WriteFile,
 } from "./tools/index.ts";
 
-export class Coder extends AI.Agent<Coder>()("Coder") {}
+export class Engineer extends AI.Agent<Engineer>()("Engineer") {}
 
-export const CoderLive = Coder.make(
+export const GeneralEngineer = Engineer.make(
   Effect.gen(function* () {
     // ── INIT: once per chat ──────────────────────────────────────────
     const thread = yield* AI.Thread;

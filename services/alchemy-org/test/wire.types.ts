@@ -1,5 +1,5 @@
 /**
- * Type-level regression tests for the Coder's WIRE surface
+ * Type-level regression tests for the Engineer's WIRE surface
  * (alchemy/AI/Wire.ts): the charter's Layer type carries every tool
  * its prose can mention, so renderer coverage is compiler-checked.
  *
@@ -11,9 +11,9 @@
  * breaks.
  */
 import type * as AI from "alchemy/AI";
-import type { CoderLive } from "../src/Coder.ts";
+import type { GeneralEngineer } from "../src/Engineer.ts";
 
-type Names = AI.ToolNames<typeof CoderLive>;
+type Names = AI.ToolNames<typeof GeneralEngineer>;
 
 // the full surface: every tool the stance mentions
 const _names: Names[] = [
@@ -31,12 +31,12 @@ const _names: Names[] = [
 const _unknown: Names = "not_a_tool";
 
 // inputs are typed per tool, from the template's Parameter splices
-const _grep: AI.ToolInput<typeof CoderLive, "grep"> = {
+const _grep: AI.ToolInput<typeof GeneralEngineer, "grep"> = {
   pattern: "log.*Error",
 };
 
 // @ts-expect-error — pattern is a string
-const _bad: AI.ToolInput<typeof CoderLive, "grep"> = { pattern: 42 };
+const _bad: AI.ToolInput<typeof GeneralEngineer, "grep"> = { pattern: 42 };
 
 // the registry contract is USERLAND — apps derive their own shape from
 // the core facts (this mirrors ui/components/tool-card.tsx's Renderers)
@@ -45,7 +45,7 @@ type Registry<L> = {
 };
 
 // @ts-expect-error — writeFile has no renderer
-const _incomplete: Registry<typeof CoderLive> = {
+const _incomplete: Registry<typeof GeneralEngineer> = {
   bash: () => 1,
   editFile: () => 1,
   glob: () => 1,
@@ -55,7 +55,7 @@ const _incomplete: Registry<typeof CoderLive> = {
   readOutput: () => 1,
 };
 
-const _complete: Registry<typeof CoderLive> = {
+const _complete: Registry<typeof GeneralEngineer> = {
   bash: (input) => (input.command satisfies string, 1),
   editFile: (input) => (input.path satisfies string, 1),
   glob: (input) => (input.pattern satisfies string, 1),

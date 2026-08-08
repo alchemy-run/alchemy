@@ -56,12 +56,12 @@ interface BoardThread {
   firstInput?: string | null;
 }
 
-/** Every thread is one SESSION of the coder: `Coder:<key>`. */
-const DEFAULT_THREAD = "Coder:main";
+/** Every thread is one SESSION of the engineer: `Engineer:<key>`. */
+const DEFAULT_THREAD = "Engineer:main";
 
 const threadFromHash = (): string => {
   const raw = decodeURIComponent(window.location.hash.slice(1));
-  return raw.startsWith("Coder:") ? raw : DEFAULT_THREAD;
+  return raw.startsWith("Engineer:") ? raw : DEFAULT_THREAD;
 };
 
 /** Short relative age for the sidebar; the tooltip has the full form. */
@@ -127,7 +127,7 @@ export const App = () => {
             (response.ok ? response.json() : []) as Promise<BoardThread[]>,
         )
         .then((board) => {
-          if (live) setThreads(board.filter((t) => t.term === "Coder"));
+          if (live) setThreads(board.filter((t) => t.term === "Engineer"));
         })
         .catch(() => {});
     load();
@@ -139,7 +139,7 @@ export const App = () => {
   }, []);
 
   const newThread = () =>
-    open(`Coder:t-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`);
+    open(`Engineer:t-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`);
 
   // newest first; the active thread is listed even before the board
   // knows it (a just-created thread has no row yet)
@@ -148,8 +148,8 @@ export const App = () => {
     if (!byId.has(activeId)) {
       byId.set(activeId, {
         id: activeId,
-        term: "Coder",
-        key: activeId.slice("Coder:".length),
+        term: "Engineer",
+        key: activeId.slice("Engineer:".length),
         status: "idle",
         ticks: 0,
         createdAt: Date.now(),

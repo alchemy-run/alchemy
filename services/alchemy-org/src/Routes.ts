@@ -1,5 +1,5 @@
 /**
- * The coder's HTTP surface — deliberately tiny: the chat transcript in
+ * The engineer's HTTP surface — deliberately tiny: the chat transcript in
  * the AI SDK UIMessage protocol (snapshot hydration for the UI; the
  * live tail rides the run-socket `/attach` door the entrypoint adds),
  * and the raw observation log for debugging.
@@ -11,7 +11,7 @@ import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
-export const coderRoutes = Effect.gen(function* () {
+export const engineerRoutes = Effect.gen(function* () {
   const chats = yield* AI.Chats;
 
   const listChats = HttpRouter.add(
@@ -58,7 +58,7 @@ export const coderRoutes = Effect.gen(function* () {
           { status: 404 },
         );
       }
-      const limitRaw = new URL(request.url, "http://coder").searchParams.get(
+      const limitRaw = new URL(request.url, "http://engineer").searchParams.get(
         "limit",
       );
       const limit = limitRaw === null ? undefined : Number(limitRaw);

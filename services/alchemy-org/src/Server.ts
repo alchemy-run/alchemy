@@ -1,5 +1,5 @@
 /**
- * The coder, running on your machine — an Effectful
+ * The engineer, running on your machine — an Effectful
  * {@link LocalService.Vite} service hosting the agent as a detached
  * local process: the {@link Local} provide-list (DriverCore with
  * sqlite durability, the read/run/write toolbox) under the HTTP
@@ -20,9 +20,9 @@ import * as Effect from "effect/Effect";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { CoderLive } from "./Coder.ts";
-import { coderRoutes } from "./Routes.ts";
-import { CoderChats, DriverLocal } from "./services/Driver.ts";
+import { GeneralEngineer } from "./Engineer.ts";
+import { engineerRoutes } from "./Routes.ts";
+import { EngineerChats, DriverLocal } from "./services/Driver.ts";
 import {
   ReadToolsLocal,
   RunToolsLocal,
@@ -34,14 +34,14 @@ const workspaceRoot = process.env.CODER_WORKSPACE ?? `${process.cwd()}/../..`;
 const WorkspaceLive = Workspace.fixed(workspaceRoot);
 
 /**
- * The whole coder over LOCAL physics — the charter, the
+ * The whole engineer over LOCAL physics — the charter, the
  * read/run/write toolbox over one fixed workspace, and the org's
  * assembled driver (services/Driver.ts: AI.DriverLocal +
  * SqliteThreadStorage + Model + ChatsObserver + ref store). The
  * service provides this to its init effect; the composition smoke
  * test builds it directly.
  */
-export const CoderLocal = CoderLive.pipe(
+export const EngineerLocal = GeneralEngineer.pipe(
   Layer.provide([ReadToolsLocal, RunToolsLocal, WriteToolsLocal]),
   Layer.provide(WorkspaceLive),
   // provideMERGE: the HTTP edge consumes AgentGateway for the
@@ -49,12 +49,12 @@ export const CoderLocal = CoderLive.pipe(
   Layer.provideMerge(DriverLocal),
   // the chat projection (same const the driver bundle observes into)
   // — consumed by the HTTP edge for the transcript
-  Layer.provideMerge(CoderChats),
+  Layer.provideMerge(EngineerChats),
   Layer.orDie,
 );
 
-export default class CoderServer extends LocalService.Vite<CoderServer>()(
-  "Coder",
+export default class EngineerServer extends LocalService.Vite<EngineerServer>()(
+  "Engineer",
   {
     // no port pinned: the runtime binds an ephemeral one and reports it
     // back through the startup handshake — it lands in the `url` output.
@@ -67,7 +67,7 @@ export default class CoderServer extends LocalService.Vite<CoderServer>()(
   },
   Effect.gen(function* () {
     const gateway = yield* AI.AgentGateway;
-    const api = yield* HttpRouter.toHttpEffect(yield* coderRoutes);
+    const api = yield* HttpRouter.toHttpEffect(yield* engineerRoutes);
 
     return {
       fetch: Effect.gen(function* () {
@@ -89,5 +89,5 @@ export default class CoderServer extends LocalService.Vite<CoderServer>()(
         return yield* api;
       }),
     };
-  }).pipe(Effect.provide(CoderLocal)),
+  }).pipe(Effect.provide(EngineerLocal)),
 ) {}

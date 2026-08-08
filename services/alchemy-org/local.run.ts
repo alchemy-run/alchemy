@@ -1,5 +1,5 @@
 /**
- * The coder's LOCAL deploy: {@link CoderServer} as a detached local
+ * The engineer's LOCAL deploy: {@link EngineerServer} as a detached local
  * process — DriverCore over SqliteThreadStorage, per-machine
  * workspace, UI included. Nothing in the cloud.
  *
@@ -9,18 +9,18 @@
 import * as Alchemy from "alchemy";
 import * as Local from "alchemy/Local";
 import * as Effect from "effect/Effect";
-import CoderServer from "./src/Server.ts";
+import EngineerServer from "./src/Server.ts";
 
 export default Alchemy.Stack(
-  "Coder",
+  "Engineer",
   {
     providers: Local.providers(),
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {
-    const coder = yield* CoderServer;
+    const engineer = yield* EngineerServer;
     return {
-      url: coder.url,
+      url: engineer.url,
     };
   }),
 );

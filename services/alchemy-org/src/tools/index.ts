@@ -1,5 +1,5 @@
 /**
- * The coder's tools — one file per tool: the contract (an `AI.Tool`
+ * The engineer's tools — one file per tool: the contract (an `AI.Tool`
  * term) co-located with its implementation Layer(s), the same
  * convention as alchemy's resources. Physics that is missing fails
  * MODEL-VISIBLY (a tool result the agent reacts to), never as a

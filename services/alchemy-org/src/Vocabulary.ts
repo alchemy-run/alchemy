@@ -1,5 +1,5 @@
 /**
- * Shared vocabulary of the coder: the typed Parameters that tools and
+ * Shared vocabulary of the engineer: the typed Parameters that tools and
  * the charter interpolate. A Parameter's template is its description;
  * description and schema are one artifact.
  */
