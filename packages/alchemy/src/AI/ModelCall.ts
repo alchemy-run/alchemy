@@ -1,28 +1,25 @@
 /**
- * `Sampler` — the driver service that owns ONE MODEL SAMPLING
- * (driver-assembly.md §3): streaming the provider wire, consolidating
- * deltas back into the response shape the round consumes, surfacing
- * live parts as they stream, and the retry/budget policy for
- * transient failures.
+ * `ModelCall` — the driver service that makes ONE CALL TO THE MODEL:
+ * streaming the provider wire, consolidating deltas back into the
+ * response shape the round consumes, surfacing live parts as they
+ * stream, and the retry/budget policy for transient failures.
  *
- * This is the first piece of the decomposition shared by BOTH drivers
- * (DriverMemory and DriverCloudflare previously carried byte-identical
- * copies). It is a `Context.Service` so a user driver swaps it as a
- * Layer — retry schedules, sampling timeouts, model tiering, malformed
- * budgets all live INSIDE the user's Sampler, never as separate policy
- * objects:
+ * Shared by every driver assembly (memory, sqlite, Cloudflare). It is
+ * a `Context.Service` so a user driver swaps it as a Layer — retry
+ * schedules, sampling timeouts, model tiering, malformed budgets all
+ * live INSIDE the user's ModelCall, never as separate policy objects:
  *
  * ```ts
- * const OrgSampler = Layer.effect(
- *   AI.Sampler,
+ * const OrgModelCall = Layer.effect(
+ *   AI.ModelCall,
  *   Effect.map(LanguageModel.LanguageModel, (model) => ({
- *     ...AI.makeSampler(model),
+ *     ...AI.makeModelCall(model),
  *     malformedBudget: 1,
  *   })),
  * );
  * ```
  *
- * Absent, the drivers build {@link makeSampler} over their own
+ * Absent, the drivers build {@link makeModelCall} over their own
  * LanguageModel — today's behavior, verbatim.
  */
 import * as Context from "effect/Context";
@@ -46,11 +43,11 @@ export type LivePart =
       readonly params: unknown;
     };
 
-export interface SamplerService {
+export interface ModelCallService {
   /**
    * One sampling — tool handlers execute INSIDE this call; `onLive`
    * surfaces deltas and tool calls as they stream. Typed failures
-   * pass through to the round's crash model (spec §11b); the sampler
+   * pass through to the round's crash model (spec §11b); the modelCall
    * decides only which failures are RE-SAMPLED and on what schedule.
    */
   readonly step: (options: {
@@ -66,17 +63,17 @@ export interface SamplerService {
   readonly malformedBudget: number;
 }
 
-export class Sampler extends Context.Service<Sampler, SamplerService>()(
-  "alchemy/AI/Sampler",
+export class ModelCall extends Context.Service<ModelCall, ModelCallService>()(
+  "alchemy/AI/ModelCall",
 ) {}
 
-/** The model surface the default sampler needs. */
+/** The model surface the default modelCall needs. */
 interface StreamingModel {
   readonly streamText: unknown;
 }
 
 /**
- * The default sampler over a LanguageModel — the behavior both
+ * The default modelCall over a LanguageModel — the behavior both
  * drivers shipped before the seam existed:
  *
  * - The wire is STREAMED so an observer sees text/thinking tokens as
@@ -96,7 +93,7 @@ interface StreamingModel {
  *   CALL is excluded from blind re-sampling: the round feeds it back
  *   to the model as a corrective note.
  */
-export const makeSampler = (model: StreamingModel): SamplerService => ({
+export const makeModelCall = (model: StreamingModel): ModelCallService => ({
   malformedBudget: 3,
   step: ({ prompt, toolkit, onLive = () => Effect.void }) =>
     Effect.gen(function* () {
@@ -197,15 +194,15 @@ export const makeSampler = (model: StreamingModel): SamplerService => ({
     ),
 });
 
-/** The default sampler as a Layer, for user drivers that want to wrap
+/** The default modelCall as a Layer, for user drivers that want to wrap
  *  rather than replace it. */
-export const SamplerDefault: Layer.Layer<
-  Sampler,
+export const ModelCallDefault: Layer.Layer<
+  ModelCall,
   never,
   LanguageModel.LanguageModel
 > = Layer.effect(
-  Sampler,
+  ModelCall,
   Effect.map(LanguageModel.LanguageModel, (model) =>
-    makeSampler(model as StreamingModel),
+    makeModelCall(model as StreamingModel),
   ),
 );

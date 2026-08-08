@@ -60,7 +60,7 @@ import {
   render,
   type Stance,
 } from "./DriverShared.ts";
-import { makeSampler, Sampler } from "./Sampler.ts";
+import { makeModelCall, ModelCall } from "./ModelCall.ts";
 import {
   Thread,
   Tick,
@@ -237,12 +237,12 @@ export const DriverMemory: Layer.Layer<
         // parked at interpret.
         const ambientStore = Context.getOption(context, PersistentRef.Store);
         const journal = Context.getOption(context, RunJournal);
-        // the SAMPLER seam (driver-assembly.md §3): a user driver
+        // the MODEL-CALL seam (driver-assembly.md §3): a user driver
         // provides its own (retry/budget/tiering policy lives inside
         // it); absent, the default over this driver's LanguageModel.
-        const sampler = Option.getOrElse(
-          Context.getOption(context, Sampler),
-          () => makeSampler(model),
+        const modelCall = Option.getOrElse(
+          Context.getOption(context, ModelCall),
+          () => makeModelCall(model),
         );
         const saveSnapshot = (run: RunState): Effect.Effect<void> =>
           Option.isNone(journal)
@@ -1082,7 +1082,7 @@ export const DriverMemory: Layer.Layer<
                 });
               }
               const startedAt = yield* Effect.sync(() => Date.now());
-              const response = yield* sampler
+              const response = yield* modelCall
                 .step({
                   prompt: Prompt.concat(
                     Prompt.make([{ role: "system", content: tick.system }]),
@@ -1110,13 +1110,13 @@ export const DriverMemory: Layer.Layer<
                   // crash: nothing was executed, so tell the model what
                   // was wrong and let it re-issue. Bounded — a model that
                   // keeps emitting invalid calls crashes with the real
-                  // error after the sampler's streak budget.
+                  // error after the modelCall's streak budget.
                   Effect.catchIf(
                     (error): error is AiError =>
                       isAiError(error) &&
                       error.reason._tag === "ToolParameterValidationError",
                     (error) =>
-                      malformed >= sampler.malformedBudget
+                      malformed >= modelCall.malformedBudget
                         ? Effect.fail(error)
                         : Effect.succeed({
                             malformed: error.message,

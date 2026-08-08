@@ -92,7 +92,7 @@ import {
   type CompiledToolRef,
   type Stance,
 } from "../../AI/DriverShared.ts";
-import { makeSampler, Sampler } from "../../AI/Sampler.ts";
+import { makeModelCall, ModelCall } from "../../AI/ModelCall.ts";
 import {
   RunObserver,
   RoundAbandoned,
@@ -355,12 +355,12 @@ export const DriverCloudflare: Layer.Layer<
         );
         const recoverAfter = durability.recoverAfterMillis ?? 30_000;
         const maxAttempts = durability.maxAttempts ?? 5;
-        // the SAMPLER seam (driver-assembly.md §3): a user driver
+        // the MODEL-CALL seam (driver-assembly.md §3): a user driver
         // provides its own (retry/budget/tiering policy lives inside
         // it); absent, the default over this driver's LanguageModel.
-        const sampler = Option.getOrElse(
-          Context.getOption(captured, Sampler),
-          () => makeSampler(model),
+        const modelCall = Option.getOrElse(
+          Context.getOption(captured, ModelCall),
+          () => makeModelCall(model),
         );
 
         /**
@@ -1084,7 +1084,7 @@ export const DriverCloudflare: Layer.Layer<
 
             const thread = yield* readThread;
             const startedAt = Date.now();
-            const response = yield* sampler
+            const response = yield* modelCall
               .step({
                 prompt: Prompt.concat(
                   Prompt.make([{ role: "system", content: system }]),
@@ -1114,13 +1114,13 @@ export const DriverCloudflare: Layer.Layer<
                 // crash: nothing was executed, so tell the model what
                 // was wrong and let it re-issue. Bounded — a model that
                 // keeps emitting invalid calls crashes with the real
-                // error after the sampler's streak budget.
+                // error after the modelCall's streak budget.
                 Effect.catchIf(
                   (error): error is AiError =>
                     isAiError(error) &&
                     error.reason._tag === "ToolParameterValidationError",
                   (error) =>
-                    malformed >= sampler.malformedBudget
+                    malformed >= modelCall.malformedBudget
                       ? Effect.fail(error)
                       : Effect.succeed({ malformed: error.message } as const),
                 ),
