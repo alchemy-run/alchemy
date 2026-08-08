@@ -12,7 +12,7 @@ import { BunServices } from "@effect/platform-bun";
 import { expect, test } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { Local } from "../src/Local.ts";
+import { CoderLocal as Local } from "../src/Server.ts";
 
 const hasCredentials = process.env.ANTHROPIC_API_KEY !== undefined;
 

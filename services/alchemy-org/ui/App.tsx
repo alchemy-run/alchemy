@@ -53,24 +53,184 @@ interface BoardThread {
   ticks: number;
   createdAt: number;
   updatedAt: number;
+  firstInput?: string | null;
 }
 
-/** THE chat — one agent, one durable conversation. */
-const CHAT_ID = "Coder:main";
+/** Every thread is one SESSION of the coder: `Coder:<key>`. */
+const DEFAULT_THREAD = "Coder:main";
 
-export const App = () => (
-  <div className="flex h-screen bg-background text-foreground">
-    <main className="flex min-w-0 flex-1 flex-col">
-      <ChatView
-        id={CHAT_ID}
-        active
-        agents={[]}
-        breadcrumb={undefined}
-        onOpenThread={() => {}}
-      />
-    </main>
-  </div>
-);
+const threadFromHash = (): string => {
+  const raw = decodeURIComponent(window.location.hash.slice(1));
+  return raw.startsWith("Coder:") ? raw : DEFAULT_THREAD;
+};
+
+/** Short relative age for the sidebar; the tooltip has the full form. */
+const timeAgo = (at: number): string => {
+  const seconds = Math.max(0, Math.floor((Date.now() - at) / 1000));
+  if (seconds < 60) return "now";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+  return `${Math.floor(seconds / 86400)}d`;
+};
+
+const statusDot: Record<BoardThread["status"], string> = {
+  running: "bg-emerald-500 animate-pulse",
+  idle: "bg-muted-foreground/40",
+  settled: "bg-muted-foreground/20",
+  crashed: "bg-red-500",
+};
+
+/** A thread's sidebar title: its first message, else a placeholder. */
+const threadTitle = (thread: BoardThread | undefined): string => {
+  const first = thread?.firstInput?.trim();
+  return first !== undefined && first !== null && first.length > 0
+    ? first
+    : "New thread";
+};
+
+export const App = () => {
+  const [threads, setThreads] = useState<BoardThread[]>([]);
+  const [activeId, setActiveId] = useState<string>(threadFromHash);
+  // visited threads stay MOUNTED (visibility-hidden) so switching
+  // back preserves scroll position and the streaming tail
+  const [visited, setVisited] = useState<string[]>(() => [threadFromHash()]);
+
+  const open = (id: string) => {
+    window.location.hash = encodeURIComponent(id);
+    setActiveId(id);
+    setVisited((current) =>
+      current.includes(id) ? current : [...current, id],
+    );
+  };
+
+  // back/forward navigation drives the same path
+  useEffect(() => {
+    const onHash = () => {
+      const id = threadFromHash();
+      setActiveId(id);
+      setVisited((current) =>
+        current.includes(id) ? current : [...current, id],
+      );
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  // the board: poll — threads appear the moment their session is
+  // admitted (opening a thread attaches, which admits)
+  useEffect(() => {
+    let live = true;
+    const load = () =>
+      fetch("/api/chats")
+        .then(
+          (response) =>
+            (response.ok ? response.json() : []) as Promise<BoardThread[]>,
+        )
+        .then((board) => {
+          if (live) setThreads(board.filter((t) => t.term === "Coder"));
+        })
+        .catch(() => {});
+    load();
+    const timer = setInterval(load, 4000);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, []);
+
+  const newThread = () =>
+    open(`Coder:t-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`);
+
+  // newest first; the active thread is listed even before the board
+  // knows it (a just-created thread has no row yet)
+  const list = useMemo(() => {
+    const byId = new Map(threads.map((thread) => [thread.id, thread]));
+    if (!byId.has(activeId)) {
+      byId.set(activeId, {
+        id: activeId,
+        term: "Coder",
+        key: activeId.slice("Coder:".length),
+        status: "idle",
+        ticks: 0,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        firstInput: null,
+      });
+    }
+    return [...byId.values()].sort((a, b) => b.updatedAt - a.updatedAt);
+  }, [threads, activeId]);
+
+  return (
+    <div className="flex h-screen bg-background text-foreground">
+      <aside className="flex w-64 shrink-0 flex-col border-r border-border">
+        <div className="flex items-center justify-between border-b border-border px-3 py-2">
+          <span className="font-mono text-xs text-muted-foreground">
+            threads
+          </span>
+          <button
+            type="button"
+            onClick={newThread}
+            className="rounded border border-border px-2 py-0.5 font-mono text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            + new
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {list.map((thread) => (
+            <button
+              key={thread.id}
+              type="button"
+              onClick={() => open(thread.id)}
+              className={cn(
+                "flex w-full flex-col gap-1 border-b border-border/50 px-3 py-2 text-left hover:bg-accent/50",
+                thread.id === activeId && "bg-accent",
+              )}
+            >
+              <span className="truncate text-[13px] leading-tight">
+                {threadTitle(thread)}
+              </span>
+              <span className="flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
+                <span
+                  className={cn(
+                    "inline-block size-1.5 rounded-full",
+                    statusDot[thread.status] ?? statusDot.idle,
+                  )}
+                />
+                {thread.status}
+                <span className="ml-auto">
+                  <AtTooltip at={thread.updatedAt}>
+                    <span className="cursor-default">
+                      {timeAgo(thread.updatedAt)}
+                    </span>
+                  </AtTooltip>
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </aside>
+      <main className="relative flex min-w-0 flex-1 flex-col">
+        {visited.map((id) => (
+          <div
+            key={id}
+            className={cn(
+              "absolute inset-0 flex flex-col",
+              id === activeId ? "visible" : "pointer-events-none invisible",
+            )}
+          >
+            <ChatView
+              id={id}
+              active={id === activeId}
+              agents={[]}
+              breadcrumb={undefined}
+              onOpenThread={open}
+            />
+          </div>
+        ))}
+      </main>
+    </div>
+  );
+};
 
 
 interface ChatContext {

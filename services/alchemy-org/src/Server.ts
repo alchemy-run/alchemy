@@ -14,12 +14,44 @@
  */
 import * as AI from "alchemy/AI";
 import * as LocalService from "alchemy/Local";
+import * as Workspace from "alchemy/Workspace";
+import { Layer } from "effect";
 import * as Effect from "effect/Effect";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { Local } from "./Local.ts";
+import { CoderLive } from "./Coder.ts";
 import { coderRoutes } from "./Routes.ts";
+import { CoderChats, DriverLocal } from "./services/Driver.ts";
+import {
+  ReadToolsLocal,
+  RunToolsLocal,
+  WriteToolsLocal,
+} from "./tools/LocalToolbox.ts";
+
+const workspaceRoot = process.env.CODER_WORKSPACE ?? `${process.cwd()}/../..`;
+
+const WorkspaceLive = Workspace.fixed(workspaceRoot);
+
+/**
+ * The whole coder over LOCAL physics — the charter, the
+ * read/run/write toolbox over one fixed workspace, and the org's
+ * assembled driver (services/Driver.ts: AI.DriverLocal +
+ * SqliteThreadStorage + Model + ChatsObserver + ref store). The
+ * service provides this to its init effect; the composition smoke
+ * test builds it directly.
+ */
+export const CoderLocal = CoderLive.pipe(
+  Layer.provide([ReadToolsLocal, RunToolsLocal, WriteToolsLocal]),
+  Layer.provide(WorkspaceLive),
+  // provideMERGE: the HTTP edge consumes AgentGateway for the
+  // run-socket `/attach` door, so the driver bundle must be exported
+  Layer.provideMerge(DriverLocal),
+  // the chat projection (same const the driver bundle observes into)
+  // — consumed by the HTTP edge for the transcript
+  Layer.provideMerge(CoderChats),
+  Layer.orDie,
+);
 
 export default class CoderServer extends LocalService.Vite<CoderServer>()(
   "Coder",
@@ -57,5 +89,5 @@ export default class CoderServer extends LocalService.Vite<CoderServer>()(
         return yield* api;
       }),
     };
-  }).pipe(Effect.provide(Local)),
+  }).pipe(Effect.provide(CoderLocal)),
 ) {}
