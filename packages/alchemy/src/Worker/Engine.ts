@@ -189,3 +189,52 @@ export const findWorkerEngine = (
               ),
         ),
       );
+
+/**
+ * Proof that a worker is deployed to a specific platform — produced by a
+ * deploy module (`Cloudflare.Worker(props, ApiLive)`) and required by that
+ * platform's {@link HostRef} constructor (`Cloudflare.Worker.ref(Api)`).
+ *
+ * `K` is a TYPE parameter, not merely runtime data: it is what makes
+ * `api/rivet.ts` + `Cloudflare.Worker.ref(Api)` a compile error rather
+ * than a silent HTTP hop. Per-worker distinctness comes from `W` — two
+ * tag-constructor calls produce the same type unless their type arguments
+ * differ, so the string key below matters only at runtime.
+ */
+export interface DeploymentService<W, K extends string> {
+  /** The engine kind that deployed the worker. */
+  readonly kind: K;
+  /** The deployed worker's resource handle (attribute Outputs). */
+  readonly worker: W;
+}
+
+/** Build the keyed deployment tag for one worker on one platform. */
+export const Deployment = <W, K extends string>(kind: K, logicalId: string) =>
+  Context.Service<DeploymentService<W, K>, DeploymentService<W, K>>()(
+    `Alchemy.WorkerDeployment/${kind}/${logicalId}`,
+  );
+
+/**
+ * A resolved reference to a worker a caller binds to — deliberately
+ * platform-AGNOSTIC, so a definition module (`web/worker.ts`) can require
+ * it without naming a cloud. The platform-specific obligation lives on
+ * {@link Deployment}, which the `.ref` constructor consumes to produce
+ * this; that split is what keeps definition modules cloud-free while the
+ * proof still propagates to the stack.
+ */
+export interface HostRefService<W> {
+  /** The engine kind hosting the referenced worker. */
+  readonly kind: string;
+  /** The referenced worker's resource handle (attribute Outputs). */
+  readonly worker: W;
+  /** Standard env key the worker's URL is bound under. */
+  readonly urlKey: string;
+  /** Standard env key the worker's secret is bound under. */
+  readonly secretKey: string;
+}
+
+/** Build the keyed host-reference tag for one worker. */
+export const HostRef = <W>(logicalId: string) =>
+  Context.Service<HostRefService<W>, HostRefService<W>>()(
+    `Alchemy.WorkerHostRef/${logicalId}`,
+  );

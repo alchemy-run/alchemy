@@ -39,6 +39,13 @@
  * );
  * ```
  */
+import {
+  Deployment,
+  HostRef,
+  type DeploymentService,
+  type HostRefService,
+} from "../Worker/Engine.ts";
+import { workerConnectionKeys } from "../Worker/DurableObject.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -479,3 +486,62 @@ export const CloudflareWorkerEngine = (): Layer.Layer<WorkerEngineService> =>
       } satisfies WorkerEngineService;
     }),
   ) as Layer.Layer<WorkerEngineService>;
+
+/**
+ * The Cloudflare **deploy module** form: apply the Cloudflare target to a
+ * portable worker layer and emit the proof that this worker is deployed
+ * here.
+ *
+ * The worker class is passed explicitly rather than recovered from the
+ * layer because `Layer.provide` returns a fresh layer — an annotation on
+ * the layer built by `Worker.make` would not survive
+ * `WebLive.pipe(Layer.provide(...))`. Passing the class mirrors the
+ * resource form's leading `id: string`; here the id is the tag.
+ */
+export const deployWorker = <W, RIn>(
+  cls: { LogicalId: string } & Effect.Effect<W, never, any>,
+  props: CloudflareWorkerTargetProps,
+  layer: Layer.Layer<W, never, RIn | GenericWorkerTarget>,
+): Layer.Layer<W | DeploymentService<W, "cloudflare">, never, RIn> => {
+  const deployed = layer.pipe(Layer.provide(WorkerTarget(props)));
+  const deployment = Layer.effect(
+    Deployment<W, "cloudflare">(CLOUDFLARE_ENGINE, cls.LogicalId),
+    Effect.gen(function* () {
+      const worker = yield* cls as unknown as Effect.Effect<W, never, never>;
+      return { kind: CLOUDFLARE_ENGINE as "cloudflare", worker };
+    }),
+  );
+  return deployment.pipe(Layer.provideMerge(deployed)) as Layer.Layer<
+    W | DeploymentService<W, "cloudflare">,
+    never,
+    RIn
+  >;
+};
+
+/**
+ * Assert — and prove — that `cls` is deployed to Cloudflare, yielding the
+ * platform-agnostic {@link HostRef} a binder requires.
+ *
+ * The `Deployment` requirement is what propagates to the stack: only the
+ * Cloudflare deploy module for this worker can discharge it, so pointing
+ * a binder at a worker deployed elsewhere fails to compile.
+ */
+export const workerRef = <W>(
+  cls: { LogicalId: string } & Effect.Effect<W, never, any>,
+): Layer.Layer<HostRefService<W>, never, DeploymentService<W, "cloudflare">> =>
+  Layer.effect(
+    HostRef<W>(cls.LogicalId),
+    Effect.gen(function* () {
+      const deployment = yield* Deployment<W, "cloudflare">(
+        CLOUDFLARE_ENGINE,
+        cls.LogicalId,
+      );
+      const { urlKey, secretKey } = workerConnectionKeys(cls.LogicalId);
+      return {
+        kind: deployment.kind,
+        worker: deployment.worker,
+        urlKey,
+        secretKey,
+      };
+    }),
+  );
