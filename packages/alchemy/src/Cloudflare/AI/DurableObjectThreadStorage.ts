@@ -54,13 +54,12 @@ export const seqOf = (prefix: string, key: string) =>
   Number(key.slice(prefix.length));
 
 /**
- * The DO session's full meta — the shared {@link SessionMeta} plus
- * the burst host's own facts (the message seq counter, the inbox
- * drain watermark, the liveness marker, the settled outcome).
+ * The DO session's full meta — the shared {@link SessionMeta} (which
+ * carries the liveness marker and the settled outcome) plus this
+ * substrate's row bookkeeping.
  */
 export interface DurableSessionMeta extends SessionMeta {
-  readonly settled?: { readonly outcome: unknown };
-  /** Next thread-message row seq. */
+  /** Next row seq (shared by message and inbox rows). */
   readonly seq: number;
   /**
    * The drain WATERMARK: inbox rows below this seq are already in the
@@ -70,17 +69,6 @@ export interface DurableSessionMeta extends SessionMeta {
    * — at-least-once drain, exactly-once append.
    */
   readonly drained: number;
-  /**
-   * The LIVENESS marker, following think's `cf_agents_runs` design
-   * (designs/ai/reports/think-durable-execution.md): present while a
-   * burst owes the thread a reply, cleared at quiescence. A burst that
-   * finds it already set on entry knows its predecessor DIED mid-round
-   * — eviction, deploy, or crash, all indistinguishable and all
-   * recovered the same way. `attempts` counts consecutive re-entries
-   * on the SAME round; any completed sampling resets it (progress-
-   * keyed budgets, not wall-clock).
-   */
-  readonly busy?: { readonly attempts: number; readonly since: number };
 }
 
 export const emptyMeta: DurableSessionMeta = {
@@ -158,16 +146,73 @@ export const makeDurableObjectSessionStorage = (
                 tick: found.tick,
                 observed: found.observed,
                 active: found.active,
+                busy: found.busy,
+                settled: found.settled,
               },
       ),
     ),
-    // the shared fields merge into the superset row — the host's own
-    // facts (seq, drained, busy, settled) are never touched here
+    // the shared fields merge into the superset row — the row
+    // bookkeeping (seq, drained) is never touched here
     putMeta: (meta) =>
       Effect.gen(function* () {
         const full = yield* readMeta;
         yield* writeMeta({ ...full, ...meta });
       }),
+    putInbox: (input) =>
+      sealed(
+        Effect.gen(function* () {
+          const full = yield* readMeta;
+          // one atomic write: a crash can never leave a row the
+          // counter would overwrite
+          yield* storage
+            .put({
+              [seqKey(INBOX, full.seq)]: input,
+              [META]: {
+                ...full,
+                seq: full.seq + 1,
+              } satisfies DurableSessionMeta,
+            })
+            .pipe(Effect.orDie);
+          return full.seq;
+        }),
+      ),
+    listInbox: sealed(
+      Effect.gen(function* () {
+        const full = yield* readMeta;
+        const rows = yield* listRows<unknown>(INBOX);
+        return rows.flatMap(([k, input]) => {
+          const seq = seqOf(INBOX, k);
+          return seq >= full.drained ? [{ seq, input }] : [];
+        });
+      }),
+    ),
+    deleteInbox: (seqs) =>
+      seqs.length === 0
+        ? Effect.void
+        : sealed(
+            storage
+              .delete(seqs.map((seq) => seqKey(INBOX, seq)))
+              .pipe(Effect.orDie, Effect.asVoid),
+          ),
+    // the ATOMIC ADMIT: thread rows + watermark + meta in ONE put
+    admit: ({ messages, drainedTo, meta }) =>
+      sealed(
+        Effect.gen(function* () {
+          const full = yield* readMeta;
+          const entries: Record<string, unknown> = {};
+          let seq = full.seq;
+          for (const message of messages) {
+            entries[seqKey(MSG, seq++)] = message;
+          }
+          entries[META] = {
+            ...full,
+            ...meta,
+            seq,
+            drained: drainedTo,
+          } satisfies DurableSessionMeta;
+          yield* storage.put(entries).pipe(Effect.orDie);
+        }),
+      ),
     messages: Effect.map(listRows<Prompt.MessageEncoded>(MSG), (rows) =>
       rows.map(([, message]) => message),
     ),

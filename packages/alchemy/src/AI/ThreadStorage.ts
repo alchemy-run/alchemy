@@ -38,6 +38,25 @@ export interface SessionMeta {
   readonly observed: number;
   /** Activated skills (effective when the stance also mentions them). */
   readonly active: ReadonlyArray<string>;
+  /**
+   * The round LIVENESS marker: present while a round is owed a reply,
+   * cleared at quiescence. An engine that finds it set on entry knows
+   * the previous attempt DIED mid-round — eviction, restart, or crash,
+   * all indistinguishable on disk and all recovered the same way.
+   * `attempts` counts consecutive re-entries on the SAME round; any
+   * completed sampling resets it (progress-keyed budgets, not
+   * wall-clock).
+   */
+  readonly busy?: { readonly attempts: number; readonly since: number };
+  /** The settled outcome — a settled session answers late dispatches
+   *  with it and is never restored. */
+  readonly settled?: { readonly outcome: unknown };
+}
+
+/** One pending inbox row. */
+export interface InboxRow {
+  readonly seq: number;
+  readonly input: unknown;
 }
 
 /** One session's storage — all reads and writes for `${term}/${key}`. */
@@ -45,6 +64,29 @@ export interface ThreadHandle {
   /** The persisted meta, or `undefined` if nothing was ever written. */
   readonly meta: Effect.Effect<SessionMeta | undefined>;
   readonly putMeta: (meta: SessionMeta) => Effect.Effect<void>;
+  /**
+   * Durably queue one input, returning its inbox seq — the engine
+   * pairs in-flight waiters to their inputs by this seq.
+   */
+  readonly putInbox: (input: unknown) => Effect.Effect<number>;
+  /** Pending inbox rows at or above the drain watermark, in order. */
+  readonly listInbox: Effect.Effect<ReadonlyArray<InboxRow>>;
+  /** Drop consumed inbox rows (best-effort — the watermark already
+   *  guards against re-admission). */
+  readonly deleteInbox: (seqs: ReadonlyArray<number>) => Effect.Effect<void>;
+  /**
+   * The ATOMIC ADMIT — the crash-consistency heart of the drain:
+   * append the admitted inputs to the thread, advance the inbox
+   * watermark past them, and persist the meta (typically opening the
+   * round's busy marker), in ONE write. Every crash point around it
+   * converges: rows below the watermark are never re-admitted; rows
+   * not yet admitted redeliver.
+   */
+  readonly admit: (options: {
+    readonly messages: ReadonlyArray<Prompt.MessageEncoded>;
+    readonly drainedTo: number;
+    readonly meta: SessionMeta;
+  }) => Effect.Effect<void>;
   /** The thread, in order — encoded rows (JSON-safe). */
   readonly messages: Effect.Effect<ReadonlyArray<Prompt.MessageEncoded>>;
   readonly appendMessages: (
@@ -87,6 +129,9 @@ interface MemorySession {
   meta: SessionMeta | undefined;
   messages: Array<Prompt.MessageEncoded>;
   log: Array<SessionObservation>;
+  inbox: Array<InboxRow>;
+  inboxSeq: number;
+  drained: number;
 }
 
 /**
@@ -103,7 +148,14 @@ export const MemoryThreadStorage: Layer.Layer<ThreadStorage> = Layer.sync(
       const id = `${term}\u0000${key}`;
       let session = sessions.get(id);
       if (session === undefined) {
-        session = { meta: undefined, messages: [], log: [] };
+        session = {
+          meta: undefined,
+          messages: [],
+          log: [],
+          inbox: [],
+          inboxSeq: 0,
+          drained: 0,
+        };
         sessions.set(id, session);
       }
       return session;
@@ -116,6 +168,30 @@ export const MemoryThreadStorage: Layer.Layer<ThreadStorage> = Layer.sync(
             meta: Effect.sync(() => session.meta),
             putMeta: (meta) =>
               Effect.sync(() => {
+                session.meta = meta;
+              }),
+            putInbox: (input) =>
+              Effect.sync(() => {
+                const seq = session.inboxSeq++;
+                session.inbox.push({ seq, input });
+                return seq;
+              }),
+            listInbox: Effect.sync(() =>
+              session.inbox.filter(
+                (inboxRow) => inboxRow.seq >= session.drained,
+              ),
+            ),
+            deleteInbox: (seqs) =>
+              Effect.sync(() => {
+                const drop = new Set(seqs);
+                session.inbox = session.inbox.filter(
+                  (inboxRow) => !drop.has(inboxRow.seq),
+                );
+              }),
+            admit: ({ messages, drainedTo, meta }) =>
+              Effect.sync(() => {
+                session.messages.push(...messages);
+                session.drained = drainedTo;
                 session.meta = meta;
               }),
             messages: Effect.sync(() => session.messages),

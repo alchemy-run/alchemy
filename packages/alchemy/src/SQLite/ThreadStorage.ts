@@ -2,20 +2,24 @@
  * `AI.ThreadStorage` over bun:sqlite — the durable LOCAL substrate:
  *
  * ```ts
- * AI.DriverCore.pipe(
- *   Layer.provide(SqliteThreadStorage(".alchemy/sessions.sqlite")),
+ * AI.DriverLocal.pipe(
+ *   Layer.provide(SqliteThreadStorage(".alchemy/runs.sqlite")),
  * )
  * ```
  *
- * Every thread row, observation, and meta write lands in sqlite the
- * moment it happens (the driver is write-through), so a killed
- * process loses nothing: restart restores every unsettled session PARKED
- * with its thread primed and its observation cursor continued.
+ * Every thread row, inbox row, observation, and meta write lands in
+ * sqlite the moment it happens (the engine is write-through), so a
+ * killed process loses nothing: restart restores every unsettled
+ * session parked, thread primed, observation cursor continued, and —
+ * because the inbox and the round liveness marker are durable too —
+ * inputs that arrived before the crash redeliver and interrupted
+ * rounds recover exactly as they do on Durable Objects.
  *
- * Same sqlite physics as the sibling stores: no finalizer, commits
- * per statement (observation + meta pair in one transaction), the OS
- * closes the fd at exit. `bun:sqlite` is imported lazily inside the
- * layer build so this module stays bundleable outside bun.
+ * The atomic pairs (admit = messages + watermark + meta; observation
+ * + cursor) are transactions. Same sqlite physics as the sibling
+ * stores: no finalizer, the OS closes the fd at exit. `bun:sqlite` is
+ * imported lazily inside the layer build so this module stays
+ * bundleable outside bun.
  */
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -23,18 +27,28 @@ import type * as Prompt from "effect/unstable/ai/Prompt";
 import type { SessionObservation } from "../AI/Observer.ts";
 import {
   ThreadStorage,
+  type InboxRow,
   type SessionMeta,
   type ThreadHandle,
 } from "../AI/ThreadStorage.ts";
 
 const TABLES = `
 CREATE TABLE IF NOT EXISTS session_meta (
-  term TEXT NOT NULL,
-  key  TEXT NOT NULL,
-  data TEXT NOT NULL,
+  term      TEXT NOT NULL,
+  key       TEXT NOT NULL,
+  data      TEXT NOT NULL,
+  drained   INTEGER NOT NULL DEFAULT 0,
+  inbox_seq INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (term, key)
 );
 CREATE TABLE IF NOT EXISTS session_messages (
+  term TEXT NOT NULL,
+  key  TEXT NOT NULL,
+  seq  INTEGER NOT NULL,
+  data TEXT NOT NULL,
+  PRIMARY KEY (term, key, seq)
+);
+CREATE TABLE IF NOT EXISTS session_inbox (
   term TEXT NOT NULL,
   key  TEXT NOT NULL,
   seq  INTEGER NOT NULL,
@@ -69,6 +83,29 @@ export const SqliteThreadStorage = (path: string): Layer.Layer<ThreadStorage> =>
       return ThreadStorage.of({
         open: (term, key) =>
           Effect.sync((): ThreadHandle => {
+            /** The meta row is the session's anchor: inbox and admit
+             *  bookkeeping live on it, so ensure it exists. */
+            const ensureRow = () => {
+              db.query(
+                "INSERT OR IGNORE INTO session_meta (term, key, data) VALUES (?, ?, 'null')",
+              ).run(term, key);
+            };
+            const readRow = () =>
+              db
+                .query(
+                  "SELECT data, drained, inbox_seq FROM session_meta WHERE term = ? AND key = ?",
+                )
+                .get(term, key) as {
+                data: string;
+                drained: number;
+                inbox_seq: number;
+              } | null;
+            const putMeta = (meta: SessionMeta) => {
+              ensureRow();
+              db.query(
+                "UPDATE session_meta SET data = ? WHERE term = ? AND key = ?",
+              ).run(JSON.stringify(meta), term, key);
+            };
             const nextMessageSeq = () =>
               (
                 db
@@ -77,23 +114,77 @@ export const SqliteThreadStorage = (path: string): Layer.Layer<ThreadStorage> =>
                   )
                   .get(term, key) as { seq: number }
               ).seq;
-            const putMeta = (meta: SessionMeta) => {
-              db.query(
-                "INSERT OR REPLACE INTO session_meta (term, key, data) VALUES (?, ?, ?)",
-              ).run(term, key, JSON.stringify(meta));
+            const insertMessages = (
+              messages: ReadonlyArray<Prompt.MessageEncoded>,
+            ) => {
+              let seq = nextMessageSeq();
+              const insert = db.query(
+                "INSERT INTO session_messages (term, key, seq, data) VALUES (?, ?, ?, ?)",
+              );
+              for (const message of messages) {
+                insert.run(term, key, seq++, JSON.stringify(message));
+              }
             };
             return {
               meta: Effect.sync(() => {
-                const row = db
-                  .query(
-                    "SELECT data FROM session_meta WHERE term = ? AND key = ?",
-                  )
-                  .get(term, key) as { data: string } | null;
-                return row === null
-                  ? undefined
-                  : (JSON.parse(row.data) as SessionMeta);
+                const found = readRow();
+                if (found === null) return undefined;
+                return (
+                  (JSON.parse(found.data) as SessionMeta | null) ?? undefined
+                );
               }),
               putMeta: (meta) => Effect.sync(() => putMeta(meta)),
+              putInbox: (input) =>
+                Effect.sync(() =>
+                  db.transaction(() => {
+                    ensureRow();
+                    const seq = (readRow()?.inbox_seq ?? 0) as number;
+                    db.query(
+                      "INSERT INTO session_inbox (term, key, seq, data) VALUES (?, ?, ?, ?)",
+                    ).run(term, key, seq, JSON.stringify(input ?? null));
+                    db.query(
+                      "UPDATE session_meta SET inbox_seq = ? WHERE term = ? AND key = ?",
+                    ).run(seq + 1, term, key);
+                    return seq;
+                  })(),
+                ),
+              listInbox: Effect.sync(() => {
+                const drained = readRow()?.drained ?? 0;
+                return (
+                  db
+                    .query(
+                      "SELECT seq, data FROM session_inbox WHERE term = ? AND key = ? AND seq >= ? ORDER BY seq",
+                    )
+                    .all(term, key, drained) as Array<{
+                    seq: number;
+                    data: string;
+                  }>
+                ).map(
+                  (inboxRow): InboxRow => ({
+                    seq: inboxRow.seq,
+                    input: JSON.parse(inboxRow.data),
+                  }),
+                );
+              }),
+              deleteInbox: (seqs) =>
+                Effect.sync(() => {
+                  const drop = db.query(
+                    "DELETE FROM session_inbox WHERE term = ? AND key = ? AND seq = ?",
+                  );
+                  for (const seq of seqs) drop.run(term, key, seq);
+                }),
+              // the crash-consistency heart: messages + watermark +
+              // meta in ONE transaction
+              admit: ({ messages, drainedTo, meta }) =>
+                Effect.sync(() => {
+                  db.transaction(() => {
+                    ensureRow();
+                    insertMessages(messages);
+                    db.query(
+                      "UPDATE session_meta SET data = ?, drained = ? WHERE term = ? AND key = ?",
+                    ).run(JSON.stringify(meta), drainedTo, term, key);
+                  })();
+                }),
               messages: Effect.sync(
                 () =>
                   (
@@ -109,15 +200,7 @@ export const SqliteThreadStorage = (path: string): Layer.Layer<ThreadStorage> =>
               appendMessages: (messages) =>
                 Effect.sync(() => {
                   if (messages.length === 0) return;
-                  db.transaction(() => {
-                    let seq = nextMessageSeq();
-                    const insert = db.query(
-                      "INSERT INTO session_messages (term, key, seq, data) VALUES (?, ?, ?, ?)",
-                    );
-                    for (const message of messages) {
-                      insert.run(term, key, seq++, JSON.stringify(message));
-                    }
-                  })();
+                  db.transaction(() => insertMessages(messages))();
                 }),
               replaceMessages: (messages) =>
                 Effect.sync(() => {
@@ -125,13 +208,7 @@ export const SqliteThreadStorage = (path: string): Layer.Layer<ThreadStorage> =>
                     db.query(
                       "DELETE FROM session_messages WHERE term = ? AND key = ?",
                     ).run(term, key);
-                    const insert = db.query(
-                      "INSERT INTO session_messages (term, key, seq, data) VALUES (?, ?, ?, ?)",
-                    );
-                    let seq = 0;
-                    for (const message of messages) {
-                      insert.run(term, key, seq++, JSON.stringify(message));
-                    }
+                    insertMessages(messages);
                   })();
                 }),
               // the row and its cursor land in ONE transaction: a
@@ -169,22 +246,26 @@ export const SqliteThreadStorage = (path: string): Layer.Layer<ThreadStorage> =>
           Effect.sync(() =>
             (
               db
-                .query("SELECT key FROM session_meta WHERE term = ?")
-                .all(term) as Array<{ key: string }>
-            ).map((row) => row.key),
+                .query("SELECT key, data FROM session_meta WHERE term = ?")
+                .all(term) as Array<{ key: string; data: string }>
+            )
+              .filter((row) => row.data !== "null")
+              .map((row) => row.key),
           ),
         remove: (term, key) =>
           Effect.sync(() => {
             db.transaction(() => {
-              db.query(
-                "DELETE FROM session_meta WHERE term = ? AND key = ?",
-              ).run(term, key);
-              db.query(
-                "DELETE FROM session_messages WHERE term = ? AND key = ?",
-              ).run(term, key);
-              db.query(
-                "DELETE FROM session_observations WHERE term = ? AND key = ?",
-              ).run(term, key);
+              for (const table of [
+                "session_meta",
+                "session_messages",
+                "session_inbox",
+                "session_observations",
+              ]) {
+                db.query(`DELETE FROM ${table} WHERE term = ? AND key = ?`).run(
+                  term,
+                  key,
+                );
+              }
             })();
           }),
       });

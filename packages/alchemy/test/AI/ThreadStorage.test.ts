@@ -95,6 +95,49 @@ const contract = (
       }),
     );
 
+    it.effect("inbox: enqueue, list above watermark, atomic admit", () =>
+      Effect.gen(function* () {
+        const layer = yield* storageLayer;
+        yield* Effect.gen(function* () {
+          const storage = yield* ThreadStorage;
+          const handle = yield* storage.open("TestAgent", "issue-9");
+          const s0 = yield* handle.putInbox("first");
+          const s1 = yield* handle.putInbox({ event: "second" });
+          expect(s1).toBeGreaterThan(s0);
+          const pending = yield* handle.listInbox;
+          expect(pending.map((row) => row.input)).toEqual([
+            "first",
+            { event: "second" },
+          ]);
+
+          // the atomic admit: messages + watermark + meta in one write
+          yield* handle.admit({
+            messages: [user("first")],
+            drainedTo: s1 + 1,
+            meta: {
+              tick: 0,
+              observed: 0,
+              active: [],
+              busy: { attempts: 0, since: 123 },
+            },
+          });
+          // rows below the watermark are never re-admitted, even
+          // before deleteInbox runs (the crash window)
+          expect(yield* handle.listInbox).toEqual([]);
+          expect((yield* handle.messages).length).toBe(1);
+          expect((yield* handle.meta)?.busy).toEqual({
+            attempts: 0,
+            since: 123,
+          });
+          yield* handle.deleteInbox([s0, s1]);
+          // a later enqueue is visible again
+          const s2 = yield* handle.putInbox("third");
+          expect(s2).toBeGreaterThan(s1);
+          expect((yield* handle.listInbox).length).toBe(1);
+        }).pipe(Effect.provide(layer));
+      }),
+    );
+
     it.effect("keys lists persisted sessions; remove drops them", () =>
       Effect.gen(function* () {
         const layer = yield* storageLayer;
