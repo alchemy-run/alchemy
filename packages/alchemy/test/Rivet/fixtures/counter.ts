@@ -4,7 +4,6 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { ActorWorker } from "./worker.ts";
 
 export class CounterBoom extends Data.TaggedError("CounterBoom")<{
   readonly reason: string;
@@ -22,11 +21,11 @@ export class Counter extends Alchemy.DurableObject<
 >()("Counter") {}
 
 /**
- * The implementation layer, bound to {@link ActorWorker}. Provided on the
- * worker impl (hosts the class) and on callers (resolves the remote stub).
+ * The implementation layer — worker- and cloud-free. Provided on the
+ * hosting worker's impl (registers the class there) and on callers
+ * (resolves the remote stub via a piped `.ref`).
  */
 export const CounterLive = Counter.make(
-  ActorWorker,
   Effect.gen(function* () {
     const state = yield* Alchemy.DurableObjectState;
     return Effect.gen(function* () {

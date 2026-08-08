@@ -1,7 +1,6 @@
 /**
- * The conformance worker, deployed to a **Rivet cluster**. As with the
- * other instantiations, the only platform-specific line is the target
- * layer — the Durable Object is the shared one.
+ * The conformance worker, deployed to a **Rivet cluster**. The definition
+ * is the same cloud-free `make`; only the deploy module names Rivet.
  *
  * Rivet inverts the other engines: this module becomes a RUNNER container
  * (an ECS service with no inbound ports) whose actors are reached through
@@ -10,25 +9,18 @@
  */
 import * as Rivet from "@/Rivet";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import { Counter, counterLive } from "../counter.ts";
+import { Counter, CounterLive } from "../counter.ts";
 import { ConformanceActors, ConformanceWorker } from "./cluster.ts";
 
-export const CounterLive = counterLive(ConformanceWorker);
-
-export default ConformanceWorker.make(
-  Effect.gen(function* () {
-    // Registers the Durable Object on the worker; the runner serves it as
-    // a Rivet actor.
-    yield* Counter;
-    return {};
-  }).pipe(
-    Effect.provide(
-      CounterLive.pipe(
-        Layer.provideMerge(
-          Rivet.Worker({ cluster: ConformanceActors, main: import.meta.url }),
-        ),
-      ),
-    ),
+export default Rivet.Worker(
+  ConformanceWorker,
+  { cluster: ConformanceActors, main: import.meta.url },
+  ConformanceWorker.make(
+    Effect.gen(function* () {
+      // Registers the Durable Object on the worker; the runner serves it
+      // as a Rivet actor.
+      yield* Counter;
+      return {};
+    }).pipe(Effect.provide(CounterLive)),
   ),
 );

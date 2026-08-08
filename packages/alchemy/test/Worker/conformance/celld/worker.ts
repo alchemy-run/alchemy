@@ -1,28 +1,20 @@
 /**
- * The conformance worker, deployed to a **celld fleet**. As with the
- * Cloudflare instantiation, the only platform-specific line is the target
- * layer — the Durable Object and the HTTP surface are the shared ones.
+ * The conformance worker, deployed to a **celld fleet**. The definition
+ * is the same cloud-free `make`; only the deploy module names celld.
  */
 import * as Celld from "@/Celld";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import { Counter, counterLive } from "../counter.ts";
+import { Counter, CounterLive } from "../counter.ts";
 import { conformanceFetch } from "../routes.ts";
 import { ConformanceCells, ConformanceWorker } from "./fleet.ts";
 
-export const CounterLive = counterLive(ConformanceWorker);
-
-export default ConformanceWorker.make(
-  Effect.gen(function* () {
-    const counters = yield* Counter;
-    return { fetch: conformanceFetch(counters) };
-  }).pipe(
-    Effect.provide(
-      CounterLive.pipe(
-        Layer.provideMerge(
-          Celld.Worker({ fleet: ConformanceCells, main: import.meta.url }),
-        ),
-      ),
-    ),
+export default Celld.Worker(
+  ConformanceWorker,
+  { fleet: ConformanceCells, main: import.meta.url },
+  ConformanceWorker.make(
+    Effect.gen(function* () {
+      const counters = yield* Counter;
+      return { fetch: conformanceFetch(counters) };
+    }).pipe(Effect.provide(CounterLive)),
   ),
 );

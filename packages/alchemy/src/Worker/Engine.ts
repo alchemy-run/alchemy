@@ -222,19 +222,33 @@ export const Deployment = <W, K extends string>(kind: K, logicalId: string) =>
  * this; that split is what keeps definition modules cloud-free while the
  * proof still propagates to the stack.
  */
-export interface HostRefService<W> {
+export interface HostRefService<W = unknown> {
   /** The engine kind hosting the referenced worker. */
   readonly kind: string;
+  /** The referenced worker's logical id. */
+  readonly workerId: string;
   /** The referenced worker's resource handle (attribute Outputs). */
   readonly worker: W;
   /** Standard env key the worker's URL is bound under. */
   readonly urlKey: string;
   /** Standard env key the worker's secret is bound under. */
   readonly secretKey: string;
+  /**
+   * The remote Durable Object transport for the hosting platform. Rides
+   * on the ref because each `.ref` names its cloud statically — engines
+   * are deploy-time layers absent from a deployed caller's bundle, so
+   * nothing can be looked up at runtime.
+   */
+  readonly remoteDurableObject: WorkerTargetService["remoteDurableObject"];
 }
 
-/** Build the keyed host-reference tag for one worker. */
-export const HostRef = <W>(logicalId: string) =>
-  Context.Service<HostRefService<W>, HostRefService<W>>()(
-    `Alchemy.WorkerHostRef/${logicalId}`,
-  );
+/**
+ * The host-reference tag. A SINGLE well-known tag rather than a keyed
+ * family: within one DO layer's provide chain there is exactly one host
+ * (each `CounterLive.pipe(Layer.provide(X.Worker.ref(W)))` scopes its own),
+ * so no runtime key is needed — stack-level distinctness lives on the
+ * keyed {@link Deployment} instead.
+ */
+export class HostRef extends Context.Service<HostRef, HostRefService>()(
+  "Alchemy.WorkerHostRef",
+) {}

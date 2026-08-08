@@ -4,17 +4,19 @@
  * runs per-instance with {@link DurableObjectState}) with the hosting
  * platform selected by the worker's target layer.
  *
- * The class is a pure tag; **the layer binds impl + hosting worker**
- * (`Counter.make(Api, impl)`). Building the layer inside the hosting
- * worker's impl registers the class; building it anywhere else yields a
- * remote stub speaking the alchemy fetch-RPC protocol against the worker's
- * gateway (engine-neutral at runtime — engines only differ in the
- * deploy-time caller binding).
+ * The class is a pure tag; **the layer is cloud- and worker-free**
+ * (`Counter.make(impl)`). Building the layer inside a hosting worker's
+ * impl registers the class on that worker; building it anywhere else
+ * yields a remote stub, with the hosting worker supplied by a `.ref`
+ * layer (`CounterLive.pipe(Layer.provide(Celld.Worker.ref(Api)))`) —
+ * engine-neutral at runtime; engines only differ in the deploy-time
+ * caller binding.
  *
  * ```ts
  * export class Counter extends Alchemy.DurableObject<Counter, Shape>()("Counter") {}
- * export const CounterLive = Counter.make(Api, impl);
- * // callers: Effect.provide(CounterLive.pipe(Layer.provideMerge(Celld.Worker())))
+ * export const CounterLive = Counter.make(impl);
+ * // hosting:  Cloudflare.Worker(Api, { main }, ApiLive)  // ApiLive provides CounterLive
+ * // callers:  Effect.provide(CounterLive.pipe(Layer.provide(Cloudflare.Worker.ref(Api))))
  * ```
  */
 import * as Context from "effect/Context";
@@ -40,7 +42,7 @@ import {
   DurableObjectState,
   fromDurableObjectState,
 } from "./DurableObjectState.ts";
-import { WorkerTarget, findWorkerEngine } from "./Engine.ts";
+import { HostRef, WorkerTarget, findWorkerEngine } from "./Engine.ts";
 import { Worker, isAlchemyWorker, type WorkerServices } from "./Worker.ts";
 
 export type { DurableObjectStub };
@@ -153,13 +155,14 @@ export interface DurableObjectClass {
         "~alchemy/name": Name;
       };
       /**
-       * The implementation layer, bound to the worker that hosts this
-       * class. Provide it on the worker impl (hosts the class) and on
-       * callers (resolves the remote stub); run the same class on a
-       * different worker by making another layer.
+       * The implementation layer — cloud- and worker-free. Provide it on
+       * the hosting worker's impl (registers the class there) and on
+       * callers (resolves the remote stub). A caller supplies the hosting
+       * worker with a `.ref` layer:
+       * `CounterLive.pipe(Layer.provide(Cloudflare.Worker.ref(Api)))` —
+       * omitting it fails to compile via the {@link HostRef} requirement.
        */
       make<Req = never>(
-        worker: WorkerRef,
         impl: Effect.Effect<
           Effect.Effect<
             [Shape] extends [never] ? MainRpc<DurableObjectState> : Shape,
@@ -169,7 +172,11 @@ export interface DurableObjectClass {
           never,
           DurableObjectServices | Req
         >,
-      ): Layer.Layer<Self, never, Exclude<Req, DurableObjectServices>>;
+      ): Layer.Layer<
+        Self,
+        never,
+        HostRef | Exclude<Req, DurableObjectServices>
+      >;
     };
   };
 }
@@ -309,75 +316,78 @@ export const DurableObject: DurableObjectClass = taggedFunction(
      * runtime, speaks the engine-neutral fetch-RPC protocol against the
      * standard connection env keys.
      */
-    const remote = (workerRef: WorkerRef) =>
-      Effect.gen(function* () {
-        const workerClass = resolveWorkerRef(workerRef);
-        const { urlKey, secretKey } = workerConnectionKeys(
-          workerClass.LogicalId,
-        );
+    const remote = Effect.gen(function* () {
+      // The host ref is a real requirement (see Engine.ts): a caller that
+      // never pipes `X.Worker.ref(TheWorker)` fails to COMPILE instead of
+      // dying in production. It carries the hosting worker's identity,
+      // resource handle, engine kind, and connection env keys.
+      const hostRef = yield* HostRef;
+      const { urlKey, secretKey } = hostRef;
 
-        if (!globalThis.__ALCHEMY_RUNTIME__) {
-          const host = yield* Binding.Host;
-          if (
-            host !== undefined &&
-            typeof (host as any).bind === "function" &&
-            !isAlchemyWorker(host)
-          ) {
-            // Yield the worker class: resource effects memoize by logical
-            // id, so this references the stack's worker node and orders it
-            // (and its infrastructure) ahead of this host in the graph.
-            const worker = (yield* asEffect(workerClass as any)) as any;
-            const engine = yield* findWorkerEngine(worker.Props?.target?.kind);
-            const data = yield* engine.callerBinding({
-              worker,
-              host,
-              urlKey,
-              secretKey,
-            });
-            yield* (host as any)
-              .bind`Allow(${host}, Alchemy.Worker.Call(${worker}))`(data);
-          }
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        const host = yield* Binding.Host;
+        if (
+          host !== undefined &&
+          typeof (host as any).bind === "function" &&
+          !isAlchemyWorker(host)
+        ) {
+          // The ref's Deployment requirement already ordered the worker
+          // node (and its infrastructure) ahead of this host in the
+          // stack graph; its resolved handle rides on the ref.
+          const worker = hostRef.worker as any;
+          const engine = yield* findWorkerEngine(hostRef.kind);
+          const data = yield* engine.callerBinding({
+            worker,
+            host,
+            urlKey,
+            secretKey,
+          });
+          yield* (host as any)
+            .bind`Allow(${host}, Alchemy.Worker.Call(${worker}))`(data);
         }
+      }
 
-        // The TARGET is a real requirement (see Engine.ts): it propagates
-        // into the caller's `R`, so a host that never provides an engine's
-        // layer fails to compile instead of dying in production.
-        const target = yield* WorkerTarget;
-        const ctx = yield* CurrentRuntimeContext;
+      const ctx = yield* CurrentRuntimeContext;
 
-        // Read the bound connection once: empty at plan (nothing to call
-        // yet), populated inside the deployed host by `callerBinding`.
-        const url = ctx ? rawValue(yield* ctx.get(urlKey)) : undefined;
-        const secret = ctx ? rawValue(yield* ctx.get(secretKey)) : undefined;
-        const remoteClient =
-          url !== undefined && secret !== undefined
-            ? target.remoteDurableObject({ url, secret, namespace })
-            : undefined;
+      // Read the bound connection once: empty at plan (nothing to call
+      // yet), populated inside the deployed host by `callerBinding`.
+      const url = ctx ? rawValue(yield* ctx.get(urlKey)) : undefined;
+      const secret = ctx ? rawValue(yield* ctx.get(secretKey)) : undefined;
+      // The transport rides on the ref (each `.ref` names its cloud
+      // statically) — engines are deploy-time layers absent from a
+      // deployed caller's bundle, so nothing is looked up at runtime.
+      const remoteClient =
+        url !== undefined && secret !== undefined
+          ? hostRef.remoteDurableObject({ url, secret, namespace })
+          : undefined;
 
-        return {
-          Type: TypeId,
-          LogicalId: namespace,
-          name: namespace,
-          getByName: (name: string) => {
-            if (remoteClient === undefined) {
-              throw new Error(
-                `DurableObject '${namespace}' is not reachable from this host — ` +
-                  `it can only be called at runtime, and the worker connection ` +
-                  `env (${urlKey}) must be bound by the engine's caller binding.`,
-              );
-            }
-            return remoteClient.getByName(name) as DurableObjectStub<any>;
-          },
-        } satisfies DurableObject<any>;
-      });
+      return {
+        Type: TypeId,
+        LogicalId: namespace,
+        name: namespace,
+        getByName: (name: string) => {
+          if (remoteClient === undefined) {
+            throw new Error(
+              `DurableObject '${namespace}' is not reachable from this host — ` +
+                `it can only be called at runtime, and the worker connection ` +
+                `env (${urlKey}) must be bound by the engine's caller binding.`,
+            );
+          }
+          return remoteClient.getByName(name) as DurableObjectStub<any>;
+        },
+      } satisfies DurableObject<any>;
+    });
 
     /**
-     * The layer body: hosting when built inside the target worker, remote
-     * everywhere else. The worker is a property of the LAYER — running the
-     * class on a different worker is just a different layer.
+     * The layer body: hosting when built inside the worker the ambient
+     * {@link HostRef} points at, remote everywhere else. Inside a deploy
+     * module (`Cloudflare.Worker(Api, props, ApiLive)`) the wrapper
+     * provides a SELF ref, so a DO layer in the hosted impl takes the
+     * hosting path; a caller's DO layer pipes a foreign `.ref` and takes
+     * the remote path. The host is a property of the LAYER's provide
+     * chain — running the class on a different worker is a different ref.
      */
     const dispatch = (
-      workerRef: WorkerRef,
       impl:
         | Effect.Effect<
             Effect.Effect<DurableObjectShape>,
@@ -388,18 +398,18 @@ export const DurableObject: DurableObjectClass = taggedFunction(
     ) =>
       Effect.gen(function* () {
         const host = yield* Binding.Host;
-        const workerClass = resolveWorkerRef(workerRef);
-        if (isAlchemyWorker(host) && host.LogicalId === workerClass.LogicalId) {
+        const hostRef = yield* HostRef;
+        if (isAlchemyWorker(host) && host.LogicalId === hostRef.workerId) {
           if (impl === undefined) {
             return yield* Effect.die(
               new Error(
-                `DurableObject '${namespace}' is hosted by worker '${host.LogicalId}' but no implementation was provided — provide ${namespace}.make(${workerClass.LogicalId}, impl) on the worker impl.`,
+                `DurableObject '${namespace}' is hosted by worker '${host.LogicalId}' but no implementation was provided — provide ${namespace}.make(impl) on the worker impl.`,
               ),
             );
           }
           return yield* makeHost(impl);
         }
-        return yield* remote(workerRef);
+        return yield* remote;
       });
 
     if (inlineImpl !== undefined) {
@@ -418,8 +428,8 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           return yield* Effect.die(
             new Error(
               `DurableObject '${namespace}' was yielded outside a worker ` +
-                "without a deployment target — provide the engine's layer " +
-                "(e.g. `Celld.Worker()` / `Rivet.Worker()`).",
+                "without a host reference — pipe the hosting worker's ref " +
+                "(e.g. `Layer.provide(Cloudflare.Worker.ref(TheWorker))`).",
             ),
           );
         }),
@@ -428,11 +438,10 @@ export const DurableObject: DurableObjectClass = taggedFunction(
 
     return class extends effectClass(tag as Effect.Effect<any, never, any>) {
       static make = <Req = never>(
-        worker: WorkerRef,
         impl: Effect.Effect<
           Effect.Effect<DurableObjectShape, never, DurableObjectState | Req>
         >,
-      ) => Layer.effect(tag, dispatch(worker, impl as any));
+      ) => Layer.effect(tag, dispatch(impl as any));
     };
   },
 ) as any;

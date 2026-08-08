@@ -28,6 +28,7 @@
  * (`Celld.providers()` registers `celld`; a Cloudflare engine slots in the
  * same way).
  */
+import type { DeploymentService, HostRef } from "./Engine.ts";
 import type * as ConfigError from "effect/Config";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
@@ -107,11 +108,19 @@ export interface WorkerClass extends Effect.Effect<Worker, never, Worker> {
     <
       const Id extends string,
       ImplShape extends ([Shape] extends [never] ? WorkerShape : Shape),
-      Req extends WorkerServices | PlatformServices = never,
+      Req extends
+        | WorkerServices
+        | PlatformServices
+        | HostRef
+        | DeploymentService<any, string> = never,
     >(
       id: Id,
       impl: Effect.Effect<ImplShape, ConfigError.ConfigError, Req>,
-    ): Effect.Effect<Worker & Rpc<Self>, never, Providers> &
+    ): Effect.Effect<
+      Worker & Rpc<Self>,
+      never,
+      Providers | Extract<Req, HostRef | DeploymentService<any, string>>
+    > &
       Named<Id> & {
         new (
           _: never,
@@ -127,13 +136,23 @@ export interface WorkerClass extends Effect.Effect<Worker, never, Worker> {
          * The deployable module: the impl carries its own capability
          * layers AND its deployment target in one provide chain.
          */
-        make<Req extends WorkerServices | PlatformServices = never>(
+        make<
+          Req extends
+            | WorkerServices
+            | PlatformServices
+            | HostRef
+            | DeploymentService<any, string> = never,
+        >(
           impl: Effect.Effect<
             [Shape] extends [never] ? WorkerShape : Shape,
             ConfigError.ConfigError,
             Req
           >,
-        ): Layer.Layer<Self, never, Providers>;
+        ): Layer.Layer<
+          Self,
+          never,
+          Providers | Extract<Req, HostRef | DeploymentService<any, string>>
+        >;
         new (
           _: never,
         ): ([Shape] extends [never] ? {} : Shape) &

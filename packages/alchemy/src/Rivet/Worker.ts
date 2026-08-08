@@ -46,7 +46,10 @@ import {
   type DeploymentService,
   type HostRefService,
 } from "../Worker/Engine.ts";
-import { workerConnectionKeys } from "../Worker/DurableObject.ts";
+import {
+  resolveWorkerRef,
+  workerConnectionKeys,
+} from "../Worker/DurableObject.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -494,23 +497,39 @@ export type { WorkerBindingContract };
  * `.pipe(...)`. It mirrors the resource form's leading `id: string`; here
  * the id is the tag.
  */
-const deployWorker = <W, RIn>(
-  cls: { LogicalId: string } & Effect.Effect<W, never, any>,
+const deployWorker = <Self, WOut, RIn>(
+  cls: Effect.Effect<WOut, never, any>,
   props: RivetWorkerProps,
-  layer: Layer.Layer<W, never, RIn | WorkerTarget>,
-): Layer.Layer<W | DeploymentService<W, "rivet">, never, RIn> => {
-  const deployed = layer.pipe(Layer.provide(makeTarget(props)));
+  layer: Layer.Layer<Self, never, RIn | WorkerTarget | HostRef>,
+): Layer.Layer<
+  Self | DeploymentService<WOut, "rivet">,
+  never,
+  Exclude<RIn, WorkerTarget | HostRef>
+> => {
+  const clsId = resolveWorkerRef(cls as any).LogicalId;
+  const selfRef = Layer.sync(HostRef, () => ({
+    kind: RIVET_ENGINE,
+    workerId: clsId,
+    // Never read on the hosting path (dispatch compares ids and hosts);
+    // present so foreign-DO layers piped with their own ref are unaffected.
+    worker: undefined,
+    ...workerConnectionKeys(clsId),
+    remoteDurableObject,
+  }));
+  const deployed = layer.pipe(
+    Layer.provide(Layer.mergeAll(makeTarget(props), selfRef)),
+  );
   const deployment = Layer.effect(
-    Deployment<W, "rivet">(RIVET_ENGINE, cls.LogicalId),
+    Deployment<WOut, "rivet">(RIVET_ENGINE, clsId),
     Effect.gen(function* () {
-      const worker = yield* cls as unknown as Effect.Effect<W, never, never>;
+      const worker = yield* cls as unknown as Effect.Effect<WOut, never, never>;
       return { kind: RIVET_ENGINE as "rivet", worker };
     }),
   );
   return deployment.pipe(Layer.provideMerge(deployed)) as Layer.Layer<
-    W | DeploymentService<W, "rivet">,
+    Self | DeploymentService<WOut, "rivet">,
     never,
-    RIn
+    Exclude<RIn, WorkerTarget | HostRef>
   >;
 };
 
@@ -521,23 +540,29 @@ const deployWorker = <W, RIn>(
  * requirement, so a binder pointed at a worker hosted elsewhere fails to
  * compile.
  */
-const workerRef = <W>(
-  cls: { LogicalId: string } & Effect.Effect<W, never, any>,
-): Layer.Layer<HostRefService<W>, never, DeploymentService<W, "rivet">> =>
+const workerRef = <WOut>(
+  cls: Effect.Effect<WOut, never, any>,
+): Layer.Layer<HostRef, never, DeploymentService<WOut, "rivet">> =>
   Layer.effect(
-    HostRef<W>(cls.LogicalId),
+    HostRef,
     Effect.gen(function* () {
-      const deployment = yield* Deployment<W, "rivet">(
-        RIVET_ENGINE,
-        cls.LogicalId,
-      );
-      const { urlKey, secretKey } = workerConnectionKeys(cls.LogicalId);
-      return {
-        kind: deployment.kind,
-        worker: deployment.worker,
+      const clsId = resolveWorkerRef(cls as any).LogicalId;
+      const { urlKey, secretKey } = workerConnectionKeys(clsId);
+      const base = {
+        kind: RIVET_ENGINE,
+        workerId: clsId,
         urlKey,
         secretKey,
+        remoteDurableObject,
       };
+      // Inside the deployed caller the layer stack re-executes, but the
+      // stack-scoped Deployment proof is a plan-time construct — the
+      // connection material arrives via the bound env instead.
+      if (globalThis.__ALCHEMY_RUNTIME__) {
+        return { ...base, worker: undefined };
+      }
+      const deployment = yield* Deployment<WOut, "rivet">(RIVET_ENGINE, clsId);
+      return { ...base, worker: deployment.worker };
     }),
   );
 

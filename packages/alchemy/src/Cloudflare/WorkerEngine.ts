@@ -45,7 +45,10 @@ import {
   type DeploymentService,
   type HostRefService,
 } from "../Worker/Engine.ts";
-import { workerConnectionKeys } from "../Worker/DurableObject.ts";
+import {
+  resolveWorkerRef,
+  workerConnectionKeys,
+} from "../Worker/DurableObject.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -498,23 +501,39 @@ export const CloudflareWorkerEngine = (): Layer.Layer<WorkerEngineService> =>
  * `WebLive.pipe(Layer.provide(...))`. Passing the class mirrors the
  * resource form's leading `id: string`; here the id is the tag.
  */
-export const deployWorker = <W, RIn>(
-  cls: { LogicalId: string } & Effect.Effect<W, never, any>,
+export const deployWorker = <Self, WOut, RIn>(
+  cls: Effect.Effect<WOut, never, any>,
   props: CloudflareWorkerTargetProps,
-  layer: Layer.Layer<W, never, RIn | GenericWorkerTarget>,
-): Layer.Layer<W | DeploymentService<W, "cloudflare">, never, RIn> => {
-  const deployed = layer.pipe(Layer.provide(WorkerTarget(props)));
+  layer: Layer.Layer<Self, never, RIn | GenericWorkerTarget | HostRef>,
+): Layer.Layer<
+  Self | DeploymentService<WOut, "cloudflare">,
+  never,
+  Exclude<RIn, GenericWorkerTarget | HostRef>
+> => {
+  const clsId = resolveWorkerRef(cls as any).LogicalId;
+  const selfRef = Layer.sync(HostRef, () => ({
+    kind: CLOUDFLARE_ENGINE,
+    workerId: clsId,
+    // Never read on the hosting path (dispatch compares ids and hosts);
+    // present so foreign-DO layers piped with their own ref are unaffected.
+    worker: undefined,
+    ...workerConnectionKeys(clsId),
+    remoteDurableObject,
+  }));
+  const deployed = layer.pipe(
+    Layer.provide(Layer.mergeAll(WorkerTarget(props), selfRef)),
+  );
   const deployment = Layer.effect(
-    Deployment<W, "cloudflare">(CLOUDFLARE_ENGINE, cls.LogicalId),
+    Deployment<WOut, "cloudflare">(CLOUDFLARE_ENGINE, clsId),
     Effect.gen(function* () {
-      const worker = yield* cls as unknown as Effect.Effect<W, never, never>;
+      const worker = yield* cls as unknown as Effect.Effect<WOut, never, never>;
       return { kind: CLOUDFLARE_ENGINE as "cloudflare", worker };
     }),
   );
   return deployment.pipe(Layer.provideMerge(deployed)) as Layer.Layer<
-    W | DeploymentService<W, "cloudflare">,
+    Self | DeploymentService<WOut, "cloudflare">,
     never,
-    RIn
+    Exclude<RIn, GenericWorkerTarget | HostRef>
   >;
 };
 
@@ -526,23 +545,32 @@ export const deployWorker = <W, RIn>(
  * Cloudflare deploy module for this worker can discharge it, so pointing
  * a binder at a worker deployed elsewhere fails to compile.
  */
-export const workerRef = <W>(
-  cls: { LogicalId: string } & Effect.Effect<W, never, any>,
-): Layer.Layer<HostRefService<W>, never, DeploymentService<W, "cloudflare">> =>
+export const workerRef = <WOut>(
+  cls: Effect.Effect<WOut, never, any>,
+): Layer.Layer<HostRef, never, DeploymentService<WOut, "cloudflare">> =>
   Layer.effect(
-    HostRef<W>(cls.LogicalId),
+    HostRef,
     Effect.gen(function* () {
-      const deployment = yield* Deployment<W, "cloudflare">(
-        CLOUDFLARE_ENGINE,
-        cls.LogicalId,
-      );
-      const { urlKey, secretKey } = workerConnectionKeys(cls.LogicalId);
-      return {
-        kind: deployment.kind,
-        worker: deployment.worker,
+      const clsId = resolveWorkerRef(cls as any).LogicalId;
+      const { urlKey, secretKey } = workerConnectionKeys(clsId);
+      const base = {
+        kind: CLOUDFLARE_ENGINE,
+        workerId: clsId,
         urlKey,
         secretKey,
+        remoteDurableObject,
       };
+      // Inside the deployed caller the layer stack re-executes, but the
+      // stack-scoped Deployment proof is a plan-time construct — the
+      // connection material arrives via the bound env instead.
+      if (globalThis.__ALCHEMY_RUNTIME__) {
+        return { ...base, worker: undefined };
+      }
+      const deployment = yield* Deployment<WOut, "cloudflare">(
+        CLOUDFLARE_ENGINE,
+        clsId,
+      );
+      return { ...base, worker: deployment.worker };
     }),
   );
 
@@ -564,11 +592,15 @@ export const workerRef = <W>(
  * already in an import cycle with this one; re-exported by the barrel.
  */
 export const Worker: typeof CloudflareWorker & {
-  <W, RIn>(
-    cls: { LogicalId: string } & Effect.Effect<W, never, any>,
+  <Self, WOut, RIn>(
+    cls: Effect.Effect<WOut, never, any>,
     props: CloudflareWorkerTargetProps,
-    layer: Layer.Layer<W, never, RIn | GenericWorkerTarget>,
-  ): Layer.Layer<W | DeploymentService<W, "cloudflare">, never, RIn>;
+    layer: Layer.Layer<Self, never, RIn | GenericWorkerTarget | HostRef>,
+  ): Layer.Layer<
+    Self | DeploymentService<WOut, "cloudflare">,
+    never,
+    Exclude<RIn, GenericWorkerTarget | HostRef>
+  >;
   readonly ref: typeof workerRef;
 } = Object.assign(
   (...args: any[]) =>

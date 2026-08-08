@@ -7,7 +7,10 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import InlineWorker, { Cells } from "./fixtures/worker-inline.ts";
+import InlineWorkerLive, {
+  Cells,
+  CellsWorker,
+} from "./fixtures/worker-inline.ts";
 
 const testOptions = {
   providers: Layer.mergeAll(AWS.providers(), Celld.providers()),
@@ -28,9 +31,9 @@ describe.skipIf(!!process.env.FAST)("Celld inline Worker (live)", () => {
       const { url } = yield* sharedStack.deploy(
         Effect.gen(function* () {
           yield* Cells;
-          const worker = yield* InlineWorker;
+          const worker = yield* CellsWorker;
           return { url: worker.url };
-        }),
+        }).pipe(Effect.provide(InlineWorkerLive)),
       );
       expect(url).toBeTruthy();
       workerUrl = String(url);

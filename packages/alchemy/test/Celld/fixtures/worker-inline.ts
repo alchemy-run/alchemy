@@ -14,11 +14,10 @@ export class Counter extends Alchemy.DurableObject<Counter>()(
   Effect.gen(function* () {
     const state = yield* Alchemy.DurableObjectState;
     return Effect.gen(function* () {
-      const count = (yield* state.storage.get<number>("count")) ?? 0;
       return {
         increment: () =>
           Effect.gen(function* () {
-            const next = count + 1;
+            const next = ((yield* state.storage.get<number>("count")) ?? 0) + 1;
             yield* state.storage.put("count", next);
             return next;
           }),
@@ -27,22 +26,25 @@ export class Counter extends Alchemy.DurableObject<Counter>()(
   }),
 ) {}
 
-export default class CellsWorker extends Alchemy.Worker<CellsWorker>()(
-  "CellsWorker",
-  Effect.gen(function* () {
-    const counters = yield* Counter;
-    return {
-      fetch: Effect.gen(function* () {
-        const request = yield* HttpServerRequest;
-        const room =
-          new URL(request.url, "http://cells").pathname.slice(1) || "lobby";
-        const value = yield* counters.getByName(room).increment();
-        return yield* HttpServerResponse.json({ room, value });
-      }),
-    };
-  }).pipe(
-    // The deployment target is a layer IN the impl — this is what makes it
-    // a celld deployment.
-    Effect.provide(Celld.Worker({ fleet: () => Cells, main: import.meta.url })),
+export class CellsWorker extends Alchemy.Worker<CellsWorker>()("CellsWorker") {}
+
+// The deploy module: the definition above is cloud-free; this line is
+// what makes it a celld deployment.
+export default Celld.Worker(
+  CellsWorker,
+  { fleet: Cells, main: import.meta.url },
+  CellsWorker.make(
+    Effect.gen(function* () {
+      const counters = yield* Counter;
+      return {
+        fetch: Effect.gen(function* () {
+          const request = yield* HttpServerRequest;
+          const room =
+            new URL(request.url, "http://cells").pathname.slice(1) || "lobby";
+          const value = yield* counters.getByName(room).increment();
+          return yield* HttpServerResponse.json({ room, value });
+        }),
+      };
+    }),
   ),
-) {}
+);

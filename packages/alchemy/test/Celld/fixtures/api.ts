@@ -9,6 +9,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as Celld from "@/Celld";
 import * as Layer from "effect/Layer";
 import { Counter, CounterLive } from "./counter.ts";
+import { CellsWorker } from "./worker.ts";
 
 /**
  * The Lambda caller: `yield* Counter` returns the same namespace handle the
@@ -115,8 +116,11 @@ export default class Api extends AWS.Lambda.Function<Api>()(
       }),
     };
   }).pipe(
-    // The engine layer supplies the remote transport — `Celld.Worker()`
-    // with no props is client mode (this Lambda deploys nothing).
-    Effect.provide(CounterLive.pipe(Layer.provideMerge(Celld.Worker()))),
+    // The ref supplies the host: it proves (at the stack) the worker is
+    // deployed to celld, registers the caller binding, and carries the
+    // remote transport. This Lambda deploys nothing.
+    Effect.provide(
+      CounterLive.pipe(Layer.provide(Celld.Worker.ref(CellsWorker))),
+    ),
   ),
 ) {}
