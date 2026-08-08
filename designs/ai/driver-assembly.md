@@ -1,8 +1,7 @@
-# Driver Assembly: One Algorithm, Substrate as Layers
+# Driver Assembly: One Engine, Placements, Storage as Layers
 
 Status: **implemented** (2026-08-08). This document describes the
-architecture as it exists in code; the historical plan it replaced is
-in git history.
+architecture as it exists in code.
 
 The goal ([bootstrap.md](./bootstrap.md)): a self-improving agent must
 be able to modify most of its own machine, so most of the machine must
@@ -12,129 +11,111 @@ algorithm and the defaults, not the personality.
 ## Vocabulary (agreed)
 
 - **Session** — one keyed conversation instance of an agent
-  (`term/key`): its thread, lifecycle, observation log. (The term
-  "run" is retired.)
+  (`term/key`): its thread, lifecycle, observation log. ("Run" is
+  retired.)
 - **Round** — one drain-to-quiescence cycle within a session.
 - **Tick** — one sampling within a round.
+- **Burst** — run rounds until the session parks or settles; the unit
+  of execution on every substrate (`engine.burst(key)`).
 - **Driver** — the contract: `interpret(term, charter) → Actor`.
-- **`DriverCore`** — the driver over the RESIDENT host (a forked
-  fiber per session, parked on its inbox) consuming the seams below.
-- **`DurableObjectHost` / `DriverCloudflare`** — the driver over the
-  BURST host (event-kicked, serialized, alarm recovery) on Durable
-  Objects.
-- **Seams** — plain `Context.Service`s the algorithm consumes:
-  `Model`, `ThreadStorage`, `ToolCalling`, `SessionObserver`,
-  `PersistentRef.Store`, `AgentGateway`.
+- **Placement** — where sessions physically live and how bursts are
+  driven: `DriverLocal` (resident fibers) or `DriverCloudflare`
+  (Durable Objects).
 
-## The shared algorithm (written once)
+## `DriverCore` — the whole machine, written once
 
-`src/AI/DriverShared.ts` owns the algorithm, parameterized by
-`SessionOps` — the small adapter each host implements (provide
-session services, stamp observations, persist active skills, remember
-children, spawn policy):
+`src/AI/DriverCore.ts` contains everything substrate-independent:
 
-- **`compileTick(ops, resolvers, inputs)`** — evaluate the turn
-  (function turns receive `{count, inputs}`), render the stance,
-  walk the skill graph to its active fixpoint, build door/dispatch/
-  spawn/skill intrinsics, present capabilities through the optional
-  `ToolCalling` seam, assemble the toolkit.
-- **`sampleTick({ops, model, handle, tick, exhausted})`** — read the
-  thread from the `ThreadHandle`, call the `Model`, surface live
-  parts, append the response (or the malformed-call corrective note)
-  with its durable observations.
-- **`makeResolvers(driver, term, context)`** — memoized capability
-  resolution (tools, skills, delegate actors) from the charter's
-  captured Layer context.
+**The algorithm** — `compileTick` (turn → stance → skill-graph
+fixpoint → doors/dispatch/spawn/skill intrinsics → toolkit, through
+the optional `ToolCalling` seam) and `sampleTick` (thread →
+`Model.step` → live parts → response append + observations, malformed
+feedback).
 
-Nothing in the algorithm knows where it runs. The discipline that
-makes this true: **every durable fact crosses one interface,
-write-through** — each input, note, response row, observation, and
-meta update lands in a `ThreadHandle` the moment it exists. The
-algorithm keeps no private durable state, so it can be killed at any
-line and re-entered (which is what a serverless substrate does).
+**The session engine** — `makeSessionEngine(options)`: the complete
+lifecycle, written once for every placement — admit (with
+init-once-per-shell), the inbox drain with waiter pairing (a dispatch
+waiter joins a round only when its own input's seq is drained), quiet
+inputs (never open a round; join whichever round drains), compaction
+at the boundary, the burst loop, crash triage (deterministic failures
+abandon the round and fail waiters TYPED; transient ones leave the
+round owed to a scheduled re-entry), bounded busy/liveness recovery
+with visible abandonment, settle with the supervision cascade and a
+persisted outcome for late dispatches, spawn (the call itself drives
+the anonymous worker's rounds — works on every substrate), and
+restore. A burst is TOTALLY contained: it never rejects, because
+placements often run it on fire-and-forget channels (a rejected
+`waitUntil` promise resets a Durable Object).
 
-## The two substrate seams
+The engine consumes:
 
-**1. `ThreadStorage` (`src/AI/ThreadStorage.ts`) — where facts live.**
-`open(term, key) → ThreadHandle`, `keys(term)` (the restore surface),
-`remove(term, key)` (settled sessions). The handle carries messages
-(encoded rows), the observation log (seq-cursored), and
-`SessionMeta` ({tick, observed, active}); `appendObservation` writes
-row + cursor atomically. Implementations:
+| Seam | Contract |
+|---|---|
+| `ThreadStorage` | where session facts persist: messages, observation log, meta (tick/cursor/active/busy/settled), and the INBOX with `putInbox`/`listInbox`/`admit` — admit is the ATOMIC drain (messages + watermark + round-open in one write) |
+| `Model` | one model call: streaming consolidation, retry policy, malformed budget |
+| `ToolCalling` | the calling convention (direct tools vs codemode `eval`) |
+| `SessionObserver` | lifecycle facts out (chat projections, boards) |
+| `PersistentRef.Store` | charter refs, framed per session |
 
-- `MemoryThreadStorage` (`src/AI/ThreadStorage.ts`) — Maps; as
-  durable as the process.
-- `SqliteThreadStorage` (`src/SQLite/ThreadStorage.ts`) — bun:sqlite;
-  restart restores every unsettled session parked, thread primed,
-  cursor continued.
-- `makeDurableObjectSessionStorage`
-  (`src/Cloudflare/AI/DurableObjectThreadStorage.ts`) — the same
-  handle over one DO's rows (`msg:`/`obs:`/`meta`), plus the host-only
-  facts (`inbox:` watermark, `remind:` rows, busy marker) as a
-  superset meta.
+And a placement provides five callbacks: `kick` (trigger execution),
+`broadcast` (socket fanout), `remind` (the clock), `scheduleReentry`
+(recovery), and optionally `stateStore`/`wrapHandler`.
 
-**2. The host — how the loop is driven.** The one thing that can't be
-a data contract:
+## The placements
 
-- **Resident** (`DriverCore`): fiber per session, blocks parked on a
-  RAM inbox; waiters are Deferreds; `remind` is a sleeping fiber;
-  restore happens at interpret from `ThreadStorage.keys`.
-- **Burst** (`DurableObjectHost`): no resident fiber; every event
-  kicks a serialized burst that runs rounds until quiescence and
-  RETURNS. Inbox rows + drain watermark give at-least-once drain /
-  exactly-once append; a liveness marker + the DO alarm re-enter
-  interrupted rounds (bounded attempts, then visible abandonment);
-  `remind` is an alarm row; verbs arrive as RPC on the `AgentSessions`
-  DO (one instance per session, named `${term}/${key}`).
-
-## Assemblies
+**`DriverLocal`** (`src/AI/DriverLocal.ts`, ~280 lines) — resident:
+one fiber per session that bursts then parks on a wake queue; sockets
+are a RAM writer set served by `AgentGateway` on the host's own HTTP
+server; `remind`/`scheduleReentry` are sleeping fibers; restore
+happens at interpret and starts fibers when the Host program runs.
 
 ```ts
-// ephemeral local
-AI.DriverCore.pipe(Layer.provide(AI.MemoryThreadStorage))
-
-// durable local (what alchemy-org runs)
-AI.DriverCore.pipe(
-  Layer.provide(SqliteThreadStorage(".alchemy/coder-runs.sqlite")),
-  Layer.provide(OrgModel),
-)
-
-// cloudflare
-Cloudflare.AI.DriverCloudflare   // = DurableObjectHost over DO storage
+AI.DriverLocal.pipe(Layer.provide(AI.MemoryThreadStorage))          // ephemeral
+AI.DriverLocal.pipe(Layer.provide(SqliteThreadStorage(".alchemy/runs.sqlite")))
 ```
 
-There is deliberately no `DriverMemory` export — compose explicitly.
+With sqlite, the durable inbox + busy marker mean a killed process
+redelivers pre-crash inputs and recovers interrupted rounds exactly
+like Durable Objects — recovery is engine behavior, not a Cloudflare
+feature.
 
-## The seams users swap
+**`DriverCloudflare` / `DurableObjectHost`**
+(`src/Cloudflare/AI/DriverCloudflare.ts`, ~520 lines) — one DO per
+session (named `${term}/${key}`): verbs as RPC, `kick` is
+`state.waitUntil(burst)` (parking is returning), storage is
+`DurableObjectThreadStorage` (the same `ThreadHandle` over the
+instance's rows; spawn workers ride an in-memory sibling), broadcast
+is hibernatable WebSockets re-read per frame, and ONE alarm serves
+both clocks (reminder rows + recovery deadlines), fully contained so
+workerd's alarm retry never races the engine's bounded recovery.
 
-| Seam | Decides | Default |
-|---|---|---|
-| `Model` | one model call: streaming consolidation, retry policy, malformed budget, tiering | `makeModel(LanguageModel)`, 3× exponential |
-| `ThreadStorage` | where thread/observations/meta persist | chosen per assembly |
-| `ToolCalling` | the calling convention: direct provider tools vs codemode's single `eval` (`CodeModeEffect`/`CodeModeAsync`) | direct |
-| `SessionObserver` | where lifecycle facts flow (chat projections, boards) | absent |
-| `PersistentRef.Store` | where charter refs persist (framed per session) | memory |
-| `AgentGateway` | live view attach (WebSocket → replay + deltas) | provided by each host |
+## Extension model
 
-**There is deliberately NO core policy hook for oversight**: budgets,
-continuation policies, human-approval gates are ordinary user code —
-wrap `Model`, wrap a tool, or write your own host. pi needs
-continuation hooks because its loop is closed; ours is a layer the
-user owns.
+Wrap seams, never fork the engine:
 
-## What stays host-specific (and why)
+```ts
+export const OrgDriver = AI.DriverLocal.pipe(
+  Layer.provide(SqliteThreadStorage(".alchemy/runs.sqlite")),
+  Layer.provide(OrgModel),            // tiering/retry/budget policy
+  Layer.provide(AI.CodeModeEffect()), // calling convention
+);
+```
 
-- Waiters (Deferreds) — process-shaped, not serializable. An eviction
-  mid-round fails the DO caller, which re-drives from the world
-  (durable continuations are a later phase).
-- The DO inbox/watermark/busy machinery — burst-only concerns.
-- `spawn` on the DO host — refused honestly (each anonymous worker
-  would be its own DO session; later phase).
+A new substrate is a `ThreadStorage` implementation (+ a placement
+only if it can't hold a resident fiber). There is deliberately NO
+core policy hook for oversight: budgets, continuation policies,
+approval gates are userland — wrap `Model`, wrap a tool, or write
+your own placement.
 
 ## Verification
 
-- `test/AI/DriverCore.test.ts` + `SessionSocket.test.ts` — the
-  algorithm + resident host, scripted model (30 tests).
-- `test/Cloudflare/AI/DriverCloudflare.test.ts` — the burst host,
-  live: durable threads, cross-DO delegation, alarm recovery,
-  poisoned-round abandonment, socket replay/deltas (10 tests).
+- `test/AI/DriverLocal.test.ts` + `SessionSocket.test.ts` +
+  `DriverAnthropic.test.ts` — engine + resident placement, scripted
+  model (38 tests, including quiet-send and crash semantics).
+- `test/AI/ThreadStorage.test.ts` — the storage contract, one suite
+  over memory AND sqlite (inbox, atomic admit, watermark, restore
+  surface).
+- `test/Cloudflare/AI/DriverCloudflare.test.ts` — the DO placement,
+  live: durable threads, cross-DO delegation, alarm reminders, alarm
+  recovery of interrupted rounds, poisoned-round abandonment, socket
+  replay/deltas, settle (10 tests).
