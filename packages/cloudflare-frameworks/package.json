@@ -113,6 +113,12 @@
     }
   },
   "exports": {
+    "./aws-lambda": {
+      "types": "./dist/aws-lambda/index.d.ts",
+      "bun": "./dist/aws-lambda/index.js",
+      "worker": "./dist/aws-lambda/index.js",
+      "import": "./dist/aws-lambda/index.js"
+    },
     "./core": {
       "types": "./dist/core/index.d.ts",
       "bun": "./dist/core/index.js",
@@ -173,6 +179,12 @@
       "bun": "./dist/nuxt/index.js",
       "worker": "./dist/nuxt/index.js",
       "import": "./dist/nuxt/index.js"
+    },
+    "./nuxt/aws": {
+      "types": "./dist/nuxt/aws.d.ts",
+      "bun": "./dist/nuxt/aws.js",
+      "worker": "./dist/nuxt/aws.js",
+      "import": "./dist/nuxt/aws.js"
     },
     "./nuxt/cloudflare": {
       "types": "./dist/nuxt/cloudflare.d.ts",
