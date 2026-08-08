@@ -82,6 +82,13 @@ export interface AssetDeployment extends Resource<
      * Number of files uploaded in this deployment.
      */
     fileCount: number;
+    /**
+     * POSIX-relative paths of every uploaded file (before the `prefix` is
+     * applied), sorted. Downstream consumers derive routing manifests from
+     * this list (e.g. `StaticSite`'s CloudFront KV file manifest), so the
+     * manifest always reflects exactly what was uploaded.
+     */
+    files: string[];
   },
   never,
   Providers
@@ -159,6 +166,7 @@ export const AssetDeploymentProvider = () =>
         const files = yield* Effect.tryPromise(() => walk(root));
         const hash = createHash("sha256");
         const desiredKeys = new Set<string>();
+        const uploadedFiles: string[] = [];
 
         // Observe — list every key already under the prefix and capture
         // its ETag (S3 ETag for non-multipart PUTs is the hex MD5 of the
@@ -188,6 +196,7 @@ export const AssetDeploymentProvider = () =>
           hash.update(options.cacheControl);
 
           desiredKeys.add(key);
+          uploadedFiles.push(normalizedRelativePath);
 
           // Sync — diff observed object hash against desired body hash,
           // and only PUT when the content has changed. ETag is wrapped in
@@ -221,6 +230,7 @@ export const AssetDeploymentProvider = () =>
           prefix,
           version: hash.digest("hex"),
           fileCount: files.length,
+          files: uploadedFiles,
         };
       });
 

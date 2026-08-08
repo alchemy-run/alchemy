@@ -55,6 +55,18 @@ export default Alchemy.Stack(
           }
         : undefined;
 
+    const router = yield* AWS.Website.Router("FrontendRouter", {
+      domain: websiteDomain,
+      invalidation: {
+        paths: "all",
+      },
+      tags: {
+        Example: "aws-vite",
+        Surface: "website",
+        Mode: "router",
+      },
+    });
+
     const site = yield* AWS.Website.StaticSite("FrontendSite", {
       path: ".",
       build: {
@@ -65,25 +77,12 @@ export default Alchemy.Stack(
         VITE_STAGE: "test",
       },
       spa: true,
-      cdn: false,
-      tags: {
-        Example: "aws-vite",
-        Surface: "website",
-      },
-    });
-
-    const router = yield* AWS.Website.Router("FrontendRouter", {
-      domain: websiteDomain,
-      routes: {
-        "/*": site.routeTarget,
-      },
-      invalidation: {
-        paths: "all",
+      router: {
+        instance: router,
       },
       tags: {
         Example: "aws-vite",
         Surface: "website",
-        Mode: "router",
       },
     });
 
@@ -99,5 +98,5 @@ export default Alchemy.Stack(
       aliasRecordNames: router.records.map((record) => record.name),
       previewHint: Output.interpolate`Run bun run dev:vite for local frontend iteration, then deploy to publish ${router.distribution.domainName}`,
     };
-  }) as any,
+  }),
 );

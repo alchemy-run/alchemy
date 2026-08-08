@@ -17,7 +17,9 @@ import { KeyValueStore } from "../CloudFront/KeyValueStore.ts";
 import { KvEntries } from "../CloudFront/KvEntries.ts";
 import { KvRoutesUpdate } from "../CloudFront/KvRoutesUpdate.ts";
 import { MANAGED_CACHING_OPTIMIZED_POLICY_ID } from "../CloudFront/ManagedPolicies.ts";
+import type { PolicyStatement } from "../IAM/Policy.ts";
 import { Record as Route53Record } from "../Route53/Record.ts";
+import type { Bucket } from "../S3/Bucket.ts";
 import {
   CF_BLOCK_CLOUDFRONT_URL_INJECTION,
   CF_ROUTER_INJECTION,
@@ -148,6 +150,7 @@ export const Router = (id: string, props: RouterProps) =>
     ];
 
     const inlineRouteEntries: Record<string, Input<string>> = {};
+    const routeBuckets: Bucket[] = [];
 
     if (props.routes) {
       let routeIndex = 0;
@@ -178,6 +181,9 @@ export const Router = (id: string, props: RouterProps) =>
           });
         } else {
           const bucketRoute = route as any;
+          if (typeof bucketRoute.bucket !== "string") {
+            routeBuckets.push(bucketRoute.bucket as Bucket);
+          }
           const bucketDomain =
             typeof bucketRoute.bucket === "string"
               ? bucketRoute.bucket
@@ -216,7 +222,7 @@ export const Router = (id: string, props: RouterProps) =>
       origins: [
         {
           id: "default",
-          domainName: "placeholder.sst.dev",
+          domainName: "placeholder.alchemy.run",
           customOriginConfig: {
             httpPort: 80,
             httpsPort: 443,
@@ -251,6 +257,28 @@ export const Router = (id: string, props: RouterProps) =>
           }
         : undefined,
       tags: props.tags,
+    });
+
+    // Inline bucket routes are served through the router's distribution with
+    // OAC-signed requests (see `setS3Origin` in cfcode.ts) — each bucket must
+    // allow this distribution or every request 403s.
+    yield* Effect.forEach(routeBuckets, (routeBucket) => {
+      const bucketPolicy: PolicyStatement = {
+        Effect: "Allow",
+        Principal: {
+          Service: "cloudfront.amazonaws.com",
+        },
+        Action: ["s3:GetObject"],
+        Resource: [Output.interpolate`${routeBucket.bucketArn}/*` as any],
+        Condition: {
+          StringEquals: {
+            "AWS:SourceArn": distribution.distributionArn as any,
+          },
+        },
+      };
+      return routeBucket.bind`AWS.S3.Policy(CloudFront, ${routeBucket})`({
+        policyStatements: [bucketPolicy],
+      });
     });
 
     const records =
@@ -300,6 +328,7 @@ export const Router = (id: string, props: RouterProps) =>
       kvStoreArn: kvStore.keyValueStoreArn as Input<string>,
       kvNamespace,
       distributionId: distribution.distributionId as Input<string>,
+      distributionArn: distribution.distributionArn as Input<string>,
       url: domain
         ? Output.interpolate`https://${domain.name}`
         : Output.interpolate`https://${distribution.domainName}`,

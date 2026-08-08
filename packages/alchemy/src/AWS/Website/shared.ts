@@ -144,16 +144,6 @@ export interface StaticSiteAssetsProps {
   textEncoding?: WebsiteTextEncoding;
 }
 
-export interface StaticSiteRouterProps {
-  /**
-   * Optional path prefix used when composing with `AWS.Website.Router`.
-   * This is metadata only; `StaticSite` still returns `routeTarget` for
-   * explicit router composition.
-   * @default "/"
-   */
-  path?: string;
-}
-
 export interface RouterUrlRouteProps {
   /**
    * Destination URL.
@@ -231,11 +221,6 @@ export interface RouterProps {
    */
   tags?: Record<string, string>;
 }
-
-/**
- * The bucket route a `StaticSite` exposes for explicit `Router` composition.
- */
-export type StaticSiteRouteTarget = RouterBucketRouteProps;
 
 /**
  * Route targets returned by `SsrSite` for composition with

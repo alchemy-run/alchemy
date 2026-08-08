@@ -34,12 +34,7 @@ describe.skipIf(!runLive)("AWS.Website.Router", () => {
               path: "examples/aws-static-site/site",
               forceDestroy: true,
               router: {
-                instance: {
-                  kvStoreArn: router.kvStoreArn,
-                  kvNamespace: router.kvNamespace,
-                  distributionId: router.distributionId,
-                  url: router.url,
-                },
+                instance: router,
               },
             });
 
