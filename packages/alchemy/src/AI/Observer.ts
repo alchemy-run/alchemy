@@ -187,3 +187,8 @@ export class SessionObserver extends Context.Service<
     readonly emit: (observation: SessionObservation) => Effect.Effect<void>;
   }
 >()("alchemy/AI/SessionObserver") {}
+
+/** LIVE observation types — broadcast as they stream but never
+ *  persisted, and the seq cursor does not advance for them. */
+export const isLiveObservation = (type: SessionObservation["type"]): boolean =>
+  type === "assistant-delta" || type === "tool-call";

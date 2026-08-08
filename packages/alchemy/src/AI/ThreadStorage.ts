@@ -113,16 +113,18 @@ export interface ThreadHandle {
   ) => Effect.Effect<ReadonlyArray<SessionObservation>>;
 }
 
+export interface ThreadStorageService {
+  /** Open (or create) one session's handle. */
+  readonly open: (term: string, key: string) => Effect.Effect<ThreadHandle>;
+  /** Keys with persisted state for one term — the restore surface. */
+  readonly keys: (term: string) => Effect.Effect<ReadonlyArray<string>>;
+  /** Drop one session's rows entirely. */
+  readonly remove: (term: string, key: string) => Effect.Effect<void>;
+}
+
 export class ThreadStorage extends Context.Service<
   ThreadStorage,
-  {
-    /** Open (or create) one session's handle. */
-    readonly open: (term: string, key: string) => Effect.Effect<ThreadHandle>;
-    /** Keys with persisted state for one term — the restore surface. */
-    readonly keys: (term: string) => Effect.Effect<ReadonlyArray<string>>;
-    /** Drop a settled session — settled sessions are never restored. */
-    readonly remove: (term: string, key: string) => Effect.Effect<void>;
-  }
+  ThreadStorageService
 >()("alchemy/AI/ThreadStorage") {}
 
 interface MemorySession {

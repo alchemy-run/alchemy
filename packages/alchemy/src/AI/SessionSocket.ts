@@ -78,8 +78,7 @@ export type SessionSocketServerFrame =
  * projection uses (`ChatsMemory` accumulates exactly these into its
  * transient streaming sample).
  */
-export const isLiveObservation = (type: SessionObservation["type"]): boolean =>
-  type === "assistant-delta" || type === "tool-call";
+export { isLiveObservation } from "./Observer.ts";
 
 /**
  * What a driver must expose for one session to speak the socket protocol

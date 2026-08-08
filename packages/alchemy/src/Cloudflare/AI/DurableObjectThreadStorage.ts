@@ -151,12 +151,13 @@ export const makeDurableObjectSessionStorage = (
               },
       ),
     ),
-    // the shared fields merge into the superset row — the row
-    // bookkeeping (seq, drained) is never touched here
+    // the shared fields are REPLACED wholesale (so an absent `busy`
+    // clears the marker); only the row bookkeeping (seq, drained)
+    // survives from the previous value
     putMeta: (meta) =>
       Effect.gen(function* () {
         const full = yield* readMeta;
-        yield* writeMeta({ ...full, ...meta });
+        yield* writeMeta({ ...meta, seq: full.seq, drained: full.drained });
       }),
     putInbox: (input) =>
       sealed(
@@ -205,7 +206,6 @@ export const makeDurableObjectSessionStorage = (
             entries[seqKey(MSG, seq++)] = message;
           }
           entries[META] = {
-            ...full,
             ...meta,
             seq,
             drained: drainedTo,
@@ -243,7 +243,11 @@ export const makeDurableObjectSessionStorage = (
           yield* storage
             .put({
               [seqKey(OBS, observation.seq)]: observation,
-              [META]: { ...full, ...meta } satisfies DurableSessionMeta,
+              [META]: {
+                ...meta,
+                seq: full.seq,
+                drained: full.drained,
+              } satisfies DurableSessionMeta,
             })
             .pipe(Effect.orDie);
         }),

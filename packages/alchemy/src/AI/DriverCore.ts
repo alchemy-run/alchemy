@@ -14,31 +14,55 @@
  */
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as S from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
 import { isAiError, type AiError } from "effect/unstable/ai/AiError";
 import type * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import * as Prompt from "effect/unstable/ai/Prompt";
 import * as AiTool from "effect/unstable/ai/Tool";
 import * as Toolkit from "effect/unstable/ai/Toolkit";
+import * as PersistentRef from "../PersistentRef.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
 import type { Actor } from "./Actor.ts";
 import { isAgent, type Agent } from "./Agent.ts";
 import { isDispatchTool, type DispatchTool } from "./Dispatch.ts";
-import type { Turn, TurnFn } from "./Driver.ts";
+import type { Charter, Turn, TurnFn } from "./Driver.ts";
 import { Refused } from "./Errors.ts";
 import { isEvent } from "./Event.ts";
-import type { ModelService } from "./Model.ts";
-import type { CompactPlan } from "./Thread.ts";
-import type { EncodedCrash, SessionObservation } from "./Observer.ts";
+import { type ModelService } from "./Model.ts";
+import {
+  isLiveObservation,
+  RoundAbandoned,
+  SessionObserver,
+  type EncodedCrash,
+  type SessionObservation,
+} from "./Observer.ts";
 import { isParameter } from "./Parameter.ts";
 import { dedentTemplate, isFragment, type Fragment } from "./Prose.ts";
+import type {
+  SessionSocketHost,
+  SessionSocketServerFrame,
+} from "./SessionSocket.ts";
 import { isSkill, type Skill, type SkillService } from "./Skill.ts";
-import type { ThreadHandle } from "./ThreadStorage.ts";
-import { ToolCalling, type ToolPresentation } from "./ToolCalling.ts";
+import {
+  Thread,
+  Tick,
+  type CompactPlan,
+  type ThreadService,
+  type TickService,
+} from "./Thread.ts";
+import type {
+  SessionMeta,
+  ThreadHandle,
+  ThreadStorageService,
+} from "./ThreadStorage.ts";
 import { isTool, isToolImpl, type Tool } from "./Tool.ts";
+import { ToolCalling, type ToolPresentation } from "./ToolCalling.ts";
 
 /**
  * A burst failure, described for the driver's two consumers (spec
@@ -468,9 +492,9 @@ export interface SessionOps {
     childKey: string,
     actor: Actor,
   ) => void;
-  /** The spawn intrinsic — host-specific (the resident host runs an
-   *  anonymous worker session; a host may refuse). */
-  readonly spawn: (params: SpawnParams) => Effect.Effect<unknown>;
+  /** The spawn intrinsic — the engine drives an anonymous worker
+   *  session inline; its failure is a model-visible tool result. */
+  readonly spawn: (params: SpawnParams) => Effect.Effect<unknown, unknown>;
   /** Optional sealing applied to every toolkit handler (the DO host
    *  provides the runtime capability once here). */
   readonly wrapHandler?: (
@@ -1142,3 +1166,953 @@ export const buildToolkit = (
           handlerContext,
         )) as Toolkit.WithHandler<any>;
       }) as Effect.Effect<Toolkit.WithHandler<any> | undefined>);
+
+// ═══════════════════════ THE SESSION ENGINE ═══════════════════════
+//
+// ONE implementation of a term's sessions — lifecycle (admit,
+// init-once, rounds, waiters, settle, crash, restore) over the
+// storage seam, written once for every placement. A PLACEMENT
+// (DriverLocal's resident fibers, the Durable Object host) supplies
+// only what is physically its own: how execution is kicked, how
+// socket frames fan out, how reminders and recovery re-entries are
+// scheduled. The engine never knows where it is running.
+
+/** What a placement lends the engine. */
+export interface SessionEngineOptions {
+  /** The placement's name, for error/log prefixes. */
+  readonly driver: string;
+  readonly term: string;
+  readonly charter: Charter;
+  /** The charter's captured Layer context. */
+  readonly context: Context.Context<never>;
+  readonly storage: ThreadStorageService;
+  readonly model: ModelService;
+  /**
+   * Trigger execution of a session's pending work. The resident
+   * placement wakes the session's parked fiber; the DO placement
+   * `waitUntil`s a burst. Must be safe to call at any time — bursts
+   * are internally serialized per session.
+   */
+  readonly kick: (key: string) => Effect.Effect<void>;
+  /** Fan one socket frame out to the session's attached live views
+   *  (RAM writer set locally; hibernatable sockets on DOs). */
+  readonly broadcast: (
+    key: string,
+    frame: SessionSocketServerFrame,
+  ) => Effect.Effect<void>;
+  /** Schedule a reminder — it fires back through `send` as an
+   *  ordinary input (sleeping fiber locally; alarm row on DOs). */
+  readonly remind: (
+    key: string,
+    fireAtMillis: number,
+    note: string,
+  ) => Effect.Effect<void>;
+  /** Schedule a recovery re-entry of `burst(key)` after a delay
+   *  (forked sleep locally; the DO alarm on Cloudflare). */
+  readonly scheduleReentry: (
+    key: string,
+    delayMillis: number,
+  ) => Effect.Effect<void>;
+  /** The per-session PersistentRef store (DO storage on Cloudflare).
+   *  Default: an ambient store from context, else per-session memory. */
+  readonly stateStore?: (key: string) => PersistentRef.StoreService;
+  /** Extra sealing for toolkit handlers (the DO placement provides
+   *  the runtime capability once here). */
+  readonly wrapHandler?: SessionOps["wrapHandler"];
+  /** Re-entries on the same round before it is abandoned with an
+   *  interruption note. @default 5 */
+  readonly maxAttempts?: number;
+  /** Base delay before recovery re-enters a silent round (doubles
+   *  per attempt, capped at 8×). @default 30 seconds */
+  readonly recoverAfterMillis?: number;
+}
+
+/** One session's RAM shell — everything process-shaped. All durable
+ *  facts live behind the handle. */
+interface EngineSession {
+  readonly key: string;
+  readonly handle: ThreadHandle;
+  /** Bursts are serialized per session. */
+  readonly gate: Semaphore.Semaphore;
+  tick: number;
+  observed: number;
+  readonly active: Set<string>;
+  busy?: { readonly attempts: number; readonly since: number };
+  settledOutcome?: { readonly outcome: unknown };
+  /** The park race for a resident fiber; late verbs read
+   *  `settledOutcome`. */
+  readonly settledSignal: Deferred.Deferred<unknown>;
+  turn?: Turn | TurnFn;
+  /** Spawn workers sample a CONSTANT tick — no charter, no turn. */
+  fixedTick?: TickResult;
+  pendingCompaction?: CompactPlan;
+  readonly pendingNotes: Array<Fragment>;
+  lastStance?: Stance;
+  /** Waiters not yet answerable, paired to their input's inbox seq —
+   *  a waiter joins a round only when its own input is drained. */
+  readonly pendingWaiters: Array<{
+    readonly seq: number;
+    readonly waiter: Deferred.Deferred<unknown, unknown>;
+  }>;
+  /** The current round's waiters — resolved by `AI.reply` or, for
+   *  rounds that never reply, by quiescence with the response text. */
+  readonly roundWaiters: Array<Deferred.Deferred<unknown, unknown>>;
+  /** Session workers dispatched by this session (supervision edge). */
+  readonly children: Map<
+    string,
+    { readonly key: string; readonly actor: Actor }
+  >;
+  readonly stateStore: PersistentRef.StoreService;
+}
+
+export interface SessionEngine {
+  /** Fire-and-forget delivery; admits on first sight of the key. */
+  readonly send: (
+    input: unknown,
+    options?: {
+      readonly key?: string;
+      readonly parent?: { readonly term: string; readonly key: string };
+      readonly wake?: boolean;
+    },
+  ) => Effect.Effect<void>;
+  /** Deliver and await the round's answer (`AI.reply` or quiescence). */
+  readonly dispatch: (
+    input: unknown,
+    options?: {
+      readonly key?: string;
+      readonly parent?: { readonly term: string; readonly key: string };
+    },
+  ) => Effect.Effect<unknown, unknown>;
+  /** Input at the sampling boundary. Unkeyed steers go to the last
+   *  admitted session; a KEYED steer to an unknown key admits fresh
+   *  (crash recovery — re-polled events are never dropped). */
+  readonly steer: (
+    key: string | undefined,
+    input: unknown,
+  ) => Effect.Effect<void>;
+  /** End a session idempotently from the outside. `admit: true`
+   *  settles even a never-seen key (the DO placement's semantics —
+   *  the instance exists by virtue of being addressed). */
+  readonly settle: (
+    key: string,
+    outcome: unknown,
+    options?: { readonly admit?: boolean },
+  ) => Effect.Effect<void>;
+  /** Settle every RAM-resident session (process shutdown). */
+  readonly interrupt: Effect.Effect<void>;
+  /** Run rounds for one session until it parks or settles —
+   *  serialized per session; safe to call redundantly. */
+  readonly burst: (key: string) => Effect.Effect<void>;
+  /** Revive persisted sessions (parked). Returns the revived keys so
+   *  a resident placement can start their fibers. */
+  readonly restore: Effect.Effect<ReadonlyArray<string>>;
+  /** Create-or-get a session WITHOUT feeding it (socket attach). */
+  readonly ensure: (key?: string) => Effect.Effect<string>;
+  /** The socket protocol surface for one session. */
+  readonly socketHost: (key: string) => Effect.Effect<SessionSocketHost>;
+  /** Resolves with the outcome when the session settles — the other
+   *  arm of a resident fiber's park race. */
+  readonly awaitSettled: (key: string) => Effect.Effect<unknown>;
+}
+
+export const makeSessionEngine = (
+  options: SessionEngineOptions,
+): SessionEngine => {
+  const {
+    driver,
+    term,
+    charter,
+    context,
+    storage,
+    model,
+    kick,
+    broadcast,
+    scheduleReentry,
+  } = options;
+  const maxAttempts = options.maxAttempts ?? 5;
+  const recoverAfter = options.recoverAfterMillis ?? 30_000;
+
+  const sessions = new Map<string, EngineSession>();
+  const resolvers = makeResolvers(driver, term, context);
+  const observer = Context.getOption(context, SessionObserver);
+  const ambientStore = Context.getOption(context, PersistentRef.Store);
+  // Minted keys are PROCESS-UNIQUE, not just engine-unique: session
+  // identity leaks into the world (workspace checkouts key on
+  // `AI.Thread.key`), so a bare counter would collide across restarts.
+  const mintPrefix = crypto.randomUUID().slice(0, 8);
+  let minted = 0;
+  let lastKey: string | undefined;
+
+  const metaOf = (s: EngineSession): SessionMeta => ({
+    tick: s.tick,
+    observed: s.observed,
+    active: [...s.active],
+    busy: s.busy,
+    settled: s.settledOutcome,
+  });
+
+  const putMeta = (s: EngineSession) =>
+    s.handle
+      .putMeta(metaOf(s))
+      .pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning(
+            `ThreadStorage meta write failed for '${s.key}' of '${term}'`,
+            cause,
+          ),
+        ),
+      );
+
+  const observe = (
+    s: EngineSession,
+    observation: ObservationDraft,
+  ): Effect.Effect<void> =>
+    Effect.gen(function* () {
+      // live facts (deltas, in-flight tool calls) never persist and
+      // never advance the cursor
+      const live = isLiveObservation(observation.type);
+      const full = {
+        ...observation,
+        term,
+        key: s.key,
+        seq: live ? s.observed : s.observed++,
+        at: Date.now(),
+      } as SessionObservation;
+      if (!live) {
+        // the durable row and its cursor persist together — a failed
+        // write costs restart fidelity, not the round
+        yield* s.handle
+          .appendObservation(full, metaOf(s))
+          .pipe(
+            Effect.catchCause((cause) =>
+              Effect.logWarning(
+                `ThreadStorage append failed for '${s.key}' of '${term}'`,
+                cause,
+              ),
+            ),
+          );
+      }
+      yield* Effect.ignore(
+        broadcast(s.key, {
+          type: "observation",
+          durable: !live,
+          observation: full,
+        }),
+      );
+      if (Option.isSome(observer)) {
+        yield* observer.value.emit(full).pipe(Effect.ignore);
+      }
+    });
+
+  const appendThread = (
+    s: EngineSession,
+    messages: ReadonlyArray<Prompt.MessageEncoded>,
+  ): Effect.Effect<void> =>
+    messages.length === 0
+      ? Effect.void
+      : s.handle
+          .appendMessages(messages)
+          .pipe(
+            Effect.catchCause((cause) =>
+              Effect.logWarning(
+                `ThreadStorage append failed for '${s.key}' of '${term}'`,
+                cause,
+              ),
+            ),
+          );
+
+  // ── the session-scoped AI.Thread / AI.Tick services ──────────────
+  const makeThreadService = (s: EngineSession): ThreadService => ({
+    key: s.key,
+    tokens: Effect.map(s.handle.messages, (rows) =>
+      Math.ceil(JSON.stringify(rows).length / 4),
+    ),
+    entries: Effect.map(
+      s.handle.messages,
+      (rows) => Prompt.make([...rows]).content,
+    ),
+    compact: (plan) =>
+      Effect.sync(() => {
+        s.pendingCompaction = plan;
+      }),
+    // ANSWER the current round, from wherever the answer is produced
+    // (usually a tool handler) — the caller resolves now; the session
+    // neither parks nor ends
+    reply: (value) =>
+      Effect.forEach(
+        s.roundWaiters.splice(0),
+        (waiter) => Deferred.succeed(waiter, value),
+        { discard: true },
+      ),
+    // the engine's CLOCK, through the placement's scheduler — a
+    // sleeping fiber locally, an alarm row on DOs. Delivery is an
+    // ordinary inbox message: a wake if parked, queued if busy,
+    // dropped if settled.
+    remind: (delay, note) =>
+      options.remind(s.key, Date.now() + Duration.toMillis(delay), note),
+  });
+
+  const makeTickService = (s: EngineSession): TickService => ({
+    count: s.tick,
+    say: (note) =>
+      Effect.sync(() => {
+        s.pendingNotes.push(note);
+      }),
+  });
+
+  /** Provide the engine-owned services to RUNTIME charter code. */
+  const provideSession =
+    (s: EngineSession) =>
+    <A, E>(effect: Effect.Effect<A, E, any>): Effect.Effect<A, E> =>
+      effect.pipe(
+        Effect.provideService(Thread, makeThreadService(s)),
+        Effect.provideService(Tick, makeTickService(s)),
+        Effect.provideService(PersistentRef.Store, s.stateStore),
+        // the FRAME: refs are namespaced by the session's identity
+        PersistentRef.within(term, s.key),
+        Effect.provide(RuntimeContext.phantom),
+        Effect.provide(context),
+      ) as Effect.Effect<A, E>;
+
+  /** The INIT evaluation context — `AI.Thread` but deliberately NOT
+   *  `AI.Tick`: no sampling is under way during init. */
+  const provideInit =
+    (s: EngineSession) =>
+    <A, E>(effect: Effect.Effect<A, E, any>): Effect.Effect<A, E> =>
+      effect.pipe(
+        Effect.provideService(Thread, makeThreadService(s)),
+        Effect.provideService(PersistentRef.Store, s.stateStore),
+        PersistentRef.within(term, s.key),
+        Effect.provide(RuntimeContext.phantom),
+        Effect.provide(context),
+      ) as Effect.Effect<A, E>;
+
+  /** The host adapter the shared algorithm consumes. */
+  const makeOps = (s: EngineSession): SessionOps => ({
+    driver,
+    term,
+    key: s.key,
+    context,
+    provide: provideSession(s),
+    turn: () => s.turn!,
+    tick: () => s.tick,
+    clearNotes: () => {
+      s.pendingNotes.length = 0;
+    },
+    observe: (draft) => observe(s, draft),
+    observeLive: (draft) => observe(s, draft),
+    activeSkills: () => s.active,
+    setSkill: (name, active) =>
+      Effect.gen(function* () {
+        if (active) s.active.add(name);
+        else s.active.delete(name);
+        yield* putMeta(s);
+      }),
+    lastStance: () => s.lastStance,
+    setLastStance: (stance) => {
+      s.lastStance = stance;
+    },
+    registerChild: (agent, childKey, actor) => {
+      s.children.set(`${agent}:${childKey}`, { key: childKey, actor });
+    },
+    spawn: (params) => spawn(s, params),
+    wrapHandler: options.wrapHandler,
+  });
+
+  const makeShell = (key: string): Effect.Effect<EngineSession> =>
+    Effect.gen(function* () {
+      return {
+        key,
+        handle: yield* storage.open(term, key),
+        gate: yield* Semaphore.make(1),
+        tick: 0,
+        observed: 0,
+        active: new Set<string>(),
+        settledSignal: yield* Deferred.make<unknown>(),
+        pendingNotes: [],
+        pendingWaiters: [],
+        roundWaiters: [],
+        children: new Map(),
+        stateStore:
+          options.stateStore !== undefined
+            ? options.stateStore(key)
+            : Option.isSome(ambientStore)
+              ? ambientStore.value
+              : PersistentRef.makeMemoryStore(),
+      };
+    });
+
+  /**
+   * Create-or-restore one session's RAM shell. A persisted meta seeds
+   * the cursors (the same code path serves cold restore and a DO
+   * re-activation); a fresh key emits `admitted` and runs the
+   * charter's per-session INIT.
+   */
+  const ensureSession = (
+    key?: string,
+    parent?: { readonly term: string; readonly key: string },
+  ): Effect.Effect<EngineSession> =>
+    Effect.gen(function* () {
+      const sessionKey = key ?? `session-${mintPrefix}-${minted++}`;
+      let s = sessions.get(sessionKey);
+      if (s === undefined) {
+        s = yield* makeShell(sessionKey);
+        const meta = yield* s.handle.meta.pipe(
+          Effect.catchCause((cause) =>
+            Effect.as(
+              Effect.logWarning(
+                `ThreadStorage meta read failed for '${sessionKey}' of '${term}'`,
+                cause,
+              ),
+              undefined,
+            ),
+          ),
+        );
+        if (meta === undefined) {
+          yield* observe(s, { type: "admitted", parent });
+        } else {
+          s.tick = meta.tick;
+          s.observed = meta.observed;
+          for (const skill of meta.active) s.active.add(skill);
+          s.busy = meta.busy;
+          s.settledOutcome = meta.settled;
+          if (meta.settled !== undefined) {
+            yield* Deferred.succeed(s.settledSignal, meta.settled.outcome);
+          }
+        }
+        // per-session init: the thread exists (Thread in scope for
+        // thread-scoped setup); no sampling yet (no Tick)
+        const initResult = yield* provideInit(s)(
+          charter as Effect.Effect<unknown, unknown>,
+        ).pipe(Effect.orDie);
+        s.turn = isFragment(initResult)
+          ? Effect.succeed(initResult)
+          : Effect.isEffect(initResult)
+            ? (initResult as Turn)
+            : typeof initResult === "function"
+              ? (initResult as TurnFn)
+              : yield* Effect.die(
+                  `${driver}: the charter for '${term}' returned neither prose, a turn effect, nor a turn function`,
+                );
+        sessions.set(sessionKey, s);
+      }
+      lastKey = sessionKey;
+      return s;
+    });
+
+  /** Queue one input; pair a dispatch waiter to its inbox seq. */
+  const enqueue = (
+    s: EngineSession,
+    input: unknown,
+    waiter?: Deferred.Deferred<unknown, unknown>,
+  ): Effect.Effect<void> =>
+    Effect.gen(function* () {
+      const seq = yield* s.handle.putInbox(input);
+      if (waiter !== undefined) {
+        s.pendingWaiters.push({ seq, waiter });
+      }
+    });
+
+  const failAllWaiters = (s: EngineSession, error: unknown) =>
+    Effect.forEach(
+      [
+        ...s.roundWaiters.splice(0),
+        ...s.pendingWaiters.splice(0).map((entry) => entry.waiter),
+      ],
+      (waiter) => Deferred.fail(waiter, error),
+      { discard: true },
+    );
+
+  const resolveRoundWaiters = (s: EngineSession, value: unknown) =>
+    Effect.forEach(
+      s.roundWaiters.splice(0),
+      (waiter) => Deferred.succeed(waiter, value),
+      { discard: true },
+    );
+
+  /** The SUPERVISION cascade: a settled session settles every session
+   *  worker it dispatched. */
+  const settleChildren = (s: EngineSession): Effect.Effect<void> =>
+    Effect.forEach(
+      [...s.children.values()],
+      ({ key: childKey, actor }) =>
+        Effect.ignore(
+          actor
+            .settle(childKey, { supervisor: { term, key: s.key } })
+            .pipe(Effect.provide(RuntimeContext.phantom)),
+        ),
+      { discard: true },
+    ).pipe(Effect.andThen(Effect.sync(() => s.children.clear())));
+
+  // the intrinsic spawn: an ANONYMOUS session with the spawner's
+  // system prompt REPLACED by the written role, and a subset of the
+  // spawner's CURRENT tick's tools/skills — never spawn/dispatch
+  // (workers are leaves). The spawn call itself drives the worker's
+  // rounds, so no placement machinery is needed — spawn works on
+  // every substrate.
+  const spawn = (
+    spawner: EngineSession,
+    params: SpawnParams,
+  ): Effect.Effect<unknown, unknown> =>
+    Effect.gen(function* () {
+      const stance = spawner.lastStance!;
+      const worker = yield* makeShell(`spawn-${mintPrefix}-${minted++}`);
+      sessions.set(worker.key, worker);
+      const handlers: Record<string, (params: any) => Effect.Effect<any, any>> =
+        {};
+      const granted: Array<AiTool.Any> = [];
+      const grantedNames = params.tools ?? [...stance.tools.keys()];
+      for (const name of grantedNames) {
+        const compiled = stance.tools.get(name);
+        if (compiled === undefined) continue;
+        granted.push(compileTool(compiled.term));
+        const resolved = yield* resolvers.resolveHandler(compiled);
+        handlers[name] = (input) => provideSession(worker)(resolved(input));
+      }
+      // handed skills arrive PRE-ACTIVATED: prose joins the worker's
+      // instructions, tools join its (fixed) toolkit
+      const handed: Array<{ name: string } & ResolvedSkill> = [];
+      for (const name of params.skills ?? []) {
+        const skillTerm = stance.skills.get(name);
+        if (skillTerm === undefined) continue;
+        const resolved = yield* resolvers.resolveSkill(skillTerm);
+        handed.push({ name, ...resolved });
+        for (const [toolName, fn] of Object.entries(resolved.handlers)) {
+          handlers[toolName] ??= (input) => provideSession(worker)(fn(input));
+        }
+      }
+      const tools = dedupeByName([
+        ...granted,
+        ...handed.flatMap((skill) => [...skill.tools]),
+      ]);
+      const system = [
+        params.instructions,
+        ...handed.map((skill) => `## Skill: ${skill.name}\n\n${skill.prose}`),
+      ].join("\n\n");
+      const toolkit = yield* buildToolkit(
+        tools,
+        handlers,
+        options.wrapHandler === undefined
+          ? undefined
+          : { wrapHandler: options.wrapHandler },
+      );
+      worker.fixedTick = { system, toolkit };
+      const waiter = yield* Deferred.make<unknown, unknown>();
+      yield* enqueue(worker, params.task, waiter);
+      // the spawn call DRIVES the worker — its rounds run inside this
+      // handler, and the waiter resolves at the worker's quiescence
+      yield* burst(worker.key);
+      return yield* Deferred.await(waiter);
+    });
+
+  /**
+   * ONE BURST: run rounds for a session until it parks or settles —
+   * serialized per session, safe to call redundantly (a kick with
+   * nothing to do parks immediately). This is the whole execution
+   * model on every substrate; placements only decide WHEN to call it.
+   */
+  const burst = (key: string): Effect.Effect<void> =>
+    Effect.gen(function* () {
+      const s = yield* ensureSession(key);
+      // the crash is DELIVERED by onCrash (observation, waiters,
+      // re-entry scheduling) — the burst itself never fails, so a
+      // kicking verb can never be poisoned by the round it kicked
+      yield* s.gate.withPermits(1)(
+        rounds(s).pipe(
+          Effect.tapCause((cause) => onCrash(s, cause)),
+          Effect.catchCause(() => Effect.void),
+        ),
+      );
+    }) as Effect.Effect<void>;
+
+  const rounds = (s: EngineSession) =>
+    Effect.gen(function* () {
+      if (s.settledOutcome !== undefined) return;
+
+      // ── recovery: a busy marker on ENTRY means the previous
+      // attempt DIED mid-round — eviction, restart, or crash, all
+      // indistinguishable on disk and all re-entered the same way.
+      // (The gate makes this unambiguous: a healthy predecessor
+      // clears the marker before releasing.) Bounded re-entry:
+      // progress resets the budget; exhaustion abandons the round
+      // VISIBLY and the session keeps serving.
+      let recovering = false;
+      if (s.busy !== undefined) {
+        const attempts = s.busy.attempts + 1;
+        if (attempts > maxAttempts) {
+          yield* appendThread(s, [
+            noteMessage(
+              `This round was interrupted ${maxAttempts} times and has been abandoned — the messages above it may be unanswered. Continuing fresh from here.`,
+            ),
+          ]);
+          yield* observe(s, {
+            type: "input",
+            text: `<note>\nround abandoned after ${maxAttempts} interrupted attempts\n</note>`,
+            kind: "note",
+          });
+          s.busy = undefined;
+          yield* putMeta(s);
+          const abandoned = new RoundAbandoned({
+            term,
+            key: s.key,
+            attempts: maxAttempts,
+          });
+          yield* observe(s, {
+            type: "crashed",
+            error: {
+              _tag: abandoned._tag,
+              message: abandoned.message,
+              retryable: false,
+            },
+            fatal: true,
+          });
+          // exhaustion is the ONE defect-lane crash that answers
+          // waiters — as a TYPED failure the caller can catch
+          yield* failAllWaiters(s, abandoned);
+        } else {
+          s.busy = { attempts, since: Date.now() };
+          yield* putMeta(s);
+          yield* scheduleReentry(
+            s.key,
+            recoverAfter * 2 ** Math.min(attempts, 3),
+          );
+          recovering = true;
+          // INFORMED re-decision, without transcript surgery: the
+          // interrupted attempt's tool calls never persisted (only
+          // complete samplings append), so the re-sample would
+          // otherwise repeat side effects blind.
+          yield* appendThread(s, [
+            noteMessage(
+              `The previous attempt at this work was interrupted mid-sampling (attempt ${attempts} of ${maxAttempts}). Any actions it took may or may not have completed — verify before repeating anything with side effects.`,
+            ),
+          ]);
+          yield* observe(s, {
+            type: "input",
+            text: `<note>\nrecovering an interrupted round (attempt ${attempts}/${maxAttempts})\n</note>`,
+            kind: "note",
+          });
+          yield* Effect.logInfo(
+            `${driver} session '${term}/${s.key}': recovering an interrupted round (attempt ${attempts}/${maxAttempts})`,
+          );
+        }
+      }
+
+      const ops = makeOps(s);
+      /**
+       * Whether the LAST sampling was quiescent. An empty inbox is
+       * only a park if it is — a sampling that called tools must come
+       * back around to read their results, with no new input at all.
+       * Starts `true` so a burst kicked with nothing to do parks
+       * instead of sampling — unless it is RECOVERING an interrupted
+       * round, whose inputs are already in the thread and owed a
+       * reply.
+       */
+      let quiescent = !recovering;
+      // consecutive malformed-tool-call feedback rounds — resets on
+      // any well-formed sampling
+      let malformed = 0;
+
+      while (true) {
+        if (s.settledOutcome !== undefined) break;
+        const rows = yield* s.handle.listInbox;
+        if (rows.length === 0 && quiescent) {
+          // PARKED: the session's work is done until the world moves.
+          // Everything durable is already written through the handle,
+          // so parking is just returning — the placement decides who
+          // waits (a resident fiber) or who returns (a DO event).
+          yield* observe(s, { type: "parked" });
+          break;
+        }
+        // boundary work: requested compaction applies BEFORE the new
+        // inputs join the thread, so nothing fresh is lost
+        yield* Effect.suspend(() => {
+          const plan = s.pendingCompaction;
+          if (plan === undefined) return Effect.void;
+          s.pendingCompaction = undefined;
+          return applyCompactionPlan(s.handle, plan);
+        });
+        const drained = rows.map((row) => inputProvenance(row.input));
+        const inputs = drained.map((item) => item.value);
+        if (rows.length > 0) {
+          const maxSeq = rows[rows.length - 1]!.seq;
+          // drained waiters JOIN THE ROUND: only now are they
+          // answerable — by AI.reply, or by quiescence as fallback
+          for (let index = s.pendingWaiters.length - 1; index >= 0; index--) {
+            const entry = s.pendingWaiters[index]!;
+            if (entry.seq <= maxSeq) {
+              s.pendingWaiters.splice(index, 1);
+              s.roundWaiters.push(entry.waiter);
+            }
+          }
+          // the ATOMIC ADMIT: inputs into the thread, watermark past
+          // them, the round OPENED (busy) — one write; every crash
+          // point around it converges
+          s.busy = s.busy ?? { attempts: 0, since: Date.now() };
+          yield* s.handle.admit({
+            messages: drained.map((item) => asUserMessage(item.value)),
+            drainedTo: maxSeq + 1,
+            meta: metaOf(s),
+          });
+          yield* s.handle
+            .deleteInbox(rows.map((row) => row.seq))
+            .pipe(Effect.ignore);
+          for (const { value, kind } of drained) {
+            yield* observe(s, {
+              type: "input",
+              text: typeof value === "string" ? value : JSON.stringify(value),
+              kind,
+            });
+          }
+        }
+
+        // TICK — the shared algorithm renders this sampling's stance
+        // and assembles its toolkit (spawn workers sample a constant)
+        const tick =
+          s.fixedTick !== undefined
+            ? s.fixedTick
+            : yield* compileTick(ops, resolvers, inputs);
+
+        // deliver collected notes (`AI.say`): a PLAIN append, in
+        // emission order — the author's condition IS the policy
+        for (const note of s.pendingNotes.splice(0)) {
+          const text = render(note.template as TemplateStringsArray, [
+            ...note.refs,
+          ]);
+          if (text.length === 0) continue;
+          yield* appendThread(s, [noteMessage(text)]);
+          yield* observe(s, {
+            type: "input",
+            text: `<note>\n${text}\n</note>`,
+            kind: "note",
+          });
+        }
+
+        const outcome = yield* sampleTick({
+          ops,
+          model,
+          handle: s.handle,
+          tick,
+          exhausted: malformed >= model.malformedBudget,
+        });
+        if (outcome.kind === "malformed") {
+          malformed++;
+          quiescent = false; // come straight back around and re-sample
+          continue;
+        }
+        malformed = 0;
+        const response = outcome.response;
+        s.tick++;
+        quiescent = response.toolCalls.length === 0;
+        // PROGRESS: a completed sampling resets the recovery budget;
+        // a quiescent one closes the round entirely
+        s.busy = quiescent ? undefined : { attempts: 0, since: Date.now() };
+        yield* putMeta(s);
+        if (quiescent) {
+          yield* resolveRoundWaiters(s, response.text);
+        } else {
+          yield* scheduleReentry(s.key, recoverAfter);
+        }
+      }
+    });
+
+  /**
+   * A crashed burst never strands its callers, and never ends the
+   * session: a DETERMINISTIC failure (billing, auth, content policy)
+   * abandons the round NOW and fails waiters with the ORIGINAL typed
+   * error (catchable by tag); a transient one leaves the round OWED —
+   * the scheduled re-entry recovers it and answers the waiters at
+   * quiescence.
+   */
+  const onCrash = (s: EngineSession, cause: Cause.Cause<unknown>) =>
+    Effect.gen(function* () {
+      yield* Effect.logError(
+        `${driver} session '${term}/${s.key}' crashed`,
+        cause,
+      );
+      const crash = describeCrash(cause);
+      yield* observe(s, {
+        type: "crashed",
+        error: crash.encoded,
+        fatal: !crash.encoded.retryable,
+      });
+      if (!crash.encoded.retryable) {
+        const line =
+          crash.encoded._tag !== undefined
+            ? `${crash.encoded._tag}: ${crash.encoded.message}`
+            : crash.encoded.message;
+        yield* appendThread(s, [
+          noteMessage(
+            `The previous round failed with a non-retryable error ` +
+              `(${line}) and was abandoned rather than retried. ` +
+              `The messages above it may be unanswered.`,
+          ),
+        ]);
+        s.busy = undefined;
+        yield* putMeta(s);
+        yield* failAllWaiters(s, crash.error);
+        return;
+      }
+      // the round is still OWED: guarantee the wake is coming — a
+      // crash before the drain opened the round would otherwise
+      // leave no re-entry scheduled and a caller parked forever
+      if (s.busy === undefined && s.settledOutcome === undefined) {
+        s.busy = { attempts: 0, since: Date.now() };
+        yield* putMeta(s);
+      }
+      yield* scheduleReentry(
+        s.key,
+        recoverAfter * 2 ** Math.min(s.busy?.attempts ?? 0, 3),
+      );
+    });
+
+  const settle = (
+    key: string,
+    outcomeValue: unknown,
+    settleOptions?: { readonly admit?: boolean },
+  ): Effect.Effect<void> =>
+    Effect.gen(function* () {
+      let s = sessions.get(key);
+      if (s === undefined) {
+        if (settleOptions?.admit !== true) return;
+        s = yield* ensureSession(key);
+      }
+      // idempotent: a second settle changes nothing
+      if (s.settledOutcome !== undefined) return;
+      s.settledOutcome = { outcome: outcomeValue };
+      // busy dies with the session — a settled session must not keep
+      // recovery re-entering it
+      s.busy = undefined;
+      yield* putMeta(s);
+      yield* observe(s, { type: "settled" });
+      // anyone still waiting gets the outcome — the current round's
+      // waiters AND undrained arrivals alike
+      yield* Effect.forEach(
+        [
+          ...s.roundWaiters.splice(0),
+          ...s.pendingWaiters.splice(0).map((entry) => entry.waiter),
+        ],
+        (waiter) => Deferred.succeed(waiter, outcomeValue),
+        { discard: true },
+      );
+      yield* Deferred.succeed(s.settledSignal, outcomeValue);
+      yield* settleChildren(s);
+    });
+
+  const send: SessionEngine["send"] = (input, sendOptions) =>
+    Effect.gen(function* () {
+      const s = yield* ensureSession(sendOptions?.key, sendOptions?.parent);
+      if (s.settledOutcome !== undefined) return;
+      yield* enqueue(s, input);
+      // QUIET delivery (`wake: false`): the row is durable in the
+      // inbox but nothing is kicked — a parked session stays parked,
+      // and whatever wakes it next drains everything accumulated
+      if (sendOptions?.wake !== false) {
+        yield* kick(s.key);
+      }
+    });
+
+  const dispatch: SessionEngine["dispatch"] = (input, dispatchOptions) =>
+    Effect.gen(function* () {
+      const s = yield* ensureSession(
+        dispatchOptions?.key,
+        dispatchOptions?.parent,
+      );
+      if (s.settledOutcome !== undefined) return s.settledOutcome.outcome;
+      // the waiter RIDES the input (paired by inbox seq): it joins
+      // the answerable round only when its own message is drained, so
+      // an in-flight earlier round can never answer it
+      const waiter = yield* Deferred.make<unknown, unknown>();
+      yield* enqueue(s, input, waiter);
+      yield* kick(s.key);
+      return yield* Deferred.await(waiter);
+    });
+
+  const steer: SessionEngine["steer"] = (key, input) =>
+    Effect.gen(function* () {
+      const target = key ?? lastKey;
+      if (target === undefined) return;
+      const s = sessions.get(target);
+      if (s === undefined) {
+        // crash recovery: a KEYED steer must never be silently
+        // dropped — the session's RAM shell died but the world's
+        // event is real; admit a fresh session
+        if (key !== undefined) {
+          yield* send(input, { key });
+        }
+        return;
+      }
+      if (s.settledOutcome !== undefined) return;
+      yield* enqueue(s, input);
+      yield* kick(s.key);
+    });
+
+  const restore: SessionEngine["restore"] = Effect.gen(function* () {
+    const persisted = yield* storage
+      .keys(term)
+      .pipe(
+        Effect.catchCause((cause) =>
+          Effect.as(
+            Effect.logWarning(
+              `ThreadStorage restore failed for '${term}'`,
+              cause,
+            ),
+            [] as ReadonlyArray<string>,
+          ),
+        ),
+      );
+    const revived: Array<string> = [];
+    for (const key of persisted) {
+      if (sessions.has(key)) continue;
+      // spawn workers are not restorable: their stance was a runtime
+      // grant of the spawner's tick, not the charter
+      if (key.startsWith("spawn-")) continue;
+      yield* ensureSession(key);
+      revived.push(key);
+    }
+    if (revived.length > 0) {
+      yield* Effect.logInfo(
+        `Driver '${term}': restored ${revived.length} session(s) parked`,
+      );
+    }
+    return revived;
+  });
+
+  const socketHost: SessionEngine["socketHost"] = (key) =>
+    Effect.gen(function* () {
+      const s = yield* ensureSession(key);
+      return {
+        replay: (fromSeq) => s.handle.observations(fromSeq),
+        watermark: Effect.sync(() => s.observed),
+        // the socket's steer: admit input; the answer arrives as
+        // observations, never as a response
+        submit: (input) =>
+          Effect.gen(function* () {
+            if (s.settledOutcome !== undefined) return;
+            yield* enqueue(s, input);
+            yield* kick(s.key);
+          }),
+      } satisfies SessionSocketHost;
+    });
+
+  return {
+    send,
+    dispatch,
+    steer,
+    settle,
+    interrupt: Effect.suspend(() =>
+      Effect.forEach(
+        [...sessions.keys()],
+        (key) => settle(key, { interrupted: true }),
+        { discard: true },
+      ),
+    ),
+    burst,
+    restore,
+    ensure: (key) => Effect.map(ensureSession(key), (s) => s.key),
+    socketHost,
+    awaitSettled: (key) =>
+      Effect.flatMap(ensureSession(key), (s) =>
+        Deferred.await(s.settledSignal),
+      ),
+  };
+};
