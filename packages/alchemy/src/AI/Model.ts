@@ -1,5 +1,5 @@
 /**
- * `ModelCall` — the driver service that makes ONE CALL TO THE MODEL:
+ * `Model` — the driver service that makes ONE CALL TO THE MODEL:
  * streaming the provider wire, consolidating deltas back into the
  * response shape the round consumes, surfacing live parts as they
  * stream, and the retry/budget policy for transient failures.
@@ -7,19 +7,19 @@
  * Shared by every driver assembly (memory, sqlite, Cloudflare). It is
  * a `Context.Service` so a user driver swaps it as a Layer — retry
  * schedules, sampling timeouts, model tiering, malformed budgets all
- * live INSIDE the user's ModelCall, never as separate policy objects:
+ * live INSIDE the user's Model, never as separate policy objects:
  *
  * ```ts
- * const OrgModelCall = Layer.effect(
- *   AI.ModelCall,
+ * const OrgModel = Layer.effect(
+ *   AI.Model,
  *   Effect.map(LanguageModel.LanguageModel, (model) => ({
- *     ...AI.makeModelCall(model),
+ *     ...AI.makeModel(model),
  *     malformedBudget: 1,
  *   })),
  * );
  * ```
  *
- * Absent, the drivers build {@link makeModelCall} over their own
+ * Absent, the drivers build {@link makeModel} over their own
  * LanguageModel — today's behavior, verbatim.
  */
 import * as Context from "effect/Context";
@@ -43,11 +43,11 @@ export type LivePart =
       readonly params: unknown;
     };
 
-export interface ModelCallService {
+export interface ModelService {
   /**
    * One sampling — tool handlers execute INSIDE this call; `onLive`
    * surfaces deltas and tool calls as they stream. Typed failures
-   * pass through to the round's crash model (spec §11b); the modelCall
+   * pass through to the round's crash model (spec §11b); the Model
    * decides only which failures are RE-SAMPLED and on what schedule.
    */
   readonly step: (options: {
@@ -63,17 +63,17 @@ export interface ModelCallService {
   readonly malformedBudget: number;
 }
 
-export class ModelCall extends Context.Service<ModelCall, ModelCallService>()(
-  "alchemy/AI/ModelCall",
+export class Model extends Context.Service<Model, ModelService>()(
+  "alchemy/AI/Model",
 ) {}
 
-/** The model surface the default modelCall needs. */
+/** The model surface the default Model needs. */
 interface StreamingModel {
   readonly streamText: unknown;
 }
 
 /**
- * The default modelCall over a LanguageModel — the behavior both
+ * The default Model over a LanguageModel — the behavior both
  * drivers shipped before the seam existed:
  *
  * - The wire is STREAMED so an observer sees text/thinking tokens as
@@ -93,7 +93,7 @@ interface StreamingModel {
  *   CALL is excluded from blind re-sampling: the round feeds it back
  *   to the model as a corrective note.
  */
-export const makeModelCall = (model: StreamingModel): ModelCallService => ({
+export const makeModel = (model: StreamingModel): ModelService => ({
   malformedBudget: 3,
   step: ({ prompt, toolkit, onLive = () => Effect.void }) =>
     Effect.gen(function* () {
@@ -194,15 +194,15 @@ export const makeModelCall = (model: StreamingModel): ModelCallService => ({
     ),
 });
 
-/** The default modelCall as a Layer, for user drivers that want to wrap
+/** The default Model as a Layer, for user drivers that want to wrap
  *  rather than replace it. */
-export const ModelCallDefault: Layer.Layer<
-  ModelCall,
+export const ModelDefault: Layer.Layer<
+  Model,
   never,
   LanguageModel.LanguageModel
 > = Layer.effect(
-  ModelCall,
+  Model,
   Effect.map(LanguageModel.LanguageModel, (model) =>
-    makeModelCall(model as StreamingModel),
+    makeModel(model as StreamingModel),
   ),
 );

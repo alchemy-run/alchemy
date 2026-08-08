@@ -92,7 +92,7 @@ import {
   type CompiledToolRef,
   type Stance,
 } from "../../AI/DriverShared.ts";
-import { makeModelCall, ModelCall } from "../../AI/ModelCall.ts";
+import { makeModel, Model } from "../../AI/Model.ts";
 import {
   RunObserver,
   RoundAbandoned,
@@ -280,7 +280,7 @@ export const DriverCloudflare: Layer.Layer<
   LanguageModel.LanguageModel | Worker
 > = Layer.effectContext(
   Effect.gen(function* () {
-    const model = yield* LanguageModel.LanguageModel;
+    const languageModel = yield* LanguageModel.LanguageModel;
     const registrations = new Map<string, RegisteredCharter>();
 
     /**
@@ -355,12 +355,11 @@ export const DriverCloudflare: Layer.Layer<
         );
         const recoverAfter = durability.recoverAfterMillis ?? 30_000;
         const maxAttempts = durability.maxAttempts ?? 5;
-        // the MODEL-CALL seam (driver-assembly.md §3): a user driver
+        // the MODEL seam (driver-assembly.md §3): a user driver
         // provides its own (retry/budget/tiering policy lives inside
         // it); absent, the default over this driver's LanguageModel.
-        const modelCall = Option.getOrElse(
-          Context.getOption(captured, ModelCall),
-          () => makeModelCall(model),
+        const model = Option.getOrElse(Context.getOption(captured, Model), () =>
+          makeModel(languageModel),
         );
 
         /**
@@ -1084,7 +1083,7 @@ export const DriverCloudflare: Layer.Layer<
 
             const thread = yield* readThread;
             const startedAt = Date.now();
-            const response = yield* modelCall
+            const response = yield* model
               .step({
                 prompt: Prompt.concat(
                   Prompt.make([{ role: "system", content: system }]),
@@ -1114,13 +1113,13 @@ export const DriverCloudflare: Layer.Layer<
                 // crash: nothing was executed, so tell the model what
                 // was wrong and let it re-issue. Bounded — a model that
                 // keeps emitting invalid calls crashes with the real
-                // error after the modelCall's streak budget.
+                // error after the model's streak budget.
                 Effect.catchIf(
                   (error): error is AiError =>
                     isAiError(error) &&
                     error.reason._tag === "ToolParameterValidationError",
                   (error) =>
-                    malformed >= modelCall.malformedBudget
+                    malformed >= model.malformedBudget
                       ? Effect.fail(error)
                       : Effect.succeed({ malformed: error.message } as const),
                 ),

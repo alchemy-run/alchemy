@@ -60,7 +60,7 @@ import {
   render,
   type Stance,
 } from "./DriverShared.ts";
-import { makeModelCall, ModelCall } from "./ModelCall.ts";
+import { makeModel, Model } from "./Model.ts";
 import {
   Thread,
   Tick,
@@ -213,7 +213,7 @@ export const DriverMemory: Layer.Layer<
         readonly submit: (key: string, input: unknown) => Effect.Effect<void>;
       }
     >();
-    const model = yield* LanguageModel.LanguageModel;
+    const languageModel = yield* LanguageModel.LanguageModel;
     // Process-lifetime forks (run loops, remind, sockets): under a
     // Platform Host these survive `Effect.provide` of OrgLocal; in
     // unit tests they ride the ambient Scope wrapping the test body.
@@ -237,12 +237,11 @@ export const DriverMemory: Layer.Layer<
         // parked at interpret.
         const ambientStore = Context.getOption(context, PersistentRef.Store);
         const journal = Context.getOption(context, RunJournal);
-        // the MODEL-CALL seam (driver-assembly.md §3): a user driver
+        // the MODEL seam (driver-assembly.md §3): a user driver
         // provides its own (retry/budget/tiering policy lives inside
         // it); absent, the default over this driver's LanguageModel.
-        const modelCall = Option.getOrElse(
-          Context.getOption(context, ModelCall),
-          () => makeModelCall(model),
+        const model = Option.getOrElse(Context.getOption(context, Model), () =>
+          makeModel(languageModel),
         );
         const saveSnapshot = (run: RunState): Effect.Effect<void> =>
           Option.isNone(journal)
@@ -1082,7 +1081,7 @@ export const DriverMemory: Layer.Layer<
                 });
               }
               const startedAt = yield* Effect.sync(() => Date.now());
-              const response = yield* modelCall
+              const response = yield* model
                 .step({
                   prompt: Prompt.concat(
                     Prompt.make([{ role: "system", content: tick.system }]),
@@ -1110,13 +1109,13 @@ export const DriverMemory: Layer.Layer<
                   // crash: nothing was executed, so tell the model what
                   // was wrong and let it re-issue. Bounded — a model that
                   // keeps emitting invalid calls crashes with the real
-                  // error after the modelCall's streak budget.
+                  // error after the model's streak budget.
                   Effect.catchIf(
                     (error): error is AiError =>
                       isAiError(error) &&
                       error.reason._tag === "ToolParameterValidationError",
                     (error) =>
-                      malformed >= modelCall.malformedBudget
+                      malformed >= model.malformedBudget
                         ? Effect.fail(error)
                         : Effect.succeed({
                             malformed: error.message,
