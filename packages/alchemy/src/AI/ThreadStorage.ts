@@ -144,14 +144,12 @@ interface MemorySession {
 }
 
 /**
- * The in-memory `ThreadStorage`: plain Maps, exactly as durable as
- * the process — the default substrate for `DriverCore`. Fresh state
- * per Layer build (layers memoize by reference, so one assembly
- * shares one store).
+ * One in-memory `ThreadStorage` instance: plain Maps, exactly as
+ * durable as the process. Also what hosts hand ephemeral sessions
+ * (a spawn worker inside a Durable Object).
  */
-export const MemoryThreadStorage: Layer.Layer<ThreadStorage> = Layer.sync(
-  ThreadStorage,
-  () => {
+export const makeMemoryThreadStorage = (): ThreadStorageService => {
+  {
     const sessions = new Map<string, MemorySession>();
     const row = (term: string, key: string): MemorySession => {
       const id = `${term}\u0000${key}`;
@@ -249,5 +247,15 @@ export const MemoryThreadStorage: Layer.Layer<ThreadStorage> = Layer.sync(
           sessions.delete(`${term}\u0000${key}`);
         }),
     });
-  },
+  }
+};
+
+/**
+ * The in-memory `ThreadStorage` Layer — the default substrate for
+ * `DriverLocal`. Fresh state per Layer build (layers memoize by
+ * reference, so one assembly shares one store).
+ */
+export const MemoryThreadStorage: Layer.Layer<ThreadStorage> = Layer.sync(
+  ThreadStorage,
+  makeMemoryThreadStorage,
 );
