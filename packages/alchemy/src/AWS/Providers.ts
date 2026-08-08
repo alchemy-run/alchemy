@@ -54,8 +54,9 @@ import * as Bedrock from "./Bedrock/index.ts";
 import * as BedrockAgentCore from "./BedrockAgentCore/index.ts";
 import * as BedrockDataAutomation from "./BedrockDataAutomation/index.ts";
 import * as Budgets from "./Budgets/index.ts";
-import * as Celld from "./Celld/index.ts";
-import * as Rivet from "./Rivet/index.ts";
+import { EcsFleetHost } from "../Celld/EcsFleetHost.ts";
+import { EcsClusterHost } from "../Rivet/EcsClusterHost.ts";
+import { EcsRunnerHost } from "../Rivet/EcsRunnerHost.ts";
 import * as Chatbot from "./Chatbot/index.ts";
 import * as CloudControl from "./CloudControl/index.ts";
 import * as CloudFormation from "./CloudFormation/index.ts";
@@ -1680,10 +1681,10 @@ export const providers = () =>
     Layer.provideMerge(EKS.EksKubernetesAdapter()),
     // The `aws-ecs` Celld fleet host — same seam pattern: `Celld.Fleet`
     // resolves it dynamically from the ambient stack context.
-    Layer.provideMerge(Celld.EcsFleetHost()),
+    Layer.provideMerge(EcsFleetHost()),
     // The `aws-ecs` Rivet cluster + runner hosts — same seam pattern.
-    Layer.provideMerge(Rivet.EcsClusterHost()),
-    Layer.provideMerge(Rivet.EcsRunnerHost()),
+    Layer.provideMerge(EcsClusterHost()),
+    Layer.provideMerge(EcsRunnerHost()),
     Layer.provideMerge(
       Layer.mergeAll(
         Command.providers(),

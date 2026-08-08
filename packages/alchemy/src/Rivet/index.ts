@@ -50,3 +50,5 @@ export {
 export { providers, Providers } from "./Providers.ts";
 // Internal scaffolding stays un-exported: RunnerEntry (entry generation),
 // ActorState (storage/alarm adapters), the Gateway stub internals.
+export { DEFAULT_RIVET_VERSION, EcsClusterHost } from "./EcsClusterHost.ts";
+export { DEFAULT_RIVETKIT_VERSION, EcsRunnerHost } from "./EcsRunnerHost.ts";

@@ -34,10 +34,10 @@ import {
   type RunnerDeployOptions,
   type RunnerHostService,
   type RunnerSource,
-} from "../../Rivet/RunnerHost.ts";
-import type { BundledImageSource } from "../ECR/ImageSource.ts";
-import { makeImageSource, type ImageSource } from "../ECR/ImageSource.ts";
-import { waitForServiceConvergence } from "../ECS/Service.ts";
+} from "./RunnerHost.ts";
+import type { BundledImageSource } from "../AWS/ECR/ImageSource.ts";
+import { makeImageSource, type ImageSource } from "../AWS/ECR/ImageSource.ts";
+import { waitForServiceConvergence } from "../AWS/ECS/Service.ts";
 import {
   createTaskRoleIfNotExists,
   deleteTaskDefinitionInfrastructure,
@@ -45,7 +45,7 @@ import {
   ensureTaskLogGroup,
   reapSupersededTaskDefinitionRevision,
   registerTaskDefinitionRevision,
-} from "../ECS/Task.ts";
+} from "../AWS/ECS/Task.ts";
 
 /**
  * rivetkit's drain window must fit inside Fargate's 120s `stopTimeout`

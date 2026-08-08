@@ -21,35 +21,32 @@
  * service (`forceNewDeployment`) after each new version — ECS keeps old
  * tasks serving until replacements are healthy.
  */
-import * as ecs from "@distilled.cloud/aws/ecs";
 import { Credentials } from "@distilled.cloud/aws/Credentials";
+import * as ecs from "@distilled.cloud/aws/ecs";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
-import type { Input } from "../../Input.ts";
-import * as Option from "effect/Option";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
+import * as CloudMap from "../AWS/CloudMap/index.ts";
+import * as EC2 from "../AWS/EC2/index.ts";
+import * as ECS from "../AWS/ECS/index.ts";
+import * as IAM from "../AWS/IAM/index.ts";
+import * as S3 from "../AWS/S3/index.ts";
+import type { Input } from "../Input.ts";
+import * as Namespace from "../Namespace.ts";
+import * as Output from "../Output.ts";
+import { Random } from "../Random.ts";
+import { Stack } from "../Stack.ts";
+import { DEFAULT_CELLD_IMAGE, DEFAULT_CELLD_VERSION } from "./CelldCli.ts";
 import {
   FleetHost,
   type FleetHostComposeOptions,
   type FleetHostService,
-} from "../../Celld/FleetHost.ts";
-import {
-  DEFAULT_CELLD_IMAGE,
-  DEFAULT_CELLD_VERSION,
-} from "../../Celld/CelldCli.ts";
-import * as Namespace from "../../Namespace.ts";
-import * as Output from "../../Output.ts";
-import { Random } from "../../Random.ts";
-import { Stack } from "../../Stack.ts";
-import * as CloudMap from "../CloudMap/index.ts";
-import * as EC2 from "../EC2/index.ts";
-import * as ECS from "../ECS/index.ts";
-import * as IAM from "../IAM/index.ts";
-import * as S3 from "../S3/index.ts";
+} from "./FleetHost.ts";
 
-declare module "../../Celld/FleetHost.ts" {
+declare module "./FleetHost.ts" {
   interface FleetHostOptionsRegistry {
     "aws-ecs": {
       /**

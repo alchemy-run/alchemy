@@ -55,23 +55,23 @@
  */
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as Effect from "effect/Effect";
-import type { Input } from "../../Input.ts";
+import type { Input } from "../Input.ts";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import * as Namespace from "../../Namespace.ts";
-import * as Output from "../../Output.ts";
-import { Random } from "../../Random.ts";
+import * as Namespace from "../Namespace.ts";
+import * as Output from "../Output.ts";
+import { Random } from "../Random.ts";
 import {
   ClusterHost,
   type ClusterHostComposeOptions,
   type ClusterHostService,
-} from "../../Rivet/ClusterHost.ts";
-import { Stack } from "../../Stack.ts";
-import * as CloudMap from "../CloudMap/index.ts";
-import * as EC2 from "../EC2/index.ts";
-import * as ECS from "../ECS/index.ts";
+} from "./ClusterHost.ts";
+import { Stack } from "../Stack.ts";
+import * as CloudMap from "../AWS/CloudMap/index.ts";
+import * as EC2 from "../AWS/EC2/index.ts";
+import * as ECS from "../AWS/ECS/index.ts";
 
-declare module "../../Rivet/ClusterHost.ts" {
+declare module "./ClusterHost.ts" {
   interface ClusterHostOptionsRegistry {
     "aws-ecs": {
       /**

@@ -23,3 +23,4 @@ export { DEFAULT_CELLD_IMAGE, DEFAULT_CELLD_VERSION } from "./CelldCli.ts";
 export { providers, Providers } from "./Providers.ts";
 // Internal scaffolding stays un-exported: CelldCli (deploy machinery),
 // Wrangler, FleetGateway, FleetEntry.
+export { EcsFleetHost } from "./EcsFleetHost.ts";

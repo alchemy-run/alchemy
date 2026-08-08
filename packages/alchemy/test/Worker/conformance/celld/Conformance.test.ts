@@ -12,6 +12,11 @@ import ConformanceWorkerLive from "./worker.ts";
 
 const testOptions = {
   providers: Layer.mergeAll(AWS.providers(), Celld.providers()),
+  // Same escape as the Rivet suite: point at a virgin stage to iterate
+  // while a leaked generation (failed destroy, lost state) awaits
+  // `bun nuke` — redeploying the default stage collides with it via tag
+  // recovery.
+  stage: process.env.CELLD_CONFORMANCE_STAGE,
 };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "CelldConformance");
