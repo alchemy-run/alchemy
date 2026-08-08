@@ -1,5 +1,5 @@
 import * as Options from "@alchemy.run/cloudflare-test-tools/e2e/Options";
-import * as Octane from "@alchemy.run/cloudflare-frameworks/octane";
+import * as Octane from "@alchemy.run/web-frameworks/octane";
 
 const SECRET = "s3cret-from-binding";
 
@@ -19,9 +19,9 @@ const SECRET = "s3cret-from-binding";
 export default Options.make({
   // The typed factory form (harness contract form 3): map the harness
   // options onto Octane options, then pin the dev port so parallel fixture
-  // runs don't collide. `framework: "@alchemy.run/cloudflare-frameworks/octane"` (the string
+  // runs don't collide. `framework: "@alchemy.run/web-frameworks/octane"` (the string
   // form) works identically when no framework-specific options are needed.
-  // The deploy target defaults to `@alchemy.run/cloudflare-frameworks/octane/cloudflare`.
+  // The deploy target defaults to `@alchemy.run/web-frameworks/octane/cloudflare`.
   framework: (options) => {
     const base = Octane.fromHarnessOptions(options as Octane.HarnessOptions);
     return Octane.layer({

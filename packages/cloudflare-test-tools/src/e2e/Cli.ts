@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { Framework } from "@alchemy.run/cloudflare-frameworks/core";
+import { Framework } from "@alchemy.run/web-frameworks/core";
 import * as Effect from "effect/Effect";
 import * as Command from "effect/unstable/cli/Command";
 import * as Flag from "effect/unstable/cli/Flag";

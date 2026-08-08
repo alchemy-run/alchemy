@@ -17,7 +17,7 @@ import {
  * installed in the user's project — `loadSource` fails with a
  * `SourceProviderError` naming it otherwise.
  */
-const WAKU_SOURCE_PROVIDER = "@alchemy.run/cloudflare-frameworks/waku/source";
+const WAKU_SOURCE_PROVIDER = "@alchemy.run/web-frameworks/waku/source";
 
 export interface WakuProps<
   Bindings extends WorkerBindingProps = {},
@@ -96,7 +96,7 @@ export interface WakuProps<
  * bundle deploys as the Worker script and the client output (including
  * SSG-prerendered pages) deploys as static assets.
  *
- * Requires the `@alchemy.run/cloudflare-frameworks` package to be installed in
+ * Requires the `@alchemy.run/web-frameworks` package to be installed in
  * your project; the integration is loaded from its `/waku` export. Input files
  * are content-hashed
  * (respecting `.gitignore` by default) so unchanged projects skip the

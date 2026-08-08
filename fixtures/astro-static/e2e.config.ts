@@ -1,5 +1,5 @@
-import * as Astro from "@alchemy.run/cloudflare-frameworks/astro";
-import cloudflare from "@alchemy.run/cloudflare-frameworks/astro/cloudflare";
+import * as Astro from "@alchemy.run/web-frameworks/astro";
+import cloudflare from "@alchemy.run/web-frameworks/astro/cloudflare";
 import * as Options from "@alchemy.run/cloudflare-test-tools/e2e/Options";
 
 export default Options.make({

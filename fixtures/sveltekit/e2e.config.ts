@@ -1,6 +1,6 @@
 import { KvNamespace, Text } from "@alchemy.run/cloudflare-runtime/core/bindings";
 import * as Options from "@alchemy.run/cloudflare-test-tools/e2e/Options";
-import * as SvelteKit from "@alchemy.run/cloudflare-frameworks/sveltekit";
+import * as SvelteKit from "@alchemy.run/web-frameworks/sveltekit";
 
 const SECRET = "s3cret-from-binding";
 // FIXTURE_OVERRIDE exists as a real Text binding ("proxied-value") AND as a
@@ -13,9 +13,9 @@ const OVERRIDE_LITERAL_VALUE = "literal-override";
 export default Options.make({
   // The typed factory form (harness contract form 3): map the harness
   // options onto SvelteKit options, then pin the dev port so parallel fixture
-  // runs don't collide. `framework: "@alchemy.run/cloudflare-frameworks/sveltekit"` (the string
+  // runs don't collide. `framework: "@alchemy.run/web-frameworks/sveltekit"` (the string
   // form) works identically when no framework-specific options are needed.
-  // The deploy target defaults to `@alchemy.run/cloudflare-frameworks/sveltekit/cloudflare`.
+  // The deploy target defaults to `@alchemy.run/web-frameworks/sveltekit/cloudflare`.
   framework: (options) => {
     const base = SvelteKit.fromHarnessOptions(options as SvelteKit.HarnessOptions);
     return SvelteKit.layer({

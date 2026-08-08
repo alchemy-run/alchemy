@@ -1,7 +1,7 @@
 # `@fixtures/octane`
 
 An [OctaneJS](https://octanejs.dev) fullstack app driven by the e2e harness
-through `@alchemy.run/cloudflare-frameworks/octane`.
+through `@alchemy.run/web-frameworks/octane`.
 
 The project is a stock Octane setup: `octane()` in `vite.config.ts`, routes +
 `adapter: cloudflare()` in `octane.config.ts`. The integration adds nothing to

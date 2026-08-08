@@ -2,7 +2,7 @@
  * A REAL user-owned Vite config, exactly like a normal SvelteKit v3 project:
  * `sveltekit()` is registered here by the user (kit v3 has no
  * `svelte.config.js` — all kit options live in this call), alongside a user
- * Vite plugin. `@alchemy.run/cloudflare-frameworks/sveltekit` must load this file natively and
+ * Vite plugin. `@alchemy.run/web-frameworks/sveltekit` must load this file natively and
  * inject its deploy-target adapter into THIS `sveltekit(...)` instance rather
  * than constructing a second one.
  *

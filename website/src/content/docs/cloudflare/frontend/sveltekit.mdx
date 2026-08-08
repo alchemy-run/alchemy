@@ -7,7 +7,7 @@ sidebar:
 
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
-export const devDeps = "@alchemy.run/cloudflare-frameworks";
+export const devDeps = "@alchemy.run/web-frameworks";
 
 `Cloudflare.Website.SvelteKit` deploys a
 [SvelteKit](https://svelte.dev/docs/kit) app as a Cloudflare Worker.
@@ -21,7 +21,7 @@ Worker. There is no `svelte.config.js` to write, no
 ## Install
 
 The build integration is not bundled with alchemy. Install
-`@alchemy.run/cloudflare-frameworks`; the resource loads its
+`@alchemy.run/web-frameworks`; the resource loads its
 `/sveltekit` export from your project at deploy time. It is only used at
 build time, so a dev dependency is enough:
 

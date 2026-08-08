@@ -22,12 +22,10 @@ import type {
 } from "./shared.ts";
 
 /** The framework-integration package that drives the Nuxt build. */
-export const NUXT_FRAMEWORK_SPECIFIER =
-  "@alchemy.run/cloudflare-frameworks/nuxt";
+export const NUXT_FRAMEWORK_SPECIFIER = "@alchemy.run/web-frameworks/nuxt";
 
 /** The AWS Lambda deploy target for the Nuxt build. */
-export const NUXT_AWS_TARGET_SPECIFIER =
-  "@alchemy.run/cloudflare-frameworks/nuxt/aws";
+export const NUXT_AWS_TARGET_SPECIFIER = "@alchemy.run/web-frameworks/nuxt/aws";
 
 export interface NuxtProps {
   /**
@@ -116,8 +114,8 @@ export interface NuxtProps {
  * CloudFront distribution whose edge router serves uploaded files from S3
  * and forwards everything else to the server.
  *
- * The build runs through `@alchemy.run/cloudflare-frameworks/nuxt` with the
- * `@alchemy.run/cloudflare-frameworks/nuxt/aws` deploy target (nitro's `aws-lambda` preset,
+ * The build runs through `@alchemy.run/web-frameworks/nuxt` with the
+ * `@alchemy.run/web-frameworks/nuxt/aws` deploy target (nitro's `aws-lambda` preset,
  * streaming enabled) — both must be installed in your project.
  *
  * @resource

@@ -13,7 +13,7 @@
     "astro": "catalog:frameworks"
   },
   "devDependencies": {
-    "@alchemy.run/cloudflare-frameworks": "workspace:*",
+    "@alchemy.run/web-frameworks": "workspace:*",
     "alchemy": "workspace:*",
     "effect": "catalog:",
     "typescript": "catalog:"

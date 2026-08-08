@@ -1,6 +1,6 @@
 # @fixtures/astro-ssr
 
-E2e fixture for `@alchemy.run/cloudflare-frameworks/astro` exercising the **SSR-first path with
+E2e fixture for `@alchemy.run/web-frameworks/astro` exercising the **SSR-first path with
 an honored user config file**. Where `fixtures/astro` is mostly prerendered
 and fully programmatic (no `astro.config.*`), this fixture is the inverse: a
 **real `astro.config.mjs`** (`output: "server"`, redirects,

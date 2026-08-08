@@ -29,7 +29,7 @@
       "dependsOn": ["build", "^build"],
       "outputs": [".cache/**/*.tsbuildinfo", "**/.cache/**/*.tsbuildinfo"]
     },
-    "@alchemy.run/cloudflare-frameworks#typecheck": {
+    "@alchemy.run/web-frameworks#typecheck": {
       "dependsOn": ["build", "^build"],
       "outputs": [".cache/**/*.tsbuildinfo", "**/.cache/**/*.tsbuildinfo"]
     },
