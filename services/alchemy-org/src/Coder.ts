@@ -3,7 +3,7 @@
  *
  * ONE agent, ONE durable chat (`main`). You talk to it through the
  * local UI; it reads, searches, runs, and edits the workspace it was
- * pointed at. The thread survives server restarts (RunJournal), the
+ * pointed at. The thread survives server restarts (SqliteThreadStorage), the
  * transcript survives them too (ChatsSqlite), and the stance is
  * re-rendered every tick — so improving this agent is editing this
  * file and restarting.

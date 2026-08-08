@@ -19,7 +19,10 @@
  *   run ignores further input.
  */
 import * as AI from "@/AI/index.ts";
-import { DriverMemory } from "@/AI/DriverMemory.ts";
+import { DriverCore } from "@/AI/DriverCore.ts";
+import { MemoryThreadStorage } from "@/AI/ThreadStorage.ts";
+
+const InMemoryDriver = DriverCore.pipe(Layer.provide(MemoryThreadStorage));
 import { RuntimeContext } from "@/RuntimeContext.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Deferred from "effect/Deferred";
@@ -64,7 +67,7 @@ const testLayer = (
   capabilities: Layer.Layer<never, any, any>,
 ) =>
   Layer.mergeAll(
-    DriverMemory.pipe(Layer.provide(model.layer)),
+    InMemoryDriver.pipe(Layer.provide(model.layer)),
     capabilities,
     RuntimeContext.phantom,
   );
@@ -80,7 +83,7 @@ const interpret = (term: AI.Interpretable, charter: AI.Charter) =>
     Effect.flatMap(AI.Driver, (driver) => driver.interpret(term, charter)),
   );
 
-describe("DriverMemory", () => {
+describe("DriverCore (in-memory)", () => {
   it.effect("dispatch admits one item and resolves at quiescence", () => {
     const model = Model.make([
       () => [
@@ -166,7 +169,7 @@ describe("DriverMemory", () => {
       }).pipe(
         Effect.provide(
           Layer.mergeAll(
-            DriverMemory.pipe(Layer.provide(model.layer)),
+            InMemoryDriver.pipe(Layer.provide(model.layer)),
             search,
             RuntimeContext.phantom,
           ),
@@ -289,7 +292,7 @@ describe("DriverMemory", () => {
       // call 2: the lead reports
       () => [Model.text("Engineer patched the parser."), Model.finish()],
     ]);
-    const driver = DriverMemory.pipe(Layer.provide(model.layer));
+    const driver = InMemoryDriver.pipe(Layer.provide(model.layer));
     return Effect.gen(function* () {
       const lead = yield* interpret(Lead, LeadCharter);
       const answer = yield* lead.dispatch("The parser is broken");
@@ -362,7 +365,7 @@ describe("DriverMemory", () => {
       const ObserverLive = Layer.succeed(AI.RunObserver, {
         emit: (observation) => Effect.sync(() => void seen.push(observation)),
       });
-      const driver = DriverMemory.pipe(Layer.provide(model.layer));
+      const driver = InMemoryDriver.pipe(Layer.provide(model.layer));
       return Effect.gen(function* () {
         const lead = yield* interpret(Lead, LeadCharter);
         // the lead's final sampling is the replayed engineer step — its
@@ -782,7 +785,7 @@ Record the final ${result}.`((p) =>
     const ObserverLive = Layer.succeed(AI.RunObserver, {
       emit: (observation) => Effect.sync(() => void seen.push(observation)),
     });
-    const driver = DriverMemory.pipe(Layer.provide(model.layer));
+    const driver = InMemoryDriver.pipe(Layer.provide(model.layer));
     return Effect.gen(function* () {
       const lead = yield* interpret(Lead, LeadCharter);
       const answer = yield* lead.dispatch("Widget needed", { key: "job#1" });
@@ -860,7 +863,7 @@ Record the final ${result}.`((p) =>
     const ObserverLive = Layer.succeed(AI.RunObserver, {
       emit: (observation) => Effect.sync(() => void seen.push(observation)),
     });
-    const driver = DriverMemory.pipe(Layer.provide(model.layer));
+    const driver = InMemoryDriver.pipe(Layer.provide(model.layer));
     const doorCharter = Effect.gen(function* () {
       const task = AI.Parameter("task", S.String)`The work, standing alone.`;
       const handToEngineer = yield* AI.Dispatch(Engineer, "hand_to_engineer")`

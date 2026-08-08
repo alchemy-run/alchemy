@@ -176,7 +176,7 @@ export type RunObservation = ObservationEnvelope &
 
 /**
  * The driver's OBSERVABILITY seam — an optional service (the same
- * pattern as `WireMode`): when present in the context a driver is
+ * pattern as `ToolCalling`): when present in the context a driver is
  * interpreted in, every run lifecycle fact is emitted into it;
  * absent, the driver spends nothing. Emission is fire-and-forget —
  * an observer can never fail or slow a run.

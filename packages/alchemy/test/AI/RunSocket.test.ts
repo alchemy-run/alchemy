@@ -7,7 +7,10 @@
  * network beyond localhost, sub-second.
  */
 import * as AI from "@/AI/index.ts";
-import { DriverMemory } from "@/AI/DriverMemory.ts";
+import { DriverCore } from "@/AI/DriverCore.ts";
+import { MemoryThreadStorage } from "@/AI/ThreadStorage.ts";
+
+const InMemoryDriver = DriverCore.pipe(Layer.provide(MemoryThreadStorage));
 import { RuntimeContext } from "@/RuntimeContext.ts";
 import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
 import { describe, expect, it } from "alchemy-test";
@@ -74,7 +77,7 @@ const readAll = (stream: ReadableStream<unknown>) =>
     }
   });
 
-describe("RunSocket (DriverMemory)", () => {
+describe("RunSocket (DriverCore)", () => {
   it.live(
     "the memory driver serves the identical protocol: submit, live deltas, cursor resume",
     () => {
@@ -199,7 +202,7 @@ describe("RunSocket (DriverMemory)", () => {
           Researcher.make(ResearcherCharter).pipe(
             Layer.provideMerge(
               Layer.mergeAll(
-                DriverMemory.pipe(Layer.provide(model.layer)),
+                InMemoryDriver.pipe(Layer.provide(model.layer)),
                 search,
                 RuntimeContext.phantom,
               ),
@@ -324,7 +327,7 @@ describe("RunSocket (DriverMemory)", () => {
           Researcher.make(ResearcherCharter).pipe(
             Layer.provideMerge(
               Layer.mergeAll(
-                DriverMemory.pipe(Layer.provide(model.layer)),
+                InMemoryDriver.pipe(Layer.provide(model.layer)),
                 search,
                 RuntimeContext.phantom,
               ),

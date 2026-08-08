@@ -1,5 +1,5 @@
 /**
- * CODEMODE: the {@link WireMode} implementations that collapse a
+ * CODEMODE: the {@link ToolCalling} implementations that collapse a
  * tick's grants into ONE `eval` tool — the model writes CODE that
  * calls the granted capabilities and composes them with ordinary
  * control flow, instead of round-tripping every call through the
@@ -25,7 +25,11 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
 import * as AiTool from "effect/unstable/ai/Tool";
-import { WireMode, type WireGrant, type WirePresentation } from "./WireMode.ts";
+import {
+  ToolCalling,
+  type ToolGrant,
+  type ToolPresentation,
+} from "./ToolCalling.ts";
 
 /**
  * Codemode, EFFECT flavor: the model's code is the body of a function
@@ -147,7 +151,7 @@ const renderType = (schema: any, depth = 0): string => {
 
 /** One `declare function` line per grant, with its doc as a comment. */
 const renderSignature = (
-  grant: WireGrant,
+  grant: ToolGrant,
   wrap: (returns: string) => string,
 ): string => {
   const doc = grant.description
@@ -218,13 +222,13 @@ const makeCodeMode = (flavor: {
   readonly teach: (signatures: string) => string;
   readonly evaluate: (
     code: string,
-    grants: ReadonlyArray<WireGrant>,
+    grants: ReadonlyArray<ToolGrant>,
   ) => Effect.Effect<unknown, string>;
   readonly options?: CodeModeOptions;
 }) =>
-  Layer.succeed(WireMode, {
+  Layer.succeed(ToolCalling, {
     present: (grants) =>
-      Effect.sync((): WirePresentation => {
+      Effect.sync((): ToolPresentation => {
         const signatures = grants
           .map((grant) => renderSignature(grant, flavor.wrapReturn))
           .join("\n\n");

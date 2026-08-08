@@ -1,7 +1,7 @@
 /**
  * The coder, running on your machine — an Effectful
  * {@link LocalService.Vite} service hosting the agent as a detached
- * local process: the {@link Local} provide-list (DriverMemory with
+ * local process: the {@link Local} provide-list (DriverCore with
  * sqlite durability, the read/run/write toolbox) under the HTTP
  * surface (Routes.ts), with the UI built by Vite and served from the
  * same address.

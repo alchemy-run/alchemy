@@ -4,7 +4,10 @@
  * layered driver. One smoke test, gated on `ANTHROPIC_API_KEY` (run
  * via `doppler run -p alchemy-v2 -c dev -- bun run test …`).
  */
-import { DriverMemory } from "@/AI/DriverMemory.ts";
+import { DriverCore } from "@/AI/DriverCore.ts";
+import { MemoryThreadStorage } from "@/AI/ThreadStorage.ts";
+
+const InMemoryDriver = DriverCore.pipe(Layer.provide(MemoryThreadStorage));
 import { RuntimeContext } from "@/RuntimeContext.ts";
 import { AnthropicClient, AnthropicLanguageModel } from "@effect/ai-anthropic";
 import { describe, expect, it } from "alchemy-test";
@@ -32,7 +35,7 @@ const Anthropic = AnthropicLanguageModel.layer({
   Layer.provide(FetchHttpClient.layer),
 );
 
-describe("DriverMemory ⨯ Anthropic", () => {
+describe("DriverCore ⨯ Anthropic", () => {
   it.live.skipIf(!process.env.ANTHROPIC_API_KEY)(
     "runs the real loop: dispatch → tool → answer",
     () => {
@@ -60,7 +63,7 @@ describe("DriverMemory ⨯ Anthropic", () => {
           Researcher.make(ResearcherCharter).pipe(
             Layer.provideMerge(
               Layer.mergeAll(
-                DriverMemory.pipe(Layer.provide(Anthropic)),
+                InMemoryDriver.pipe(Layer.provide(Anthropic)),
                 search,
                 RuntimeContext.phantom,
               ),

@@ -1,5 +1,5 @@
 /**
- * The coder over LOCAL physics — the laptop provide-list: DriverMemory
+ * The coder over LOCAL physics — the laptop provide-list: DriverCore + SqliteThreadStorage
  * fibers with sqlite durability (threads, transcripts, refs), and the
  * read/run/write toolbox on the process's own FileSystem/shell over
  * ONE fixed workspace.

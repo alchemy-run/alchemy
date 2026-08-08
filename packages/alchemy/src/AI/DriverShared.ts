@@ -1,7 +1,7 @@
 /**
  * Substrate-INDEPENDENT driver internals — the pieces every `Driver`
  * implementation shares regardless of where its runs live (an
- * in-process `Map` for {@link DriverMemory}, Durable Objects for
+ * in-process `Map` on the resident host, Durable Objects for
  * `DriverCloudflare`). These are pure functions of a charter's terms:
  * rendering a capability's tagged template, compiling `AI.Tool`s and
  * the intrinsics into effect-AI tools, and the message shapes the

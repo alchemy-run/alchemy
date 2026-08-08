@@ -131,7 +131,7 @@ export const handleRunSocketFrame =
  * `Upgrade: websocket` request to the run named `term/key`, where the
  * {@link RunSocketServerFrame} protocol is spoken. Provided BY the
  * driver Layer — `DriverCloudflare` routes into the run's own Durable
- * Object; `DriverMemory` serves the socket in-process.
+ * Object; `DriverCore`'s resident host serves the socket in-process.
  *
  * ```ts
  * const gateway = yield* AI.AgentGateway;

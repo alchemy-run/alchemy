@@ -1,4 +1,5 @@
 export * from "./BunSQLite.ts";
+export * from "./ThreadStorage.ts";
 export * from "./libSQL.ts";
 export * from "./SQLite.ts";
 export * from "./SQLiteConnection.ts";

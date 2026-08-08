@@ -7,13 +7,11 @@ import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Schedule from "effect/Schedule";
 import * as S from "effect/Schema";
-import * as Stream from "effect/Stream";
 import { isAiError, type AiError } from "effect/unstable/ai/AiError";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import * as Prompt from "effect/unstable/ai/Prompt";
-import * as Response from "effect/unstable/ai/Response";
 import * as AiTool from "effect/unstable/ai/Tool";
-import * as Toolkit from "effect/unstable/ai/Toolkit";
+import type * as Toolkit from "effect/unstable/ai/Toolkit";
 import { makeProcessScope, runOnHost } from "../Local/Process.ts";
 import * as PersistentRef from "../PersistentRef.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
@@ -31,7 +29,6 @@ import {
 import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { RunObserver, type RunObservation } from "./Observer.ts";
-import { RunJournal } from "./RunJournal.ts";
 import {
   AgentGateway,
   handleRunSocketFrame,
@@ -69,12 +66,20 @@ import {
   type TickService,
 } from "./Thread.ts";
 import { isTool, isToolImpl, type Tool } from "./Tool.ts";
-import { WireMode, type WirePresentation } from "./WireMode.ts";
+import {
+  ThreadStorage,
+  type ThreadHandle,
+  type RunMeta,
+} from "./ThreadStorage.ts";
+import { ToolCalling, type ToolPresentation } from "./ToolCalling.ts";
 
 /** `Omit` distributed over a union (plain `Omit` collapses it). */
 type DistributiveOmit<T, K extends PropertyKey> = T extends any
   ? Omit<T, K>
   : never;
+
+/** The thread crosses storage in its ENCODED form — rows are JSON. */
+const encodeMessages = S.encodeSync(S.Array(Prompt.Message));
 
 /**
  * One mailbox delivery: the input plus, for a `dispatch`, the waiter
@@ -103,12 +108,13 @@ interface RunState {
   readonly settled: Deferred.Deferred<unknown>;
   /** World identity (`owner/repo#7`) or driver-minted. */
   readonly key: string;
+  /** The run's storage — thread, observation log, meta all live
+   *  behind this handle (the `ThreadStorage` seam decides the substrate). */
+  readonly handle: ThreadHandle;
   /** Skills this run has activated (effective when also mentioned). */
   readonly active: Set<string>;
   /** Samplings performed so far. */
   tick: number;
-  /** The thread — everything after the (separate) frozen head. */
-  prompt: Prompt.Prompt;
   /** The run's TURN, produced by its own charter init — a constant
    *  fragment lifted to an Effect, or a function of the tick event. */
   turn?: Turn | TurnFn;
@@ -118,9 +124,6 @@ interface RunState {
   readonly pendingNotes: Array<Fragment>;
   /** Next observation sequence number (the observer's cursor). */
   observed: number;
-  /** The DURABLE observation log — this run's own projection, what a
-   *  socket's `subscribe {fromSeq}` replays (ring-buffered). */
-  readonly log: Array<RunObservation>;
   /** Attached run sockets — each entry sends one wire frame. */
   readonly sockets: Set<(frame: RunSocketServerFrame) => Effect.Effect<void>>;
   /** The last rendered stance — what `spawn`/`skill` grant from. */
@@ -138,10 +141,9 @@ interface RunState {
     { readonly key: string; readonly actor: Actor }
   >;
   /**
-   * The run's `PersistentRef.Store` — on this in-memory driver a
-   * plain Map, exactly as durable as the run itself (the substrate's
-   * durability IS its lifetime). The durable driver implements the
-   * same contract over DO storage.
+   * The run's `PersistentRef.Store` — absent an ambient store, a
+   * plain Map exactly as durable as the process. Swap the store Layer
+   * (sqlite locally, DO storage in the cloud) for durable refs.
    */
   readonly stateStore: PersistentRef.StoreService;
 }
@@ -153,10 +155,20 @@ interface TickResult {
 }
 
 /**
- * The in-memory Driver: the smallest interpreter that makes a charter
- * LIVE. One Layer, one requirement (`LanguageModel`) — every other
- * capability (durability, tracing, passivation, scheduling) is a Layer
- * to be added around it later, never a feature of the loop.
+ * THE driver — the shared interpreter that makes a charter LIVE,
+ * written once against two seams:
+ *
+ * - {@link ThreadStorage} — where a run's durable facts live (thread,
+ *   observation log, meta). `MemoryThreadStorage` for ephemeral runs,
+ *   `SqliteThreadStorage` for a durable local process, DO storage on
+ *   Cloudflare.
+ * - {@link Model} — one model call (streaming, retry policy,
+ *   malformed budget). Defaults over the ambient `LanguageModel`.
+ *
+ * The HOST here is the resident one: each run is a forked fiber that
+ * parks on its inbox — right for anything process-shaped (dev
+ * machine, server). The Durable Object host in `DriverCloudflare`
+ * replaces the resident loop with event-kicked bursts.
  *
  * What `interpret(term, charter)` builds:
  *
@@ -198,11 +210,18 @@ interface TickResult {
  * outside; a settled run ignores further input and answers late
  * dispatches with its outcome. Transient sampling/turn failures retry
  * with capped backoff before failing the run.
+ *
+ * Durability is WRITE-THROUGH: every input, note, and response row
+ * lands in the run's {@link ThreadHandle} the moment it exists, and
+ * every durable observation persists its meta with it. Restore at
+ * interpret brings persisted runs back PARKED — threads primed, seq
+ * cursor continued — while the BEHAVIOR (charter code, tools) rebuilds
+ * from current code.
  */
-export const DriverMemory: Layer.Layer<
+export const DriverCore: Layer.Layer<
   Driver | AgentGateway,
   never,
-  LanguageModel.LanguageModel
+  LanguageModel.LanguageModel | ThreadStorage
 > = Layer.effectContext(
   Effect.gen(function* () {
     /** term → the socket door its `interpret` registered. */
@@ -214,9 +233,11 @@ export const DriverMemory: Layer.Layer<
       }
     >();
     const languageModel = yield* LanguageModel.LanguageModel;
+    const threadStorage = yield* ThreadStorage;
     // Process-lifetime forks (run loops, remind, sockets): under a
-    // Platform Host these survive `Effect.provide` of OrgLocal; in
-    // unit tests they ride the ambient Scope wrapping the test body.
+    // Platform Host these survive `Effect.provide` of the org layer;
+    // in unit tests they ride the ambient Scope wrapping the test
+    // body.
     const process = yield* makeProcessScope;
 
     const interpret = (term: Interpretable, charter: Charter) =>
@@ -224,48 +245,29 @@ export const DriverMemory: Layer.Layer<
         const context = yield* Effect.context<never>();
         const termName = term["~alchemy/Name"];
 
-        // the observability seam (same pattern as WireMode): when an
+        // the observability seam (same pattern as ToolCalling): when an
         // observer is present, run lifecycle facts flow into it —
         // fire-and-forget, an observer can never fail or slow a run.
         // Each run's observations carry a monotonic `seq`, the
         // catch-up cursor consumers dedupe and resume by.
         const observer = Context.getOption(context, RunObserver);
-        // the durability seams (both optional — see RunJournal.ts):
         // an ambient PersistentRef.Store makes charter refs durable
-        // (the run frame isolates keys); a RunJournal makes THREADS
-        // durable — saved at park/crash, removed at settle, restored
-        // parked at interpret.
+        // (the run frame isolates keys)
         const ambientStore = Context.getOption(context, PersistentRef.Store);
-        const journal = Context.getOption(context, RunJournal);
-        // the MODEL seam (driver-assembly.md §3): a user driver
-        // provides its own (retry/budget/tiering policy lives inside
-        // it); absent, the default over this driver's LanguageModel.
+        // the MODEL seam: a user driver provides its own (retry,
+        // budget, and tiering policy live inside it); absent, the
+        // default over this driver's LanguageModel.
         const model = Option.getOrElse(Context.getOption(context, Model), () =>
           makeModel(languageModel),
         );
-        const saveSnapshot = (run: RunState): Effect.Effect<void> =>
-          Option.isNone(journal)
-            ? Effect.void
-            : Effect.suspend(() =>
-                journal.value.save({
-                  term: termName,
-                  key: run.key,
-                  tick: run.tick,
-                  observed: run.observed,
-                  active: [...run.active],
-                  prompt: S.encodeSync(Prompt.Prompt)(run.prompt),
-                  log: [...run.log],
-                }),
-              ).pipe(
-                // persistence must never crash or slow a run — a
-                // failed save costs restart fidelity, not the round
-                Effect.catchCause((cause) =>
-                  Effect.logWarning(
-                    `RunJournal save failed for '${run.key}' of '${termName}'`,
-                    cause,
-                  ),
-                ),
-              );
+
+        /** The run's meta as the handle persists it. */
+        const metaOf = (run: RunState): RunMeta => ({
+          tick: run.tick,
+          observed: run.observed,
+          active: [...run.active],
+        });
+
         const observe = (
           run: RunState,
           observation: DistributiveOmit<
@@ -274,8 +276,8 @@ export const DriverMemory: Layer.Layer<
           >,
         ): Effect.Effect<void> =>
           Effect.gen(function* () {
-            // live facts (deltas, in-flight tool calls) never log and
-            // never advance the cursor — same split as the CF driver
+            // live facts (deltas, in-flight tool calls) never persist
+            // and never advance the cursor
             const live = isLiveObservation(observation.type);
             const full = {
               ...observation,
@@ -285,9 +287,18 @@ export const DriverMemory: Layer.Layer<
               at: Date.now(),
             } as RunObservation;
             if (!live) {
-              run.log.push(full);
-              // ring: mirror ChatsMemory's eviction policy
-              if (run.log.length > 2000) run.log.splice(0, 500);
+              // the durable row and its cursor persist together —
+              // a failed write costs restart fidelity, not the round
+              yield* run.handle
+                .appendObservation(full, metaOf(run))
+                .pipe(
+                  Effect.catchCause((cause) =>
+                    Effect.logWarning(
+                      `ThreadStorage append failed for '${run.key}' of '${termName}'`,
+                      cause,
+                    ),
+                  ),
+                );
             }
             if (run.sockets.size > 0) {
               const frame: RunSocketServerFrame = {
@@ -304,13 +315,35 @@ export const DriverMemory: Layer.Layer<
             }
           });
 
+        /** Append thread rows, tolerating (and logging) a failed
+         *  write — persistence must never crash a round. */
+        const appendThread = (
+          run: RunState,
+          messages: ReadonlyArray<Prompt.MessageEncoded>,
+        ): Effect.Effect<void> =>
+          messages.length === 0
+            ? Effect.void
+            : run.handle
+                .appendMessages(messages)
+                .pipe(
+                  Effect.catchCause((cause) =>
+                    Effect.logWarning(
+                      `ThreadStorage append failed for '${run.key}' of '${termName}'`,
+                      cause,
+                    ),
+                  ),
+                );
+
         // ── the run-scoped AI.Thread / AI.Tick services ─────────────
         const makeThreadService = (run: RunState): ThreadService => ({
           key: run.key,
-          tokens: Effect.sync(() =>
-            Math.ceil(JSON.stringify(run.prompt.content).length / 4),
+          tokens: Effect.map(run.handle.messages, (rows) =>
+            Math.ceil(JSON.stringify(rows).length / 4),
           ),
-          entries: Effect.sync(() => run.prompt.content),
+          entries: Effect.map(
+            run.handle.messages,
+            (rows) => Prompt.make([...rows]).content,
+          ),
           compact: (plan) =>
             Effect.sync(() => {
               run.pendingCompaction = plan;
@@ -324,12 +357,12 @@ export const DriverMemory: Layer.Layer<
                 yield* Deferred.succeed(waiter, value);
               }
             }),
-          // the driver's CLOCK, fused to the run's lifetime: on this
-          // in-memory driver runs live as long as the process, so a
+          // the driver's CLOCK, fused to the run's lifetime: on the
+          // resident host runs live as long as the process, so a
           // process-scoped fiber is exactly as durable as the run —
-          // a DO-backed driver implements the same contract with an
-          // alarm. Delivery is an ordinary inbox message: a wake if
-          // parked, queued if busy, dropped if settled.
+          // the DO host implements the same contract with an alarm.
+          // Delivery is an ordinary inbox message: a wake if parked,
+          // queued if busy, dropped if settled.
           remind: (delay, note) =>
             process.fork(
               Effect.sleep(delay).pipe(
@@ -433,7 +466,7 @@ export const DriverMemory: Layer.Layer<
             const service = Context.getOption(context, compiled.term as any);
             if (Option.isNone(service)) {
               return yield* Effect.die(
-                `DriverMemory: no implementation provided for tool '${name}' of '${termName}' — provide the tool's Layer or splice an inline impl`,
+                `DriverCore: no implementation provided for tool '${name}' of '${termName}' — provide the tool's Layer or splice an inline impl`,
               );
             }
             // the tool contract: the service IS the callable (a Layer
@@ -464,7 +497,7 @@ export const DriverMemory: Layer.Layer<
             const service = Context.getOption(context, skill as any);
             if (Option.isNone(service)) {
               return yield* Effect.die(
-                `DriverMemory: no implementation provided for skill '${skillName}' referenced by '${termName}'`,
+                `DriverCore: no implementation provided for skill '${skillName}' referenced by '${termName}'`,
               );
             }
             // the IMPLEMENTATION carries the teaching: prose, spliced
@@ -478,7 +511,7 @@ export const DriverMemory: Layer.Layer<
               const resolved = impl.tools[name];
               if (resolved === undefined) {
                 return yield* Effect.die(
-                  `DriverMemory: skill '${skillName}' implementation provides no tool '${name}'`,
+                  `DriverCore: skill '${skillName}' implementation provides no tool '${name}'`,
                 );
               }
               handlers[name] = resolved;
@@ -504,7 +537,7 @@ export const DriverMemory: Layer.Layer<
             const service = Context.getOption(context, agent as any);
             if (Option.isNone(service)) {
               return yield* Effect.die(
-                `DriverMemory: no implementation provided for agent '${name}' referenced by '${termName}'`,
+                `DriverCore: no implementation provided for agent '${name}' referenced by '${termName}'`,
               );
             }
             const actor = service.value as Actor;
@@ -613,12 +646,11 @@ export const DriverMemory: Layer.Layer<
               waiters: [],
               settled: yield* Deferred.make<unknown>(),
               key,
+              handle: yield* threadStorage.open(termName, key),
               active: new Set<string>(),
               tick: 0,
-              prompt: Prompt.empty,
               pendingNotes: [],
               observed: 0,
-              log: [],
               sockets: new Set(),
               children: new Map(),
               // an ambient store (org-provided sqlite, DO storage)
@@ -637,31 +669,38 @@ export const DriverMemory: Layer.Layer<
          * (restorable eviction — nothing is silently rewritten); reset
          * restarts the thread from one summary note.
          */
-        const applyCompaction = (run: RunState): void => {
-          const plan = run.pendingCompaction;
-          if (plan === undefined) return;
-          run.pendingCompaction = undefined;
-          if ("reset" in plan) {
-            run.prompt = Prompt.make([
-              noteMessage(
-                `The thread was compacted; it restarts from this summary of prior work:\n${plan.reset.summary}`,
-              ),
-            ]);
-            return;
-          }
-          const messages = run.prompt.content;
-          const kept = messages.filter((entry, i) => !plan.drop(entry, i));
-          const dropped = messages.length - kept.length;
-          if (dropped === 0) return;
-          run.prompt = Prompt.concat(
-            Prompt.make([
+        const applyCompaction = (run: RunState): Effect.Effect<void> =>
+          Effect.gen(function* () {
+            const plan = run.pendingCompaction;
+            if (plan === undefined) return;
+            run.pendingCompaction = undefined;
+            if ("reset" in plan) {
+              yield* run.handle.replaceMessages([
+                noteMessage(
+                  `The thread was compacted; it restarts from this summary of prior work:\n${plan.reset.summary}`,
+                ),
+              ]);
+              return;
+            }
+            const rows = yield* run.handle.messages;
+            const decoded = Prompt.make([...rows]).content;
+            const kept: Array<Prompt.MessageEncoded> = [];
+            let dropped = 0;
+            for (let index = 0; index < decoded.length; index++) {
+              if (plan.drop(decoded[index]!, index)) {
+                dropped++;
+              } else {
+                kept.push(rows[index]!);
+              }
+            }
+            if (dropped === 0) return;
+            yield* run.handle.replaceMessages([
               asUserMessage(
                 `[${dropped} earlier message${dropped === 1 ? "" : "s"} archived by compaction]`,
               ),
-            ]),
-            Prompt.fromMessages(kept),
-          );
-        };
+              ...kept,
+            ]);
+          });
 
         /** The per-run `skill` switch — activation is the run's act. */
         const skillSwitch =
@@ -782,12 +821,12 @@ export const DriverMemory: Layer.Layer<
             );
             if (Effect.isEffect(result)) {
               return yield* Effect.die(
-                `DriverMemory: the turn of '${termName}' (run '${run.key}') returned an Effect — did you forget to yield* an AI.prose?`,
+                `DriverCore: the turn of '${termName}' (run '${run.key}') returned an Effect — did you forget to yield* an AI.prose?`,
               );
             }
             if (!isFragment(result)) {
               return yield* Effect.die(
-                `DriverMemory: the turn of '${termName}' (run '${run.key}') returned a non-Fragment value — turns return the stance; answer callers with AI.reply`,
+                `DriverCore: the turn of '${termName}' (run '${run.key}') returned a non-Fragment value — turns return the stance; answer callers with AI.reply`,
               );
             }
             const stance = yield* renderStance(run, result);
@@ -899,10 +938,10 @@ export const DriverMemory: Layer.Layer<
               ...activeTools,
               ...doorTools,
             ]);
-            const wireMode = Context.getOption(context, WireMode);
-            const wire: WirePresentation =
-              Option.isSome(wireMode) && capabilityTools.length > 0
-                ? yield* wireMode.value.present(
+            const toolCalling = Context.getOption(context, ToolCalling);
+            const wire: ToolPresentation =
+              Option.isSome(toolCalling) && capabilityTools.length > 0
+                ? yield* toolCalling.value.present(
                     capabilityTools.map((tool) => ({
                       name: tool.name,
                       description: AiTool.getDescription(tool) ?? "",
@@ -1014,15 +1053,11 @@ export const DriverMemory: Layer.Layer<
               let items: Array<InboxItem> = yield* Queue.clear(run.inbox);
               if (items.length === 0 && quiescent) {
                 // PARKED: the run's work is done until the world moves.
-                // Quiet inputs deliberately DON'T factor in — they
-                // accumulate as context and never wake a parked run.
+                // Everything durable is already written through the
+                // handle, so parking is just waiting. Quiet inputs
+                // deliberately DON'T factor in — they accumulate as
+                // context and never wake a parked run.
                 yield* observe(run, { type: "parked" });
-                // the durability point of the restart surface: a
-                // parked thread survives the process. Saved AFTER the
-                // parked observation so the snapshot's seq cursor
-                // includes it — a restored run must never re-issue an
-                // already-used seq (consumers dedupe by seq).
-                yield* saveSnapshot(run);
                 const wake = yield* Effect.raceFirst(
                   Effect.map(Queue.take(run.inbox), (item) => ({
                     settled: false as const,
@@ -1040,7 +1075,7 @@ export const DriverMemory: Layer.Layer<
               items = [...run.quiet.splice(0), ...items];
               // boundary work: requested compaction applies BEFORE the
               // new inputs join the thread, so nothing fresh is lost
-              applyCompaction(run);
+              yield* applyCompaction(run);
               // drained waiters JOIN THE ROUND: only now are they
               // answerable — by AI.reply, or by quiescence as fallback
               const drained: Array<{
@@ -1053,7 +1088,7 @@ export const DriverMemory: Layer.Layer<
               }
               const inputs = drained.map((item) => item.value);
               for (const { value, kind } of drained) {
-                run.prompt = Prompt.concat(run.prompt, [asUserMessage(value)]);
+                yield* appendThread(run, [asUserMessage(value)]);
                 yield* observe(run, {
                   type: "input",
                   text:
@@ -1073,7 +1108,7 @@ export const DriverMemory: Layer.Layer<
                   ...note.refs,
                 ]);
                 if (text.length === 0) continue;
-                run.prompt = Prompt.concat(run.prompt, [noteMessage(text)]);
+                yield* appendThread(run, [noteMessage(text)]);
                 yield* observe(run, {
                   type: "input",
                   text: `<note>\n${text}\n</note>`,
@@ -1081,11 +1116,12 @@ export const DriverMemory: Layer.Layer<
                 });
               }
               const startedAt = yield* Effect.sync(() => Date.now());
+              const thread = Prompt.make([...(yield* run.handle.messages)]);
               const response = yield* model
                 .step({
                   prompt: Prompt.concat(
                     Prompt.make([{ role: "system", content: tick.system }]),
-                    run.prompt,
+                    thread,
                   ),
                   toolkit: tick.toolkit,
                   onLive: (part) =>
@@ -1109,7 +1145,7 @@ export const DriverMemory: Layer.Layer<
                   // crash: nothing was executed, so tell the model what
                   // was wrong and let it re-issue. Bounded — a model that
                   // keeps emitting invalid calls crashes with the real
-                  // error after the model's streak budget.
+                  // error after the Model's streak budget.
                   Effect.catchIf(
                     (error): error is AiError =>
                       isAiError(error) &&
@@ -1128,7 +1164,7 @@ export const DriverMemory: Layer.Layer<
                   `your last response included a tool call with INVALID ` +
                   `parameters — NOTHING was executed:\n${response.malformed}\n` +
                   `Re-issue the call with parameters matching the tool's schema.`;
-                run.prompt = Prompt.concat(run.prompt, [noteMessage(text)]);
+                yield* appendThread(run, [noteMessage(text)]);
                 yield* observe(run, {
                   type: "input",
                   text: `<note>\n${text}\n</note>`,
@@ -1169,10 +1205,13 @@ export const DriverMemory: Layer.Layer<
                 });
               }
               run.tick++;
-              run.prompt = Prompt.concat(
-                run.prompt,
-                Prompt.fromResponseParts(response.content),
+              yield* appendThread(
+                run,
+                encodeMessages(
+                  Prompt.fromResponseParts(response.content).content,
+                ),
               );
+              yield* run.handle.putMeta(metaOf(run)).pipe(Effect.ignore);
               quiescent = response.toolCalls.length === 0;
               if (quiescent) {
                 for (const waiter of run.waiters.splice(0)) {
@@ -1184,12 +1223,8 @@ export const DriverMemory: Layer.Layer<
             // current round's waiters AND undrained arrivals alike
             const outcome = yield* Deferred.await(run.settled);
             yield* observe(run, { type: "settled" });
-            // settled runs are never restored — drop the journal row
-            if (Option.isSome(journal)) {
-              yield* journal.value
-                .remove(termName, run.key)
-                .pipe(Effect.ignore);
-            }
+            // settled runs are never restored — drop the persisted row
+            yield* threadStorage.remove(termName, run.key).pipe(Effect.ignore);
             for (const item of yield* Queue.clear(run.inbox)) {
               if (item.waiter !== undefined) run.waiters.push(item.waiter);
             }
@@ -1239,14 +1274,13 @@ export const DriverMemory: Layer.Layer<
                         exit.cause,
                       );
                       const crash = describeCrash(exit.cause);
+                      // the crash note is durable — crashed threads
+                      // restore parked; the next input resumes
                       yield* observe(run, {
                         type: "crashed",
                         error: crash.encoded,
                         fatal: !crash.encoded.retryable,
                       });
-                      // crashed threads restore parked — the crash
-                      // note is in the log; the next input resumes
-                      yield* saveSnapshot(run);
                       for (const waiter of run.waiters.splice(0)) {
                         yield* Deferred.done(waiter, exit as Exit.Exit<never>);
                       }
@@ -1268,11 +1302,6 @@ export const DriverMemory: Layer.Layer<
             ),
           );
 
-        /**
-         * Admit one item: on first sight of a key, run the CHARTER for
-         * that run (per-run init — the closure is the instance), then
-         * start its loop.
-         */
         /** Create-or-get a run WITHOUT admitting input — the run's
          *  init and loop start; the inbox stays untouched. This is
          *  what a socket ATTACH uses: observing a run must not feed
@@ -1299,7 +1328,7 @@ export const DriverMemory: Layer.Layer<
                   : typeof initResult === "function"
                     ? (initResult as TurnFn)
                     : yield* Effect.die(
-                        `DriverMemory: the charter for '${termName}' returned neither prose, a turn effect, nor a turn function`,
+                        `DriverCore: the charter for '${termName}' returned neither prose, a turn effect, nor a turn function`,
                       );
               yield* startLoop(run, actorTick);
               runs.set(runKey, run);
@@ -1401,48 +1430,43 @@ export const DriverMemory: Layer.Layer<
         // (level-triggered: the next tick renders the new stance).
         // No `admitted` observation: the projection already has the
         // run's history; restored runs emit nothing until they wake.
-        if (Option.isSome(journal)) {
-          const snapshots = yield* journal.value
-            .restore(termName)
+        {
+          const persisted = yield* threadStorage
+            .keys(termName)
             .pipe(
               Effect.catchCause((cause) =>
                 Effect.as(
                   Effect.logWarning(
-                    `RunJournal restore failed for '${termName}'`,
+                    `ThreadStorage restore failed for '${termName}'`,
                     cause,
                   ),
-                  [],
+                  [] as ReadonlyArray<string>,
                 ),
               ),
             );
-          if (snapshots.length > 0) {
+          if (persisted.length > 0) {
             yield* Effect.logInfo(
-              `Driver '${termName}': restoring ${snapshots.length} run(s) from the journal`,
+              `Driver '${termName}': restoring ${persisted.length} run(s) from storage`,
             );
           }
-          for (const snapshot of snapshots) {
-            if (runs.has(snapshot.key)) continue;
-            const restored = yield* Effect.try({
-              try: () => ({
-                prompt: S.decodeUnknownSync(Prompt.Prompt)(snapshot.prompt),
-              }),
-              catch: (error) => error,
-            }).pipe(
-              Effect.tapCause((cause) =>
-                Effect.logWarning(
-                  `RunJournal: snapshot for '${snapshot.key}' of '${termName}' failed to decode — starting without it`,
-                  cause,
+          for (const runKey of persisted) {
+            if (runs.has(runKey)) continue;
+            const run = yield* makeRunState(runKey);
+            const meta = yield* run.handle.meta.pipe(
+              Effect.catchCause((cause) =>
+                Effect.as(
+                  Effect.logWarning(
+                    `ThreadStorage: meta for '${runKey}' of '${termName}' failed to read — starting without it`,
+                    cause,
+                  ),
+                  undefined,
                 ),
               ),
-              Effect.option,
             );
-            if (Option.isNone(restored)) continue;
-            const run = yield* makeRunState(snapshot.key);
-            run.tick = snapshot.tick;
-            run.observed = snapshot.observed;
-            run.prompt = restored.value.prompt;
-            for (const skill of snapshot.active) run.active.add(skill);
-            run.log.push(...snapshot.log);
+            if (meta === undefined) continue;
+            run.tick = meta.tick;
+            run.observed = meta.observed;
+            for (const skill of meta.active) run.active.add(skill);
             const initResult = yield* provideInit(run)(
               charter as Effect.Effect<unknown, unknown>,
             ).pipe(Effect.orDie);
@@ -1453,7 +1477,7 @@ export const DriverMemory: Layer.Layer<
                 : typeof initResult === "function"
                   ? (initResult as TurnFn)
                   : yield* Effect.die(
-                      `DriverMemory: the charter for '${termName}' returned neither prose, a turn effect, nor a turn function`,
+                      `DriverCore: the charter for '${termName}' returned neither prose, a turn effect, nor a turn function`,
                     );
             // The run is REGISTERED synchronously (admits/ensures find
             // its inbox and queue into it), but the loop start must
@@ -1467,9 +1491,9 @@ export const DriverMemory: Layer.Layer<
             yield* runOnHost(startLoop(run, actorTick)).pipe(
               Effect.asVoid,
             ) as Effect.Effect<void>;
-            runs.set(snapshot.key, run);
+            runs.set(runKey, run);
             yield* Effect.logInfo(
-              `Driver '${termName}': restored run '${snapshot.key}' parked at tick ${snapshot.tick}`,
+              `Driver '${termName}': restored run '${runKey}' parked at tick ${meta.tick}`,
             );
           }
         }
@@ -1480,7 +1504,7 @@ export const DriverMemory: Layer.Layer<
      * The local {@link AgentGateway}: the SAME protocol the Cloudflare
      * driver speaks from its Durable Objects, served in-process — a
      * WebSocket upgrade on the host's own HTTP server, replay from
-     * the run's in-memory log, live broadcast from `observe`.
+     * the run's handle, live broadcast from `observe`.
      */
     // socket-serving fibers live on the process Scope — never on the
     // HTTP request that carried the upgrade: Bun counts an unresolved
@@ -1495,7 +1519,7 @@ export const DriverMemory: Layer.Layer<
         const host = socketHosts.get(term);
         if (host === undefined) {
           return yield* Effect.die(
-            `DriverMemory: no interpreted term '${term}' to attach to — has its Layer been built?`,
+            `DriverCore: no interpreted term '${term}' to attach to — has its Layer been built?`,
           );
         }
         const run = yield* host.ensure(key);
@@ -1508,10 +1532,7 @@ export const DriverMemory: Layer.Layer<
             ) as Effect.Effect<void>;
           const handle = handleRunSocketFrame(
             {
-              replay: (fromSeq) =>
-                Effect.sync(() =>
-                  run.log.filter((observation) => observation.seq >= fromSeq),
-                ),
+              replay: (fromSeq) => run.handle.observations(fromSeq),
               watermark: Effect.sync(() => run.observed),
               submit: (input) => host.submit(key, input),
             },

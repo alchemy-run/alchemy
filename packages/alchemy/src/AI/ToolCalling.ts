@@ -1,7 +1,7 @@
 /**
  * The WIRE seam: how a tick's granted capabilities are PRESENTED to
  * the model. Mention-is-presence stays the semantics either way — the
- * stance decides WHAT exists this tick; a `WireMode` decides how those
+ * stance decides WHAT exists this tick; a `ToolCalling` decides how those
  * grants appear on the wire.
  *
  * Absent (the default): direct tool-calling — every grant is its own
@@ -31,7 +31,7 @@ import type * as AiTool from "effect/unstable/ai/Tool";
  * schemas for input and RETURN (from the Tool's `returns` schema —
  * `AI.Tool("readDiff", S.String)`), and the live handler.
  */
-export interface WireGrant {
+export interface ToolGrant {
   readonly name: string;
   readonly description: string;
   /** JSON schema of the tool's input object. */
@@ -42,18 +42,19 @@ export interface WireGrant {
 }
 
 /** The transformed wire surface: provider tools + their handlers. */
-export interface WirePresentation {
+export interface ToolPresentation {
   readonly tools: ReadonlyArray<AiTool.Any>;
   readonly handlers: Record<string, (input: any) => Effect.Effect<any, any>>;
 }
 
-export interface WireModeService {
+export interface ToolCallingService {
   /** Present this tick's grants — called at every sampling boundary. */
   readonly present: (
-    grants: ReadonlyArray<WireGrant>,
-  ) => Effect.Effect<WirePresentation>;
+    grants: ReadonlyArray<ToolGrant>,
+  ) => Effect.Effect<ToolPresentation>;
 }
 
-export class WireMode extends Context.Service<WireMode, WireModeService>()(
-  "alchemy/AI/WireMode",
-) {}
+export class ToolCalling extends Context.Service<
+  ToolCalling,
+  ToolCallingService
+>()("alchemy/AI/ToolCalling") {}
