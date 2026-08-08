@@ -1,6 +1,6 @@
 /**
  * Substrate-INDEPENDENT driver internals — the pieces every `Driver`
- * implementation shares regardless of where its runs live (an
+ * implementation shares regardless of where its sessions live (an
  * in-process `Map` on the resident host, Durable Objects for
  * `DriverCloudflare`). These are pure functions of a charter's terms:
  * rendering a capability's tagged template, compiling `AI.Tool`s and
@@ -9,7 +9,7 @@
  *
  * Kept here (not duplicated per driver) so the two implementations
  * diverge ONLY where the substrate forces them to — the loop's
- * concurrency and the run's persistence — never in how a stance
+ * concurrency and the session's persistence — never in how a stance
  * becomes a toolkit. See designs/ai/driver-cloudflare.md.
  */
 import * as Cause from "effect/Cause";
@@ -205,15 +205,15 @@ export const compileTool = (term: Tool<any, any[]>) => {
  * `${Engineer}` and `${Reviewer}` in the rendered stance grant a
  * single `dispatch` affordance whose `agent` parameter is the CLOSED
  * set of mentioned names — the model can only reach agents the tick's
- * prose hired. The task must stand alone because the delegate's run is
+ * prose hired. The task must stand alone because the delegate's session is
  * its OWN conversation (fresh key, fresh transcript); the delegate
  * never sees the host's.
  *
  * `session` is the CALL/REPLY seam (the gen_server pattern): a
  * repeated dispatch with the same session continues the SAME worker
- * run — full context, same worktree — via the driver's
+ * session — full context, same worktree — via the driver's
  * admit-or-enqueue semantics. Sessions are namespaced under the
- * dispatching run's key, so two issues' "fix" sessions never collide.
+ * dispatching session's key, so two issues' "fix" sessions never collide.
  */
 export const compileDispatch = (names: ReadonlyArray<string>) =>
   AiTool.make("dispatch", {
@@ -291,7 +291,7 @@ export const compileSpawn = (
  * Compile the intrinsic `skill` tool: a stance's skill mentions are
  * ACCESS; this tool is ACTIVATION. Activating returns the skill's
  * prose (the documentation enters the conversation exactly when it is
- * needed) and enables its tools for the rest of the run; deactivating
+ * needed) and enables its tools for the rest of the session; deactivating
  * retires them — the agent manages its own working set.
  */
 export const compileSkillTool = (names: ReadonlyArray<string>) =>

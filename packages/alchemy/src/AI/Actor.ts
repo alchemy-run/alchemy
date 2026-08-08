@@ -1,17 +1,17 @@
 import type * as Effect from "effect/Effect";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 
-/** A reference to a driver run: which term, which key. */
-export interface RunRef {
+/** A reference to a driver session: which term, which key. */
+export interface SessionRef {
   readonly term: string;
   readonly key: string;
 }
 
 /**
  * The Actor — what the driver returns when it interprets any term's
- * charter: a mailbox with a serial run loop, spoken to only in the
- * actor verbs. Hand it work (`dispatch`/`send`), talk to a run
- * mid-flight (`steer`), resolve a run from the outside (`settle`).
+ * charter: a mailbox with a serial session loop, spoken to only in the
+ * actor verbs. Hand it work (`dispatch`/`send`), talk to a session
+ * mid-flight (`steer`), resolve a session from the outside (`settle`).
  *
  * Who may hold the Actor is a Layer decision. A PUBLIC {@link Agent}'s
  * tag IS its Actor — agents exist to be called. A sealed domain
@@ -25,30 +25,30 @@ export interface RunRef {
  * `unknown`. `settle` deliberately stays `unknown` — the outcome
  * belongs to the world, not to the charter's declarations.
  *
- * Runs are keyed at admission; `steer`/`settle` address them by that
+ * Sessions are keyed at admission; `steer`/`settle` address them by that
  * key.
  */
 export interface Actor<In = unknown> {
   /**
-   * Admit one work item and await its run's resolution (admit + join).
-   * `options.key` names the run (see {@link Actor.send}).
+   * Admit one work item and await its session's resolution (admit + join).
+   * `options.key` names the session (see {@link Actor.send}).
    */
   dispatch(
     item: In,
     options?: {
       readonly key?: string;
-      readonly parent?: RunRef;
+      readonly parent?: SessionRef;
     },
   ): Effect.Effect<unknown, never, RuntimeContext>;
   /**
    * Admit one work item, fire-and-forget (the admission half alone).
    *
-   * `options.key` is the run's CALLER-CHOSEN name — the world identity
-   * to correlate by (`owner/repo#7`). Naming the run is what makes
+   * `options.key` is the session's CALLER-CHOSEN name — the world identity
+   * to correlate by (`owner/repo#7`). Naming the session is what makes
    * `steer(key, …)` and `settle(key, …)` addressable from code that
    * never saw a driver-minted session.
    *
-   * `options.parent` records WHICH RUN caused this admission — the
+   * `options.parent` records WHICH SESSION caused this admission — the
    * driver's own `dispatch` intrinsic stamps it automatically, so
    * observability can reconstruct the delegation tree (issue desk →
    * engineer → …). Purely observational: it never affects routing.
@@ -57,36 +57,39 @@ export interface Actor<In = unknown> {
     item: In,
     options?: {
       readonly key?: string;
-      readonly parent?: RunRef;
+      readonly parent?: SessionRef;
       /**
        * `wake: false` delivers WITHOUT waking: the input lands in the
-       * run's thread durably, but a parked run stays parked — the
+       * session's thread durably, but a parked session stays parked — the
        * accumulated inputs are read on its next wake (an operator
-       * message, a reminder, a waking send), and a BUSY run picks
+       * message, a reminder, a waking send), and a BUSY session picks
        * them up at its next sampling boundary as usual. The
        * level-triggered delivery mode: events as CONTEXT, not
-       * triggers. Default `true` (a send wakes a parked run).
+       * triggers. Default `true` (a send wakes a parked session).
        */
       readonly wake?: boolean;
     },
   ): Effect.Effect<void, never, RuntimeContext>;
   /**
-   * Run-key–addressed input: deliver a message to a SPECIFIC run,
-   * promoted at the run's next boundary (wakes a parked run for
+   * Session-key–addressed input: deliver a message to a SPECIFIC session,
+   * promoted at the session's next boundary (wakes a parked session for
    * another work round).
    */
-  steer(runKey: string, input: In): Effect.Effect<void, never, RuntimeContext>;
-  /** Mid-run input to the active run, promoted at the next boundary. */
+  steer(
+    sessionKey: string,
+    input: In,
+  ): Effect.Effect<void, never, RuntimeContext>;
+  /** Mid-session input to the active session, promoted at the next boundary. */
   steer(input: In): Effect.Effect<void, never, RuntimeContext>;
   /**
-   * End a SPECIFIC run from the outside: the run resolves with `event`
-   * as its outcome. The caller that consumed the wire owns run endings
-   * — the driver just runs the loop. Settling a key with no live run
-   * is an idempotent no-op (the run may have settled already — the
+   * End a SPECIFIC session from the outside: the session resolves with `event`
+   * as its outcome. The caller that consumed the wire owns session endings
+   * — the driver just sessions the loop. Settling a key with no live session
+   * is an idempotent no-op (the session may have settled already — the
    * world outranks the org's beliefs).
    */
   settle(
-    runKey: string,
+    sessionKey: string,
     event: unknown,
   ): Effect.Effect<void, never, RuntimeContext>;
   /** Scope authority: settle in-flight work as interrupted. */

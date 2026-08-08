@@ -151,7 +151,7 @@ export const makeModel = (model: StreamingModel): ModelService => ({
               }
               case "tool-call": {
                 parts.push(part);
-                // surface the call NOW — its handler may run for
+                // surface the call NOW — its handler may session for
                 // minutes before the sampling completes
                 yield* onLive({
                   kind: "tool-call",

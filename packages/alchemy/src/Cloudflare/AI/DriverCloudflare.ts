@@ -1,7 +1,7 @@
 /**
  * The Cloudflare driver — the same `AI.Driver` contract as
- * `AI.DriverMemory`, with runs hosted on Durable Objects: ONE DO
- * instance per run (named `${term}/${key}`), the thread and inbox in
+ * `AI.DriverMemory`, with sessions hosted on Durable Objects: ONE DO
+ * instance per session (named `${term}/${key}`), the thread and inbox in
  * DO storage, `Thread.remind` on the DO alarm, actor verbs as RPC.
  *
  * Swapping substrates is one line:
@@ -31,13 +31,13 @@
  * isolate (`WorkerBridge.getSharedBuild`), and the class-level
  * `layers` slot IS that build. So the agent layers build on the DO
  * side too, their `interpret` calls record `term → {charter, captured
- * context}` in this driver's registrations, and the `AgentRuns` DO —
+ * context}` in this driver's registrations, and the `AgentSessions` DO —
  * declared here, discovered as a binding because the layer yields it
  * during init — closes over that same map. An activating DO parses its
- * own name and becomes that run.
+ * own name and becomes that session.
  *
- * Because the actor verbs are uniform, a door fired INSIDE a run RPCs
- * to the delegate's own DO: cross-run delegation is cross-DO by
+ * Because the actor verbs are uniform, a door fired INSIDE a session RPCs
+ * to the delegate's own DO: cross-session delegation is cross-DO by
  * construction.
  *
  * v1 (direct implementation — see designs/ai/driver-cloudflare.md):
@@ -63,7 +63,7 @@ import * as Prompt from "effect/unstable/ai/Prompt";
 import * as Response from "effect/unstable/ai/Response";
 import type * as AiTool from "effect/unstable/ai/Tool";
 import * as Toolkit from "effect/unstable/ai/Toolkit";
-import type { Actor, RunRef } from "../../AI/Actor.ts";
+import type { Actor, SessionRef } from "../../AI/Actor.ts";
 import { isAgent, type Agent } from "../../AI/Agent.ts";
 import { isDispatchTool, type DispatchTool } from "../../AI/Dispatch.ts";
 import { Refused, type DriverError } from "../../AI/Errors.ts";
@@ -94,9 +94,9 @@ import {
 } from "../../AI/DriverShared.ts";
 import { makeModel, Model } from "../../AI/Model.ts";
 import {
-  RunObserver,
+  SessionObserver,
   RoundAbandoned,
-  type RunObservation,
+  type SessionObservation,
 } from "../../AI/Observer.ts";
 import { isParameter } from "../../AI/Parameter.ts";
 import * as PersistentRef from "../../PersistentRef.ts";
@@ -104,10 +104,10 @@ import { makeDurableObjectStore } from "../Workers/PersistentRefStore.ts";
 import { dedentTemplate, isFragment, type Fragment } from "../../AI/Prose.ts";
 import {
   AgentGateway,
-  handleRunSocketFrame,
-  type RunSocketClientFrame,
-  type RunSocketServerFrame,
-} from "../../AI/RunSocket.ts";
+  handleSessionSocketFrame,
+  type SessionSocketClientFrame,
+  type SessionSocketServerFrame,
+} from "../../AI/SessionSocket.ts";
 import { isSkill, type Skill, type SkillService } from "../../AI/Skill.ts";
 import {
   Thread,
@@ -124,8 +124,8 @@ import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { upgrade, type WebSocket } from "../Workers/WebSocket.ts";
 import { Worker } from "../Workers/Worker.ts";
 
-/** What one `interpret` call recorded — all the run engine needs to
- *  BECOME a run of this term when a DO activates. */
+/** What one `interpret` call recorded — all the session engine needs to
+ *  BECOME a session of this term when a DO activates. */
 interface RegisteredCharter {
   readonly charter: Charter;
   /** The charter's own Layer graph, captured at interpret — tools,
@@ -135,23 +135,23 @@ interface RegisteredCharter {
   readonly term: Interpretable;
 }
 
-/** The DO name addressing one run of one term: `${term}/${key}`. */
-const runName = (termName: string, key: string) => `${termName}/${key}`;
+/** The DO name addressing one session of one term: `${term}/${key}`. */
+const sessionName = (termName: string, key: string) => `${termName}/${key}`;
 
 /** Split a DO name back into its term and key halves. The key may
  *  itself contain slashes (session keys are `${parent}/${agent}/${s}`),
  *  so only the FIRST segment is the term. */
-const parseRunName = (name: string) => {
+const parseSessionName = (name: string) => {
   const at = name.indexOf("/");
   return at < 0
     ? { term: name, key: name }
     : { term: name.slice(0, at), key: name.slice(at + 1) };
 };
 
-// ── storage layout (one run per DO) ──────────────────────────────────
+// ── storage layout (one session per DO) ──────────────────────────────────
 // inbox:{seq}      pending inputs, drained per burst
 // msg:{seq}        thread messages, appended (the transcript)
-// obs:{seq}        durable observations — the run's own projection,
+// obs:{seq}        durable observations — the session's own projection,
 //                  replayable from any cursor (the chat/board source)
 // remind:{fireAt}  scheduled notes (the alarm re-arms from these)
 // meta             { tick, observed, active[], settled?, drained, busy? }
@@ -167,7 +167,7 @@ const seqKey = (prefix: string, seq: number) =>
 
 const seqOf = (prefix: string, key: string) => Number(key.slice(prefix.length));
 
-interface RunMeta {
+interface SessionMeta {
   readonly tick: number;
   readonly observed: number;
   readonly active: ReadonlyArray<string>;
@@ -194,7 +194,7 @@ interface RunMeta {
   readonly busy?: { readonly attempts: number; readonly since: number };
 }
 
-const emptyMeta: RunMeta = {
+const emptyMeta: SessionMeta = {
   tick: 0,
   observed: 0,
   active: [],
@@ -226,19 +226,19 @@ type DistributiveOmit<T, K extends PropertyKey> = T extends any
   : never;
 
 /**
- * A run's RPC surface — the {@link Actor} verbs, as one DO speaks them.
+ * A session's RPC surface — the {@link Actor} verbs, as one DO speaks them.
  * Uniform across every agent, which is what makes delegation
- * cross-DO for free: a door fired inside a run calls these on the
+ * cross-DO for free: a door fired inside a session calls these on the
  * delegate's own instance.
  */
-interface RunRpc extends MainRpc<DurableObjectState> {
+interface SessionRpc extends MainRpc<DurableObjectState> {
   readonly deliver: (
     input: unknown,
-    options?: { readonly parent?: RunRef; readonly wake?: boolean },
+    options?: { readonly parent?: SessionRef; readonly wake?: boolean },
   ) => Effect.Effect<void, unknown, RuntimeContext>;
   readonly dispatch: (
     input: unknown,
-    options?: { readonly parent?: RunRef },
+    options?: { readonly parent?: SessionRef },
   ) => Effect.Effect<unknown, unknown, RuntimeContext>;
   readonly steer: (
     input: unknown,
@@ -247,7 +247,7 @@ interface RunRpc extends MainRpc<DurableObjectState> {
     outcome: unknown,
   ) => Effect.Effect<void, unknown, RuntimeContext>;
   readonly alarm: () => Effect.Effect<void, unknown, RuntimeContext>;
-  /** The live-view seam: WebSocket attach + the run-socket frames. */
+  /** The live-view seam: WebSocket attach + the session-socket frames. */
   readonly fetch: HttpEffect<DurableObjectState | RuntimeContext>;
   readonly webSocketMessage: (
     socket: WebSocket,
@@ -261,11 +261,11 @@ interface RunRpc extends MainRpc<DurableObjectState> {
   ) => Effect.Effect<void>;
 }
 
-export { AgentGateway } from "../../AI/RunSocket.ts";
+export { AgentGateway } from "../../AI/SessionSocket.ts";
 
 /**
  * The `AI.Driver` for Cloudflare — no argument, and no class for the
- * user to declare: the runs DO is declared in this module and
+ * user to declare: the sessions DO is declared in this module and
  * discovered as a binding because this layer YIELDS it while building.
  *
  * It requires `Worker` for exactly that reason: the binding attaches
@@ -284,14 +284,14 @@ export const DriverCloudflare: Layer.Layer<
     const registrations = new Map<string, RegisteredCharter>();
 
     /**
-     * The runs namespace: ONE Durable Object for every agent — the term
+     * The sessions namespace: ONE Durable Object for every agent — the term
      * prefix of the instance name says which charter an activation
      * becomes. Declared HERE, not by the user, and closed over
      * `registrations`, which the shared layer build populates before
-     * any activation's constructor runs.
+     * any activation's constructor sessions.
      */
-    const runs = yield* DurableObject<RunRpc>()(
-      "AgentRuns",
+    const sessions = yield* DurableObject<SessionRpc>()(
+      "AgentSessions",
       Effect.gen(function* () {
         const state = yield* DurableObjectState;
         const storage = state.storage;
@@ -307,19 +307,19 @@ export const DriverCloudflare: Layer.Layer<
           | undefined;
         const me = {
           get term() {
-            return (identity ??= parseRunName(String(state.id.name))).term;
+            return (identity ??= parseSessionName(String(state.id.name))).term;
           },
           get key() {
-            return (identity ??= parseRunName(String(state.id.name))).key;
+            return (identity ??= parseSessionName(String(state.id.name))).key;
           },
         };
 
         // ── durable state accessors ─────────────────────────────────
         const readMeta = Effect.map(
-          storage.get<RunMeta>(META).pipe(Effect.orDie),
+          storage.get<SessionMeta>(META).pipe(Effect.orDie),
           (found) => found ?? emptyMeta,
         );
-        const writeMeta = (meta: RunMeta) =>
+        const writeMeta = (meta: SessionMeta) =>
           storage.put(META, meta).pipe(Effect.orDie);
 
         const listRows = <A>(prefix: string) =>
@@ -348,7 +348,7 @@ export const DriverCloudflare: Layer.Layer<
 
         // ── observations ────────────────────────────────────────────
         const captured = yield* Effect.context<never>();
-        const observer = Context.getOption(captured, RunObserver);
+        const observer = Context.getOption(captured, SessionObserver);
         const durability = Option.getOrElse(
           Context.getOption(captured, DriverDurability),
           () => ({}) as (typeof DriverDurability)["Service"],
@@ -390,7 +390,7 @@ export const DriverCloudflare: Layer.Layer<
          * closes. Sockets are re-read from the runtime each time (no
          * in-memory session map to rehydrate after hibernation).
          */
-        const broadcast = (frame: RunSocketServerFrame) =>
+        const broadcast = (frame: SessionSocketServerFrame) =>
           Effect.gen(function* () {
             // runtime-colored, but only ever called from inside a DO
             // event — seal rather than thread the phantom capability
@@ -408,14 +408,14 @@ export const DriverCloudflare: Layer.Layer<
 
         /**
          * A DURABLE observation: written as a row (the replay log —
-         * this run's own projection) with the watermark bump in ONE
+         * this session's own projection) with the watermark bump in ONE
          * atomic write, then fanned out to attached sockets and the
          * external observer. The row is the record; delivery is
          * best-effort on both channels.
          */
         const observe = (
           observation: DistributiveOmit<
-            RunObservation,
+            SessionObservation,
             "term" | "key" | "seq" | "at"
           >,
         ) =>
@@ -427,7 +427,7 @@ export const DriverCloudflare: Layer.Layer<
               key: me.key,
               seq: meta.observed,
               at: Date.now(),
-            } as RunObservation;
+            } as SessionObservation;
             yield* storage
               .put({
                 [seqKey(OBS, meta.observed)]: full,
@@ -453,7 +453,7 @@ export const DriverCloudflare: Layer.Layer<
          */
         const observeLive = (
           observation: DistributiveOmit<
-            RunObservation,
+            SessionObservation,
             "term" | "key" | "seq" | "at"
           >,
         ) =>
@@ -465,7 +465,7 @@ export const DriverCloudflare: Layer.Layer<
               key: me.key,
               seq: meta.observed,
               at: Date.now(),
-            } as RunObservation;
+            } as SessionObservation;
             yield* broadcast({
               type: "observation",
               durable: false,
@@ -496,8 +496,8 @@ export const DriverCloudflare: Layer.Layer<
             discard: true,
           });
 
-        // ── the run-scoped AI.Thread / AI.Tick services ─────────────
-        // storage is a RUNTIME capability; the run-scoped services the
+        // ── the session-scoped AI.Thread / AI.Tick services ─────────────
+        // storage is a RUNTIME capability; the session-scoped services the
         // driver hands userland are plain effects, so seal it here
         const sealed = <A>(
           effect: Effect.Effect<A, never, RuntimeContext>,
@@ -532,8 +532,8 @@ export const DriverCloudflare: Layer.Layer<
         };
 
         /**
-         * The run's `PersistentRef.Store`: DO storage rows under the
-         * run's own prefix, written through the synchronous KV API —
+         * The session's `PersistentRef.Store`: DO storage rows under the
+         * session's own prefix, written through the synchronous KV API —
          * write coalescing + the output gate make writes durable before
          * anything leaves the DO. ONE instance per activation:
          * `PersistentRef` memoizes refs per store instance, so every
@@ -552,8 +552,8 @@ export const DriverCloudflare: Layer.Layer<
             Effect.provideService(Thread, threadService),
             Effect.provideService(Tick, tick),
             Effect.provideService(PersistentRef.Store, stateStore),
-            // The FRAME: every ref this run makes is namespaced by the
-            // run's durable identity, so isolation is a logical
+            // The FRAME: every ref this session makes is namespaced by the
+            // session's durable identity, so isolation is a logical
             // property of the key — not an accident of this store
             // being per-DO — and survives a swap to a shared store.
             PersistentRef.within(me.term, me.key),
@@ -727,7 +727,7 @@ export const DriverCloudflare: Layer.Layer<
         // Concurrent events (two HTTP requests, an alarm during a
         // dispatch) each kick a burst, so the loop is SERIALIZED: the
         // second waits, then finds its input already drained by the
-        // first and returns at once. One serial loop per run is the
+        // first and returns at once. One serial loop per session is the
         // driver's contract, on this substrate too.
         const gate = yield* Semaphore.make(1);
 
@@ -740,7 +740,7 @@ export const DriverCloudflare: Layer.Layer<
           }
 
           // per-ACTIVATION init: the charter's closure is isolate
-          // state (run-durable state lives in the thread/storage)
+          // state (session-durable state lives in the thread/storage)
           let meta = yield* readMeta;
 
           // ── recovery: a busy marker on ENTRY means the previous
@@ -749,7 +749,7 @@ export const DriverCloudflare: Layer.Layer<
           // (The gate makes this unambiguous: a healthy predecessor
           // clears the marker before releasing.) Bounded re-entry:
           // progress resets the budget; exhaustion abandons the round
-          // VISIBLY and the run keeps serving.
+          // VISIBLY and the session keeps serving.
           let recovering = false;
           if (meta.busy !== undefined && meta.settled === undefined) {
             const attempts = meta.busy.attempts + 1;
@@ -806,7 +806,7 @@ export const DriverCloudflare: Layer.Layer<
                 kind: "note",
               });
               yield* Effect.logInfo(
-                `DriverCloudflare run '${me.term}/${me.key}': recovering an interrupted round (attempt ${attempts}/${maxAttempts})`,
+                `DriverCloudflare session '${me.term}/${me.key}': recovering an interrupted round (attempt ${attempts}/${maxAttempts})`,
               );
             }
           }
@@ -852,7 +852,7 @@ export const DriverCloudflare: Layer.Layer<
               if (rows.length > 0) {
                 yield* storage.delete(rows.map(([k]) => k)).pipe(Effect.orDie);
               }
-              // PARKED: the run's work is done until the world moves.
+              // PARKED: the session's work is done until the world moves.
               // On this substrate parking is RETURNING — the next
               // event (deliver, steer, alarm) kicks a fresh burst.
               yield* observe({ type: "parked" });
@@ -1017,7 +1017,7 @@ export const DriverCloudflare: Layer.Layer<
                     .pipe(Effect.provide(RuntimeContext.phantom));
                   // a child's round can run for minutes; the answer
                   // arriving is the fact worth a breadcrumb, since a
-                  // deployed run can only be read through its logs
+                  // deployed session can only be read through its logs
                   yield* Effect.logDebug(
                     `[dispatch] ${params.agent} answered ${JSON.stringify(answer)?.slice(0, 120)}`,
                   );
@@ -1064,7 +1064,7 @@ export const DriverCloudflare: Layer.Layer<
             );
             handlers.spawn = () =>
               // v1: anonymous workers are not yet hosted on this
-              // substrate (each would be its own DO run) — the model
+              // substrate (each would be its own DO session) — the model
               // sees an honest refusal rather than a silent no-op
               Effect.succeed(
                 "spawn is not available on this driver yet — do the work yourself or dispatch a named agent",
@@ -1160,7 +1160,7 @@ export const DriverCloudflare: Layer.Layer<
             });
             // tool OUTPUTS are not restated by `assistant` — they are
             // their own durable rows, upgrading the call's state in
-            // any projection that replays this run
+            // any projection that replays this session
             for (const result of response.toolResults) {
               yield* observe({
                 type: "tool-result",
@@ -1192,7 +1192,7 @@ export const DriverCloudflare: Layer.Layer<
           Effect.tapCause((cause) =>
             Effect.gen(function* () {
               yield* Effect.logError(
-                `DriverCloudflare run '${me.term}/${me.key}' crashed`,
+                `DriverCloudflare session '${me.term}/${me.key}' crashed`,
                 cause,
               );
               const crash = describeCrash(cause);
@@ -1257,7 +1257,7 @@ export const DriverCloudflare: Layer.Layer<
               .pipe(Effect.orDie);
           });
 
-        return Effect.succeed<RunRpc>({
+        return Effect.succeed<SessionRpc>({
           /**
            * The LIVE VIEW attaches here (via {@link AgentGateway}):
            * accept the WebSocket and hibernate freely — there is no
@@ -1270,11 +1270,11 @@ export const DriverCloudflare: Layer.Layer<
           }),
           webSocketMessage: (socket, message) =>
             Effect.suspend(() =>
-              handleRunSocketFrame(
+              handleSessionSocketFrame(
                 {
                   replay: (fromSeq) =>
                     sealed(
-                      Effect.map(listRows<RunObservation>(OBS), (rows) =>
+                      Effect.map(listRows<SessionObservation>(OBS), (rows) =>
                         rows.flatMap(([k, observation]) =>
                           seqOf(OBS, k) >= fromSeq ? [observation] : [],
                         ),
@@ -1304,12 +1304,12 @@ export const DriverCloudflare: Layer.Layer<
                   typeof message === "string"
                     ? message
                     : new TextDecoder().decode(message),
-                ) as RunSocketClientFrame,
+                ) as SessionSocketClientFrame,
               ),
             ).pipe(
               // a malformed frame must never kill the socket's DO
               Effect.catchDefect((defect) =>
-                Effect.logWarning(`[run-socket] bad frame: ${defect}`),
+                Effect.logWarning(`[session-socket] bad frame: ${defect}`),
               ),
               Effect.provide(RuntimeContext.phantom),
             ) as Effect.Effect<void>,
@@ -1317,7 +1317,7 @@ export const DriverCloudflare: Layer.Layer<
             Effect.ignore(socket.close(code, reason)),
           deliver: (
             input: unknown,
-            options?: { parent?: RunRef; wake?: boolean },
+            options?: { parent?: SessionRef; wake?: boolean },
           ) =>
             Effect.gen(function* () {
               const meta = yield* readMeta;
@@ -1327,16 +1327,16 @@ export const DriverCloudflare: Layer.Layer<
               }
               yield* enqueue(input);
               // QUIET delivery (`wake: false`): the row is durable in
-              // the inbox but no burst is kicked — a parked run stays
+              // the inbox but no burst is kicked — a parked session stays
               // parked, and whatever wakes it next (a waking send, a
               // reminder, an operator steer) drains everything
-              // accumulated. A run that is ALREADY bursting picks the
+              // accumulated. A session that is ALREADY bursting picks the
               // row up at its next boundary regardless.
               if (options?.wake !== false) {
                 yield* state.waitUntil(burst);
               }
             }),
-          dispatch: (input: unknown, options?: { parent?: RunRef }) =>
+          dispatch: (input: unknown, options?: { parent?: SessionRef }) =>
             Effect.gen(function* () {
               const meta = yield* readMeta;
               if (meta.settled !== undefined) return meta.settled.outcome;
@@ -1365,7 +1365,7 @@ export const DriverCloudflare: Layer.Layer<
             Effect.gen(function* () {
               const meta = yield* readMeta;
               if (meta.settled !== undefined) return;
-              // busy dies with the run — a settled run must not keep
+              // busy dies with the session — a settled session must not keep
               // an armed recovery alarm re-entering it
               yield* writeMeta({
                 ...meta,
@@ -1378,8 +1378,8 @@ export const DriverCloudflare: Layer.Layer<
               // ends the session workers it opened
               for (const child of children.values()) {
                 yield* Effect.ignore(
-                  runs
-                    .getByName(runName(child.term, child.key))
+                  sessions
+                    .getByName(sessionName(child.term, child.key))
                     .settle({ supervisor: { term: me.term, key: me.key } }),
                 );
               }
@@ -1423,8 +1423,9 @@ export const DriverCloudflare: Layer.Layer<
           term,
         });
 
-        const stub = (key: string) => runs.getByName(runName(termName, key));
-        const mint = () => `run-${mintPrefix}-${minted++}`;
+        const stub = (key: string) =>
+          sessions.getByName(sessionName(termName, key));
+        const mint = () => `session-${mintPrefix}-${minted++}`;
 
         return {
           send: (item: unknown, options?: Parameters<Actor["send"]>[1]) =>
@@ -1448,25 +1449,25 @@ export const DriverCloudflare: Layer.Layer<
               : stub(first as string)
                   .steer(second)
                   .pipe(Effect.orDie, Effect.asVoid)) as Actor["steer"],
-          settle: (runKey: string, outcome: unknown) =>
-            stub(runKey).settle(outcome).pipe(Effect.orDie, Effect.asVoid),
+          settle: (sessionKey: string, outcome: unknown) =>
+            stub(sessionKey).settle(outcome).pipe(Effect.orDie, Effect.asVoid),
           interrupt: () =>
             Effect.die(
               new Error(
-                "DriverCloudflare: interrupt() is process-local; settle runs by key instead",
+                "DriverCloudflare: interrupt() is process-local; settle sessions by key instead",
               ),
             ),
         } as Actor;
       }) as Effect.Effect<Actor, DriverError, never>;
 
-    /** The gateway: route a WebSocket upgrade into the run's own DO. */
+    /** The gateway: route a WebSocket upgrade into the session's own DO. */
     const attach = (
       term: string,
       key: string,
       request: HttpServerRequest.HttpServerRequest,
     ) =>
-      runs
-        .getByName(runName(term, key))
+      sessions
+        .getByName(sessionName(term, key))
         .fetch(request)
         .pipe(Effect.orDie) as Effect.Effect<
         HttpServerResponse.HttpServerResponse,

@@ -8,7 +8,7 @@
  *   in-flight sampling) into `UIMessage[]` — the snapshot a client
  *   loads, and re-loads while polling for the live view;
  * - {@link makeChunkTranslator} turns live observations into
- *   `UIMessageChunk`s for an SSE response: one run-burst = one
+ *   `UIMessageChunk`s for an SSE response: one session-burst = one
  *   assistant message, one sampling = one step.
  *
  * Only TYPES are imported from `ai` — the adapter adds no runtime
@@ -17,10 +17,10 @@
 import type { UIMessage, UIMessageChunk, UIMessagePart } from "ai";
 import type { StreamingSample } from "./Chats.ts";
 import { renderCrash } from "./DriverShared.ts";
-import type { RunObservation } from "./Observer.ts";
+import type { SessionObservation } from "./Observer.ts";
 
 /**
- * Reduce a run's observation log into AI SDK UIMessages: inputs are
+ * Reduce a session's observation log into AI SDK UIMessages: inputs are
  * user messages; a BURST of samplings (everything between inputs) is
  * one assistant message whose parts are step-start + reasoning +
  * text + dynamic-tool parts, with tool results upgrading their
@@ -29,7 +29,7 @@ import type { RunObservation } from "./Observer.ts";
  * as they accumulate.
  */
 export const toUIMessages = (
-  log: ReadonlyArray<RunObservation>,
+  log: ReadonlyArray<SessionObservation>,
   streaming?: StreamingSample | undefined,
 ): Array<UIMessage> => {
   const messages: Array<UIMessage> = [];
@@ -145,7 +145,7 @@ export const toUIMessages = (
           parts: [
             {
               type: "text",
-              text: `Run crashed: ${renderCrash(observation.error)}`,
+              text: `Session crashed: ${renderCrash(observation.error)}`,
             },
           ],
           metadata: { at: observation.at },
@@ -193,7 +193,7 @@ export const toUIMessages = (
 };
 
 /**
- * A stateful translator from a run's live observations to AI SDK
+ * A stateful translator from a session's live observations to AI SDK
  * UIMessageChunks: emits `start` once, wraps each sampling in
  * `start-step`/`finish-step`, and reports whether the response is
  * COMPLETE (quiescence, settle, or crash) so the HTTP edge knows when
@@ -208,7 +208,7 @@ export const makeChunkTranslator = () => {
   const knownCalls = new Set<string>();
 
   return (
-    observation: RunObservation,
+    observation: SessionObservation,
   ): { chunks: Array<UIMessageChunk>; done: boolean } => {
     const chunks: Array<UIMessageChunk> = [];
     let done = false;
@@ -293,8 +293,8 @@ export const makeChunkTranslator = () => {
       }
       case "settled": {
         closeStep();
-        // a stream must resolve cleanly even when the run ended
-        // before producing anything (e.g. steering a settled run)
+        // a stream must resolve cleanly even when the session ended
+        // before producing anything (e.g. steering a settled session)
         if (!started) chunks.push({ type: "start" });
         chunks.push({ type: "finish" });
         done = true;

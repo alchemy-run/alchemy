@@ -69,11 +69,11 @@ export const ChatsSqlite = (
             .all() as Array<{ data: string }>,
       );
       for (const row of rows) {
-        yield* memory.ingest(JSON.parse(row.data) as AI.RunObservation);
+        yield* memory.ingest(JSON.parse(row.data) as AI.SessionObservation);
       }
 
       // ── write-through ingest ──────────────────────────────────────
-      const persist = (observation: AI.RunObservation) =>
+      const persist = (observation: AI.SessionObservation) =>
         Effect.sync(() => {
           db.query(
             "INSERT INTO observations (chat_id, seq, at, data) VALUES (?, ?, ?, ?)",

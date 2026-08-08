@@ -1,8 +1,8 @@
 import * as Data from "effect/Data";
 
 /**
- * The typed abnormal exit of an agent run: raised by the driver
- * when a run exceeds one of its budget ceilings — a hard limit (tokens,
+ * The typed abnormal exit of an agent session: raised by the driver
+ * when a session exceeds one of its budget ceilings — a hard limit (tokens,
  * wall-clock, iterations, dollars) or the no-progress detector
  * (`stall`). Ceilings come from the provided `AI.budget({...})` Layer,
  * or from the driver's own default guards when none is given — so
@@ -28,19 +28,19 @@ export class BudgetExceeded extends Data.TaggedError("AI.BudgetExceeded")<{
 }> {}
 
 /**
- * The typed give-up of a bounded agent run: the run concluded that its
+ * The typed give-up of a bounded agent session: the session concluded that its
  * halt condition (`Out`) is unachievable — distinct from `BudgetExceeded`
  * (nothing ran out) and from the halt (nothing was achieved).
  *
  * The evidence bar is Codex's shipped `Blocked` semantics (§9.3): a
  * repeat-observed blocker across consecutive iterations, claimed by the
- * run and ratified by the driver/check — never the model's bare refusal.
+ * session and ratified by the driver/check — never the model's bare refusal.
  * Only `until`-halted loops can refuse (a perpetual ring has nothing to
  * give up on), so `Refused` joins the `Err` channel exactly when the
  * charter declares a bounded exit.
  */
 export class Refused extends Data.TaggedError("AI.Refused")<{
-  /** The loop whose run gave up. */
+  /** The loop whose session gave up. */
   readonly loop: string;
   /** The blocker, with the evidence that ratified it. */
   readonly reason: string;

@@ -93,7 +93,7 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
  * the previous run's thread and every count would be off.
  */
 const stamp = Date.now();
-const runKey = (name: string) => `${name}-${stamp}`;
+const sessionKey = (name: string) => `${name}-${stamp}`;
 
 /** What the deterministic model reports when it isn't calling a tool. */
 interface Report {
@@ -143,7 +143,7 @@ test(
   "a run is a Durable Object: dispatch reaches a charter that never crossed the wire",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const key = runKey("hello");
+    const key = sessionKey("hello");
 
     const answer = yield* report(url, { key, input: "who are you?" });
 
@@ -160,7 +160,7 @@ test(
   "AI.reply answers the round with a typed artifact from a tool handler",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const key = runKey("reply");
+    const key = sessionKey("reply");
 
     // the answer is the ARTIFACT the handler replied with, not the
     // model's closing text — the round is answered where the artifact
@@ -175,7 +175,7 @@ test(
   "the thread is durable: the same key resumes its conversation",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const key = runKey("resume");
+    const key = sessionKey("resume");
 
     const first = yield* report(url, { key, input: "first" });
     expect(first.users).toBe(1);
@@ -194,8 +194,8 @@ test(
   "distinct keys are distinct runs with separate threads",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const a = runKey("iso-a");
-    const b = runKey("iso-b");
+    const a = sessionKey("iso-a");
+    const b = sessionKey("iso-b");
 
     yield* report(url, { key: a, input: "belongs to A" });
     const second = yield* report(url, { key: a, input: "still A" });
@@ -214,7 +214,7 @@ test(
   "delegation crosses Durable Objects: the Supervisor's dispatch is an RPC",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const key = runKey("delegate");
+    const key = sessionKey("delegate");
 
     // the Supervisor's charter mentions ${Scribe}, so the driver gives
     // it a dispatch tool whose handler calls the Scribe's own DO; the
@@ -236,7 +236,7 @@ test(
   "Thread.remind is a real alarm: it wakes a parked run with nothing holding a timer",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const key = runKey("remind");
+    const key = sessionKey("remind");
 
     // round 1 schedules the note and quiesces — the run parks and the
     // DO goes idle; no fiber, no process, just a row and an alarm
@@ -265,7 +265,7 @@ test(
   "a round interrupted mid-sampling recovers by ALARM, with no caller waiting",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const key = runKey("recover");
+    const key = sessionKey("recover");
     const directive = `call:crash:r-${stamp}:1`;
 
     // fire-and-forget: the input lands, the round opens, and the
@@ -299,7 +299,7 @@ test(
   "a poisoned round exhausts its attempts, is abandoned VISIBLY, and the run keeps serving",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const key = runKey("exhaust");
+    const key = sessionKey("exhaust");
     const directive = `call:crash:x-${stamp}:99`;
 
     // a budget of 99 never succeeds: initial burst + 2 alarm
@@ -329,32 +329,36 @@ test(
 const connect = (url: string) =>
   Effect.gen(function* () {
     const socket = yield* Socket.makeWebSocket(url);
-    const frames = yield* Queue.unbounded<AI.RunSocketServerFrame>();
+    const frames = yield* Queue.unbounded<AI.SessionSocketServerFrame>();
     const write = yield* socket.writer;
     const opened = yield* Deferred.make<void>();
 
     yield* Effect.forkScoped(
       socket.runString(
         (message) =>
-          Queue.offer(frames, JSON.parse(message) as AI.RunSocketServerFrame),
+          Queue.offer(
+            frames,
+            JSON.parse(message) as AI.SessionSocketServerFrame,
+          ),
         { onOpen: Deferred.succeed(opened, undefined) },
       ),
     );
     yield* Deferred.await(opened);
 
     return {
-      send: (frame: AI.RunSocketClientFrame) => write(JSON.stringify(frame)),
+      send: (frame: AI.SessionSocketClientFrame) =>
+        write(JSON.stringify(frame)),
       next: Queue.take(frames),
     };
   });
 
 /** Take frames until the predicate matches, returning everything taken. */
 const framesUntil = (
-  client: { next: Effect.Effect<AI.RunSocketServerFrame, unknown> },
-  done: (frame: AI.RunSocketServerFrame) => boolean,
+  client: { next: Effect.Effect<AI.SessionSocketServerFrame, unknown> },
+  done: (frame: AI.SessionSocketServerFrame) => boolean,
 ) =>
   Effect.gen(function* () {
-    const seen: Array<AI.RunSocketServerFrame> = [];
+    const seen: Array<AI.SessionSocketServerFrame> = [];
     while (true) {
       const frame = yield* client.next.pipe(Effect.timeout("30 seconds"));
       seen.push(frame);
@@ -363,8 +367,8 @@ const framesUntil = (
   });
 
 const isDurable = (
-  frame: AI.RunSocketServerFrame,
-  type: AI.RunObservation["type"],
+  frame: AI.SessionSocketServerFrame,
+  type: AI.SessionObservation["type"],
 ) =>
   frame.type === "observation" &&
   frame.durable &&
@@ -374,7 +378,7 @@ test(
   "the run socket: submit drives the agent, deltas stream live, the cursor resumes",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const key = runKey("socket");
+    const key = sessionKey("socket");
     const wsUrl = `${url.replace(/^http/, "ws")}/attach/Scribe/${key}`;
 
     // ── round 1: attach, submit over the socket, watch it stream
@@ -390,7 +394,7 @@ test(
 
     const durables = first.filter(
       (frame) => frame.type === "observation" && frame.durable,
-    ) as Array<Extract<AI.RunSocketServerFrame, { type: "observation" }>>;
+    ) as Array<Extract<AI.SessionSocketServerFrame, { type: "observation" }>>;
     const types = durables.map((frame) => frame.observation.type);
     // the whole round arrived as observations: admission, the input,
     // the sampling, the park
@@ -449,7 +453,7 @@ test(
   "settle ends a run from the outside; a settled run ignores further input",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const key = runKey("settle");
+    const key = sessionKey("settle");
 
     yield* report(url, { key, input: "working" });
     yield* drive(url, "/settle", { key, input: "done" });

@@ -33,9 +33,9 @@ export type CompactPlan =
     };
 
 /**
- * The RUN a charter is executing inside — its world identity and its
+ * The SESSION a charter is executing inside — its world identity and its
  * thread (the conversation). The driver provides it to INIT (which
- * runs once per run at admit, when the thread already exists — so
+ * runs once per session at admit, when the thread already exists — so
  * thread-scoped setup like a workspace checkout keyed by `thread.key`
  * belongs there), to the charter's TURN, and to tool handlers.
  * `AI.Tick` is the one runtime fact init never sees.
@@ -46,7 +46,7 @@ export type CompactPlan =
  */
 export interface ThreadService {
   /**
-   * The run's key — caller-chosen world identity (`owner/repo#7`) when
+   * The session's key — caller-chosen world identity (`owner/repo#7`) when
    * admitted with one, driver-minted otherwise.
    */
   readonly key: string;
@@ -63,20 +63,20 @@ export interface ThreadService {
    * ANSWER the current round: resolve every pending dispatch waiter
    * with `value`, from wherever the answer is actually produced (a
    * tool handler, usually — the moment the artifact exists). Replying
-   * does NOT park or end the run: the model may keep working; parking
+   * does NOT park or end the session: the model may keep working; parking
    * stays quiescence, ending stays `settle`. A round that never
    * replies answers with its quiescent text (the fallback). Waiters
-   * are a batch: every caller currently awaiting this run receives
+   * are a batch: every caller currently awaiting this session receives
    * the same value.
    */
   readonly reply: (value: unknown) => Effect.Effect<void>;
   /**
-   * Schedule a note to THIS run's future self. Returns immediately —
+   * Schedule a note to THIS session's future self. Returns immediately —
    * the note is DATA `(fireAt, text)`, delivered as an ordinary inbox
-   * message at fireAt: a wake if the run is parked by then, a queued
+   * message at fireAt: a wake if the session is parked by then, a queued
    * message if busy, dropped if settled. The clock is the DRIVER's
-   * and lives exactly as long as the run does: a fiber on the
-   * in-memory driver (runs are process-lifetime there), a Durable
+   * and lives exactly as long as the session does: a fiber on the
+   * in-memory driver (sessions are process-lifetime there), a Durable
    * Object alarm on a durable driver.
    */
   readonly remind: (delay: Duration.Input, note: string) => Effect.Effect<void>;
@@ -92,7 +92,7 @@ export class Thread extends Context.Service<Thread, ThreadService>()(
  * note collector behind {@link say}.
  */
 export interface TickService {
-  /** Samplings performed so far in this run (0 on the first tick). */
+  /** Samplings performed so far in this session (0 on the first tick). */
   readonly count: number;
   /**
    * Register a note for delivery (usually via {@link say}). Notes are
@@ -160,7 +160,7 @@ export const say = <const Refs extends any[]>(
  * );
  * ```
  *
- * Replying neither parks nor ends the run — the model may continue
+ * Replying neither parks nor ends the session — the model may continue
  * (clean up, comment, start CI); parking stays quiescence, ending
  * stays `settle`. A round that never replies answers with its
  * quiescent text.

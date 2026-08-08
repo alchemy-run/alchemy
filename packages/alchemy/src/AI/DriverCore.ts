@@ -28,14 +28,14 @@ import {
 } from "./Driver.ts";
 import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { RunObserver, type RunObservation } from "./Observer.ts";
+import { SessionObserver, type SessionObservation } from "./Observer.ts";
 import {
   AgentGateway,
-  handleRunSocketFrame,
+  handleSessionSocketFrame,
   isLiveObservation,
-  type RunSocketClientFrame,
-  type RunSocketServerFrame,
-} from "./RunSocket.ts";
+  type SessionSocketClientFrame,
+  type SessionSocketServerFrame,
+} from "./SessionSocket.ts";
 import { isParameter } from "./Parameter.ts";
 import { dedentTemplate, isFragment, type Fragment } from "./Prose.ts";
 import { isDispatchTool, type DispatchTool } from "./Dispatch.ts";
@@ -69,7 +69,7 @@ import { isTool, isToolImpl, type Tool } from "./Tool.ts";
 import {
   ThreadStorage,
   type ThreadHandle,
-  type RunMeta,
+  type SessionMeta,
 } from "./ThreadStorage.ts";
 import { ToolCalling, type ToolPresentation } from "./ToolCalling.ts";
 
@@ -93,29 +93,29 @@ interface InboxItem {
   readonly waiter?: Deferred.Deferred<unknown>;
 }
 
-interface RunState {
+interface SessionState {
   readonly inbox: Queue.Queue<InboxItem>;
   /**
    * QUIET inputs (`send(…, { wake: false })`): delivered into the
    * thread at the next sampling boundary, but never a wake themselves
-   * — a parked run stays parked with these accumulating as context.
+   * — a parked session stays parked with these accumulating as context.
    */
   readonly quiet: Array<InboxItem>;
   /** The CURRENT round's waiters — resolved by `AI.reply` or, for
    *  rounds that never reply, by quiescence with the response text. */
   readonly waiters: Array<Deferred.Deferred<unknown>>;
-  /** The run's ending: `settle` from outside, or a turn Outcome. */
+  /** The session's ending: `settle` from outside, or a turn Outcome. */
   readonly settled: Deferred.Deferred<unknown>;
   /** World identity (`owner/repo#7`) or driver-minted. */
   readonly key: string;
-  /** The run's storage — thread, observation log, meta all live
+  /** The session's storage — thread, observation log, meta all live
    *  behind this handle (the `ThreadStorage` seam decides the substrate). */
   readonly handle: ThreadHandle;
-  /** Skills this run has activated (effective when also mentioned). */
+  /** Skills this session has activated (effective when also mentioned). */
   readonly active: Set<string>;
   /** Samplings performed so far. */
   tick: number;
-  /** The run's TURN, produced by its own charter init — a constant
+  /** The session's TURN, produced by its own charter init — a constant
    *  fragment lifted to an Effect, or a function of the tick event. */
   turn?: Turn | TurnFn;
   /** Requested compaction; applied at the next tick's start. */
@@ -124,16 +124,18 @@ interface RunState {
   readonly pendingNotes: Array<Fragment>;
   /** Next observation sequence number (the observer's cursor). */
   observed: number;
-  /** Attached run sockets — each entry sends one wire frame. */
-  readonly sockets: Set<(frame: RunSocketServerFrame) => Effect.Effect<void>>;
+  /** Attached session sockets — each entry sends one wire frame. */
+  readonly sockets: Set<
+    (frame: SessionSocketServerFrame) => Effect.Effect<void>
+  >;
   /** The last rendered stance — what `spawn`/`skill` grant from. */
   lastStance?: Stance;
   /**
-   * Session workers this run dispatched — the SUPERVISION edge: when
-   * this run settles, its children settle with it. Keyed by
+   * Session workers this session dispatched — the SUPERVISION edge: when
+   * this session settles, its children settle with it. Keyed by
    * `{agent}:{childKey}` because two DIFFERENT agents may share one
    * child key (a shared-workspace topology: the engineer and the
-   * reviewer both keyed by the issue); the value carries the run key
+   * reviewer both keyed by the issue); the value carries the session key
    * the cascade settles.
    */
   readonly children: Map<
@@ -141,7 +143,7 @@ interface RunState {
     { readonly key: string; readonly actor: Actor }
   >;
   /**
-   * The run's `PersistentRef.Store` — absent an ambient store, a
+   * The session's `PersistentRef.Store` — absent an ambient store, a
    * plain Map exactly as durable as the process. Swap the store Layer
    * (sqlite locally, DO storage in the cloud) for durable refs.
    */
@@ -158,24 +160,24 @@ interface TickResult {
  * THE driver — the shared interpreter that makes a charter LIVE,
  * written once against two seams:
  *
- * - {@link ThreadStorage} — where a run's durable facts live (thread,
- *   observation log, meta). `MemoryThreadStorage` for ephemeral runs,
+ * - {@link ThreadStorage} — where a session's durable facts live (thread,
+ *   observation log, meta). `MemoryThreadStorage` for ephemeral sessions,
  *   `SqliteThreadStorage` for a durable local process, DO storage on
  *   Cloudflare.
  * - {@link Model} — one model call (streaming, retry policy,
  *   malformed budget). Defaults over the ambient `LanguageModel`.
  *
- * The HOST here is the resident one: each run is a forked fiber that
+ * The HOST here is the resident one: each session is a forked fiber that
  * parks on its inbox — right for anything process-shaped (dev
  * machine, server). The Durable Object host in `DriverCloudflare`
  * replaces the resident loop with event-kicked bursts.
  *
  * What `interpret(term, charter)` builds:
  *
- * - the Actor is a keyed map of RUNS. The charter's INIT runs once per
- *   RUN, on first admission of its key — the init closure is the run's
+ * - the Actor is a keyed map of SESSIONS. The charter's INIT runs once per
+ *   SESSION, on first admission of its key — the init closure is the session's
  *   instance (plain `Ref`s for state, inline tools closing over them)
- *   — and yields the run's TURN. A static charter (`AI.prose`) lifts
+ *   — and yields the session's TURN. A static charter (`AI.prose`) lifts
  *   to a constant turn.
  * - Before EVERY sampling the turn is re-evaluated. A `Fragment`
  *   result IS the system prompt, verbatim — no diffing, no derived
@@ -185,8 +187,8 @@ interface TickResult {
  *   dynamic reaches the thread through EXPLICIT channels: `AI.say`
  *   notes, tool results, and steers. Answering a caller is the
  *   explicit `AI.reply` act (a tool handler, usually); a `Refused`
- *   failure is the run giving up.
- * - `AI.Run` is provided to init, turn, and tool handlers: driver
+ *   failure is the session giving up.
+ * - `AI.Thread`/`AI.Tick` are provided to init, turn, and tool handlers: driver
  *   facts (key, tick, tokens) plus read-only thread access and the one
  *   thread mutation — `compact`, applied at tick boundaries only.
  *
@@ -205,16 +207,16 @@ interface TickResult {
  * Steering is delivered at the SAMPLING BOUNDARY — queued while a
  * step is in flight, spliced as a user message before the next model
  * call, never aborting in-flight work. A keyed steer to an UNKNOWN key
- * admits a fresh run (crash recovery: re-polled events must never be
- * silently dropped). `settle` ends a run idempotently from the
- * outside; a settled run ignores further input and answers late
+ * admits a fresh session (crash recovery: re-polled events must never be
+ * silently dropped). `settle` ends a session idempotently from the
+ * outside; a settled session ignores further input and answers late
  * dispatches with its outcome. Transient sampling/turn failures retry
- * with capped backoff before failing the run.
+ * with capped backoff before failing the session.
  *
  * Durability is WRITE-THROUGH: every input, note, and response row
- * lands in the run's {@link ThreadHandle} the moment it exists, and
+ * lands in the session's {@link ThreadHandle} the moment it exists, and
  * every durable observation persists its meta with it. Restore at
- * interpret brings persisted runs back PARKED — threads primed, seq
+ * interpret brings persisted sessions back PARKED — threads primed, seq
  * cursor continued — while the BEHAVIOR (charter code, tools) rebuilds
  * from current code.
  */
@@ -228,13 +230,13 @@ export const DriverCore: Layer.Layer<
     const socketHosts = new Map<
       string,
       {
-        readonly ensure: (key: string) => Effect.Effect<RunState>;
+        readonly ensure: (key: string) => Effect.Effect<SessionState>;
         readonly submit: (key: string, input: unknown) => Effect.Effect<void>;
       }
     >();
     const languageModel = yield* LanguageModel.LanguageModel;
     const threadStorage = yield* ThreadStorage;
-    // Process-lifetime forks (run loops, remind, sockets): under a
+    // Process-lifetime forks (session loops, remind, sockets): under a
     // Platform Host these survive `Effect.provide` of the org layer;
     // in unit tests they ride the ambient Scope wrapping the test
     // body.
@@ -246,13 +248,13 @@ export const DriverCore: Layer.Layer<
         const termName = term["~alchemy/Name"];
 
         // the observability seam (same pattern as ToolCalling): when an
-        // observer is present, run lifecycle facts flow into it —
-        // fire-and-forget, an observer can never fail or slow a run.
-        // Each run's observations carry a monotonic `seq`, the
+        // observer is present, session lifecycle facts flow into it —
+        // fire-and-forget, an observer can never fail or slow a session.
+        // Each session's observations carry a monotonic `seq`, the
         // catch-up cursor consumers dedupe and resume by.
-        const observer = Context.getOption(context, RunObserver);
+        const observer = Context.getOption(context, SessionObserver);
         // an ambient PersistentRef.Store makes charter refs durable
-        // (the run frame isolates keys)
+        // (the session frame isolates keys)
         const ambientStore = Context.getOption(context, PersistentRef.Store);
         // the MODEL seam: a user driver provides its own (retry,
         // budget, and tiering policy live inside it); absent, the
@@ -261,17 +263,17 @@ export const DriverCore: Layer.Layer<
           makeModel(languageModel),
         );
 
-        /** The run's meta as the handle persists it. */
-        const metaOf = (run: RunState): RunMeta => ({
-          tick: run.tick,
-          observed: run.observed,
-          active: [...run.active],
+        /** The session's meta as the handle persists it. */
+        const metaOf = (session: SessionState): SessionMeta => ({
+          tick: session.tick,
+          observed: session.observed,
+          active: [...session.active],
         });
 
         const observe = (
-          run: RunState,
+          session: SessionState,
           observation: DistributiveOmit<
-            RunObservation,
+            SessionObservation,
             "term" | "key" | "seq" | "at"
           >,
         ): Effect.Effect<void> =>
@@ -282,31 +284,31 @@ export const DriverCore: Layer.Layer<
             const full = {
               ...observation,
               term: termName,
-              key: run.key,
-              seq: live ? run.observed : run.observed++,
+              key: session.key,
+              seq: live ? session.observed : session.observed++,
               at: Date.now(),
-            } as RunObservation;
+            } as SessionObservation;
             if (!live) {
               // the durable row and its cursor persist together —
               // a failed write costs restart fidelity, not the round
-              yield* run.handle
-                .appendObservation(full, metaOf(run))
+              yield* session.handle
+                .appendObservation(full, metaOf(session))
                 .pipe(
                   Effect.catchCause((cause) =>
                     Effect.logWarning(
-                      `ThreadStorage append failed for '${run.key}' of '${termName}'`,
+                      `ThreadStorage append failed for '${session.key}' of '${termName}'`,
                       cause,
                     ),
                   ),
                 );
             }
-            if (run.sockets.size > 0) {
-              const frame: RunSocketServerFrame = {
+            if (session.sockets.size > 0) {
+              const frame: SessionSocketServerFrame = {
                 type: "observation",
                 durable: !live,
                 observation: full,
               };
-              for (const send of run.sockets) {
+              for (const send of session.sockets) {
                 yield* Effect.ignore(send(frame));
               }
             }
@@ -318,48 +320,48 @@ export const DriverCore: Layer.Layer<
         /** Append thread rows, tolerating (and logging) a failed
          *  write — persistence must never crash a round. */
         const appendThread = (
-          run: RunState,
+          session: SessionState,
           messages: ReadonlyArray<Prompt.MessageEncoded>,
         ): Effect.Effect<void> =>
           messages.length === 0
             ? Effect.void
-            : run.handle
+            : session.handle
                 .appendMessages(messages)
                 .pipe(
                   Effect.catchCause((cause) =>
                     Effect.logWarning(
-                      `ThreadStorage append failed for '${run.key}' of '${termName}'`,
+                      `ThreadStorage append failed for '${session.key}' of '${termName}'`,
                       cause,
                     ),
                   ),
                 );
 
-        // ── the run-scoped AI.Thread / AI.Tick services ─────────────
-        const makeThreadService = (run: RunState): ThreadService => ({
-          key: run.key,
-          tokens: Effect.map(run.handle.messages, (rows) =>
+        // ── the session-scoped AI.Thread / AI.Tick services ─────────────
+        const makeThreadService = (session: SessionState): ThreadService => ({
+          key: session.key,
+          tokens: Effect.map(session.handle.messages, (rows) =>
             Math.ceil(JSON.stringify(rows).length / 4),
           ),
           entries: Effect.map(
-            run.handle.messages,
+            session.handle.messages,
             (rows) => Prompt.make([...rows]).content,
           ),
           compact: (plan) =>
             Effect.sync(() => {
-              run.pendingCompaction = plan;
+              session.pendingCompaction = plan;
             }),
           // ANSWER the current round, from wherever the answer is
           // produced (usually a tool handler) — the caller resolves
-          // now; the run neither parks nor ends
+          // now; the session neither parks nor ends
           reply: (value) =>
             Effect.gen(function* () {
-              for (const waiter of run.waiters.splice(0)) {
+              for (const waiter of session.waiters.splice(0)) {
                 yield* Deferred.succeed(waiter, value);
               }
             }),
-          // the driver's CLOCK, fused to the run's lifetime: on the
-          // resident host runs live as long as the process, so a
-          // process-scoped fiber is exactly as durable as the run —
+          // the driver's CLOCK, fused to the session's lifetime: on the
+          // resident host sessions live as long as the process, so a
+          // process-scoped fiber is exactly as durable as the session —
           // the DO host implements the same contract with an alarm.
           // Delivery is an ordinary inbox message: a wake if parked,
           // queued if busy, dropped if settled.
@@ -368,8 +370,8 @@ export const DriverCore: Layer.Layer<
               Effect.sleep(delay).pipe(
                 Effect.andThen(
                   Effect.gen(function* () {
-                    if (yield* Deferred.isDone(run.settled)) return;
-                    yield* Queue.offer(run.inbox, {
+                    if (yield* Deferred.isDone(session.settled)) return;
+                    yield* Queue.offer(session.inbox, {
                       input: reminderInput(note),
                     });
                   }),
@@ -379,30 +381,30 @@ export const DriverCore: Layer.Layer<
             ),
         });
 
-        const makeTickService = (run: RunState): TickService => ({
-          count: run.tick,
+        const makeTickService = (session: SessionState): TickService => ({
+          count: session.tick,
           say: (note) =>
             Effect.sync(() => {
-              run.pendingNotes.push(note);
+              session.pendingNotes.push(note);
             }),
         });
 
         /**
          * Provide the driver-owned services to RUNTIME charter code
          * (turns, splices, tool handlers): `AI.Thread`/`AI.Tick` for
-         * THIS run, the captured interpret context (so charter
+         * THIS session, the captured interpret context (so charter
          * dependencies resolve no matter which fiber the code runs
          * on), and the runtime color.
          */
         const provideRun =
-          (run: RunState) =>
+          (session: SessionState) =>
           <A, E>(effect: Effect.Effect<A, E, any>): Effect.Effect<A, E> =>
             effect.pipe(
-              Effect.provideService(Thread, makeThreadService(run)),
-              Effect.provideService(Tick, makeTickService(run)),
-              Effect.provideService(PersistentRef.Store, run.stateStore),
-              // the FRAME: refs are namespaced by the run's identity
-              PersistentRef.within(termName, run.key),
+              Effect.provideService(Thread, makeThreadService(session)),
+              Effect.provideService(Tick, makeTickService(session)),
+              Effect.provideService(PersistentRef.Store, session.stateStore),
+              // the FRAME: refs are namespaced by the session's identity
+              PersistentRef.within(termName, session.key),
               Effect.provide(RuntimeContext.phantom),
               Effect.provide(context),
             ) as Effect.Effect<A, E>;
@@ -410,7 +412,7 @@ export const DriverCore: Layer.Layer<
         /**
          * Provide the INIT evaluation context: the captured interpret
          * context, the runtime color, and `AI.Thread` — init runs ONCE
-         * PER RUN at admit, when the thread already exists, so
+         * PER SESSION at admit, when the thread already exists, so
          * thread-scoped setup (state keyed by `thread.key`, a
          * workspace checkout) belongs here. Deliberately NOT
          * `AI.Tick`: no sampling is under way during init.
@@ -419,13 +421,13 @@ export const DriverCore: Layer.Layer<
          * here with a missing-service defect.
          */
         const provideInit =
-          (run: RunState) =>
+          (session: SessionState) =>
           <A, E>(effect: Effect.Effect<A, E, any>): Effect.Effect<A, E> =>
             effect.pipe(
-              Effect.provideService(Thread, makeThreadService(run)),
-              Effect.provideService(PersistentRef.Store, run.stateStore),
-              // the FRAME: refs are namespaced by the run's identity
-              PersistentRef.within(termName, run.key),
+              Effect.provideService(Thread, makeThreadService(session)),
+              Effect.provideService(PersistentRef.Store, session.stateStore),
+              // the FRAME: refs are namespaced by the session's identity
+              PersistentRef.within(termName, session.key),
               Effect.provide(RuntimeContext.phantom),
               Effect.provide(context),
             ) as Effect.Effect<A, E>;
@@ -434,20 +436,20 @@ export const DriverCore: Layer.Layer<
          * Wrap a tool handler so its FAILURES are observable in the
          * process log: a failing tool result is model-visible (the
          * agent reacts), but without this the operator sees nothing —
-         * a run burning its budget against a broken tool looks like
+         * a session burning its budget against a broken tool looks like
          * silence from the outside.
          */
         const observedHandler =
           (
-            run: RunState,
+            session: SessionState,
             name: string,
             fn: (params: any) => Effect.Effect<any, any, any>,
           ) =>
           (input: any) =>
-            provideRun(run)(fn(input)).pipe(
+            provideRun(session)(fn(input)).pipe(
               Effect.tapError((error) =>
                 Effect.logWarning(
-                  `Driver run '${run.key}' of '${termName}': tool '${name}' failed: ${String(error).slice(0, 500)}`,
+                  `Driver session '${session.key}' of '${termName}': tool '${name}' failed: ${String(error).slice(0, 500)}`,
                 ),
               ),
             );
@@ -547,7 +549,7 @@ export const DriverCore: Layer.Layer<
 
         // ── stance rendering: fragment tree → blocks + mentions ─────
         const renderStance = (
-          run: RunState,
+          session: SessionState,
           root: Fragment,
         ): Effect.Effect<Stance> =>
           Effect.gen(function* () {
@@ -598,7 +600,7 @@ export const DriverCore: Layer.Layer<
                   } else if (Effect.isEffect(ref)) {
                     // evaluated at render time, EVERY tick — a nested
                     // AI.prose, a component's turn value
-                    const value = yield* provideRun(run)(
+                    const value = yield* provideRun(session)(
                       ref as Effect.Effect<unknown>,
                     );
                     if (isFragment(value)) {
@@ -628,17 +630,17 @@ export const DriverCore: Layer.Layer<
             return { blocks, tools, skills, delegates, doors };
           });
 
-        const runs = new Map<string, RunState>();
-        // Minted keys are PROCESS-UNIQUE, not just driver-unique: run
+        const sessions = new Map<string, SessionState>();
+        // Minted keys are PROCESS-UNIQUE, not just driver-unique: session
         // identity leaks into the world (workspace checkouts key on
         // `AI.Thread.key`), so a bare counter would collide across
-        // restarts — a fresh process's `run-0` would inherit the
-        // previous process's `run-0` worktree, stale work included.
+        // restarts — a fresh process's `session-0` would inherit the
+        // previous process's `session-0` worktree, stale work included.
         const mintPrefix = crypto.randomUUID().slice(0, 8);
         let minted = 0;
         let lastKey: string | undefined;
 
-        const makeRunState = (key: string): Effect.Effect<RunState> =>
+        const makeSessionState = (key: string): Effect.Effect<SessionState> =>
           Effect.gen(function* () {
             return {
               inbox: yield* Queue.unbounded<InboxItem>(),
@@ -654,9 +656,9 @@ export const DriverCore: Layer.Layer<
               sockets: new Set(),
               children: new Map(),
               // an ambient store (org-provided sqlite, DO storage)
-              // makes charter refs durable; the run frame
-              // (within(term, key)) keeps per-run isolation on the
-              // shared store. Absent: exactly as durable as the run.
+              // makes charter refs durable; the session frame
+              // (within(term, key)) keeps per-session isolation on the
+              // shared store. Absent: exactly as durable as the session.
               stateStore: Option.isSome(ambientStore)
                 ? ambientStore.value
                 : PersistentRef.makeMemoryStore(),
@@ -669,20 +671,20 @@ export const DriverCore: Layer.Layer<
          * (restorable eviction — nothing is silently rewritten); reset
          * restarts the thread from one summary note.
          */
-        const applyCompaction = (run: RunState): Effect.Effect<void> =>
+        const applyCompaction = (session: SessionState): Effect.Effect<void> =>
           Effect.gen(function* () {
-            const plan = run.pendingCompaction;
+            const plan = session.pendingCompaction;
             if (plan === undefined) return;
-            run.pendingCompaction = undefined;
+            session.pendingCompaction = undefined;
             if ("reset" in plan) {
-              yield* run.handle.replaceMessages([
+              yield* session.handle.replaceMessages([
                 noteMessage(
                   `The thread was compacted; it restarts from this summary of prior work:\n${plan.reset.summary}`,
                 ),
               ]);
               return;
             }
-            const rows = yield* run.handle.messages;
+            const rows = yield* session.handle.messages;
             const decoded = Prompt.make([...rows]).content;
             const kept: Array<Prompt.MessageEncoded> = [];
             let dropped = 0;
@@ -694,7 +696,7 @@ export const DriverCore: Layer.Layer<
               }
             }
             if (dropped === 0) return;
-            yield* run.handle.replaceMessages([
+            yield* session.handle.replaceMessages([
               asUserMessage(
                 `[${dropped} earlier message${dropped === 1 ? "" : "s"} archived by compaction]`,
               ),
@@ -702,32 +704,32 @@ export const DriverCore: Layer.Layer<
             ]);
           });
 
-        /** The per-run `skill` switch — activation is the run's act. */
+        /** The per-session `skill` switch — activation is the session's act. */
         const skillSwitch =
-          (run: RunState) =>
+          (session: SessionState) =>
           (params: { action: "activate" | "deactivate"; skill: string }) =>
             Effect.gen(function* () {
               if (params.action === "deactivate") {
-                run.active.delete(params.skill);
+                session.active.delete(params.skill);
                 return `deactivated ${params.skill}`;
               }
-              const skillTerm = run.lastStance?.skills.get(params.skill);
+              const skillTerm = session.lastStance?.skills.get(params.skill);
               if (skillTerm === undefined) {
                 // model-visible: the stance no longer mentions it
                 return `no skill named '${params.skill}' is available right now`;
               }
               const resolved = yield* resolveSkill(skillTerm);
-              run.active.add(params.skill);
+              session.active.add(params.skill);
               return resolved.prose;
             });
 
-        // the intrinsic spawn: an ANONYMOUS run with the spawner's
+        // the intrinsic spawn: an ANONYMOUS session with the spawner's
         // system prompt REPLACED by the written role, and a subset of
         // the spawner's CURRENT tick's tools/skills — never
         // spawn/dispatch (workers are leaves). A worker's stance is
         // its written instructions: constant, no turn.
         const spawn = (
-          spawner: RunState,
+          spawner: SessionState,
           params: {
             instructions: string;
             task: string;
@@ -737,7 +739,7 @@ export const DriverCore: Layer.Layer<
         ) =>
           Effect.gen(function* () {
             const stance = spawner.lastStance!;
-            const worker = yield* makeRunState(
+            const worker = yield* makeSessionState(
               `spawn-${mintPrefix}-${minted++}`,
             );
             const handlers: Record<
@@ -786,7 +788,7 @@ export const DriverCore: Layer.Layer<
           });
 
         /**
-         * One ACTOR tick: evaluate the run's turn — a function turn
+         * One ACTOR tick: evaluate the session's turn — a function turn
          * receives the tick event ({count, inputs}) — and render the
          * resulting Fragment into this tick's SYSTEM PROMPT (verbatim)
          * and toolkit. The turn returns the STANCE and nothing else:
@@ -794,23 +796,23 @@ export const DriverCore: Layer.Layer<
          * turn code), never a return value.
          */
         const actorTick = (
-          run: RunState,
+          session: SessionState,
           inputs: ReadonlyArray<unknown>,
         ): Effect.Effect<TickResult> =>
           Effect.gen(function* () {
-            const result = yield* provideRun(run)(
+            const result = yield* provideRun(session)(
               Effect.suspend(() => {
                 // each ATTEMPT starts with a clean say buffer, so a
                 // retried turn delivers only the successful
                 // evaluation's notes — never a failed attempt's
-                run.pendingNotes.length = 0;
-                const turn = run.turn!;
+                session.pendingNotes.length = 0;
+                const turn = session.turn!;
                 return typeof turn === "function"
-                  ? turn({ count: run.tick, inputs })
+                  ? turn({ count: session.tick, inputs })
                   : turn;
               }).pipe(
                 // transient turn failures (an observation fetch, a
-                // flaky service) retry; a typed Refused is the run
+                // flaky service) retry; a typed Refused is the session
                 // GIVING UP and propagates immediately
                 Effect.retry({
                   while: (error) => !(error instanceof Refused),
@@ -821,15 +823,15 @@ export const DriverCore: Layer.Layer<
             );
             if (Effect.isEffect(result)) {
               return yield* Effect.die(
-                `DriverCore: the turn of '${termName}' (run '${run.key}') returned an Effect — did you forget to yield* an AI.prose?`,
+                `DriverCore: the turn of '${termName}' (session '${session.key}') returned an Effect — did you forget to yield* an AI.prose?`,
               );
             }
             if (!isFragment(result)) {
               return yield* Effect.die(
-                `DriverCore: the turn of '${termName}' (run '${run.key}') returned a non-Fragment value — turns return the stance; answer callers with AI.reply`,
+                `DriverCore: the turn of '${termName}' (session '${session.key}') returned a non-Fragment value — turns return the stance; answer callers with AI.reply`,
               );
             }
-            const stance = yield* renderStance(run, result);
+            const stance = yield* renderStance(session, result);
 
             // the SKILL GRAPH: a stance mention is access at the root;
             // an ACTIVE skill's teaching exposes the skills it
@@ -838,7 +840,7 @@ export const DriverCore: Layer.Layer<
             // resolve however deep the activations go
             const effectiveSkills = new Map(stance.skills);
             {
-              const frontier = [...run.active];
+              const frontier = [...session.active];
               const visited = new Set<string>();
               while (frontier.length > 0) {
                 const name = frontier.pop()!;
@@ -852,11 +854,11 @@ export const DriverCore: Layer.Layer<
                   if (!effectiveSkills.has(subName)) {
                     effectiveSkills.set(subName, sub);
                   }
-                  if (run.active.has(subName)) frontier.push(subName);
+                  if (session.active.has(subName)) frontier.push(subName);
                 }
               }
             }
-            run.lastStance = { ...stance, skills: effectiveSkills };
+            session.lastStance = { ...stance, skills: effectiveSkills };
 
             // this tick's CAPABILITIES: mentioned tools + active∩reachable
             // skills' tools, with their handlers
@@ -868,17 +870,21 @@ export const DriverCore: Layer.Layer<
             for (const [name, compiled] of stance.tools) {
               charterTools.push(compileTool(compiled.term));
               const resolved = yield* resolveHandler(compiled);
-              capabilityHandlers[name] = observedHandler(run, name, resolved);
+              capabilityHandlers[name] = observedHandler(
+                session,
+                name,
+                resolved,
+              );
             }
             const activeTools: Array<AiTool.Any> = [];
-            for (const name of run.active) {
+            for (const name of session.active) {
               const skillTerm = effectiveSkills.get(name);
               if (skillTerm === undefined) continue; // not reachable now
               const resolved = yield* resolveSkill(skillTerm);
               activeTools.push(...resolved.tools);
               for (const [toolName, fn] of Object.entries(resolved.handlers)) {
                 capabilityHandlers[toolName] ??= observedHandler(
-                  run,
+                  session,
                   toolName,
                   fn,
                 );
@@ -898,19 +904,19 @@ export const DriverCore: Layer.Layer<
               const doorHandler = (params: any) =>
                 Effect.gen(function* () {
                   const derived = yield* door.policy(params, {
-                    key: run.key,
+                    key: session.key,
                   });
                   const actor = yield* resolveDelegate(door.agent);
                   const agentName = door.agent["~alchemy/Name"];
                   if (derived.key !== undefined) {
-                    run.children.set(`${agentName}:${derived.key}`, {
+                    session.children.set(`${agentName}:${derived.key}`, {
                       key: derived.key,
                       actor,
                     });
                   }
-                  yield* observe(run, {
+                  yield* observe(session, {
                     type: "dispatched",
-                    tick: run.tick,
+                    tick: session.tick,
                     toolName: name,
                     agent: agentName,
                     child: derived.key,
@@ -918,12 +924,12 @@ export const DriverCore: Layer.Layer<
                   return yield* actor
                     .dispatch(derived.task, {
                       key: derived.key,
-                      parent: { term: termName, key: run.key },
+                      parent: { term: termName, key: session.key },
                     })
                     .pipe(Effect.provide(RuntimeContext.phantom));
                 });
               capabilityHandlers[name] = observedHandler(
-                run,
+                session,
                 name,
                 doorHandler,
               );
@@ -965,11 +971,11 @@ export const DriverCore: Layer.Layer<
               delegates.set(name, yield* resolveDelegate(agent));
             }
             if (delegates.size > 0) {
-              // stamp the DELEGATION EDGE: the child run's `admitted`
+              // stamp the DELEGATION EDGE: the child session's `admitted`
               // observation records who dispatched it, so observers can
               // reconstruct the tree (issue desk → engineer → …). A
               // `session` derives a DETERMINISTIC child key namespaced
-              // under this run — the call/reply seam: same session,
+              // under this session — the call/reply seam: same session,
               // same worker, same context — and the child is REMEMBERED
               // for the supervision cascade (settle propagates down).
               handlers.dispatch = (params: {
@@ -982,13 +988,16 @@ export const DriverCore: Layer.Layer<
                   const key =
                     params.session === undefined
                       ? undefined
-                      : `${run.key}/${params.agent}/${params.session}`;
+                      : `${session.key}/${params.agent}/${params.session}`;
                   if (key !== undefined) {
-                    run.children.set(`${params.agent}:${key}`, { key, actor });
+                    session.children.set(`${params.agent}:${key}`, {
+                      key,
+                      actor,
+                    });
                   }
-                  yield* observe(run, {
+                  yield* observe(session, {
                     type: "dispatched",
-                    tick: run.tick,
+                    tick: session.tick,
                     toolName: "dispatch",
                     agent: params.agent,
                     child: key,
@@ -996,13 +1005,13 @@ export const DriverCore: Layer.Layer<
                   return yield* actor
                     .dispatch(params.task, {
                       key,
-                      parent: { term: termName, key: run.key },
+                      parent: { term: termName, key: session.key },
                     })
                     .pipe(Effect.provide(RuntimeContext.phantom));
                 });
             }
-            handlers.spawn = (params) => spawn(run, params);
-            handlers.skill = skillSwitch(run);
+            handlers.spawn = (params) => spawn(session, params);
+            handlers.skill = skillSwitch(session);
 
             const intrinsics: Array<AiTool.Any> = [
               ...(delegates.size > 0
@@ -1033,14 +1042,14 @@ export const DriverCore: Layer.Layer<
           });
 
         const loop = (
-          run: RunState,
+          session: SessionState,
           prepare: (
-            run: RunState,
+            session: SessionState,
             inputs: ReadonlyArray<unknown>,
           ) => Effect.Effect<TickResult>,
         ) =>
           Effect.gen(function* () {
-            // starts QUIESCENT: a run created without input (a socket
+            // starts QUIESCENT: a session created without input (a socket
             // attach `ensure`s it; the admitting offer may lose the
             // startup race) parks on the queue instead of sampling an
             // empty thread
@@ -1049,33 +1058,33 @@ export const DriverCore: Layer.Layer<
             // step catch below) — resets on any well-formed sampling
             let malformed = 0;
             while (true) {
-              if (yield* Deferred.isDone(run.settled)) break;
-              let items: Array<InboxItem> = yield* Queue.clear(run.inbox);
+              if (yield* Deferred.isDone(session.settled)) break;
+              let items: Array<InboxItem> = yield* Queue.clear(session.inbox);
               if (items.length === 0 && quiescent) {
-                // PARKED: the run's work is done until the world moves.
+                // PARKED: the session's work is done until the world moves.
                 // Everything durable is already written through the
                 // handle, so parking is just waiting. Quiet inputs
                 // deliberately DON'T factor in — they accumulate as
-                // context and never wake a parked run.
-                yield* observe(run, { type: "parked" });
+                // context and never wake a parked session.
+                yield* observe(session, { type: "parked" });
                 const wake = yield* Effect.raceFirst(
-                  Effect.map(Queue.take(run.inbox), (item) => ({
+                  Effect.map(Queue.take(session.inbox), (item) => ({
                     settled: false as const,
                     item,
                   })),
-                  Effect.map(Deferred.await(run.settled), () => ({
+                  Effect.map(Deferred.await(session.settled), () => ({
                     settled: true as const,
                   })),
                 );
                 if (wake.settled) break;
-                items = [wake.item, ...(yield* Queue.clear(run.inbox))];
+                items = [wake.item, ...(yield* Queue.clear(session.inbox))];
               }
               // quiet inputs JOIN whatever round is happening anyway —
               // prepended (they arrived earlier), never a wake themselves
-              items = [...run.quiet.splice(0), ...items];
+              items = [...session.quiet.splice(0), ...items];
               // boundary work: requested compaction applies BEFORE the
               // new inputs join the thread, so nothing fresh is lost
-              yield* applyCompaction(run);
+              yield* applyCompaction(session);
               // drained waiters JOIN THE ROUND: only now are they
               // answerable — by AI.reply, or by quiescence as fallback
               const drained: Array<{
@@ -1084,12 +1093,13 @@ export const DriverCore: Layer.Layer<
               }> = [];
               for (const item of items) {
                 drained.push(inputProvenance(item.input));
-                if (item.waiter !== undefined) run.waiters.push(item.waiter);
+                if (item.waiter !== undefined)
+                  session.waiters.push(item.waiter);
               }
               const inputs = drained.map((item) => item.value);
               for (const { value, kind } of drained) {
-                yield* appendThread(run, [asUserMessage(value)]);
-                yield* observe(run, {
+                yield* appendThread(session, [asUserMessage(value)]);
+                yield* observe(session, {
                   type: "input",
                   text:
                     typeof value === "string" ? value : JSON.stringify(value),
@@ -1098,25 +1108,25 @@ export const DriverCore: Layer.Layer<
               }
               // TICK: re-evaluate the stance before every sampling —
               // function turns receive the tick event ({count, inputs})
-              const tick = yield* prepare(run, inputs);
+              const tick = yield* prepare(session, inputs);
               // deliver collected notes (`AI.say`): a PLAIN append, in
               // emission order — no dedupe, no memory. The author's
               // condition (`if (count === 30) yield* AI.say…`) is the
               // whole delivery policy.
-              for (const note of run.pendingNotes.splice(0)) {
+              for (const note of session.pendingNotes.splice(0)) {
                 const text = render(note.template as TemplateStringsArray, [
                   ...note.refs,
                 ]);
                 if (text.length === 0) continue;
-                yield* appendThread(run, [noteMessage(text)]);
-                yield* observe(run, {
+                yield* appendThread(session, [noteMessage(text)]);
+                yield* observe(session, {
                   type: "input",
                   text: `<note>\n${text}\n</note>`,
                   kind: "note",
                 });
               }
               const startedAt = yield* Effect.sync(() => Date.now());
-              const thread = Prompt.make([...(yield* run.handle.messages)]);
+              const thread = Prompt.make([...(yield* session.handle.messages)]);
               const response = yield* model
                 .step({
                   prompt: Prompt.concat(
@@ -1126,16 +1136,16 @@ export const DriverCore: Layer.Layer<
                   toolkit: tick.toolkit,
                   onLive: (part) =>
                     part.kind === "tool-call"
-                      ? observe(run, {
+                      ? observe(session, {
                           type: "tool-call",
-                          tick: run.tick,
+                          tick: session.tick,
                           toolCallId: part.id,
                           toolName: part.name,
                           input: part.params,
                         })
-                      : observe(run, {
+                      : observe(session, {
                           type: "assistant-delta",
-                          tick: run.tick,
+                          tick: session.tick,
                           channel: part.kind,
                           delta: part.delta,
                         }),
@@ -1164,8 +1174,8 @@ export const DriverCore: Layer.Layer<
                   `your last response included a tool call with INVALID ` +
                   `parameters — NOTHING was executed:\n${response.malformed}\n` +
                   `Re-issue the call with parameters matching the tool's schema.`;
-                yield* appendThread(run, [noteMessage(text)]);
-                yield* observe(run, {
+                yield* appendThread(session, [noteMessage(text)]);
+                yield* observe(session, {
                   type: "input",
                   text: `<note>\n${text}\n</note>`,
                   kind: "note",
@@ -1176,16 +1186,16 @@ export const DriverCore: Layer.Layer<
               malformed = 0;
               // where the time goes: one line per sampling (model
               // round-trip INCLUDING the tool handlers that ran
-              // inside it) — the timing profile of every run
+              // inside it) — the timing profile of every session
               yield* Effect.logInfo(
-                `Driver run '${run.key}' of '${termName}': sampling #${run.tick} took ${Date.now() - startedAt}ms` +
+                `Driver session '${session.key}' of '${termName}': sampling #${session.tick} took ${Date.now() - startedAt}ms` +
                   (response.toolCalls.length > 0
                     ? ` [${response.toolCalls.map((call) => call.name).join(", ")}]`
                     : " [quiesced]"),
               );
-              yield* observe(run, {
+              yield* observe(session, {
                 type: "assistant",
-                tick: run.tick,
+                tick: session.tick,
                 ms: Date.now() - startedAt,
                 text: response.text,
                 reasoning: response.reasoningText,
@@ -1196,7 +1206,7 @@ export const DriverCore: Layer.Layer<
                 })),
               });
               for (const result of response.toolResults) {
-                yield* observe(run, {
+                yield* observe(session, {
                   type: "tool-result",
                   toolCallId: result.id,
                   toolName: result.name,
@@ -1204,93 +1214,97 @@ export const DriverCore: Layer.Layer<
                   isFailure: result.isFailure,
                 });
               }
-              run.tick++;
+              session.tick++;
               yield* appendThread(
-                run,
+                session,
                 encodeMessages(
                   Prompt.fromResponseParts(response.content).content,
                 ),
               );
-              yield* run.handle.putMeta(metaOf(run)).pipe(Effect.ignore);
+              yield* session.handle
+                .putMeta(metaOf(session))
+                .pipe(Effect.ignore);
               quiescent = response.toolCalls.length === 0;
               if (quiescent) {
-                for (const waiter of run.waiters.splice(0)) {
+                for (const waiter of session.waiters.splice(0)) {
                   yield* Deferred.succeed(waiter, response.text);
                 }
               }
             }
             // settled: anyone still waiting gets the outcome — the
             // current round's waiters AND undrained arrivals alike
-            const outcome = yield* Deferred.await(run.settled);
-            yield* observe(run, { type: "settled" });
-            // settled runs are never restored — drop the persisted row
-            yield* threadStorage.remove(termName, run.key).pipe(Effect.ignore);
-            for (const item of yield* Queue.clear(run.inbox)) {
-              if (item.waiter !== undefined) run.waiters.push(item.waiter);
+            const outcome = yield* Deferred.await(session.settled);
+            yield* observe(session, { type: "settled" });
+            // settled sessions are never restored — drop the persisted row
+            yield* threadStorage
+              .remove(termName, session.key)
+              .pipe(Effect.ignore);
+            for (const item of yield* Queue.clear(session.inbox)) {
+              if (item.waiter !== undefined) session.waiters.push(item.waiter);
             }
-            for (const waiter of run.waiters.splice(0)) {
+            for (const waiter of session.waiters.splice(0)) {
               yield* Deferred.succeed(waiter, outcome);
             }
-            yield* settleChildren(run);
+            yield* settleChildren(session);
           });
 
         /**
-         * The SUPERVISION cascade: a settled (or crashed) run settles
+         * The SUPERVISION cascade: a settled (or crashed) session settles
          * every session worker it dispatched — parked workers must not
          * outlive the conversation that owns them.
          */
-        const settleChildren = (run: RunState): Effect.Effect<void> =>
+        const settleChildren = (session: SessionState): Effect.Effect<void> =>
           Effect.forEach(
-            [...run.children.values()],
+            [...session.children.values()],
             ({ key, actor }) =>
               actor
                 .settle(key, {
-                  supervisor: { term: termName, key: run.key },
+                  supervisor: { term: termName, key: session.key },
                 })
                 .pipe(Effect.provide(RuntimeContext.phantom)),
             { discard: true },
-          ).pipe(Effect.andThen(Effect.sync(() => run.children.clear())));
+          ).pipe(Effect.andThen(Effect.sync(() => session.children.clear())));
 
-        /** Fork a run's loop onto the process Scope. */
+        /** Fork a session's loop onto the process Scope. */
         const startLoop = (
-          run: RunState,
+          session: SessionState,
           prepare: (
-            run: RunState,
+            session: SessionState,
             inputs: ReadonlyArray<unknown>,
           ) => Effect.Effect<TickResult>,
         ) =>
           process.fork(
-            loop(run, prepare).pipe(
+            loop(session, prepare).pipe(
               // a crashed loop must never strand its callers: the
               // failure exit propagates to every waiter (dispatch
-              // dies with the same defect) and marks the run ended
+              // dies with the same defect) and marks the session ended
               Effect.onExit((exit) =>
                 Exit.isFailure(exit)
                   ? Effect.gen(function* () {
                       // fire-and-forget deliveries (`send`) have no waiter
                       // to die with — the log is their only witness
                       yield* Effect.logError(
-                        `Driver run '${run.key}' of '${termName}' crashed`,
+                        `Driver session '${session.key}' of '${termName}' crashed`,
                         exit.cause,
                       );
                       const crash = describeCrash(exit.cause);
                       // the crash note is durable — crashed threads
                       // restore parked; the next input resumes
-                      yield* observe(run, {
+                      yield* observe(session, {
                         type: "crashed",
                         error: crash.encoded,
                         fatal: !crash.encoded.retryable,
                       });
-                      for (const waiter of run.waiters.splice(0)) {
+                      for (const waiter of session.waiters.splice(0)) {
                         yield* Deferred.done(waiter, exit as Exit.Exit<never>);
                       }
                       yield* Deferred.done(
-                        run.settled,
+                        session.settled,
                         exit as Exit.Exit<never>,
                       );
                       // a crashed supervisor takes its session workers
                       // down with it, same as a settled one
-                      yield* settleChildren(run);
+                      yield* settleChildren(session);
                     })
                   : Effect.void,
               ),
@@ -1302,26 +1316,26 @@ export const DriverCore: Layer.Layer<
             ),
           );
 
-        /** Create-or-get a run WITHOUT admitting input — the run's
+        /** Create-or-get a session WITHOUT admitting input — the session's
          *  init and loop start; the inbox stays untouched. This is
-         *  what a socket ATTACH uses: observing a run must not feed
+         *  what a socket ATTACH uses: observing a session must not feed
          *  it. */
         const ensure = (
           key?: string,
           parent?: { readonly term: string; readonly key: string },
         ) =>
           Effect.gen(function* () {
-            const runKey = key ?? `run-${mintPrefix}-${minted++}`;
-            let run = runs.get(runKey);
-            if (run === undefined) {
-              run = yield* makeRunState(runKey);
-              yield* observe(run, { type: "admitted", parent });
-              // per-run init: the thread exists (Thread in scope for
+            const sessionKey = key ?? `session-${mintPrefix}-${minted++}`;
+            let session = sessions.get(sessionKey);
+            if (session === undefined) {
+              session = yield* makeSessionState(sessionKey);
+              yield* observe(session, { type: "admitted", parent });
+              // per-session init: the thread exists (Thread in scope for
               // thread-scoped setup); no sampling yet (no Tick)
-              const initResult = yield* provideInit(run)(
+              const initResult = yield* provideInit(session)(
                 charter as Effect.Effect<unknown, unknown>,
               ).pipe(Effect.orDie);
-              run.turn = isFragment(initResult)
+              session.turn = isFragment(initResult)
                 ? Effect.succeed(initResult)
                 : Effect.isEffect(initResult)
                   ? (initResult as Turn)
@@ -1330,11 +1344,11 @@ export const DriverCore: Layer.Layer<
                     : yield* Effect.die(
                         `DriverCore: the charter for '${termName}' returned neither prose, a turn effect, nor a turn function`,
                       );
-              yield* startLoop(run, actorTick);
-              runs.set(runKey, run);
+              yield* startLoop(session, actorTick);
+              sessions.set(sessionKey, session);
             }
-            lastKey = runKey;
-            return run;
+            lastKey = sessionKey;
+            return session;
           });
 
         const admit = (
@@ -1344,15 +1358,15 @@ export const DriverCore: Layer.Layer<
           wake = true,
         ) =>
           Effect.gen(function* () {
-            const run = yield* ensure(key, parent);
-            if (!(yield* Deferred.isDone(run.settled))) {
+            const session = yield* ensure(key, parent);
+            if (!(yield* Deferred.isDone(session.settled))) {
               if (wake) {
-                yield* Queue.offer(run.inbox, item);
+                yield* Queue.offer(session.inbox, item);
               } else {
-                run.quiet.push(item);
+                session.quiet.push(item);
               }
             }
-            return run;
+            return session;
           });
 
         const actor: Actor = {
@@ -1371,13 +1385,13 @@ export const DriverCore: Layer.Layer<
               // round only when its own message is drained, so an
               // in-flight earlier round can never answer it
               const waiter = yield* Deferred.make<unknown>();
-              const run = yield* admit(
+              const session = yield* admit(
                 { input: item, waiter },
                 options?.key,
                 options?.parent,
               );
-              if (yield* Deferred.isDone(run.settled)) {
-                return yield* Deferred.await(run.settled);
+              if (yield* Deferred.isDone(session.settled)) {
+                return yield* Deferred.await(session.settled);
               }
               return yield* Deferred.await(waiter);
             }),
@@ -1388,48 +1402,48 @@ export const DriverCore: Layer.Layer<
                   ? [lastKey, first]
                   : [first as string, second];
               if (key === undefined) return;
-              const run = runs.get(key);
-              if (run === undefined) {
+              const session = sessions.get(key);
+              if (session === undefined) {
                 // crash recovery: a KEYED steer must never be silently
-                // dropped — the run's state died with the isolate but
-                // the world's event is real; admit a fresh run
+                // dropped — the session's state died with the isolate but
+                // the world's event is real; admit a fresh session
                 if (second !== undefined) {
                   yield* Effect.asVoid(admit({ input }, key));
                 }
                 return;
               }
-              if (yield* Deferred.isDone(run.settled)) return;
-              yield* Queue.offer(run.inbox, { input });
+              if (yield* Deferred.isDone(session.settled)) return;
+              yield* Queue.offer(session.inbox, { input });
             })) as Actor["steer"],
-          settle: (runKey, event) =>
+          settle: (sessionKey, event) =>
             Effect.gen(function* () {
-              const run = runs.get(runKey);
-              if (run === undefined) return;
+              const session = sessions.get(sessionKey);
+              if (session === undefined) return;
               // idempotent: a second settle changes nothing
-              yield* Deferred.succeed(run.settled, event);
+              yield* Deferred.succeed(session.settled, event);
             }),
           interrupt: () =>
             Effect.gen(function* () {
-              for (const run of runs.values()) {
-                yield* Deferred.succeed(run.settled, {
+              for (const session of sessions.values()) {
+                yield* Deferred.succeed(session.settled, {
                   interrupted: true,
                 });
               }
             }),
         };
         // the socket door: what `AgentGateway.attach` resolves a term
-        // to — ensure (never feeds the run) plus the submit sink
+        // to — ensure (never feeds the session) plus the submit sink
         socketHosts.set(termName, {
           ensure: (key: string) => ensure(key),
           submit: (key: string, input: unknown) =>
             Effect.asVoid(admit({ input }, key)),
         });
-        // ── RESTORE (bootstrap §3): persisted runs come back PARKED,
-        // threads primed, seq cursor continued. Init re-runs — the
+        // ── RESTORE (bootstrap §3): persisted sessions come back PARKED,
+        // threads primed, seq cursor continued. Init re-executes — the
         // charter closure is the instance, rebuilt from CURRENT code
         // (level-triggered: the next tick renders the new stance).
         // No `admitted` observation: the projection already has the
-        // run's history; restored runs emit nothing until they wake.
+        // session's history; restored sessions emit nothing until they wake.
         {
           const persisted = yield* threadStorage
             .keys(termName)
@@ -1446,17 +1460,17 @@ export const DriverCore: Layer.Layer<
             );
           if (persisted.length > 0) {
             yield* Effect.logInfo(
-              `Driver '${termName}': restoring ${persisted.length} run(s) from storage`,
+              `Driver '${termName}': restoring ${persisted.length} session(s) from storage`,
             );
           }
-          for (const runKey of persisted) {
-            if (runs.has(runKey)) continue;
-            const run = yield* makeRunState(runKey);
-            const meta = yield* run.handle.meta.pipe(
+          for (const sessionKey of persisted) {
+            if (sessions.has(sessionKey)) continue;
+            const session = yield* makeSessionState(sessionKey);
+            const meta = yield* session.handle.meta.pipe(
               Effect.catchCause((cause) =>
                 Effect.as(
                   Effect.logWarning(
-                    `ThreadStorage: meta for '${runKey}' of '${termName}' failed to read — starting without it`,
+                    `ThreadStorage: meta for '${sessionKey}' of '${termName}' failed to read — starting without it`,
                     cause,
                   ),
                   undefined,
@@ -1464,13 +1478,13 @@ export const DriverCore: Layer.Layer<
               ),
             );
             if (meta === undefined) continue;
-            run.tick = meta.tick;
-            run.observed = meta.observed;
-            for (const skill of meta.active) run.active.add(skill);
-            const initResult = yield* provideInit(run)(
+            session.tick = meta.tick;
+            session.observed = meta.observed;
+            for (const skill of meta.active) session.active.add(skill);
+            const initResult = yield* provideInit(session)(
               charter as Effect.Effect<unknown, unknown>,
             ).pipe(Effect.orDie);
-            run.turn = isFragment(initResult)
+            session.turn = isFragment(initResult)
               ? Effect.succeed(initResult)
               : Effect.isEffect(initResult)
                 ? (initResult as Turn)
@@ -1479,21 +1493,21 @@ export const DriverCore: Layer.Layer<
                   : yield* Effect.die(
                       `DriverCore: the charter for '${termName}' returned neither prose, a turn effect, nor a turn function`,
                     );
-            // The run is REGISTERED synchronously (admits/ensures find
+            // The session is REGISTERED synchronously (admits/ensures find
             // its inbox and queue into it), but the loop start must
             // not block the BUILD: `startLoop` awaits the Host
             // program starting, which a plan-time build never does.
             // `runOnHost` registers it as a program runner — a
             // planner registers-and-discards (no restore in a
             // planner, no hang); the real runtime starts the loop the
-            // moment `exports.program` runs, draining anything the
+            // moment `exports.program` sessions, draining anything the
             // inbox queued meanwhile.
-            yield* runOnHost(startLoop(run, actorTick)).pipe(
+            yield* runOnHost(startLoop(session, actorTick)).pipe(
               Effect.asVoid,
             ) as Effect.Effect<void>;
-            runs.set(runKey, run);
+            sessions.set(sessionKey, session);
             yield* Effect.logInfo(
-              `Driver '${termName}': restored run '${runKey}' parked at tick ${meta.tick}`,
+              `Driver '${termName}': restored session '${sessionKey}' parked at tick ${meta.tick}`,
             );
           }
         }
@@ -1504,7 +1518,7 @@ export const DriverCore: Layer.Layer<
      * The local {@link AgentGateway}: the SAME protocol the Cloudflare
      * driver speaks from its Durable Objects, served in-process — a
      * WebSocket upgrade on the host's own HTTP server, replay from
-     * the run's handle, live broadcast from `observe`.
+     * the session's handle, live broadcast from `observe`.
      */
     // socket-serving fibers live on the process Scope — never on the
     // HTTP request that carried the upgrade: Bun counts an unresolved
@@ -1522,34 +1536,34 @@ export const DriverCore: Layer.Layer<
             `DriverCore: no interpreted term '${term}' to attach to — has its Layer been built?`,
           );
         }
-        const run = yield* host.ensure(key);
+        const session = yield* host.ensure(key);
         const socket = yield* request.upgrade.pipe(Effect.orDie);
         const serve = Effect.gen(function* () {
           const write = yield* socket.writer;
-          const send = (frame: RunSocketServerFrame): Effect.Effect<void> =>
+          const send = (frame: SessionSocketServerFrame): Effect.Effect<void> =>
             Effect.asVoid(
               Effect.ignore(write(JSON.stringify(frame))),
             ) as Effect.Effect<void>;
-          const handle = handleRunSocketFrame(
+          const handle = handleSessionSocketFrame(
             {
-              replay: (fromSeq) => run.handle.observations(fromSeq),
-              watermark: Effect.sync(() => run.observed),
+              replay: (fromSeq) => session.handle.observations(fromSeq),
+              watermark: Effect.sync(() => session.observed),
               submit: (input) => host.submit(key, input),
             },
             send,
           );
-          run.sockets.add(send);
+          session.sockets.add(send);
           yield* socket
             .runString((raw: string) =>
-              handle(JSON.parse(raw) as RunSocketClientFrame).pipe(
+              handle(JSON.parse(raw) as SessionSocketClientFrame).pipe(
                 Effect.catchDefect((defect) =>
-                  Effect.logWarning(`[run-socket] bad frame: ${defect}`),
+                  Effect.logWarning(`[session-socket] bad frame: ${defect}`),
                 ),
               ),
             )
             .pipe(
               Effect.ignore,
-              Effect.ensuring(Effect.sync(() => run.sockets.delete(send))),
+              Effect.ensuring(Effect.sync(() => session.sockets.delete(send))),
             );
         });
         yield* process.fork(Effect.scoped(serve).pipe(Effect.asVoid));

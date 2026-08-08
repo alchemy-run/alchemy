@@ -36,7 +36,7 @@ export type ToolParameters<Refs> = {
  * host process term's turns — the template becomes the toolkit
  * description, the interpolated `Parameter` refs become the schema, and
  * the `<Self>()` tag resolves its implementation (the physics) from
- * ambient context. A tool has no inbox, no runs, and no ring.
+ * ambient context. A tool has no inbox, no sessions, and no ring.
  */
 export interface Tool<
   Name extends string = string,
@@ -171,7 +171,7 @@ export const isTool = (value: unknown): value is Tool<any, any> =>
  * `yield*`ed in the charter's INIT
  * (`const park = yield* AI.Tool("park")`…`(() => …)`). Spliced into
  * the charter's prose, it grants the tool with its physics carried in
- * the splice: the closure form for run-local affordances (a tool that
+ * the splice: the closure form for session-local affordances (a tool that
  * flips a phase `Ref`, a persona-private verb no other term should
  * share).
  */

@@ -1,8 +1,8 @@
 /**
- * The CHAT PROJECTION of driver runs — the materialized view every UI
- * over the driver needs (designs/ai/streaming.md): one driver RUN
+ * The CHAT PROJECTION of driver sessions — the materialized view every UI
+ * over the driver needs (designs/ai/streaming.md): one driver SESSION
  * (term + key) = one CHAT, id `${term}:${key}`; the driver's
- * {@link RunObservation} log is the canonical record — per-run,
+ * {@link SessionObservation} log is the canonical record — per-session,
  * seq-ordered, ring-buffered; `subscribe` is the snapshot+tail
  * pattern every surveyed harness uses.
  *
@@ -13,16 +13,16 @@
  *
  * Same per-environment-physics pattern as every org seam:
  * {@link ChatsMemory} for a single process today; a Durable Object or
- * sqlite implementation slots in behind the same contract when runs
+ * sqlite implementation slots in behind the same contract when sessions
  * must survive their host.
  */
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
-import { RunObserver, type RunObservation } from "./Observer.ts";
+import { SessionObserver, type SessionObservation } from "./Observer.ts";
 
-/** Chat identity: one driver run. */
+/** Chat identity: one driver session. */
 export interface ChatSummary {
   readonly id: string;
   readonly term: string;
@@ -31,12 +31,12 @@ export interface ChatSummary {
   readonly status: "running" | "idle" | "settled" | "crashed";
   /** Samplings so far (assistant observations). */
   readonly ticks: number;
-  /** When the run was admitted. */
+  /** When the session was admitted. */
   readonly createdAt: number;
   readonly updatedAt: number;
-  /** The chat id of the run that dispatched this one, if any. */
+  /** The chat id of the session that dispatched this one, if any. */
   readonly parent: string | undefined;
-  /** The run's FIRST input (truncated) — the work item it was born with. */
+  /** The session's FIRST input (truncated) — the work item it was born with. */
   readonly firstInput: string | undefined;
 }
 
@@ -60,7 +60,7 @@ export interface StreamingSample {
 
 /** A chat's full state: the canonical log + the in-flight sampling. */
 export interface ChatSnapshot {
-  readonly log: ReadonlyArray<RunObservation>;
+  readonly log: ReadonlyArray<SessionObservation>;
   readonly streaming: StreamingSample | undefined;
 }
 
@@ -70,7 +70,7 @@ export class Chats extends Context.Service<
   Chats,
   {
     /** Feed one driver observation into the projection. */
-    readonly ingest: (observation: RunObservation) => Effect.Effect<void>;
+    readonly ingest: (observation: SessionObservation) => Effect.Effect<void>;
     readonly list: () => Effect.Effect<ReadonlyArray<ChatSummary>>;
     /** The chat's canonical log + in-flight sampling, or undefined. */
     readonly snapshot: (id: string) => Effect.Effect<ChatSnapshot | undefined>;
@@ -78,15 +78,15 @@ export class Chats extends Context.Service<
      * Live tail: backlog (observations with `seq > since`) plus a
      * queue of everything after. Registers even for chats that have
      * not been admitted yet (subscribe-then-trigger races). The
-     * caller MUST run `unsubscribe` when done — tie it to the
+     * caller MUST session `unsubscribe` when done — tie it to the
      * response stream's lifetime, not the request scope.
      */
     readonly subscribe: (
       id: string,
       since?: number,
     ) => Effect.Effect<{
-      readonly backlog: ReadonlyArray<RunObservation>;
-      readonly queue: Queue.Queue<RunObservation>;
+      readonly backlog: ReadonlyArray<SessionObservation>;
+      readonly queue: Queue.Queue<SessionObservation>;
       readonly unsubscribe: Effect.Effect<void>;
     }>;
   }
@@ -98,9 +98,9 @@ export class Chats extends Context.Service<
  * instance (the same const the HTTP surface reads — layers memoize by
  * reference).
  */
-export const ChatsObserver: Layer.Layer<RunObserver, never, Chats> =
+export const ChatsObserver: Layer.Layer<SessionObserver, never, Chats> =
   Layer.effect(
-    RunObserver,
+    SessionObserver,
     Effect.gen(function* () {
       const chats = yield* Chats;
       return { emit: chats.ingest };
@@ -131,8 +131,8 @@ interface ChatState {
         toolCalls: Array<{ id: string; name: string; input: unknown }>;
       }
     | undefined;
-  log: Array<RunObservation>;
-  readonly subscribers: Set<Queue.Queue<RunObservation>>;
+  log: Array<SessionObservation>;
+  readonly subscribers: Set<Queue.Queue<SessionObservation>>;
 }
 
 /** In-memory physics: a single process's projection. */
@@ -217,7 +217,7 @@ export const ChatsMemory = (options?: ChatsMemoryOptions): Layer.Layer<Chats> =>
             }
             if (observation.type === "assistant") chat.ticks++;
             // the working/waiting line: parked = idle until the next
-            // input wakes it (settled/crashed runs emit nothing after)
+            // input wakes it (settled/crashed sessions emit nothing after)
             if (observation.type === "parked") chat.status = "idle";
             if (observation.type === "input") chat.status = "running";
             if (observation.type === "settled") chat.status = "settled";
@@ -250,7 +250,7 @@ export const ChatsMemory = (options?: ChatsMemoryOptions): Layer.Layer<Chats> =>
           }),
         subscribe: (id, since) =>
           Effect.gen(function* () {
-            const queue = yield* Queue.unbounded<RunObservation>();
+            const queue = yield* Queue.unbounded<SessionObservation>();
             const at = id.indexOf(":");
             const chat =
               chats.get(id) ??

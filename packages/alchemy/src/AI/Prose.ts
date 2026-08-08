@@ -21,7 +21,7 @@ import type { Services } from "./Services.ts";
  *
  * Blocks are the change-detection unit: on the first tick every block
  * freezes into the system prompt; on later ticks any block whose text
- * is not in that frozen head forms the run's SITUATION, delivered as
+ * is not in that frozen head forms the session's SITUATION, delivered as
  * one superseding message when (and only when) it changes.
  */
 export interface Fragment<

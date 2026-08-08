@@ -1,6 +1,6 @@
 /**
- * First-class React hooks for talking to agent runs — the client half
- * of the run-socket protocol ({@link RunSocketTransport}), packaged
+ * First-class React hooks for talking to agent sessions — the client half
+ * of the session-socket protocol ({@link SessionSocketTransport}), packaged
  * the way a UI wants to consume it:
  *
  * ```tsx
@@ -20,7 +20,7 @@
  * the agent's socket transport instead of HTTP POST + SSE. It works
  * against ANY driver that provides `AI.AgentGateway`: the in-memory
  * driver serving from a local process and the Cloudflare driver
- * serving from a run's own Durable Object speak the identical
+ * serving from a session's own Durable Object speak the identical
  * protocol.
  *
  * This module lives at `alchemy/AI/React` (not the `alchemy/AI`
@@ -31,10 +31,10 @@ import { useChat as useAiChat } from "@ai-sdk/react";
 import type { ChatInit, UIMessage } from "ai";
 import { useEffect, useMemo } from "react";
 import { chatId as makeChatId } from "./Chats.ts";
-import { RunSocketTransport } from "./RunSocket.ts";
+import { SessionSocketTransport } from "./SessionSocket.ts";
 
 /**
- * Build the run-socket URL for a chat id (`${term}:${key}`) or an
+ * Build the session-socket URL for a chat id (`${term}:${key}`) or an
  * explicit `{ term, key }`. Keys may contain `/` — each path segment
  * is encoded so the Worker's rest-join parser recovers them.
  */
@@ -84,14 +84,14 @@ export interface UseAgentOptions {
   readonly history?: "replay" | "live";
 }
 
-/** A connection to ONE agent run — hand it to {@link useChat}. */
+/** A connection to ONE agent session — hand it to {@link useChat}. */
 export interface AgentConnection {
   readonly url: string;
-  readonly transport: RunSocketTransport;
+  readonly transport: SessionSocketTransport;
 }
 
 /**
- * Connect to an agent run over its WebSocket. The connection is
+ * Connect to an agent session over its WebSocket. The connection is
  * memoized per URL; {@link useChat} with `resume: true` opens it on
  * mount via `reconnectToStream`.
  */
@@ -106,7 +106,7 @@ export const useAgent = (options: UseAgentOptions): AgentConnection => {
   }, [options.url, options.chatId, options.term, options.key]);
   const history = options.history;
   return useMemo(
-    () => ({ url, transport: new RunSocketTransport({ url, history }) }),
+    () => ({ url, transport: new SessionSocketTransport({ url, history }) }),
     [url, history],
   );
 };
@@ -124,8 +124,8 @@ export type UseChatOptions = Omit<ChatInit<UIMessage>, "transport"> & {
 };
 
 /**
- * The AI SDK's `useChat`, speaking to an agent run: submits go down
- * the run socket as inputs, and the run's observations come back as
+ * The AI SDK's `useChat`, speaking to an agent session: submits go down
+ * the session socket as inputs, and the session's observations come back as
  * `UIMessageChunk`s. With `persist` (default), the socket re-subscribes
  * after every burst so a parked IssueOwner keeps streaming.
  */

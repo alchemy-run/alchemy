@@ -3,13 +3,13 @@
  *
  * ```ts
  * AI.DriverCore.pipe(
- *   Layer.provide(SqliteThreadStorage(".alchemy/runs.sqlite")),
+ *   Layer.provide(SqliteThreadStorage(".alchemy/sessions.sqlite")),
  * )
  * ```
  *
  * Every thread row, observation, and meta write lands in sqlite the
  * moment it happens (the driver is write-through), so a killed
- * process loses nothing: restart restores every unsettled run PARKED
+ * process loses nothing: restart restores every unsettled session PARKED
  * with its thread primed and its observation cursor continued.
  *
  * Same sqlite physics as the sibling stores: no finalizer, commits
@@ -20,28 +20,28 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Prompt from "effect/unstable/ai/Prompt";
-import type { RunObservation } from "../AI/Observer.ts";
+import type { SessionObservation } from "../AI/Observer.ts";
 import {
   ThreadStorage,
-  type RunMeta,
+  type SessionMeta,
   type ThreadHandle,
 } from "../AI/ThreadStorage.ts";
 
 const TABLES = `
-CREATE TABLE IF NOT EXISTS run_meta (
+CREATE TABLE IF NOT EXISTS session_meta (
   term TEXT NOT NULL,
   key  TEXT NOT NULL,
   data TEXT NOT NULL,
   PRIMARY KEY (term, key)
 );
-CREATE TABLE IF NOT EXISTS run_messages (
+CREATE TABLE IF NOT EXISTS session_messages (
   term TEXT NOT NULL,
   key  TEXT NOT NULL,
   seq  INTEGER NOT NULL,
   data TEXT NOT NULL,
   PRIMARY KEY (term, key, seq)
 );
-CREATE TABLE IF NOT EXISTS run_observations (
+CREATE TABLE IF NOT EXISTS session_observations (
   term TEXT NOT NULL,
   key  TEXT NOT NULL,
   seq  INTEGER NOT NULL,
@@ -73,23 +73,25 @@ export const SqliteThreadStorage = (path: string): Layer.Layer<ThreadStorage> =>
               (
                 db
                   .query(
-                    "SELECT COALESCE(MAX(seq) + 1, 0) AS seq FROM run_messages WHERE term = ? AND key = ?",
+                    "SELECT COALESCE(MAX(seq) + 1, 0) AS seq FROM session_messages WHERE term = ? AND key = ?",
                   )
                   .get(term, key) as { seq: number }
               ).seq;
-            const putMeta = (meta: RunMeta) => {
+            const putMeta = (meta: SessionMeta) => {
               db.query(
-                "INSERT OR REPLACE INTO run_meta (term, key, data) VALUES (?, ?, ?)",
+                "INSERT OR REPLACE INTO session_meta (term, key, data) VALUES (?, ?, ?)",
               ).run(term, key, JSON.stringify(meta));
             };
             return {
               meta: Effect.sync(() => {
                 const row = db
-                  .query("SELECT data FROM run_meta WHERE term = ? AND key = ?")
+                  .query(
+                    "SELECT data FROM session_meta WHERE term = ? AND key = ?",
+                  )
                   .get(term, key) as { data: string } | null;
                 return row === null
                   ? undefined
-                  : (JSON.parse(row.data) as RunMeta);
+                  : (JSON.parse(row.data) as SessionMeta);
               }),
               putMeta: (meta) => Effect.sync(() => putMeta(meta)),
               messages: Effect.sync(
@@ -97,7 +99,7 @@ export const SqliteThreadStorage = (path: string): Layer.Layer<ThreadStorage> =>
                   (
                     db
                       .query(
-                        "SELECT data FROM run_messages WHERE term = ? AND key = ? ORDER BY seq",
+                        "SELECT data FROM session_messages WHERE term = ? AND key = ? ORDER BY seq",
                       )
                       .all(term, key) as Array<{ data: string }>
                   ).map(
@@ -110,7 +112,7 @@ export const SqliteThreadStorage = (path: string): Layer.Layer<ThreadStorage> =>
                   db.transaction(() => {
                     let seq = nextMessageSeq();
                     const insert = db.query(
-                      "INSERT INTO run_messages (term, key, seq, data) VALUES (?, ?, ?, ?)",
+                      "INSERT INTO session_messages (term, key, seq, data) VALUES (?, ?, ?, ?)",
                     );
                     for (const message of messages) {
                       insert.run(term, key, seq++, JSON.stringify(message));
@@ -121,10 +123,10 @@ export const SqliteThreadStorage = (path: string): Layer.Layer<ThreadStorage> =>
                 Effect.sync(() => {
                   db.transaction(() => {
                     db.query(
-                      "DELETE FROM run_messages WHERE term = ? AND key = ?",
+                      "DELETE FROM session_messages WHERE term = ? AND key = ?",
                     ).run(term, key);
                     const insert = db.query(
-                      "INSERT INTO run_messages (term, key, seq, data) VALUES (?, ?, ?, ?)",
+                      "INSERT INTO session_messages (term, key, seq, data) VALUES (?, ?, ?, ?)",
                     );
                     let seq = 0;
                     for (const message of messages) {
@@ -133,12 +135,12 @@ export const SqliteThreadStorage = (path: string): Layer.Layer<ThreadStorage> =>
                   })();
                 }),
               // the row and its cursor land in ONE transaction: a
-              // restored run can never re-issue a used seq
+              // restored session can never re-issue a used seq
               appendObservation: (observation, meta) =>
                 Effect.sync(() => {
                   db.transaction(() => {
                     db.query(
-                      "INSERT OR REPLACE INTO run_observations (term, key, seq, data) VALUES (?, ?, ?, ?)",
+                      "INSERT OR REPLACE INTO session_observations (term, key, seq, data) VALUES (?, ?, ?, ?)",
                     ).run(
                       term,
                       key,
@@ -154,12 +156,12 @@ export const SqliteThreadStorage = (path: string): Layer.Layer<ThreadStorage> =>
                     (
                       db
                         .query(
-                          "SELECT data FROM run_observations WHERE term = ? AND key = ? AND seq >= ? ORDER BY seq",
+                          "SELECT data FROM session_observations WHERE term = ? AND key = ? AND seq >= ? ORDER BY seq",
                         )
                         .all(term, key, fromSeq) as Array<{ data: string }>
                     ).map(
-                      (row) => JSON.parse(row.data) as RunObservation,
-                    ) as ReadonlyArray<RunObservation>,
+                      (row) => JSON.parse(row.data) as SessionObservation,
+                    ) as ReadonlyArray<SessionObservation>,
                 ),
             };
           }),
@@ -167,22 +169,21 @@ export const SqliteThreadStorage = (path: string): Layer.Layer<ThreadStorage> =>
           Effect.sync(() =>
             (
               db
-                .query("SELECT key FROM run_meta WHERE term = ?")
+                .query("SELECT key FROM session_meta WHERE term = ?")
                 .all(term) as Array<{ key: string }>
             ).map((row) => row.key),
           ),
         remove: (term, key) =>
           Effect.sync(() => {
             db.transaction(() => {
-              db.query("DELETE FROM run_meta WHERE term = ? AND key = ?").run(
-                term,
-                key,
-              );
               db.query(
-                "DELETE FROM run_messages WHERE term = ? AND key = ?",
+                "DELETE FROM session_meta WHERE term = ? AND key = ?",
               ).run(term, key);
               db.query(
-                "DELETE FROM run_observations WHERE term = ? AND key = ?",
+                "DELETE FROM session_messages WHERE term = ? AND key = ?",
+              ).run(term, key);
+              db.query(
+                "DELETE FROM session_observations WHERE term = ? AND key = ?",
               ).run(term, key);
             })();
           }),

@@ -34,49 +34,49 @@ export class RoundAbandoned extends Data.TaggedError("RoundAbandoned")<{
 }> {
   override get message() {
     return (
-      `run '${this.term}/${this.key}': round abandoned after ` +
+      `session '${this.term}/${this.key}': round abandoned after ` +
       `${this.attempts} interrupted attempts`
     );
   }
 }
 
 /**
- * The envelope every observation carries: which run it belongs to
- * (`term` + `key`), WHERE in that run's history it sits (`seq` — a
- * per-run monotonic sequence, the resume/dedupe cursor), and when.
+ * The envelope every observation carries: which session it belongs to
+ * (`term` + `key`), WHERE in that session's history it sits (`seq` — a
+ * per-session monotonic sequence, the resume/dedupe cursor), and when.
  */
 export interface ObservationEnvelope {
   readonly term: string;
   readonly key: string;
-  /** Per-run monotonic sequence number — the catch-up cursor. */
+  /** Per-session monotonic sequence number — the catch-up cursor. */
   readonly seq: number;
   readonly at: number;
 }
 
 /**
  * One structured fact about a driver's execution — enough to
- * reconstruct every run's TRANSCRIPT (inputs, assistant text, tool
+ * reconstruct every session's TRANSCRIPT (inputs, assistant text, tool
  * calls and their results) and to stream it live. Deliberately the
  * DRIVER's vocabulary, not any UI protocol's: every surveyed harness
  * (Codex, OpenCode, Mastra, flue) keeps a canonical internal event log
  * and translates at the edge (see designs/ai/streaming.md).
  * JSON-serializable by construction.
  */
-export type RunObservation = ObservationEnvelope &
+export type SessionObservation = ObservationEnvelope &
   (
     | {
         readonly type: "admitted";
-        /** The run whose dispatch/send caused this admission, if any. */
+        /** The session whose dispatch/send caused this admission, if any. */
         readonly parent?: { readonly term: string; readonly key: string };
       }
     | {
-        /** A message appended to the run's thread: work item, steer, or note. */
+        /** A message appended to the session's thread: work item, steer, or note. */
         readonly type: "input";
         readonly text: string;
         /**
          * PROVENANCE, structural: `note` = driver-authored aside
          * (`AI.say`, recovery notes); `reminder` = a `Thread.remind`
-         * delivery (the run's own past self). Absent = an ordinary
+         * delivery (the session's own past self). Absent = an ordinary
          * message (world event or steer). The in-band text markers
          * (`<note>`, `[reminder]`) remain — they are MODEL-facing;
          * this field is for projections, which must never parse them.
@@ -113,7 +113,7 @@ export type RunObservation = ObservationEnvelope &
     | {
         /** One sampling's response — text and/or tool calls. */
         readonly type: "assistant";
-        /** The sampling's ordinal within its run (0-based). */
+        /** The sampling's ordinal within its session (0-based). */
         readonly tick: number;
         /** Model round-trip INCLUDING the tool handlers that ran inside it. */
         readonly ms: number;
@@ -136,23 +136,23 @@ export type RunObservation = ObservationEnvelope &
       }
     | {
         /**
-         * A DELEGATION left this run: the intrinsic `dispatch` or a
+         * A DELEGATION left this session: the intrinsic `dispatch` or a
          * policy door (`AI.Dispatch`) handed a task to another agent.
-         * Emitted when the handler runs, so observers can pair the
+         * Emitted when the handler finishes, so observers can pair the
          * tool call with the worker thread it created (`key` is the
-         * child run's key; undefined when the child was minted
+         * child session's key; undefined when the child was minted
          * anonymously).
          */
         readonly type: "dispatched";
         readonly tick: number;
         readonly toolName: string;
         readonly agent: string;
-        /** The child run's key; undefined when minted anonymously. */
+        /** The child session's key; undefined when minted anonymously. */
         readonly child: string | undefined;
       }
     | {
         /**
-         * The run QUIESCED with an empty inbox and is parked — its
+         * The session QUIESCED with an empty inbox and is parked — its
          * work is done until the world moves (the next input wakes
          * it). The line between "working" and "waiting" for any UI.
          */
@@ -177,13 +177,13 @@ export type RunObservation = ObservationEnvelope &
 /**
  * The driver's OBSERVABILITY seam — an optional service (the same
  * pattern as `ToolCalling`): when present in the context a driver is
- * interpreted in, every run lifecycle fact is emitted into it;
+ * interpreted in, every session lifecycle fact is emitted into it;
  * absent, the driver spends nothing. Emission is fire-and-forget —
- * an observer can never fail or slow a run.
+ * an observer can never fail or slow a session.
  */
-export class RunObserver extends Context.Service<
-  RunObserver,
+export class SessionObserver extends Context.Service<
+  SessionObserver,
   {
-    readonly emit: (observation: RunObservation) => Effect.Effect<void>;
+    readonly emit: (observation: SessionObservation) => Effect.Effect<void>;
   }
->()("alchemy/AI/RunObserver") {}
+>()("alchemy/AI/SessionObserver") {}

@@ -12,9 +12,9 @@ export interface DispatchDerived {
   /** The task handed to the worker — it sees nothing else. */
   readonly task: string;
   /**
-   * The child run key (`${thread.key}/Engineer/build`): a REPEAT
+   * The child session key (`${thread.key}/Engineer/build`): a REPEAT
    * dispatch to the same key continues the same worker, context
-   * intact. Omitted = a fresh anonymous run per call.
+   * intact. Omitted = a fresh anonymous session per call.
    */
   readonly key?: string;
 }

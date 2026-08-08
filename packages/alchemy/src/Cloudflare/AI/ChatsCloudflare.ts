@@ -1,12 +1,12 @@
 /**
  * The Chats projection on Cloudflare — a singleton Durable Object that
- * every run DO and the HTTP Worker share. `ChatsMemory` is per-isolate;
+ * every session DO and the HTTP Worker share. `ChatsMemory` is per-isolate;
  * this is the board's source of truth so `/api/board` sees admissions
- * that happened inside AgentRuns.
+ * that happened inside AgentSessions.
  *
- * Run DOs reach it through {@link ChatsObserver} → `chats.ingest` (RPC).
+ * Session DOs reach it through {@link ChatsObserver} → `chats.ingest` (RPC).
  * The Worker HTTP surface `yield* Chats` for `list` / `snapshot`. Live
- * per-run transcripts stay on the run socket (`/attach`); this DO holds
+ * per-session transcripts stay on the session socket (`/attach`); this DO holds
  * summaries + a ring-buffered log for the board and initial hydrate.
  */
 import {
@@ -16,7 +16,7 @@ import {
   type ChatSummary,
   type StreamingSample,
 } from "../../AI/Chats.ts";
-import type { RunObservation } from "../../AI/Observer.ts";
+import type { SessionObservation } from "../../AI/Observer.ts";
 import { RuntimeContext } from "../../RuntimeContext.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -39,7 +39,7 @@ interface StoredChat {
   parent: string | undefined;
   firstInput: string | undefined;
   streaming: StreamingSample | undefined;
-  log: Array<RunObservation>;
+  log: Array<SessionObservation>;
 }
 
 const MAX_LOG = 2000;
@@ -47,7 +47,7 @@ const FIRST_INPUT_BYTES = 4000;
 
 const applyObservation = (
   chat: StoredChat,
-  observation: RunObservation,
+  observation: SessionObservation,
 ): StoredChat => {
   const next: StoredChat = {
     ...chat,
@@ -138,14 +138,14 @@ const toSummary = (id: string, chat: StoredChat): ChatSummary => ({
 });
 
 interface ChatsRpc extends MainRpc<DurableObjectState> {
-  readonly ingest: (observation: RunObservation) => Effect.Effect<void>;
+  readonly ingest: (observation: SessionObservation) => Effect.Effect<void>;
   readonly list: () => Effect.Effect<ReadonlyArray<ChatSummary>>;
   readonly snapshot: (id: string) => Effect.Effect<ChatSnapshot | undefined>;
 }
 
 /**
  * Cloudflare physics for {@link Chats}: one Durable Object (`board`)
- * shared by every run and the HTTP Worker.
+ * shared by every session and the HTTP Worker.
  */
 export const ChatsCloudflare: Layer.Layer<Chats, never, Worker> = Layer.effect(
   Chats,
@@ -239,12 +239,12 @@ export const ChatsCloudflare: Layer.Layer<Chats, never, Worker> = Layer.effect(
         board().ingest(observation).pipe(Effect.orDie, Effect.asVoid),
       list: () => board().list().pipe(Effect.orDie),
       snapshot: (id) => board().snapshot(id).pipe(Effect.orDie),
-      // Live tails belong on the run socket (`/attach`). Directory
+      // Live tails belong on the session socket (`/attach`). Directory
       // consumers poll `list`; per-chat HTTP SSE gets the durable
       // backlog and an inert queue (no cross-isolate Queue).
       subscribe: (id, since) =>
         Effect.gen(function* () {
-          const queue = yield* Queue.unbounded<RunObservation>();
+          const queue = yield* Queue.unbounded<SessionObservation>();
           const snap = yield* board().snapshot(id).pipe(Effect.orDie);
           const backlog =
             snap === undefined

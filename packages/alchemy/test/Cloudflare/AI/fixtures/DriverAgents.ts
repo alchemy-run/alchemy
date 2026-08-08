@@ -246,7 +246,7 @@ export const SupervisorLive = Supervisor.make(
  * a hang legible in `wrangler tail`: the last phase logged is the
  * phase that stalled.
  */
-export const LoggingObserver = Layer.succeed(AI.RunObserver, {
+export const LoggingObserver = Layer.succeed(AI.SessionObserver, {
   emit: (observation) =>
     Effect.log(
       `[driver] ${observation.term}/${observation.key} #${observation.seq} ${observation.type}`,

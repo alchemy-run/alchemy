@@ -35,7 +35,7 @@ type Ops = typeof Ops;
  * segments plus its `name`. The chain is private to this module; the
  * two ways onto it:
  *
- * - **Hosts** (the AI drivers) frame every run automatically:
+ * - **Hosts** (the AI drivers) frame every session automatically:
  *   `["IssueOwner", "sam-goodwin/test-alchemy#123"]`. Charter code
  *   gets per-instance isolation without ever naming itself.
  * - **Libraries** scope their own state with {@link within}:
@@ -50,7 +50,7 @@ type Ops = typeof Ops;
  * ## Why a named constructor and our own type
  *
  * - **Identity.** Refs are anonymous and positional; after a process
- *   restart / DO eviction the creating closure re-runs and makes *new*
+ *   restart / DO eviction the creating closure re-executes and makes *new*
  *   refs. Durable identity needs a stable key — the name + chain.
  * - **Serializability.** A `Ref` may hold anything; a durable one must
  *   round-trip. Pass a `schema` for rich types; without one the value
@@ -61,7 +61,7 @@ type Ops = typeof Ops;
  *   the type lets `write` be an Effect and any store — DO storage, KV,
  *   D1, filesystem — implement it honestly.
  * - **Failures are defects.** Persistence can fail, but a consumer
- *   can't meaningfully handle a storage failure mid-run: the store
+ *   can't meaningfully handle a storage failure mid-session: the store
  *   surfaces it as a defect (crash-and-retry, at-least-once), keeping
  *   every operation's error channel clean instead of threading a
  *   `StoreError` through all charter code.
@@ -135,10 +135,10 @@ const Chain = Context.Reference<ReadonlyArray<string>>(
  * - Library code isolates its private state:
  *   `myHelpers.pipe(PersistentRef.within("coding"))` — its
  *   `"progress"` and the charter's `"progress"` are different rows.
- * - Hosts (the AI drivers) frame each run with its durable identity
- *   (`within(agent, runKey)`), which is why the same charter's
+ * - Hosts (the AI drivers) frame each session with its durable identity
+ *   (`within(agent, sessionKey)`), which is why the same charter's
  *   `make("phase")` is isolated per instance on any store — including
- *   shared ones. Segments are arbitrary strings; run keys with `/`
+ *   shared ones. Segments are arbitrary strings; session keys with `/`
  *   need no escaping.
  */
 export const within =
@@ -225,12 +225,12 @@ export interface MakeOptions<A, I> {
  * ambient namespace chain (see {@link within}) plus `name`.
  *
  * - First activation: no persisted row exists, the ref starts at the
- *   `initial` value — a lazy thunk, or an Effect that is run ONLY in
+ *   `initial` value — a lazy thunk, or an Effect that is session ONLY in
  *   this case (the "load once per instance" pattern: fetch it on
  *   first contact, never again). The default itself is NOT persisted
  *   until written — an untouched name has no row.
  * - Re-activation: the persisted value is loaded and decoded; the ref
- *   resumes where it left off. An Effect `initial` does not run.
+ *   resumes where it left off. An Effect `initial` does not session.
  * - Same store instance, same identity: returns the memoized ref (do
  *   not reuse one name at two different types).
  *
@@ -315,7 +315,7 @@ export const make = <A, I = A, E = never, R = never>(
 /**
  * An in-memory store: durability equals the Layer's lifetime. The
  * right store for tests and for substrates whose process lifetime IS
- * the run lifetime (e.g. the in-memory AI driver).
+ * the session lifetime (e.g. the in-memory AI driver).
  */
 export const layerMemory: Layer.Layer<Store> = Layer.sync(Store, () =>
   makeMemoryStore(),
@@ -323,7 +323,7 @@ export const layerMemory: Layer.Layer<Store> = Layer.sync(Store, () =>
 
 /**
  * Build a memory `StoreService` over an explicit map — useful when
- * the caller owns the map's lifetime (a per-run record) or when a
+ * the caller owns the map's lifetime (a per-session record) or when a
  * test needs to simulate re-activation by building two stores over
  * one map. Rows are keyed by {@link pathKey}.
  */

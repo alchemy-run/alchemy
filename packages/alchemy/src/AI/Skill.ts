@@ -56,7 +56,7 @@ export interface SkillService {
  * driver's intrinsic `skill` tool). Activation returns the skill's
  * prose as the tool result — the documentation enters the
  * conversation exactly when it is needed — and enables the skill's
- * tools for the rest of that run. Deactivation retires them. A
+ * tools for the rest of that session. Deactivation retires them. A
  * spawner may hand skills to a spawned worker PRE-ACTIVATED: the
  * prose joins the worker's instructions, the tools its toolkit.
  */

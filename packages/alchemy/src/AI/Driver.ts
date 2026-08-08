@@ -17,7 +17,7 @@ import { isTool } from "./Tool.ts";
 /**
  * The one term kind the Driver can interpret: an {@link Agent}.
  * Capability terms (`Tool`/`Parameter`) are compiled *into* their
- * host's turns — they have no runs and no loop of their own. A
+ * host's turns — they have no sessions and no loop of their own. A
  * domain-shaped surface (a process) is not a term at all: it is a
  * plain `Context.Service` whose hand-written Layer interprets a
  * PRIVATE agent and wires the world to its verbs.
@@ -26,7 +26,7 @@ export type Interpretable = Agent<any, any>;
 
 /**
  * The TURN half of a charter: re-entrant, evaluated by the driver
- * before EVERY sampling of every run. Its result is what the run IS
+ * before EVERY sampling of every session. Its result is what the session IS
  * right now:
  *
  * - a {@link Fragment} — the stance: what the persona knows, which
@@ -36,7 +36,7 @@ export type Interpretable = Agent<any, any>;
  *   is the explicit {@link reply} act (from a tool handler or turn
  *   code), never a return value.
  * - a failure — retried by the driver with capped backoff; a typed
- *   `AI.Refused` is the run giving up, riding the error channel.
+ *   `AI.Refused` is the session giving up, riding the error channel.
  *
  * Returning an un-yielded Effect (a forgotten `yield*` on `AI.prose`)
  * or any non-Fragment value is a loud defect, never a silent outcome.
@@ -49,7 +49,7 @@ export type Turn<E = any, R = any> = Effect.Effect<Fragment, E, R>;
  * deciding over without reaching for ambient services.
  */
 export interface TickEvent<In = unknown> {
-  /** Samplings performed so far in this run (the budget clock). */
+  /** Samplings performed so far in this session (the budget clock). */
   readonly count: number;
   /**
    * The messages drained at this boundary — work items, steers,
@@ -71,12 +71,12 @@ export type TurnFn<In = unknown, E = any, R = any> = (
 
 /**
  * A charter is the BEHAVIOR of an Agent or Process: an INIT effect
- * that runs once per RUN (the closure is the component instance —
+ * that runs once per SESSION (the closure is the component instance —
  * allocate `Ref`s, resolve bindings for tools, define inline tools
  * over both) and returns the {@link Turn} the driver re-evaluates at
- * every sampling boundary of that run.
+ * every sampling boundary of that session.
  *
- * Init IS thread-scoped: it runs at admit, when the run's thread
+ * Init IS thread-scoped: it runs at admit, when the session's thread
  * already exists, so `AI.Thread` is in scope — set up state FOR the
  * thread there (a workspace checkout keyed by `thread.key`, Refs the
  * turn and tools share). `AI.Tick` is the one runtime fact init never
@@ -109,7 +109,7 @@ export type TurnFn<In = unknown, E = any, R = any> = (
  *
  * A static stance is byte-identical every tick — the prompt cache
  * never busts; the guard tier costs nothing extra when the stance it
- * returns is constant. Re-rendering a DIFFERENT stance mid-run is
+ * returns is constant. Re-rendering a DIFFERENT stance mid-session is
  * possible and occasionally right, but it replaces the system prompt
  * (cache-busting) — skills (model-pulled) and messages are the cheap
  * dynamism channels.
@@ -117,17 +117,17 @@ export type TurnFn<In = unknown, E = any, R = any> = (
 export type Charter = Effect.Effect<Fragment | Turn | TurnFn, any, any>;
 
 /**
- * The services the driver itself provides while evaluating a run's
+ * The services the driver itself provides while evaluating a session's
  * TURN and its tool handlers — excluded from a charter's inferred
  * requirements because no user Layer could ever provide them.
  *
- * These are RUNTIME facts and affordances: `Thread` (the run's
+ * These are RUNTIME facts and affordances: `Thread` (the session's
  * identity and conversation), `Tick` (this sampling), and the
- * `PersistentRef.Store` (durable named state, framed by the run's
+ * `PersistentRef.Store` (durable named state, framed by the session's
  * identity — the opt-in named-state capability both drivers provide).
- * Init runs ONCE PER RUN at admit — the thread already exists, so
+ * Init runs ONCE PER SESSION at admit — the thread already exists, so
  * init MAY read `Thread` for thread-scoped setup (a `PersistentRef`
- * keyed by the run, a workspace checkout addressed by `thread.key`).
+ * keyed by the session, a workspace checkout addressed by `thread.key`).
  * `Tick` exists only inside the loop: no sampling is under way during
  * init, so only turns and tool handlers see it.
  */
@@ -135,7 +135,7 @@ export type TurnServices = Thread | Tick | RuntimeContext | PersistentRef.Store;
 
 /**
  * A charter's requirement union: the init effect's own requirements
- * (`Thread` excluded — init is per-run and the driver provides the
+ * (`Thread` excluded — init is per-session and the driver provides the
  * thread at admit; `Tick` NOT excluded, so an init that yields it
  * surfaces an unprovideable requirement here and fails to compose)
  * plus everything any turn could mention (splices accumulate through
@@ -215,9 +215,9 @@ export class Driver extends Context.Service<Driver, DriverService>()(
  * ```
  *
  * Delivery discipline for the wiring: `send(event, { key })` is the
- * ONE delivery verb — it admits the run on first sight of its key and
+ * ONE delivery verb — it admits the session on first sight of its key and
  * enqueues thereafter (so a re-delivered event after a crash re-admits
- * the run: level-triggered recovery); `settle(key, outcome)` is the
+ * the session: level-triggered recovery); `settle(key, outcome)` is the
  * one ending. Dedupe of at-least-once DELIVERIES (webhook
  * redeliveries, poll re-observations) belongs to the Layer — offer
  * the event's content to the Ledger and drop duplicates.

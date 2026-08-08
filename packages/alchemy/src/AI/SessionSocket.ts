@@ -1,24 +1,24 @@
 /**
- * The RUN SOCKET protocol — how a live view attaches to one agent run
+ * The SESSION SOCKET protocol — how a live view attaches to one agent session
  * over a WebSocket, and the AI SDK `ChatTransport` that speaks it.
  *
  * Four frame concepts, distilled from studying cloudflare/agents'
  * chat protocol (designs/ai/reports/cloudflare-chat-protocol.md):
  * their five-frame resume handshake, chunk-buffer tables, and
  * full-replay-from-zero all compensate for the absence of a cursor —
- * our observations carry a per-run monotonic `seq`, so resume is ONE
+ * our observations carry a per-session monotonic `seq`, so resume is ONE
  * frame: `subscribe { fromSeq }` replays the durable observation rows
  * above the cursor and live delivery continues from there.
  *
- * - client → server: {@link RunSocketClientFrame} — `subscribe`
+ * - client → server: {@link SessionSocketClientFrame} — `subscribe`
  *   (replay from a cursor) and `submit` (admit input; the answer
  *   arrives as observations, never as a correlated response).
- * - server → client: {@link RunSocketServerFrame} — an `observation`
+ * - server → client: {@link SessionSocketServerFrame} — an `observation`
  *   carrier (durable rows advance the client's cursor; live facts
  *   like `assistant-delta` do not), and a `live` marker ending a
  *   replay.
  *
- * The wire carries DRIVER vocabulary — {@link RunObservation} —
+ * The wire carries DRIVER vocabulary — {@link SessionObservation} —
  * not any UI protocol's: translation to AI SDK `UIMessageChunk`s
  * happens client-side ({@link makeChunkTranslator}), so the server
  * never learns about UIMessage.
@@ -29,14 +29,14 @@ import * as Effect from "effect/Effect";
 import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import type * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type { RuntimeContext } from "../RuntimeContext.ts";
-import type { RunObservation } from "./Observer.ts";
+import type { SessionObservation } from "./Observer.ts";
 import { makeChunkTranslator } from "./UIMessage.ts";
 
-/** Frames a client sends to an attached run. */
-export type RunSocketClientFrame =
+/** Frames a client sends to an attached session. */
+export type SessionSocketClientFrame =
   | {
       /** Replay durable observations with `seq >= fromSeq`, then a
-       *  {@link RunSocketServerFrame} `live` marker. Live broadcast is
+       *  {@link SessionSocketServerFrame} `live` marker. Live broadcast is
        *  independent of subscription — every attached socket receives
        *  new observations; `subscribe` only requests catch-up.
        *  `fromSeq: "live"` skips replay entirely (a client that
@@ -45,13 +45,13 @@ export type RunSocketClientFrame =
       readonly fromSeq?: number | "live";
     }
   | {
-      /** Admit one input to the run (the socket's `steer`). */
+      /** Admit one input to the session (the socket's `steer`). */
       readonly type: "submit";
       readonly input: unknown;
     };
 
-/** Frames a run sends to its attached clients. */
-export type RunSocketServerFrame =
+/** Frames a session sends to its attached clients. */
+export type SessionSocketServerFrame =
   | {
       readonly type: "observation";
       /**
@@ -61,7 +61,7 @@ export type RunSocketServerFrame =
        * and the durable `assistant` restatement covers the gap.
        */
       readonly durable: boolean;
-      readonly observation: RunObservation;
+      readonly observation: SessionObservation;
     }
   | {
       /** Replay complete — delivery is live from here; `seq` is the
@@ -78,22 +78,22 @@ export type RunSocketServerFrame =
  * projection uses (`ChatsMemory` accumulates exactly these into its
  * transient streaming sample).
  */
-export const isLiveObservation = (type: RunObservation["type"]): boolean =>
+export const isLiveObservation = (type: SessionObservation["type"]): boolean =>
   type === "assistant-delta" || type === "tool-call";
 
 /**
- * What a driver must expose for one run to speak the socket protocol
+ * What a driver must expose for one session to speak the socket protocol
  * — the substrate differences (DO storage rows vs in-memory log)
  * disappear behind these three capabilities.
  */
-export interface RunSocketHost {
+export interface SessionSocketHost {
   /** Durable observations with `seq >= fromSeq`, oldest first. */
   readonly replay: (
     fromSeq: number,
-  ) => Effect.Effect<ReadonlyArray<RunObservation>>;
+  ) => Effect.Effect<ReadonlyArray<SessionObservation>>;
   /** The next durable seq — what a completed replay reports as `live`. */
   readonly watermark: Effect.Effect<number>;
-  /** Admit one input to the run (the socket's steer). */
+  /** Admit one input to the session (the socket's steer). */
   readonly submit: (input: unknown) => Effect.Effect<void>;
 }
 
@@ -101,12 +101,12 @@ export interface RunSocketHost {
  * The protocol, in one place: both drivers delegate their inbound
  * frames here so the wire can never drift between substrates.
  */
-export const handleRunSocketFrame =
+export const handleSessionSocketFrame =
   (
-    host: RunSocketHost,
-    send: (frame: RunSocketServerFrame) => Effect.Effect<void>,
+    host: SessionSocketHost,
+    send: (frame: SessionSocketServerFrame) => Effect.Effect<void>,
   ) =>
-  (frame: RunSocketClientFrame): Effect.Effect<void> => {
+  (frame: SessionSocketClientFrame): Effect.Effect<void> => {
     switch (frame.type) {
       case "subscribe":
         return Effect.gen(function* () {
@@ -127,10 +127,10 @@ export const handleRunSocketFrame =
   };
 
 /**
- * The Worker/server-side door to a run's live view: routes an
- * `Upgrade: websocket` request to the run named `term/key`, where the
- * {@link RunSocketServerFrame} protocol is spoken. Provided BY the
- * driver Layer — `DriverCloudflare` routes into the run's own Durable
+ * The Worker/server-side door to a session's live view: routes an
+ * `Upgrade: websocket` request to the session named `term/key`, where the
+ * {@link SessionSocketServerFrame} protocol is spoken. Provided BY the
+ * driver Layer — `DriverCloudflare` routes into the session's own Durable
  * Object; `DriverCore`'s resident host serves the socket in-process.
  *
  * ```ts
@@ -154,8 +154,8 @@ export class AgentGateway extends Context.Service<
   }
 >()("alchemy/AI/AgentGateway") {}
 
-export interface RunSocketTransportOptions {
-  /** The absolute `ws(s)://` URL of the run's attach endpoint. */
+export interface SessionSocketTransportOptions {
+  /** The absolute `ws(s)://` URL of the session's attach endpoint. */
   readonly url: string;
   /** Override the WebSocket constructor (defaults to the global). */
   readonly webSocket?: new (url: string) => WebSocket;
@@ -174,30 +174,30 @@ export interface RunSocketTransportOptions {
 }
 
 /**
- * An AI SDK `ChatTransport` over the run socket, for `useChat`:
+ * An AI SDK `ChatTransport` over the session socket, for `useChat`:
  *
  * ```ts
  * const chat = useChat({
- *   transport: new RunSocketTransport({ url: `wss://…/attach/Scribe/${key}` }),
+ *   transport: new SessionSocketTransport({ url: `wss://…/attach/Scribe/${key}` }),
  * });
  * ```
  *
  * `sendMessages` submits the last user message's text and returns a
- * stream of `UIMessageChunk`s translated from the run's observations
- * until the run parks (quiesces), settles, or crashes. Streaming is
+ * stream of `UIMessageChunk`s translated from the session's observations
+ * until the session parks (quiesces), settles, or crashes. Streaming is
  * STEP-granular in v1 — each completed sampling arrives as one burst
  * of chunks (the durable `assistant` restatement); token-level deltas
  * are a translator upgrade, not a protocol change.
  */
-export class RunSocketTransport<
+export class SessionSocketTransport<
   M extends UIMessage = UIMessage,
 > implements ChatTransport<M> {
   private socket: WebSocket | undefined;
   private cursor = 0;
   private subscribed = false;
-  private readonly options: RunSocketTransportOptions;
+  private readonly options: SessionSocketTransportOptions;
 
-  constructor(options: RunSocketTransportOptions) {
+  constructor(options: SessionSocketTransportOptions) {
     this.options = options;
   }
 
@@ -223,7 +223,7 @@ export class RunSocketTransport<
   }
 
   /**
-   * One turn: translate this run's observations from HERE forward
+   * One turn: translate this session's observations from HERE forward
    * until the translator reports completion. The socket outlives the
    * stream — the next turn reuses it.
    */
@@ -233,7 +233,9 @@ export class RunSocketTransport<
     return new ReadableStream<UIMessageChunk>({
       start: (controller) => {
         const onMessage = (event: MessageEvent) => {
-          const frame = JSON.parse(String(event.data)) as RunSocketServerFrame;
+          const frame = JSON.parse(
+            String(event.data),
+          ) as SessionSocketServerFrame;
           if (frame.type === "live") {
             // replay complete — pin the cursor to the watermark so the
             // next subscribe never re-reads rows this client (or its
@@ -296,7 +298,7 @@ export class RunSocketTransport<
       JSON.stringify({
         type: "submit",
         input: text,
-      } satisfies RunSocketClientFrame),
+      } satisfies SessionSocketClientFrame),
     );
     return stream;
   };
@@ -319,7 +321,7 @@ export class RunSocketTransport<
       JSON.stringify({
         type: "subscribe",
         fromSeq,
-      } satisfies RunSocketClientFrame),
+      } satisfies SessionSocketClientFrame),
     );
     return stream;
   };

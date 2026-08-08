@@ -33,31 +33,35 @@ import {
 const connect = (url: string) =>
   Effect.gen(function* () {
     const socket = yield* Socket.makeWebSocket(url);
-    const frames = yield* Queue.unbounded<AI.RunSocketServerFrame>();
+    const frames = yield* Queue.unbounded<AI.SessionSocketServerFrame>();
     const write = yield* socket.writer;
     const opened = yield* Deferred.make<void>();
 
     yield* Effect.forkScoped(
       socket.runString(
         (message) =>
-          Queue.offer(frames, JSON.parse(message) as AI.RunSocketServerFrame),
+          Queue.offer(
+            frames,
+            JSON.parse(message) as AI.SessionSocketServerFrame,
+          ),
         { onOpen: Deferred.succeed(opened, undefined) },
       ),
     );
     yield* Deferred.await(opened);
 
     return {
-      send: (frame: AI.RunSocketClientFrame) => write(JSON.stringify(frame)),
+      send: (frame: AI.SessionSocketClientFrame) =>
+        write(JSON.stringify(frame)),
       next: Queue.take(frames),
     };
   });
 
 const framesUntil = (
-  client: { next: Effect.Effect<AI.RunSocketServerFrame, unknown> },
-  done: (frame: AI.RunSocketServerFrame) => boolean,
+  client: { next: Effect.Effect<AI.SessionSocketServerFrame, unknown> },
+  done: (frame: AI.SessionSocketServerFrame) => boolean,
 ) =>
   Effect.gen(function* () {
-    const seen: Array<AI.RunSocketServerFrame> = [];
+    const seen: Array<AI.SessionSocketServerFrame> = [];
     while (true) {
       const frame = yield* client.next.pipe(Effect.timeout("10 seconds"));
       seen.push(frame);
@@ -77,7 +81,7 @@ const readAll = (stream: ReadableStream<unknown>) =>
     }
   });
 
-describe("RunSocket (DriverCore)", () => {
+describe("SessionSocket (DriverCore)", () => {
   it.live(
     "the memory driver serves the identical protocol: submit, live deltas, cursor resume",
     () => {
@@ -139,7 +143,9 @@ describe("RunSocket (DriverCore)", () => {
         );
         const durables = first.filter(
           (frame) => frame.type === "observation" && frame.durable,
-        ) as Array<Extract<AI.RunSocketServerFrame, { type: "observation" }>>;
+        ) as Array<
+          Extract<AI.SessionSocketServerFrame, { type: "observation" }>
+        >;
         const types = durables.map((frame) => frame.observation.type);
         expect(types).toContain("input");
         expect(types).toContain("assistant");
@@ -216,7 +222,7 @@ describe("RunSocket (DriverCore)", () => {
   );
 
   it.live(
-    "RunSocketTransport end to end: a tool round becomes UIMessageChunks, broadcast reaches every socket",
+    "SessionSocketTransport end to end: a tool round becomes UIMessageChunks, broadcast reaches every socket",
     () => {
       // a REAL agentic round: sampling 1 calls the tool, sampling 2
       // answers — exercising the tool-call (live) and tool-result
@@ -257,7 +263,7 @@ describe("RunSocket (DriverCore)", () => {
 
             // the CLIENT under test: the exact transport `useChat`
             // runs on, translating observations into UIMessageChunks
-            const transport = new AI.RunSocketTransport({ url: wsUrl });
+            const transport = new AI.SessionSocketTransport({ url: wsUrl });
             const stream = yield* Effect.promise(() =>
               transport.sendMessages({
                 trigger: "submit-message",

@@ -8,7 +8,7 @@ export * from "./Driver.ts";
 export * from "./DriverCore.ts";
 export * from "./Chats.ts";
 export * from "./Observer.ts";
-export * from "./RunSocket.ts";
+export * from "./SessionSocket.ts";
 export * from "./Model.ts";
 export * from "./ThreadStorage.ts";
 export * from "./ToolCalling.ts";
