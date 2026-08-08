@@ -188,6 +188,9 @@ export const Nuxt = (id: string, props: NuxtProps = {}) =>
       main: build.serverEntry as unknown as string,
       handler: "handler",
       isExternal: true,
+      // nitro's `.output/server` is a complete deployment unit (entry +
+      // chunks + its own node_modules) — ship it as-is.
+      bundle: false,
       runtime: "nodejs22.x",
       architecture: props.server?.architecture,
       memorySize: props.server?.memorySize ?? 1024,

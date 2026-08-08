@@ -6,6 +6,7 @@ import * as Lambda from "@distilled.cloud/aws/lambda";
 import { Region } from "@distilled.cloud/aws/Region";
 import type * as lambda from "aws-lambda";
 import * as Cause from "effect/Cause";
+import type { PlatformError } from "effect/PlatformError";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -50,8 +51,8 @@ import {
   hasAlchemyTags,
   hasTags,
 } from "../../Tags.ts";
-import { sha256 } from "../../Util/sha256.ts";
-import { zipCode } from "../../Util/zip.ts";
+import { sha256, sha256Object } from "../../Util/sha256.ts";
+import { zipCode, zipFiles, type ZipFile } from "../../Util/zip.ts";
 import { Assets } from "../Assets.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import * as IAM from "../IAM/index.ts";
@@ -192,6 +193,18 @@ export interface FunctionProps extends PlatformProps {
    */
   handler?: string;
   /**
+   * Set to `false` to skip bundling and deploy `main`'s directory as-is:
+   * every file in the directory containing `main` ships in the code
+   * archive, preserving relative paths. Use for framework outputs that are
+   * already self-contained deployment units (e.g. nitro's
+   * `.output/server`, OpenNext's server functions) where re-bundling can
+   * break `require`s of packaged `node_modules`. Implies external mode:
+   * `handler` names an export of `main`, and the Lambda handler string is
+   * derived from `main`'s basename (e.g. `index.mjs` → `index.handler`).
+   * @default true
+   */
+  bundle?: false;
+  /**
    * Whether to create a Lambda function URL, or its configuration.
    * `true` creates a public Function URL with `authType: "NONE"`.
    * Set `false` to disable the Function URL.
@@ -319,6 +332,28 @@ export interface FunctionProps extends PlatformProps {
  * valid `Duration.Input`. Reconstruct an input that `Duration.toSeconds`
  * accepts before delegating.
  */
+/**
+ * The Lambda `Handler` string for a function's props: `<file>.<export>`.
+ * Bundled functions always emit `index.js`; prebuilt directories
+ * (`bundle: false`) keep `main`'s own basename. The export half honors
+ * `handler` only outside Effect mode (see the note at the call site).
+ */
+const handlerStringOf = (props: FunctionProps): string => {
+  const externalMode = props.isExternal || props.bundle === false;
+  const base =
+    props.bundle === false
+      ? props.main
+          .slice(
+            Math.max(
+              props.main.lastIndexOf("/"),
+              props.main.lastIndexOf("\\"),
+            ) + 1,
+          )
+          .replace(/\.[^.]+$/, "")
+      : "index";
+  return `${base}.${externalMode ? (props.handler ?? "default") : "default"}`;
+};
+
 export const toTimeoutSeconds = (
   timeout: Duration.Duration | undefined,
 ): number | undefined => {
@@ -1149,10 +1184,62 @@ export const FunctionProvider = () =>
         return role;
       });
 
+      // Recursively list every file under `root` as sorted POSIX-relative
+      // paths (prebuilt-directory packaging).
+      const walkFiles = (
+        root: string,
+      ): Effect.Effect<string[], PlatformError, never> =>
+        Effect.gen(function* () {
+          const out: string[] = [];
+          const go: (rel: string) => Effect.Effect<void, PlatformError> =
+            Effect.fn(function* (rel: string) {
+              const absolute = rel === "" ? root : `${root}/${rel}`;
+              const entries = yield* fs.readDirectory(absolute);
+              for (const entry of entries) {
+                const childRel = rel === "" ? entry : `${rel}/${entry}`;
+                const info = yield* fs.stat(`${root}/${childRel}`);
+                if (info.type === "Directory") {
+                  yield* go(childRel);
+                } else {
+                  out.push(childRel);
+                }
+              }
+            });
+          yield* go("");
+          return out.sort();
+        });
+
+      // `bundle: false` — ship `main`'s directory as-is. Framework outputs
+      // like nitro's `.output/server` are complete deployment units (entry +
+      // chunks + their own `node_modules`); re-bundling them can orphan
+      // CJS `require`s of exports-mapped subpaths.
+      const prebuiltCode = Effect.fn(function* (realMain: string) {
+        const lastSlash = realMain.lastIndexOf("/");
+        const dir = realMain.slice(0, lastSlash);
+        const files = yield* walkFiles(dir);
+        const archiveFiles: ZipFile[] = [];
+        const fileHashes: Record<string, string> = {};
+        for (const rel of files) {
+          const content = yield* fs.readFile(`${dir}/${rel}`);
+          archiveFiles.push({ path: rel, content });
+          fileHashes[rel] = yield* sha256(content);
+        }
+        const identityHash = yield* sha256Object(fileHashes);
+        const buildArchive = Effect.gen(function* () {
+          const archive = yield* zipFiles(archiveFiles);
+          return { archive, archiveHash: identityHash };
+        });
+        return { identityHash, buildArchive };
+      });
+
       const bundleCode = Effect.fn(function* (
         id: string,
         props: FunctionProps,
       ) {
+        if (props.bundle === false) {
+          const realMain = yield* TempRoot.resolveMainPath(props.main);
+          return yield* prebuiltCode(realMain);
+        }
         const {
           output: buildOutput,
           install,
@@ -1597,9 +1684,12 @@ export default handler;
           // Effect-mode functions are wrapped in a generated entry whose ONLY
           // export is `default` — `handler` names an export of the USER's
           // module and can only address it when the module is bundled as-is
-          // (isExternal). Honoring it in Effect mode deploys a Lambda that
-          // dies at init with Runtime.HandlerNotFound.
-          Handler: `index.${news.isExternal ? (news.handler ?? "default") : "default"}`,
+          // (isExternal / bundle: false). Honoring it in Effect mode deploys
+          // a Lambda that dies at init with Runtime.HandlerNotFound.
+          // Prebuilt directories keep their own entry filename, so the
+          // handler prefix is `main`'s basename instead of the bundler's
+          // fixed `index`.
+          Handler: handlerStringOf(news),
           Role: roleArn,
           Code: codeLocation,
           Runtime: news.runtime ?? "nodejs22.x",
