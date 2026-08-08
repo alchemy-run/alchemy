@@ -16,6 +16,7 @@ import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
+import * as Exit from "effect/Exit";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
@@ -1548,12 +1549,39 @@ export const makeSessionEngine = (
    * re-activation); a fresh key emits `admitted` and runs the
    * charter's per-session INIT.
    */
+  /** In-flight creations, so two concurrent verbs for a fresh key
+   *  never double-create the shell (double `admitted`, split waiters). */
+  const creating = new Map<string, Deferred.Deferred<EngineSession, unknown>>();
+
   const ensureSession = (
     key?: string,
     parent?: { readonly term: string; readonly key: string },
   ): Effect.Effect<EngineSession> =>
     Effect.gen(function* () {
       const sessionKey = key ?? `session-${mintPrefix}-${minted++}`;
+      lastKey = sessionKey;
+      const existing = sessions.get(sessionKey);
+      if (existing !== undefined) return existing;
+      const inflight = creating.get(sessionKey);
+      if (inflight !== undefined) {
+        return yield* Effect.orDie(Deferred.await(inflight));
+      }
+      const gate = yield* Deferred.make<EngineSession, unknown>();
+      creating.set(sessionKey, gate);
+      const built = yield* Effect.exit(buildSession(sessionKey, parent));
+      creating.delete(sessionKey);
+      yield* Deferred.done(gate, built);
+      if (Exit.isFailure(built)) {
+        return yield* Effect.failCause(built.cause);
+      }
+      return built.value;
+    }) as Effect.Effect<EngineSession>;
+
+  const buildSession = (
+    sessionKey: string,
+    parent?: { readonly term: string; readonly key: string },
+  ): Effect.Effect<EngineSession> =>
+    Effect.gen(function* () {
       let s = sessions.get(sessionKey);
       if (s === undefined) {
         s = yield* makeShell(sessionKey);
@@ -1596,7 +1624,6 @@ export const makeSessionEngine = (
                 );
         sessions.set(sessionKey, s);
       }
-      lastKey = sessionKey;
       return s;
     });
 
@@ -1723,12 +1750,17 @@ export const makeSessionEngine = (
       // re-entry scheduling) — the burst itself never fails, so a
       // kicking verb can never be poisoned by the round it kicked
       yield* s.gate.withPermits(1)(
-        rounds(s).pipe(
-          Effect.tapCause((cause) => onCrash(s, cause)),
-          Effect.catchCause(() => Effect.void),
-        ),
+        rounds(s).pipe(Effect.tapCause((cause) => onCrash(s, cause))),
       );
-    }) as Effect.Effect<void>;
+    }).pipe(
+      // TOTAL containment, ensure included: a burst often rides a
+      // host's fire-and-forget channel (workerd's waitUntil), where a
+      // rejected promise RESETS the Durable Object — a burst must
+      // never reject, only log
+      Effect.catchCause((cause) =>
+        Effect.logError(`${driver}: burst for '${key}' failed`, cause),
+      ),
+    ) as Effect.Effect<void>;
 
   const rounds = (s: EngineSession) =>
     Effect.gen(function* () {
@@ -1862,6 +1894,10 @@ export const makeSessionEngine = (
             drainedTo: maxSeq + 1,
             meta: metaOf(s),
           });
+          // the round is now OWED: guarantee re-entry even if this
+          // very attempt dies without a crash handler (a hard isolate
+          // death mid-sampling) — a stale re-entry just parks
+          yield* scheduleReentry(s.key, recoverAfter);
           yield* s.handle
             .deleteInbox(rows.map((row) => row.seq))
             .pipe(Effect.ignore);

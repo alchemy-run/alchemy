@@ -417,7 +417,21 @@ export const DurableObjectHost: Layer.Layer<
               // a burst never fails)
               yield* active.burst(me.key);
               yield* armAlarm();
-            }),
+            }).pipe(
+              // a failing alarm event must be CONTAINED: workerd's own
+              // alarm retry would race our bounded one (and a repeated
+              // failure resets the object) — log, best-effort re-arm,
+              // and let our recovery machinery own the re-entry
+              Effect.catchCause((cause) =>
+                Effect.gen(function* () {
+                  yield* Effect.logError(
+                    `DriverCloudflare alarm for '${me.term}/${me.key}' failed (contained)`,
+                    cause,
+                  );
+                  yield* Effect.ignore(armAlarm());
+                }),
+              ),
+            ),
         });
       }),
     );

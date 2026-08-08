@@ -61,8 +61,16 @@ export default class KernelTestWorker extends Cloudflare.Worker<KernelTestWorker
           }
           // admit, fire-and-forget
           case "/send": {
-            yield* actor.send(input, { key });
-            return yield* HttpServerResponse.json({ sent: true });
+            const sent = yield* Effect.exit(actor.send(input, { key }));
+            if (Exit.isSuccess(sent)) {
+              return yield* HttpServerResponse.json({ sent: true });
+            }
+            const detail = Cause.pretty(sent.cause);
+            yield* Effect.logError(`[fixture] send failed: ${detail}`);
+            return yield* HttpServerResponse.json(
+              { error: detail },
+              { status: 500 },
+            );
           }
           // key-addressed input: wakes a parked run
           case "/steer": {
