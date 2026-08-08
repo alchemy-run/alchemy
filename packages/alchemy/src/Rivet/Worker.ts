@@ -40,6 +40,13 @@
  * );
  * ```
  */
+import {
+  Deployment,
+  HostRef,
+  type DeploymentService,
+  type HostRefService,
+} from "../Worker/Engine.ts";
+import { workerConnectionKeys } from "../Worker/DurableObject.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -163,7 +170,7 @@ const remoteDurableObject = ({
  * on the worker's runtime context. With NO props, client-only: supplies
  * the transport without recording a deployment.
  */
-export const Worker = (props?: RivetWorkerProps): Layer.Layer<WorkerTarget> =>
+const makeTarget = (props?: RivetWorkerProps): Layer.Layer<WorkerTarget> =>
   Layer.effect(
     WorkerTarget,
     Effect.gen(function* () {
@@ -471,3 +478,67 @@ export const RivetWorkerEngine = (): Layer.Layer<WorkerEngineService> =>
   ) as Layer.Layer<WorkerEngineService>;
 
 export type { WorkerBindingContract };
+
+/**
+ * The Rivet **deploy module** form plus its `.ref` companion — the same
+ * shape every engine exposes, so switching clouds is one line.
+ *
+ * ```ts
+ * export const ApiWorker = Rivet.Worker(Api, { ... }, ApiLive);
+ * export const WebWorker = Rivet.Worker(Web, { ... },
+ *   WebLive.pipe(Layer.provide(Rivet.Worker.ref(Api))));
+ * ```
+ *
+ * The worker class is passed explicitly because `Layer.provide` returns a
+ * fresh layer, so an annotation on the layer would not survive a binder's
+ * `.pipe(...)`. It mirrors the resource form's leading `id: string`; here
+ * the id is the tag.
+ */
+const deployWorker = <W, RIn>(
+  cls: { LogicalId: string } & Effect.Effect<W, never, any>,
+  props: RivetWorkerProps,
+  layer: Layer.Layer<W, never, RIn | WorkerTarget>,
+): Layer.Layer<W | DeploymentService<W, "rivet">, never, RIn> => {
+  const deployed = layer.pipe(Layer.provide(makeTarget(props)));
+  const deployment = Layer.effect(
+    Deployment<W, "rivet">(RIVET_ENGINE, cls.LogicalId),
+    Effect.gen(function* () {
+      const worker = yield* cls as unknown as Effect.Effect<W, never, never>;
+      return { kind: RIVET_ENGINE as "rivet", worker };
+    }),
+  );
+  return deployment.pipe(Layer.provideMerge(deployed)) as Layer.Layer<
+    W | DeploymentService<W, "rivet">,
+    never,
+    RIn
+  >;
+};
+
+/**
+ * Assert — and prove — that `cls` is deployed to Rivet, yielding the
+ * platform-agnostic {@link HostRef} a binder requires. Only the Rivet
+ * deploy module for this worker can discharge the `Deployment`
+ * requirement, so a binder pointed at a worker hosted elsewhere fails to
+ * compile.
+ */
+const workerRef = <W>(
+  cls: { LogicalId: string } & Effect.Effect<W, never, any>,
+): Layer.Layer<HostRefService<W>, never, DeploymentService<W, "rivet">> =>
+  Layer.effect(
+    HostRef<W>(cls.LogicalId),
+    Effect.gen(function* () {
+      const deployment = yield* Deployment<W, "rivet">(
+        RIVET_ENGINE,
+        cls.LogicalId,
+      );
+      const { urlKey, secretKey } = workerConnectionKeys(cls.LogicalId);
+      return {
+        kind: deployment.kind,
+        worker: deployment.worker,
+        urlKey,
+        secretKey,
+      };
+    }),
+  );
+
+export const Worker = Object.assign(deployWorker, { ref: workerRef });

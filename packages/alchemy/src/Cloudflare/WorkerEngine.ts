@@ -545,3 +545,38 @@ export const workerRef = <W>(
       };
     }),
   );
+
+/**
+ * `Cloudflare.Worker` — the native resource/class factory, plus the
+ * portable **deploy module** form and its `.ref` companion.
+ *
+ * The deploy form is discriminated by its first argument: the resource
+ * forms lead with `id: string`, this one leads with the `Alchemy.Worker`
+ * tag. Same position, same role — the id is just a tag.
+ *
+ * ```ts
+ * export const ApiWorker = Cloudflare.Worker(Api, { main }, ApiLive);
+ * export const WebWorker = Cloudflare.Worker(Web, { main },
+ *   WebLive.pipe(Layer.provide(Cloudflare.Worker.ref(Api))));
+ * ```
+ *
+ * Lives here rather than in `Workers/Worker.ts` because that module is
+ * already in an import cycle with this one; re-exported by the barrel.
+ */
+export const Worker: typeof CloudflareWorker & {
+  <W, RIn>(
+    cls: { LogicalId: string } & Effect.Effect<W, never, any>,
+    props: CloudflareWorkerTargetProps,
+    layer: Layer.Layer<W, never, RIn | GenericWorkerTarget>,
+  ): Layer.Layer<W | DeploymentService<W, "cloudflare">, never, RIn>;
+  readonly ref: typeof workerRef;
+} = Object.assign(
+  (...args: any[]) =>
+    // The portable deploy form leads with the tag; every native form
+    // leads with a string id (or takes none at all).
+    args.length === 3 && typeof args[0] !== "string"
+      ? deployWorker(args[0], args[1], args[2])
+      : (CloudflareWorker as any)(...args),
+  CloudflareWorker,
+  { ref: workerRef },
+) as any;
