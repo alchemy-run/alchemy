@@ -24,7 +24,9 @@
 import * as ecs from "@distilled.cloud/aws/ecs";
 import { Credentials } from "@distilled.cloud/aws/Credentials";
 import { Region } from "@distilled.cloud/aws/Region";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import {
@@ -272,7 +274,15 @@ export const EcsFleetHost = (): Layer.Layer<FleetHostService> =>
                 : {}),
               AWS_REGION: yield* region,
               // The managed CLI cache lives under $HOME/.alchemy.
-              ...(process.env.HOME ? { HOME: process.env.HOME } : {}),
+              ...Option.match(
+                yield* Config.option(Config.string("HOME")).pipe(
+                  Effect.orElseSucceed(() => Option.none<string>()),
+                ),
+                {
+                  onNone: () => ({}),
+                  onSome: (home) => ({ HOME: home }),
+                },
+              ),
             };
           }),
 

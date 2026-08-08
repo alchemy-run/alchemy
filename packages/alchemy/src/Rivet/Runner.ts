@@ -23,7 +23,9 @@
  * @internal consumed by the generated runner entry, not by user code.
  */
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as Option from "effect/Option";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -56,22 +58,34 @@ export interface ResolveWorkerExportsOptions {
 /**
  * The synthetic runner environment: process env verbatim, plus a
  * gateway-backed namespace client under each hosted Durable Object class
- * name (where workerd would surface the native binding).
+ * name (where workerd would surface the native binding). Connection
+ * settings are read through `Config` (backed by the runner's env
+ * ConfigProvider), never `process.env` directly.
  */
 const makeRunnerEnvironment = (
   durableObjects: readonly string[],
-): Record<string, any> => {
-  const env: Record<string, any> = { ...process.env };
-  const endpoint = process.env.RIVET_ENDPOINT;
-  if (endpoint !== undefined) {
-    const connection = parseRivetEndpoint(endpoint);
-    const pool = process.env.RIVET_POOL ?? RIVET_RUNNER_POOL;
-    for (const className of durableObjects) {
-      env[className] = makeRivetActorClient({ ...connection, pool }, className);
+): Effect.Effect<Record<string, any>> =>
+  Effect.gen(function* () {
+    const env: Record<string, any> = yield* Effect.sync(() => ({
+      ...process.env,
+    }));
+    const endpoint = yield* Config.option(Config.string("RIVET_ENDPOINT")).pipe(
+      Effect.orElseSucceed(() => Option.none<string>()),
+    );
+    if (Option.isSome(endpoint)) {
+      const connection = parseRivetEndpoint(endpoint.value);
+      const pool = yield* Config.string("RIVET_POOL").pipe(
+        Effect.orElseSucceed(() => RIVET_RUNNER_POOL),
+      );
+      for (const className of durableObjects) {
+        env[className] = makeRivetActorClient(
+          { ...connection, pool },
+          className,
+        );
+      }
     }
-  }
-  return env;
-};
+    return env;
+  });
 
 /** Lifecycle handlers dispatched by the bridge itself — never actions. */
 const RESERVED_HANDLERS = new Set([
@@ -187,7 +201,7 @@ export const resolveWorkerExports = (
       ),
     ),
     Layer.provideMerge(
-      Layer.succeed(
+      Layer.effect(
         WorkerEnvironment,
         makeRunnerEnvironment(options.durableObjects),
       ),

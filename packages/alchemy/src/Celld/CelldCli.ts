@@ -26,8 +26,10 @@
  *
  * @internal not exported from the Celld barrel.
  */
+import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
@@ -79,22 +81,26 @@ const releaseTriple = Effect.sync(() => {
  * project; a custom binary wins via `CELLD_ESBUILD`.
  */
 export const resolveEsbuild: Effect.Effect<string, EsbuildNotFoundError> =
-  Effect.suspend(() => {
-    if (process.env.CELLD_ESBUILD) {
-      return Effect.succeed(process.env.CELLD_ESBUILD);
+  Effect.gen(function* () {
+    const custom = yield* Config.option(Config.string("CELLD_ESBUILD")).pipe(
+      Effect.orElseSucceed(() => Option.none<string>()),
+    );
+    if (Option.isSome(custom)) {
+      return custom.value;
     }
     // Prefer the NATIVE platform binary: `esbuild/bin/esbuild` is a
     // `#!/usr/bin/env node` wrapper, which fails in the deploy child's
     // minimal environment (and on node-less bun installs).
     const nativePackage = `@esbuild/${process.platform}-${process.arch === "arm64" ? "arm64" : "x64"}/bin/esbuild`;
     for (const candidate of [nativePackage, "esbuild/bin/esbuild"]) {
-      try {
-        return Effect.succeed(require.resolve(candidate));
-      } catch {
-        // try the next candidate
+      const resolved = yield* Effect.try(() => require.resolve(candidate)).pipe(
+        Effect.option,
+      );
+      if (Option.isSome(resolved)) {
+        return resolved.value;
       }
     }
-    return Effect.fail(
+    return yield* Effect.fail(
       new EsbuildNotFoundError({
         message:
           "celld deploy requires esbuild (an optional peer dependency of alchemy). Add `esbuild` to your project's devDependencies, or point CELLD_ESBUILD at an esbuild binary.",
@@ -118,8 +124,9 @@ export const acquireCelld = (
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const home = yield* Effect.sync(
-      () => process.env.HOME ?? process.env.USERPROFILE ?? ".",
+    const home = yield* Config.string("HOME").pipe(
+      Config.orElse(() => Config.string("USERPROFILE")),
+      Effect.orElseSucceed(() => "."),
     );
     const dir = path.join(home, ".alchemy", "bin", "celld", version);
     const bin = path.join(dir, "celld");
@@ -224,6 +231,9 @@ export const celldDeploy = (
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const bin = yield* acquireCelld(options.version);
     const esbuild = yield* resolveEsbuild;
+    const pathEnv = yield* Config.option(Config.string("PATH")).pipe(
+      Effect.orElseSucceed(() => Option.none<string>()),
+    );
 
     const args = [
       "deploy",
@@ -242,7 +252,10 @@ export const celldDeploy = (
       cwd: options.projectDir,
       env: {
         // PATH for the esbuild fallback wrapper (`#!/usr/bin/env node`).
-        ...(process.env.PATH ? { PATH: process.env.PATH } : {}),
+        ...Option.match(pathEnv, {
+          onNone: () => ({}),
+          onSome: (value) => ({ PATH: value }),
+        }),
         ...options.env,
         CELLD_ESBUILD: esbuild,
       },
