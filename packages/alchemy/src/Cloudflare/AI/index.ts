@@ -5,6 +5,7 @@ export * from "./DurableObjectChatPersistence.ts";
 export * from "./Evaluation.ts";
 export * from "./Gateway.ts";
 export * from "./DriverCloudflare.ts";
+export * from "./DurableObjectThreadStorage.ts";
 export * from "./GatewayDynamicRouting.ts";
 export * from "./GatewayProvider.ts";
 export * from "./LanguageModel.ts";
