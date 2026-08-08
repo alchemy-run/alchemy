@@ -329,7 +329,7 @@ const deleteRunner = ({ output }: { output: Record<string, any> }) =>
  * `Layer.mergeAll(AWS.providers(), Rivet.providers())` and both resolve
  * automatically.
  */
-export const EcsRunnerHost = (): Layer.Layer<RunnerHostService> =>
+export const EcsRunnerHost = (): Layer.Layer<RunnerHost<"aws-ecs">> =>
   Layer.effect(
     RunnerHost("aws-ecs"),
     Effect.gen(function* () {
@@ -365,4 +365,4 @@ export const EcsRunnerHost = (): Layer.Layer<RunnerHostService> =>
         deleteRunner: (options) => provide(deleteRunner(options)),
       } satisfies RunnerHostService;
     }),
-  ) as Layer.Layer<RunnerHostService>;
+  ) as Layer.Layer<RunnerHost<"aws-ecs">>;

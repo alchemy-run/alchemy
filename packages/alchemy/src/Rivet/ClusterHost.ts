@@ -147,12 +147,26 @@ const CLUSTER_HOST_PREFIX = "Rivet.ClusterHost/";
  * layer built with `ClusterHost("aws-ecs")` is found by any dynamic lookup
  * for that kind.
  */
-export const ClusterHost = (
-  kind: string,
-): Context.Service<ClusterHostService, ClusterHostService> =>
-  Context.Service<ClusterHostService, ClusterHostService>()(
+/**
+ * The tag identity for one registered ClusterHost kind — 1:1 with the
+ * constructor: `ClusterHost<"aws-ecs">` is the type of the tag
+ * `ClusterHost("aws-ecs")` returns. The phantom pins the kind into the
+ * identity so a layer registered for one kind cannot satisfy a
+ * requirement for another; the service shape stays ClusterHostService.
+ */
+export interface ClusterHost<
+  Kind extends string = string,
+> extends ClusterHostService {
+  /** @internal phantom — never set at runtime. */
+  readonly hostKind?: Kind;
+}
+
+export const ClusterHost = <const Kind extends string>(
+  kind: Kind,
+): Context.Service<ClusterHost<Kind>, ClusterHostService> =>
+  Context.Service<ClusterHost<Kind>, ClusterHostService>()(
     `${CLUSTER_HOST_PREFIX}${kind}`,
-  ) as any;
+  );
 
 const missingHost = (kind: string | undefined) =>
   Effect.die(

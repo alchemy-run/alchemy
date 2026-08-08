@@ -318,7 +318,9 @@ const noopSession: ScopedPlanStatusSession = {
  * domain / route reconciliation, and deletion are the provider's, not
  * reimplemented here. Registered by `Cloudflare.providers()`.
  */
-export const CloudflareWorkerEngine = (): Layer.Layer<WorkerEngineService> =>
+export const CloudflareWorkerEngine = (): Layer.Layer<
+  WorkerEngine<"cloudflare">
+> =>
   Layer.effect(
     WorkerEngine(CLOUDFLARE_ENGINE),
     Effect.gen(function* () {
@@ -495,7 +497,7 @@ export const CloudflareWorkerEngine = (): Layer.Layer<WorkerEngineService> =>
           }),
       } satisfies WorkerEngineService;
     }),
-  ) as Layer.Layer<WorkerEngineService>;
+  ) as Layer.Layer<WorkerEngine<"cloudflare">>;
 
 /**
  * The Cloudflare **deploy module** form: apply the Cloudflare target to a

@@ -55,6 +55,7 @@
  */
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as Effect from "effect/Effect";
+import type { Input } from "../../Input.ts";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Namespace from "../../Namespace.ts";
@@ -158,9 +159,9 @@ const composeEcsCluster = ({ id, props }: ClusterHostComposeOptions) =>
 
     const secret = yield* Random("AdminToken", { bytes: 32 });
 
-    let vpcId: any;
-    let subnetIds: any;
-    let securityGroupIds: any;
+    let vpcId: Input<string>;
+    let subnetIds: Input<string[]>;
+    let securityGroupIds: Input<string[]>;
     if (options.vpc !== undefined) {
       vpcId = options.vpc.vpcId;
       subnetIds = options.vpc.subnetIds;
@@ -308,7 +309,7 @@ const composeEcsCluster = ({ id, props }: ClusterHostComposeOptions) =>
  * compose a stack with `Layer.mergeAll(AWS.providers(), Rivet.providers())`
  * and the host resolves automatically.
  */
-export const EcsClusterHost = (): Layer.Layer<ClusterHostService> =>
+export const EcsClusterHost = (): Layer.Layer<ClusterHost<"aws-ecs">> =>
   Layer.effect(
     ClusterHost("aws-ecs"),
     Effect.gen(function* () {
@@ -354,4 +355,4 @@ export const EcsClusterHost = (): Layer.Layer<ClusterHostService> =>
           }),
       } satisfies ClusterHostService;
     }),
-  ) as Layer.Layer<ClusterHostService>;
+  ) as Layer.Layer<ClusterHost<"aws-ecs">>;

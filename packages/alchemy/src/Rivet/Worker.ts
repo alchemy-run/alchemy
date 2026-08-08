@@ -264,7 +264,7 @@ const truncateName = (name: string, maxLength: number) =>
  * `Alchemy.Worker`s targeted at a Rivet cluster. Registered by
  * `Rivet.providers()`.
  */
-export const RivetWorkerEngine = (): Layer.Layer<WorkerEngineService> =>
+export const RivetWorkerEngine = (): Layer.Layer<WorkerEngine<"rivet">> =>
   Layer.effect(
     WorkerEngine(RIVET_ENGINE),
     Effect.gen(function* () {
@@ -478,7 +478,7 @@ export const RivetWorkerEngine = (): Layer.Layer<WorkerEngineService> =>
           }),
       } satisfies WorkerEngineService;
     }),
-  ) as Layer.Layer<WorkerEngineService>;
+  ) as Layer.Layer<WorkerEngine<"rivet">>;
 
 export type { WorkerBindingContract };
 

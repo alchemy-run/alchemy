@@ -153,12 +153,26 @@ export interface WorkerEngineService {
 const ENGINE_PREFIX = "Alchemy.WorkerEngine/";
 
 /** The keyed Context tag for a worker engine. */
-export const WorkerEngine = (
-  kind: string,
-): Context.Service<WorkerEngineService, WorkerEngineService> =>
-  Context.Service<WorkerEngineService, WorkerEngineService>()(
+/**
+ * The tag identity for one registered WorkerEngine kind — 1:1 with the
+ * constructor: `WorkerEngine<"aws-ecs">` is the type of the tag
+ * `WorkerEngine("aws-ecs")` returns. The phantom pins the kind into the
+ * identity so a layer registered for one kind cannot satisfy a
+ * requirement for another; the service shape stays WorkerEngineService.
+ */
+export interface WorkerEngine<
+  Kind extends string = string,
+> extends WorkerEngineService {
+  /** @internal phantom — never set at runtime. */
+  readonly engineKind?: Kind;
+}
+
+export const WorkerEngine = <const Kind extends string>(
+  kind: Kind,
+): Context.Service<WorkerEngine<Kind>, WorkerEngineService> =>
+  Context.Service<WorkerEngine<Kind>, WorkerEngineService>()(
     `${ENGINE_PREFIX}${kind}`,
-  ) as any;
+  );
 
 /**
  * Resolve the {@link WorkerEngineService} for an engine kind from the

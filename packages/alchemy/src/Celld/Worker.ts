@@ -318,7 +318,7 @@ interface CelldTargetProps {
  * `Alchemy.Worker`s targeted at a Celld fleet. Registered by
  * `Celld.providers()`.
  */
-export const CelldWorkerEngine = (): Layer.Layer<WorkerEngineService> =>
+export const CelldWorkerEngine = (): Layer.Layer<WorkerEngine<"celld">> =>
   Layer.effect(
     WorkerEngine(CELLD_ENGINE),
     Effect.gen(function* () {
@@ -564,7 +564,7 @@ export const CelldWorkerEngine = (): Layer.Layer<WorkerEngineService> =>
           }),
       } satisfies WorkerEngineService;
     }),
-  ) as Layer.Layer<WorkerEngineService>;
+  ) as Layer.Layer<WorkerEngine<"celld">>;
 
 export type { WorkerBindingContract };
 

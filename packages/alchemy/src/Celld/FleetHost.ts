@@ -136,12 +136,26 @@ const FLEET_HOST_PREFIX = "Celld.FleetHost/";
  * built with `FleetHost("aws-ecs")` is found by any dynamic lookup for that
  * kind.
  */
-export const FleetHost = (
-  kind: string,
-): Context.Service<FleetHostService, FleetHostService> =>
-  Context.Service<FleetHostService, FleetHostService>()(
+/**
+ * The tag identity for one registered FleetHost kind — 1:1 with the
+ * constructor: `FleetHost<"aws-ecs">` is the type of the tag
+ * `FleetHost("aws-ecs")` returns. The phantom pins the kind into the
+ * identity so a layer registered for one kind cannot satisfy a
+ * requirement for another; the service shape stays FleetHostService.
+ */
+export interface FleetHost<
+  Kind extends string = string,
+> extends FleetHostService {
+  /** @internal phantom — never set at runtime. */
+  readonly hostKind?: Kind;
+}
+
+export const FleetHost = <const Kind extends string>(
+  kind: Kind,
+): Context.Service<FleetHost<Kind>, FleetHostService> =>
+  Context.Service<FleetHost<Kind>, FleetHostService>()(
     `${FLEET_HOST_PREFIX}${kind}`,
-  ) as any;
+  );
 
 const missingHost = (kind: string | undefined) =>
   Effect.die(

@@ -26,6 +26,7 @@ import { Credentials } from "@distilled.cloud/aws/Credentials";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import type { Input } from "../../Input.ts";
 import * as Option from "effect/Option";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -91,9 +92,9 @@ const composeEcsFleet = ({ id, props }: FleetHostComposeOptions) =>
       tags: props.tags,
     });
 
-    let vpcId: any;
-    let subnetIds: any;
-    let securityGroupIds: any;
+    let vpcId: Input<string>;
+    let subnetIds: Input<string[]>;
+    let securityGroupIds: Input<string[]>;
     if (options.vpc !== undefined) {
       vpcId = options.vpc.vpcId;
       subnetIds = options.vpc.subnetIds;
@@ -245,7 +246,7 @@ ENTRYPOINT ["/alchemy/busybox", "sh", "/alchemy/entrypoint.sh"]
  * compose a stack with `Layer.mergeAll(AWS.providers(), Celld.providers())`
  * and the host resolves automatically.
  */
-export const EcsFleetHost = (): Layer.Layer<FleetHostService> =>
+export const EcsFleetHost = (): Layer.Layer<FleetHost<"aws-ecs">> =>
   Layer.effect(
     FleetHost("aws-ecs"),
     Effect.gen(function* () {
@@ -321,6 +322,6 @@ export const EcsFleetHost = (): Layer.Layer<FleetHostService> =>
           }),
       } satisfies FleetHostService;
     }),
-  ) as Layer.Layer<FleetHostService>;
+  ) as Layer.Layer<FleetHost<"aws-ecs">>;
 
 export { DEFAULT_CELLD_VERSION };

@@ -110,12 +110,26 @@ const RUNNER_HOST_PREFIX = "Rivet.RunnerHost/";
  * a layer built with `RunnerHost("aws-ecs")` is found by any dynamic
  * lookup for that kind.
  */
-export const RunnerHost = (
-  kind: string,
-): Context.Service<RunnerHostService, RunnerHostService> =>
-  Context.Service<RunnerHostService, RunnerHostService>()(
+/**
+ * The tag identity for one registered RunnerHost kind — 1:1 with the
+ * constructor: `RunnerHost<"aws-ecs">` is the type of the tag
+ * `RunnerHost("aws-ecs")` returns. The phantom pins the kind into the
+ * identity so a layer registered for one kind cannot satisfy a
+ * requirement for another; the service shape stays RunnerHostService.
+ */
+export interface RunnerHost<
+  Kind extends string = string,
+> extends RunnerHostService {
+  /** @internal phantom — never set at runtime. */
+  readonly hostKind?: Kind;
+}
+
+export const RunnerHost = <const Kind extends string>(
+  kind: Kind,
+): Context.Service<RunnerHost<Kind>, RunnerHostService> =>
+  Context.Service<RunnerHost<Kind>, RunnerHostService>()(
     `${RUNNER_HOST_PREFIX}${kind}`,
-  ) as any;
+  );
 
 /** Resolve the {@link RunnerHostService} for a host kind, or die with setup guidance. */
 export const findRunnerHost = (
