@@ -1,14 +1,12 @@
 /**
- * The **Cloudflare deployment target** for the portable `Alchemy.Worker`.
+ * The **Cloudflare deployment** of the portable `Alchemy.Worker`.
  *
- * `Cloudflare.WorkerTarget(props)` is a Layer provided INSIDE the worker
- * impl's own provide chain — it records the Cloudflare-specific deployment
- * config on the worker's runtime context and supplies the Cloudflare
- * runtime behaviors (the authenticated RPC gateway around `fetch` so
- * non-Cloudflare callers can reach hosted Durable Objects, the native
- * JSRPC local-stub flavor, and the fetch-RPC remote transport). With no
- * props the layer is CLIENT-only: it supplies just the runtime transport
- * so a caller can reach a Cloudflare-deployed worker.
+ * `Cloudflare.Worker(cls, props, layer)` is the deploy module: it applies
+ * the Cloudflare target to a cloud-free worker layer and emits the
+ * `Deployment` proof, while `Cloudflare.Worker.ref(cls)` lets callers
+ * bind to the worker — consuming that proof and yielding the
+ * platform-agnostic `HostRef` (identity, connection env keys, and the
+ * fetch-RPC remote transport).
  *
  * The matching **engine** (`Alchemy.WorkerEngine/cloudflare`, registered by
  * `Cloudflare.providers()`) owns the deployment lifecycle by DELEGATING to
@@ -23,17 +21,26 @@
  * ```typescript
  * export class Api extends Alchemy.Worker<Api>()("Api") {}
  *
- * export default Api.make(
+ * export const ApiLive = Api.make(
  *   Effect.gen(function* () {
  *     const counters = yield* Counter;
  *     return { fetch: ... };
+ *   }).pipe(Effect.provide(CounterLive)),
+ * );
+ *
+ * export default Cloudflare.Worker(Api, { main: import.meta.url }, ApiLive);
+ * ```
+ *
+ * @section Binding to a Cloudflare-deployed Worker
+ * @example
+ * ```typescript
+ * export const WebLive = Web.make(
+ *   Effect.gen(function* () {
+ *     const counters = yield* Counter; // remote stub over the gateway
+ *     return { fetch: ... };
  *   }).pipe(
  *     Effect.provide(
- *       CounterLive.pipe(
- *         Layer.provideMerge(
- *           Cloudflare.WorkerTarget({ main: import.meta.url }),
- *         ),
- *       ),
+ *       CounterLive.pipe(Layer.provide(Cloudflare.Worker.ref(Api))),
  *     ),
  *   ),
  * );

@@ -1,37 +1,37 @@
 /**
  * The portable **`Alchemy.Worker`**: one authoring surface for
- * fetch-serving, Durable-Object-hosting workers, with the deployment
- * platform selected by a **target layer inside the impl's own provide
- * chain** — so capability/engine mismatches surface as compile errors at
- * `Api.make(impl)`, not at deploy time.
+ * fetch-serving, Durable-Object-hosting workers. The definition is
+ * cloud-free; the **deploy module** is the single line that names a
+ * platform, and capability/engine mismatches surface as compile errors —
+ * an unprovided requirement in the layer's `R`, not a deploy-time crash.
  *
  * ```ts
  * export class Api extends Alchemy.Worker<Api>()("Api") {}
  *
- * export default Api.make(
+ * export const ApiLive = Api.make(
  *   Effect.gen(function* () {
  *     const counters = yield* Counter;
  *     return { fetch: ... };
- *   }).pipe(
- *     Effect.provide(
- *       CounterLive.pipe(
- *         Layer.provideMerge(Celld.Worker({ fleet: Cells, main: import.meta.url })),
- *       ),
- *     ),
- *   ),
+ *   }).pipe(Effect.provide(CounterLive)),
  * );
+ *
+ * // the deploy module — swap the wrapper to switch clouds:
+ * export default Cloudflare.Worker(Api, { main: import.meta.url }, ApiLive);
+ * // export default Celld.Worker(Api, { fleet: Cells, main: import.meta.url }, ApiLive);
+ * // export default Rivet.Worker(Api, { cluster: Actors, main: import.meta.url }, ApiLive);
  * ```
  *
- * The target layer records itself on the worker's runtime context; the
- * platform folds it into the persisted Props, and the provider dispatches
- * every lifecycle operation to the matching {@link WorkerEngine}
- * (`Celld.providers()` registers `celld`; a Cloudflare engine slots in the
- * same way).
+ * The deploy wrapper provides the target (and a self host-ref) to the
+ * layer; `make` re-injects them around the impl so the target records
+ * itself on the worker's runtime context at impl evaluation. The platform
+ * folds it into the persisted Props, and the provider dispatches every
+ * lifecycle operation to the matching {@link WorkerEngine}.
  */
-import type { DeploymentService, HostRef } from "./Engine.ts";
+import type { DeploymentService } from "./Engine.ts";
 import type * as ConfigError from "effect/Config";
 import * as Effect from "effect/Effect";
-import type * as Layer from "effect/Layer";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import type { HttpEffect } from "../Http.ts";
 import type { Named, Tag } from "../Named.ts";
 import { Platform, type PlatformProps } from "../Platform.ts";
@@ -45,11 +45,17 @@ import {
 import type { Rpc } from "../Rpc.ts";
 import type { WorkerEnvironment } from "../Cloudflare/Workers/Worker.ts";
 import {
+  HostRef,
+  WorkerTarget,
   findWorkerEngine,
   type WorkerBindingContract,
   type WorkerTargetService,
 } from "./Engine.ts";
-import { makeGenericWorkerRuntimeContext } from "./RuntimeContext.ts";
+import { RuntimeContext } from "../RuntimeContext.ts";
+import {
+  makeGenericWorkerRuntimeContext,
+  type GenericWorkerRuntimeContext,
+} from "./RuntimeContext.ts";
 import type { Providers } from "./Providers.ts";
 
 export const WorkerTypeId = "Alchemy.Worker";
@@ -177,9 +183,46 @@ const workerConstructor = (...args: any[]): any => {
       }
       const cls = tagged(id);
       // The portable surface takes the impl ONLY — deployment config
-      // arrives via the target layer inside the impl's provide chain.
+      // arrives via the deploy wrapper (`Cloudflare.Worker(cls, props,
+      // layer)`), which provides the target + self host-ref to the LAYER.
+      // Layers build at stack setup, but the target must be visible during
+      // IMPL evaluation (per-resource, worker runtime context ambient) so
+      // it can record itself for `foldProps`/`wrapServe` and so hosted DO
+      // layers can discharge their HostRef requirement. Capture both here
+      // at layer build and re-inject them around the impl.
       const platformMake = cls.make;
-      cls.make = (implOnly: unknown) => platformMake.call(cls, {}, implOnly);
+      cls.make = (implOnly: unknown) =>
+        Layer.unwrap(
+          Effect.gen(function* () {
+            const target = yield* Effect.serviceOption(WorkerTarget).pipe(
+              Effect.map(Option.getOrUndefined),
+            );
+            const hostRef = yield* Effect.serviceOption(HostRef).pipe(
+              Effect.map(Option.getOrUndefined),
+            );
+            let impl = Effect.gen(function* () {
+              if (target !== undefined) {
+                // Reproduce the target layer's recording side effect at
+                // impl-evaluation time (the worker's runtime context only
+                // exists here, not at stack-layer build).
+                const ctx = yield* Effect.serviceOption(RuntimeContext).pipe(
+                  Effect.map(Option.getOrUndefined),
+                );
+                if (ctx !== undefined) {
+                  (ctx as GenericWorkerRuntimeContext).target = target;
+                }
+              }
+              return yield* implOnly as Effect.Effect<any, any, any>;
+            }) as Effect.Effect<any, any, any>;
+            if (target !== undefined) {
+              impl = impl.pipe(Effect.provideService(WorkerTarget, target));
+            }
+            if (hostRef !== undefined) {
+              impl = impl.pipe(Effect.provideService(HostRef, hostRef));
+            }
+            return platformMake.call(cls, {}, impl) as Layer.Layer<any>;
+          }),
+        );
       return cls;
     };
   }
