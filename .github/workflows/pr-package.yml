@@ -65,7 +65,8 @@ jobs:
               { "dir": "distilled/packages/neon",        "name": "@distilled.cloud/neon",              "group": "Distilled", "submodule": true },
               { "dir": "distilled/packages/planetscale", "name": "@distilled.cloud/planetscale",       "group": "Distilled", "submodule": true }
             ]
-          pr-package-token: ${{ secrets.PR_PACKAGE_TOKEN }}
+          pr-package-host: ${{ vars.STAGING_PR_PACKAGE_HOST }}
+          pr-package-token: ${{ secrets.STAGING_PR_PACKAGE_TOKEN }}
 
       - name: Generate bot token
         if: >-
