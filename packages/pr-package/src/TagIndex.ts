@@ -1,3 +1,3 @@
 import * as Cloudflare from "alchemy/Cloudflare";
 
-export const TagIndex = Cloudflare.KV.Namespace("PrPackageContentTagIndex");
+export const TagIndex = Cloudflare.KV.Namespace("PrPackageHashTagIndex");

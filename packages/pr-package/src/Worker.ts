@@ -19,7 +19,7 @@ class Unauthorized {
   readonly _tag = "Unauthorized";
 }
 
-type TarballRef = readonly [packageName: string, hash: string, size: number];
+type TarballRef = readonly [packageName: string, hash: string];
 
 export interface HandlerOptions extends AliasParserOptions {
   /** Default TTL when X-TTL is not provided while assigning tags. e.g. "3 weeks". */
@@ -32,31 +32,25 @@ const bindings = Layer.mergeAll(
   Cloudflare.SecretsStore.ReadSecretBinding,
 );
 
-const tarballRef = (
-  project: string,
-  hash: string,
-  size: number,
-): TarballRef => [project, hash, size];
+const tarballRef = (project: string, hash: string): TarballRef => [
+  project,
+  hash,
+];
 
 const tarballId = (ref: TarballRef) => JSON.stringify(ref);
 
-const tarballKey = ([project, hash, size]: TarballRef) =>
-  `${encodeURIComponent(project)}/${hash}/${size}.tgz`;
+const tarballKey = ([project, hash]: TarballRef) =>
+  `${encodeURIComponent(project)}/${hash}.tgz`;
 
 const encodedProject = (project: string) =>
   project.split("/").map(encodeURIComponent).join("/");
 
 const parseTarballPath = (subPath: string) => {
-  const match = subPath.match(
-    /^\/packages\/([a-f0-9]{64})\/([1-9][0-9]*)(\/stats)?$/,
-  );
+  const match = subPath.match(/^\/packages\/([a-f0-9]{64})(\/stats)?$/);
   if (!match) return undefined;
-  const size = Number(match[2]);
-  if (!Number.isSafeInteger(size)) return undefined;
   return {
     hash: match[1]!,
-    size,
-    stats: match[3] !== undefined,
+    stats: match[2] !== undefined,
   };
 };
 
@@ -133,8 +127,8 @@ export const handler = (options: HandlerOptions = {}) =>
         const subPath = projectMatch[2] || "/";
         const content = parseTarballPath(subPath);
 
-        // Content is addressed by the complete (package, sha256, byte-size)
-        // tuple. Repeated CI runs can probe this route and avoid sending bytes.
+        // Content is addressed by package and SHA-256. Repeated CI runs can
+        // probe this route and avoid sending bytes.
         if (
           content &&
           !content.stats &&
@@ -142,7 +136,7 @@ export const handler = (options: HandlerOptions = {}) =>
         ) {
           return yield* Effect.gen(function* () {
             yield* requireAuth;
-            const ref = tarballRef(project, content.hash, content.size);
+            const ref = tarballRef(project, content.hash);
             const key = tarballKey(ref);
             const existing = yield* r2.head(key).pipe(Effect.orDie);
 
@@ -155,11 +149,16 @@ export const handler = (options: HandlerOptions = {}) =>
             const contentLength = Number(
               request.headers["content-length"] ?? 0,
             );
-            if (contentLength !== content.size) {
+            if (!Number.isSafeInteger(contentLength) || contentLength <= 0) {
               return yield* HttpServerResponse.json(
-                {
-                  error: `Content-Length must match tarball size ${content.size}`,
-                },
+                { error: "Content-Length must be a positive integer" },
+                { status: 400 },
+              );
+            }
+
+            if (existing && existing.size !== contentLength) {
+              return yield* HttpServerResponse.json(
+                { error: "Content-Length does not match the existing tarball" },
                 { status: 400 },
               );
             }
@@ -178,7 +177,7 @@ export const handler = (options: HandlerOptions = {}) =>
             return yield* HttpServerResponse.json({
               package: project,
               hash: content.hash,
-              size: content.size,
+              size: existing?.size ?? contentLength,
               uploaded: !existing,
             });
           }).pipe(
@@ -210,23 +209,14 @@ export const handler = (options: HandlerOptions = {}) =>
             }
 
             const hash = request.headers["x-tarball-hash"];
-            const size = Number(request.headers["x-tarball-size"] ?? 0);
-            if (
-              !hash ||
-              !/^[a-f0-9]{64}$/.test(hash) ||
-              !Number.isSafeInteger(size) ||
-              size <= 0
-            ) {
+            if (!hash || !/^[a-f0-9]{64}$/.test(hash)) {
               return yield* HttpServerResponse.json(
-                {
-                  error:
-                    "X-Tarball-Hash (sha256) and X-Tarball-Size are required",
-                },
+                { error: "X-Tarball-Hash (sha256) is required" },
                 { status: 400 },
               );
             }
 
-            const ref = tarballRef(project, hash, size);
+            const ref = tarballRef(project, hash);
             const id = tarballId(ref);
             const object = yield* r2.head(tarballKey(ref)).pipe(Effect.orDie);
             if (!object) {
@@ -277,7 +267,7 @@ export const handler = (options: HandlerOptions = {}) =>
             return yield* HttpServerResponse.json({
               package: project,
               hash,
-              size,
+              size: object.size,
               tags,
               ttl: ttlStr,
               expiresAt,
@@ -302,7 +292,7 @@ export const handler = (options: HandlerOptions = {}) =>
             );
           }
 
-          const [packageName, hash, size] = JSON.parse(id) as TarballRef;
+          const [packageName, hash] = JSON.parse(id) as TarballRef;
           if (packageName !== project) {
             return yield* HttpServerResponse.json(
               { error: "tag points to another package" },
@@ -317,7 +307,7 @@ export const handler = (options: HandlerOptions = {}) =>
             new Response(null, {
               status: 302,
               headers: {
-                location: `/projects/${encodedProject(project)}/packages/${hash}/${size}`,
+                location: `/projects/${encodedProject(project)}/packages/${hash}`,
               },
             }),
           );
@@ -325,7 +315,7 @@ export const handler = (options: HandlerOptions = {}) =>
 
         if (method === "GET" && content && !content.stats) {
           const object = yield* r2
-            .get(tarballKey(tarballRef(project, content.hash, content.size)))
+            .get(tarballKey(tarballRef(project, content.hash)))
             .pipe(Effect.orDie);
           if (!object) {
             return yield* HttpServerResponse.json(
@@ -340,7 +330,7 @@ export const handler = (options: HandlerOptions = {}) =>
               status: 200,
               headers: {
                 "content-type": "application/gzip",
-                "content-length": String(content.size),
+                "content-length": String(object.size),
                 "cache-control": "public, max-age=31536000, immutable",
               },
             }),
@@ -383,7 +373,7 @@ export const handler = (options: HandlerOptions = {}) =>
         if (method === "GET" && content?.stats) {
           return yield* Effect.gen(function* () {
             yield* requireAuth;
-            const ref = tarballRef(project, content.hash, content.size);
+            const ref = tarballRef(project, content.hash);
             const object = yield* r2.head(tarballKey(ref)).pipe(Effect.orDie);
             if (!object) {
               return yield* HttpServerResponse.json(

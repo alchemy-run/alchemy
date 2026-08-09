@@ -4,7 +4,7 @@ A self-hostable PR-package service for Cloudflare. Publish content-addressed npm
 
 It packages four Cloudflare resources into a single Effect `handler`:
 
-- **R2** bucket — stores `.tgz` blobs by `(package, sha256, byte size)`
+- **R2** bucket — stores `.tgz` blobs by `(package, sha256)`
 - **KV** namespace — tag → content-addressed tarball pointer
 - **Secrets Store** + a `Random`-generated **bearer token** — gates writes
 - **Durable Object** — per-tarball download stats and TTL state
@@ -99,11 +99,11 @@ The stack output gives you the worker URL and the auto-generated bearer token. S
 
 All routes are scoped by `:pkgName`, which can be scoped (`@scope/name`) or unscoped (`name`) — matches npm package naming.
 
-### `HEAD /projects/:pkgName/packages/:sha256/:size` — probe
+### `HEAD /projects/:pkgName/packages/:sha256` — probe
 
-Checks whether the backing tarball identified by `(package name, SHA-256, byte size)` already exists. Authentication is required. Returns 200 when present and 404 otherwise.
+Checks whether the backing tarball identified by `(package name, SHA-256)` already exists. Authentication is required. Returns 200 when present and 404 otherwise.
 
-### `PUT /projects/:pkgName/packages/:sha256/:size` — upload
+### `PUT /projects/:pkgName/packages/:sha256` — upload
 
 Uploads the raw `.tgz` stream when the content-addressed backing tarball is absent. Authentication, `Content-Type: application/gzip`, and a matching `Content-Length` are required. Repeating the request is idempotent and does not overwrite existing content.
 
@@ -115,7 +115,6 @@ Headers:
 
 - `Authorization: Bearer <token>` (required)
 - `X-Tarball-Hash: <sha256>` (required)
-- `X-Tarball-Size: <bytes>` (required)
 - `X-Tags: <json-array>` (required) — e.g. `["main","abc1234","abc1234abc1234..."]`
 - `X-TTL: <duration>` (optional) — e.g. `"7 hours"`, `"3 weeks"`. Effect `Duration` syntax.
 
@@ -127,9 +126,9 @@ Whenever the path doesn't start with `/projects/`, the request URL is handed to 
 
 ### `GET /projects/:pkgName/tags/:tag` — resolve tag → 302 to tarball
 
-Looks up the tag's `(package name, SHA-256, byte size)` pointer, records a download, and redirects to the immutable tarball URL.
+Looks up the tag's `(package name, SHA-256)` pointer, records a download, and redirects to the immutable tarball URL.
 
-### `GET /projects/:pkgName/packages/:sha256/:size` — serve tarball
+### `GET /projects/:pkgName/packages/:sha256` — serve tarball
 
 Returns the `.tgz` with `cache-control: public, max-age=31536000, immutable`. No auth required; the URL itself is content-addressed.
 
@@ -137,7 +136,7 @@ Returns the `.tgz` with `cache-control: public, max-age=31536000, immutable`. No
 
 Auth required. If the tag was the tarball's last one, the backing blob is also deleted.
 
-### `GET /projects/:pkgName/packages/:sha256/:size/stats` — download stats
+### `GET /projects/:pkgName/packages/:sha256/stats` — download stats
 
 Auth required. Returns `{ downloads: { [tag]: number }, totalDownloads: number }`.
 
@@ -151,13 +150,13 @@ size=$(wc -c < "$tgz" | tr -d ' ')
 base="https://pkg.example.com/projects/my-pkg"
 
 curl -fsSI -H "Authorization: Bearer ${PR_PACKAGE_TOKEN}" \
-  "$base/packages/$hash/$size" || \
+  "$base/packages/$hash" || \
 curl -fsS -X PUT -H "Authorization: Bearer ${PR_PACKAGE_TOKEN}" \
   -H "Content-Type: application/gzip" -H "Content-Length: $size" \
-  --data-binary "@$tgz" "$base/packages/$hash/$size"
+  --data-binary "@$tgz" "$base/packages/$hash"
 
 curl -fsS -X PUT -H "Authorization: Bearer ${PR_PACKAGE_TOKEN}" \
-  -H "X-Tarball-Hash: $hash" -H "X-Tarball-Size: $size" \
+  -H "X-Tarball-Hash: $hash" \
   -H "X-Tags: [\"${GITHUB_SHA:0:7}\",\"$GITHUB_SHA\",\"main\"]" \
   "$base/tags"
 ```
