@@ -28,7 +28,7 @@ jobs:
           fetch-depth: 0
           submodules: "true"
 
-      - uses: alchemy-run/actions/actions/setup@c97e174683129d473b3c3db160e257ffb989f314 # actions#10
+      - uses: alchemy-run/actions/actions/setup@7ca7d3b984ef010c8912de0b2f9433b96bde8f10 # actions#10
         with:
           bun-version: "1.3.13"
 
@@ -48,7 +48,7 @@ jobs:
         run: bun run build:pr-packages
 
       - id: publish
-        uses: alchemy-run/actions/actions/pr-package@c97e174683129d473b3c3db160e257ffb989f314 # actions#10
+        uses: alchemy-run/actions/actions/pr-package@7ca7d3b984ef010c8912de0b2f9433b96bde8f10 # actions#10
         with:
           rebuild-all-paths: distilled
           packages: >-
@@ -82,7 +82,7 @@ jobs:
         if: >-
           github.event_name == 'pull_request' &&
           fromJson(steps.publish.outputs.plan).packages[0] != null
-        uses: alchemy-run/actions/actions/pr-package-comment@c97e174683129d473b3c3db160e257ffb989f314 # actions#10
+        uses: alchemy-run/actions/actions/pr-package-comment@7ca7d3b984ef010c8912de0b2f9433b96bde8f10 # actions#10
         with:
           plan: ${{ steps.publish.outputs.plan }}
           token: ${{ steps.bot-token.outputs.token }}

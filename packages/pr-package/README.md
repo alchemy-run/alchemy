@@ -91,7 +91,7 @@ The stack output gives you the worker URL and the auto-generated bearer token. S
 | Option          | Type                                | Default          | Notes                                                                |
 | --------------- | ----------------------------------- | ---------------- | -------------------------------------------------------------------- |
 | `parseAliasUrl` | `(url: URL) => AliasMatch \| null`  | `() => null`     | Maps any non-`/projects/...` GET to `{ pkgName, tag }` for a 301.    |
-| `defaultTtl`    | `string` (Effect Duration)          | `"3 weeks"`      | TTL applied when an upload doesn't pass `X-TTL`.                     |
+| `defaultTtl`    | `string` (Effect Duration)          | `"3 weeks"`      | TTL applied when a tag request doesn't pass `Alchemy-TTL`.           |
 
 `AliasMatch` is `{ pkgName: string; tag: string }`. Returning `null` falls through to the regular `/projects/:pkgName/...` matcher.
 
@@ -114,9 +114,9 @@ Assigns tags to an existing backing tarball without uploading its bytes again.
 Headers:
 
 - `Authorization: Bearer <token>` (required)
-- `X-Tarball-Hash: <sha256>` (required)
-- `X-Tags: <json-array>` (required) — e.g. `["main","abc1234","abc1234abc1234..."]`
-- `X-TTL: <duration>` (optional) — e.g. `"7 hours"`, `"3 weeks"`. Effect `Duration` syntax.
+- `Alchemy-Tarball-Hash: <sha256>` (required)
+- `Alchemy-Tags: <json-array>` (required) — e.g. `["main","abc1234","abc1234abc1234..."]`
+- `Alchemy-TTL: <duration>` (optional) — e.g. `"7 hours"`, `"3 weeks"`. Effect `Duration` syntax.
 
 If a tag already points elsewhere, it moves to the new tarball. A tarball is deleted after its final tag is removed.
 
@@ -158,8 +158,8 @@ curl -fsS -X PUT -H "Authorization: Bearer ${PR_PACKAGE_TOKEN}" \
   --data-binary "@$tgz" "$base/packages/$hash"
 
 curl -fsS -X PUT -H "Authorization: Bearer ${PR_PACKAGE_TOKEN}" \
-  -H "X-Tarball-Hash: $hash" \
-  -H "X-Tags: [\"${GITHUB_SHA:0:7}\",\"$GITHUB_SHA\",\"main\"]" \
+  -H "Alchemy-Tarball-Hash: $hash" \
+  -H "Alchemy-Tags: [\"${GITHUB_SHA:0:7}\",\"$GITHUB_SHA\",\"main\"]" \
   "$base/tags"
 ```
 

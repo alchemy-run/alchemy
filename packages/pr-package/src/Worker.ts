@@ -26,7 +26,7 @@ class Unauthorized {
 }
 
 export interface HandlerOptions extends AliasParserOptions {
-  /** Default TTL when X-TTL is not provided while assigning tags. e.g. "3 weeks". */
+  /** Default TTL when Alchemy-TTL is not provided while assigning tags. e.g. "3 weeks". */
   defaultTtl?: string;
 }
 
@@ -191,21 +191,24 @@ export const handler = (options: HandlerOptions = {}) =>
 
             let tags: string[] | undefined;
             try {
-              tags = parseTags(request.headers["x-tags"]);
+              tags = parseTags(request.headers["alchemy-tags"]);
             } catch {
               tags = undefined;
             }
             if (!tags) {
               return yield* HttpServerResponse.json(
-                { error: "X-Tags must be a non-empty JSON array of strings" },
+                {
+                  error:
+                    "Alchemy-Tags must be a non-empty JSON array of strings",
+                },
                 { status: 400 },
               );
             }
 
-            const hash = request.headers["x-tarball-hash"];
+            const hash = request.headers["alchemy-tarball-hash"];
             if (!hash || !/^[a-f0-9]{64}$/.test(hash)) {
               return yield* HttpServerResponse.json(
-                { error: "X-Tarball-Hash (sha256) is required" },
+                { error: "Alchemy-Tarball-Hash (sha256) is required" },
                 { status: 400 },
               );
             }
@@ -220,18 +223,20 @@ export const handler = (options: HandlerOptions = {}) =>
               );
             }
 
-            const ttlStr = request.headers["x-ttl"] || defaultTtl;
+            const ttlStr = request.headers["alchemy-ttl"] || defaultTtl;
             const ttlDuration = Duration.fromInput(ttlStr as Duration.Input);
             if (ttlDuration._tag === "None") {
               return yield* HttpServerResponse.json(
-                { error: "X-TTL must be an Effect Duration string" },
+                {
+                  error: "Alchemy-TTL must be an Effect Duration string",
+                },
                 { status: 400 },
               );
             }
             const ttlMillis = Duration.toMillis(ttlDuration.value);
             if (ttlMillis <= 0) {
               return yield* HttpServerResponse.json(
-                { error: "X-TTL must be a positive duration" },
+                { error: "Alchemy-TTL must be a positive duration" },
                 { status: 400 },
               );
             }
