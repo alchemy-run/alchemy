@@ -10,7 +10,14 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", "**/dist/**", ".cache/**/*.tsbuildinfo", "**/.cache/**/*.tsbuildinfo"]
+      "outputs": [
+        "dist/**",
+        "**/dist/**",
+        "lib/**",
+        "**/lib/**",
+        ".cache/**/*.tsbuildinfo",
+        "**/.cache/**/*.tsbuildinfo"
+      ]
     },
     "dev": {
       "persistent": true,
