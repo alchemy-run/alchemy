@@ -16,6 +16,7 @@
     "build:clean": "bun clean . && bun i && bun run build && bun download:env",
     "build:cloudflare-packages": "bun tsc -b distilled/packages/cloudflare/tsconfig.json && turbo run build --filter=@alchemy.run/cloudflare-runtime --filter=@alchemy.run/cloudflare-frameworks --filter=@alchemy.run/cloudflare-test-tools",
     "build:packages": "bun tsc -b && bun run --filter './packages/*' build",
+    "build:pr-packages": "turbo run build --filter=alchemy --filter=@alchemy.run/better-auth --filter=@alchemy.run/cloudflare-runtime --filter=@alchemy.run/cloudflare-frameworks --filter=@alchemy.run/pr-package --filter=@distilled.cloud/core --filter=@distilled.cloud/aws --filter=@distilled.cloud/axiom --filter=@distilled.cloud/cloudflare --filter=@distilled.cloud/neon --filter=@distilled.cloud/planetscale",
     "build": "bun tsc -b && bun run --filter ./website --filter './packages/*' build && bun lint:providers",
     "clean:shallow": "rm -rf alchemy/*.tgz && bun tsc -b --clean",
     "clean": "git clean -fqdx -e .env",
