@@ -7,7 +7,7 @@ It packages four Cloudflare resources into a single Effect `handler`:
 - **R2** bucket — stores `.tgz` blobs by `(package, sha256)`
 - **KV** namespace — tag → content-addressed tarball pointer
 - **Secrets Store** + a `Random`-generated **bearer token** — gates writes
-- **Durable Object** — per-tarball download stats and TTL state
+- **Durable Object** — per-tarball download stats and scheduled TTL cleanup
 
 ## Install
 
@@ -119,6 +119,8 @@ Headers:
 - `X-TTL: <duration>` (optional) — e.g. `"7 hours"`, `"3 weeks"`. Effect `Duration` syntax.
 
 If a tag already points elsewhere, it moves to the new tarball. A tarball is deleted after its final tag is removed.
+
+Assigning tags schedules a named Durable Object expiration event. When it fires, the service removes every KV tag that still points to that tarball, deletes the R2 blob, and clears the tarball state. Reassigning the tarball before expiry reschedules the event.
 
 ### `GET /<alias-path>` — pretty install URL → 301
 

@@ -14,12 +14,16 @@ import { AuthToken } from "./AuthToken.ts";
 import { Bucket } from "./Bucket.ts";
 import PackageStore from "./PackageStore.ts";
 import { TagIndex } from "./TagIndex.ts";
+import {
+  tarballId,
+  tarballKey,
+  tarballRef,
+  type TarballRef,
+} from "./Tarball.ts";
 
 class Unauthorized {
   readonly _tag = "Unauthorized";
 }
-
-type TarballRef = readonly [packageName: string, hash: string];
 
 export interface HandlerOptions extends AliasParserOptions {
   /** Default TTL when X-TTL is not provided while assigning tags. e.g. "3 weeks". */
@@ -31,16 +35,6 @@ const bindings = Layer.mergeAll(
   Cloudflare.KV.ReadWriteNamespaceBinding,
   Cloudflare.SecretsStore.ReadSecretBinding,
 );
-
-const tarballRef = (project: string, hash: string): TarballRef => [
-  project,
-  hash,
-];
-
-const tarballId = (ref: TarballRef) => JSON.stringify(ref);
-
-const tarballKey = ([project, hash]: TarballRef) =>
-  `${encodeURIComponent(project)}/${hash}.tgz`;
 
 const encodedProject = (project: string) =>
   project.split("/").map(encodeURIComponent).join("/");
@@ -262,7 +256,9 @@ export const handler = (options: HandlerOptions = {}) =>
             }
 
             const store = packages.getByName(id);
-            yield* store.init(tags, expiresAt).pipe(Effect.orDie);
+            yield* store
+              .init(project, hash, tags, expiresAt)
+              .pipe(Effect.orDie);
 
             return yield* HttpServerResponse.json({
               package: project,
