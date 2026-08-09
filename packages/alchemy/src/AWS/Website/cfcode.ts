@@ -1,3 +1,5 @@
+// Alchemy modifications are licensed under Apache-2.0.
+// This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
  * CloudFront Function injection code ported from SST's Router component.
  * These are JavaScript code strings that get injected into CloudFront Function handlers.

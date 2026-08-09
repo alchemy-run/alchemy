@@ -1,3 +1,5 @@
+// Alchemy modifications are licensed under Apache-2.0.
+// This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 import type { ReadyAnalytics } from "./types.ts";
 
 // This will allow us to make breaking changes to the analytic schema

@@ -45,9 +45,7 @@ jobs:
             turbo-${{ runner.os }}-${{ github.repository_id }}-
 
       - name: Build packages
-        run: |
-          cp README.md packages/alchemy/README.md
-          bun run build:pr-packages
+        run: bun run build:pr-packages
 
       - id: publish
         uses: alchemy-run/actions/actions/pr-package@ab9b8d7a9e09390ba578b85373dcac972bf3edc4 # actions#10
