@@ -6,6 +6,7 @@ import type {
   Workflow,
 } from "@alchemy.run/cloudflare-runtime/core";
 import type { BundleOutput } from "../../Bundle/Bundle.ts";
+import type { ViteFrameworkBuildOutput } from "../../Bundle/Vite.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
 import type { WorkerAssetsConfig, WorkerSourceDescriptor } from "./Worker.ts";
 
@@ -79,4 +80,5 @@ export interface ViteBuildChildResult {
   base: string | undefined;
   serverBundle: BundleOutput | undefined;
   externalWorkspaces: string[];
+  framework: ViteFrameworkBuildOutput | undefined;
 }

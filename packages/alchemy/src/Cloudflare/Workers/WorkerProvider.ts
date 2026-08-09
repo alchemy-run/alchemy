@@ -19,6 +19,7 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import * as Artifacts from "../../Artifacts.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { hashDirectory, type MemoOptions } from "../../Command/Memo.ts";
+import type { ViteFrameworkBuildOutput } from "../../Bundle/Vite.ts";
 import { havePropsChanged, isResolved, stripEffects } from "../../Diff.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as Provider from "../../Provider.ts";
@@ -2140,64 +2141,69 @@ export const LiveWorkerProvider = () =>
       ) {
         const compatibility = getCompatibility(props);
         const Vite = yield* loadVite;
-        const { clientDirectory, base, serverBundle, externalWorkspaces } =
-          yield* Vite.viteBuild(
-            props.vite?.rootDir,
-            Object.fromEntries(
-              (yield* Effect.all(
-                Object.entries(props.env ?? {}).map(
-                  Effect.fn(function* ([key, value]) {
-                    return [
-                      key,
-                      typeof value === "string"
-                        ? value
-                        : Redacted.isRedacted(value) &&
-                            typeof Redacted.value(value) === "string"
-                          ? Redacted.value(value)
-                          : // `Worker.URL` (bare tag or called) — resolved to
-                            // this Worker's own URL. The bare tag is
-                            // Effect-shaped, so check before `Effect.isEffect`.
-                            isSelfUrl(value)
-                            ? selfUrl
-                            : // A `WorkerLoader` is a real Effect that also carries
-                              // the `~alchemy/Kind` marker — it is a binding, not a
-                              // runnable env value. Check it before `Effect.isEffect`
-                              // so we don't execute it as an inlined env entry.
-                              isWorkerLoader(value)
+        const {
+          clientDirectory,
+          base,
+          serverBundle,
+          externalWorkspaces,
+          framework,
+        } = yield* Vite.viteBuild(
+          props.vite?.rootDir,
+          Object.fromEntries(
+            (yield* Effect.all(
+              Object.entries(props.env ?? {}).map(
+                Effect.fn(function* ([key, value]) {
+                  return [
+                    key,
+                    typeof value === "string"
+                      ? value
+                      : Redacted.isRedacted(value) &&
+                          typeof Redacted.value(value) === "string"
+                        ? Redacted.value(value)
+                        : // `Worker.URL` (bare tag or called) — resolved to
+                          // this Worker's own URL. The bare tag is
+                          // Effect-shaped, so check before `Effect.isEffect`.
+                          isSelfUrl(value)
+                          ? selfUrl
+                          : // A `WorkerLoader` is a real Effect that also carries
+                            // the `~alchemy/Kind` marker — it is a binding, not a
+                            // runnable env value. Check it before `Effect.isEffect`
+                            // so we don't execute it as an inlined env entry.
+                            isWorkerLoader(value)
+                            ? undefined
+                            : // A `Cloudflare.Container` declaration is likewise
+                              // Effect-shaped but is a binding (DO namespace +
+                              // ContainerApplication) — yielding it would resolve
+                              // the started-instance tag, which only exists inside
+                              // a Durable Object (#997).
+                              isContainerDecl(value)
                               ? undefined
-                              : // A `Cloudflare.Container` declaration is likewise
-                                // Effect-shaped but is a binding (DO namespace +
-                                // ContainerApplication) — yielding it would resolve
-                                // the started-instance tag, which only exists inside
-                                // a Durable Object (#997).
-                                isContainerDecl(value)
-                                ? undefined
-                                : Effect.isEffect(value)
-                                  ? yield* value as any as Effect.Effect<any>
-                                  : undefined,
-                    ];
-                  }),
-                ),
-              )).filter(([_, value]) => value !== undefined),
-            ),
-            {
-              // A relative `vite.main` is documented to resolve from the Vite
-              // root. The rolldown plugin resolves the worker entry with no
-              // importer (i.e. against `process.cwd()`), which breaks when the
-              // deploy runs from a different directory (e.g. a monorepo infra
-              // package) — absolutize before handing it over (#796).
-              main: props.vite?.main
-                ? path.resolve(
-                    initialCwd,
-                    props.vite.rootDir ?? ".",
-                    props.vite.main,
-                  )
-                : undefined,
-              compatibilityDate: compatibility.date,
-              compatibilityFlags: compatibility.flags,
-              viteEnvironments: props.vite?.viteEnvironments,
-            },
-          );
+                              : Effect.isEffect(value)
+                                ? yield* value as any as Effect.Effect<any>
+                                : undefined,
+                  ];
+                }),
+              ),
+            )).filter(([_, value]) => value !== undefined),
+          ),
+          {
+            // A relative `vite.main` is documented to resolve from the Vite
+            // root. The rolldown plugin resolves the worker entry with no
+            // importer (i.e. against `process.cwd()`), which breaks when the
+            // deploy runs from a different directory (e.g. a monorepo infra
+            // package) — absolutize before handing it over (#796).
+            main: props.vite?.main
+              ? path.resolve(
+                  initialCwd,
+                  props.vite.rootDir ?? ".",
+                  props.vite.main,
+                )
+              : undefined,
+            compatibilityDate: compatibility.date,
+            compatibilityFlags: compatibility.flags,
+            viteEnvironments: props.vite?.viteEnvironments,
+          },
+        );
         const [assets, bundle, input] = yield* Effect.all(
           [
             clientDirectory
@@ -2237,6 +2243,7 @@ export const LiveWorkerProvider = () =>
           bundle,
           input: input.hash,
           additionalWorkspaces: input.workspaces,
+          framework,
         };
       });
 
@@ -2281,6 +2288,7 @@ export const LiveWorkerProvider = () =>
               bundle: output.bundle,
               input: output.hash.input,
               additionalWorkspaces: output.hash.additionalWorkspaces,
+              framework: output.framework,
             };
           }
           if (props.script !== undefined) {
@@ -2972,14 +2980,15 @@ export const LiveWorkerProvider = () =>
         // has bound to this script. The disk read is the expensive
         // part; the script PUT happens either way.
         const prebuiltAssets = normalizePrebuiltAssets(news.assets, output);
-        const {
-          assets,
-          bundle,
-          hash: preparedHash,
-        } = yield* prepareAssetsAndBundle(id, name, news, {
+        const prepared = yield* prepareAssetsAndBundle(id, name, news, {
           skipAssetsRead: prebuiltAssets?.skip,
           selfUrl,
         });
+        const { assets, bundle, hash: preparedHash } = prepared;
+        const framework: ViteFrameworkBuildOutput | undefined =
+          "framework" in prepared
+            ? (prepared.framework as ViteFrameworkBuildOutput | undefined)
+            : undefined;
         // When the caller supplied a precomputed hash (e.g. via
         // `Command.Build`), store *that* hash in output state so the
         // next diff can short-circuit by comparing it directly. The
@@ -3034,6 +3043,13 @@ export const LiveWorkerProvider = () =>
             return item;
           }),
         );
+        for (const durableObject of framework?.durableObjects ?? []) {
+          metadataBindings.push({
+            type: "durable_object_namespace",
+            name: durableObject.binding,
+            className: durableObject.className,
+          });
+        }
         const expectedDurableObjectClassNames =
           getExpectedDurableObjectClassNames(metadataBindings, name);
         let metadataAssets:
@@ -3136,7 +3152,11 @@ export const LiveWorkerProvider = () =>
         // Parse the DO logical-id→class mapping from script tags (packed
         // `alchemy:dos:` and legacy per-DO `alchemy:do:` formats)
         const oldDoClassNameByLogicalId = getDurableObjectTagMap(oldTags);
-        const currentDoBindings = getDurableObjectBindings(bindings, name);
+        const currentDoBindings = getDurableObjectBindings(
+          bindings,
+          name,
+          framework?.durableObjects,
+        );
         const currentDoClassNameByLogicalId = Object.fromEntries(
           currentDoBindings.map((binding) => [
             binding.logicalId,
@@ -5227,6 +5247,10 @@ function mergeDurableObjectClasses(
 function getDurableObjectBindings(
   bindings: ReadonlyArray<ResourceBinding>,
   workerName: string,
+  frameworkDurableObjects: ReadonlyArray<{
+    binding: string;
+    className: string;
+  }> = [],
 ) {
   // Resource authors (and the `make`/`yield* Tag`/plan-vs-apply machinery)
   // can register the same DO binding multiple times under the same logical
@@ -5237,7 +5261,7 @@ function getDurableObjectBindings(
   // worker just references a foreign class — ship the binding to
   // Cloudflare, but don't drive class migrations for it.
   const seen = new Set<string>();
-  return bindings.flatMap((binding) =>
+  const resourceBindings = bindings.flatMap((binding) =>
     (binding.data.bindings ?? []).flatMap((item: WorkerBinding) => {
       if (
         item.type !== "durable_object_namespace" ||
@@ -5269,6 +5293,23 @@ function getDurableObjectBindings(
       ];
     }),
   );
+  return [
+    ...resourceBindings,
+    ...frameworkDurableObjects.flatMap((binding) => {
+      const logicalId = `vite:${binding.binding}`;
+      const dedupKey = `${logicalId}::${binding.binding}::${binding.className}`;
+      if (seen.has(dedupKey)) return [];
+      seen.add(dedupKey);
+      return [
+        {
+          logicalId,
+          bindingName: binding.binding,
+          className: binding.className,
+          transferredFrom: undefined,
+        },
+      ];
+    }),
+  ];
 }
 
 /**

@@ -17,6 +17,13 @@ import type {
 import type * as Context from "effect/Context";
 import type * as vite from "vite";
 import { dev } from "./dev-plugin.ts";
+export {
+  cloudflareViteFramework,
+  getViteFrameworkContribution,
+  type ViteFrameworkContribution,
+  type ViteFrameworkDurableObject,
+  type ViteFrameworkWorkerCustomizer,
+} from "./framework.ts";
 import { preview } from "./preview-plugin.ts";
 
 export interface CloudflareVitePluginDevOptions {

@@ -34,7 +34,7 @@ const readConfig = Effect.gen(function* () {
 const program = Effect.gen(function* () {
   const config = yield* readConfig;
   const fs = yield* FileSystem.FileSystem;
-  const { clientDirectory, base, serverBundle, externalWorkspaces } =
+  const { clientDirectory, base, serverBundle, externalWorkspaces, framework } =
     yield* viteBuildInProcess(config.rootDir, config.env, {
       main: config.main,
       compatibilityDate: config.compatibilityDate,
@@ -50,6 +50,7 @@ const program = Effect.gen(function* () {
     base,
     serverBundle: bundle,
     externalWorkspaces: Array.from(workspaces),
+    framework,
   };
   yield* fs.writeFile(config.outputPath, NodeV8.serialize(result));
 });

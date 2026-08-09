@@ -18,6 +18,7 @@ import type * as Stream from "effect/Stream";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import type { Artifacts } from "../../Artifacts.ts";
 import type * as Bundle from "../../Bundle/Bundle.ts";
+import type { ViteFrameworkBuildOutput } from "../../Bundle/Vite.ts";
 import type { WorkflowExport } from "../Workflows/Workflow.ts";
 import type { AssetReadResult, ValidationError } from "./Assets.ts";
 import type { DurableObjectExport } from "./DurableObject.ts";
@@ -66,6 +67,8 @@ export interface SourceBuildOutput {
   readonly assets: AssetReadResult | undefined;
   /** Source-owned hash slots. Slots the source doesn't use are omitted. */
   readonly hash: Partial<SourceHash>;
+  /** Framework-generated Worker metadata, lowered by the WorkerProvider. */
+  readonly framework?: ViteFrameworkBuildOutput;
 }
 
 /**

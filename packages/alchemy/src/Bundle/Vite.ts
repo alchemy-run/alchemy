@@ -15,6 +15,14 @@ import {
   type BundleOutput,
 } from "./Bundle.ts";
 
+/** Durable Object metadata contributed by a framework-owned Vite entry. */
+export interface ViteFrameworkBuildOutput {
+  readonly durableObjects: ReadonlyArray<{
+    readonly binding: string;
+    readonly className: string;
+  }>;
+}
+
 export interface ViteBuildOutput {
   readonly clientDirectory: string | undefined;
   /**
@@ -26,6 +34,11 @@ export interface ViteBuildOutput {
   // This is emitted as an Effect instead of a value so we can process it in parallel with reading the client assets.
   readonly serverBundle: Effect.Effect<BundleOutput | undefined, BundleError>;
   readonly externalWorkspaces: Effect.Effect<Set<string>, PlatformError>;
+  /**
+   * Framework-generated Worker metadata captured from the app Vite config.
+   * The WorkerProvider owns lowering it into bindings and migrations.
+   */
+  readonly framework: ViteFrameworkBuildOutput | undefined;
 }
 
 // `@vitejs/plugin-rsc` writes these modules separately after build completes instead of emitting them as chunks.
@@ -277,6 +290,7 @@ export const viteBuildOutputPlugin = Effect.fn(function* ({
         base,
         serverBundle: makeServerBundle(),
         externalWorkspaces: collectExternalWorkspaces(),
+        framework: undefined,
       }),
     ),
   };

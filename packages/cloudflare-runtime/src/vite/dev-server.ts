@@ -40,6 +40,7 @@ import { renderExportWrappers } from "./export-types.ts";
 import type { EntryEnvironment } from "./module-runner/constants.shared.ts";
 import { ENVIRONMENT_NAME_HEADER } from "./module-runner/constants.shared.ts";
 import type { CloudflareVitePluginOptions } from "./plugin.ts";
+import { withViteFrameworkWorker } from "./framework.ts";
 
 export type ServerHandle = Awaited<ReturnType<typeof startServer>>;
 
@@ -203,8 +204,9 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
 ) {
   const runtime = yield* Runtime.Runtime;
   const moduleFallback = yield* makeModuleFallbackService;
+  const worker = withViteFrameworkWorker(options);
 
-  const name = options.worker?.name ?? `vite-dev-${crypto.randomUUID()}`;
+  const name = worker?.name ?? `vite-dev-${crypto.randomUUID()}`;
   return yield* runtime.start({
     name,
     modules: yield* Effect.promise(() => makeWorkerModules(exportTypes)),
@@ -237,7 +239,7 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
           return HttpServerResponse.jsonUnsafe(result);
         }),
       }),
-      ...(options.worker?.bindings ?? []),
+      ...(worker?.bindings ?? []),
     ],
     durableObjectNamespaces: [
       {
@@ -245,19 +247,19 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
         sql: false,
         ephemeralLocal: true,
       },
-      ...(options.worker?.durableObjectNamespaces ?? []),
+      ...(worker?.durableObjectNamespaces ?? []),
     ],
-    workflows: options.worker?.workflows,
-    hyperdrives: options.worker?.hyperdrives,
+    workflows: worker?.workflows,
+    hyperdrives: worker?.hyperdrives,
     // Without this the worker starts with no consumers, so a producer
     // binding for a queue this worker consumes resolves to the dev-registry
     // proxy instead of a local broker — and that accepts-and-drops every
     // message, with `send()` never settling.
-    queueConsumers: options.worker?.queueConsumers,
-    assets: options.worker?.assets,
+    queueConsumers: worker?.queueConsumers,
+    assets: worker?.assets,
     unsafe: {
       moduleFallback,
-      ...(options.worker?.unsafe ?? {}),
+      ...(worker?.unsafe ?? {}),
     },
   });
 });

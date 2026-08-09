@@ -1,4 +1,5 @@
 import cloudflare, {
+  getViteFrameworkContribution,
   type CloudflareVitePluginOptions,
 } from "@alchemy.run/cloudflare-runtime/vite";
 import * as ConsoleService from "effect/Console";
@@ -167,6 +168,7 @@ export const viteBuild = (
         base: result.base,
         serverBundle: Effect.succeed(result.serverBundle),
         externalWorkspaces: Effect.succeed(new Set(result.externalWorkspaces)),
+        framework: result.framework,
       } satisfies ViteBuildOutput;
     }),
   );
@@ -211,7 +213,14 @@ export const viteBuildInProcess = (
       );
       await builder.buildApp();
     });
-    return yield* outputPlugin.output;
+    const contribution = getViteFrameworkContribution(pluginOptions);
+    return {
+      ...(yield* outputPlugin.output),
+      framework:
+        contribution.durableObjects && contribution.durableObjects.length > 0
+          ? { durableObjects: contribution.durableObjects }
+          : undefined,
+    } satisfies ViteBuildOutput;
   });
 
 // Emulate `vite build` env semantics for `props.env`: only
@@ -358,7 +367,7 @@ export const makeViteSource = (vite: ViteOptions): SourceProvider => ({
   build: Effect.fn(function* (ctx) {
     const path = yield* Path.Path;
     const env = yield* resolveViteEnv(ctx.env ?? {});
-    const { clientDirectory, serverBundle, externalWorkspaces } =
+    const { clientDirectory, serverBundle, externalWorkspaces, framework } =
       yield* viteBuild(vite.rootDir, env, {
         main: vite.main,
         compatibilityDate: ctx.compatibility.date,
@@ -400,6 +409,7 @@ export const makeViteSource = (vite: ViteOptions): SourceProvider => ({
         input: input.hash,
         additionalWorkspaces: input.workspaces,
       },
+      framework,
     };
   }),
   hash: Effect.fn(function* (_ctx, previous) {
