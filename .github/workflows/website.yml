@@ -10,6 +10,20 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    # `labeled` so adding `deploy-website` on an open PR triggers a
+    # deploy without needing another push.
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - labeled
+      - closed
+    paths:
+      - "website/**"
+      - "packages/alchemy/**"
+      - "bun.lock"
+      - ".github/workflows/website.yml"
 
 concurrency:
   group: deploy-website-${{ github.ref }}
