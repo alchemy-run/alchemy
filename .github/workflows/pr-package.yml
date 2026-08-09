@@ -28,7 +28,7 @@ jobs:
           fetch-depth: 0
           submodules: "true"
 
-      - uses: alchemy-run/actions/actions/setup@7c926bfa5bdeb357478f06dbb729de357062911a # actions#10
+      - uses: alchemy-run/actions/actions/setup@ab9b8d7a9e09390ba578b85373dcac972bf3edc4 # actions#10
         with:
           bun-version: "1.3.13"
 
@@ -50,7 +50,7 @@ jobs:
           bun run build:pr-packages
 
       - id: publish
-        uses: alchemy-run/actions/actions/pr-package@7c926bfa5bdeb357478f06dbb729de357062911a # actions#10
+        uses: alchemy-run/actions/actions/pr-package@ab9b8d7a9e09390ba578b85373dcac972bf3edc4 # actions#10
         with:
           rebuild-all-paths: distilled
           packages: >-
@@ -67,8 +67,7 @@ jobs:
               { "dir": "distilled/packages/neon",        "name": "@distilled.cloud/neon",              "group": "Distilled", "submodule": true },
               { "dir": "distilled/packages/planetscale", "name": "@distilled.cloud/planetscale",       "group": "Distilled", "submodule": true }
             ]
-          pr-package-host: ${{ vars.STAGING_PR_PACKAGE_HOST }}
-          pr-package-token: ${{ secrets.STAGING_PR_PACKAGE_TOKEN }}
+          pr-package-token: ${{ secrets.PR_PACKAGE_TOKEN }}
 
       - name: Generate bot token
         if: >-
@@ -84,7 +83,7 @@ jobs:
         if: >-
           github.event_name == 'pull_request' &&
           fromJson(steps.publish.outputs.plan).packages[0] != null
-        uses: alchemy-run/actions/actions/pr-package-comment@7c926bfa5bdeb357478f06dbb729de357062911a # actions#10
+        uses: alchemy-run/actions/actions/pr-package-comment@ab9b8d7a9e09390ba578b85373dcac972bf3edc4 # actions#10
         with:
           plan: ${{ steps.publish.outputs.plan }}
           token: ${{ steps.bot-token.outputs.token }}
