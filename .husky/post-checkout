@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+set -eu
+
+git_dir="$(git rev-parse --path-format=absolute --git-dir)"
+common_dir="$(git rev-parse --path-format=absolute --git-common-dir)"
+
+# `post-checkout` also runs for ordinary checkouts and clones. Distilled only
+# needs bootstrapping when Git has just created (or switched) a linked worktree.
+[ "$git_dir" != "$common_dir" ] || exit 0
+
+exec bun scripts/bootstrap-distilled-worktree.ts
