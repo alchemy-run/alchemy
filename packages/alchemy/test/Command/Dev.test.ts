@@ -427,11 +427,16 @@ test.provider(
       const fs = yield* FileSystem.FileSystem;
       const tmp = yield* fs.makeTempDirectoryScoped({ prefix: "devcmd-" });
       const pidFile = pathe.join(tmp, "pid.json");
+      const shutdownFile = pathe.join(tmp, "shutdown.json");
 
       yield* stack.deploy(
         Command.Dev("Dev", {
           command: `node ${fixtureScript}`,
-          env: { PID_FILE: pidFile, MARKER: "stop" },
+          env: {
+            PID_FILE: pidFile,
+            SHUTDOWN_FILE: shutdownFile,
+            MARKER: "stop",
+          },
         }),
       );
       const { pid } = yield* waitForPidFile(pidFile, "stop");
@@ -440,6 +445,10 @@ test.provider(
       yield* stack.destroy();
       yield* waitForDeath(pid);
       expect(yield* isAlive(pid)).toBe(false);
+      expect(JSON.parse(yield* fs.readFileString(shutdownFile))).toEqual({
+        pid,
+        marker: "stop",
+      });
     }),
   { timeout: 30_000 },
 );

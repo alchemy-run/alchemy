@@ -82,6 +82,7 @@ export class CommandExecutor extends Context.Service<
      */
     readonly spawn: (
       props: CommandProps,
+      options?: CommandSpawnOptions,
     ) => Effect.Effect<
       ChildProcessSpawner.ChildProcessHandle,
       CommandError,
@@ -100,6 +101,15 @@ export class CommandExecutor extends Context.Service<
     >;
   }
 >()("alchemy/Command/CommandExecutor") {}
+
+/** Internal lifecycle controls for resource-specific command ownership. */
+export interface CommandSpawnOptions extends ChildProcess.KillOptions {
+  /**
+   * Disable the generic synchronous exit hook when another owner provides a
+   * stronger abrupt-exit lifecycle (for example Command.Dev's guardian).
+   */
+  readonly registerExitKill?: boolean;
+}
 
 /**
  * Extends Effect's `PlatformError` to include the command that failed and some command-specific error reasons.
@@ -224,7 +234,9 @@ const parseExecutionTimeout = (
   return Effect.succeed(decoded.value);
 };
 
-const terminateProcessGroup = (child: ChildProcessSpawner.ChildProcessHandle) =>
+export const terminateProcessGroup = (
+  child: ChildProcessSpawner.ChildProcessHandle,
+) =>
   Effect.gen(function* () {
     // Dispatch SIGTERM without waiting indefinitely for the root process. The
     // Effect process runtime targets the detached process group on POSIX and
@@ -306,7 +318,7 @@ export const CommandExecutorLive = () =>
       };
 
       /** Spawns a command, returning the child process handle. */
-      const spawn = (props: CommandProps) =>
+      const spawn = (props: CommandProps, options?: CommandSpawnOptions) =>
         parseCommand(props).pipe(
           Effect.flatMap(({ bin, args }) =>
             spawner.spawn(
@@ -328,11 +340,16 @@ export const CommandExecutorLive = () =>
                 // The Effect process runtime creates a detached process group
                 // by default on POSIX. Preserve that default so timeouts and
                 // scoped interruption can terminate every descendant.
-                killSignal: "SIGKILL",
+                killSignal: options?.killSignal ?? "SIGKILL",
+                forceKillAfter: options?.forceKillAfter,
               }),
             ),
           ),
-          Effect.tap((child) => registerExitKill(child.pid)),
+          Effect.tap((child) =>
+            options?.registerExitKill === false
+              ? Effect.succeed(child)
+              : registerExitKill(child.pid).pipe(Effect.as(child)),
+          ),
           Effect.map((child) =>
             redactChildProcessHandle(child, makeCommandRedactor(props.env)),
           ),

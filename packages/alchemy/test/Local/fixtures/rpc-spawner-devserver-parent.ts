@@ -20,10 +20,11 @@ import { PlatformServices } from "../../../src/Util/PlatformServices.ts";
 const sidecarEntry = process.argv[2];
 const command = process.argv[3];
 const pidFile = process.argv[4];
+const shutdownFile = process.argv[5];
 
-if (!sidecarEntry || !command || !pidFile) {
+if (!sidecarEntry || !command || !pidFile || !shutdownFile) {
   console.error(
-    "usage: rpc-spawner-devserver-parent.ts <sidecar-entry-url> <command> <pid-file>",
+    "usage: rpc-spawner-devserver-parent.ts <sidecar-entry-url> <command> <pid-file> <shutdown-file>",
   );
   process.exit(2);
 }
@@ -61,7 +62,11 @@ const program = Effect.gen(function* () {
     instanceId: "Dev",
     news: {
       command,
-      env: { PID_FILE: pidFile, MARKER: "rpc-devserver" },
+      env: {
+        PID_FILE: pidFile,
+        SHUTDOWN_FILE: shutdownFile,
+        MARKER: "rpc-devserver",
+      },
     },
     olds: undefined,
     output: undefined,

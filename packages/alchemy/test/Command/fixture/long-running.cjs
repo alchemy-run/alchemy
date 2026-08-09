@@ -4,6 +4,7 @@
 const fs = require("node:fs");
 
 const file = process.env.PID_FILE;
+const shutdownFile = process.env.SHUTDOWN_FILE;
 const marker = process.env.MARKER ?? "default";
 
 if (!file) {
@@ -12,6 +13,19 @@ if (!file) {
 }
 
 fs.writeFileSync(file, JSON.stringify({ pid: process.pid, marker }));
+
+// Dev-process cleanup is graceful first: record the signal before yielding
+// to normal termination so the RpcSpawner fixture proves the child observed
+// SIGTERM across the real sidecar boundary.
+process.once("SIGTERM", () => {
+  if (shutdownFile) {
+    fs.writeFileSync(
+      shutdownFile,
+      JSON.stringify({ pid: process.pid, marker }),
+    );
+  }
+  process.exit(0);
+});
 
 // Print a localhost URL so the Dev provider's URL-readiness scan resolves
 // immediately (like a real dev server) instead of waiting out its 5-second
