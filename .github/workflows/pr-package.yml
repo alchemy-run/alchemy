@@ -30,6 +30,9 @@ jobs:
 
       - uses: alchemy-run/actions/actions/setup@feature/refactor/pr-package-single-job # PR #9
 
+      - name: Install Distilled dependencies
+        run: bun install --cwd distilled --frozen-lockfile
+
       - name: Restore Turbo cache
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
@@ -48,11 +51,11 @@ jobs:
           rebuild-all-paths: distilled
           packages: >-
             [
-              { "dir": "packages/alchemy",               "name": "alchemy",                            "group": "Alchemy" },
-              { "dir": "packages/better-auth",           "name": "@alchemy.run/better-auth",           "group": "Alchemy" },
-              { "dir": "packages/cloudflare-runtime",    "name": "@alchemy.run/cloudflare-runtime",    "group": "Alchemy" },
-              { "dir": "packages/cloudflare-frameworks", "name": "@alchemy.run/cloudflare-frameworks", "group": "Alchemy" },
-              { "dir": "packages/pr-package",            "name": "@alchemy.run/pr-package",            "group": "Alchemy" },
+              { "dir": "packages/alchemy",               "name": "alchemy",                            "group": "Alchemy", "readme": "README.md" },
+              { "dir": "packages/better-auth",           "name": "@alchemy.run/better-auth",           "group": "Alchemy", "readme": "README.md" },
+              { "dir": "packages/cloudflare-runtime",    "name": "@alchemy.run/cloudflare-runtime",    "group": "Alchemy", "readme": "README.md" },
+              { "dir": "packages/cloudflare-frameworks", "name": "@alchemy.run/cloudflare-frameworks", "group": "Alchemy", "readme": "README.md" },
+              { "dir": "packages/pr-package",            "name": "@alchemy.run/pr-package",            "group": "Alchemy", "readme": "README.md" },
               { "dir": "distilled/packages/core",        "name": "@distilled.cloud/core",              "group": "Distilled", "submodule": true },
               { "dir": "distilled/packages/aws",         "name": "@distilled.cloud/aws",               "group": "Distilled", "submodule": true },
               { "dir": "distilled/packages/axiom",       "name": "@distilled.cloud/axiom",             "group": "Distilled", "submodule": true },
