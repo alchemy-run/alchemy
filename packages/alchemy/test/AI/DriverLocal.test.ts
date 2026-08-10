@@ -23,6 +23,9 @@ import { DriverLocal } from "@/AI/DriverLocal.ts";
 import { ThreadStorageMemory } from "@/AI/ThreadStorageMemory.ts";
 
 const InMemoryDriver = DriverLocal.pipe(Layer.provide(ThreadStorageMemory));
+
+/** The codemode ToolEngine over the in-process evaluator. */
+const codeMode = AI.CodeMode().pipe(Layer.provide(AI.EvalFunction));
 import { RuntimeContext } from "@/RuntimeContext.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Deferred from "effect/Deferred";
@@ -1342,44 +1345,7 @@ ${
       );
     }).pipe(
       Effect.scoped,
-      Effect.provide(
-        testLayer(model, Layer.mergeAll(search.layer, AI.CodeModeAsync())),
-      ),
-    );
-  });
-
-  it.effect("codemode(effect): the program stays on the driver fiber", () => {
-    const model = Model.make([
-      () => [
-        Model.toolCall("eval", {
-          code: `
-            return Effect.gen(function* () {
-              const result = yield* tools.search({ query: "alchemy" });
-              return "wrapped:" + result;
-            });`,
-        }),
-        Model.finish("tool-calls"),
-      ],
-      () => [Model.text("done"), Model.finish()],
-    ]);
-    const search = recordingSearch();
-    return Effect.gen(function* () {
-      const researcher = yield* interpret(Researcher, ResearcherCharter);
-      yield* researcher.dispatch("go");
-
-      const evalTool = model.calls[0]!.tools[0]!;
-      expect(evalTool.description).toContain(
-        "declare function search(input: { query: string }): Effect<unknown>",
-      );
-      expect(search.queries).toEqual(["alchemy"]);
-      expect(Model.promptText(model.calls[1]!)).toContain(
-        "wrapped:results for alchemy",
-      );
-    }).pipe(
-      Effect.scoped,
-      Effect.provide(
-        testLayer(model, Layer.mergeAll(search.layer, AI.CodeModeEffect())),
-      ),
+      Effect.provide(testLayer(model, Layer.mergeAll(search.layer, codeMode))),
     );
   });
 
@@ -1400,9 +1366,7 @@ ${
       expect(Model.promptText(model.calls[1]!)).toContain("program failed");
     }).pipe(
       Effect.scoped,
-      Effect.provide(
-        testLayer(model, Layer.mergeAll(search.layer, AI.CodeModeAsync())),
-      ),
+      Effect.provide(testLayer(model, Layer.mergeAll(search.layer, codeMode))),
     );
   });
 });
