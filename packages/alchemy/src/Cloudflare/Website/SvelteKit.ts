@@ -82,8 +82,8 @@ export interface SvelteKitProps<
  * Client assets and prerendered pages are deployed as Worker static
  * assets; dynamic routes are served by the generated Worker.
  *
- * The `@distilled.cloud/sveltekit` package must be installed in your
- * project — it is loaded dynamically at deploy time.
+ * The `@alchemy.run/cloudflare-frameworks` package must be installed in your
+ * project — its `/sveltekit` export is loaded dynamically at deploy time.
  *
  * Input files are content-hashed (respecting `.gitignore` by default) so
  * unchanged projects skip the build and deploy entirely.
@@ -232,7 +232,7 @@ export const SvelteKit: {
                   }
                 : props?.assets,
             source: {
-              provider: "@distilled.cloud/sveltekit/source",
+              provider: "@alchemy.run/cloudflare-frameworks/sveltekit/source",
               devMode: "server",
               options: {
                 rootDir: props?.rootDir,

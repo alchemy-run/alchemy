@@ -73,7 +73,10 @@ const waitForNamespaceToBeDeleted = Effect.fn(function* (
     Effect.retry({
       while: (e): e is NamespaceStillExists =>
         e instanceof NamespaceStillExists,
-      schedule: Schedule.exponential(250),
+      schedule: Schedule.min([
+        Schedule.exponential(250),
+        Schedule.spaced("2 seconds"),
+      ]),
       times: 10,
     }),
     Effect.catchTag("NamespaceNotFound", () => Effect.void),
@@ -93,7 +96,10 @@ const readNamespaceValue = Effect.fn(function* (options: {
   const res = yield* kv.getNamespaceValue(options).pipe(
     Effect.retry({
       while: (e): boolean => e._tag === "KeyNotFound",
-      schedule: Schedule.exponential("1 second"),
+      schedule: Schedule.min([
+        Schedule.exponential("1 second"),
+        Schedule.spaced("3 seconds"),
+      ]),
       times: 8,
     }),
   );
@@ -372,6 +378,120 @@ describe.concurrent("Nuxt", () => {
       }).pipe(logLevel),
     { timeout: 600_000 },
   );
+
+  // ─────────────────────────────────────────────────────────────────────
+  // SPA mode: `ssr: false`
+  //
+  // Pages render exclusively in the browser — the raw HTML the deploy
+  // serves is the app shell (identified by the fixture's `app.head` meta
+  // marker), for `/` and for deep links alike. Nitro keeps `server/`
+  // routes executing in the worker with the full cloudflare runtime
+  // contract; only page rendering moves to the client.
+  // ─────────────────────────────────────────────────────────────────────
+
+  const spaFixtureDir = pathe.resolve(
+    import.meta.dirname,
+    "fixtures",
+    "nuxt-spa-app",
+  );
+
+  const SPA_SHELL_MARKER = "nuxt-spa-shell";
+
+  test.provider(
+    "Nuxt: ssr:false serves the SPA shell while server routes still run in the worker",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
+        yield* stack.destroy();
+
+        const rootDir = yield* cloneFixture(spaFixtureDir, {
+          prefix: "alchemy-nuxt-spa-",
+          tempRoot,
+          entries: [
+            ".gitignore",
+            "package.json",
+            "nuxt.config.ts",
+            "app",
+            "server",
+            "public",
+          ],
+        });
+
+        const bindingMarker = "nuxt-spa-binding-marker";
+
+        const site = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Website.Nuxt("NuxtSpaSite", {
+              rootDir,
+              workersDev: { enabled: true, previewsEnabled: true },
+              memo: {
+                include: [
+                  "app/**",
+                  "server/**",
+                  "public/**",
+                  "nuxt.config.ts",
+                  "package.json",
+                ],
+              },
+              env: {
+                TEST_BINDING: bindingMarker,
+              },
+            });
+          }),
+        );
+
+        expect(site.url).toBeDefined();
+        yield* expectWorkerExists(site.workerName, accountId);
+
+        // (a) `/` serves the app shell: the `app.head` meta marker is in
+        // the raw HTML, while the page markup (which only ever renders in
+        // the browser under `ssr: false`) is absent.
+        const homeBody = yield* expectUrlContains(
+          `${site.url!}/`,
+          SPA_SHELL_MARKER,
+          {
+            timeout: "120 seconds",
+            label: "SPA shell at /",
+          },
+        );
+        expect(homeBody).not.toContain("NUXT_SPA_PAGE_MARKER");
+
+        // (b) A hard GET to a client route serves the shell too — the
+        // client router owns the route; its markup never appears in HTML.
+        const deepBody = yield* expectUrlContains(
+          `${site.url!}/deep`,
+          SPA_SHELL_MARKER,
+          {
+            timeout: "60 seconds",
+            label: "deep link serves SPA shell",
+          },
+        );
+        expect(deepBody).not.toContain("NUXT_SPA_DEEP_MARKER");
+
+        // (c) Nitro keeps `server/api` routes executing in the worker,
+        // `ssr: false` notwithstanding — with the cloudflare_module
+        // runtime contract (env binding + waitUntil) intact.
+        const hello = yield* fetchJsonReady<{
+          marker: string;
+          binding: string | null;
+          hasWaitUntil: boolean;
+        }>(`${site.url!}/api/hello`);
+        expect(hello.marker).toBe("spa-api-route-ok");
+        expect(hello.binding).toBe(bindingMarker);
+        expect(hello.hasWaitUntil).toBe(true);
+
+        // (d) A `public/` asset serves from the asset layer.
+        yield* expectUrlContains(`${site.url!}/robots.txt`, "User-agent", {
+          timeout: "60 seconds",
+          label: "static asset in SPA mode",
+        });
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+      }).pipe(logLevel),
+    { timeout: 600_000 },
+  );
 });
 
 /**
@@ -394,8 +514,14 @@ const fetchJsonReady = <T>(url: string) =>
           : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
       ),
       Effect.retry({
-        schedule: Schedule.exponential("500 millis"),
-        times: 15,
+        // Capped interval, ~90s total budget: fresh workers.dev subdomains and
+        // DO namespaces can take over a minute to start serving under
+        // concurrent deploys.
+        schedule: Schedule.min([
+          Schedule.exponential("500 millis"),
+          Schedule.spaced("2 seconds"),
+        ]),
+        times: 45,
       }),
     );
   });
@@ -416,8 +542,12 @@ const postJsonReady = <T>(url: string, body: unknown) =>
         : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
     ),
     Effect.retry({
-      schedule: Schedule.exponential("500 millis"),
-      times: 15,
+      // Capped interval, ~90s total budget (workers.dev / DO propagation).
+      schedule: Schedule.min([
+        Schedule.exponential("500 millis"),
+        Schedule.spaced("2 seconds"),
+      ]),
+      times: 45,
     }),
   );
 
@@ -435,7 +565,11 @@ const putJsonReady = <T>(url: string) =>
         : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
     ),
     Effect.retry({
-      schedule: Schedule.exponential("500 millis"),
-      times: 15,
+      // Capped interval, ~90s total budget (workers.dev / DO propagation).
+      schedule: Schedule.min([
+        Schedule.exponential("500 millis"),
+        Schedule.spaced("2 seconds"),
+      ]),
+      times: 45,
     }),
   );

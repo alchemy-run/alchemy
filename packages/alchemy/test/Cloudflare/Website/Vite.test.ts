@@ -1074,6 +1074,60 @@ if (el) {
   );
 
   devTest.provider(
+    "Vite dev: client-only SPA serves the shell for deep links",
+    (stack) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        yield* stack.destroy();
+
+        const rootDir = yield* cloneFixture(spaFixtureDir, {
+          prefix: "alchemy-vite-spa-dev-",
+          tempRoot,
+          entries: ["index.html", "package.json", "src"],
+        });
+        const marker = "vite-spa-dev-marker";
+        yield* fs.writeFileString(
+          path.join(rootDir, "index.html"),
+          htmlPage(marker),
+        );
+
+        const site = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Website.Vite("ViteSpaDev", {
+              ...viteProps(rootDir, ["index.html", "src/**", "package.json"]),
+              assets: { notFoundHandling: "single-page-application" as const },
+              dev: { port: 0 },
+            });
+          }),
+        );
+
+        // Local identity: the url points at the alchemy dev proxy — no
+        // cloud Worker exists.
+        expect(site.url).toBeDefined();
+        expect(site.url).toMatch(/^http:\/\/localhost:\d+/);
+
+        // The SPA shell serves at the root...
+        yield* expectUrlContains(`${site.url!}/`, marker, {
+          timeout: "60 seconds",
+          label: "spa dev shell",
+        });
+        // ...and a deep link to an unregistered route falls back to the
+        // shell so client-side routing can boot.
+        yield* expectUrlContains(`${site.url!}/deep/link/route`, marker, {
+          timeout: "30 seconds",
+          label: "spa dev deep link fallback",
+        });
+        // The dev server serves the client module the shell references.
+        yield* expectUrlContains(`${site.url!}/src/main.ts`, "hydrated", {
+          timeout: "30 seconds",
+          label: "spa dev module asset",
+        });
+      }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+    { timeout: 180_000 },
+  );
+
+  devTest.provider(
     "Vite dev: TanStack Start keeps Alchemy-managed R2 bindings",
     (stack) =>
       Effect.gen(function* () {
@@ -1260,8 +1314,12 @@ const fetchJsonReady = <T>(url: string) =>
           : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
       ),
       Effect.retry({
-        schedule: Schedule.exponential("500 millis"),
-        times: 15,
+        // Capped interval, ~90s total budget (workers.dev / DO propagation).
+        schedule: Schedule.min([
+          Schedule.exponential("500 millis"),
+          Schedule.spaced("2 seconds"),
+        ]),
+        times: 45,
       }),
     );
   });
@@ -1318,8 +1376,12 @@ const putTextJsonReady = <T>(url: string, body: string) =>
           : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
       ),
       Effect.retry({
-        schedule: Schedule.exponential("500 millis"),
-        times: 15,
+        // Capped interval, ~90s total budget (workers.dev / DO propagation).
+        schedule: Schedule.min([
+          Schedule.exponential("500 millis"),
+          Schedule.spaced("2 seconds"),
+        ]),
+        times: 45,
       }),
     );
   });

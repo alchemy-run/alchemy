@@ -582,17 +582,23 @@ export const DockerLive = Layer.effect(
       ),
       container: {
         create: ({ image, env, command, context, ...options }) =>
-          run([
-            ...formatArgs({ context }),
-            "container",
-            "create",
-            ...formatArgs({
-              ...options,
-              env: env ? Object.keys(env) : undefined,
-            }),
-            image,
-            ...(command ?? []),
-          ]),
+          // `--env KEY` (name-only) keeps values off CLI arguments; Docker
+          // copies each value from the CLI process environment, so the
+          // normalized container env must be passed to the child process.
+          run(
+            [
+              ...formatArgs({ context }),
+              "container",
+              "create",
+              ...formatArgs({
+                ...options,
+                env: env ? Object.keys(env) : undefined,
+              }),
+              image,
+              ...(command ?? []),
+            ],
+            env,
+          ),
         inspect: (name, context) =>
           runInspect<Docker.Container>([
             ...formatArgs({ context }),

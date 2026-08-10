@@ -6,6 +6,7 @@ import * as Command from "../../Command/index.ts";
 import type { Input, InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
+import { renamedFrom } from "../../Rename.ts";
 import {
   effectClass,
   isYieldableEffectLike,
@@ -297,6 +298,12 @@ const makeStaticSite = <
     // Pure-static sites (neither `main` nor `script`) deploy as
     // assets-only Workers: no script is uploaded and Cloudflare's asset
     // layer serves every request itself.
+    //
+    // The Worker's FQN was `<id>/Worker` before #1053 flattened it to
+    // `<id>`; `renamedFrom` migrates the pre-existing state row to the new
+    // FQN instead of letting the engine plan a create+delete replacement
+    // (a new physical name, a torn-down workers.dev URL, and a
+    // custom-domain handover that crashes the deploy).
     return yield* Worker<Bindings, WorkerAssetsConfig, Req>(id, {
       ...props,
       assets: build
@@ -311,7 +318,7 @@ const makeStaticSite = <
       // state with a stub Attributes shape.
       dev: dev ? { mode: "external", url: dev.url } : undefined,
       script: props.script,
-    });
+    }).pipe(renamedFrom(`${id}/Worker`));
   });
 
 /**

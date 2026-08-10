@@ -152,6 +152,7 @@ A linear five-part walkthrough from zero to a tested, locally-developed, CI-depl
 - [Nuxt](https://alchemy.run/cloudflare/frontend/nuxt) — Deploy a Nuxt app to Cloudflare Workers with Cloudflare.Website.Nuxt — nitro's cloudflare_module preset, native nuxt.config.ts loading, and wrangler-free local dev.
 - [SvelteKit](https://alchemy.run/cloudflare/frontend/sveltekit) — Deploy a SvelteKit app to Cloudflare Workers with Cloudflare.Website.SvelteKit — a wrangler-free in-memory adapter, real bindings on platform.env, and full-HMR local dev.
 - [Waku](https://alchemy.run/cloudflare/frontend/waku) — Deploy a Waku app to Cloudflare Workers with Cloudflare.Website.Waku — RSC server in the Worker, SSG pages as static assets, and a custom-entry seam for Durable Objects.
+- [Octane](https://alchemy.run/cloudflare/frontend/octane) — Deploy an OctaneJS fullstack app to Cloudflare Workers with Cloudflare.Website.Octane — your own vite build, Octane's Cloudflare adapter, wrangler-free.
 
 ## Cloudflare — APIs
 
@@ -265,8 +266,8 @@ A linear five-part walkthrough from zero to a tested, CI-deployed AWS project. E
 
 ## AWS — Email
 
-- [Sending & managing email](https://alchemy.run/aws/email/sending) — Send email with SES — verify a domain or address identity, send from a Lambda with the SendEmail binding, then manage identity policies, contact lists, custom verification templates, dedicated IP pools, tenants, multi-region endpoints, account settings, and VDM deliverability insights.
-- [Receiving inbound email](https://alchemy.run/aws/email/receiving) — Receive inbound mail with SES receipt rule sets and rules — store raw messages in S3, fan out to SNS, invoke a Lambda, or bounce, plus IP filters, the active rule set pointer, and the SendBounce runtime binding. Region-limited (us-east-1/us-west-2/eu-west-1).
+- [Email receiving](https://alchemy.run/aws/email/receiving) — Receive inbound email with SES — rule sets and rules that store mail in S3, fan out to SNS, invoke a Lambda, or bounce it, plus IP filters and the active rule set pointer.
+- [Sending & managing email](https://alchemy.run/aws/email/sending) — Send email with SES — verify identities, send from a Lambda with the SendEmail binding, manage contact lists, tenants, dedicated IP pools, account settings, and deliverability insights.
 
 ## AWS — Security & secrets
 
@@ -362,4 +363,4 @@ Cloud-agnostic local process primitives — memoized builds, one-off commands, a
 
 Per-resource API reference, generated from JSDoc on the source `.ts` files via `bun generate:api-reference`. Each page documents the resource's input properties (with types, defaults, and constraints), output attributes, and Quick Reference / Examples sections derived from `@section` / `@example` JSDoc tags.
 
-The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~851 KB) — only fetch it when you need to locate a specific resource's reference page.
+The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~855 KB) — only fetch it when you need to locate a specific resource's reference page.
