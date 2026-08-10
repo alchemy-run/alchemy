@@ -1,0 +1,58 @@
+import { ConfigError } from "@distilled.cloud/core/errors";
+import {
+  Credentials,
+  DEFAULT_API_BASE_URL,
+} from "@distilled.cloud/digitalocean/Credentials";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { getAuthProvider } from "../Auth/AuthProvider.ts";
+import { ALCHEMY_PROFILE, AlchemyProfile } from "../Auth/Profile.ts";
+import {
+  DIGITALOCEAN_AUTH_PROVIDER_NAME,
+  type DigitalOceanAuthConfig,
+  type DigitalOceanResolvedCredentials,
+} from "./AuthProvider.ts";
+
+export {
+  Credentials,
+  CredentialsFromEnv,
+  DEFAULT_API_BASE_URL,
+} from "@distilled.cloud/digitalocean/Credentials";
+
+/**
+ * Build a `Credentials` layer that resolves DigitalOcean credentials via the
+ * Alchemy AuthProvider using the configured profile (defaults to "default",
+ * overridable with the `ALCHEMY_PROFILE` env/config value).
+ */
+export const fromAuthProvider = () =>
+  Layer.effect(
+    Credentials,
+    Effect.gen(function* () {
+      const profile = yield* AlchemyProfile;
+      const auth = yield* getAuthProvider<
+        DigitalOceanAuthConfig,
+        DigitalOceanResolvedCredentials
+      >(DIGITALOCEAN_AUTH_PROVIDER_NAME);
+      const profileName = yield* ALCHEMY_PROFILE;
+      const ci = yield* Config.boolean("CI").pipe(Config.withDefault(false));
+
+      return yield* profile.loadOrConfigure(auth, profileName, { ci }).pipe(
+        Effect.flatMap((config) =>
+          auth.read(profileName, config as DigitalOceanAuthConfig),
+        ),
+        Effect.map((creds) => ({
+          apiToken: creds.apiToken,
+          apiBaseUrl: DEFAULT_API_BASE_URL,
+        })),
+        Effect.mapError(
+          (e) =>
+            new ConfigError({
+              message: `Failed to resolve DigitalOcean credentials for profile '${profileName}': ${(e as { message?: string }).message ?? String(e)}`,
+            }),
+        ),
+        Effect.orDie,
+        Effect.cached,
+      );
+    }),
+  );

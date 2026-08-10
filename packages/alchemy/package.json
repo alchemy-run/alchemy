@@ -204,6 +204,18 @@
       "worker": "./src/Endpoint/index.ts",
       "import": "./lib/Endpoint/index.js"
     },
+    "./DigitalOcean": {
+      "types": "./lib/DigitalOcean/index.d.ts",
+      "bun": "./src/DigitalOcean/index.ts",
+      "worker": "./src/DigitalOcean/index.ts",
+      "import": "./lib/DigitalOcean/index.js"
+    },
+    "./DigitalOcean/*": {
+      "types": "./lib/DigitalOcean/*/index.d.ts",
+      "bun": "./src/DigitalOcean/*/index.ts",
+      "worker": "./src/DigitalOcean/*/index.ts",
+      "import": "./lib/DigitalOcean/*/index.js"
+    },
     "./Neon": {
       "types": "./lib/Neon/index.d.ts",
       "bun": "./src/Neon/index.ts",
@@ -364,14 +376,15 @@
     "access": "public"
   },
   "dependencies": {
+    "@alchemy.run/cloudflare-runtime": "workspace:*",
     "@alchemy.run/node-utils": "catalog:",
     "@aws-sdk/credential-providers": "catalog:",
     "@clack/prompts": "^1.7.0",
     "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/axiom": "workspace:*",
-    "@alchemy.run/cloudflare-runtime": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
+    "@distilled.cloud/digitalocean": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",
     "@effect/sql-d1": "catalog:",

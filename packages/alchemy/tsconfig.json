@@ -49,6 +49,9 @@
       "path": "../../distilled/packages/core/tsconfig.json"
     },
     {
+      "path": "../../distilled/packages/digitalocean/tsconfig.json"
+    },
+    {
       "path": "../../distilled/packages/planetscale/tsconfig.json"
     },
     {

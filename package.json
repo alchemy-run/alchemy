@@ -129,7 +129,8 @@
       "dotenv": "^16.5.0",
       "oxfmt": "^0.36.0",
       "oxlint": "^1.51.0",
-      "pathe": "^2.0.3"
+      "pathe": "^2.0.3",
+      "@distilled.cloud/digitalocean": "workspace:*"
     },
     "catalogs": {
       "cloudflare": {
