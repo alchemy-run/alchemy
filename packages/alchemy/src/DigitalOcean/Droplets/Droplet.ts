@@ -5,6 +5,7 @@ import {
   dropletsDestroy,
   dropletsGet,
   dropletsList,
+  dropletActionsGet,
   type Droplet as ApiDroplet,
   type DropletActionRename,
   type DropletSingleCreateInput,
@@ -160,8 +161,14 @@ class DropletStillPresent extends Data.TaggedError("DropletStillPresent")<{
   readonly dropletId: number;
 }> {}
 
-const isReady = (droplet: ApiDroplet | undefined): droplet is ApiDroplet =>
-  droplet !== undefined && droplet.status === "active" && !droplet.locked;
+class DropletActionFailed extends Data.TaggedError("DropletActionFailed")<{
+  readonly dropletId: number;
+  readonly actionId: number;
+  readonly status: string;
+}> {}
+
+const isReady = (droplet: ApiDroplet) =>
+  droplet.status === "active" && !droplet.locked;
 
 // Order-insensitive prop comparison; an omitted list and an empty list
 // describe the same desired state.
@@ -179,6 +186,7 @@ export const DropletProvider = () =>
       const destroy = yield* dropletsDestroy;
       const list = yield* dropletsList;
       const postAction = yield* dropletActionsPost;
+      const getAction = yield* dropletActionsGet;
 
       const toAttrs = (droplet: ApiDroplet) => ({
         dropletId: droplet.id,
@@ -212,34 +220,73 @@ export const DropletProvider = () =>
         );
 
       /**
-       * Droplet creation answers 202 with status "new"; networking (and the
-       * public IP we surface as an attribute) only exists once it turns
-       * "active". A locked droplet also rejects actions, so wait out both.
-       * Polling happens on the success channel — `DropletNotReady` exists
-       * only as the terminal timeout error.
+       * Poll the droplet until `settled` holds. Polling happens on the
+       * success channel — `DropletNotReady` exists only as the terminal
+       * timeout error. Droplet reads are eventually consistent after
+       * actions (a completed rename stays invisible to GET for ~30-60s,
+       * verified against the live API), so anything a mutation changes must
+       * be polled until observed, never assumed from action completion.
        */
-      const waitForActive = (dropletId: number) =>
+      const waitForDroplet = (
+        dropletId: number,
+        settled: (droplet: ApiDroplet) => boolean,
+      ) =>
         get({ droplet_id: dropletId }).pipe(
           Effect.map((r) => r.droplet),
-          // A transient API blip is indistinguishable from "not ready yet"
-          // while polling — fold it into the same bounded budget.
+          // A transient API blip is indistinguishable from "not settled
+          // yet" while polling — fold it into the same bounded budget.
           Effect.catchIf(isTransientError, () => Effect.succeed(undefined)),
           Effect.repeat({
             schedule: Schedule.spaced("5 seconds"),
-            // Explicitly boolean, not the `isReady` refinement (which TS
-            // would infer even through a wrapper): `times` exhaustion can
-            // still hand back a not-ready droplet, so the result type must
-            // stay wide for the guard below.
-            until: (droplet): boolean => isReady(droplet),
-            // ≈ 10 minutes — droplets usually activate in well under one.
+            // Explicitly boolean so TS doesn't infer a refinement: `times`
+            // exhaustion can still hand back an unsettled droplet, and the
+            // result type must stay wide for the guard below.
+            until: (droplet): boolean =>
+              droplet !== undefined && settled(droplet),
+            // ≈ 10 minutes — droplets usually settle in well under one.
             times: 120,
           }),
           Effect.flatMap((droplet) => {
             const status = droplet?.status ?? "missing";
-            return isReady(droplet)
+            return droplet !== undefined && settled(droplet)
               ? Effect.succeed(droplet)
               : Effect.fail(new DropletNotReady({ dropletId, status }));
           }),
+        );
+
+      /**
+       * Droplet creation answers 202 with status "new"; networking (and the
+       * public IP we surface as an attribute) only exists once it turns
+       * "active". A locked droplet also rejects actions, so wait out both.
+       */
+      const waitForActive = (dropletId: number) =>
+        waitForDroplet(dropletId, isReady);
+
+      /**
+       * Droplet actions (rename, resize, power, …) are asynchronous — the
+       * POST answers with an in-progress Action, and the droplet itself
+       * stays `active` throughout, so polling the droplet proves nothing.
+       * Poll the action until it leaves "in-progress"; anything but
+       * "completed" is the terminal `DropletActionFailed`.
+       */
+      const waitForAction = (dropletId: number, actionId: number) =>
+        getAction({ droplet_id: dropletId, action_id: actionId }).pipe(
+          Effect.map((r) => r.action?.status ?? "in-progress"),
+          Effect.catchIf(isTransientError, () =>
+            Effect.succeed("in-progress" as const),
+          ),
+          Effect.repeat({
+            schedule: Schedule.spaced("5 seconds"),
+            until: (status): boolean => status !== "in-progress",
+            times: 60,
+          }),
+          Effect.flatMap((status) =>
+            status === "completed"
+              ? Effect.void
+              : Effect.fail(
+                  new DropletActionFailed({ dropletId, actionId, status }),
+                ),
+          ),
         );
 
       return {
@@ -335,14 +382,28 @@ export const DropletProvider = () =>
           // Everything else was classified `replace` by diff.
           if (current.name !== desiredName) {
             yield* waitForActive(current.id);
-            yield* postAction({
+            const renamed = yield* postAction({
               droplet_id: current.id,
               body: {
                 type: "rename",
                 name: desiredName,
               } satisfies DropletActionRename,
             });
-            return toAttrs(yield* waitForActive(current.id));
+            const actionId = renamed.action?.id;
+            if (actionId === undefined) {
+              return yield* Effect.die(
+                new Error("rename action response carried no action id"),
+              );
+            }
+            yield* waitForAction(current.id, actionId);
+            // Action completion is not read visibility — poll until the new
+            // name is actually served.
+            return toAttrs(
+              yield* waitForDroplet(
+                current.id,
+                (droplet) => isReady(droplet) && droplet.name === desiredName,
+              ),
+            );
           }
           return toAttrs(current);
         }),
