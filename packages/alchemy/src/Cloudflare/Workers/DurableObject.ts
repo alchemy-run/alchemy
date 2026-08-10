@@ -141,11 +141,20 @@ export const makeDurableObjectHosting = (namespace: string) => {
         name: namespace,
         ...decl,
       };
+      // The engine flavors are read with `in` guards: a resource proxy
+      // answers property READS for any name with a callable `PropExpr`
+      // Output accessor, so `host.durableObjectBinding !== undefined` is
+      // true on EVERY host. `in` forwards to the proxy target and only
+      // reports properties the engine's runtime context really assigned.
+      const durableObjectBinding =
+        "durableObjectBinding" in (host as object)
+          ? host.durableObjectBinding
+          : undefined;
       // Binding data is HOST-NATIVE: the host's runtime context shapes the
       // declaration for its platform's worker binding contract.
       yield* host.bind`${namespace}`(
-        host.durableObjectBinding !== undefined
-          ? host.durableObjectBinding(declaration)
+        durableObjectBinding !== undefined
+          ? durableObjectBinding(declaration)
           : {
               bindings: [
                 {
@@ -188,8 +197,9 @@ export const makeDurableObjectHosting = (namespace: string) => {
       );
 
       const stub =
-        host.durableObjectStub ??
-        ((nativeStub: unknown) => makeRpcStub(nativeStub));
+        ("durableObjectStub" in (host as object)
+          ? host.durableObjectStub
+          : undefined) ?? ((nativeStub: unknown) => makeRpcStub(nativeStub));
       return { native, stub } as const;
     });
 
