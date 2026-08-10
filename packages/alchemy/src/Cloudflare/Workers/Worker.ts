@@ -2227,22 +2227,94 @@ const NativeWorker: ResourceClassLike<Worker> &
 // ── The public `Cloudflare.Worker` ─────────────────────────────────────
 // The native resource/class factory above, plus the portable DEPLOY form
 // (`Cloudflare.Worker(cls, props, implOrDefinition)`) and its `.ref`
-// companion. The deploy machinery lives in ../WorkerDeploy.ts and is
-// constructed LAZILY with the native const passed as a parameter — so
-// this module stays out of the deploy module's import graph and the
+// companion. The deploy form is constructed LAZILY at first call — the
 // documented TDZ cycles keep resolving at call time.
 import {
-  makeCloudflareDeploy,
-  type CloudflareWorkerTargetProps,
-} from "../WorkerDeploy.ts";
+  makeWorkerDeploy,
+  type WorkerDeployAdapter,
+} from "../../Worker/Deploy.ts";
 import type {
   DeploymentService,
   HostRef,
+  HostRefService,
   WorkerTarget as GenericWorkerTarget,
+  WorkerTargetService,
 } from "../../Worker/Engine.ts";
+import { makeRpcStub } from "./Rpc.ts";
 
-let deployForm: ReturnType<typeof makeCloudflareDeploy> | undefined;
-const deploy = () => (deployForm ??= makeCloudflareDeploy(NativeWorker));
+/**
+ * The Cloudflare-specific deployment config the deploy form forwards to
+ * the native platform. A strict subset of the native {@link WorkerProps} —
+ * `env` and `exports` are contributed by the portable surface itself and
+ * must not be set here.
+ */
+export interface CloudflareWorkerTargetProps extends Pick<
+  WorkerProps,
+  | "name"
+  | "main"
+  | "compatibility"
+  | "workersDev"
+  | "domain"
+  | "routes"
+  | "assets"
+  | "build"
+  | "bundle"
+  | "rules"
+  | "observability"
+  | "cache"
+  | "limits"
+  | "placement"
+  | "tags"
+  | "logpush"
+  | "crons"
+  | "dev"
+> {}
+
+const crossCloudNotImplemented = () =>
+  new Error(
+    "cross-cloud calls to Cloudflare-hosted workers are not implemented yet",
+  );
+
+/**
+ * The Cloudflare per-cloud adapter provided around the worker impl. Only
+ * the members the portable Durable Object hosting path reads on
+ * Cloudflare: the native binding shape for a DO class declaration and the
+ * native JSRPC stub flavor. Remote (cross-cloud) callers are not
+ * supported yet.
+ */
+const cloudflareTarget: WorkerTargetService = {
+  kind: "cloudflare",
+  durableObjectBinding: (declaration) => ({
+    bindings: [
+      {
+        type: "durable_object_namespace" as const,
+        name: declaration.name,
+        className: declaration.className,
+      },
+    ],
+  }),
+  localDurableObject: (nativeBinding) => makeRpcStub<any>(nativeBinding),
+  remoteDurableObject: () => {
+    throw crossCloudNotImplemented();
+  },
+};
+
+const deployAdapter: WorkerDeployAdapter<"cloudflare"> = {
+  kind: "cloudflare",
+  target: cloudflareTarget,
+  callerBinding: (): HostRefService["callerBinding"] => () =>
+    Effect.die(crossCloudNotImplemented()),
+  makeNative: (clsId, props: CloudflareWorkerTargetProps, impl) => {
+    const nativeCls = (NativeWorker as any)(clsId);
+    return {
+      layer: nativeCls.make(props as WorkerProps, impl),
+      instance: nativeCls.Self,
+    };
+  },
+};
+
+let deployForm: ReturnType<typeof makeWorkerDeploy<"cloudflare">> | undefined;
+const deploy = () => (deployForm ??= makeWorkerDeploy(deployAdapter));
 
 export const Worker: typeof NativeWorker & {
   /** Deploy a worker definition (shared-module form). */
