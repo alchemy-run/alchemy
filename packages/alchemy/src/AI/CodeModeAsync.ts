@@ -1,4 +1,5 @@
 import type * as Layer from "effect/Layer";
+import { dedent } from "../Util/dedent.ts";
 import { makeCodeMode, type CodeModeOptions } from "./CodeMode.ts";
 import type { Eval } from "./Eval.ts";
 import type { ToolEngine } from "./ToolEngine.ts";
@@ -27,13 +28,20 @@ export const CodeModeAsync = (
     // the model's body already targets the evaluator's async tools —
     // hand it over as-is
     wrapCode: (body) => body,
-    teach: (signatures) =>
-      `Run a program against your capabilities instead of calling them ` +
-      `one at a time. Write the BODY of an async JavaScript function ` +
-      `with \`tools\` in scope: await tool calls, compose with ordinary ` +
-      `control flow, and \`return\` the result — it becomes your tool ` +
-      `result. Use console.log to surface intermediate values. No ` +
-      `imports, no type annotations. A rejected tool call throws; ` +
-      `catch it or let it fail the program.\n\nAvailable capabilities ` +
-      `(call as tools.<name>):\n\n${signatures}`,
+    teach: (signatures) => dedent`
+      Run a program against your capabilities instead of calling them one
+      at a time. Write the BODY of an async JavaScript function with
+      \`tools\` in scope: await tool calls, compose with ordinary control
+      flow, and \`return\` the result — it becomes your tool result. Use
+      console.log to surface intermediate values. No imports, no type
+      annotations.
+
+      A tool's declared errors are in its signature's error channel and
+      reject the promise — catch them or let them fail the program;
+      anything undeclared is a defect.
+
+      Available capabilities (call as tools.<name>):
+
+      ${signatures}
+    `,
   });

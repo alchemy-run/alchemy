@@ -1,4 +1,5 @@
 import type * as Layer from "effect/Layer";
+import { dedent } from "../Util/dedent.ts";
 import { makeCodeMode, type CodeModeOptions } from "./CodeMode.ts";
 import type { Eval } from "./Eval.ts";
 import type { ToolEngine } from "./ToolEngine.ts";
@@ -28,25 +29,34 @@ export const CodeModeEffect = (
     // re-shape the evaluator's async tools into Effect-returning ones,
     // run the model's returned Effect, and hand `Eval` the awaited
     // result — the evaluator stays convention-blind
-    wrapCode: (body) =>
-      `const __asyncTools = tools;\n` +
-      `tools = Object.fromEntries(\n` +
-      `  Object.entries(__asyncTools).map(([__k, __f]) => [\n` +
-      `    __k,\n` +
-      `    (input) => Effect.promise(() => __f(input)),\n` +
-      `  ]),\n` +
-      `);\n` +
-      `const __program = (function () {\n${body}\n})();\n` +
-      `return await Effect.runPromise(__program);`,
-    teach: (signatures) =>
-      `Run a program against your capabilities instead of calling them ` +
-      `one at a time. Write the BODY of a JavaScript function: it must ` +
-      `\`return\` an Effect — use Effect.gen(function* () { ... }) with ` +
-      `yield* on every tool call, and compose with ordinary control ` +
-      `flow (loops, conditionals, Effect.forEach for concurrency). Use ` +
-      `console.log to surface intermediate values. No imports, no type ` +
-      `annotations. The returned Effect's result becomes your tool ` +
-      `result; a failed tool call fails the program unless you handle ` +
-      `it (Effect.catch).\n\nAvailable capabilities (call as ` +
-      `tools.<name>):\n\n${signatures}`,
+    wrapCode: (body) => dedent`
+      const __asyncTools = tools;
+      tools = Object.fromEntries(
+        Object.entries(__asyncTools).map(([__k, __f]) => [
+          __k,
+          (input) => Effect.promise(() => __f(input)),
+        ]),
+      );
+      const __program = (function () {
+      ${body}
+      })();
+      return await Effect.runPromise(__program);
+    `,
+    teach: (signatures) => dedent`
+      Run a program against your capabilities instead of calling them one
+      at a time. Write the BODY of a JavaScript function: it must \`return\`
+      an Effect — use Effect.gen(function* () { ... }) with yield* on every
+      tool call, and compose with ordinary control flow (loops,
+      conditionals, Effect.forEach for concurrency). Use console.log to
+      surface intermediate values. No imports, no type annotations.
+
+      The returned Effect's result becomes your tool result. A tool's
+      declared errors are in its signature's error channel — handle them
+      with Effect.catch or let them fail the program; anything undeclared
+      is a defect.
+
+      Available capabilities (call as tools.<name>):
+
+      ${signatures}
+    `,
   });
