@@ -2,6 +2,7 @@ import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { spawn } from "node:child_process";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
@@ -12,10 +13,6 @@ const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "nextjs-app");
 
-// Clone under the alchemy package so `next`/`@opennextjs/aws` resolve from
-// the workspace's hoisted node_modules (the fixture has no node_modules).
-const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
-
 const fixtureEntries = [
   ".gitignore",
   "package.json",
@@ -25,6 +22,41 @@ const fixtureEntries = [
   "public",
 ];
 
+/**
+ * Run a command to completion in a child process (Effect-wrapped spawn —
+ * the suite shares one bun process, so a sync spawn would stall every
+ * concurrently running test). Fails with the combined output on a
+ * non-zero exit.
+ */
+const run = (options: {
+  cmd: string;
+  args: string[];
+  cwd: string;
+}): Effect.Effect<string, Error> =>
+  Effect.callback<string, Error>((resume) => {
+    const child = spawn(options.cmd, options.args, {
+      cwd: options.cwd,
+      env: { ...process.env, NO_COLOR: "1" },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let output = "";
+    child.stdout.on("data", (chunk) => (output += chunk));
+    child.stderr.on("data", (chunk) => (output += chunk));
+    child.once("error", (error) => resume(Effect.fail(error)));
+    child.once("close", (code) =>
+      resume(
+        code === 0
+          ? Effect.succeed(output)
+          : Effect.fail(
+              new Error(
+                `${options.cmd} ${options.args.join(" ")} exited ${code}:\n${output}`,
+              ),
+            ),
+      ),
+    );
+    return Effect.sync(() => child.kill("SIGKILL"));
+  });
+
 describe("AWS.Website.Nextjs local", () => {
   test.provider(
     "dev runs Next's own dev server with no cloud resources",
@@ -32,10 +64,20 @@ describe("AWS.Website.Nextjs local", () => {
       Effect.gen(function* () {
         yield* stack.destroy();
 
+        // Clone OUTSIDE the repo (OS temp dir): an in-workspace clone makes
+        // OpenNext detect the workspace as a monorepo and trace the server
+        // bundle against bun's isolated-install symlink store, which drops
+        // transitive deps (e.g. @swc/helpers) from the shipped node_modules.
         const rootDir = yield* cloneFixture(fixtureDir, {
           prefix: "alchemy-nextjs-aws-local-",
-          tempRoot,
           entries: fixtureEntries,
+        });
+        // Hoisted install in the clone so output tracing sees a plain
+        // node_modules tree — the representative user-project shape.
+        yield* run({
+          cmd: "bun",
+          args: ["install", "--linker=hoisted"],
+          cwd: rootDir,
         });
 
         const deployed = yield* stack.deploy(

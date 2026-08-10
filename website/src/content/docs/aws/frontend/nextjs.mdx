@@ -1,0 +1,84 @@
+---
+title: Next.js
+description: Deploy a Next.js app to AWS with AWS.Website.Nextjs — the OpenNext serverless topology with streaming SSR, image optimization, and ISR wiring, plus next dev under alchemy dev.
+sidebar:
+  order: 9
+---
+
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+export const devDeps = "@alchemy.run/web-frameworks @opennextjs/aws";
+
+`AWS.Website.Nextjs` deploys a [Next.js](https://nextjs.org) app to
+AWS using the [OpenNext](https://opennext.js.org/aws) serverless
+topology:
+
+- the Next server on a Lambda Function URL with response streaming
+- static assets and the prerender cache in S3, served through
+  CloudFront's edge router
+- a dedicated image-optimization Lambda behind `/_next/image`
+- ISR wiring: an SQS revalidation queue with a consumer Lambda and a
+  DynamoDB tag-cache table
+
+## Install
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun add -d ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm install -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+</Tabs>
+
+## Deploy a Next.js app
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as AWS from "alchemy/AWS";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyNextApp",
+  {
+    providers: AWS.providers(),
+    state: AWS.state(),
+  },
+  Effect.gen(function* () {
+    const site = yield* AWS.Website.Nextjs("Web", {
+      rootDir: ".",
+    });
+    return { url: site.url };
+  }),
+);
+```
+
+Statically-rendered pages are served from the S3 prerender cache;
+dynamic pages and route handlers stream from the server Lambda;
+`next/image` requests are handled by the dedicated optimizer.
+
+## Local dev
+
+`alchemy dev` runs `next dev` (native HMR, Turbopack) instead of
+deploying; `site.url` is the local address and no AWS resources are
+created. Wrap the site in `Alchemy.remote()` to deploy the real
+infrastructure even during dev.
+
+## Custom domain
+
+```typescript
+const site = yield* AWS.Website.Nextjs("Web", {
+  rootDir: ".",
+  domain: {
+    name: "app.example.com",
+    hostedZoneId: zone.hostedZoneId,
+  },
+});
+```

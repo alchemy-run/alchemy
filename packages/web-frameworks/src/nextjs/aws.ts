@@ -42,8 +42,8 @@ import type { PlatformError } from "effect/PlatformError";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import type * as NodeHttp from "node:http";
 import { createRequire } from "node:module";
+import type * as NodeChildProcessModule from "node:child_process";
 import type * as NodeNet from "node:net";
 
 const fail = (message: string) => (cause: unknown) =>
@@ -73,8 +73,26 @@ export interface NextjsAwsOptions {
   readonly buildArgs?: ReadonlyArray<string> | undefined;
 }
 
-/** The server-module name of the default server's Lambda entry. */
+/** The default server-module name of the server's Lambda entry (the actual
+ * name is derived from `open-next.output.json` after the build). */
 export const SERVER_ENTRY_NAME = "server-functions/default/index.mjs";
+
+/**
+ * Derive the entry-module name (relative to `.open-next/`) from the output
+ * manifest's default origin: `bundle` (e.g. `.open-next/server-functions/
+ * default`) plus the file half of `handler` (`index.handler` → `index.mjs`).
+ */
+export const deriveServerEntryName = (origin: {
+  readonly handler?: string;
+  readonly bundle?: string;
+}): string => {
+  const bundle = (origin.bundle ?? ".open-next/server-functions/default")
+    .replace(/^\.open-next\//, "")
+    .replace(/\/+$/, "");
+  const handler = origin.handler ?? "index.handler";
+  const file = handler.split(".").slice(0, -1).join(".") || "index";
+  return `${bundle}/${file}.mjs`;
+};
 
 /**
  * The minimal `open-next.config.ts` generated when the project has none:
@@ -194,131 +212,147 @@ const runOpenNextBuild = (options: {
   );
 
 // ---------------------------------------------------------------------------
-// dev — the real `next dev` through the documented custom-server API
+// dev — the real `next dev` CLI in a child process
 // ---------------------------------------------------------------------------
 
-type RequestHandler = (
-  req: NodeHttp.IncomingMessage,
-  res: NodeHttp.ServerResponse,
-) => Promise<void>;
-
-/** The subset of `NextCustomServer` (the public custom-server API) we drive. */
-interface NextDevApp {
-  prepare(): Promise<void>;
-  getRequestHandler(): RequestHandler;
-  close(): Promise<void>;
-}
-
-type CreateNextServer = (options: {
-  dev: boolean;
-  dir: string;
-  hostname: string;
-  port: number;
-}) => NextDevApp;
-
 /**
- * Resolve the *project's* `next` (public entry, CJS) — the app's installed
- * copy is the one driven, never a hoisted sibling. Unwrap the ESM-interop
- * `default` nesting to the `createServer` function.
+ * Resolve the *project's* `next` CLI entry (`next/dist/bin/next`). The
+ * app's installed copy is the one driven, never a hoisted sibling.
  */
-const loadNext = (
-  root: string,
-): Effect.Effect<CreateNextServer, FrameworkCore.FrameworkError> =>
-  FrameworkCore.loadProjectModule<Record<string, unknown>>(root, "next").pipe(
-    Effect.mapError((error) =>
-      fail(`Failed to load "next" from ${root}`)(error.cause),
+const resolveNextCli = (root: string) =>
+  Effect.try({
+    try: () => {
+      const require = createRequire(`${root.replace(/\/+$/, "")}/package.json`);
+      return require.resolve("next/dist/bin/next");
+    },
+    catch: fail(
+      `Failed to resolve "next" from ${root}. ` +
+        "It must be installed in your project.",
     ),
-    Effect.flatMap((module_) => {
-      let candidate: unknown = module_;
-      for (let i = 0; i < 3 && typeof candidate !== "function"; i++) {
-        candidate = (candidate as Record<string, unknown> | undefined)?.default;
-      }
-      return typeof candidate === "function"
-        ? Effect.succeed(candidate as CreateNextServer)
-        : Effect.fail(
-            fail(
-              `The "next" package resolved from ${root} has no callable default export`,
-            )(undefined),
-          );
-    }),
-  );
+  });
 
-interface HttpServerHandle {
-  readonly port: number;
-  readonly setHandler: (handler: RequestHandler) => void;
+/** Bind an ephemeral port and release it, returning the port number. */
+const pickEphemeralPort: Effect.Effect<number, FrameworkCore.FrameworkError> =
+  Effect.callback((resume) => {
+    const net = createRequire(import.meta.url)("net") as typeof NodeNet;
+    const server = net.createServer();
+    server.once("error", (cause) =>
+      resume(Effect.fail(fail("Failed to allocate an ephemeral port")(cause))),
+    );
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (address === null || typeof address === "string") {
+        server.close();
+        resume(Effect.fail(fail("No TCP address for the port probe")(null)));
+        return;
+      }
+      const port = address.port;
+      server.close(() => resume(Effect.succeed(port)));
+    });
+  });
+
+interface NextDevChild {
+  readonly exited: () => boolean;
+  readonly output: () => string;
 }
 
 /**
- * Listen before Next starts: the actual port must be known when the app is
- * created (`port` seeds Turbopack's HMR/asset URLs), so the server binds
- * first (503 until the handler is wired) and the ephemeral port feeds
- * `next({ port })`. The HMR websocket upgrade is auto-wired by
- * `getRequestHandler()` through `req.socket.server` on the first request.
+ * Spawn `node <next CLI> dev -p <port>` with the project root as cwd,
+ * scoped: closing the Scope kills the process tree (SIGTERM, then SIGKILL).
+ * Always plain `node` — the AWS Lambda programming model.
  */
-const acquireHttpServer = (
-  hostname: string,
-  port: number | undefined,
-): Effect.Effect<HttpServerHandle, FrameworkCore.FrameworkError, Scope.Scope> =>
+const spawnNextDev = (options: {
+  readonly root: string;
+  readonly cli: string;
+  readonly port: number;
+}): Effect.Effect<NextDevChild, FrameworkCore.FrameworkError, Scope.Scope> =>
   Effect.acquireRelease(
-    Effect.callback<
-      HttpServerHandle & {
-        readonly server: NodeHttp.Server;
-        readonly sockets: Set<NodeNet.Socket>;
+    Effect.try({
+      try: () => {
+        const cp = createRequire(import.meta.url)(
+          "child_process",
+        ) as typeof NodeChildProcessModule;
+        const child = cp.spawn(
+          "node",
+          [options.cli, "dev", "-p", String(options.port)],
+          {
+            cwd: options.root,
+            stdio: ["ignore", "pipe", "pipe"],
+            detached: false,
+          },
+        );
+        let exited = false;
+        let output = "";
+        const capture = (chunk: unknown) => {
+          output += String(chunk);
+          if (output.length > 65536) output = output.slice(-32768);
+          process.stderr.write(String(chunk));
+        };
+        child.stdout?.on("data", capture);
+        child.stderr?.on("data", capture);
+        child.once("exit", () => {
+          exited = true;
+        });
+        return {
+          child,
+          handle: {
+            exited: () => exited,
+            output: () => output,
+          } satisfies NextDevChild,
+        };
       },
-      FrameworkCore.FrameworkError
-    >((resume) => {
-      let handler: RequestHandler | undefined;
-      const sockets = new Set<NodeNet.Socket>();
-      // Lazy CJS require keeps `node:http` out of workerd bundles that may
-      // statically scan this module's imports.
-      const http = createRequire(import.meta.url)("http") as typeof NodeHttp;
-      const server = http.createServer((req, res) => {
-        if (handler !== undefined) {
-          void handler(req, res);
-        } else {
-          res.statusCode = 503;
-          res.end("Next.js dev server is starting");
-        }
-      });
-      server.on("connection", (socket) => {
-        sockets.add(socket);
-        socket.on("close", () => sockets.delete(socket));
-      });
-      server.once("error", (cause) =>
-        resume(
-          Effect.fail(
-            fail(`Failed to listen on ${hostname}:${port ?? 0}`)(cause),
-          ),
-        ),
-      );
-      server.listen(port ?? 0, hostname, () => {
-        const address = server.address();
-        if (address === null || typeof address === "string") {
-          resume(
-            Effect.fail(fail("The dev server has no TCP address")(address)),
-          );
+      catch: fail("Failed to spawn the next dev CLI (is `node` on PATH?)"),
+    }),
+    ({ child }) =>
+      Effect.callback<void>((resume) => {
+        if (child.exitCode !== null) {
+          resume(Effect.void);
           return;
         }
-        resume(
-          Effect.succeed({
-            server,
-            sockets,
-            port: address.port,
-            setHandler: (h) => {
-              handler = h;
-            },
-          }),
-        );
-      });
-    }),
-    ({ server, sockets }) =>
-      Effect.callback<void>((resume) => {
-        // Destroy live (keep-alive / HMR websocket) sockets so close() never
-        // hangs on an idle connection.
-        for (const socket of sockets) socket.destroy();
-        server.close(() => resume(Effect.void));
+        const killTimer = setTimeout(() => child.kill("SIGKILL"), 3000);
+        child.once("exit", () => {
+          clearTimeout(killTimer);
+          resume(Effect.void);
+        });
+        child.kill("SIGTERM");
       }),
-  );
+  ).pipe(Effect.map(({ handle }) => handle));
+
+/**
+ * Poll the dev server URL until it answers any HTTP response. Fails fast
+ * when the child exits before becoming ready.
+ */
+const awaitNextDevReady = (options: {
+  readonly url: string;
+  readonly child: NextDevChild;
+}): Effect.Effect<void, FrameworkCore.FrameworkError> =>
+  Effect.gen(function* () {
+    for (let attempt = 0; attempt < 240; attempt++) {
+      if (options.child.exited()) {
+        return yield* Effect.fail(
+          fail(
+            `The next dev CLI exited before becoming ready:\n${options.child.output().slice(-4000)}`,
+          )(undefined),
+        );
+      }
+      const ready = yield* Effect.tryPromise({
+        try: async () => {
+          const response = await fetch(options.url, {
+            signal: AbortSignal.timeout(2000),
+          });
+          return response.status < 600;
+        },
+        catch: () => "not-ready" as const,
+      }).pipe(Effect.orElseSucceed(() => false));
+      if (ready) return;
+      yield* Effect.sleep(500);
+    }
+    return yield* Effect.fail(
+      fail(`Timed out waiting for the next dev server at ${options.url}`)(
+        undefined,
+      ),
+    );
+  });
 
 /** The service shape {@link make} resolves to (the framework-module contract
  * `AWS.Website.Server` drives; `serverModules` carries names only — the AWS
@@ -434,7 +468,8 @@ export const make: (
         );
       }
 
-      const entryPath = path.join(distDirectory, SERVER_ENTRY_NAME);
+      const entryName = deriveServerEntryName(defaultOrigin);
+      const entryPath = path.join(distDirectory, entryName);
       if (
         !(yield* fs.exists(entryPath).pipe(Effect.orElseSucceed(() => false)))
       ) {
@@ -446,7 +481,7 @@ export const make: (
       return {
         distDirectory,
         clientDirectory,
-        serverModules: [{ name: SERVER_ENTRY_NAME }],
+        serverModules: [{ name: entryName }],
       };
     });
 
@@ -454,31 +489,12 @@ export const make: (
       devOptions?: FrameworkCore.FrameworkDevOptions,
     ) {
       const root = yield* resolveRoot(devOptions?.root);
-      const hostname = "localhost";
-
-      // Bind our http server first so the real port can seed `next({ port })`.
-      const http = yield* acquireHttpServer(hostname, devOptions?.port);
-
-      const createNext = yield* loadNext(root);
-      const app = yield* Effect.acquireRelease(
-        Effect.tryPromise({
-          try: async () => {
-            const app = createNext({
-              dev: true,
-              dir: root,
-              hostname,
-              port: http.port,
-            });
-            await app.prepare();
-            return app;
-          },
-          catch: fail("Failed to start the Next.js dev server"),
-        }),
-        (app) => Effect.promise(() => app.close().catch(() => undefined)),
-      );
-      http.setHandler(app.getRequestHandler());
-
-      return { url: `http://${hostname}:${http.port}` };
+      const port = devOptions?.port ?? (yield* pickEphemeralPort);
+      const cli = yield* resolveNextCli(root);
+      const child = yield* spawnNextDev({ root, cli, port });
+      const url = `http://localhost:${port}`;
+      yield* awaitNextDevReady({ url, child });
+      return { url };
     });
 
     return { build, dev };

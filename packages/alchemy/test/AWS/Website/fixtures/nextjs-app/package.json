@@ -11,6 +11,9 @@
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
-    "@opennextjs/aws": "4.1.0"
+    "@opennextjs/aws": "4.1.0",
+    "@types/node": "^26.0.0",
+    "@types/react": "^19.2.0",
+    "typescript": "^5.9.0"
   }
 }

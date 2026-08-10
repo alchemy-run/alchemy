@@ -125,8 +125,8 @@ export interface NextjsProps {
  * Deploy a Next.js application to AWS with the OpenNext
  * (`@opennextjs/aws`) serverless topology: the SSR server on a streaming
  * Lambda Function URL, static assets in S3 behind CloudFront's KV-manifest
- * edge router, the ISR/fetch cache in the same bucket, a dedicated image
- * optimization Lambda routed at `/_next/image`, and ISR revalidation
+ * edge router, the ISR/fetch cache in a dedicated S3 bucket, a dedicated
+ * image optimization Lambda routed at `/_next/image`, and ISR revalidation
  * through an SQS FIFO queue plus a DynamoDB tag-cache table.
  *
  * The build runs through `@alchemy.run/web-frameworks/nextjs/aws` (the
@@ -192,6 +192,7 @@ export const Nextjs = (id: string, props: NextjsProps = {}) =>
       return {
         bucket: undefined,
         build,
+        cacheBucket: undefined,
         cacheFiles: undefined,
         distribution: undefined,
         files: undefined,
@@ -219,8 +220,8 @@ export const Nextjs = (id: string, props: NextjsProps = {}) =>
         return `${dir}/${relative}`;
       })(build.distDir as any) as Input<string>;
 
-    // The asset bucket also holds the ISR/fetch cache (under
-    // `_cache/`), read and written by the server function.
+    // The CDN-facing asset bucket (site assets + public files + originals
+    // for the image optimizer).
     const bucket =
       props.assets?.bucket ??
       (yield* Bucket("Bucket", {
@@ -228,6 +229,18 @@ export const Nextjs = (id: string, props: NextjsProps = {}) =>
         forceDestroy: props.forceDestroy,
         tags: props.tags,
       }));
+
+    // The ISR/fetch cache lives in its OWN bucket, deliberately separate
+    // from the site bucket: the site bucket carries the CloudFront read
+    // policy (bound to the distribution's ARN), so a server -> site-bucket
+    // reference would close a dependency cycle
+    // (server -> bucket -> distribution -> server) and force the CloudFront
+    // origin to rendezvous on the Lambda's precreate stub, which has no
+    // Function URL yet. A dedicated cache bucket keeps the graph acyclic.
+    const cacheBucket = yield* Bucket("CacheBucket", {
+      forceDestroy: props.forceDestroy,
+      tags: props.tags,
+    });
 
     // ISR revalidation queue: OpenNext's `sqs` queue override sends
     // explicitly-deduplicated messages to a FIFO queue.
@@ -261,7 +274,9 @@ export const Nextjs = (id: string, props: NextjsProps = {}) =>
     });
 
     const server = yield* LambdaFunction("Server", {
-      main: fromDist("server-functions/default/index.mjs"),
+      // The framework module derives the entry from open-next.output.json
+      // (origins.default.bundle + handler), so this tracks the manifest.
+      main: build.serverEntry as unknown as string,
       handler: "handler",
       isExternal: true,
       // OpenNext's server-functions/default is a complete deployment unit
@@ -275,7 +290,7 @@ export const Nextjs = (id: string, props: NextjsProps = {}) =>
         // The env names OpenNext's s3/sqs/dynamodb overrides read. Regions
         // are omitted: the SDK falls back to the Lambda runtime's own
         // AWS_REGION, and every resource here is same-region.
-        CACHE_BUCKET_NAME: bucket.bucketName,
+        CACHE_BUCKET_NAME: cacheBucket.bucketName,
         CACHE_BUCKET_KEY_PREFIX: NEXTJS_CACHE_PREFIX,
         REVALIDATION_QUEUE_URL: revalidationQueue.queueUrl,
         CACHE_DYNAMO_TABLE: tagCacheTable.tableName,
@@ -289,42 +304,44 @@ export const Nextjs = (id: string, props: NextjsProps = {}) =>
       },
     });
 
-    yield* server.bind`Allow(${server}, AWS.Website.Nextjs.Cache(${bucket}))`({
-      policyStatements: [
-        {
-          Effect: "Allow",
-          Action: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
-          Resource: [Output.interpolate`${bucket.bucketArn}/*` as any],
-        },
-        {
-          Effect: "Allow",
-          Action: ["s3:ListBucket"],
-          Resource: [bucket.bucketArn as any],
-        },
-        {
-          Effect: "Allow",
-          Action: ["sqs:SendMessage"],
-          Resource: [revalidationQueue.queueArn as any],
-        },
-        {
-          Effect: "Allow",
-          Action: [
-            "dynamodb:GetItem",
-            "dynamodb:PutItem",
-            "dynamodb:DeleteItem",
-            "dynamodb:Query",
-            "dynamodb:Scan",
-            "dynamodb:BatchGetItem",
-            "dynamodb:BatchWriteItem",
-            "dynamodb:UpdateItem",
-          ],
-          Resource: [
-            tagCacheTable.tableArn as any,
-            Output.interpolate`${tagCacheTable.tableArn}/index/*` as any,
-          ],
-        },
-      ] satisfies PolicyStatement[],
-    });
+    yield* server.bind`Allow(${server}, AWS.Website.Nextjs.Cache(${cacheBucket}))`(
+      {
+        policyStatements: [
+          {
+            Effect: "Allow",
+            Action: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+            Resource: [Output.interpolate`${cacheBucket.bucketArn}/*` as any],
+          },
+          {
+            Effect: "Allow",
+            Action: ["s3:ListBucket"],
+            Resource: [cacheBucket.bucketArn as any],
+          },
+          {
+            Effect: "Allow",
+            Action: ["sqs:SendMessage"],
+            Resource: [revalidationQueue.queueArn as any],
+          },
+          {
+            Effect: "Allow",
+            Action: [
+              "dynamodb:GetItem",
+              "dynamodb:PutItem",
+              "dynamodb:DeleteItem",
+              "dynamodb:Query",
+              "dynamodb:Scan",
+              "dynamodb:BatchGetItem",
+              "dynamodb:BatchWriteItem",
+              "dynamodb:UpdateItem",
+            ],
+            Resource: [
+              tagCacheTable.tableArn as any,
+              Output.interpolate`${tagCacheTable.tableArn}/index/*` as any,
+            ],
+          },
+        ] satisfies PolicyStatement[],
+      },
+    );
 
     // ISR revalidation consumer: drains the FIFO queue and HEAD-requests
     // stale pages with the prerender revalidate header.
@@ -415,14 +432,7 @@ export const Nextjs = (id: string, props: NextjsProps = {}) =>
 
     const siteProps: StaticSiteProps = {
       path: build.clientDir as unknown as string,
-      assets: {
-        ...props.assets,
-        // Never purge: the ISR/fetch cache lives in the same bucket (under
-        // `_cache/`), and the site's asset deployment purges from the
-        // bucket ROOT — a purge would delete the cache (and in-flight
-        // requests' previous-deploy hashed chunks).
-        purge: false,
-      },
+      assets: props.assets,
       domain: props.domain,
       router: props.router,
       edge: props.edge,
@@ -441,7 +451,7 @@ export const Nextjs = (id: string, props: NextjsProps = {}) =>
     // under `_cache/` (matching CACHE_BUCKET_KEY_PREFIX). Old builds' seeds
     // are left in place so a rolling deploy never breaks in-flight ISR.
     const cacheFiles = yield* AssetDeployment("CacheFiles", {
-      bucket,
+      bucket: cacheBucket,
       sourcePath: fromDist("cache") as unknown as string,
       prefix: NEXTJS_CACHE_PREFIX,
       purge: false,
@@ -450,6 +460,7 @@ export const Nextjs = (id: string, props: NextjsProps = {}) =>
     return {
       ...site,
       build,
+      cacheBucket,
       cacheFiles,
       imageFunction,
       imageUrl: imageFunction.functionUrl,
