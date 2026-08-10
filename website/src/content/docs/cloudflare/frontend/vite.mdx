@@ -85,9 +85,13 @@ export default defineConfig({
 (`main`, the directory-shaped `assets`), plus Vite-specific options:
 
 ```typescript
+// an SPA whose Worker serves the /api/* routes
 const site = yield* Cloudflare.Website.Vite("Website", {
   rootDir: "./web",
-  assets: { runWorkerFirst: ["/api/*"] },
+  assets: {
+    notFoundHandling: "single-page-application",
+    runWorkerFirst: ["/api/*"],
+  },
 });
 ```
 
