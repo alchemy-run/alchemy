@@ -15,12 +15,10 @@ import { ConformanceActors, ConformanceWorker } from "./cluster.ts";
 export default Rivet.Worker(
   ConformanceWorker,
   { cluster: ConformanceActors, main: import.meta.url },
-  ConformanceWorker.make(
-    Effect.gen(function* () {
-      // Registers the Durable Object on the worker; the runner serves it
-      // as a Rivet actor.
-      yield* Counter;
-      return {};
-    }).pipe(Effect.provide(CounterLive)),
-  ),
+  Effect.gen(function* () {
+    // Registers the Durable Object on the worker; the runner serves it
+    // as a Rivet actor.
+    yield* Counter;
+    return {};
+  }).pipe(Effect.provide(CounterLive)),
 );

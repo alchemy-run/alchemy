@@ -513,12 +513,19 @@ export const CloudflareWorkerEngine = (): Layer.Layer<
 export const deployWorker = <Self, WOut, RIn>(
   cls: Effect.Effect<WOut, never, any>,
   props: CloudflareWorkerTargetProps,
-  layer: Layer.Layer<Self, never, RIn | GenericWorkerTarget | HostRef>,
+  layer:
+    | Layer.Layer<Self, never, RIn | GenericWorkerTarget | HostRef>
+    | Effect.Effect<any, any, RIn | GenericWorkerTarget | HostRef>,
 ): Layer.Layer<
   Self | DeploymentService<WOut, "cloudflare">,
   never,
   Exclude<RIn, GenericWorkerTarget | HostRef>
 > => {
+  // The impl-effect form: the class is already in hand, so `make` is
+  // called here rather than by the caller.
+  const resolved = Effect.isEffect(layer)
+    ? ((cls as any).make(layer) as Layer.Layer<any, never, any>)
+    : layer;
   const clsId = resolveWorkerRef(cls as any).LogicalId;
   const selfRef = Layer.sync(HostRef, () => ({
     kind: CLOUDFLARE_ENGINE,
@@ -529,12 +536,23 @@ export const deployWorker = <Self, WOut, RIn>(
     ...workerConnectionKeys(clsId),
     remoteDurableObject,
   }));
-  const deployed = layer.pipe(
+  const deployed = resolved.pipe(
     Layer.provide(Layer.mergeAll(WorkerTarget(props), selfRef)),
   );
   const deployment = Layer.effect(
     Deployment<WOut, "cloudflare">(CLOUDFLARE_ENGINE, clsId),
     Effect.gen(function* () {
+      // Inside the deployed worker the entry rebuilds this layer, but the
+      // resource effect belongs to plan time — running it in the isolate
+      // drags plan machinery (Terminal/NodeServices) into workerd, which
+      // dies on beta.105 (`process.stdin.once` is not a function). Nothing
+      // consumes Deployment at runtime; refs guard themselves.
+      if (globalThis.__ALCHEMY_RUNTIME__) {
+        return {
+          kind: CLOUDFLARE_ENGINE as "cloudflare",
+          worker: undefined as unknown as WOut,
+        };
+      }
       const worker = yield* cls as unknown as Effect.Effect<WOut, never, never>;
       return { kind: CLOUDFLARE_ENGINE as "cloudflare", worker };
     }),
@@ -601,6 +619,7 @@ export const workerRef = <WOut>(
  * already in an import cycle with this one; re-exported by the barrel.
  */
 export const Worker: typeof CloudflareWorker & {
+  /** Deploy a worker definition layer (shared-module form). */
   <Self, WOut, RIn>(
     cls: Effect.Effect<WOut, never, any>,
     props: CloudflareWorkerTargetProps,
@@ -609,6 +628,19 @@ export const Worker: typeof CloudflareWorker & {
     Self | DeploymentService<WOut, "cloudflare">,
     never,
     Exclude<RIn, GenericWorkerTarget | HostRef>
+  >;
+  /** Deploy an impl effect directly — the class is already in hand, so
+   *  `make` is called by the wrapper (single-module form). */
+  <WOut, Self, I extends Effect.Effect<any, any, any>>(
+    cls: Effect.Effect<WOut, never, any> & {
+      make: (impl: I) => Layer.Layer<Self, never, any>;
+    },
+    props: CloudflareWorkerTargetProps,
+    impl: I,
+  ): Layer.Layer<
+    Self | DeploymentService<WOut, "cloudflare">,
+    never,
+    Extract<Effect.Services<I>, DeploymentService<any, string>>
   >;
   readonly ref: typeof workerRef;
 } = Object.assign(

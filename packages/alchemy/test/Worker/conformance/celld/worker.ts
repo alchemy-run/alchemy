@@ -11,10 +11,8 @@ import { ConformanceCells, ConformanceWorker } from "./fleet.ts";
 export default Celld.Worker(
   ConformanceWorker,
   { fleet: ConformanceCells, main: import.meta.url },
-  ConformanceWorker.make(
-    Effect.gen(function* () {
-      const counters = yield* Counter;
-      return { fetch: conformanceFetch(counters) };
-    }).pipe(Effect.provide(CounterLive)),
-  ),
+  Effect.gen(function* () {
+    const counters = yield* Counter;
+    return { fetch: conformanceFetch(counters) };
+  }).pipe(Effect.provide(CounterLive)),
 );

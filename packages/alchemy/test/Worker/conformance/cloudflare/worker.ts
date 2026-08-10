@@ -20,10 +20,8 @@ export default Cloudflare.Worker(
     workersDev: true,
     compatibility: { date: "2025-06-01" },
   },
-  ConformanceWorker.make(
-    Effect.gen(function* () {
-      const counters = yield* Counter;
-      return { fetch: conformanceFetch(counters) };
-    }).pipe(Effect.provide(CounterLive)),
-  ),
+  Effect.gen(function* () {
+    const counters = yield* Counter;
+    return { fetch: conformanceFetch(counters) };
+  }).pipe(Effect.provide(CounterLive)),
 );

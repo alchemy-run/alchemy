@@ -586,12 +586,19 @@ export type { WorkerBindingContract };
 const deployWorker = <Self, WOut, RIn>(
   cls: Effect.Effect<WOut, never, any>,
   props: CelldWorkerProps,
-  layer: Layer.Layer<Self, never, RIn | WorkerTarget | HostRef>,
+  layer:
+    | Layer.Layer<Self, never, RIn | WorkerTarget | HostRef>
+    | Effect.Effect<any, any, RIn | WorkerTarget | HostRef>,
 ): Layer.Layer<
   Self | DeploymentService<WOut, "celld">,
   never,
   Exclude<RIn, WorkerTarget | HostRef>
 > => {
+  // The impl-effect form: the class is already in hand, so `make` is
+  // called here rather than by the caller.
+  const resolved = Effect.isEffect(layer)
+    ? ((cls as any).make(layer) as Layer.Layer<any, never, any>)
+    : layer;
   const clsId = resolveWorkerRef(cls as any).LogicalId;
   const selfRef = Layer.sync(HostRef, () => ({
     kind: CELLD_ENGINE,
@@ -602,12 +609,23 @@ const deployWorker = <Self, WOut, RIn>(
     ...workerConnectionKeys(clsId),
     remoteDurableObject,
   }));
-  const deployed = layer.pipe(
+  const deployed = resolved.pipe(
     Layer.provide(Layer.mergeAll(makeTarget(props), selfRef)),
   );
   const deployment = Layer.effect(
     Deployment<WOut, "celld">(CELLD_ENGINE, clsId),
     Effect.gen(function* () {
+      // Inside the deployed worker the entry rebuilds this layer, but the
+      // resource effect belongs to plan time — running it in the isolate
+      // drags plan machinery (Terminal/NodeServices) into workerd, which
+      // dies on beta.105 (`process.stdin.once` is not a function). Nothing
+      // consumes Deployment at runtime; refs guard themselves.
+      if (globalThis.__ALCHEMY_RUNTIME__) {
+        return {
+          kind: CELLD_ENGINE as "celld",
+          worker: undefined as unknown as WOut,
+        };
+      }
       const worker = yield* cls as unknown as Effect.Effect<WOut, never, never>;
       return { kind: CELLD_ENGINE as "celld", worker };
     }),
@@ -652,4 +670,29 @@ const workerRef = <WOut>(
     }),
   );
 
-export const Worker = Object.assign(deployWorker, { ref: workerRef });
+export const Worker: {
+  /** Deploy a worker definition layer (shared-module form). */
+  <Self, WOut, RIn>(
+    cls: Effect.Effect<WOut, never, any>,
+    props: CelldWorkerProps,
+    layer: Layer.Layer<Self, never, RIn | WorkerTarget | HostRef>,
+  ): Layer.Layer<
+    Self | DeploymentService<WOut, "celld">,
+    never,
+    Exclude<RIn, WorkerTarget | HostRef>
+  >;
+  /** Deploy an impl effect directly — the class is already in hand, so
+   *  `make` is called by the wrapper (single-module form). */
+  <WOut, Self, I extends Effect.Effect<any, any, any>>(
+    cls: Effect.Effect<WOut, never, any> & {
+      make: (impl: I) => Layer.Layer<Self, never, any>;
+    },
+    props: CelldWorkerProps,
+    impl: I,
+  ): Layer.Layer<
+    Self | DeploymentService<WOut, "celld">,
+    never,
+    Extract<Effect.Services<I>, DeploymentService<any, string>>
+  >;
+  readonly ref: typeof workerRef;
+} = Object.assign(deployWorker as any, { ref: workerRef });

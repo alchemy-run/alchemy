@@ -33,18 +33,16 @@ export class CellsWorker extends Alchemy.Worker<CellsWorker>()("CellsWorker") {}
 export default Celld.Worker(
   CellsWorker,
   { fleet: Cells, main: import.meta.url },
-  CellsWorker.make(
-    Effect.gen(function* () {
-      const counters = yield* Counter;
-      return {
-        fetch: Effect.gen(function* () {
-          const request = yield* HttpServerRequest;
-          const room =
-            new URL(request.url, "http://cells").pathname.slice(1) || "lobby";
-          const value = yield* counters.getByName(room).increment();
-          return yield* HttpServerResponse.json({ room, value });
-        }),
-      };
-    }),
-  ),
+  Effect.gen(function* () {
+    const counters = yield* Counter;
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const room =
+          new URL(request.url, "http://cells").pathname.slice(1) || "lobby";
+        const value = yield* counters.getByName(room).increment();
+        return yield* HttpServerResponse.json({ room, value });
+      }),
+    };
+  }),
 );

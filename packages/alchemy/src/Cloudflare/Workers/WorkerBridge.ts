@@ -1,5 +1,10 @@
 import type * as cf from "@cloudflare/workers-types";
-import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcessSpawner";
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
+import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
+import * as NodePath from "@effect/platform-node/NodePath";
+import * as NodeStdio from "@effect/platform-node/NodeStdio";
+import * as Terminal from "effect/Terminal";
 import type { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import * as Cause from "effect/Cause";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -258,8 +263,38 @@ const getSharedBuild = (
 
   const layer = makeEntrypointLayer(tag, entrypoint);
 
+  // `NodeServices.layer` minus `NodeTerminal`: as of effect beta.105 the
+  // Node terminal registers `process.stdin` listeners AT LAYER BUILD
+  // (`stdin.once("end", ...)`), and workerd's `process.stdin` stub has no
+  // listener API — building it kills every effect-native worker with error
+  // 1101 before the first request. An isolate has no terminal anyway; the
+  // stub keeps the service constructible and fails on USE with a message
+  // instead of at boot.
+  const stubTerminal = Layer.succeed(
+    Terminal.Terminal,
+    Terminal.make({
+      columns: Effect.succeed(0),
+      rows: Effect.succeed(0),
+      readInput: Effect.die(
+        new Error("Terminal input is unavailable inside a Cloudflare Worker"),
+      ),
+      readLine: Effect.die(
+        new Error("Terminal input is unavailable inside a Cloudflare Worker"),
+      ),
+      display: (text) => Effect.sync(() => console.log(text)),
+    }),
+  );
   const platform = Layer.mergeAll(
-    NodeServices.layer,
+    Layer.provideMerge(
+      NodeChildProcessSpawner.layer,
+      Layer.mergeAll(
+        NodeFileSystem.layer,
+        NodeCrypto.layer,
+        NodePath.layer,
+        NodeStdio.layer,
+        stubTerminal,
+      ),
+    ),
     FetchHttpClient.layer,
     // TODO(sam): wire this up to telemetry more directly
     Logger.layer([Logger.consolePretty()]),
