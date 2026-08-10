@@ -31,7 +31,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsdown && tsc -b --force tsconfig.json && cp src/nextjs/runner.mjs dist/nextjs/runner.mjs && bun ../../scripts/copy-package-files.ts cloudflare-frameworks",
+    "build": "tsdown && tsc -b --force tsconfig.json && cp src/nextjs/runner.mjs dist/nextjs/runner.mjs && bun ../../scripts/copy-package-files.ts web-frameworks",
     "clean": "rm -rf dist",
     "test": "vitest run",
     "test:core": "vitest run src/core/test",
