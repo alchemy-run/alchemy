@@ -9,6 +9,7 @@ import { Stack } from "@/Stack";
 import { State } from "@/State";
 import * as Test from "@/Test/Alchemy";
 import { initialCwd } from "@/Util/Node.ts";
+import * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -17,6 +18,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
@@ -46,6 +48,10 @@ const main = pathe.resolve(import.meta.dirname, "fixtures/worker.ts");
 const doMain = pathe.resolve(
   import.meta.dirname,
   "fixtures/do-counter-worker.ts",
+);
+const containerDoMain = pathe.resolve(
+  import.meta.dirname,
+  "fixtures/container-do-worker.ts",
 );
 
 describe.concurrent("Cloudflare.Worker", () => {
@@ -1910,5 +1916,137 @@ export default {
         yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
       }).pipe(logLevel),
     { timeout: 360_000 },
+  );
+
+  // #1150 regression: a Container bound in a Worker's `env` resolves its
+  // Durable Object attachment from the worker's `durableObjectNamespaces`
+  // output. With a stale or partial state store (e.g. an adopted worker that
+  // has not reconciled in this session), that output can be empty, so the
+  // attachment resolves without a namespace id. Reconcile used to treat
+  // that as a real mismatch with the live application's attachment ("the DO
+  // attachment is immutable, so we delete and recreate"), delete the live
+  // application, and then fail the recreate — the Cloudflare API requires
+  // `durable_objects.*` on create (VALIDATE_INPUT) — leaving the application
+  // destroyed with every retry failing identically. An unresolved attachment
+  // must never trigger the delete/recreate path, and creation must fall back
+  // to resolving the namespace by class name from the account's namespace
+  // list.
+  test.provider(
+    "container reconcile with an unresolved DO attachment preserves the live application",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
+        yield* stack.destroy();
+
+        const echo = Cloudflare.Container("AttachmentContainer", {
+          className: "AttachmentRegressionContainer",
+          image: "mendhak/http-https-echo:latest",
+        });
+        const program = Effect.gen(function* () {
+          const worker = yield* Cloudflare.Worker("AttachmentWorker", {
+            main: containerDoMain,
+            compatibility: { date: "2024-01-01" },
+            env: { ECHO: echo },
+          });
+          const app = yield* echo.Application;
+          return { worker, app };
+        });
+
+        const first = yield* stack.deploy(program);
+        const applicationId = first.app.applicationId;
+        const namespaceId = first.app.durableObjects?.namespaceId;
+        expect(namespaceId).toBeDefined();
+
+        // Recreate the incident's state: blank the worker's persisted
+        // namespace map — the worker itself still plans as a noop and
+        // republishes the stale output, so the container's
+        // binding-contributed attachment resolves without a namespace id —
+        // and stale the container's stored image hash so the container
+        // plans an update and reconcile actually runs.
+        const doctorState = Effect.gen(function* () {
+          const state = yield* yield* State;
+          const workerKey = {
+            stack: stack.name,
+            stage: "test",
+            fqn: "AttachmentWorker",
+          };
+          const worker = yield* state.get(workerKey);
+          expect(worker).toBeDefined();
+          yield* state.set({
+            ...workerKey,
+            value: {
+              ...(worker as any),
+              attr: {
+                ...(worker as any).attr,
+                durableObjectNamespaces: {},
+              },
+            },
+          });
+          const containerKey = {
+            stack: stack.name,
+            stage: "test",
+            fqn: "AttachmentContainer",
+          };
+          const container = yield* state.get(containerKey);
+          expect(container).toBeDefined();
+          yield* state.set({
+            ...containerKey,
+            value: {
+              ...(container as any),
+              attr: { ...(container as any).attr, hash: { image: "stale" } },
+            },
+          });
+        }).pipe(Effect.provide(stack.state));
+
+        yield* doctorState;
+
+        // The redeploy's container reconcile sees an unresolved desired
+        // attachment. It must NOT delete/recreate the live application.
+        const second = yield* stack.deploy(program);
+        expect(second.app.applicationId).toEqual(applicationId);
+        expect(second.app.durableObjects).toEqual({ namespaceId });
+        const live = yield* Containers.getContainerApplication({
+          accountId,
+          applicationId,
+        });
+        expect(live.durableObjects).toEqual({ namespaceId });
+
+        // Recovery from the damage the bug used to cause: the live
+        // application is gone (deleted out-of-band) while state still
+        // points at it and the attachment still resolves without a
+        // namespace id. Reconcile falls through to "no application exists"
+        // and the create must resolve the namespace by class name from the
+        // account's namespace list instead of creating without
+        // `durable_objects` (VALIDATE_INPUT).
+        yield* Containers.deleteContainerApplication({
+          accountId,
+          applicationId,
+        });
+        // Reconcile falls back to an eventually-consistent name lookup, so
+        // wait until the deleted application is gone from the listing.
+        yield* Containers.listContainerApplications({ accountId }).pipe(
+          Effect.flatMap((apps) =>
+            apps.some((app) => app.id === applicationId)
+              ? Effect.fail("deleted container application still listed")
+              : Effect.void,
+          ),
+          Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
+        );
+        yield* doctorState;
+
+        const third = yield* stack.deploy(program);
+        expect(third.app.applicationId).not.toEqual(applicationId);
+        expect(third.app.durableObjects).toEqual({ namespaceId });
+        const recreated = yield* Containers.getContainerApplication({
+          accountId,
+          applicationId: third.app.applicationId,
+        });
+        expect(recreated.durableObjects).toEqual({ namespaceId });
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(first.worker.workerName, accountId);
+      }).pipe(logLevel),
+    { timeout: 600_000 },
   );
 });
