@@ -1,6 +1,6 @@
 # @fixtures/waku
 
-E2E fixture for `@alchemy.run/web-frameworks/waku` — the wrangler-free [Waku](https://waku.gg)
+E2E fixture for `@alchemy.run/frontend-frameworks/waku` — the wrangler-free [Waku](https://waku.gg)
 integration for Cloudflare Workers.
 
 There is no `vite.config.ts` and no `wrangler.jsonc`: `e2e.config.ts`

@@ -14,7 +14,7 @@
     "effect": "catalog:"
   },
   "devDependencies": {
-    "@alchemy.run/web-frameworks": "workspace:*",
+    "@alchemy.run/frontend-frameworks": "workspace:*",
     "@sveltejs/kit": "catalog:frameworks",
     "@sveltejs/vite-plugin-svelte": "catalog:frameworks",
     "@types/node": "^24.12.0",

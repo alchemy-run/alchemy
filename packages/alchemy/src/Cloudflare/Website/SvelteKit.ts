@@ -82,7 +82,7 @@ export interface SvelteKitProps<
  * Client assets and prerendered pages are deployed as Worker static
  * assets; dynamic routes are served by the generated Worker.
  *
- * The `@alchemy.run/web-frameworks` package must be installed in your
+ * The `@alchemy.run/frontend-frameworks` package must be installed in your
  * project — its `/sveltekit` export is loaded dynamically at deploy time.
  *
  * Input files are content-hashed (respecting `.gitignore` by default) so
@@ -232,7 +232,7 @@ export const SvelteKit: {
                   }
                 : props?.assets,
             source: {
-              provider: "@alchemy.run/web-frameworks/sveltekit/source",
+              provider: "@alchemy.run/frontend-frameworks/sveltekit/source",
               devMode: "server",
               options: {
                 rootDir: props?.rootDir,

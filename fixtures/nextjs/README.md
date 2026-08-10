@@ -1,6 +1,6 @@
 # fixtures/nextjs
 
-E2e fixture for `@alchemy.run/web-frameworks/nextjs` — the wrangler-free Next.js
+E2e fixture for `@alchemy.run/frontend-frameworks/nextjs` — the wrangler-free Next.js
 (OpenNext-based) framework integration.
 
 The app exercises the OpenNext long tail:
@@ -29,7 +29,7 @@ bun run test     # build + playwright (live = miniflare, dev = cloudflare-runtim
 ## Notes
 
 - `wrangler` resolves to the inert stub in
-  `packages/web-frameworks/src/nextjs/wrangler-stub` — only its `package.json` version field is
+  `packages/frontend-frameworks/src/nextjs/wrangler-stub` — only its `package.json` version field is
   ever read (OpenNext's `ensureNextjsVersionSupported`); no wrangler code is
   installed or executed.
 - The OpenNext pipeline runs `npx next build` internally (the fixture's own

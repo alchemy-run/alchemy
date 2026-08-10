@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@alchemy.run/cloudflare-runtime": "workspace:*",
-    "@alchemy.run/web-frameworks": "workspace:*",
+    "@alchemy.run/frontend-frameworks": "workspace:*",
     "@effect/platform-node": "catalog:effect",
     "effect": "catalog:effect",
     "miniflare": "catalog:workers"

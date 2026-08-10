@@ -15,15 +15,15 @@ import {
 
 /**
  * The module specifier of the Next.js source provider. Loaded with a
- * dynamic `import()`, so `@alchemy.run/web-frameworks` must be installed
+ * dynamic `import()`, so `@alchemy.run/frontend-frameworks` must be installed
  * in the deploying project. The provider is exposed through its `/nextjs`
  * subpath.
  */
-const NEXTJS_SOURCE_PROVIDER = "@alchemy.run/web-frameworks/nextjs/source";
+const NEXTJS_SOURCE_PROVIDER = "@alchemy.run/frontend-frameworks/nextjs/source";
 
 /**
  * The default compatibility date when none is provided. Matches the
- * `@alchemy.run/web-frameworks/nextjs` integration's own default so deploy and local
+ * `@alchemy.run/frontend-frameworks/nextjs` integration's own default so deploy and local
  * dev agree.
  */
 const DEFAULT_COMPATIBILITY_DATE = "2026-05-12";
@@ -104,14 +104,14 @@ export interface NextjsProps<
  * A Cloudflare Worker deployed from a Next.js project.
  *
  * `Nextjs` builds the app with the wrangler-free OpenNext pipeline from
- * [`@alchemy.run/web-frameworks/nextjs`](https://github.com/alchemy-run/alchemy/tree/main/packages/web-frameworks/src/nextjs):
+ * [`@alchemy.run/frontend-frameworks/nextjs`](https://github.com/alchemy-run/alchemy/tree/main/packages/frontend-frameworks/src/nextjs):
  * `next build` runs through `@opennextjs/cloudflare`, the resulting worker
  * is bundled into a self-contained ES module set, and the static assets
  * (including prerendered pages and the read-only incremental cache) deploy
  * as Workers static assets. Input files are content-hashed so unchanged
  * projects skip the build and deploy entirely.
  *
- * Both `@alchemy.run/web-frameworks` and its peer
+ * Both `@alchemy.run/frontend-frameworks` and its peer
  * `@opennextjs/cloudflare` must be installed in the deploying project. The
  * source provider is loaded from the package's `/nextjs` export with a dynamic
  * `import()`.

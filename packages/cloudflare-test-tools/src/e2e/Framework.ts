@@ -2,7 +2,7 @@ import {
   Framework,
   FrameworkError,
   loadProjectModule,
-} from "@alchemy.run/web-frameworks/core";
+} from "@alchemy.run/frontend-frameworks/core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Cwd } from "./Cwd.ts";

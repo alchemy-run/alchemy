@@ -5,7 +5,7 @@ import {
   writeBuildOutput,
   type BuildOutput,
   type DeployTargetServer,
-} from "@alchemy.run/web-frameworks/core";
+} from "@alchemy.run/frontend-frameworks/core";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

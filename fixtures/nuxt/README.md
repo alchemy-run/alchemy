@@ -1,6 +1,6 @@
 # fixtures/nuxt
 
-E2E fixture for `@alchemy.run/web-frameworks/nuxt`: a Nuxt 4 app built programmatically
+E2E fixture for `@alchemy.run/frontend-frameworks/nuxt`: a Nuxt 4 app built programmatically
 through the project's `@nuxt/kit` with nitro's `cloudflare_module` preset —
 wrangler-free (no `wrangler.json` is read or written).
 

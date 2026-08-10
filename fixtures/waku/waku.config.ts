@@ -4,7 +4,7 @@ import { defineConfig } from "waku/config";
 /**
  * Real user config file, loaded NATIVELY by the integration (the same
  * `vite.runnerImport("/waku.config")` semantics as waku's own CLI — see
- * packages/web-frameworks/src/waku/Waku.ts `loadUserConfigFile`). Both settings here are
+ * packages/frontend-frameworks/src/waku/Waku.ts `loadUserConfigFile`). Both settings here are
  * user-observable and only work if this file is honored:
  *
  * - `rscBase` moves waku's RSC endpoint/payload base from the default `RSC`

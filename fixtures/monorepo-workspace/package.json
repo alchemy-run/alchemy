@@ -13,7 +13,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:workers",
     "@alchemy.run/cloudflare-test-tools": "workspace:*",
-    "@alchemy.run/web-frameworks": "workspace:*",
+    "@alchemy.run/frontend-frameworks": "workspace:*",
     "@playwright/test": "catalog:",
     "effect": "catalog:effect",
     "vite": "catalog:"

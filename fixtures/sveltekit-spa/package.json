@@ -13,7 +13,7 @@
   "devDependencies": {
     "@alchemy.run/cloudflare-runtime": "workspace:*",
     "@alchemy.run/cloudflare-test-tools": "workspace:*",
-    "@alchemy.run/web-frameworks": "workspace:*",
+    "@alchemy.run/frontend-frameworks": "workspace:*",
     "@playwright/test": "catalog:",
     "@sveltejs/kit": "catalog:frameworks",
     "@sveltejs/vite-plugin-svelte": "catalog:frameworks",

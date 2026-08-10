@@ -29,7 +29,7 @@
       "dependsOn": ["build", "^build"],
       "outputs": [".cache/**/*.tsbuildinfo", "**/.cache/**/*.tsbuildinfo"]
     },
-    "@alchemy.run/web-frameworks#typecheck": {
+    "@alchemy.run/frontend-frameworks#typecheck": {
       "dependsOn": ["build", "^build"],
       "outputs": [".cache/**/*.tsbuildinfo", "**/.cache/**/*.tsbuildinfo"]
     },

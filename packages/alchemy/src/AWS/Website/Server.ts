@@ -14,7 +14,7 @@ import { sha256Object } from "../../Util/sha256.ts";
 
 /**
  * The structural slice of a framework-integration module
- * (`@alchemy.run/web-frameworks/nuxt`, `@alchemy.run/web-frameworks/astro`, ...) this resource
+ * (`@alchemy.run/frontend-frameworks/nuxt`, `@alchemy.run/frontend-frameworks/astro`, ...) this resource
  * drives. Typed structurally so alchemy carries no dependency on
  * `@distilled.cloud/framework-core` — the *project's* install is always the
  * one loaded. Requirement channels are erased (the module is loaded
@@ -55,7 +55,7 @@ export class FrameworkServerError extends Data.TaggedError(
 export interface ServerProps {
   /**
    * Module specifier of the framework-integration package that implements
-   * the build and dev server (e.g. `"@alchemy.run/web-frameworks/nuxt"`). Must be
+   * the build and dev server (e.g. `"@alchemy.run/frontend-frameworks/nuxt"`). Must be
    * installed in your project — it is loaded dynamically at deploy time and
    * drives your project's own framework toolchain.
    */
@@ -69,7 +69,7 @@ export interface ServerProps {
   /**
    * The deploy target the build is produced for: a module specifier
    * resolved from your project's `node_modules`
-   * (e.g. `"@alchemy.run/web-frameworks/nuxt/aws"`).
+   * (e.g. `"@alchemy.run/frontend-frameworks/nuxt/aws"`).
    */
   target: string;
   /**
@@ -158,8 +158,8 @@ export interface Server extends Resource<
  * @example Nuxt For AWS Lambda
  * ```typescript
  * const server = yield* Server("Server", {
- *   framework: "@alchemy.run/web-frameworks/nuxt",
- *   target: "@alchemy.run/web-frameworks/nuxt/aws",
+ *   framework: "@alchemy.run/frontend-frameworks/nuxt",
+ *   target: "@alchemy.run/frontend-frameworks/nuxt/aws",
  *   root: "./app",
  * });
  * // deploy: server.serverEntry -> .output/server/index.mjs (Lambda handler)

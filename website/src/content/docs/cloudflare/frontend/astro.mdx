@@ -7,7 +7,7 @@ sidebar:
 
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
-export const devDeps = "@alchemy.run/web-frameworks";
+export const devDeps = "@alchemy.run/frontend-frameworks";
 
 `Cloudflare.Website.Astro` deploys an [Astro](https://astro.build)
 project as a Cloudflare Worker. It runs Astro's programmatic build
@@ -19,7 +19,7 @@ install into your config, and no Wrangler file.
 ## Install
 
 The build integration is not bundled with alchemy. Install
-`@alchemy.run/web-frameworks`; the resource loads its `/astro`
+`@alchemy.run/frontend-frameworks`; the resource loads its `/astro`
 export from your project at deploy time. It is only used at build time,
 so a dev dependency is enough:
 

@@ -1,7 +1,7 @@
 import cloudflareVitePlugin, {
   type CloudflareVitePluginOptions,
 } from "@alchemy.run/cloudflare-runtime/vite";
-import * as FrameworkCore from "@alchemy.run/web-frameworks/core";
+import * as FrameworkCore from "@alchemy.run/frontend-frameworks/core";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

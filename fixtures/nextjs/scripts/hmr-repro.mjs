@@ -3,8 +3,8 @@
 // three routes, and exits. Useful for debugging test/hmr.test.ts failures.
 // Run with: node scripts/hmr-repro.mjs
 import { Text } from "@alchemy.run/cloudflare-runtime/core/bindings";
-import { Framework } from "@alchemy.run/web-frameworks/core";
-import nextjsFramework from "@alchemy.run/web-frameworks/nextjs";
+import { Framework } from "@alchemy.run/frontend-frameworks/core";
+import nextjsFramework from "@alchemy.run/frontend-frameworks/nextjs";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";

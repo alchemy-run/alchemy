@@ -13,7 +13,7 @@
     "astro": "catalog:frameworks"
   },
   "devDependencies": {
-    "@alchemy.run/web-frameworks": "workspace:*",
+    "@alchemy.run/frontend-frameworks": "workspace:*",
     "alchemy": "workspace:*",
     "effect": "catalog:",
     "typescript": "catalog:"

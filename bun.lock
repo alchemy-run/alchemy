@@ -595,7 +595,7 @@
     "examples/cloudflare-octane": {
       "name": "example-cloudflare-octane",
       "dependencies": {
-        "@alchemy.run/web-frameworks": "workspace:*",
+        "@alchemy.run/frontend-frameworks": "workspace:*",
         "@octanejs/adapter-cloudflare": "catalog:frameworks",
         "@octanejs/vite-plugin": "catalog:frameworks",
         "alchemy": "workspace:*",
@@ -801,7 +801,7 @@
         "astro": "catalog:frameworks",
       },
       "devDependencies": {
-        "@alchemy.run/web-frameworks": "workspace:*",
+        "@alchemy.run/frontend-frameworks": "workspace:*",
         "alchemy": "workspace:*",
         "effect": "catalog:",
         "typescript": "catalog:",
@@ -816,7 +816,7 @@
         "react-dom": "^19.2.0",
       },
       "devDependencies": {
-        "@alchemy.run/web-frameworks": "workspace:*",
+        "@alchemy.run/frontend-frameworks": "workspace:*",
         "@opennextjs/cloudflare": "catalog:frameworks",
         "@types/react": "^19.2.2",
         "@types/react-dom": "^19.2.2",
@@ -833,7 +833,7 @@
         "effect": "catalog:",
       },
       "devDependencies": {
-        "@alchemy.run/web-frameworks": "workspace:*",
+        "@alchemy.run/frontend-frameworks": "workspace:*",
         "@types/node": "^24.12.0",
         "nitropack": "catalog:frameworks",
         "nuxt": "catalog:frameworks",
@@ -848,7 +848,7 @@
         "effect": "catalog:",
       },
       "devDependencies": {
-        "@alchemy.run/web-frameworks": "workspace:*",
+        "@alchemy.run/frontend-frameworks": "workspace:*",
         "@sveltejs/kit": "catalog:frameworks",
         "@sveltejs/vite-plugin-svelte": "catalog:frameworks",
         "@types/node": "^24.12.0",
@@ -870,7 +870,7 @@
         "waku": "catalog:frameworks",
       },
       "devDependencies": {
-        "@alchemy.run/web-frameworks": "workspace:*",
+        "@alchemy.run/frontend-frameworks": "workspace:*",
         "@types/node": "^24.12.0",
         "@types/react": "^19.2.17",
         "@types/react-dom": "^19.2.3",
@@ -1011,7 +1011,7 @@
       "devDependencies": {
         "@alchemy.run/cloudflare-runtime": "workspace:*",
         "@alchemy.run/cloudflare-test-tools": "workspace:*",
-        "@alchemy.run/web-frameworks": "workspace:*",
+        "@alchemy.run/frontend-frameworks": "workspace:*",
         "@cloudflare/workers-types": "catalog:workers",
         "@effect/platform-node": "catalog:effect",
         "@playwright/test": "catalog:",
@@ -1027,7 +1027,7 @@
       "devDependencies": {
         "@alchemy.run/cloudflare-runtime": "workspace:*",
         "@alchemy.run/cloudflare-test-tools": "workspace:*",
-        "@alchemy.run/web-frameworks": "workspace:*",
+        "@alchemy.run/frontend-frameworks": "workspace:*",
         "@cloudflare/workers-types": "catalog:workers",
         "@effect/platform-node": "catalog:effect",
         "@playwright/test": "catalog:",
@@ -1043,7 +1043,7 @@
       "devDependencies": {
         "@alchemy.run/cloudflare-runtime": "workspace:*",
         "@alchemy.run/cloudflare-test-tools": "workspace:*",
-        "@alchemy.run/web-frameworks": "workspace:*",
+        "@alchemy.run/frontend-frameworks": "workspace:*",
         "@cloudflare/workers-types": "catalog:workers",
         "@effect/platform-node": "catalog:effect",
         "@playwright/test": "catalog:",
@@ -1055,7 +1055,7 @@
       "name": "@fixtures/monorepo-workspace",
       "devDependencies": {
         "@alchemy.run/cloudflare-test-tools": "workspace:*",
-        "@alchemy.run/web-frameworks": "workspace:*",
+        "@alchemy.run/frontend-frameworks": "workspace:*",
         "@cloudflare/workers-types": "catalog:workers",
         "@playwright/test": "catalog:",
         "effect": "catalog:effect",
@@ -1072,13 +1072,13 @@
       "devDependencies": {
         "@alchemy.run/cloudflare-runtime": "workspace:*",
         "@alchemy.run/cloudflare-test-tools": "workspace:*",
-        "@alchemy.run/web-frameworks": "workspace:*",
+        "@alchemy.run/frontend-frameworks": "workspace:*",
         "@effect/platform-node": "catalog:effect",
         "@opennextjs/cloudflare": "catalog:frameworks",
         "@playwright/test": "catalog:",
         "effect": "catalog:effect",
         "miniflare": "catalog:workers",
-        "wrangler": "file:../../packages/web-frameworks/src/nextjs/wrangler-stub",
+        "wrangler": "file:../../packages/frontend-frameworks/src/nextjs/wrangler-stub",
       },
     },
     "fixtures/nextjs-isr": {
@@ -1091,13 +1091,13 @@
       "devDependencies": {
         "@alchemy.run/cloudflare-runtime": "workspace:*",
         "@alchemy.run/cloudflare-test-tools": "workspace:*",
-        "@alchemy.run/web-frameworks": "workspace:*",
+        "@alchemy.run/frontend-frameworks": "workspace:*",
         "@effect/platform-node": "catalog:effect",
         "@opennextjs/cloudflare": "catalog:frameworks",
         "@playwright/test": "catalog:",
         "effect": "catalog:effect",
         "miniflare": "catalog:workers",
-        "wrangler": "file:../../packages/web-frameworks/src/nextjs/wrangler-stub",
+        "wrangler": "file:../../packages/frontend-frameworks/src/nextjs/wrangler-stub",
       },
     },
     "fixtures/nuxt": {
@@ -1109,7 +1109,7 @@
       "devDependencies": {
         "@alchemy.run/cloudflare-runtime": "workspace:*",
         "@alchemy.run/cloudflare-test-tools": "workspace:*",
-        "@alchemy.run/web-frameworks": "workspace:*",
+        "@alchemy.run/frontend-frameworks": "workspace:*",
         "@cloudflare/workers-types": "catalog:workers",
         "@playwright/test": "catalog:",
         "@types/node": "^24.12.0",
@@ -1126,7 +1126,7 @@
       },
       "devDependencies": {
         "@alchemy.run/cloudflare-test-tools": "workspace:*",
-        "@alchemy.run/web-frameworks": "workspace:*",
+        "@alchemy.run/frontend-frameworks": "workspace:*",
         "@cloudflare/workers-types": "catalog:workers",
         "@playwright/test": "catalog:",
         "@types/node": "^24.12.0",
@@ -1203,7 +1203,7 @@
       "devDependencies": {
         "@alchemy.run/cloudflare-runtime": "workspace:*",
         "@alchemy.run/cloudflare-test-tools": "workspace:*",
-        "@alchemy.run/web-frameworks": "workspace:*",
+        "@alchemy.run/frontend-frameworks": "workspace:*",
         "@playwright/test": "catalog:",
         "@sveltejs/kit": "catalog:frameworks",
         "@sveltejs/vite-plugin-svelte": "catalog:frameworks",
@@ -1218,7 +1218,7 @@
       "devDependencies": {
         "@alchemy.run/cloudflare-runtime": "workspace:*",
         "@alchemy.run/cloudflare-test-tools": "workspace:*",
-        "@alchemy.run/web-frameworks": "workspace:*",
+        "@alchemy.run/frontend-frameworks": "workspace:*",
         "@playwright/test": "catalog:",
         "@sveltejs/kit": "catalog:frameworks",
         "@sveltejs/vite-plugin-svelte": "catalog:frameworks",
@@ -1282,7 +1282,7 @@
       "devDependencies": {
         "@alchemy.run/cloudflare-runtime": "workspace:*",
         "@alchemy.run/cloudflare-test-tools": "workspace:*",
-        "@alchemy.run/web-frameworks": "workspace:*",
+        "@alchemy.run/frontend-frameworks": "workspace:*",
         "@cloudflare/unenv-preset": "catalog:workers",
         "@cloudflare/workers-types": "catalog:workers",
         "@playwright/test": "catalog:",
@@ -1308,7 +1308,7 @@
       "devDependencies": {
         "@alchemy.run/cloudflare-runtime": "workspace:*",
         "@alchemy.run/cloudflare-test-tools": "workspace:*",
-        "@alchemy.run/web-frameworks": "workspace:*",
+        "@alchemy.run/frontend-frameworks": "workspace:*",
         "@cloudflare/workers-types": "catalog:workers",
         "@playwright/test": "catalog:",
         "@types/node": "^24.12.0",
@@ -1329,7 +1329,7 @@
       "devDependencies": {
         "@alchemy.run/cloudflare-runtime": "workspace:*",
         "@alchemy.run/cloudflare-test-tools": "workspace:*",
-        "@alchemy.run/web-frameworks": "workspace:*",
+        "@alchemy.run/frontend-frameworks": "workspace:*",
         "@cloudflare/workers-types": "catalog:workers",
         "@playwright/test": "catalog:",
         "@types/node": "^24.12.0",
@@ -1381,7 +1381,7 @@
         "yaml": "catalog:",
       },
       "devDependencies": {
-        "@alchemy.run/web-frameworks": "workspace:*",
+        "@alchemy.run/frontend-frameworks": "workspace:*",
         "@aws/durable-execution-sdk-js": "^2.1.0",
         "@cloudflare/containers": "catalog:",
         "@cloudflare/puppeteer": "^1.1.0",
@@ -1555,7 +1555,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@alchemy.run/cloudflare-runtime": "workspace:*",
-        "@alchemy.run/web-frameworks": "workspace:*",
+        "@alchemy.run/frontend-frameworks": "workspace:*",
         "@effect/platform-node": "catalog:effect",
         "effect": "catalog:effect",
         "miniflare": "catalog:workers",
@@ -1566,16 +1566,8 @@
         "vite": "catalog:",
       },
     },
-    "packages/pr-package": {
-      "name": "@alchemy.run/pr-package",
-      "version": "2.0.0-beta.70",
-      "dependencies": {
-        "alchemy": "workspace:*",
-        "effect": "catalog:",
-      },
-    },
-    "packages/web-frameworks": {
-      "name": "@alchemy.run/web-frameworks",
+    "packages/frontend-frameworks": {
+      "name": "@alchemy.run/frontend-frameworks",
       "version": "2.0.0-beta.70",
       "dependencies": {
         "@alchemy.run/cloudflare-runtime": "workspace:*",
@@ -1628,6 +1620,14 @@
         "vite",
         "waku",
       ],
+    },
+    "packages/pr-package": {
+      "name": "@alchemy.run/pr-package",
+      "version": "2.0.0-beta.70",
+      "dependencies": {
+        "alchemy": "workspace:*",
+        "effect": "catalog:",
+      },
     },
     "website": {
       "name": "website",
@@ -1830,11 +1830,11 @@
 
     "@alchemy.run/cloudflare-test-tools": ["@alchemy.run/cloudflare-test-tools@workspace:packages/cloudflare-test-tools"],
 
+    "@alchemy.run/frontend-frameworks": ["@alchemy.run/frontend-frameworks@workspace:packages/frontend-frameworks"],
+
     "@alchemy.run/node-utils": ["@alchemy.run/node-utils@0.0.5", "", {}, "sha512-5agdhQxWBodxa5hDRyjnpx91RTU3g+qd5fxYB7uNDCaOzB0XC47UU/KHR6zf6jhz/NXf61gJS+vhYwn8NHeRoQ=="],
 
     "@alchemy.run/pr-package": ["@alchemy.run/pr-package@workspace:packages/pr-package"],
-
-    "@alchemy.run/web-frameworks": ["@alchemy.run/web-frameworks@workspace:packages/web-frameworks"],
 
     "@alloc/quick-lru": ["@alloc/quick-lru@5.2.0", "", {}, "sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw=="],
 
@@ -6258,7 +6258,7 @@
 
     "@alchemy.run/cloudflare-runtime/@cloudflare/workers-types": ["@cloudflare/workers-types@5.20260729.1", "", {}, "sha512-X5r/4y0gKMq/B72qkz/tEwNK4c3v2regT3to6Ia8qqC66E0+YIN/fU7x0JG6ej2rLxtU3TV3aVhfK9y8+jMMAw=="],
 
-    "@alchemy.run/web-frameworks/@cloudflare/workers-types": ["@cloudflare/workers-types@5.20260729.1", "", {}, "sha512-X5r/4y0gKMq/B72qkz/tEwNK4c3v2regT3to6Ia8qqC66E0+YIN/fU7x0JG6ej2rLxtU3TV3aVhfK9y8+jMMAw=="],
+    "@alchemy.run/frontend-frameworks/@cloudflare/workers-types": ["@cloudflare/workers-types@5.20260729.1", "", {}, "sha512-X5r/4y0gKMq/B72qkz/tEwNK4c3v2regT3to6Ia8qqC66E0+YIN/fU7x0JG6ej2rLxtU3TV3aVhfK9y8+jMMAw=="],
 
     "@astrojs/check/chokidar": ["chokidar@4.0.3", "", { "dependencies": { "readdirp": "^4.0.1" } }, "sha512-Qgzu8kfBvo+cA4962jnP1KkS6Dop5NS6g7R5LFYJr4b8Ub94PPQXUksCw9PvXoeXPRRddRNC5C1JQUR2SMGtnA=="],
 
@@ -6390,9 +6390,9 @@
 
     "@fixtures/monorepo-workspace/@cloudflare/workers-types": ["@cloudflare/workers-types@5.20260729.1", "", {}, "sha512-X5r/4y0gKMq/B72qkz/tEwNK4c3v2regT3to6Ia8qqC66E0+YIN/fU7x0JG6ej2rLxtU3TV3aVhfK9y8+jMMAw=="],
 
-    "@fixtures/nextjs/wrangler": ["wrangler@file:packages/web-frameworks/src/nextjs/wrangler-stub", {}],
+    "@fixtures/nextjs/wrangler": ["wrangler@file:packages/frontend-frameworks/src/nextjs/wrangler-stub", {}],
 
-    "@fixtures/nextjs-isr/wrangler": ["wrangler@file:packages/web-frameworks/src/nextjs/wrangler-stub", {}],
+    "@fixtures/nextjs-isr/wrangler": ["wrangler@file:packages/frontend-frameworks/src/nextjs/wrangler-stub", {}],
 
     "@fixtures/nuxt/@cloudflare/workers-types": ["@cloudflare/workers-types@5.20260729.1", "", {}, "sha512-X5r/4y0gKMq/B72qkz/tEwNK4c3v2regT3to6Ia8qqC66E0+YIN/fU7x0JG6ej2rLxtU3TV3aVhfK9y8+jMMAw=="],
 

@@ -30,7 +30,7 @@ an `Effect` of it, for config that reads env via `Config`):
 import * as Options from "@alchemy.run/cloudflare-test-tools/e2e/Options";
 
 export default Options.make({
-  framework: "@alchemy.run/web-frameworks/waku", // ← optional; omit for the Vite default
+  framework: "@alchemy.run/frontend-frameworks/waku", // ← optional; omit for the Vite default
   target: {
     // name: "cloudflare" is the default (the only implemented target today)
     cloudflare: {
@@ -71,7 +71,7 @@ forms:
 
 1. **Omitted** — the built-in Vite implementation, configured by
    `options.vite`. Zero behavior change for existing fixtures.
-2. **A package specifier string** (e.g. `"@alchemy.run/web-frameworks/waku"`) — resolved
+2. **A package specifier string** (e.g. `"@alchemy.run/frontend-frameworks/waku"`) — resolved
    and imported from the **fixture's own `node_modules`** via framework-core's
    `loadProjectModule(cwd, specifier)`, so the fixture's installed copy of the
    framework (its `waku`, `astro`, `next`, ... dependency tree) is the one
@@ -92,9 +92,9 @@ A package named by the string form must **default-export** (or named-export
 - a `Layer<Framework>` directly (for packages with no per-fixture options).
 
 ```ts
-// @alchemy.run/web-frameworks/waku — src/waku/index.ts
+// @alchemy.run/frontend-frameworks/waku — src/waku/index.ts
 import type { Options } from "@alchemy.run/cloudflare-test-tools/e2e/Options";
-import { Framework } from "@alchemy.run/web-frameworks/core";
+import { Framework } from "@alchemy.run/frontend-frameworks/core";
 import * as Layer from "effect/Layer";
 
 export default (options: Options): Layer.Layer<Framework> =>
@@ -134,7 +134,7 @@ dependency tree.
 
 ## The `Framework` service contract
 
-Defined in `@alchemy.run/web-frameworks/core` (`Framework.ts`):
+Defined in `@alchemy.run/frontend-frameworks/core` (`Framework.ts`):
 
 ```ts
 class Framework extends Context.Service<
@@ -145,7 +145,7 @@ class Framework extends Context.Service<
       options?: FrameworkDevOptions,
     ) => Effect<FrameworkDevServer, FrameworkError, Scope.Scope>; // { url: string }
   }
->()("@alchemy.run/web-frameworks/core/Framework") {}
+>()("@alchemy.run/frontend-frameworks/core/Framework") {}
 ```
 
 Semantics every implementation must honor:

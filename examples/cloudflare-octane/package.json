@@ -9,7 +9,7 @@
     "destroy": "alchemy destroy"
   },
   "dependencies": {
-    "@alchemy.run/web-frameworks": "workspace:*",
+    "@alchemy.run/frontend-frameworks": "workspace:*",
     "@octanejs/adapter-cloudflare": "catalog:frameworks",
     "@octanejs/vite-plugin": "catalog:frameworks",
     "alchemy": "workspace:*",

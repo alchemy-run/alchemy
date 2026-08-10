@@ -17,7 +17,7 @@ import {
  * installed in the user's project — `loadSource` fails with a
  * `SourceProviderError` naming it otherwise.
  */
-const NUXT_SOURCE_PROVIDER = "@alchemy.run/web-frameworks/nuxt/source";
+const NUXT_SOURCE_PROVIDER = "@alchemy.run/frontend-frameworks/nuxt/source";
 
 export interface NuxtProps<
   Bindings extends WorkerBindingProps = {},
@@ -84,7 +84,7 @@ export interface NuxtProps<
  * deploys as the Worker script; client assets and prerendered pages
  * (`.output/public`) deploy as Worker static assets.
  *
- * Requires the `@alchemy.run/web-frameworks` package to be installed in
+ * Requires the `@alchemy.run/frontend-frameworks` package to be installed in
  * your project; the integration is loaded from its `/nuxt` export. Input files
  * are content-hashed
  * (respecting `.gitignore` by default) so unchanged projects skip the

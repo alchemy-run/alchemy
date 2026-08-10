@@ -14,7 +14,7 @@ The integration package must be installed in the project (it is loaded
 dynamically at deploy time):
 
 ```sh
-bun add -d @alchemy.run/web-frameworks
+bun add -d @alchemy.run/frontend-frameworks
 ```
 
 ## Deploy

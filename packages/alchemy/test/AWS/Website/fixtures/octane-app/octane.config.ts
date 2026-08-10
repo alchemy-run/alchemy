@@ -1,4 +1,4 @@
-import { aws } from "@alchemy.run/web-frameworks/octane/aws-adapter";
+import { aws } from "@alchemy.run/frontend-frameworks/octane/aws-adapter";
 import { defineConfig, RenderRoute, ServerRoute } from "@octanejs/vite-plugin";
 
 /**

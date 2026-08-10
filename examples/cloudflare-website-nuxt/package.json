@@ -14,7 +14,7 @@
     "effect": "catalog:"
   },
   "devDependencies": {
-    "@alchemy.run/web-frameworks": "workspace:*",
+    "@alchemy.run/frontend-frameworks": "workspace:*",
     "@types/node": "^24.12.0",
     "nitropack": "catalog:frameworks",
     "nuxt": "catalog:frameworks",

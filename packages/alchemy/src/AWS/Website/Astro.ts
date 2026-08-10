@@ -22,11 +22,12 @@ import type {
 } from "./shared.ts";
 
 /** The framework-integration package that drives the Astro build. */
-export const ASTRO_FRAMEWORK_SPECIFIER = "@alchemy.run/web-frameworks/astro";
+export const ASTRO_FRAMEWORK_SPECIFIER =
+  "@alchemy.run/frontend-frameworks/astro";
 
 /** The AWS Lambda deploy target for the Astro build. */
 export const ASTRO_AWS_TARGET_SPECIFIER =
-  "@alchemy.run/web-frameworks/astro/aws";
+  "@alchemy.run/frontend-frameworks/astro/aws";
 
 export interface AstroProps {
   /**
@@ -147,8 +148,8 @@ export interface AstroProps {
  * pages included) in S3, and a CloudFront distribution whose edge router
  * serves uploaded files from S3 and forwards everything else to the server.
  *
- * The build runs through `@alchemy.run/web-frameworks/astro` with the
- * `@alchemy.run/web-frameworks/astro/aws` deploy target (a wrangler-free
+ * The build runs through `@alchemy.run/frontend-frameworks/astro` with the
+ * `@alchemy.run/frontend-frameworks/astro/aws` deploy target (a wrangler-free
  * AWS Lambda adapter is injected — your `astro.config.*` must not declare
  * one) — the package must be installed in your project.
  *

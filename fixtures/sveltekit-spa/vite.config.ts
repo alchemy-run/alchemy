@@ -1,7 +1,7 @@
 /**
  * A REAL user-owned Vite config, exactly like a normal SvelteKit v3 project:
  * the user registers `sveltekit()` here themselves, and
- * `@alchemy.run/web-frameworks/sveltekit` must load this file natively and inject its
+ * `@alchemy.run/frontend-frameworks/sveltekit` must load this file natively and inject its
  * deploy-target adapter into THIS `sveltekit(...)` instance rather than
  * constructing a second one (the user-config principle).
  *

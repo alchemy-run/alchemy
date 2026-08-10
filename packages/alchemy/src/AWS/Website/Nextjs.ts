@@ -32,7 +32,7 @@ import type {
  * (it is its own deploy target — the module IS the AWS pipeline).
  */
 export const NEXTJS_AWS_FRAMEWORK_SPECIFIER =
-  "@alchemy.run/web-frameworks/nextjs/aws";
+  "@alchemy.run/frontend-frameworks/nextjs/aws";
 
 /** The S3 key prefix the OpenNext ISR/fetch cache seed is uploaded under. */
 export const NEXTJS_CACHE_PREFIX = "_cache";
@@ -129,7 +129,7 @@ export interface NextjsProps {
  * image optimization Lambda routed at `/_next/image`, and ISR revalidation
  * through an SQS FIFO queue plus a DynamoDB tag-cache table.
  *
- * The build runs through `@alchemy.run/web-frameworks/nextjs/aws` (the
+ * The build runs through `@alchemy.run/frontend-frameworks/nextjs/aws` (the
  * `@opennextjs/aws` pipeline) — both it and `@opennextjs/aws` must be
  * installed in your project. When the project has no `open-next.config.ts`,
  * a minimal default with the streaming server wrapper is generated.
