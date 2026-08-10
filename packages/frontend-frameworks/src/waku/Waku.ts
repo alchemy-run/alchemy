@@ -834,6 +834,7 @@ export const make = (
         });
         const wakuConfig = yield* makeConfig(project, root, hooks);
         const port = devOptions?.port ?? options?.port;
+        const host = devOptions?.host;
         // The dev server *starts* under the project root cwd (waku
         // resolves its html shell and relative inputs from the cwd at
         // startup); the cwd is restored once the server is listening.
@@ -848,11 +849,16 @@ export const make = (
                   plugins: [
                     project.vitePlugins.unstable_combinedPlugins(wakuConfig),
                   ],
-                  ...(port !== undefined
+                  ...(port !== undefined || host !== undefined
                     ? {
                         server: {
-                          port,
-                          strictPort: devOptions?.port !== undefined,
+                          ...(port !== undefined
+                            ? {
+                                port,
+                                strictPort: devOptions?.port !== undefined,
+                              }
+                            : undefined),
+                          ...(host !== undefined ? { host } : undefined),
                         },
                       }
                     : undefined),

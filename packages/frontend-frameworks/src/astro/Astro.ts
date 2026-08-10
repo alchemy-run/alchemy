@@ -70,6 +70,8 @@ export interface AstroConfigInputs {
   readonly userConfig?: AstroInlineConfig | undefined;
   /** Dev-server port (merged into `server.port`). */
   readonly port?: number | undefined;
+  /** Dev-server host (merged into `server.host`). */
+  readonly host?: string | undefined;
   /**
    * Extra Vite plugins appended after the user's (e.g. the build-output
    * collector).
@@ -99,16 +101,19 @@ export const makeAstroInlineConfig = (
   inputs: AstroConfigInputs,
 ): AstroInlineConfig => {
   const user = inputs.userConfig;
-  const port = inputs.port;
+  const serverOverrides = {
+    ...(inputs.port !== undefined ? { port: inputs.port } : {}),
+    ...(inputs.host !== undefined ? { host: inputs.host } : {}),
+  };
   const server: AstroInlineConfig["server"] =
-    port === undefined
+    Object.keys(serverOverrides).length === 0
       ? user?.server
       : typeof user?.server === "function"
         ? (options) => ({
             ...(user.server as (options: unknown) => object)(options),
-            port,
+            ...serverOverrides,
           })
-        : { ...user?.server, port };
+        : { ...user?.server, ...serverOverrides };
   return {
     logLevel: "warn",
     ...user,
@@ -215,7 +220,7 @@ export const make = <TargetConfig = unknown>(
     const makeConfig = (
       root: string,
       target: AstroTarget,
-      overrides?: Pick<AstroConfigInputs, "port" | "extraVitePlugins">,
+      overrides?: Pick<AstroConfigInputs, "port" | "host" | "extraVitePlugins">,
     ): AstroInlineConfig =>
       makeAstroInlineConfig({
         root,
@@ -274,7 +279,10 @@ export const make = <TargetConfig = unknown>(
         const root = yield* resolveRoot(devOptions?.root);
         const target = yield* resolveTarget(root);
         const astro = yield* loadAstro(root);
-        const config = makeConfig(root, target, { port: devOptions?.port });
+        const config = makeConfig(root, target, {
+          port: devOptions?.port,
+          host: devOptions?.host,
+        });
         const server = yield* Effect.acquireRelease(
           Effect.tryPromise({
             try: async () => await astro.dev(config),

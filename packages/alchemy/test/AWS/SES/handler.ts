@@ -31,7 +31,7 @@ export class SESTestFunction extends Lambda.Function<Lambda.Function>()(
 export default SESTestFunction.make(
   {
     main,
-    url: true,
+    functionUrl: true,
     timeout: Duration.seconds(30),
     // The gate is read at module load, which happens BOTH locally at deploy
     // (where the binding is declared) and inside the Lambda (where the client

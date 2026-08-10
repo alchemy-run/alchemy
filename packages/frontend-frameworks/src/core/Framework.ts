@@ -23,6 +23,8 @@ export interface FrameworkDevOptions {
   readonly root?: string | undefined;
   /** Port for the dev server. Defaults to the framework's own choice. */
   readonly port?: number | undefined;
+  /** Host the dev server binds to. Defaults to the framework's own choice. */
+  readonly host?: string | undefined;
 }
 
 export interface FrameworkDevServer {

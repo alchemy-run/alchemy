@@ -80,7 +80,7 @@ export const BindingsFleetLive = Layer.effect(
 export default AsgBindingsFunction.make(
   {
     main: import.meta.url,
-    url: true,
+    functionUrl: true,
   },
   Effect.gen(function* () {
     const { group } = yield* BindingsFleet;

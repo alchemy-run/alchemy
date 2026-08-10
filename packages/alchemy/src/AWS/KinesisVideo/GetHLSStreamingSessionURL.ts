@@ -35,7 +35,7 @@ export interface GetHLSStreamingSessionURLRequest extends Omit<
  * // init Effect. Data-plane calls fan out to GetDataEndpoint first, so
  * // allow a generous timeout.
  * export default PlaybackFunction.make(
- *   { main: import.meta.url, url: true, timeout: Duration.seconds(30) },
+ *   { main: import.meta.url, functionUrl: true, timeout: Duration.seconds(30) },
  *   Effect.gen(function* () {
  *     const stream = yield* AWS.KinesisVideo.Stream("Camera", {
  *       mediaType: "video/h264",

@@ -8,7 +8,7 @@ import * as Output from "../../Output.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
 import { Function as LambdaFunction } from "../Lambda/Function.ts";
 import type { AssetFileOption } from "./AssetDeployment.ts";
-import { Server } from "./Server.ts";
+import { Server, type ServerDevProps } from "./Server.ts";
 import {
   makeKvSite,
   type StaticSiteProps,
@@ -67,6 +67,11 @@ export interface AstroProps {
    * @default true
    */
   memo?: MemoOptions | boolean;
+  /**
+   * Options for the local dev server that runs this site under
+   * `alchemy dev`.
+   */
+  dev?: ServerDevProps;
   /**
    * SSR server (Lambda) configuration. Ignored for `output: "static"`
    * sites (no server deploys).
@@ -225,6 +230,7 @@ export const Astro = (id: string, props: AstroProps = {}) =>
       env: props.server?.environment,
       options: { astro: { ...props.astro, output } },
       memo: props.memo,
+      dev: props.dev,
     });
 
     if (isLocal) {
@@ -283,7 +289,7 @@ export const Astro = (id: string, props: AstroProps = {}) =>
       memorySize: props.server?.memorySize ?? 1024,
       timeout: props.server?.timeout ?? Duration.seconds(30),
       env: props.server?.environment,
-      url: {
+      functionUrl: {
         authType: "NONE",
         invokeMode: "RESPONSE_STREAM",
       },

@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as NodeNet from "node:net";
 import { hashDirectory, type MemoOptions } from "../../Command/Memo.ts";
 import { havePropsChanged, isResolved } from "../../Diff.ts";
 import * as LocalProvider from "../../Local/LocalProvider.ts";
@@ -30,6 +31,7 @@ interface FrameworkModule {
       readonly dev: (options?: {
         readonly root?: string;
         readonly port?: number;
+        readonly host?: string;
       }) => Effect.Effect<{ readonly url: string }, unknown>;
     },
     unknown,
@@ -51,6 +53,51 @@ export class FrameworkServerError extends Data.TaggedError(
   readonly message: string;
   readonly cause?: unknown;
 }> {}
+
+/**
+ * Options for the local dev server that runs a framework site under
+ * `alchemy dev`.
+ *
+ * Use `{ mode: "external" }` to skip starting a dev server entirely —
+ * useful when an external dev server (e.g. one you run yourself in
+ * another terminal) is serving the site instead.
+ */
+export type ServerDevProps =
+  | {
+      /**
+       * Run the framework's own dev server locally (the default).
+       * @default "server"
+       */
+      mode?: "server";
+      /**
+       * Host the dev server binds to. Defaults to the framework's own
+       * choice (localhost).
+       */
+      host?: string;
+      /**
+       * Preferred port for the dev server. Defaults to an ephemeral port.
+       * If the port is unavailable, the next free port is used unless
+       * {@link strictPort} is `true`.
+       */
+      port?: number;
+      /**
+       * When `true`, fail instead of falling back to another port if
+       * {@link port} is already in use.
+       * @default false
+       */
+      strictPort?: boolean;
+    }
+  | {
+      /**
+       * Don't start a dev server; an external dev server is running instead.
+       */
+      mode: "external";
+      /**
+       * URL the external dev server is reachable at, if applicable.
+       * This will be returned as the `url` attribute of the Server resource.
+       */
+      url?: string;
+    };
 
 export interface ServerProps {
   /**
@@ -79,10 +126,10 @@ export interface ServerProps {
    */
   options?: Record<string, unknown>;
   /**
-   * Preferred dev-server port during `alchemy dev`. Defaults to an
-   * ephemeral port.
+   * Options for the local dev server that runs this site under
+   * `alchemy dev`. See {@link ServerDevProps}.
    */
-  port?: number;
+  dev?: ServerDevProps;
   /**
    * Environment variables for the framework server. On deploy the
    * composite sets these on the Lambda; during `alchemy dev` they are
@@ -343,6 +390,54 @@ export const ServerProviderLive = () =>
   );
 
 /**
+ * Try to bind `port` on `host`; resolves `true` when the port is free.
+ * The listener is closed immediately — the port is only observed
+ * available, not reserved, so the caller should bind promptly and the
+ * framework still handles the (tiny) race window itself.
+ */
+const isPortFree = (port: number, host: string) =>
+  Effect.callback<boolean>((resume) => {
+    const server = NodeNet.createServer();
+    server.unref();
+    server.once("error", () => resume(Effect.succeed(false)));
+    server.listen(port, host, () => {
+      server.close(() => resume(Effect.succeed(true)));
+    });
+  });
+
+/**
+ * Resolve the dev server's port from the `dev` props: probe the preferred
+ * port and either fail (`strictPort`) or walk forward to the next free
+ * port when it is taken.
+ */
+const resolveDevPort = Effect.fn(function* (options: {
+  readonly framework: string;
+  readonly port: number;
+  readonly host: string;
+  readonly strictPort: boolean;
+}) {
+  const { framework, port, host, strictPort } = options;
+  if (yield* isPortFree(port, host)) return port;
+  if (strictPort) {
+    return yield* Effect.fail(
+      new FrameworkServerError({
+        framework,
+        message: `Port ${port} is already in use and \`dev.strictPort\` is set`,
+      }),
+    );
+  }
+  for (let candidate = port + 1; candidate <= port + 100; candidate++) {
+    if (yield* isPortFree(candidate, host)) return candidate;
+  }
+  return yield* Effect.fail(
+    new FrameworkServerError({
+      framework,
+      message: `No free port found between ${port} and ${port + 100}`,
+    }),
+  );
+});
+
+/**
  * The `alchemy dev` variant: runs the framework's own dev server (native
  * HMR through the framework's kit — nuxt, astro, ...) inside the dev
  * sidecar, so it survives user-code hot reloads. Restarts when the
@@ -360,6 +455,19 @@ export const ServerProviderLocal = () =>
       const fs = yield* FileSystem.FileSystem;
       return {
         start: Effect.fn(function* ({ news: props }) {
+          // External mode: an external dev server (run out-of-band by the
+          // user) serves the site — don't import the framework or spawn
+          // anything, just surface the external URL as the attribute.
+          if (props.dev?.mode === "external") {
+            return {
+              distDir: undefined,
+              clientDir: undefined,
+              serverEntry: undefined,
+              url: props.dev.url,
+              hash: { input: undefined, output: undefined },
+            };
+          }
+          const dev = props.dev;
           const root = path.resolve(initialCwd, props.root ?? ".");
           // Dev/live env parity: the composite sets these on the Lambda on
           // deploy; in dev the framework server runs inside the sidecar
@@ -379,11 +487,24 @@ export const ServerProviderLocal = () =>
             Effect.provideService(FileSystem.FileSystem, fs),
             Effect.provideService(Path.Path, path),
           );
+          // Resolve the port BEFORE handing off to the framework: probe
+          // the preferred port, fail on `strictPort`, otherwise walk
+          // forward to the next free port. Without a preferred port the
+          // framework picks its own (ephemeral) port.
+          const port =
+            dev?.port !== undefined
+              ? yield* resolveDevPort({
+                  framework: props.framework,
+                  port: dev.port,
+                  host: dev.host ?? "127.0.0.1",
+                  strictPort: dev.strictPort ?? false,
+                })
+              : undefined;
           // `dev` is scoped: the server lives in the instance scope the
           // LocalProvider helper provides and is torn down on
           // restart/delete. It resolves at readiness with the local URL.
           const { url } = yield* Effect.mapError(
-            service.dev({ root, port: props.port }),
+            service.dev({ root, port, host: dev?.host }),
             (cause) =>
               new FrameworkServerError({
                 framework: props.framework,

@@ -16,7 +16,7 @@ export class DynamoDBTestFunction extends Lambda.Function<Lambda.Function>()(
 export default DynamoDBTestFunction.make(
   {
     main,
-    url: true,
+    functionUrl: true,
   },
   Effect.gen(function* () {
     const sourceTable = yield* DynamoDB.Table("TestTable", {

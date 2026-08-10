@@ -1,10 +1,13 @@
 import * as Effect from "effect/Effect";
+import type * as Redacted from "effect/Redacted";
 import { createHash } from "node:crypto";
+import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Command from "../../Command/index.ts";
 import { toPath } from "../../FQN.ts";
 import type { Input } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
+import { ProviderModePolicy } from "../../ProviderMode.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import { Certificate } from "../ACM/Certificate.ts";
@@ -140,6 +143,45 @@ export interface StaticSiteProps {
    * User-defined tags applied to created resources.
    */
   tags?: Record<string, string>;
+  /**
+   * Local dev configuration. When `alchemy dev` runs, the build/upload is
+   * skipped and `command` is spawned as a long-lived child process tied to
+   * the stack's scope. Alchemy does not proxy or interpret the process —
+   * the dev server's own URL (e.g. `http://localhost:5173`) is what you
+   * open in the browser.
+   *
+   * @example
+   * ```typescript
+   * AWS.Website.StaticSite("App", {
+   *   path: "./app",
+   *   build: { command: "npm run build", output: "dist" },
+   *   dev: { command: "npm run dev" },
+   * });
+   * ```
+   */
+  dev?: {
+    /**
+     * Shell command to run as the local dev server (e.g. `npm run dev`).
+     */
+    command: string;
+    /**
+     * Working directory for {@link command}. Defaults to
+     * {@link StaticSiteProps.path} (the site directory), or
+     * `process.cwd()` if neither is set.
+     */
+    cwd?: string;
+    /**
+     * Environment variables for {@link command}, merged on top of
+     * `process.env`. `Redacted` values stay out of logs and state, so put
+     * secrets here rather than interpolating them into {@link command}.
+     */
+    env?: Record<string, string | Redacted.Redacted<string>>;
+    /**
+     * Override for the `url` output if alchemy fails to detect it from the
+     * stdout of the dev command.
+     */
+    url?: string;
+  };
 }
 
 /**
@@ -214,7 +256,36 @@ export interface StaticSiteProps {
  * ```
  */
 export const StaticSite = (id: string, props: StaticSiteProps) =>
-  makeKvSite(id, props).pipe(Namespace.push(id));
+  Effect.gen(function* () {
+    const ctx = yield* AlchemyContext;
+    const remoted = yield* ProviderModePolicy;
+    // Mirrors the Cloudflare Website composites: during `alchemy dev` with
+    // a `dev.command`, the site is the external dev server (spawned in the
+    // dev sidecar so it survives user-code HMR) and no cloud resources are
+    // declared; `Alchemy.remote()` opts back into the full live deployment.
+    const isLocal = ctx.dev && remoted !== true;
+
+    if (isLocal && props.dev) {
+      const dev = yield* Command.Dev("Dev", {
+        command: props.dev.command,
+        cwd:
+          props.dev.cwd ??
+          (typeof props.path === "string" ? props.path : undefined),
+        env: props.dev.env,
+      });
+      return {
+        bucket: undefined,
+        build: undefined,
+        files: undefined,
+        distribution: undefined,
+        invalidation: undefined,
+        kvNamespace: undefined,
+        url: Output.map(dev.url, (url) => url ?? props.dev?.url),
+      };
+    }
+
+    return yield* makeKvSite(id, props);
+  }).pipe(Namespace.push(id));
 
 /**
  * Dynamic server origin for {@link makeKvSite} — the KV metadata gains a

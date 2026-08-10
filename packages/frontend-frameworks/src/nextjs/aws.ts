@@ -265,6 +265,7 @@ const spawnNextDev = (options: {
   readonly root: string;
   readonly cli: string;
   readonly port: number;
+  readonly host?: string | undefined;
 }): Effect.Effect<NextDevChild, FrameworkCore.FrameworkError, Scope.Scope> =>
   Effect.acquireRelease(
     Effect.try({
@@ -274,7 +275,13 @@ const spawnNextDev = (options: {
         ) as typeof NodeChildProcessModule;
         const child = cp.spawn(
           "node",
-          [options.cli, "dev", "-p", String(options.port)],
+          [
+            options.cli,
+            "dev",
+            "-p",
+            String(options.port),
+            ...(options.host !== undefined ? ["-H", options.host] : []),
+          ],
           {
             cwd: options.root,
             stdio: ["ignore", "pipe", "pipe"],
@@ -491,8 +498,9 @@ export const make: (
       const root = yield* resolveRoot(devOptions?.root);
       const port = devOptions?.port ?? (yield* pickEphemeralPort);
       const cli = yield* resolveNextCli(root);
-      const child = yield* spawnNextDev({ root, cli, port });
-      const url = `http://localhost:${port}`;
+      const host = devOptions?.host;
+      const child = yield* spawnNextDev({ root, cli, port, host });
+      const url = `http://${host ?? "localhost"}:${port}`;
       yield* awaitNextDevReady({ url, child });
       return { url };
     });

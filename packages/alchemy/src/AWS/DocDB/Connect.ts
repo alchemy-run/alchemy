@@ -107,7 +107,7 @@ export interface ConnectOptions {
  * @example Query DocumentDB from a Function
  * ```typescript
  * export default MyFunction.make(
- *   { main: import.meta.url, url: true },
+ *   { main: import.meta.url, functionUrl: true },
  *   Effect.gen(function* () {
  *     // init — bind the cluster's managed master secret; grants
  *     // secretsmanager:GetSecretValue and attaches the function to the

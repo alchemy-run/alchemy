@@ -284,7 +284,7 @@ export interface StatementsClient {
  * @example Serve Query Results from a Lambda Function
  * ```typescript
  * export default QueryFunction.make(
- *   { main: import.meta.url, url: true },
+ *   { main: import.meta.url, functionUrl: true },
  *   Effect.gen(function* () {
  *     const namespace = yield* RedshiftServerless.Namespace("Analytics", {
  *       dbName: "analytics",

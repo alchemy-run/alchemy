@@ -598,6 +598,7 @@ export const make: (
     const vite = yield* loadVite(root);
     const config = yield* resolveViteConfig(root, adapter);
     const port = devOptions?.port ?? options?.dev?.port;
+    const host = devOptions?.host;
 
     const server = yield* Effect.acquireRelease(
       Effect.tryPromise({
@@ -607,6 +608,7 @@ export const make: (
             server: {
               ...config.server,
               ...(port !== undefined ? { port } : undefined),
+              ...(host !== undefined ? { host } : undefined),
             },
           });
           return await server.listen();

@@ -23,7 +23,7 @@ export interface CreateEventRequest extends Omit<
  * import * as AgentCore from "alchemy/AWS/BedrockAgentCore";
  *
  * export default MyFunction.make(
- *   { main: import.meta.url, url: true },
+ *   { main: import.meta.url, functionUrl: true },
  *   Effect.gen(function* () {
  *     const memory = yield* AgentCore.Memory("AgentMemory", {
  *       eventExpiryDuration: "30 days",

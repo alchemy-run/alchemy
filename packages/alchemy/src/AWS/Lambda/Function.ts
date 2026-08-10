@@ -195,11 +195,11 @@ export interface FunctionProps extends PlatformProps {
   bundle?: false;
   /**
    * Whether to create a Lambda function URL, or its configuration.
-   * `true` creates a public Function URL with `authType: "NONE"`.
-   * Set `false` to disable the Function URL.
+   * `functionUrl: true` creates a public Function URL with `authType: "NONE"`.
+   * Set `functionUrl: false` to disable the Function URL.
    * @default true
    */
-  url?: boolean | FunctionUrlConfig;
+  functionUrl?: boolean | FunctionUrlConfig;
   functionName?: string;
   // TODO(sam): use a Layer instead so we can manage Effect platform?
   runtime?: "nodejs22.x" | "nodejs24.x";
@@ -421,7 +421,7 @@ export interface NormalizedFunctionUrlConfig {
 }
 
 export const normalizeFunctionUrl = (
-  url: FunctionProps["url"] = true,
+  url: FunctionProps["functionUrl"] = true,
 ): NormalizedFunctionUrlConfig | undefined => {
   if (url === false) {
     return undefined;
@@ -484,7 +484,7 @@ export const normalizeFunctionUrl = (
  *
  * const func = yield* AWS.Lambda.Function("ApiFunction", {
  *   main: "./src/handler.ts",
- *   url: true,
+ *   functionUrl: true,
  * });
  * ```
  *
@@ -527,7 +527,7 @@ export const normalizeFunctionUrl = (
  * ```typescript
  * export default class ApiFunction extends AWS.Lambda.Function<ApiFunction>()(
  *   "ApiFunction",
- *   { main: import.meta.url, url: true },
+ *   { main: import.meta.url, functionUrl: true },
  *   Effect.gen(function* () {
  *     // init: bind resources
  *     const getItem = yield* AWS.DynamoDB.GetItem(table);
@@ -551,7 +551,7 @@ export const normalizeFunctionUrl = (
  * ```typescript
  * const func = yield* AWS.Lambda.Function("ApiFunction", {
  *   main: "./src/handler.ts",
- *   url: true,
+ *   functionUrl: true,
  * });
  * ```
  *
@@ -559,7 +559,7 @@ export const normalizeFunctionUrl = (
  * ```typescript
  * const func = yield* AWS.Lambda.Function("ApiFunction", {
  *   main: "./src/handler.ts",
- *   url: {
+ *   functionUrl: {
  *     authType: "AWS_IAM",
  *   },
  * });
@@ -1570,8 +1570,8 @@ export const FunctionProvider = () =>
         currentFunctionUrl,
       }: {
         functionName: string;
-        url: FunctionProps["url"];
-        oldUrl?: FunctionProps["url"];
+        url: FunctionProps["functionUrl"];
+        oldUrl?: FunctionProps["functionUrl"];
         currentFunctionUrl?: string;
       }) {
         const desired = normalizeFunctionUrl(url);
@@ -1660,8 +1660,8 @@ export const FunctionProvider = () =>
           }
           if (
             !deepEqual(
-              normalizeFunctionUrl(olds.url),
-              normalizeFunctionUrl(news.url),
+              normalizeFunctionUrl(olds.functionUrl),
+              normalizeFunctionUrl(news.functionUrl),
             )
           ) {
             return { action: "update" };
@@ -2012,8 +2012,8 @@ export const FunctionProvider = () =>
 
           const functionUrl = yield* createOrUpdateFunctionUrl({
             functionName,
-            url: news.url,
-            oldUrl: olds?.url,
+            url: news.functionUrl,
+            oldUrl: olds?.functionUrl,
             currentFunctionUrl: output?.functionUrl,
           });
 

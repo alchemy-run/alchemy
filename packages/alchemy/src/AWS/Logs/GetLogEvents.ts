@@ -31,7 +31,7 @@ export interface GetLogEventsRequest extends Omit<
  * // Provide the GetLogEventsHttp layer on the Function's init Effect;
  * // combine with Layer.mergeAll when using several Logs bindings.
  * export default TailFunction.make(
- *   { main: import.meta.url, url: true },
+ *   { main: import.meta.url, functionUrl: true },
  *   Effect.gen(function* () {
  *     const logGroup = yield* AWS.Logs.LogGroup("AppLogs", {});
  *     const getLogEvents = yield* AWS.Logs.GetLogEvents(logGroup);

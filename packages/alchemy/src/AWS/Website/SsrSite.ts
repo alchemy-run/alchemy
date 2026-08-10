@@ -33,8 +33,8 @@ export type SsrSiteServerOrigin =
   | {
       type: "lambda";
       /**
-       * Lambda Function created with `url` enabled — its function URL becomes
-       * the origin.
+       * Lambda Function created with `functionUrl` enabled — its function URL
+       * becomes the origin.
        */
       function: Function;
       /**
@@ -137,7 +137,7 @@ const serverUrlOf = (server: SsrSiteServerOrigin): Input<string> => {
       return Output.map((url: string | undefined) => {
         if (!url) {
           throw new Error(
-            "SsrSite lambda origins require a function created with `url` enabled.",
+            "SsrSite lambda origins require a function created with `functionUrl` enabled.",
           );
         }
         return url;

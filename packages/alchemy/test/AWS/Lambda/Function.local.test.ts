@@ -90,7 +90,7 @@ test.provider.skipIf(!dockerAvailable)(
           main: mainPath,
           handler: "handler",
           isExternal: true,
-          url: true,
+          functionUrl: true,
           env: { DEV_MARKER: "env-carried" },
         }),
       );
@@ -232,7 +232,7 @@ test.provider.skipIf(!dockerAvailable)(
             main: esmHandlerPath,
             handler: "handler",
             bundle: false,
-            url: false,
+            functionUrl: false,
             env: { TARGET_BUCKET: bucket.bucketName },
           });
           // The dualized RESOURCE (requires the alchemy floci fork ≥

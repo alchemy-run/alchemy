@@ -8,7 +8,7 @@ import * as Output from "../../Output.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
 import { Function as LambdaFunction } from "../Lambda/Function.ts";
 import type { AssetFileOption } from "./AssetDeployment.ts";
-import { Server } from "./Server.ts";
+import { Server, type ServerDevProps } from "./Server.ts";
 import {
   makeKvSite,
   type StaticSiteProps,
@@ -45,6 +45,11 @@ export interface NuxtProps {
    * @default true
    */
   memo?: MemoOptions | boolean;
+  /**
+   * Options for the local dev server that runs this site under
+   * `alchemy dev`.
+   */
+  dev?: ServerDevProps;
   /**
    * SSR server (Lambda) configuration.
    */
@@ -170,6 +175,7 @@ export const Nuxt = (id: string, props: NuxtProps = {}) =>
       env: props.server?.environment,
       options: props.nuxt ? { nuxt: props.nuxt } : undefined,
       memo: props.memo,
+      dev: props.dev,
     });
 
     if (isLocal) {
@@ -198,7 +204,7 @@ export const Nuxt = (id: string, props: NuxtProps = {}) =>
       memorySize: props.server?.memorySize ?? 1024,
       timeout: props.server?.timeout ?? Duration.seconds(30),
       env: props.server?.environment,
-      url: {
+      functionUrl: {
         authType: "NONE",
         invokeMode: "RESPONSE_STREAM",
       },

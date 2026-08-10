@@ -41,6 +41,9 @@ describe("AWS.Website.Astro local", () => {
           Effect.gen(function* () {
             const site = yield* AWS.Website.Astro("AstroSite", {
               rootDir,
+              // Pin the dev server to a deterministic port — `dev.port`
+              // flows through Server's port probe into the framework kit.
+              dev: { port: 43117 },
             });
             return { site };
           }),
@@ -52,6 +55,8 @@ describe("AWS.Website.Astro local", () => {
         expect(url).toMatch(
           /^http:\/\/(localhost|127\.0\.0\.1|\[[0-9a-fA-F:]+\])/,
         );
+        // The preferred `dev.port` was honored.
+        expect(url).toContain(":43117");
         expect(deployed.site.distribution).toBeUndefined();
         expect(deployed.site.server).toBeUndefined();
         expect(deployed.site.bucket).toBeUndefined();

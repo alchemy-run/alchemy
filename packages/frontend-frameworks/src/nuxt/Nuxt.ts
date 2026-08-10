@@ -55,7 +55,10 @@ export interface NuxtInstance {
    */
   readonly server?:
     | {
-        readonly listen: (port: number) => Promise<NuxtDevListener>;
+        readonly listen: (
+          port: number,
+          opts?: { readonly hostname?: string },
+        ) => Promise<NuxtDevListener>;
       }
     | undefined;
 }
@@ -548,9 +551,17 @@ export const make: (
       );
     }
     const port = devOptions?.port ?? options?.dev?.port ?? 0;
+    const host = devOptions?.host;
     const listener = yield* Effect.acquireRelease(
       Effect.tryPromise({
-        try: () => server.listen(port),
+        // Nitro's dev-server `listen` is listhen-backed; the second
+        // argument merges into listhen's options (older versions ignore
+        // it, degrading to the default host).
+        try: () =>
+          server.listen(
+            port,
+            host !== undefined ? { hostname: host } : undefined,
+          ),
         catch: (error) =>
           fail("Failed to start the dev server listener", error),
       }),

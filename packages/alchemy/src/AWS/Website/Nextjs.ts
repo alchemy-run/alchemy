@@ -14,7 +14,7 @@ import { Bucket } from "../S3/Bucket.ts";
 import { Queue } from "../SQS/Queue.ts";
 import type { AssetFileOption } from "./AssetDeployment.ts";
 import { AssetDeployment } from "./AssetDeployment.ts";
-import { Server } from "./Server.ts";
+import { Server, type ServerDevProps } from "./Server.ts";
 import {
   makeKvSite,
   type StaticSiteProps,
@@ -48,6 +48,11 @@ export interface NextjsProps {
    * @default true
    */
   memo?: MemoOptions | boolean;
+  /**
+   * Options for the local dev server that runs this site under
+   * `alchemy dev`.
+   */
+  dev?: ServerDevProps;
   /**
    * SSR server (Lambda) configuration.
    */
@@ -187,6 +192,7 @@ export const Nextjs = (id: string, props: NextjsProps = {}) =>
       root: props.rootDir,
       env: props.server?.environment,
       memo: props.memo,
+      dev: props.dev,
     });
 
     if (isLocal) {
@@ -297,7 +303,7 @@ export const Nextjs = (id: string, props: NextjsProps = {}) =>
         CACHE_DYNAMO_TABLE: tagCacheTable.tableName,
         ...props.server?.environment,
       },
-      url: {
+      functionUrl: {
         authType: "NONE",
         // The default server is built with the aws-lambda-streaming
         // wrapper (the framework module enforces it).
@@ -354,7 +360,7 @@ export const Nextjs = (id: string, props: NextjsProps = {}) =>
       runtime: "nodejs22.x",
       memorySize: 512,
       timeout: Duration.seconds(30),
-      url: false,
+      functionUrl: false,
     });
 
     yield* revalidationFunction.bind`Allow(${revalidationFunction}, AWS.SQS.Consume(${revalidationQueue}))`(
@@ -396,7 +402,7 @@ export const Nextjs = (id: string, props: NextjsProps = {}) =>
       env: {
         BUCKET_NAME: bucket.bucketName,
       },
-      url: {
+      functionUrl: {
         authType: "NONE",
         // The image optimizer is buffered (streaming: false in the
         // OpenNext output manifest).
