@@ -14,6 +14,30 @@ type ParamOf<Refs, N> = Extract<
 // the union of every parameter's type in the template), and a
 // `S.optionalKey` schema makes the KEY optional — mirroring exactly
 // what the compiled S.Struct does at runtime.
+/** Any `Data.TaggedError` / `Schema.TaggedError` class — both compile
+ *  to a constructor whose instances are `Error`s. */
+export type ErrorTerm = new (...args: any[]) => Error;
+
+/**
+ * The tool's DECLARED failures, from the error classes its template
+ * splices — error mention-is-presence, exactly like `${Parameter}`
+ * declares a field:
+ *
+ * ```ts
+ * class Missing extends Data.TaggedError("Missing")<{ path: string }> {}
+ *
+ * export class ReadFile extends AI.Tool<ReadFile>()("readFile", S.String)`
+ *   Read ${path}. Fails with ${Missing} when it does not exist.` {}
+ * // → readFile(input: { path: string }): Effect<string, Missing>
+ * ```
+ *
+ * A failure the template never mentions is not in the error channel:
+ * it is a DEFECT (`Effect.die`), and the model is told as much.
+ */
+export type ToolErrors<Refs> = Refs extends ErrorTerm
+  ? InstanceType<Refs>
+  : never;
+
 export type ToolParameters<Refs> = {
   [N in Extract<Refs, Parameter>["~alchemy/Name"] as ParamOf<
     Refs,
@@ -69,14 +93,14 @@ export interface Tool<
    * spliced into prose; the HANDLER's requirements ride the splice
    * (they are turn-time, satisfied by the driver at call time).
    */
-  <Err = never, Req = never>(
+  <Err extends ToolErrors<Refs[number]> = never, Req = never>(
     impl: Effect.Effect<
       (props: this["params"]) => Effect.Effect<any>,
       Err,
       Req
     >,
   ): Effect.Effect<ToolImpl<this, Err, Req>, never, Services<Refs>>;
-  <Err = never, Req = never>(
+  <Err extends ToolErrors<Refs[number]> = never, Req = never>(
     impl: (props: this["params"]) => Effect.Effect<any, Err, Req>,
   ): Effect.Effect<ToolImpl<this, Err, Req>, never, Services<Refs>>;
 }
@@ -119,7 +143,7 @@ export const Tool: {
           // function, never an Effect to normalize
           (
             input: ToolParameters<Refs[number]>,
-          ) => Effect.Effect<any, never, RuntimeContext>
+          ) => Effect.Effect<any, ToolErrors<Refs[number]>, RuntimeContext>
         >;
     };
   };
@@ -159,6 +183,24 @@ const makeTool = (
     template,
     ...(returns !== undefined ? { returns } : {}),
   }) as any;
+};
+
+/**
+ * A spliced ERROR class — `Data.TaggedError` and `Schema.TaggedError`
+ * both produce a constructor whose prototype is an `Error`, which is
+ * the one check that catches both.
+ */
+export const isErrorTerm = (value: unknown): value is ErrorTerm =>
+  typeof value === "function" &&
+  (value as { prototype?: unknown }).prototype instanceof Error;
+
+/**
+ * The tag a spliced error class declares: `Schema.TaggedError` carries
+ * a static `_tag`; `Data.TaggedError` names the class after its tag.
+ */
+export const errorTag = (term: ErrorTerm): string => {
+  const tag = (term as unknown as { _tag?: unknown })._tag;
+  return typeof tag === "string" ? tag : term.name;
 };
 
 export const isTool = (value: unknown): value is Tool<any, any> =>

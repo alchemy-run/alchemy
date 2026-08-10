@@ -27,12 +27,18 @@ const InMemoryDriver = DriverLocal.pipe(Layer.provide(ThreadStorageMemory));
 /** The two codemode ToolEngines, over the in-process evaluator. */
 const codeModeAsync = AI.CodeModeAsync().pipe(Layer.provide(AI.EvalFunction));
 const codeModeEffect = AI.CodeModeEffect().pipe(Layer.provide(AI.EvalFunction));
+
+/** A tool's DECLARED failure — mentioned in its prose, so it lands in
+ *  the generated signature's error channel. */
+class Missing extends Data.TaggedError("Missing")<{ path: string }> {}
+const path = AI.Parameter("path", S.String)`Absolute path to read.`;
 import { RuntimeContext } from "@/RuntimeContext.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Data from "effect/Data";
 import * as Ref from "effect/Ref";
 import * as S from "effect/Schema";
 import * as Schedule from "effect/Schedule";
@@ -1372,8 +1378,10 @@ ${
       yield* researcher.dispatch("go");
 
       const evalTool = model.calls[0]!.tools[0]!;
+      // the error channel is explicit: a tool that declares no errors
+      // can only fail with a DEFECT, and the signature says so
       expect(evalTool.description).toContain(
-        "declare function search(input: { query: string }): Effect<unknown>",
+        "declare function search(input: { query: string }): Effect<unknown, never>",
       );
       expect(search.queries).toEqual(["alchemy"]);
       expect(Model.promptText(model.calls[1]!)).toContain(
@@ -1386,6 +1394,45 @@ ${
       ),
     );
   });
+
+  it.effect(
+    "codemode(effect): a mentioned error IS the signature's error channel",
+    () => {
+      const model = Model.make([
+        () => [
+          Model.toolCall("eval", {
+            code: `
+              return Effect.gen(function* () {
+                return yield* tools.readFile({ path: "/tmp/x" });
+              }).pipe(Effect.catchTag("Missing", () => Effect.succeed("caught")));`,
+          }),
+          Model.finish("tool-calls"),
+        ],
+        () => [Model.text("done"), Model.finish()],
+      ]);
+      return Effect.gen(function* () {
+        const charter = Effect.gen(function* () {
+          const readFile = yield* AI.Tool("readFile", S.String)`
+Read the file at ${path}. Fails with ${Missing} when it does not exist.`(() =>
+            Effect.fail(new Missing({ path: "/tmp/x" })),
+          );
+          return AI.fragment`Read things with ${readFile}.`;
+        });
+        const researcher = yield* interpret(Researcher, charter);
+        yield* researcher.dispatch("go");
+
+        const evalTool = model.calls[0]!.tools[0]!;
+        // the MENTIONED error is the error channel — and it is
+        // documented, so the model knows what it may catch
+        expect(evalTool.description).toContain(
+          "declare function readFile(input: { path: string }): Effect<string, Missing>",
+        );
+        expect(evalTool.description).toContain("@throws Missing");
+        // the program caught it by tag, so the round answered normally
+        expect(Model.promptText(model.calls[1]!)).toContain("caught");
+      }).pipe(Effect.scoped, Effect.provide(testLayer(model, codeModeEffect)));
+    },
+  );
 
   it.effect("codemode: a broken program fails model-visibly", () => {
     const model = Model.make([

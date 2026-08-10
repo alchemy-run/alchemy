@@ -49,20 +49,33 @@ const renderType = (schema: any, depth = 0): string => {
   }
 };
 
-/** One `declare function` line per grant, with its doc as a comment.
- *  `wrap` reflects the convention's return shape (`Promise` vs
- *  `Effect`). */
+/**
+ * One `declare function` line per grant, with its doc as a comment —
+ * plus a line per DECLARED failure, so the model can see what a call
+ * may fail with and handle it. `wrap` reflects the convention's return
+ * shape: it receives the success type and the union of error tags
+ * (`never` when the tool declares none).
+ */
 const renderSignature = (
   grant: ToolGrant,
-  wrap: (returns: string) => string,
+  wrap: (returns: string, errors: string) => string,
 ): string => {
-  const doc = grant.description
-    .split("\n")
-    .map((line) => `// ${line}`)
-    .join("\n");
+  const lines = grant.description.split("\n");
+  for (const error of grant.errors) {
+    lines.push(
+      error.fields === undefined
+        ? `@throws ${error.tag}`
+        : `@throws ${error.tag} ${renderType(error.fields)}`,
+    );
+  }
+  const doc = lines.map((line) => `// ${line}`).join("\n");
+  const errors =
+    grant.errors.length === 0
+      ? "never"
+      : grant.errors.map((error) => error.tag).join(" | ");
   return `${doc}\ndeclare function ${grant.name}(input: ${renderType(
     grant.parameters,
-  )}): ${wrap(renderType(grant.returns))}`;
+  )}): ${wrap(renderType(grant.returns), errors)}`;
 };
 
 /** Render an eval result as the tool result the model reads —
@@ -109,7 +122,7 @@ export interface CodeModeOptions {
  *   never learns which convention called it).
  */
 export const makeCodeMode = (convention: {
-  readonly wrap: (returns: string) => string;
+  readonly wrap: (returns: string, errors: string) => string;
   readonly teach: (signatures: string) => string;
   readonly wrapCode: (body: string) => string;
   readonly options?: CodeModeOptions;

@@ -14,6 +14,17 @@ export interface ToolGrant {
   readonly parameters: unknown;
   /** JSON schema of the tool's return value (`unknown` when undeclared). */
   readonly returns: unknown;
+  /**
+   * The tool's DECLARED failures — the error classes its template
+   * spliced (error mention-is-presence). `fields` is the error's JSON
+   * schema when it is a `Schema.TaggedError`; a `Data.TaggedError`
+   * contributes its tag alone. Anything not listed here is a DEFECT,
+   * not a failure the program can catch.
+   */
+  readonly errors: ReadonlyArray<{
+    readonly tag: string;
+    readonly fields?: unknown;
+  }>;
   readonly handler: (input: any) => Effect.Effect<any, any>;
 }
 

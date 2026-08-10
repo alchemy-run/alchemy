@@ -49,7 +49,13 @@ import type {
   ThreadHandle,
   ThreadStorageService,
 } from "./ThreadStorage.ts";
-import { isTool, isToolImpl, type Tool } from "./Tool.ts";
+import {
+  errorTag,
+  isErrorTerm,
+  isTool,
+  isToolImpl,
+  type Tool,
+} from "./Tool.ts";
 import { ToolEngine, type ToolPresentation } from "./ToolEngine.ts";
 
 /**
@@ -195,9 +201,51 @@ export const render = (
  * driver's toolkits are dynamic and open-ended, so strict grammars
  * are the wrong trade; non-strict tool calling has no such limit.
  */
+/**
+ * The DECLARED FAILURES a compiled tool carries, read back off the
+ * tool by the tool engine — see {@link ToolGrant.errors}. An
+ * annotation (rather than a field) because the compiled artifact is
+ * effect-AI's `Tool`, whose shape we do not own.
+ */
+export const ToolErrorTags: Context.Reference<
+  ReadonlyArray<{ readonly tag: string; readonly fields?: unknown }>
+> = Context.Reference("alchemy/AI/ToolErrorTags", {
+  defaultValue: (): ReadonlyArray<{
+    readonly tag: string;
+    readonly fields?: unknown;
+  }> => [],
+});
+
+/** The declared failures of a compiled tool, oldest mention first. */
+export const getToolErrors = (
+  tool: AiTool.Any,
+): ReadonlyArray<{ readonly tag: string; readonly fields?: unknown }> =>
+  Context.get(tool.annotations, ToolErrorTags);
+
 export const compileTool = (term: Tool<any, any[]>) => {
   const fields: Record<string, S.Top> = {};
+  // ERROR mention-is-presence: the error classes the template splices
+  // ARE the tool's failure channel; everything else is a defect
+  const errors: Array<{ tag: string; fields?: unknown }> = [];
+  const errorSchemas: Array<S.Top> = [];
   for (const ref of term.refs) {
+    if (isErrorTerm(ref)) {
+      const tag = errorTag(ref);
+      if (errors.some((error) => error.tag === tag)) continue;
+      // a Schema.TaggedError is itself a schema — it can describe its
+      // fields on the wire; a Data.TaggedError contributes its tag
+      const schema = S.isSchema(ref as never)
+        ? (ref as unknown as S.Top)
+        : undefined;
+      if (schema !== undefined) errorSchemas.push(schema);
+      errors.push({
+        tag,
+        ...(schema !== undefined
+          ? { fields: AiTool.getJsonSchemaFromSchema(schema as never) }
+          : {}),
+      });
+      continue;
+    }
     if (!isParameter(ref)) continue;
     // the Parameter's template IS the field's description — annotate
     // the schema so it reaches the provider's JSON schema (description
@@ -219,9 +267,18 @@ export const compileTool = (term: Tool<any, any[]>) => {
     // the declared RETURN schema (`AI.Tool("readDiff", S.String)`) —
     // codemode renders it into the generated signature
     success: (term.returns as S.Top | undefined) ?? S.Unknown,
-    failure: S.Unknown,
+    // the declared failures, when they can describe themselves;
+    // `failureMode: "return"` keeps a failure a MODEL-VISIBLE result
+    failure:
+      errorSchemas.length === 0
+        ? S.Unknown
+        : errorSchemas.length === 1
+          ? errorSchemas[0]!
+          : (S.Union(errorSchemas as never) as S.Top),
     failureMode: "return",
-  }).annotate(AiTool.Strict, false);
+  })
+    .annotate(AiTool.Strict, false)
+    .annotate(ToolErrorTags, errors);
 };
 
 /**
@@ -882,6 +939,7 @@ export const compileTick = (
               returns: AiTool.getJsonSchemaFromSchema(
                 (tool as any).successSchema,
               ),
+              errors: getToolErrors(tool),
               handler: capabilityHandlers[tool.name]!,
             })),
           )
