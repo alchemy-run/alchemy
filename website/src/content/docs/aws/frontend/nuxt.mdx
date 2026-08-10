@@ -1,0 +1,133 @@
+---
+title: Nuxt
+description: Deploy a Nuxt app to AWS with AWS.Website.Nuxt — nitro's aws-lambda preset on a streaming Lambda Function URL, S3 assets behind CloudFront, and Nuxt's own dev server under alchemy dev.
+sidebar:
+  order: 10
+---
+
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+export const devDeps = "@alchemy.run/web-frameworks";
+
+`AWS.Website.Nuxt` deploys a [Nuxt](https://nuxt.com) app to AWS. It
+builds the app through your project's own `@nuxt/kit` with nitro's
+`aws-lambda` preset: the nitro server runs on a Lambda Function URL
+with response streaming, and client assets plus prerendered pages are
+served from a private S3 bucket through CloudFront. A CloudFront
+Function routes each request at the edge — uploaded files go to S3,
+everything else streams from the Lambda.
+
+## Install
+
+The build integration is not bundled with alchemy. Install
+`@alchemy.run/web-frameworks`; the resource loads its `/nuxt` and
+`/nuxt/aws` exports from your project at deploy time. It is only used
+at build time, so a dev dependency is enough:
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun add -d ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm install -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+</Tabs>
+
+## Deploy a Nuxt app
+
+Point `rootDir` at the directory containing `nuxt.config.ts` and
+surface the site's URL from the Stack:
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as AWS from "alchemy/AWS";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyNuxtApp",
+  {
+    providers: AWS.providers(),
+    state: AWS.state(),
+  },
+  Effect.gen(function* () {
+    const site = yield* AWS.Website.Nuxt("Web", {
+      rootDir: ".",
+    });
+    return { url: site.url };
+  }),
+);
+```
+
+Your `nuxt.config.ts` loads natively — route rules, runtime config,
+and modules all apply. The deploy target owns `nitro.preset`
+(`aws-lambda` with streaming enabled), so there is nothing
+AWS-specific to add to your config. Prerendered routes
+(`routeRules: { "/about": { prerender: true } }`) are uploaded to S3
+and served from the edge without invoking the server.
+
+## Local dev
+
+`alchemy dev` runs Nuxt's own dev server — native HMR through your
+project's toolchain — instead of deploying anything:
+
+```sh
+bun alchemy dev ./alchemy.run.ts
+```
+
+`site.url` is the dev server's `http://localhost:<port>` address and
+no AWS resources are created. Wrap the site in `Alchemy.remote()` to
+deploy the real infrastructure even during dev.
+
+## Tune the server function
+
+```typescript
+const site = yield* AWS.Website.Nuxt("Web", {
+  rootDir: ".",
+  server: {
+    memorySize: 2048,
+    environment: {
+      NUXT_PUBLIC_API_BASE: api.url,
+    },
+  },
+});
+```
+
+## Custom domain
+
+```typescript
+const site = yield* AWS.Website.Nuxt("Web", {
+  rootDir: ".",
+  domain: {
+    name: "app.example.com",
+    hostedZoneId: zone.hostedZoneId,
+  },
+});
+```
+
+The certificate is created in `us-east-1` (required by CloudFront),
+DNS validation records and the alias record are managed through
+Route 53.
+
+## Share a distribution with Router
+
+CloudFront distributions take minutes to create. To serve several
+sites (or a site plus an API) from one distribution, attach the site
+to an [`AWS.Website.Router`](/aws/frontend/static-site#compose-with-router):
+
+```typescript
+const router = yield* AWS.Website.Router("FrontDoor", {
+  domain: { name: "example.com", hostedZoneId: zone.hostedZoneId },
+});
+
+const site = yield* AWS.Website.Nuxt("Web", {
+  rootDir: ".",
+  router: { instance: router },
+});
+```

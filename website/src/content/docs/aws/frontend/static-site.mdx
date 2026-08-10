@@ -83,6 +83,31 @@ when source files change. `environment` variables are passed to the build
 command, so outputs from other resources (like an API URL) flow straight into
 the frontend bundle.
 
+## SPAs and 404 pages
+
+A miss — a request that matches no uploaded file — can be answered two ways,
+and they are mutually exclusive:
+
+```typescript
+// Single-page app: misses serve index.html with a 200 so the
+// client-side router takes over.
+const app = yield* AWS.Website.StaticSite("App", {
+  path: "./app",
+  build: { command: "bun run build", output: "dist" },
+  spa: true,
+});
+
+// Static site: misses return a real 404 status with your error page.
+const docs = yield* AWS.Website.StaticSite("Docs", {
+  path: "./docs/dist",
+  errorPage: "404.html",
+});
+```
+
+Pretty URLs work in both modes: `/about` serves `about.html` or
+`about/index.html` when one was uploaded, resolved at the edge from the file
+manifest.
+
 ## Compose sites with a Router
 
 `AWS.Website.Router` is a shared CloudFront front door: one distribution whose
