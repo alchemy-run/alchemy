@@ -200,6 +200,14 @@ interface WorkerHostLike {
 const isWorkerHost = (value: unknown): value is WorkerHostLike =>
   (typeof value === "object" || typeof value === "function") &&
   value !== null &&
+  // `in` first: a resource proxy answers property READS for any attribute
+  // name with a callable `PropExpr` Output accessor, so `typeof
+  // host.export === "function"` alone is true for EVERY resource (a
+  // Lambda included). `in` forwards to the proxy target and only reports
+  // properties that really exist (`export` is Object.assigned onto worker
+  // instances by their runtime context; refs report nothing).
+  "bind" in (value as object) &&
+  "export" in (value as object) &&
   typeof (value as { bind?: unknown }).bind === "function" &&
   typeof (value as { export?: unknown }).export === "function";
 
