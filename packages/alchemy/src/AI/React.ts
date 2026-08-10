@@ -30,7 +30,7 @@
 import { useChat as useAiChat } from "@ai-sdk/react";
 import type { ChatInit, UIMessage } from "ai";
 import { useEffect, useMemo } from "react";
-import { chatId as makeChatId } from "./Chats.ts";
+import { sessionId as makeChatId } from "./SessionIndex.ts";
 import { SessionSocketTransport } from "./EventStream.ts";
 
 /**

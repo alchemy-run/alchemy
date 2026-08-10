@@ -8,9 +8,9 @@
  */
 import * as AI from "@/AI/index.ts";
 import { DriverLocal } from "@/AI/DriverLocal.ts";
-import { MemoryThreadStorage } from "@/AI/ThreadStorage.ts";
+import { ThreadStorageMemory } from "@/AI/ThreadStorageMemory.ts";
 
-const InMemoryDriver = DriverLocal.pipe(Layer.provide(MemoryThreadStorage));
+const InMemoryDriver = DriverLocal.pipe(Layer.provide(ThreadStorageMemory));
 import { RuntimeContext } from "@/RuntimeContext.ts";
 import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
 import { describe, expect, it } from "alchemy-test";

@@ -3,7 +3,7 @@
  *
  * ```ts
  * AI.DriverLocal.pipe(
- *   Layer.provide(SqliteThreadStorage(".alchemy/runs.sqlite")),
+ *   Layer.provide(ThreadStorageSqlite(".alchemy/runs.sqlite")),
  * )
  * ```
  *
@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS session_observations (
   PRIMARY KEY (term, key, seq)
 );`;
 
-export const SqliteThreadStorage = (path: string): Layer.Layer<ThreadStorage> =>
+export const ThreadStorageSqlite = (path: string): Layer.Layer<ThreadStorage> =>
   Layer.effect(
     ThreadStorage,
     Effect.gen(function* () {
@@ -78,7 +78,7 @@ export const SqliteThreadStorage = (path: string): Layer.Layer<ThreadStorage> =>
           return database;
         },
         catch: (cause) =>
-          new Error(`SqliteThreadStorage failed to open ${path}: ${cause}`),
+          new Error(`ThreadStorageSqlite failed to open ${path}: ${cause}`),
       }).pipe(Effect.orDie);
 
       return ThreadStorage.of({

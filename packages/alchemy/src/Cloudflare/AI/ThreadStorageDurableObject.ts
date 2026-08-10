@@ -110,7 +110,7 @@ export interface DurableObjectSessionStorage {
  * request-time effects (the DO constructor also runs at PLAN time,
  * against a mock state).
  */
-export const makeDurableObjectSessionStorage = (
+export const makeThreadStorageDurableObject = (
   state: DurableObjectState["Service"],
 ): DurableObjectSessionStorage => {
   const storage = state.storage;

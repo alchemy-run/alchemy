@@ -21,13 +21,13 @@ test.skipIf(!hasCredentials)(
   async () => {
     const chats = await Effect.runPromise(
       Effect.gen(function* () {
-        const projection = yield* AI.Chats;
-        return yield* projection.list();
+        const index = yield* AI.SessionIndex;
+        return yield* index.list();
       }).pipe(
         Effect.provide(Local),
         Effect.provide(BunServices.layer),
         Effect.scoped,
-      ) as Effect.Effect<ReadonlyArray<AI.ChatSummary>>,
+      ) as Effect.Effect<ReadonlyArray<AI.SessionSummary>>,
     );
     expect(Array.isArray(chats)).toBe(true);
   },

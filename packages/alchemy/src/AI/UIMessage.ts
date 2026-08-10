@@ -1,7 +1,7 @@
 /**
  * The Vercel AI SDK adapter — driver vocabulary rendered into the
  * `useChat` wire protocol (designs/ai/streaming.md). The projection
- * ({@link Chats}) stays protocol-neutral; this module is where AI SDK
+ * stays protocol-neutral; this module is where AI SDK
  * shapes are minted:
  *
  * - {@link toUIMessages} reduces a chat's canonical log (plus the
@@ -15,7 +15,19 @@
  * dependency.
  */
 import type { UIMessage, UIMessageChunk, UIMessagePart } from "ai";
-import type { StreamingSample } from "./Chats.ts";
+/** The IN-FLIGHT sampling a projection may accumulate from
+ *  `assistant-delta` and live `tool-call` observations — transient:
+ *  the final `assistant` observation restates the whole sampling. */
+export interface StreamingSample {
+  readonly tick: number;
+  readonly text: string;
+  readonly reasoning: string;
+  readonly toolCalls: ReadonlyArray<{
+    readonly id: string;
+    readonly name: string;
+    readonly input: unknown;
+  }>;
+}
 import { renderCrash } from "./DriverCore.ts";
 import type { SessionObservation } from "./EventStream.ts";
 

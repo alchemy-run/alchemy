@@ -1,7 +1,7 @@
 /**
  * The `ThreadStorage` CONTRACT, asserted against both local
- * implementations — the same suite runs over `MemoryThreadStorage`
- * and `SqliteThreadStorage`, so a third implementation (a new
+ * implementations — the same suite runs over `ThreadStorageMemory`
+ * and `ThreadStorageSqlite`, so a third implementation (a new
  * substrate) can copy these assertions as its conformance test.
  *
  * What the contract guarantees (what `DriverCore` relies on):
@@ -14,8 +14,9 @@
  *   surface) and `remove` drops a settled session entirely.
  */
 import type { SessionObservation } from "@/AI/EventStream.ts";
-import { MemoryThreadStorage, ThreadStorage } from "@/AI/ThreadStorage.ts";
-import { SqliteThreadStorage } from "@/SQLite/ThreadStorage.ts";
+import { ThreadStorage } from "@/AI/ThreadStorage.ts";
+import { ThreadStorageMemory } from "@/AI/ThreadStorageMemory.ts";
+import { ThreadStorageSqlite } from "@/SQLite/ThreadStorageSqlite.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -165,14 +166,14 @@ const contract = (
     );
   });
 
-contract("MemoryThreadStorage", Effect.succeed(MemoryThreadStorage));
+contract("ThreadStorageMemory", Effect.succeed(ThreadStorageMemory));
 
 contract(
-  "SqliteThreadStorage",
+  "ThreadStorageSqlite",
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const dir = yield* fs.makeTempDirectory({ prefix: "thread-storage-" });
-    return SqliteThreadStorage(path.join(dir, "runs.sqlite"));
+    return ThreadStorageSqlite(path.join(dir, "runs.sqlite"));
   }),
 );

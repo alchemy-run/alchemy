@@ -5,9 +5,9 @@
  * via `doppler run -p alchemy-v2 -c dev -- bun run test …`).
  */
 import { DriverLocal } from "@/AI/DriverLocal.ts";
-import { MemoryThreadStorage } from "@/AI/ThreadStorage.ts";
+import { ThreadStorageMemory } from "@/AI/ThreadStorageMemory.ts";
 
-const InMemoryDriver = DriverLocal.pipe(Layer.provide(MemoryThreadStorage));
+const InMemoryDriver = DriverLocal.pipe(Layer.provide(ThreadStorageMemory));
 import { RuntimeContext } from "@/RuntimeContext.ts";
 import { AnthropicClient, AnthropicLanguageModel } from "@effect/ai-anthropic";
 import { describe, expect, it } from "alchemy-test";

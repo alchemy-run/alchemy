@@ -20,9 +20,9 @@
  */
 import * as AI from "@/AI/index.ts";
 import { DriverLocal } from "@/AI/DriverLocal.ts";
-import { MemoryThreadStorage } from "@/AI/ThreadStorage.ts";
+import { ThreadStorageMemory } from "@/AI/ThreadStorageMemory.ts";
 
-const InMemoryDriver = DriverLocal.pipe(Layer.provide(MemoryThreadStorage));
+const InMemoryDriver = DriverLocal.pipe(Layer.provide(ThreadStorageMemory));
 import { RuntimeContext } from "@/RuntimeContext.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Deferred from "effect/Deferred";

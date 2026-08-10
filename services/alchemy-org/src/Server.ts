@@ -22,7 +22,7 @@ import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { GeneralEngineer } from "./Engineer.ts";
 import { engineerRoutes } from "./Routes.ts";
-import { DriverLocal, EngineerChats } from "./services/Driver.ts";
+import { DriverLocal } from "./services/Driver.ts";
 import {
   ReadToolsLocal,
   RunToolsLocal,
@@ -37,19 +37,17 @@ const WorkspaceLive = Workspace.fixed(workspaceRoot);
  * The whole engineer over LOCAL physics — the charter, the
  * read/run/write toolbox over one fixed workspace, and the org's
  * assembled driver (services/Driver.ts: AI.DriverLocal +
- * SqliteThreadStorage + Model + ChatsObserver + ref store). The
- * service provides this to its init effect; the composition smoke
- * test builds it directly.
+ * ThreadStorageSqlite + Model + SessionIndexSqlite + ref store). The
+ * driver bundle is provideMERGED because the HTTP edge consumes it
+ * too: `SessionSockets` for the `/attach` door, `SessionIndex` for
+ * the board, `ThreadStorage` for transcripts. The service provides
+ * this to its init effect; the composition smoke test builds it
+ * directly.
  */
 export const EngineerLocal = GeneralEngineer.pipe(
   Layer.provide([ReadToolsLocal, RunToolsLocal, WriteToolsLocal]),
   Layer.provide(WorkspaceLive),
-  // provideMERGE: the HTTP edge consumes SessionSockets for the
-  // run-socket `/attach` door, so the driver bundle must be exported
   Layer.provideMerge(DriverLocal),
-  // the chat projection (same const the driver bundle observes into)
-  // — consumed by the HTTP edge for the transcript
-  Layer.provideMerge(EngineerChats),
   Layer.orDie,
 );
 

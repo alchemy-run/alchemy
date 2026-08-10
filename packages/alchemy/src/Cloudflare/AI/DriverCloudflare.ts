@@ -10,7 +10,7 @@
  * `AI.DriverLocal` runs on a laptop. This module contributes only
  * what the substrate physically owns:
  *
- * - **storage** — {@link makeDurableObjectSessionStorage}: the shared
+ * - **storage** — {@link makeThreadStorageDurableObject}: the shared
  *   `ThreadHandle` contract over the instance's own rows;
  * - **kick** — `state.waitUntil(engine.burst(key))`: execution rides
  *   DO events; parking is returning;
@@ -42,10 +42,8 @@ import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest"
 import type * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type { Actor, SessionRef } from "../../AI/Agent.ts";
 import { Driver, type Charter, type Interpretable } from "../../AI/Driver.ts";
-import {
-  makeMemoryThreadStorage,
-  type ThreadStorageService,
-} from "../../AI/ThreadStorage.ts";
+import type { ThreadStorageService } from "../../AI/ThreadStorage.ts";
+import { makeThreadStorageMemory } from "../../AI/ThreadStorageMemory.ts";
 import {
   makeSessionEngine,
   reminderInput,
@@ -67,11 +65,11 @@ import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { upgrade, type WebSocket } from "../Workers/WebSocket.ts";
 import { Worker } from "../Workers/Worker.ts";
 import {
-  makeDurableObjectSessionStorage,
+  makeThreadStorageDurableObject,
   REMIND,
   seqKey,
   seqOf,
-} from "./DurableObjectThreadStorage.ts";
+} from "./ThreadStorageDurableObject.ts";
 
 /** What one `interpret` call recorded — all a DO activation needs to
  *  BECOME a session of its term. */
@@ -183,7 +181,7 @@ export const DurableObjectHost: Layer.Layer<
       Effect.gen(function* () {
         const state = yield* DurableObjectState;
         const storage = state.storage;
-        const store = makeDurableObjectSessionStorage(state);
+        const store = makeThreadStorageDurableObject(state);
         /**
          * WHO THIS ACTIVATION IS, read lazily. The constructor's outer
          * effect also runs at PLAN time — against a mock state with no
@@ -271,7 +269,7 @@ export const DurableObjectHost: Layer.Layer<
          * inline by the spawn call and are not restorable by design.
          */
         let engineRef: SessionEngine | undefined;
-        const memoryStore = makeMemoryThreadStorage();
+        const memoryStore = makeThreadStorageMemory();
         const stateStore = makeDurableObjectStore(state);
         const engine = Effect.sync((): SessionEngine => {
           if (engineRef !== undefined) return engineRef;

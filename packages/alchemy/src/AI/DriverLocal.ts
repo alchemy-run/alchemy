@@ -15,15 +15,15 @@
  * - **restore** — persisted sessions revive parked at interpret,
  *   their fibers started when the Host program runs.
  *
- * Substrate is the `ThreadStorage` Layer: `MemoryThreadStorage` for
- * ephemeral sessions, `SqliteThreadStorage` for a durable local
+ * Substrate is the `ThreadStorage` Layer: `ThreadStorageMemory` for
+ * ephemeral sessions, `ThreadStorageSqlite` for a durable local
  * process — with the durable inbox and the round liveness marker,
  * a killed process redelivers pre-crash inputs and recovers
  * interrupted rounds exactly as Durable Objects do.
  *
  * ```ts
- * AI.DriverLocal.pipe(Layer.provide(AI.MemoryThreadStorage))
- * AI.DriverLocal.pipe(Layer.provide(SqliteThreadStorage(".alchemy/runs.sqlite")))
+ * AI.DriverLocal.pipe(Layer.provide(AI.ThreadStorageMemory))
+ * AI.DriverLocal.pipe(Layer.provide(ThreadStorageSqlite(".alchemy/runs.sqlite")))
  * ```
  */
 import * as Context from "effect/Context";
