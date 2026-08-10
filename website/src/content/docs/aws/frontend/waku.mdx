@@ -46,9 +46,7 @@ export default Alchemy.Stack(
     state: AWS.state(),
   },
   Effect.gen(function* () {
-    const site = yield* AWS.Website.Waku("Web", {
-      rootDir: ".",
-    });
+    const site = yield* AWS.Website.Waku("Web");
     return { url: site.url };
   }),
 );
@@ -69,7 +67,6 @@ infrastructure even during dev.
 
 ```typescript
 const site = yield* AWS.Website.Waku("Web", {
-  rootDir: ".",
   domain: {
     name: "app.example.com",
     hostedZoneId: zone.hostedZoneId,

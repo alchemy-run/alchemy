@@ -57,9 +57,7 @@ export default Alchemy.Stack(
     state: AWS.state(),
   },
   Effect.gen(function* () {
-    const site = yield* AWS.Website.Nuxt("Web", {
-      rootDir: ".",
-    });
+    const site = yield* AWS.Website.Nuxt("Web");
     return { url: site.url };
   }),
 );
@@ -89,7 +87,6 @@ deploy the real infrastructure even during dev.
 
 ```typescript
 const site = yield* AWS.Website.Nuxt("Web", {
-  rootDir: ".",
   server: {
     memorySize: 2048,
     environment: {
@@ -103,7 +100,6 @@ const site = yield* AWS.Website.Nuxt("Web", {
 
 ```typescript
 const site = yield* AWS.Website.Nuxt("Web", {
-  rootDir: ".",
   domain: {
     name: "app.example.com",
     hostedZoneId: zone.hostedZoneId,
@@ -127,7 +123,6 @@ const router = yield* AWS.Website.Router("FrontDoor", {
 });
 
 const site = yield* AWS.Website.Nuxt("Web", {
-  rootDir: ".",
   router: { instance: router },
 });
 ```
