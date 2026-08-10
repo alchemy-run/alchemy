@@ -362,12 +362,13 @@
     "access": "public"
   },
   "dependencies": {
+    "@alchemy.run/cloudflare-runtime": "workspace:*",
+    "@alchemy.run/floci": "workspace:*",
     "@alchemy.run/node-utils": "catalog:",
     "@aws-sdk/credential-providers": "catalog:",
     "@clack/prompts": "^1.7.0",
     "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/axiom": "workspace:*",
-    "@alchemy.run/cloudflare-runtime": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",

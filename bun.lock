@@ -1346,6 +1346,7 @@
       },
       "dependencies": {
         "@alchemy.run/cloudflare-runtime": "workspace:*",
+        "@alchemy.run/floci": "workspace:*",
         "@alchemy.run/node-utils": "catalog:",
         "@aws-sdk/credential-providers": "catalog:",
         "@clack/prompts": "^1.7.0",
@@ -1564,6 +1565,18 @@
         "@playwright/test": "catalog:",
         "rolldown": "catalog:",
         "vite": "catalog:",
+      },
+    },
+    "packages/floci": {
+      "name": "@alchemy.run/floci",
+      "version": "0.0.1",
+      "devDependencies": {
+        "@types/node": "catalog:",
+        "effect": "catalog:",
+        "typescript": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
       },
     },
     "packages/frontend-frameworks": {
@@ -1829,6 +1842,8 @@
     "@alchemy.run/cloudflare-runtime": ["@alchemy.run/cloudflare-runtime@workspace:packages/cloudflare-runtime"],
 
     "@alchemy.run/cloudflare-test-tools": ["@alchemy.run/cloudflare-test-tools@workspace:packages/cloudflare-test-tools"],
+
+    "@alchemy.run/floci": ["@alchemy.run/floci@workspace:packages/floci"],
 
     "@alchemy.run/frontend-frameworks": ["@alchemy.run/frontend-frameworks@workspace:packages/frontend-frameworks"],
 
