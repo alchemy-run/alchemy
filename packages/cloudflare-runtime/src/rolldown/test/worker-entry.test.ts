@@ -1,3 +1,4 @@
+import path from "node:path";
 import type * as vite from "vite";
 import { assert, describe, expect, it } from "vitest";
 import { optionsPlugin } from "../plugins/options.ts";
@@ -26,10 +27,7 @@ describe("vite worker entry resolution", () => {
       },
     });
     expect(config.environments?.ssr?.build?.rollupOptions?.input).toEqual({
-      app:
-        process.platform === "win32"
-          ? "\0distilled:worker-entry:D:/project/workers/app.ts"
-          : "\0distilled:worker-entry:/project/workers/app.ts",
+      app: `\0distilled:worker-entry:${path.resolve("/project", "./workers/app.ts").replaceAll("\\", "/")}`,
     });
   });
 
