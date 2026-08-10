@@ -3,44 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Eval } from "./Eval.ts";
 
-/** Strip TypeScript annotations when running under bun; else run as-is. */
-const transpile = (code: string): string => {
-  const bun = (globalThis as any).Bun;
-  if (bun?.Transpiler === undefined) return code;
-  return new bun.Transpiler({ loader: "ts" }).transformSync(code);
-};
-
-/**
- * The model writes a function BODY (top-level `return` and all), which
- * a module-level transpiler rejects — so wrap it into a NAMED async
- * function declaration first (a bare expression statement would be
- * dead-code eliminated by Bun's transpiler), transpile, and evaluate
- * the declaration back into a callable.
- *
- * `Effect` and `console` are in scope so the effect convention can
- * reference the runtime and either convention can log — the evaluator
- * stays convention-agnostic; it just makes them available.
- */
-const compileBody = (
-  body: string,
-): ((
-  tools: unknown,
-  Effect: unknown,
-  console: unknown,
-) => Promise<unknown>) => {
-  const wrapped = transpile(
-    `async function __body__(tools, Effect, console) {\n${body}\n}`,
-  );
-  return new Function(`${wrapped}\nreturn __body__;`)() as (
-    tools: unknown,
-    Effect: unknown,
-    console: unknown,
-  ) => Promise<unknown>;
-};
-
-const format = (value: unknown): string =>
-  typeof value === "string" ? value : (JSON.stringify(value) ?? String(value));
-
 /**
  * The IN-PROCESS {@link Eval}: `new Function` over the local runtime
  * (TypeScript stripped via `Bun.Transpiler` when available). Tools are
@@ -97,3 +59,41 @@ export const EvalFunction: Layer.Layer<Eval> = Layer.succeed(Eval, {
       }),
     ),
 });
+
+/**
+ * The model writes a function BODY (top-level `return` and all), which
+ * a module-level transpiler rejects — so wrap it into a NAMED async
+ * function declaration first (a bare expression statement would be
+ * dead-code eliminated by Bun's transpiler), transpile, and evaluate
+ * the declaration back into a callable.
+ *
+ * `Effect` and `console` are in scope so the effect convention can
+ * reference the runtime and either convention can log — the evaluator
+ * stays convention-agnostic; it just makes them available.
+ */
+const compileBody = (
+  body: string,
+): ((
+  tools: unknown,
+  Effect: unknown,
+  console: unknown,
+) => Promise<unknown>) => {
+  const wrapped = transpile(
+    `async function __body__(tools, Effect, console) {\n${body}\n}`,
+  );
+  return new Function(`${wrapped}\nreturn __body__;`)() as (
+    tools: unknown,
+    Effect: unknown,
+    console: unknown,
+  ) => Promise<unknown>;
+};
+
+/** Strip TypeScript annotations when running under bun; else run as-is. */
+const transpile = (code: string): string => {
+  const bun = (globalThis as any).Bun;
+  if (bun?.Transpiler === undefined) return code;
+  return new bun.Transpiler({ loader: "ts" }).transformSync(code);
+};
+
+const format = (value: unknown): string =>
+  typeof value === "string" ? value : (JSON.stringify(value) ?? String(value));

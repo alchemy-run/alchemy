@@ -1,5 +1,7 @@
 export * from "./Agent.ts";
 export * from "./CodeMode.ts";
+export * from "./CodeModeAsync.ts";
+export * from "./CodeModeEffect.ts";
 export * from "./Dispatch.ts";
 export * from "./Eval.ts";
 export * from "./EvalFunction.ts";
