@@ -1,3 +1,5 @@
+// Alchemy modifications are licensed under Apache-2.0.
+// This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 import type { ENABLEMENT_COMPATIBILITY_FLAGS } from "./compatibility-flags.ts";
 import type { ReadyAnalytics } from "./types.ts";
 

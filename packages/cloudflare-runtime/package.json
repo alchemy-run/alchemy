@@ -3,7 +3,7 @@
   "version": "2.0.0-beta.70",
   "description": "Cloudflare Workers local runtime and build plugins for Alchemy.",
   "homepage": "https://alchemy.run",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "author": "Sam Goodwin <sam@alchemy.run>",
   "keywords": [
     "alchemy",
@@ -23,13 +23,15 @@
   "sideEffects": false,
   "files": [
     "src",
-    "dist"
+    "dist",
+    "NOTICE",
+    "THIRD_PARTY_LICENSES.md"
   ],
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
-    "build": "tsdown",
+    "build": "tsdown && bun ../../scripts/copy-package-files.ts cloudflare-runtime",
     "clean": "rm -rf dist",
     "test": "vitest run",
     "test:rolldown": "vitest run --project rolldown",

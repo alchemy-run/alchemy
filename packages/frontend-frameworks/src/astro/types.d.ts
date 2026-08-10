@@ -1,3 +1,5 @@
+// Alchemy modifications are licensed under Apache-2.0.
+// This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
  * Ambient app types injected into the user's project by the integration
  * (`injectTypes` in `astro:config:done`) — the fork of upstream

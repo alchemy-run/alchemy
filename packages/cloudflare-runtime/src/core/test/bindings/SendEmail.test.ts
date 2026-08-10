@@ -1,3 +1,5 @@
+// Alchemy modifications are licensed under Apache-2.0.
+// This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
  * Adapted from Miniflare's email plugin tests
  * (`workers-sdk/packages/miniflare/test/plugins/email/index.spec.ts`).
