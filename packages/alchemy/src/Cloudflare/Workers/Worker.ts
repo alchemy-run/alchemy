@@ -628,6 +628,13 @@ export interface WorkerProps<
    * that hash authoritative instead — the directory is not read during
    * planning at all.
    *
+   * Requests are served assets-first by default: a request matching a file
+   * never invokes the Worker. `runWorkerFirst` inverts that — `true` routes
+   * every request through the Worker ahead of the asset layer (serve files
+   * yourself via the `ASSETS` binding), and a glob array (e.g. `["/api/*"]`)
+   * routes only matching paths worker-first. The same routing applies under
+   * `alchemy dev`.
+   *
    * When neither {@link main} nor {@link script} is provided, the Worker is
    * deployed **assets-only**: no script is uploaded at all and Cloudflare's
    * asset layer serves every request, applying `htmlHandling` /

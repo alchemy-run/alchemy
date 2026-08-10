@@ -87,7 +87,7 @@ export default defineConfig({
 ```typescript
 const site = yield* Cloudflare.Website.Vite("Website", {
   rootDir: "./web",
-  assets: { runWorkerFirst: true },
+  assets: { runWorkerFirst: ["/api/*"] },
 });
 ```
 
@@ -98,7 +98,10 @@ const site = yield* Cloudflare.Website.Vite("Website", {
   server environment (see
   [Multiple server environments](#multiple-server-environments-rsc)).
 - **`assets`** — a flat `AssetsConfig` for routing behavior:
-  `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc. The
+  `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
+  `runWorkerFirst` accepts `true` (every request hits the Worker
+  before asset matching) or a glob array like `["/api/*"]` (only
+  matching paths do — everything else stays assets-first). The
   built asset directory is supplied by the build, so unlike a plain
   Worker there is no `directory` to configure.
 - Everything else is inherited from the Worker — `domain`, `env`,

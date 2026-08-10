@@ -297,6 +297,29 @@ export default Cloudflare.Worker(
 );
 ```
 
+Set `assets.runWorkerFirst` to route requests through the Worker
+*before* asset matching — `true` for every request (the Worker then
+serves static files itself via the `ASSETS` binding), or a glob array
+to intercept only specific paths:
+
+```typescript
+export default Cloudflare.Worker(
+  "Worker",
+  {
+    main: import.meta.url,
+    assets: {
+      directory: "./public",
+      // only these paths reach the Worker ahead of assets
+      runWorkerFirst: ["/api/*", "/admin/*"],
+    },
+  },
+  // ...
+);
+```
+
+The same routing applies under `alchemy dev`, so a path that hits
+your handler locally hits it deployed too.
+
 Omit `main` entirely to deploy an **assets-only Worker** — a static
 site with no Worker code of your own:
 
