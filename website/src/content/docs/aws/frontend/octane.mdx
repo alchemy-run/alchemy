@@ -1,0 +1,84 @@
+---
+title: Octane
+description: Deploy an OctaneJS app to AWS with AWS.Website.Octane — SSR on a streaming Lambda Function URL, assets on S3 + CloudFront, and Octane's own Vite dev server under alchemy dev.
+sidebar:
+  order: 14
+---
+
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+export const devDeps = "@alchemy.run/web-frameworks";
+
+`AWS.Website.Octane` deploys an [OctaneJS](https://octanejs.com) app
+to AWS. Octane's server runs on a Lambda Function URL with response
+streaming; client assets are served from a private S3 bucket through
+CloudFront. Configure the AWS adapter in your `octane.config.ts`:
+
+```typescript
+// octane.config.ts
+import { aws } from "@alchemy.run/web-frameworks/octane/aws-adapter";
+import { defineConfig } from "octane";
+
+export default defineConfig({
+  adapter: aws(),
+});
+```
+
+## Install
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun add -d ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm install -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+</Tabs>
+
+## Deploy an Octane app
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as AWS from "alchemy/AWS";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyOctaneApp",
+  {
+    providers: AWS.providers(),
+    state: AWS.state(),
+  },
+  Effect.gen(function* () {
+    const site = yield* AWS.Website.Octane("Web", {
+      rootDir: ".",
+    });
+    return { url: site.url };
+  }),
+);
+```
+
+## Local dev
+
+`alchemy dev` runs Octane's own Vite dev server (native HMR) instead
+of deploying; `site.url` is the local address and no AWS resources
+are created. Wrap the site in `Alchemy.remote()` to deploy the real
+infrastructure even during dev.
+
+## Custom domain
+
+```typescript
+const site = yield* AWS.Website.Octane("Web", {
+  rootDir: ".",
+  domain: {
+    name: "app.example.com",
+    hostedZoneId: zone.hostedZoneId,
+  },
+});
+```

@@ -1,0 +1,80 @@
+---
+title: SvelteKit
+description: Deploy a SvelteKit app to AWS with AWS.Website.SvelteKit — SSR on a streaming Lambda Function URL, assets and prerendered pages on S3 + CloudFront, and Kit's own dev server under alchemy dev.
+sidebar:
+  order: 12
+---
+
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+export const devDeps = "@alchemy.run/web-frameworks";
+
+`AWS.Website.SvelteKit` deploys a [SvelteKit](https://svelte.dev/docs/kit)
+app to AWS. The Kit server runs on a Lambda Function URL with response
+streaming; client assets and prerendered pages are served from a
+private S3 bucket through CloudFront. The adapter is provided
+in-memory by the integration — there is no `svelte.config.js` adapter
+to install.
+
+## Install
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun add -d ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm install -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+</Tabs>
+
+## Deploy a SvelteKit app
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as AWS from "alchemy/AWS";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyKitApp",
+  {
+    providers: AWS.providers(),
+    state: AWS.state(),
+  },
+  Effect.gen(function* () {
+    const site = yield* AWS.Website.SvelteKit("Web", {
+      rootDir: ".",
+    });
+    return { url: site.url };
+  }),
+);
+```
+
+Routes with `export const prerender = true` are uploaded to S3 and
+served from the edge without invoking the server; server routes
+(`+server.ts`) and server load functions stream from the Lambda.
+
+## Local dev
+
+`alchemy dev` runs SvelteKit's own Vite dev server (native HMR)
+instead of deploying; `site.url` is the local address and no AWS
+resources are created. Wrap the site in `Alchemy.remote()` to deploy
+the real infrastructure even during dev.
+
+## Custom domain
+
+```typescript
+const site = yield* AWS.Website.SvelteKit("Web", {
+  rootDir: ".",
+  domain: {
+    name: "app.example.com",
+    hostedZoneId: zone.hostedZoneId,
+  },
+});
+```

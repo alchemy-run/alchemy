@@ -1,0 +1,78 @@
+---
+title: Waku
+description: Deploy a Waku app to AWS with AWS.Website.Waku — RSC server on a streaming Lambda Function URL, SSG pages and assets on S3 + CloudFront, and Waku's own dev server under alchemy dev.
+sidebar:
+  order: 13
+---
+
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+export const devDeps = "@alchemy.run/web-frameworks";
+
+`AWS.Website.Waku` deploys a [Waku](https://waku.gg) app (React
+Server Components) to AWS. The RSC server runs on a Lambda Function
+URL with response streaming; client assets and statically-generated
+pages are served from a private S3 bucket through CloudFront.
+
+## Install
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun add -d ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm install -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+</Tabs>
+
+## Deploy a Waku app
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as AWS from "alchemy/AWS";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyWakuApp",
+  {
+    providers: AWS.providers(),
+    state: AWS.state(),
+  },
+  Effect.gen(function* () {
+    const site = yield* AWS.Website.Waku("Web", {
+      rootDir: ".",
+    });
+    return { url: site.url };
+  }),
+);
+```
+
+Pages rendered as `"static"` are generated at build time, uploaded
+to S3, and served from the edge; dynamic pages and API routes stream
+from the Lambda.
+
+## Local dev
+
+`alchemy dev` runs Waku's own dev server (native HMR) instead of
+deploying; `site.url` is the local address and no AWS resources are
+created. Wrap the site in `Alchemy.remote()` to deploy the real
+infrastructure even during dev.
+
+## Custom domain
+
+```typescript
+const site = yield* AWS.Website.Waku("Web", {
+  rootDir: ".",
+  domain: {
+    name: "app.example.com",
+    hostedZoneId: zone.hostedZoneId,
+  },
+});
+```

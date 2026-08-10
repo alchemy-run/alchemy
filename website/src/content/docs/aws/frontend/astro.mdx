@@ -1,0 +1,101 @@
+---
+title: Astro
+description: Deploy an Astro app to AWS with AWS.Website.Astro — SSR on a streaming Lambda Function URL, static output on S3 + CloudFront, and Astro's own dev server under alchemy dev.
+sidebar:
+  order: 11
+---
+
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+export const devDeps = "@alchemy.run/web-frameworks";
+
+`AWS.Website.Astro` deploys an [Astro](https://astro.build) app to
+AWS. Server-rendered pages stream from a Lambda Function URL; client
+assets and prerendered pages are served from a private S3 bucket
+through CloudFront, routed at the edge. Astro's adapter is provided
+by the integration — there is nothing AWS-specific to add to your
+`astro.config.mjs`.
+
+## Install
+
+Install `@alchemy.run/web-frameworks` as a dev dependency; the
+resource loads its `/astro` and `/astro/aws` exports from your
+project at deploy time:
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun add -d ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm install -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+</Tabs>
+
+## Deploy an Astro app
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as AWS from "alchemy/AWS";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyAstroApp",
+  {
+    providers: AWS.providers(),
+    state: AWS.state(),
+  },
+  Effect.gen(function* () {
+    const site = yield* AWS.Website.Astro("Web", {
+      rootDir: ".",
+    });
+    return { url: site.url };
+  }),
+);
+```
+
+Pages marked `export const prerender = true` are uploaded to S3 and
+served from the edge without invoking the server.
+
+## Static sites
+
+Declare `output: "static"` and the whole site deploys as assets —
+no Lambda is created:
+
+```typescript
+const site = yield* AWS.Website.Astro("Docs", {
+  rootDir: ".",
+  astro: { output: "static" },
+});
+```
+
+## Local dev
+
+`alchemy dev` runs Astro's own dev server (native HMR) instead of
+deploying; `site.url` is the local address and no AWS resources are
+created. Wrap the site in `Alchemy.remote()` to deploy the real
+infrastructure even during dev.
+
+## Custom domain
+
+```typescript
+const site = yield* AWS.Website.Astro("Web", {
+  rootDir: ".",
+  domain: {
+    name: "app.example.com",
+    hostedZoneId: zone.hostedZoneId,
+  },
+});
+```
+
+:::note
+Astro's default image service uses `sharp`. To use Astro image
+optimization on AWS, add `sharp` as a project dependency so it ships
+with the server bundle.
+:::
