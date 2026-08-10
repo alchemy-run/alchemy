@@ -172,6 +172,7 @@ export const SvelteKit = (id: string, props: SvelteKitProps = {}) =>
       framework: SVELTEKIT_FRAMEWORK_SPECIFIER,
       target: SVELTEKIT_AWS_TARGET_SPECIFIER,
       root: props.rootDir,
+      env: props.server?.environment,
       options: props.kit ? { kit: props.kit } : undefined,
       memo: props.memo,
     });

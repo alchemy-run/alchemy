@@ -166,6 +166,7 @@ export const Nuxt = (id: string, props: NuxtProps = {}) =>
       framework: NUXT_FRAMEWORK_SPECIFIER,
       target: NUXT_AWS_TARGET_SPECIFIER,
       root: props.rootDir,
+      env: props.server?.environment,
       options: props.nuxt ? { nuxt: props.nuxt } : undefined,
       memo: props.memo,
     });

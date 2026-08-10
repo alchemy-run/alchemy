@@ -167,6 +167,7 @@ export const Waku = (id: string, props: WakuProps = {}) =>
       framework: WAKU_FRAMEWORK_SPECIFIER,
       target: WAKU_AWS_TARGET_SPECIFIER,
       root: props.rootDir,
+      env: props.server?.environment,
       options: props.waku ? { waku: props.waku } : undefined,
       memo: props.memo,
     });

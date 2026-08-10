@@ -84,6 +84,14 @@ export interface ServerProps {
    */
   port?: number;
   /**
+   * Environment variables for the framework server. On deploy the
+   * composite sets these on the Lambda; during `alchemy dev` they are
+   * applied to the dev server's process environment (the dev sidecar and
+   * any child it spawns) so server code reads the same values in both
+   * modes. Changing a value restarts the dev server.
+   */
+  env?: Record<string, string>;
+  /**
    * Controls which files are hashed to decide whether the build should
    * re-run. By default every non-gitignored file in the root is hashed,
    * plus the nearest lockfile. Set `false` to rebuild on every deploy.
@@ -353,6 +361,20 @@ export const ServerProviderLocal = () =>
       return {
         start: Effect.fn(function* ({ news: props }) {
           const root = path.resolve(initialCwd, props.root ?? ".");
+          // Dev/live env parity: the composite sets these on the Lambda on
+          // deploy; in dev the framework server runs inside the sidecar
+          // (or as its child — `next dev`), so the sidecar's process env
+          // is what SSR code reads. `env` is part of the restart surface,
+          // so a changed value restarts the dev server with the new
+          // environment. Values are not unset on stop: sibling dev servers
+          // share the process, so clearing could clobber their keys.
+          if (props.env !== undefined) {
+            yield* Effect.sync(() => {
+              for (const [key, value] of Object.entries(props.env!)) {
+                process.env[key] = String(value);
+              }
+            });
+          }
           const service = yield* makeFramework(props, root).pipe(
             Effect.provideService(FileSystem.FileSystem, fs),
             Effect.provideService(Path.Path, path),

@@ -42,6 +42,11 @@ describe("AWS.Website.Nuxt local", () => {
           Effect.gen(function* () {
             const site = yield* AWS.Website.Nuxt("NuxtSite", {
               rootDir,
+              server: {
+                environment: {
+                  NUXT_PUBLIC_ENV_MARKER: "nuxt-aws-dev-env-marker",
+                },
+              },
             });
             return { site };
           }),
@@ -68,6 +73,11 @@ describe("AWS.Website.Nuxt local", () => {
           "config:nuxt-aws-user-config-loaded",
           { label: "user nuxt.config.ts applied (dev)" },
         );
+        // server.environment reaches the dev server's process env — the
+        // same values the Lambda gets on deploy (dev/live parity).
+        yield* expectUrlContains(`${url}/`, "env:nuxt-aws-dev-env-marker", {
+          label: "server.environment injected into dev server",
+        });
         // Server API route through the dev server.
         yield* expectUrlContains(
           `${url}/api/hello?echo=dev`,

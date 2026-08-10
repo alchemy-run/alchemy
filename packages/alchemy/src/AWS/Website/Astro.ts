@@ -221,6 +221,7 @@ export const Astro = (id: string, props: AstroProps = {}) =>
       framework: ASTRO_FRAMEWORK_SPECIFIER,
       target: ASTRO_AWS_TARGET_SPECIFIER,
       root: props.rootDir,
+      env: props.server?.environment,
       options: { astro: { ...props.astro, output } },
       memo: props.memo,
     });

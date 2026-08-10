@@ -185,6 +185,7 @@ export const Nextjs = (id: string, props: NextjsProps = {}) =>
       framework: NEXTJS_AWS_FRAMEWORK_SPECIFIER,
       target: NEXTJS_AWS_FRAMEWORK_SPECIFIER,
       root: props.rootDir,
+      env: props.server?.environment,
       memo: props.memo,
     });
 

@@ -16,7 +16,8 @@ import { Invalidation } from "../CloudFront/Invalidation.ts";
 import { KeyValueStore } from "../CloudFront/KeyValueStore.ts";
 import { KvEntries } from "../CloudFront/KvEntries.ts";
 import { KvRoutesUpdate } from "../CloudFront/KvRoutesUpdate.ts";
-import { MANAGED_CACHING_OPTIMIZED_POLICY_ID } from "../CloudFront/ManagedPolicies.ts";
+import { CachePolicy } from "../CloudFront/CachePolicy.ts";
+import { MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID } from "../CloudFront/ManagedPolicies.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import { Record as Route53Record } from "../Route53/Record.ts";
 import type { Bucket } from "../S3/Bucket.ts";
@@ -215,6 +216,28 @@ export const Router = (id: string, props: RouterProps) =>
       });
     }
 
+    // One behavior serves every attached site — static AND server-rendered
+    // — so the cache policy must not cache responses that carry no
+    // Cache-Control (SSR pages), while still honoring the immutable
+    // Cache-Control the asset uploader sets. Managed CachingOptimized
+    // would cache header-less SSR responses for a day. The
+    // AllViewerExceptHostHeader origin-request policy forwards viewer
+    // headers/cookies/query to server origins (required for Lambda URLs,
+    // whose Host must stay the function URL's own domain).
+    const cachePolicy = yield* CachePolicy("CachePolicy", {
+      comment: `${id} router cache policy`,
+      minTTL: 0,
+      defaultTTL: 0,
+      maxTTL: "365 days",
+      parametersInCacheKeyAndForwardedToOrigin: {
+        EnableAcceptEncodingGzip: true,
+        EnableAcceptEncodingBrotli: true,
+        QueryStringsConfig: { QueryStringBehavior: "all" },
+        HeadersConfig: { HeaderBehavior: "none" },
+        CookiesConfig: { CookieBehavior: "none" },
+      },
+    });
+
     const distribution = yield* Distribution("Distribution", {
       aliases: domain
         ? [domain.name, ...(domain.aliases ?? []), ...(domain.redirects ?? [])]
@@ -246,7 +269,8 @@ export const Router = (id: string, props: RouterProps) =>
         ],
         cachedMethods: ["GET", "HEAD"],
         compress: true,
-        cachePolicyId: MANAGED_CACHING_OPTIMIZED_POLICY_ID,
+        cachePolicyId: cachePolicy.cachePolicyId,
+        originRequestPolicyId: MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID,
         functionAssociations,
       },
       viewerCertificate: certificate

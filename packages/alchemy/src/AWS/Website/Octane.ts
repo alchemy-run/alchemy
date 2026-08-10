@@ -174,6 +174,7 @@ export const Octane = (id: string, props: OctaneProps = {}) =>
       framework: OCTANE_FRAMEWORK_SPECIFIER,
       target: OCTANE_AWS_TARGET_SPECIFIER,
       root: props.rootDir,
+      env: props.server?.environment,
       memo: props.memo,
     });
 

@@ -96,6 +96,10 @@ const site = yield* AWS.Website.Nuxt("Web", {
 });
 ```
 
+`environment` values are set on the Lambda on deploy and injected into
+the dev server's process environment under `alchemy dev`, so server
+code reads the same values in both modes.
+
 ## Custom domain
 
 ```typescript

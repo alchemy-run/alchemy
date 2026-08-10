@@ -16,6 +16,9 @@ export default defineNuxtConfig({
   runtimeConfig: {
     public: {
       fixtureMarker: "nuxt-aws-user-config-loaded",
+      // Overridden at runtime by NUXT_PUBLIC_ENV_MARKER — proves
+      // dev/live env parity (sidecar process env vs Lambda env).
+      envMarker: "env-not-set",
     },
   },
   routeRules: {
