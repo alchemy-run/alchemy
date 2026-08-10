@@ -1,31 +1,31 @@
 /**
- * The extension seam between the portable `Alchemy.Worker` /
+ * The compile-time seam between the portable `Alchemy.Worker` /
  * `Alchemy.DurableObject` authoring surface and the platform a worker
  * actually deploys to.
  *
- * Two services, mirroring the `Kubernetes.ClusterAdapter` /
- * `Celld.FleetHost` pattern:
+ * There is no deploy-time dispatch here: a deploy wrapper
+ * (`Cloudflare.Worker(cls, props, impl)`, `Celld.Worker(...)`,
+ * `Rivet.Worker(...)`) constructs its cloud's NATIVE worker resource
+ * directly. What remains portable is purely contractual:
  *
- * - **{@link WorkerTarget}** — provided INSIDE the worker impl's own
- *   `Effect.provide` chain by a target constructor (e.g.
- *   `Celld.Worker({ fleet, main })`). It carries the engine kind, the
- *   resolved deployment props, and the engine-side behaviors the runtime
- *   context needs at bundle-assembly time. Because capability binding
- *   layers require host services only their matching target provides,
- *   putting the target in the impl's provide chain makes
- *   engine/capability mismatches a COMPILE error at `Api.make(impl)`.
+ * - **{@link WorkerTarget}** — the per-cloud adapter carrier, provided by
+ *   the deploy wrapper around the worker impl. It carries the runtime
+ *   behaviors the portable Durable Object layer needs at impl-evaluation
+ *   time: the local/remote stub flavors, the host-native shape of a
+ *   Durable Object binding, and the optional gateway wrap for `fetch`.
  *
- * - **{@link WorkerEngine}** — a keyed Context tag
- *   (`Alchemy.WorkerEngine/<kind>`) resolved dynamically from the ambient
- *   provider context. The engine owns the deployment lifecycle for
- *   `Alchemy.Worker` resources targeted at it, plus how callers outside
- *   the worker connect to its Durable Objects. Cloud provider layers
- *   contribute engines (`Celld.providers()` registers `celld`).
+ * - **{@link Deployment}** — the keyed proof that a worker is deployed to
+ *   a specific platform, produced by the deploy wrapper and consumed by
+ *   that platform's `.ref` constructor.
+ *
+ * - **{@link HostRef}** — the platform-agnostic resolved reference a
+ *   caller binds to, carrying identity, connection env keys, the remote
+ *   Durable Object transport, and the deploy-time caller binding.
  */
 import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
+import type * as Effect from "effect/Effect";
 import type { HttpEffect } from "../Http.ts";
-import type { ResourceBinding, ResourceLike } from "../Resource.ts";
+import type { ResourceLike } from "../Resource.ts";
 
 /** A named Durable Object namespace client (see `Worker/DurableObject.ts`). */
 export interface DurableObjectNamespaceClient {
@@ -33,32 +33,36 @@ export interface DurableObjectNamespaceClient {
 }
 
 /**
- * The value a target layer provides inside the worker impl's provide chain.
- * `props` is folded onto the worker resource's Props post-init (the engine's
- * provider reads it back at reconcile).
+ * The per-cloud adapter a deploy wrapper provides around the worker impl.
+ * The portable Durable Object layer resolves it during the impl's init to
+ * register host-native binding data and build engine-specific stubs.
  */
 export interface WorkerTargetService {
-  /** The engine kind this target deploys through (keys the engine lookup). */
+  /** The platform kind this target deploys through (e.g. `"cloudflare"`). */
   readonly kind: string;
   /**
-   * Engine-specific deployment props, resolved by the target constructor
-   * (may carry Outputs of other resources — deep `Input` resolution turns
-   * them into plain values by reconcile).
-   */
-  readonly props: Record<string, unknown>;
-  /**
-   * Wrap the worker's served `fetch` handler at bundle-assembly time (e.g.
-   * celld's authenticated RPC gateway). Applied on BOTH plan and runtime
+   * Wrap the worker's served `fetch` handler (e.g. the authenticated RPC
+   * gateway). Applied by the deploy wrapper on BOTH plan and runtime
    * evaluations of the impl.
    */
   readonly wrapServe?: (
     handler: HttpEffect<any> | undefined,
   ) => HttpEffect<any>;
   /**
+   * The host-native binding data for a Durable Object class declaration —
+   * what `host.bind` receives when a hosted DO layer registers itself.
+   * Cloudflare returns `{ bindings: [{ type: "durable_object_namespace",
+   * ... }] }`; celld and Rivet accept `{ durableObjects: [decl] }`.
+   */
+  readonly durableObjectBinding: (decl: {
+    readonly name: string;
+    readonly className: string;
+  }) => unknown;
+  /**
    * Build the namespace client for a Durable Object hosted by THIS worker,
    * from the runtime environment's native binding (e.g. celld wraps the
-   * native stub with the fetch-RPC transport; a Cloudflare engine would use
-   * the JSRPC stub).
+   * native stub with the fetch-RPC transport; Cloudflare uses the JSRPC
+   * stub).
    */
   readonly localDurableObject: (
     nativeBinding: any,
@@ -66,21 +70,15 @@ export interface WorkerTargetService {
   ) => DurableObjectNamespaceClient;
   /**
    * Build the namespace client a REMOTE caller (an AWS Lambda, an ECS task)
-   * uses to reach this engine's Durable Objects, from the connection
-   * material the engine's `callerBinding` bound into the caller's
+   * uses to reach this platform's Durable Objects, from the connection
+   * material the ref's `callerBinding` bound into the caller's
    * environment.
    *
-   * This lives on the TARGET rather than the engine deliberately. Engines
-   * are deploy-time provider layers and do not exist inside a deployed
-   * caller's bundle, so resolving the protocol through
-   * {@link findWorkerEngine} at runtime would typecheck and then die in
-   * production. The target layer is provided in the caller's own
-   * `Effect.provide` chain, so it is present in both phases — and a caller
-   * that forgets it fails to COMPILE.
-   *
-   * Engines differ here: celld and Cloudflare serve alchemy's fetch-RPC on
-   * the worker gateway (`POST {url}/{ns}/{instance}/__rpc__/{method}`);
-   * Rivet speaks its own gateway protocol.
+   * This lives on the target/ref rather than being looked up at runtime
+   * deliberately: deploy-time provider layers do not exist inside a
+   * deployed caller's bundle, so the transport must ride in the caller's
+   * own `Effect.provide` chain — and a caller that forgets it fails to
+   * COMPILE.
    */
   readonly remoteDurableObject: (options: {
     readonly url: string;
@@ -95,9 +93,9 @@ export class WorkerTarget extends Context.Service<
 >()("Alchemy.WorkerTarget") {}
 
 /**
- * The generic worker's binding contract. `grants` is the host-mediated
- * permission channel, extended per engine substrate via module
- * augmentation (an AWS-substrate engine registers `policyStatements`).
+ * The portable worker's binding contract. `grants` is the host-mediated
+ * permission channel, extended per platform substrate via module
+ * augmentation (an AWS-substrate host registers `policyStatements`).
  */
 export interface WorkerBindingContract {
   env?: Record<string, any>;
@@ -105,109 +103,10 @@ export interface WorkerBindingContract {
   grants?: Record<string, unknown>[];
 }
 
-export interface WorkerEngineService {
-  readonly kind: "Alchemy.WorkerEngine";
-  /**
-   * Deployment lifecycle for `Alchemy.Worker` resources targeted at this
-   * engine. Signatures mirror the provider's — the generic WorkerProvider
-   * dispatches to these per the resource's stamped target kind.
-   */
-  readonly reconcile: (input: {
-    id: string;
-    news: Record<string, any>;
-    olds: Record<string, any> | undefined;
-    output: Record<string, any> | undefined;
-    session: { note: (message: string) => Effect.Effect<void> };
-    bindings: ResourceBinding<WorkerBindingContract>[];
-  }) => Effect.Effect<Record<string, any>, any, any>;
-  readonly delete: (input: {
-    id: string;
-    olds: Record<string, any>;
-    output: Record<string, any>;
-  }) => Effect.Effect<void, any, any>;
-  readonly diff?: (input: {
-    id: string;
-    news: any;
-    output: Record<string, any> | undefined;
-  }) => Effect.Effect<{ action: "update" | "replace" } | undefined, any, any>;
-  /**
-   * The deploy-time half of connecting a caller host (Lambda Function, ECS
-   * task, …) to a worker deployed through this engine: return the binding
-   * data the caller needs — the worker's URL + secret under the provided
-   * STANDARD env keys, plus any engine-specific fragments (network
-   * attachment, credentials). The runtime half is engine-neutral: callers
-   * speak the alchemy fetch-RPC protocol against the bound URL.
-   */
-  readonly callerBinding: (options: {
-    /** The `Alchemy.Worker` resource instance (attribute Outputs). */
-    readonly worker: any;
-    /** The caller host resource the binding lands on. */
-    readonly host: ResourceLike;
-    /** Standard env key the worker's URL must be bound under. */
-    readonly urlKey: string;
-    /** Standard env key the worker's secret must be bound under. */
-    readonly secretKey: string;
-  }) => Effect.Effect<Record<string, unknown>, any, any>;
-}
-
-const ENGINE_PREFIX = "Alchemy.WorkerEngine/";
-
-/** The keyed Context tag for a worker engine. */
-/**
- * The tag identity for one registered WorkerEngine kind — 1:1 with the
- * constructor: `WorkerEngine<"aws-ecs">` is the type of the tag
- * `WorkerEngine("aws-ecs")` returns. The phantom pins the kind into the
- * identity so a layer registered for one kind cannot satisfy a
- * requirement for another; the service shape stays WorkerEngineService.
- */
-export interface WorkerEngine<
-  Kind extends string = string,
-> extends WorkerEngineService {
-  /** @internal phantom — never set at runtime. */
-  readonly engineKind?: Kind;
-}
-
-export const WorkerEngine = <const Kind extends string>(
-  kind: Kind,
-): Context.Service<WorkerEngine<Kind>, WorkerEngineService> =>
-  Context.Service<WorkerEngine<Kind>, WorkerEngineService>()(
-    `${ENGINE_PREFIX}${kind}`,
-  );
-
-/**
- * Resolve the {@link WorkerEngineService} for an engine kind from the
- * ambient context (the stack's composed provider layers). Dies with setup
- * guidance when the contributing provider layer is missing.
- */
-export const findWorkerEngine = (
-  kind: string | undefined,
-): Effect.Effect<WorkerEngineService> =>
-  kind === undefined
-    ? Effect.die(
-        new Error(
-          "This Alchemy.Worker has no deployment target. Provide one " +
-            "inside the impl's layer stack — e.g. " +
-            "`impl.pipe(Effect.provide(Celld.Worker({ fleet, main })))`.",
-        ),
-      )
-    : Effect.serviceOption(WorkerEngine(kind)).pipe(
-        Effect.flatMap((option) =>
-          option._tag === "Some"
-            ? Effect.succeed(option.value)
-            : Effect.die(
-                new Error(
-                  `No worker engine is registered for kind '${kind}'. Add ` +
-                    "the provider layer that contributes it to the stack's " +
-                    "providers — e.g. 'celld' ships with `Celld.providers()`.",
-                ),
-              ),
-        ),
-      );
-
 /**
  * Proof that a worker is deployed to a specific platform — produced by a
- * deploy module (`Cloudflare.Worker(props, ApiLive)`) and required by that
- * platform's {@link HostRef} constructor (`Cloudflare.Worker.ref(Api)`).
+ * deploy module (`Cloudflare.Worker(cls, props, impl)`) and required by
+ * that platform's {@link HostRef} constructor (`Cloudflare.Worker.ref(cls)`).
  *
  * `K` is a TYPE parameter, not merely runtime data: it is what makes
  * `api/rivet.ts` + `Cloudflare.Worker.ref(Api)` a compile error rather
@@ -216,7 +115,7 @@ export const findWorkerEngine = (
  * differ, so the string key below matters only at runtime.
  */
 export interface DeploymentService<W, K extends string> {
-  /** The engine kind that deployed the worker. */
+  /** The platform kind that deployed the worker. */
   readonly kind: K;
   /** The deployed worker's resource handle (attribute Outputs). */
   readonly worker: W;
@@ -237,7 +136,7 @@ export const Deployment = <W, K extends string>(kind: K, logicalId: string) =>
  * proof still propagates to the stack.
  */
 export interface HostRefService<W = unknown> {
-  /** The engine kind hosting the referenced worker. */
+  /** The platform kind hosting the referenced worker. */
   readonly kind: string;
   /** The referenced worker's logical id. */
   readonly workerId: string;
@@ -249,11 +148,29 @@ export interface HostRefService<W = unknown> {
   readonly secretKey: string;
   /**
    * The remote Durable Object transport for the hosting platform. Rides
-   * on the ref because each `.ref` names its cloud statically — engines
-   * are deploy-time layers absent from a deployed caller's bundle, so
-   * nothing can be looked up at runtime.
+   * on the ref because each `.ref` names its cloud statically — deploy
+   * layers are absent from a deployed caller's bundle, so nothing can be
+   * looked up at runtime.
    */
   readonly remoteDurableObject: WorkerTargetService["remoteDurableObject"];
+  /**
+   * The deploy-time half of connecting a caller host (Lambda Function, ECS
+   * task, …) to the referenced worker: return the binding data the caller
+   * needs — the worker's URL + secret under the provided STANDARD env
+   * keys, plus any platform-specific fragments (network attachment,
+   * credentials). The runtime half is platform-neutral: callers speak the
+   * transport above against the bound URL.
+   */
+  readonly callerBinding: (options: {
+    /** The deployed worker's resource handle (attribute Outputs). */
+    readonly worker: any;
+    /** The caller host resource the binding lands on. */
+    readonly host: ResourceLike;
+    /** Standard env key the worker's URL must be bound under. */
+    readonly urlKey: string;
+    /** Standard env key the worker's secret must be bound under. */
+    readonly secretKey: string;
+  }) => Effect.Effect<Record<string, unknown>, any, any>;
 }
 
 /**

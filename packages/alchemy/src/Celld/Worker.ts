@@ -1,15 +1,14 @@
 /**
- * The **celld deployment target** for `Alchemy.Worker`.
+ * The **celld deployment** of the portable `Alchemy.Worker`.
  *
- * `Celld.Worker({ fleet, main })` is a Layer provided INSIDE the worker
- * impl's own provide chain — it resolves the {@link Fleet}'s connection
- * material, records the target on the worker's runtime context, and
- * supplies the celld-specific runtime behaviors (the authenticated RPC
- * gateway around `fetch`, the fetch-RPC local stub flavor).
+ * `Celld.Worker(cls, { fleet, main }, implOrDefinition)` is the deploy
+ * module: it constructs the NATIVE {@link CelldWorker} resource from the
+ * cloud-free impl and emits the `Deployment` proof, while
+ * `Celld.Worker.ref(cls)` lets callers bind to the worker — consuming
+ * that proof and yielding the platform-agnostic `HostRef`.
  *
- * The matching **engine** (`Alchemy.WorkerEngine/celld`, registered by
- * `Celld.providers()`) owns the deployment lifecycle: bundle the impl
- * (celld's object-form entry), stage a wrangler project, run
+ * The `Celld.Worker` resource owns the deployment lifecycle: bundle the
+ * impl (celld's object-form entry), stage a wrangler project, run
  * `celld deploy` (a pure bucket write via the pinned CLI), and roll the
  * fleet's nodes so they load the new version.
  *
@@ -18,56 +17,46 @@
  * ```typescript
  * export class Api extends Alchemy.Worker<Api>()("Api") {}
  *
- * export default Api.make(
+ * export default Celld.Worker(
+ *   Api,
+ *   { fleet: Cells, main: import.meta.url },
  *   Effect.gen(function* () {
  *     const counters = yield* Counter;
  *     return { fetch: ... };
- *   }).pipe(
- *     Effect.provide(
- *       CounterLive.pipe(
- *         Layer.provideMerge(Celld.Worker({ fleet: Cells, main: import.meta.url })),
- *       ),
- *     ),
- *   ),
+ *   }).pipe(Effect.provide(CounterLive)),
  * );
  * ```
  */
-import {
-  Deployment,
-  HostRef,
-  type DeploymentService,
-  type HostRefService,
-} from "../Worker/Engine.ts";
-import {
-  resolveWorkerRef,
-  workerConnectionKeys,
-} from "../Worker/DurableObject.ts";
+import type { DeploymentService, HostRef } from "../Worker/Engine.ts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as Redacted from "effect/Redacted";
 import * as Artifacts from "../Artifacts.ts";
-import * as Output from "../Output.ts";
-import { packEnvValue, RuntimeContext } from "../RuntimeContext.ts";
+import { Platform } from "../Platform.ts";
+import * as Provider from "../Provider.ts";
+import type { Resource, ResourceBinding } from "../Resource.ts";
 import { Stack } from "../Stack.ts";
 import { asEffect } from "../Util/types.ts";
 import { fromCloudflareFetcher } from "../Cloudflare/Fetcher.ts";
 import type { WorkerBuildOptions } from "../Cloudflare/Workers/Sources/Rolldown.ts";
 import { WorkerBundle } from "../Cloudflare/Workers/Sources/Rolldown.ts";
+import { makeWorkerRuntimeContext } from "../Cloudflare/Workers/WorkerRuntimeContext.ts";
 import { makeFetchRpcStub } from "../Rpc.ts";
 import {
-  WorkerEngine,
+  makeWorkerDeploy,
+  type WorkerDeployAdapter,
+} from "../Worker/Deploy.ts";
+import {
   WorkerTarget,
+  type HostRefService,
   type WorkerBindingContract,
-  type WorkerEngineService,
   type WorkerTargetService,
 } from "../Worker/Engine.ts";
-import type { GenericWorkerRuntimeContext } from "../Worker/RuntimeContext.ts";
 import { DEFAULT_CELLD_VERSION, celldDeploy } from "./CelldCli.ts";
 import type { Fleet } from "./Fleet.ts";
 import { makeCelldVirtualEntry } from "./FleetEntry.ts";
@@ -77,15 +66,19 @@ import {
   FLEET_SECRET_VAR,
   makeGatewayFetch,
 } from "./FleetGateway.ts";
-import { findFleetHost } from "./FleetHost.ts";
+import { findFleetHost, type FleetBucket } from "./FleetHost.ts";
 import {
   computeFleetMigrations,
   renderWranglerJson,
   type CelldMigration,
   type FleetDurableObjectBinding,
 } from "./Wrangler.ts";
+import { packEnvValue } from "../RuntimeContext.ts";
 
 export const CELLD_ENGINE = "celld";
+
+export const CelldWorkerTypeId = "Celld.Worker";
+export type CelldWorkerTypeId = typeof CelldWorkerTypeId;
 
 /**
  * A reference to the {@link Fleet} class: the class itself, or a thunk for
@@ -111,6 +104,7 @@ const resolveFleetRef = (ref: FleetRef, depth = 0): { LogicalId: string } => {
   );
 };
 
+/** The public deploy-wrapper props. */
 export interface CelldWorkerProps {
   /** The {@link Fleet} this worker deploys onto. */
   fleet: FleetRef;
@@ -134,6 +128,321 @@ export interface CelldWorkerProps {
   /** Bundler configuration overrides. */
   build?: WorkerBuildOptions;
 }
+
+/**
+ * The persisted Props of the native `Celld.Worker` resource: the deploy
+ * config plus the fleet connection material resolved by the deploy
+ * wrapper (attribute Outputs of the Fleet — resolved to plain values by
+ * reconcile), plus the env/exports channels the platform machinery fills.
+ */
+export interface CelldWorkerResourceProps {
+  /** Entry module of the worker bundle. */
+  main: string;
+  /** The celld release the managed deploy CLI is pinned to. */
+  celldVersion?: string;
+  /** Workers compatibility date for the bundle. */
+  compatibilityDate?: string;
+  /** Workers compatibility flags for the bundle. */
+  compatibilityFlags?: string[];
+  /** Bundler configuration overrides. */
+  build?: WorkerBuildOptions;
+  /** Logical id of the {@link Fleet} this worker deploys onto. */
+  fleet?: string;
+  /** The fleet host kind (keys the FleetHost lookup). */
+  hostKind?: string;
+  /** The fleet's deployment bucket. */
+  bucket?: FleetBucket;
+  /** The fleet's public URL. */
+  fleetUrl?: string;
+  /** The fleet's gateway secret. */
+  fleetSecret?: Redacted.Redacted<string>;
+  /** Host-specific connection state copied from the fleet. */
+  hostState?: Record<string, any>;
+  /** Extra environment variables for the worker. @internal */
+  env?: Record<string, any>;
+  /** Durable Object / export map, populated from the impl. @internal */
+  exports?: Record<string, any>;
+  /** @internal */
+  isExternal?: boolean;
+}
+
+export interface CelldWorkerAttributes {
+  workerName: string;
+  /** The worker's reachable URL (the fleet URL). */
+  url: string | undefined;
+  fleetUrl: string | undefined;
+  fleetSecret: Redacted.Redacted<string> | undefined;
+  bucket: FleetBucket | undefined;
+  hostKind: string | undefined;
+  hostState: Record<string, any> | undefined;
+  /** The deployed content id (bundle-hash prefix). */
+  deploymentId: string;
+  /** The celld version id written by `celld deploy`. */
+  versionId: string | undefined;
+  /** The persisted Durable Object class map (migration baseline). */
+  durableObjectClasses: string[];
+  migrations: CelldMigration[];
+  code: { hash: string };
+}
+
+export interface CelldWorker extends Resource<
+  CelldWorkerTypeId,
+  CelldWorkerResourceProps,
+  CelldWorkerAttributes,
+  WorkerBindingContract
+> {}
+
+/**
+ * The native `Celld.Worker` platform resource. Constructed by the deploy
+ * wrapper (`Celld.Worker(cls, props, impl)`) — the platform machinery
+ * evaluates the impl (exports, Durable Object registrations) exactly like
+ * a Cloudflare Worker; the provider below owns the celld deployment
+ * lifecycle.
+ */
+export const CelldWorkerResource = Platform(CelldWorkerTypeId, {
+  // A fleet deploys the same Effect worker artifact Cloudflare Workers do,
+  // so the serve/export/env machinery is shared — only the resource Type
+  // stamp differs (the context is Object.assigned onto the instance).
+  createRuntimeContext: (id: string) => ({
+    ...makeWorkerRuntimeContext(id),
+    Type: CelldWorkerTypeId as any,
+  }),
+});
+
+const DEFAULT_COMPATIBILITY_DATE = "2025-06-01";
+const DEFAULT_COMPATIBILITY_FLAGS = ["nodejs_compat"];
+
+/** Render a wrangler `vars` value: strings verbatim, everything else packed
+ * so the runtime `get` accessor round-trips it (Redacted markers included). */
+const renderVar = (value: unknown): string =>
+  typeof value === "string"
+    ? value
+    : Redacted.isRedacted(value)
+      ? Redacted.value(value as Redacted.Redacted<any>)
+      : packEnvValue(value);
+
+const collectBindings = (
+  bindings: { data?: WorkerBindingContract; action?: string }[],
+) => {
+  const active = (bindings ?? []).filter(
+    (binding) => binding.action !== "delete",
+  );
+  const durableObjects = new Map<string, FleetDurableObjectBinding>();
+  const env: Record<string, unknown> = {};
+  for (const binding of active) {
+    for (const declaration of binding.data?.durableObjects ?? []) {
+      durableObjects.set(declaration.name, declaration);
+    }
+    Object.assign(env, binding.data?.env ?? {});
+  }
+  return { durableObjects: [...durableObjects.values()], env };
+};
+
+const buildBundle = (id: string, news: CelldWorkerResourceProps) =>
+  Effect.gen(function* () {
+    const stack = yield* Stack;
+    const bundler = yield* WorkerBundle;
+    return yield* bundler.build({
+      id,
+      main: news.main,
+      compatibility: {
+        date: news.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
+        flags: news.compatibilityFlags ?? DEFAULT_COMPATIBILITY_FLAGS,
+      },
+      entry: {
+        kind: "effect",
+        exports: news.exports ?? {},
+        makeVirtualEntry: makeCelldVirtualEntry,
+      },
+      stack: { name: stack.name, stage: stack.stage },
+      extraOptions: news.build,
+    });
+  }).pipe(Artifacts.cached("build"));
+
+const workerName = (stack: { name: string; stage: string }, id: string) =>
+  `${stack.name}-${stack.stage}-${id}`.toLowerCase();
+
+/**
+ * The `Celld.Worker` provider: the deployment lifecycle for workers
+ * targeted at a celld fleet. Registered by `Celld.providers()`.
+ */
+export const CelldWorkerProvider = () =>
+  Provider.effect(
+    CelldWorkerResource as any,
+    Effect.gen(function* () {
+      return {
+        read: ({ output }: { output: Record<string, any> | undefined }) =>
+          Effect.succeed(output),
+
+        // The Props don't capture the code itself, so the default
+        // prop-comparison misses pure code edits — compare the bundle hash
+        // against the persisted one. Everything else is prop-visible and
+        // handled by the default update logic.
+        diff: ({
+          id,
+          news,
+          output,
+        }: {
+          id: string;
+          news: any;
+          output: Record<string, any> | undefined;
+        }) =>
+          Effect.gen(function* () {
+            if (output === undefined || typeof news?.main !== "string") {
+              return undefined;
+            }
+            const bundle = yield* buildBundle(id, news);
+            if (bundle.hash !== output.code?.hash) {
+              return { action: "update" as const };
+            }
+            return undefined;
+          }),
+
+        reconcile: Effect.fn(function* ({
+          id,
+          news,
+          output,
+          session,
+          bindings,
+        }: {
+          id: string;
+          news: CelldWorkerResourceProps;
+          olds: CelldWorkerResourceProps | undefined;
+          output: Record<string, any> | undefined;
+          session: { note: (message: string) => Effect.Effect<void> };
+          bindings: ResourceBinding<WorkerBindingContract>[];
+        }) {
+          const stack = yield* Stack;
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+
+          if (news.main === undefined) {
+            return yield* Effect.die(
+              new Error(`Celld.Worker '${id}' requires a 'main' entry module.`),
+            );
+          }
+          if (
+            news.bucket === undefined ||
+            news.fleetUrl === undefined ||
+            news.fleetSecret === undefined ||
+            news.hostKind === undefined
+          ) {
+            return yield* Effect.die(
+              new Error(
+                `Celld.Worker '${id}' has no fleet connection — ` +
+                  "declare the fleet on the deploy wrapper: " +
+                  "Celld.Worker(cls, { fleet, main }, impl).",
+              ),
+            );
+          }
+
+          const host = yield* findFleetHost(news.hostKind);
+          const { durableObjects, env: bindingEnv } = collectBindings(
+            bindings as any,
+          );
+
+          // Migration delta against the persisted class map — typed
+          // fail-before-deploy on conflicts.
+          const { migrations, classes } = yield* computeFleetMigrations({
+            history: output?.migrations,
+            oldClasses: output?.durableObjectClasses,
+            current: durableObjects,
+          });
+
+          yield* session.note("bundling worker");
+          const bundle = yield* buildBundle(id, news);
+          const deploymentId = bundle.hash.slice(0, 16);
+
+          // Stage the wrangler project.
+          const staged = yield* fs.makeTempDirectory({
+            prefix: "alchemy-celld-",
+          });
+          for (const file of bundle.files) {
+            const filePath = path.join(staged, file.path);
+            yield* fs.makeDirectory(path.dirname(filePath), {
+              recursive: true,
+            });
+            if (typeof file.content === "string") {
+              yield* fs.writeFileString(filePath, file.content);
+            } else {
+              yield* fs.writeFile(filePath, file.content);
+            }
+          }
+          const vars: Record<string, string> = {};
+          for (const [key, value] of Object.entries({
+            ...news.env,
+            ...bindingEnv,
+          })) {
+            if (value !== undefined) {
+              vars[key] = renderVar(value);
+            }
+          }
+          vars[FLEET_SECRET_VAR] = Redacted.value(news.fleetSecret);
+          vars[FLEET_DEPLOYMENT_VAR] = deploymentId;
+          yield* fs.writeFileString(
+            path.join(staged, "wrangler.json"),
+            renderWranglerJson({
+              name: workerName(stack, id),
+              main: bundle.files[0].path,
+              compatibilityDate:
+                news.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
+              compatibilityFlags:
+                news.compatibilityFlags ?? DEFAULT_COMPATIBILITY_FLAGS,
+              durableObjects,
+              migrations,
+              vars,
+            }),
+          );
+
+          // Deploy — a pure bucket write via the pinned celld CLI, with
+          // standard-chain credentials resolved by the fleet host.
+          yield* session.note("celld deploy");
+          const deployEnv = yield* host.deployEnv({ news });
+          const { versionId } = yield* celldDeploy({
+            projectDir: staged,
+            bucket: news.bucket.uri,
+            endpoint: news.bucket.endpoint,
+            region: news.bucket.region,
+            env: deployEnv,
+            version: news.celldVersion ?? DEFAULT_CELLD_VERSION,
+          });
+          yield* fs
+            .remove(staged, { recursive: true })
+            .pipe(Effect.catch(() => Effect.void));
+
+          // celld nodes load a deployment at startup — roll them when the
+          // deployed content changed. On the FIRST deploy the nodes' own
+          // supervision loop picks the deployment up (they retry until one
+          // exists), so no roll is needed.
+          if (output !== undefined && output.deploymentId !== deploymentId) {
+            yield* session.note("restarting fleet nodes");
+            yield* host.restartNodes({ news });
+          }
+
+          return {
+            workerName: workerName(stack, id),
+            url: news.fleetUrl,
+            fleetUrl: news.fleetUrl,
+            fleetSecret: news.fleetSecret,
+            bucket: news.bucket,
+            hostKind: news.hostKind,
+            hostState: news.hostState,
+            deploymentId,
+            versionId,
+            durableObjectClasses: classes,
+            migrations: migrations as CelldMigration[],
+            code: { hash: bundle.hash },
+          };
+        }),
+
+        // The deployment object lives in the fleet's bucket, which the
+        // fleet host tears down with the rest of its children.
+        delete: () => Effect.void,
+
+        list: () => Effect.succeed([]),
+      };
+    }),
+  );
 
 /** The celld local-stub flavor: alchemy fetch-RPC over the native binding. */
 const localDurableObject = (nativeBinding: any) => {
@@ -223,354 +532,89 @@ const remoteDurableObject = ({
     }),
 });
 
-/**
- * The celld target layer. Resolves the fleet's connection material at plan
- * (a no-op at runtime — the bundle re-executes this layer, where only the
- * runtime behaviors matter) and records the target on the worker's runtime
- * context.
- */
-const makeTarget = (props?: CelldWorkerProps): Layer.Layer<WorkerTarget> =>
-  Layer.effect(
-    WorkerTarget,
+/** The celld per-cloud adapter provided around the worker impl. */
+const celldTarget: WorkerTargetService = {
+  kind: CELLD_ENGINE,
+  wrapServe: (handler) => makeGatewayFetch(handler),
+  durableObjectBinding: (declaration) => ({ durableObjects: [declaration] }),
+  localDurableObject,
+  remoteDurableObject,
+};
+
+const callerBinding =
+  (): HostRefService["callerBinding"] =>
+  ({ worker, host, urlKey, secretKey }) =>
     Effect.gen(function* () {
-      // No props = CLIENT mode: the layer supplies only the runtime
-      // behaviors (transport, stub flavors) so a caller can reach a celld
-      // worker. With props it can additionally deploy one.
-      let targetProps: Record<string, unknown> = {
-        engine: CELLD_ENGINE,
-        main: props?.main,
-        celldVersion: props?.celldVersion,
-        compatibilityDate: props?.compatibilityDate,
-        compatibilityFlags: props?.compatibilityFlags,
-        build: props?.build,
-      };
-
-      if (!globalThis.__ALCHEMY_RUNTIME__ && props !== undefined) {
-        // Resolve the fleet and copy its connection material. Yielding the
-        // fleet class references the stack's fleet node (memoized by
-        // logical id) and orders it ahead of the worker in the graph. The
-        // host KIND must be plan-readable (it keys the FleetHost lookup),
-        // so it comes from the fleet's resolved Props, not the attribute
-        // Output.
-        const fleetClass = resolveFleetRef(props.fleet);
-        const fleet = (yield* asEffect(fleetClass as any)) as Fleet & {
-          Props?: { hostKind?: string };
-        };
-        targetProps = {
-          ...targetProps,
-          fleet: fleetClass.LogicalId,
-          hostKind: fleet.Props?.hostKind ?? fleet.hostKind,
-          bucket: fleet.bucket,
-          fleetUrl: fleet.fleetUrl,
-          fleetSecret: fleet.fleetSecret,
-          hostState: fleet.hostState,
-        };
-      }
-
-      const target: WorkerTargetService = {
-        kind: CELLD_ENGINE,
-        props: targetProps,
-        wrapServe: (handler) => makeGatewayFetch(handler),
-        localDurableObject,
-        remoteDurableObject,
-      };
-
-      // Record the target on the ambient worker runtime context so the
-      // platform folds it into the persisted Props.
-      const ctx = yield* Effect.serviceOption(RuntimeContext).pipe(
-        Effect.map(Option.getOrUndefined),
-      );
-      if (ctx !== undefined) {
-        (ctx as GenericWorkerRuntimeContext).target = target;
-      }
-      return target;
-    }),
-  );
-
-const DEFAULT_COMPATIBILITY_DATE = "2025-06-01";
-const DEFAULT_COMPATIBILITY_FLAGS = ["nodejs_compat"];
-
-/** Render a wrangler `vars` value: strings verbatim, everything else packed
- * so the runtime `get` accessor round-trips it (Redacted markers included). */
-const renderVar = (value: unknown): string =>
-  typeof value === "string"
-    ? value
-    : Redacted.isRedacted(value)
-      ? Redacted.value(value as Redacted.Redacted<any>)
-      : packEnvValue(value);
-
-interface CelldTargetProps {
-  fleet?: string;
-  main?: string;
-  celldVersion?: string;
-  compatibilityDate?: string;
-  compatibilityFlags?: string[];
-  build?: WorkerBuildOptions;
-  hostKind?: string;
-  bucket?: { uri: string; endpoint?: string; region?: string };
-  fleetUrl?: string;
-  fleetSecret?: Redacted.Redacted<string>;
-  hostState?: Record<string, any>;
-}
-
-/**
- * The `celld` {@link WorkerEngine}: the deployment lifecycle for
- * `Alchemy.Worker`s targeted at a Celld fleet. Registered by
- * `Celld.providers()`.
- */
-export const CelldWorkerEngine = (): Layer.Layer<WorkerEngine<"celld">> =>
-  Layer.effect(
-    WorkerEngine(CELLD_ENGINE),
-    Effect.gen(function* () {
-      const stack = yield* Stack;
-
-      const collectBindings = (
-        bindings: { data?: WorkerBindingContract; action?: string }[],
-      ) => {
-        const active = (bindings ?? []).filter(
-          (binding) => binding.action !== "delete",
-        );
-        const durableObjects = new Map<string, FleetDurableObjectBinding>();
-        const env: Record<string, unknown> = {};
-        for (const binding of active) {
-          for (const declaration of binding.data?.durableObjects ?? []) {
-            durableObjects.set(declaration.name, declaration);
-          }
-          Object.assign(env, binding.data?.env ?? {});
-        }
-        return { durableObjects: [...durableObjects.values()], env };
-      };
-
-      const buildBundle = (
-        id: string,
-        target: CelldTargetProps,
-        exports: Record<string, any> | undefined,
-        build: WorkerBuildOptions | undefined,
-      ) =>
-        Effect.gen(function* () {
-          const bundler = yield* WorkerBundle;
-          return yield* bundler.build({
-            id,
-            main: target.main!,
-            compatibility: {
-              date: target.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
-              flags: target.compatibilityFlags ?? DEFAULT_COMPATIBILITY_FLAGS,
-            },
-            entry: {
-              kind: "effect",
-              exports: exports ?? {},
-              makeVirtualEntry: makeCelldVirtualEntry,
-            },
-            stack: { name: stack.name, stage: stack.stage },
-            extraOptions: build,
-          });
-        }).pipe(Artifacts.cached("build"));
-
-      const workerName = (id: string) =>
-        `${stack.name}-${stack.stage}-${id}`.toLowerCase();
-
+      const adapter = yield* findFleetHost(worker.Props?.hostKind);
+      const fragment = yield* adapter.callerBinding({
+        target: { hostState: worker.hostState },
+        host,
+      });
       return {
-        kind: "Alchemy.WorkerEngine" as const,
+        ...fragment,
+        env: {
+          ...(fragment as { env?: Record<string, unknown> }).env,
+          [urlKey]: worker.fleetUrl,
+          [secretKey]: worker.fleetSecret,
+        },
+      };
+    });
 
-        diff: ({ id, news, output }) =>
-          Effect.gen(function* () {
-            const target: CelldTargetProps | undefined = news?.target?.props;
-            if (output === undefined || typeof target?.main !== "string") {
-              return undefined;
-            }
-            const bundle = yield* buildBundle(
-              id,
-              target,
-              news?.exports,
-              target.build,
-            );
-            if (bundle.hash !== output.code?.hash) {
-              return { action: "update" as const };
-            }
-            return undefined;
-          }),
+const adapter: WorkerDeployAdapter<"celld"> = {
+  kind: CELLD_ENGINE,
+  target: celldTarget,
+  callerBinding,
+  makeNative: (clsId, props: CelldWorkerProps, impl) => {
+    const nativeCls = (CelldWorkerResource as any)(clsId);
+    // Input-shaped props (fleet attributes are Outputs, resolved to plain
+    // values by reconcile) — typed loosely for the platform's InputProps.
+    const nativeProps = Effect.gen(function* () {
+      const base: Record<string, unknown> = {
+        main: props.main,
+        celldVersion: props.celldVersion,
+        compatibilityDate: props.compatibilityDate,
+        compatibilityFlags: props.compatibilityFlags,
+        build: props.build,
+      };
+      // At runtime the deploy module re-executes inside the bundle, where
+      // only the runtime behaviors matter — never touch the fleet node.
+      if (globalThis.__ALCHEMY_RUNTIME__) {
+        return base;
+      }
+      // Resolve the fleet and copy its connection material. Yielding the
+      // fleet class references the stack's fleet node (memoized by
+      // logical id) and orders it ahead of the worker in the graph. The
+      // host KIND must be plan-readable (it keys the FleetHost lookup),
+      // so it comes from the fleet's resolved Props, not the attribute
+      // Output.
+      const fleetClass = resolveFleetRef(props.fleet);
+      const fleet = (yield* asEffect(fleetClass as any)) as Fleet & {
+        Props?: { hostKind?: string };
+      };
+      return {
+        ...base,
+        fleet: fleetClass.LogicalId,
+        hostKind: fleet.Props?.hostKind ?? fleet.hostKind,
+        bucket: fleet.bucket,
+        fleetUrl: fleet.fleetUrl,
+        fleetSecret: fleet.fleetSecret,
+        hostState: fleet.hostState,
+      };
+    });
+    return {
+      layer: nativeCls.make(nativeProps, impl),
+      instance: nativeCls.Self,
+    };
+  },
+};
 
-        reconcile: Effect.fn(function* ({
-          id,
-          news,
-          output,
-          bindings,
-          session,
-        }) {
-          const fs = yield* FileSystem.FileSystem;
-          const path = yield* Path.Path;
-          const target: CelldTargetProps = news.target?.props ?? {};
-
-          if (target.main === undefined) {
-            return yield* Effect.die(
-              new Error(
-                `Alchemy.Worker '${id}' (celld) requires a 'main' entry module on its target.`,
-              ),
-            );
-          }
-          if (
-            target.bucket === undefined ||
-            target.fleetUrl === undefined ||
-            target.fleetSecret === undefined ||
-            target.hostKind === undefined
-          ) {
-            return yield* Effect.die(
-              new Error(
-                `Alchemy.Worker '${id}' (celld) has no fleet connection — ` +
-                  "declare the fleet on the target: Celld.Worker({ fleet, main }).",
-              ),
-            );
-          }
-
-          const host = yield* findFleetHost(target.hostKind);
-          const { durableObjects, env: bindingEnv } = collectBindings(
-            bindings as any,
-          );
-
-          // Migration delta against the persisted class map — typed
-          // fail-before-deploy on conflicts.
-          const { migrations, classes } = yield* computeFleetMigrations({
-            history: output?.migrations,
-            oldClasses: output?.durableObjectClasses,
-            current: durableObjects,
-          });
-
-          yield* session.note("bundling worker");
-          const bundle = yield* buildBundle(
-            id,
-            target,
-            news.exports,
-            target.build,
-          );
-          const deploymentId = bundle.hash.slice(0, 16);
-
-          // Stage the wrangler project.
-          const staged = yield* fs.makeTempDirectory({
-            prefix: "alchemy-celld-",
-          });
-          for (const file of bundle.files) {
-            const filePath = path.join(staged, file.path);
-            yield* fs.makeDirectory(path.dirname(filePath), {
-              recursive: true,
-            });
-            if (typeof file.content === "string") {
-              yield* fs.writeFileString(filePath, file.content);
-            } else {
-              yield* fs.writeFile(filePath, file.content);
-            }
-          }
-          const vars: Record<string, string> = {};
-          for (const [key, value] of Object.entries({
-            ...news.env,
-            ...bindingEnv,
-          })) {
-            if (value !== undefined) {
-              vars[key] = renderVar(value);
-            }
-          }
-          vars[FLEET_SECRET_VAR] = Redacted.value(target.fleetSecret);
-          vars[FLEET_DEPLOYMENT_VAR] = deploymentId;
-          yield* fs.writeFileString(
-            path.join(staged, "wrangler.json"),
-            renderWranglerJson({
-              name: workerName(id),
-              main: bundle.files[0].path,
-              compatibilityDate:
-                target.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
-              compatibilityFlags:
-                target.compatibilityFlags ?? DEFAULT_COMPATIBILITY_FLAGS,
-              durableObjects,
-              migrations,
-              vars,
-            }),
-          );
-
-          // Deploy — a pure bucket write via the pinned celld CLI, with
-          // standard-chain credentials resolved by the fleet host.
-          yield* session.note("celld deploy");
-          const deployEnv = yield* host.deployEnv({ news: target });
-          const { versionId } = yield* celldDeploy({
-            projectDir: staged,
-            bucket: target.bucket.uri,
-            endpoint: target.bucket.endpoint,
-            region: target.bucket.region,
-            env: deployEnv,
-            version: target.celldVersion ?? DEFAULT_CELLD_VERSION,
-          });
-          yield* fs
-            .remove(staged, { recursive: true })
-            .pipe(Effect.catch(() => Effect.void));
-
-          // celld nodes load a deployment at startup — roll them when the
-          // deployed content changed. On the FIRST deploy the nodes' own
-          // supervision loop picks the deployment up (they retry until one
-          // exists), so no roll is needed.
-          if (output !== undefined && output.deploymentId !== deploymentId) {
-            yield* session.note("restarting fleet nodes");
-            yield* host.restartNodes({ news: target });
-          }
-
-          return {
-            workerName: workerName(id),
-            url: target.fleetUrl,
-            fleetUrl: target.fleetUrl,
-            fleetSecret: target.fleetSecret,
-            bucket: target.bucket,
-            hostKind: target.hostKind,
-            hostState: target.hostState,
-            deploymentId,
-            versionId,
-            durableObjectClasses: classes,
-            migrations: migrations as CelldMigration[],
-            code: { hash: bundle.hash },
-          };
-        }),
-
-        // The deployment object lives in the fleet's bucket, which the
-        // fleet host tears down with the rest of its children.
-        delete: () => Effect.void,
-
-        callerBinding: ({ worker, host, urlKey, secretKey }) =>
-          Effect.gen(function* () {
-            const adapter = yield* findFleetHost(
-              worker.Props?.target?.props?.hostKind,
-            );
-            // Engine-specific attributes live under the worker's `engine`
-            // bag — hand the adapter an Output view of what it needs.
-            const engineAttrs = worker.engine;
-            const fragment = yield* adapter.callerBinding({
-              target: {
-                hostState: Output.map(
-                  engineAttrs,
-                  (attrs: any) => attrs?.hostState,
-                ),
-              },
-              host,
-            });
-            return {
-              ...fragment,
-              env: {
-                ...(fragment as { env?: Record<string, unknown> }).env,
-                [urlKey]: Output.map(
-                  engineAttrs,
-                  (attrs: any) => attrs?.fleetUrl,
-                ),
-                [secretKey]: Output.map(
-                  engineAttrs,
-                  (attrs: any) => attrs?.fleetSecret,
-                ),
-              },
-            };
-          }),
-      } satisfies WorkerEngineService;
-    }),
-  ) as Layer.Layer<WorkerEngine<"celld">>;
+const { deployWorker, workerRef } = makeWorkerDeploy(adapter);
 
 export type { WorkerBindingContract };
 
 /**
  * The Celld **deploy module** form plus its `.ref` companion — the same
- * shape every engine exposes, so switching clouds is one line.
+ * shape every deploy target exposes, so switching clouds is one line.
  *
  * ```ts
  * export const ApiWorker = Celld.Worker(Api, { ... }, ApiLive);
@@ -578,100 +622,12 @@ export type { WorkerBindingContract };
  *   WebLive.pipe(Layer.provide(Celld.Worker.ref(Api))));
  * ```
  *
- * The worker class is passed explicitly because `Layer.provide` returns a
- * fresh layer, so an annotation on the layer would not survive a binder's
- * `.pipe(...)`. It mirrors the resource form's leading `id: string`; here
- * the id is the tag.
+ * The worker class is passed explicitly because it names the deployment
+ * (the class's logical id is the native resource's id). It mirrors the
+ * resource form's leading `id: string`; here the id is the tag.
  */
-const deployWorker = <Self, WOut, RIn>(
-  cls: Effect.Effect<WOut, never, any>,
-  props: CelldWorkerProps,
-  layer:
-    | Layer.Layer<Self, never, RIn | WorkerTarget | HostRef>
-    | Effect.Effect<any, any, RIn | WorkerTarget | HostRef>,
-): Layer.Layer<
-  Self | DeploymentService<WOut, "celld">,
-  never,
-  Exclude<RIn, WorkerTarget | HostRef>
-> => {
-  // The impl-effect form: the class is already in hand, so `make` is
-  // called here rather than by the caller.
-  const resolved = Effect.isEffect(layer)
-    ? ((cls as any).make(layer) as Layer.Layer<any, never, any>)
-    : layer;
-  const clsId = resolveWorkerRef(cls as any).LogicalId;
-  const selfRef = Layer.sync(HostRef, () => ({
-    kind: CELLD_ENGINE,
-    workerId: clsId,
-    // Never read on the hosting path (dispatch compares ids and hosts);
-    // present so foreign-DO layers piped with their own ref are unaffected.
-    worker: undefined,
-    ...workerConnectionKeys(clsId),
-    remoteDurableObject,
-  }));
-  const deployed = resolved.pipe(
-    Layer.provide(Layer.mergeAll(makeTarget(props), selfRef)),
-  );
-  const deployment = Layer.effect(
-    Deployment<WOut, "celld">(CELLD_ENGINE, clsId),
-    Effect.gen(function* () {
-      // Inside the deployed worker the entry rebuilds this layer, but the
-      // resource effect belongs to plan time — running it in the isolate
-      // drags plan machinery (Terminal/NodeServices) into workerd, which
-      // dies on beta.105 (`process.stdin.once` is not a function). Nothing
-      // consumes Deployment at runtime; refs guard themselves.
-      if (globalThis.__ALCHEMY_RUNTIME__) {
-        return {
-          kind: CELLD_ENGINE as "celld",
-          worker: undefined as unknown as WOut,
-        };
-      }
-      const worker = yield* cls as unknown as Effect.Effect<WOut, never, never>;
-      return { kind: CELLD_ENGINE as "celld", worker };
-    }),
-  );
-  return deployment.pipe(Layer.provideMerge(deployed)) as Layer.Layer<
-    Self | DeploymentService<WOut, "celld">,
-    never,
-    Exclude<RIn, WorkerTarget | HostRef>
-  >;
-};
-
-/**
- * Assert — and prove — that `cls` is deployed to Celld, yielding the
- * platform-agnostic {@link HostRef} a binder requires. Only the Celld
- * deploy module for this worker can discharge the `Deployment`
- * requirement, so a binder pointed at a worker hosted elsewhere fails to
- * compile.
- */
-const workerRef = <WOut>(
-  cls: Effect.Effect<WOut, never, any>,
-): Layer.Layer<HostRef, never, DeploymentService<WOut, "celld">> =>
-  Layer.effect(
-    HostRef,
-    Effect.gen(function* () {
-      const clsId = resolveWorkerRef(cls as any).LogicalId;
-      const { urlKey, secretKey } = workerConnectionKeys(clsId);
-      const base = {
-        kind: CELLD_ENGINE,
-        workerId: clsId,
-        urlKey,
-        secretKey,
-        remoteDurableObject,
-      };
-      // Inside the deployed caller the layer stack re-executes, but the
-      // stack-scoped Deployment proof is a plan-time construct — the
-      // connection material arrives via the bound env instead.
-      if (globalThis.__ALCHEMY_RUNTIME__) {
-        return { ...base, worker: undefined };
-      }
-      const deployment = yield* Deployment<WOut, "celld">(CELLD_ENGINE, clsId);
-      return { ...base, worker: deployment.worker };
-    }),
-  );
-
 export const Worker: {
-  /** Deploy a worker definition layer (shared-module form). */
+  /** Deploy a worker definition (shared-module form). */
   <Self, WOut, RIn>(
     cls: Effect.Effect<WOut, never, any>,
     props: CelldWorkerProps,
@@ -681,8 +637,7 @@ export const Worker: {
     never,
     Exclude<RIn, WorkerTarget | HostRef>
   >;
-  /** Deploy an impl effect directly — the class is already in hand, so
-   *  `make` is called by the wrapper (single-module form). */
+  /** Deploy an impl effect directly (single-module form). */
   <WOut, Self, I extends Effect.Effect<any, any, any>>(
     cls: Effect.Effect<WOut, never, any> & {
       make: (impl: I) => Layer.Layer<Self, never, any>;
@@ -694,5 +649,7 @@ export const Worker: {
     never,
     Extract<Effect.Services<I>, DeploymentService<any, string>>
   >;
-  readonly ref: typeof workerRef;
+  readonly ref: <WOut>(
+    cls: Effect.Effect<WOut, never, any>,
+  ) => Layer.Layer<HostRef, never, DeploymentService<WOut, "celld">>;
 } = Object.assign(deployWorker as any, { ref: workerRef });

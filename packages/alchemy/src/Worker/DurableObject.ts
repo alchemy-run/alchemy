@@ -42,8 +42,8 @@ import {
   DurableObjectState,
   fromDurableObjectState,
 } from "./DurableObjectState.ts";
-import { HostRef, WorkerTarget, findWorkerEngine } from "./Engine.ts";
-import { Worker, isAlchemyWorker, type WorkerServices } from "./Worker.ts";
+import { HostRef, WorkerTarget } from "./Engine.ts";
+import type { WorkerServices } from "./Worker.ts";
 
 export type { DurableObjectStub };
 
@@ -181,6 +181,28 @@ export interface DurableObjectClass {
   };
 }
 
+/**
+ * The shape of a resource that can HOST Durable Objects: any native worker
+ * resource (Cloudflare / Celld / Rivet) — a `Platform()`-built instance
+ * whose runtime context exposes `export` alongside the resource's `bind`.
+ * Non-worker hosts (Lambda Functions, ECS tasks) have `bind` but no
+ * `export`, which is what routes them to the remote-caller path.
+ */
+interface WorkerHostLike {
+  LogicalId: string;
+  bind: (
+    template: TemplateStringsArray,
+    ...args: any[]
+  ) => (data: any) => Effect.Effect<void>;
+  export: (name: string, value: any) => Effect.Effect<void>;
+}
+
+const isWorkerHost = (value: unknown): value is WorkerHostLike =>
+  (typeof value === "object" || typeof value === "function") &&
+  value !== null &&
+  typeof (value as { bind?: unknown }).bind === "function" &&
+  typeof (value as { export?: unknown }).export === "function";
+
 /** Unwrap a possibly-`Redacted` env value to its raw string. */
 const rawValue = (value: unknown): string | undefined =>
   value === undefined
@@ -216,9 +238,8 @@ export const DurableObject: DurableObjectClass = taggedFunction(
      * returns the namespace handle over the native binding, using the
      * ambient target's engine-specific stub flavor.
      */
-    const binding = () =>
+    const binding = (host: WorkerHostLike) =>
       Effect.gen(function* () {
-        const worker = yield* Worker;
         // The target is ambient inside the impl's provide chain (the DO
         // layer sits above it). Its absence here means the deployable
         // module provided no target — surfaced with guidance.
@@ -226,9 +247,14 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           Effect.map(Option.getOrUndefined),
         );
 
-        yield* worker.bind`${namespace}`({
-          durableObjects: [{ name: namespace, className }],
-        });
+        const declaration = { name: namespace, className };
+        // Binding data is HOST-NATIVE: the target adapter shapes the
+        // declaration for its platform's worker binding contract.
+        yield* host.bind`${namespace}`(
+          target !== undefined
+            ? target.durableObjectBinding(declaration)
+            : { durableObjects: [declaration] },
+        );
 
         const native = yield* Effect.all([
           Effect.serviceOption(WorkerEnvironment).pipe(
@@ -276,13 +302,14 @@ export const DurableObject: DurableObjectClass = taggedFunction(
       });
 
     const makeHost = Effect.fn(function* (
+      host: WorkerHostLike,
       impl: Effect.Effect<
         Effect.Effect<DurableObjectShape>,
         never,
         DurableObjectState
       >,
     ) {
-      const self = yield* binding();
+      const self = yield* binding(host);
       const phase = yield* ALCHEMY_PHASE;
       const constructor = impl.pipe(
         Effect.provide(Layer.succeed(DurableObjectScope, self as any)),
@@ -302,7 +329,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
       }
       // `export` lives on the runtime context assigned onto the instance —
       // present at both plan and runtime, but not part of the resource type.
-      yield* ((yield* Worker) as any).export(namespace, {
+      yield* host.export(namespace, {
         kind: "durableObject",
         constructor,
         services: yield* Effect.context<never>(),
@@ -329,14 +356,15 @@ export const DurableObject: DurableObjectClass = taggedFunction(
         if (
           host !== undefined &&
           typeof (host as any).bind === "function" &&
-          !isAlchemyWorker(host)
+          !isWorkerHost(host)
         ) {
           // The ref's Deployment requirement already ordered the worker
           // node (and its infrastructure) ahead of this host in the
-          // stack graph; its resolved handle rides on the ref.
+          // stack graph; its resolved handle rides on the ref, and so
+          // does the platform's caller binding (absorbed from the deleted
+          // engine seam).
           const worker = hostRef.worker as any;
-          const engine = yield* findWorkerEngine(hostRef.kind);
-          const data = yield* engine.callerBinding({
+          const data = yield* hostRef.callerBinding({
             worker,
             host,
             urlKey,
@@ -399,7 +427,10 @@ export const DurableObject: DurableObjectClass = taggedFunction(
       Effect.gen(function* () {
         const host = yield* Binding.Host;
         const hostRef = yield* HostRef;
-        if (isAlchemyWorker(host) && host.LogicalId === hostRef.workerId) {
+        // Type-agnostic identity match: the host is whatever NATIVE worker
+        // resource the deploy wrapper constructed (Cloudflare / Celld /
+        // Rivet) — hosting iff its logical id is the ref's worker.
+        if (isWorkerHost(host) && host.LogicalId === hostRef.workerId) {
           if (impl === undefined) {
             return yield* Effect.die(
               new Error(
@@ -407,7 +438,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
               ),
             );
           }
-          return yield* makeHost(impl);
+          return yield* makeHost(host, impl);
         }
         return yield* remote;
       });
@@ -418,8 +449,8 @@ export const DurableObject: DurableObjectClass = taggedFunction(
       return class extends effectClass(
         Effect.gen(function* () {
           const host = yield* Binding.Host;
-          if (isAlchemyWorker(host)) {
-            return yield* makeHost(inlineImpl as any);
+          if (isWorkerHost(host)) {
+            return yield* makeHost(host, inlineImpl as any);
           }
           const provided = yield* Effect.serviceOption(tag);
           if (Option.isSome(provided)) {

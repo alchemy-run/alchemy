@@ -2,7 +2,7 @@
  * The portable **`Alchemy.Worker`**: one authoring surface for
  * fetch-serving, Durable-Object-hosting workers. The definition is
  * cloud-free; the **deploy module** is the single line that names a
- * platform, and capability/engine mismatches surface as compile errors —
+ * platform, and capability/platform mismatches surface as compile errors —
  * an unprovided requirement in the layer's `R`, not a deploy-time crash.
  *
  * ```ts
@@ -21,80 +21,44 @@
  * // export default Rivet.Worker(Api, { cluster: Actors, main: import.meta.url }, ApiLive);
  * ```
  *
- * The deploy wrapper provides the target (and a self host-ref) to the
- * layer; `make` re-injects them around the impl so the target records
- * itself on the worker's runtime context at impl evaluation. The platform
- * folds it into the persisted Props, and the provider dispatches every
- * lifecycle operation to the matching {@link WorkerEngine}.
+ * The class is a pure TAG plus a `make` that packages the impl into a
+ * deployable definition. There is no `Alchemy.Worker` resource type: the
+ * deploy wrapper constructs its cloud's NATIVE worker resource from the
+ * impl and provides this class's tag with that resource, so `yield* Api`
+ * inside the stack resolves the native worker (URL and all).
  */
-import type { DeploymentService } from "./Engine.ts";
+import type { DeploymentService, HostRef } from "./Engine.ts";
 import type * as ConfigError from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as Effectable from "effect/Effectable";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import type { HttpEffect } from "../Http.ts";
 import type { Named, Tag } from "../Named.ts";
-import { Platform, type PlatformProps } from "../Platform.ts";
 import type { MainRpc, PlatformServices } from "../Platform.ts";
-import * as Provider from "../Provider.ts";
-import {
-  Resource,
-  isResourceOfType,
-  type ResourceBinding,
-} from "../Resource.ts";
+import type { Resource } from "../Resource.ts";
 import type { Rpc } from "../Rpc.ts";
 import type { WorkerEnvironment } from "../Cloudflare/Workers/Worker.ts";
-import {
-  HostRef,
-  WorkerTarget,
-  findWorkerEngine,
-  type WorkerBindingContract,
-  type WorkerTargetService,
-} from "./Engine.ts";
-import { RuntimeContext } from "../RuntimeContext.ts";
-import {
-  makeGenericWorkerRuntimeContext,
-  type GenericWorkerRuntimeContext,
-} from "./RuntimeContext.ts";
-import type { Providers } from "./Providers.ts";
+import { Self } from "../Self.ts";
+import type { WorkerBindingContract } from "./Engine.ts";
 
 export const WorkerTypeId = "Alchemy.Worker";
 export type WorkerTypeId = typeof WorkerTypeId;
 
-export interface WorkerProps extends PlatformProps {
-  /** Extra environment variables for the worker. */
-  env?: Record<string, any>;
-  /**
-   * Deployment target — stamped by the target layer provided inside the
-   * impl (via the runtime context's `foldProps`); never set manually.
-   * @internal
-   */
-  target?: { kind: string; props: Record<string, unknown> };
-  /**
-   * Durable Object / export map. Populated automatically from the impl;
-   * do not set manually.
-   * @internal
-   */
-  exports?: Record<string, any>;
-}
-
+/**
+ * The portable worker contract — the attribute surface every deploy
+ * target's native worker resource satisfies. Purely type-level: the value
+ * behind the tag is the NATIVE resource (Cloudflare / Celld / Rivet
+ * worker), which carries strictly more.
+ */
 export interface Worker extends Resource<
   WorkerTypeId,
-  WorkerProps,
+  {},
   {
-    /** The engine kind this worker deployed through. */
-    targetKind: string;
-    /** The worker's reachable URL, when the engine exposes one. */
+    /** The worker's reachable URL, when the platform exposes one. */
     url: string | undefined;
-    /** Engine-specific attributes, as returned by the engine's reconcile. */
-    engine: Record<string, any>;
   },
-  WorkerBindingContract,
-  Providers
+  WorkerBindingContract
 > {}
-
-export const isAlchemyWorker = <T>(value: T): value is T & Worker =>
-  isResourceOfType(value, WorkerTypeId);
 
 /** Services available to a worker impl's init effect. */
 export type WorkerServices = Worker | WorkerEnvironment;
@@ -104,12 +68,30 @@ export type WorkerShape =
   | void
   | ({ fetch?: HttpEffect<any> } & Partial<MainRpc<never>>);
 
-export interface WorkerClass extends Effect.Effect<Worker, never, Worker> {
+export const WorkerDefinitionTag = "Alchemy.WorkerDefinition" as const;
+
+/**
+ * The deployable definition `Worker.make(impl)` produces: a runtime-inert
+ * marker carrying the impl, typed as the layer the deploy wrapper will
+ * actually produce. Only deploy wrappers consume it — building it
+ * directly dies with guidance.
+ */
+export interface WorkerDefinition {
+  readonly _tag: typeof WorkerDefinitionTag;
+  readonly impl: Effect.Effect<any, any, any>;
+}
+
+export const isWorkerDefinition = (value: unknown): value is WorkerDefinition =>
+  typeof value === "object" &&
+  value !== null &&
+  (value as { _tag?: unknown })._tag === WorkerDefinitionTag;
+
+export interface WorkerClass {
   <Self, Shape = never>(): {
     /**
      * Inline form: the deployable class in one declaration — the impl
-     * (carrying its capability layers and deployment target in its own
-     * provide chain) sits right on the class.
+     * (carrying its capability layers in its own provide chain) sits
+     * right on the class; the deploy wrapper picks it up.
      */
     <
       const Id extends string,
@@ -125,7 +107,7 @@ export interface WorkerClass extends Effect.Effect<Worker, never, Worker> {
     ): Effect.Effect<
       Worker & Rpc<Self>,
       never,
-      Providers | Extract<Req, HostRef | DeploymentService<any, string>>
+      Extract<Req, HostRef | DeploymentService<any, string>>
     > &
       Named<Id> & {
         new (
@@ -136,11 +118,13 @@ export interface WorkerClass extends Effect.Effect<Worker, never, Worker> {
       };
     <const Id extends string>(
       id: Id,
-    ): Effect.Effect<Worker & Rpc<Self>, never, Providers> &
+    ): Effect.Effect<Worker & Rpc<Self>, never, never> &
       Named<Id> & {
         /**
-         * The deployable module: the impl carries its own capability
-         * layers AND its deployment target in one provide chain.
+         * The deployable definition: the impl carries its own capability
+         * layers in one provide chain; the deploy wrapper
+         * (`Cloudflare.Worker(cls, props, definition)`) supplies the
+         * platform.
          */
         make<
           Req extends
@@ -157,7 +141,7 @@ export interface WorkerClass extends Effect.Effect<Worker, never, Worker> {
         ): Layer.Layer<
           Self,
           never,
-          Providers | Extract<Req, HostRef | DeploymentService<any, string>>
+          Extract<Req, HostRef | DeploymentService<any, string>>
         >;
         new (
           _: never,
@@ -168,153 +152,64 @@ export interface WorkerClass extends Effect.Effect<Worker, never, Worker> {
   };
 }
 
-const platform = Platform(WorkerTypeId, {
-  createRuntimeContext: makeGenericWorkerRuntimeContext,
-});
+/** The keyed Self tag a deploy wrapper provides with the native resource. */
+export const workerSelf = (logicalId: string) =>
+  Self(`${WorkerTypeId}<${logicalId}>`);
+
+const makeDefinition = (impl: Effect.Effect<any, any, any>, tag: any) =>
+  Object.assign(
+    Layer.effect(
+      tag,
+      Effect.die(
+        new Error(
+          "An Alchemy.Worker definition cannot be built directly — deploy " +
+            "it through a cloud wrapper, e.g. " +
+            "`Cloudflare.Worker(Api, { main: import.meta.url }, ApiLive)` " +
+            "(or Celld.Worker / Rivet.Worker).",
+        ),
+      ),
+    ),
+    { _tag: WorkerDefinitionTag, impl },
+  );
+
+const makeWorkerClass = (
+  id: string,
+  inlineImpl?: Effect.Effect<any, any, any>,
+): any => {
+  const tag = workerSelf(id);
+  class PortableWorker {
+    /** Logical id of the worker this class names. Statically readable. */
+    static readonly LogicalId = id;
+    /** The Context tag the deploy wrapper provides the native resource under. */
+    static readonly Self = tag;
+    /** Inline-form impl, when the class was declared with one. @internal */
+    static readonly impl = inlineImpl;
+    static make = (impl: Effect.Effect<any, any, any>) =>
+      makeDefinition(impl, tag);
+  }
+  // Make the class a real Effect: `yield* Api` resolves the tag — the
+  // deploy wrapper's layer provides it with the native worker resource.
+  return Object.assign(
+    PortableWorker,
+    Effectable.Prototype({
+      label: `${WorkerTypeId}<${id}>`,
+      evaluate: () => tag,
+    }),
+  );
+};
 
 const workerConstructor = (...args: any[]): any => {
   if (args.length === 0) {
-    const tagged = (platform as any)();
-    return (id: string, impl?: unknown) => {
-      if (Effect.isEffect(impl)) {
-        // Inline form: the class IS the deployable — props are empty; the
-        // deployment target arrives via the impl's own provide chain.
-        return tagged(id, {}, impl);
-      }
-      const cls = tagged(id);
-      // The portable surface takes the impl ONLY — deployment config
-      // arrives via the deploy wrapper (`Cloudflare.Worker(cls, props,
-      // layer)`), which provides the target + self host-ref to the LAYER.
-      // Layers build at stack setup, but the target must be visible during
-      // IMPL evaluation (per-resource, worker runtime context ambient) so
-      // it can record itself for `foldProps`/`wrapServe` and so hosted DO
-      // layers can discharge their HostRef requirement. Capture both here
-      // at layer build and re-inject them around the impl.
-      const platformMake = cls.make;
-      cls.make = (implOnly: unknown) =>
-        Layer.unwrap(
-          Effect.gen(function* () {
-            const target = yield* Effect.serviceOption(WorkerTarget).pipe(
-              Effect.map(Option.getOrUndefined),
-            );
-            const hostRef = yield* Effect.serviceOption(HostRef).pipe(
-              Effect.map(Option.getOrUndefined),
-            );
-            let impl = Effect.gen(function* () {
-              if (target !== undefined) {
-                // Reproduce the target layer's recording side effect at
-                // impl-evaluation time (the worker's runtime context only
-                // exists here, not at stack-layer build).
-                const ctx = yield* Effect.serviceOption(RuntimeContext).pipe(
-                  Effect.map(Option.getOrUndefined),
-                );
-                if (ctx !== undefined) {
-                  (ctx as GenericWorkerRuntimeContext).target = target;
-                }
-              }
-              return yield* implOnly as Effect.Effect<any, any, any>;
-            }) as Effect.Effect<any, any, any>;
-            if (target !== undefined) {
-              impl = impl.pipe(Effect.provideService(WorkerTarget, target));
-            }
-            if (hostRef !== undefined) {
-              impl = impl.pipe(Effect.provideService(HostRef, hostRef));
-            }
-            return platformMake.call(cls, {}, impl) as Layer.Layer<any>;
-          }),
-        );
-      return cls;
-    };
+    return (id: string, impl?: unknown) =>
+      makeWorkerClass(
+        id,
+        Effect.isEffect(impl) ? (impl as Effect.Effect<any>) : undefined,
+      );
   }
-  return (platform as any)(...args);
+  return makeWorkerClass(
+    args[0] as string,
+    Effect.isEffect(args[1]) ? (args[1] as Effect.Effect<any>) : undefined,
+  );
 };
 
-export const Worker: WorkerClass = Object.assign(
-  workerConstructor,
-  platform,
-) as any;
-
-export const WorkerProvider = () =>
-  Provider.effect(
-    Worker as any,
-    Effect.gen(function* () {
-      return {
-        read: ({ output }: { output: Record<string, any> | undefined }) =>
-          Effect.succeed(output),
-
-        diff: ({
-          id,
-          news,
-          output,
-        }: {
-          id: string;
-          news: any;
-          output: Record<string, any> | undefined;
-        }) =>
-          Effect.gen(function* () {
-            const kind: string | undefined = news?.target?.kind;
-            if (kind === undefined || output === undefined) {
-              return undefined;
-            }
-            const engine = yield* findWorkerEngine(kind);
-            return engine.diff
-              ? yield* engine.diff({ id, news, output: output?.engine })
-              : undefined;
-          }),
-
-        reconcile: Effect.fn(function* ({
-          id,
-          news,
-          olds,
-          output,
-          session,
-          bindings,
-        }: {
-          id: string;
-          news: WorkerProps;
-          olds: WorkerProps | undefined;
-          output: Record<string, any> | undefined;
-          session: { note: (message: string) => Effect.Effect<void> };
-          bindings: ResourceBinding<WorkerBindingContract>[];
-        }) {
-          const engine = yield* findWorkerEngine(news.target?.kind);
-          const attributes = yield* engine.reconcile({
-            id,
-            news: news as Record<string, any>,
-            olds: olds as Record<string, any> | undefined,
-            // Engines see their own attribute bag.
-            output: output?.engine,
-            session,
-            bindings,
-          });
-          return {
-            targetKind: news.target!.kind,
-            url: (attributes as { url?: string }).url,
-            engine: attributes,
-          };
-        }),
-
-        delete: Effect.fn(function* ({
-          id,
-          olds,
-          output,
-        }: {
-          id: string;
-          olds: WorkerProps;
-          output: Record<string, any>;
-        }) {
-          const kind: string | undefined =
-            output?.targetKind ?? olds?.target?.kind;
-          if (kind === undefined) {
-            return;
-          }
-          const engine = yield* findWorkerEngine(kind);
-          yield* engine.delete({
-            id,
-            olds: olds as Record<string, any>,
-            output: output?.engine ?? output,
-          });
-        }),
-      };
-    }),
-  );
+export const Worker: WorkerClass = workerConstructor as any;

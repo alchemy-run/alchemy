@@ -1,13 +1,14 @@
 export * from "./DurableObject.ts";
 export * from "./DurableObjectState.ts";
 export {
-  WorkerEngine,
+  Deployment,
+  HostRef,
   WorkerTarget,
-  findWorkerEngine,
+  type DeploymentService,
+  type DurableObjectNamespaceClient,
+  type HostRefService,
   type WorkerBindingContract,
-  type WorkerEngineService,
   type WorkerTargetService,
 } from "./Engine.ts";
-export { providers, Providers } from "./Providers.ts";
 export * from "./Worker.ts";
-// Internal: RuntimeContext.ts (bundle/runtime scaffolding).
+// Internal: Deploy.ts (per-cloud deploy-wrapper scaffolding).

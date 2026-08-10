@@ -1,71 +1,55 @@
 /**
- * The **Rivet deployment target** for `Alchemy.Worker`.
+ * The **Rivet deployment** of the portable `Alchemy.Worker`.
  *
- * `Rivet.Worker({ cluster, main })` is a Layer provided INSIDE the worker
- * impl's own provide chain — it resolves the {@link Cluster}'s connection
- * material, records the target on the worker's runtime context, and
- * supplies the Rivet-specific runtime behaviors (the gateway-backed
- * Durable Object stub flavors).
+ * `Rivet.Worker(cls, { cluster, main }, implOrDefinition)` is the deploy
+ * module: it constructs the NATIVE {@link RivetWorker} resource from the
+ * cloud-free impl and emits the `Deployment` proof, while
+ * `Rivet.Worker.ref(cls)` lets callers bind to the worker — consuming
+ * that proof and yielding the platform-agnostic `HostRef`.
  *
- * With NO props (`Rivet.Worker()`) the layer is **client-only**: it
- * supplies the transport a remote caller (Lambda, ECS task) needs to reach
- * a Rivet worker's Durable Objects, and records nothing — the caller's own
- * deployment target stays in charge.
- *
- * The matching **engine** (`Alchemy.WorkerEngine/rivet`, registered by
- * `Rivet.providers()`) owns the deployment lifecycle. Rivet inverts celld:
- * the user's actor code runs in their OWN long-running process (a
- * "runner") that connects OUT to the Rivet Engine — nothing is uploaded to
- * the engine. So reconcile builds the user's `main` (plus the generated
- * runner entry) into a container image and keeps it running via the
- * platform's {@link RunnerHost} (`aws-ecs` deploys an ECS service with no
- * inbound ports).
+ * Rivet inverts celld: the user's actor code runs in their OWN
+ * long-running process (a "runner") that connects OUT to the Rivet Engine
+ * — nothing is uploaded to the engine. So reconcile builds the user's
+ * `main` (plus the generated runner entry) into a container image and
+ * keeps it running via the platform's {@link RunnerHost} (`aws-ecs`
+ * deploys an ECS service with no inbound ports).
  *
  * @section Deploying a Worker to a Cluster
  * @example
  * ```typescript
  * export class Api extends Alchemy.Worker<Api>()("Api") {}
  *
- * export default Api.make(
+ * export default Rivet.Worker(
+ *   Api,
+ *   { cluster: Actors, main: import.meta.url },
  *   Effect.gen(function* () {
  *     yield* Counter;
  *     return {};
- *   }).pipe(
- *     Effect.provide(
- *       CounterLive.pipe(
- *         Layer.provideMerge(Rivet.Worker({ cluster: Actors, main: import.meta.url })),
- *       ),
- *     ),
- *   ),
+ *   }).pipe(Effect.provide(CounterLive)),
  * );
  * ```
  */
-import {
-  Deployment,
-  HostRef,
-  type DeploymentService,
-  type HostRefService,
-} from "../Worker/Engine.ts";
-import {
-  resolveWorkerRef,
-  workerConnectionKeys,
-} from "../Worker/DurableObject.ts";
+import type { DeploymentService, HostRef } from "../Worker/Engine.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
-import * as Output from "../Output.ts";
-import { packEnvValue, RuntimeContext } from "../RuntimeContext.ts";
+import { Platform } from "../Platform.ts";
+import * as Provider from "../Provider.ts";
+import type { Resource, ResourceBinding } from "../Resource.ts";
+import { packEnvValue } from "../RuntimeContext.ts";
 import { Stack } from "../Stack.ts";
 import { asEffect } from "../Util/types.ts";
+import { makeWorkerRuntimeContext } from "../Cloudflare/Workers/WorkerRuntimeContext.ts";
 import {
-  WorkerEngine,
+  makeWorkerDeploy,
+  type WorkerDeployAdapter,
+} from "../Worker/Deploy.ts";
+import {
   WorkerTarget,
+  type HostRefService,
   type WorkerBindingContract,
-  type WorkerEngineService,
   type WorkerTargetService,
 } from "../Worker/Engine.ts";
-import type { GenericWorkerRuntimeContext } from "../Worker/RuntimeContext.ts";
 import type { Cluster } from "./Cluster.ts";
 import { findClusterHost } from "./ClusterHost.ts";
 import {
@@ -82,6 +66,9 @@ import {
 } from "./RunnerHost.ts";
 
 export const RIVET_ENGINE = "rivet";
+
+export const RivetWorkerTypeId = "Rivet.Worker";
+export type RivetWorkerTypeId = typeof RivetWorkerTypeId;
 
 /**
  * A reference to the {@link Cluster} class: the class itself, or a thunk
@@ -110,6 +97,7 @@ const resolveClusterRef = (
   );
 };
 
+/** The public deploy-wrapper props. */
 export interface RivetWorkerProps {
   /** The {@link Cluster} this worker's runner connects to. */
   cluster: ClusterRef;
@@ -136,101 +124,85 @@ export interface RivetWorkerProps {
 }
 
 /**
- * The in-runner stub flavor: the synthetic runner environment (see
- * `Runner.ts`) already maps each hosted class to a gateway-backed
- * namespace, so the "native binding" IS the finished stub.
+ * The persisted Props of the native `Rivet.Worker` resource: the deploy
+ * config plus the cluster connection material resolved by the deploy
+ * wrapper (attribute Outputs of the Cluster — resolved to plain values by
+ * reconcile), plus the env/exports channels the platform machinery fills.
  */
-const localDurableObject = (nativeBinding: any) => nativeBinding;
+export interface RivetWorkerResourceProps {
+  /** Entry module of the worker bundle. */
+  main: string;
+  /** Environment image the bundled runner is layered onto. */
+  image?: string;
+  /** The rivetkit release installed into the runner image. */
+  rivetkitVersion?: string;
+  /** Runner task CPU units. */
+  cpu?: number;
+  /** Runner task memory (MiB). */
+  memory?: number;
+  /** Number of runner instances. */
+  desiredCount?: number;
+  /** Bundler configuration overrides. */
+  build?: unknown;
+  /** Logical id of the {@link Cluster} this worker's runner connects to. */
+  cluster?: string;
+  /** The runner host kind (keys the RunnerHost lookup). */
+  hostKind?: string;
+  /** The Rivet Engine endpoint. */
+  endpoint?: string;
+  /** The cluster admin token. */
+  adminToken?: Redacted.Redacted<string>;
+  /** Host-specific connection state copied from the cluster. */
+  hostState?: Record<string, any>;
+  /** Extra environment variables for the runner. @internal */
+  env?: Record<string, any>;
+  /** Durable Object / export map, populated from the impl. @internal */
+  exports?: Record<string, any>;
+  /** @internal */
+  isExternal?: boolean;
+}
+
+export interface RivetWorkerAttributes {
+  workerName: string;
+  /** The worker's reachable URL (the engine endpoint). */
+  url: string | undefined;
+  endpoint: string | undefined;
+  adminToken: Redacted.Redacted<string> | undefined;
+  hostKind: string | undefined;
+  hostState: Record<string, any> | undefined;
+  /**
+   * Rivet drains actors on lower versions once a higher one registers —
+   * the version must strictly increase across deploys, so it derives from
+   * the persisted attributes, not the content.
+   */
+  envoyVersion: number;
+  /** Host-specific runner state (ECS service/task identifiers, image). */
+  runner: Record<string, any> | undefined;
+  code: { hash: string | undefined };
+}
+
+export interface RivetWorker extends Resource<
+  RivetWorkerTypeId,
+  RivetWorkerResourceProps,
+  RivetWorkerAttributes,
+  WorkerBindingContract
+> {}
 
 /**
- * The remote-caller stub flavor: speak the Rivet gateway protocol against
- * the engine endpoint + token that the engine's `callerBinding` bound into
- * the caller's environment.
+ * The native `Rivet.Worker` platform resource. Constructed by the deploy
+ * wrapper (`Rivet.Worker(cls, props, impl)`) — the platform machinery
+ * evaluates the impl (exports, Durable Object registrations); the
+ * provider below owns the runner deployment lifecycle.
  */
-const remoteDurableObject = ({
-  url,
-  secret,
-  namespace,
-}: {
-  url: string;
-  secret: string;
-  namespace: string;
-}) =>
-  makeRivetActorClient(
-    {
-      endpoint: url,
-      token: secret,
-      namespace: RIVET_ACTOR_NAMESPACE,
-      pool: RIVET_RUNNER_POOL,
-    },
-    namespace,
-  );
-
-/**
- * The Rivet target layer. With props, resolves the cluster's connection
- * material at plan (a no-op at runtime — the bundle re-executes this
- * layer, where only the runtime behaviors matter) and records the target
- * on the worker's runtime context. With NO props, client-only: supplies
- * the transport without recording a deployment.
- */
-const makeTarget = (props?: RivetWorkerProps): Layer.Layer<WorkerTarget> =>
-  Layer.effect(
-    WorkerTarget,
-    Effect.gen(function* () {
-      let targetProps: Record<string, unknown> = {
-        engine: RIVET_ENGINE,
-        main: props?.main,
-        image: props?.image,
-        rivetkitVersion: props?.rivetkitVersion,
-        cpu: props?.cpu,
-        memory: props?.memory,
-        desiredCount: props?.desiredCount,
-        build: props?.build,
-      };
-
-      if (props !== undefined && !globalThis.__ALCHEMY_RUNTIME__) {
-        // Resolve the cluster and copy its connection material. Yielding
-        // the cluster class references the stack's cluster node (memoized
-        // by logical id) and orders it ahead of the worker in the graph.
-        // The host KIND must be plan-readable (it keys the RunnerHost
-        // lookup), so it comes from the cluster's resolved Props, not the
-        // attribute Output.
-        const clusterClass = resolveClusterRef(props.cluster);
-        const cluster = (yield* asEffect(clusterClass as any)) as Cluster & {
-          Props?: { hostKind?: string };
-        };
-        targetProps = {
-          ...targetProps,
-          cluster: clusterClass.LogicalId,
-          hostKind: cluster.Props?.hostKind ?? cluster.hostKind,
-          endpoint: cluster.endpoint,
-          adminToken: cluster.adminToken,
-          hostState: cluster.hostState,
-        };
-      }
-
-      const target: WorkerTargetService = {
-        kind: RIVET_ENGINE,
-        props: targetProps,
-        localDurableObject,
-        remoteDurableObject,
-      };
-
-      // Record the target on the ambient worker runtime context so the
-      // platform folds it into the persisted Props — but ONLY for the
-      // deployment form. The client-only form must not clobber the
-      // caller's own target (e.g. a celld worker calling a Rivet DO).
-      if (props !== undefined) {
-        const ctx = yield* Effect.serviceOption(RuntimeContext).pipe(
-          Effect.map(Option.getOrUndefined),
-        );
-        if (ctx !== undefined) {
-          (ctx as GenericWorkerRuntimeContext).target = target;
-        }
-      }
-      return target;
-    }),
-  );
+export const RivetWorkerResource = Platform(RivetWorkerTypeId, {
+  // The impl evaluates through the shared worker runtime context (exports
+  // and Durable Object registration machinery); only the resource Type
+  // stamp differs (the context is Object.assigned onto the instance).
+  createRuntimeContext: (id: string) => ({
+    ...makeWorkerRuntimeContext(id),
+    Type: RivetWorkerTypeId as any,
+  }),
+});
 
 /** Render a container env value: strings verbatim, everything else packed
  * so the runtime `get` accessor round-trips it (Redacted markers included). */
@@ -241,92 +213,82 @@ const renderVar = (value: unknown): string =>
       ? Redacted.value(value as Redacted.Redacted<any>)
       : packEnvValue(value);
 
-interface RivetTargetProps {
-  cluster?: string;
-  main?: string;
-  image?: string;
-  rivetkitVersion?: string;
-  cpu?: number;
-  memory?: number;
-  desiredCount?: number;
-  build?: unknown;
-  hostKind?: string;
-  endpoint?: string;
-  adminToken?: Redacted.Redacted<string>;
-  hostState?: Record<string, any>;
-}
-
 const truncateName = (name: string, maxLength: number) =>
   name.length <= maxLength ? name : name.slice(0, maxLength);
 
+const workerName = (stack: { name: string; stage: string }, id: string) =>
+  `${stack.name}-${stack.stage}-${id}`.toLowerCase();
+
+const runnerNames = (
+  stack: { name: string; stage: string },
+  id: string,
+): RunnerNames => {
+  const base = `${workerName(stack, id)}-runner`;
+  return {
+    serviceName: truncateName(base, 255),
+    repositoryName: truncateName(base, 255),
+    taskFamily: truncateName(base, 255),
+    taskRoleName: truncateName(`${workerName(stack, id)}-rnr-task`, 64),
+    executionRoleName: truncateName(`${workerName(stack, id)}-rnr-exec`, 64),
+    logGroupName: `/ecs/${truncateName(base, 200)}`,
+  };
+};
+
+const runnerSource = (news: RivetWorkerResourceProps): RunnerSource => ({
+  main: news.main,
+  build: news.build,
+  image: news.image,
+  rivetkitVersion: news.rivetkitVersion,
+  cpu: news.cpu,
+  memory: news.memory,
+  desiredCount: news.desiredCount,
+});
+
+const collectBindings = (
+  bindings: { data?: WorkerBindingContract; action?: string }[],
+) => {
+  const active = (bindings ?? []).filter(
+    (binding) => binding.action !== "delete",
+  );
+  const durableObjects = new Map<string, { name: string; className: string }>();
+  const env: Record<string, unknown> = {};
+  for (const binding of active) {
+    for (const declaration of binding.data?.durableObjects ?? []) {
+      durableObjects.set(declaration.name, declaration);
+    }
+    Object.assign(env, binding.data?.env ?? {});
+  }
+  return { durableObjects: [...durableObjects.values()], env };
+};
+
 /**
- * The `rivet` {@link WorkerEngine}: the deployment lifecycle for
- * `Alchemy.Worker`s targeted at a Rivet cluster. Registered by
- * `Rivet.providers()`.
+ * The `Rivet.Worker` provider: the runner deployment lifecycle for
+ * workers targeted at a Rivet cluster. Registered by `Rivet.providers()`.
  */
-export const RivetWorkerEngine = (): Layer.Layer<WorkerEngine<"rivet">> =>
-  Layer.effect(
-    WorkerEngine(RIVET_ENGINE),
+export const RivetWorkerProvider = () =>
+  Provider.effect(
+    RivetWorkerResource as any,
     Effect.gen(function* () {
-      const stack = yield* Stack;
-
-      const workerName = (id: string) =>
-        `${stack.name}-${stack.stage}-${id}`.toLowerCase();
-
-      const runnerNames = (id: string): RunnerNames => {
-        const base = `${workerName(id)}-runner`;
-        return {
-          serviceName: truncateName(base, 255),
-          repositoryName: truncateName(base, 255),
-          taskFamily: truncateName(base, 255),
-          taskRoleName: truncateName(`${workerName(id)}-rnr-task`, 64),
-          executionRoleName: truncateName(`${workerName(id)}-rnr-exec`, 64),
-          logGroupName: `/ecs/${truncateName(base, 200)}`,
-        };
-      };
-
-      const runnerSource = (target: RivetTargetProps): RunnerSource => ({
-        main: target.main!,
-        build: target.build,
-        image: target.image,
-        rivetkitVersion: target.rivetkitVersion,
-        cpu: target.cpu,
-        memory: target.memory,
-        desiredCount: target.desiredCount,
-      });
-
-      const collectBindings = (
-        bindings: { data?: WorkerBindingContract; action?: string }[],
-      ) => {
-        const active = (bindings ?? []).filter(
-          (binding) => binding.action !== "delete",
-        );
-        const durableObjects = new Map<
-          string,
-          { name: string; className: string }
-        >();
-        const env: Record<string, unknown> = {};
-        for (const binding of active) {
-          for (const declaration of binding.data?.durableObjects ?? []) {
-            durableObjects.set(declaration.name, declaration);
-          }
-          Object.assign(env, binding.data?.env ?? {});
-        }
-        return { durableObjects: [...durableObjects.values()], env };
-      };
-
       return {
-        kind: "Alchemy.WorkerEngine" as const,
+        read: ({ output }: { output: Record<string, any> | undefined }) =>
+          Effect.succeed(output),
 
-        diff: ({ id: _id, news, output }) =>
+        diff: ({
+          news,
+          output,
+        }: {
+          id: string;
+          news: any;
+          output: Record<string, any> | undefined;
+        }) =>
           Effect.gen(function* () {
-            const target: RivetTargetProps | undefined = news?.target?.props;
-            if (output === undefined || typeof target?.main !== "string") {
+            if (output === undefined || typeof news?.main !== "string") {
               return undefined;
             }
-            const host = yield* findRunnerHost(target.hostKind);
+            const stack = yield* Stack;
+            const host = yield* findRunnerHost(news.hostKind);
             const hash = yield* host.runnerCodeHash({
-              source: runnerSource(target),
+              source: runnerSource(news),
               bootstrap: makeRivetRunnerEntry(news?.exports ?? {}, {
                 name: stack.name,
                 stage: stack.stage,
@@ -342,32 +304,38 @@ export const RivetWorkerEngine = (): Layer.Layer<WorkerEngine<"rivet">> =>
           id,
           news,
           output,
-          bindings,
           session,
+          bindings,
+        }: {
+          id: string;
+          news: RivetWorkerResourceProps;
+          olds: RivetWorkerResourceProps | undefined;
+          output: Record<string, any> | undefined;
+          session: { note: (message: string) => Effect.Effect<void> };
+          bindings: ResourceBinding<WorkerBindingContract>[];
         }) {
-          const target: RivetTargetProps = news.target?.props ?? {};
+          const stack = yield* Stack;
 
-          if (target.main === undefined) {
+          if (news.main === undefined) {
             return yield* Effect.die(
-              new Error(
-                `Alchemy.Worker '${id}' (rivet) requires a 'main' entry module on its target.`,
-              ),
+              new Error(`Rivet.Worker '${id}' requires a 'main' entry module.`),
             );
           }
           if (
-            target.endpoint === undefined ||
-            target.adminToken === undefined ||
-            target.hostKind === undefined
+            news.endpoint === undefined ||
+            news.adminToken === undefined ||
+            news.hostKind === undefined
           ) {
             return yield* Effect.die(
               new Error(
-                `Alchemy.Worker '${id}' (rivet) has no cluster connection — ` +
-                  "declare the cluster on the target: Rivet.Worker({ cluster, main }).",
+                `Rivet.Worker '${id}' has no cluster connection — ` +
+                  "declare the cluster on the deploy wrapper: " +
+                  "Rivet.Worker(cls, { cluster, main }, impl).",
               ),
             );
           }
 
-          const host = yield* findRunnerHost(target.hostKind);
+          const host = yield* findRunnerHost(news.hostKind);
           const { env: bindingEnv } = collectBindings(bindings as any);
 
           // Rivet drains actors on lower versions once a higher one
@@ -392,9 +360,9 @@ export const RivetWorkerEngine = (): Layer.Layer<WorkerEngine<"rivet">> =>
             // rivetkit rejects RIVET_NAMESPACE alongside it, so the
             // namespace travels inside the endpoint.
             RIVET_ENDPOINT: formatRivetEndpoint({
-              endpoint: target.endpoint,
+              endpoint: news.endpoint,
               namespace: RIVET_ACTOR_NAMESPACE,
-              token: Redacted.value(target.adminToken),
+              token: Redacted.value(news.adminToken),
             }),
             RIVET_POOL: RIVET_RUNNER_POOL,
             RIVET_ENVOY_VERSION: String(envoyVersion),
@@ -403,14 +371,14 @@ export const RivetWorkerEngine = (): Layer.Layer<WorkerEngine<"rivet">> =>
           yield* session.note("deploying rivet runner");
           const result = yield* host.deployRunner({
             id,
-            names: runnerNames(id),
-            source: runnerSource(target),
+            names: runnerNames(stack, id),
+            source: runnerSource(news),
             env,
             bootstrap: makeRivetRunnerEntry(news.exports ?? {}, {
               name: stack.name,
               stage: stack.stage,
             }),
-            connection: { hostState: target.hostState },
+            connection: { hostState: news.hostState },
             tags: {
               "alchemy::stack": stack.name,
               "alchemy::stage": stack.stage,
@@ -421,22 +389,28 @@ export const RivetWorkerEngine = (): Layer.Layer<WorkerEngine<"rivet">> =>
           });
 
           return {
-            workerName: workerName(id),
-            url: target.endpoint,
-            endpoint: target.endpoint,
-            adminToken: target.adminToken,
-            hostKind: target.hostKind,
-            hostState: target.hostState,
+            workerName: workerName(stack, id),
+            url: news.endpoint,
+            endpoint: news.endpoint,
+            adminToken: news.adminToken,
+            hostKind: news.hostKind,
+            hostState: news.hostState,
             envoyVersion,
             runner: result.runnerState,
             code: { hash: result.codeHash },
           };
         }),
 
-        delete: Effect.fn(function* ({ olds, output }) {
+        delete: Effect.fn(function* ({
+          olds,
+          output,
+        }: {
+          id: string;
+          olds: RivetWorkerResourceProps;
+          output: Record<string, any>;
+        }) {
           const kind: string | undefined =
-            (output?.hostKind as string | undefined) ??
-            olds?.target?.props?.hostKind;
+            (output?.hostKind as string | undefined) ?? olds?.hostKind;
           if (kind === undefined || output?.runner === undefined) {
             return;
           }
@@ -444,47 +418,128 @@ export const RivetWorkerEngine = (): Layer.Layer<WorkerEngine<"rivet">> =>
           yield* host.deleteRunner({ output: output.runner });
         }),
 
-        callerBinding: ({ worker, host, urlKey, secretKey }) =>
-          Effect.gen(function* () {
-            const adapter = yield* findClusterHost(
-              worker.Props?.target?.props?.hostKind,
-            );
-            // Engine-specific attributes live under the worker's `engine`
-            // bag — hand the adapter an Output view of what it needs.
-            const engineAttrs = worker.engine;
-            const fragment = yield* adapter.callerBinding({
-              target: {
-                hostState: Output.map(
-                  engineAttrs,
-                  (attrs: any) => attrs?.hostState,
-                ),
-              },
-              host,
-            });
-            return {
-              ...fragment,
-              env: {
-                ...(fragment as { env?: Record<string, unknown> }).env,
-                [urlKey]: Output.map(
-                  engineAttrs,
-                  (attrs: any) => attrs?.endpoint,
-                ),
-                [secretKey]: Output.map(
-                  engineAttrs,
-                  (attrs: any) => attrs?.adminToken,
-                ),
-              },
-            };
-          }),
-      } satisfies WorkerEngineService;
+        list: () => Effect.succeed([]),
+      };
     }),
-  ) as Layer.Layer<WorkerEngine<"rivet">>;
+  );
+
+/**
+ * The in-runner stub flavor: the synthetic runner environment (see
+ * `Runner.ts`) already maps each hosted class to a gateway-backed
+ * namespace, so the "native binding" IS the finished stub.
+ */
+const localDurableObject = (nativeBinding: any) => nativeBinding;
+
+/**
+ * The remote-caller stub flavor: speak the Rivet gateway protocol against
+ * the engine endpoint + token that the ref's `callerBinding` bound into
+ * the caller's environment.
+ */
+const remoteDurableObject = ({
+  url,
+  secret,
+  namespace,
+}: {
+  url: string;
+  secret: string;
+  namespace: string;
+}) =>
+  makeRivetActorClient(
+    {
+      endpoint: url,
+      token: secret,
+      namespace: RIVET_ACTOR_NAMESPACE,
+      pool: RIVET_RUNNER_POOL,
+    },
+    namespace,
+  );
+
+/** The Rivet per-cloud adapter provided around the worker impl. */
+const rivetTarget: WorkerTargetService = {
+  kind: RIVET_ENGINE,
+  // No gateway wrap: the runner serves no HTTP — actors are reached
+  // through the engine's own gateway protocol.
+  durableObjectBinding: (declaration) => ({ durableObjects: [declaration] }),
+  localDurableObject,
+  remoteDurableObject,
+};
+
+const callerBinding =
+  (): HostRefService["callerBinding"] =>
+  ({ worker, host, urlKey, secretKey }) =>
+    Effect.gen(function* () {
+      const adapter = yield* findClusterHost(worker.Props?.hostKind);
+      const fragment = yield* adapter.callerBinding({
+        target: { hostState: worker.hostState },
+        host,
+      });
+      return {
+        ...fragment,
+        env: {
+          ...(fragment as { env?: Record<string, unknown> }).env,
+          [urlKey]: worker.endpoint,
+          [secretKey]: worker.adminToken,
+        },
+      };
+    });
+
+const adapter: WorkerDeployAdapter<"rivet"> = {
+  kind: RIVET_ENGINE,
+  target: rivetTarget,
+  callerBinding,
+  makeNative: (clsId, props: RivetWorkerProps, impl) => {
+    const nativeCls = (RivetWorkerResource as any)(clsId);
+    // Input-shaped props (cluster attributes are Outputs, resolved to
+    // plain values by reconcile) — typed loosely for the platform's
+    // InputProps.
+    const nativeProps = Effect.gen(function* () {
+      const base: Record<string, unknown> = {
+        main: props.main,
+        image: props.image,
+        rivetkitVersion: props.rivetkitVersion,
+        cpu: props.cpu,
+        memory: props.memory,
+        desiredCount: props.desiredCount,
+        build: props.build,
+      };
+      // At runtime the deploy module re-executes inside the runner, where
+      // only the runtime behaviors matter — never touch the cluster node.
+      if (globalThis.__ALCHEMY_RUNTIME__) {
+        return base;
+      }
+      // Resolve the cluster and copy its connection material. Yielding
+      // the cluster class references the stack's cluster node (memoized
+      // by logical id) and orders it ahead of the worker in the graph.
+      // The host KIND must be plan-readable (it keys the RunnerHost
+      // lookup), so it comes from the cluster's resolved Props, not the
+      // attribute Output.
+      const clusterClass = resolveClusterRef(props.cluster);
+      const cluster = (yield* asEffect(clusterClass as any)) as Cluster & {
+        Props?: { hostKind?: string };
+      };
+      return {
+        ...base,
+        cluster: clusterClass.LogicalId,
+        hostKind: cluster.Props?.hostKind ?? cluster.hostKind,
+        endpoint: cluster.endpoint,
+        adminToken: cluster.adminToken,
+        hostState: cluster.hostState,
+      };
+    });
+    return {
+      layer: nativeCls.make(nativeProps, impl),
+      instance: nativeCls.Self,
+    };
+  },
+};
+
+const { deployWorker, workerRef } = makeWorkerDeploy(adapter);
 
 export type { WorkerBindingContract };
 
 /**
  * The Rivet **deploy module** form plus its `.ref` companion — the same
- * shape every engine exposes, so switching clouds is one line.
+ * shape every deploy target exposes, so switching clouds is one line.
  *
  * ```ts
  * export const ApiWorker = Rivet.Worker(Api, { ... }, ApiLive);
@@ -492,100 +547,12 @@ export type { WorkerBindingContract };
  *   WebLive.pipe(Layer.provide(Rivet.Worker.ref(Api))));
  * ```
  *
- * The worker class is passed explicitly because `Layer.provide` returns a
- * fresh layer, so an annotation on the layer would not survive a binder's
- * `.pipe(...)`. It mirrors the resource form's leading `id: string`; here
- * the id is the tag.
+ * The worker class is passed explicitly because it names the deployment
+ * (the class's logical id is the native resource's id). It mirrors the
+ * resource form's leading `id: string`; here the id is the tag.
  */
-const deployWorker = <Self, WOut, RIn>(
-  cls: Effect.Effect<WOut, never, any>,
-  props: RivetWorkerProps,
-  layer:
-    | Layer.Layer<Self, never, RIn | WorkerTarget | HostRef>
-    | Effect.Effect<any, any, RIn | WorkerTarget | HostRef>,
-): Layer.Layer<
-  Self | DeploymentService<WOut, "rivet">,
-  never,
-  Exclude<RIn, WorkerTarget | HostRef>
-> => {
-  // The impl-effect form: the class is already in hand, so `make` is
-  // called here rather than by the caller.
-  const resolved = Effect.isEffect(layer)
-    ? ((cls as any).make(layer) as Layer.Layer<any, never, any>)
-    : layer;
-  const clsId = resolveWorkerRef(cls as any).LogicalId;
-  const selfRef = Layer.sync(HostRef, () => ({
-    kind: RIVET_ENGINE,
-    workerId: clsId,
-    // Never read on the hosting path (dispatch compares ids and hosts);
-    // present so foreign-DO layers piped with their own ref are unaffected.
-    worker: undefined,
-    ...workerConnectionKeys(clsId),
-    remoteDurableObject,
-  }));
-  const deployed = resolved.pipe(
-    Layer.provide(Layer.mergeAll(makeTarget(props), selfRef)),
-  );
-  const deployment = Layer.effect(
-    Deployment<WOut, "rivet">(RIVET_ENGINE, clsId),
-    Effect.gen(function* () {
-      // Inside the deployed worker the entry rebuilds this layer, but the
-      // resource effect belongs to plan time — running it in the isolate
-      // drags plan machinery (Terminal/NodeServices) into workerd, which
-      // dies on beta.105 (`process.stdin.once` is not a function). Nothing
-      // consumes Deployment at runtime; refs guard themselves.
-      if (globalThis.__ALCHEMY_RUNTIME__) {
-        return {
-          kind: RIVET_ENGINE as "rivet",
-          worker: undefined as unknown as WOut,
-        };
-      }
-      const worker = yield* cls as unknown as Effect.Effect<WOut, never, never>;
-      return { kind: RIVET_ENGINE as "rivet", worker };
-    }),
-  );
-  return deployment.pipe(Layer.provideMerge(deployed)) as Layer.Layer<
-    Self | DeploymentService<WOut, "rivet">,
-    never,
-    Exclude<RIn, WorkerTarget | HostRef>
-  >;
-};
-
-/**
- * Assert — and prove — that `cls` is deployed to Rivet, yielding the
- * platform-agnostic {@link HostRef} a binder requires. Only the Rivet
- * deploy module for this worker can discharge the `Deployment`
- * requirement, so a binder pointed at a worker hosted elsewhere fails to
- * compile.
- */
-const workerRef = <WOut>(
-  cls: Effect.Effect<WOut, never, any>,
-): Layer.Layer<HostRef, never, DeploymentService<WOut, "rivet">> =>
-  Layer.effect(
-    HostRef,
-    Effect.gen(function* () {
-      const clsId = resolveWorkerRef(cls as any).LogicalId;
-      const { urlKey, secretKey } = workerConnectionKeys(clsId);
-      const base = {
-        kind: RIVET_ENGINE,
-        workerId: clsId,
-        urlKey,
-        secretKey,
-        remoteDurableObject,
-      };
-      // Inside the deployed caller the layer stack re-executes, but the
-      // stack-scoped Deployment proof is a plan-time construct — the
-      // connection material arrives via the bound env instead.
-      if (globalThis.__ALCHEMY_RUNTIME__) {
-        return { ...base, worker: undefined };
-      }
-      const deployment = yield* Deployment<WOut, "rivet">(RIVET_ENGINE, clsId);
-      return { ...base, worker: deployment.worker };
-    }),
-  );
-
 export const Worker: {
-  /** Deploy a worker definition layer (shared-module form). */
+  /** Deploy a worker definition (shared-module form). */
   <Self, WOut, RIn>(
     cls: Effect.Effect<WOut, never, any>,
     props: RivetWorkerProps,
@@ -595,8 +562,7 @@ export const Worker: {
     never,
     Exclude<RIn, WorkerTarget | HostRef>
   >;
-  /** Deploy an impl effect directly — the class is already in hand, so
-   *  `make` is called by the wrapper (single-module form). */
+  /** Deploy an impl effect directly (single-module form). */
   <WOut, Self, I extends Effect.Effect<any, any, any>>(
     cls: Effect.Effect<WOut, never, any> & {
       make: (impl: I) => Layer.Layer<Self, never, any>;
@@ -608,5 +574,7 @@ export const Worker: {
     never,
     Extract<Effect.Services<I>, DeploymentService<any, string>>
   >;
-  readonly ref: typeof workerRef;
+  readonly ref: <WOut>(
+    cls: Effect.Effect<WOut, never, any>,
+  ) => Layer.Layer<HostRef, never, DeploymentService<WOut, "rivet">>;
 } = Object.assign(deployWorker as any, { ref: workerRef });

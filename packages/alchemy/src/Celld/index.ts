@@ -14,9 +14,13 @@ export {
 } from "./FleetHost.ts";
 export {
   CELLD_ENGINE,
-  CelldWorkerEngine,
+  CelldWorkerProvider,
+  CelldWorkerResource,
   Worker,
+  type CelldWorker,
+  type CelldWorkerAttributes,
   type CelldWorkerProps,
+  type CelldWorkerResourceProps,
   type FleetRef,
 } from "./Worker.ts";
 export { DEFAULT_CELLD_IMAGE, DEFAULT_CELLD_VERSION } from "./CelldCli.ts";

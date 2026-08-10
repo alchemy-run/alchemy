@@ -28,10 +28,14 @@ export {
 } from "./RunnerHost.ts";
 export {
   RIVET_ENGINE,
-  RivetWorkerEngine,
+  RivetWorkerProvider,
+  RivetWorkerResource,
   Worker,
   type ClusterRef,
+  type RivetWorker,
+  type RivetWorkerAttributes,
   type RivetWorkerProps,
+  type RivetWorkerResourceProps,
 } from "./Worker.ts";
 export {
   RivetGatewayError,

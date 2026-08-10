@@ -123,8 +123,6 @@ import * as WorkersForPlatforms from "./WorkersForPlatforms/index.ts";
 import * as Workflows from "./Workflows/Workflow.ts";
 import * as Zaraz from "./Zaraz/index.ts";
 import * as Zone from "./Zone/index.ts";
-import * as AlchemyWorker from "../Worker/Providers.ts";
-import { CloudflareWorkerEngine } from "./WorkerEngine.ts";
 
 export { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 
@@ -686,11 +684,6 @@ export const providers = () =>
     // local provider composes it into its `ProviderLayer.dual` local thunk,
     // so workerd machinery only builds when a local variant is actually
     // demanded (dev runs, or deleting a local-mode row during deploy).
-    // The portable `Alchemy.Worker` provider + the `cloudflare` engine.
-    // provideMerge so the generic worker provider's dynamic engine lookup
-    // (and Durable Object caller bindings) see them in the stack context.
-    Layer.provideMerge(AlchemyWorker.providers()),
-    Layer.provideMerge(CloudflareWorkerEngine()),
     Layer.provideMerge(CloudflareApiLive()),
     Layer.orDie,
   );
