@@ -573,6 +573,16 @@ export const DistributionProvider = () =>
           `CloudFront Distribution wait: polling deployment for ${distributionId}`,
         );
         return yield* cloudfront.getDistribution({ Id: distributionId }).pipe(
+          // Bound each poll — a wedged read must count as "not deployed
+          // yet" and retry, never hang the deploy (see the delete-wait).
+          Effect.timeout(30_000),
+          Effect.catchTag("TimeoutError", () =>
+            Effect.fail(
+              new DistributionPendingDeployment({
+                message: `Timed out reading distribution ${distributionId} while polling deployment`,
+              }),
+            ),
+          ),
           Effect.map((response) => response.Distribution),
           Effect.flatMap((distribution) =>
             distribution?.Status === "Deployed"
@@ -708,7 +718,23 @@ export const DistributionProvider = () =>
         return yield* Effect.logInfo(
           `CloudFront Distribution delete: waiting for ${distributionId} to become disabled and deployed`,
         ).pipe(
-          Effect.andThen(() => getCurrent(distributionId)),
+          // Bound each poll: a single wedged HTTP read (stale keep-alive
+          // socket) otherwise hangs the whole destroy — observed as a
+          // disable-wait that logged one poll and then sat silent past a
+          // 60-minute test budget. Timeout counts as "not ready yet" and
+          // rides the same bounded retry.
+          Effect.andThen(() =>
+            getCurrent(distributionId).pipe(
+              Effect.timeout(30_000),
+              Effect.catchTag("TimeoutError", () =>
+                Effect.fail(
+                  new DistributionPendingDeletionReadiness({
+                    message: `Timed out reading distribution ${distributionId} while waiting for deletion readiness`,
+                  }),
+                ),
+              ),
+            ),
+          ),
           Effect.flatMap(
             Effect.fn(function* (current) {
               if (!current) {

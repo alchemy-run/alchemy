@@ -81,9 +81,12 @@ describe.skipIf(!runLive)("AWS.Website.Router", () => {
     // Create waits for Status === "Deployed" (~5 min) and destroy is
     // disable -> wait -> delete (~5-15 min more): 600s was measured too
     // small — the run died mid-destroy with green assertions.
-    // CloudFront full lifecycle: create (~7m) + invalidations + disable-wait
-    // + delete (~10-20m). Same budget as StaticSite's live test.
-    { timeout: 2_400_000 },
+    // CloudFront full lifecycle (create + KV-routed assertions + disable +
+    // delete) measures ~6m with bounded polls; generous headroom for
+    // propagation variance. If this ever times out mid-destroy again,
+    // suspect a hung poll first (see the Effect.timeout guards in
+    // Distribution.ts), not CloudFront.
+    { timeout: 1_500_000 },
   );
 });
 
