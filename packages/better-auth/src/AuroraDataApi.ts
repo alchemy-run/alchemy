@@ -2,6 +2,7 @@ import type { RuntimeContext } from "alchemy";
 import * as AWS from "alchemy/AWS";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
 import {
   Database,
@@ -218,10 +219,11 @@ export const makeDataApiDialect = (
 
 export interface AuroraDataApiOptions {
   /**
-   * Secrets Manager secret holding the database credentials (Aurora's
-   * managed master secret, or one you provision).
+   * Secrets Manager secret holding the database credentials. Required when
+   * passing a bare `DBCluster`; defaults to the composite's `secret` when
+   * passing an `AWS.RDS.Aurora` result.
    */
-  readonly secret: AWS.SecretsManager.Secret;
+  readonly secret?: AWS.SecretsManager.Secret;
   /** Database name inside the cluster. */
   readonly database?: string;
   /**
@@ -231,6 +233,35 @@ export interface AuroraDataApiOptions {
    */
   readonly migrate?: false;
 }
+
+/** The `AWS.RDS.Aurora` composite pieces this layer consumes. */
+interface AuroraLike {
+  readonly cluster: AWS.RDS.DBCluster;
+  readonly secret: AWS.SecretsManager.Secret;
+  readonly writer: AWS.RDS.DBInstance;
+}
+
+const isAuroraLike = (value: object): value is AuroraLike =>
+  "cluster" in value && "secret" in value && "writer" in value;
+
+/**
+ * A freshly-created cluster answers `DatabaseNotFoundException` until its
+ * writer instance registers, and a Serverless v2 cluster answers
+ * `DatabaseResumingException` while scaling from zero — both transient.
+ * Bounded per the speed doctrine (~1 minute of backoff).
+ */
+const transientRetry = <A, E extends { _tag: string }, R>(
+  effect: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  effect.pipe(
+    Effect.retry({
+      while: (error) =>
+        error._tag === "DatabaseResumingException" ||
+        error._tag === "DatabaseNotFoundException",
+      schedule: Schedule.exponential("2 seconds", 1.5),
+      times: 8,
+    }),
+  );
 
 /**
  * Aurora (RDS Data API) database layer for {@link BetterAuth} — the
@@ -243,25 +274,14 @@ export interface AuroraDataApiOptions {
  * enabled (`AWS.RDS.Aurora` enables it by default).
  *
  * ```typescript
+ * export const Db = AWS.RDS.Aurora("AuthDb", { subnetIds, securityGroupIds });
+ *
  * export default AuthFunction.make(
  *   { main, url: true },
  *   Effect.gen(function* () {
- *     const db = yield* AWS.RDS.Aurora("AuthDb", { ... });
  *     const auth = yield* BetterAuth({ emailAndPassword: { enabled: true } });
  *     return { fetch: ... };
- *   }).pipe(
- *     Effect.provide(
- *       Layer.unwrap(
- *         Effect.map(AWS.RDS.Aurora("AuthDb", { ... }), (db) =>
- *           AuroraDataApi(db.cluster, { secret: db.secret, database: "auth" }),
- *         ),
- *       ),
- *     ),
- *     Effect.provide(AWS.RDSData.ExecuteStatementHttp),
- *     Effect.provide(AWS.RDSData.BeginTransactionHttp),
- *     Effect.provide(AWS.RDSData.CommitTransactionHttp),
- *     Effect.provide(AWS.RDSData.RollbackTransactionHttp),
- *   ),
+ *   }).pipe(Effect.provide(AuroraDataApi(Db, { database: "postgres" }))),
  * );
  * ```
  *
@@ -269,18 +289,31 @@ export interface AuroraDataApiOptions {
  * this layer.
  */
 export const AuroraDataApi = (
-  cluster: AWS.RDS.DBCluster | Effect.Effect<AWS.RDS.DBCluster, never, any>,
-  options: AuroraDataApiOptions,
+  cluster:
+    | AWS.RDS.DBCluster
+    | AuroraLike
+    | Effect.Effect<AWS.RDS.DBCluster | AuroraLike, never, any>,
+  options?: AuroraDataApiOptions,
 ) =>
   Layer.effect(
     Database,
     Effect.gen(function* () {
-      const db = Effect.isEffect(cluster)
-        ? yield* cluster as Effect.Effect<AWS.RDS.DBCluster>
+      const source = Effect.isEffect(cluster)
+        ? yield* cluster as Effect.Effect<AWS.RDS.DBCluster | AuroraLike>
         : cluster;
+      const composite = isAuroraLike(source) ? source : undefined;
+      const db = composite?.cluster ?? (source as AWS.RDS.DBCluster);
+      const secret = options?.secret ?? composite?.secret;
+      if (secret === undefined) {
+        return yield* Effect.die(
+          new Error(
+            "AuroraDataApi: pass the AWS.RDS.Aurora composite, or a DBCluster together with `options.secret`.",
+          ),
+        );
+      }
       const bindingOptions = {
-        secret: options.secret,
-        ...(options.database === undefined
+        secret,
+        ...(options?.database === undefined
           ? {}
           : { database: options.database }),
       };
@@ -312,9 +345,13 @@ export const AuroraDataApi = (
         const dialect = yield* makeDataApiDialect({
           execute: (request) =>
             run(
-              executeStatement(request as AWS.RDSData.ExecuteStatementRequest),
+              transientRetry(
+                executeStatement(
+                  request as AWS.RDSData.ExecuteStatementRequest,
+                ),
+              ),
             ),
-          begin: () => run(beginTransaction()),
+          begin: () => run(transientRetry(beginTransaction())),
           commit: (transactionId) => run(commitTransaction({ transactionId })),
           rollback: (transactionId) =>
             run(rollbackTransaction({ transactionId })),
@@ -330,18 +367,26 @@ export const AuroraDataApi = (
       // Deploy-time migrations call the Data API through distilled with the
       // ambient stack credentials (mirroring D1's deploy-time HTTP client).
       // DCE'd from runtime bundles.
-      if (!globalThis.__ALCHEMY_RUNTIME__ && options.migrate !== false) {
+      if (!globalThis.__ALCHEMY_RUNTIME__ && options?.migrate !== false) {
         return {
           ...service,
           migrate: {
-            identity: { clusterArn: db.dbClusterArn } as Record<
-              string,
-              unknown
-            >,
+            identity: {
+              clusterArn: db.dbClusterArn,
+              // depend on the WRITER instance too: a cluster with no
+              // registered instance answers DatabaseNotFoundException
+              ...(composite === undefined
+                ? {}
+                : { writerArn: composite.writer.dbInstanceArn }),
+            } as Record<string, unknown>,
             connect: Effect.gen(function* () {
               // Init half — capture the ARNs as Action dependencies.
               const clusterArn = yield* db.dbClusterArn;
-              const secretArn = yield* options.secret.secretArn;
+              const secretArn = yield* secret.secretArn;
+              if (composite !== undefined) {
+                // capture-only: the migration must wait for the writer
+                yield* composite.writer.dbInstanceArn;
+              }
               const ambient = yield* Effect.context<never>();
               // Apply half — Data API dialect over distilled.
               return Effect.gen(function* () {
@@ -353,7 +398,7 @@ export const AuroraDataApi = (
                 const base = {
                   resourceArn,
                   secretArn: resolvedSecretArn,
-                  ...(options.database === undefined
+                  ...(options?.database === undefined
                     ? {}
                     : { database: options.database }),
                 };
@@ -366,12 +411,15 @@ export const AuroraDataApi = (
                 const dialect = yield* makeDataApiDialect({
                   execute: (request) =>
                     run(
-                      rdsdata.executeStatement({
-                        ...base,
-                        ...request,
-                      } as never),
+                      transientRetry(
+                        rdsdata.executeStatement({
+                          ...base,
+                          ...request,
+                        } as never),
+                      ),
                     ),
-                  begin: () => run(rdsdata.beginTransaction(base)),
+                  begin: () =>
+                    run(transientRetry(rdsdata.beginTransaction(base))),
                   commit: (transactionId) =>
                     run(
                       rdsdata.commitTransaction({

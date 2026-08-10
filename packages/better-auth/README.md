@@ -111,15 +111,7 @@ export const Db = AWS.RDS.Aurora("AuthDb", {
 Effect.gen(function* () {
   const auth = yield* BetterAuth({ emailAndPassword: { enabled: true } });
   // ...
-}).pipe(
-  Effect.provide(
-    Layer.unwrap(
-      Effect.map(Db, (db) =>
-        AuroraDataApi(db.cluster, { secret: db.secret, database: "postgres" }),
-      ),
-    ),
-  ),
-);
+}).pipe(Effect.provide(AuroraDataApi(Db, { database: "postgres" })));
 ```
 
 ## Cloudflare Hyperdrive

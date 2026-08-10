@@ -2,7 +2,6 @@ import * as AWS from "alchemy/AWS";
 import * as Lambda from "alchemy/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
@@ -34,11 +33,9 @@ export const Db = Effect.gen(function* () {
   });
 });
 
-const AuthDatabase = Layer.unwrap(
-  Effect.map(Db, (db) =>
-    AuroraDataApi(db.cluster, { secret: db.secret, database: "postgres" }),
-  ),
-);
+// The layer takes the Aurora composite directly — cluster + secret +
+// writer dependency all wired from one value.
+const AuthDatabase = AuroraDataApi(Db, { database: "postgres" });
 
 export class AuroraAuthFunction extends Lambda.Function<Lambda.Function>()(
   "BetterAuthAuroraFunction",
