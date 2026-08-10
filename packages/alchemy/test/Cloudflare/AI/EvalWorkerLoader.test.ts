@@ -208,6 +208,34 @@ test(
   { timeout: 180_000 },
 );
 
+test(
+  "async: the SYNTAX MATRIX links in the isolate (every import form at once)",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    // one round trip, many forms: named, aliased, namespace, a second
+    // statement on the same line, and a local export the program uses
+    const facts = yield* session(
+      url,
+      `
+        import { search } from "./tools.js";
+        import { search as find } from "./tools.js";
+        import * as everything from "./tools.js";
+        const marker = "m";export { marker };
+        export default async function () {
+          const direct = await search({ query: "direct" });
+          const aliased = await find({ query: "aliased" });
+          const viaNamespace = await everything.search({ query: "namespace" });
+          return [direct, aliased, viaNamespace, marker].join(" | ");
+        }`,
+    );
+    expect(facts.queries).toEqual(["direct", "aliased", "namespace"]);
+    expect(facts.resultPrompt).toContain(
+      "results for direct | results for aliased | results for namespace | m",
+    );
+  }),
+  { timeout: 180_000 },
+);
+
 // ─── the EFFECT convention (EvalWorkerLoaderEffect) ─────────────────
 
 test(
@@ -273,6 +301,41 @@ test(
     // the CONCATENATED value can only exist if catchTag matched the
     // reconstructed tagged error across the isolate boundary
     expect(facts.resultPrompt).toContain("caught:/tmp/nope");
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "effect: the SYNTAX MATRIX of effect imports resolves against the monolith",
+  Effect.gen(function* () {
+    const { effectUrl } = yield* stack;
+    // every rewritten form in one program: submodule namespace, submodule
+    // named, aliased named, ROOT namespace, root named, and two
+    // statements on one line — each value is used, so a form that failed
+    // to link shows up in the result
+    const facts = yield* session(
+      effectUrl,
+      `
+        import * as Effect from "effect/Effect";
+        import { millis } from "effect/Duration";
+        import { succeed as pure } from "effect/Effect";
+        import * as everything from "effect";
+        import { Duration } from "effect";
+        import { search } from "./tools.js";import { search as find } from "./tools.js";
+        export default Effect.gen(function* () {
+          yield* Effect.sleep(millis(1));
+          const fromPure = yield* pure("pure");
+          const viaRootNamespace = everything.Duration.toMillis(millis(2));
+          const viaRootNamed = Duration.toMillis(millis(3));
+          const searched = yield* search({ query: "matrix" });
+          const found = yield* find({ query: "alias" });
+          return [fromPure, viaRootNamespace, viaRootNamed, searched, found].join(" | ");
+        });`,
+    );
+    expect(facts.queries).toEqual(["matrix", "alias"]);
+    expect(facts.resultPrompt).toContain(
+      "pure | 2 | 3 | results for matrix | results for alias",
+    );
   }),
   { timeout: 180_000 },
 );

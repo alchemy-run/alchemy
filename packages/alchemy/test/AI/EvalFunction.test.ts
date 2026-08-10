@@ -342,6 +342,123 @@ describe("EvalFunction", () => {
     );
   });
 
+  describe("export rewriting", () => {
+    it("an exported const KEEPS its local binding", () =>
+      Effect.gen(function* () {
+        // rewriting `export const a = 1` to `__exports.a = 1` would leave
+        // `a` undefined for the rest of the module
+        const result = yield* run({
+          "helper.js": `
+            export const base = 2;
+            export const doubled = base * 2;`,
+          "main.js": `
+            import { base, doubled } from "./helper.js";
+            export default async function () { return base + doubled; }`,
+        });
+        expect(result.output).toBe(6);
+      }));
+
+    it("exports let and var", () =>
+      Effect.gen(function* () {
+        const result = yield* run({
+          "helper.js": `export let a = 1;\nexport var b = 2;`,
+          "main.js": `
+            import { a, b } from "./helper.js";
+            export default async function () { return a + b; }`,
+        });
+        expect(result.output).toBe(3);
+      }));
+
+    it("exports function declarations (incl. async and generator)", () =>
+      Effect.gen(function* () {
+        const result = yield* run({
+          "helper.js": `
+            export function sync() { return "s"; }
+            export async function asynchronous() { return "a"; }
+            export function* generator() { yield "g"; }`,
+          "main.js": `
+            import { sync, asynchronous, generator } from "./helper.js";
+            export default async function () {
+              return sync() + (await asynchronous()) + [...generator()].join("");
+            }`,
+        });
+        expect(result.output).toBe("sag");
+      }));
+
+    it("exports class declarations", () =>
+      Effect.gen(function* () {
+        const result = yield* run({
+          "helper.js": `export class Greeter { hello() { return "hi"; } }`,
+          "main.js": `
+            import { Greeter } from "./helper.js";
+            export default async function () { return new Greeter().hello(); }`,
+        });
+        expect(result.output).toBe("hi");
+      }));
+
+    it("exports a local clause, with aliases", () =>
+      Effect.gen(function* () {
+        const result = yield* run({
+          "helper.js": `
+            const a = 1;
+            const b = 2;
+            export { a, b as renamed };`,
+          "main.js": `
+            import { a, renamed } from "./helper.js";
+            export default async function () { return a + renamed; }`,
+        });
+        expect(result.output).toBe(3);
+      }));
+
+    it("re-exports a clause from another module, with aliases", () =>
+      Effect.gen(function* () {
+        const result = yield* run({
+          "inner.js": `export const value = 7;`,
+          "outer.js": `export { value, value as alias } from "./inner.js";`,
+          "main.js": `
+            import { value, alias } from "./outer.js";
+            export default async function () { return value + alias; }`,
+        });
+        expect(result.output).toBe(14);
+      }));
+
+    it("exports a default alias from another module", () =>
+      Effect.gen(function* () {
+        const result = yield* run({
+          "inner.js": `export default "inner-default";`,
+          "outer.js": `export { default as inherited } from "./inner.js";`,
+          "main.js": `
+            import { inherited } from "./outer.js";
+            export default async function () { return inherited; }`,
+        });
+        expect(result.output).toBe("inner-default");
+      }));
+
+    it("`export default` accepts a named function declaration", () =>
+      Effect.gen(function* () {
+        const result = yield* run({
+          "main.js": `export default async function named() { return "named"; }`,
+        });
+        expect(result.output).toBe("named");
+      }));
+
+    it("a module can export MANY forms at once", () =>
+      Effect.gen(function* () {
+        const result = yield* run({
+          "helper.js": `
+            export const a = "a";
+            export function b() { return "b"; }
+            export class C { name() { return "c"; } }
+            const d = "d";
+            export { d };`,
+          "main.js": `
+            import { a, b, C, d } from "./helper.js";
+            export default async function () { return a + b() + new C().name() + d; }`,
+        });
+        expect(result.output).toBe("abcd");
+      }));
+  });
+
   describe("tools", () => {
     it.live("the reserved tools.raw.js exposes granted handlers", () =>
       Effect.gen(function* () {

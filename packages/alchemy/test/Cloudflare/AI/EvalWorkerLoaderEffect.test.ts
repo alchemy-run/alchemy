@@ -1,12 +1,20 @@
 /**
  * UNIT tests for {@link rewriteEffectImports} — the source transform
- * `EvalWorkerLoaderEffect` applies to model-authored code before it is
- * wrapped into the isolate's program module. The isolate's module map
- * has no node_modules, so `effect` import STATEMENTS must become
- * destructures of the bundled `effect` namespace the prelude provides;
- * everything else must pass through byte-for-byte.
+ * `EvalWorkerLoaderEffect` applies to every module of the request graph
+ * before the isolate loads it. The isolate's module map has no
+ * node_modules, so `effect` import STATEMENTS must become destructures
+ * of the bundled monolith namespace the prelude imports; everything
+ * else must pass through byte-for-byte.
+ *
+ * The matrix here mirrors `test/AI/EvalFunction.test.ts`'s import
+ * matrix (the in-process rewriter), so the two rewriters are held to
+ * the same syntax coverage: every clause shape, statement position,
+ * quoting, and pass-through case.
  */
-import { rewriteEffectImports } from "@/Cloudflare/AI/EvalWorkerLoaderEffect.ts";
+import {
+  effectTransform,
+  rewriteEffectImports,
+} from "@/Cloudflare/AI/EvalWorkerLoaderEffect.ts";
 import { describe, expect, it } from "alchemy-test";
 
 describe("rewriteEffectImports", () => {
@@ -15,6 +23,12 @@ describe("rewriteEffectImports", () => {
       expect(
         rewriteEffectImports(`import * as Effect from "effect/Effect";`),
       ).toBe(`const Effect = effect.Effect;`);
+    });
+
+    it("rewrites a namespace import of the ROOT package", () => {
+      expect(
+        rewriteEffectImports(`import * as everything from "effect";`),
+      ).toBe(`const everything = effect;`);
     });
 
     it("keeps the local alias, not the module name", () => {
@@ -49,11 +63,11 @@ describe("rewriteEffectImports", () => {
         rewriteEffectImports(
           `import   *   as   Effect   from   "effect/Effect" ;`,
         ),
-      ).toBe(`const Effect = effect.Effect; ;`);
+      ).toBe(`const Effect = effect.Effect;`);
     });
   });
 
-  describe("named imports from a submodule", () => {
+  describe("named imports", () => {
     it("rewrites a single named import", () => {
       expect(rewriteEffectImports(`import { gen } from "effect/Effect";`)).toBe(
         `const { gen } = effect.Effect;`,
@@ -90,9 +104,7 @@ describe("rewriteEffectImports", () => {
         ),
       );
     });
-  });
 
-  describe("named imports from the effect root", () => {
     it("rewrites root named imports to the namespace itself", () => {
       expect(
         rewriteEffectImports(`import { Effect, Duration } from "effect";`),
@@ -103,6 +115,56 @@ describe("rewriteEffectImports", () => {
       expect(rewriteEffectImports(`import { Effect as E } from 'effect'`)).toBe(
         `const { Effect: E } = effect;`,
       );
+    });
+  });
+
+  describe("other statement forms", () => {
+    it("drops a side-effect-only import (nothing to run)", () => {
+      expect(rewriteEffectImports(`import "effect/Effect";`).trim()).toBe("");
+    });
+
+    it("re-exports named bindings off the namespace", () => {
+      expect(rewriteEffectImports(`export { gen } from "effect/Effect";`)).toBe(
+        `const { gen } = effect.Effect; export { gen };`,
+      );
+    });
+
+    it("a re-export ALIAS binds and exports the alias", () => {
+      // `b as c` takes `b` from the module and exports it as `c`, so the
+      // local binding — and the re-export — must be `c`
+      expect(
+        rewriteEffectImports(
+          `export { gen as generate } from "effect/Effect";`,
+        ),
+      ).toBe(`const { gen: generate } = effect.Effect; export { generate };`);
+    });
+  });
+
+  describe("statement position (minified / multi-statement lines)", () => {
+    it("rewrites a second statement on the SAME line", () => {
+      expect(
+        rewriteEffectImports(
+          `import * as Effect from "effect/Effect";import { millis } from "effect/Duration";`,
+        ),
+      ).toBe(
+        `const Effect = effect.Effect;const { millis } = effect.Duration;`,
+      );
+    });
+
+    it("rewrites fully minified imports (no spaces)", () => {
+      expect(
+        rewriteEffectImports(`import*as Effect from"effect/Effect";`),
+      ).toBe(`const Effect = effect.Effect;`);
+      // the clause is copied verbatim, so a minified clause stays tight
+      expect(rewriteEffectImports(`import{gen}from"effect/Effect";`)).toBe(
+        `const {gen} = effect.Effect;`,
+      );
+    });
+
+    it("rewrites INDENTED imports, preserving the indentation", () => {
+      expect(
+        rewriteEffectImports(`  import * as Data from "effect/Data";`),
+      ).toBe(`  const Data = effect.Data;`);
     });
   });
 
@@ -126,13 +188,18 @@ describe("rewriteEffectImports", () => {
       expect(rewriteEffectImports(code)).toBe(code);
     });
 
-    it("leaves DEEP subpaths alone (not part of the bundled runtime)", () => {
-      const code = `import { HttpClient } from "effect/unstable/http";`;
+    it("leaves DEEP subpaths alone (the monolith has only top-level modules)", () => {
+      const code = `import { HttpClient } from "effect/unstable/http/HttpClient";`;
       expect(rewriteEffectImports(code)).toBe(code);
     });
 
-    it("leaves default imports alone (no such export on the runtime)", () => {
+    it("leaves default imports alone (effect modules have no default export)", () => {
       const code = `import Effect from "effect/Effect";`;
+      expect(rewriteEffectImports(code)).toBe(code);
+    });
+
+    it("leaves relative tool imports alone", () => {
+      const code = `import { search } from "./tools.js";`;
       expect(rewriteEffectImports(code)).toBe(code);
     });
 
@@ -151,9 +218,10 @@ describe("rewriteEffectImports", () => {
       const program = [
         `import * as Effect from "effect/Effect";`,
         `import { Duration } from "effect";`,
+        `import { search } from "./tools.js";`,
         ``,
-        `return Effect.gen(function* () {`,
-        `  const first = yield* tools.search({ query: "alchemy" });`,
+        `export default Effect.gen(function* () {`,
+        `  const first = yield* search({ query: "alchemy" });`,
         `  yield* Effect.sleep(Duration.millis(1));`,
         `  return first;`,
         `});`,
@@ -162,9 +230,10 @@ describe("rewriteEffectImports", () => {
         [
           `const Effect = effect.Effect;`,
           `const { Duration } = effect;`,
+          `import { search } from "./tools.js";`,
           ``,
-          `return Effect.gen(function* () {`,
-          `  const first = yield* tools.search({ query: "alchemy" });`,
+          `export default Effect.gen(function* () {`,
+          `  const first = yield* search({ query: "alchemy" });`,
           `  yield* Effect.sleep(Duration.millis(1));`,
           `  return first;`,
           `});`,
@@ -172,42 +241,51 @@ describe("rewriteEffectImports", () => {
       );
     });
 
-    it("rewrites INDENTED imports (models indent freely)", () => {
-      expect(
-        rewriteEffectImports(`  import * as Data from "effect/Data";`),
-      ).toBe(`const Data = effect.Data;`);
-    });
-
     it("is idempotent", () => {
       const program = [
         `import * as Effect from "effect/Effect";`,
         `import { flatMap as fm } from "effect/Effect";`,
         `import { Duration } from "effect";`,
-        `return Effect.void;`,
+        `export default Effect.void;`,
       ].join("\n");
       const once = rewriteEffectImports(program);
       expect(rewriteEffectImports(once)).toBe(once);
     });
 
-    it("output is syntactically valid JavaScript", () => {
+    it("the rewritten bindings are legal STATEMENTS", () => {
       const rewritten = rewriteEffectImports(
         [
           `import * as Effect from "effect/Effect";`,
           `import { map, flatMap as fm } from "effect/Effect";`,
           `import { Duration as D } from "effect";`,
-          `return Effect.void;`,
         ].join("\n"),
       );
-      // wraps like programModule does: body position, so the rewritten
-      // import lines must be legal STATEMENTS (imports would throw here)
+      // no `import` survives, and the result parses as a function body
+      expect(rewritten).not.toContain("import");
       expect(
         () =>
-          new Function(
-            "tools",
-            "effect",
-            `return (async () => {\n${rewritten}\n})()`,
-          ),
+          new Function("effect", `${rewritten}\nreturn [Effect, map, fm, D];`),
       ).not.toThrow();
+    });
+  });
+
+  describe("effectTransform", () => {
+    it("prepends a REAL namespace import of the monolith", () => {
+      const transformed = effectTransform(
+        `import * as Effect from "effect/Effect";\nexport default Effect.void;`,
+      );
+      expect(transformed.split("\n")[0]).toBe(
+        `import * as effect from "./effect.js";`,
+      );
+      expect(transformed).toContain(`const Effect = effect.Effect;`);
+    });
+
+    it("still prepends for a module that imports nothing from effect", () => {
+      // one unused import is harmless; the alternative is scanning for
+      // usage, which a rewrite cannot do reliably
+      const transformed = effectTransform(`export default async () => 1;`);
+      expect(transformed).toContain(`import * as effect from "./effect.js";`);
+      expect(transformed).toContain(`export default async () => 1;`);
     });
   });
 });
