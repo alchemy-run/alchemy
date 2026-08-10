@@ -22,8 +22,9 @@ import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as S from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
+import * as Stream from "effect/Stream";
 import { isAiError, type AiError } from "effect/unstable/ai/AiError";
-import type * as LanguageModel from "effect/unstable/ai/LanguageModel";
+import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import * as Prompt from "effect/unstable/ai/Prompt";
 import * as AiTool from "effect/unstable/ai/Tool";
 import * as Toolkit from "effect/unstable/ai/Toolkit";
@@ -35,20 +36,20 @@ import { isDispatchTool, type DispatchTool } from "./Dispatch.ts";
 import type { Charter, Turn, TurnFn } from "./Driver.ts";
 import { Refused } from "./Errors.ts";
 import { isEvent } from "./Event.ts";
-import { type ModelService } from "./Model.ts";
+import * as Response from "effect/unstable/ai/Response";
 import {
   isLiveObservation,
   RoundAbandoned,
-  SessionObserver,
+  EventStream,
   type EncodedCrash,
   type SessionObservation,
-} from "./Observer.ts";
+} from "./EventStream.ts";
 import { isParameter } from "./Parameter.ts";
 import { dedentTemplate, isFragment, type Fragment } from "./Fragment.ts";
 import type {
   SessionSocketHost,
   SessionSocketServerFrame,
-} from "./SessionSocket.ts";
+} from "./EventStream.ts";
 import { isSkill, type Skill, type SkillService } from "./Skill.ts";
 import {
   Thread,
@@ -63,7 +64,7 @@ import type {
   ThreadStorageService,
 } from "./ThreadStorage.ts";
 import { isTool, isToolImpl, type Tool } from "./Tool.ts";
-import { ToolCalling, type ToolPresentation } from "./ToolCalling.ts";
+import { ToolEngine, type ToolPresentation } from "./ToolEngine.ts";
 
 /**
  * A burst failure, described for the driver's two consumers (spec
@@ -464,7 +465,7 @@ export interface SessionOps {
   readonly term: string;
   readonly key: string;
   /** The charter's captured Layer context: capability resolution and
-   *  the optional seams (`ToolCalling`). */
+   *  the optional seams (`ToolEngine`). */
   readonly context: Context.Context<never>;
   /** Provide the session-scoped services (`AI.Thread`, `AI.Tick`,
    *  refs, the captured context, the runtime color) to charter code. */
@@ -728,7 +729,7 @@ export const renderStance = (
  * (function turns receive `{count, inputs}`), render the stance,
  * walk the skill graph to its active fixpoint, and assemble this
  * sampling's system prompt + toolkit — capabilities through the
- * optional `ToolCalling` seam, intrinsics always direct.
+ * optional `ToolEngine` seam, intrinsics always direct.
  */
 export const compileTick = (
   ops: SessionOps,
@@ -875,7 +876,7 @@ export const compileTick = (
       capabilityHandlers[name] = observedHandler(name, doorHandler);
     }
 
-    // the TOOL-CALLING seam: an optional convention transforms how
+    // the TOOL ENGINE: an optional convention transforms how
     // the capabilities are PRESENTED (e.g. codemode collapses them
     // into one `eval` tool) — mention-is-presence unchanged;
     // absent, every grant is its own provider tool
@@ -884,7 +885,7 @@ export const compileTick = (
       ...activeTools,
       ...doorTools,
     ]);
-    const toolCalling = Context.getOption(ops.context, ToolCalling);
+    const toolCalling = Context.getOption(ops.context, ToolEngine);
     const wire: ToolPresentation =
       Option.isSome(toolCalling) && capabilityTools.length > 0
         ? yield* toolCalling.value.present(
@@ -994,17 +995,159 @@ export const compileTick = (
     };
   });
 
+/** The provider surface one sampling needs from `LanguageModel`. */
+export interface StreamingLanguageModel {
+  readonly streamText: unknown;
+}
+
+/** A live wire fact, surfaced AS IT STREAMS (deltas, tool calls). */
+type LivePart =
+  | { readonly kind: "text" | "reasoning"; readonly delta: string }
+  | {
+      readonly kind: "tool-call";
+      readonly id: string;
+      readonly name: string;
+      readonly params: unknown;
+    };
+
+/**
+ * One call to the {@link StreamingLanguageModel}: stream the provider
+ * wire and consolidate the parts back into the response shape the
+ * round consumes.
+ *
+ * - The wire is STREAMED so an observer sees text/thinking tokens as
+ *   they arrive; block metadata is merged across deltas (Anthropic's
+ *   thinking SIGNATURE arrives as a late empty delta and must survive
+ *   onto the consolidated reasoning part, or the next request fails).
+ * - Tool RESULTS are load-bearing: they are what
+ *   `Prompt.fromResponseParts` turns into the tool message answering
+ *   the call. Drop one and the thread records a call nothing ever
+ *   answered — providers reject that.
+ * - Retryability is the error's own testimony (spec §11b): a
+ *   deterministic failure (billing, auth, content policy) must not be
+ *   re-sampled — it propagates TYPED to the round. Custom retry,
+ *   tiering, or budget policy belongs on the `LanguageModel` service
+ *   itself: wrap it with a Layer; the loop consumes the standard
+ *   effect/ai component and adds only this transient-failure default.
+ */
+const sampleModel = (
+  languageModel: StreamingLanguageModel,
+  options: {
+    readonly prompt: Prompt.Prompt;
+    readonly toolkit: Toolkit.WithHandler<any> | undefined;
+    readonly onLive: (part: LivePart) => Effect.Effect<void>;
+  },
+): Effect.Effect<LanguageModel.GenerateTextResponse<any>, unknown> =>
+  Effect.gen(function* () {
+    const parts: Array<unknown> = [];
+    // open blocks by stream id (providers interleave by index)
+    const open = new Map<
+      string,
+      { type: "text" | "reasoning"; text: string; metadata: any }
+    >();
+    yield* Stream.runForEach(
+      (
+        languageModel.streamText as (
+          streamOptions: unknown,
+        ) => Stream.Stream<any, unknown>
+      )({ prompt: options.prompt, toolkit: options.toolkit }),
+      (part: any) =>
+        Effect.gen(function* () {
+          switch (part.type) {
+            case "text-start":
+            case "reasoning-start": {
+              open.set(part.id, {
+                type: part.type === "text-start" ? "text" : "reasoning",
+                text: "",
+                metadata: { ...part.metadata },
+              });
+              return;
+            }
+            case "text-delta":
+            case "reasoning-delta": {
+              const kind = part.type === "text-delta" ? "text" : "reasoning";
+              const block = open.get(part.id) ?? {
+                type: kind as "text" | "reasoning",
+                text: "",
+                metadata: {},
+              };
+              open.set(part.id, block);
+              block.text += part.delta;
+              Object.assign(block.metadata, part.metadata);
+              if (part.delta.length > 0) {
+                yield* options.onLive({ kind, delta: part.delta });
+              }
+              return;
+            }
+            case "text-end":
+            case "reasoning-end": {
+              const block = open.get(part.id);
+              if (block === undefined) return;
+              open.delete(part.id);
+              Object.assign(block.metadata, part.metadata);
+              parts.push(
+                Response.makePart(block.type, {
+                  text: block.text,
+                  metadata: block.metadata,
+                } as never),
+              );
+              return;
+            }
+            case "tool-call": {
+              parts.push(part);
+              // surface the call NOW — its handler may run for
+              // minutes before the sampling completes
+              yield* options.onLive({
+                kind: "tool-call",
+                id: part.id,
+                name: part.name,
+                params: part.params,
+              });
+              return;
+            }
+            case "tool-result":
+            case "finish": {
+              parts.push(part);
+              return;
+            }
+            default:
+              return;
+          }
+        }),
+    );
+    // a provider that never closed a block still yields its text
+    for (const block of open.values()) {
+      parts.push(
+        Response.makePart(block.type, {
+          text: block.text,
+          metadata: block.metadata,
+        } as never),
+      );
+    }
+    return new LanguageModel.GenerateTextResponse<any>(parts as never);
+  }).pipe(
+    Effect.retry({
+      while: (error) =>
+        isAiError(error)
+          ? error.isRetryable &&
+            error.reason._tag !== "ToolParameterValidationError"
+          : true,
+      schedule: Schedule.exponential("1 second"),
+      times: 3,
+    }),
+  );
+
 /**
  * ONE SAMPLING, written once for every host: read the thread from
- * the handle, call the `Model`, surface live parts as observations,
- * and either append the response (with its durable `assistant` and
- * `tool-result` observations) or — on a malformed tool call within
- * budget — append the corrective note and report `malformed` so the
- * host comes straight back around.
+ * the handle, call the language model, surface live parts as
+ * observations, and either append the response (with its durable
+ * `assistant` and `tool-result` observations) or — on a malformed
+ * tool call within budget — append the corrective note and report
+ * `malformed` so the host comes straight back around.
  */
 export const sampleTick = (options: {
   readonly ops: SessionOps;
-  readonly model: ModelService;
+  readonly languageModel: StreamingLanguageModel;
   readonly handle: ThreadHandle;
   readonly tick: TickResult;
   /** True once the host's malformed streak exceeds the budget — the
@@ -1019,7 +1162,7 @@ export const sampleTick = (options: {
   unknown
 > =>
   Effect.gen(function* () {
-    const { ops, model, handle, tick } = options;
+    const { ops, languageModel, handle, tick } = options;
     // persistence must never crash or slow a round — a failed
     // append costs restart fidelity, not the sampling
     const append = (
@@ -1037,45 +1180,43 @@ export const sampleTick = (options: {
         );
     const startedAt = yield* Effect.sync(() => Date.now());
     const thread = Prompt.make([...(yield* handle.messages)]);
-    const response = yield* model
-      .step({
-        prompt: Prompt.concat(
-          Prompt.make([{ role: "system", content: tick.system }]),
-          thread,
-        ),
-        toolkit: tick.toolkit,
-        onLive: (part) =>
-          part.kind === "tool-call"
-            ? ops.observeLive({
-                type: "tool-call",
-                tick: ops.tick(),
-                toolCallId: part.id,
-                toolName: part.name,
-                input: part.params,
-              })
-            : ops.observeLive({
-                type: "assistant-delta",
-                tick: ops.tick(),
-                channel: part.kind,
-                delta: part.delta,
-              }),
-      })
-      .pipe(
-        // A MALFORMED TOOL CALL is a model-visible fact, not a
-        // crash: nothing was executed, so tell the model what
-        // was wrong and let it re-issue. Bounded — a model that
-        // keeps emitting invalid calls crashes with the real
-        // error after the Model's streak budget.
-        Effect.catchIf(
-          (error): error is AiError =>
-            isAiError(error) &&
-            error.reason._tag === "ToolParameterValidationError",
-          (error) =>
-            options.exhausted
-              ? Effect.fail(error)
-              : Effect.succeed({ malformed: error.message } as const),
-        ),
-      );
+    const response = yield* sampleModel(languageModel, {
+      prompt: Prompt.concat(
+        Prompt.make([{ role: "system", content: tick.system }]),
+        thread,
+      ),
+      toolkit: tick.toolkit,
+      onLive: (part) =>
+        part.kind === "tool-call"
+          ? ops.observeLive({
+              type: "tool-call",
+              tick: ops.tick(),
+              toolCallId: part.id,
+              toolName: part.name,
+              input: part.params,
+            })
+          : ops.observeLive({
+              type: "assistant-delta",
+              tick: ops.tick(),
+              channel: part.kind,
+              delta: part.delta,
+            }),
+    }).pipe(
+      // A MALFORMED TOOL CALL is a model-visible fact, not a
+      // crash: nothing was executed, so tell the model what
+      // was wrong and let it re-issue. Bounded — a model that
+      // keeps emitting invalid calls crashes with the real
+      // error after the malformed budget.
+      Effect.catchIf(
+        (error): error is AiError =>
+          isAiError(error) &&
+          error.reason._tag === "ToolParameterValidationError",
+        (error) =>
+          options.exhausted
+            ? Effect.fail(error)
+            : Effect.succeed({ malformed: error.message } as const),
+      ),
+    );
     if ("malformed" in response) {
       const text =
         `your last response included a tool call with INVALID ` +
@@ -1187,7 +1328,19 @@ export interface SessionEngineOptions {
   /** The charter's captured Layer context. */
   readonly context: Context.Context<never>;
   readonly storage: ThreadStorageService;
-  readonly model: ModelService;
+  /**
+   * The standard effect/ai `LanguageModel` the loop samples with —
+   * consumed directly, no wrapper concept: retry schedules, model
+   * tiering, and token budgets are expressed by WRAPPING the
+   * `LanguageModel` service itself with a Layer.
+   */
+  readonly languageModel: StreamingLanguageModel;
+  /**
+   * Consecutive malformed-tool-call feedback rounds (the loop tells
+   * the model what was invalid and re-samples) before the validation
+   * error propagates as the round's real failure. @default 3
+   */
+  readonly malformedBudget?: number;
   /**
    * Trigger execution of a session's pending work. The resident
    * placement wakes the session's parked fiber; the DO placement
@@ -1325,17 +1478,18 @@ export const makeSessionEngine = (
     charter,
     context,
     storage,
-    model,
+    languageModel,
     kick,
     broadcast,
     scheduleReentry,
   } = options;
   const maxAttempts = options.maxAttempts ?? 5;
   const recoverAfter = options.recoverAfterMillis ?? 30_000;
+  const malformedBudget = options.malformedBudget ?? 3;
 
   const sessions = new Map<string, EngineSession>();
   const resolvers = makeResolvers(driver, term, context);
-  const observer = Context.getOption(context, SessionObserver);
+  const observer = Context.getOption(context, EventStream);
   const ambientStore = Context.getOption(context, PersistentRef.Store);
   // Minted keys are PROCESS-UNIQUE, not just engine-unique: session
   // identity leaks into the world (workspace checkouts key on
@@ -1934,10 +2088,10 @@ export const makeSessionEngine = (
 
         const outcome = yield* sampleTick({
           ops,
-          model,
+          languageModel,
           handle: s.handle,
           tick,
-          exhausted: malformed >= model.malformedBudget,
+          exhausted: malformed >= malformedBudget,
         });
         if (outcome.kind === "malformed") {
           malformed++;

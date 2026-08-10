@@ -1,7 +1,7 @@
 /**
  * The WIRE seam: how a tick's granted capabilities are PRESENTED to
  * the model. Mention-is-presence stays the semantics either way — the
- * stance decides WHAT exists this tick; a `ToolCalling` decides how those
+ * stance decides WHAT exists this tick; a `ToolEngine` decides how those
  * grants appear on the wire.
  *
  * Absent (the default): direct tool-calling — every grant is its own
@@ -47,14 +47,14 @@ export interface ToolPresentation {
   readonly handlers: Record<string, (input: any) => Effect.Effect<any, any>>;
 }
 
-export interface ToolCallingService {
+export interface ToolEngineService {
   /** Present this tick's grants — called at every sampling boundary. */
   readonly present: (
     grants: ReadonlyArray<ToolGrant>,
   ) => Effect.Effect<ToolPresentation>;
 }
 
-export class ToolCalling extends Context.Service<
-  ToolCalling,
-  ToolCallingService
->()("alchemy/AI/ToolCalling") {}
+export class ToolEngine extends Context.Service<
+  ToolEngine,
+  ToolEngineService
+>()("alchemy/AI/ToolEngine") {}

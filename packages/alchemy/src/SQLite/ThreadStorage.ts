@@ -24,7 +24,7 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Prompt from "effect/unstable/ai/Prompt";
-import type { SessionObservation } from "../AI/Observer.ts";
+import type { SessionObservation } from "../AI/EventStream.ts";
 import {
   ThreadStorage,
   type InboxRow,

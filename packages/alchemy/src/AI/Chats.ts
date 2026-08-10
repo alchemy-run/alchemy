@@ -20,7 +20,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
-import { SessionObserver, type SessionObservation } from "./Observer.ts";
+import { EventStream, type SessionObservation } from "./EventStream.ts";
 
 /** Chat identity: one driver session. */
 export interface ChatSummary {
@@ -98,9 +98,9 @@ export class Chats extends Context.Service<
  * instance (the same const the HTTP surface reads — layers memoize by
  * reference).
  */
-export const ChatsObserver: Layer.Layer<SessionObserver, never, Chats> =
+export const ChatsObserver: Layer.Layer<EventStream, never, Chats> =
   Layer.effect(
-    SessionObserver,
+    EventStream,
     Effect.gen(function* () {
       const chats = yield* Chats;
       return { emit: chats.ingest };

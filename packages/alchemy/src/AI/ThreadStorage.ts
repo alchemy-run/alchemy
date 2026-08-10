@@ -26,7 +26,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Prompt from "effect/unstable/ai/Prompt";
-import type { SessionObservation } from "./Observer.ts";
+import type { SessionObservation } from "./EventStream.ts";
 
 /** The session facts that ride beside the thread: restored at boot so a
  *  revived session continues its tick count and observation cursor. */

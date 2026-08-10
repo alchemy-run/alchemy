@@ -44,7 +44,7 @@ const WorkspaceLive = Workspace.fixed(workspaceRoot);
 export const EngineerLocal = GeneralEngineer.pipe(
   Layer.provide([ReadToolsLocal, RunToolsLocal, WriteToolsLocal]),
   Layer.provide(WorkspaceLive),
-  // provideMERGE: the HTTP edge consumes AgentGateway for the
+  // provideMERGE: the HTTP edge consumes SessionSockets for the
   // run-socket `/attach` door, so the driver bundle must be exported
   Layer.provideMerge(DriverLocal),
   // the chat projection (same const the driver bundle observes into)
@@ -66,7 +66,7 @@ export default class EngineerServer extends Local.Vite<EngineerServer>()(
     },
   },
   Effect.gen(function* () {
-    const gateway = yield* AI.AgentGateway;
+    const gateway = yield* AI.SessionSockets;
     const api = yield* HttpRouter.toHttpEffect(yield* engineerRoutes);
 
     return {

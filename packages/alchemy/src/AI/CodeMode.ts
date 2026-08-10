@@ -1,5 +1,5 @@
 /**
- * CODEMODE: the {@link ToolCalling} implementations that collapse a
+ * CODEMODE: the {@link ToolEngine} implementations that collapse a
  * tick's grants into ONE `eval` tool — the model writes CODE that
  * calls the granted capabilities and composes them with ordinary
  * control flow, instead of round-tripping every call through the
@@ -26,10 +26,10 @@ import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
 import * as AiTool from "effect/unstable/ai/Tool";
 import {
-  ToolCalling,
+  ToolEngine,
   type ToolGrant,
   type ToolPresentation,
-} from "./ToolCalling.ts";
+} from "./ToolEngine.ts";
 
 /**
  * Codemode, EFFECT flavor: the model's code is the body of a function
@@ -226,7 +226,7 @@ const makeCodeMode = (flavor: {
   ) => Effect.Effect<unknown, string>;
   readonly options?: CodeModeOptions;
 }) =>
-  Layer.succeed(ToolCalling, {
+  Layer.succeed(ToolEngine, {
     present: (grants) =>
       Effect.sync((): ToolPresentation => {
         const signatures = grants

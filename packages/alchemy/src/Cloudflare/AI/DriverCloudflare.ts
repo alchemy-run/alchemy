@@ -52,14 +52,13 @@ import {
   type SessionEngine,
 } from "../../AI/DriverCore.ts";
 import type { DriverError } from "../../AI/Errors.ts";
-import { makeModel, Model } from "../../AI/Model.ts";
 import { makeDurableObjectStore } from "../Workers/PersistentRefStore.ts";
 import {
-  AgentGateway,
+  SessionSockets,
   handleSessionSocketFrame,
   type SessionSocketClientFrame,
   type SessionSocketServerFrame,
-} from "../../AI/SessionSocket.ts";
+} from "../../AI/EventStream.ts";
 import type { HttpEffect } from "../../Http.ts";
 import type { MainRpc } from "../../Platform.ts";
 import { RuntimeContext } from "../../RuntimeContext.ts";
@@ -150,7 +149,7 @@ interface SessionRpc extends MainRpc<DurableObjectState> {
   ) => Effect.Effect<void>;
 }
 
-export { AgentGateway } from "../../AI/SessionSocket.ts";
+export { SessionSockets } from "../../AI/EventStream.ts";
 
 /**
  * The `AI.Driver` for Cloudflare — no argument, and no class for the
@@ -164,7 +163,7 @@ export { AgentGateway } from "../../AI/SessionSocket.ts";
  * LanguageModel | ThreadStorage>` — the substrate is in the type.
  */
 export const DurableObjectHost: Layer.Layer<
-  Driver | AgentGateway,
+  Driver | SessionSockets,
   never,
   LanguageModel.LanguageModel | Worker
 > = Layer.effectContext(
@@ -282,10 +281,6 @@ export const DurableObjectHost: Layer.Layer<
               `DriverCloudflare: no charter registered for '${me.term}' — is its Layer in the worker's layers slot?`,
             );
           }
-          const model = Option.getOrElse(
-            Context.getOption(registration.context, Model),
-            () => makeModel(languageModel),
-          );
           const singleSessionStorage: ThreadStorageService = {
             open: (term, key) =>
               key === me.key
@@ -302,7 +297,7 @@ export const DurableObjectHost: Layer.Layer<
             charter: registration.charter,
             context: registration.context,
             storage: singleSessionStorage,
-            model,
+            languageModel,
             // execution rides DO events; the burst is contained (it
             // never fails), so waitUntil can never be poisoned
             kick: (key) => sealed(state.waitUntil(engineRef!.burst(key))),
@@ -337,7 +332,7 @@ export const DurableObjectHost: Layer.Layer<
 
         return Effect.succeed<SessionRpc>({
           /**
-           * The LIVE VIEW attaches here (via {@link AgentGateway}):
+           * The LIVE VIEW attaches here (via {@link SessionSockets}):
            * accept the WebSocket and hibernate freely — there is no
            * in-memory session state to lose, because `broadcast`
            * re-reads the attached sockets from the runtime every time.
@@ -500,7 +495,7 @@ export const DurableObjectHost: Layer.Layer<
         RuntimeContext
       >;
 
-    return Context.add(Context.make(Driver, { interpret }), AgentGateway, {
+    return Context.add(Context.make(Driver, { interpret }), SessionSockets, {
       attach,
     });
   }),

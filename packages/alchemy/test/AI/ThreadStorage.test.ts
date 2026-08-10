@@ -13,7 +13,7 @@
  * - `keys(term)` lists sessions with persisted meta (the restore
  *   surface) and `remove` drops a settled session entirely.
  */
-import type { SessionObservation } from "@/AI/Observer.ts";
+import type { SessionObservation } from "@/AI/EventStream.ts";
 import { MemoryThreadStorage, ThreadStorage } from "@/AI/ThreadStorage.ts";
 import { SqliteThreadStorage } from "@/SQLite/ThreadStorage.ts";
 import { describe, expect, it } from "alchemy-test";

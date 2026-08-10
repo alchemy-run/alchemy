@@ -1,7 +1,7 @@
 /**
  * The run-socket protocol on the IN-MEMORY driver: the same four
  * frames the Cloudflare driver speaks from a Durable Object, served
- * in-process — `AgentGateway.attach` upgrades a WebSocket on a local
+ * in-process — `SessionSockets.attach` upgrades a WebSocket on a local
  * Bun HTTP server, replays the run's own observation log from a
  * cursor, and broadcasts live facts as they happen. No cloud, no
  * network beyond localhost, sub-second.
@@ -95,7 +95,7 @@ describe("SessionSocket (DriverLocal)", () => {
         // resolving the agent's tag interprets it — which registers
         // its socket host with the gateway
         yield* Researcher;
-        const gateway = yield* AI.AgentGateway;
+        const gateway = yield* AI.SessionSockets;
 
         // an in-process Bun HTTP server routing /attach/:term/:key.
         // The short shutdown budget matters: Bun's graceful stop never
@@ -239,7 +239,7 @@ describe("SessionSocket (DriverLocal)", () => {
 
       return Effect.gen(function* () {
         yield* Researcher;
-        const gateway = yield* AI.AgentGateway;
+        const gateway = yield* AI.SessionSockets;
         const server = yield* BunHttpServer.make({
           port: 0,
           gracefulShutdownTimeout: Duration.millis(100),

@@ -9,7 +9,7 @@
  * - **kick** — offer to the session's wake queue (starting its fiber
  *   on first sight);
  * - **broadcast** — a RAM set of socket writers per session, served
- *   over the host's own HTTP server (`AgentGateway`);
+ *   over the host's own HTTP server (`SessionSockets`);
  * - **remind / recovery re-entry** — sleeping fibers on the process
  *   scope;
  * - **restore** — persisted sessions revive parked at interpret,
@@ -43,19 +43,18 @@ import {
   reminderInput,
   type SessionEngine,
 } from "./DriverCore.ts";
-import { makeModel, Model } from "./Model.ts";
 import {
-  AgentGateway,
+  SessionSockets,
   handleSessionSocketFrame,
   type SessionSocketClientFrame,
   type SessionSocketServerFrame,
-} from "./SessionSocket.ts";
+} from "./EventStream.ts";
 import { ThreadStorage } from "./ThreadStorage.ts";
 
 type SendFrame = (frame: SessionSocketServerFrame) => Effect.Effect<void>;
 
 export const DriverLocal: Layer.Layer<
-  Driver | AgentGateway,
+  Driver | SessionSockets,
   never,
   LanguageModel.LanguageModel | ThreadStorage
 > = Layer.effectContext(
@@ -91,12 +90,6 @@ export const DriverLocal: Layer.Layer<
       Effect.gen(function* () {
         const context = yield* Effect.context<never>();
         const termName = term["~alchemy/Name"];
-        // the MODEL seam: a user driver provides its own (retry,
-        // budget, and tiering policy live inside it); absent, the
-        // default over this driver's LanguageModel.
-        const model = Option.getOrElse(Context.getOption(context, Model), () =>
-          makeModel(languageModel),
-        );
 
         // ── the resident machinery: one fiber + one wake queue per
         // session ─────────────────────────────────────────────────
@@ -142,7 +135,7 @@ export const DriverLocal: Layer.Layer<
           charter,
           context,
           storage: threadStorage,
-          model,
+          languageModel,
           kick: (key) =>
             Effect.gen(function* () {
               yield* startFiber(key);
@@ -212,7 +205,7 @@ export const DriverLocal: Layer.Layer<
       });
 
     /**
-     * The local {@link AgentGateway}: the SAME protocol the Durable
+     * The local {@link SessionSockets}: the SAME protocol the Durable
      * Object placement speaks, served in-process — a WebSocket
      * upgrade on the host's own HTTP server, replay from the
      * session's handle, live broadcast from the engine's observe.
@@ -266,7 +259,7 @@ export const DriverLocal: Layer.Layer<
       Context.make(Driver, {
         interpret,
       } as Context.Service.Shape<typeof Driver>),
-      AgentGateway,
+      SessionSockets,
       { attach },
     );
   }) as never,

@@ -1,37 +1,202 @@
-/**
- * The SESSION SOCKET protocol — how a live view attaches to one agent session
- * over a WebSocket, and the AI SDK `ChatTransport` that speaks it.
- *
- * Four frame concepts, distilled from studying cloudflare/agents'
- * chat protocol (designs/ai/reports/cloudflare-chat-protocol.md):
- * their five-frame resume handshake, chunk-buffer tables, and
- * full-replay-from-zero all compensate for the absence of a cursor —
- * our observations carry a per-session monotonic `seq`, so resume is ONE
- * frame: `subscribe { fromSeq }` replays the durable observation rows
- * above the cursor and live delivery continues from there.
- *
- * - client → server: {@link SessionSocketClientFrame} — `subscribe`
- *   (replay from a cursor) and `submit` (admit input; the answer
- *   arrives as observations, never as a correlated response).
- * - server → client: {@link SessionSocketServerFrame} — an `observation`
- *   carrier (durable rows advance the client's cursor; live facts
- *   like `assistant-delta` do not), and a `live` marker ending a
- *   replay.
- *
- * The wire carries DRIVER vocabulary — {@link SessionObservation} —
- * not any UI protocol's: translation to AI SDK `UIMessageChunk`s
- * happens client-side ({@link makeChunkTranslator}), so the server
- * never learns about UIMessage.
- */
 import type { ChatTransport, UIMessage, UIMessageChunk } from "ai";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import type * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type { RuntimeContext } from "../RuntimeContext.ts";
-import type { SessionObservation } from "./Observer.ts";
 import { makeChunkTranslator } from "./UIMessage.ts";
 
+/**
+ * The ENCODED form of a round failure — what a `crashed` observation
+ * carries across storage and RPC. The driver never renders errors
+ * (spec §11b): projections, boards, and UIs own presentation.
+ * JSON-serializable by construction, like every observation.
+ */
+export interface EncodedCrash {
+  /** The error's tag — for AiErrors, the semantic REASON tag
+   *  (`InvalidRequestError`, `RateLimitError`, …), not the wrapper. */
+  readonly _tag: string | undefined;
+  /** One human-readable line — no stack, no `Cause(...)` wrapper. */
+  readonly message: string;
+  /**
+   * The error's own testimony on whether re-running could succeed
+   * (`AiError.isRetryable`). Errors carrying no testimony default to
+   * retryable — the recovery loop's bounded budget is the safety net.
+   */
+  readonly retryable: boolean;
+}
+
+/**
+ * A round exhausted its recovery budget (interrupted `attempts` times
+ * with no completed sampling) and was abandoned — the typed failure
+ * every waiter on that round receives.
+ */
+export class RoundAbandoned extends Data.TaggedError("RoundAbandoned")<{
+  readonly term: string;
+  readonly key: string;
+  readonly attempts: number;
+}> {
+  override get message() {
+    return (
+      `session '${this.term}/${this.key}': round abandoned after ` +
+      `${this.attempts} interrupted attempts`
+    );
+  }
+}
+
+/**
+ * The envelope every observation carries: which session it belongs to
+ * (`term` + `key`), WHERE in that session's history it sits (`seq` — a
+ * per-session monotonic sequence, the resume/dedupe cursor), and when.
+ */
+export interface ObservationEnvelope {
+  readonly term: string;
+  readonly key: string;
+  /** Per-session monotonic sequence number — the catch-up cursor. */
+  readonly seq: number;
+  readonly at: number;
+}
+
+/**
+ * One structured fact about a driver's execution — enough to
+ * reconstruct every session's TRANSCRIPT (inputs, assistant text, tool
+ * calls and their results) and to stream it live. Deliberately the
+ * DRIVER's vocabulary, not any UI protocol's: every surveyed harness
+ * (Codex, OpenCode, Mastra, flue) keeps a canonical internal event log
+ * and translates at the edge (see designs/ai/streaming.md).
+ * JSON-serializable by construction.
+ */
+export type SessionObservation = ObservationEnvelope &
+  (
+    | {
+        readonly type: "admitted";
+        /** The session whose dispatch/send caused this admission, if any. */
+        readonly parent?: { readonly term: string; readonly key: string };
+      }
+    | {
+        /** A message appended to the session's thread: work item, steer, or note. */
+        readonly type: "input";
+        readonly text: string;
+        /**
+         * PROVENANCE, structural: `note` = driver-authored aside
+         * (`AI.say`, recovery notes); `reminder` = a `Thread.remind`
+         * delivery (the session's own past self). Absent = an ordinary
+         * message (world event or steer). The in-band text markers
+         * (`<note>`, `[reminder]`) remain — they are MODEL-facing;
+         * this field is for projections, which must never parse them.
+         */
+        readonly kind?: "note" | "reminder";
+      }
+    | {
+        /**
+         * One TOKEN SLICE of an in-flight sampling — text or thinking as
+         * the provider streams it. Purely a live-view fact: the final
+         * `assistant` observation restates the whole sampling and is the
+         * canonical record (deltas need not be retained, and a transient
+         * provider retry may replay them).
+         */
+        readonly type: "assistant-delta";
+        readonly tick: number;
+        readonly channel: "text" | "reasoning";
+        readonly delta: string;
+      }
+    | {
+        /**
+         * A tool call the IN-FLIGHT sampling just made, surfaced the
+         * moment it streams — its handler may run for minutes (a
+         * dispatched subagent) before the sampling's final `assistant`
+         * observation restates it. Live-view fact, same caveats as
+         * `assistant-delta`.
+         */
+        readonly type: "tool-call";
+        readonly tick: number;
+        readonly toolCallId: string;
+        readonly toolName: string;
+        readonly input: unknown;
+      }
+    | {
+        /** One sampling's response — text and/or tool calls. */
+        readonly type: "assistant";
+        /** The sampling's ordinal within its session (0-based). */
+        readonly tick: number;
+        /** Model round-trip INCLUDING the tool handlers that ran inside it. */
+        readonly ms: number;
+        readonly text: string;
+        /** The sampling's thinking trace, when the model produced one. */
+        readonly reasoning?: string;
+        /** Tool calls the model made this sampling; empty = quiesced. */
+        readonly toolCalls: ReadonlyArray<{
+          readonly id: string;
+          readonly name: string;
+          readonly input: unknown;
+        }>;
+      }
+    | {
+        readonly type: "tool-result";
+        readonly toolCallId: string;
+        readonly toolName: string;
+        readonly output: unknown;
+        readonly isFailure: boolean;
+      }
+    | {
+        /**
+         * A DELEGATION left this session: the intrinsic `dispatch` or a
+         * policy door (`AI.Dispatch`) handed a task to another agent.
+         * Emitted when the handler finishes, so observers can pair the
+         * tool call with the worker thread it created (`key` is the
+         * child session's key; undefined when the child was minted
+         * anonymously).
+         */
+        readonly type: "dispatched";
+        readonly tick: number;
+        readonly toolName: string;
+        readonly agent: string;
+        /** The child session's key; undefined when minted anonymously. */
+        readonly child: string | undefined;
+      }
+    | {
+        /**
+         * The session QUIESCED with an empty inbox and is parked — its
+         * work is done until the world moves (the next input wakes
+         * it). The line between "working" and "waiting" for any UI.
+         */
+        readonly type: "parked";
+      }
+    | { readonly type: "settled" }
+    | {
+        /**
+         * The current round FAILED. `fatal` distinguishes the two
+         * §11b lanes this observation covers: a non-retryable typed
+         * failure abandoned on the spot (`fatal: true`) vs a defect
+         * the bounded recovery loop will re-enter (`fatal` absent).
+         * Rows written before the EncodedCrash shape carry a plain
+         * string in `error` — renderers must tolerate both.
+         */
+        readonly type: "crashed";
+        readonly error: EncodedCrash | string;
+        readonly fatal?: boolean;
+      }
+  );
+
+/**
+ * The driver's OBSERVABILITY seam — an optional service (the same
+ * pattern as the tool engine): when present in the context a driver is
+ * interpreted in, every session lifecycle fact is emitted into it;
+ * absent, the driver spends nothing. Emission is fire-and-forget —
+ * an observer can never fail or slow a session.
+ */
+export class EventStream extends Context.Service<
+  EventStream,
+  {
+    readonly emit: (observation: SessionObservation) => Effect.Effect<void>;
+  }
+>()("alchemy/AI/EventStream") {}
+
+/** LIVE observation types — broadcast as they stream but never
+ *  persisted, and the seq cursor does not advance for them. */
+export const isLiveObservation = (type: SessionObservation["type"]): boolean =>
+  type === "assistant-delta" || type === "tool-call";
 /** Frames a client sends to an attached session. */
 export type SessionSocketClientFrame =
   | {
@@ -69,16 +234,6 @@ export type SessionSocketServerFrame =
       readonly type: "live";
       readonly seq: number;
     };
-
-/**
- * The LIVE observations — view-only facts that are broadcast but
- * never logged, and whose `seq` repeats the current watermark instead
- * of advancing it: a reconnect misses them and the durable
- * `assistant` restatement covers the gap. The SAME split every
- * projection uses (`ChatsMemory` accumulates exactly these into its
- * transient streaming sample).
- */
-export { isLiveObservation } from "./Observer.ts";
 
 /**
  * What a driver must expose for one session to speak the socket protocol
@@ -133,13 +288,13 @@ export const handleSessionSocketFrame =
  * Object; `DriverCore`'s resident host serves the socket in-process.
  *
  * ```ts
- * const gateway = yield* AI.AgentGateway;
+ * const gateway = yield* AI.SessionSockets;
  * // in a fetch handler: ws(s)://host/attach/Scribe/issue-7
  * return yield* gateway.attach("Scribe", "issue-7", request);
  * ```
  */
-export class AgentGateway extends Context.Service<
-  AgentGateway,
+export class SessionSockets extends Context.Service<
+  SessionSockets,
   {
     readonly attach: (
       term: string,
@@ -151,7 +306,7 @@ export class AgentGateway extends Context.Service<
       RuntimeContext
     >;
   }
->()("alchemy/AI/AgentGateway") {}
+>()("alchemy/AI/SessionSockets") {}
 
 export interface SessionSocketTransportOptions {
   /** The absolute `ws(s)://` URL of the session's attach endpoint. */

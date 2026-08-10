@@ -362,7 +362,7 @@ describe("DriverLocal (in-memory)", () => {
         // call 3: the lead concludes — REPLAYED step must handle it too
       ]);
       const seen: Array<AI.SessionObservation> = [];
-      const ObserverLive = Layer.succeed(AI.SessionObserver, {
+      const ObserverLive = Layer.succeed(AI.EventStream, {
         emit: (observation) => Effect.sync(() => void seen.push(observation)),
       });
       const driver = InMemoryDriver.pipe(Layer.provide(model.layer));
@@ -782,7 +782,7 @@ Record the final ${result}.`((p) =>
       () => [Model.text("All done."), Model.finish()],
     ]);
     const seen: Array<AI.SessionObservation> = [];
-    const ObserverLive = Layer.succeed(AI.SessionObserver, {
+    const ObserverLive = Layer.succeed(AI.EventStream, {
       emit: (observation) => Effect.sync(() => void seen.push(observation)),
     });
     const driver = InMemoryDriver.pipe(Layer.provide(model.layer));
@@ -860,7 +860,7 @@ Record the final ${result}.`((p) =>
       () => [Model.text("All done."), Model.finish()],
     ]);
     const seen: Array<AI.SessionObservation> = [];
-    const ObserverLive = Layer.succeed(AI.SessionObserver, {
+    const ObserverLive = Layer.succeed(AI.EventStream, {
       emit: (observation) => Effect.sync(() => void seen.push(observation)),
     });
     const driver = InMemoryDriver.pipe(Layer.provide(model.layer));
@@ -1232,7 +1232,7 @@ ${
       ]);
       return Effect.gen(function* () {
         const seen: Array<AI.SessionObservation> = [];
-        const ObserverLive = Layer.succeed(AI.SessionObserver, {
+        const ObserverLive = Layer.succeed(AI.EventStream, {
           emit: (observation) => Effect.sync(() => void seen.push(observation)),
         });
         const search = recordingSearch();

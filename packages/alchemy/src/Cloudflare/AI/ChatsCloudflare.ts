@@ -16,7 +16,7 @@ import {
   type ChatSummary,
   type StreamingSample,
 } from "../../AI/Chats.ts";
-import type { SessionObservation } from "../../AI/Observer.ts";
+import type { SessionObservation } from "../../AI/EventStream.ts";
 import { RuntimeContext } from "../../RuntimeContext.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

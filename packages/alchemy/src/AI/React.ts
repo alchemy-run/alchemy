@@ -18,7 +18,7 @@
  * `useChat` IS the Vercel AI SDK's `useChat` — same return shape,
  * same ecosystem compatibility (ai-elements etc.) — pre-wired with
  * the agent's socket transport instead of HTTP POST + SSE. It works
- * against ANY driver that provides `AI.AgentGateway`: the in-memory
+ * against ANY driver that provides `AI.SessionSockets`: the in-memory
  * driver serving from a local process and the Cloudflare driver
  * serving from a session's own Durable Object speak the identical
  * protocol.
@@ -31,7 +31,7 @@ import { useChat as useAiChat } from "@ai-sdk/react";
 import type { ChatInit, UIMessage } from "ai";
 import { useEffect, useMemo } from "react";
 import { chatId as makeChatId } from "./Chats.ts";
-import { SessionSocketTransport } from "./SessionSocket.ts";
+import { SessionSocketTransport } from "./EventStream.ts";
 
 /**
  * Build the session-socket URL for a chat id (`${term}:${key}`) or an

@@ -17,7 +17,7 @@
 import type { UIMessage, UIMessageChunk, UIMessagePart } from "ai";
 import type { StreamingSample } from "./Chats.ts";
 import { renderCrash } from "./DriverCore.ts";
-import type { SessionObservation } from "./Observer.ts";
+import type { SessionObservation } from "./EventStream.ts";
 
 /**
  * Reduce a session's observation log into AI SDK UIMessages: inputs are
