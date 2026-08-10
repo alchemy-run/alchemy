@@ -283,6 +283,11 @@ export const AwsAuth = AuthProviderLayer<
         if (ctx.ci) {
           return { method: "env" as const };
         }
+        if (ctx.reason) {
+          // e.g. the credential-demand seam (`Auth/Demand.ts`) explaining
+          // which dev-plan resources require real AWS credentials.
+          yield* Clank.info(ctx.reason);
+        }
         return yield* configureInteractive(profileName);
       }).pipe(
         Effect.mapError(
