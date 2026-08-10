@@ -791,8 +791,12 @@ export const LiveContainerProvider = () =>
       const getDurableObjects = (
         bindings: ResourceBinding<ContainerApplication["Binding"]>[],
       ) => {
+        // An attachment whose namespace id has not surfaced (the bound
+        // worker's output is unresolved — see resolveDurableObjectsByClass
+        // above) is indistinguishable from "no attachment" here: treat it as
+        // unresolved rather than as a desired empty attachment.
         const dos = bindings.flatMap((b) =>
-          b.data.durableObjects ? [b.data.durableObjects] : [],
+          b.data.durableObjects?.namespaceId ? [b.data.durableObjects] : [],
         );
         // A single DO namespace may appear in multiple bindings (e.g. when
         // a Container is referenced by several resources). Dedupe by namespaceId.
