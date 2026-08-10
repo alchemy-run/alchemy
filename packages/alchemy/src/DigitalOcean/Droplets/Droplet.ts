@@ -11,7 +11,6 @@ import {
   type DropletStatus,
 } from "@distilled.cloud/digitalocean/droplets";
 import * as Data from "effect/Data";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -161,11 +160,8 @@ class DropletStillPresent extends Data.TaggedError("DropletStillPresent")<{
   readonly dropletId: number;
 }> {}
 
-const pollSchedule = (attempts: number) =>
-  Schedule.max([
-    Schedule.spaced(Duration.seconds(5)),
-    Schedule.recurs(attempts),
-  ]);
+const isReady = (droplet: ApiDroplet | undefined): droplet is ApiDroplet =>
+  droplet !== undefined && droplet.status === "active" && !droplet.locked;
 
 // Order-insensitive prop comparison; an omitted list and an empty list
 // describe the same desired state.
@@ -219,27 +215,30 @@ export const DropletProvider = () =>
        * Droplet creation answers 202 with status "new"; networking (and the
        * public IP we surface as an attribute) only exists once it turns
        * "active". A locked droplet also rejects actions, so wait out both.
+       * Polling happens on the success channel — `DropletNotReady` exists
+       * only as the terminal timeout error.
        */
       const waitForActive = (dropletId: number) =>
         get({ droplet_id: dropletId }).pipe(
           Effect.map((r) => r.droplet),
-          Effect.flatMap((droplet) =>
-            droplet === undefined ||
-            droplet.status !== "active" ||
-            droplet.locked
-              ? Effect.fail(
-                  new DropletNotReady({
-                    dropletId,
-                    status: (droplet?.status as string) ?? "missing",
-                  }),
-                )
-              : Effect.succeed(droplet),
-          ),
-          Effect.retry({
-            while: (e) => e instanceof DropletNotReady || isTransientError(e),
-            // 5s × 120 ≈ 10 minutes — droplets usually activate in well
-            // under one.
-            schedule: pollSchedule(120),
+          // A transient API blip is indistinguishable from "not ready yet"
+          // while polling — fold it into the same bounded budget.
+          Effect.catchIf(isTransientError, () => Effect.succeed(undefined)),
+          Effect.repeat({
+            schedule: Schedule.spaced("5 seconds"),
+            // Explicitly boolean, not the `isReady` refinement (which TS
+            // would infer even through a wrapper): `times` exhaustion can
+            // still hand back a not-ready droplet, so the result type must
+            // stay wide for the guard below.
+            until: (droplet): boolean => isReady(droplet),
+            // ≈ 10 minutes — droplets usually activate in well under one.
+            times: 120,
+          }),
+          Effect.flatMap((droplet) => {
+            const status = droplet?.status ?? "missing";
+            return isReady(droplet)
+              ? Effect.succeed(droplet)
+              : Effect.fail(new DropletNotReady({ dropletId, status }));
           }),
         );
 
@@ -351,22 +350,24 @@ export const DropletProvider = () =>
           yield* destroy({ droplet_id: output.dropletId }).pipe(
             Effect.catchTag("NotFound", () => Effect.void),
           );
-          // Destruction is async (202-style). Wait until the droplet is
-          // actually gone so a follow-up create of the same name doesn't
-          // observe the dying instance.
-          yield* get({ droplet_id: output.dropletId }).pipe(
-            Effect.flatMap(() =>
-              Effect.fail(
-                new DropletStillPresent({ dropletId: output.dropletId }),
-              ),
-            ),
-            Effect.catchTag("NotFound", () => Effect.void),
-            Effect.retry({
-              while: (e) =>
-                e instanceof DropletStillPresent || isTransientError(e),
-              schedule: pollSchedule(60),
+          // Destruction is async (202-style). Poll on the success channel
+          // until the API answers NotFound so a follow-up create of the
+          // same name doesn't observe the dying instance.
+          const gone = yield* get({ droplet_id: output.dropletId }).pipe(
+            Effect.map(() => false),
+            Effect.catchTag("NotFound", () => Effect.succeed(true)),
+            Effect.catchIf(isTransientError, () => Effect.succeed(false)),
+            Effect.repeat({
+              schedule: Schedule.spaced("5 seconds"),
+              until: (gone) => gone,
+              times: 60,
             }),
           );
+          if (!gone) {
+            return yield* Effect.fail(
+              new DropletStillPresent({ dropletId: output.dropletId }),
+            );
+          }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const stack = yield* Stack;
