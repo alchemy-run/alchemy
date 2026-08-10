@@ -1,3 +1,4 @@
+import { isTransientError } from "@distilled.cloud/core/category";
 import {
   dropletActionsPost,
   dropletsCreate,
@@ -7,6 +8,7 @@ import {
   type Droplet as ApiDroplet,
   type DropletActionRename,
   type DropletSingleCreateInput,
+  type DropletStatus,
 } from "@distilled.cloud/digitalocean/droplets";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
@@ -19,6 +21,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
+import { arrayEqualsUnordered } from "../../Util/equal.ts";
 import type { Providers } from "../Providers.ts";
 
 export type DropletProps = {
@@ -66,8 +69,7 @@ export type Droplet = Resource<
   {
     dropletId: number;
     name: string;
-    /** "new" | "active" | "off" | "archive" */
-    status: string;
+    status: DropletStatus;
     region: string;
     sizeSlug: string;
     imageId: number | undefined;
@@ -159,26 +161,18 @@ class DropletStillPresent extends Data.TaggedError("DropletStillPresent")<{
   readonly dropletId: number;
 }> {}
 
-const isTransientTag = (e: unknown) => {
-  const tag = (e as { _tag?: string })._tag;
-  return (
-    tag === "TooManyRequests" ||
-    tag === "ServiceUnavailable" ||
-    tag === "InternalServerError" ||
-    tag === "BadGateway" ||
-    tag === "GatewayTimeout"
-  );
-};
-
 const pollSchedule = (attempts: number) =>
   Schedule.max([
     Schedule.spaced(Duration.seconds(5)),
     Schedule.recurs(attempts),
   ]);
 
-const sameSet = (a: readonly unknown[] = [], b: readonly unknown[] = []) =>
-  a.length === b.length &&
-  [...a].sort().every((v, i) => v === [...b].sort()[i]);
+// Order-insensitive prop comparison; an omitted list and an empty list
+// describe the same desired state.
+const sameSet = <T extends string | number>(
+  a: ReadonlyArray<T> | undefined,
+  b: ReadonlyArray<T> | undefined,
+) => arrayEqualsUnordered(a ?? [], b ?? []);
 
 export const DropletProvider = () =>
   Provider.effect(
@@ -193,12 +187,11 @@ export const DropletProvider = () =>
       const toAttrs = (droplet: ApiDroplet) => ({
         dropletId: droplet.id,
         name: droplet.name,
-        status: droplet.status as string,
-        region: droplet.region.slug as string,
+        status: droplet.status,
+        region: droplet.region.slug,
         sizeSlug: droplet.size_slug,
-        imageId: (droplet.image as { id?: number }).id,
-        imageSlug:
-          (droplet.image as { slug?: string | null }).slug ?? undefined,
+        imageId: droplet.image.id,
+        imageSlug: droplet.image.slug ?? undefined,
         ipv4: droplet.networks.v4?.find((n) => n.type === "public")?.ip_address,
         privateIpv4: droplet.networks.v4?.find((n) => n.type === "private")
           ?.ip_address,
@@ -243,9 +236,7 @@ export const DropletProvider = () =>
               : Effect.succeed(droplet),
           ),
           Effect.retry({
-            while: (e: unknown) =>
-              (e as { _tag?: string })._tag === "DropletNotReady" ||
-              isTransientTag(e),
+            while: (e) => e instanceof DropletNotReady || isTransientError(e),
             // 5s × 120 ≈ 10 minutes — droplets usually activate in well
             // under one.
             schedule: pollSchedule(120),
@@ -371,9 +362,8 @@ export const DropletProvider = () =>
             ),
             Effect.catchTag("NotFound", () => Effect.void),
             Effect.retry({
-              while: (e: unknown) =>
-                (e as { _tag?: string })._tag === "DropletStillPresent" ||
-                isTransientTag(e),
+              while: (e) =>
+                e instanceof DropletStillPresent || isTransientError(e),
               schedule: pollSchedule(60),
             }),
           );

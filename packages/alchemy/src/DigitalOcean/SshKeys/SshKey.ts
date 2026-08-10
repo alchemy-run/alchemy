@@ -78,9 +78,9 @@ export const SshKeyProvider = () =>
       const list = yield* sshKeysList;
 
       const toAttrs = (key: ApiSshKey) => ({
-        sshKeyId: key.id as number,
+        sshKeyId: key.id,
         name: key.name,
-        fingerprint: key.fingerprint as string,
+        fingerprint: key.fingerprint,
         publicKey: key.public_key,
       });
 
