@@ -321,7 +321,10 @@ describe.concurrent("Nextjs dev", () => {
           .pipe(
             Effect.retry({
               while: (e): boolean => e._tag === "KeyNotFound",
-              schedule: Schedule.exponential("1 second"),
+              schedule: Schedule.min([
+                Schedule.exponential("1 second"),
+                Schedule.spaced("3 seconds"),
+              ]),
               times: 8,
             }),
             Effect.flatMap((res) =>

@@ -4,7 +4,6 @@ import { inMemoryState } from "@/State";
 import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { isDockerReady } from "./Runtime.ts";
 
 const { test } = Test.make({
   providers: Docker.providers(),
@@ -93,63 +92,59 @@ test.provider("diff replaces a context when docker endpoint is removed", () =>
 );
 
 describe("Docker.Context", { concurrent: false }, () => {
-  test.provider.skipIf(!isDockerReady)(
-    "creates a context with description and endpoint",
-    (stack) =>
-      Effect.gen(function* () {
-        const docker = yield* Docker.Docker;
-        const contextName = "alchemy-test-context-create";
+  test.provider("creates a context with description and endpoint", (stack) =>
+    Effect.gen(function* () {
+      const docker = yield* Docker.Docker;
+      const contextName = "alchemy-test-context-create";
 
-        yield* Effect.addFinalizer(() =>
-          docker.context.remove(contextName, true).pipe(Effect.ignore),
-        );
+      yield* Effect.addFinalizer(() =>
+        docker.context.remove(contextName, true).pipe(Effect.ignore),
+      );
 
-        const context = yield* stack.deploy(
-          Docker.Context("created-context", {
-            name: contextName,
-            description: "created by alchemy tests",
-            docker: "host=unix:///var/run/docker.sock",
-          }),
-        );
+      const context = yield* stack.deploy(
+        Docker.Context("created-context", {
+          name: contextName,
+          description: "created by alchemy tests",
+          docker: "host=unix:///var/run/docker.sock",
+        }),
+      );
 
-        expect(context.name).toBe(contextName);
-        expect(context.id).toBe(contextName);
-        expect(context.description).toBe("created by alchemy tests");
-        expect(extractDockerHost(context.docker)).toBe(
-          "unix:///var/run/docker.sock",
-        );
-      }),
+      expect(context.name).toBe(contextName);
+      expect(context.id).toBe(contextName);
+      expect(context.description).toBe("created by alchemy tests");
+      expect(extractDockerHost(context.docker)).toBe(
+        "unix:///var/run/docker.sock",
+      );
+    }),
   );
 
-  test.provider.skipIf(!isDockerReady)(
-    "updates an existing context without replacing it",
-    (stack) =>
-      Effect.gen(function* () {
-        const contextName = "alchemy-test-context-update";
+  test.provider("updates an existing context without replacing it", (stack) =>
+    Effect.gen(function* () {
+      const contextName = "alchemy-test-context-update";
 
-        const first = yield* stack.deploy(
-          Docker.Context("updatable-context", {
-            name: contextName,
-            description: "v1",
-            docker: "host=unix:///var/run/docker.sock",
-          }),
-        );
+      const first = yield* stack.deploy(
+        Docker.Context("updatable-context", {
+          name: contextName,
+          description: "v1",
+          docker: "host=unix:///var/run/docker.sock",
+        }),
+      );
 
-        const second = yield* stack.deploy(
-          Docker.Context("updatable-context", {
-            name: contextName,
-            description: "v2",
-            docker: "host=unix:///var/run/docker.sock",
-          }),
-        );
+      const second = yield* stack.deploy(
+        Docker.Context("updatable-context", {
+          name: contextName,
+          description: "v2",
+          docker: "host=unix:///var/run/docker.sock",
+        }),
+      );
 
-        expect(second.id).toBe(first.id);
-        expect(second.name).toBe(first.name);
-        expect(second.description).toBe("v2");
-        expect(extractDockerHost(second.docker)).toBe(
-          "unix:///var/run/docker.sock",
-        );
-      }),
+      expect(second.id).toBe(first.id);
+      expect(second.name).toBe(first.name);
+      expect(second.description).toBe("v2");
+      expect(extractDockerHost(second.docker)).toBe(
+        "unix:///var/run/docker.sock",
+      );
+    }),
   );
 
   test.provider("plans a replace when docker endpoint is cleared", (stack) =>

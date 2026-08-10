@@ -93,8 +93,9 @@ const kvRoundTrip = Effect.fn(function* (
  * waku's own dev server serves the app behind the alchemy dev proxy, with
  * the `kv_namespace` binding lowered onto the local workerd simulator.
  */
-// Tests are independent (per-test scratch stacks, private fixture clones),
-// so run them concurrently; suites are sequential by default.
+// Concurrent like the other Website suites: the Waku build runs in a
+// child process with cwd = project root (core/BuildChild.ts), and the
+// dev server only chdirs briefly inside the RPC sidecar during startup.
 describe.concurrent("Waku dev", () => {
   test.provider(
     "Waku dev: local dev server renders RSC SSR with bindings, local KV, and HMR",

@@ -1,4 +1,4 @@
-import { layerRuntime } from "@distilled.cloud/cloudflare-runtime";
+import { layerRuntime } from "@alchemy.run/cloudflare-runtime/core";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -6,6 +6,7 @@ import * as MutableHashMap from "effect/MutableHashMap";
 import * as Path from "effect/Path";
 import { AlchemyContext } from "../AlchemyContext.ts";
 import * as RpcProvider from "../Local/RpcProvider.ts";
+import { LOCAL_ID_PREFIX } from "../ProviderMode.ts";
 import { CloudflareEnvironment } from "./CloudflareEnvironment.ts";
 import type { Queue } from "./Queues/Queue.ts";
 import type { Consumer } from "./Queues/Consumer.ts";
@@ -110,7 +111,8 @@ export const localRuntimeServices = () =>
   (_localRuntimeServices ??= makeLocalRuntimeServices());
 
 export const isLocalId = (id: string | undefined): id is string =>
-  typeof id === "string" && id.startsWith("dev:");
+  typeof id === "string" && id.startsWith(LOCAL_ID_PREFIX);
 export const isLiveId = (id: string | undefined): id is string =>
-  typeof id === "string" && !id.startsWith("dev:");
-export const generateLocalId = (): string => `dev:${crypto.randomUUID()}`;
+  typeof id === "string" && !id.startsWith(LOCAL_ID_PREFIX);
+export const generateLocalId = (): string =>
+  `${LOCAL_ID_PREFIX}${crypto.randomUUID()}`;

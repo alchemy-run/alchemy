@@ -22,6 +22,6 @@ bun alchemy destroy  # tear down
 
 ## Notes
 
-- `@distilled.cloud/sveltekit` must be installed in the project — the Worker's source provider is loaded from it dynamically at deploy time.
+- `@alchemy.run/cloudflare-frameworks` must be installed in the project — the Worker's source provider is loaded from its `/sveltekit` export at deploy time.
 - Unchanged projects skip the build and deploy entirely (the project tree is content-hashed, respecting `.gitignore`).
 - In `alchemy dev`, `platform.env` carries the Worker's real Cloudflare bindings (KV, R2, D1, ...) served by the cloudflare-runtime platform proxy, with literal `env` values (strings and secrets) overlaid.

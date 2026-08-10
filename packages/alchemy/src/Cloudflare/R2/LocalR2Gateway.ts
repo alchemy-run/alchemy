@@ -17,8 +17,8 @@
  *
  * NOT exported from `index.ts` — capability-internal scaffolding.
  */
-import { R2Bucket } from "@distilled.cloud/cloudflare-runtime/bindings";
-import { open } from "@distilled.cloud/cloudflare-runtime/platform-proxy";
+import { R2Bucket } from "@alchemy.run/cloudflare-runtime/core/bindings";
+import { open } from "@alchemy.run/cloudflare-runtime/core/platform-proxy";
 import type * as runtime from "@cloudflare/workers-types";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
