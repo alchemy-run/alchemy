@@ -141,6 +141,12 @@ describe("Cloudflare Worker Telemetry", () => {
         });
         yield* expectUrlContains(collected, "custom.child-span");
         yield* expectUrlContains(collected, "custom-work-log");
+
+        // Tear down: without this the run strands its workers (scratch
+        // state is in-memory, so the LEADING destroy is a no-op) and the
+        // next run deterministically fails to attach the collector's
+        // custom hostname, which the stranded worker still holds.
+        yield* stack.destroy();
       }),
     { timeout: 600_000 },
   );
