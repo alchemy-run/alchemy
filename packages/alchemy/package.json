@@ -409,6 +409,7 @@
     "@foldkit/vite-plugin": "catalog:fixtures",
     "@octanejs/adapter-cloudflare": "catalog:frameworks",
     "@octanejs/vite-plugin": "catalog:frameworks",
+    "@opennextjs/aws": "catalog:frameworks",
     "@opennextjs/cloudflare": "catalog:frameworks",
     "@oxc-project/types": "^0.139.0",
     "@sveltejs/kit": "catalog:frameworks",
