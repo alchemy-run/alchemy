@@ -40,6 +40,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { fileURLToPath } from "node:url";
+import { runBuildChild } from "../core/BuildChild.ts";
 import {
   DeployTargetError,
   makeDeployTarget,
@@ -48,7 +49,7 @@ import {
   type BuildOutput,
   type DeployTargetFinishContext,
 } from "../core/index.ts";
-import type { OctaneTarget, OctaneTargetConfig } from "./Octane.ts";
+import { make, type OctaneTarget, type OctaneTargetConfig } from "./Octane.ts";
 
 /** The `adapter.name` the AWS marker adapter declares. */
 export const ADAPTER_NAME = "aws";
@@ -172,10 +173,12 @@ const finish = (
   );
 
 /**
- * Create the AWS Lambda {@link OctaneTarget}. See the module doc for the
- * seams.
+ * The adapter-driven target — the shape the framework's regular
+ * build/finish pipeline consumes. Used directly in the build child (where
+ * `cwd === root` holds); {@link makeAwsTarget} wraps it with the wholesale
+ * `build` hook that spawns the child.
  */
-export const makeAwsTarget = (
+const makeAwsAdapterTarget = (
   config: OctaneAwsTargetConfig = {},
 ): OctaneTarget =>
   makeDeployTarget({
@@ -190,6 +193,55 @@ export const makeAwsTarget = (
     serverEntryFileName: SERVER_ENTRY_FILE_NAME,
     finish: (output, context) => finish(config, output, context),
   });
+
+/**
+ * Octane's production build runs the project's own `vite build`, whose
+ * natively-loaded `vite.config.*` / `octane.config.ts` execute user plugins
+ * that may read the cwd, mutate `process.env`, or `process.chdir` — none of
+ * which may touch the engine process (many deploys share one event loop).
+ * This target's wholesale `build` therefore runs the framework in a
+ * disposable child process whose working directory IS the project root (see
+ * `core/BuildChild.ts`). The shared `core/BuildChildRunner` entry imports
+ * this module in the child and calls the exported {@link buildInChild}.
+ */
+export interface OctaneAwsBuildChildConfig {
+  readonly rootDir: string;
+  /** The (JSON-serializable) target config the parent was created with. */
+  readonly config: OctaneAwsTargetConfig;
+}
+
+export const buildInChild = (config: OctaneAwsBuildChildConfig) =>
+  Effect.gen(function* () {
+    const framework = yield* make({
+      root: config.rootDir,
+      // The adapter-only target: no wholesale `build` hook, so the child
+      // runs the regular vite build + finish pipeline (no recursion).
+      target: makeAwsAdapterTarget(config.config),
+      compatibilityDate: config.config.compatibilityDate,
+      compatibilityFlags: config.config.compatibilityFlags,
+    });
+    return yield* framework.build({ root: config.rootDir });
+  });
+
+/**
+ * Create the AWS Lambda {@link OctaneTarget}. See the module doc for the
+ * seams.
+ */
+export const makeAwsTarget = (
+  config: OctaneAwsTargetConfig = {},
+): OctaneTarget => ({
+  ...makeAwsAdapterTarget(config),
+  build: (context) =>
+    runBuildChild({
+      module: import.meta.url,
+      rootDir: context.root,
+      framework: "octane",
+      config: {
+        rootDir: context.root,
+        config,
+      } satisfies OctaneAwsBuildChildConfig,
+    }).pipe(Effect.mapError((error) => fail(error.message, error.cause))),
+});
 
 /**
  * The deploy-target module contract (`resolveDeployTarget` accepts the

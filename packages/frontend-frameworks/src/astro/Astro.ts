@@ -235,9 +235,11 @@ export const make = <TargetConfig = unknown>(
         const target = yield* resolveTarget(root);
         if (target.build !== undefined) {
           // Wholesale build takeover: the target owns the entire
-          // production build (the OpenNext-style case).
+          // production build (the OpenNext-style case). The inline Astro
+          // overlay rides along so a child-process build can reconstruct
+          // the framework with the same options.
           return yield* target
-            .build({ root, framework: "astro" })
+            .build({ root, framework: "astro", astro: options?.astro })
             .pipe(
               Effect.provideService(FileSystem.FileSystem, fs),
               Effect.provideService(Path.Path, path),

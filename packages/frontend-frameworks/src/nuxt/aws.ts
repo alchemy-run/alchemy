@@ -25,8 +25,10 @@
  * No `devPlatform`: `dev` runs Nuxt's own Node dev server, which is already
  * the AWS Lambda programming model (plain Node).
  */
-import { makeDeployTarget } from "../core/index.ts";
-import type { NuxtTarget, NuxtTargetConfig } from "./Nuxt.ts";
+import * as Effect from "effect/Effect";
+import { runBuildChild } from "../core/BuildChild.ts";
+import { DeployTargetError, makeDeployTarget } from "../core/index.ts";
+import { make, type NuxtTarget, type NuxtTargetConfig } from "./Nuxt.ts";
 
 /** The nitro deployment preset this target builds with. */
 export const NITRO_PRESET = "aws-lambda";
@@ -55,11 +57,16 @@ export interface NuxtAwsTargetConfig extends NuxtTargetConfig {
   readonly streaming?: boolean | undefined;
 }
 
+const fail = (message: string, cause?: unknown) =>
+  new DeployTargetError({ platform: "aws", message, cause });
+
 /**
- * Create the AWS Lambda {@link NuxtTarget}. See the module doc for the
- * seams.
+ * The adapter-driven target — the shape the framework's regular nitro
+ * build pipeline consumes. Used directly in the build child (where
+ * `cwd === root` holds); {@link makeAwsTarget} wraps it with the wholesale
+ * `build` hook that spawns the child.
  */
-export const makeAwsTarget = (config: NuxtAwsTargetConfig = {}): NuxtTarget =>
+const makeAwsAdapterTarget = (config: NuxtAwsTargetConfig = {}): NuxtTarget =>
   makeDeployTarget({
     platform: "aws",
     config,
@@ -85,6 +92,56 @@ export const makeAwsTarget = (config: NuxtAwsTargetConfig = {}): NuxtTarget =>
       // clone). See the matching note in ./cloudflare.ts.
     },
   });
+
+/**
+ * `loadNuxt` executes the user's `nuxt.config.ts` and modules, which may
+ * read the cwd, mutate `process.env`, or `process.chdir` — none of which
+ * may touch the engine process (many deploys share one event loop). This
+ * target's wholesale `build` therefore runs the framework in a disposable
+ * child process whose working directory IS the project root (see
+ * `core/BuildChild.ts`). The shared `core/BuildChildRunner` entry imports
+ * this module in the child and calls the exported {@link buildInChild}.
+ */
+export interface NuxtAwsBuildChildConfig {
+  readonly rootDir: string;
+  /** The (JSON-serializable) target config the parent was created with. */
+  readonly config: NuxtAwsTargetConfig;
+}
+
+export const buildInChild = (config: NuxtAwsBuildChildConfig) =>
+  Effect.gen(function* () {
+    const framework = yield* make({
+      root: config.rootDir,
+      // The adapter-only target: no wholesale `build` hook, so the child
+      // runs the regular nitro build pipeline (no recursion).
+      target: makeAwsAdapterTarget(config.config),
+      compatibilityDate: config.config.compatibilityDate,
+      compatibilityFlags: config.config.compatibilityFlags,
+      main: config.config.main,
+      nuxt: config.config.nuxt,
+    });
+    return yield* framework.build({ root: config.rootDir });
+  });
+
+/**
+ * Create the AWS Lambda {@link NuxtTarget}. See the module doc for the
+ * seams.
+ */
+export const makeAwsTarget = (
+  config: NuxtAwsTargetConfig = {},
+): NuxtTarget => ({
+  ...makeAwsAdapterTarget(config),
+  build: (context) =>
+    runBuildChild({
+      module: import.meta.url,
+      rootDir: context.root,
+      framework: "nuxt",
+      config: {
+        rootDir: context.root,
+        config,
+      } satisfies NuxtAwsBuildChildConfig,
+    }).pipe(Effect.mapError((error) => fail(error.message, error.cause))),
+});
 
 /**
  * The deploy-target module contract (`resolveDeployTarget` accepts the

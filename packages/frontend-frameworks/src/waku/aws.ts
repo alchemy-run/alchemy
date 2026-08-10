@@ -30,6 +30,8 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { fileURLToPath } from "node:url";
+import type { Config as WakuConfig } from "waku/config";
+import { runBuildChild } from "../core/BuildChild.ts";
 import {
   DeployTargetError,
   makeDeployTarget,
@@ -37,7 +39,7 @@ import {
   type BuildOutput,
 } from "../core/index.ts";
 import { AWS_LAMBDA_HANDLE_GLOBAL } from "./aws-shared.ts";
-import type { WakuTarget } from "./Waku.ts";
+import { make, type WakuTarget, type WakuTargetBuildContext } from "./Waku.ts";
 
 export type { WakuTarget, WakuTargetContext } from "./Waku.ts";
 
@@ -87,9 +89,12 @@ export const handler = handle(
 `;
 
 /**
- * Build the AWS Lambda {@link WakuTarget}. See the module doc for the seams.
+ * The adapter-driven target — the shape the framework's regular
+ * build/finish pipeline consumes. Used directly in the build child (where
+ * `cwd === root` holds); {@link makeWakuAwsTarget} wraps it with the
+ * wholesale `build` hook that spawns the child.
  */
-export const makeWakuAwsTarget = (
+const makeAwsAdapterTarget = (
   config?: WakuAwsTargetConfig,
 ): WakuTarget<WakuAwsTargetConfig | undefined> =>
   makeDeployTarget({
@@ -176,6 +181,70 @@ export const makeWakuAwsTarget = (
         return { ...output, serverModules } satisfies BuildOutput;
       }),
   });
+
+/**
+ * Waku assumes `process.cwd()` is the project root in several places (the
+ * html-shell plugin's `index.html` input resolves against the cwd, and
+ * rolldown resolves relative inputs from the cwd), so the framework build
+ * chdirs to the root — which must never happen in the engine process (many
+ * deploys share one event loop). This target's wholesale `build` therefore
+ * runs the framework in a disposable child process whose working directory
+ * IS the project root (see `core/BuildChild.ts`); the framework's own
+ * chdir is a no-op there. The shared `core/BuildChildRunner` entry imports
+ * this module in the child and calls the exported {@link buildInChild}.
+ */
+export interface WakuAwsBuildChildConfig {
+  readonly rootDir: string;
+  /** The (JSON-serializable) target config the parent was created with. */
+  readonly config: WakuAwsTargetConfig | undefined;
+  /**
+   * The inline waku options the framework was constructed with
+   * (`WakuFrameworkOptions.waku`, carried through the build context). Only
+   * JSON-serializable fields cross the process boundary.
+   */
+  readonly waku: WakuConfig | undefined;
+}
+
+export const buildInChild = (config: WakuAwsBuildChildConfig) =>
+  Effect.gen(function* () {
+    const framework = yield* make({
+      root: config.rootDir,
+      // The adapter-only target: no wholesale `build` hook, so the child
+      // runs the regular waku build + finish pipeline (no recursion).
+      target: makeAwsAdapterTarget(config.config),
+      waku: config.waku,
+    });
+    return yield* framework.build({ root: config.rootDir });
+  });
+
+/**
+ * Build the AWS Lambda {@link WakuTarget}. See the module doc for the seams.
+ */
+export const makeWakuAwsTarget = (
+  config?: WakuAwsTargetConfig,
+): WakuTarget<WakuAwsTargetConfig | undefined> => ({
+  ...makeAwsAdapterTarget(config),
+  build: (context: WakuTargetBuildContext) =>
+    runBuildChild({
+      module: import.meta.url,
+      rootDir: context.root,
+      framework: "waku",
+      config: {
+        rootDir: context.root,
+        config,
+        waku: context.waku,
+      } satisfies WakuAwsBuildChildConfig,
+    }).pipe(
+      Effect.mapError(
+        (error) =>
+          new DeployTargetError({
+            platform: "aws",
+            message: error.message,
+            cause: error.cause,
+          }),
+      ),
+    ),
+});
 
 /**
  * The deploy-target module contract (`resolveDeployTarget` accepts the

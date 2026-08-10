@@ -26,10 +26,16 @@
  * No `devPlatform`: `dev` runs Astro's own Node dev server, which is
  * already the AWS Lambda programming model (plain Node).
  */
-import type { AstroIntegration } from "astro";
+import type { AstroInlineConfig, AstroIntegration } from "astro";
 import * as Effect from "effect/Effect";
-import { makeDeployTarget, type ServerEntryChunk } from "../core/index.ts";
-import type { AstroTarget } from "./Target.ts";
+import { runBuildChild } from "../core/BuildChild.ts";
+import {
+  DeployTargetError,
+  makeDeployTarget,
+  type ServerEntryChunk,
+} from "../core/index.ts";
+import { make } from "./Astro.ts";
+import type { AstroTarget, AstroTargetBuildContext } from "./Target.ts";
 
 /**
  * The importable specifier of this package's AWS Lambda server entrypoint —
@@ -169,11 +175,16 @@ export const distilledAws = (
   };
 };
 
+const fail = (message: string, cause?: unknown) =>
+  new DeployTargetError({ platform: "aws", message, cause });
+
 /**
- * Build the AWS Lambda {@link AstroTarget}. See the module doc for the
- * seams.
+ * The adapter-driven target — the shape the framework's regular
+ * build/finish pipeline consumes. Used directly in the build child (where
+ * `cwd === root` holds); {@link target} wraps it with the wholesale
+ * `build` hook that spawns the child.
  */
-export const target = (config: AstroAwsConfig = {}): AstroAwsTarget => {
+const makeAwsAdapterTarget = (config: AstroAwsConfig = {}): AstroAwsTarget => {
   // The resolved build output mode from `astro:config:done`: `"static"`
   // means every route is prerendered, so the deploy must be assets-only.
   let buildOutput: "static" | "server" | undefined;
@@ -216,6 +227,58 @@ export const target = (config: AstroAwsConfig = {}): AstroAwsTarget => {
       ),
   });
 };
+
+/**
+ * The natively-loaded `astro.config.*` executes user plugins/integrations
+ * that may read the cwd, mutate `process.env`, or `process.chdir` — none of
+ * which may touch the engine process (many deploys share one event loop).
+ * This target's wholesale `build` therefore runs the framework in a
+ * disposable child process whose working directory IS the project root (see
+ * `core/BuildChild.ts`). The shared `core/BuildChildRunner` entry imports
+ * this module in the child and calls the exported {@link buildInChild}.
+ */
+export interface AstroAwsBuildChildConfig {
+  readonly rootDir: string;
+  /** The (JSON-serializable) target config the parent was created with. */
+  readonly config: AstroAwsConfig;
+  /**
+   * The inline Astro overlay the framework was constructed with
+   * (`AstroFrameworkOptions.astro`, carried through the build context).
+   * Only JSON-serializable fields cross the process boundary.
+   */
+  readonly astro: AstroInlineConfig | undefined;
+}
+
+export const buildInChild = (config: AstroAwsBuildChildConfig) =>
+  Effect.gen(function* () {
+    const framework = yield* make({
+      root: config.rootDir,
+      // The adapter-only target: no wholesale `build` hook, so the child
+      // runs the regular astro build + finish pipeline (no recursion).
+      target: makeAwsAdapterTarget(config.config),
+      astro: config.astro,
+    });
+    return yield* framework.build({ root: config.rootDir });
+  });
+
+/**
+ * Build the AWS Lambda {@link AstroTarget}. See the module doc for the
+ * seams.
+ */
+export const target = (config: AstroAwsConfig = {}): AstroAwsTarget => ({
+  ...makeAwsAdapterTarget(config),
+  build: (context: AstroTargetBuildContext) =>
+    runBuildChild({
+      module: import.meta.url,
+      rootDir: context.root,
+      framework: "astro",
+      config: {
+        rootDir: context.root,
+        config,
+        astro: context.astro,
+      } satisfies AstroAwsBuildChildConfig,
+    }).pipe(Effect.mapError((error) => fail(error.message, error.cause))),
+});
 
 /**
  * The deploy-target module contract (`resolveDeployTarget` accepts the

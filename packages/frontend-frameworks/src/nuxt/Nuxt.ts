@@ -118,6 +118,14 @@ export interface NuxtTargetConfig {
    * @default true (applied by the Cloudflare target)
    */
   readonly nodeCompat?: boolean | undefined;
+  /**
+   * The nuxt config overrides the framework half was constructed with
+   * ({@link NuxtOptions.nuxt}). Carried on the target config so wholesale
+   * targets that re-run the framework in a child process (the AWS target —
+   * `loadNuxt` executes user config/modules that may mutate the process)
+   * can reconstruct the framework with the same options.
+   */
+  readonly nuxt?: Record<string, unknown> | undefined;
 }
 
 /** Inputs the framework passes when asking the target for its dev platform. */
@@ -320,6 +328,7 @@ export const make: (
     compatibilityDate: options?.compatibilityDate,
     compatibilityFlags: options?.compatibilityFlags,
     main: options?.main,
+    nuxt: options?.nuxt,
   };
 
   const resolveTarget = (root: string) =>

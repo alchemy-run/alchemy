@@ -16,11 +16,28 @@
  */
 import {
   isDeployTarget,
+  type BuildOutput,
   type DeployTarget,
+  type DeployTargetBuildContext,
+  type DeployTargetError,
   type DeployTargetInput,
+  type DeployTargetServices,
   type ServerEntryChunk,
 } from "../core/index.ts";
-import type { AstroIntegration } from "astro";
+import type { AstroInlineConfig, AstroIntegration } from "astro";
+import type * as Effect from "effect/Effect";
+
+/**
+ * The context an Astro target's wholesale `build` takeover receives: the
+ * generic build context plus the inline Astro overlay the framework was
+ * constructed with (`AstroFrameworkOptions.astro`) — carried so wholesale
+ * targets that re-run the framework in a child process (the AWS target)
+ * can reconstruct it. Only JSON-serializable fields survive that process
+ * boundary.
+ */
+export interface AstroTargetBuildContext extends DeployTargetBuildContext {
+  readonly astro?: AstroInlineConfig | undefined;
+}
 
 export interface AstroTarget<Config = unknown> extends DeployTarget<Config> {
   /**
@@ -28,6 +45,15 @@ export interface AstroTarget<Config = unknown> extends DeployTarget<Config> {
    * (`AstroInlineConfig.adapter`). Called once per `dev`/`build` operation.
    */
   readonly integration: () => AstroIntegration;
+  /**
+   * Optional *wholesale* build takeover (see `DeployTarget.build`), with
+   * the Astro-specific {@link AstroTargetBuildContext}.
+   */
+  readonly build?:
+    | ((
+        context: AstroTargetBuildContext,
+      ) => Effect.Effect<BuildOutput, DeployTargetError, DeployTargetServices>)
+    | undefined;
   /**
    * Optional entry-chunk pin for the build-output collector: astro's page
    * modules are rolldown inputs of the `ssr` environment, so it emits many
