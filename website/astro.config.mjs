@@ -28,6 +28,7 @@ function providersSidebarEntry() {
       { label: "PlanetScale", link: "/planetscale" },
       { label: "Neon", link: "/neon" },
       { label: "Prisma", link: "/prisma" },
+      { label: "Better Auth", link: "/better-auth" },
       { label: "Axiom", link: "/axiom" },
       { label: "GitHub", link: "/github" },
       { label: "Docker", link: "/docker" },
@@ -1021,6 +1022,15 @@ export default defineConfig({
               ],
             },
             providerResourcesEntry("Prisma"),
+          ],
+        },
+        {
+          label: "Better Auth",
+          items: [
+            { label: "Overview", link: "/better-auth" },
+            { label: "Database layers", link: "/better-auth/database-layers" },
+            { label: "Migrations", link: "/better-auth/migrations" },
+            providerResourcesEntry("BetterAuth"),
           ],
         },
         {

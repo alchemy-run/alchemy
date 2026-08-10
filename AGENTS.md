@@ -182,10 +182,32 @@ bun generate:api-reference   # -> website/src/content/docs/providers/{Cloud}/{Re
 
 This is the only doc generator that produces user-facing output. ([scripts/generate-api-reference.ts](./scripts/generate-api-reference.ts)) does the following:
 
-1. Discovers resource files in `packages/alchemy/src/{Cloud}/{Service}/`
+1. Discovers documented files across its configured source roots — `packages/alchemy/src/{Cloud}/{Service}/` plus flat single-provider packages like `packages/better-auth/src/` (mapped onto a synthetic provider directory, e.g. `BetterAuth/`)
 2. Parses TypeScript with `ts-morph`
-3. Extracts the resource-level summary plus `@section` / `@example` blocks from JSDoc
-4. Writes one markdown file per resource at `website/src/content/docs/providers/{Cloud}/{Resource}.md`
+3. Extracts the page-level summary plus `@section` / `@example` blocks from JSDoc on the export tagged `@resource`, `@binding`, or `@layer`
+4. Writes one markdown file per page at `website/src/content/docs/providers/{Provider}/{Name}.md`
+
+**Layer pages** (`@layer`) document exported Layer factories — the pluggable implementations of a Context service (e.g. better-auth's database layers). Alongside the shared tags, a Layer declares what it satisfies and needs:
+
+```typescript
+/**
+ * Neon database layer for Better Auth over Neon's serverless driver.
+ *
+ * @layer
+ * @provides BetterAuth.Database
+ * @peer @neondatabase/serverless
+ * @product Neon
+ *
+ * @section Connecting from a Worker or Lambda
+ * @example ...
+ */
+export const Neon = (url: ConnectionSource, options?: NeonOptions): Layer.Layer<Database> => ...
+```
+
+- `@provides <Service.Tag>` — the Context service tag(s) the Layer satisfies (repeatable)
+- `@peer <package>` — optional peer dependencies the Layer needs at runtime (repeatable)
+
+Both render as a metadata line under the page's `Source:` blockquote. Every Layer implementation should carry these annotations — a Layer without them is an undocumented integration surface.
 
 After editing JSDoc on a resource, run `bun generate:api-reference` to refresh the website docs.
 
