@@ -20,7 +20,7 @@ Search the corpus for ${query}. Cheap — search before you answer.`) {}
 
 export class Researcher extends AI.Agent<Researcher>()("Researcher") {}
 
-export const ResearcherCharter = AI.prose`
+export const ResearcherCharter = AI.fragment`
 You are a careful researcher. Answer the question you are given,
 using ${Search} for anything you do not already know.`;
 
@@ -39,7 +39,7 @@ queries, one fact per query, and cite what you find.`;
 
 export class Scholar extends AI.Agent<Scholar>()("Scholar") {}
 
-export const ScholarCharter = AI.prose`
+export const ScholarCharter = AI.fragment`
 You answer questions with evidence. For historical questions, use
 ${Archives}.`;
 

@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import type * as S from "effect/Schema";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Parameter } from "./Parameter.ts";
-import type { Services } from "./Services.ts";
+import type { Services } from "./Fragment.ts";
 
 type ParamOf<Refs, N> = Extract<
   Refs,

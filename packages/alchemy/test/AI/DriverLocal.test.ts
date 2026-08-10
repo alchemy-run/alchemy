@@ -536,7 +536,7 @@ describe("DriverLocal (in-memory)", () => {
       return Effect.gen(function* () {
         const scholar = yield* interpret(
           Scholar,
-          AI.prose`
+          AI.fragment`
             You date manuscripts. The stacks are ${DeepArchives}.`,
         );
         const answer = yield* scholar.dispatch("Date this manuscript.");
@@ -643,8 +643,8 @@ Enter the sandbox.`(() =>
           // TURN — before every sampling: the stance follows the state
           return Effect.gen(function* () {
             return yield* (yield* Ref.get(sandboxed))
-              ? AI.prose`You are IN the sandbox; nothing you run is real.`
-              : AI.prose`You are read-only until you ${enter}.`;
+              ? AI.fragment`You are IN the sandbox; nothing you run is real.`
+              : AI.fragment`You are read-only until you ${enter}.`;
           });
         });
         const researcher = yield* interpret(Researcher, charter);
@@ -687,7 +687,7 @@ Enter the sandbox.`(() =>
       return Effect.gen(function* () {
         // a STATIC charter whose splice is still dynamic — an effect
         // reading AI.Thread, evaluated at render time with the run provided
-        const charter = AI.prose`
+        const charter = AI.fragment`
 You are working ${Effect.map(AI.Thread, (thread) => thread.key)}. Answer briefly.`;
         const researcher = yield* interpret(Researcher, charter);
         yield* researcher.dispatch("hello", { key: "repo#9" });
@@ -724,7 +724,7 @@ You are working ${Effect.map(AI.Thread, (thread) => thread.key)}. Answer briefly
 Record the final ${result}.`((p) =>
             AI.reply({ answer: p.result }).pipe(Effect.as("recorded")),
           );
-          return AI.prose`Compute the answer, then ${markDone}.`;
+          return AI.fragment`Compute the answer, then ${markDone}.`;
         });
         const researcher = yield* interpret(Researcher, charter);
         // dispatch resolves with the TYPED reply, not the model's text —
@@ -871,7 +871,7 @@ Hand one round of work to the engineer with ${task}.`((p, thread) => ({
         task: p.task,
         key: `${thread.key}/Engineer/build`,
       }));
-      return AI.prose`
+      return AI.fragment`
 Route every request through ${handToEngineer}; report when done.`;
     });
     return Effect.gen(function* () {
@@ -956,7 +956,7 @@ Note something to your future self.`(() =>
             thread.remind("50 millis", "check the oven"),
           ).pipe(Effect.as("noted")),
         );
-        return AI.prose`Use ${remindMe} when asked to wait, then park.`;
+        return AI.fragment`Use ${remindMe} when asked to wait, then park.`;
       });
       const researcher = yield* interpret(Researcher, charter);
       const answer = yield* researcher.dispatch("wait for the oven", {
@@ -985,7 +985,7 @@ Note something to your future self.`(() =>
       const charter = Effect.gen(function* () {
         // the GUARD tier: a reducer from what-just-happened to
         // how-to-stand — the stance itself stays constant
-        const stance = AI.prose`Answer briefly.`;
+        const stance = AI.fragment`Answer briefly.`;
         return (tick: AI.TickEvent) =>
           Effect.gen(function* () {
             events.push(tick);
@@ -1023,7 +1023,7 @@ Note something to your future self.`(() =>
             Ref.update(count, (n) => n + 1).pipe(Effect.as("bumped")),
           );
           return Effect.gen(function* () {
-            return yield* AI.prose`
+            return yield* AI.fragment`
 Counter: ${Ref.get(count)}. Use ${bump} when told.`;
           });
         });
@@ -1043,7 +1043,7 @@ Counter: ${Ref.get(count)}. Use ${bump} when told.`;
   it.effect("prose margins are stripped; relative indentation survives", () => {
     const model = Model.make([() => [Model.text("ok"), Model.finish()]]);
     return Effect.gen(function* () {
-      const charter = AI.prose`
+      const charter = AI.fragment`
         You follow the checklist:
           - search first
           - answer second
@@ -1084,7 +1084,7 @@ Summarize progress as ${summary}; your context restarts from it.`((p) =>
             ),
           );
           return Effect.gen(function* () {
-            return yield* AI.prose`Work the task. ${handoff} when the thread grows stale.`;
+            return yield* AI.fragment`Work the task. ${handoff} when the thread grows stale.`;
           });
         });
         const researcher = yield* interpret(Researcher, charter);
@@ -1119,7 +1119,7 @@ Summarize progress as ${summary}; your context restarts from it.`((p) =>
           yield* AI.say`Status check.`;
           // GUARDED: the `===` condition delivers exactly once
           if (count === 1) yield* AI.say`One sampling done — settle in.`;
-          return yield* AI.prose`Work the task with ${bump}.`;
+          return yield* AI.fragment`Work the task with ${bump}.`;
         });
       });
       const researcher = yield* interpret(Researcher, charter);
@@ -1168,13 +1168,13 @@ Summarize as ${summary}; the thread restarts.`((p) =>
             ),
           );
           return Effect.gen(function* () {
-            return yield* AI.prose`
+            return yield* AI.fragment`
 Triage the issue; ${park} when blocked. ${handoff} to compact.
 
 ${
   (yield* Ref.get(parked))
-    ? AI.prose`You are parked on the author; judge their next reply.`
-    : AI.prose``
+    ? AI.fragment`You are parked on the author; judge their next reply.`
+    : AI.fragment``
 }`;
           });
         });
@@ -1238,7 +1238,7 @@ ${
         const search = recordingSearch();
         const researcher = yield* interpret(
           Researcher,
-          AI.prose`Search with ${Search}, then answer.`,
+          AI.fragment`Search with ${Search}, then answer.`,
         ).pipe(Effect.provide([ObserverLive, search.layer]));
         yield* researcher.dispatch("find x", { key: "o#1" });
 

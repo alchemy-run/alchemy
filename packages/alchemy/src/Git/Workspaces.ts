@@ -81,7 +81,7 @@ export interface WorkspacesService {
  * const { key } = yield* AI.Thread;                      // init is per-run
  * const ws = yield* workspaces.checkout({ key, remote });
  * return Effect.gen(function* () {
- *   return yield* AI.prose`…your checkout is ${ws.path}, branch ${ws.branch}…`;
+ *   return yield* AI.fragment`…your checkout is ${ws.path}, branch ${ws.branch}…`;
  * });
  * ```
  */

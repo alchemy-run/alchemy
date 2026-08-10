@@ -36,7 +36,7 @@ export const GeneralEngineer = Engineer.make(
     const thread = yield* AI.Thread;
 
     // ── the STANCE: re-rendered before every sampling ────────────────
-    return AI.prose`
+    return AI.fragment`
       You are a coding agent working in a repository checkout on the
       operator's machine — their pair of hands in this codebase. The
       operator reads your work in a chat UI; be direct, lead with the

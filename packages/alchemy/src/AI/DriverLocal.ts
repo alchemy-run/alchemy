@@ -36,7 +36,7 @@ import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { makeProcessScope, runOnHost } from "../Local/Process.ts";
-import type { Actor } from "./Actor.ts";
+import type { Actor } from "./Agent.ts";
 import { Driver, type Charter, type Interpretable } from "./Driver.ts";
 import {
   makeSessionEngine,

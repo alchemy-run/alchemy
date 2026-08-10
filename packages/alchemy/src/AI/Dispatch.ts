@@ -1,7 +1,7 @@
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type { Agent } from "./Agent.ts";
-import type { Services } from "./Services.ts";
+import type { Services } from "./Fragment.ts";
 import type { ToolParameters } from "./Tool.ts";
 
 /** The requirement a door contributes: the delegate agent's tag. */

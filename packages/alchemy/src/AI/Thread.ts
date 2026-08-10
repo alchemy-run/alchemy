@@ -2,7 +2,7 @@ import * as Context from "effect/Context";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type * as Prompt from "effect/unstable/ai/Prompt";
-import type { Fragment } from "./Prose.ts";
+import type { Fragment } from "./Fragment.ts";
 
 /**
  * A compaction request — the ONE mutation a charter may ask of its
@@ -120,7 +120,7 @@ export class Tick extends Context.Service<Tick, TickService>()(
  *   if (count === 30) {
  *     yield* AI.say`30 of 40 samplings spent — converge now.`;
  *   }
- *   return yield* AI.prose`…stance…`;
+ *   return yield* AI.fragment`…stance…`;
  * });
  * ```
  *

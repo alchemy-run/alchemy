@@ -222,7 +222,7 @@ export const RemindLive = Layer.succeed(Remind, ((input: { seconds: number }) =>
 export class Scribe extends AI.Agent<Scribe>()("Scribe") {}
 
 export const ScribeLive = Scribe.make(
-  AI.prose`
+  AI.fragment`
     You keep the record. Put anything you are handed into it with
     ${Write}, and use ${Remind} when you are asked to wait.
 
@@ -235,7 +235,7 @@ export class Supervisor extends AI.Agent<Supervisor>()("Supervisor") {}
 /** Mentioning ${Scribe} compiles the driver's delegation tool — whose
  *  handler RPCs into the Scribe's OWN Durable Object. */
 export const SupervisorLive = Supervisor.make(
-  AI.prose`
+  AI.fragment`
     You do no work yourself. Hand every task to ${Scribe} and report
     what came back.
   `,

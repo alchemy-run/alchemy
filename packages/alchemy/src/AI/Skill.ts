@@ -2,8 +2,8 @@ import type * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import { makeTerm } from "./Agent.ts";
-import type { Services } from "./Services.ts";
-import type { FragmentTools, WiredLayer } from "./Wire.ts";
+import type { Services } from "./Fragment.ts";
+import type { FragmentTools, WiredLayer } from "./Agent.ts";
 
 /**
  * The service shape a skill's tag resolves to: the skill's TEACHING

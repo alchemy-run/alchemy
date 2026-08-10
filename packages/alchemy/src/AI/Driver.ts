@@ -5,12 +5,12 @@ import * as Option from "effect/Option";
 import type * as Scope from "effect/Scope";
 import type * as PersistentRef from "../PersistentRef.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
-import type { Actor } from "./Actor.ts";
+import type { Actor } from "./Agent.ts";
 import type { Agent } from "./Agent.ts";
 import type { DriverError } from "./Errors.ts";
-import type { Fragment } from "./Prose.ts";
+import type { Fragment } from "./Fragment.ts";
 import type { Thread, Tick } from "./Thread.ts";
-import type { Services } from "./Services.ts";
+import type { Services } from "./Fragment.ts";
 import { isSkill, type Skill, type SkillService } from "./Skill.ts";
 import { isTool } from "./Tool.ts";
 
@@ -38,7 +38,7 @@ export type Interpretable = Agent<any, any>;
  * - a failure — retried by the driver with capped backoff; a typed
  *   `AI.Refused` is the session giving up, riding the error channel.
  *
- * Returning an un-yielded Effect (a forgotten `yield*` on `AI.prose`)
+ * Returning an un-yielded Effect (a forgotten `yield*` on `AI.fragment`)
  * or any non-Fragment value is a loud defect, never a silent outcome.
  */
 export type Turn<E = any, R = any> = Effect.Effect<Fragment, E, R>;
@@ -92,13 +92,13 @@ export type TurnFn<In = unknown, E = any, R = any> = (
  * // 2. a closure (tools, refs, bindings) returning a STATIC stance
  * Engineer.make(Effect.gen(function* () {
  *   const openPullRequest = yield* AI.Tool("open_pull_request")`…`(…);
- *   return AI.prose`…${openPullRequest}…`;      // Fragment → constant turn
+ *   return AI.fragment`…${openPullRequest}…`;      // Fragment → constant turn
  * }));
  *
  * // 3. the GUARD tier — a function of the tick event, for laws the
  * //    model cannot be trusted to enforce on itself
  * Engineer.make(Effect.gen(function* () {
- *   const stance = AI.prose`…`;
+ *   const stance = AI.fragment`…`;
  *   return Effect.fn(function* (tick: AI.TickEvent) {
  *     if (tick.count >= 60) return yield* Effect.fail(new AI.Refused({ … }));
  *     if (tick.count === 45) yield* AI.say`45 of 60 spent — converge.`;
@@ -139,7 +139,7 @@ export type TurnServices = Thread | Tick | RuntimeContext | PersistentRef.Store;
  * thread at admit; `Tick` NOT excluded, so an init that yields it
  * surfaces an unprovideable requirement here and fails to compose)
  * plus everything any turn could mention (splices accumulate through
- * `AI.prose`'s requirement channel — including branches that did not
+ * `AI.fragment`'s requirement channel — including branches that did not
  * render this tick), minus the driver-provided {@link TurnServices}.
  */
 export type CharterServices<C> =

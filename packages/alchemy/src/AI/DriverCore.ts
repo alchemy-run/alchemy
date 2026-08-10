@@ -29,7 +29,7 @@ import * as AiTool from "effect/unstable/ai/Tool";
 import * as Toolkit from "effect/unstable/ai/Toolkit";
 import * as PersistentRef from "../PersistentRef.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
-import type { Actor } from "./Actor.ts";
+import type { Actor } from "./Agent.ts";
 import { isAgent, type Agent } from "./Agent.ts";
 import { isDispatchTool, type DispatchTool } from "./Dispatch.ts";
 import type { Charter, Turn, TurnFn } from "./Driver.ts";
@@ -44,7 +44,7 @@ import {
   type SessionObservation,
 } from "./Observer.ts";
 import { isParameter } from "./Parameter.ts";
-import { dedentTemplate, isFragment, type Fragment } from "./Prose.ts";
+import { dedentTemplate, isFragment, type Fragment } from "./Fragment.ts";
 import type {
   SessionSocketHost,
   SessionSocketServerFrame,
@@ -694,7 +694,7 @@ export const renderStance = (
             flush();
           } else if (Effect.isEffect(ref)) {
             // evaluated at render time, EVERY tick — a nested
-            // AI.prose, a component's turn value
+            // AI.fragment, a component's turn value
             const value = yield* ops.provide(ref as Effect.Effect<unknown>);
             if (isFragment(value)) {
               flush();
@@ -759,7 +759,7 @@ export const compileTick = (
     );
     if (Effect.isEffect(result)) {
       return yield* Effect.die(
-        `${ops.driver}: the turn of '${ops.term}' (session '${ops.key}') returned an Effect — did you forget to yield* an AI.prose?`,
+        `${ops.driver}: the turn of '${ops.term}' (session '${ops.key}') returned an Effect — did you forget to yield* an AI.fragment?`,
       );
     }
     if (!isFragment(result)) {
