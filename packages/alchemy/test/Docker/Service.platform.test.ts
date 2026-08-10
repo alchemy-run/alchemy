@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import TestService, { SERVICE_EXTERNAL_PORT } from "./fixtures/service.ts";
-import { ensureDockerSwarm, isDockerSwarmReady } from "./Runtime.ts";
+import { ensureDockerSwarm } from "./Runtime.ts";
 
 const { test } = Test.make({ providers: Docker.providers() });
 
@@ -14,7 +14,7 @@ const { test } = Test.make({ providers: Docker.providers() });
 // engine, deploy it as a swarm service, and prove over HTTP that (a) the
 // `{ fetch }` handler is served and (b) the `ServerHost.run` background loop
 // is actually executing inside the swarm task (`/ticks` keeps climbing).
-test.provider.skipIf(!isDockerSwarmReady)(
+test.provider(
   "effectful service serves fetch and runs background loops",
   (stack) =>
     Effect.gen(function* () {

@@ -87,9 +87,9 @@ const fetchJsonReady = <T>(url: string) =>
     );
   });
 
-// Concurrent for consistency with the other Website suites; both tests
-// are `exclusive: true` (the kit dev server is cwd-sensitive), so the
-// runner's whole-process lock still serializes them globally.
+// Concurrent like the other Website suites: the kit dev server never
+// chdirs (the kit-runtime realign plugin handles cwd != root), so
+// nothing here mutates process-global state.
 describe.concurrent("SvelteKit dev", () => {
   test.provider(
     "SvelteKit dev: local dev server renders SSR with platform.env bindings, local KV, and HMR",
@@ -190,10 +190,7 @@ describe.concurrent("SvelteKit dev", () => {
 
         yield* stack.destroy();
       }).pipe(logLevel),
-    // The kit dev server is cwd-sensitive (same reason the live test is
-    // exclusive): `svelte-kit sync` and the config loader resolve from the
-    // process working directory.
-    { timeout: 300_000, exclusive: true },
+    { timeout: 300_000 },
   );
 
   /**
@@ -291,6 +288,93 @@ describe.concurrent("SvelteKit dev", () => {
           );
         expect(gone).toBe(true);
       }).pipe(logLevel),
-    { timeout: 300_000, exclusive: true },
+    { timeout: 300_000 },
+  );
+
+  // ─────────────────────────────────────────────────────────────────────
+  // SPA fixture under `alchemy dev`: pages are `ssr = false`, so a deep
+  // link to a client route must serve the app shell (kit's Vite dev
+  // server renders app.html with no page markup), while `+server.ts`
+  // endpoints still execute server-side in the dev server with access to
+  // `platform.env`.
+  // ─────────────────────────────────────────────────────────────────────
+
+  const spaFixtureDir = pathe.resolve(
+    import.meta.dirname,
+    "fixtures",
+    "sveltekit-spa-app",
+  );
+
+  /** app.html marker in the SPA fixture — identifies the app shell. */
+  const SPA_SHELL_MARKER = "sveltekit-spa-shell";
+
+  test.provider(
+    "SvelteKit dev: SPA deep links serve the app shell; server endpoints still run with platform.env bindings",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const rootDir = yield* cloneFixture(spaFixtureDir, {
+          prefix: "alchemy-sveltekit-dev-spa-",
+          tempRoot,
+          entries: ["package.json", "src"],
+        });
+
+        const bindingMarker = "sveltekit-dev-spa-binding-marker";
+
+        const site = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Website.SvelteKit("SvelteKitSpaLocal", {
+              rootDir,
+              dev: { port: 0 },
+              memo: { include: ["src/**", "package.json"] },
+              // Same props as the live SPA test — in dev the adapter's
+              // fallback generation never runs (no build); kit's dev
+              // server serves the shell for `ssr = false` routes itself.
+              adapter: { notFoundHandling: "single-page-application" },
+              env: {
+                TEST_BINDING: bindingMarker,
+              },
+            });
+          }),
+        );
+
+        // Local identity: the url points at the alchemy dev proxy — no
+        // cloud Worker exists.
+        expect(site.url).toBeDefined();
+        expect(site.url).toMatch(/^http:\/\/localhost:\d+/);
+
+        // (a) A deep link to a CLIENT route serves the app shell — the
+        // shell marker is present and the widget markup (which only ever
+        // renders in the browser) is absent.
+        const widgetsBody = yield* expectUrlContains(
+          `${site.url!}/widgets`,
+          SPA_SHELL_MARKER,
+          {
+            timeout: "120 seconds",
+            label: "sveltekit dev SPA deep link serves the shell",
+          },
+        );
+        expect(widgetsBody).not.toContain("sveltekit-spa-widgets");
+        expect(widgetsBody).not.toContain("sprocket");
+
+        // (b) The server endpoint executes in the dev server with the
+        // binding overlaid on `platform.env`.
+        const widgets = yield* fetchJsonReady<{
+          server: boolean;
+          message: string | null;
+          widgets: Array<{ id: string; name: string }>;
+        }>(`${site.url!}/api/widgets`);
+        expect(widgets.server).toBe(true);
+        expect(widgets.message).toBe(bindingMarker);
+        expect(widgets.widgets.map((w) => w.name)).toEqual([
+          "sprocket",
+          "flange",
+          "grommet",
+        ]);
+
+        yield* stack.destroy();
+      }).pipe(logLevel),
+    { timeout: 300_000 },
   );
 });

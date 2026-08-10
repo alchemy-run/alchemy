@@ -148,11 +148,11 @@ export class DomainCreationFailed extends Data.TaggedError(
 const DOMAIN_TRANSIENT = new Set(["CREATING", "DELETING"]);
 
 /**
- * A freshly created IAM role is eventually consistent; `createDomain` can
- * transiently reject a role it cannot yet assume. Wrapped in an
- * explicitly-typed helper so the `Effect.retry` conditional return type does
- * not leak into declaration emit and widen the provider layer's requirement
- * to `unknown` (see PATTERNS §7).
+ * A freshly created (or re-observed) IAM role is eventually consistent;
+ * `createDomain` / `updateDomain` can transiently reject a role DataZone
+ * cannot yet assume. Wrapped in an explicitly-typed helper so the
+ * `Effect.retry` conditional return type does not leak into declaration emit
+ * and widen the provider layer's requirement to `unknown` (see PATTERNS §7).
  */
 const retryWhileRoleAssumeFails = <A, E extends { _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
@@ -426,14 +426,16 @@ export const DomainProvider = () =>
               (news.serviceRole !== undefined &&
                 domain.serviceRole !== news.serviceRole);
             if (drifted) {
-              yield* datazone.updateDomain({
-                identifier: domain.id,
-                name,
-                description: news.description,
-                domainExecutionRole: executionRoleArn,
-                serviceRole: news.serviceRole,
-                singleSignOn: news.singleSignOn,
-              });
+              yield* retryWhileRoleAssumeFails(
+                datazone.updateDomain({
+                  identifier: domain.id,
+                  name,
+                  description: news.description,
+                  domainExecutionRole: executionRoleArn,
+                  serviceRole: news.serviceRole,
+                  singleSignOn: news.singleSignOn,
+                }),
+              );
               domain = (yield* getDomainOrUndefined(domain.id)) ?? domain;
             }
           }

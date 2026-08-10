@@ -40,7 +40,11 @@ import {
   tryFindProviderByType,
   type ProviderService,
 } from "./Provider.ts";
-import { defaultProviderMode, type ProviderMode } from "./ProviderMode.ts";
+import {
+  defaultProviderMode,
+  stampedMode,
+  type ProviderMode,
+} from "./ProviderMode.ts";
 import {
   isResource,
   type ResourceBinding,
@@ -343,17 +347,20 @@ export const make = <A>(
 
     /**
      * Has this resource switched provider modes since it was last
-     * reconciled? Rows without a persisted mode (legacy rows, or rows
-     * written by a mode-agnostic provider) are assumed to already be in
-     * the current run's mode — no replacement churn.
+     * reconciled? Rows without a persisted mode were written by a
+     * pre-provider-mode engine (or a provider that only became dual-mode
+     * later) — their physical resource is LIVE unless its attrs carry a
+     * `dev:` identity marker proving it was reconciled locally (see
+     * {@link stampedMode}). A dev run replaces unstamped live rows exactly
+     * like stamped live rows; live runs replace unstamped marker rows.
      */
     const hasModeSwitched = (
       mode: ProviderMode | undefined,
       oldState: ResourceState | undefined,
     ): boolean =>
       mode !== undefined &&
-      oldState?.providerMode !== undefined &&
-      oldState.providerMode !== mode;
+      oldState !== undefined &&
+      stampedMode(oldState) !== mode;
 
     const resourceFqns = yield* state.list({
       stack: stackName,
@@ -1781,12 +1788,16 @@ export const make = <A>(
               // and the remediation instead of limping into a partial apply.
               //
               // Orphan deletes resolve the provider variant for the mode
-              // that created the row (`providerMode`), so e.g. a local dev
+              // that created the row (`providerMode`, or the `dev:` marker
+              // inference for legacy unstamped rows), so e.g. a local dev
               // worker's row is deleted by the local provider even during a
-              // live deploy — and vice versa.
+              // live deploy — and vice versa. Unstamped rows are physically
+              // live unless their attrs carry the marker (see stampedMode),
+              // never the run default.
+              const rowMode = stampedMode(oldState);
               const providerOption = yield* tryFindProviderByType(
                 resourceType,
-                oldState.providerMode,
+                rowMode,
               );
               if (Option.isNone(providerOption)) {
                 return yield* Effect.die(

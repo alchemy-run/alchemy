@@ -3883,8 +3883,8 @@ describe("provider modes (local ⇄ live)", () => {
   //   - the resolved mode lands on the plan node (`node.mode`)
   //   - a persisted mode different from the resolved mode forces a
   //     REPLACEMENT, overriding whatever the provider diff would say
-  //   - legacy rows (no persisted mode) are assumed to be the current run's
-  //     mode — no replacement churn
+  //   - legacy rows (no persisted mode) are assumed live, unless their
+  //     attrs carry the `dev:` identity marker (then local)
   //   - deletions carry the persisted mode so orphans are torn down by the
   //     provider that created them
   //   - a mode-switching upstream invalidates its attrs for downstream diffs
@@ -4016,21 +4016,26 @@ describe("provider modes (local ⇄ live)", () => {
   );
 
   test(
-    "legacy rows without a persisted mode are assumed to be the current run's mode",
+    "legacy rows without a persisted mode are assumed live",
     Effect.gen(function* () {
       yield* seed({ A: modalState("A", { providerMode: undefined }) });
 
-      // Deploy (live) run: assumed live → noop. Dev run: the row is ALSO
-      // assumed local (assume-current applies to whatever mode this plan
-      // resolves) → still no replacement churn; the row is stamped on its
-      // next write.
+      // An unstamped row was written by a pre-provider-mode engine (or by
+      // a provider that only became dual later) — its physical resource is
+      // LIVE. A deploy (live) run sees no churn; a dev run replaces it
+      // exactly like a stamped live row. Assuming the run's mode instead
+      // would silently adopt the deployed live resource as a local
+      // instance and leak it untracked.
       const liveDefault = yield* makePlan(ModalResource("A", { value: "v1" }));
       expect(liveDefault.resources.A).toMatchObject({ action: "noop" });
 
       const devRun = yield* inDev(
         makePlan(ModalResource("A", { value: "v1" })),
       );
-      expect(devRun.resources.A).toMatchObject({ action: "noop" });
+      expect(devRun.resources.A).toMatchObject({
+        action: "replace",
+        mode: "local",
+      });
     }),
   );
 
