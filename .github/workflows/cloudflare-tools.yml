@@ -74,7 +74,3 @@ jobs:
           TEST_R2_BUCKET_NAME: ${{ secrets.TEST_R2_BUCKET_NAME }}
           TEST_D1_DATABASE_ID: ${{ secrets.TEST_D1_DATABASE_ID }}
           TEST_SERVICE_WORKER_NAME: ${{ secrets.TEST_SERVICE_WORKER_NAME }}
-
-      - name: Keep failed macOS runner alive for SSH debugging
-        if: failure() && runner.os == 'macOS'
-        run: sleep 1800
