@@ -45,7 +45,7 @@ export default Options.make({
   // lives in its real `astro.config.mjs` (`output: "static"`), which the
   // integration must load and honor (the user-config principle).
   framework: (options) =>
-    Astro.make({
+    Astro.layer({
       target: cloudflare({ worker: Options.resolveCloudflareOptions(options).worker }),
     }),
 });
