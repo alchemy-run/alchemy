@@ -97,4 +97,6 @@ dependencies or breaking conventions.
 
 ## License
 
-Apache-2.0
+Licensed under the [Apache License 2.0](./LICENSE). See
+[Third-Party Licenses](./THIRD_PARTY_LICENSES.md) for code incorporated from
+upstream projects.

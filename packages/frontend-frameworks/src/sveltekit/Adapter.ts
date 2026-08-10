@@ -1,3 +1,5 @@
+// Alchemy modifications are licensed under Apache-2.0.
+// This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
  * In-memory SvelteKit `Adapter` — a wrangler-free fork of
  * `@sveltejs/adapter-cloudflare`'s `adapt()`.

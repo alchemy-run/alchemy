@@ -144,33 +144,42 @@ function appleTouchSvg(): string {
  * has no satori/font dependency. Used when a page has no slug-specific OG
  * image (e.g. external referrers hitting the bare domain).
  */
+const OG_WIDTH = 1200;
+const OG_HEIGHT = 630;
+const OG_PIXEL_RATIO = 2.5;
+
 function ogFallbackSvg(): string {
-  const W = 1200;
-  const H = 630;
-  const { stroke, dot, bg } = YANTRA_THEMES.light;
-  // Yantra glyph centered, large.
-  const glyphSize = 220;
-  const glyph = yantraSvg({ size: glyphSize, stroke, dot, strokeWidth: 0.7 })
-    .replace(/^<svg[^>]*>/, "")
-    .replace(/<\/svg>$/, "");
+  const W = OG_WIDTH;
+  const H = OG_HEIGHT;
+  const { stroke, bg } = YANTRA_THEMES.light;
+  const glyphSize = 260;
+  // Embed the exact standalone light logo rather than maintaining a second
+  // OG-specific rendering of its geometry and stroke weight.
+  const logo = brandMarkSvg("light").replace(
+    'width="512" height="512"',
+    `width="${glyphSize}" height="${glyphSize}"`,
+  );
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
     <rect width="${W}" height="${H}" fill="${bg}"/>
     <!-- subtle hairline frame -->
     <rect x="24" y="24" width="${W - 48}" height="${H - 48}" fill="none" stroke="${stroke}" stroke-opacity="0.18" stroke-width="1"/>
-    <!-- yantra centered, slightly above midline so wordmark sits below -->
-    <g transform="translate(${(W - glyphSize) / 2} ${H / 2 - glyphSize - 20})" viewBox="0 0 24 24">
-      <svg width="${glyphSize}" height="${glyphSize}" viewBox="0 0 24 24" fill="none" stroke="${stroke}" stroke-width="0.7" stroke-linecap="round" stroke-linejoin="round">${glyph}</svg>
-    </g>
+    <!-- exact standalone logo, centered -->
+    <g transform="translate(${(W - glyphSize) / 2} 48)">${logo}</g>
     <!-- wordmark -->
-    <text x="${W / 2}" y="${H / 2 + 60}" text-anchor="middle"
+    <text x="${W / 2}" y="400" text-anchor="middle"
       font-family="'Source Serif 4', 'Source Serif Pro', Georgia, serif"
-      font-style="italic" font-weight="500" font-size="96" fill="#2a2620"
-      letter-spacing="-2">alchemy</text>
-    <text x="${W / 2}" y="${H / 2 + 120}" text-anchor="middle"
+      font-style="italic" font-weight="500" font-size="112" fill="#2a2620"
+      letter-spacing="-2">Alchemy</text>
+    <text x="${W / 2}" y="462" text-anchor="middle"
       font-family="'JetBrains Mono', ui-monospace, monospace"
-      font-size="20" fill="${stroke}" letter-spacing="4">
+      font-size="18" fill="${stroke}" letter-spacing="4">
       ZERO &#8594; PRODUCTION
+    </text>
+    <text x="${W / 2}" y="506" text-anchor="middle"
+      font-family="'Source Serif 4', 'Source Serif Pro', Georgia, serif"
+      font-size="22" font-weight="600" fill="#85714f" letter-spacing="0.5">
+      Infrastructure as Effects
     </text>
     <!-- bottom-right url tag -->
     <text x="${W - 48}" y="${H - 48}" text-anchor="end"
@@ -207,14 +216,27 @@ async function main() {
     rasterize(appleTouchSvg(), 180),
   );
 
-  // 4. The brand mark at 512, per theme — emitted as both the standalone
-  //    vector and the PWA / share raster.
+  // 4. The brand mark at 512, per theme — emitted as a transparent standalone
+  //    vector, a transparent PWA/share raster, and an opaque logo raster using
+  //    the theme background. None of the variants adds a frame or border.
   for (const theme of ["light", "dark"] as const) {
     const mark = brandMarkSvg(theme);
     await writeFile(path.join(publicDir, `alchemy-logo-${theme}.svg`), mark);
     await writeFile(
       path.join(publicDir, `icon-512${theme === "dark" ? "-dark" : ""}.png`),
       rasterize(mark, 512),
+    );
+    const { stroke, dot, bg } = YANTRA_THEMES[theme];
+    const logo = yantraSvg({
+      size: 512,
+      stroke,
+      dot,
+      bg,
+      strokeWidth: 1.1,
+    });
+    await writeFile(
+      path.join(publicDir, `alchemy-logo-${theme}-bg.png`),
+      rasterize(logo, 512),
     );
   }
 
@@ -229,12 +251,12 @@ async function main() {
   await writeFile(path.join(publicDir, "og-default.svg"), ogSvg);
   await writeFile(
     path.join(publicDir, "og-default.png"),
-    rasterize(ogSvg, 1200, await brandFonts()),
+    rasterize(ogSvg, OG_WIDTH * OG_PIXEL_RATIO, await brandFonts()),
   );
 
   // eslint-disable-next-line no-console
   console.log(
-    "[brand] wrote favicon.{svg,png}, favicon-{16,32}[-dark].png, apple-touch-icon.png, icon-512[-dark].png, alchemy-logo-{light,dark}.svg, og-default.{svg,png}",
+    "[brand] wrote favicon.{svg,png}, favicon-{16,32}[-dark].png, apple-touch-icon.png, icon-512[-dark].png, alchemy-logo-{light,dark}.svg, alchemy-logo-{light,dark}-bg.png, og-default.{svg,png}",
   );
 }
 

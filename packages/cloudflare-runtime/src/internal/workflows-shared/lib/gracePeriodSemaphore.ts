@@ -1,3 +1,5 @@
+// Alchemy modifications are licensed under Apache-2.0.
+// This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 import { ms } from "itty-time";
 import type { Engine } from "../engine.ts";
 import type { WorkflowSleepDuration } from "cloudflare:workers";

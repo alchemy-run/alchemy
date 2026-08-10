@@ -1,3 +1,5 @@
+// Alchemy modifications are licensed under Apache-2.0.
+// This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
  * The Cloudflare Workers deploy target for `@alchemy.run/frontend-frameworks/waku` — the ONLY
  * module in this package (besides the bundled `./adapter` fork it selects)

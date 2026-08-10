@@ -49,11 +49,10 @@ jobs:
       # in the alchemy -> distilled project-reference chain (distilled/aws
       # is huge), which doesn't fit the bump job's ubuntu-latest box.
       build-mode: per-package
-      # The alchemy package ships the repo-root README.md; copy it in
-      # before building. Turbo scopes the build to the package being
-      # published and builds its workspace dependencies first.
+      # Turbo scopes the build to the package being published and builds its
+      # workspace dependencies first. Each package build copies its shared
+      # license metadata, and alchemy also copies the repo-root README.
       build-command: >-
-        cp ../../README.md . 2>/dev/null || true;
         PKG_NAME=$(node -p "require('./package.json').name");
         cd ../..;
         bun turbo run build --filter="$PKG_NAME"
