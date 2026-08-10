@@ -1,4 +1,8 @@
-import type { RuntimeContext } from "alchemy";
+import {
+  resolveConnectionSource,
+  staticConnectionSource,
+  type ConnectionSource,
+} from "alchemy/SQL/ConnectionSource";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -8,15 +12,7 @@ import {
   type DatabaseService,
   type DirectDatabase,
 } from "./Database.ts";
-import { BetterAuthMigrationError } from "./Errors.ts";
-import {
-  defaultMigrateSource,
-  initMigrateSource,
-  resolveConnectionSource,
-  sourceDigest,
-  type ConnectionSource,
-  type SqlLayerOptions,
-} from "./Postgres.ts";
+import { makeMigrateSupport, type SqlLayerOptions } from "./Postgres.ts";
 
 export interface NeonOptions extends SqlLayerOptions {}
 
@@ -118,7 +114,7 @@ export const Neon = (
     Database,
     Effect.gen(function* () {
       const urlEffect = yield* resolveConnectionSource(url);
-      const migrateSource = defaultMigrateSource(url, options?.migrate);
+      const migrateSource = staticConnectionSource(url, options?.migrate);
 
       return {
         provider: "postgres",
@@ -126,36 +122,11 @@ export const Neon = (
         ...(migrateSource === undefined
           ? {}
           : {
-              migrate: {
-                identity: { urlDigest: sourceDigest(migrateSource) } as Record<
-                  string,
-                  unknown
-                >,
-                connect: Effect.gen(function* () {
-                  // Init half — capture the connection-string Output.
-                  const urlAccessor = yield* initMigrateSource(migrateSource);
-                  // Apply half — open the serverless pool.
-                  return openPool(urlAccessor).pipe(
-                    Effect.catchDefect((cause: unknown) =>
-                      Effect.fail(
-                        new BetterAuthMigrationError({
-                          message:
-                            "Failed to connect to Neon for Better Auth schema migrations",
-                          cause,
-                        }),
-                      ),
-                    ),
-                  );
-                }) as Effect.Effect<
-                  Effect.Effect<
-                    DirectDatabase,
-                    BetterAuthMigrationError,
-                    Scope.Scope
-                  >,
-                  never,
-                  RuntimeContext
-                >,
-              },
+              migrate: makeMigrateSupport(
+                migrateSource,
+                openPool,
+                "Failed to connect to Neon for Better Auth schema migrations",
+              ),
             }),
       } satisfies DatabaseService;
     }),

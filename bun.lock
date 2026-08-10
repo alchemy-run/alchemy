@@ -1411,7 +1411,6 @@
         "@vitejs/plugin-rsc": "catalog:fixtures",
         "alchemy-test": "workspace:*",
         "astro": "catalog:frameworks",
-        "better-auth": "catalog:",
         "effect": "catalog:",
         "foldkit": "catalog:fixtures",
         "hono": "catalog:frameworks",

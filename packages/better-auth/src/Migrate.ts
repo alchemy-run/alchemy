@@ -1,4 +1,5 @@
 import { Action, Stack, type Output } from "alchemy";
+import { sha256Object } from "alchemy/Util/sha256";
 import { CurrentRuntimeContext, sanitizeKey } from "alchemy/RuntimeContext";
 import type { BetterAuthOptions } from "better-auth";
 import { getSchema } from "better-auth/db";
@@ -189,36 +190,30 @@ const runMigrationWith = (
 export const schemaFingerprint = (
   options: BetterAuthOptions,
 ): Effect.Effect<string> =>
-  Effect.promise(async () => {
+  Effect.suspend(() => {
     const schema = getSchema(options);
+    // Reduce to the migration-relevant field attributes; sha256Object's
+    // stable serialization handles key ordering.
     const reduced = Object.fromEntries(
-      Object.entries(schema)
-        .sort(([a], [b]) => (a < b ? -1 : 1))
-        .map(([table, def]) => [
-          table,
-          Object.fromEntries(
-            Object.entries(def.fields)
-              .sort(([a], [b]) => (a < b ? -1 : 1))
-              .map(([name, field]) => [
-                name,
-                {
-                  type: String(field.type),
-                  required: field.required ?? false,
-                  unique: field.unique ?? false,
-                  references: field.references
-                    ? {
-                        model: field.references.model,
-                        field: field.references.field,
-                      }
-                    : undefined,
-                },
-              ]),
-          ),
-        ]),
+      Object.entries(schema).map(([table, def]) => [
+        table,
+        Object.fromEntries(
+          Object.entries(def.fields).map(([name, field]) => [
+            name,
+            {
+              type: String(field.type),
+              required: field.required ?? false,
+              unique: field.unique ?? false,
+              references: field.references
+                ? {
+                    model: field.references.model,
+                    field: field.references.field,
+                  }
+                : undefined,
+            },
+          ]),
+        ),
+      ]),
     );
-    const bytes = new TextEncoder().encode(JSON.stringify(reduced));
-    const digest = await crypto.subtle.digest("SHA-256", bytes);
-    return Array.from(new Uint8Array(digest))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
+    return sha256Object(reduced);
   });

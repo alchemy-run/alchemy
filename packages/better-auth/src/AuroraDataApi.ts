@@ -1,3 +1,4 @@
+import type * as rdsdata from "@distilled.cloud/aws/rds-data";
 import type { RuntimeContext } from "alchemy";
 import * as AWS from "alchemy/AWS";
 import * as Effect from "effect/Effect";
@@ -22,7 +23,7 @@ import { BetterAuthMigrationError } from "./Errors.ts";
 export interface DataApiExecutor {
   readonly execute: (request: {
     sql: string;
-    parameters?: SqlParameter[];
+    parameters?: rdsdata.SqlParameter[];
     includeResultMetadata?: boolean;
     transactionId?: string;
   }) => Promise<DataApiResponse>;
@@ -31,103 +32,11 @@ export interface DataApiExecutor {
   readonly rollback: (transactionId: string) => Promise<unknown>;
 }
 
-interface SqlParameter {
-  name: string;
-  typeHint?: string;
-  value: Record<string, unknown>;
-}
-
-interface DataApiField {
-  stringValue?: string;
-  longValue?: number;
-  doubleValue?: number;
-  booleanValue?: boolean;
-  blobValue?: unknown;
-  isNull?: boolean;
-}
-
 interface DataApiResponse {
-  records?: DataApiField[][];
-  columnMetadata?: { label?: string; name?: string; typeName?: string }[];
+  records?: rdsdata.Field[][];
+  columnMetadata?: rdsdata.ColumnMetadata[];
   numberOfRecordsUpdated?: number;
 }
-
-const toSqlParameter = (name: string, value: unknown): SqlParameter => {
-  if (value === null || value === undefined) {
-    return { name, value: { isNull: true } };
-  }
-  if (typeof value === "string") {
-    return { name, value: { stringValue: value } };
-  }
-  if (typeof value === "number") {
-    return Number.isInteger(value)
-      ? { name, value: { longValue: value } }
-      : { name, value: { doubleValue: value } };
-  }
-  if (typeof value === "bigint") {
-    return { name, value: { longValue: Number(value) } };
-  }
-  if (typeof value === "boolean") {
-    return { name, value: { booleanValue: value } };
-  }
-  if (value instanceof Date) {
-    return {
-      name,
-      typeHint: "TIMESTAMP",
-      value: {
-        stringValue: value.toISOString().replace("T", " ").replace("Z", ""),
-      },
-    };
-  }
-  if (value instanceof Uint8Array) {
-    return { name, value: { blobValue: value } };
-  }
-  return { name, value: { stringValue: JSON.stringify(value) } };
-};
-
-const TIMESTAMP_TYPES = new Set([
-  "timestamp",
-  "timestamptz",
-  "date",
-  "datetime",
-]);
-
-const fieldValue = (
-  field: DataApiField,
-  typeName: string | undefined,
-): unknown => {
-  if (field.isNull) {
-    return null;
-  }
-  if (field.stringValue !== undefined) {
-    if (typeName !== undefined && TIMESTAMP_TYPES.has(typeName.toLowerCase())) {
-      // Data API returns UTC timestamps as "YYYY-MM-DD HH:MM:SS[.FFF]"
-      const iso = field.stringValue.replace(" ", "T");
-      return new Date(/[Z+]/.test(iso.slice(10)) ? iso : `${iso}Z`);
-    }
-    return field.stringValue;
-  }
-  if (field.longValue !== undefined) return field.longValue;
-  if (field.doubleValue !== undefined) return field.doubleValue;
-  if (field.booleanValue !== undefined) return field.booleanValue;
-  if (field.blobValue !== undefined) return field.blobValue;
-  return null;
-};
-
-const toRows = (response: DataApiResponse): Record<string, unknown>[] => {
-  const metadata = response.columnMetadata ?? [];
-  return (response.records ?? []).map((record) => {
-    const row: Record<string, unknown> = {};
-    record.forEach((field, index) => {
-      const column = metadata[index];
-      row[column?.label ?? column?.name ?? `column${index}`] = fieldValue(
-        field,
-        column?.typeName,
-      );
-    });
-    return row;
-  });
-};
 
 /**
  * Build a Kysely dialect over the RDS Data API.
@@ -166,7 +75,7 @@ export const makeDataApiDialect = (
         const response = await executor.execute({
           sql: compiledQuery.sql,
           parameters: compiledQuery.parameters.map((value, index) =>
-            toSqlParameter(`${index + 1}`, value),
+            AWS.RDSData.toSqlParameter(`${index + 1}`, value),
           ),
           includeResultMetadata: true,
           ...(this.transactionId === undefined
@@ -174,7 +83,7 @@ export const makeDataApiDialect = (
             : { transactionId: this.transactionId }),
         });
         return {
-          rows: toRows(response) as never[],
+          rows: AWS.RDSData.toRows(response) as never[],
           numAffectedRows: BigInt(response.numberOfRecordsUpdated ?? 0),
         };
       }
