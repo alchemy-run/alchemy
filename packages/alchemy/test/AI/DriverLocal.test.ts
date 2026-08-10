@@ -1317,13 +1317,17 @@ ${
 
   it.effect("codemode(async): grants collapse into one eval tool", () => {
     const model = Model.make([
-      // the model programs against the granted capability
+      // the model programs against the granted capability — a COMPLETE
+      // module importing its tools and default-exporting the program
       () => [
         Model.toolCall("eval", {
           code: `
-            const first = await tools.search({ query: "alchemy" });
-            const second = await tools.search({ query: "effect" });
-            return first + " // " + second;`,
+            import { search } from "./tools.js";
+            export default async function () {
+              const first = await search({ query: "alchemy" });
+              const second = await search({ query: "effect" });
+              return first + " // " + second;
+            }`,
         }),
         Model.finish("tool-calls"),
       ],
@@ -1363,8 +1367,10 @@ ${
       () => [
         Model.toolCall("eval", {
           code: `
-            return Effect.gen(function* () {
-              const result = yield* tools.search({ query: "alchemy" });
+            import * as Effect from "effect/Effect";
+            import { search } from "./tools.js";
+            export default Effect.gen(function* () {
+              const result = yield* search({ query: "alchemy" });
               return "wrapped:" + result;
             });`,
         }),
@@ -1402,9 +1408,11 @@ ${
         () => [
           Model.toolCall("eval", {
             code: `
-              return Effect.gen(function* () {
-                return yield* tools.readFile({ path: "/tmp/x" });
-              }).pipe(Effect.catchTag("Missing", () => Effect.succeed("caught")));`,
+              import * as Effect from "effect/Effect";
+              import { readFile } from "./tools.js";
+              export default Effect.gen(function* () {
+                return yield* readFile({ path: "/tmp/x" });
+              }).pipe(Effect.catchTag("Missing", (e) => Effect.succeed("caught:" + e.path)));`,
           }),
           Model.finish("tool-calls"),
         ],
@@ -1428,8 +1436,10 @@ Read the file at ${path}. Fails with ${Missing} when it does not exist.`(() =>
           "declare function readFile(input: { path: string }): Effect<string, Missing>",
         );
         expect(evalTool.description).toContain("@throws Missing");
-        // the program caught it by tag, so the round answered normally
-        expect(Model.promptText(model.calls[1]!)).toContain("caught");
+        // the program caught it by tag: the CONCATENATED value can only
+        // exist if the catch handler ran (the echoed program source
+        // contains `"caught:" + e.path`, never the joined string)
+        expect(Model.promptText(model.calls[1]!)).toContain("caught:/tmp/x");
       }).pipe(Effect.scoped, Effect.provide(testLayer(model, codeModeEffect)));
     },
   );
@@ -1437,7 +1447,9 @@ Read the file at ${path}. Fails with ${Missing} when it does not exist.`(() =>
   it.effect("codemode: a broken program fails model-visibly", () => {
     const model = Model.make([
       () => [
-        Model.toolCall("eval", { code: `return await tools.nope();` }),
+        Model.toolCall("eval", {
+          code: `export default async function () { return await nope(); }`,
+        }),
         Model.finish("tool-calls"),
       ],
       () => [Model.text("recovered"), Model.finish()],

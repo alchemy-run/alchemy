@@ -115,16 +115,27 @@ export interface CodeModeOptions {
  * {@link Eval} service. It owns the CONVENTION entirely:
  *
  * - `wrap` — the return shape in the generated signatures;
- * - `teach` — how the model is instructed to write the program;
- * - `wrapCode` — transforms the model's body into the async body
- *   `Eval` runs (the effect convention re-shapes `tools` into
- *   Effect-returning and runs the returned Effect here, so `Eval`
- *   never learns which convention called it).
+ * - `teach` — how the model is instructed to write the program (a
+ *   COMPLETE ES module importing its capabilities from `"./tools.js"`
+ *   and default-exporting the program);
+ * - `program` — builds the module graph `Eval` runs from the model's
+ *   module: a `"tools.js"` adapter over the evaluator's reserved
+ *   `"tools.raw.js"` bridges (the effect convention re-shapes them
+ *   into Effect-returning), the model's code verbatim as
+ *   `"program.js"`, and a runner whose default export is the async
+ *   thunk the evaluator invokes — so `Eval` never learns which
+ *   convention called it.
  */
 export const makeCodeMode = (convention: {
   readonly wrap: (returns: string, errors: string) => string;
   readonly teach: (signatures: string) => string;
-  readonly wrapCode: (body: string) => string;
+  readonly program: (
+    code: string,
+    toolNames: ReadonlyArray<string>,
+  ) => {
+    readonly modules: Record<string, string>;
+    readonly main: string;
+  };
   readonly options?: CodeModeOptions;
 }): Layer.Layer<ToolEngine, never, Eval> =>
   Layer.effect(
@@ -140,13 +151,14 @@ export const makeCodeMode = (convention: {
             name: grant.name,
             call: grant.handler,
           }));
+          const toolNames = grants.map((grant) => grant.name);
           return {
             tools: [compileEvalTool(convention.teach(signatures))],
             handlers: {
               eval: (input: { code: string }) =>
                 evaluator
                   .run({
-                    code: convention.wrapCode(input.code),
+                    ...convention.program(input.code, toolNames),
                     tools,
                     timeout,
                   })
