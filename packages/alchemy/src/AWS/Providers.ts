@@ -21,6 +21,7 @@ import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import * as Command from "../Command/index.ts";
 import { DockerLive } from "../Docker/Docker.ts";
 import { KeyPair, KeyPairProvider } from "../KeyPair.ts";
+import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { flociDual } from "./Local/FlociServices.ts";
 import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
@@ -1261,7 +1262,12 @@ export const providers = () =>
           // floci rejects ("ARN resource type must be 'function'") — dualize
           // once the floci fork supports ESM tagging.
           Lambda.EventSourceMappingProvider(),
-          Lambda.FunctionProvider(),
+          // Dual: live Lambda in deploy, floci-emulated (RPC-sidecar-hosted,
+          // hot-reloading) Lambda in dev — see FlociFunctionProvider.
+          ProviderLayer.dual(Lambda.Function, {
+            live: () => Lambda.FunctionProvider(),
+            local: () => Lambda.FlociFunctionProvider(),
+          }),
           Lambda.LayerVersionProvider(),
           Lambda.VersionProvider(),
           Lambda.MicrovmImageProvider(),
