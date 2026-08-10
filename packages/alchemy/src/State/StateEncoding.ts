@@ -77,6 +77,13 @@ export const encodeState = (value: unknown): unknown => {
       [DURATION_MARKER]: value.toJSON(),
     };
   }
+  // Dates are serializable leaves: leave the instance intact so
+  // `JSON.stringify` invokes `Date.toJSON()` (ISO string). Walking it
+  // structurally would persist `{}` — and every later plan would then diff
+  // the empty object against the program's Date and churn a phantom update
+  // forever (`canonicalize` in Diff.ts deliberately compares a Date and its
+  // persisted ISO string as equal).
+  if (value instanceof Date) return value;
   if (isResource(value)) {
     return {
       id: value.LogicalId,
