@@ -1,31 +1,3 @@
-/**
- * The RESIDENT placement of the session engine — `AI.Driver` for
- * anything process-shaped (a dev machine, a server): each session is
- * a forked fiber that bursts, then parks on a wake signal until the
- * world moves. The ALGORITHM and the LIFECYCLE live in
- * {@link makeSessionEngine} (`DriverCore`); this Layer contributes
- * only what a process physically owns:
- *
- * - **kick** — offer to the session's wake queue (starting its fiber
- *   on first sight);
- * - **broadcast** — a RAM set of socket writers per session, served
- *   over the host's own HTTP server (`SessionSockets`);
- * - **remind / recovery re-entry** — sleeping fibers on the process
- *   scope;
- * - **restore** — persisted sessions revive parked at interpret,
- *   their fibers started when the Host program runs.
- *
- * Substrate is the `ThreadStorage` Layer: `ThreadStorageMemory` for
- * ephemeral sessions, `ThreadStorageSqlite` for a durable local
- * process — with the durable inbox and the round liveness marker,
- * a killed process redelivers pre-crash inputs and recovers
- * interrupted rounds exactly as Durable Objects do.
- *
- * ```ts
- * AI.DriverLocal.pipe(Layer.provide(AI.ThreadStorageMemory))
- * AI.DriverLocal.pipe(Layer.provide(ThreadStorageSqlite(".alchemy/runs.sqlite")))
- * ```
- */
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -53,6 +25,33 @@ import { ThreadStorage } from "./ThreadStorage.ts";
 
 type SendFrame = (frame: SessionSocketServerFrame) => Effect.Effect<void>;
 
+/**
+ * The RESIDENT Driver — `AI.Driver` for anything process-shaped (a
+ * dev machine, a server): each session is a forked fiber that bursts,
+ * then parks on a wake signal until the world moves. The ALGORITHM
+ * and the LIFECYCLE live in {@link makeSessionEngine} (`DriverCore`);
+ * this Layer contributes only what a process physically owns:
+ *
+ * - **kick** — offer to the session's wake queue (starting its fiber
+ *   on first sight);
+ * - **broadcast** — a RAM set of socket writers per session, served
+ *   over the host's own HTTP server (`SessionSockets`);
+ * - **remind / recovery re-entry** — sleeping fibers on the process
+ *   scope;
+ * - **restore** — persisted sessions revive parked at interpret,
+ *   their fibers started when the Host program runs.
+ *
+ * Substrate is the `ThreadStorage` Layer: `ThreadStorageMemory` for
+ * ephemeral sessions, `ThreadStorageSqlite` for a durable local
+ * process — with the durable inbox and the round liveness marker,
+ * a killed process redelivers pre-crash inputs and recovers
+ * interrupted rounds exactly as Durable Objects do.
+ *
+ * ```ts
+ * AI.DriverLocal.pipe(Layer.provide(AI.ThreadStorageMemory))
+ * AI.DriverLocal.pipe(Layer.provide(ThreadStorageSqlite(".alchemy/runs.sqlite")))
+ * ```
+ */
 export const DriverLocal: Layer.Layer<
   Driver | SessionSockets,
   never,

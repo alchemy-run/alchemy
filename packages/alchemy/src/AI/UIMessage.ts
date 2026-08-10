@@ -1,20 +1,7 @@
-/**
- * The Vercel AI SDK adapter — driver vocabulary rendered into the
- * `useChat` wire protocol (designs/ai/streaming.md). The projection
- * stays protocol-neutral; this module is where AI SDK
- * shapes are minted:
- *
- * - {@link toUIMessages} reduces a chat's canonical log (plus the
- *   in-flight sampling) into `UIMessage[]` — the snapshot a client
- *   loads, and re-loads while polling for the live view;
- * - {@link makeChunkTranslator} turns live observations into
- *   `UIMessageChunk`s for an SSE response: one session-burst = one
- *   assistant message, one sampling = one step.
- *
- * Only TYPES are imported from `ai` — the adapter adds no runtime
- * dependency.
- */
 import type { UIMessage, UIMessageChunk, UIMessagePart } from "ai";
+import { renderCrash } from "./DriverCore.ts";
+import type { SessionObservation } from "./EventStream.ts";
+
 /** The IN-FLIGHT sampling a projection may accumulate from
  *  `assistant-delta` and live `tool-call` observations — transient:
  *  the final `assistant` observation restates the whole sampling. */
@@ -28,17 +15,18 @@ export interface StreamingSample {
     readonly input: unknown;
   }>;
 }
-import { renderCrash } from "./DriverCore.ts";
-import type { SessionObservation } from "./EventStream.ts";
 
 /**
- * Reduce a session's observation log into AI SDK UIMessages: inputs are
- * user messages; a BURST of samplings (everything between inputs) is
- * one assistant message whose parts are step-start + reasoning +
- * text + dynamic-tool parts, with tool results upgrading their
- * call's state. The in-flight sampling (when given) rides along as a
- * final streaming-state assistant message, so pollers render tokens
- * as they accumulate.
+ * The Vercel AI SDK adapter, snapshot half — driver vocabulary
+ * rendered into the `useChat` wire protocol (designs/ai/streaming.md;
+ * only TYPES are imported from `ai`, no runtime dependency): reduce a
+ * session's observation log into AI SDK UIMessages. Inputs are user
+ * messages; a BURST of samplings (everything between inputs) is one
+ * assistant message whose parts are step-start + reasoning + text +
+ * dynamic-tool parts, with tool results upgrading their call's
+ * state. The in-flight sampling (when given) rides along as a final
+ * streaming-state assistant message, so pollers render tokens as
+ * they accumulate. {@link makeChunkTranslator} is the live half.
  */
 export const toUIMessages = (
   log: ReadonlyArray<SessionObservation>,

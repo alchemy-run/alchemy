@@ -1,25 +1,3 @@
-/**
- * CODEMODE: the {@link ToolEngine} implementations that collapse a
- * tick's grants into ONE `eval` tool — the model writes CODE that
- * calls the granted capabilities and composes them with ordinary
- * control flow, instead of round-tripping every call through the
- * model. Two flavors, one seam:
- *
- * - {@link CodeModeEffect} — the code returns an `Effect`; tools are
- *   Effect-returning functions, so the whole program stays on the
- *   driver's fiber (interruption and tracing intact).
- * - {@link CodeModeAsync} — the code is an async function body; tools
- *   return Promises.
- *
- * The bridge is the enforcement point: the ONLY functions in scope are
- * this tick's granted handlers — mention-is-presence decides what the
- * code can reach, exactly as it decides direct tool-calling.
- *
- * v0 EVALUATION IS IN-PROCESS (`new Function` over the local runtime,
- * TypeScript stripped via `Bun.Transpiler` when available) — fine for
- * a local org, NOT an isolation boundary. The sandbox-as-service seam
- * (spec §13) replaces the evaluator without touching this contract.
- */
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -32,11 +10,26 @@ import {
 } from "./ToolEngine.ts";
 
 /**
- * Codemode, EFFECT flavor: the model's code is the body of a function
- * `(Effect, tools) => Effect<A>` — tools are Effect-returning, the
- * program composes with `Effect.gen`/`pipe`, and evaluation stays on
- * the driver's fiber (a failed tool call is a typed failure the
- * program can catch or let propagate as the eval result).
+ * CODEMODE, EFFECT flavor — a {@link ToolEngine} that collapses a
+ * tick's grants into ONE `eval` tool: the model writes CODE that
+ * calls the granted capabilities and composes them with ordinary
+ * control flow, instead of round-tripping every call through the
+ * model. The code is the body of a function `(Effect, tools) =>
+ * Effect<A>` — tools are Effect-returning, the program composes with
+ * `Effect.gen`/`pipe`, and evaluation stays on the driver's fiber
+ * (interruption and tracing intact; a failed tool call is a typed
+ * failure the program can catch or let propagate as the eval result).
+ *
+ * The bridge is the enforcement point: the ONLY functions in scope
+ * are this tick's granted handlers — mention-is-presence decides what
+ * the code can reach, exactly as it decides direct tool-calling.
+ *
+ * v0 EVALUATION IS IN-PROCESS (`new Function` over the local runtime,
+ * TypeScript stripped via `Bun.Transpiler` when available) — fine for
+ * a local org, NOT an isolation boundary. The sandbox-as-service seam
+ * (spec §13) replaces the evaluator without touching this contract.
+ *
+ * See {@link CodeModeAsync} for the async/await flavor.
  */
 export const CodeModeEffect = (options?: CodeModeOptions) =>
   makeCodeMode({

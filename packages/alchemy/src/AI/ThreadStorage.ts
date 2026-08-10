@@ -1,27 +1,3 @@
-/**
- * `ThreadStorage` — WHERE A SESSION'S DURABLE FACTS LIVE. This is the driver's
- * storage seam: everything about a session that must survive beyond the
- * current process/isolate goes through one {@link ThreadHandle} —
- * the thread messages (the model's working context), the observation
- * log (the session's own replayable projection), and the session meta (tick,
- * observation cursor, active skills).
- *
- * `DriverCore` is written against this contract and nothing else, so
- * the substrate is a Layer choice, never a driver choice:
- *
- * ```ts
- * AI.DriverCore.pipe(Layer.provide(AI.ThreadStorageMemory))          // ephemeral
- * AI.DriverCore.pipe(Layer.provide(ThreadStorageSqlite(".alchemy/sessions.db"))) // durable
- * // DO storage implements the same handle inside DriverCloudflare
- * ```
- *
- * What deliberately does NOT live here: waiters, sockets, in-flight
- * work — anything process-shaped. Those belong to the HOST (the
- * resident loop, or the Durable Object burst), not to storage.
- *
- * Messages and observations cross this seam ENCODED (JSON-safe): the
- * contract is storable rows, not live objects.
- */
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -129,6 +105,32 @@ export interface ThreadStorageService {
   readonly remove: (term: string, key: string) => Effect.Effect<void>;
 }
 
+/**
+ * WHERE A SESSION'S DURABLE FACTS LIVE — the driver's storage seam:
+ * everything about a session that must survive beyond the current
+ * process/isolate goes through one {@link ThreadHandle} — the thread
+ * messages (the model's working context), the inbox (atomic admit),
+ * the observation log (the session's replayable projection), and the
+ * session meta (tick, observation cursor, active skills, liveness).
+ *
+ * The loop is written against this contract and nothing else, so the
+ * substrate is a Layer choice, never a driver choice:
+ *
+ * ```ts
+ * AI.DriverLocal.pipe(Layer.provide(AI.ThreadStorageMemory))   // ephemeral
+ * AI.DriverLocal.pipe(
+ *   Layer.provide(ThreadStorageSqlite(".alchemy/sessions.db")), // durable
+ * )
+ * // DO storage implements the same handle inside DriverCloudflare
+ * ```
+ *
+ * What deliberately does NOT live here: waiters, sockets, in-flight
+ * work — anything process-shaped. Those belong to the Driver (the
+ * resident loop, or the Durable Object burst), not to storage.
+ *
+ * Messages and observations cross this seam ENCODED (JSON-safe): the
+ * contract is storable rows, not live objects.
+ */
 export class ThreadStorage extends Context.Service<
   ThreadStorage,
   ThreadStorageService

@@ -1,17 +1,3 @@
-/**
- * Substrate-INDEPENDENT driver internals — the pieces every `Driver`
- * implementation shares regardless of where its sessions live (an
- * in-process `Map` on the resident host, Durable Objects for
- * `DriverCloudflare`). These are pure functions of a charter's terms:
- * rendering a capability's tagged template, compiling `AI.Tool`s and
- * the intrinsics into effect-AI tools, and the message shapes the
- * thread is built from.
- *
- * Kept here (not duplicated per driver) so the two implementations
- * diverge ONLY where the substrate forces them to — the loop's
- * concurrency and the session's persistence — never in how a stance
- * becomes a toolkit. See designs/ai/driver-cloudflare.md.
- */
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
@@ -1309,17 +1295,7 @@ export const buildToolkit = (
         )) as Toolkit.WithHandler<any>;
       }) as Effect.Effect<Toolkit.WithHandler<any> | undefined>);
 
-// ═══════════════════════ THE SESSION ENGINE ═══════════════════════
-//
-// ONE implementation of a term's sessions — lifecycle (admit,
-// init-once, rounds, waiters, settle, crash, restore) over the
-// storage seam, written once for every placement. A PLACEMENT
-// (DriverLocal's resident fibers, the Durable Object host) supplies
-// only what is physically its own: how execution is kicked, how
-// socket frames fan out, how reminders and recovery re-entries are
-// scheduled. The engine never knows where it is running.
-
-/** What a placement lends the engine. */
+/** What a Driver lends the engine — see {@link makeSessionEngine}. */
 export interface SessionEngineOptions {
   /** The placement's name, for error/log prefixes. */
   readonly driver: string;
@@ -1469,6 +1445,16 @@ export interface SessionEngine {
   readonly awaitSettled: (key: string) => Effect.Effect<unknown>;
 }
 
+/**
+ * THE SESSION ENGINE — one implementation of a term's sessions:
+ * lifecycle (admit, init-once, rounds, waiters, settle, crash,
+ * restore) over the storage seam, written once for every Driver. A
+ * Driver (DriverLocal's resident fibers, DriverCloudflare's Durable
+ * Objects) supplies only what is physically its own: how execution is
+ * kicked, how socket frames fan out, how reminders and recovery
+ * re-entries are scheduled. The engine never knows where it is
+ * running.
+ */
 export const makeSessionEngine = (
   options: SessionEngineOptions,
 ): SessionEngine => {

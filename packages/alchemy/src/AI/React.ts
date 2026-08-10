@@ -1,32 +1,3 @@
-/**
- * First-class React hooks for talking to agent sessions — the client half
- * of the session-socket protocol ({@link SessionSocketTransport}), packaged
- * the way a UI wants to consume it:
- *
- * ```tsx
- * import { useAgent, useChat } from "alchemy/AI/React";
- *
- * function IssueChannel({ chatId }: { chatId: string }) {
- *   const agent = useAgent({ chatId }); // → wss://…/attach/IssueOwner/…
- *   const { messages, sendMessage, status } = useChat({
- *     agent,
- *     resume: true, // subscribe on mount; re-subscribe after each burst
- *   });
- * }
- * ```
- *
- * `useChat` IS the Vercel AI SDK's `useChat` — same return shape,
- * same ecosystem compatibility (ai-elements etc.) — pre-wired with
- * the agent's socket transport instead of HTTP POST + SSE. It works
- * against ANY driver that provides `AI.SessionSockets`: the in-memory
- * driver serving from a local process and the Cloudflare driver
- * serving from a session's own Durable Object speak the identical
- * protocol.
- *
- * This module lives at `alchemy/AI/React` (not the `alchemy/AI`
- * barrel) so server-side consumers of the AI module never pull
- * `react` into a Worker or Lambda bundle.
- */
 import { useChat as useAiChat } from "@ai-sdk/react";
 import type { ChatInit, UIMessage } from "ai";
 import { useEffect, useMemo } from "react";
@@ -91,9 +62,26 @@ export interface AgentConnection {
 }
 
 /**
- * Connect to an agent session over its WebSocket. The connection is
- * memoized per URL; {@link useChat} with `resume: true` opens it on
- * mount via `reconnectToStream`.
+ * Connect to an agent session over its WebSocket — the client half of
+ * the session-socket protocol ({@link SessionSocketTransport}). The
+ * connection is memoized per URL; {@link useChat} with `resume: true`
+ * opens it on mount via `reconnectToStream`.
+ *
+ * ```tsx
+ * import { useAgent, useChat } from "alchemy/AI/React";
+ *
+ * function IssueChannel({ chatId }: { chatId: string }) {
+ *   const agent = useAgent({ chatId }); // → wss://…/attach/IssueOwner/…
+ *   const { messages, sendMessage, status } = useChat({
+ *     agent,
+ *     resume: true, // subscribe on mount; re-subscribe after each burst
+ *   });
+ * }
+ * ```
+ *
+ * These hooks live at `alchemy/AI/React` (not the `alchemy/AI`
+ * barrel) so server-side consumers of the AI module never pull
+ * `react` into a Worker or Lambda bundle.
  */
 export const useAgent = (options: UseAgentOptions): AgentConnection => {
   const url = useMemo(() => {
@@ -125,9 +113,17 @@ export type UseChatOptions = Omit<ChatInit<UIMessage>, "transport"> & {
 
 /**
  * The AI SDK's `useChat`, speaking to an agent session: submits go down
- * the session socket as inputs, and the session's observations come back as
- * `UIMessageChunk`s. With `persist` (default), the socket re-subscribes
- * after every burst so a parked IssueOwner keeps streaming.
+ * the session socket as inputs, and the session's observations come back
+ * as `UIMessageChunk`s. With `persist` (default), the socket
+ * re-subscribes after every burst so a parked session keeps streaming.
+ *
+ * This IS the Vercel AI SDK's `useChat` — same return shape, same
+ * ecosystem compatibility (ai-elements etc.) — pre-wired with the
+ * agent's socket transport instead of HTTP POST + SSE. It works
+ * against ANY driver that provides `AI.SessionSockets`: the resident
+ * driver serving from a local process and the Cloudflare driver
+ * serving from a session's own Durable Object speak the identical
+ * protocol.
  */
 export const useChat = ({
   agent,
