@@ -47,7 +47,7 @@ export default Options.make({
   // config rides alongside (the dev toolbar would differ between dev and the
   // built output, breaking the shared screenshots).
   framework: (options) =>
-    Astro.make({
+    Astro.layer({
       target: cloudflare({ worker: Options.resolveCloudflareOptions(options).worker }),
       astro: {
         devToolbar: { enabled: false },

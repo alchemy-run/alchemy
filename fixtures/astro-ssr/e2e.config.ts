@@ -46,7 +46,7 @@ export default Options.make({
   // fixture's Astro configuration lives in its real `astro.config.mjs`,
   // which the integration must load and honor (the user-config principle).
   framework: (options) =>
-    Astro.make({
+    Astro.layer({
       target: cloudflare({ worker: Options.resolveCloudflareOptions(options).worker }),
     }),
 });
