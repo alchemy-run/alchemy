@@ -829,6 +829,7 @@
       "name": "cloudflare-d1-drizzle",
       "version": "0.0.0",
       "dependencies": {
+        "@alchemy.run/drizzle": "workspace:*",
         "@cloudflare/workers-types": "catalog:",
         "@effect/platform-bun": "catalog:",
         "@effect/platform-node": "catalog:",
@@ -903,6 +904,7 @@
       "name": "cloudflare-neon-drizzle",
       "version": "0.0.0",
       "dependencies": {
+        "@alchemy.run/drizzle": "workspace:*",
         "@cloudflare/workers-types": "catalog:",
         "@effect/platform-bun": "catalog:",
         "@effect/platform-node": "catalog:",
@@ -933,6 +935,7 @@
       "name": "cloudflare-planetscale-mysql-drizzle",
       "version": "0.0.0",
       "dependencies": {
+        "@alchemy.run/drizzle": "workspace:*",
         "@cloudflare/workers-types": "catalog:",
         "@effect/platform-bun": "catalog:",
         "@effect/platform-node": "catalog:",
@@ -950,6 +953,7 @@
       "name": "cloudflare-planetscale-postgres-drizzle",
       "version": "0.0.0",
       "dependencies": {
+        "@alchemy.run/drizzle": "workspace:*",
         "@cloudflare/workers-types": "catalog:",
         "@effect/platform-bun": "catalog:",
         "@effect/platform-node": "catalog:",
@@ -1055,6 +1059,7 @@
       "name": "cloudflare-tanstack-rpc-drizzle-example",
       "version": "0.0.0",
       "dependencies": {
+        "@alchemy.run/drizzle": "workspace:*",
         "@effect/atom-react": "catalog:",
         "@effect/platform-bun": "catalog:",
         "@effect/platform-node": "catalog:",
@@ -1348,7 +1353,6 @@
         "@distilled.cloud/neon": "workspace:*",
         "@distilled.cloud/planetscale": "workspace:*",
         "@effect/sql-d1": "catalog:",
-        "@effect/sql-sqlite-do": "catalog:",
         "@effect/vitest": "catalog:",
         "@libsql/client": "catalog:",
         "@octokit/rest": "^22.0.1",
@@ -1373,6 +1377,7 @@
         "yaml": "catalog:",
       },
       "devDependencies": {
+        "@alchemy.run/drizzle": "workspace:*",
         "@aws/durable-execution-sdk-js": "^2.1.0",
         "@cloudflare/containers": "catalog:",
         "@cloudflare/puppeteer": "^1.1.0",
@@ -1409,6 +1414,8 @@
         "alchemy-test": "workspace:*",
         "astro": "7.1.0",
         "better-auth": "catalog:",
+        "drizzle-kit": "catalog:",
+        "drizzle-orm": "catalog:",
         "effect": "catalog:",
         "foldkit": "catalog:fixtures",
         "hono": "catalog:fixtures",
@@ -1443,8 +1450,6 @@
         "@effect/sql-mysql2": "catalog:",
         "@effect/sql-pg": "catalog:",
         "@vercel/nft": "^1.10.2",
-        "drizzle-kit": "catalog:",
-        "drizzle-orm": "catalog:",
         "effect": "catalog:",
         "mongodb": "^6.10.0",
         "mysql2": "^3.15.3",
@@ -1459,8 +1464,6 @@
         "@effect/sql-mysql2",
         "@effect/sql-pg",
         "@vercel/nft",
-        "drizzle-kit",
-        "drizzle-orm",
         "mongodb",
         "mysql2",
         "pg",
@@ -1494,6 +1497,27 @@
       "peerDependencies": {
         "better-auth": "catalog:",
       },
+    },
+    "packages/drizzle": {
+      "name": "@alchemy.run/drizzle",
+      "version": "2.0.0-beta.69",
+      "dependencies": {
+        "@effect/sql-d1": "catalog:",
+        "@effect/sql-sqlite-do": "catalog:",
+        "alchemy": "workspace:*",
+        "effect": "catalog:",
+      },
+      "peerDependencies": {
+        "@effect/sql-mysql2": "catalog:",
+        "@effect/sql-pg": "catalog:",
+        "drizzle-kit": "catalog:",
+        "drizzle-orm": "catalog:",
+      },
+      "optionalPeers": [
+        "@effect/sql-mysql2",
+        "@effect/sql-pg",
+        "drizzle-kit",
+      ],
     },
     "packages/pr-package": {
       "name": "@alchemy.run/pr-package",
@@ -1656,6 +1680,8 @@
     "@alchemy.run/benchmark-container": ["@alchemy.run/benchmark-container@workspace:benchmark/container"],
 
     "@alchemy.run/better-auth": ["@alchemy.run/better-auth@workspace:packages/better-auth"],
+
+    "@alchemy.run/drizzle": ["@alchemy.run/drizzle@workspace:packages/drizzle"],
 
     "@alchemy.run/node-utils": ["@alchemy.run/node-utils@0.0.5", "", {}, "sha512-5agdhQxWBodxa5hDRyjnpx91RTU3g+qd5fxYB7uNDCaOzB0XC47UU/KHR6zf6jhz/NXf61gJS+vhYwn8NHeRoQ=="],
 

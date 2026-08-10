@@ -58,6 +58,7 @@ jobs:
         [
           { "dir": "packages/alchemy",     "name": "alchemy",                   "runner": "ubuntu-22-large" },
           { "dir": "packages/better-auth", "name": "@alchemy.run/better-auth",  "runner": "ubuntu-22-large" },
+          { "dir": "packages/drizzle",     "name": "@alchemy.run/drizzle",      "runner": "ubuntu-22-large" },
           { "dir": "packages/pr-package",  "name": "@alchemy.run/pr-package",   "runner": "ubuntu-22-large" }
         ]
     secrets: inherit

@@ -1,0 +1,53 @@
+{
+  "name": "@alchemy.run/drizzle",
+  "version": "2.0.0-beta.69",
+  "license": "Apache-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "packages/drizzle"
+  },
+  "files": [
+    "lib",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "bun": "./src/index.ts",
+      "worker": "./src/index.ts",
+      "import": "./lib/index.js"
+    }
+  },
+  "dependencies": {
+    "alchemy": "workspace:*",
+    "@effect/sql-d1": "catalog:",
+    "@effect/sql-sqlite-do": "catalog:",
+    "effect": "catalog:"
+  },
+  "peerDependencies": {
+    "@effect/sql-mysql2": "catalog:",
+    "@effect/sql-pg": "catalog:",
+    "drizzle-kit": "catalog:",
+    "drizzle-orm": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@effect/sql-mysql2": {
+      "optional": true
+    },
+    "@effect/sql-pg": {
+      "optional": true
+    },
+    "drizzle-kit": {
+      "optional": true
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

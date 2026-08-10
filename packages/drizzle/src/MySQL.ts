@@ -6,9 +6,9 @@ import type { EffectDrizzleMySqlConfig } from "drizzle-orm/mysql-core/effect/uti
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Redacted from "effect/Redacted";
-import { makeExecutionMemo } from "../Runtime/ExecutionMemo.ts";
-import { resolveMySQLConfig, type MySQLConfig } from "../SQL/MySQL.ts";
-import { proxyChain } from "../Util/proxy-chain.ts";
+import { makeExecutionMemo } from "alchemy/Runtime/ExecutionMemo";
+import { resolveMySQLConfig, type MySQLConfig } from "alchemy/SQL/MySQL";
+import { proxyChain } from "alchemy/Util/proxy-chain";
 
 /**
  * Open a Drizzle/MySQL database from a connection URL using the

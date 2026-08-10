@@ -18,6 +18,9 @@
   "references": [
     {
       "path": "../../packages/alchemy/tsconfig.json"
+    },
+    {
+      "path": "../../packages/drizzle/tsconfig.json"
     }
   ]
 }

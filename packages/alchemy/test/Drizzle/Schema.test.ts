@@ -1,4 +1,4 @@
-import * as Drizzle from "@/Drizzle";
+import * as Drizzle from "@alchemy.run/drizzle";
 import * as Provider from "@/Provider";
 import * as Stack from "@/Stack";
 import { State } from "@/State";

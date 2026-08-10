@@ -163,12 +163,6 @@
       "worker": "./src/Cloudflare/*/index.ts",
       "import": "./lib/Cloudflare/*/index.js"
     },
-    "./Drizzle": {
-      "types": "./lib/Drizzle/index.d.ts",
-      "bun": "./src/Drizzle/index.ts",
-      "worker": "./src/Drizzle/index.ts",
-      "import": "./lib/Drizzle/index.js"
-    },
     "./Axiom": {
       "types": "./lib/Axiom/index.d.ts",
       "bun": "./src/Axiom/index.ts",
@@ -360,7 +354,6 @@
     "@distilled.cloud/neon": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",
     "@effect/sql-d1": "catalog:",
-    "@effect/sql-sqlite-do": "catalog:",
     "@effect/vitest": "catalog:",
     "@libsql/client": "catalog:",
     "@octokit/rest": "^22.0.1",
@@ -385,8 +378,11 @@
     "yaml": "catalog:"
   },
   "devDependencies": {
+    "@alchemy.run/drizzle": "workspace:*",
     "@aws/durable-execution-sdk-js": "^2.1.0",
     "alchemy-test": "workspace:*",
+    "drizzle-kit": "catalog:",
+    "drizzle-orm": "catalog:",
     "@cloudflare/containers": "catalog:",
     "@cloudflare/puppeteer": "^1.1.0",
     "@cloudflare/workers-types": "catalog:",
@@ -455,8 +451,6 @@
     "@effect/sql-mysql2": "catalog:",
     "@effect/sql-pg": "catalog:",
     "@vercel/nft": "^1.10.2",
-    "drizzle-kit": "catalog:",
-    "drizzle-orm": "catalog:",
     "effect": "catalog:",
     "mongodb": "^6.10.0",
     "mysql2": "^3.15.3",
@@ -481,12 +475,6 @@
       "optional": true
     },
     "@vercel/nft": {
-      "optional": true
-    },
-    "drizzle-kit": {
-      "optional": true
-    },
-    "drizzle-orm": {
       "optional": true
     },
     "mongodb": {

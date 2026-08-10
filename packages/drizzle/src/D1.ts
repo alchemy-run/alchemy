@@ -4,9 +4,9 @@ import type { EffectSQLiteD1Database } from "drizzle-orm/effect-d1";
 import * as SQLiteD1Drizzle from "drizzle-orm/effect-d1";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import type { D1DatabaseSource } from "../SQL/D1.ts";
-import { makeExecutionMemo } from "../Runtime/ExecutionMemo.ts";
-import { proxyChain } from "../Util/proxy-chain.ts";
+import type { D1DatabaseSource } from "alchemy/SQL/D1";
+import { makeExecutionMemo } from "alchemy/Runtime/ExecutionMemo";
+import { proxyChain } from "alchemy/Util/proxy-chain";
 
 /**
  * Open a Drizzle database over a Cloudflare D1 binding using the
