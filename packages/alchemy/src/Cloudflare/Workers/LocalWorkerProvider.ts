@@ -1344,19 +1344,8 @@ const toRuntimeAssets = Effect.fn(function* (
     directory: assets.directory,
     headers: assets.headers ?? files._headers,
     redirects: assets.redirects ?? files._redirects,
-    // Distilled widened generated string enums to open unions (`string & {}`);
-    // the API only ever returns the known variants here.
-    htmlHandling: assets.htmlHandling as
-      | "none"
-      | "auto-trailing-slash"
-      | "force-trailing-slash"
-      | "drop-trailing-slash"
-      | undefined,
-    notFoundHandling: assets.notFoundHandling as
-      | "none"
-      | "404-page"
-      | "single-page-application"
-      | undefined,
+    htmlHandling: assets.htmlHandling,
+    notFoundHandling: assets.notFoundHandling,
     // The deployed default is assets-first (`run_worker_first` omitted =
     // false on the cloud API), but the runtime's router inverts it — it
     // treats anything `!== false` (including `undefined`) as worker-first.
