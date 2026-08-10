@@ -122,8 +122,8 @@ const router = yield* AWS.Website.Router("WebsiteRouter", {
 
 const site = yield* AWS.Website.StaticSite("Docs", {
   path: "./docs",
-  router: {
-    instance: router,
+  domain: {
+    router,
     path: "/docs",
   },
 });
@@ -131,8 +131,10 @@ const site = yield* AWS.Website.StaticSite("Docs", {
 
 The site registers itself by writing its file manifest and metadata into the
 router's KV store — no distribution redeploy is needed to add or remove a
-site. When attaching to a router, put `domain` and `edge` on the `Router`, not
-the `StaticSite`; passing either alongside `router` is an error.
+site. In router mode, `domain.name` is an optional host pattern (exact
+hostname or `*.example.com`) matched at the edge; the hostname must also be
+covered by the Router's own `domain`. `edge` and `cloudfrontUrl` live on the
+`Router` — setting them on an attached site is an error.
 
 ## Route to non-site origins
 

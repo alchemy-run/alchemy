@@ -127,6 +127,6 @@ const router = yield* AWS.Website.Router("FrontDoor", {
 });
 
 const site = yield* AWS.Website.Nuxt("Web", {
-  router: { instance: router },
+  domain: { router },
 });
 ```

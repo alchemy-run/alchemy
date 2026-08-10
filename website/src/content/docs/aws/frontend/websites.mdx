@@ -125,8 +125,8 @@ const router = yield* AWS.Website.Router("WebsiteRouter", {
 
 const docs = yield* AWS.Website.StaticSite("Docs", {
   path: "./docs",
-  router: {
-    instance: router,
+  domain: {
+    router,
     path: "/docs",
   },
 });
@@ -134,9 +134,10 @@ const docs = yield* AWS.Website.StaticSite("Docs", {
 
 The site registers its file manifest in the Router's KV store
 and is served under `/docs` — no second distribution, and adding
-or updating a site never touches the distribution config. The
-`domain` lives on the Router; sites attached to a Router must
-not set their own.
+or updating a site never touches the distribution config.
+The Router owns the distribution, so its
+`domain` carries the certificate and DNS; an attached site's
+`domain.name` is a host pattern matched at the edge.
 
 Routers also take inline `routes` for origins that aren't static
 sites — for example, forwarding a path prefix to an API:
