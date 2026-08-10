@@ -49,6 +49,14 @@ describe.skipIf(!runLive)("AWS.Website.StaticSite", () => {
         const url = spa.site.url! as string;
         expect(url).toMatch(/^https:\/\//);
 
+        // urls contract (cloudfront-default arm): a domain-less site
+        // serves only at its CloudFront default domain, and `url` is
+        // always `urls[0]`.
+        expect(spa.site.urls).toEqual([
+          `https://${spa.site.distribution!.domainName}`,
+        ]);
+        expect(url).toBe(spa.site.urls[0]);
+
         // Root serves the index page. Generous first-request budget: the
         // distribution just reached Deployed but edge propagation can lag.
         yield* expectUrlContains(`${url}/`, INDEX_MARKER, {

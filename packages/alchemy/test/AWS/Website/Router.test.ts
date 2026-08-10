@@ -4,8 +4,14 @@ import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { fileURLToPath } from "node:url";
 
 const { test } = Test.make({ providers: AWS.providers() });
+
+// Anchor the fixture to the repo root regardless of the runner's cwd.
+const fixtureDir = fileURLToPath(
+  new URL("../../../../../examples/aws-static-site/site", import.meta.url),
+);
 
 // Gated: CloudFront Distribution create blocks on Status === "Deployed"
 // (~5-15 min) and destroy requires disable -> wait -> delete (another
@@ -31,10 +37,10 @@ describe.skipIf(!runLive)("AWS.Website.Router", () => {
             });
 
             const site = yield* AWS.Website.StaticSite("DocsSite", {
-              path: "examples/aws-static-site/site",
+              path: fixtureDir,
               forceDestroy: true,
-              router: {
-                instance: router,
+              domain: {
+                router,
               },
             });
 
@@ -47,6 +53,17 @@ describe.skipIf(!runLive)("AWS.Website.Router", () => {
 
         expect(deployed.router.distribution.distributionId).toBeDefined();
         expect(deployed.router.kvStoreArn).toBeDefined();
+
+        // urls contract (cloudfront-default arm): a router without a
+        // domain serves only at its CloudFront default domain, and `url`
+        // is always `urls[0]`.
+        expect(deployed.router.urls).toEqual([
+          `https://${deployed.router.distribution.domainName}`,
+        ]);
+        expect(deployed.router.url).toBe(deployed.router.urls[0]);
+        // A path-only attached site inherits the router's primary URL.
+        expect(deployed.site.urls).toEqual([deployed.router.url]);
+        expect(deployed.site.url).toBe(deployed.site.urls[0]);
 
         const config = yield* cloudfront.getDistributionConfig({
           Id: deployed.router.distribution.distributionId,
@@ -61,7 +78,12 @@ describe.skipIf(!runLive)("AWS.Website.Router", () => {
           deployed.router.distribution.distributionId,
         );
       }),
-    { timeout: 600_000 },
+    // Create waits for Status === "Deployed" (~5 min) and destroy is
+    // disable -> wait -> delete (~5-15 min more): 600s was measured too
+    // small — the run died mid-destroy with green assertions.
+    // CloudFront full lifecycle: create (~7m) + invalidations + disable-wait
+    // + delete (~10-20m). Same budget as StaticSite's live test.
+    { timeout: 2_400_000 },
   );
 });
 

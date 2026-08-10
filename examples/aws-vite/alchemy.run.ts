@@ -77,8 +77,8 @@ export default Alchemy.Stack(
         VITE_STAGE: "test",
       },
       spa: true,
-      router: {
-        instance: router,
+      domain: {
+        router,
       },
       tags: {
         Example: "aws-vite",

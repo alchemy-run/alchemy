@@ -9,11 +9,7 @@ import { ProviderModePolicy } from "../../ProviderMode.ts";
 import { Function as LambdaFunction } from "../Lambda/Function.ts";
 import type { AssetFileOption } from "./AssetDeployment.ts";
 import { Server, type ServerDevProps } from "./Server.ts";
-import {
-  makeKvSite,
-  type StaticSiteProps,
-  type StaticSiteRouterAttachment,
-} from "./StaticSite.ts";
+import { makeKvSite, type StaticSiteProps } from "./StaticSite.ts";
 import type {
   StaticSiteAssetsProps,
   WebsiteDomainProps,
@@ -86,14 +82,21 @@ export interface SvelteKitProps {
     fileOptions?: AssetFileOption[];
   };
   /**
-   * Optional custom domain.
-   */
-  domain?: string | WebsiteDomainProps;
-  /**
-   * Serve this site through an existing `AWS.Website.Router` instead of a
+   * Optional custom domain. A string is shorthand for `{ name }`; `null`
+   * explicitly clears a previously set domain. Set `domain.router` to
+   * serve the site through an existing `AWS.Website.Router` instead of a
    * standalone CloudFront distribution.
    */
-  router?: StaticSiteRouterAttachment;
+  domain?: string | WebsiteDomainProps | null;
+  /**
+   * Serve the site at its CloudFront default domain
+   * (`https://dxxxx.cloudfront.net`). `false` 301s default-domain requests
+   * to `https://<domain.name>` at the edge and excludes the default domain
+   * from the `urls` output. Requires `domain`; not applicable when
+   * `domain.router` is set.
+   * @default true
+   */
+  cloudfrontUrl?: boolean;
   /**
    * Additional CloudFront Function customizations.
    */
@@ -194,6 +197,7 @@ export const SvelteKit = (id: string, props: SvelteKitProps = {}) =>
         server: undefined,
         serverUrl: undefined,
         url: build.url,
+        urls: [build.url],
       };
     }
 
@@ -228,7 +232,7 @@ export const SvelteKit = (id: string, props: SvelteKitProps = {}) =>
       path: build.clientDir as unknown as string,
       assets: props.assets,
       domain: props.domain,
-      router: props.router,
+      cloudfrontUrl: props.cloudfrontUrl,
       edge: props.edge,
       bucketName: props.bucketName,
       forceDestroy: props.forceDestroy,

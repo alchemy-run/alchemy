@@ -76,6 +76,11 @@ describe("AWS.Website.StaticSite local", () => {
         expect(deployed.site.distribution).toBeUndefined();
         expect(deployed.site.files).toBeUndefined();
 
+        // Dev-mode urls contract: `urls` is exactly the dev server's URL
+        // and `url` is always `urls[0]`.
+        expect(deployed.site.urls).toEqual([url]);
+        expect(deployed.site.url).toBe(deployed.site.urls[0]);
+
         // Content serves through the dev server straight from `site/`.
         yield* expectUrlContains(`${url}/`, marker, {
           timeout: "60 seconds",

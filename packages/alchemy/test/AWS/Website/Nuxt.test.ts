@@ -141,7 +141,7 @@ describe.skipIf(!runLive)("AWS.Website.Nuxt", () => {
             const site = yield* AWS.Website.Nuxt("NuxtSite", {
               rootDir,
               forceDestroy: true,
-              router: { instance: router },
+              domain: { router },
               server: {
                 environment: {
                   NUXT_PUBLIC_ENV_MARKER: "nuxt-aws-live-env-marker",
