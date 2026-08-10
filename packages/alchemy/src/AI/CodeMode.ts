@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
 import * as AiTool from "effect/unstable/ai/Tool";
-import { Eval, type EvalTool } from "./Eval.ts";
+import { Eval, type EvalResult, type EvalTool } from "./Eval.ts";
 import {
   ToolEngine,
   type ToolGrant,
@@ -49,24 +49,35 @@ const renderType = (schema: any, depth = 0): string => {
   }
 };
 
-/** One `declare function` line per grant, with its doc as a comment. */
-const renderSignature = (grant: ToolGrant): string => {
+/** One `declare function` line per grant, with its doc as a comment.
+ *  `wrap` reflects the convention's return shape (`Promise` vs
+ *  `Effect`). */
+const renderSignature = (
+  grant: ToolGrant,
+  wrap: (returns: string) => string,
+): string => {
   const doc = grant.description
     .split("\n")
     .map((line) => `// ${line}`)
     .join("\n");
   return `${doc}\ndeclare function ${grant.name}(input: ${renderType(
     grant.parameters,
-  )}): Promise<${renderType(grant.returns)}>`;
+  )}): ${wrap(renderType(grant.returns))}`;
 };
 
-/** Render an eval result as a tool result the model reads. */
-const renderResult = (value: unknown): string =>
-  value === undefined
-    ? "undefined"
-    : typeof value === "string"
-      ? value
-      : (JSON.stringify(value, null, 2) ?? String(value));
+/** Render an eval result as the tool result the model reads —
+ *  the output, plus captured console logs when the program printed. */
+const renderResult = (result: EvalResult): string => {
+  const output =
+    result.output === undefined
+      ? "undefined"
+      : typeof result.output === "string"
+        ? result.output
+        : (JSON.stringify(result.output, null, 2) ?? String(result.output));
+  return result.logs.length === 0
+    ? output
+    : `${output}\n\n--- logs ---\n${result.logs.join("\n")}`;
+};
 
 const compileEvalTool = (description: string) =>
   AiTool.make("eval", {
@@ -77,15 +88,6 @@ const compileEvalTool = (description: string) =>
     failureMode: "return",
   }).annotate(AiTool.Strict, false);
 
-const teach = (signatures: string): string =>
-  `Run a program against your capabilities instead of calling them ` +
-  `one at a time. Write the BODY of an async JavaScript function ` +
-  `with \`tools\` in scope: await tool calls, compose with ordinary ` +
-  `control flow, and \`return\` the result — it becomes your tool ` +
-  `result. No imports, no type annotations. A rejected tool call ` +
-  `throws; catch it or let it fail the program.\n\nAvailable ` +
-  `capabilities (call as tools.<name>):\n\n${signatures}`;
-
 export interface CodeModeOptions {
   /**
    * Wall-clock budget for one `eval` call.
@@ -95,51 +97,131 @@ export interface CodeModeOptions {
 }
 
 /**
- * CODEMODE — a {@link ToolEngine} that collapses a tick's grants into
- * ONE `eval` tool: instead of round-tripping every call through the
- * model, the model writes CODE (the body of an async function with
- * `tools` in scope) that calls the granted capabilities and composes
- * them with ordinary control flow. The `eval` tool's description is
- * the generated TypeScript signatures of this tick's grants —
- * mention-is-presence decides exactly what the code can reach.
+ * One CODEMODE convention — a {@link ToolEngine} that collapses a
+ * tick's grants into ONE `eval` tool and delegates execution to the
+ * {@link Eval} service. It owns the CONVENTION entirely:
  *
- * WHERE the code runs is the pluggable {@link Eval} service, resolved
- * at layer build: `EvalFunction` in-process locally, a WorkerLoader
- * isolate on Cloudflare. CodeMode owns only the PRESENTATION (teach
- * the model, generate signatures, render the result); execution is
- * `Eval`'s.
- *
- * ```ts
- * IssuesLive.pipe(Layer.provide(AI.CodeMode().pipe(Layer.provide(AI.EvalFunction))))
- * // provide no ToolEngine at all: direct tool-calling, exactly as before
- * ```
- *
- * Driver intrinsics (`dispatch`, `spawn`, `skill`) stay direct tools —
- * they are conversation control, not capabilities.
+ * - `wrap` — the return shape in the generated signatures;
+ * - `teach` — how the model is instructed to write the program;
+ * - `wrapCode` — transforms the model's body into the async body
+ *   `Eval` runs (the effect convention re-shapes `tools` into
+ *   Effect-returning and runs the returned Effect here, so `Eval`
+ *   never learns which convention called it).
  */
-export const CodeMode = (
-  options?: CodeModeOptions,
-): Layer.Layer<ToolEngine, never, Eval> =>
+const makeCodeMode = (convention: {
+  readonly wrap: (returns: string) => string;
+  readonly teach: (signatures: string) => string;
+  readonly wrapCode: (body: string) => string;
+  readonly options?: CodeModeOptions;
+}): Layer.Layer<ToolEngine, never, Eval> =>
   Layer.effect(
     ToolEngine,
     Effect.map(Eval, (evaluator) => ({
       present: (grants) =>
         Effect.sync((): ToolPresentation => {
-          const signatures = grants.map(renderSignature).join("\n\n");
-          const timeout = options?.timeout ?? "120 seconds";
+          const signatures = grants
+            .map((grant) => renderSignature(grant, convention.wrap))
+            .join("\n\n");
+          const timeout = convention.options?.timeout ?? "120 seconds";
           const tools: ReadonlyArray<EvalTool> = grants.map((grant) => ({
             name: grant.name,
             call: grant.handler,
           }));
           return {
-            tools: [compileEvalTool(teach(signatures))],
+            tools: [compileEvalTool(convention.teach(signatures))],
             handlers: {
               eval: (input: { code: string }) =>
                 evaluator
-                  .run({ code: input.code, tools, timeout })
+                  .run({
+                    code: convention.wrapCode(input.code),
+                    tools,
+                    timeout,
+                  })
                   .pipe(Effect.map(renderResult)) as Effect.Effect<string, any>,
             },
           };
         }),
     })),
   );
+
+/**
+ * CODEMODE, ASYNC convention — the model writes the BODY of an async
+ * function with `tools` in scope: `await` tool calls, compose with
+ * ordinary control flow, `return` the result. Portable: pair with any
+ * {@link Eval} — `EvalFunction` in-process, or a WorkerLoader across
+ * an isolate.
+ *
+ * ```ts
+ * IssuesLive.pipe(Layer.provide(AI.CodeModeAsync().pipe(Layer.provide(AI.EvalFunction))))
+ * ```
+ *
+ * Driver intrinsics (`dispatch`, `spawn`, `skill`) stay direct tools —
+ * they are conversation control, not capabilities. Provide no
+ * ToolEngine at all for plain one-at-a-time tool calling.
+ */
+export const CodeModeAsync = (
+  options?: CodeModeOptions,
+): Layer.Layer<ToolEngine, never, Eval> =>
+  makeCodeMode({
+    options,
+    wrap: (type) => `Promise<${type}>`,
+    // the model's body already targets async tools — run it as-is
+    wrapCode: (body) => body,
+    teach: (signatures) =>
+      `Run a program against your capabilities instead of calling them ` +
+      `one at a time. Write the BODY of an async JavaScript function ` +
+      `with \`tools\` in scope: await tool calls, compose with ordinary ` +
+      `control flow, and \`return\` the result — it becomes your tool ` +
+      `result. Use console.log to surface intermediate values. No ` +
+      `imports, no type annotations. A rejected tool call throws; ` +
+      `catch it or let it fail the program.\n\nAvailable capabilities ` +
+      `(call as tools.<name>):\n\n${signatures}`,
+  });
+
+/**
+ * CODEMODE, EFFECT convention — the model writes the BODY of a
+ * function returning an `Effect`: `tools.<name>` are Effect-returning,
+ * compose with `Effect.gen`/`yield*`/`Effect.forEach`, and the
+ * returned Effect's result becomes the tool result.
+ *
+ * The convention is entirely CodeMode's: it re-shapes the evaluator's
+ * async `tools` into Effect-returning ones and runs the returned
+ * Effect, so a dumb {@link Eval} never learns about Effect. `Eval`
+ * must expose the `Effect` runtime in scope (`EvalFunction` does);
+ * pair accordingly.
+ *
+ * ```ts
+ * IssuesLive.pipe(Layer.provide(AI.CodeModeEffect().pipe(Layer.provide(AI.EvalFunction))))
+ * ```
+ */
+export const CodeModeEffect = (
+  options?: CodeModeOptions,
+): Layer.Layer<ToolEngine, never, Eval> =>
+  makeCodeMode({
+    options,
+    wrap: (type) => `Effect<${type}>`,
+    // re-shape the evaluator's async tools into Effect-returning ones,
+    // run the model's returned Effect, and hand `Eval` the awaited
+    // result — the evaluator stays convention-blind
+    wrapCode: (body) =>
+      `const __asyncTools = tools;\n` +
+      `tools = Object.fromEntries(\n` +
+      `  Object.entries(__asyncTools).map(([__k, __f]) => [\n` +
+      `    __k,\n` +
+      `    (input) => Effect.promise(() => __f(input)),\n` +
+      `  ]),\n` +
+      `);\n` +
+      `const __program = (function () {\n${body}\n})();\n` +
+      `return await Effect.runPromise(__program);`,
+    teach: (signatures) =>
+      `Run a program against your capabilities instead of calling them ` +
+      `one at a time. Write the BODY of a JavaScript function: it must ` +
+      `\`return\` an Effect — use Effect.gen(function* () { ... }) with ` +
+      `yield* on every tool call, and compose with ordinary control ` +
+      `flow (loops, conditionals, Effect.forEach for concurrency). Use ` +
+      `console.log to surface intermediate values. No imports, no type ` +
+      `annotations. The returned Effect's result becomes your tool ` +
+      `result; a failed tool call fails the program unless you handle ` +
+      `it (Effect.catch).\n\nAvailable capabilities (call as ` +
+      `tools.<name>):\n\n${signatures}`,
+  });
