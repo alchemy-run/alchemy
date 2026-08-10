@@ -21,6 +21,7 @@ import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import * as Command from "../Command/index.ts";
 import { DockerLive } from "../Docker/Docker.ts";
 import { KeyPair, KeyPairProvider } from "../KeyPair.ts";
+import { flociDual } from "./Local/FlociServices.ts";
 import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
 import * as AccessAnalyzer from "./AccessAnalyzer/index.ts";
@@ -1135,7 +1136,7 @@ export const providers = () =>
           DevOpsGuru.NotificationChannelProvider(),
           DevOpsGuru.ResourceCollectionProvider(),
           DevOpsGuru.ServiceIntegrationProvider(),
-          DynamoDB.TableProvider(),
+          flociDual(DynamoDB.Table, () => DynamoDB.TableProvider()),
           EC2.DhcpOptionsProvider(),
           EC2.EgressOnlyInternetGatewayProvider(),
           EC2.EIPProvider(),
@@ -1190,9 +1191,9 @@ export const providers = () =>
           EventBridge.ApiDestinationProvider(),
           EventBridge.ArchiveProvider(),
           EventBridge.ConnectionProvider(),
-          EventBridge.EventBusProvider(),
+          flociDual(EventBridge.EventBus, () => EventBridge.EventBusProvider()),
           EventBridge.PermissionProvider(),
-          EventBridge.RuleProvider(),
+          flociDual(EventBridge.Rule, () => EventBridge.RuleProvider()),
           FIS.ExperimentTemplateProvider(),
           FIS.TargetAccountConfigurationProvider(),
           Firehose.DeliveryStreamProvider(),
@@ -1216,7 +1217,7 @@ export const providers = () =>
           IAM.LoginProfileProvider(),
           IAM.OpenIDConnectProviderProvider(),
           IAM.PolicyProvider(),
-          IAM.RoleProvider(),
+          flociDual(IAM.Role, () => IAM.RoleProvider()),
           IAM.SAMLProviderProvider(),
           IAM.ServerCertificateProvider(),
           IAM.ServiceLinkedRoleProvider(),
@@ -1255,6 +1256,10 @@ export const providers = () =>
           LakeFormation.PermissionsProvider(),
           LakeFormation.ResourceProvider(),
           Lambda.AliasProvider(),
+          // NOT dualized: the EventSourceMapping reconciler's ownership scan
+          // calls lambda ListTags on `event-source-mapping:` ARNs, which
+          // floci rejects ("ARN resource type must be 'function'") — dualize
+          // once the floci fork supports ESM tagging.
           Lambda.EventSourceMappingProvider(),
           Lambda.FunctionProvider(),
           Lambda.LayerVersionProvider(),
@@ -1359,11 +1364,13 @@ export const providers = () =>
           Route53.RecordProvider(),
           Route53.VpcAssociationAuthorizationProvider(),
           Route53.ZoneVpcAssociationProvider(),
-          S3.BucketProvider(),
+          flociDual(S3.Bucket, () => S3.BucketProvider()),
           Scheduler.ScheduleGroupProvider(),
           Scheduler.ScheduleProvider(),
           SecretsManager.RotationScheduleProvider(),
-          SecretsManager.SecretProvider(),
+          flociDual(SecretsManager.Secret, () =>
+            SecretsManager.SecretProvider(),
+          ),
           SES.AccountSettingsProvider(),
           SES.ActiveReceiptRuleSetProvider(),
           SES.ConfigurationSetEventDestinationProvider(),
@@ -1383,10 +1390,10 @@ export const providers = () =>
           SES.TenantResourceAssociationProvider(),
           SNS.PlatformApplicationProvider(),
           SNS.SubscriptionProvider(),
-          SNS.TopicProvider(),
+          flociDual(SNS.Topic, () => SNS.TopicProvider()),
           SocialMessaging.LinkedWhatsAppBusinessAccountProvider(),
-          SQS.QueueProvider(),
-          SSM.ParameterProvider(),
+          flociDual(SQS.Queue, () => SQS.QueueProvider()),
+          flociDual(SSM.Parameter, () => SSM.ParameterProvider()),
           StepFunctions.ActivityProvider(),
           StepFunctions.StateMachineProvider(),
           WAFv2.IPSetProvider(),
