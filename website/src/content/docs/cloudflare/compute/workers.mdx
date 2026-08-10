@@ -317,6 +317,14 @@ export default Cloudflare.Worker(
 );
 ```
 
+You rarely need this for SSR pages or API routes alone — a path that
+matches no asset already falls through to the Worker. Reach for it
+when a path the Worker must own could be answered by the asset layer
+instead: an asset file shadowing a route, a
+`single-page-application` fallback that would serve the app shell to
+navigations, or a handler that intercepts asset requests outright
+(`true`, serving files itself via the `ASSETS` binding).
+
 The same routing applies under `alchemy dev`, so a path that hits
 your handler locally hits it deployed too.
 

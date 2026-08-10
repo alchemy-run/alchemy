@@ -98,12 +98,17 @@ const site = yield* Cloudflare.Website.Vite("Website", {
   server environment (see
   [Multiple server environments](#multiple-server-environments-rsc)).
 - **`assets`** — a flat `AssetsConfig` for routing behavior:
-  `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
-  `runWorkerFirst` accepts `true` (every request hits the Worker
-  before asset matching) or a glob array like `["/api/*"]` (only
-  matching paths do — everything else stays assets-first). The
-  built asset directory is supplied by the build, so unlike a plain
-  Worker there is no `directory` to configure.
+  `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc. SSR
+  apps need none of it: server routes and API paths match no built
+  asset, so they already fall through to the Worker. The glob array
+  matters for SPAs — with `notFoundHandling:
+  "single-page-application"`, whether an unmatched path serves the
+  app shell or reaches the Worker depends on the request's
+  `Sec-Fetch-Mode`, so `runWorkerFirst: ["/api/*"]` pins your API
+  namespace to the Worker deterministically. `true` routes every
+  request through the Worker, for handlers that intercept asset
+  requests. The built asset directory is supplied by the build, so
+  unlike a plain Worker there is no `directory` to configure.
 - Everything else is inherited from the Worker — `domain`, `env`,
   `compatibility`, `crons`, and so on. See
   [Workers](/cloudflare/compute/workers).
