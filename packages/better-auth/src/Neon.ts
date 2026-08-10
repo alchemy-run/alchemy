@@ -63,15 +63,32 @@ const openPool = (
   });
 
 /**
- * Neon database layer for {@link BetterAuth} over Neon's serverless driver
- * (`@neondatabase/serverless`, optional peer).
+ * Neon database layer for Better Auth over Neon's serverless driver.
  *
  * This is the optimal Workers/Lambda → Neon pairing: the driver speaks
- * WebSocket/HTTP instead of TCP, so it needs no Hyperdrive, no `pg`
- * install, and no `nodejs_compat` socket support. One pool per execution,
- * closed when the event settles.
+ * WebSocket instead of TCP, so it needs no Hyperdrive, no `pg` install,
+ * and no socket compatibility flags. One pool per execution, closed when
+ * the event settles.
  *
+ * For TCP access through Cloudflare Hyperdrive use `CloudflareHyperdrive`;
+ * for a generic `pg` connection use `Postgres`.
+ *
+ * @layer
+ * @provides BetterAuth.Database
+ * @peer @neondatabase/serverless
+ * @product Neon
+ * @category Postgres
+ *
+ * @section Connecting from a Worker or Lambda
+ * The `connectionUri` Output binds into the host environment at deploy
+ * and is read back at runtime; the same source drives the deploy-time
+ * migration Action.
+ * @example Worker (or Lambda) with a Neon-backed BetterAuth
  * ```typescript
+ * import { BetterAuth } from "@alchemy.run/better-auth";
+ * import { Neon as NeonDatabase } from "@alchemy.run/better-auth/Neon";
+ * import * as Neon from "alchemy/Neon";
+ *
  * export const AuthDb = Neon.Project("AuthDb");
  *
  * Effect.gen(function* () {
@@ -79,13 +96,20 @@ const openPool = (
  *   return { fetch: ... };
  * }).pipe(
  *   Effect.provide(
- *     Layer.unwrap(Effect.map(AuthDb, (db) => NeonAuth(db.connectionUri))),
+ *     Layer.unwrap(Effect.map(AuthDb, (db) => NeonDatabase(db.connectionUri))),
  *   ),
  * )
  * ```
  *
- * For TCP access through Cloudflare Hyperdrive use `CloudflareHyperdrive`;
- * for a generic `pg` connection use `Postgres`.
+ * @section Branch-per-stage setups
+ * Point the layer at a branch's connection string instead of the project's
+ * to isolate auth data per stage.
+ * @example Using a Neon branch
+ * ```typescript
+ * const branch = yield* Neon.Branch("auth-db", { project });
+ * // ...
+ * Effect.provide(Layer.unwrap(Effect.map(branch, (b) => NeonDatabase(b.connectionUri))))
+ * ```
  */
 export const Neon = (
   url: ConnectionSource,

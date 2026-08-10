@@ -15,21 +15,31 @@ const open = (path: string): Effect.Effect<BunDatabase, never, Scope.Scope> =>
   );
 
 /**
- * Local `bun:sqlite` database layer for {@link BetterAuth} — development
- * and tests on the bun runtime only (a deployed Worker/Lambda cannot open
- * a local SQLite file).
+ * Local `bun:sqlite` database layer for Better Auth — development and
+ * tests on the bun runtime only (a deployed Worker/Lambda cannot open a
+ * local SQLite file).
  *
  * Data persists in the file across runs; migrations run against the same
  * file at deploy time.
  *
+ * @layer
+ * @provides BetterAuth.Database
+ * @product SQLite
+ * @category Local & custom
+ *
+ * @section Local development
+ * @example File-backed auth for `alchemy dev`
  * ```typescript
+ * import { BetterAuth } from "@alchemy.run/better-auth";
+ * import { SQLite } from "@alchemy.run/better-auth/SQLite";
+ *
  * Effect.gen(function* () {
  *   const auth = yield* BetterAuth({ emailAndPassword: { enabled: true } });
  *   // ...
  * }).pipe(Effect.provide(SQLite(".alchemy/auth.sqlite")))
  * ```
  *
- * @param path SQLite file path. The parent directory must exist.
+ * @param path SQLite file path (parent directory must exist).
  * @default ".alchemy/better-auth.sqlite"
  */
 export const SQLite = (

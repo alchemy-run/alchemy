@@ -5,18 +5,29 @@ import * as Layer from "effect/Layer";
 import { Database, type DatabaseInput } from "./Database.ts";
 
 /**
- * In-memory database layer for {@link BetterAuth} — tests and throwaway
- * dev only. Data lives in the provided (or an internal) record for the
+ * In-memory database layer for Better Auth — tests and throwaway dev
+ * only. Data lives in the provided (or an internal) record for the
  * lifetime of the process/isolate; nothing is persisted and there is no
- * migration step (the memory adapter materializes tables on the fly).
+ * migration step (tables are seeded from the resolved auth schema).
  *
+ * @layer
+ * @provides BetterAuth.Database
+ * @product Memory
+ * @category Local & custom
+ *
+ * @section Testing
+ * @example Unit-testing auth flows without a database
  * ```typescript
+ * import { BetterAuth, Memory } from "@alchemy.run/better-auth";
+ *
  * Effect.gen(function* () {
  *   const auth = yield* BetterAuth({
  *     emailAndPassword: { enabled: true },
  *     secret: "test-secret",
  *   });
- *   // ...
+ *   const signUp = yield* auth.api.signUpEmail({
+ *     body: { email: "a@b.co", password: "password1234", name: "A" },
+ *   });
  * }).pipe(Effect.provide(Memory()))
  * ```
  */

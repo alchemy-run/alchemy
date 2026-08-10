@@ -28,22 +28,65 @@ export interface CloudflareHyperdriveOptions {
 }
 
 /**
- * Cloudflare Hyperdrive layer for {@link BetterAuth} — pooled Postgres (or
- * MySQL) through a Hyperdrive {@link Cloudflare.Hyperdrive.Connection}.
+ * Cloudflare Hyperdrive layer for Better Auth — pooled TCP Postgres (or
+ * MySQL) through a Hyperdrive connection.
  *
- * Provide it on the Worker impl effect:
+ * Hyperdrive's connection string is minted per-invocation inside the
+ * Worker and cannot be used at deploy time, so pass the ORIGIN database
+ * URL as `migrate` for deploy-time schema migrations (or omit it to skip
+ * them).
  *
+ * @layer
+ * @provides BetterAuth.Database
+ * @peer pg
+ * @peer mysql2
+ * @product Hyperdrive
+ * @category Cloudflare
+ *
+ * @section Pooled Postgres through Hyperdrive
+ * The Worker connects over TCP through Hyperdrive's pooler; auth reads
+ * should disable Hyperdrive caching so sessions are never stale.
+ * @example Hyperdrive over a Neon origin
  * ```typescript
+ * import { BetterAuth } from "@alchemy.run/better-auth";
+ * import { CloudflareHyperdrive } from "@alchemy.run/better-auth/CloudflareHyperdrive";
+ *
+ * export const PgProject = Neon.Project("AuthDb");
+ * export const Hyperdrive = Effect.gen(function* () {
+ *   const project = yield* PgProject;
+ *   return yield* Cloudflare.Hyperdrive.Connection("AuthHd", {
+ *     origin: project.origin,
+ *     caching: { disabled: true },
+ *   });
+ * });
+ *
  * Effect.gen(function* () {
- *   const auth = yield* BetterAuth({ ... });
+ *   const auth = yield* BetterAuth({ emailAndPassword: { enabled: true } });
  *   return { fetch: ... };
  * }).pipe(
  *   Effect.provide(
- *     CloudflareHyperdrive(Hyperdrive, {
- *       migrate: branch.connectionUri, // origin URL for deploy-time schema
- *     }),
+ *     Layer.unwrap(
+ *       Effect.gen(function* () {
+ *         const project = yield* PgProject;
+ *         const connection = yield* Hyperdrive;
+ *         return CloudflareHyperdrive(connection, {
+ *           migrate: project.connectionUri,
+ *         });
+ *       }),
+ *     ),
  *   ),
  * )
+ * ```
+ *
+ * @section MySQL origins
+ * Hyperdrive also fronts MySQL origins — select the dialect and the layer
+ * drives `mysql2` instead of `pg`.
+ * @example MySQL behind Hyperdrive
+ * ```typescript
+ * CloudflareHyperdrive(connection, {
+ *   dialect: "mysql",
+ *   migrate: password.connectionUrl,
+ * })
  * ```
  */
 export const CloudflareHyperdrive = (

@@ -11,22 +11,62 @@ import {
 import type { BetterAuthMigrationError } from "./Errors.ts";
 
 /**
- * Cloudflare D1 database layer for {@link BetterAuth}.
+ * Cloudflare D1 database layer for Better Auth.
  *
  * At runtime the Worker reaches the database through its native D1 binding
  * (the layer bakes in `QueryDatabaseBinding`). At deploy time, schema
- * migrations run over the D1 HTTP query API (`QueryDatabaseLocal` — which
- * also transparently targets the local D1 simulator under `alchemy dev`).
+ * migrations run over the D1 HTTP query API — which also transparently
+ * targets the local D1 simulator under `alchemy dev`.
  *
- * Provide it on the Worker impl effect:
+ * @layer
+ * @provides BetterAuth.Database
+ * @product D1
+ * @category Cloudflare
  *
+ * @section Using D1 as the auth database
+ * Provide the layer on the Worker impl effect that yields `BetterAuth`.
+ * The database resource can be referenced from module scope — the layer
+ * accepts the resource or its Effect.
+ * @example Worker with a D1-backed BetterAuth
  * ```typescript
- * export const Db = Cloudflare.D1.Database("AuthDb");
+ * import { BetterAuth } from "@alchemy.run/better-auth";
+ * import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
+ * import * as Cloudflare from "alchemy/Cloudflare";
  *
- * Effect.gen(function* () {
- *   const auth = yield* BetterAuth({ emailAndPassword: { enabled: true } });
- *   return { fetch: ... };
- * }).pipe(Effect.provide(CloudflareD1(Db)))
+ * export const AuthDb = Cloudflare.D1.Database("AuthDb");
+ *
+ * export default class Api extends Cloudflare.Worker<Api>()(
+ *   "Api",
+ *   { main: import.meta.url, compatibility: { flags: ["nodejs_compat"] } },
+ *   Effect.gen(function* () {
+ *     const auth = yield* BetterAuth({
+ *       basePath: "/auth",
+ *       emailAndPassword: { enabled: true },
+ *     });
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const request = yield* HttpServerRequest;
+ *         if (request.url.startsWith("/auth")) {
+ *           return yield* auth.fetch;
+ *         }
+ *         const session = yield* auth.getSession();
+ *         return yield* HttpServerResponse.json({ user: session?.user ?? null });
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(CloudflareD1(AuthDb))),
+ * ) {}
+ * ```
+ *
+ * @section Migrations
+ * The schema migration Action connects over the D1 HTTP API at deploy
+ * time — the Worker's native binding is never used outside the deployed
+ * runtime, and no migration code ships in the Worker bundle.
+ * @example Opting out of automatic migrations
+ * ```typescript
+ * const auth = yield* BetterAuth({
+ *   migrate: false, // manage the schema yourself
+ *   emailAndPassword: { enabled: true },
+ * });
  * ```
  */
 export const CloudflareD1 = (

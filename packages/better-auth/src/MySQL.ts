@@ -119,18 +119,39 @@ export const makeMySQLService = (
   }) as Effect.Effect<DatabaseService>;
 
 /**
- * MySQL database layer for {@link BetterAuth}, from a connection string.
+ * Generic TCP MySQL database layer for Better Auth, from a connection
+ * string.
  *
- * Works with PlanetScale MySQL (`password.origin` connection URL), Cloudflare
- * Hyperdrive MySQL origins, AWS RDS MySQL, or any literal URL. One mysql2
- * pool per execution, closed when the event settles. `mysql2` is an
- * optional peer dependency.
+ * Works with PlanetScale MySQL, Cloudflare Hyperdrive MySQL origins, AWS
+ * RDS MySQL, or any literal URL. One `mysql2` pool per execution, closed
+ * when the event settles.
  *
+ * @layer
+ * @provides BetterAuth.Database
+ * @peer mysql2
+ * @product MySQL
+ * @category MySQL
+ *
+ * @section Connecting to PlanetScale MySQL
+ * PlanetScale requires TLS — pass it in the URL's `ssl` query parameter
+ * (mysql2 parses it as JSON).
+ * @example PlanetScale MySQL with TLS
  * ```typescript
+ * import { BetterAuth } from "@alchemy.run/better-auth";
+ * import { MySQL } from "@alchemy.run/better-auth/MySQL";
+ *
+ * const password = yield* Planetscale.MySQLPassword("auth-db", {
+ *   database,
+ *   role: "admin",
+ * });
+ * const url =
+ *   `mysql://${password.username}:...@${password.host}/${database.name}` +
+ *   `?ssl=${encodeURIComponent('{"rejectUnauthorized":true}')}`;
+ *
  * Effect.gen(function* () {
  *   const auth = yield* BetterAuth({ emailAndPassword: { enabled: true } });
  *   return { fetch: ... };
- * }).pipe(Effect.provide(MySQL(password.connectionUrl)))
+ * }).pipe(Effect.provide(MySQL(url)))
  * ```
  */
 export const MySQL = (

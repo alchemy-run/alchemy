@@ -242,25 +242,49 @@ export const makePostgresService = (
   }) as Effect.Effect<DatabaseService>;
 
 /**
- * Postgres database layer for {@link BetterAuth}, from a connection
+ * Generic TCP Postgres database layer for Better Auth, from a connection
  * string.
  *
  * Works with every Postgres alchemy exposes a connection string for:
- * Neon (`branch.connectionUri`), PlanetScale Postgres
- * (`role.connectionUrl`), Prisma Postgres (`connection.databaseUrl`), AWS
- * RDS (secret URL), or any literal. One `pg.Pool` is opened per execution
- * and closed when the event settles — the only legal pooling shape on
- * workerd. `pg` is an optional peer dependency.
+ * PlanetScale Postgres (`role.connectionUrl`), Prisma Postgres
+ * (`connection.databaseUrl`), AWS RDS inside a VPC, or any literal URL.
+ * One `pg.Pool` is opened per execution and closed when the event settles
+ * — the only legal pooling shape on workerd. Prefer `Neon`,
+ * `AuroraDataApi`, or `CloudflareHyperdrive` when they match your
+ * environment → database pair.
  *
  * On AWS Lambda, add `build: { install: ["pg"] }` to the Function props so
  * the dynamically-imported driver ships in the artifact with an npm layout
  * (its CJS require chain does not survive store-style node_modules).
  *
+ * @layer
+ * @provides BetterAuth.Database
+ * @peer pg
+ * @product Postgres
+ * @category Postgres
+ *
+ * @section Connecting with a resource Output
+ * Resource Outputs are bound into the host environment at deploy and read
+ * back at runtime; the same source drives deploy-time migrations.
+ * @example PlanetScale Postgres
  * ```typescript
+ * import { BetterAuth } from "@alchemy.run/better-auth";
+ * import { Postgres } from "@alchemy.run/better-auth/Postgres";
+ *
+ * const role = yield* Planetscale.PostgresRole("auth-role", { database, branch });
+ *
  * Effect.gen(function* () {
  *   const auth = yield* BetterAuth({ emailAndPassword: { enabled: true } });
  *   return { fetch: ... };
- * }).pipe(Effect.provide(Postgres(branch.connectionUri)))
+ * }).pipe(Effect.provide(Postgres(role.connectionUrl)))
+ * ```
+ *
+ * @section Separate migration source
+ * When the runtime URL is not deploy-resolvable (or points at a pooler),
+ * pass a direct deploy-time URL as `migrate`.
+ * @example Pooled runtime, direct migrations
+ * ```typescript
+ * Postgres(role.connectionUrlPooled, { migrate: role.connectionUrl })
  * ```
  */
 export const Postgres = (
