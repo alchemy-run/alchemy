@@ -9,14 +9,7 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-    // `Website.Foldkit` applies the SPA fallback itself, so deep links
-    // reach the Foldkit router without an `assets` config here.
-    const worker = yield* Cloudflare.Website.Foldkit("Foldkit", {
-      compatibility: {
-        flags: ["nodejs_compat"],
-      },
-      memo: {},
-    });
+    const worker = yield* Cloudflare.Website.Foldkit("Foldkit");
 
     return {
       url: worker.url,

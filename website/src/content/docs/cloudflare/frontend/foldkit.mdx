@@ -127,7 +127,7 @@ your Stack is baked into the bundle at build time — pass a
 // alchemy.run.ts
 export const Website = Cloudflare.Website.Foldkit("Foldkit", {
 +  env: {
-+    VITE_API_URL: backend.url,
++    VITE_API_URL: backend.url.as<string>(),
 +  },
 });
 ```
@@ -184,18 +184,9 @@ export default {
 };
 ```
 
-Give the `ssr` environment an entry in your Vite config, then bind
-what the Worker needs:
-
-```typescript
-// vite.config.ts
-export default defineConfig({
-  plugins: [foldkit()],
-  environments: {
-    ssr: { build: { rollupOptions: { input: "./src/worker.ts" } } },
-  },
-});
-```
+Your `vite.config.ts` needs no changes — the injected Cloudflare
+plugin points the `ssr` environment at `main` itself. Just declare
+the entry and bind what the Worker needs:
 
 ```typescript
 // alchemy.run.ts
