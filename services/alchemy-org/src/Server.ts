@@ -23,11 +23,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { GeneralEngineer } from "./Engineer.ts";
 import { engineerRoutes } from "./Routes.ts";
 import { DriverLocal } from "./services/Driver.ts";
-import {
-  ReadToolsLocal,
-  RunToolsLocal,
-  WriteToolsLocal,
-} from "./tools/LocalToolbox.ts";
+import { ReadTools, RunTools, WriteTools } from "./tools/Toolbox.ts";
 
 const workspaceRoot = process.env.CODER_WORKSPACE ?? `${process.cwd()}/../..`;
 
@@ -35,17 +31,19 @@ const WorkspaceLive = Workspace.fixed(workspaceRoot);
 
 /**
  * The whole engineer over LOCAL physics — the charter, the
- * read/run/write toolbox over one fixed workspace, and the org's
+ * read/run/write toolbox over the trusted-host sandbox
+ * (AI.SandboxLocal over one fixed workspace), and the org's
  * assembled driver (services/Driver.ts: AI.DriverLocal +
  * ThreadStorageSqlite + Model + SessionIndexSqlite + ref store). The
  * driver bundle is provideMERGED because the HTTP edge consumes it
  * too: `SessionSockets` for the `/attach` door, `SessionIndex` for
- * the board, `ThreadStorage` for transcripts. The service provides
- * this to its init effect; the composition smoke test builds it
- * directly.
+ * the board, `ThreadStorage` for transcripts. Swapping the sandbox
+ * layer (a Cloudflare Container, a MicroVM) is the ONLY change a
+ * different placement needs — the toolbox is sandbox-agnostic.
  */
 export const EngineerLocal = GeneralEngineer.pipe(
-  Layer.provide([ReadToolsLocal, RunToolsLocal, WriteToolsLocal]),
+  Layer.provide([ReadTools, RunTools, WriteTools]),
+  Layer.provide(AI.SandboxLocal),
   Layer.provide(WorkspaceLive),
   Layer.provideMerge(DriverLocal),
   Layer.orDie,

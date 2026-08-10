@@ -2,7 +2,7 @@ import * as AI from "alchemy/AI";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
-import { WorkspaceFiles } from "alchemy/Workspace";
+import { sha256Hex } from "../lib/Digest.ts";
 import { path } from "../Vocabulary.ts";
 
 const edits = AI.Parameter(
@@ -31,11 +31,11 @@ missing, ambiguous, or overlapping edit leaves the file unchanged.
 Pass ${expectedDigest} to prove the file has not changed since you
 read it. Prefer this over writeFile for existing files.` {}
 
-/** Local physics over the {@link Workspace} checkout. */
-export const EditFileLocal = Layer.effect(
+/** Physics over the session {@link AI.Sandbox}. */
+export const EditFileLive = Layer.effect(
   EditFile,
   Effect.gen(function* () {
-    const files = yield* WorkspaceFiles;
+    const sandbox = yield* AI.Sandbox;
     return ((input: {
       path: string;
       edits: ReadonlyArray<{
@@ -46,8 +46,9 @@ export const EditFileLocal = Layer.effect(
       expectedDigest: string;
     }) =>
       Effect.gen(function* () {
-        const snapshot = yield* files.readText(input.path);
-        if (snapshot.digest !== input.expectedDigest) {
+        const content = yield* sandbox.readFile(input.path);
+        const digest = yield* sha256Hex(content);
+        if (digest !== input.expectedDigest) {
           return yield* Effect.fail(
             `file changed since it was read: ${input.path} — read it again and retry with the new digest`,
           );
@@ -73,7 +74,7 @@ export const EditFileLocal = Layer.effect(
           const starts: number[] = [];
           let cursor = 0;
           while (true) {
-            const found = snapshot.content.indexOf(edit.oldString, cursor);
+            const found = content.indexOf(edit.oldString, cursor);
             if (found === -1) break;
             starts.push(found);
             cursor = found + edit.oldString.length;
@@ -110,19 +111,16 @@ export const EditFileLocal = Layer.effect(
           }
         }
 
-        let updated = snapshot.content;
+        let updated = content;
         for (const replacement of [...replacements].reverse()) {
           updated =
             updated.slice(0, replacement.start) +
             replacement.text +
             updated.slice(replacement.end);
         }
-        const result = yield* files.writeAtomic(input.path, updated, {
-          mode: "overwrite",
-          expectedDigest: input.expectedDigest,
-          bom: snapshot.bom,
-        });
-        return `edited ${input.path}: replaced ${replacements.length} block(s)\n[SHA-256: ${result.digest}]`;
+        yield* sandbox.writeFile(input.path, updated);
+        const next = yield* sha256Hex(updated);
+        return `edited ${input.path}: replaced ${replacements.length} block(s)\n[SHA-256: ${next}]`;
       })) as never;
   }),
 );

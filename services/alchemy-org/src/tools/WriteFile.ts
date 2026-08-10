@@ -2,7 +2,7 @@ import * as AI from "alchemy/AI";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
-import { WorkspaceFiles } from "alchemy/Workspace";
+import { sha256Hex } from "../lib/Digest.ts";
 import { content, path } from "../Vocabulary.ts";
 
 const mode = AI.Parameter("mode", S.Literals(["create", "overwrite"]))`
@@ -20,11 +20,11 @@ only be replaced with ${expectedDigest}. Use create for new files
 and overwrite only for complete rewrites — prefer editFile for
 targeted changes.` {}
 
-/** Local physics over the {@link Workspace} checkout. */
-export const WriteFileLocal = Layer.effect(
+/** Physics over the session {@link AI.Sandbox}. */
+export const WriteFileLive = Layer.effect(
   WriteFile,
   Effect.gen(function* () {
-    const files = yield* WorkspaceFiles;
+    const sandbox = yield* AI.Sandbox;
     return ((input: {
       path: string;
       content: string;
@@ -32,22 +32,35 @@ export const WriteFileLocal = Layer.effect(
       expectedDigest?: string;
     }) =>
       Effect.gen(function* () {
-        if (input.mode === "overwrite" && input.expectedDigest === undefined) {
-          return yield* Effect.fail(
-            "expectedDigest is required in overwrite mode — read the file first",
-          );
+        const present = yield* sandbox.exists(input.path);
+        if (input.mode === "create") {
+          if (present) {
+            return yield* Effect.fail(
+              `file already exists: ${input.path} — read it first and use overwrite mode`,
+            );
+          }
+        } else {
+          if (input.expectedDigest === undefined) {
+            return yield* Effect.fail(
+              "expectedDigest is required in overwrite mode — read the file first",
+            );
+          }
+          if (!present) {
+            return yield* Effect.fail(
+              `cannot overwrite missing file: ${input.path} — use create mode`,
+            );
+          }
+          const current = yield* sandbox.readFile(input.path);
+          const digest = yield* sha256Hex(current);
+          if (digest !== input.expectedDigest) {
+            return yield* Effect.fail(
+              `file changed since it was read: ${input.path} — read it again and retry with the new digest`,
+            );
+          }
         }
-        const result = yield* files.writeAtomic(
-          input.path,
-          input.content,
-          input.mode === "create"
-            ? { mode: "create" }
-            : {
-                mode: "overwrite",
-                expectedDigest: input.expectedDigest!,
-              },
-        );
-        return `wrote ${input.path} (${new TextEncoder().encode(input.content).byteLength} bytes)\n[SHA-256: ${result.digest}]`;
+        yield* sandbox.writeFile(input.path, input.content);
+        const digest = yield* sha256Hex(input.content);
+        return `wrote ${input.path} (${new TextEncoder().encode(input.content).byteLength} bytes)\n[SHA-256: ${digest}]`;
       })) as never;
   }),
 );

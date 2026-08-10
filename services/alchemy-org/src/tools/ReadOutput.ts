@@ -30,7 +30,7 @@ Read complete tool output retained under ${outputId}. Page large
 artifacts with ${offset} and ${limit}. IDs are scoped to the current
 local toolbox and reveal no host filesystem path.` {}
 
-export const ReadOutputLocal = Layer.effect(
+export const ReadOutputLive = Layer.effect(
   ReadOutput,
   Effect.gen(function* () {
     const store = yield* ToolOutputStore;

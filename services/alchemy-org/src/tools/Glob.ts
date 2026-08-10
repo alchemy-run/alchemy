@@ -1,12 +1,9 @@
 import * as AI from "alchemy/AI";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Path from "effect/Path";
 import * as S from "effect/Schema";
-import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
-import { runProcess } from "../lib/ProcessRunner.ts";
+import { truncateHead } from "../lib/Output.ts";
 import { ToolOutputStore } from "../lib/ToolOutputStore.ts";
-import { Workspace } from "alchemy/Workspace";
 
 const pattern = AI.Parameter("pattern", S.String)`
 Glob pattern such as "*.ts", "**/*.json", or
@@ -32,28 +29,20 @@ workspace-relative paths, respects .gitignore, and excludes .git.
 Use for filename discovery; use grep for file contents. Bound output
 with ${limit}.` {}
 
-export const GlobLocal = Layer.effect(
+const MAX_BYTES = 50_000;
+
+/** Physics: ripgrep file listing through the session {@link AI.Sandbox}. */
+export const GlobLive = Layer.effect(
   Glob,
   Effect.gen(function* () {
-    const workspace = yield* Workspace;
-    const path = yield* Path.Path;
-    const environment = yield* Effect.context<
-      ChildProcessSpawner | ToolOutputStore
-    >();
+    const sandbox = yield* AI.Sandbox;
+    const store = yield* ToolOutputStore;
     return ((input: { pattern: string; path?: string; limit?: number }) =>
       Effect.gen(function* () {
         const max = input.limit ?? 1000;
-        const root = yield* workspace.root;
-        const target =
-          input.path === undefined || input.path === "."
-            ? "."
-            : path.relative(
-                root,
-                yield* workspace.resolveExisting(input.path),
-              );
-        const result = yield* runProcess({
-          command: "rg",
-          args: [
+        const result = yield* sandbox.exec(
+          "rg",
+          [
             "--files",
             "--hidden",
             "--sort",
@@ -62,24 +51,30 @@ export const GlobLocal = Layer.effect(
             "!.git/*",
             "--glob",
             input.pattern,
-            target,
+            input.path ?? ".",
           ],
-          cwd: root,
-          timeoutSeconds: 20,
-          maxLines: max,
-          maxBytes: 50_000,
-          preview: "head",
-        });
-        if (result.exitCode > 1) {
+          { timeout: 20_000 },
+        );
+        if (result.exitCode === 127) {
           return yield* Effect.fail(
-            `glob failed (exit ${result.exitCode}): ${result.stderr.text || "check the pattern and path"}`,
+            "ripgrep (rg) is required for glob but was not found on PATH",
           );
         }
-        const shown = result.stdout.text.replaceAll(/^\.\/+/gm, "").trim();
-        if (shown.length === 0) return "no files found";
-        return result.stdout.truncated
-          ? `${shown}\n[Output truncated: ${result.stdout.shownLines} of ${result.stdout.totalLines} paths shown. Full output: ${result.stdout.outputId}]`
-          : shown;
-      }).pipe(Effect.provide(environment))) as never;
+        if (result.exitCode > 1) {
+          return yield* Effect.fail(
+            `glob failed (exit ${result.exitCode}): ${result.stderr || "check the pattern and path"}`,
+          );
+        }
+        const cleaned = result.stdout.replaceAll(/^\.\/+/gm, "").trim();
+        if (cleaned.length === 0) return "no files found";
+        const preview = truncateHead(cleaned, {
+          maxLines: max,
+          maxBytes: MAX_BYTES,
+        });
+        if (!preview.truncated) return preview.text;
+        const artifact = yield* store.create("glob");
+        yield* artifact.append(cleaned);
+        return `${preview.text}\n[Output truncated: ${preview.shownLines} of ${preview.totalLines} paths shown. Full output: ${artifact.id}]`;
+      })) as never;
   }),
 );

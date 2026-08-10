@@ -1,13 +1,10 @@
 import * as AI from "alchemy/AI";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Path from "effect/Path";
 import * as S from "effect/Schema";
-import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
-import { runProcess } from "../lib/ProcessRunner.ts";
+import { truncateHead } from "../lib/Output.ts";
 import { ToolOutputStore } from "../lib/ToolOutputStore.ts";
 import { pattern } from "../Vocabulary.ts";
-import { Workspace } from "alchemy/Workspace";
 
 const pathParam = AI.Parameter("path", S.optionalKey(S.String))`
 Workspace-relative file or directory to search (default: ".").`;
@@ -67,19 +64,17 @@ Choose ${outputMode} and bound the result with ${limit}. Respects
 .gitignore and skips binaries. Always search before reading files;
 use Glob for filename discovery.` {}
 
+const MAX_BYTES = 50_000;
+
 /**
- * Physics: ripgrep at the {@link Workspace} root (respects
- * `.gitignore`, skips binaries), falling back to `grep -rn` when `rg`
- * is not on PATH. The model never sees which ran.
+ * Physics: ripgrep run through the session {@link AI.Sandbox} (rg is
+ * part of every sandbox image; the trusted host needs it on PATH).
  */
-export const GrepLocal = Layer.effect(
+export const GrepLive = Layer.effect(
   Grep,
   Effect.gen(function* () {
-    const workspace = yield* Workspace;
-    const path = yield* Path.Path;
-    const environment = yield* Effect.context<
-      ChildProcessSpawner | ToolOutputStore
-    >();
+    const sandbox = yield* AI.Sandbox;
+    const store = yield* ToolOutputStore;
 
     return ((input: {
       pattern: string;
@@ -96,14 +91,6 @@ export const GrepLocal = Layer.effect(
       Effect.gen(function* () {
         const mode = input.outputMode ?? "content";
         const max = input.limit ?? (mode === "content" ? 100 : 500);
-        const root = yield* workspace.root;
-        const target =
-          input.path === undefined || input.path === "."
-            ? "."
-            : path.relative(
-                root,
-                yield* workspace.resolveExisting(input.path),
-              );
         const args = [
           "--line-number",
           "--no-heading",
@@ -125,36 +112,34 @@ export const GrepLocal = Layer.effect(
           ...(input.multiline ? ["--multiline"] : []),
           "--regexp",
           input.pattern,
-          target,
+          input.path ?? ".",
         ];
-        const result = yield* runProcess({
-          command: "rg",
-          args,
-          cwd: root,
-          timeoutSeconds: input.multiline ? 60 : 20,
-          maxLines: max,
-          maxBytes: 50_000,
-          preview: "head",
-        }).pipe(
-          Effect.mapError((error) =>
-            error.includes("ENOENT")
-              ? "ripgrep (rg) is required for grep but was not found on PATH"
-              : error,
-          ),
-        );
+        const result = yield* sandbox.exec("rg", args, {
+          timeout: (input.multiline ? 60 : 20) * 1000,
+        });
 
-        // rg exit 1 = no matches; >1 is invalid input or runtime error.
+        // rg exit 1 = no matches; 127 = rg missing; >1 = bad input.
         if (result.exitCode === 1) return "no matches";
-        if (result.exitCode > 1) {
+        if (result.exitCode === 127) {
           return yield* Effect.fail(
-            `grep failed (exit ${result.exitCode}): ${result.stderr.text || "check the pattern and filters"}`,
+            "ripgrep (rg) is required for grep but was not found on PATH",
           );
         }
-        const shown = result.stdout.text.replaceAll(/^\.\/+/gm, "").trim();
-        if (shown.length === 0) return "no matches";
-        return result.stdout.truncated
-          ? `${shown}\n[Output truncated: ${result.stdout.shownLines} of ${result.stdout.totalLines} lines shown. Full output: ${result.stdout.outputId}]`
-          : shown;
-      }).pipe(Effect.provide(environment))) as never;
+        if (result.exitCode > 1) {
+          return yield* Effect.fail(
+            `grep failed (exit ${result.exitCode}): ${result.stderr || "check the pattern and filters"}`,
+          );
+        }
+        const cleaned = result.stdout.replaceAll(/^\.\/+/gm, "").trim();
+        if (cleaned.length === 0) return "no matches";
+        const preview = truncateHead(cleaned, {
+          maxLines: max,
+          maxBytes: MAX_BYTES,
+        });
+        if (!preview.truncated) return preview.text;
+        const artifact = yield* store.create("grep");
+        yield* artifact.append(cleaned);
+        return `${preview.text}\n[Output truncated: ${preview.shownLines} of ${preview.totalLines} lines shown. Full output: ${artifact.id}]`;
+      })) as never;
   }),
 );

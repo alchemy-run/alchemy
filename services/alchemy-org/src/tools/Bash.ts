@@ -2,11 +2,9 @@ import * as AI from "alchemy/AI";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
-import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
-import { runProcess } from "../lib/ProcessRunner.ts";
+import { truncateTail } from "../lib/Output.ts";
 import { ToolOutputStore } from "../lib/ToolOutputStore.ts";
 import { command } from "../Vocabulary.ts";
-import { Workspace } from "alchemy/Workspace";
 
 const timeout = AI.Parameter(
   "timeout",
@@ -32,36 +30,57 @@ truncated, use readOutput with the returned opaque ID. The test suite
 is the only oracle of done-ness.` {}
 
 const DEFAULT_TIMEOUT_SECONDS = 60;
+const MAX_LINES = 2000;
+const MAX_BYTES = 50_000;
 
-/** Local physics: `sh -c` with `cwd` at the {@link Workspace} root. */
-export const BashLocal = Layer.effect(
+/** Physics over the session {@link AI.Sandbox}. */
+export const BashLive = Layer.effect(
   Bash,
   Effect.gen(function* () {
-    const workspace = yield* Workspace;
-    const environment = yield* Effect.context<
-      ChildProcessSpawner | ToolOutputStore
-    >();
+    const sandbox = yield* AI.Sandbox;
+    const store = yield* ToolOutputStore;
+
+    // Show a bounded preview; retain the complete (sandbox-retained)
+    // output as an opaque artifact readable with readOutput.
+    const channel = (label: string, text: string, dropped: boolean) =>
+      Effect.gen(function* () {
+        const preview = truncateTail(text, {
+          maxLines: MAX_LINES,
+          maxBytes: MAX_BYTES,
+        });
+        if (!preview.truncated && !dropped) {
+          return { text: preview.text, note: "" };
+        }
+        const artifact = yield* store.create(label);
+        yield* artifact.append(text);
+        return {
+          text: preview.text,
+          note: `\nFull ${label}: ${artifact.id}`,
+        };
+      });
+
     return ((input: { command: string; timeout?: number }) =>
       Effect.gen(function* () {
-        const root = yield* workspace.root;
-        const result = yield* runProcess({
-          command: "sh",
-          args: ["-c", input.command],
-          cwd: root,
-          timeoutSeconds: input.timeout ?? DEFAULT_TIMEOUT_SECONDS,
-          maxLines: 2000,
-          maxBytes: 50_000,
-          preview: "tail",
+        const result = yield* sandbox.exec(input.command, undefined, {
+          timeout: (input.timeout ?? DEFAULT_TIMEOUT_SECONDS) * 1000,
         });
-        const artifact = (label: string, outputId: string | undefined) =>
-          outputId === undefined ? "" : `\nFull ${label}: ${outputId}`;
+        const stdout = yield* channel(
+          "stdout",
+          result.stdout,
+          result.stdoutTruncated,
+        );
+        const stderr = yield* channel(
+          "stderr",
+          result.stderr,
+          result.stderrTruncated,
+        );
         return (
           `exit: ${result.exitCode}\n` +
-          `--- stdout ---\n${result.stdout.text || "(no output)"}` +
-          artifact("stdout", result.stdout.outputId) +
-          `\n--- stderr ---\n${result.stderr.text || "(no output)"}` +
-          artifact("stderr", result.stderr.outputId)
+          `--- stdout ---\n${stdout.text || "(no output)"}` +
+          stdout.note +
+          `\n--- stderr ---\n${stderr.text || "(no output)"}` +
+          stderr.note
         );
-      }).pipe(Effect.provide(environment))) as never;
+      })) as never;
   }),
 );

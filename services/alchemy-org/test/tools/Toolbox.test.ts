@@ -1,25 +1,25 @@
 import { BunServices } from "@effect/platform-bun";
 import { expect, test } from "bun:test";
+import { SandboxLocal } from "alchemy/AI";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
-import { WorkspaceFilesLive } from "alchemy/Workspace";
 import { ToolOutputStoreLive } from "../../src/lib/ToolOutputStore.ts";
 import {
   Bash,
-  BashLocal,
+  BashLive,
   Glob,
-  GlobLocal,
+  GlobLive,
   Grep,
-  GrepLocal,
+  GrepLive,
   ListDirectory,
-  ListDirectoryLocal,
+  ListDirectoryLive,
   ReadFile,
-  ReadFileLocal,
+  ReadFileLive,
   ReadOutput,
-  ReadOutputLocal,
+  ReadOutputLive,
 } from "../../src/tools/index.ts";
 import { Workspace, fixed as workspace } from "alchemy/Workspace";
 
@@ -52,16 +52,16 @@ const withWorkspace = <A, E>(program: Effect.Effect<A, E, any>): Promise<A> =>
       const WorkspaceLayer = workspace(root);
       const Support = Layer.mergeAll(
         WorkspaceLayer,
-        WorkspaceFilesLive.pipe(Layer.provide(WorkspaceLayer)),
+        SandboxLocal.pipe(Layer.provide(WorkspaceLayer)),
         ToolOutputStoreLive,
       );
       const Tools = Layer.mergeAll(
-        GrepLocal,
-        GlobLocal,
-        ListDirectoryLocal,
-        ReadFileLocal,
-        BashLocal,
-        ReadOutputLocal,
+        GrepLive,
+        GlobLive,
+        ListDirectoryLive,
+        ReadFileLive,
+        BashLive,
+        ReadOutputLive,
       ).pipe(Layer.provide(Support));
       return yield* program.pipe(
         Effect.provide(Layer.mergeAll(Tools, Support, RuntimeContext.phantom)),
@@ -189,6 +189,6 @@ test("Bash timeout is model-visible and terminates the process", () =>
           command: "sleep 5",
           timeout: 1,
         }).pipe(Effect.flip),
-      ).toContain("timed out after 1 seconds");
+      ).toContain("timed out after 1000ms");
     }),
   ));

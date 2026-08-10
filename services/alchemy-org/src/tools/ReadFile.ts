@@ -2,7 +2,7 @@ import * as AI from "alchemy/AI";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
-import { WorkspaceFiles } from "alchemy/Workspace";
+import { sha256Hex } from "../lib/Digest.ts";
 import { path } from "../Vocabulary.ts";
 
 const offset = AI.Parameter("offset", S.optionalKey(S.Int))`
@@ -31,18 +31,19 @@ const MAX_BYTES = 50_000;
 const MAX_LINE_CHARS = 2000;
 const encoder = new TextEncoder();
 
-/** Local physics over the {@link Workspace} checkout. */
-export const ReadFileLocal = Layer.effect(
+/** Physics over the session {@link AI.Sandbox}. */
+export const ReadFileLive = Layer.effect(
   ReadFile,
   Effect.gen(function* () {
-    const files = yield* WorkspaceFiles;
+    const sandbox = yield* AI.Sandbox;
     return ((input: { path: string; offset?: number; limit?: number }) =>
       Effect.gen(function* () {
         if (input.offset === 0 || !Number.isInteger(input.offset ?? 1)) {
           return yield* Effect.fail("offset must be a non-zero integer");
         }
-        const snapshot = yield* files.readText(input.path);
-        const lines = snapshot.content.split("\n");
+        const content = yield* sandbox.readFile(input.path);
+        const digest = yield* sha256Hex(content);
+        const lines = content.split("\n");
         const requested = input.offset ?? 1;
         const start =
           requested < 0 ? Math.max(1, lines.length + requested + 1) : requested;
@@ -80,12 +81,12 @@ export const ReadFileLocal = Layer.effect(
           bytes += lineBytes;
           end = index + 1;
         }
-        const content = window.join("\n");
+        const body = window.join("\n");
         const page =
           end < lines.length
-            ? `${content}\n[Showing lines ${start}-${end} of ${lines.length}. Use offset=${end + 1} to continue.]`
-            : content;
-        return `${page}\n[SHA-256: ${snapshot.digest}]`;
+            ? `${body}\n[Showing lines ${start}-${end} of ${lines.length}. Use offset=${end + 1} to continue.]`
+            : body;
+        return `${page}\n[SHA-256: ${digest}]`;
       })) as never;
   }),
 );
