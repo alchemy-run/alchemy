@@ -68,10 +68,7 @@ import {
   type WorkerTargetService,
 } from "../Worker/Engine.ts";
 import { makeRpcStub } from "./Workers/Rpc.ts";
-import {
-  Worker as CloudflareWorker,
-  type WorkerProps,
-} from "./Workers/Worker.ts";
+import type { WorkerProps } from "./Workers/Worker.ts";
 
 export const CLOUDFLARE_ENGINE = "cloudflare";
 
@@ -235,85 +232,37 @@ const callerBinding =
       };
     });
 
-const adapter: WorkerDeployAdapter<"cloudflare"> = {
-  kind: CLOUDFLARE_ENGINE,
-  target: cloudflareTarget,
-  callerBinding,
-  makeNative: (clsId, props: CloudflareWorkerTargetProps, impl) => {
-    const nativeCls = (CloudflareWorker as any)(clsId);
-    const nativeProps = Effect.gen(function* () {
-      const env: Record<string, unknown> = {};
-      // The gateway secret rides as a `secret_text` binding (the provider
-      // lowers `Redacted` env values to secrets); `makeGatewayFetch` reads
-      // it back from the worker env at runtime. At runtime the deploy
-      // module re-executes, but the secret already lives in the deployed
-      // env — mint nothing.
-      if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const secret = yield* Random(gatewaySecretId(clsId), { bytes: 32 });
-        env[FLEET_SECRET_VAR] = secret.text;
-      }
-      return { ...props, env } as WorkerProps;
-    });
-    return {
-      layer: nativeCls.make(nativeProps, impl),
-      instance: nativeCls.Self,
-    };
-  },
-};
-
-const { deployWorker, workerRef } = makeWorkerDeploy(adapter);
-
 /**
- * `Cloudflare.Worker` — the native resource/class factory, plus the
- * portable **deploy module** form and its `.ref` companion.
- *
- * The deploy form is discriminated by its first argument: the resource
- * forms lead with `id: string`, this one leads with the `Alchemy.Worker`
- * tag. Same position, same role — the id is just a tag.
- *
- * ```ts
- * export const ApiWorker = Cloudflare.Worker(Api, { main }, ApiLive);
- * export const WebWorker = Cloudflare.Worker(Web, { main },
- *   WebLive.pipe(Layer.provide(Cloudflare.Worker.ref(Api))));
- * ```
- *
- * Lives here rather than in `Workers/Worker.ts` because that module is
- * already in an import cycle with several consumers of the deploy seam;
- * re-exported by the barrel.
+ * Build the Cloudflare deploy form. The native `Worker` const is passed in
+ * by `Workers/Worker.ts` (which owns the public identifier) rather than
+ * imported — that keeps this module out of Worker.ts's import cycle.
  */
-export const Worker: typeof CloudflareWorker & {
-  /** Deploy a worker definition (shared-module form). */
-  <Self, WOut, RIn>(
-    cls: Effect.Effect<WOut, never, any>,
-    props: CloudflareWorkerTargetProps,
-    layer: Layer.Layer<Self, never, RIn | GenericWorkerTarget | HostRef>,
-  ): Layer.Layer<
-    Self | DeploymentService<WOut, "cloudflare">,
-    never,
-    Exclude<RIn, GenericWorkerTarget | HostRef>
-  >;
-  /** Deploy an impl effect directly (single-module form). */
-  <WOut, Self, I extends Effect.Effect<any, any, any>>(
-    cls: Effect.Effect<WOut, never, any> & {
-      make: (impl: I) => Layer.Layer<Self, never, any>;
+export const makeCloudflareDeploy = (CloudflareWorker: any) => {
+  const adapter: WorkerDeployAdapter<"cloudflare"> = {
+    kind: CLOUDFLARE_ENGINE,
+    target: cloudflareTarget,
+    callerBinding,
+    makeNative: (clsId, props: CloudflareWorkerTargetProps, impl) => {
+      const nativeCls = (CloudflareWorker as any)(clsId);
+      const nativeProps = Effect.gen(function* () {
+        const env: Record<string, unknown> = {};
+        // The gateway secret rides as a `secret_text` binding (the provider
+        // lowers `Redacted` env values to secrets); `makeGatewayFetch` reads
+        // it back from the worker env at runtime. At runtime the deploy
+        // module re-executes, but the secret already lives in the deployed
+        // env — mint nothing.
+        if (!globalThis.__ALCHEMY_RUNTIME__) {
+          const secret = yield* Random(gatewaySecretId(clsId), { bytes: 32 });
+          env[FLEET_SECRET_VAR] = secret.text;
+        }
+        return { ...props, env } as WorkerProps;
+      });
+      return {
+        layer: nativeCls.make(nativeProps, impl),
+        instance: nativeCls.Self,
+      };
     },
-    props: CloudflareWorkerTargetProps,
-    impl: I,
-  ): Layer.Layer<
-    Self | DeploymentService<WOut, "cloudflare">,
-    never,
-    Extract<Effect.Services<I>, DeploymentService<any, string>>
-  >;
-  readonly ref: <WOut>(
-    cls: Effect.Effect<WOut, never, any>,
-  ) => Layer.Layer<HostRef, never, DeploymentService<WOut, "cloudflare">>;
-} = Object.assign(
-  (...args: any[]) =>
-    // The portable deploy form leads with the tag; every native form
-    // leads with a string id (or takes none at all).
-    args.length === 3 && typeof args[0] !== "string"
-      ? deployWorker(args[0], args[1], args[2])
-      : (CloudflareWorker as any)(...args),
-  CloudflareWorker,
-  { ref: workerRef },
-) as any;
+  };
+
+  return makeWorkerDeploy(adapter);
+};

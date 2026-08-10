@@ -2086,7 +2086,7 @@ export const isSelf = (value: unknown): value is Self =>
  * };
  * ```
  */
-export const Worker: ResourceClassLike<Worker> &
+const NativeWorker: ResourceClassLike<Worker> &
   Effect.Effect<
     Worker & WorkerRuntimeContext & RuntimeContext,
     never,
@@ -2223,3 +2223,62 @@ export const Worker: ResourceClassLike<Worker> &
   },
   { URL },
 );
+
+// ── The public `Cloudflare.Worker` ─────────────────────────────────────
+// The native resource/class factory above, plus the portable DEPLOY form
+// (`Cloudflare.Worker(cls, props, implOrDefinition)`) and its `.ref`
+// companion. The deploy machinery lives in ../WorkerDeploy.ts and is
+// constructed LAZILY with the native const passed as a parameter — so
+// this module stays out of the deploy module's import graph and the
+// documented TDZ cycles keep resolving at call time.
+import {
+  makeCloudflareDeploy,
+  type CloudflareWorkerTargetProps,
+} from "../WorkerDeploy.ts";
+import type {
+  DeploymentService,
+  HostRef,
+  WorkerTarget as GenericWorkerTarget,
+} from "../../Worker/Engine.ts";
+
+let deployForm: ReturnType<typeof makeCloudflareDeploy> | undefined;
+const deploy = () => (deployForm ??= makeCloudflareDeploy(NativeWorker));
+
+export const Worker: typeof NativeWorker & {
+  /** Deploy a worker definition (shared-module form). */
+  <Self, WOut, RIn>(
+    cls: Effect.Effect<WOut, never, any>,
+    props: CloudflareWorkerTargetProps,
+    layer: Layer.Layer<Self, never, RIn | GenericWorkerTarget | HostRef>,
+  ): Layer.Layer<
+    Self | DeploymentService<WOut, "cloudflare">,
+    never,
+    Exclude<RIn, GenericWorkerTarget | HostRef>
+  >;
+  /** Deploy an impl effect directly (single-module form). */
+  <WOut, Self, I extends Effect.Effect<any, any, any>>(
+    cls: Effect.Effect<WOut, never, any> & {
+      make: (impl: I) => Layer.Layer<Self, never, any>;
+    },
+    props: CloudflareWorkerTargetProps,
+    impl: I,
+  ): Layer.Layer<
+    Self | DeploymentService<WOut, "cloudflare">,
+    never,
+    Extract<Effect.Services<I>, DeploymentService<any, string>>
+  >;
+  readonly ref: <WOut>(
+    cls: Effect.Effect<WOut, never, any>,
+  ) => Layer.Layer<HostRef, never, DeploymentService<WOut, "cloudflare">>;
+} = Object.assign(
+  (...args: any[]) =>
+    // The portable deploy form leads with the tag; every native form
+    // leads with a string id (or takes none at all).
+    args.length === 3 && typeof args[0] !== "string"
+      ? deploy().deployWorker(args[0], args[1], args[2])
+      : (NativeWorker as any)(...args),
+  NativeWorker,
+  {
+    ref: (cls: Effect.Effect<any, never, any>) => deploy().workerRef(cls),
+  },
+) as any;

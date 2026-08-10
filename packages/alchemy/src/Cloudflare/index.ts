@@ -115,7 +115,3 @@ export * from "./Workflows/index.ts";
 // "alchemy/Cloudflare" (see Workers/Sources/Rolldown.ts), so they must stay top-level.
 export { makeDurableObjectBridge, makeWorkerBridge } from "./Workers/index.ts";
 export { makeWorkflowBridge } from "./Workflows/index.ts";
-
-// The augmented `Worker` (native forms + the portable deploy form and
-// `.ref`) wins over the star re-export from ./Workers/index.ts.
-export { Worker } from "./WorkerDeploy.ts";
