@@ -1,3 +1,5 @@
+// Alchemy modifications are licensed under Apache-2.0.
+// This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
  * Ambient declarations for the vendored `@astrojs/cloudflare` runtime
  * (adapted from upstream `virtual.d.ts`, minus the wrangler/vite-plugin

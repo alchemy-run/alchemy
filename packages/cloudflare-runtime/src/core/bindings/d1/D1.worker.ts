@@ -1,3 +1,5 @@
+// Alchemy modifications are licensed under Apache-2.0.
+// This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
  * Local D1 database simulator, adapted from Miniflare's D1 plugin workers
  * (`workers-sdk/packages/miniflare/src/workers/d1/*`), collapsed into a

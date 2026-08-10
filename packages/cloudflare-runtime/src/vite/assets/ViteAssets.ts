@@ -1,3 +1,5 @@
+// Alchemy modifications are licensed under Apache-2.0.
+// This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 import { loadInternalWorker } from "../../core/internal/internal-worker.ts";
 import * as Assets from "../../core/bindings/assets/Assets.ts";
 import * as Loopback from "../../core/globals/Loopback.ts";

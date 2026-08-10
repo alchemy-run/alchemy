@@ -1,3 +1,5 @@
+// Alchemy modifications are licensed under Apache-2.0.
+// This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 import { describe, it, vi } from "vitest";
 import { mockJaegerBinding } from "../../../shared/tracing.ts";
 import { Analytics } from "../src/analytics.ts";

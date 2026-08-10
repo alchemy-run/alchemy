@@ -11,9 +11,6 @@ export class Website extends Cloudflare.Website.Vite<Website>()("Website", {
     BUCKET: Bucket,
     BACKEND: Backend,
   },
-  assets: {
-    runWorkerFirst: true,
-  },
 }) {}
 
 export type WebsiteEnv = Cloudflare.InferEnv<typeof Website>;

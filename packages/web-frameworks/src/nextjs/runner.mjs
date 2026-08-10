@@ -1,3 +1,5 @@
+// Alchemy modifications are licensed under Apache-2.0.
+// This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 // Programmatic @opennextjs/cloudflare build runner — NO wrangler binary, NO
 // wrangler.json. Executed as a disposable child process (see Build.ts): the
 // upstream pipeline mutates cwd-coupled module state, spawns `next build`, and

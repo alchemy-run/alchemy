@@ -3,7 +3,7 @@
   "version": "2.0.0-beta.70",
   "description": "Framework build and development integrations for Alchemy.",
   "homepage": "https://alchemy.run",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "author": "Sam Goodwin <sam@alchemy.run>",
   "keywords": [
     "alchemy",
@@ -23,13 +23,15 @@
   "sideEffects": false,
   "files": [
     "src",
-    "dist"
+    "dist",
+    "NOTICE",
+    "THIRD_PARTY_LICENSES.md"
   ],
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
-    "build": "tsdown && tsc -b --force tsconfig.json && cp src/nextjs/runner.mjs dist/nextjs/runner.mjs",
+    "build": "tsdown && tsc -b --force tsconfig.json && cp src/nextjs/runner.mjs dist/nextjs/runner.mjs && bun ../../scripts/copy-package-files.ts cloudflare-frameworks",
     "clean": "rm -rf dist",
     "test": "vitest run",
     "test:core": "vitest run src/core/test",

@@ -1,3 +1,5 @@
+// Alchemy modifications are licensed under Apache-2.0.
+// This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
  * Wrangler-free workerd prerenderer: the build-side driver of the
  * `__astro_*` prerender protocol, ported from `@astrojs/cloudflare` v14.1.3

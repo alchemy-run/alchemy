@@ -23,10 +23,11 @@
   },
   "files": [
     "lib",
-    "src"
+    "src",
+    "NOTICE"
   ],
   "scripts": {
-    "build": "tsc -b"
+    "build": "tsc -b && bun ../../scripts/copy-package-files.ts pr-package"
   },
   "exports": {
     ".": {

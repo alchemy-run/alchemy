@@ -24,17 +24,19 @@
   "files": [
     "bin",
     "lib",
-    "src"
+    "src",
+    "NOTICE",
+    "THIRD_PARTY_LICENSES.md"
   ],
   "type": "module",
   "sideEffects": false,
   "scripts": {
     "clear:state": "cd ../../ && bun clear:state",
     "dev": "tsdown --watch",
-    "build": "rm -rf lib && tsc -b --force && tsc -b tsconfig.bin.json --force && bun bundle",
+    "build": "rm -rf lib && tsc -b --force && tsc -b tsconfig.bin.json --force && bun bundle && bun ../../scripts/copy-package-files.ts alchemy",
     "bundle": "tsdown",
     "bundle:watch": "tsdown --watch",
-    "publish:npm": "cp ../README.md . && bun publish && rm README.md",
+    "publish:npm": "bun publish",
     "test": "alchemy-test",
     "test:benchmark": "tsx --tsconfig tsconfig.test.json test/types.benchmark.ts",
     "nuke": "cd ../../ && bun nuke"
