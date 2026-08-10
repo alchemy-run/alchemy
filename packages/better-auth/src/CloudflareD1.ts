@@ -21,7 +21,6 @@ import type { BetterAuthMigrationError } from "./Errors.ts";
  * @layer
  * @provides BetterAuth.Database
  * @product D1
- * @category Cloudflare
  *
  * @section Using D1 as the auth database
  * Provide the layer on the Worker impl effect that yields `BetterAuth`.

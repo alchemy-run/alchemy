@@ -25,7 +25,6 @@ const open = (path: string): Effect.Effect<BunDatabase, never, Scope.Scope> =>
  * @layer
  * @provides BetterAuth.Database
  * @product SQLite
- * @category Local & custom
  *
  * @section Local development
  * @example File-backed auth for `alchemy dev`

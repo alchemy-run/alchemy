@@ -13,7 +13,6 @@ import { Database, type DatabaseInput } from "./Database.ts";
  * @layer
  * @provides BetterAuth.Database
  * @product Memory
- * @category Local & custom
  *
  * @section Testing
  * @example Unit-testing auth flows without a database

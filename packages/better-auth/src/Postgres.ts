@@ -261,7 +261,6 @@ export const makePostgresService = (
  * @provides BetterAuth.Database
  * @peer pg
  * @product Postgres
- * @category Postgres
  *
  * @section Connecting with a resource Output
  * Resource Outputs are bound into the host environment at deploy and read

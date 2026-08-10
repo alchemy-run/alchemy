@@ -38,7 +38,6 @@ export interface DrizzleLayerConfig {
  * @provides BetterAuth.Database
  * @peer drizzle-orm
  * @product Drizzle
- * @category Local & custom
  *
  * @section Bringing your own Drizzle db
  * @example Postgres drizzle instance with a generated auth schema

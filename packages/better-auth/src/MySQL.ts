@@ -130,7 +130,6 @@ export const makeMySQLService = (
  * @provides BetterAuth.Database
  * @peer mysql2
  * @product MySQL
- * @category MySQL
  *
  * @section Connecting to PlanetScale MySQL
  * PlanetScale requires TLS — pass it in the URL's `ssl` query parameter

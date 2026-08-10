@@ -41,7 +41,6 @@ export interface CloudflareHyperdriveOptions {
  * @peer pg
  * @peer mysql2
  * @product Hyperdrive
- * @category Cloudflare
  *
  * @section Pooled Postgres through Hyperdrive
  * The Worker connects over TCP through Hyperdrive's pooler; auth reads

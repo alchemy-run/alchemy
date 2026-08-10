@@ -278,7 +278,6 @@ const transientRetry = <A, E extends { _tag: string }, R>(
  * @peer kysely
  * @peer @distilled.cloud/aws
  * @product Aurora
- * @category AWS
  *
  * @section Lambda with an Aurora-backed BetterAuth
  * Pass the `AWS.RDS.Aurora` composite directly — the layer wires the

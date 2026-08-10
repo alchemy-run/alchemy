@@ -77,7 +77,6 @@ const openPool = (
  * @provides BetterAuth.Database
  * @peer @neondatabase/serverless
  * @product Neon
- * @category Postgres
  *
  * @section Connecting from a Worker or Lambda
  * The `connectionUri` Output binds into the host environment at deploy
