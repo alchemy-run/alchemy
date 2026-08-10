@@ -17,7 +17,7 @@ import { createConfigPlugin } from "../config-plugin.ts";
 import framework, {
   DEFAULT_TARGET_SPECIFIER,
   isAstroTarget,
-  make,
+  layer as toLayer,
   makeAstroInlineConfig,
   NODE_ENVIRONMENTS,
   type AstroTarget,
@@ -550,7 +550,7 @@ describe("vendored runtime purity", () => {
 describe("framework factory", () => {
   it("default-exports a factory producing a Layer<Framework>", () => {
     expect(Layer.isLayer(framework({}))).toBe(true);
-    expect(Layer.isLayer(make())).toBe(true);
+    expect(Layer.isLayer(toLayer())).toBe(true);
   });
 
   it("accepts the harness's target-scoped carriage and the deprecated vite alias", () => {
@@ -600,7 +600,7 @@ describe("deploy-target resolution", () => {
         return Effect.succeed(OUTPUT);
       },
     };
-    const layer = make({ target }).pipe(Layer.provide(NodeServices.layer));
+    const layer = toLayer({ target }).pipe(Layer.provide(NodeServices.layer));
     const output = await run(layer, build);
     expect(output).toEqual(OUTPUT);
     expect(contexts).toHaveLength(1);
@@ -609,7 +609,7 @@ describe("deploy-target resolution", () => {
   });
 
   it("fails with a FrameworkError when the resolved target is not an AstroTarget", async () => {
-    const layer = make({
+    const layer = toLayer({
       target: { platform: "test", config: {} } as unknown as AstroTarget,
     }).pipe(Layer.provide(NodeServices.layer));
     const error = await run(layer, Effect.flip(build));
@@ -624,7 +624,7 @@ describe("deploy-target resolution", () => {
 
   it("applies a target factory to targetConfig", async () => {
     const configs: Array<unknown> = [];
-    const layer = make({
+    const layer = toLayer({
       target: (config: { flag: boolean }) => {
         configs.push(config);
         return {

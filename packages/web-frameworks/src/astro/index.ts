@@ -1,6 +1,7 @@
-import { make } from "./Astro.ts";
+import { layer } from "./Astro.ts";
 
 export {
+  layer,
   make,
   makeAstroInlineConfig,
   type AstroConfigInputs,
@@ -35,7 +36,7 @@ interface HarnessOptions {
  * default Cloudflare target module as its config.
  */
 const framework = (options?: HarnessOptions) =>
-  make({
+  layer({
     targetConfig: {
       worker: options?.target?.cloudflare?.worker ?? options?.vite,
     },

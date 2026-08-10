@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Semaphore from "effect/Semaphore";
 import * as NodePath from "node:path";
 import type * as ViteModule from "vite";
 import type { Config as WakuConfig } from "waku/config";
@@ -399,6 +400,45 @@ export const makeWakuConfigInput = (inputs: WakuConfigInputs): WakuConfig => {
  */
 const INITIAL_NODE_ENV = process.env.NODE_ENV;
 
+/**
+ * Serializes cwd swaps across concurrent builds in one process (the same
+ * discipline as the source provider's dev-server startup lock).
+ */
+const cwdLock = Semaphore.makeUnsafe(1);
+
+/**
+ * Run `effect` with `process.cwd()` set to the project root, restoring the
+ * previous cwd afterwards. Waku's toolchain assumes cwd == root: the
+ * html-shell plugin declares a cwd-relative `index.html` client input (a
+ * root outside the cwd makes `vite:build-html` emit an invalid
+ * `../index.html` asset name) and reads the html shell with bare relative
+ * paths. A no-op when the cwd already is the root.
+ */
+const withRootCwd = <A, E, R>(
+  root: string,
+  effect: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  Effect.flatMap(
+    Effect.sync(() => process.cwd() === NodePath.resolve(root)),
+    (isRoot) =>
+      isRoot
+        ? effect
+        : Semaphore.withPermits(
+            cwdLock,
+            1,
+          )(
+            Effect.acquireUseRelease(
+              Effect.sync(() => {
+                const previous = process.cwd();
+                process.chdir(root);
+                return previous;
+              }),
+              () => effect,
+              (previous) => Effect.sync(() => process.chdir(previous)),
+            ),
+          ),
+  );
+
 const PREVIEW_SERVER_GLOBAL = "__WAKU_START_PREVIEW_SERVER__";
 
 /** The shape waku's `unstable_startPreviewServer` expects the global to produce. */
@@ -482,256 +522,257 @@ interface ProjectModules {
  * Deploy-target resolution happens per operation: platform-specific halves
  * (adapter module, bundler plugins) come exclusively from the resolved
  * {@link WakuTarget} — this module contains no platform imports.
+ *
+ * Returns the service implementation as an Effect (the alchemy-side
+ * `FrameworkModule` contract); use {@link layer} for the `Layer` form the
+ * e2e harness consumes.
  */
 export const make = (
   options?: WakuFrameworkOptions,
-): Layer.Layer<
-  FrameworkCore.Framework,
+): Effect.Effect<
+  FrameworkCore.Framework["Service"],
   never,
   FileSystem.FileSystem | Path.Path
 > =>
-  Layer.effect(
-    FrameworkCore.Framework,
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
 
-      const fail = (message: string) => (cause: unknown) =>
-        new FrameworkCore.FrameworkError({ framework: "waku", message, cause });
+    const fail = (message: string) => (cause: unknown) =>
+      new FrameworkCore.FrameworkError({ framework: "waku", message, cause });
 
-      const resolveRoot = (override: string | undefined) =>
-        Effect.sync(() => override ?? options?.root ?? process.cwd());
+    const resolveRoot = (override: string | undefined) =>
+      Effect.sync(() => override ?? options?.root ?? process.cwd());
 
-      const resolveTarget: (
-        root: string,
-      ) => Effect.Effect<WakuTarget, FrameworkCore.FrameworkError> = Effect.fn(
-        function* (root: string) {
-          const { input, config } = selectWakuTargetInput(options);
-          return yield* FrameworkCore.resolveDeployTarget<WakuTarget, unknown>(
-            root,
-            input,
-            config,
-          ).pipe(Effect.mapError(fail("Failed to resolve the deploy target")));
-        },
+    const resolveTarget: (
+      root: string,
+    ) => Effect.Effect<WakuTarget, FrameworkCore.FrameworkError> = Effect.fn(
+      function* (root: string) {
+        const { input, config } = selectWakuTargetInput(options);
+        return yield* FrameworkCore.resolveDeployTarget<WakuTarget, unknown>(
+          root,
+          input,
+          config,
+        ).pipe(Effect.mapError(fail("Failed to resolve the deploy target")));
+      },
+    );
+
+    /** Run the target's waku hooks, validating they exist (a dynamically
+     * loaded module may satisfy `DeployTarget` without the waku hooks). */
+    const useTargetHooks: (
+      target: WakuTarget,
+      context: WakuTargetContext,
+    ) => Effect.Effect<
+      {
+        adapterPath: string;
+        plugins: ReadonlyArray<ViteModule.PluginOption>;
+      },
+      FrameworkCore.FrameworkError
+    > = Effect.fn(function* (target: WakuTarget, context: WakuTargetContext) {
+      if (
+        typeof target.adapter !== "function" ||
+        typeof target.vitePlugins !== "function"
+      ) {
+        return yield* Effect.fail(
+          fail(
+            `Deploy target "${target.platform}" does not implement the waku target hooks ` +
+              "(adapter, vitePlugins) required to drive waku " +
+              context.phase,
+          )(undefined),
+        );
+      }
+      const [adapterPath, plugins] = yield* Effect.all(
+        [target.adapter(context), target.vitePlugins(context)],
+        { concurrency: "unbounded" },
+      ).pipe(
+        Effect.mapError(
+          fail(`The deploy target failed preparing the waku ${context.phase}`),
+        ),
       );
+      return { adapterPath, plugins };
+    });
 
-      /** Run the target's waku hooks, validating they exist (a dynamically
-       * loaded module may satisfy `DeployTarget` without the waku hooks). */
-      const useTargetHooks: (
-        target: WakuTarget,
-        context: WakuTargetContext,
-      ) => Effect.Effect<
-        {
-          adapterPath: string;
-          plugins: ReadonlyArray<ViteModule.PluginOption>;
-        },
-        FrameworkCore.FrameworkError
-      > = Effect.fn(function* (target: WakuTarget, context: WakuTargetContext) {
-        if (
-          typeof target.adapter !== "function" ||
-          typeof target.vitePlugins !== "function"
-        ) {
-          return yield* Effect.fail(
-            fail(
-              `Deploy target "${target.platform}" does not implement the waku target hooks ` +
-                "(adapter, vitePlugins) required to drive waku " +
-                context.phase,
-            )(undefined),
-          );
-        }
-        const [adapterPath, plugins] = yield* Effect.all(
-          [target.adapter(context), target.vitePlugins(context)],
+    const loadProject: (
+      root: string,
+    ) => Effect.Effect<ProjectModules, FrameworkCore.FrameworkError> =
+      Effect.fn(function* (root: string) {
+        const [vite, internals, vitePlugins, wakuDirectory] = yield* Effect.all(
+          [
+            FrameworkCore.loadProjectModule<typeof ViteModule>(
+              root,
+              "vite",
+            ).pipe(Effect.mapError(fail("Failed to load the project's vite"))),
+            FrameworkCore.loadProjectModule<WakuInternalsModule>(
+              root,
+              "waku/internals",
+            ).pipe(
+              Effect.mapError(
+                fail("Failed to load the project's waku/internals"),
+              ),
+            ),
+            FrameworkCore.loadProjectModule<WakuVitePluginsModule>(
+              root,
+              "waku/vite-plugins",
+            ).pipe(
+              Effect.mapError(
+                fail("Failed to load the project's waku/vite-plugins"),
+              ),
+            ),
+            FrameworkCore.resolveProjectPackageDirectory(root, "waku").pipe(
+              Effect.mapError(
+                fail("Failed to resolve the project's waku package directory"),
+              ),
+            ),
+          ],
+          { concurrency: "unbounded" },
+        );
+        return { vite, internals, vitePlugins, wakuDirectory };
+      });
+
+    /**
+     * Load the project's `waku.config.ts`/`waku.config.js` exactly the way
+     * waku's own CLI does. Waku's loader (`lib/vite-rsc/loader.ts`
+     * `loadConfig`) is NOT exported, so its semantics are replicated: an
+     * existence probe for {@link WAKU_CONFIG_FILES} at the project root
+     * (waku probes the cwd — its CLI always runs from the project),
+     * followed by `vite.runnerImport("/waku.config")` with the project's
+     * own vite. `runnerImport`'s inline config pins `root` so the
+     * root-relative id resolves identically when root !== cwd. `NODE_ENV`
+     * is set before this runs, matching waku's CLI ordering (vite#20299).
+     *
+     * Deliberate divergences from the CLI (host-process concerns):
+     * - no `loadDotEnv()` — the CLI mutates `process.env` from
+     *   `.env.local`/`.env`; here the host (alchemy/e2e) owns the process
+     *   environment and worker env comes from bindings.
+     * - no dev-server restart on config-file change — the dev handle is a
+     *   plain URL; edits to `waku.config.*` need a dev restart.
+     */
+    const loadUserConfigFile: (
+      project: ProjectModules,
+      root: string,
+    ) => Effect.Effect<WakuConfig | undefined, FrameworkCore.FrameworkError> =
+      Effect.fn(function* (project: ProjectModules, root: string) {
+        const exists = yield* Effect.all(
+          WAKU_CONFIG_FILES.map((file) => fs.exists(path.join(root, file))),
           { concurrency: "unbounded" },
         ).pipe(
           Effect.mapError(
-            fail(
-              `The deploy target failed preparing the waku ${context.phase}`,
-            ),
+            fail("Failed to probe for the project's waku.config file"),
           ),
         );
-        return { adapterPath, plugins };
+        if (!exists.some(Boolean)) {
+          return undefined;
+        }
+        return yield* Effect.tryPromise({
+          try: async () => {
+            const imported = await project.vite.runnerImport<{
+              default: WakuConfig;
+            }>("/waku.config", { root });
+            return imported.module.default;
+          },
+          catch: fail("Failed to load the project's waku.config file"),
+        });
       });
 
-      const loadProject: (
-        root: string,
-      ) => Effect.Effect<ProjectModules, FrameworkCore.FrameworkError> =
-        Effect.fn(function* (root: string) {
-          const [vite, internals, vitePlugins, wakuDirectory] =
-            yield* Effect.all(
-              [
-                FrameworkCore.loadProjectModule<typeof ViteModule>(
-                  root,
-                  "vite",
-                ).pipe(
-                  Effect.mapError(fail("Failed to load the project's vite")),
-                ),
-                FrameworkCore.loadProjectModule<WakuInternalsModule>(
-                  root,
-                  "waku/internals",
-                ).pipe(
-                  Effect.mapError(
-                    fail("Failed to load the project's waku/internals"),
-                  ),
-                ),
-                FrameworkCore.loadProjectModule<WakuVitePluginsModule>(
-                  root,
-                  "waku/vite-plugins",
-                ).pipe(
-                  Effect.mapError(
-                    fail("Failed to load the project's waku/vite-plugins"),
-                  ),
-                ),
-                FrameworkCore.resolveProjectPackageDirectory(root, "waku").pipe(
-                  Effect.mapError(
-                    fail(
-                      "Failed to resolve the project's waku package directory",
-                    ),
-                  ),
-                ),
-              ],
-              { concurrency: "unbounded" },
-            );
-          return { vite, internals, vitePlugins, wakuDirectory };
-        });
-
-      /**
-       * Load the project's `waku.config.ts`/`waku.config.js` exactly the way
-       * waku's own CLI does. Waku's loader (`lib/vite-rsc/loader.ts`
-       * `loadConfig`) is NOT exported, so its semantics are replicated: an
-       * existence probe for {@link WAKU_CONFIG_FILES} at the project root
-       * (waku probes the cwd — its CLI always runs from the project),
-       * followed by `vite.runnerImport("/waku.config")` with the project's
-       * own vite. `runnerImport`'s inline config pins `root` so the
-       * root-relative id resolves identically when root !== cwd. `NODE_ENV`
-       * is set before this runs, matching waku's CLI ordering (vite#20299).
-       *
-       * Deliberate divergences from the CLI (host-process concerns):
-       * - no `loadDotEnv()` — the CLI mutates `process.env` from
-       *   `.env.local`/`.env`; here the host (alchemy/e2e) owns the process
-       *   environment and worker env comes from bindings.
-       * - no dev-server restart on config-file change — the dev handle is a
-       *   plain URL; edits to `waku.config.*` need a dev restart.
-       */
-      const loadUserConfigFile: (
-        project: ProjectModules,
-        root: string,
-      ) => Effect.Effect<WakuConfig | undefined, FrameworkCore.FrameworkError> =
-        Effect.fn(function* (project: ProjectModules, root: string) {
-          const exists = yield* Effect.all(
-            WAKU_CONFIG_FILES.map((file) => fs.exists(path.join(root, file))),
-            { concurrency: "unbounded" },
-          ).pipe(
-            Effect.mapError(
-              fail("Failed to probe for the project's waku.config file"),
-            ),
-          );
-          if (!exists.some(Boolean)) {
-            return undefined;
-          }
-          return yield* Effect.tryPromise({
-            try: async () => {
-              const imported = await project.vite.runnerImport<{
-                default: WakuConfig;
-              }>("/waku.config", { root });
-              return imported.module.default;
-            },
-            catch: fail("Failed to load the project's waku.config file"),
-          });
-        });
-
-      const makeConfig: (
+    const makeConfig: (
+      project: ProjectModules,
+      root: string,
+      inputs: {
+        adapterPath: string;
+        plugins: ReadonlyArray<ViteModule.PluginOption>;
+      },
+    ) => Effect.Effect<ResolvedWakuConfig, FrameworkCore.FrameworkError> =
+      Effect.fn(function* (
         project: ProjectModules,
         root: string,
         inputs: {
           adapterPath: string;
           plugins: ReadonlyArray<ViteModule.PluginOption>;
         },
-      ) => Effect.Effect<ResolvedWakuConfig, FrameworkCore.FrameworkError> =
-        Effect.fn(function* (
-          project: ProjectModules,
-          root: string,
-          inputs: {
-            adapterPath: string;
-            plugins: ReadonlyArray<ViteModule.PluginOption>;
-          },
-        ) {
-          const fileConfig = yield* loadUserConfigFile(project, root);
-          const userConfig = mergeUserWakuConfig({
-            file: fileConfig,
-            inline: options?.waku,
-            mergeViteConfig: project.vite.mergeConfig,
-          });
-          if (userConfig?.unstable_adapter !== undefined) {
-            return yield* Effect.fail(
-              fail(
-                `The waku config sets unstable_adapter (${JSON.stringify(userConfig.unstable_adapter)}), ` +
-                  "but the deploy target owns the server adapter " +
-                  `(it injects ${JSON.stringify(inputs.adapterPath)}). ` +
-                  "Remove unstable_adapter from waku.config.ts/waku.config.js (and from the " +
-                  "integration's waku options); to change the deploy platform, pass a different " +
-                  "deploy target to the integration instead.",
-              )(undefined),
-            );
-          }
-          return project.internals.unstable_resolveConfig(
-            makeWakuConfigInput({
-              adapterPath: inputs.adapterPath,
-              // The server-entry resolver goes first so
-              // `virtual:waku/server-entry` (the wrappable-handler seam a user
-              // worker entry imports) resolves in dev, build, and the SSG
-              // preview server alike.
-              plugins: [
-                makeWakuServerEntryPlugin(project.wakuDirectory),
-                ...inputs.plugins,
-              ],
-              userConfig,
-            }),
-          );
+      ) {
+        const fileConfig = yield* loadUserConfigFile(project, root);
+        const userConfig = mergeUserWakuConfig({
+          file: fileConfig,
+          inline: options?.waku,
+          mergeViteConfig: project.vite.mergeConfig,
         });
+        if (userConfig?.unstable_adapter !== undefined) {
+          return yield* Effect.fail(
+            fail(
+              `The waku config sets unstable_adapter (${JSON.stringify(userConfig.unstable_adapter)}), ` +
+                "but the deploy target owns the server adapter " +
+                `(it injects ${JSON.stringify(inputs.adapterPath)}). ` +
+                "Remove unstable_adapter from waku.config.ts/waku.config.js (and from the " +
+                "integration's waku options); to change the deploy platform, pass a different " +
+                "deploy target to the integration instead.",
+            )(undefined),
+          );
+        }
+        return project.internals.unstable_resolveConfig(
+          makeWakuConfigInput({
+            adapterPath: inputs.adapterPath,
+            // The server-entry resolver goes first so
+            // `virtual:waku/server-entry` (the wrappable-handler seam a user
+            // worker entry imports) resolves in dev, build, and the SSG
+            // preview server alike.
+            plugins: [
+              makeWakuServerEntryPlugin(project.wakuDirectory),
+              ...inputs.plugins,
+            ],
+            userConfig,
+          }),
+        );
+      });
 
-      return FrameworkCore.Framework.of({
-        build: Effect.fn(function* (buildOptions) {
-          const root = yield* resolveRoot(buildOptions?.root);
-          const target = yield* resolveTarget(root);
-          if (target.build !== undefined) {
-            // Wholesale build takeover: the target owns the entire pipeline.
-            return yield* target
-              .build({ root, framework: "waku" })
-              .pipe(
-                Effect.provideService(FileSystem.FileSystem, fs),
-                Effect.provideService(Path.Path, path),
-                Effect.mapError(fail("The deploy target's build failed")),
-              );
-          }
-          const project = yield* loadProject(root);
-          const hooks = yield* useTargetHooks(target, {
-            root,
-            wakuDirectory: project.wakuDirectory,
-            phase: "build",
-          });
-          // waku's CLI sets this before loading anything; waku's
-          // environmentsPlugin bakes `process.env.NODE_ENV` into `define`.
-          yield* Effect.sync(() => {
-            process.env.NODE_ENV = INITIAL_NODE_ENV ?? "production";
-          });
-          const wakuConfig = yield* makeConfig(project, root, hooks);
-          // Entry selection (the user-entry seam): when the deploy target
-          // carries a user worker entry, the chunk built from it must become
-          // `serverModules[0]` — waku's own `server/index.js` remains an
-          // ordinary chunk the user entry imports (via
-          // `virtual:waku/server-entry`). Without one, waku's own `index`
-          // entry chunk is pinned by name as before.
-          const userEntry = FrameworkCore.resolveDeployTargetEntry(target, {
-            root,
-          });
-          const collector = yield* FrameworkCore.makeBuildOutputCollector({
-            entryEnvironment: "rsc",
-            selectEntry:
-              userEntry !== undefined
-                ? FrameworkCore.selectEntryByFacade(userEntry)
-                : (chunk) => chunk.name === WAKU_SERVER_ENTRY_MODULE,
-          }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
-          yield* Effect.tryPromise({
+    return FrameworkCore.Framework.of({
+      build: Effect.fn(function* (buildOptions) {
+        const root = yield* resolveRoot(buildOptions?.root);
+        const target = yield* resolveTarget(root);
+        if (target.build !== undefined) {
+          // Wholesale build takeover: the target owns the entire pipeline.
+          return yield* target
+            .build({ root, framework: "waku" })
+            .pipe(
+              Effect.provideService(FileSystem.FileSystem, fs),
+              Effect.provideService(Path.Path, path),
+              Effect.mapError(fail("The deploy target's build failed")),
+            );
+        }
+        const project = yield* loadProject(root);
+        const hooks = yield* useTargetHooks(target, {
+          root,
+          wakuDirectory: project.wakuDirectory,
+          phase: "build",
+        });
+        // waku's CLI sets this before loading anything; waku's
+        // environmentsPlugin bakes `process.env.NODE_ENV` into `define`.
+        yield* Effect.sync(() => {
+          process.env.NODE_ENV = INITIAL_NODE_ENV ?? "production";
+        });
+        const wakuConfig = yield* makeConfig(project, root, hooks);
+        // Entry selection (the user-entry seam): when the deploy target
+        // carries a user worker entry, the chunk built from it must become
+        // `serverModules[0]` — waku's own `server/index.js` remains an
+        // ordinary chunk the user entry imports (via
+        // `virtual:waku/server-entry`). Without one, waku's own `index`
+        // entry chunk is pinned by name as before.
+        const userEntry = FrameworkCore.resolveDeployTargetEntry(target, {
+          root,
+        });
+        const collector = yield* FrameworkCore.makeBuildOutputCollector({
+          entryEnvironment: "rsc",
+          selectEntry:
+            userEntry !== undefined
+              ? FrameworkCore.selectEntryByFacade(userEntry)
+              : (chunk) => chunk.name === WAKU_SERVER_ENTRY_MODULE,
+        }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
+        // The whole build runs under the project root cwd: waku's
+        // html-shell plugin declares a cwd-relative `index.html` client
+        // input and reads the shell with bare relative paths (see
+        // withRootCwd).
+        yield* withRootCwd(
+          root,
+          Effect.tryPromise({
             try: async () => {
               const builder = await project.vite.createBuilder(
                 {
@@ -762,37 +803,43 @@ export const make = (
               }
             },
             catch: fail("Failed to build"),
-          });
-          // Disk re-read: waku writes `__waku_build_metadata.js` and prunes
-          // static-only server chunks during `buildApp` hooks, after the
-          // in-memory `writeBundle` capture.
-          const output = yield* collector
-            .collect({ fromDisk: true })
-            .pipe(Effect.mapError((error) => fail(error.message)(error.cause)));
-          return yield* FrameworkCore.applyDeployTargetFinish(target, output, {
+          }),
+        );
+        // Disk re-read: waku writes `__waku_build_metadata.js` and prunes
+        // static-only server chunks during `buildApp` hooks, after the
+        // in-memory `writeBundle` capture.
+        const output = yield* collector
+          .collect({ fromDisk: true })
+          .pipe(Effect.mapError((error) => fail(error.message)(error.cause)));
+        return yield* FrameworkCore.applyDeployTargetFinish(target, output, {
+          root,
+          framework: "waku",
+        }).pipe(
+          Effect.provideService(FileSystem.FileSystem, fs),
+          Effect.provideService(Path.Path, path),
+          Effect.mapError(fail("The deploy target's finishing pass failed")),
+        );
+      }),
+      dev: Effect.fn(function* (devOptions) {
+        const root = yield* resolveRoot(devOptions?.root);
+        const target = yield* resolveTarget(root);
+        const project = yield* loadProject(root);
+        const hooks = yield* useTargetHooks(target, {
+          root,
+          wakuDirectory: project.wakuDirectory,
+          phase: "dev",
+        });
+        yield* Effect.sync(() => {
+          process.env.NODE_ENV = INITIAL_NODE_ENV ?? "development";
+        });
+        const wakuConfig = yield* makeConfig(project, root, hooks);
+        const port = devOptions?.port ?? options?.port;
+        // The dev server *starts* under the project root cwd (waku
+        // resolves its html shell and relative inputs from the cwd at
+        // startup); the cwd is restored once the server is listening.
+        const server = yield* Effect.acquireRelease(
+          withRootCwd(
             root,
-            framework: "waku",
-          }).pipe(
-            Effect.provideService(FileSystem.FileSystem, fs),
-            Effect.provideService(Path.Path, path),
-            Effect.mapError(fail("The deploy target's finishing pass failed")),
-          );
-        }),
-        dev: Effect.fn(function* (devOptions) {
-          const root = yield* resolveRoot(devOptions?.root);
-          const target = yield* resolveTarget(root);
-          const project = yield* loadProject(root);
-          const hooks = yield* useTargetHooks(target, {
-            root,
-            wakuDirectory: project.wakuDirectory,
-            phase: "dev",
-          });
-          yield* Effect.sync(() => {
-            process.env.NODE_ENV = INITIAL_NODE_ENV ?? "development";
-          });
-          const wakuConfig = yield* makeConfig(project, root, hooks);
-          const port = devOptions?.port ?? options?.port;
-          const server = yield* Effect.acquireRelease(
             Effect.tryPromise({
               try: async () => {
                 const server = await project.vite.createServer({
@@ -814,18 +861,30 @@ export const make = (
               },
               catch: fail("Failed to start the waku dev server"),
             }),
-            (server) => Effect.promise(async () => await server.close()),
+          ),
+          (server) => Effect.promise(async () => await server.close()),
+        );
+        const url = server.resolvedUrls?.local[0];
+        if (url === undefined) {
+          return yield* Effect.fail(
+            fail("Could not determine the URL of the waku dev server")(
+              undefined,
+            ),
           );
-          const url = server.resolvedUrls?.local[0];
-          if (url === undefined) {
-            return yield* Effect.fail(
-              fail("Could not determine the URL of the waku dev server")(
-                undefined,
-              ),
-            );
-          }
-          return { url };
-        }),
-      });
-    }),
-  );
+        }
+        return { url };
+      }),
+    });
+  });
+
+/**
+ * The `Layer` form of {@link make} — the shape the e2e harness's framework
+ * factory contract expects (`(options) => Layer<Framework>`).
+ */
+export const layer = (
+  options?: WakuFrameworkOptions,
+): Layer.Layer<
+  FrameworkCore.Framework,
+  never,
+  FileSystem.FileSystem | Path.Path
+> => Layer.effect(FrameworkCore.Framework, make(options));

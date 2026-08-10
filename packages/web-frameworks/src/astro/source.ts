@@ -850,7 +850,7 @@ export const buildInChild = (config: AstroBuildChildConfig) =>
     });
     const astro = yield* FrameworkCore.Framework.pipe(
       Effect.provide(
-        Astro.make({
+        Astro.layer({
           root: config.rootDir,
           target: cloudflareTarget({
             worker: {
@@ -879,7 +879,7 @@ const makeAstroSourceProvider = (
   const framework = (rootDir: string, vite: CloudflareVitePluginOptions) =>
     FrameworkCore.Framework.pipe(
       Effect.provide(
-        Astro.make({
+        Astro.layer({
           root: rootDir,
           // This module IS the alchemy Cloudflare Worker source provider, so
           // it constructs the Cloudflare deploy target directly (as a value)

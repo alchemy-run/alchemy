@@ -18,6 +18,7 @@ import {
   isDeployTarget,
   type DeployTarget,
   type DeployTargetInput,
+  type ServerEntryChunk,
 } from "../core/index.ts";
 import type { AstroIntegration } from "astro";
 
@@ -27,6 +28,18 @@ export interface AstroTarget<Config = unknown> extends DeployTarget<Config> {
    * (`AstroInlineConfig.adapter`). Called once per `dev`/`build` operation.
    */
   readonly integration: () => AstroIntegration;
+  /**
+   * Optional entry-chunk pin for the build-output collector: astro's page
+   * modules are rolldown inputs of the `ssr` environment, so it emits many
+   * entry chunks. A target whose adapter entry is not otherwise
+   * identifiable (e.g. the AWS target's `serverEntrypoint`, which astro
+   * renames to `config.build.serverEntry`) selects the chunk that becomes
+   * `serverModules[0]` here. The Cloudflare target does not need it — its
+   * vite plugin wraps the worker entry with a recognizable facade.
+   */
+  readonly selectServerEntry?:
+    | ((chunk: ServerEntryChunk) => boolean)
+    | undefined;
 }
 
 /**

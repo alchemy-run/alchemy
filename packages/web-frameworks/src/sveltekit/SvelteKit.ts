@@ -73,6 +73,14 @@ export interface SvelteKitTargetConfig {
   readonly compatibilityFlags?: Array<string> | undefined;
   /** Adapter behavior (assets binding name, fallback generation). */
   readonly adapter?: SvelteKitAdapterOptions | undefined;
+  /**
+   * The kit config the framework half was constructed with
+   * ({@link SvelteKitOptions.kit}). Carried on the target config so
+   * wholesale targets that re-run the framework in a child process (the
+   * AWS target — kit's postbuild workers require `cwd === root`) can
+   * reconstruct the framework with the same options.
+   */
+  readonly kit?: Record<string, unknown> | undefined;
 }
 
 /** Inputs the framework passes when asking the target for a kit `Adapter`. */
@@ -367,6 +375,7 @@ export const make: (
     compatibilityDate: options?.compatibilityDate,
     compatibilityFlags: options?.compatibilityFlags,
     adapter: options?.adapter,
+    kit: options?.kit,
   };
 
   const resolveTarget = (root: string) =>

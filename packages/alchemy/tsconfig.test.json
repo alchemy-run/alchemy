@@ -14,7 +14,8 @@
     // Octane fixture: `.tsx` components use octane's JSX runtime, which
     // conflicts with this package's default `@opentui/solid` jsxImportSource.
     "test/Cloudflare/Website/fixtures/octane-app",
-    "test/Cloudflare/Website/fixtures/octane-spa-app"
+    "test/Cloudflare/Website/fixtures/octane-spa-app",
+    "test/AWS/Website/fixtures/octane-app"
   ],
   "compilerOptions": {
     "composite": true,

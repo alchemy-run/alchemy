@@ -1,7 +1,8 @@
-import { make, type WakuFrameworkOptions } from "./Waku.ts";
+import { layer, type WakuFrameworkOptions } from "./Waku.ts";
 
 export {
   DEFAULT_TARGET_SPECIFIER,
+  layer,
   make,
   makeWakuConfigInput,
   makeWakuServerEntryPlugin,
@@ -27,6 +28,6 @@ export {
  * carriage (`options.target.cloudflare.worker`, with the deprecated
  * top-level `vite` as alias) is read structurally by `make`.
  */
-const framework = (options?: WakuFrameworkOptions) => make(options);
+const framework = (options?: WakuFrameworkOptions) => layer(options);
 
 export default framework;

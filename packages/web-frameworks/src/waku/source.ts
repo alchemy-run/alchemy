@@ -20,7 +20,7 @@ import * as NodeCrypto from "node:crypto";
 import { createRequire } from "node:module";
 import { runBuildChild } from "../core/BuildChild.ts";
 import { makeWakuCloudflareTarget } from "./cloudflare.ts";
-import { make as makeWakuFramework } from "./Waku.ts";
+import { layer as wakuFrameworkLayer } from "./Waku.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Structural mirror of alchemy's Worker source-provider contract.
@@ -656,7 +656,7 @@ export const buildInChild = (config: WakuBuildChildConfig) =>
     return yield* waku.build({ root: config.rootDir });
   }).pipe(
     Effect.provide(
-      makeWakuFramework({
+      wakuFrameworkLayer({
         root: config.rootDir,
         waku: config.waku,
         target: makeWakuCloudflareTarget({
@@ -813,7 +813,7 @@ export const makeWakuSourceProvider = (
       const path = yield* Path.Path;
       const rootDir = rootDirOf(path);
       const queueConsumers = yield* ctx.worker.queueConsumers;
-      const framework = makeWakuFramework({
+      const framework = wakuFrameworkLayer({
         root: rootDir,
         waku: wakuConfig,
         target: makeWakuCloudflareTarget({

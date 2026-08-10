@@ -140,162 +140,173 @@ export const makeAstroInlineConfig = (
  *   the Cloudflare target the `ssr` environment executes inside workerd via
  *   the cloudflare-vite-plugin module runner, with in-memory bindings — no
  *   wrangler config anywhere. Closing the Scope stops the server.
+ *
+ * Returns the service implementation as an Effect (the alchemy-side
+ * `FrameworkModule` contract); use {@link layer} for the `Layer` form the
+ * e2e harness consumes.
  */
 export const make = <TargetConfig = unknown>(
+  options?: AstroFrameworkOptions<TargetConfig>,
+): Effect.Effect<
+  FrameworkCore.Framework["Service"],
+  never,
+  FileSystem.FileSystem | Path.Path
+> =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+
+    const fail = (message: string) => (cause: unknown) =>
+      new FrameworkCore.FrameworkError({
+        framework: "astro",
+        message,
+        cause,
+      });
+
+    const failTarget = (error: FrameworkCore.DeployTargetError) =>
+      new FrameworkCore.FrameworkError({
+        framework: "astro",
+        message: error.message,
+        cause: error.cause ?? error,
+      });
+
+    // Astro's dev()/build() record telemetry events by default.
+    yield* Effect.sync(() => {
+      process.env.ASTRO_TELEMETRY_DISABLED ??= "1";
+    });
+
+    const resolveRoot = (override: string | undefined) =>
+      Effect.sync(() =>
+        path.resolve(override ?? options?.root ?? process.cwd()),
+      );
+
+    const resolveTarget = (
+      root: string,
+    ): Effect.Effect<AstroTarget, FrameworkCore.FrameworkError> =>
+      FrameworkCore.resolveDeployTarget<AstroTarget, TargetConfig | undefined>(
+        root,
+        (options?.target ??
+          DEFAULT_TARGET_SPECIFIER) as FrameworkCore.DeployTargetInput<
+          AstroTarget,
+          TargetConfig | undefined
+        >,
+        options?.targetConfig,
+      ).pipe(
+        Effect.mapError(failTarget),
+        Effect.flatMap((target) =>
+          isAstroTarget(target)
+            ? Effect.succeed(target)
+            : Effect.fail(
+                fail(
+                  "The resolved deploy target is not an AstroTarget: it must provide an " +
+                    "`integration: () => AstroIntegration` hook",
+                )(undefined),
+              ),
+        ),
+      );
+
+    const loadAstro = (
+      root: string,
+    ): Effect.Effect<AstroModule, FrameworkCore.FrameworkError> =>
+      FrameworkCore.loadProjectModule<AstroModule>(root, "astro").pipe(
+        Effect.mapError(fail("Failed to load the project's astro")),
+      );
+
+    const makeConfig = (
+      root: string,
+      target: AstroTarget,
+      overrides?: Pick<AstroConfigInputs, "port" | "extraVitePlugins">,
+    ): AstroInlineConfig =>
+      makeAstroInlineConfig({
+        root,
+        integration: target.integration(),
+        userConfig: options?.astro,
+        ...overrides,
+      });
+
+    return FrameworkCore.Framework.of({
+      build: Effect.fn(function* (buildOptions) {
+        const root = yield* resolveRoot(buildOptions?.root);
+        const target = yield* resolveTarget(root);
+        if (target.build !== undefined) {
+          // Wholesale build takeover: the target owns the entire
+          // production build (the OpenNext-style case).
+          return yield* target
+            .build({ root, framework: "astro" })
+            .pipe(
+              Effect.provideService(FileSystem.FileSystem, fs),
+              Effect.provideService(Path.Path, path),
+              Effect.mapError(failTarget),
+            );
+        }
+        const astro = yield* loadAstro(root);
+        const collector = yield* FrameworkCore.makeBuildOutputCollector({
+          entryEnvironment: "ssr",
+          skipEnvironments: NODE_ENVIRONMENTS,
+          selectEntry: target.selectServerEntry,
+        }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
+        const config = makeConfig(root, target, {
+          extraVitePlugins: [collector.plugin],
+        });
+        yield* Effect.tryPromise({
+          try: async () => await astro.build(config),
+          catch: fail("Failed to build"),
+        });
+        // Disk re-read: astro injects the serialized SSR manifest into the
+        // entry chunk on disk *after* the bundler finishes (the in-memory
+        // capture still contains the `@@ASTRO_MANIFEST_REPLACE@@`
+        // placeholder), and prunes the prerender-only chunks.
+        const output = yield* collector
+          .collect({ fromDisk: true })
+          .pipe(Effect.mapError((error) => fail(error.message)(error.cause)));
+        // The astro build is delivered in-memory (no on-disk entry handed
+        // over), so the finish context carries no `entry`.
+        return yield* FrameworkCore.applyDeployTargetFinish(target, output, {
+          root,
+          framework: "astro",
+        }).pipe(
+          Effect.provideService(FileSystem.FileSystem, fs),
+          Effect.provideService(Path.Path, path),
+          Effect.mapError(failTarget),
+        );
+      }),
+      dev: Effect.fn(function* (devOptions) {
+        const root = yield* resolveRoot(devOptions?.root);
+        const target = yield* resolveTarget(root);
+        const astro = yield* loadAstro(root);
+        const config = makeConfig(root, target, { port: devOptions?.port });
+        const server = yield* Effect.acquireRelease(
+          Effect.tryPromise({
+            try: async () => await astro.dev(config),
+            catch: fail("Failed to start the astro dev server"),
+          }),
+          (server) => Effect.promise(async () => await server.stop()),
+        );
+        const url =
+          server.resolvedUrls?.local[0] ??
+          (typeof server.address.port === "number"
+            ? `http://localhost:${server.address.port}/`
+            : undefined);
+        if (url === undefined) {
+          return yield* Effect.fail(
+            fail("Could not determine the URL of the astro dev server")(
+              undefined,
+            ),
+          );
+        }
+        return { url };
+      }),
+    });
+  });
+
+/**
+ * The `Layer` form of {@link make} — the shape the e2e harness's framework
+ * factory contract expects (`(options) => Layer<Framework>`).
+ */
+export const layer = <TargetConfig = unknown>(
   options?: AstroFrameworkOptions<TargetConfig>,
 ): Layer.Layer<
   FrameworkCore.Framework,
   never,
   FileSystem.FileSystem | Path.Path
-> =>
-  Layer.effect(
-    FrameworkCore.Framework,
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-
-      const fail = (message: string) => (cause: unknown) =>
-        new FrameworkCore.FrameworkError({
-          framework: "astro",
-          message,
-          cause,
-        });
-
-      const failTarget = (error: FrameworkCore.DeployTargetError) =>
-        new FrameworkCore.FrameworkError({
-          framework: "astro",
-          message: error.message,
-          cause: error.cause ?? error,
-        });
-
-      // Astro's dev()/build() record telemetry events by default.
-      yield* Effect.sync(() => {
-        process.env.ASTRO_TELEMETRY_DISABLED ??= "1";
-      });
-
-      const resolveRoot = (override: string | undefined) =>
-        Effect.sync(() =>
-          path.resolve(override ?? options?.root ?? process.cwd()),
-        );
-
-      const resolveTarget = (
-        root: string,
-      ): Effect.Effect<AstroTarget, FrameworkCore.FrameworkError> =>
-        FrameworkCore.resolveDeployTarget<
-          AstroTarget,
-          TargetConfig | undefined
-        >(
-          root,
-          (options?.target ??
-            DEFAULT_TARGET_SPECIFIER) as FrameworkCore.DeployTargetInput<
-            AstroTarget,
-            TargetConfig | undefined
-          >,
-          options?.targetConfig,
-        ).pipe(
-          Effect.mapError(failTarget),
-          Effect.flatMap((target) =>
-            isAstroTarget(target)
-              ? Effect.succeed(target)
-              : Effect.fail(
-                  fail(
-                    "The resolved deploy target is not an AstroTarget: it must provide an " +
-                      "`integration: () => AstroIntegration` hook",
-                  )(undefined),
-                ),
-          ),
-        );
-
-      const loadAstro = (
-        root: string,
-      ): Effect.Effect<AstroModule, FrameworkCore.FrameworkError> =>
-        FrameworkCore.loadProjectModule<AstroModule>(root, "astro").pipe(
-          Effect.mapError(fail("Failed to load the project's astro")),
-        );
-
-      const makeConfig = (
-        root: string,
-        target: AstroTarget,
-        overrides?: Pick<AstroConfigInputs, "port" | "extraVitePlugins">,
-      ): AstroInlineConfig =>
-        makeAstroInlineConfig({
-          root,
-          integration: target.integration(),
-          userConfig: options?.astro,
-          ...overrides,
-        });
-
-      return FrameworkCore.Framework.of({
-        build: Effect.fn(function* (buildOptions) {
-          const root = yield* resolveRoot(buildOptions?.root);
-          const target = yield* resolveTarget(root);
-          if (target.build !== undefined) {
-            // Wholesale build takeover: the target owns the entire
-            // production build (the OpenNext-style case).
-            return yield* target
-              .build({ root, framework: "astro" })
-              .pipe(
-                Effect.provideService(FileSystem.FileSystem, fs),
-                Effect.provideService(Path.Path, path),
-                Effect.mapError(failTarget),
-              );
-          }
-          const astro = yield* loadAstro(root);
-          const collector = yield* FrameworkCore.makeBuildOutputCollector({
-            entryEnvironment: "ssr",
-            skipEnvironments: NODE_ENVIRONMENTS,
-          }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
-          const config = makeConfig(root, target, {
-            extraVitePlugins: [collector.plugin],
-          });
-          yield* Effect.tryPromise({
-            try: async () => await astro.build(config),
-            catch: fail("Failed to build"),
-          });
-          // Disk re-read: astro injects the serialized SSR manifest into the
-          // entry chunk on disk *after* the bundler finishes (the in-memory
-          // capture still contains the `@@ASTRO_MANIFEST_REPLACE@@`
-          // placeholder), and prunes the prerender-only chunks.
-          const output = yield* collector
-            .collect({ fromDisk: true })
-            .pipe(Effect.mapError((error) => fail(error.message)(error.cause)));
-          // The astro build is delivered in-memory (no on-disk entry handed
-          // over), so the finish context carries no `entry`.
-          return yield* FrameworkCore.applyDeployTargetFinish(target, output, {
-            root,
-            framework: "astro",
-          }).pipe(
-            Effect.provideService(FileSystem.FileSystem, fs),
-            Effect.provideService(Path.Path, path),
-            Effect.mapError(failTarget),
-          );
-        }),
-        dev: Effect.fn(function* (devOptions) {
-          const root = yield* resolveRoot(devOptions?.root);
-          const target = yield* resolveTarget(root);
-          const astro = yield* loadAstro(root);
-          const config = makeConfig(root, target, { port: devOptions?.port });
-          const server = yield* Effect.acquireRelease(
-            Effect.tryPromise({
-              try: async () => await astro.dev(config),
-              catch: fail("Failed to start the astro dev server"),
-            }),
-            (server) => Effect.promise(async () => await server.stop()),
-          );
-          const url =
-            server.resolvedUrls?.local[0] ??
-            (typeof server.address.port === "number"
-              ? `http://localhost:${server.address.port}/`
-              : undefined);
-          if (url === undefined) {
-            return yield* Effect.fail(
-              fail("Could not determine the URL of the astro dev server")(
-                undefined,
-              ),
-            );
-          }
-          return { url };
-        }),
-      });
-    }),
-  );
+> => Layer.effect(FrameworkCore.Framework, make(options));

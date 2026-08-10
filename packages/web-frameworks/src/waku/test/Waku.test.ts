@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { mergeConfig } from "vite";
 import framework, {
   DEFAULT_TARGET_SPECIFIER,
+  layer,
   make,
   makeWakuConfigInput,
   makeWakuServerEntryPlugin,
@@ -251,7 +252,10 @@ describe("adapter fork", () => {
 describe("framework factory", () => {
   it("default-exports a factory producing a Layer<Framework>", () => {
     expect(Layer.isLayer(framework({}))).toBe(true);
-    expect(Layer.isLayer(make())).toBe(true);
+    expect(Layer.isLayer(layer())).toBe(true);
+    // The alchemy-side FrameworkModule contract: `make` returns the service
+    // implementation as an Effect.
+    expect(Effect.isEffect(make())).toBe(true);
   });
 
   it("pins the server entry to waku's rsc index module", () => {

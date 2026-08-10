@@ -229,6 +229,15 @@ export interface KvSiteServerOptions {
    * `x-forwarded-host` set.
    */
   serverHost: Input<string>;
+  /**
+   * Optional dedicated image-optimization origin: requests whose path
+   * starts with `route` (e.g. `/_next/image`) are forwarded to `host`
+   * instead of the server origin (see `metadata.image` in cfcode.ts).
+   */
+  image?: {
+    route: string;
+    host: Input<string>;
+  };
 }
 
 /**
@@ -341,6 +350,8 @@ export const makeKvSite = (
       errorPage: props.errorPage,
       routerPathPrefix,
       serverHost: server?.serverHost,
+      imageRoute: server?.image?.route,
+      imageHost: server?.image?.host,
     });
 
     let distributionId: Input<string>;
@@ -647,11 +658,14 @@ const buildKvEntries = (args: {
   errorPage: string | undefined;
   routerPathPrefix: string | undefined;
   serverHost: Input<string> | undefined;
+  imageRoute: string | undefined;
+  imageHost: Input<string> | undefined;
 }): Input<Record<string, string>> =>
   Output.map(
-    ([fileList, bucketDomain, serverHost]: [
+    ([fileList, bucketDomain, serverHost, imageHost]: [
       string[] | undefined,
       string,
+      string | undefined,
       string | undefined,
     ]) => {
       const entries: Record<string, string> = {};
@@ -677,6 +691,10 @@ const buildKvEntries = (args: {
           routes: args.assetRoutes,
         },
         servers: serverHost !== undefined ? [[serverHost]] : undefined,
+        image:
+          args.imageRoute !== undefined && imageHost !== undefined
+            ? { route: args.imageRoute, host: imageHost }
+            : undefined,
       };
       entries["metadata"] = JSON.stringify(metadata);
       return entries;
@@ -686,7 +704,10 @@ const buildKvEntries = (args: {
       args.files.files,
       Output.asOutput(args.bucketDomain as any),
       Output.asOutput(args.serverHost as any),
-    ) as Output.Output<[string[] | undefined, string, string | undefined]>,
+      Output.asOutput(args.imageHost as any),
+    ) as Output.Output<
+      [string[] | undefined, string, string | undefined, string | undefined]
+    >,
   );
 
 interface KvSiteMetadata {
@@ -703,6 +724,11 @@ interface KvSiteMetadata {
    * forwards misses to — see `findNearestServer` in cfcode.ts.
    */
   servers?: Array<Array<string>> | undefined;
+  /**
+   * Dedicated image-optimization origin: requests whose path starts with
+   * `route` are forwarded to `host` — see `metadata.image` in cfcode.ts.
+   */
+  image?: { route: string; host: string } | undefined;
 }
 
 const buildRequestFunctionCode = ({

@@ -131,6 +131,12 @@
       "worker": "./dist/astro/index.js",
       "import": "./dist/astro/index.js"
     },
+    "./astro/aws": {
+      "types": "./dist/astro/aws.d.ts",
+      "bun": "./dist/astro/aws.js",
+      "worker": "./dist/astro/aws.js",
+      "import": "./dist/astro/aws.js"
+    },
     "./astro/cloudflare": {
       "types": "./dist/astro/cloudflare.d.ts",
       "bun": "./dist/astro/cloudflare.js",
@@ -142,6 +148,12 @@
       "bun": "./dist/astro/source.js",
       "worker": "./dist/astro/source.js",
       "import": "./dist/astro/source.js"
+    },
+    "./astro/entrypoints/aws-server": {
+      "types": "./dist/astro/entrypoints/aws-server.d.ts",
+      "bun": "./dist/astro/entrypoints/aws-server.js",
+      "worker": "./dist/astro/entrypoints/aws-server.js",
+      "import": "./dist/astro/entrypoints/aws-server.js"
     },
     "./astro/entrypoints/server": {
       "types": "./dist/astro/runtime/entrypoints/server.d.ts",
@@ -167,6 +179,12 @@
       "bun": "./dist/nextjs/index.js",
       "worker": "./dist/nextjs/index.js",
       "import": "./dist/nextjs/index.js"
+    },
+    "./nextjs/aws": {
+      "types": "./dist/nextjs/aws.d.ts",
+      "bun": "./dist/nextjs/aws.js",
+      "worker": "./dist/nextjs/aws.js",
+      "import": "./dist/nextjs/aws.js"
     },
     "./nextjs/source": {
       "types": "./dist/nextjs/source.d.ts",
@@ -204,6 +222,18 @@
       "worker": "./dist/octane/index.js",
       "import": "./dist/octane/index.js"
     },
+    "./octane/aws": {
+      "types": "./dist/octane/aws.d.ts",
+      "bun": "./dist/octane/aws.js",
+      "worker": "./dist/octane/aws.js",
+      "import": "./dist/octane/aws.js"
+    },
+    "./octane/aws-adapter": {
+      "types": "./dist/octane/aws-adapter.d.ts",
+      "bun": "./dist/octane/aws-adapter.js",
+      "worker": "./dist/octane/aws-adapter.js",
+      "import": "./dist/octane/aws-adapter.js"
+    },
     "./octane/cloudflare": {
       "types": "./dist/octane/cloudflare.d.ts",
       "bun": "./dist/octane/cloudflare.js",
@@ -221,6 +251,12 @@
       "bun": "./dist/sveltekit/index.js",
       "worker": "./dist/sveltekit/index.js",
       "import": "./dist/sveltekit/index.js"
+    },
+    "./sveltekit/aws": {
+      "types": "./dist/sveltekit/aws.d.ts",
+      "bun": "./dist/sveltekit/aws.js",
+      "worker": "./dist/sveltekit/aws.js",
+      "import": "./dist/sveltekit/aws.js"
     },
     "./sveltekit/cloudflare": {
       "types": "./dist/sveltekit/cloudflare.d.ts",
@@ -245,6 +281,18 @@
       "bun": "./dist/waku/adapter.js",
       "worker": "./dist/waku/adapter.js",
       "import": "./dist/waku/adapter.js"
+    },
+    "./waku/aws": {
+      "types": "./dist/waku/aws.d.ts",
+      "bun": "./dist/waku/aws.js",
+      "worker": "./dist/waku/aws.js",
+      "import": "./dist/waku/aws.js"
+    },
+    "./waku/aws-adapter": {
+      "types": "./dist/waku/aws-adapter.d.ts",
+      "bun": "./dist/waku/aws-adapter.js",
+      "worker": "./dist/waku/aws-adapter.js",
+      "import": "./dist/waku/aws-adapter.js"
     },
     "./waku/cloudflare": {
       "types": "./dist/waku/cloudflare.d.ts",
