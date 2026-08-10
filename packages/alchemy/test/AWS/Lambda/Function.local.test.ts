@@ -235,43 +235,22 @@ test.provider.skipIf(!dockerAvailable)(
             url: false,
             env: { TARGET_BUCKET: bucket.bucketName },
           });
-          return { queue, bucket, fn };
+          // The dualized RESOURCE (requires the alchemy floci fork ≥
+          // 1.6.0-alchemy.2: its reconciler's ownership scan calls lambda
+          // ListTags on the `event-source-mapping:` ARN, and creation
+          // brands it with Tags).
+          const esm = yield* AWS.Lambda.EventSourceMapping("DevEsm", {
+            functionName: fn.functionName,
+            eventSourceArn: queue.queueArn,
+            batchSize: 1,
+            enabled: true,
+          });
+          return { queue, bucket, fn, esm };
         }),
       );
       expect(outputs.queue.queueArn).toContain(":000000000000:");
       expect(outputs.fn.functionArn).toContain(":000000000000:");
-
-      // Pre-clean: the emulator container is long-lived — an interrupted
-      // earlier run may have left mappings whose pollers spin on deleted
-      // queues.
-      const leftover = yield* Lambda.listEventSourceMappings({
-        FunctionName: outputs.fn.functionName,
-      }).pipe(
-        Effect.catchTag("ResourceNotFoundException", () =>
-          Effect.succeed({ EventSourceMappings: [] }),
-        ),
-        Effect.provide(flociContext),
-      );
-      yield* Effect.forEach(leftover.EventSourceMappings ?? [], (mapping) =>
-        mapping.UUID
-          ? Lambda.deleteEventSourceMapping({ UUID: mapping.UUID }).pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              Effect.provide(flociContext),
-            )
-          : Effect.void,
-      );
-
-      // The EventSourceMapping RESOURCE is not dualized yet (floci rejects
-      // lambda ListTags on `event-source-mapping:` ARNs — see the F1
-      // fork-patch candidates), so wire it via distilled against the
-      // emulator, exactly like EsmConformance.local.test.ts.
-      const esm = yield* Lambda.createEventSourceMapping({
-        FunctionName: outputs.fn.functionName,
-        EventSourceArn: outputs.queue.queueArn,
-        BatchSize: 1,
-        Enabled: true,
-      }).pipe(Effect.provide(flociContext));
-      expect(esm.UUID).toBeDefined();
+      expect(outputs.esm.eventSourceMappingArn).toContain(":000000000000:");
 
       yield* SQS.sendMessage({
         QueueUrl: outputs.queue.queueUrl,
@@ -292,14 +271,20 @@ test.provider.skipIf(!dockerAvailable)(
       );
       expect(consumed.status).toBe(200);
 
-      // Cleanup: mapping first (stop the poller), then the stack.
-      if (esm.UUID) {
-        yield* Lambda.deleteEventSourceMapping({ UUID: esm.UUID }).pipe(
-          Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          Effect.provide(flociContext),
-        );
-      }
+      // Destroy tears down the mapping (stopping its poller), the
+      // function, the queue, and the bucket in dependency order.
       yield* stack.destroy();
+
+      const esmGone = yield* Lambda.getEventSourceMapping({
+        UUID: outputs.esm.uuid,
+      }).pipe(
+        Effect.map(() => false),
+        Effect.catchTag("ResourceNotFoundException", () =>
+          Effect.succeed(true),
+        ),
+        Effect.provide(flociContext),
+      );
+      expect(esmGone).toBe(true);
 
       const gone = yield* Lambda.getFunction({
         FunctionName: outputs.fn.functionName,

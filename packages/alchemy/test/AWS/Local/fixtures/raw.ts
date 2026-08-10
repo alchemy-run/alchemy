@@ -53,6 +53,30 @@ export const rawAwsJson = Effect.fn(function* (options: {
   );
 });
 
+/** POST an AWS query-protocol operation (SNS, …) straight at the gateway. */
+export const rawAwsQuery = Effect.fn(function* (options: {
+  service: string;
+  region: string;
+  params: Record<string, string>;
+}) {
+  const client = yield* HttpClient.HttpClient;
+  return yield* client.execute(
+    HttpClientRequest.post(`${FLOCI_ENDPOINT}/`).pipe(
+      HttpClientRequest.setHeaders({
+        "content-type": "application/x-www-form-urlencoded",
+        "x-amz-date": "20260101T000000Z",
+        authorization: `AWS4-HMAC-SHA256 Credential=test/20260101/${options.region}/${options.service}/aws4_request, SignedHeaders=host;x-amz-date, Signature=dummy`,
+      }),
+      HttpClientRequest.setBody(
+        HttpBody.text(
+          new URLSearchParams(options.params).toString(),
+          "application/x-www-form-urlencoded",
+        ),
+      ),
+    ),
+  );
+});
+
 /** Path-style S3 GET against the gateway (list the bucket's objects). */
 export const rawS3GetBucket = Effect.fn(function* (bucketName: string) {
   const client = yield* HttpClient.HttpClient;

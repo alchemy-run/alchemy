@@ -1257,11 +1257,12 @@ export const providers = () =>
           LakeFormation.PermissionsProvider(),
           LakeFormation.ResourceProvider(),
           Lambda.AliasProvider(),
-          // NOT dualized: the EventSourceMapping reconciler's ownership scan
-          // calls lambda ListTags on `event-source-mapping:` ARNs, which
-          // floci rejects ("ARN resource type must be 'function'") — dualize
-          // once the floci fork supports ESM tagging.
-          Lambda.EventSourceMappingProvider(),
+          // Requires the alchemy floci fork ≥ 1.6.0-alchemy.2: the
+          // reconciler's ownership scan calls lambda ListTags on
+          // `event-source-mapping:` ARNs, which stock floci 1.6.0 rejects.
+          flociDual(Lambda.EventSourceMapping, () =>
+            Lambda.EventSourceMappingProvider(),
+          ),
           // Dual: live Lambda in deploy, floci-emulated (RPC-sidecar-hosted,
           // hot-reloading) Lambda in dev — see FlociFunctionProvider.
           ProviderLayer.dual(Lambda.Function, {

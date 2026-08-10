@@ -34,6 +34,7 @@ import * as Redacted from "effect/Redacted";
 import {
   dockerAvailable,
   rawAwsJson,
+  rawAwsQuery,
   rawS3GetBucket,
   regionOfArn,
 } from "./fixtures/raw.ts";
@@ -75,10 +76,10 @@ test.provider.skipIf(!dockerAvailable)(
             partitionKey: "id",
             attributes: { id: "S" },
           });
-          // NOTE: SNS.Topic is dualized but excluded here — floci does not
-          // implement SNS GetDataProtectionPolicy, which the Topic
-          // reconciler observes unconditionally on standard topics
-          // (fork-patch candidate; see the F1 report).
+          // Requires the alchemy floci fork ≥ 1.6.0-alchemy.2: the Topic
+          // reconciler observes SNS GetDataProtectionPolicy unconditionally
+          // on standard topics, which stock floci 1.6.0 rejects.
+          const topic = yield* AWS.SNS.Topic("DataTopic");
           const secret = yield* AWS.SecretsManager.Secret("DataSecret", {
             secretString: Redacted.make("local-secret-value"),
           });
@@ -93,7 +94,17 @@ test.provider.skipIf(!dockerAvailable)(
             eventBusName: bus.eventBusName,
             eventPattern: { source: ["alchemy.local-test"] },
           });
-          return { bucket, queue, table, secret, parameter, role, bus, rule };
+          return {
+            bucket,
+            queue,
+            table,
+            topic,
+            secret,
+            parameter,
+            role,
+            bus,
+            rule,
+          };
         }),
       );
 
@@ -101,6 +112,7 @@ test.provider.skipIf(!dockerAvailable)(
       expect(outputs.queue.queueArn).toContain(":000000000000:");
       expect(outputs.queue.queueUrl).toContain("localhost");
       expect(outputs.table.tableArn).toContain(":000000000000:");
+      expect(outputs.topic.topicArn).toContain(":000000000000:");
       expect(outputs.secret.secretArn).toContain(":000000000000:");
       expect(outputs.parameter.parameterArn).toContain(":000000000000:");
       expect(outputs.role.roleArn).toContain("::000000000000:");
@@ -115,6 +127,7 @@ test.provider.skipIf(!dockerAvailable)(
         "DataBucket",
         "DataQueue",
         "DataTable",
+        "DataTopic",
         "DataSecret",
         "DataParameter",
         "DataRole",
@@ -156,6 +169,17 @@ test.provider.skipIf(!dockerAvailable)(
 
       const getBucket = yield* rawS3GetBucket(outputs.bucket.bucketName);
       expect(getBucket.status).toBe(200);
+
+      const getTopicAttrs = yield* rawAwsQuery({
+        service: "sns",
+        region,
+        params: {
+          Action: "GetTopicAttributes",
+          Version: "2010-03-31",
+          TopicArn: outputs.topic.topicArn,
+        },
+      });
+      expect(getTopicAttrs.status).toBe(200);
 
       const getParameter = yield* rawAwsJson({
         service: "ssm",
@@ -206,6 +230,17 @@ test.provider.skipIf(!dockerAvailable)(
 
       const bucketAfter = yield* rawS3GetBucket(outputs.bucket.bucketName);
       expect(bucketAfter.status).toBe(404); // NoSuchBucket
+
+      const topicAfter = yield* rawAwsQuery({
+        service: "sns",
+        region,
+        params: {
+          Action: "GetTopicAttributes",
+          Version: "2010-03-31",
+          TopicArn: outputs.topic.topicArn,
+        },
+      });
+      expect(topicAfter.status).toBe(404); // NotFoundException
     }),
   { timeout: 300_000 },
 );
