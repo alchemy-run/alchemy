@@ -1,4 +1,4 @@
-import type { RuntimeServices } from "@distilled.cloud/cloudflare-runtime";
+import type { RuntimeServices } from "@alchemy.run/cloudflare-runtime/core";
 import * as secretsStore from "@distilled.cloud/cloudflare/secrets-store";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";

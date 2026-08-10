@@ -187,7 +187,7 @@ we raise inside the `flatMap` stays a normal, typed failure the client can catch
 ```typescript
 // src/backend/api.ts
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as Drizzle from "alchemy/Drizzle";
+import * as Drizzle from "alchemy/Drizzle/Postgres";
 import { eq } from "drizzle-orm";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -290,7 +290,6 @@ import { Hyperdrive, NeonDatabase } from "./src/backend/database.ts";
 export class Website extends Cloudflare.Website.Vite<Website>()("Website", {
   compatibility: { flags: ["enable_request_signal"] },
   env: { BACKEND: Backend },
-  assets: { runWorkerFirst: true },
 }) {}
 
 export type WebsiteEnv = Cloudflare.InferEnv<typeof Website>;

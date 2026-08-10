@@ -215,11 +215,27 @@ test.provider(
       });
       expect(live.id).toBe(row!.attr!.workflowId);
 
-      // Round-trip an instance through the real edge.
+      // Round-trip an instance through the real edge. A freshly-deployed
+      // worker's engine link can still be propagating, in which case the
+      // instance terminates `errored` ("Worker not found.") — the same
+      // transient the live suite rides out (see Workers/Workflow.test.ts
+      // `runWorkflowToCompletion`): fail the attempt and retry with a
+      // brand-new instance.
       const url = deployed.worker.url!;
-      const instanceId = yield* startInstance(url);
-      const status = yield* waitForTerminal(url, instanceId);
-      expect(status.status).toBe("complete");
+      const status = yield* Effect.gen(function* () {
+        const instanceId = yield* startInstance(url);
+        const terminal = yield* waitForTerminal(url, instanceId);
+        if (terminal.status !== "complete") {
+          return yield* Effect.fail(
+            new Error(
+              `workflow expected complete, got ${terminal.status}: ${JSON.stringify(terminal)}`,
+            ),
+          );
+        }
+        return terminal;
+      }).pipe(
+        Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 2 }),
+      );
       expect(status.output?.greeting).toBe("Hello, world!");
 
       yield* stack.destroy();

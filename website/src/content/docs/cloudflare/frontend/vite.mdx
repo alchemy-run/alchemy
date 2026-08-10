@@ -61,7 +61,7 @@ produces a directory of files, use
 
 :::caution[Remove @cloudflare/vite-plugin if present]
 Alchemy appends its own Cloudflare Vite plugin
-(`@distilled.cloud/cloudflare-vite-plugin`) and is **not
+(`@alchemy.run/cloudflare-runtime/vite`) and is **not
 compatible** with `@cloudflare/vite-plugin` in your
 `vite.config.ts`. Remove it — this applies to every framework
 deployed with this resource:
@@ -85,9 +85,13 @@ export default defineConfig({
 (`main`, the directory-shaped `assets`), plus Vite-specific options:
 
 ```typescript
+// an SPA whose Worker serves the /api/* routes
 const site = yield* Cloudflare.Website.Vite("Website", {
   rootDir: "./web",
-  assets: { runWorkerFirst: true },
+  assets: {
+    notFoundHandling: "single-page-application",
+    runWorkerFirst: ["/api/*"],
+  },
 });
 ```
 
@@ -98,9 +102,17 @@ const site = yield* Cloudflare.Website.Vite("Website", {
   server environment (see
   [Multiple server environments](#multiple-server-environments-rsc)).
 - **`assets`** — a flat `AssetsConfig` for routing behavior:
-  `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc. The
-  built asset directory is supplied by the build, so unlike a plain
-  Worker there is no `directory` to configure.
+  `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc. SSR
+  apps need none of it: server routes and API paths match no built
+  asset, so they already fall through to the Worker. The glob array
+  matters for SPAs — with `notFoundHandling:
+  "single-page-application"`, whether an unmatched path serves the
+  app shell or reaches the Worker depends on the request's
+  `Sec-Fetch-Mode`, so `runWorkerFirst: ["/api/*"]` pins your API
+  namespace to the Worker deterministically. `true` routes every
+  request through the Worker, for handlers that intercept asset
+  requests. The built asset directory is supplied by the build, so
+  unlike a plain Worker there is no `directory` to configure.
 - Everything else is inherited from the Worker — `domain`, `env`,
   `compatibility`, `crons`, and so on. See
   [Workers](/cloudflare/compute/workers).

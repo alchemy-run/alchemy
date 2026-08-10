@@ -4,7 +4,7 @@ import { Artifacts } from "@/Artifacts";
 import { isResolved } from "@/Diff.ts";
 import * as ProviderLayer from "@/Dev/ProviderLayer.ts";
 import * as Provider from "@/Provider.ts";
-import type { ProviderMode } from "@/ProviderMode.ts";
+import { LOCAL_ID_PREFIX, type ProviderMode } from "@/ProviderMode.ts";
 import { Resource, type ResourceBinding } from "@/Resource";
 import { Stack } from "@/Stack";
 import * as State from "@/State/index";
@@ -1173,6 +1173,19 @@ export interface ModalResource extends Resource<
     value: string;
     /** Which provider variant reconciled this instance. */
     runtime: ProviderMode;
+    /**
+     * Physical identity marker, mirroring real local providers: the local
+     * variant fabricates a `dev:`-prefixed id, the live variant a plain
+     * one. Legacy-row tests rely on this to exercise the marker-inferred
+     * mode fallback for unstamped rows.
+     */
+    instance: string;
+    /**
+     * Local dev URL — returned by the LOCAL variant only, mirroring how a
+     * local Worker's attrs carry its dev-proxy URL. Apply announces it as
+     * a `ready at <url>` note on local-mode rows.
+     */
+    url?: string;
   }
 > {}
 
@@ -1248,6 +1261,8 @@ const modalVariant = (mode: ProviderMode) =>
           return {
             value: (news as ModalResourceProps).value ?? id,
             runtime: mode,
+            instance: mode === "local" ? `${LOCAL_ID_PREFIX}${id}` : id,
+            ...(mode === "local" ? { url: "http://localhost:1337" } : {}),
           };
         }),
         delete: Effect.fn(function* ({ id }) {

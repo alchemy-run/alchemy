@@ -1,4 +1,4 @@
-import { layerRuntime } from "@distilled.cloud/cloudflare-runtime";
+import { layerRuntime } from "@alchemy.run/cloudflare-runtime/core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stdio from "effect/Stdio";

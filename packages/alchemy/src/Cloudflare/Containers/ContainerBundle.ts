@@ -454,7 +454,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
  * return the paths + content hash of that context.
  *
  * This is the local-dev image shape (`ContainerImage.Build`) that
- * `@distilled.cloud/cloudflare-runtime` consumes: it `docker build`s the
+ * `@alchemy.run/cloudflare-runtime/core` consumes: it `docker build`s the
  * `dockerfile` against the `context` directory. Shared between the local
  * provider (which serves this context to the runtime as the `dev` image) and
  * the live provider (which persists the same deterministic context path as

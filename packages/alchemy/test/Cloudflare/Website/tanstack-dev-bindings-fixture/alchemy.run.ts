@@ -8,9 +8,6 @@ export const Website = Cloudflare.Website.Vite("TanStackDevBindingsFixture", {
   compatibility: {
     flags: ["nodejs_compat"],
   },
-  assets: {
-    runWorkerFirst: true,
-  },
   env: {
     BUCKET: Bucket,
     DEV_MARKER: "manual-dev",

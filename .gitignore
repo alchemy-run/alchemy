@@ -15,6 +15,7 @@ dist/
 
 .repomix-output.txt
 wrangler.jsonc
+!packages/cloudflare-*/src/**/wrangler.jsonc
 
 # Husky - ignore generated files but keep hooks
 .husky/_
@@ -39,8 +40,21 @@ pnpm-workspace.yaml
 !packages/alchemy/test/Cloudflare/Workers/fixtures/drizzle-do/drizzle/migrations.js
 *.map
 
+packages/cloudflare-runtime/src/rolldown/.env.test
+packages/cloudflare-runtime/src/rolldown/out/
+!packages/cloudflare-runtime/src/rolldown/test/fixtures/**/node_modules/
+!packages/cloudflare-runtime/src/rolldown/test/fixtures/**/node_modules/**
+!packages/cloudflare-runtime/src/rolldown/test/fixtures/**/*.js
+!packages/cloudflare-frameworks/src/nextjs/wrangler-stub/*.js
+!packages/cloudflare-*/src/**/*.d.ts
+!fixtures/**/*.d.ts
+!fixtures/**/*.js
+
 .attest
 .cache
+.turbo
+coverage
+test-results
 .external
 .bundle-benchmark
 packages/alchemy/docs

@@ -61,10 +61,9 @@ export interface WorkerBundleOptions {
  * Rebuild any `builtin:esm-external-require` plugin instance with OUR copy of
  * rolldown.
  *
- * cloudflare-tools is its own bun workspace with its own dependency store, so
- * under bun's `bun` export condition `@distilled.cloud/cloudflare-rolldown-plugin`
+ * A separately installed or bundled `@alchemy.run/cloudflare-runtime/rolldown`
  * can resolve a physically different copy of rolldown than the one Alchemy
- * bundles with. Builtin plugins — here `builtin:esm-external-require`, which
+ * invokes. Builtin plugins — here `builtin:esm-external-require`, which
  * rewrites CJS `require`s of Node builtins into ESM imports under
  * `nodejs_compat` — are `BuiltinPlugin` class instances that rolldown
  * recognizes with an `instanceof` check. An instance constructed by the
@@ -105,7 +104,7 @@ export const WorkerBundle = Effect.gen(function* () {
     const [{ default: cloudflareRolldown }, { esmExternalRequirePlugin }] =
       yield* Effect.promise(() =>
         Promise.all([
-          import("@distilled.cloud/cloudflare-rolldown-plugin"),
+          import("@alchemy.run/cloudflare-runtime/rolldown"),
           import("rolldown/plugins"),
         ]),
       );

@@ -13,7 +13,6 @@ export default Alchemy.Stack(
       compatibility: {
         flags: ["nodejs_compat"],
       },
-      memo: {},
       assets: {
         notFoundHandling: "single-page-application",
       },

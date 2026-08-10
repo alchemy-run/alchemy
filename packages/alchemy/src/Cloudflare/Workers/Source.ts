@@ -6,7 +6,7 @@ import type {
   DurableObjectNamespace as RuntimeDurableObject,
   QueueConsumer as RuntimeQueueConsumer,
   RuntimeServices,
-} from "@distilled.cloud/cloudflare-runtime";
+} from "@alchemy.run/cloudflare-runtime/core";
 import type * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -360,7 +360,7 @@ export const resolveSource = (
   }
   if (props.vite) {
     // Loaded lazily: `./Sources/Vite.ts` pulls in
-    // `@distilled.cloud/cloudflare-vite-plugin` (~0.5s), which is only
+    // `@alchemy.run/cloudflare-runtime/vite` (~0.5s), which is only
     // needed for vite-based workers — not for every Worker resolution.
     const vite = props.vite;
     return Effect.promise(() => import("./Sources/Vite.ts")).pipe(
