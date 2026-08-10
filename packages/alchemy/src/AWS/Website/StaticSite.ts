@@ -8,6 +8,7 @@ import type { Input } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
+import { isResource } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import { Certificate } from "../ACM/Certificate.ts";
@@ -242,8 +243,12 @@ export interface StaticSiteProps {
  *
  * @example Host-Matched Router Attachment
  * ```typescript
- * // The site serves for docs.example.com on the router; the hostname must
- * // also be covered by the router's own domain (alias + cert + DNS).
+ * // The site serves for docs.example.com on the router. On a same-stack
+ * // router that owns a domain, this declaration alone provisions the
+ * // hostname end-to-end: the site binds it onto the router's distribution
+ * // (alias), certificate (SAN), and Route 53 record set. Wildcard
+ * // patterns and cross-stack router refs register KV host-matching only —
+ * // those hostnames must be covered by the router's own domain.
  * const site = yield* StaticSite("Docs", {
  *   path: "./docs",
  *   domain: {
@@ -504,6 +509,39 @@ export const makeKvSite = (
           }),
         { concurrency: "unbounded" },
       );
+      // Site→Router hostname binding: this site's concrete hostnames are
+      // bound onto the Router's distribution (alias), managed certificate
+      // (SAN — a change replaces the certificate create-first), and Route 53
+      // record set, so the declaration here alone fully provisions the
+      // hostname. Wildcard patterns bind nothing concrete, and cross-stack
+      // Router refs carry no `bindTargets` (bindings are same-stack) — in
+      // both cases the site registers KV host-matching only and the
+      // hostname must be covered by the Router's own `domain`.
+      const concreteHostnames = [
+        ...(routerDomain.name && !routerDomain.name.includes("*")
+          ? [routerDomain.name]
+          : []),
+        ...(routerDomain.aliases ?? []).filter((alias) => !alias.includes("*")),
+        ...(routerDomain.redirects ?? []),
+      ];
+      const bindTargets = routerRef.bindTargets;
+      if (bindTargets && concreteHostnames.length > 0) {
+        if (bindTargets.distribution && isResource(bindTargets.distribution)) {
+          yield* bindTargets.distribution.bind`AWS.Website.Site(${fqn})`({
+            aliases: concreteHostnames,
+          });
+        }
+        if (bindTargets.certificate && isResource(bindTargets.certificate)) {
+          yield* bindTargets.certificate.bind`AWS.Website.Site(${fqn})`({
+            subjectAlternativeNames: concreteHostnames,
+          });
+        }
+        if (bindTargets.records && isResource(bindTargets.records)) {
+          yield* bindTargets.records.bind`AWS.Website.Site(${fqn})`({
+            names: concreteHostnames,
+          });
+        }
+      }
       // Host-matched attachment: the site's own hostnames (the router's
       // CloudFront URL never serves it — KV host-match). Path-only
       // attachment: derived from the router's primary URL, inheriting the

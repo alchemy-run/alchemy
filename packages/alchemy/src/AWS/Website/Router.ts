@@ -20,6 +20,7 @@ import { CachePolicy } from "../CloudFront/CachePolicy.ts";
 import { MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID } from "../CloudFront/ManagedPolicies.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import { Record as Route53Record } from "../Route53/Record.ts";
+import { Records as Route53Records } from "../Route53/Records.ts";
 import type { Bucket } from "../S3/Bucket.ts";
 import { buildHostRedirectInjection, CF_ROUTER_INJECTION } from "./cfcode.ts";
 import { normalizeWebsiteDomain, type RouterProps } from "./shared.ts";
@@ -94,12 +95,12 @@ export const Router = (id: string, props: RouterProps) =>
       );
     }
 
-    const certificate =
-      !domain || domain.cert
-        ? domain?.cert
-          ? { certificateArn: domain.cert }
-          : undefined
-        : yield* Certificate("Certificate", {
+    // The managed certificate (when the Router owns one) doubles as a bind
+    // target for attached-site hostnames — keep the resource handle distinct
+    // from the viewer-certificate value, which may be a user-provided ARN.
+    const managedCertificate =
+      domain && !domain.cert
+        ? yield* Certificate("Certificate", {
             domainName: domain.name,
             subjectAlternativeNames: [
               ...(domain.aliases ?? []),
@@ -107,7 +108,11 @@ export const Router = (id: string, props: RouterProps) =>
             ],
             hostedZoneId: domain.hostedZoneId,
             tags: props.tags,
-          });
+          })
+        : undefined;
+    const certificate =
+      managedCertificate ??
+      (domain?.cert ? { certificateArn: domain.cert } : undefined);
 
     const stack = yield* Stack;
     const stage = yield* Stage;
@@ -340,6 +345,22 @@ export const Router = (id: string, props: RouterProps) =>
           )
         : [];
 
+    // Bind target for attached-site hostnames: a record set (initially
+    // empty) that same-stack sites bind their concrete hostnames onto, each
+    // becoming an A-alias record pointing at this distribution (see
+    // `WebsiteRouterBindTargets`).
+    const siteRecords =
+      domain?.hostedZoneId && domain.dns !== false
+        ? yield* Route53Records("SiteAliasRecords", {
+            hostedZoneId: domain.hostedZoneId,
+            type: "A",
+            aliasTarget: {
+              hostedZoneId: distribution.hostedZoneId,
+              dnsName: distribution.domainName,
+            },
+          })
+        : undefined;
+
     const invalidation =
       props.invalidation === false || !props.invalidation
         ? undefined
@@ -379,6 +400,22 @@ export const Router = (id: string, props: RouterProps) =>
       kvNamespace,
       distributionId: distribution.distributionId as Input<string>,
       distributionArn: distribution.distributionArn as Input<string>,
+      /**
+       * Same-stack bind targets for attached-site hostnames (see
+       * `WebsiteRouterBindTargets` in shared.ts): a site declaring
+       * `domain: { name, router }` binds its concrete hostnames onto the
+       * distribution (alias), the managed certificate (SAN), and the
+       * Route 53 record set. Only populated when the Router owns a
+       * `domain` — without one there is no viewer certificate to cover
+       * bound aliases.
+       */
+      bindTargets: domain
+        ? {
+            distribution,
+            certificate: managedCertificate,
+            records: siteRecords,
+          }
+        : undefined,
       /**
        * The most significant URL the Router serves at — always `urls[0]`.
        */

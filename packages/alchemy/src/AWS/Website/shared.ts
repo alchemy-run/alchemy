@@ -1,5 +1,39 @@
 import type { Input } from "../../Input.ts";
+import type { Certificate } from "../ACM/Certificate.ts";
+import type { Distribution } from "../CloudFront/Distribution.ts";
+import type { Records } from "../Route53/Records.ts";
 import type { Bucket } from "../S3/Bucket.ts";
+
+/**
+ * Same-stack resources a Router-attached site binds its concrete hostnames
+ * onto, so declaring `domain: { name, router }` on the site alone is enough
+ * for the hostname to be fully provisioned — distribution alias, certificate
+ * SAN, and Route 53 record. Populated by `AWS.Website.Router` when it owns a
+ * `domain`; absent on cross-stack references (bindings are same-stack), in
+ * which case the site registers KV host-matching only and the hostname must
+ * be covered by the Router's own `domain` configuration.
+ */
+export interface WebsiteRouterBindTargets {
+  /**
+   * The Router's CloudFront distribution — bound hostnames become
+   * distribution aliases.
+   */
+  distribution?: Distribution;
+  /**
+   * The Router's managed ACM certificate — bound hostnames become
+   * certificate SANs (a SAN change replaces the certificate, create-first).
+   * Absent when the Router uses a user-provided `domain.cert`, which must
+   * then already cover attached-site hostnames (e.g. a wildcard
+   * certificate).
+   */
+  certificate?: Certificate;
+  /**
+   * The Router's Route 53 alias record set — bound hostnames get A-alias
+   * records pointing at the distribution. Absent when the Router's domain
+   * sets `dns: false` or has no `hostedZoneId`.
+   */
+  records?: Records;
+}
 
 /**
  * Structural slice of an `AWS.Website.Router` that a site attaches to via
@@ -11,6 +45,12 @@ export interface WebsiteRouterRef {
   distributionId: Input<string>;
   distributionArn: Input<string>;
   url: Input<string>;
+  /**
+   * Same-stack bind targets for attached-site hostnames (see
+   * {@link WebsiteRouterBindTargets}). Cross-stack refs omit this — the
+   * attached site then falls back to KV host-matching only.
+   */
+  bindTargets?: WebsiteRouterBindTargets | undefined;
 }
 
 /**
@@ -80,9 +120,16 @@ export interface WebsiteRouterDomainProps {
    *
    * Pattern semantics exist ONLY in Router mode: a standalone
    * {@link WebsiteStandaloneDomainProps.name} is always a concrete
-   * hostname. The hostname must also be covered by the Router's own
-   * `domain` (alias + certificate + DNS) for requests to reach the
-   * distribution.
+   * hostname.
+   *
+   * A concrete hostname on a same-stack Router that owns a `domain` is
+   * fully provisioned from this declaration alone: the site binds it onto
+   * the Router's distribution (alias), certificate (SAN), and Route 53
+   * record set (see {@link WebsiteRouterBindTargets}). Wildcard patterns
+   * bind nothing concrete — a wildcard-matched site still needs the
+   * Router's own `domain`/certificate to cover its hostnames (e.g. a
+   * wildcard alias on the Router). The same applies to cross-stack Router
+   * references, where bindings cannot flow.
    */
   name?: string;
   /**

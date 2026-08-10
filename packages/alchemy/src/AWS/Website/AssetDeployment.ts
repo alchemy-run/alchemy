@@ -7,6 +7,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { initialCwd } from "../../Util/Node.ts";
 import type { Providers } from "../Providers.ts";
 import type { WebsiteTextEncoding } from "./shared.ts";
 
@@ -162,7 +163,11 @@ export const AssetDeploymentProvider = () =>
       const reconcileSync = Effect.fn(function* (news: AssetDeploymentProps) {
         const bucketName = news.bucket.bucketName;
         const prefix = normalizePrefix(news.prefix);
-        const root = news.sourcePath;
+        // Resolve against the process's INITIAL cwd, never the live cwd:
+        // Server persists build dirs relative to initialCwd, and a sibling
+        // framework build may transiently chdir this shared process while
+        // the upload walks the tree.
+        const root = path.resolve(initialCwd, news.sourcePath);
         const files = yield* Effect.tryPromise(() => walk(root));
         const hash = createHash("sha256");
         const desiredKeys = new Set<string>();
