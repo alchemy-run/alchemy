@@ -164,7 +164,7 @@ export const DurableObjectHost: Layer.Layer<
   Driver | SessionSockets,
   never,
   LanguageModel.LanguageModel | Worker
-> = Layer.effectContext(
+> = Layer.unwrap(
   Effect.gen(function* () {
     const languageModel = yield* LanguageModel.LanguageModel;
     const registrations = new Map<string, RegisteredCharter>();
@@ -493,9 +493,10 @@ export const DurableObjectHost: Layer.Layer<
         RuntimeContext
       >;
 
-    return Context.add(Context.make(Driver, { interpret }), SessionSockets, {
-      attach,
-    });
+    return Layer.mergeAll(
+      Layer.succeed(Driver, { interpret }),
+      Layer.succeed(SessionSockets, { attach }),
+    );
   }),
 );
 

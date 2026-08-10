@@ -1,8 +1,6 @@
-import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
@@ -56,7 +54,7 @@ export const DriverLocal: Layer.Layer<
   Driver | SessionSockets,
   never,
   LanguageModel.LanguageModel | ThreadStorage
-> = Layer.effectContext(
+> = Layer.unwrap(
   Effect.gen(function* () {
     const languageModel = yield* LanguageModel.LanguageModel;
     const threadStorage = yield* ThreadStorage;
@@ -254,12 +252,9 @@ export const DriverLocal: Layer.Layer<
         return HttpServerResponse.empty();
       });
 
-    return Context.add(
-      Context.make(Driver, {
-        interpret,
-      } as Context.Service.Shape<typeof Driver>),
-      SessionSockets,
-      { attach },
+    return Layer.mergeAll(
+      Layer.succeed(Driver, { interpret }),
+      Layer.succeed(SessionSockets, { attach }),
     );
-  }) as never,
+  }),
 );
