@@ -172,17 +172,11 @@
       "worker": "./src/Cloudflare/*/index.ts",
       "import": "./lib/Cloudflare/*/index.js"
     },
-    "./Drizzle": {
-      "types": "./lib/Drizzle/index.d.ts",
-      "bun": "./src/Drizzle/index.ts",
-      "worker": "./src/Drizzle/index.ts",
-      "import": "./lib/Drizzle/index.js"
-    },
-    "./Drizzle/*": {
-      "types": "./lib/Drizzle/*.d.ts",
-      "bun": "./src/Drizzle/*.ts",
-      "worker": "./src/Drizzle/*.ts",
-      "import": "./lib/Drizzle/*.js"
+    "./Cloudflare/Workers/*": {
+      "types": "./lib/Cloudflare/Workers/*.d.ts",
+      "bun": "./src/Cloudflare/Workers/*.ts",
+      "worker": "./src/Cloudflare/Workers/*.ts",
+      "import": "./lib/Cloudflare/Workers/*.js"
     },
     "./Axiom": {
       "types": "./lib/Axiom/index.d.ts",
@@ -373,7 +367,6 @@
     "@distilled.cloud/neon": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",
     "@effect/sql-d1": "catalog:",
-    "@effect/sql-sqlite-do": "catalog:",
     "@effect/vitest": "catalog:",
     "@libsql/client": "catalog:",
     "@octokit/rest": "^22.0.1",
@@ -429,6 +422,8 @@
     "alchemy-test": "workspace:*",
     "astro": "catalog:frameworks",
     "better-auth": "catalog:",
+    "drizzle-kit": "catalog:",
+    "drizzle-orm": "catalog:",
     "effect": "catalog:",
     "foldkit": "catalog:fixtures",
     "hono": "catalog:frameworks",
@@ -463,8 +458,6 @@
     "@effect/sql-mysql2": "catalog:",
     "@effect/sql-pg": "catalog:",
     "@vercel/nft": "^1.10.2",
-    "drizzle-kit": "catalog:",
-    "drizzle-orm": "catalog:",
     "effect": "catalog:",
     "mongodb": "^6.10.0",
     "mysql2": "^3.15.3",
@@ -489,12 +482,6 @@
       "optional": true
     },
     "@vercel/nft": {
-      "optional": true
-    },
-    "drizzle-kit": {
-      "optional": true
-    },
-    "drizzle-orm": {
       "optional": true
     },
     "mongodb": {

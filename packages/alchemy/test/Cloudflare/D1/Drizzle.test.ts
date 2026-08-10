@@ -1,5 +1,5 @@
 import * as Cloudflare from "@/Cloudflare";
-import * as Drizzle from "@/Drizzle";
+import * as Drizzle from "@alchemy.run/drizzle";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";

@@ -1,5 +1,5 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Drizzle from "@/Drizzle/index.ts";
+import * as Drizzle from "@alchemy.run/drizzle";
 import * as Effect from "effect/Effect";
 
 /**

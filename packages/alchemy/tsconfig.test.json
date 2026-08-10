@@ -39,6 +39,9 @@
       "path": "../alchemy-test/tsconfig.json"
     },
     {
+      "path": "../drizzle/tsconfig.json"
+    },
+    {
       "path": "./tsconfig.bin.json"
     }
   ]

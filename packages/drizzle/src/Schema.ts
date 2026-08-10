@@ -4,11 +4,11 @@ import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import { ChildProcess } from "effect/unstable/process";
 import * as crypto from "node:crypto";
-import * as Artifacts from "../Artifacts.ts";
-import { isResolved } from "../Diff.ts";
-import * as Provider from "../Provider.ts";
-import { Resource } from "../Resource.ts";
-import { exec } from "../Util/exec.ts";
+import * as Artifacts from "alchemy/Artifacts";
+import { isResolved } from "alchemy/Diff";
+import * as Provider from "alchemy/Provider";
+import { Resource } from "alchemy/Resource";
+import { exec } from "alchemy/Util/exec";
 import type { Providers } from "./Providers.ts";
 
 export type Dialect = "postgres" | "mysql" | "sqlite";

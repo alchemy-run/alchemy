@@ -1,5 +1,5 @@
 // `@effect/sql-pg` (and pg underneath) are optional peers — value imports
-// are deferred to first use so `alchemy/Drizzle` resolves without them
+// are deferred to first use so `@alchemy.run/drizzle` resolves without them
 // installed.
 import type * as PgClient from "@effect/sql-pg/PgClient";
 import type { AnyRelations, EmptyRelations } from "drizzle-orm";
@@ -8,8 +8,8 @@ import type { EffectDrizzlePgConfig } from "drizzle-orm/pg-core/effect/utils";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Redacted from "effect/Redacted";
-import { makeExecutionMemo } from "../Runtime/ExecutionMemo.ts";
-import { proxyChain } from "../Util/proxy-chain.ts";
+import { makeExecutionMemo } from "alchemy/Runtime/ExecutionMemo";
+import { proxyChain } from "alchemy/Util/proxy-chain";
 
 /**
  * Open a Drizzle/Postgres database from a connection URL using the

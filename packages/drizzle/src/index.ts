@@ -16,4 +16,4 @@ export * from "./Schema.ts";
 // (`@effect/sql-mysql2`/`mysql2`, `@effect/sql-pg`/`pg`) are optional peer
 // dependencies, and keeping them out of the barrel keeps them out of every
 // non-user's module graph. Import them via their subpaths instead:
-// `alchemy/Drizzle/MySQL`, `alchemy/Drizzle/Postgres`.
+// `@alchemy.run/drizzle/MySQL`, `@alchemy.run/drizzle/Postgres`.

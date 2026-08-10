@@ -1,6 +1,6 @@
 import * as Lambda from "@/AWS/Lambda";
 import * as RDS from "@/AWS/RDS";
-import * as Drizzle from "@/Drizzle/Postgres.ts";
+import * as Drizzle from "@alchemy.run/drizzle/Postgres";
 import { sql } from "drizzle-orm";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";

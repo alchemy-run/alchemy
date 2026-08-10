@@ -1,5 +1,5 @@
 import * as Layer from "effect/Layer";
-import * as Provider from "../Provider.ts";
+import * as Provider from "alchemy/Provider";
 import { Schema, SchemaProvider } from "./Schema.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()(
@@ -17,7 +17,7 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
  * ```typescript
  * import * as Alchemy from "alchemy";
  * import * as Cloudflare from "alchemy/Cloudflare";
- * import * as Drizzle from "alchemy/Drizzle";
+ * import * as Drizzle from "@alchemy.run/drizzle";
  * import * as Neon from "alchemy/Neon";
  * import * as Effect from "effect/Effect";
  * import * as Layer from "effect/Layer";

@@ -5,6 +5,7 @@
     "": {
       "name": "alchemy-monorepo",
       "devDependencies": {
+        "@alchemy.run/drizzle": "workspace:*",
         "@alchemy.run/pr-package": "workspace:*",
         "@ark/attest": "^0.56.0",
         "@cloudflare/puppeteer": "^1.1.0",
@@ -504,6 +505,7 @@
       "name": "cloudflare-d1-drizzle",
       "version": "0.0.0",
       "dependencies": {
+        "@alchemy.run/drizzle": "workspace:*",
         "@cloudflare/workers-types": "catalog:",
         "@effect/platform-bun": "catalog:",
         "@effect/platform-node": "catalog:",
@@ -578,6 +580,7 @@
       "name": "cloudflare-neon-drizzle",
       "version": "0.0.0",
       "dependencies": {
+        "@alchemy.run/drizzle": "workspace:*",
         "@cloudflare/workers-types": "catalog:",
         "@effect/platform-bun": "catalog:",
         "@effect/platform-node": "catalog:",
@@ -608,6 +611,7 @@
       "name": "cloudflare-planetscale-mysql-drizzle",
       "version": "0.0.0",
       "dependencies": {
+        "@alchemy.run/drizzle": "workspace:*",
         "@cloudflare/workers-types": "catalog:",
         "@effect/platform-bun": "catalog:",
         "@effect/platform-node": "catalog:",
@@ -625,6 +629,7 @@
       "name": "cloudflare-planetscale-postgres-drizzle",
       "version": "0.0.0",
       "dependencies": {
+        "@alchemy.run/drizzle": "workspace:*",
         "@cloudflare/workers-types": "catalog:",
         "@effect/platform-bun": "catalog:",
         "@effect/platform-node": "catalog:",
@@ -730,6 +735,7 @@
       "name": "cloudflare-tanstack-rpc-drizzle-example",
       "version": "0.0.0",
       "dependencies": {
+        "@alchemy.run/drizzle": "workspace:*",
         "@effect/atom-react": "catalog:",
         "@effect/platform-bun": "catalog:",
         "@effect/platform-node": "catalog:",
@@ -1356,7 +1362,6 @@
         "@distilled.cloud/neon": "workspace:*",
         "@distilled.cloud/planetscale": "workspace:*",
         "@effect/sql-d1": "catalog:",
-        "@effect/sql-sqlite-do": "catalog:",
         "@effect/vitest": "catalog:",
         "@libsql/client": "catalog:",
         "@octokit/rest": "^22.0.1",
@@ -1412,6 +1417,8 @@
         "alchemy-test": "workspace:*",
         "astro": "catalog:frameworks",
         "better-auth": "catalog:",
+        "drizzle-kit": "catalog:",
+        "drizzle-orm": "catalog:",
         "effect": "catalog:",
         "foldkit": "catalog:fixtures",
         "hono": "catalog:frameworks",
@@ -1446,8 +1453,6 @@
         "@effect/sql-mysql2": "catalog:",
         "@effect/sql-pg": "catalog:",
         "@vercel/nft": "^1.10.2",
-        "drizzle-kit": "catalog:",
-        "drizzle-orm": "catalog:",
         "effect": "catalog:",
         "mongodb": "^6.10.0",
         "mysql2": "^3.15.3",
@@ -1462,8 +1467,6 @@
         "@effect/sql-mysql2",
         "@effect/sql-pg",
         "@vercel/nft",
-        "drizzle-kit",
-        "drizzle-orm",
         "mongodb",
         "mysql2",
         "pg",
@@ -1619,6 +1622,31 @@
         "rolldown": "catalog:",
         "vite": "catalog:",
       },
+    },
+    "packages/drizzle": {
+      "name": "@alchemy.run/drizzle",
+      "version": "2.0.0-beta.70",
+      "dependencies": {
+        "@effect/sql-d1": "catalog:",
+        "@effect/sql-sqlite-do": "catalog:",
+        "alchemy": "workspace:*",
+      },
+      "peerDependencies": {
+        "@effect/sql-mysql2": "catalog:",
+        "@effect/sql-pg": "catalog:",
+        "drizzle-kit": "catalog:",
+        "drizzle-orm": "catalog:",
+        "effect": "catalog:",
+        "mysql2": "^3.15.3",
+        "pg": "^8.13.0",
+      },
+      "optionalPeers": [
+        "@effect/sql-mysql2",
+        "@effect/sql-pg",
+        "drizzle-kit",
+        "mysql2",
+        "pg",
+      ],
     },
     "packages/pr-package": {
       "name": "@alchemy.run/pr-package",
@@ -1829,6 +1857,8 @@
     "@alchemy.run/cloudflare-runtime": ["@alchemy.run/cloudflare-runtime@workspace:packages/cloudflare-runtime"],
 
     "@alchemy.run/cloudflare-test-tools": ["@alchemy.run/cloudflare-test-tools@workspace:packages/cloudflare-test-tools"],
+
+    "@alchemy.run/drizzle": ["@alchemy.run/drizzle@workspace:packages/drizzle"],
 
     "@alchemy.run/node-utils": ["@alchemy.run/node-utils@0.0.5", "", {}, "sha512-5agdhQxWBodxa5hDRyjnpx91RTU3g+qd5fxYB7uNDCaOzB0XC47UU/KHR6zf6jhz/NXf61gJS+vhYwn8NHeRoQ=="],
 

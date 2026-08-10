@@ -4,7 +4,7 @@ import * as SQLiteDoDrizzle from "drizzle-orm/effect-sqlite-do";
 import { migrate } from "drizzle-orm/effect-sqlite-do/migrator";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { DurableObjectState } from "../Cloudflare/Workers/DurableObjectState.ts";
+import { DurableObjectState } from "alchemy/Cloudflare/Workers/DurableObjectState";
 
 /**
  * Migrations for {@link DurableObject} — the shape of the `migrations.js`
@@ -69,7 +69,7 @@ export interface DurableObjectConfig<
  * ```
  *
  * ```typescript
- * import * as Drizzle from "alchemy/Drizzle/Cloudflare";
+ * import * as Drizzle from "@alchemy.run/drizzle/Cloudflare";
  * import migrations from "./drizzle/migrations.js";
  * import { posts, relations, users } from "./schema.ts";
  *

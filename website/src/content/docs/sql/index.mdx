@@ -25,19 +25,19 @@ everything else.
 typed errors, no ORM — one subpath per backend (`alchemy/SQL/D1`,
 `alchemy/SQL/Postgres`, `alchemy/SQL/MySQL`), so you only load the
 driver you use.
-`alchemy/Drizzle` is the ORM sibling: a typed schema and relational
+`@alchemy.run/drizzle` is the ORM sibling: a typed schema and relational
 queries. `Drizzle.Schema`, `Drizzle.providers()`, and `Drizzle.D1`
-come from the `alchemy/Drizzle` entry; the Postgres and MySQL
-clients live on their own subpaths (`alchemy/Drizzle/Postgres`,
-`alchemy/Drizzle/MySQL`) so their drivers only load when you use
+come from the `@alchemy.run/drizzle` entry; the Postgres and MySQL
+clients live on their own subpaths (`@alchemy.run/drizzle/Postgres`,
+`@alchemy.run/drizzle/MySQL`) so their drivers only load when you use
 them, and the Durable Object client lives at
-`alchemy/Drizzle/Cloudflare`. Both wrap the same
+`@alchemy.run/drizzle/Cloudflare`. Both wrap the same
 [`@effect/sql`](https://effect.website) drivers and share one
 lifecycle.
 
 ```typescript
 import * as SQL from "alchemy/SQL/D1";
-import * as Drizzle from "alchemy/Drizzle";
+import * as Drizzle from "@alchemy.run/drizzle";
 
 // Raw effect-sql — tagged-template queries, typed errors
 const sql = yield* SQL.D1(d1);

@@ -5,7 +5,7 @@ description: Replace raw pg with Drizzle's effect-postgres integration, manage y
 
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
-export const drizzleDeps = `drizzle-orm@^1.0.0-rc.4 @effect/sql-pg pg`;
+export const drizzleDeps = `@alchemy.run/drizzle drizzle-orm@^1.0.0-rc.4 @effect/sql-pg pg`;
 export const drizzleDevDeps = `drizzle-kit@^1.0.0-rc.4 @types/pg`;
 export const mysqlDeps = `@effect/sql-mysql2 mysql2`;
 
@@ -65,7 +65,7 @@ export const Posts = pgTable("posts", {
 ```diff lang="typescript"
 // alchemy.run.ts
 import * as Cloudflare from "alchemy/Cloudflare";
-+import * as Drizzle from "alchemy/Drizzle";
++import * as Drizzle from "@alchemy.run/drizzle";
 import * as Neon from "alchemy/Neon";
 import * as Layer from "effect/Layer";
 
@@ -114,7 +114,7 @@ branch resource each deploy:
 ```diff lang="typescript"
 // src/Db.ts
 import * as Cloudflare from "alchemy/Cloudflare";
-+import * as Drizzle from "alchemy/Drizzle";
++import * as Drizzle from "@alchemy.run/drizzle";
 import * as Neon from "alchemy/Neon";
 import * as Effect from "effect/Effect";
 
@@ -159,7 +159,7 @@ wrappers around queries:
 ```typescript
 // src/Api.ts
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as Drizzle from "alchemy/Drizzle/Postgres";
+import * as Drizzle from "@alchemy.run/drizzle/Postgres";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Hyperdrive } from "./Db.ts";
@@ -322,7 +322,7 @@ Register `Planetscale.providers()` alongside the Drizzle provider:
 ```diff lang="typescript"
 // alchemy.run.ts
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as Drizzle from "alchemy/Drizzle";
+import * as Drizzle from "@alchemy.run/drizzle";
 -import * as Neon from "alchemy/Neon";
 +import * as Planetscale from "alchemy/Planetscale";
 import * as Layer from "effect/Layer";
@@ -344,7 +344,7 @@ pending migrations transactionally on every deploy:
 ```typescript
 // src/Db.ts
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as Drizzle from "alchemy/Drizzle";
+import * as Drizzle from "@alchemy.run/drizzle";
 import * as Planetscale from "alchemy/Planetscale";
 import * as Effect from "effect/Effect";
 
@@ -442,7 +442,7 @@ uses the MySQL resource trio — database, branch, and a
 ```typescript
 // src/Db.ts
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as Drizzle from "alchemy/Drizzle";
+import * as Drizzle from "@alchemy.run/drizzle";
 import * as Planetscale from "alchemy/Planetscale";
 import * as Effect from "effect/Effect";
 
@@ -493,7 +493,7 @@ At runtime, `Drizzle.MySQL` is the drop-in sibling of
 ```typescript
 // src/Api.ts
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as Drizzle from "alchemy/Drizzle/MySQL";
+import * as Drizzle from "@alchemy.run/drizzle/MySQL";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Hyperdrive } from "./Db.ts";

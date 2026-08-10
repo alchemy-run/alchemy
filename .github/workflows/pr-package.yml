@@ -57,6 +57,7 @@ jobs:
             [
               { "dir": "packages/alchemy",               "name": "alchemy",                            "group": "Alchemy" },
               { "dir": "packages/better-auth",           "name": "@alchemy.run/better-auth",           "group": "Alchemy" },
+              { "dir": "packages/drizzle",               "name": "@alchemy.run/drizzle",              "group": "Alchemy" },
               { "dir": "packages/cloudflare-runtime",    "name": "@alchemy.run/cloudflare-runtime",    "group": "Alchemy" },
               { "dir": "packages/cloudflare-frameworks", "name": "@alchemy.run/cloudflare-frameworks", "group": "Alchemy" },
               { "dir": "packages/pr-package",            "name": "@alchemy.run/pr-package",            "group": "Alchemy" },

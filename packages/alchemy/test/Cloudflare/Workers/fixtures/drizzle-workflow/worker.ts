@@ -1,5 +1,5 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Drizzle from "@/Drizzle/Postgres.ts";
+import * as Drizzle from "@alchemy.run/drizzle/Postgres";
 import { eq } from "drizzle-orm";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";

@@ -1,0 +1,79 @@
+{
+  "name": "@alchemy.run/drizzle",
+  "version": "2.0.0-beta.70",
+  "description": "Drizzle ORM integration for Alchemy.",
+  "homepage": "https://alchemy.run",
+  "license": "Apache-2.0",
+  "author": "Sam Goodwin <sam@alchemy.run>",
+  "keywords": [
+    "alchemy",
+    "drizzle",
+    "effect",
+    "infrastructure-as-code"
+  ],
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "packages/drizzle"
+  },
+  "bugs": {
+    "url": "https://github.com/alchemy-run/alchemy/issues"
+  },
+  "files": [
+    "lib",
+    "src"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "bun": "./src/index.ts",
+      "worker": "./src/index.ts",
+      "import": "./lib/index.js"
+    },
+    "./*": {
+      "types": "./lib/*.d.ts",
+      "bun": "./src/*.ts",
+      "worker": "./src/*.ts",
+      "import": "./lib/*.js"
+    }
+  },
+  "dependencies": {
+    "@effect/sql-d1": "catalog:",
+    "@effect/sql-sqlite-do": "catalog:",
+    "alchemy": "workspace:*"
+  },
+  "peerDependencies": {
+    "@effect/sql-mysql2": "catalog:",
+    "@effect/sql-pg": "catalog:",
+    "drizzle-kit": "catalog:",
+    "drizzle-orm": "catalog:",
+    "effect": "catalog:",
+    "mysql2": "^3.15.3",
+    "pg": "^8.13.0"
+  },
+  "peerDependenciesMeta": {
+    "@effect/sql-mysql2": {
+      "optional": true
+    },
+    "@effect/sql-pg": {
+      "optional": true
+    },
+    "drizzle-kit": {
+      "optional": true
+    },
+    "mysql2": {
+      "optional": true
+    },
+    "pg": {
+      "optional": true
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

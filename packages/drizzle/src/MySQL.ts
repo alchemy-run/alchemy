@@ -1,5 +1,5 @@
 // `@effect/sql-mysql2` (and mysql2 underneath) are optional peers — value
-// imports are deferred to first use so `alchemy/Drizzle` resolves without
+// imports are deferred to first use so `@alchemy.run/drizzle` resolves without
 // them installed.
 import type * as MysqlClient from "@effect/sql-mysql2/MysqlClient";
 import type { AnyRelations, EmptyRelations } from "drizzle-orm";
@@ -8,9 +8,9 @@ import type { EffectDrizzleMySqlConfig } from "drizzle-orm/mysql-core/effect/uti
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Redacted from "effect/Redacted";
-import { makeExecutionMemo } from "../Runtime/ExecutionMemo.ts";
-import type { MySQLConfig } from "../SQL/MySQL.ts";
-import { proxyChain } from "../Util/proxy-chain.ts";
+import { makeExecutionMemo } from "alchemy/Runtime/ExecutionMemo";
+import type { MySQLConfig } from "alchemy/SQL/MySQL";
+import { proxyChain } from "alchemy/Util/proxy-chain";
 
 /**
  * Open a Drizzle/MySQL database from a connection URL using the
@@ -62,7 +62,7 @@ export const MySQL = <
             Promise.all([
               import("@effect/sql-mysql2/MysqlClient"),
               import("drizzle-orm/effect-mysql2"),
-              import("../SQL/MySQL.ts"),
+              import("alchemy/SQL/MySQL"),
             ]),
           );
         const { client, ...drizzleConfig } = config ?? {};

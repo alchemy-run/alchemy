@@ -115,7 +115,7 @@ Object. Commit it and hand it to `Drizzle.DurableObject`, along with
 the `relations`:
 
 ```typescript
-import * as Drizzle from "alchemy/Drizzle/Cloudflare";
+import * as Drizzle from "@alchemy.run/drizzle/Cloudflare";
 import migrations from "./drizzle/migrations.js";
 import { posts, relations, users } from "./schema.ts";
 
@@ -136,7 +136,7 @@ export class Users extends Cloudflare.DurableObject<Users>()(
 ) {}
 ```
 
-`Drizzle.DurableObject` (from `alchemy/Drizzle/Cloudflare`) opens
+`Drizzle.DurableObject` (from `@alchemy.run/drizzle/Cloudflare`) opens
 drizzle over the instance's own SQLite storage using the
 `drizzle-orm/effect-sqlite-do` integration — the
 same effect-native query surface as [`Drizzle.D1`](/sql/drizzle/d1)
