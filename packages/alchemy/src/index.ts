@@ -41,13 +41,11 @@ export {
   DurableObjectScope,
   DurableObjectState,
   Worker,
-  WorkerTarget,
   type DurableObjectServices,
   type DurableObjectStub,
   type WorkerBindingContract,
   type WorkerRef,
   type WorkerShape,
-  type WorkerTargetService,
 } from "./Worker/index.ts";
 export * from "./Stage.ts";
 export { inMemoryState, localState } from "./State/index.ts";

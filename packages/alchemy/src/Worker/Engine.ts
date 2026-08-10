@@ -6,13 +6,10 @@
  * There is no deploy-time dispatch here: a deploy wrapper
  * (`Cloudflare.Worker(cls, props, impl)`, `Celld.Worker(...)`,
  * `Rivet.Worker(...)`) constructs its cloud's NATIVE worker resource
- * directly. What remains portable is purely contractual:
- *
- * - **{@link WorkerTarget}** — the per-cloud adapter carrier, provided by
- *   the deploy wrapper around the worker impl. It carries the runtime
- *   behaviors the portable Durable Object layer needs at impl-evaluation
- *   time: the local/remote stub flavors, the host-native shape of a
- *   Durable Object binding, and the optional gateway wrap for `fetch`.
+ * directly — the hosting machinery itself is the native Durable Object
+ * core (see `Cloudflare/Workers/DurableObject.ts`), with per-engine
+ * variation riding on the host's runtime context. What remains portable
+ * is purely contractual:
  *
  * - **{@link Deployment}** — the keyed proof that a worker is deployed to
  *   a specific platform, produced by the deploy wrapper and consumed by
@@ -24,73 +21,12 @@
  */
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
-import type { HttpEffect } from "../Http.ts";
 import type { ResourceLike } from "../Resource.ts";
 
 /** A named Durable Object namespace client (see `Worker/DurableObject.ts`). */
 export interface DurableObjectNamespaceClient {
   getByName: (name: string) => any;
 }
-
-/**
- * The per-cloud adapter a deploy wrapper provides around the worker impl.
- * The portable Durable Object layer resolves it during the impl's init to
- * register host-native binding data and build engine-specific stubs.
- */
-export interface WorkerTargetService {
-  /** The platform kind this target deploys through (e.g. `"cloudflare"`). */
-  readonly kind: string;
-  /**
-   * Wrap the worker's served `fetch` handler (e.g. the authenticated RPC
-   * gateway). Applied by the deploy wrapper on BOTH plan and runtime
-   * evaluations of the impl.
-   */
-  readonly wrapServe?: (
-    handler: HttpEffect<any> | undefined,
-  ) => HttpEffect<any>;
-  /**
-   * The host-native binding data for a Durable Object class declaration —
-   * what `host.bind` receives when a hosted DO layer registers itself.
-   * Cloudflare returns `{ bindings: [{ type: "durable_object_namespace",
-   * ... }] }`; celld and Rivet accept `{ durableObjects: [decl] }`.
-   */
-  readonly durableObjectBinding: (decl: {
-    readonly name: string;
-    readonly className: string;
-  }) => unknown;
-  /**
-   * Build the namespace client for a Durable Object hosted by THIS worker,
-   * from the runtime environment's native binding (e.g. celld wraps the
-   * native stub with the fetch-RPC transport; Cloudflare uses the JSRPC
-   * stub).
-   */
-  readonly localDurableObject: (
-    nativeBinding: any,
-    namespace: string,
-  ) => DurableObjectNamespaceClient;
-  /**
-   * Build the namespace client a REMOTE caller (an AWS Lambda, an ECS task)
-   * uses to reach this platform's Durable Objects, from the connection
-   * material the ref's `callerBinding` bound into the caller's
-   * environment.
-   *
-   * This lives on the target/ref rather than being looked up at runtime
-   * deliberately: deploy-time provider layers do not exist inside a
-   * deployed caller's bundle, so the transport must ride in the caller's
-   * own `Effect.provide` chain — and a caller that forgets it fails to
-   * COMPILE.
-   */
-  readonly remoteDurableObject: (options: {
-    readonly url: string;
-    readonly secret: string;
-    readonly namespace: string;
-  }) => DurableObjectNamespaceClient;
-}
-
-export class WorkerTarget extends Context.Service<
-  WorkerTarget,
-  WorkerTargetService
->()("Alchemy.WorkerTarget") {}
 
 /**
  * The portable worker's binding contract. `grants` is the host-mediated
@@ -147,12 +83,20 @@ export interface HostRefService<W = unknown> {
   /** Standard env key the worker's secret is bound under. */
   readonly secretKey: string;
   /**
-   * The remote Durable Object transport for the hosting platform. Rides
+   * The remote Durable Object transport for the hosting platform — builds
+   * the namespace client a REMOTE caller (an AWS Lambda, an ECS task) uses
+   * to reach this platform's Durable Objects, from the connection material
+   * the ref's `callerBinding` bound into the caller's environment. Rides
    * on the ref because each `.ref` names its cloud statically — deploy
    * layers are absent from a deployed caller's bundle, so nothing can be
-   * looked up at runtime.
+   * looked up at runtime, and a caller that forgets the ref fails to
+   * COMPILE.
    */
-  readonly remoteDurableObject: WorkerTargetService["remoteDurableObject"];
+  readonly remoteDurableObject: (options: {
+    readonly url: string;
+    readonly secret: string;
+    readonly namespace: string;
+  }) => DurableObjectNamespaceClient;
   /**
    * The deploy-time half of connecting a caller host (Lambda Function, ECS
    * task, …) to the referenced worker: return the binding data the caller

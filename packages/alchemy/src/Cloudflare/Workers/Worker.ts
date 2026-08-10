@@ -2237,10 +2237,7 @@ import type {
   DeploymentService,
   HostRef,
   HostRefService,
-  WorkerTarget as GenericWorkerTarget,
-  WorkerTargetService,
 } from "../../Worker/Engine.ts";
-import { makeRpcStub } from "./Rpc.ts";
 
 /**
  * The Cloudflare-specific deployment config the deploy form forwards to
@@ -2276,32 +2273,16 @@ const crossCloudNotImplemented = () =>
   );
 
 /**
- * The Cloudflare per-cloud adapter provided around the worker impl. Only
- * the members the portable Durable Object hosting path reads on
- * Cloudflare: the native binding shape for a DO class declaration and the
- * native JSRPC stub flavor. Remote (cross-cloud) callers are not
- * supported yet.
+ * The Cloudflare deploy adapter. The Durable Object hosting path needs no
+ * per-engine members here — the hosting core's defaults ARE the
+ * Cloudflare-native flavors (see `DurableObject.ts`). Remote
+ * (cross-cloud) callers are not supported yet.
  */
-const cloudflareTarget: WorkerTargetService = {
+const deployAdapter: WorkerDeployAdapter<"cloudflare"> = {
   kind: "cloudflare",
-  durableObjectBinding: (declaration) => ({
-    bindings: [
-      {
-        type: "durable_object_namespace" as const,
-        name: declaration.name,
-        className: declaration.className,
-      },
-    ],
-  }),
-  localDurableObject: (nativeBinding) => makeRpcStub<any>(nativeBinding),
   remoteDurableObject: () => {
     throw crossCloudNotImplemented();
   },
-};
-
-const deployAdapter: WorkerDeployAdapter<"cloudflare"> = {
-  kind: "cloudflare",
-  target: cloudflareTarget,
   callerBinding: (): HostRefService["callerBinding"] => () =>
     Effect.die(crossCloudNotImplemented()),
   makeNative: (clsId, props: CloudflareWorkerTargetProps, impl) => {
@@ -2321,11 +2302,11 @@ export const Worker: typeof NativeWorker & {
   <Self, WOut, RIn>(
     cls: Effect.Effect<WOut, never, any>,
     props: CloudflareWorkerTargetProps,
-    layer: Layer.Layer<Self, never, RIn | GenericWorkerTarget | HostRef>,
+    layer: Layer.Layer<Self, never, RIn | HostRef>,
   ): Layer.Layer<
     Self | DeploymentService<WOut, "cloudflare">,
     never,
-    Exclude<RIn, GenericWorkerTarget | HostRef>
+    Exclude<RIn, HostRef>
   >;
   /** Deploy an impl effect directly (single-module form). */
   <WOut, Self, I extends Effect.Effect<any, any, any>>(

@@ -8,13 +8,13 @@
  *
  * 1. resolve the impl (an impl Effect, or the definition marker
  *    `cls.make(impl)` produced);
- * 2. provide the per-cloud {@link WorkerTarget} adapter and a SELF
- *    {@link HostRef} around the impl, and apply the target's `wrapServe`
- *    to the returned `fetch` (identically on plan and runtime
- *    evaluations);
+ * 2. provide a SELF {@link HostRef} around the impl, and apply the
+ *    adapter's `wrapServe` to the returned `fetch` (identically on plan
+ *    and runtime evaluations);
  * 3. hand the wrapped impl to the cloud's native worker platform — which
  *    owns exports, Durable Object class migrations, bundling, and the
- *    whole deployment lifecycle;
+ *    whole deployment lifecycle (per-engine Durable Object variation
+ *    rides on the platform's runtime context, not here);
  * 4. return a Layer providing the portable class tag (value = the native
  *    resource) plus the keyed {@link Deployment} proof its `.ref`
  *    companion consumes.
@@ -23,13 +23,8 @@
  */
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import {
-  Deployment,
-  HostRef,
-  WorkerTarget,
-  type HostRefService,
-  type WorkerTargetService,
-} from "./Engine.ts";
+import type { HttpEffect } from "../Http.ts";
+import { Deployment, HostRef, type HostRefService } from "./Engine.ts";
 import {
   resolveWorkerRef,
   workerConnectionKeys,
@@ -65,8 +60,19 @@ export const resolveDeployImpl = (
 export interface WorkerDeployAdapter<K extends string> {
   /** The platform kind (`"cloudflare"`, `"celld"`, `"rivet"`). */
   readonly kind: K;
-  /** The per-cloud adapter provided around the impl. */
-  readonly target: WorkerTargetService;
+  /**
+   * Wrap the worker's served `fetch` handler (e.g. the authenticated RPC
+   * gateway remote callers reach hosted Durable Objects through). Applied
+   * on BOTH plan and runtime evaluations of the impl.
+   */
+  readonly wrapServe?: (
+    handler: HttpEffect<any> | undefined,
+  ) => HttpEffect<any>;
+  /**
+   * The remote Durable Object transport callers outside this platform
+   * speak (see {@link HostRefService.remoteDurableObject}).
+   */
+  readonly remoteDurableObject: HostRefService["remoteDurableObject"];
   /**
    * The deploy-time caller binding a `.ref` (and the self host-ref)
    * carries — absorbed from the deleted engine seam.
@@ -95,7 +101,7 @@ export const makeWorkerDeploy = <K extends string>(
     kind: adapter.kind,
     workerId: clsId,
     ...workerConnectionKeys(clsId),
-    remoteDurableObject: adapter.target.remoteDurableObject,
+    remoteDurableObject: adapter.remoteDurableObject,
     callerBinding: adapter.callerBinding(clsId),
   });
 
@@ -113,19 +119,16 @@ export const makeWorkerDeploy = <K extends string>(
       // unaffected.
       worker: undefined,
     };
-    // Provide the target + self host-ref around the impl, and apply the
-    // target's gateway wrap to the returned `fetch`. The wrap must run on
-    // BOTH plan and runtime evaluations — this mapping is part of the
-    // deploy module, which re-executes inside the bundle.
+    // Provide the self host-ref around the impl, and apply the adapter's
+    // gateway wrap to the returned `fetch`. The wrap must run on BOTH
+    // plan and runtime evaluations — this mapping is part of the deploy
+    // module, which re-executes inside the bundle.
     const wrappedImpl = Effect.gen(function* () {
       const shape = ((yield* impl) ?? {}) as Record<string, unknown>;
-      return adapter.target.wrapServe !== undefined
-        ? { ...shape, fetch: adapter.target.wrapServe(shape.fetch as any) }
+      return adapter.wrapServe !== undefined
+        ? { ...shape, fetch: adapter.wrapServe(shape.fetch as any) }
         : shape;
-    }).pipe(
-      Effect.provideService(WorkerTarget, adapter.target),
-      Effect.provideService(HostRef, selfRef),
-    );
+    }).pipe(Effect.provideService(HostRef, selfRef));
 
     const native = adapter.makeNative(clsId, props, wrappedImpl);
     // The portable class tag resolves the NATIVE resource — `yield* Api`

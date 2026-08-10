@@ -51,11 +51,9 @@ import {
   makeWorkerDeploy,
   type WorkerDeployAdapter,
 } from "../Worker/Deploy.ts";
-import {
-  WorkerTarget,
-  type HostRefService,
-  type WorkerBindingContract,
-  type WorkerTargetService,
+import type {
+  HostRefService,
+  WorkerBindingContract,
 } from "../Worker/Engine.ts";
 import { DEFAULT_CELLD_VERSION, celldDeploy } from "./CelldCli.ts";
 import type { Fleet } from "./Fleet.ts";
@@ -202,10 +200,20 @@ export interface CelldWorker extends Resource<
 export const CelldWorkerResource = Platform(CelldWorkerTypeId, {
   // A fleet deploys the same Effect worker artifact Cloudflare Workers do,
   // so the serve/export/env machinery is shared — only the resource Type
-  // stamp differs (the context is Object.assigned onto the instance).
+  // stamp and the Durable Object flavors differ (the context is
+  // Object.assigned onto the instance, where the DO hosting core reads
+  // the two engine variation points).
   createRuntimeContext: (id: string) => ({
     ...makeWorkerRuntimeContext(id),
     Type: CelldWorkerTypeId as any,
+    // Celld's worker binding contract carries plain DO declarations, not
+    // Cloudflare's `bindings` array.
+    durableObjectBinding: (decl: { name: string; className: string }) => ({
+      durableObjects: [{ name: decl.name, className: decl.className }],
+    }),
+    // Celld namespace stubs speak fetch, not workerd JSRPC (celld's JSRPC
+    // dispatch stalls on Proxy-returning constructors).
+    durableObjectStub: (nativeStub: unknown) => localDurableObject(nativeStub),
   }),
 });
 
@@ -532,15 +540,6 @@ const remoteDurableObject = ({
     }),
 });
 
-/** The celld per-cloud adapter provided around the worker impl. */
-const celldTarget: WorkerTargetService = {
-  kind: CELLD_ENGINE,
-  wrapServe: (handler) => makeGatewayFetch(handler),
-  durableObjectBinding: (declaration) => ({ durableObjects: [declaration] }),
-  localDurableObject,
-  remoteDurableObject,
-};
-
 const callerBinding =
   (): HostRefService["callerBinding"] =>
   ({ worker, host, urlKey, secretKey }) =>
@@ -562,7 +561,8 @@ const callerBinding =
 
 const adapter: WorkerDeployAdapter<"celld"> = {
   kind: CELLD_ENGINE,
-  target: celldTarget,
+  wrapServe: (handler) => makeGatewayFetch(handler),
+  remoteDurableObject,
   callerBinding,
   makeNative: (clsId, props: CelldWorkerProps, impl) => {
     const nativeCls = (CelldWorkerResource as any)(clsId);
@@ -631,11 +631,11 @@ export const Worker: {
   <Self, WOut, RIn>(
     cls: Effect.Effect<WOut, never, any>,
     props: CelldWorkerProps,
-    layer: Layer.Layer<Self, never, RIn | WorkerTarget | HostRef>,
+    layer: Layer.Layer<Self, never, RIn | HostRef>,
   ): Layer.Layer<
     Self | DeploymentService<WOut, "celld">,
     never,
-    Exclude<RIn, WorkerTarget | HostRef>
+    Exclude<RIn, HostRef>
   >;
   /** Deploy an impl effect directly (single-module form). */
   <WOut, Self, I extends Effect.Effect<any, any, any>>(

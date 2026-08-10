@@ -44,11 +44,9 @@ import {
   makeWorkerDeploy,
   type WorkerDeployAdapter,
 } from "../Worker/Deploy.ts";
-import {
-  WorkerTarget,
-  type HostRefService,
-  type WorkerBindingContract,
-  type WorkerTargetService,
+import type {
+  HostRefService,
+  WorkerBindingContract,
 } from "../Worker/Engine.ts";
 import type { Cluster } from "./Cluster.ts";
 import { findClusterHost } from "./ClusterHost.ts";
@@ -196,11 +194,22 @@ export interface RivetWorker extends Resource<
  */
 export const RivetWorkerResource = Platform(RivetWorkerTypeId, {
   // The impl evaluates through the shared worker runtime context (exports
-  // and Durable Object registration machinery); only the resource Type
-  // stamp differs (the context is Object.assigned onto the instance).
+  // and Durable Object registration machinery); the resource Type stamp
+  // and the Durable Object flavors differ (the context is Object.assigned
+  // onto the instance, where the DO hosting core reads the two engine
+  // variation points).
   createRuntimeContext: (id: string) => ({
     ...makeWorkerRuntimeContext(id),
     Type: RivetWorkerTypeId as any,
+    // Rivet's worker binding contract carries plain DO declarations, not
+    // Cloudflare's `bindings` array.
+    durableObjectBinding: (decl: { name: string; className: string }) => ({
+      durableObjects: [{ name: decl.name, className: decl.className }],
+    }),
+    // The synthetic runner environment (see `Runner.ts`) already maps each
+    // hosted class to a gateway-backed namespace, so the "native stub" IS
+    // the finished stub.
+    durableObjectStub: (nativeStub: unknown) => nativeStub,
   }),
 });
 
@@ -424,13 +433,6 @@ export const RivetWorkerProvider = () =>
   );
 
 /**
- * The in-runner stub flavor: the synthetic runner environment (see
- * `Runner.ts`) already maps each hosted class to a gateway-backed
- * namespace, so the "native binding" IS the finished stub.
- */
-const localDurableObject = (nativeBinding: any) => nativeBinding;
-
-/**
  * The remote-caller stub flavor: speak the Rivet gateway protocol against
  * the engine endpoint + token that the ref's `callerBinding` bound into
  * the caller's environment.
@@ -454,16 +456,6 @@ const remoteDurableObject = ({
     namespace,
   );
 
-/** The Rivet per-cloud adapter provided around the worker impl. */
-const rivetTarget: WorkerTargetService = {
-  kind: RIVET_ENGINE,
-  // No gateway wrap: the runner serves no HTTP — actors are reached
-  // through the engine's own gateway protocol.
-  durableObjectBinding: (declaration) => ({ durableObjects: [declaration] }),
-  localDurableObject,
-  remoteDurableObject,
-};
-
 const callerBinding =
   (): HostRefService["callerBinding"] =>
   ({ worker, host, urlKey, secretKey }) =>
@@ -485,7 +477,9 @@ const callerBinding =
 
 const adapter: WorkerDeployAdapter<"rivet"> = {
   kind: RIVET_ENGINE,
-  target: rivetTarget,
+  // No gateway wrap: the runner serves no HTTP — actors are reached
+  // through the engine's own gateway protocol.
+  remoteDurableObject,
   callerBinding,
   makeNative: (clsId, props: RivetWorkerProps, impl) => {
     const nativeCls = (RivetWorkerResource as any)(clsId);
@@ -556,11 +550,11 @@ export const Worker: {
   <Self, WOut, RIn>(
     cls: Effect.Effect<WOut, never, any>,
     props: RivetWorkerProps,
-    layer: Layer.Layer<Self, never, RIn | WorkerTarget | HostRef>,
+    layer: Layer.Layer<Self, never, RIn | HostRef>,
   ): Layer.Layer<
     Self | DeploymentService<WOut, "rivet">,
     never,
-    Exclude<RIn, WorkerTarget | HostRef>
+    Exclude<RIn, HostRef>
   >;
   /** Deploy an impl effect directly (single-module form). */
   <WOut, Self, I extends Effect.Effect<any, any, any>>(
