@@ -10,14 +10,12 @@ import AuroraAuthFunctionLive, {
 import { AuthHttpError, getJson, postJson, toCookieHeader } from "../http.ts";
 
 /**
- * Aurora Serverless v2 provisioning takes ~10 minutes — far beyond the
- * suite's speed budget, so the full lifecycle is opt-in:
- *
- *   BETTER_AUTH_TEST_AURORA=1 bun run test test/AWS/Aurora.test.ts --profile testing
- *
- * The Data API dialect itself is pinned ungated by AuroraDataApi.test.ts.
+ * Aurora Serverless v2 provisioning takes ~10 minutes, so this suite is
+ * skipped under `--fast` (the established FAST=1 convention for
+ * long-provisioning resources). The Data API dialect itself is pinned
+ * ungated by AuroraDataApi.test.ts.
  */
-const enabled = !!process.env.BETTER_AUTH_TEST_AURORA;
+const enabled = !process.env.FAST;
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
