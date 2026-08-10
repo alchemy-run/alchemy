@@ -4,6 +4,12 @@
   "injectionSelector": "L:source.ts -comment -string -meta.embedded.block.alchemy-prose, L:source.tsx -comment -string -meta.embedded.block.alchemy-prose, L:source.js -comment -string -meta.embedded.block.alchemy-prose, L:source.jsx -comment -string -meta.embedded.block.alchemy-prose, L:source.js.jsx -comment -string -meta.embedded.block.alchemy-prose",
   "patterns": [
     {
+      "include": "#typescript-template"
+    },
+    {
+      "include": "#markdown-template"
+    },
+    {
       "include": "#prose-template"
     },
     {
@@ -14,6 +20,74 @@
     }
   ],
   "repository": {
+    "typescript-template": {
+      "comment": "typescript`…` (alchemy/Code) — a block of generated code written inline, so the body is highlighted as TypeScript rather than as a string. Listed before the prose rules: a bare `typescript` tag would otherwise never be reached. Like them it begins at the tag rather than at the backtick, so the host grammar's own tagged-template rule cannot match first and win.",
+      "begin": "(?<![_$[:alnum:]])((?:[_$[:alpha:]][_$[:alnum:]]*\\s*\\??\\.\\s*)*)(typescript)\\s*(`)",
+      "beginCaptures": {
+        "1": {
+          "patterns": [
+            {
+              "include": "source.ts"
+            }
+          ]
+        },
+        "2": {
+          "name": "entity.name.function.tagged-template.alchemy"
+        },
+        "3": {
+          "name": "punctuation.definition.string.template.begin.alchemy"
+        }
+      },
+      "end": "(`)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.string.template.end.alchemy"
+        }
+      },
+      "contentName": "meta.embedded.block.typescript",
+      "patterns": [
+        {
+          "include": "#splice"
+        },
+        {
+          "include": "#escape"
+        },
+        {
+          "include": "#code-line-ts"
+        }
+      ]
+    },
+    "markdown-template": {
+      "comment": "markdown`…` (alchemy/Code) — a document written inline, given the same Markdown treatment as charter prose.",
+      "begin": "(?<![_$[:alnum:]])((?:[_$[:alpha:]][_$[:alnum:]]*\\s*\\??\\.\\s*)*)(markdown)\\s*(`)",
+      "beginCaptures": {
+        "1": {
+          "patterns": [
+            {
+              "include": "source.ts"
+            }
+          ]
+        },
+        "2": {
+          "name": "entity.name.function.tagged-template.alchemy"
+        },
+        "3": {
+          "name": "punctuation.definition.string.template.begin.alchemy"
+        }
+      },
+      "end": "(`)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.string.template.end.alchemy"
+        }
+      },
+      "contentName": "meta.embedded.block.alchemy-prose",
+      "patterns": [
+        {
+          "include": "#prose-body"
+        }
+      ]
+    },
     "prose-template": {
       "comment": "A tagged template whose tag is a member access ending in .make / .prose / .say — the body is prose, so it is highlighted as Markdown rather than as a string. The begin pattern swallows the whole receiver chain because an injection only outranks the host grammar's own tagged-template rule when both start at the same offset; beginning at the dot would let the host match first and win.",
       "begin": "((?:[_$[:alpha:]][_$[:alnum:]]*\\s*\\??\\.\\s*)+)(make|prose|say)\\s*(`)",

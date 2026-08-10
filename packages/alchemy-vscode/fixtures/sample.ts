@@ -21,6 +21,14 @@ declare const AI: {
   ) => (t: TemplateStringsArray) => new () => unknown;
 };
 declare const Parameter: (name: string, props: unknown) => unknown;
+declare const typescript: (
+  t: TemplateStringsArray,
+  ...values: unknown[]
+) => string;
+declare const markdown: (
+  t: TemplateStringsArray,
+  ...values: unknown[]
+) => string;
 declare const Coding: {
   make: (t: TemplateStringsArray, ...refs: unknown[]) => unknown;
 };
@@ -118,3 +126,17 @@ export const notATag = Parameter("not-a-tag", {
 });
 
 export const token = Redacted.make("not-prose");
+
+/** typescript`…` is code, not a string: keywords keep their colors. */
+export const generated = typescript`
+  const program = (function () {
+    return 1;
+  })();
+`;
+
+/** markdown`…` gets the same treatment charter prose does. */
+export const document = markdown`
+  # Generated report
+
+  - **bold** in a list
+`;

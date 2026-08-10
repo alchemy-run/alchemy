@@ -212,6 +212,16 @@ const results = [
   expect("make", "entity.name.function.tagged-template.alchemy"),
   expect("not-prose", "string.quoted"),
   refute("not-prose", "meta.embedded.block.alchemy-prose"),
+  // typescript`…` is code: the body keeps TypeScript's own colors
+  // (`const` alone proves nothing — a fenced block above has one too)
+  expect("typescript", "entity.name.function.tagged-template.alchemy"),
+  expect("program", "meta.embedded.block.typescript"),
+  expect("return", "keyword.control.flow"),
+  refute("program", "meta.embedded.block.alchemy-prose"),
+  // markdown`…` is a document, same treatment as charter prose
+  expect("markdown", "entity.name.function.tagged-template.alchemy"),
+  expect("Generated report", "markup.heading"),
+  expect("bold", "markup.bold"),
 ];
 
 process.exit(results.every(Boolean) ? 0 : 1);
