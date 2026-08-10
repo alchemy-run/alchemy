@@ -69,6 +69,34 @@ jobs:
             ]
           pr-package-token: ${{ secrets.PR_PACKAGE_TOKEN }}
 
+      - name: Check pnpm peer graph
+        if: fromJson(steps.publish.outputs.plan).packages[0] != null
+        env:
+          PLAN: ${{ steps.publish.outputs.plan }}
+        run: |
+          set -euo pipefail
+
+          PACKAGE_URL=$(jq -r '
+            . as $plan
+            | .packages[]
+            | select(.name == "alchemy")
+            | "https://\($plan.install_host)/\(.install)/\(.commit)"
+          ' <<< "$PLAN")
+
+          if [ -z "$PACKAGE_URL" ]; then
+            echo "alchemy was not selected for this publication"
+            exit 0
+          fi
+
+          TEMP_DIR=$(mktemp -d)
+          trap 'rm -rf "$TEMP_DIR"' EXIT
+          cd "$TEMP_DIR"
+
+          bunx pnpm@11.21.0 init
+          bunx pnpm@11.21.0 config set blockExoticSubdeps false --location project
+          bunx pnpm@11.21.0 add --ignore-scripts "$PACKAGE_URL"
+          bunx pnpm@11.21.0 peers check
+
       - name: Generate bot token
         if: >-
           github.event_name == 'pull_request' &&
