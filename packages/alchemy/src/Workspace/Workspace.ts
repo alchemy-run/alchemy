@@ -130,7 +130,16 @@ const makeContainment = (
   return { resolveExisting, resolveForCreate };
 };
 
-/** A FIXED containment root, created if missing. */
+/**
+ * A FIXED containment root, created if missing.
+ *
+ * Provisioning is LAZY — the directory is created (and canonicalized)
+ * on first use, memoized, not at layer build. Layer construction must
+ * stay filesystem-free because a layer can be built somewhere the root
+ * does not belong: a Cloudflare container's `.make()` impl builds at
+ * PLAN time on the developer's machine, where eagerly `mkdir`-ing the
+ * guest's `/workspace` fails (`EROFS`) long before any container runs.
+ */
 export const fixed = (
   root: string,
 ): Layer.Layer<Workspace, never, Path.Path | FileSystem.FileSystem> =>
@@ -139,18 +148,36 @@ export const fixed = (
     Effect.gen(function* () {
       const path = yield* Path.Path;
       const fs = yield* FileSystem.FileSystem;
-      // self-provisioning: checkouts land under it later —
+
+      // self-provisioning on first use: checkouts land under it later —
       // Git.Workspaces populates, we contain
-      const resolved = path.resolve(root);
-      yield* fs.makeDirectory(resolved, { recursive: true }).pipe(Effect.orDie);
-      const canonicalRoot = yield* fs.realPath(resolved).pipe(Effect.orDie);
-      const containment = makeContainment(canonicalRoot, fs, path);
+      const canonicalRoot = yield* Effect.cached(
+        Effect.gen(function* () {
+          const resolved = path.resolve(root);
+          yield* fs
+            .makeDirectory(resolved, { recursive: true })
+            .pipe(Effect.orDie);
+          return yield* fs.realPath(resolved).pipe(Effect.orDie);
+        }),
+      );
+
+      const within = <A>(
+        use: (
+          containment: ReturnType<typeof makeContainment>,
+        ) => Effect.Effect<A, string>,
+      ) =>
+        Effect.flatMap(canonicalRoot, (resolved) =>
+          use(makeContainment(resolved, fs, path)),
+        );
 
       return {
-        root: Effect.succeed(canonicalRoot),
-        resolve: containment.resolveForCreate,
-        resolveExisting: containment.resolveExisting,
-        resolveForCreate: containment.resolveForCreate,
+        root: canonicalRoot,
+        resolve: (relative) =>
+          within((containment) => containment.resolveForCreate(relative)),
+        resolveExisting: (relative) =>
+          within((containment) => containment.resolveExisting(relative)),
+        resolveForCreate: (relative) =>
+          within((containment) => containment.resolveForCreate(relative)),
       };
     }),
   );
