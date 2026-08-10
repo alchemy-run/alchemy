@@ -6,7 +6,9 @@ import {
   sshKeysUpdate,
   type SshKeys as ApiSshKey,
 } from "@distilled.cloud/digitalocean/sshKeys";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -86,8 +88,8 @@ export const SshKeyProvider = () =>
 
       const observeById = (identifier: string) =>
         get({ ssh_key_identifier: identifier }).pipe(
-          Effect.map((r) => r.ssh_key),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.map((r) => Option.fromNullishOr(r.ssh_key)),
+          Effect.catchTag("NotFound", () => Effect.succeedNone),
         );
 
       const listAll = Effect.gen(function* () {
@@ -104,7 +106,10 @@ export const SshKeyProvider = () =>
       const observeByContent = (publicKey: string) =>
         listAll.pipe(
           Effect.map((keys) =>
-            keys.find((k) => normalizeKey(k.public_key) === publicKey),
+            Arr.findFirst(
+              keys,
+              (k) => normalizeKey(k.public_key) === publicKey,
+            ),
           ),
         );
 
@@ -129,15 +134,18 @@ export const SshKeyProvider = () =>
           // Observe — by cached id first, falling back to a content scan so
           // a crash after create (state never persisted) converges on the
           // existing key instead of failing on the duplicate-key 422.
-          const observed =
-            (output !== undefined
+          const cached =
+            output !== undefined
               ? yield* observeById(String(output.sshKeyId))
-              : undefined) ?? (yield* observeByContent(publicKey));
+              : Option.none<ApiSshKey>();
+          const observed = Option.isSome(cached)
+            ? cached
+            : yield* observeByContent(publicKey);
 
           // Ensure — POST registers the key. No AlreadyExists tolerance:
           // sshKeysCreate has no typed duplicate error yet (422 surfaces
           // untyped); the observe above is the idempotency guard.
-          if (observed === undefined) {
+          if (Option.isNone(observed)) {
             const created = yield* create({
               name: desiredName,
               public_key: publicKey,
@@ -152,14 +160,15 @@ export const SshKeyProvider = () =>
           }
 
           // Sync — the only mutable aspect is the name.
-          if (observed.name !== desiredName) {
+          const key = observed.value;
+          if (key.name !== desiredName) {
             const updated = yield* update({
-              ssh_key_identifier: String(observed.id),
+              ssh_key_identifier: String(key.id),
               name: desiredName,
             });
-            return toAttrs(updated.ssh_key ?? observed);
+            return toAttrs(updated.ssh_key ?? key);
           }
-          return toAttrs(observed);
+          return toAttrs(key);
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* del({ ssh_key_identifier: String(output.sshKeyId) }).pipe(
@@ -169,7 +178,7 @@ export const SshKeyProvider = () =>
         read: Effect.fn(function* ({ olds, output }) {
           if (output !== undefined) {
             const existing = yield* observeById(String(output.sshKeyId));
-            return existing === undefined ? undefined : toAttrs(existing);
+            return Option.getOrUndefined(Option.map(existing, toAttrs));
           }
           // Content match without cached state: the key material is
           // identical, but we cannot prove we created it — surface as
@@ -179,9 +188,9 @@ export const SshKeyProvider = () =>
           const existing = yield* observeByContent(
             normalizeKey(olds.publicKey),
           );
-          return existing === undefined
-            ? undefined
-            : Unowned(toAttrs(existing));
+          return Option.getOrUndefined(
+            Option.map(existing, (key) => Unowned(toAttrs(key))),
+          );
         }),
       };
     }),

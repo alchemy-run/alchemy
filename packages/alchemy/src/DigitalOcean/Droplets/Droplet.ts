@@ -11,8 +11,10 @@ import {
   type DropletSingleCreateInput,
   type DropletStatus,
 } from "@distilled.cloud/digitalocean/droplets";
+import * as Arr from "effect/Array";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -207,15 +209,15 @@ export const DropletProvider = () =>
 
       const observe = (dropletId: number) =>
         get({ droplet_id: dropletId }).pipe(
-          Effect.map((r) => r.droplet),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.map((r) => Option.fromNullishOr(r.droplet)),
+          Effect.catchTag("NotFound", () => Effect.succeedNone),
         );
 
       /** Find the droplet named `name` that carries our marker tag. */
       const observeByName = (name: string, marker: string) =>
         list({ name, per_page: 200 }).pipe(
           Effect.map((r) =>
-            (r.droplets ?? []).find((d) => d.tags.includes(marker)),
+            Arr.findFirst(r.droplets ?? [], (d) => d.tags.includes(marker)),
           ),
         );
 
@@ -232,26 +234,37 @@ export const DropletProvider = () =>
         settled: (droplet: ApiDroplet) => boolean,
       ) =>
         get({ droplet_id: dropletId }).pipe(
-          Effect.map((r) => r.droplet),
+          Effect.map((r) => Option.fromNullishOr(r.droplet)),
           // A transient API blip is indistinguishable from "not settled
           // yet" while polling — fold it into the same bounded budget.
-          Effect.catchIf(isTransientError, () => Effect.succeed(undefined)),
+          Effect.catchIf(isTransientError, () =>
+            Effect.succeed(Option.none<ApiDroplet>()),
+          ),
           Effect.repeat({
             schedule: Schedule.spaced("5 seconds"),
-            // Explicitly boolean so TS doesn't infer a refinement: `times`
-            // exhaustion can still hand back an unsettled droplet, and the
-            // result type must stay wide for the guard below.
-            until: (droplet): boolean =>
-              droplet !== undefined && settled(droplet),
+            until: (droplet) => Option.exists(droplet, settled),
             // ≈ 10 minutes — droplets usually settle in well under one.
             times: 120,
           }),
-          Effect.flatMap((droplet) => {
-            const status = droplet?.status ?? "missing";
-            return droplet !== undefined && settled(droplet)
-              ? Effect.succeed(droplet)
-              : Effect.fail(new DropletNotReady({ dropletId, status }));
-          }),
+          // `times` exhaustion can still hand back an unsettled droplet —
+          // re-check before conceding success.
+          Effect.flatMap(
+            Option.match({
+              onNone: () =>
+                Effect.fail(
+                  new DropletNotReady({ dropletId, status: "missing" }),
+                ),
+              onSome: (droplet) =>
+                settled(droplet)
+                  ? Effect.succeed(droplet)
+                  : Effect.fail(
+                      new DropletNotReady({
+                        dropletId,
+                        status: droplet.status,
+                      }),
+                    ),
+            }),
+          ),
         );
 
       /**
@@ -343,15 +356,14 @@ export const DropletProvider = () =>
           // converges instead of creating a same-named twin. `read` upstream
           // has already surfaced foreign droplets as `Unowned`, so mutation
           // is safe here.
-          let current =
-            output !== undefined
-              ? yield* observe(output.dropletId)
-              : yield* observeByName(desiredName, marker);
+          const current = yield* output !== undefined
+            ? observe(output.dropletId)
+            : observeByName(desiredName, marker);
 
           // Ensure — POST creates the droplet (names are not unique, so
           // there is no AlreadyExists race to tolerate; the observe above is
           // the guard). Wait until it is active so attributes carry an IP.
-          if (current === undefined) {
+          if (Option.isNone(current)) {
             const created = yield* create({
               body: {
                 name: desiredName,
@@ -380,10 +392,11 @@ export const DropletProvider = () =>
 
           // Sync — the only mutable aspect is the name (a rename action).
           // Everything else was classified `replace` by diff.
-          if (current.name !== desiredName) {
-            yield* waitForActive(current.id);
+          const droplet = current.value;
+          if (droplet.name !== desiredName) {
+            yield* waitForActive(droplet.id);
             const renamed = yield* postAction({
-              droplet_id: current.id,
+              droplet_id: droplet.id,
               body: {
                 type: "rename",
                 name: desiredName,
@@ -395,17 +408,17 @@ export const DropletProvider = () =>
                 new Error("rename action response carried no action id"),
               );
             }
-            yield* waitForAction(current.id, actionId);
+            yield* waitForAction(droplet.id, actionId);
             // Action completion is not read visibility — poll until the new
             // name is actually served.
             return toAttrs(
               yield* waitForDroplet(
-                current.id,
-                (droplet) => isReady(droplet) && droplet.name === desiredName,
+                droplet.id,
+                (d) => isReady(d) && d.name === desiredName,
               ),
             );
           }
-          return toAttrs(current);
+          return toAttrs(droplet);
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* destroy({ droplet_id: output.dropletId }).pipe(
@@ -434,15 +447,22 @@ export const DropletProvider = () =>
           const stack = yield* Stack;
           const stage = yield* Stage;
           const marker = buildMarker(stack.name, stage, id);
-          const existing =
-            output !== undefined
-              ? yield* observe(output.dropletId)
-              : olds?.name !== undefined
-                ? yield* observeByName(olds.name, marker)
-                : undefined;
-          if (existing === undefined) return undefined;
-          const attrs = toAttrs(existing);
-          return existing.tags.includes(marker) ? attrs : Unowned(attrs);
+          const probe = () => {
+            if (output !== undefined) return observe(output.dropletId);
+            if (olds?.name !== undefined) {
+              return observeByName(olds.name, marker);
+            }
+            return Effect.succeedNone;
+          };
+          // Collapse to the engine's `Attributes | undefined` contract at
+          // the boundary.
+          return Option.match(yield* probe(), {
+            onNone: () => undefined,
+            onSome: (droplet) => {
+              const attrs = toAttrs(droplet);
+              return droplet.tags.includes(marker) ? attrs : Unowned(attrs);
+            },
+          });
         }),
       };
     }),
