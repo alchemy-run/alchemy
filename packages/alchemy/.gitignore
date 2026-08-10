@@ -1,1 +1,5 @@
 .tmp
+# built by scripts/generate-eval-effect-runtime.ts (root `bun i` prepare hook
+# and this package's build) — the effect runtime shipped into dynamic worker
+# isolates by Cloudflare.AI.EvalWorkerLoader
+src/Cloudflare/AI/EvalEffectRuntime.generated.ts

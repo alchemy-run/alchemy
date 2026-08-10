@@ -22,7 +22,8 @@
   "scripts": {
     "clear:state": "cd ../../ && bun clear:state",
     "dev": "tsdown --watch",
-    "build": "rm -rf lib && tsc -b --force && tsc -b tsconfig.bin.json --force && bun bundle",
+    "build": "bun generate:eval-runtime && rm -rf lib && tsc -b --force && tsc -b tsconfig.bin.json --force && bun bundle",
+    "generate:eval-runtime": "bun scripts/generate-eval-effect-runtime.ts",
     "bundle": "tsdown",
     "bundle:watch": "tsdown --watch",
     "publish:npm": "cp ../README.md . && bun publish && rm README.md",

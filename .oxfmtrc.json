@@ -21,6 +21,7 @@
     "examples/prisma-tanstack-start/src/prisma/contract.json",
     "**/package.json",
     "./distilled",
-    "**/fixtures/chart/templates/**"
+    "**/fixtures/chart/templates/**",
+    "**/*.generated.ts"
   ]
 }

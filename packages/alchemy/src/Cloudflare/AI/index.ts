@@ -4,6 +4,12 @@ export * from "./DurableObjectChatPersistence.ts";
 export * from "./Evaluation.ts";
 export * from "./Gateway.ts";
 export * from "./DriverCloudflare.ts";
+export * from "./EvalWorkerLoader.ts";
+export * from "./EvalWorkerLoaderEffect.ts";
+// NOTE: SandboxContainerRuntime.ts (the guest .make()) is deliberately NOT
+// exported — import it directly into the Stack program so Durable Object
+// bundles that touch this barrel never pull the guest's process machinery.
+export * from "./SandboxContainer.ts";
 export * from "./ThreadStorageDurableObject.ts";
 export * from "./GatewayDynamicRouting.ts";
 export * from "./GatewayProvider.ts";
