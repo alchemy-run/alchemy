@@ -314,14 +314,6 @@ export interface FunctionProps extends PlatformProps {
 }
 
 /**
- * Normalize a {@link FunctionProps.timeout} to whole seconds.
- *
- * State JSON round-trips flatten a `Duration` to its `toJSON` shape
- * (`{_id:"Duration",_tag:"Millis"|"Nanos"|"Infinity",...}`), which is not a
- * valid `Duration.Input`. Reconstruct an input that `Duration.toSeconds`
- * accepts before delegating.
- */
-/**
  * The Lambda `Handler` string for a function's props: `<file>.<export>`.
  * Bundled functions always emit `index.js`; prebuilt directories
  * (`bundle: false`) keep `main`'s own basename. The export half honors
@@ -346,6 +338,14 @@ const handlerStringOf = (props: FunctionProps): string => {
   return `${base}.${externalMode ? (props.handler ?? "default") : "default"}`;
 };
 
+/**
+ * Normalize a {@link FunctionProps.timeout} to whole seconds.
+ *
+ * State JSON round-trips flatten a `Duration` to its `toJSON` shape
+ * (`{_id:"Duration",_tag:"Millis"|"Nanos"|"Infinity",...}`), which is not a
+ * valid `Duration.Input`. Reconstruct an input that `Duration.toSeconds`
+ * accepts before delegating.
+ */
 export const toTimeoutSeconds = (
   timeout: Duration.Duration | undefined,
 ): number | undefined => {
