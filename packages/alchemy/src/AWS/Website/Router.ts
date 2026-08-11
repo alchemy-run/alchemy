@@ -75,8 +75,8 @@ import { normalizeWebsiteDomain, type RouterProps } from "./shared.ts";
  * });
  * ```
  */
-export const Router = (id: string, props: RouterProps) =>
-  Effect.gen(function* () {
+export const Router = Effect.fn("AWS.Website.Router")(
+  function* (id: string, props: RouterProps) {
     const domain = normalizeWebsiteDomain(props.domain);
 
     if (domain && domain.dns === false && !domain.cert) {
@@ -428,7 +428,9 @@ export const Router = (id: string, props: RouterProps) =>
        */
       urls,
     };
-  }).pipe(Namespace.push(id));
+  },
+  (effect, id: string, _props: RouterProps) => effect.pipe(Namespace.push(id)),
+);
 
 const buildRouterRequestFunctionCode = ({
   kvNamespace,

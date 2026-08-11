@@ -2,6 +2,7 @@ import type { Input } from "../../Input.ts";
 import type { Certificate } from "../ACM/Certificate.ts";
 import type { Distribution } from "../CloudFront/Distribution.ts";
 import type { Records } from "../Route53/Records.ts";
+import type { AssetFileOption } from "./AssetDeployment.ts";
 import type { Bucket } from "../S3/Bucket.ts";
 
 /**
@@ -303,6 +304,17 @@ export interface StaticSiteAssetsProps {
    * @default "utf-8"
    */
   textEncoding?: WebsiteTextEncoding;
+}
+
+/**
+ * Static-asset upload configuration for the website composites:
+ * {@link StaticSiteAssetsProps} plus per-file overrides.
+ */
+export interface WebsiteAssetsConfig extends StaticSiteAssetsProps {
+  /**
+   * Per-file overrides for content type and cache-control.
+   */
+  fileOptions?: AssetFileOption[];
 }
 
 export interface RouterUrlRouteProps {

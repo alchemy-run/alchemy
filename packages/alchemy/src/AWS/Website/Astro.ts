@@ -1,21 +1,5 @@
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import { AlchemyContext } from "../../AlchemyContext.ts";
-import type { MemoOptions } from "../../Command/Memo.ts";
-import type { Input } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
-import * as Output from "../../Output.ts";
-import { ProviderModePolicy } from "../../ProviderMode.ts";
-import { Function as LambdaFunction } from "../Lambda/Function.ts";
-import type { AssetFileOption } from "./AssetDeployment.ts";
-import { Server, type ServerDevProps } from "./Server.ts";
-import { makeKvSite, type StaticSiteProps } from "./StaticSite.ts";
-import type {
-  StaticSiteAssetsProps,
-  WebsiteDomainProps,
-  WebsiteEdgeProps,
-  WebsiteInvalidationProps,
-} from "./shared.ts";
+import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 
 /** The framework-integration package that drives the Astro build. */
 export const ASTRO_FRAMEWORK_SPECIFIER =
@@ -25,12 +9,7 @@ export const ASTRO_FRAMEWORK_SPECIFIER =
 export const ASTRO_AWS_TARGET_SPECIFIER =
   "@alchemy.run/frontend-frameworks/astro/aws";
 
-export interface AstroProps {
-  /**
-   * Project root directory (the directory containing `astro.config.*`).
-   * @default "."
-   */
-  rootDir?: string;
+export interface AstroProps extends FrameworkSiteProps {
   /**
    * Serializable Astro config merged OVER the project's own
    * `astro.config.*` (which loads natively). `adapter` is owned by the AWS
@@ -59,81 +38,6 @@ export interface AstroProps {
     trailingSlash?: "always" | "never" | "ignore";
   };
   /**
-   * Controls which files are hashed to decide whether the build re-runs.
-   * @default true
-   */
-  memo?: MemoOptions | boolean;
-  /**
-   * Options for the local dev server that runs this site under
-   * `alchemy dev`.
-   */
-  dev?: ServerDevProps;
-  /**
-   * SSR server (Lambda) configuration. Ignored for `output: "static"`
-   * sites (no server deploys).
-   */
-  server?: {
-    /**
-     * Memory allocated to the server function, in MB.
-     * @default 1024
-     */
-    memorySize?: number;
-    /**
-     * Maximum request duration.
-     * @default 30 seconds
-     */
-    timeout?: Duration.Duration;
-    /**
-     * Environment variables for the server function.
-     */
-    environment?: Record<string, any>;
-    /**
-     * Instruction set architecture.
-     * @default "x86_64"
-     */
-    architecture?: "x86_64" | "arm64";
-  };
-  /**
-   * Static asset upload configuration.
-   */
-  assets?: StaticSiteAssetsProps & {
-    fileOptions?: AssetFileOption[];
-  };
-  /**
-   * Optional custom domain. A string is shorthand for `{ name }`; `null`
-   * explicitly clears a previously set domain. Set `domain.router` to
-   * serve the site through an existing `AWS.Website.Router` instead of a
-   * standalone CloudFront distribution.
-   */
-  domain?: string | WebsiteDomainProps | null;
-  /**
-   * Serve the site at its CloudFront default domain
-   * (`https://dxxxx.cloudfront.net`). `false` 301s default-domain requests
-   * to `https://<domain.name>` at the edge and excludes the default domain
-   * from the `urls` output. Requires `domain`; not applicable when
-   * `domain.router` is set.
-   * @default true
-   */
-  cloudfrontUrl?: boolean;
-  /**
-   * Additional CloudFront Function customizations.
-   */
-  edge?: WebsiteEdgeProps;
-  /**
-   * Optional deterministic S3 bucket name for the asset bucket.
-   */
-  bucketName?: string;
-  /**
-   * Whether to delete uploaded objects when the bucket is destroyed.
-   * @default false
-   */
-  forceDestroy?: boolean;
-  /**
-   * CloudFront invalidation behavior.
-   * @default { paths: "all", wait: false }
-   */
-  invalidation?: false | WebsiteInvalidationProps;
-  /**
    * Serve the built error page (e.g. astro's `404.html`) for requests that
    * match no uploaded file. Only applies to `output: "static"` sites — a
    * server-backed site forwards misses to the Lambda instead.
@@ -144,10 +48,6 @@ export interface AstroProps {
    * to `output: "static"` sites.
    */
   spa?: boolean;
-  /**
-   * User-defined tags applied to created resources.
-   */
-  tags?: Record<string, string>;
 }
 
 /**
@@ -210,110 +110,20 @@ export interface AstroProps {
  * });
  * ```
  */
-export const Astro = (id: string, props: AstroProps = {}) =>
-  Effect.gen(function* () {
-    const ctx = yield* AlchemyContext;
-    const remoted = yield* ProviderModePolicy;
-    // Mirrors the Cloudflare Website composites: during `alchemy dev` the
-    // site is the framework's own dev server (native HMR) and no cloud
-    // resources are declared; `Alchemy.remote()` opts back into the full
-    // live deployment.
-    const isLocal = ctx.dev && remoted !== true;
-
-    // Server output is the documented default: astro's own zero-config
-    // default is `"static"`. The inline config merges OVER the project's
-    // `astro.config.*`, so an explicit file-level `output` is superseded;
-    // opt into a fully prerendered site with `astro: { output: "static" }`.
-    const output = props.astro?.output ?? "server";
-
-    const build = yield* Server("Build", {
-      framework: ASTRO_FRAMEWORK_SPECIFIER,
-      target: ASTRO_AWS_TARGET_SPECIFIER,
-      root: props.rootDir,
-      env: props.server?.environment,
-      options: { astro: { ...props.astro, output } },
-      memo: props.memo,
-      dev: props.dev,
-    });
-
-    if (isLocal) {
-      return {
-        bucket: undefined,
-        build,
-        files: undefined,
-        distribution: undefined,
-        invalidation: undefined,
-        kvNamespace: undefined,
-        server: undefined,
-        serverUrl: undefined,
-        url: build.url,
-        urls: [build.url],
-      };
-    }
-
-    const siteProps: StaticSiteProps = {
-      path: build.clientDir as unknown as string,
-      assets: props.assets,
-      domain: props.domain,
-      cloudfrontUrl: props.cloudfrontUrl,
-      edge: props.edge,
-      bucketName: props.bucketName,
-      forceDestroy: props.forceDestroy,
-      invalidation: props.invalidation,
-      tags: props.tags,
-    };
-
-    if (output === "static") {
-      // Assets-only: every page was prerendered into the client directory
-      // at build time; misses resolve to the error page (or the index page
-      // for SPAs) instead of a server origin.
-      const site = yield* makeKvSite(id, {
-        ...siteProps,
-        errorPage: props.errorPage,
-        spa: props.spa,
-      });
-      return {
-        ...site,
-        build,
-        server: undefined,
-        serverUrl: undefined,
-      };
-    }
-
-    const server = yield* LambdaFunction("Server", {
-      main: build.serverEntry as unknown as string,
-      handler: "handler",
-      isExternal: true,
-      // astro's `dist/server` is a complete deployment unit (entry +
-      // chunks, all dependencies bundled by the AWS deploy target) — ship
-      // it as-is.
-      bundle: false,
-      runtime: "nodejs22.x",
-      architecture: props.server?.architecture,
-      memorySize: props.server?.memorySize ?? 1024,
-      timeout: props.server?.timeout ?? Duration.seconds(30),
-      env: props.server?.environment,
-      functionUrl: {
-        authType: "NONE",
-        invokeMode: "RESPONSE_STREAM",
-      },
-    });
-
-    const serverHost = Output.map((url: string | undefined) => {
-      if (!url) {
-        throw new Error(
-          "The Astro server function did not produce a Function URL.",
-        );
-      }
-      return new URL(url).hostname;
-    })(server.functionUrl as any) as Input<string>;
-
-    const site = yield* makeKvSite(id, siteProps, { serverHost });
-
-    return {
-      ...site,
-      build,
-      server,
-      serverUrl: server.functionUrl,
-    };
+export const Astro = (id: string, props: AstroProps = {}) => {
+  // Server output is the documented default: astro's own zero-config
+  // default is `"static"`. The inline config merges OVER the project's
+  // `astro.config.*`, so an explicit file-level `output` is superseded;
+  // opt into a fully prerendered site with `astro: { output: "static" }`.
+  const output = props.astro?.output ?? "server";
+  return makeFrameworkSite(id, props, {
+    name: "Astro",
+    framework: ASTRO_FRAMEWORK_SPECIFIER,
+    target: ASTRO_AWS_TARGET_SPECIFIER,
+    options: { astro: { ...props.astro, output } },
+    static:
+      output === "static"
+        ? { spa: props.spa, errorPage: props.errorPage }
+        : undefined,
   }).pipe(Namespace.push(id));
+};
