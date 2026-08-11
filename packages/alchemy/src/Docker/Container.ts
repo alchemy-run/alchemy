@@ -51,6 +51,21 @@ export interface ContainerProps {
   start?: boolean;
   /** Docker healthcheck configuration. */
   healthcheck?: Container.Healthcheck;
+  /**
+   * Memory limit in Docker's byte-suffix format (`"512m"`, `"2g"`).
+   * The kernel OOM-kills the container rather than the host when exceeded.
+   */
+  memory?: string;
+  /**
+   * Set `no-new-privileges`, preventing processes in the container from
+   * gaining privileges via setuid/setgid binaries. @default false
+   */
+  noNewPrivileges?: boolean;
+  /**
+   * Mount the container's root filesystem read-only. Writable paths must
+   * be provided explicitly as volumes or tmpfs. @default false
+   */
+  readOnly?: boolean;
 }
 
 export declare namespace Container {
@@ -425,6 +440,11 @@ const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
         label: news.labels,
         "stop-timeout": toSeconds(news.stopTimeout)?.toString(),
         rm: news.removeOnExit ?? false,
+        memory: news.memory,
+        "security-opt": news.noNewPrivileges
+          ? ["no-new-privileges"]
+          : undefined,
+        "read-only": news.readOnly ?? false,
         ...(news.healthcheck
           ? {
               "health-cmd": Array.isArray(news.healthcheck.cmd)

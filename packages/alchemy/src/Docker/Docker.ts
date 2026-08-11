@@ -52,6 +52,9 @@ export class Docker extends Context.Service<
         "stop-timeout": string | undefined;
         p: Array<string> | undefined;
         command: Array<string> | undefined;
+        memory: string | undefined;
+        "security-opt": Array<string> | undefined;
+        "read-only": boolean | undefined;
         label?: Record<string, string>;
         context?: string;
       }) => Effect.Effect<CommandOutput, PlatformError>;
@@ -402,6 +405,10 @@ export declare namespace Docker {
         MaximumRetryCount: number;
       };
       AutoRemove: boolean;
+      /** Memory limit in bytes; 0 when unlimited. */
+      Memory: number;
+      SecurityOpt: string[] | null;
+      ReadonlyRootfs: boolean;
     };
     NetworkSettings: {
       Networks: Record<

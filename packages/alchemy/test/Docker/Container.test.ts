@@ -179,6 +179,30 @@ describe("Docker.Container", { concurrent: false }, () => {
   );
 
   test.provider(
+    "applies memory limit, no-new-privileges, and read-only rootfs",
+    (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        // start: false — a read-only rootfs needs writable mounts nginx
+        // doesn't have here; this test only verifies the create args land.
+        const container = yield* stack.deploy(
+          Docker.Container("hardened-container", {
+            image: "nginx:alpine",
+            memory: "64m",
+            noNewPrivileges: true,
+            readOnly: true,
+            start: false,
+          }),
+        );
+
+        const info = yield* docker.container.inspect(container.name);
+        expect(info.HostConfig.Memory).toBe(64 * 1024 * 1024);
+        expect(info.HostConfig.SecurityOpt).toContain("no-new-privileges");
+        expect(info.HostConfig.ReadonlyRootfs).toBe(true);
+      }),
+  );
+
+  test.provider(
     "updates network aliases without replacing the container",
     (stack) =>
       Effect.gen(function* () {
