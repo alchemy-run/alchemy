@@ -16,6 +16,16 @@ export interface ExecProps extends CommandRunProps {
    * @default true
    */
   memo?: MemoOptions | boolean;
+  /**
+   * Command to run when the resource is **deleted** — a final backup, a
+   * deregistration call, or any teardown step that must happen before the
+   * resources this `Exec` depends on are destroyed. Runs with the same
+   * `cwd`, `env`, `shell`, and `timeout` as `command`, using the
+   * last-deployed props. A non-zero exit fails the deletion, so a destroy
+   * never silently skips teardown work — make the command tolerate an
+   * already-gone target if it should not block destroy.
+   */
+  destroyCommand?: string;
 }
 
 export interface Exec extends Resource<
@@ -81,6 +91,16 @@ export interface Exec extends Resource<
  *   timeout: "5 minutes",
  * });
  * ```
+ *
+ * @section Running a Command on Destroy
+ * @example Final Backup Before Teardown
+ * ```typescript
+ * yield* Exec("final-backup", {
+ *   command: "true",
+ *   destroyCommand: "npm run db:backup",
+ *   memo: false,
+ * });
+ * ```
  */
 export const Exec = Resource<Exec>("Command.Exec");
 
@@ -124,7 +144,10 @@ export const ExecProvider = () =>
             },
           };
         }),
-        delete: () => Effect.void,
+        delete: Effect.fn(function* ({ olds, session }) {
+          if (olds.destroyCommand === undefined) return;
+          yield* run({ ...olds, command: olds.destroyCommand }, session);
+        }),
       };
     }),
   );

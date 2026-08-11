@@ -115,3 +115,35 @@ test.provider(
     }),
   { timeout: 60000 },
 );
+
+test.provider(
+  "destroyCommand runs on delete with the deployed cwd and env",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+
+      yield* stack.destroy();
+
+      const tempDir = yield* fs.makeTempDirectoryScoped();
+      const marker = pathe.join(tempDir, "destroyed.txt");
+
+      yield* stack.deploy(
+        Command.Exec("destroy-exec", {
+          command: "true",
+          destroyCommand: 'printf "%s" "$MARKER" > destroyed.txt',
+          shell: true,
+          cwd: tempDir,
+          env: { MARKER: "final" },
+          memo: false,
+        }),
+      );
+
+      // The destroy command is destroy-only — deploying must not run it.
+      expect(yield* fs.exists(marker)).toBe(false);
+
+      // Destroy runs it once, in the deployed cwd, with the deployed env.
+      yield* stack.destroy();
+      expect(yield* fs.readFileString(marker)).toBe("final");
+    }),
+  { timeout: 30000 },
+);
