@@ -377,7 +377,7 @@ describe.concurrent("Cloudflare.Worker version", () => {
   );
 
   test.provider(
-    "rejects script-level settings on a version worker",
+    "rejects script-level settings including Vite on a version worker",
     (stack) =>
       Effect.gen(function* () {
         yield* stack.destroy();
@@ -401,6 +401,7 @@ describe.concurrent("Cloudflare.Worker version", () => {
                 script: script("invalid-preview-v1"),
                 version: { parent: parent.workerName },
                 crons: ["*/5 * * * *"],
+                vite: {},
               });
             }),
           )
@@ -408,6 +409,7 @@ describe.concurrent("Cloudflare.Worker version", () => {
 
         expect(error).toBeInstanceOf(WorkerVersionConfigError);
         expect(String(error)).toContain("script-level settings");
+        expect(String(error)).toContain("vite");
 
         yield* stack.destroy();
       }).pipe(logLevel),

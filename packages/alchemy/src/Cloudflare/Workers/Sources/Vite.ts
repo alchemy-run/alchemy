@@ -214,11 +214,13 @@ export const viteBuildInProcess = (
       await builder.buildApp();
     });
     const contribution = getViteFrameworkContribution(pluginOptions);
+    const compatibilityFlags = contribution.compatibilityFlags ?? [];
+    const durableObjects = contribution.durableObjects ?? [];
     return {
       ...(yield* outputPlugin.output),
       framework:
-        contribution.durableObjects && contribution.durableObjects.length > 0
-          ? { durableObjects: contribution.durableObjects }
+        compatibilityFlags.length > 0 || durableObjects.length > 0
+          ? { compatibilityFlags, durableObjects }
           : undefined,
     } satisfies ViteBuildOutput;
   });

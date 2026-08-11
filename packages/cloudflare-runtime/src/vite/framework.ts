@@ -20,7 +20,10 @@ export interface ViteFrameworkDurableObject {
 
 /** The Worker-only portion a Vite framework may contribute to Alchemy. */
 export interface ViteFrameworkContribution {
-  /** A virtual or file Worker entry, used only when Alchemy has no explicit entry. */
+  /**
+   * A virtual or file Worker entry. It must preserve and re-export the
+   * application's Worker surface because Alchemy deploys exactly one entry.
+   */
   readonly main?: string;
   /** Compatibility flags required by the generated Worker. */
   readonly compatibilityFlags?: ReadonlyArray<string>;
@@ -28,16 +31,21 @@ export interface ViteFrameworkContribution {
   readonly durableObjects?: ReadonlyArray<ViteFrameworkDurableObject>;
 }
 
-/**
- * Existing framework config customizers (including Flue's
- * `flueWorkerConfig()`) mutate this Cloudflare-shaped object.
- */
+/** A framework config customizer that mutates a Cloudflare-shaped object. */
 export type ViteFrameworkWorkerCustomizer = (config: object) => void;
 
 const FRAMEWORK_PLUGIN_NAME = "vite-plugin-cloudflare:alchemy-framework";
 const frameworkContributions = new WeakMap<
   CloudflareVitePluginOptions,
   ViteFrameworkContribution
+>();
+const alchemyWorkerEntries = new WeakMap<
+  CloudflareVitePluginOptions,
+  string | undefined
+>();
+const alchemyCompatibilityFlags = new WeakMap<
+  CloudflareVitePluginOptions,
+  ReadonlyArray<string> | undefined
 >();
 
 type PluginWithFrameworkContribution = vite.Plugin & {
@@ -83,14 +91,29 @@ export const applyViteFrameworkContributions = (
     },
   );
   const contribution = mergeFrameworkContributions(contributions);
+  if (!alchemyWorkerEntries.has(options)) {
+    alchemyWorkerEntries.set(options, options.main);
+    alchemyCompatibilityFlags.set(options, options.compatibilityFlags);
+  }
+  const alchemyMain = alchemyWorkerEntries.get(options);
+
+  if (
+    alchemyMain !== undefined &&
+    contribution.main !== undefined &&
+    alchemyMain !== contribution.main
+  ) {
+    throw new Error(
+      `Alchemy's Vite Worker entry "${alchemyMain}" conflicts with framework-contributed entry "${contribution.main}". The framework entry must preserve and re-export the application Worker instead of declaring a second main.`,
+    );
+  }
   frameworkContributions.set(options, contribution);
 
   // `optionsPlugin` reads these values while resolving the Vite config. The
   // mutation is idempotent across Vite config reloads (the merge dedupes
   // flags), while the framework-only local Worker shape stays in the WeakMap.
-  options.main ??= contribution.main;
+  options.main = alchemyMain ?? contribution.main;
   options.compatibilityFlags = mergeUnique(
-    options.compatibilityFlags,
+    alchemyCompatibilityFlags.get(options),
     contribution.compatibilityFlags,
   );
 };
@@ -108,26 +131,50 @@ export const withViteFrameworkWorker = <B extends BindingHooks>(
   const durableObjects = contribution.durableObjects ?? [];
   if (durableObjects.length === 0) return options.worker;
   const worker = options.worker;
+  const applicationBindings = new Map(
+    (worker?.bindings ?? []).flatMap((hook) => {
+      const declaration = DurableObjectNamespace.getLocalDeclaration(hook);
+      return declaration ? [[declaration.binding, declaration] as const] : [];
+    }),
+  );
+  const hostedClasses = new Set(
+    worker?.durableObjectNamespaces?.map(({ className }) => className) ?? [],
+  );
+  const bindings: Array<BindingHooks[number]> = [...(worker?.bindings ?? [])];
+  const namespaces: Array<RuntimeDurableObject> = [
+    ...(worker?.durableObjectNamespaces ?? []),
+  ];
+  for (const durableObject of durableObjects) {
+    const applicationBinding = applicationBindings.get(durableObject.binding);
+    if (applicationBinding) {
+      const localToThisWorker =
+        applicationBinding.scriptName === undefined ||
+        applicationBinding.scriptName === worker?.name;
+      if (
+        localToThisWorker &&
+        applicationBinding.className === durableObject.className
+      ) {
+        continue;
+      }
+      throw new Error(
+        `Framework-contributed Durable Object binding "${durableObject.binding}" conflicts with the application Worker.`,
+      );
+    }
+    bindings.push(
+      DurableObjectNamespace.local({
+        binding: durableObject.binding,
+        className: durableObject.className,
+      }),
+    );
+    if (!hostedClasses.has(durableObject.className)) {
+      hostedClasses.add(durableObject.className);
+      namespaces.push({ className: durableObject.className, sql: true });
+    }
+  }
   return {
     ...worker,
-    bindings: [
-      ...(worker?.bindings ?? []),
-      ...durableObjects.map((durableObject) =>
-        DurableObjectNamespace.local({
-          binding: durableObject.binding,
-          className: durableObject.className,
-        }),
-      ),
-    ],
-    durableObjectNamespaces: [
-      ...(worker?.durableObjectNamespaces ?? []),
-      ...durableObjects.map(
-        (durableObject): RuntimeDurableObject => ({
-          className: durableObject.className,
-          sql: true,
-        }),
-      ),
-    ],
+    bindings,
+    durableObjectNamespaces: namespaces,
   };
 };
 
@@ -177,9 +224,21 @@ const mergeFrameworkContributions = (
       durableObjects.set(durableObject.binding, durableObject);
     }
   }
-  const main = contributions
-    .map((contribution) => contribution.main)
-    .find(Boolean);
+  const mains = new Set(
+    contributions.flatMap((contribution) =>
+      contribution.main === undefined ? [] : [contribution.main],
+    ),
+  );
+  if (mains.size > 1) {
+    throw new Error(
+      `Framework Vite contributions disagree about the Worker entry: ${[
+        ...mains,
+      ]
+        .map((main) => `"${main}"`)
+        .join(", ")}.`,
+    );
+  }
+  const main = mains.values().next().value;
   return {
     ...(main ? { main } : {}),
     compatibilityFlags: mergeUnique(

@@ -67,6 +67,12 @@ import { isPythonMain, readPythonWorkerBundle } from "./Sources/Python.ts";
 import { WorkerBundle } from "./Sources/Rolldown.ts";
 import { isWorkerLoader } from "./WorkerLoader.ts";
 import { createWorkerName } from "./WorkerName.ts";
+import {
+  getDurableObjectBindings,
+  mergeCompatibilityFlags,
+  reconcileViteFrameworkDurableObjects,
+} from "./ViteFrameworkLowering.ts";
+export { ViteFrameworkContributionError } from "./ViteFrameworkLowering.ts";
 class MissingDurableObjects extends Data.TaggedError("MissingDurableObjects")<{
   scriptName: string;
   expected: string[];
@@ -3043,15 +3049,6 @@ export const LiveWorkerProvider = () =>
             return item;
           }),
         );
-        for (const durableObject of framework?.durableObjects ?? []) {
-          metadataBindings.push({
-            type: "durable_object_namespace",
-            name: durableObject.binding,
-            className: durableObject.className,
-          });
-        }
-        const expectedDurableObjectClassNames =
-          getExpectedDurableObjectClassNames(metadataBindings, name);
         let metadataAssets:
           | workers.PutScriptRequest["metadata"]["assets"]
           | undefined;
@@ -3121,6 +3118,16 @@ export const LiveWorkerProvider = () =>
           });
         }
         appendAlchemyAndEnvBindings(metadataBindings, news, accountId, name);
+        const reconciledFramework = yield* reconcileViteFrameworkDurableObjects(
+          {
+            applicationBindings: metadataBindings,
+            durableObjects: framework?.durableObjects ?? [],
+            workerName: name,
+          },
+        );
+        metadataBindings.push(...reconciledFramework.bindings);
+        const expectedDurableObjectClassNames =
+          getExpectedDurableObjectClassNames(metadataBindings, name);
         yield* Effect.logInfo(
           `Cloudflare Worker ${olds ? "update" : "create"}: uploading script for ${name}`,
         );
@@ -3155,7 +3162,7 @@ export const LiveWorkerProvider = () =>
         const currentDoBindings = getDurableObjectBindings(
           bindings,
           name,
-          framework?.durableObjects,
+          reconciledFramework.durableObjects,
         );
         const currentDoClassNameByLogicalId = Object.fromEntries(
           currentDoBindings.map((binding) => [
@@ -3444,6 +3451,10 @@ export const LiveWorkerProvider = () =>
         );
 
         const compatibility = getCompatibility(news);
+        const compatibilityFlags = mergeCompatibilityFlags(
+          compatibility.flags,
+          framework?.compatibilityFlags,
+        );
         const tailConsumers = resolveTailConsumers(news.tailConsumers);
         const streamingTailConsumers = resolveTailConsumers(
           news.streamingTailConsumers,
@@ -3454,7 +3465,7 @@ export const LiveWorkerProvider = () =>
           bodyPart: undefined,
           cacheOptions: news.cache ?? getCacheBinding(bindings),
           compatibilityDate: compatibility.date,
-          compatibilityFlags: compatibility.flags,
+          compatibilityFlags,
           containers:
             metadataContainers.length > 0 ? metadataContainers : undefined,
           keepAssets,
@@ -5242,74 +5253,6 @@ function mergeDurableObjectClasses(
       ),
     ).values(),
   );
-}
-
-function getDurableObjectBindings(
-  bindings: ReadonlyArray<ResourceBinding>,
-  workerName: string,
-  frameworkDurableObjects: ReadonlyArray<{
-    binding: string;
-    className: string;
-  }> = [],
-) {
-  // Resource authors (and the `make`/`yield* Tag`/plan-vs-apply machinery)
-  // can register the same DO binding multiple times under the same logical
-  // id — `binding()` is a plain `worker.bind` and intentionally has no
-  // dedup. Collapse duplicates here so each `(logicalId, bindingName,
-  // className)` tuple appears at most once. We also exclude cross-script
-  // references: a `scriptName` pointing to *another* worker means this
-  // worker just references a foreign class — ship the binding to
-  // Cloudflare, but don't drive class migrations for it.
-  const seen = new Set<string>();
-  const resourceBindings = bindings.flatMap((binding) =>
-    (binding.data.bindings ?? []).flatMap((item: WorkerBinding) => {
-      if (
-        item.type !== "durable_object_namespace" ||
-        !("className" in item) ||
-        !item.className
-      ) {
-        return [];
-      }
-      if (item.scriptName !== undefined && item.scriptName !== workerName) {
-        return [];
-      }
-      const dedupKey = `${binding.sid}::${item.name}::${item.className}`;
-      if (seen.has(dedupKey)) return [];
-      seen.add(dedupKey);
-      return [
-        {
-          logicalId: binding.sid,
-          bindingName: item.name,
-          className: item.className,
-          // Declared host history for a data-preserving
-          // `transferred_classes` migration. Normalize an empty list to
-          // "not declared"; self-references are dropped at resolution time.
-          transferredFrom:
-            Array.isArray(item.transferredFrom) &&
-            item.transferredFrom.length === 0
-              ? undefined
-              : item.transferredFrom,
-        },
-      ];
-    }),
-  );
-  return [
-    ...resourceBindings,
-    ...frameworkDurableObjects.flatMap((binding) => {
-      const logicalId = `vite:${binding.binding}`;
-      const dedupKey = `${logicalId}::${binding.binding}::${binding.className}`;
-      if (seen.has(dedupKey)) return [];
-      seen.add(dedupKey);
-      return [
-        {
-          logicalId,
-          bindingName: binding.binding,
-          className: binding.className,
-          transferredFrom: undefined,
-        },
-      ];
-    }),
-  ];
 }
 
 /**

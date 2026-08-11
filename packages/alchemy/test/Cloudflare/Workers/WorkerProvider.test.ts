@@ -9,12 +9,181 @@ import {
   shouldObserveWorkerRoutes,
   stateCustomDomains,
   stateWorkerDomain,
+  ViteFrameworkContributionError,
 } from "@/Cloudflare/Workers/WorkerProvider";
+import {
+  getDurableObjectBindings,
+  mergeCompatibilityFlags,
+  reconcileViteFrameworkDurableObjects,
+} from "@/Cloudflare/Workers/ViteFrameworkLowering.ts";
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 
 describe("WorkerProvider", () => {
+  describe("Vite framework production lowering", () => {
+    const applicationDurableObject = {
+      type: "durable_object_namespace" as const,
+      name: "APP_COUNTER",
+      className: "AppCounter",
+    };
+
+    test("merges and dedupes framework compatibility flags", () => {
+      expect(
+        mergeCompatibilityFlags(
+          ["nodejs_compat", "global_fetch_strictly_public"],
+          ["nodejs_compat", "enable_request_signal"],
+        ),
+      ).toEqual([
+        "nodejs_compat",
+        "global_fetch_strictly_public",
+        "enable_request_signal",
+      ]);
+    });
+
+    test("keeps an identical application Durable Object app-owned", () => {
+      const lowered = Effect.runSync(
+        reconcileViteFrameworkDurableObjects({
+          applicationBindings: [applicationDurableObject],
+          durableObjects: [{ binding: "APP_COUNTER", className: "AppCounter" }],
+          workerName: "worker",
+        }),
+      );
+
+      expect(lowered).toEqual({ bindings: [], durableObjects: [] });
+      expect(
+        getDurableObjectBindings(
+          [
+            {
+              sid: "ApplicationCounter",
+              data: { bindings: [applicationDurableObject] },
+            },
+          ],
+          "worker",
+          lowered.durableObjects,
+        ),
+      ).toEqual([
+        {
+          logicalId: "ApplicationCounter",
+          bindingName: "APP_COUNTER",
+          className: "AppCounter",
+          transferredFrom: undefined,
+        },
+      ]);
+    });
+
+    test("adds a class alias without claiming migration ownership", () => {
+      const lowered = Effect.runSync(
+        reconcileViteFrameworkDurableObjects({
+          applicationBindings: [applicationDurableObject],
+          durableObjects: [
+            { binding: "APP_COUNTER_ALIAS", className: "AppCounter" },
+          ],
+          workerName: "worker",
+        }),
+      );
+
+      expect(lowered).toEqual({
+        bindings: [
+          {
+            type: "durable_object_namespace",
+            name: "APP_COUNTER_ALIAS",
+            className: "AppCounter",
+          },
+        ],
+        durableObjects: [],
+      });
+    });
+
+    test("adds a distinct framework Durable Object to production migrations", () => {
+      const lowered = Effect.runSync(
+        reconcileViteFrameworkDurableObjects({
+          applicationBindings: [applicationDurableObject],
+          durableObjects: [
+            { binding: "FRAMEWORK_STATE", className: "FrameworkState" },
+          ],
+          workerName: "worker",
+        }),
+      );
+
+      expect(lowered.bindings).toEqual([
+        {
+          type: "durable_object_namespace",
+          name: "FRAMEWORK_STATE",
+          className: "FrameworkState",
+        },
+      ]);
+      expect(
+        getDurableObjectBindings(
+          [
+            {
+              sid: "ApplicationCounter",
+              data: { bindings: [applicationDurableObject] },
+            },
+          ],
+          "worker",
+          lowered.durableObjects,
+        ).map(({ logicalId, className }) => ({ logicalId, className })),
+      ).toEqual([
+        { logicalId: "ApplicationCounter", className: "AppCounter" },
+        { logicalId: "vite:FRAMEWORK_STATE", className: "FrameworkState" },
+      ]);
+    });
+
+    test("keeps a stable logical identity across contributed class renames", () => {
+      const previous = getDurableObjectTagMap(
+        encodeDurableObjectTags([
+          {
+            logicalId: "vite:FRAMEWORK_STATE",
+            className: "FrameworkState",
+          },
+        ]),
+      );
+      const lowered = Effect.runSync(
+        reconcileViteFrameworkDurableObjects({
+          applicationBindings: [applicationDurableObject],
+          durableObjects: [
+            { binding: "FRAMEWORK_STATE", className: "FrameworkStateV2" },
+          ],
+          workerName: "worker",
+        }),
+      );
+      const current = getDurableObjectBindings(
+        [],
+        "worker",
+        lowered.durableObjects,
+      )[0]!;
+
+      expect(current.logicalId).toBe("vite:FRAMEWORK_STATE");
+      expect({
+        from: previous[current.logicalId],
+        to: current.className,
+      }).toEqual({ from: "FrameworkState", to: "FrameworkStateV2" });
+    });
+
+    test("rejects a conflicting application binding by name", () => {
+      const result = Effect.runSync(
+        Effect.result(
+          reconcileViteFrameworkDurableObjects({
+            applicationBindings: [
+              { type: "plain_text", name: "FRAMEWORK_STATE", text: "value" },
+            ],
+            durableObjects: [
+              { binding: "FRAMEWORK_STATE", className: "FrameworkState" },
+            ],
+            workerName: "worker",
+          }),
+        ),
+      );
+
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure).toBeInstanceOf(ViteFrameworkContributionError);
+        expect(result.failure.message).toContain("plain_text");
+      }
+    });
+  });
+
   describe("normalizeStateDomains", () => {
     // Worker state has gone through three generations: <= beta.44 stored each
     // custom domain as a `{ id, hostname, zoneId }` object; beta.45 – beta.57

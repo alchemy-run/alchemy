@@ -29,6 +29,17 @@ export interface LocalDurableObjectNamespaceProps {
   readonly uniqueKey?: string;
 }
 
+const localDurableObjectNamespaces = new WeakMap<
+  BindingHook<any>,
+  LocalDurableObjectNamespaceProps
+>();
+
+/** @internal Read the declaration carried by a local namespace binding hook. */
+export const getLocalDeclaration = (
+  hook: BindingHook<any>,
+): LocalDurableObjectNamespaceProps | undefined =>
+  localDurableObjectNamespaces.get(hook);
+
 /**
  * Bind a Durable Object namespace.
  *
@@ -38,13 +49,11 @@ export interface LocalDurableObjectNamespaceProps {
  *   registry proxy so the DO can live in a different `cloudflare-runtime`
  *   or `wrangler dev` process.
  */
-export const local = ({
-  binding,
-  className,
-  scriptName,
-  uniqueKey,
-}: LocalDurableObjectNamespaceProps): BindingHook<RegistryProxy> =>
-  PluginContext.use((context) => {
+export const local = (
+  props: LocalDurableObjectNamespaceProps,
+): BindingHook<RegistryProxy> => {
+  const { binding, className, scriptName, uniqueKey } = props;
+  const hook = PluginContext.use((context) => {
     if (scriptName === undefined || scriptName === context.worker.name) {
       const namespace = context.worker.durableObjectNamespaces?.find(
         (namespace) => namespace.className === className,
@@ -95,3 +104,6 @@ export const local = ({
       ),
     );
   });
+  localDurableObjectNamespaces.set(hook, props);
+  return hook;
+};

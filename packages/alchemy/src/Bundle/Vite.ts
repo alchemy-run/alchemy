@@ -17,6 +17,7 @@ import {
 
 /** Durable Object metadata contributed by a framework-owned Vite entry. */
 export interface ViteFrameworkBuildOutput {
+  readonly compatibilityFlags: ReadonlyArray<string>;
   readonly durableObjects: ReadonlyArray<{
     readonly binding: string;
     readonly className: string;
