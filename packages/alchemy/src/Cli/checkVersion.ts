@@ -4,6 +4,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 
@@ -99,6 +100,16 @@ const refreshDistTags = Effect.fn(function* (cachePath: string) {
   );
 });
 
+const refreshDistTagsWithClient = Effect.fn(function* (cachePath: string) {
+  const FetchHttpClient = yield* Effect.promise(
+    () => import("effect/unstable/http/FetchHttpClient"),
+  );
+  // Build in the CLI's outer scope so a request that exceeds SYNC_WAIT keeps
+  // its client alive and can still populate the cache in the background.
+  const context = yield* Layer.build(FetchHttpClient.layer);
+  return yield* refreshDistTags(cachePath).pipe(Effect.provide(context));
+});
+
 /**
  * Warn if a newer `alchemy` version is published on the dist-tag matching
  * the current channel. Runs to completion before any interactive prompts so
@@ -118,7 +129,7 @@ export const checkLatestVersion = Effect.gen(function* () {
   const distTags =
     cached !== undefined && now - cached.checkedAt <= CACHE_TTL_MILLIS
       ? cached.distTags
-      : yield* refreshDistTags(cachePath);
+      : yield* refreshDistTagsWithClient(cachePath);
   if (distTags === undefined) return;
 
   const current = packageJson.version;

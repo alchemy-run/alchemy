@@ -13,29 +13,18 @@ import * as CliError from "effect/unstable/cli/CliError";
 import * as Flag from "effect/unstable/cli/Flag";
 import { pathToFileURL } from "node:url";
 
-import {
-  type AuthProvider,
-  AuthError,
-  AuthProviders,
-} from "../../Auth/AuthProvider.ts";
+import { type AuthProvider, AuthProviders } from "../../Auth/AuthProvider.ts";
 import {
   type AlchemyProfileProviders,
   ALCHEMY_PROFILE,
   withProfileOverride,
 } from "../../Auth/Profile.ts";
-import { AwsAuth } from "../../AWS/AuthProvider.ts";
-import { AxiomAuth } from "../../Axiom/AuthProvider.ts";
-import { CloudflareAuth } from "../../Cloudflare/Auth/AuthProvider.ts";
-import { GitHubAuth } from "../../GitHub/AuthProvider.ts";
-import { NeonAuth } from "../../Neon/AuthProvider.ts";
-import { PlanetscaleAuth } from "../../Planetscale/AuthProvider.ts";
-import { PrismaAuth } from "../../Prisma/AuthProvider.ts";
 import * as Stack from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import { recordCli } from "../../Telemetry/Metrics.ts";
-import { PromptCancelled } from "../../Util/Clank.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { fileLogger } from "../../Util/FileLogger.ts";
+export { handleCancellation } from "../handleCancellation.ts";
 
 export const USER = Config.string("USER").pipe(
   Config.orElse(() => Config.string("USERNAME")),
@@ -47,57 +36,6 @@ export const STAGE = Config.string("stage").pipe(
   (a) => a,
   Effect.map(Option.getOrUndefined),
 );
-
-/**
- * `true` if `e` is a {@link PromptCancelled}, or an {@link AuthError} whose
- * `cause` chain bottoms out in one. Schema-tagged errors don't always
- * survive `instanceof` across module boundaries, so we also accept any
- * object whose `_tag` matches.
- */
-const isPromptCancellation = (e: unknown): boolean => {
-  for (let cur: unknown = e, i = 0; cur != null && i < 16; i++) {
-    if (cur instanceof PromptCancelled) return true;
-    if (
-      typeof cur === "object" &&
-      (cur as { _tag?: unknown })._tag === "PromptCancelled"
-    ) {
-      return true;
-    }
-    if (
-      cur instanceof AuthError ||
-      (typeof cur === "object" &&
-        (cur as { _tag?: unknown })._tag === "AuthError")
-    ) {
-      cur = (cur as { cause?: unknown }).cause;
-      continue;
-    }
-    return false;
-  }
-  return false;
-};
-
-/**
- * Catches user cancellations (Ctrl+C inside a prompt, surfaced as
- * {@link PromptCancelled} or wrapped in an {@link AuthError}) and exits
- * the CLI cleanly with a friendly message instead of dumping a stack
- * trace.
- */
-export const handleCancellation = <A, E, R>(self: Effect.Effect<A, E, R>) =>
-  self.pipe(
-    Effect.catchCause((cause) => {
-      const cancelled = cause.reasons.some((r) => {
-        if (Cause.isFailReason(r)) return isPromptCancellation(r.error);
-        if (Cause.isDieReason(r)) return isPromptCancellation(r.defect);
-        return false;
-      });
-      return cancelled
-        ? Console.log("\nCancelled.")
-        : (Effect.failCause(cause) as Effect.Effect<never, E, never>);
-    }),
-    // A bare fiber interrupt (Ctrl+C while not inside a prompt) shouldn't
-    // dump a stack trace either.
-    Effect.onInterrupt(() => Console.log("\nInterrupted.")),
-  );
 
 export const stage = Flag.string("stage").pipe(
   Flag.withSchema(S.String.check(S.isPattern(/^[a-z0-9]+([-_a-z0-9]+)*$/gi))),
@@ -454,18 +392,30 @@ export const buildStackProviders = Effect.fn("buildStackProviders")(function* (
  * `alchemy profile show` can pretty-print any provider a profile mentions,
  * even one the current stack doesn't wire up.
  */
-export const builtinAuth = Layer.mergeAll(
-  AwsAuth,
-  AxiomAuth,
-  CloudflareAuth,
-  GitHubAuth,
-  NeonAuth,
-  PlanetscaleAuth,
-  PrismaAuth,
-);
+const loadBuiltinAuth = Effect.promise(async () => {
+  const [aws, axiom, cloudflare, github, neon, planetscale, prisma] =
+    await Promise.all([
+      import("../../AWS/AuthProvider.ts"),
+      import("../../Axiom/AuthProvider.ts"),
+      import("../../Cloudflare/Auth/AuthProvider.ts"),
+      import("../../GitHub/AuthProvider.ts"),
+      import("../../Neon/AuthProvider.ts"),
+      import("../../Planetscale/AuthProvider.ts"),
+      import("../../Prisma/AuthProvider.ts"),
+    ]);
+  return Layer.mergeAll(
+    aws.AwsAuth,
+    axiom.AxiomAuth,
+    cloudflare.CloudflareAuth,
+    github.GitHubAuth,
+    neon.NeonAuth,
+    planetscale.PlanetscaleAuth,
+    prisma.PrismaAuth,
+  );
+});
 
 /**
- * Build {@link builtinAuth} against `registry` so every built-in auth
+ * Build the built-in auth providers against `registry` so every provider
  * provider registers itself, without importing any stack entrypoint.
  */
 export const buildBuiltinAuthProviders = Effect.fn("buildBuiltinAuthProviders")(
@@ -476,6 +426,7 @@ export const buildBuiltinAuthProviders = Effect.fn("buildBuiltinAuthProviders")(
     registry?: AuthProviders["Service"];
   }) {
     const authProviders = options.registry ?? {};
+    const builtinAuth = yield* loadBuiltinAuth;
     yield* Layer.build(
       Layer.provide(
         builtinAuth,
