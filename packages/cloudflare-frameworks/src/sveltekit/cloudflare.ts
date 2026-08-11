@@ -1,3 +1,5 @@
+// Alchemy modifications are licensed under Apache-2.0.
+// This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
  * `@alchemy.run/cloudflare-frameworks/sveltekit/cloudflare` — the Cloudflare Workers deploy
  * target for `@alchemy.run/cloudflare-frameworks/sveltekit`.

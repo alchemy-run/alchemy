@@ -1,3 +1,5 @@
+// Alchemy modifications are licensed under Apache-2.0.
+// This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
  * Wrangler-free fork of waku's cloudflare adapter
  * (upstream `packages/waku/src/adapters/cloudflare.ts` @ waku 1.0.0-beta.7).

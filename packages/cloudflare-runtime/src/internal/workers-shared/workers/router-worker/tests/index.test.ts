@@ -1,3 +1,5 @@
+// Alchemy modifications are licensed under Apache-2.0.
+// This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 import { createExecutionContext } from "cloudflare:test";
 import { exports, env as runtimeEnv } from "cloudflare:workers";
 import { describe, it } from "vitest";

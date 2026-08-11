@@ -8,6 +8,8 @@ import { RAW_EMAIL } from "../bindings/send-email/SendEmailOptions.shared.ts";
 import { makeErrorResponse } from "../internal/response.shared.ts";
 import { SystemError } from "../RuntimeError.shared.ts";
 import { HEADER_CF_BLOB } from "./CfOptions.shared.ts";
+// Alchemy modifications are licensed under Apache-2.0.
+// This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 import {
   BINDING_EMAIL_DIRECTORY,
   BINDING_EMAIL_DISK,
