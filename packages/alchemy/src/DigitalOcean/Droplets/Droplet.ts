@@ -13,6 +13,7 @@ import {
 } from "@distilled.cloud/digitalocean/droplets";
 import * as Arr from "effect/Array";
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
@@ -59,11 +60,32 @@ export type DropletProps = {
   userData?: string;
   /** Block storage volume ids to attach on creation. */
   volumes?: string[];
+  /**
+   * Maximum droplet age before a deploy replaces it. Age is measured from
+   * the droplet's `createdAt`: once exceeded, the next deploy rebuilds the
+   * host on a fresh image — phoenix-style patching, where kernel and base
+   * image updates arrive by replacement instead of in-place mutation.
+   * Pass millis or a duration string (`"30 days"`); these serialize into
+   * state, unlike `Duration` values. Changing the policy itself never
+   * triggers a replace; only crossing the age horizon does. Omit to keep
+   * the droplet indefinitely.
+   */
+  replaceAfter?: Duration.Input;
   /** VPC to assign the droplet to. Defaults to the region's default VPC. */
   vpcUuid?: string;
   /** Install the droplet-console agent (see DigitalOcean docs). */
   withDropletAgent?: boolean;
 };
+
+/**
+ * `replaceAfter` age policy: due for replacement once
+ * `createdAt + replaceAfter` is in the past.
+ */
+export const isOlderThan = (
+  createdAt: string,
+  age: Duration.Input,
+  nowMs: number,
+): boolean => nowMs - new Date(createdAt).getTime() >= Duration.toMillis(age);
 
 export type Droplet = Resource<
   "DigitalOcean.Droplet",
@@ -318,8 +340,15 @@ export const DropletProvider = () =>
               if (droplets.length < 200) return out;
             }
           }),
-        diff: Effect.fn(function* ({ olds, news }) {
+        diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isResolved(news) || olds === undefined) return undefined;
+          if (
+            news.replaceAfter !== undefined &&
+            output !== undefined &&
+            isOlderThan(output.createdAt, news.replaceAfter, Date.now())
+          ) {
+            return { action: "replace" } as const;
+          }
           // Everything but `name` is create-time-only on the API (or, like
           // size, needs an offline resize we don't model yet) — replace.
           if (

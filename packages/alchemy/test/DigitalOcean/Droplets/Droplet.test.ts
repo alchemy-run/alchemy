@@ -97,3 +97,25 @@ test.provider.skipIf(!hasDigitalOceanCreds)(
     }).pipe(logLevel),
   { timeout: 900_000 },
 );
+
+// `replaceAfter` never touches the API — the age policy is a pure predicate
+// over the deployed droplet's createdAt, so it is tested without credentials.
+test(
+  "isOlderThan drives replaceAfter off createdAt",
+  Effect.sync(() => {
+    const createdAt = "2026-01-01T00:00:00Z";
+    const day = 24 * 60 * 60 * 1000;
+    const created = new Date(createdAt).getTime();
+
+    expect(
+      DigitalOcean.isOlderThan(createdAt, "30 days", created + 29 * day),
+    ).toBe(false);
+    expect(
+      DigitalOcean.isOlderThan(createdAt, "30 days", created + 30 * day),
+    ).toBe(true);
+    // Millis form is interpreted the same way.
+    expect(
+      DigitalOcean.isOlderThan(createdAt, 30 * day, created + 31 * day),
+    ).toBe(true);
+  }),
+);
