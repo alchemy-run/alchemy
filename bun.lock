@@ -450,10 +450,10 @@
       "dependencies": {
         "@distilled.cloud/aws": "catalog:",
         "@effect/platform-node": "catalog:",
-        "@types/pg": "^8.18.0",
+        "@types/pg": "catalog:",
         "alchemy": "workspace:*",
         "effect": "catalog:",
-        "pg": "^8.20.0",
+        "pg": "catalog:",
       },
     },
     "examples/aws-rest-api": {
@@ -585,10 +585,10 @@
         "alchemy": "workspace:*",
         "drizzle-orm": "catalog:",
         "effect": "catalog:",
-        "pg": "^8.13.0",
+        "pg": "catalog:",
       },
       "devDependencies": {
-        "@types/pg": "^8.11.0",
+        "@types/pg": "catalog:",
         "drizzle-kit": "catalog:",
       },
     },
@@ -615,7 +615,7 @@
         "alchemy": "workspace:*",
         "drizzle-orm": "1.0.0-rc.4",
         "effect": "catalog:",
-        "mysql2": "^3.15.3",
+        "mysql2": "catalog:",
       },
       "devDependencies": {
         "drizzle-kit": "1.0.0-rc.4",
@@ -632,10 +632,10 @@
         "alchemy": "workspace:*",
         "drizzle-orm": "catalog:",
         "effect": "catalog:",
-        "pg": "^8.13.0",
+        "pg": "catalog:",
       },
       "devDependencies": {
-        "@types/pg": "^8.11.0",
+        "@types/pg": "catalog:",
         "drizzle-kit": "catalog:",
       },
     },
@@ -739,13 +739,13 @@
         "alchemy": "workspace:*",
         "drizzle-orm": "catalog:",
         "effect": "catalog:",
-        "pg": "^8.13.0",
+        "pg": "catalog:",
         "react": "^19.2.4",
         "react-dom": "^19.2.4",
       },
       "devDependencies": {
         "@cloudflare/workers-types": "catalog:",
-        "@types/pg": "^8.11.0",
+        "@types/pg": "catalog:",
         "@types/react": "^19.2.14",
         "@types/react-dom": "^19.2.3",
         "@vitejs/plugin-react": "^6.0.1",
@@ -984,7 +984,7 @@
         "alchemy": "workspace:*",
         "effect": "catalog:",
         "nitro": "^3.0.260415-beta",
-        "pg": "^8.20.0",
+        "pg": "catalog:",
         "react": "^19.2.4",
         "react-dom": "^19.2.4",
       },
@@ -993,7 +993,7 @@
         "@prisma-next/target-postgres": "^0.8.0",
         "@prisma-next/vite-plugin-contract-emit": "^0.8.0",
         "@types/node": "catalog:",
-        "@types/pg": "^8.20.0",
+        "@types/pg": "catalog:",
         "@types/react": "^19.2.14",
         "@types/react-dom": "^19.2.3",
         "@vitejs/plugin-react": "^6.0.1",
@@ -1403,7 +1403,7 @@
         "@types/aws-lambda": "catalog:",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
-        "@types/pg": "^8.11.0",
+        "@types/pg": "catalog:",
         "@types/picomatch": "^4.0.0",
         "@types/react": "^19.2.2",
         "@types/react-dom": "^19.2.2",
@@ -1413,18 +1413,17 @@
         "@vitejs/plugin-rsc": "catalog:fixtures",
         "alchemy-test": "workspace:*",
         "astro": "catalog:frameworks",
-        "better-auth": "catalog:",
         "effect": "catalog:",
         "foldkit": "catalog:fixtures",
         "hono": "catalog:frameworks",
         "iovalkey": "^0.3.3",
         "mongodb": "^6.10.0",
-        "mysql2": "^3.15.3",
+        "mysql2": "catalog:",
         "next": "catalog:frameworks",
         "nitropack": "catalog:frameworks",
         "nuxt": "catalog:frameworks",
         "octane": "catalog:frameworks",
-        "pg": "^8.13.0",
+        "pg": "catalog:",
         "react-devtools-core": "^7.0.1",
         "react-dom": "catalog:fixtures",
         "react-router": "catalog:fixtures",
@@ -1452,8 +1451,8 @@
         "drizzle-orm": "catalog:",
         "effect": "catalog:",
         "mongodb": "^6.10.0",
-        "mysql2": "^3.15.3",
-        "pg": "^8.13.0",
+        "mysql2": "catalog:",
+        "pg": "catalog:",
         "vite": "catalog:",
         "ws": "catalog:",
       },
@@ -1492,13 +1491,43 @@
     "packages/better-auth": {
       "name": "@alchemy.run/better-auth",
       "version": "2.0.0-beta.70",
-      "dependencies": {
+      "devDependencies": {
+        "@cloudflare/workers-types": "catalog:",
+        "@distilled.cloud/aws": "catalog:",
+        "@distilled.cloud/cloudflare": "catalog:",
+        "@effect/platform-bun": "catalog:",
+        "@neondatabase/serverless": "catalog:",
+        "@types/pg": "catalog:",
         "alchemy": "workspace:*",
+        "alchemy-test": "workspace:*",
+        "better-auth": "catalog:",
+        "drizzle-orm": "catalog:",
         "effect": "catalog:",
+        "kysely": "catalog:",
+        "mysql2": "catalog:",
+        "pg": "catalog:",
       },
       "peerDependencies": {
+        "@cloudflare/workers-types": "catalog:",
+        "@distilled.cloud/aws": "catalog:",
+        "@neondatabase/serverless": "catalog:",
+        "alchemy": "workspace:*",
         "better-auth": "catalog:",
+        "drizzle-orm": "catalog:",
+        "effect": "catalog:",
+        "kysely": "catalog:",
+        "mysql2": "catalog:",
+        "pg": "catalog:",
       },
+      "optionalPeers": [
+        "@cloudflare/workers-types",
+        "@distilled.cloud/aws",
+        "@neondatabase/serverless",
+        "drizzle-orm",
+        "kysely",
+        "mysql2",
+        "pg",
+      ],
     },
     "packages/cloudflare-runtime": {
       "name": "@alchemy.run/cloudflare-runtime",
@@ -1714,6 +1743,7 @@
     "@effect/sql-sqlite-do": ">=4.0.0-beta.105 || >=4.0.0",
     "@effect/vitest": ">=4.0.0-beta.105 || >=4.0.0",
     "@libsql/client": "^0.17.0",
+    "@neondatabase/serverless": "^1.0.1",
     "@opentui/core": "latest",
     "@opentui/solid": "latest",
     "@playwright/test": "^1.61.1",
@@ -1724,6 +1754,7 @@
     "@types/aws-lambda": "^8.10.152",
     "@types/bun": "latest",
     "@types/node": "latest",
+    "@types/pg": "^8.20.0",
     "ai": "^6.0.62",
     "archiver": "^7.0.1",
     "aws4fetch": "^1.0.20",
@@ -1734,9 +1765,12 @@
     "drizzle-orm": "1.0.0-rc.4",
     "effect": ">=4.0.0-beta.105 || >=4.0.0",
     "fast-xml-parser": "^5.3.4",
+    "kysely": "^0.29.4",
+    "mysql2": "^3.23.2",
     "oxfmt": "^0.36.0",
     "oxlint": "^1.51.0",
     "pathe": "^2.0.3",
+    "pg": "^8.22.0",
     "rolldown": "1.1.5",
     "solid-js": "latest",
     "sonda": "^0.11.1",
@@ -2648,6 +2682,8 @@
     "@napi-rs/wasm-runtime": ["@napi-rs/wasm-runtime@1.2.0", "", { "dependencies": { "@tybys/wasm-util": "^0.10.3" }, "peerDependencies": { "@emnapi/core": "^2.0.0-alpha.3", "@emnapi/runtime": "^2.0.0-alpha.3" } }, "sha512-kDoONqMa+VnZ4vvvu/ZUurpJ4gkZU57e7g69qpNgWhYcZFPUHZM2CEMKm+cG6ufDVALbjMvfmMjFVqaK7uEMnA=="],
 
     "@neon-rs/load": ["@neon-rs/load@0.0.4", "", {}, "sha512-kTPhdZyTQxB+2wpiRcFWrDcejc4JI6tkPuS7UZCG4l6Zvc5kU/gGQ/ozvHTh1XR5tS+UlfAfGuPajjzQjCiHCw=="],
+
+    "@neondatabase/serverless": ["@neondatabase/serverless@1.1.0", "", {}, "sha512-r3ZZhRjEcfEdKIZnoB1RusNgvHuaBRqfCzV4Gi+5A9yUX0S4HTws/ASWqt13wL4y4I+0rqsWGdA2w7EQXHi3+Q=="],
 
     "@next/env": ["@next/env@16.2.10", "", {}, "sha512-zLPxg9M0MEHmygpj5OuxjQ+vHMiy/K7cSp74G8ecYolmgUWw0RwN02tF56npup/+qaI8JB97hQgS/r2Hb6QwVA=="],
 
@@ -6387,13 +6423,41 @@
 
     "@distilled.cloud/axiom/@types/node": ["@types/node@26.2.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-5IviulTZeRNp2vAJ514cc/HUlY5nZ9fCbq9DMyC52BrhFZACo3nI0R7qBxhQmo/d27NFe96ur/b7Wwxklda+kg=="],
 
+    "@distilled.cloud/azure/@types/node": ["@types/node@26.2.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-5IviulTZeRNp2vAJ514cc/HUlY5nZ9fCbq9DMyC52BrhFZACo3nI0R7qBxhQmo/d27NFe96ur/b7Wwxklda+kg=="],
+
     "@distilled.cloud/cloudflare/@types/node": ["@types/node@26.2.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-5IviulTZeRNp2vAJ514cc/HUlY5nZ9fCbq9DMyC52BrhFZACo3nI0R7qBxhQmo/d27NFe96ur/b7Wwxklda+kg=="],
 
+    "@distilled.cloud/coinbase/@types/node": ["@types/node@26.2.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-5IviulTZeRNp2vAJ514cc/HUlY5nZ9fCbq9DMyC52BrhFZACo3nI0R7qBxhQmo/d27NFe96ur/b7Wwxklda+kg=="],
+
     "@distilled.cloud/core/@types/node": ["@types/node@26.2.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-5IviulTZeRNp2vAJ514cc/HUlY5nZ9fCbq9DMyC52BrhFZACo3nI0R7qBxhQmo/d27NFe96ur/b7Wwxklda+kg=="],
+
+    "@distilled.cloud/expo-eas/@types/node": ["@types/node@26.2.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-5IviulTZeRNp2vAJ514cc/HUlY5nZ9fCbq9DMyC52BrhFZACo3nI0R7qBxhQmo/d27NFe96ur/b7Wwxklda+kg=="],
+
+    "@distilled.cloud/fly-io/@types/node": ["@types/node@26.2.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-5IviulTZeRNp2vAJ514cc/HUlY5nZ9fCbq9DMyC52BrhFZACo3nI0R7qBxhQmo/d27NFe96ur/b7Wwxklda+kg=="],
+
+    "@distilled.cloud/gcp/@types/node": ["@types/node@26.2.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-5IviulTZeRNp2vAJ514cc/HUlY5nZ9fCbq9DMyC52BrhFZACo3nI0R7qBxhQmo/d27NFe96ur/b7Wwxklda+kg=="],
+
+    "@distilled.cloud/kubernetes/@types/node": ["@types/node@26.2.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-5IviulTZeRNp2vAJ514cc/HUlY5nZ9fCbq9DMyC52BrhFZACo3nI0R7qBxhQmo/d27NFe96ur/b7Wwxklda+kg=="],
+
+    "@distilled.cloud/mongodb-atlas/@types/node": ["@types/node@26.2.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-5IviulTZeRNp2vAJ514cc/HUlY5nZ9fCbq9DMyC52BrhFZACo3nI0R7qBxhQmo/d27NFe96ur/b7Wwxklda+kg=="],
 
     "@distilled.cloud/neon/@types/node": ["@types/node@26.2.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-5IviulTZeRNp2vAJ514cc/HUlY5nZ9fCbq9DMyC52BrhFZACo3nI0R7qBxhQmo/d27NFe96ur/b7Wwxklda+kg=="],
 
     "@distilled.cloud/planetscale/@types/node": ["@types/node@26.2.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-5IviulTZeRNp2vAJ514cc/HUlY5nZ9fCbq9DMyC52BrhFZACo3nI0R7qBxhQmo/d27NFe96ur/b7Wwxklda+kg=="],
+
+    "@distilled.cloud/posthog/@types/node": ["@types/node@26.2.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-5IviulTZeRNp2vAJ514cc/HUlY5nZ9fCbq9DMyC52BrhFZACo3nI0R7qBxhQmo/d27NFe96ur/b7Wwxklda+kg=="],
+
+    "@distilled.cloud/prisma-postgres/@types/node": ["@types/node@26.2.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-5IviulTZeRNp2vAJ514cc/HUlY5nZ9fCbq9DMyC52BrhFZACo3nI0R7qBxhQmo/d27NFe96ur/b7Wwxklda+kg=="],
+
+    "@distilled.cloud/stripe/@types/node": ["@types/node@26.2.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-5IviulTZeRNp2vAJ514cc/HUlY5nZ9fCbq9DMyC52BrhFZACo3nI0R7qBxhQmo/d27NFe96ur/b7Wwxklda+kg=="],
+
+    "@distilled.cloud/supabase/@types/node": ["@types/node@26.2.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-5IviulTZeRNp2vAJ514cc/HUlY5nZ9fCbq9DMyC52BrhFZACo3nI0R7qBxhQmo/d27NFe96ur/b7Wwxklda+kg=="],
+
+    "@distilled.cloud/turso/@types/node": ["@types/node@26.2.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-5IviulTZeRNp2vAJ514cc/HUlY5nZ9fCbq9DMyC52BrhFZACo3nI0R7qBxhQmo/d27NFe96ur/b7Wwxklda+kg=="],
+
+    "@distilled.cloud/typesense/@types/node": ["@types/node@26.2.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-5IviulTZeRNp2vAJ514cc/HUlY5nZ9fCbq9DMyC52BrhFZACo3nI0R7qBxhQmo/d27NFe96ur/b7Wwxklda+kg=="],
+
+    "@distilled.cloud/workos/@types/node": ["@types/node@26.2.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-5IviulTZeRNp2vAJ514cc/HUlY5nZ9fCbq9DMyC52BrhFZACo3nI0R7qBxhQmo/d27NFe96ur/b7Wwxklda+kg=="],
 
     "@dotenvx/dotenvx/commander": ["commander@11.1.0", "", {}, "sha512-yPVavfyCcRhmorC7rWlkHn15b4wDVgVmBA7kV4QVBsF7kv/9TKJAbAXVTxvTnwP8HHKjRCJDClKbciiYS7p0DQ=="],
 
@@ -7142,6 +7206,10 @@
     "postcss-nested/postcss-selector-parser": ["postcss-selector-parser@6.1.4", "", { "dependencies": { "cssesc": "^3.0.0", "util-deprecate": "^1.0.2" } }, "sha512-bIoJLOmjCO1S9XdY/DcnR5hJxvrDir1PbGChrzXG3vw0/FOliy/fA3dmdhQ441kah4gKv+TwckGzex6wNS5cnQ=="],
 
     "postcss-unique-selectors/postcss-selector-parser": ["postcss-selector-parser@7.1.4", "", { "dependencies": { "cssesc": "^3.0.0", "util-deprecate": "^1.0.2" } }, "sha512-HeP7D2wyhkR+XaK6v4W8oRF62Dsz4flyuczALJp61GckGm42u1saSSJ/0auvcBqxs3jMRFEcPK34At/0JBKdOg=="],
+
+    "prisma-compute-effect/@types/node": ["@types/node@26.2.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-5IviulTZeRNp2vAJ514cc/HUlY5nZ9fCbq9DMyC52BrhFZACo3nI0R7qBxhQmo/d27NFe96ur/b7Wwxklda+kg=="],
+
+    "prisma-tanstack-start/@types/node": ["@types/node@26.2.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-5IviulTZeRNp2vAJ514cc/HUlY5nZ9fCbq9DMyC52BrhFZACo3nI0R7qBxhQmo/d27NFe96ur/b7Wwxklda+kg=="],
 
     "radix-vue/@floating-ui/vue": ["@floating-ui/vue@1.1.11", "", { "dependencies": { "@floating-ui/dom": "^1.7.6", "@floating-ui/utils": "^0.2.11", "vue-demi": ">=0.13.0" } }, "sha512-HzHKCNVxnGS35r9fCHBc3+uCnjw9IWIlCPL683cGgM9Kgj2BiAl8x1mS7vtvP6F9S/e/q4O6MApwSHj8hNLGfw=="],
 

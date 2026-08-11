@@ -27,13 +27,13 @@
     "alchemy": "workspace:*",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
-    "pg": "^8.13.0",
+    "pg": "catalog:",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:",
-    "@types/pg": "^8.11.0",
+    "@types/pg": "catalog:",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",

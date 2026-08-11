@@ -52,9 +52,10 @@ export interface AstroProps<
   sessionKVBindingName?: string | false;
   /**
    * Serializable Astro config merged into the in-memory configuration.
-   * The project's `astro.config.*` file is NOT read — the integration is
-   * fully programmatic (the Cloudflare adapter, output target, and Vite
-   * environments are managed for you).
+   * The project's `astro.config.*` file loads natively; astro merges
+   * these options OVER it (scalars override the file). The Cloudflare
+   * adapter, output target, and Vite environments are managed for you —
+   * do not declare an `adapter` in the config file.
    */
   astro?: {
     /** The full URL the site deploys to (`Astro.site`). */
@@ -91,8 +92,8 @@ export interface AstroProps<
  * `Astro` runs Astro's programmatic build with a wrangler-free
  * Cloudflare adapter (`@alchemy.run/frontend-frameworks/astro`): server-rendered pages
  * execute in the Worker, prerendered pages and client assets deploy as
- * static assets — no `astro.config.*`, adapter setup, or Wrangler
- * configuration required.
+ * static assets. Your `astro.config.*` loads natively — no adapter
+ * setup or Wrangler configuration required.
  *
  * Input files are content-hashed (respecting `.gitignore` by default)
  * so unchanged projects skip the build and deploy entirely.
@@ -194,8 +195,15 @@ export interface AstroProps<
  * ```
  *
  * @section Astro Configuration
- * The integration is fully programmatic — your `astro.config.*` file is
- * not read. Common serializable options are exposed under `astro`.
+ * Your `astro.config.*` file loads natively — integrations, Vite
+ * plugins, and other non-serializable options work as usual. Common
+ * serializable options are exposed under `astro` for deploy-specific
+ * overrides; astro merges them OVER the config file (scalars override,
+ * arrays like `integrations` concatenate). The Cloudflare adapter is
+ * injected for you — declaring an `adapter` in the config file fails
+ * the build. `output` defaults to `"server"`, superseding a file-level
+ * `output`; opt into a fully prerendered site with
+ * `astro: { output: "static" }`.
  *
  * @example Setting the site URL and source directory
  * ```typescript
