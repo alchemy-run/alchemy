@@ -59,8 +59,8 @@ export interface NuxtProps<
   memo?: MemoOptions;
   /**
    * Nuxt configuration overrides merged over the project's own
-   * `nuxt.config.ts` (the override wins). Unlike some siblings, the
-   * project's config file IS loaded natively — this is for
+   * `nuxt.config.ts` (the override wins). The project's config file is
+   * loaded natively — modules, layers, and all — so this is for
    * deploy-specific tweaks (`routeRules`, `runtimeConfig`, ...). Must be
    * JSON-serializable (it persists in state). Do not set `nitro.preset`
    * here — the Cloudflare deploy target owns the preset and a foreign

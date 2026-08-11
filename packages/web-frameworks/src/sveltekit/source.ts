@@ -195,8 +195,11 @@ export interface SvelteKitSourceOptions {
   /** Narrows the rebuild-detection input hash. */
   readonly memo?: SvelteKitMemoOptions | undefined;
   /**
-   * SvelteKit configuration passed to `sveltekit(config)` (kit v3 takes its
-   * config in-memory). Must be JSON-serializable — it persists in state.
+   * SvelteKit configuration overrides. With a project-owned
+   * `vite.config.*` (loaded natively), these merge over the options of the
+   * user's own `sveltekit(...)` call (integration wins); without one they
+   * are passed to `sveltekit(config)` wholesale. Must be JSON-serializable
+   * — it persists in state.
    */
   readonly kit?: Record<string, unknown> | undefined;
   /** Options for the wrangler-free Cloudflare adapter. */

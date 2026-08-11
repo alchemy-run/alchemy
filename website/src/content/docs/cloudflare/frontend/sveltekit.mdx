@@ -15,7 +15,8 @@ It builds the app with SvelteKit's own Vite pipeline and a
 wrangler-free in-memory Cloudflare adapter, then re-bundles the
 server output for workerd. Client assets and prerendered pages deploy
 as Worker static assets; dynamic routes are served by the generated
-Worker. There is no `svelte.config.js` to write, no
+Worker. Your `vite.config.ts` loads natively; there is no
+`svelte.config.js` to write (kit v3 dropped it), no
 `@sveltejs/adapter-cloudflare` to install, and no Wrangler file.
 
 ## Install
@@ -42,12 +43,15 @@ build time, so a dev dependency is enough:
 
 ## Configure SvelteKit
 
-There is no framework config to write. The resource drives
-SvelteKit's Vite pipeline programmatically and injects its own
-Cloudflare adapter, so a fresh SvelteKit project deploys as-is.
-Options that would normally live in `svelte.config.js` are passed via
-the `kit` prop instead — see
-[Kit and adapter options](#kit-and-adapter-options) below.
+Your project's `vite.config.ts` loads natively — your Vite plugins
+and the kit options in your `sveltekit(...)` call all apply as usual.
+Alchemy injects its own wrangler-free Cloudflare adapter (replacing
+any adapter you declare, with a warning), so a fresh SvelteKit
+project deploys as-is. Deploy-specific kit overrides can also be
+passed via the `kit` prop, which merges over your `sveltekit(...)`
+options — see [Kit and adapter options](#kit-and-adapter-options)
+below. A project without a `vite.config.*` works too: the resource
+falls back to a fully programmatic build.
 
 ## Declare the Website
 
@@ -158,9 +162,11 @@ export const load = async ({ platform }) => {
 
 ## Kit and adapter options
 
-Since kit v3 the configuration lives in memory — pass it via the
-`kit` prop instead of a `svelte.config.js`. The generated Cloudflare
-adapter is configured via `adapter`:
+Since kit v3 there is no `svelte.config.js` — kit options live in the
+`sveltekit(...)` call in your `vite.config.ts`, which loads natively.
+The `kit` prop is a deploy-time override layer merged over those
+options (the override wins). The generated Cloudflare adapter is
+configured via `adapter`:
 
 ```typescript
 export const Website = Cloudflare.Website.SvelteKit("Website", {
@@ -175,7 +181,13 @@ export const Website = Cloudflare.Website.SvelteKit("Website", {
 ```
 
 Don't set `kit.adapter` — Alchemy injects its own wrangler-free
-Cloudflare adapter.
+Cloudflare adapter (an adapter declared in your `sveltekit(...)` call
+is replaced with a warning).
+
+A few construction-time options (`preprocess`, `extensions`,
+`compilerOptions`, `vitePlugin`) can't be injected through the `kit`
+prop when your project has a `vite.config.*` — put those in your own
+`sveltekit(...)` call.
 
 ## Local dev
 

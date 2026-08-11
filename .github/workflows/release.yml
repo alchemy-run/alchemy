@@ -41,6 +41,7 @@ jobs:
       # The bun workspace includes `distilled/packages/*` from the
       # distilled submodule, so consumer checkouts must fetch it.
       submodules: "true"
+      node-version: "24"
       version: ${{ inputs.version }}
       force-latest: ${{ inputs.force-latest }}
       repo: alchemy-run/alchemy
