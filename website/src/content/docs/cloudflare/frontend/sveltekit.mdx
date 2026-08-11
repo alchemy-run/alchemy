@@ -163,15 +163,33 @@ export const load = async ({ platform }) => {
 ## Kit and adapter options
 
 Since kit v3 there is no `svelte.config.js` — kit options live in the
-`sveltekit(...)` call in your `vite.config.ts`, which loads natively.
-The `kit` prop is a deploy-time override layer merged over those
-options (the override wins). The generated Cloudflare adapter is
-configured via `adapter`:
+`sveltekit(...)` call in your `vite.config.ts`, which loads natively:
 
 ```typescript
+// vite.config.ts
+import { sveltekit } from "@sveltejs/kit/vite";
+import tailwindcss from "@tailwindcss/vite";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  plugins: [
+    tailwindcss(),
+    sveltekit({
+      alias: { $lib: "src/lib" },
+    }),
+  ],
+});
+```
+
+The `kit` prop on the resource is a deploy-time override layer
+merged over those options (the override wins). The generated
+Cloudflare adapter is configured via `adapter`:
+
+```typescript
+// alchemy.run.ts
 export const Website = Cloudflare.Website.SvelteKit("Website", {
   kit: {
-    alias: { $lib: "src/lib" },
+    paths: { base: "/docs" },
   },
   adapter: {
     notFoundHandling: "404-page",
