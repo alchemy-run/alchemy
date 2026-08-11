@@ -1,4 +1,4 @@
-import * as Retry from "@distilled.cloud/cloudflare/Retry";
+import { Retry } from "@distilled.cloud/cloudflare";
 import * as Layer from "effect/Layer";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileLive } from "../Auth/Profile.ts";
