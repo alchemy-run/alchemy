@@ -1,11 +1,15 @@
 import * as NodeChildProcess from "node:child_process";
 import * as NodeCrypto from "node:crypto";
 import { CertRequest, CertRequestProvider } from "@/CertRequest";
+import * as Provider from "@/Provider";
 import { inMemoryState } from "@/State";
 import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+
+const hasOpenssl =
+  NodeChildProcess.spawnSync("openssl", ["version"]).error === undefined;
 
 const { test } = Test.make({
   providers: CertRequestProvider(),
@@ -92,26 +96,15 @@ const verifiesWithNodeCrypto = (
   );
 };
 
-const verifiesWithOpenssl = (csrPem: string): boolean => {
-  const result = NodeChildProcess.spawnSync(
-    "openssl",
-    ["req", "-verify", "-noout"],
-    { input: csrPem },
-  );
-  // No openssl on PATH — the node:crypto verification already ran.
-  if (result.error !== undefined) return true;
-  return result.status === 0;
-};
+const verifiesWithOpenssl = (csrPem: string): boolean =>
+  NodeChildProcess.spawnSync("openssl", ["req", "-verify", "-noout"], {
+    input: csrPem,
+  }).status === 0;
 
-const opensslSubjectAndSan = (csrPem: string): string => {
-  const result = NodeChildProcess.spawnSync(
-    "openssl",
-    ["req", "-noout", "-text"],
-    { input: csrPem },
-  );
-  if (result.error !== undefined) return "";
-  return result.stdout.toString();
-};
+const opensslText = (csrPem: string): string =>
+  NodeChildProcess.spawnSync("openssl", ["req", "-noout", "-text"], {
+    input: csrPem,
+  }).stdout.toString();
 
 describe("Alchemy.CertRequest", () => {
   test.provider("generates a verifiable ec CSR with CN and SAN", (stack) =>
@@ -128,12 +121,6 @@ describe("Alchemy.CertRequest", () => {
       );
       expect(attrs.csr).toMatch(/^-----BEGIN CERTIFICATE REQUEST-----/);
       expect(verifiesWithNodeCrypto(attrs.csr, privateKey, "ec")).toBe(true);
-      expect(verifiesWithOpenssl(attrs.csr)).toBe(true);
-      const text = opensslSubjectAndSan(attrs.csr);
-      if (text !== "") {
-        expect(text).toContain("origin.example.com");
-        expect(text).toContain("*.example.com");
-      }
     }),
   );
 
@@ -148,7 +135,6 @@ describe("Alchemy.CertRequest", () => {
           }),
         );
         expect(verifiesWithNodeCrypto(attrs.csr, privateKey, "rsa")).toBe(true);
-        expect(verifiesWithOpenssl(attrs.csr)).toBe(true);
         expect(attrs.dnsNames).toEqual([]);
       }),
   );
@@ -167,8 +153,56 @@ describe("Alchemy.CertRequest", () => {
       expect(verifiesWithNodeCrypto(attrs.csr, privateKey, "ed25519")).toBe(
         true,
       );
-      expect(verifiesWithOpenssl(attrs.csr)).toBe(true);
     }),
+  );
+
+  test.provider.skipIf(!hasOpenssl)(
+    "openssl verifies the CSR and prints the requested subject and SANs",
+    (stack) =>
+      Effect.gen(function* () {
+        const privateKey = makeKey("ec");
+        const attrs = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* CertRequest("openssl-csr", {
+              privateKey,
+              commonName: "origin.example.com",
+              dnsNames: ["origin.example.com", "*.example.com"],
+            });
+          }),
+        );
+        expect(verifiesWithOpenssl(attrs.csr)).toBe(true);
+        const text = opensslText(attrs.csr);
+        expect(text).toMatch(/Subject:.*CN\s*=\s*origin\.example\.com/);
+        // The DNS: prefix proves the SAN entries carry the dNSName tag —
+        // `openssl req -verify` alone would accept any GeneralName tag.
+        expect(text).toContain("DNS:origin.example.com");
+        expect(text).toContain("DNS:*.example.com");
+      }),
+  );
+
+  test.provider.skipIf(!hasOpenssl)(
+    "openssl verifies rsa and ed25519 CSRs",
+    (stack) =>
+      Effect.gen(function* () {
+        const rsa = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* CertRequest("openssl-rsa", {
+              privateKey: makeKey("rsa"),
+            });
+          }),
+        );
+        expect(verifiesWithOpenssl(rsa.csr)).toBe(true);
+
+        const ed = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* CertRequest("openssl-ed", {
+              privateKey: makeKey("ed25519"),
+              commonName: "example.com",
+            });
+          }),
+        );
+        expect(verifiesWithOpenssl(ed.csr)).toBe(true);
+      }),
   );
 
   test.provider(
@@ -209,6 +243,23 @@ describe("Alchemy.CertRequest", () => {
       expect(second.keyFingerprint).not.toBe(first.keyFingerprint);
       expect(second.csr).not.toBe(first.csr);
       expect(verifiesWithNodeCrypto(second.csr, secondKey, "ec")).toBe(true);
+    }),
+  );
+
+  test.provider("list returns [] for the non-listable CSR", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* CertRequest("list-csr", { privateKey: makeKey("ec") });
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(CertRequest);
+      expect(yield* provider.list()).toEqual([]);
+
+      yield* stack.destroy();
     }),
   );
 });

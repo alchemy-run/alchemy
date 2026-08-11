@@ -1,8 +1,18 @@
 import * as NodeCrypto from "node:crypto";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Provider from "./Provider.ts";
 import { Resource } from "./Resource.ts";
+
+/**
+ * CSR generation failed: the private key is unparseable or of an
+ * unsupported type, or a requested DNS name is invalid.
+ */
+export class CertRequestError extends Data.TaggedError("CertRequestError")<{
+  message: string;
+  cause?: unknown;
+}> {}
 
 export interface CertRequestProps {
   /**
@@ -102,22 +112,32 @@ const tlv = (tag: number, body: Uint8Array | number[]): Uint8Array =>
 const sequence = (...parts: Array<Uint8Array | number[]>): Uint8Array =>
   tlv(0x30, concatBytes(...parts));
 
+const base128 = (value: number): number[] => {
+  const bytes: number[] = [];
+  for (let v = value; ; v = Math.floor(v / 128)) {
+    bytes.unshift(v % 128);
+    if (v < 128) break;
+  }
+  for (let i = 0; i < bytes.length - 1; i++) bytes[i] |= 0x80;
+  return bytes;
+};
+
 const oid = (dotted: string): Uint8Array => {
   const arcs = dotted.split(".").map(Number);
-  const body: number[] = [arcs[0] * 40 + arcs[1]];
-  for (const arc of arcs.slice(2)) {
-    const bytes: number[] = [];
-    for (let v = arc; ; v = Math.floor(v / 128)) {
-      bytes.unshift(v % 128);
-      if (v < 128) break;
-    }
-    for (let i = 0; i < bytes.length - 1; i++) bytes[i] |= 0x80;
-    body.push(...bytes);
-  }
-  return tlv(0x06, body);
+  return tlv(0x06, [arcs[0] * 40 + arcs[1], ...arcs.slice(2)].flatMap(base128));
 };
 
 const utf8 = (value: string): Uint8Array => new TextEncoder().encode(value);
+
+/** IA5String admits only ASCII — IDNs must arrive punycode-encoded. */
+const ia5 = (name: string): Uint8Array => {
+  if (!/^[\x00-\x7f]*$/.test(name)) {
+    throw new CertRequestError({
+      message: `dnsNames must be ASCII (punycode-encode IDNs): "${name}"`,
+    });
+  }
+  return utf8(name);
+};
 
 /** Subject: `CN=<commonName>`, or the empty DN when no name is given. */
 const subjectName = (commonName: string | undefined): Uint8Array =>
@@ -134,7 +154,7 @@ const subjectName = (commonName: string | undefined): Uint8Array =>
 const attributes = (dnsNames: string[]): Uint8Array => {
   if (dnsNames.length === 0) return tlv(0xa0, []);
   const generalNames = sequence(
-    ...dnsNames.map((name) => tlv(0x82, utf8(name))),
+    ...dnsNames.map((name) => tlv(0x82, ia5(name))),
   );
   const extension = sequence(oid("2.5.29.17"), tlv(0x04, generalNames));
   return tlv(
@@ -149,9 +169,9 @@ const signatureAlgorithm = (keyType: string): Uint8Array => {
   if (keyType === "rsa")
     return sequence(oid("1.2.840.113549.1.1.11"), tlv(0x05, []));
   if (keyType === "ed25519") return sequence(oid("1.3.101.112"));
-  throw new Error(
-    `CertRequest supports ec, rsa, and ed25519 keys; got "${keyType}"`,
-  );
+  throw new CertRequestError({
+    message: `CertRequest supports ec, rsa, and ed25519 keys; got "${keyType}"`,
+  });
 };
 
 const pemWrap = (der: Uint8Array): string => {
@@ -169,6 +189,9 @@ const buildCsr = (
 ): string => {
   const key = NodeCrypto.createPrivateKey(privateKeyPem);
   const keyType = key.asymmetricKeyType ?? "unknown";
+  // Validate the key type (and the names, inside `attributes`) before
+  // signing, so unsupported inputs fail with our message, not node's.
+  const algorithm = signatureAlgorithm(keyType);
   const spki = NodeCrypto.createPublicKey(key).export({
     type: "spki",
     format: "der",
@@ -185,15 +208,11 @@ const buildCsr = (
     key,
   );
   return pemWrap(
-    sequence(
-      info,
-      signatureAlgorithm(keyType),
-      tlv(0x03, concatBytes([0x00], signature)),
-    ),
+    sequence(info, algorithm, tlv(0x03, concatBytes([0x00], signature))),
   );
 };
 
-const keyFingerprint = (privateKeyPem: string): string =>
+const computeKeyFingerprint = (privateKeyPem: string): string =>
   NodeCrypto.createHash("sha256")
     .update(
       NodeCrypto.createPublicKey(privateKeyPem).export({
@@ -203,7 +222,9 @@ const keyFingerprint = (privateKeyPem: string): string =>
     )
     .digest("hex");
 
-const keyPem = (privateKey: Redacted.Redacted<string> | string): string =>
+const resolveKeyPem = (
+  privateKey: Redacted.Redacted<string> | string,
+): string =>
   typeof privateKey === "string" ? privateKey : Redacted.value(privateKey);
 
 const sameNames = (a: readonly string[], b: readonly string[]): boolean =>
@@ -216,8 +237,15 @@ export const CertRequestProvider = () =>
       // authoritative as long as it was generated for the same key and
       // names (signatures are randomized, so regeneration is never
       // byte-stable and would churn downstream certificates).
-      const pem = keyPem(news.privateKey);
-      const fingerprint = yield* Effect.sync(() => keyFingerprint(pem));
+      const pem = resolveKeyPem(news.privateKey);
+      const fingerprint = yield* Effect.try({
+        try: () => computeKeyFingerprint(pem),
+        catch: (cause) =>
+          new CertRequestError({
+            message: "privateKey is not a parseable PEM private key",
+            cause,
+          }),
+      });
       const dnsNames = news.dnsNames ?? [];
       if (
         output !== undefined &&
@@ -231,9 +259,13 @@ export const CertRequestProvider = () =>
       // Ensure — key or names changed (or first reconcile): mint a fresh
       // CSR. Downstream certificate resources see the new `csr` value and
       // reissue on their own terms.
-      const csr = yield* Effect.sync(() =>
-        buildCsr(pem, news.commonName, dnsNames),
-      );
+      const csr = yield* Effect.try({
+        try: () => buildCsr(pem, news.commonName, dnsNames),
+        catch: (cause) =>
+          cause instanceof CertRequestError
+            ? cause
+            : new CertRequestError({ message: "CSR generation failed", cause }),
+      });
       return {
         csr,
         keyFingerprint: fingerprint,

@@ -2,9 +2,9 @@ import { Retry } from "@distilled.cloud/cloudflare";
 import * as Layer from "effect/Layer";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileLive } from "../Auth/Profile.ts";
+import { CertRequest, CertRequestProvider } from "../CertRequest.ts";
 import * as Command from "../Command/index.ts";
 import { DockerLive } from "../Docker/Docker.ts";
-import { CertRequest, CertRequestProvider } from "../CertRequest.ts";
 import { KeyPair, KeyPairProvider } from "../KeyPair.ts";
 import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
@@ -189,6 +189,7 @@ export const providers = () =>
       Calls.TurnKey,
       Certificate.Certificate,
       CertificateAuthorities.HostnameAssociation,
+      CertRequest,
       ClientCertificate.ClientCertificate,
       CloudConnector.Rules,
       CloudforceOne.ScanConfig,
@@ -258,7 +259,6 @@ export const providers = () =>
       Intel.IndicatorFeed,
       Intel.IndicatorFeedPermission,
       KeylessCertificate.KeylessCertificate,
-      CertRequest,
       KeyPair,
       KV.Namespace,
       LeakedCredentialCheck.LeakedCredentialCheck,
