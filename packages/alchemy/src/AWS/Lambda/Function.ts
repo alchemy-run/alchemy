@@ -1347,7 +1347,7 @@ export const FunctionProvider = () =>
           Handler: handlerStringOf(news),
           Role: roleArn,
           Code: codeLocation,
-          Runtime: news.runtime ?? "nodejs22.x",
+          Runtime: news.runtime ?? "nodejs24.x",
           Architectures: [news.architecture ?? "x86_64"],
           MemorySize: news.memorySize,
           // Always explicit: `UpdateFunctionConfiguration` treats an omitted

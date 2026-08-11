@@ -9,10 +9,12 @@ import { ProviderModePolicy } from "../../ProviderMode.ts";
 import { Table } from "../DynamoDB/Table.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import { EventSourceMapping } from "../Lambda/EventSourceMapping.ts";
-import { Function as LambdaFunction } from "../Lambda/Function.ts";
+import {
+  Function as LambdaFunction,
+  type FunctionProps,
+} from "../Lambda/Function.ts";
 import { Bucket } from "../S3/Bucket.ts";
 import { Queue } from "../SQS/Queue.ts";
-import type { AssetFileOption } from "./AssetDeployment.ts";
 import { AssetDeployment } from "./AssetDeployment.ts";
 import { Server } from "./Server.ts";
 import {
@@ -21,7 +23,7 @@ import {
   type StaticSiteRouterAttachment,
 } from "./StaticSite.ts";
 import type {
-  StaticSiteAssetsProps,
+  WebsiteAssetsConfig,
   WebsiteDomainProps,
   WebsiteEdgeProps,
   WebsiteInvalidationProps,
@@ -71,6 +73,11 @@ export interface NextjsProps {
      * @default "x86_64"
      */
     architecture?: "x86_64" | "arm64";
+    /**
+     * Lambda runtime for the server function.
+     * @default "nodejs24.x"
+     */
+    runtime?: FunctionProps["runtime"];
   };
   /**
    * Image optimization (Lambda) configuration.
@@ -85,9 +92,7 @@ export interface NextjsProps {
   /**
    * Static asset upload configuration.
    */
-  assets?: StaticSiteAssetsProps & {
-    fileOptions?: AssetFileOption[];
-  };
+  assets?: WebsiteAssetsConfig;
   /**
    * Optional custom domain.
    */
@@ -172,8 +177,8 @@ export interface NextjsProps {
  * });
  * ```
  */
-export const Nextjs = (id: string, props: NextjsProps = {}) =>
-  Effect.gen(function* () {
+export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
+  function* (id: string, props: NextjsProps = {}) {
     const ctx = yield* AlchemyContext;
     const remoted = yield* ProviderModePolicy;
     // Mirrors the other Website composites: during `alchemy dev` the site
@@ -283,7 +288,7 @@ export const Nextjs = (id: string, props: NextjsProps = {}) =>
       // OpenNext's server-functions/default is a complete deployment unit
       // (entry + traced .next output + its own node_modules) — ship as-is.
       bundle: false,
-      runtime: "nodejs22.x",
+      runtime: props.server?.runtime ?? "nodejs24.x",
       architecture: props.server?.architecture,
       memorySize: props.server?.memorySize ?? 1024,
       timeout: props.server?.timeout ?? Duration.seconds(30),
@@ -351,7 +356,7 @@ export const Nextjs = (id: string, props: NextjsProps = {}) =>
       handler: "handler",
       isExternal: true,
       bundle: false,
-      runtime: "nodejs22.x",
+      runtime: "nodejs24.x",
       memorySize: 512,
       timeout: Duration.seconds(30),
       url: false,
@@ -389,7 +394,7 @@ export const Nextjs = (id: string, props: NextjsProps = {}) =>
       handler: "handler",
       isExternal: true,
       bundle: false,
-      runtime: "nodejs22.x",
+      runtime: "nodejs24.x",
       architecture: "arm64",
       memorySize: props.imageOptimization?.memorySize ?? 1536,
       timeout: Duration.seconds(25),
@@ -471,4 +476,6 @@ export const Nextjs = (id: string, props: NextjsProps = {}) =>
       serverUrl: server.functionUrl,
       tagCacheTable,
     };
-  }).pipe(Namespace.push(id));
+  },
+  (effect, id: string, _props?: NextjsProps) => effect.pipe(Namespace.push(id)),
+);

@@ -1,4 +1,5 @@
 import type { Input } from "../../Input.ts";
+import type { AssetFileOption } from "./AssetDeployment.ts";
 import type { Bucket } from "../S3/Bucket.ts";
 
 export interface WebsiteDomainProps {
@@ -142,6 +143,17 @@ export interface StaticSiteAssetsProps {
    * @default "utf-8"
    */
   textEncoding?: WebsiteTextEncoding;
+}
+
+/**
+ * Static-asset upload configuration for the website composites:
+ * {@link StaticSiteAssetsProps} plus per-file overrides.
+ */
+export interface WebsiteAssetsConfig extends StaticSiteAssetsProps {
+  /**
+   * Per-file overrides for content type and cache-control.
+   */
+  fileOptions?: AssetFileOption[];
 }
 
 export interface RouterUrlRouteProps {
