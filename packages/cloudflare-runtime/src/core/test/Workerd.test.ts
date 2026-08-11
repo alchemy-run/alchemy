@@ -5,6 +5,7 @@ import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
+import * as NodeNet from "node:net";
 import * as Workerd from "../workerd/Workerd.ts";
 import * as PortHelpers from "./helpers/port.ts";
 
@@ -265,6 +266,116 @@ layer(services)((it) => {
       }),
     { timeout: 60_000 },
   );
+  // Pins the invariant the shutdown test's de-flake relies on: a TYPED
+  // failure leaves the shared layer runtime healthy, so a vitest retry gets
+  // a real, working attempt. (An external timeout interrupt used to wedge
+  // the runtime — "All fibers interrupted without error" — making both CI
+  // retries dead-on-arrival.) Attempt 1 fails on purpose the way a bounded
+  // stage fails; attempt 2 must be able to run the full serve → fetch →
+  // shutdown round-trip.
+  let wedgeAttempts = 0;
+  it.effect(
+    "a typed failure leaves the runtime healthy, so a retry gets a real attempt",
+    () =>
+      Effect.gen(function* () {
+        wedgeAttempts += 1;
+        if (wedgeAttempts === 1) {
+          return yield* Effect.fail(
+            new Error("simulated transient wedge (attempt 1)"),
+          );
+        }
+        const workerd = yield* Workerd.Workerd;
+        const ports = yield* workerd
+          .serve({
+            sockets: [
+              {
+                name: "http",
+                address: "127.0.0.1:0",
+                service: { name: "test" },
+              },
+            ],
+            services: [
+              {
+                name: "test",
+                worker: {
+                  compatibilityDate: "2026-03-10",
+                  modules: [
+                    {
+                      name: "main.js",
+                      esModule:
+                        "export default { fetch: () => new Response('retried') };",
+                    },
+                  ],
+                },
+              },
+            ],
+          })
+          .pipe(Effect.timeout(20_000));
+        const response = yield* Effect.promise(() =>
+          fetch(`http://127.0.0.1:${ports.http}/`, {
+            signal: AbortSignal.timeout(10_000),
+          }),
+        );
+        expect(yield* Effect.promise(() => response.text())).toBe("retried");
+      }),
+    { timeout: 60_000, retry: 2 },
+  );
+
+  // Pins the persistent-wedge failure mode: against a server that accepts
+  // connections but never responds (the shape of the CI wedge — workerd's
+  // listener was up, the first response never came), the bounded fetch
+  // fails FAST with a typed TimeoutError instead of hanging until the test
+  // timeout kills the fiber. The server tracks and destroys its sockets on
+  // release — `server.close` alone waits for the aborted connection's
+  // server-side socket and never fires its callback.
+  const silentServer = Effect.acquireRelease(
+    Effect.callback<{
+      port: number;
+      server: NodeNet.Server;
+      sockets: Set<NodeNet.Socket>;
+    }>((resume) => {
+      const sockets = new Set<NodeNet.Socket>();
+      const server = NodeNet.createServer((socket) => {
+        sockets.add(socket);
+        socket.once("close", () => sockets.delete(socket));
+      });
+      server.once("error", (error) => resume(Effect.die(error)));
+      server.listen({ port: 0, host: "127.0.0.1", exclusive: true }, () =>
+        resume(
+          Effect.succeed({
+            server,
+            sockets,
+            port: (server.address() as NodeNet.AddressInfo).port,
+          }),
+        ),
+      );
+    }),
+    ({ server, sockets }) =>
+      Effect.callback<void>((resume) => {
+        for (const socket of sockets) socket.destroy();
+        server.close(() => resume(Effect.void));
+      }),
+  );
+
+  it.effect(
+    "a wedged first request fails fast with a typed abort, not a hang",
+    () =>
+      Effect.gen(function* () {
+        const silent = yield* silentServer;
+        const started = Date.now();
+        const exit = yield* Effect.tryPromise(() =>
+          fetch(`http://127.0.0.1:${silent.port}/`, {
+            signal: AbortSignal.timeout(1_000),
+          }),
+        ).pipe(Effect.exit);
+        const elapsed = Date.now() - started;
+        assert(Exit.isFailure(exit));
+        expect(String(exit.cause)).toMatch(/timeout/i);
+        expect(elapsed).toBeLessThan(10_000);
+      }),
+    { timeout: 30_000 },
+  );
+
   it.effect(
     "starts many workers concurrently",
     () =>
