@@ -154,6 +154,12 @@ export const runViteBuildChild = (
             stdout: "pipe",
             stderr: "pipe",
             extendEnv: true,
+            // A production build must not inherit the parent's NODE_ENV: a
+            // deploy driven from a test process (`bun test` sets
+            // NODE_ENV=test) would otherwise bake `import.meta.env.DEV`
+            // into the server bundle (e.g. SolidStart then ships its
+            // dev-only manifest and every SSR request 500s).
+            env: { NODE_ENV: "production" },
             killSignal: "SIGKILL",
           },
         ),

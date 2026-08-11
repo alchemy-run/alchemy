@@ -16,9 +16,8 @@ class AssetNotReady extends Data.TaggedError("AssetNotReady")<{
   body: string;
 }> {}
 
-// While the static-asset manifest is still propagating, Cloudflare serves a
-// managed "content signals" robots.txt with a 200 — the status alone can't
-// distinguish "not yet" from "served", so retry until the body matches.
+// Retry until the served body actually contains the expected marker — a 200
+// alone can't distinguish "still propagating" from "served".
 const getBodyWhenReady = (url: string, expected: string) =>
   Effect.gen(function* () {
     const res = yield* getWhenReady(url);
@@ -47,8 +46,8 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   stage: "test",
 });
 
-// The first deploy runs the full Astro build, so give the hook more headroom
-// than the default 120s.
+// The first deploy runs the full Octane (vite) build, so give the hook more
+// headroom than the default 120s.
 const stack = beforeAll(deploy(Stack).pipe(Effect.tap(Console.log)), {
   timeout: 600_000,
 });
@@ -72,65 +71,34 @@ test(
   "serves the server-rendered home page",
   Effect.gen(function* () {
     const url = yield* base;
-    const res = yield* getWhenReady(url);
-    expect(res.status).toBe(200);
-    const html = yield* res.text;
-    // The `GREETING` env value from alchemy.run.ts, read via
-    // `cloudflare:workers` in the page frontmatter — proves the Worker
-    // rendered it at request time.
-    expect(html).toContain("Hello from Alchemy!");
-    expect(html).toContain("server-rendered in a Cloudflare Worker");
+    const html = yield* getBodyWhenReady(url, "Octane on Cloudflare Workers");
+    expect(html).toContain("Octane on Cloudflare Workers");
+    expect(html).toContain("Server-rendered by Octane, deployed by Alchemy.");
   }),
   { timeout: 180_000 },
 );
 
 test(
-  "serves the prerendered about page",
-  Effect.gen(function* () {
-    const url = yield* base;
-    const res = yield* getWhenReady(`${url}/about/`);
-    expect(res.status).toBe(200);
-  }),
-  { timeout: 180_000 },
-);
-
-test(
-  "compiles tailwind from astro.config.ts",
+  "compiles tailwind from vite.config.ts",
   Effect.gen(function* () {
     const url = yield* base;
     // The utility class in the markup proves the page shipped with Tailwind
     // classes; wait until the deployed HTML includes it.
     const html = yield* getBodyWhenReady(url, "text-3xl");
 
-    // Astro either links an external compiled stylesheet or inlines small
-    // ones as a <style> block — accept both, but the compiled rule for the
-    // utility must be served either way. That rule only exists if the
-    // @tailwindcss/vite plugin from the project's own astro.config.ts ran.
+    // Octane's production server injects a per-route stylesheet link from the
+    // Vite client manifest. The compiled rule for the utility only exists if
+    // the @tailwindcss/vite plugin from the project's own vite.config.ts ran.
     const link = html.match(
       /<link[^>]*rel="stylesheet"[^>]*href="([^"]+)"[^>]*>/,
     );
-    if (link) {
-      const href = link[1]!;
-      const cssUrl = href.startsWith("http")
-        ? href
-        : `${url}${href.startsWith("/") ? "" : "/"}${href}`;
-      const css = yield* getBodyWhenReady(cssUrl, ".text-3xl");
-      expect(css).toContain(".text-3xl");
-    } else {
-      const style = html.match(/<style[^>]*>([\s\S]*?)<\/style>/);
-      expect(style).not.toBeNull();
-      expect(style![1]).toContain(".text-3xl");
-    }
-  }),
-  { timeout: 180_000 },
-);
-
-test(
-  "serves a static asset from public/",
-  Effect.gen(function* () {
-    const url = yield* base;
-    const body = yield* getBodyWhenReady(`${url}/robots.txt`, "User-agent: *");
-    expect(body).toContain("User-agent: *");
+    expect(link).not.toBeNull();
+    const href = link![1]!;
+    const cssUrl = href.startsWith("http")
+      ? href
+      : `${url}${href.startsWith("/") ? "" : "/"}${href}`;
+    const css = yield* getBodyWhenReady(cssUrl, ".text-3xl");
+    expect(css).toContain(".text-3xl");
   }),
   { timeout: 180_000 },
 );

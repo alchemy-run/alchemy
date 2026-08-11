@@ -16,9 +16,9 @@ class AssetNotReady extends Data.TaggedError("AssetNotReady")<{
   body: string;
 }> {}
 
-// While the static-asset manifest is still propagating, Cloudflare serves a
-// managed "content signals" robots.txt with a 200 — the status alone can't
-// distinguish "not yet" from "served", so retry until the body matches.
+// While the static-asset manifest is still propagating, Cloudflare can serve
+// placeholder content with a 200 — the status alone can't distinguish
+// "not yet" from "served", so retry until the body matches.
 const getBodyWhenReady = (url: string, expected: string) =>
   Effect.gen(function* () {
     const res = yield* getWhenReady(url);
@@ -47,8 +47,8 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   stage: "test",
 });
 
-// The first deploy runs the full SvelteKit build, so give the hook more
-// headroom than the default 120s.
+// The first deploy runs the full Vite build, so give the hook more headroom
+// than the default 120s.
 const stack = beforeAll(deploy(Stack).pipe(Effect.tap(Console.log)), {
   timeout: 600_000,
 });
@@ -69,26 +69,11 @@ test(
 );
 
 test(
-  "serves the server-rendered home page",
+  "serves the index HTML",
   Effect.gen(function* () {
     const url = yield* base;
-    const res = yield* getWhenReady(url);
-    expect(res.status).toBe(200);
-    const html = yield* res.text;
-    expect(html).toContain("SvelteKit on Cloudflare Workers");
-    // The `GREETING` env value from alchemy.run.ts, read via `platform.env`
-    // in the server `load` — proves the Worker rendered it at request time.
-    expect(html).toContain("Hello from alchemy");
-  }),
-  { timeout: 180_000 },
-);
-
-test(
-  "serves the prerendered about page",
-  Effect.gen(function* () {
-    const url = yield* base;
-    const res = yield* getWhenReady(`${url}/about`);
-    expect(res.status).toBe(200);
+    const html = yield* getBodyWhenReady(url, "<div id=\"root\">");
+    expect(html).toContain("Foldkit on Cloudflare");
   }),
   { timeout: 180_000 },
 );
@@ -97,29 +82,22 @@ test(
   "compiles tailwind from vite.config.ts",
   Effect.gen(function* () {
     const url = yield* base;
-    const res = yield* getWhenReady(url);
-    expect(res.status).toBe(200);
-    const html = yield* res.text;
-    // The page markup uses Tailwind utilities...
-    expect(html).toContain("text-3xl");
-    // ...and links the stylesheet Vite emitted via the project-owned
-    // vite.config.ts (the @tailwindcss/vite plugin), proving Alchemy loaded
-    // the config file natively instead of the programmatic fallback.
-    const match = html.match(/\/_app\/immutable\/assets\/[^"']+\.css/);
-    expect(match).not.toBeNull();
-    const css = yield* getBodyWhenReady(`${url}${match![0]}`, ".text-3xl");
+    // Foldkit is a client-only SPA — the markup renders in the browser, so
+    // assert on the compiled stylesheet Vite links from index.html instead
+    // of SSR output.
+    const html = yield* getBodyWhenReady(url, "stylesheet");
+    const link = html.match(
+      /<link[^>]*rel="stylesheet"[^>]*href="([^"]+)"[^>]*>/,
+    );
+    expect(link).not.toBeNull();
+    const href = link![1]!;
+    const cssUrl = href.startsWith("http")
+      ? href
+      : `${url}${href.startsWith("/") ? "" : "/"}${href}`;
+    // The compiled rule for a utility used in src/main.ts only exists if the
+    // @tailwindcss/vite plugin from the project's own vite.config.ts ran.
+    const css = yield* getBodyWhenReady(cssUrl, ".text-3xl");
     expect(css).toContain(".text-3xl");
-    expect(css).toContain(".font-bold");
-  }),
-  { timeout: 180_000 },
-);
-
-test(
-  "serves a static asset from static/",
-  Effect.gen(function* () {
-    const url = yield* base;
-    const body = yield* getBodyWhenReady(`${url}/robots.txt`, "User-agent: *");
-    expect(body).toContain("User-agent: *");
   }),
   { timeout: 180_000 },
 );
