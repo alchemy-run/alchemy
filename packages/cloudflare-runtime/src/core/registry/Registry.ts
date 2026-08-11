@@ -1,4 +1,3 @@
-import { exitHook } from "@alchemy.run/node-utils/exit-hook";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -12,7 +11,6 @@ import * as Semaphore from "effect/Semaphore";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
-import * as NodeFs from "node:fs";
 import * as Paths from "../internal/Paths.ts";
 import * as System from "../internal/System.ts";
 import { SystemError } from "../RuntimeError.shared.ts";
@@ -168,22 +166,12 @@ export const RegistryLive = Layer.effect(
             // same key; a graceful handoff closes the old scope after the new
             // instance has already overwritten the file, and removing it here
             // would unregister the live replacement.
-            // If scope finalizers fail to run, a synchronous exit hook ensures the entry is removed.
-            const unregisterSync = () => {
-              try {
-                if (NodeFs.readFileSync(entryPath, "utf8") === serialized) {
-                  NodeFs.unlinkSync(entryPath);
-                }
-              } catch {}
-            };
-            const unregister = exitHook(unregisterSync);
             return Effect.addFinalizer(() =>
               fs.readFileString(entryPath).pipe(
                 Effect.flatMap((current) =>
                   current === serialized ? fs.remove(entryPath) : Effect.void,
                 ),
                 Effect.ignore,
-                Effect.andThen(Effect.sync(() => unregister())),
               ),
             );
           }),

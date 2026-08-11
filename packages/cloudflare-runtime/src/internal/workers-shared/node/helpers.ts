@@ -1,10 +1,11 @@
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
-import ignore from "@alchemy.run/node-utils/ignore";
+import ignore from "../../../core/internal/ignore.ts";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import mime from "mime";
-import type { PathOrFileDescriptor } from "node:fs";
-import { readFileSync } from "node:fs";
-import { isAbsolute, resolve, sep } from "node:path";
+import { isAbsolute, sep } from "node:path";
 import {
   CF_ASSETS_IGNORE_FILENAME,
   HEADERS_FILENAME,
@@ -46,32 +47,16 @@ export function createPatternMatcher(
   }
 }
 
-export function thrownIsDoesNotExistError(
-  thrown: unknown,
-): thrown is Error & { code: "ENOENT" } {
-  return (
-    thrown instanceof Error && "code" in thrown && thrown.code === "ENOENT"
-  );
-}
-
-export function maybeGetFile(filePath: PathOrFileDescriptor) {
-  try {
-    return readFileSync(filePath, "utf8");
-  } catch (e: unknown) {
-    if (!thrownIsDoesNotExistError(e)) {
-      throw e;
-    }
-  }
-}
-
 /**
  * Create a function for filtering out ignored assets.
  *
  * The generated function takes an asset path, relative to the asset directory,
  * and returns true if the asset should not be ignored.
  */
-export async function createAssetsIgnoreFunction(dir: string) {
-  const cfAssetIgnorePath = resolve(dir, CF_ASSETS_IGNORE_FILENAME);
+export const createAssetsIgnoreFunction = Effect.fn(function* (dir: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const cfAssetIgnorePath = path.join(dir, CF_ASSETS_IGNORE_FILENAME);
 
   const ignorePatterns = [
     // Ignore the `.assetsignore` file and other metafiles by default.
@@ -81,15 +66,18 @@ export async function createAssetsIgnoreFunction(dir: string) {
     `/${HEADERS_FILENAME}`,
   ];
 
-  let assetsIgnoreFilePresent = false;
-  const assetsIgnore = maybeGetFile(cfAssetIgnorePath);
+  const assetsIgnore = yield* fs.readFileString(cfAssetIgnorePath).pipe(
+    Effect.catchIf(
+      (error) => error.reason._tag === "NotFound",
+      () => Effect.succeed(undefined),
+    ),
+  );
   if (assetsIgnore !== undefined) {
-    assetsIgnoreFilePresent = true;
     ignorePatterns.push(...assetsIgnore.split("\n"));
   }
 
   return {
     assetsIgnoreFunction: createPatternMatcher(ignorePatterns, true),
-    assetsIgnoreFilePresent,
+    assetsIgnoreFilePresent: assetsIgnore !== undefined,
   };
-}
+});

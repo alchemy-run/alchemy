@@ -1,8 +1,25 @@
-import { lock } from "@alchemy.run/node-utils/lockfile";
+import * as Clock from "effect/Clock";
+import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as fs from "node:fs/promises";
-import * as path from "pathe";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import type { PlatformError } from "effect/PlatformError";
+import * as Schedule from "effect/Schedule";
+import * as Semaphore from "effect/Semaphore";
 import { rootDir } from "./Profile.ts";
+
+const semaphores = new Map<string, Semaphore.Semaphore>();
+
+// Keep STALE well above REFRESH — a saturated machine can starve the
+// heartbeat fiber for seconds.
+const STALE = Duration.seconds(30);
+const REFRESH = Duration.seconds(10);
+const RETRY_INTERVAL = Duration.millis(50);
+const DEFAULT_TIMEOUT: Duration.Input = "2 minutes";
+
+class LockHeld extends Data.TaggedError("LockHeld") {}
 
 /**
  * Make a lock key safe to use as a file name on every platform.
@@ -18,79 +35,152 @@ import { rootDir } from "./Profile.ts";
 export const sanitizeLockKey = (key: string): string =>
   key.replace(/[^A-Za-z0-9._-]/g, "_");
 
-/** File-system errors that mean "we cannot lock here at all". */
-const UNLOCKABLE_FS_CODES = new Set(["EROFS", "EACCES", "EPERM", "ENOSPC"]);
+const errnoCode = (error: PlatformError): string | undefined => {
+  const cause = error.reason.cause;
+  return typeof cause === "object" && cause !== null && "code" in cause
+    ? String(cause.code)
+    : undefined;
+};
+
+/** File-system failures that mean "we cannot lock here at all". */
+const isUnlockable = (error: PlatformError): boolean =>
+  error.reason._tag === "PermissionDenied" ||
+  ["EROFS", "EACCES", "EPERM", "ENOSPC"].includes(errnoCode(error) ?? "");
 
 /**
- * Serialise execution of `effect` so no two callers ever run inside the
- * critical section concurrently for the same `key`, both within this
- * process and across other processes on the same machine.
+ * Take the cross-process lock. On success the ambient scope owns it: a
+ * finalizer removes it and a forked heartbeat keeps its mtime fresh.
+ */
+const acquireFileLock = Effect.fn(function* (
+  lockPath: string,
+  timeout: Duration.Input,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const ownerPath = path.join(lockPath, "owner");
+  const owner = yield* Effect.sync(() => crypto.randomUUID());
+
+  yield* fs.makeDirectory(path.dirname(lockPath), { recursive: true });
+
+  // Reap a lock whose crashed holder stopped refreshing its mtime.
+  const reapStale = Effect.gen(function* () {
+    const info = yield* fs.stat(lockPath);
+    const now = yield* Clock.currentTimeMillis;
+    const isStale = Option.exists(
+      info.mtime,
+      (mtime) => mtime.getTime() < now - Duration.toMillis(STALE),
+    );
+    if (isStale) {
+      yield* fs.remove(lockPath, { recursive: true, force: true });
+    }
+  }).pipe(
+    Effect.catchIf(
+      (error) => error.reason._tag === "NotFound",
+      () => Effect.void,
+    ),
+  );
+
+  // A non-recursive mkdir is the atomic test-and-set; the owner marker lets
+  // release and refresh verify the lock wasn't reaped and re-taken.
+  yield* fs.makeDirectory(lockPath).pipe(
+    Effect.andThen(
+      fs
+        .writeFileString(ownerPath, owner)
+        .pipe(
+          Effect.onError(() =>
+            fs
+              .remove(lockPath, { recursive: true, force: true })
+              .pipe(Effect.ignore),
+          ),
+        ),
+    ),
+    Effect.catchIf(
+      (error) => error.reason._tag === "AlreadyExists",
+      () => reapStale.pipe(Effect.andThen(Effect.fail(new LockHeld()))),
+    ),
+    Effect.retry({
+      while: (error) => error._tag === "LockHeld",
+      schedule: Schedule.spaced(RETRY_INTERVAL),
+      times: Math.ceil(
+        Duration.toMillis(timeout) / Duration.toMillis(RETRY_INTERVAL),
+      ),
+    }),
+    Effect.catchTag("LockHeld", () =>
+      Effect.die(
+        new Error(
+          `Timed out waiting for the alchemy auth lock '${lockPath}' — another alchemy ` +
+            `process has held it for over ${Duration.toSeconds(timeout)}s. If no other ` +
+            `alchemy process is running, delete the lock directory and retry.`,
+        ),
+      ),
+    ),
+  );
+
+  yield* Effect.addFinalizer(() =>
+    fs.readFileString(ownerPath).pipe(
+      Effect.filterOrFail((current) => current === owner),
+      Effect.andThen(fs.remove(lockPath, { recursive: true, force: true })),
+      Effect.ignore,
+    ),
+  );
+
+  yield* fs.readFileString(ownerPath).pipe(
+    Effect.filterOrFail((current) => current === owner),
+    Effect.andThen(Clock.currentTimeMillis),
+    // NB: utimes interprets a bare number as *seconds* since epoch.
+    Effect.flatMap((now) => fs.utimes(lockPath, new Date(now), new Date(now))),
+    Effect.repeat(Schedule.spaced(REFRESH)),
+    Effect.catch(() =>
+      Effect.logWarning(
+        `auth lock compromised (continuing): '${lockPath}' is no longer owned by this process`,
+      ),
+    ),
+    Effect.forkScoped,
+  );
+});
+
+/**
+ * Serialise execution of `effect` for the same `key`, both within this
+ * process (a semaphore) and across processes on the same machine (an atomic
+ * lock directory whose mtime is refreshed while held so another process can
+ * recover it after a crash).
  *
- * Uses `@alchemy.run/node-utils` lockfile for both: it tracks in-process
- * holders by path (so same-process callers wait via `retries`) and uses
- * an OS file lock for cross-process coordination, with stale-lock
- * detection at 60s.
- *
- * Locking is best-effort: on file systems where the lock directory
- * cannot be created at all (read-only home in containers/CI), the
- * effect runs unserialised with a warning instead of failing — a
+ * Best-effort: where the lock directory cannot be created at all (read-only
+ * home in containers/CI), the effect runs unserialised with a warning — a
  * missed lock only risks a redundant credential refresh.
  */
 export const withLock = <A, E, R>(
   key: string,
   effect: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E, R> => {
-  // Computed lazily (not at module-eval time) so that the
-  // `Profile -> AuthProvider -> Lock -> Profile` import cycle never reads
-  // `rootDir` before `Profile.ts` has finished initialising it.
-  const lockDir = path.join(rootDir, "lock");
-  const lockPath = path.join(lockDir, `${sanitizeLockKey(key)}.lock`);
-  return Effect.acquireUseRelease(
-    Effect.promise(async () => {
-      try {
-        await fs.mkdir(lockDir, { recursive: true });
-        return await lock(lockPath, {
-          // A full single-process test run can build hundreds of provider
-          // layers concurrently. Each credential read briefly takes this
-          // lock, so tail waiters need enough budget to drain that queue.
-          retries: { retries: 2_400, minTimeout: 50, maxTimeout: 50 },
-          // The holder refreshes the lockfile mtime on a timer. Under heavy
-          // load (e.g. a full test run saturating every core) that timer can
-          // be starved for several seconds, so keep the stale threshold well
-          // above any realistic starvation pause.
-          stale: 30_000,
-          realpath: false,
-          // The library's default handler throws from a timer callback,
-          // which surfaces as an uncaught exception and kills the process.
-          // A compromised auth lock is benign here (worst case two refreshes
-          // race), so log and continue.
-          onCompromised: (err) => {
-            console.warn(`auth lock compromised (continuing): ${err.message}`);
-          },
-        });
-      } catch (err) {
-        const code = (err as NodeJS.ErrnoException).code;
-        if (code !== undefined && UNLOCKABLE_FS_CODES.has(code)) {
-          console.warn(
-            `auth lock unavailable (${code} at '${lockPath}') — continuing without cross-process locking`,
-          );
-          return async () => {};
-        }
-        if (
-          err instanceof Error &&
-          err.message.includes("already being held")
-        ) {
-          throw new Error(
-            `Timed out waiting for the alchemy auth lock '${lockPath}' — another alchemy ` +
-              `process has held it for over 120s. If no other alchemy process is running, ` +
-              `delete the lock file and retry.`,
-            { cause: err },
-          );
-        }
-        throw err;
-      }
-    }),
-    () => effect,
-    (release) => Effect.promise(() => release().catch(() => {})),
+  options?: { readonly timeout?: Duration.Input },
+) => {
+  const safeKey = sanitizeLockKey(key);
+  let semaphore = semaphores.get(safeKey);
+  if (semaphore === undefined) {
+    semaphore = Semaphore.makeUnsafe(1);
+    semaphores.set(safeKey, semaphore);
+  }
+  return semaphore.withPermit(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
+        // Read `rootDir` here, not at module eval, so the
+        // `Profile -> AuthProvider -> Lock -> Profile` import cycle never
+        // sees it uninitialised.
+        const lockPath = path.join(rootDir, "lock", `${safeKey}.lock`);
+        yield* acquireFileLock(
+          lockPath,
+          options?.timeout ?? DEFAULT_TIMEOUT,
+        ).pipe(
+          Effect.catchIf(isUnlockable, (error) =>
+            Effect.logWarning(
+              `auth lock unavailable (${errnoCode(error) ?? error.reason._tag} at '${lockPath}') — continuing without cross-process locking`,
+            ),
+          ),
+          Effect.orDie,
+        );
+        return yield* effect;
+      }),
+    ),
   );
 };

@@ -104,6 +104,16 @@ LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
 OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 PERFORMANCE OF THIS SOFTWARE.
 
+## node-ignore
+
+`packages/cloudflare-runtime/src/core/internal/ignore.ts` is a TypeScript port
+of `ignore` (node-ignore) v7.0.5.
+
+Copyright (c) 2013 Kael Zhang <i@kael.me>, contributors
+
+The node-ignore portions are provided under the MIT License reproduced in the
+Astro section above.
+
 ## SQLite
 
 The D1 simulator contains a TypeScript port of SQLite shell quoting logic.
@@ -119,6 +129,7 @@ been dedicated to the public domain. See <https://www.sqlite.org/copyright.html>
 - OpenNext for Cloudflare: <https://github.com/opennextjs/opennextjs-cloudflare>
 - SST: <https://github.com/sst/sst>
 - node-sanitize-filename: <https://github.com/parshap/node-sanitize-filename>
+- node-ignore: <https://github.com/kaelzhang/node-ignore>
 - SQLite: <https://github.com/sqlite/sqlite>
 
 The external `.vendor` Git submodules are separate works governed by the
