@@ -23,7 +23,6 @@ describe("sanitizeLockKey", () => {
   });
 });
 
-// The lock's retry loop and heartbeat need the live clock.
 layer(NodeServices.layer, { excludeTestServices: true })("withLock", (it) => {
   it.effect(
     "acquires and releases a lock whose key contains characters invalid in file names",

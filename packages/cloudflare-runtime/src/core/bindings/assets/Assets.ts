@@ -65,7 +65,6 @@ export const AssetsLive = Layer.effect(
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const services = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
 
     interface ManifestEntry {
       readonly pathHash: Uint8Array;
@@ -105,7 +104,8 @@ export const AssetsLive = Layer.effect(
       const { assetsIgnoreFunction } = yield* createAssetsIgnoreFunction(
         dir,
       ).pipe(
-        Effect.provide(services),
+        Effect.provideService(FileSystem.FileSystem, fs),
+        Effect.provideService(Path.Path, path),
         Effect.mapError(
           (cause) =>
             new SystemError({
