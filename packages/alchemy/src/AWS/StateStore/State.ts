@@ -10,6 +10,7 @@ import { CredentialsStoreLive } from "../../Auth/Credentials.ts";
 import { decodeFqn, encodeFqn } from "../../FQN.ts";
 import { STATE_STORE_VERSION } from "../../State/HttpStateApi.ts";
 import {
+  fencedWriteRejected,
   State,
   StateStoreError,
   type PersistedState,
@@ -17,6 +18,7 @@ import {
 } from "../../State/State.ts";
 import { encodeState, reviveState } from "../../State/StateEncoding.ts";
 import { recordStateStoreInit } from "../../Telemetry/Metrics.ts";
+import { makeS3DeploymentStore, recordKey } from "./Deployments.ts";
 import { AwsAuth } from "../AuthProvider.ts";
 import * as AwsCredentials from "../Credentials.ts";
 import * as Endpoint from "../Endpoint.ts";
@@ -36,6 +38,26 @@ const OUTPUT_FILE = "__stack_output__.json";
 
 /** Maximum number of keys S3 accepts in a single DeleteObjects call. */
 const DELETE_BATCH_SIZE = 1000;
+
+/**
+ * Reduce raw stage-prefixed keys to committed resource state files.
+ * Excludes:
+ *  - the `__stack_output__.json` bookkeeping file — `decodeFqn` replaces
+ *    `__` with `/`, which would turn the literal name `__stack_output__`
+ *    into `/stack_output/` and slip past a bare-name filter, leaving the
+ *    engine to look up a non-existent resource;
+ *  - anything in a subdirectory — resource objects live flat under the
+ *    stage prefix, so any `/` marks bookkeeping such as the reserved
+ *    `.deployments/` history tree;
+ *  - any non-`.json` key.
+ */
+const resourceFiles = (keys: readonly string[], keyPrefix: string): string[] =>
+  keys
+    .map((key) => key.slice(keyPrefix.length))
+    .filter(
+      (file) =>
+        file !== OUTPUT_FILE && file.endsWith(".json") && !file.includes("/"),
+    );
 
 export interface S3StateOptions {
   /**
@@ -293,6 +315,42 @@ export const makeS3State = (options: S3StateOptions = {}) =>
         }
       });
 
+    /**
+     * Fencing check (see StateWriteFence in State.ts): a write carrying
+     * `fence: F` is rejected once any deployment version > F exists.
+     * Versions are contiguous and never deleted, so "a version above F
+     * exists" is equivalent to "F+1's record.json exists" — one HEAD per
+     * fenced write, no LIST. Check-then-write (not atomic with the PUT),
+     * so fencing is best-effort on S3 — a zombie that lost its lease is
+     * caught by its next write.
+     */
+    const checkFence = (request: {
+      stack: string;
+      stage: string;
+      fence?: number;
+    }): Effect.Effect<void, StateStoreError> =>
+      request.fence === undefined
+        ? Effect.void
+        : run((bucket) =>
+            s3
+              .headObject({
+                Bucket: bucket,
+                Key: recordKey(stagePrefix(request), request.fence! + 1),
+              })
+              .pipe(
+                Effect.flatMap(() =>
+                  Effect.fail(
+                    fencedWriteRejected({
+                      stack: request.stack,
+                      stage: request.stage,
+                      fence: request.fence!,
+                    }),
+                  ),
+                ),
+                Effect.catchTag("NotFound", () => Effect.void),
+              ),
+          );
+
     const state: StateService = {
       id: "s3",
       getVersion: () => Effect.succeed(STATE_STORE_VERSION),
@@ -313,13 +371,23 @@ export const makeS3State = (options: S3StateOptions = {}) =>
         )).filter((r) => r?.status === "replaced");
       }),
       set: (request) =>
-        run((bucket) =>
-          writeJson(bucket, resourceKey(request), request.value),
-        ).pipe(Effect.map(() => request.value)),
+        checkFence(request).pipe(
+          Effect.flatMap(() =>
+            run((bucket) =>
+              writeJson(bucket, resourceKey(request), request.value),
+            ),
+          ),
+          Effect.map(() => request.value),
+        ),
       delete: (request) =>
-        run((bucket) =>
-          s3.deleteObject({ Bucket: bucket, Key: resourceKey(request) }),
-        ).pipe(Effect.asVoid),
+        checkFence(request).pipe(
+          Effect.flatMap(() =>
+            run((bucket) =>
+              s3.deleteObject({ Bucket: bucket, Key: resourceKey(request) }),
+            ),
+          ),
+          Effect.asVoid,
+        ),
       deleteStack: ({ stack, stage }) =>
         run((bucket) =>
           deleteAll(
@@ -332,23 +400,50 @@ export const makeS3State = (options: S3StateOptions = {}) =>
       list: (request) =>
         run((bucket) => listKeys(bucket, stagePrefix(request))).pipe(
           Effect.map((keys) =>
-            keys
-              .map((key) => key.slice(stagePrefix(request).length))
-              // Filter the bookkeeping file before decoding — `decodeFqn`
-              // replaces `__` with `/`, which would turn the literal name
-              // `__stack_output__` into `/stack_output/` and slip past
-              // the filter, leaving the engine to look up a non-existent
-              // resource.
-              .filter((file) => file !== OUTPUT_FILE && file.endsWith(".json"))
-              .map((file) => decodeFqn(file.replace(/\.json$/, ""))),
+            resourceFiles(keys, stagePrefix(request)).map((file) =>
+              decodeFqn(file.replace(/\.json$/, "")),
+            ),
           ),
         ),
+      getAll: (request) =>
+        run((bucket) =>
+          Effect.gen(function* () {
+            const keyPrefix = stagePrefix(request);
+            const files = resourceFiles(
+              yield* listKeys(bucket, keyPrefix),
+              keyPrefix,
+            );
+            const entries = yield* Effect.all(
+              files.map((file) =>
+                readJson<PersistedState>(bucket, `${keyPrefix}${file}`).pipe(
+                  Effect.map(
+                    (value) =>
+                      [decodeFqn(file.replace(/\.json$/, "")), value] as const,
+                  ),
+                ),
+              ),
+              { concurrency: 8 },
+            );
+            return new Map(
+              entries.filter(
+                (entry): entry is [string, PersistedState] =>
+                  entry[1] !== undefined,
+              ),
+            ) as ReadonlyMap<string, PersistedState>;
+          }),
+        ),
+      deployments: makeS3DeploymentStore({ bucket, context, stagePrefix }),
       getOutput: (request) =>
         run((bucket) => readJson(bucket, outputKey(request))),
       setOutput: (request) =>
-        run((bucket) =>
-          writeJson(bucket, outputKey(request), request.value),
-        ).pipe(Effect.map(() => request.value)),
+        checkFence(request).pipe(
+          Effect.flatMap(() =>
+            run((bucket) =>
+              writeJson(bucket, outputKey(request), request.value),
+            ),
+          ),
+          Effect.map(() => request.value),
+        ),
     };
     return state;
   });

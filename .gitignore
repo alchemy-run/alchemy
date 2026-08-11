@@ -77,3 +77,4 @@ pnpm-lock.yaml
 .ai-workspace/
 /processes/
 .probe
+.demo/

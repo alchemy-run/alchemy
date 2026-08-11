@@ -11,6 +11,7 @@ import {
   makeScopedArtifacts,
 } from "./Artifacts.ts";
 import type { PlanStatusSession, ScopedPlanStatusSession } from "./Cli/Cli.ts";
+import { type UnstampedApplyEvent, stampApplyEvent } from "./Cli/Event.ts";
 import { deepEqual } from "./Diff.ts";
 import { InstanceId } from "./InstanceId.ts";
 import type { Apply, Plan } from "./Plan.ts";
@@ -86,6 +87,13 @@ const noopSession: PlanStatusSession = {
 };
 
 /**
+ * Emit an apply event through the session with the v2 envelope stamped:
+ * `ts` is assigned at emission via the Effect `Clock` (mirrors Apply's emit).
+ */
+const emit = (session: PlanStatusSession, event: UnstampedApplyEvent) =>
+  Effect.flatMap(stampApplyEvent(event), session.emit);
+
+/**
  * Reconcile state drift for every resource persisted under `stack`/`stage`.
  *
  * Unlike `deploy` (which converges the cloud to a *new* desired state
@@ -152,15 +160,21 @@ export const sync = (
       const scopedSession = {
         ...session,
         note: (note: string) =>
-          session.emit({ id: logicalId, kind: "annotate", message: note }),
+          emit(session, {
+            id: logicalId,
+            fqn,
+            kind: "annotate",
+            message: note,
+          }),
       } satisfies ScopedPlanStatusSession;
 
       const report = (
         status: "updating" | "updated" | "creating" | "created" | "skipped",
       ) =>
-        session.emit({
+        emit(session, {
           kind: "status-change",
           id: logicalId,
+          fqn,
           type: resourceType,
           status,
         });
@@ -333,9 +347,10 @@ export const sync = (
                 .get({ stack: stackName, stage, fqn })
                 .pipe(Effect.orElseSucceed(() => undefined));
               if (persisted && !isActionState(persisted)) {
-                yield* session.emit({
+                yield* emit(session, {
                   kind: "status-change",
                   id: persisted.logicalId,
+                  fqn,
                   type: persisted.resourceType,
                   status: "fail",
                 });

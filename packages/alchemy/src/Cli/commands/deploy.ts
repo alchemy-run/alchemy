@@ -1,7 +1,11 @@
 import * as Cause from "effect/Cause";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Console from "effect/Console";
+import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
@@ -16,8 +20,11 @@ import { ArtifactStore, createArtifactStore } from "../../Artifacts.ts";
 import { AuthProviders } from "../../Auth/AuthProvider.ts";
 import { withProfileOverride } from "../../Auth/Profile.ts";
 import * as CLI from "../../Cli/Cli.ts";
+import * as Discovery from "../../Dashboard/Discovery.ts";
+import * as Dashboard from "../../Dashboard/Launch.ts";
 import * as Plan from "../../Plan.ts";
 import { Stage } from "../../Stage.ts";
+import * as Clank from "../../Util/Clank.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { fileLogger } from "../../Util/FileLogger.ts";
 
@@ -44,6 +51,7 @@ export const ExecStackOptions = Schema.Struct({
   destroy: Schema.optional(Schema.Boolean),
   dev: Schema.optional(Schema.Boolean),
   adopt: Schema.optional(Schema.Boolean),
+  ui: Schema.optional(Schema.Boolean),
 });
 export type ExecStackOptions = typeof ExecStackOptions.Type;
 export type ExecStackOptionsEncoded = typeof ExecStackOptions.Encoded;
@@ -57,12 +65,49 @@ const stackSpanAttrs = (args: ExecStackOptions) => ({
   "alchemy.destroy": !!args.destroy,
   "alchemy.dev": !!args.dev,
   "alchemy.adopt": !!args.adopt,
+  "alchemy.ui": !!args.ui,
 });
+
+/**
+ * Clean user-facing message for a deploy blocked by the deployment lease:
+ * who holds it, since when, and that it self-heals if the holder died.
+ */
+const formatDeploymentInProgress = (error: {
+  stack: string;
+  stage: string;
+  holder: {
+    version: number;
+    startedAt: number;
+    meta: {
+      command: string;
+      initiator?: { user?: string; host?: string; pid?: number };
+    };
+  };
+}): string => {
+  const { holder } = error;
+  const who = [holder.meta.initiator?.user, holder.meta.initiator?.host]
+    .filter((part): part is string => !!part)
+    .join("@");
+  const pid = holder.meta.initiator?.pid;
+  return [
+    `Another ${holder.meta.command} of ${error.stack}/${error.stage} is already in progress (deployment v${holder.version}).`,
+    `  started: ${new Date(holder.startedAt).toISOString()}${who ? `  by: ${who}` : ""}${pid !== undefined ? ` (pid ${pid})` : ""}`,
+    "  If that run died, its lease expires automatically ~60s after its last heartbeat — try again shortly.",
+  ].join("\n");
+};
 
 const adopt = Flag.boolean("adopt").pipe(
   Flag.withDescription(
     "Adopt pre-existing cloud resources that conflict with this stack instead of failing. " +
       "Useful for re-importing infrastructure into a fresh state store.",
+  ),
+  Flag.withDefault(false),
+);
+
+const ui = Flag.boolean("ui").pipe(
+  Flag.withDescription(
+    "Open the alchemy dashboard and stream this run into it. Requires the " +
+      "optional @alchemy.run/dashboard package.",
   ),
   Flag.withDefault(false),
 );
@@ -78,8 +123,85 @@ export const execStack = Effect.fn(function* ({
   destroy = false,
   dev = false,
   adopt = false,
+  ui = false,
 }: ExecStackOptions) {
   const stackEffect = yield* importStack(main);
+
+  // --ui: fail fast (with install instructions) when the optional
+  // @alchemy.run/dashboard peer is missing — before any cloud interaction.
+  if (ui) {
+    yield* Dashboard.requireDistDir();
+  }
+
+  let dashboardUrl: string | undefined;
+  let launchedDashboard = false;
+  let dashboardFiber: Fiber.Fiber<void, never> | undefined;
+
+  // Bring the dashboard up — called AFTER the plan is computed, not
+  // before: launching early opens a tab that renders the graph with
+  // nothing to do while Plan.make bundles and diffs (seconds), and the
+  // approval banner trailing in later reads as a glitch. Post-plan, the
+  // tab opens with the plan overlay and the approve prompt together. The
+  // DashboardReporter tee only needs the server up before APPLY starts,
+  // which is always after planning. Reuses an already-running dashboard
+  // for this project; otherwise launches in-process on the project's
+  // STABLE port (deterministic from cwd+stack) so the previous run's tab
+  // reconnects to the same origin.
+  const ensureDashboard = Effect.gen(function* () {
+    // Opening is always safe: the SPA runs a same-origin BroadcastChannel
+    // takeover, so the freshly opened tab supersedes (closes) any older
+    // dashboard tab — the OS focuses the browser natively, no duplicate
+    // tabs accumulate, and no browser automation is needed.
+    const existing = yield* Discovery.discover().pipe(
+      Effect.orElseSucceed(() => undefined),
+    );
+    if (existing !== undefined) {
+      dashboardUrl = existing.url;
+      yield* Clank.openUrl(existing.url).pipe(Effect.catch(() => Effect.void));
+      return;
+    }
+    let port = Discovery.stablePort(stackEffect.stackName);
+    const probe = yield* Discovery.probePort(port, stackEffect.stackName);
+    if (probe.kind === "ours") {
+      // a dashboard from a previous run is still serving (its
+      // advertisement was lost) — reuse it rather than failing to bind
+      dashboardUrl = probe.url;
+      yield* Clank.openUrl(probe.url).pipe(Effect.catch(() => Effect.void));
+      return;
+    }
+    if (probe.kind === "foreign") {
+      // something else owns the stable port — fall back to a random one
+      port = 0;
+    }
+    const ready = yield* Deferred.make<string>();
+    dashboardFiber = yield* Effect.forkScoped(
+      Dashboard.launchDashboard({
+        stackEffect,
+        stage,
+        envFile,
+        profile: profile ?? "default",
+        port,
+        open: true,
+        ready,
+        command: dryRun ? "plan" : destroy ? "destroy" : "deploy",
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Console.error(`dashboard failed:\n${Cause.pretty(cause)}`),
+        ),
+      ),
+    );
+    dashboardUrl = yield* Deferred.await(ready).pipe(
+      Effect.timeout(Duration.seconds(30)),
+      Effect.orElseSucceed(() => undefined),
+    );
+    if (dashboardUrl === undefined) {
+      yield* Console.error(
+        "dashboard did not start in time; continuing without --ui",
+      );
+    } else {
+      launchedDashboard = true;
+    }
+  });
 
   const services = Layer.mergeAll(
     Layer.effect(
@@ -124,6 +246,12 @@ export const execStack = Effect.fn(function* ({
       const updatePlan = destroy
         ? yield* Plan.destroy(stack)
         : yield* Plan.make(stack, { force });
+      // The plan is ready — NOW bring up the dashboard, so the tab opens
+      // with the plan overlay and the approval prompt in the same breath
+      // (see ensureDashboard above).
+      if (ui) {
+        yield* ensureDashboard;
+      }
       if (dryRun) {
         yield* cli.displayPlan(updatePlan);
       } else {
@@ -134,8 +262,39 @@ export const execStack = Effect.fn(function* ({
               node.action !== "noop" ||
               node.bindings.some((b) => b.action !== "noop"),
           );
+        if (destroy && !hasChanges) {
+          // an empty destroy plan means the stage holds nothing —
+          // skipping the apply avoids a pointless deployment version (and
+          // a "Destroying…" banner over a graph of ghosts)
+          yield* Console.log("Nothing to destroy — the stage is empty.");
+          return;
+        }
         if (!yes && hasChanges) {
-          const approved = yield* cli.approvePlan(updatePlan);
+          // --ui delegates approval to the browser: the dashboard shows the
+          // plan with an approve/reject choice and the terminal just points
+          // at it. Falls back to the terminal prompt if the dashboard can't
+          // be reached.
+          let approved: boolean | undefined;
+          if (ui && dashboardUrl !== undefined) {
+            yield* Console.log(
+              `Review and approve the plan in the dashboard: ${dashboardUrl}`,
+            );
+            approved = yield* Dashboard.requestApprovalViaDashboard(
+              dashboardUrl,
+              updatePlan,
+            );
+            if (approved === false) {
+              yield* Console.log("Plan rejected in the dashboard.");
+            }
+          }
+          if (approved === undefined) {
+            if (ui && dashboardUrl !== undefined) {
+              yield* Console.warn(
+                "dashboard approval unreachable — falling back to terminal approval",
+              );
+            }
+            approved = yield* cli.approvePlan(updatePlan);
+          }
           if (!approved) {
             return;
           }
@@ -148,8 +307,21 @@ export const execStack = Effect.fn(function* ({
         // renderer only shows the failure status) so the keep-alive engages
         // and the rest of the stack keeps serving, but re-propagate a pure
         // interruption (Ctrl-C / fiber kill) so dev still shuts down cleanly.
+        // A concurrent deploy of the same stack/stage holds the deployment
+        // lease — surface who/since-when cleanly instead of a raw cause, and
+        // do NOT retry (the lease auto-expires ~60s after the holder's last
+        // heartbeat if it died).
+        const applyStack = apply(updatePlan, {
+          command: destroy ? "destroy" : "deploy",
+        }).pipe(
+          Effect.catchTag("DeploymentInProgress", (error) =>
+            Console.error(formatDeploymentInProgress(error)).pipe(
+              Effect.andThen(Effect.fail(error)),
+            ),
+          ),
+        );
         const applyPlan = dev
-          ? apply(updatePlan).pipe(
+          ? applyStack.pipe(
               Effect.catchCause((cause) =>
                 Cause.hasInterruptsOnly(cause)
                   ? Effect.failCause(cause)
@@ -158,8 +330,17 @@ export const execStack = Effect.fn(function* ({
                     ).pipe(Effect.as(undefined)),
               ),
             )
-          : apply(updatePlan);
-        const outputs = yield* applyPlan;
+          : applyStack;
+        const applyExit = yield* Effect.exit(applyPlan);
+        if (Exit.isFailure(applyExit)) {
+          if (ui && !dev && launchedDashboard) {
+            // give the dashboard a beat to flush the failure verdict to
+            // the tab before teardown ends the SSE streams
+            yield* Effect.sleep(Duration.seconds(2));
+          }
+          return yield* Effect.failCause(applyExit.cause);
+        }
+        const outputs = applyExit.value;
 
         if (outputs !== undefined) {
           yield* Console.log(outputs);
@@ -170,6 +351,35 @@ export const execStack = Effect.fn(function* ({
         }
       }
     }).pipe(Effect.provide(stack.services));
+
+    // `plan --ui` exists to LOOK at the plan — keep serving until Ctrl+C.
+    // deploy/destroy exit when the run settles: give the SSE stream a beat
+    // to flush the final patch frames, stop the dashboard fiber so its
+    // finalizers run (advertisement cleanup, SSE latch), then exit
+    // EXPLICITLY: runMain only force-exits on failure or signal, and the
+    // Bun server handle (whose graceful stop can wait forever on the
+    // browser's idle keep-alive connections) would otherwise keep the
+    // event loop alive indefinitely.
+    if (ui && !dev && dashboardUrl !== undefined) {
+      if (dryRun) {
+        yield* Console.log(
+          `\ndashboard serving at ${dashboardUrl} — press Ctrl+C to exit`,
+        );
+        yield* Effect.never;
+      } else if (launchedDashboard) {
+        yield* Effect.sleep(Duration.seconds(2));
+        yield* Console.log(
+          "\ndashboard stopped — the tab reconnects on the next --ui run",
+        );
+        if (dashboardFiber !== undefined) {
+          yield* Fiber.interrupt(dashboardFiber).pipe(
+            Effect.timeout(Duration.seconds(3)),
+            Effect.ignore,
+          );
+        }
+        yield* Effect.sync(() => process.exit(0));
+      }
+    }
   }).pipe(Effect.provide(services));
 });
 
@@ -184,6 +394,7 @@ export const deployCommand = Command.make(
     yes,
     profile,
     adopt,
+    ui,
   },
   instrumentCommand("deploy", stackSpanAttrs)(execStack),
 );
@@ -197,6 +408,7 @@ export const destroyCommand = Command.make(
     stage,
     yes,
     profile,
+    ui,
   },
   instrumentCommand(
     "destroy",
@@ -216,6 +428,7 @@ export const planCommand = Command.make(
     envFile,
     stage,
     profile,
+    ui,
   },
   instrumentCommand(
     "plan",

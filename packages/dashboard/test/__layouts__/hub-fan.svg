@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 978 1260" font-family="monospace" font-size="13">
+  <!-- hub-fan: 930x1212 aspect=0.77 -->
+  <rect width="100%" height="100%" fill="#f4efe4"/>
+  <line x1="254" y1="84" x2="374" y2="552" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="254" y1="240" x2="374" y2="552" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="254" y1="396" x2="374" y2="552" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="254" y1="552" x2="374" y2="552" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="254" y1="708" x2="374" y2="552" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="254" y1="864" x2="374" y2="552" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="254" y1="1020" x2="374" y2="552" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="254" y1="1176" x2="374" y2="552" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="604" y1="552" x2="724" y2="240" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="604" y1="552" x2="724" y2="396" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="604" y1="552" x2="724" y2="552" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="604" y1="552" x2="724" y2="708" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="604" y1="552" x2="724" y2="864" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="604" y1="552" x2="724" y2="1020" stroke="#8a7a5c" stroke-width="1.5"/>
+  <rect x="374" y="492" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="388" y="520" fill="#3f3828">Hub</text>
+  <rect x="24" y="24" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="38" y="52" fill="#3f3828">In0</text>
+  <rect x="24" y="180" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="38" y="208" fill="#3f3828">In1</text>
+  <rect x="24" y="336" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="38" y="364" fill="#3f3828">In2</text>
+  <rect x="24" y="492" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="38" y="520" fill="#3f3828">In3</text>
+  <rect x="24" y="648" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="38" y="676" fill="#3f3828">In4</text>
+  <rect x="24" y="804" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="38" y="832" fill="#3f3828">In5</text>
+  <rect x="24" y="960" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="38" y="988" fill="#3f3828">In6</text>
+  <rect x="24" y="1116" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="38" y="1144" fill="#3f3828">In7</text>
+  <rect x="724" y="180" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="738" y="208" fill="#3f3828">Out0</text>
+  <rect x="724" y="336" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="738" y="364" fill="#3f3828">Out1</text>
+  <rect x="724" y="492" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="738" y="520" fill="#3f3828">Out2</text>
+  <rect x="724" y="648" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="738" y="676" fill="#3f3828">Out3</text>
+  <rect x="724" y="804" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="738" y="832" fill="#3f3828">Out4</text>
+  <rect x="724" y="960" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="738" y="988" fill="#3f3828">Out5</text>
+</svg>

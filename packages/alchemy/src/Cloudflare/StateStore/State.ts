@@ -91,7 +91,7 @@ export const state = () =>
           authToken: string;
         }) =>
           Effect.gen(function* () {
-            const { matches, expected, observed } =
+            const { matches, expected, observed, capabilities } =
               yield* checkStateStoreVersion(url);
 
             if (observed === undefined) {
@@ -110,7 +110,10 @@ export const state = () =>
               }
             }
 
-            const httpState = yield* ensureAccess({ url, authToken });
+            const httpState = yield* ensureAccess(
+              { url, authToken },
+              capabilities,
+            );
             if (matches) {
               return httpState;
             }
@@ -155,7 +158,10 @@ export const state = () =>
             }
           });
 
-        const ensureAccess = (credentials: HttpStateStoreCredentials) =>
+        const ensureAccess = (
+          credentials: HttpStateStoreCredentials,
+          capabilities?: ReadonlyArray<string>,
+        ) =>
           Effect.gen(function* () {
             const isAuth = yield* checkHttpStateStoreAuth(credentials);
             if (!isAuth) {
@@ -171,9 +177,15 @@ export const state = () =>
                   }),
                 );
               }
-              return yield* makeCloudflareStateStore(credentials);
+              return yield* makeCloudflareStateStore({
+                ...credentials,
+                capabilities,
+              });
             }
-            return yield* makeCloudflareStateStore(credentials);
+            return yield* makeCloudflareStateStore({
+              ...credentials,
+              capabilities,
+            });
           });
 
         const { accountId } =
@@ -309,9 +321,13 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
           credentials,
         );
       }
-      const { matches, expected, observed } =
+      const { matches, expected, observed, capabilities } =
         yield* checkStateStoreVersion(url);
-      const httpState = yield* makeCloudflareStateStore({ url, authToken });
+      const httpState = yield* makeCloudflareStateStore({
+        url,
+        authToken,
+        capabilities,
+      });
       if (!matches || force) {
         if (matches && force) {
           yield* Clank.info(
@@ -487,8 +503,15 @@ const deployStateStore = ({
 }) =>
   Effect.gen(function* () {
     yield* annotateAccountHash();
+    // The state-store deploy is self-referential: when upgrading, `state`
+    // IS the (outdated) deployed store. Journaling this deploy against it
+    // would make `begin` — which is fail-closed — depend on the very
+    // contract version we are upgrading away from (a v7 store has no
+    // deployments API at all, bricking the upgrade). Strip `deployments`
+    // so the deploy runs with a declared no-op session instead.
+    const bootstrapState: StateService = { ...state, deployments: undefined };
     // deploy it with local state (which we will then hoist into the Cloudflare state store)
-    const stateLayer = Layer.succeed(State, Effect.succeed(state));
+    const stateLayer = Layer.succeed(State, Effect.succeed(bootstrapState));
     const { url, authToken } = yield* deploy({
       // use the script name as the stage name (so the user can have multiple state stores)
       stage,
@@ -865,9 +888,18 @@ const isStateStoreServing = (accountId: string) =>
 const makeCloudflareStateStore = Effect.fn(function* ({
   url,
   authToken,
+  capabilities,
 }: {
   url: string;
   authToken: string;
+  /**
+   * What the deployed worker advertised on `/version`. Threaded from the
+   * caller's `checkStateStoreVersion` probe so the client turns optional
+   * features off against an older copy rather than forcing an upgrade —
+   * and so no second `/version` request is needed. Omitted by callers
+   * that just deployed the worker (it is current by construction).
+   */
+  capabilities?: ReadonlyArray<string>;
 }) {
   const access = yield* Access.Access;
   const accessHeaders = yield* access.getAccessHeaders(new URL(url).host);
@@ -876,6 +908,7 @@ const makeCloudflareStateStore = Effect.fn(function* ({
     authToken,
     transformClient: HttpClientRequest.setHeaders(accessHeaders),
     id: "cloudflare-http",
+    capabilities,
   });
 });
 
@@ -963,6 +996,13 @@ const checkStateStoreVersion = (url: string) =>
       matches,
       expected: STATE_STORE_VERSION,
       observed: result?.version,
+      // Optional features THIS deployed copy serves. Absent on a worker
+      // deployed before capability negotiation existed, which is exactly
+      // the signal the client needs to turn those features off instead of
+      // demanding an upgrade. Undefined when the probe found no worker at
+      // all — the caller bootstraps in that case, so it never reaches a
+      // client build.
+      capabilities: result?.capabilities,
     };
   }).pipe(
     Effect.withSpan("state_store.check_version", {

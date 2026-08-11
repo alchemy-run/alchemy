@@ -217,3 +217,42 @@ describe("checkHttpStateStoreAuth", () => {
     }).pipe(Effect.provide(stubHttpClient(stub)));
   });
 });
+
+describe("deployment-history capability negotiation", () => {
+  const storeWith = (capabilities?: ReadonlyArray<string>) =>
+    makeHttpStateStore({
+      url: "https://state-store.test",
+      authToken: "token",
+      id: "test-http",
+      capabilities,
+    });
+
+  // No transport should be touched: the capability list is handed in by
+  // the caller that already probed `/version`, so building the client
+  // must not cost another round-trip.
+  const noTraffic: FetchStub = async () => {
+    throw new Error("no request expected while building the store");
+  };
+
+  it("omitting capabilities assumes the full current API", () =>
+    Effect.gen(function* () {
+      const store = yield* storeWith(undefined);
+      expect(store.deployments).toBeDefined();
+    }).pipe(Effect.provide(stubHttpClient(noTraffic))));
+
+  it("a store that advertises `deployments` keeps history", () =>
+    Effect.gen(function* () {
+      const store = yield* storeWith(["deployments"]);
+      expect(store.deployments).toBeDefined();
+    }).pipe(Effect.provide(stubHttpClient(noTraffic))));
+
+  // The point of the whole design: an older deployed worker reports no
+  // capabilities, so history switches off and `openDeploymentSession`
+  // falls back to its no-op session — instead of a STATE_STORE_VERSION
+  // bump forcing everyone to upgrade their store before deploying.
+  it("a store predating history reports it off rather than forcing an upgrade", () =>
+    Effect.gen(function* () {
+      const store = yield* storeWith([]);
+      expect(store.deployments).toBeUndefined();
+    }).pipe(Effect.provide(stubHttpClient(noTraffic))));
+});

@@ -4,10 +4,23 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
-import { StateApi } from "./HttpStateApi.ts";
+import {
+  DeploymentInProgress,
+  DeploymentNotFound,
+  DeploymentTokenInvalid,
+  type DeploymentEvent,
+  type DeploymentRecord,
+  type DeploymentStore,
+} from "./Deployment.ts";
+import {
+  StateApi,
+  type DeploymentEventWire,
+  type DeploymentRecordWire,
+} from "./HttpStateApi.ts";
 
 import type { ReplacedResourceState, ResourceState } from "./ResourceState.ts";
 import {
+  fencedWriteRejected,
   StateStoreError,
   type PersistedState,
   type StateService,
@@ -37,6 +50,21 @@ export interface HttpStateStoreProps extends HttpStateStoreCredentials {
   transformClient?: (
     client: HttpClientRequest.HttpClientRequest,
   ) => HttpClientRequest.HttpClientRequest;
+  /**
+   * Optional features the DEPLOYED store advertised on `/version`.
+   *
+   * Only meaningful for a store whose deployment alchemy manages and can
+   * therefore find stale — the Cloudflare worker, which already probes
+   * `/version` before building this client and passes what it saw. Omit
+   * it and the store is assumed to implement the full current API, which
+   * is the right default for a store someone else operates.
+   *
+   * This is how additive features (deployment history) reach an older
+   * deployed copy without a `STATE_STORE_VERSION` bump — a bump stops
+   * the next deploy of every existing project to upgrade its worker in
+   * place, whereas a missing capability just turns the feature off.
+   */
+  capabilities?: ReadonlyArray<string>;
 }
 
 export const checkHttpStateStoreAuth = ({
@@ -77,6 +105,7 @@ export const makeHttpStateStore = ({
   authToken,
   transformClient,
   id,
+  capabilities,
 }: HttpStateStoreProps) =>
   Effect.gen(function* () {
     const apiClient = yield* HttpApiClient.make(StateApi, {
@@ -89,6 +118,12 @@ export const makeHttpStateStore = ({
       ),
     });
     const state = apiClient.state;
+
+    // No capability list supplied → assume the store implements the whole
+    // current API. Only a caller that actually probed `/version` (and so
+    // knows the deployed copy predates deployment history) turns it off.
+    const supportsDeployments =
+      capabilities === undefined || capabilities.includes("deployments");
 
     const service: StateService = {
       id,
@@ -137,6 +172,7 @@ export const makeHttpStateStore = ({
         stage: string;
         fqn: string;
         value: V;
+        fence?: number;
       }) =>
         state
           .setState({
@@ -145,6 +181,7 @@ export const makeHttpStateStore = ({
               stage: request.stage,
               fqn: encodeURIComponent(request.fqn),
             },
+            query: { fence: request.fence },
             payload: encodeState(request.value),
           })
           .pipe(
@@ -152,6 +189,7 @@ export const makeHttpStateStore = ({
             // has the canonical object (including any Redacted<T>
             // instances); returning the input avoids a lossy round-trip.
             Effect.map(() => request.value),
+            failFenced(request),
             mapStateStoreError,
           ),
       delete: (request) =>
@@ -162,8 +200,9 @@ export const makeHttpStateStore = ({
               stage: request.stage,
               fqn: encodeURIComponent(request.fqn),
             },
+            query: { fence: request.fence },
           })
-          .pipe(Effect.asVoid, mapStateStoreError),
+          .pipe(Effect.asVoid, failFenced(request), mapStateStoreError),
       deleteStack: (request) =>
         state
           .deleteStack({
@@ -186,15 +225,351 @@ export const makeHttpStateStore = ({
         state
           .setStackOutput({
             params: { stack: request.stack, stage: request.stage },
+            query: { fence: request.fence },
             payload: encodeState(request.value as any),
           })
           .pipe(
             Effect.map(() => request.value),
+            failFenced(request),
             mapStateStoreError,
           ),
+      getAll: (request) =>
+        state
+          .getAllStates({
+            params: { stack: request.stack, stage: request.stage },
+          })
+          .pipe(
+            Effect.map((all) => {
+              const map = new Map<string, PersistedState>();
+              for (const [fqn, value] of Object.entries(
+                (all ?? {}) as Record<string, unknown>,
+              )) {
+                map.set(fqn, reviveStateRecursive(value) as ResourceState);
+              }
+              return map as ReadonlyMap<string, PersistedState>;
+            }),
+            mapStateStoreError,
+          ),
+      // Deployment history. Every op goes through `retryTransient`, which
+      // blindly retries transport errors, 404s (worker route propagation)
+      // and 5xx. That blanket policy is safe here ONLY because:
+      //   - `appendEvents` is seq-idempotent server-side (INSERT OR
+      //     IGNORE), so a replayed batch never double-appends;
+      //   - `end` / `heartbeat` are idempotent by contract;
+      //   - `begin` failing DeploymentInProgress decodes to a *typed*
+      //     (non-HttpClientError) failure, so `isTransient` never retries
+      //     it — it passes through to the engine untouched;
+      //   - a real DeploymentNotFound travels as 410 (not 404), so it is
+      //     never mistaken for a propagation blip.
+      deployments: {
+        begin: (request) =>
+          state
+            .beginDeployment({
+              params: { stack: request.stack, stage: request.stage },
+              payload: {
+                meta: request.meta,
+                ttlMillis: request.ttlMillis,
+                supersede: request.supersede,
+              },
+            })
+            .pipe(
+              retryTransient,
+              Effect.map((r) => ({ version: r.version, token: r.token })),
+              Effect.catch(
+                (
+                  error,
+                ): Effect.Effect<
+                  never,
+                  DeploymentInProgress | StateStoreError
+                > =>
+                  error._tag === "DeploymentInProgress"
+                    ? Effect.fail(
+                        new DeploymentInProgress({
+                          stack: request.stack,
+                          stage: request.stage,
+                          holder: reviveDeploymentRecord(error.holder),
+                        }),
+                      )
+                    : failStateStore(error),
+              ),
+            ),
+        appendEvents: (request) =>
+          state
+            .appendDeploymentEvents({
+              params: {
+                stack: request.stack,
+                stage: request.stage,
+                version: request.version,
+              },
+              payload: { token: request.token, events: request.events },
+            })
+            .pipe(
+              retryTransient,
+              Effect.map((r) => ({ ackedSeq: r.ackedSeq })),
+              Effect.catch(
+                (
+                  error,
+                ): Effect.Effect<
+                  never,
+                  DeploymentTokenInvalid | DeploymentNotFound | StateStoreError
+                > =>
+                  error._tag === "DeploymentTokenInvalid"
+                    ? Effect.fail(
+                        new DeploymentTokenInvalid({
+                          stack: error.stack,
+                          stage: error.stage,
+                          version: error.version,
+                        }),
+                      )
+                    : error._tag === "DeploymentNotFound"
+                      ? Effect.fail(
+                          new DeploymentNotFound({
+                            stack: error.stack,
+                            stage: error.stage,
+                            version: error.version,
+                          }),
+                        )
+                      : failStateStore(error),
+              ),
+            ),
+        heartbeat: (request) =>
+          state
+            .heartbeatDeployment({
+              params: {
+                stack: request.stack,
+                stage: request.stage,
+                version: request.version,
+              },
+              payload: { token: request.token },
+            })
+            .pipe(
+              retryTransient,
+              Effect.asVoid,
+              Effect.catch(
+                (
+                  error,
+                ): Effect.Effect<
+                  never,
+                  DeploymentTokenInvalid | DeploymentNotFound | StateStoreError
+                > =>
+                  error._tag === "DeploymentTokenInvalid"
+                    ? Effect.fail(
+                        new DeploymentTokenInvalid({
+                          stack: error.stack,
+                          stage: error.stage,
+                          version: error.version,
+                        }),
+                      )
+                    : error._tag === "DeploymentNotFound"
+                      ? Effect.fail(
+                          new DeploymentNotFound({
+                            stack: error.stack,
+                            stage: error.stage,
+                            version: error.version,
+                          }),
+                        )
+                      : failStateStore(error),
+              ),
+            ),
+        end: (request) =>
+          state
+            .endDeployment({
+              params: {
+                stack: request.stack,
+                stage: request.stage,
+                version: request.version,
+              },
+              payload: {
+                token: request.token,
+                outcome: request.outcome,
+                summary: request.summary,
+              },
+            })
+            .pipe(
+              retryTransient,
+              Effect.asVoid,
+              Effect.catch(
+                (
+                  error,
+                ): Effect.Effect<
+                  never,
+                  DeploymentTokenInvalid | DeploymentNotFound | StateStoreError
+                > =>
+                  error._tag === "DeploymentTokenInvalid"
+                    ? Effect.fail(
+                        new DeploymentTokenInvalid({
+                          stack: error.stack,
+                          stage: error.stage,
+                          version: error.version,
+                        }),
+                      )
+                    : error._tag === "DeploymentNotFound"
+                      ? Effect.fail(
+                          new DeploymentNotFound({
+                            stack: error.stack,
+                            stage: error.stage,
+                            version: error.version,
+                          }),
+                        )
+                      : failStateStore(error),
+              ),
+            ),
+        list: (request) =>
+          state
+            .listDeployments({
+              params: { stack: request.stack, stage: request.stage },
+              query: { before: request.before, limit: request.limit },
+            })
+            .pipe(
+              retryTransient,
+              Effect.map((records) => records.map(reviveDeploymentRecord)),
+              Effect.catch((error) => failStateStore(error)),
+            ),
+        get: (request) =>
+          state
+            .getDeployment({
+              params: {
+                stack: request.stack,
+                stage: request.stage,
+                version: request.version,
+              },
+            })
+            .pipe(
+              retryTransient,
+              Effect.map((record) =>
+                record == null ? undefined : reviveDeploymentRecord(record),
+              ),
+              Effect.catch((error) => failStateStore(error)),
+            ),
+        readEvents: (request) =>
+          state
+            .readDeploymentEvents({
+              params: {
+                stack: request.stack,
+                stage: request.stage,
+                version: request.version,
+              },
+              query: { fromSeq: request.fromSeq },
+            })
+            .pipe(
+              retryTransient,
+              Effect.map((events) => events.map(reviveDeploymentEvent)),
+              Effect.catch(
+                (
+                  error,
+                ): Effect.Effect<
+                  never,
+                  DeploymentNotFound | StateStoreError
+                > =>
+                  error._tag === "DeploymentNotFound"
+                    ? Effect.fail(
+                        new DeploymentNotFound({
+                          stack: error.stack,
+                          stage: error.stage,
+                          version: error.version,
+                        }),
+                      )
+                    : failStateStore(error),
+              ),
+            ),
+      } satisfies DeploymentStore,
     };
-    return service;
+    // Drop the whole facet on a store that never advertised it, so callers
+    // see the same shape they would get from any pre-history store.
+    return supportsDeployments
+      ? service
+      : ({ ...service, deployments: undefined } satisfies StateService);
   });
+
+/**
+ * Decode the server's 412 `StateWriteFenced` wire error into the
+ * canonical {@link fencedWriteRejected} StateStoreError. Applied before
+ * {@link mapStateStoreError} so the fence refusal keeps its precise
+ * message (and is never retried — 412 isn't in the transient set).
+ */
+const failFenced =
+  (request: { stack: string; stage: string; fence?: number }) =>
+  <A, E extends { _tag: string }, R>(eff: Effect.Effect<A, E, R>) =>
+    eff.pipe(
+      Effect.catchIf(
+        (e): e is E & { _tag: "StateWriteFenced" } =>
+          e._tag === "StateWriteFenced",
+        () =>
+          Effect.fail(
+            fencedWriteRejected({
+              stack: request.stack,
+              stage: request.stage,
+              fence: request.fence ?? 0,
+            }),
+          ),
+      ),
+    );
+
+/** Fold any residual client failure into a {@link StateStoreError}. */
+const failStateStore = (e: unknown) =>
+  Effect.fail(
+    new StateStoreError({
+      message:
+        e instanceof Error
+          ? e.message
+          : typeof e === "object" && e !== null && "_tag" in e
+            ? `${(e as { _tag: string })._tag}${
+                "message" in e ? `: ${(e as { message: unknown }).message}` : ""
+              }`
+            : String(e),
+      cause: e instanceof Error ? e : undefined,
+    }),
+  );
+
+/** Rebuild a mutable {@link DeploymentRecord} from its wire shape. */
+const reviveDeploymentRecord = (
+  wire: typeof DeploymentRecordWire.Type,
+): DeploymentRecord => {
+  const record: DeploymentRecord = {
+    stack: wire.stack,
+    stage: wire.stage,
+    version: wire.version,
+    meta: {
+      command: wire.meta.command,
+    },
+    startedAt: wire.startedAt,
+    heartbeatAt: wire.heartbeatAt,
+  };
+  if (wire.meta.initiator !== undefined) {
+    record.meta.initiator = { ...wire.meta.initiator };
+  }
+  if (wire.meta.alchemyVersion !== undefined) {
+    record.meta.alchemyVersion = wire.meta.alchemyVersion;
+  }
+  if (wire.meta.gitCommit !== undefined) {
+    record.meta.gitCommit = wire.meta.gitCommit;
+  }
+  if (wire.endedAt !== undefined) record.endedAt = wire.endedAt;
+  if (wire.outcome !== undefined) record.outcome = wire.outcome;
+  if (wire.summary !== undefined) {
+    record.summary = {};
+    if (wire.summary.counts !== undefined) {
+      record.summary.counts = { ...wire.summary.counts };
+    }
+    if (wire.summary.error !== undefined) {
+      record.summary.error = wire.summary.error;
+    }
+  }
+  return record;
+};
+
+/** Rebuild a mutable {@link DeploymentEvent} from its wire shape. */
+const reviveDeploymentEvent = (
+  wire: typeof DeploymentEventWire.Type,
+): DeploymentEvent => {
+  const event: DeploymentEvent = {
+    seq: wire.seq,
+    ts: wire.ts,
+    payload: wire.payload,
+  };
+  if (wire.fqn !== undefined) event.fqn = wire.fqn;
+  return event;
+};
 
 /**
  * Predicate over an `HttpClientError`-shaped failure that returns `true`
@@ -275,10 +650,12 @@ const mapStateStoreError = <A, E, R>(eff: Effect.Effect<A, E, R>) =>
     Effect.tapError(Effect.log),
     Effect.catch((e: E) =>
       Effect.fail(
-        new StateStoreError({
-          message: describeStateStoreFailure(e),
-          cause: e instanceof Error ? e : undefined,
-        }),
+        e instanceof StateStoreError
+          ? e
+          : new StateStoreError({
+              message: describeStateStoreFailure(e),
+              cause: e instanceof Error ? e : undefined,
+            }),
       ),
     ),
   ) as Effect.Effect<A, StateStoreError, R>;

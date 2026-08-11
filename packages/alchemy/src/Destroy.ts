@@ -22,6 +22,9 @@ export const destroy = ({
 }) =>
   evalStack(
     stack,
-    (stack) => Plan.destroy(stack).pipe(Effect.flatMap(Apply.apply)),
+    (stack) =>
+      Plan.destroy(stack).pipe(
+        Effect.flatMap((plan) => Apply.apply(plan, { command: "destroy" })),
+      ),
     { stage, dev, scope },
   );

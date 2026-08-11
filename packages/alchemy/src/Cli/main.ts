@@ -8,6 +8,7 @@ import { AlchemyContextLive } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileLive } from "alchemy/Auth/Profile";
+import { withDashboardReporter } from "alchemy/Dashboard/Reporter";
 import { TelemetryLive } from "alchemy/Telemetry/Layer";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 import packageJson from "../../package.json" with { type: "json" };
@@ -16,6 +17,7 @@ import { checkLatestVersion } from "./checkVersion.ts";
 import { handleCancellation } from "./commands/_shared.ts";
 import { awsCommand } from "./commands/aws.ts";
 import { cloudflareCommand } from "./commands/cloudflare.ts";
+import { dashboardCommand } from "./commands/dashboard.ts";
 import {
   deployCommand,
   destroyCommand,
@@ -35,6 +37,7 @@ const root = Command.make("alchemy", {}).pipe(
   Command.withSubcommands([
     awsCommand,
     cloudflareCommand,
+    dashboardCommand,
     deployCommand,
     devCommand,
     destroyCommand,
@@ -65,7 +68,9 @@ const services = Layer.mergeAll(
   FetchHttpClient.layer,
   ConfigProvider.layer(ConfigProvider.fromEnv()),
   TelemetryLive,
-  selectCli(),
+  // every apply session is also streamed to a running `alchemy dashboard`
+  // in this project (no-op when none is running)
+  Layer.provide(withDashboardReporter(selectCli()), PlatformServices),
 );
 
 const program = Effect.gen(function* () {

@@ -13,6 +13,13 @@ import {
   BearerTokenValidator,
   StateApi,
   StateAuthLive,
+  type DeploymentCorruptWire,
+  type DeploymentEventWire,
+  type DeploymentInProgressWire,
+  type DeploymentNotFoundWire,
+  type DeploymentTokenInvalidWire,
+  type StateStoreCapability,
+  type StateWriteFencedWire,
 } from "../../State/HttpStateApi.ts";
 import { ReadSecret } from "../SecretsStore/ReadSecret.ts";
 import { ReadSecretBinding } from "../SecretsStore/ReadSecretBinding.ts";
@@ -30,8 +37,23 @@ export const STATE_STORE_SCRIPT_NAME = "alchemy-state-store" as const;
  * satisfy. Clients query `/version` on the deployed worker and
  * compare against this constant; a mismatch (or 404) triggers a
  * forced redeploy via the bootstrap flow.
+ *
+ * A bump is a BREAKING change for everyone with a deployed store: the
+ * next deploy stops to upgrade the worker in place before it can run.
+ * Purely additive endpoints (deployment history) therefore advertise
+ * themselves through `capabilities` on `/version` instead, so an
+ * un-upgraded store keeps serving and simply reports the feature off.
  */
 export const STATE_STORE_VERSION = 7 as const;
+
+/**
+ * Optional features THIS worker build serves, over and above the
+ * contract pinned by `STATE_STORE_VERSION`. Clients feature-detect
+ * from this list rather than inferring support from the version.
+ */
+export const STATE_STORE_CAPABILITIES: ReadonlyArray<StateStoreCapability> = [
+  "deployments",
+];
 
 /**
  * Hard-coded OTLP/HTTP endpoints. Point at the public ingest relay
@@ -130,7 +152,10 @@ export default Worker(
 
     const versionApi = HttpApiBuilder.group(StateApi, "version", (handlers) =>
       handlers.handle("getVersion", () =>
-        Effect.succeed({ version: STATE_STORE_VERSION }).pipe(
+        Effect.succeed({
+          version: STATE_STORE_VERSION,
+          capabilities: STATE_STORE_CAPABILITIES,
+        }).pipe(
           Effect.withSpan("state_store.getVersion", {
             attributes: { "alchemy.state_store.op": "getVersion" },
           }),
@@ -193,12 +218,22 @@ export default Worker(
               }),
             );
         })
-        .handle("setState", ({ params, payload }) => {
+        .handle("setState", ({ params, payload, query }) => {
           const fqn = decodeURIComponent(params.fqn);
           return store
             .getByName(params.stack)
-            .set({ stage: params.stage, fqn, value: payload as any })
+            .set({
+              stage: params.stage,
+              fqn,
+              value: payload as any,
+              fence: query.fence,
+            })
             .pipe(
+              Effect.flatMap((result) =>
+                result._tag === "ok"
+                  ? Effect.succeed(result.value)
+                  : failStateWriteFenced(params, query.fence!),
+              ),
               Effect.tap(() =>
                 store
                   .getByName(Store.ROOT_DO_NAME)
@@ -214,15 +249,19 @@ export default Worker(
               }),
             );
         })
-        .handle("deleteState", ({ params }) => {
+        .handle("deleteState", ({ params, query }) => {
           const fqn = decodeURIComponent(params.fqn);
           // The DO method is `remove`, not `delete` — `delete` is
           // reserved by Cloudflare's RPC stub proxy.
           return store
             .getByName(params.stack)
-            .remove({ stage: params.stage, fqn })
+            .remove({ stage: params.stage, fqn, fence: query.fence })
             .pipe(
-              Effect.asVoid,
+              Effect.flatMap((result) =>
+                result._tag === "ok"
+                  ? Effect.void
+                  : failStateWriteFenced(params, query.fence!),
+              ),
               Effect.withSpan("state_store.deleteState", {
                 attributes: {
                   "alchemy.state_store.op": "deleteState",
@@ -261,11 +300,20 @@ export default Worker(
               }),
             ),
         )
-        .handle("setStackOutput", ({ params, payload }) =>
+        .handle("setStackOutput", ({ params, payload, query }) =>
           store
             .getByName(params.stack)
-            .setOutput({ stage: params.stage, value: payload as any })
+            .setOutput({
+              stage: params.stage,
+              value: payload as any,
+              fence: query.fence,
+            })
             .pipe(
+              Effect.flatMap((result) =>
+                result._tag === "ok"
+                  ? Effect.succeed(result.value)
+                  : failStateWriteFenced(params, query.fence!),
+              ),
               Effect.tap(() =>
                 store
                   .getByName(Store.ROOT_DO_NAME)
@@ -276,6 +324,254 @@ export default Worker(
                   "alchemy.state_store.op": "setStackOutput",
                   "alchemy.state_store.stack": params.stack,
                   "alchemy.state_store.stage": params.stage,
+                },
+              }),
+            ),
+        )
+        .handle("getAllStates", ({ params }) =>
+          store
+            .getByName(params.stack)
+            .getAll({ stage: params.stage })
+            .pipe(
+              Effect.withSpan("state_store.getAllStates", {
+                attributes: {
+                  "alchemy.state_store.op": "getAllStates",
+                  "alchemy.state_store.stack": params.stack,
+                  "alchemy.state_store.stage": params.stage,
+                },
+              }),
+            ),
+        )
+        .handle("beginDeployment", ({ params, payload }) =>
+          store
+            .getByName(params.stack)
+            .deploymentBegin({
+              stack: params.stack,
+              stage: params.stage,
+              meta: payload.meta,
+              ttlMillis: payload.ttlMillis,
+              supersede: payload.supersede,
+            })
+            .pipe(
+              Effect.flatMap(
+                (
+                  result,
+                ): Effect.Effect<
+                  { version: number; token: string },
+                  | typeof DeploymentInProgressWire.Type
+                  | typeof DeploymentCorruptWire.Type
+                > =>
+                  result._tag === "ok"
+                    ? Effect.succeed({
+                        version: result.version,
+                        token: result.token,
+                      })
+                    : result._tag === "in-progress"
+                      ? Effect.fail({
+                          _tag: "DeploymentInProgress",
+                          stack: params.stack,
+                          stage: params.stage,
+                          holder: result.holder,
+                        } as const)
+                      : Effect.fail({
+                          _tag: "DeploymentCorrupt",
+                          message: result.message,
+                        } as const),
+              ),
+              Effect.withSpan("state_store.beginDeployment", {
+                attributes: {
+                  "alchemy.state_store.op": "beginDeployment",
+                  "alchemy.state_store.stack": params.stack,
+                  "alchemy.state_store.stage": params.stage,
+                },
+              }),
+            ),
+        )
+        .handle("appendDeploymentEvents", ({ params, payload }) =>
+          store
+            .getByName(params.stack)
+            .deploymentAppendEvents({
+              stage: params.stage,
+              version: params.version,
+              token: payload.token,
+              events: payload.events,
+            })
+            .pipe(
+              Effect.flatMap(
+                (
+                  result,
+                ): Effect.Effect<
+                  { ackedSeq: number },
+                  | typeof DeploymentTokenInvalidWire.Type
+                  | typeof DeploymentNotFoundWire.Type
+                > =>
+                  result._tag === "ok"
+                    ? Effect.succeed({ ackedSeq: result.ackedSeq })
+                    : failDeploymentMutation(result._tag, params),
+              ),
+              Effect.withSpan("state_store.appendDeploymentEvents", {
+                attributes: {
+                  "alchemy.state_store.op": "appendDeploymentEvents",
+                  "alchemy.state_store.stack": params.stack,
+                  "alchemy.state_store.stage": params.stage,
+                  "alchemy.state_store.deployment_version": params.version,
+                },
+              }),
+            ),
+        )
+        .handle("heartbeatDeployment", ({ params, payload }) =>
+          store
+            .getByName(params.stack)
+            .deploymentHeartbeat({
+              stage: params.stage,
+              version: params.version,
+              token: payload.token,
+            })
+            .pipe(
+              Effect.flatMap(
+                (
+                  result,
+                ): Effect.Effect<
+                  void,
+                  | typeof DeploymentTokenInvalidWire.Type
+                  | typeof DeploymentNotFoundWire.Type
+                > =>
+                  result._tag === "ok"
+                    ? Effect.void
+                    : failDeploymentMutation(result._tag, params),
+              ),
+              Effect.withSpan("state_store.heartbeatDeployment", {
+                attributes: {
+                  "alchemy.state_store.op": "heartbeatDeployment",
+                  "alchemy.state_store.stack": params.stack,
+                  "alchemy.state_store.stage": params.stage,
+                  "alchemy.state_store.deployment_version": params.version,
+                },
+              }),
+            ),
+        )
+        .handle("endDeployment", ({ params, payload }) =>
+          store
+            .getByName(params.stack)
+            .deploymentEnd({
+              stage: params.stage,
+              version: params.version,
+              token: payload.token,
+              outcome: payload.outcome,
+              summary: payload.summary,
+            })
+            .pipe(
+              Effect.flatMap(
+                (
+                  result,
+                ): Effect.Effect<
+                  void,
+                  | typeof DeploymentTokenInvalidWire.Type
+                  | typeof DeploymentNotFoundWire.Type
+                > =>
+                  result._tag === "ok"
+                    ? Effect.void
+                    : failDeploymentMutation(result._tag, params),
+              ),
+              Effect.withSpan("state_store.endDeployment", {
+                attributes: {
+                  "alchemy.state_store.op": "endDeployment",
+                  "alchemy.state_store.stack": params.stack,
+                  "alchemy.state_store.stage": params.stage,
+                  "alchemy.state_store.deployment_version": params.version,
+                },
+              }),
+            ),
+        )
+        .handle("listDeployments", ({ params, query }) =>
+          store
+            .getByName(params.stack)
+            .deploymentList({
+              stage: params.stage,
+              before: query.before,
+              limit: query.limit,
+            })
+            .pipe(
+              Effect.flatMap((result) =>
+                result._tag === "ok"
+                  ? Effect.succeed(result.records)
+                  : Effect.fail({
+                      _tag: "DeploymentCorrupt",
+                      message: result.message,
+                    } as const),
+              ),
+              Effect.withSpan("state_store.listDeployments", {
+                attributes: {
+                  "alchemy.state_store.op": "listDeployments",
+                  "alchemy.state_store.stack": params.stack,
+                  "alchemy.state_store.stage": params.stage,
+                },
+              }),
+            ),
+        )
+        .handle("getDeployment", ({ params }) =>
+          store
+            .getByName(params.stack)
+            .deploymentGet({
+              stage: params.stage,
+              version: params.version,
+            })
+            .pipe(
+              Effect.flatMap((result) =>
+                result._tag === "ok"
+                  ? Effect.succeed(result.record)
+                  : Effect.fail({
+                      _tag: "DeploymentCorrupt",
+                      message: result.message,
+                    } as const),
+              ),
+              Effect.withSpan("state_store.getDeployment", {
+                attributes: {
+                  "alchemy.state_store.op": "getDeployment",
+                  "alchemy.state_store.stack": params.stack,
+                  "alchemy.state_store.stage": params.stage,
+                  "alchemy.state_store.deployment_version": params.version,
+                },
+              }),
+            ),
+        )
+        .handle("readDeploymentEvents", ({ params, query }) =>
+          store
+            .getByName(params.stack)
+            .deploymentReadEvents({
+              stage: params.stage,
+              version: params.version,
+              fromSeq: query.fromSeq,
+            })
+            .pipe(
+              Effect.flatMap(
+                (
+                  result,
+                ): Effect.Effect<
+                  readonly (typeof DeploymentEventWire.Type)[],
+                  | typeof DeploymentNotFoundWire.Type
+                  | typeof DeploymentCorruptWire.Type
+                > =>
+                  result._tag === "ok"
+                    ? Effect.succeed(result.events)
+                    : result._tag === "not-found"
+                      ? Effect.fail({
+                          _tag: "DeploymentNotFound",
+                          stack: params.stack,
+                          stage: params.stage,
+                          version: params.version,
+                        } as const)
+                      : Effect.fail({
+                          _tag: "DeploymentCorrupt",
+                          message: result.message,
+                        } as const),
+              ),
+              Effect.withSpan("state_store.readDeploymentEvents", {
+                attributes: {
+                  "alchemy.state_store.op": "readDeploymentEvents",
+                  "alchemy.state_store.stack": params.stack,
+                  "alchemy.state_store.stage": params.stage,
+                  "alchemy.state_store.deployment_version": params.version,
                 },
               }),
             ),
@@ -323,6 +619,50 @@ export default Worker(
     };
   }).pipe(Effect.provide(Layer.mergeAll(ReadSecretBinding))),
 );
+
+/**
+ * Map the stack DO's fenced-write refusal onto the schema-typed 412
+ * wire error. Like the deployment mutations, the DO surfaces the
+ * refusal as a discriminated result value (its RPC stub serializes
+ * thrown errors lossily); the worker is where it becomes typed HTTP.
+ */
+const failStateWriteFenced = (
+  params: { stack: string; stage: string },
+  fence: number,
+): Effect.Effect<never, typeof StateWriteFencedWire.Type> =>
+  Effect.fail({
+    _tag: "StateWriteFenced",
+    stack: params.stack,
+    stage: params.stage,
+    fence,
+  } as const);
+
+/**
+ * Map the stack DO's deployment mutation failures onto the schema-typed
+ * wire errors declared in `HttpStateApi.ts`. The DO returns discriminated
+ * result values (its RPC stub serializes thrown errors lossily); the worker
+ * is where they become typed HTTP failures.
+ */
+const failDeploymentMutation = (
+  tag: "not-found" | "invalid-token",
+  params: { stack: string; stage: string; version: number },
+): Effect.Effect<
+  never,
+  typeof DeploymentNotFoundWire.Type | typeof DeploymentTokenInvalidWire.Type
+> =>
+  tag === "not-found"
+    ? Effect.fail({
+        _tag: "DeploymentNotFound",
+        stack: params.stack,
+        stage: params.stage,
+        version: params.version,
+      } as const)
+    : Effect.fail({
+        _tag: "DeploymentTokenInvalid",
+        stack: params.stack,
+        stage: params.stage,
+        version: params.version,
+      } as const);
 
 /**
  * Stub `HttpPlatform` for the worker. The state-store API never

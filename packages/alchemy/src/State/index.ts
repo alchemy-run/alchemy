@@ -1,3 +1,5 @@
+export * from "./Deployment.ts";
+export * from "./DeploymentSession.ts";
 export * from "./Export.ts";
 export * from "./HttpStateApi.ts";
 export * from "./HttpStateStore.ts";

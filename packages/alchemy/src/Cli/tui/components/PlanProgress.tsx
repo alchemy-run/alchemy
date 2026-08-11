@@ -212,9 +212,9 @@ export function PlanProgress(props: PlanProgressProps): JSX.Element {
     unsubscribeRef.current = source.subscribe((event) => {
       setTasks((prev) => {
         const next = new Map(prev);
-        const keys = logicalIdIndex.get(event.id) ?? [];
 
         if (event.kind === "status-change") {
+          const keys = logicalIdIndex.get(event.id) ?? [];
           if (!event.bindingId) {
             for (const key of keys) {
               const current = next.get(key);
@@ -228,7 +228,8 @@ export function PlanProgress(props: PlanProgressProps): JSX.Element {
               });
             }
           }
-        } else {
+        } else if (event.kind === "annotate") {
+          const keys = logicalIdIndex.get(event.id) ?? [];
           for (const key of keys) {
             const current = next.get(key);
             if (!current) continue;
@@ -239,6 +240,9 @@ export function PlanProgress(props: PlanProgressProps): JSX.Element {
             });
           }
         }
+        // "log" events are dashboard-only (the terminal already shows them
+        // through the merged default logger); op-start/op-end/annotation and
+        // any future kinds are journal/dashboard detail — ignored here
 
         return next;
       });

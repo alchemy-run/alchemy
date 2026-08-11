@@ -105,15 +105,39 @@ export const runMain = <E, A>(
 export const httpServer = (
   port: number = 0,
   host: string = "127.0.0.1",
+  options?: {
+    /**
+     * Bun kills responses idle for >10s by default — long-running request
+     * handlers (e.g. the dashboard's plan evaluation) need more headroom.
+     * Seconds, max 255; defaults to 0 (no idle timeout). Node's server is
+     * unaffected.
+     */
+    idleTimeout?: number;
+    /**
+     * How long Bun's graceful `server.stop()` waits for in-flight
+     * connections before shutdown proceeds anyway (default 20s). Servers
+     * holding long-lived streams (SSE) should set this low so scope close
+     * doesn't stall on connected clients. Node's server is unaffected.
+     */
+    gracefulShutdownTimeout?: `${number} seconds`;
+  },
 ): Layer.Layer<HttpServer, ServeError> =>
   platformLayer({
     bun: async () => {
       const BunHttpServer = await import("@effect/platform-bun/BunHttpServer");
-      // `idleTimeout: 0` disables Bun's default 10s request idle timeout.
-      // The RPC spawner serves a long-lived `/logs` stream (sidecar output
-      // forwarded to the exec child's renderer) that can legitimately sit
-      // idle between lines; Bun would otherwise sever it mid-session.
-      return BunHttpServer.layer({ hostname: host, port, idleTimeout: 0 });
+      // `idleTimeout: 0` (the default here) disables Bun's 10s request
+      // idle timeout, which would otherwise sever long-lived streams that
+      // legitimately sit idle between lines — the RPC spawner's `/logs`
+      // feed and the dashboard's SSE stream both do. Callers may still
+      // narrow it.
+      return BunHttpServer.layer({
+        hostname: host,
+        port,
+        idleTimeout: options?.idleTimeout ?? 0,
+        ...(options?.gracefulShutdownTimeout !== undefined
+          ? { gracefulShutdownTimeout: options.gracefulShutdownTimeout }
+          : undefined),
+      });
     },
     node: async () => {
       const [NodeHttpServer, Http] = await Promise.all([

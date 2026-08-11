@@ -406,7 +406,7 @@ export const scratchStack = <ROut>(
       buildPlan(effect)) as ScratchStack<ROut>["plan"],
     destroy: () =>
       Plan.destroy({ name: stackName, stage }).pipe(
-        Effect.flatMap(apply),
+        Effect.flatMap((plan) => apply(plan, { command: "destroy" })),
         Effect.asVoid,
         Effect.provide(stateLayer),
         Effect.provide(options.providers as Layer.Layer<any, never, any>),

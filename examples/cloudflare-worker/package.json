@@ -11,6 +11,7 @@
   "type": "module",
   "scripts": {
     "deploy": "alchemy deploy",
+    "dashboard": "alchemy dashboard",
     "dev": "alchemy dev",
     "destroy": "alchemy destroy",
     "logs": "alchemy logs",
@@ -19,6 +20,7 @@
   },
   "dependencies": {
     "@alchemy.run/better-auth": "workspace:*",
+    "@alchemy.run/dashboard": "workspace:*",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "alchemy": "workspace:*",

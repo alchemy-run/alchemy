@@ -1,0 +1,35 @@
+{
+  "name": "@alchemy.run/dashboard",
+  "version": "0.0.0",
+  "description": "Web dashboard for alchemy stacks (`alchemy dashboard` / `--ui`)",
+  "type": "module",
+  "files": ["dist"],
+  "exports": {
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test test/",
+    "prepublishOnly": "vite build"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.14",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^6.0.2",
+    "@xyflow/react": "^12.3.0",
+    "alchemy": "workspace:*",
+    "effect": "catalog:",
+    "elkjs": "^0.10.0",
+    "lucide-react": "^0.475.0",
+    "motion": "^12.42.2",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "tailwindcss": "^4.1.14",
+    "vite": "catalog:",
+    "zustand": "^5"
+  }
+}
