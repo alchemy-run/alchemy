@@ -13,6 +13,7 @@ export {
   type ServiceLike as BindingServiceLike,
   type ServiceShape as BindingServiceShape,
 } from "./Binding.ts";
+export * from "./CertRequest.ts";
 export * from "./Destroy.ts";
 export * from "./Diff.ts";
 export * from "./Input.ts";

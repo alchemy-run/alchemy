@@ -4,6 +4,7 @@ import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileLive } from "../Auth/Profile.ts";
 import * as Command from "../Command/index.ts";
 import { DockerLive } from "../Docker/Docker.ts";
+import { CertRequest, CertRequestProvider } from "../CertRequest.ts";
 import { KeyPair, KeyPairProvider } from "../KeyPair.ts";
 import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
@@ -257,6 +258,7 @@ export const providers = () =>
       Intel.IndicatorFeed,
       Intel.IndicatorFeedPermission,
       KeylessCertificate.KeylessCertificate,
+      CertRequest,
       KeyPair,
       KV.Namespace,
       LeakedCredentialCheck.LeakedCredentialCheck,
@@ -673,6 +675,7 @@ export const providers = () =>
         LoadBalancer.MonitorGroupProvider(),
         LoadBalancer.PoolProvider(),
         Command.providers(),
+        CertRequestProvider(),
         KeyPairProvider(),
         RandomProvider(),
       ),
