@@ -39,14 +39,14 @@ import type { Reference as ZoneReference } from "../Zone/lookup.ts";
 import { type Assets, type AssetsProps } from "./Assets.ts";
 import { type DurableObjectExport } from "./DurableObject.ts";
 import { Request } from "./Request.ts";
+import type { ModuleRule } from "./Sources/Prebuilt.ts";
+import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
 import { bindWorkerAsyncBindings } from "./WorkerAsyncBindings.ts";
 import type {
   WorkerBinding,
   WorkerBindingResource,
   WorkerBindings,
 } from "./WorkerBinding.ts";
-import type { ModuleRule } from "./Sources/Prebuilt.ts";
-import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
 import {
   makeWorkerRuntimeContext,
   type WorkerRuntimeContext,
@@ -2133,14 +2133,17 @@ export const Worker: ResourceClassLike<Worker> &
           | Container.Application<any>
           | PlatformServices
           | Tag,
+        PropsReq = never,
       >(
         id: Id,
-        props: InputProps<WorkerProps>,
+        props:
+          | InputProps<WorkerProps>
+          | Effect.Effect<InputProps<WorkerProps>, ConfigError, PropsReq>,
         impl: Effect.Effect<Shape, ConfigError, Req>,
       ): Effect.Effect<
         Worker & Rpc<Self>,
         never,
-        Extract<Req, Container.Application<any>> | Providers
+        Extract<Req, Container.Application<any>> | Providers | PropsReq
       > &
         Named<Id> & {
           new (): MakeShape<Shape, WorkerShape> & Named<Id> & Tag;
