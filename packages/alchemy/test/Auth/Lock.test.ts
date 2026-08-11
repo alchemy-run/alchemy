@@ -1,6 +1,6 @@
 import { sanitizeLockKey, withLock } from "@/Auth/Lock.ts";
-import { NodeServices } from "@effect/platform-node";
-import { describe, expect, it } from "alchemy-test";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { describe, expect, it, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 
 describe("sanitizeLockKey", () => {
@@ -23,8 +23,9 @@ describe("sanitizeLockKey", () => {
   });
 });
 
-describe("withLock", () => {
-  it.live(
+// The lock's retry loop and heartbeat need the live clock.
+layer(NodeServices.layer, { excludeTestServices: true })("withLock", (it) => {
+  it.effect(
     "acquires and releases a lock whose key contains characters invalid in file names",
     () =>
       Effect.gen(function* () {
@@ -35,10 +36,10 @@ describe("withLock", () => {
           Effect.succeed("ran"),
         );
         expect(result).toBe("ran");
-      }).pipe(Effect.provide(NodeServices.layer)),
+      }),
   );
 
-  it.live("serialises same-key critical sections in-process", () =>
+  it.effect("serialises same-key critical sections in-process", () =>
     Effect.gen(function* () {
       const order: number[] = [];
       const critical = (i: number) =>
@@ -57,6 +58,6 @@ describe("withLock", () => {
       // interleaving between holders.
       expect(order.slice(0, 2)).toEqual([order[0], order[0]]);
       expect(order.slice(2)).toEqual([order[2], order[2]]);
-    }).pipe(Effect.provide(NodeServices.layer)),
+    }),
   );
 });

@@ -713,7 +713,7 @@
       "import": "./dist/core/node/RuntimeServices.mjs"
     },
     "./core/internal/ignore": {
-      "types": "./src/core/internal/ignore.ts",
+      "types": "./dist/core/node/internal/ignore.d.mts",
       "bun": "./src/core/internal/ignore.ts",
       "worker": "./src/core/internal/ignore.ts",
       "import": "./dist/core/node/internal/ignore.mjs"
