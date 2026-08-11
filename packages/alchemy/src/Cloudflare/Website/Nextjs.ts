@@ -38,6 +38,8 @@ export interface NextjsBuildOptions {
   configPath?: string;
   /**
    * The command the OpenNext pipeline runs to build the Next.js app.
+   * A `buildCommand` set in the project's `open-next.config.ts` takes
+   * precedence over this option.
    * @default "npx next build"
    */
   buildCommand?: string;

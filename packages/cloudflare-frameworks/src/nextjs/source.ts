@@ -194,7 +194,11 @@ export interface NextjsSourceOptions {
   readonly memo?: NextjsMemoOptions | undefined;
   /** Path of the OpenNext config, relative to the project root. @default "open-next.config.ts" */
   readonly configPath?: string | undefined;
-  /** The command the OpenNext pipeline runs to build the Next.js app. @default "npx next build" */
+  /**
+   * The command the OpenNext pipeline runs to build the Next.js app. A
+   * `buildCommand` in the project's `open-next.config.ts` takes precedence.
+   * @default "npx next build"
+   */
   readonly buildCommand?: string | undefined;
   /** Skip the internal `next build` (reuse an existing `.next`). */
   readonly skipNextBuild?: boolean | undefined;

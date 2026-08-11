@@ -13,8 +13,9 @@ export const devDeps = "@alchemy.run/cloudflare-frameworks";
 Cloudflare Worker. It builds the project programmatically: the React
 Server Components server bundle deploys as the Worker script, and the
 client output — including SSG-prerendered pages — deploys as static
-assets. There is no `waku.config.ts` to edit, no Wrangler file, and
-no build command to run.
+assets. No `waku.config.ts` edits are required — if you have one it
+loads natively — and there is no Wrangler file and no build command
+to run.
 
 ## Install
 
@@ -40,9 +41,18 @@ so a dev dependency is enough:
 
 ## Configure Waku
 
-There is no framework config to write: the resource builds the
-project programmatically, so a fresh Waku project deploys as-is —
-your `waku.config.ts` stays untouched.
+No framework config is required — a fresh Waku project deploys
+as-is. If your project has a `waku.config.ts`, Alchemy loads it
+natively (exactly as Waku's own CLI does) and uses it as the base
+config; options set on the resource (`srcDir`, `distDir`,
+`basePath`) merge over it. The one key Alchemy owns is
+`unstable_adapter` — setting it fails the build with an actionable
+error.
+
+:::note
+Vite configuration must live in `waku.config.ts`'s `vite` field —
+a standalone `vite.config.ts` is not loaded, same as Waku's own CLI.
+:::
 
 ## Declare the Website
 
