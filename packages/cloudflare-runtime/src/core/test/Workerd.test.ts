@@ -195,6 +195,14 @@ layer(services)((it) => {
     { timeout: 30_000 },
   );
 
+  // Every stage of this test is individually bounded. It used to hang for
+  // the full 60s test timeout on loaded ubuntu CI runners (~3 of 8 main
+  // runs) because the two unbounded waits — serve's listen-message race and
+  // the un-timeboxed fetch — could wedge under full-suite parallel load,
+  // and a vitest timeout interrupt wedges the shared layer runtime, so both
+  // retries died instantly ("All fibers interrupted without error"). With
+  // per-stage bounds a load blip surfaces as a fast, typed failure naming
+  // the stage, which vitest's CI retry budget can actually absorb.
   it.effect(
     "shuts down workerd when its scope closes",
     () =>
@@ -202,42 +210,54 @@ layer(services)((it) => {
         let port = 0;
         yield* Effect.gen(function* () {
           const workerd = yield* Workerd.Workerd;
-          const ports = yield* workerd.serve({
-            sockets: [
-              {
-                name: "http",
-                address: "127.0.0.1:0",
-                service: { name: "test" },
-              },
-            ],
-            services: [
-              {
-                name: "test",
-                worker: {
-                  compatibilityDate: "2026-03-10",
-                  modules: [
-                    {
-                      name: "main.js",
-                      esModule:
-                        "export default { fetch: () => new Response('ok') };",
-                    },
-                  ],
+          const ports = yield* workerd
+            .serve({
+              sockets: [
+                {
+                  name: "http",
+                  address: "127.0.0.1:0",
+                  service: { name: "test" },
                 },
-              },
-            ],
-          });
+              ],
+              services: [
+                {
+                  name: "test",
+                  worker: {
+                    compatibilityDate: "2026-03-10",
+                    modules: [
+                      {
+                        name: "main.js",
+                        esModule:
+                          "export default { fetch: () => new Response('ok') };",
+                      },
+                    ],
+                  },
+                },
+              ],
+            })
+            .pipe(Effect.timeout(20_000));
           port = ports.http;
+          // Workerd has reported its listener, so connect succeeds; the
+          // bound covers a slow first-request isolate compile under load.
           const response = yield* Effect.promise(() =>
-            fetch(`http://127.0.0.1:${port}/`),
+            fetch(`http://127.0.0.1:${port}/`, {
+              signal: AbortSignal.timeout(10_000),
+            }),
           );
           expect(yield* Effect.promise(() => response.text())).toBe("ok");
         }).pipe(Effect.scoped);
 
-        // Wait until we can bind to the port ourselves. Closing the scope
-        // kills workerd, but the OS releases the listener a moment after the
-        // process exits — a single immediate probe races that on loaded CI
-        // runners (observed on macos-latest), so retry briefly (bounded).
-        const free = yield* PortHelpers.check(port).pipe(
+        // Prove shutdown by LISTENING on exactly the address workerd held.
+        // (`PortHelpers.check` sweeps seven hosts — 0.0.0.0, ::, localhost,
+        // … — any of which a concurrently-running test project can occupy
+        // at this port number, failing the probe for reasons unrelated to
+        // workerd.) Closing the scope kills workerd, but the OS releases
+        // the listener a moment after the process exits — a single
+        // immediate probe races that on loaded CI runners (observed on
+        // macos-latest), so retry briefly (bounded).
+        const free = yield* PortHelpers.occupy(port, "127.0.0.1").pipe(
+          Effect.scoped,
+          Effect.catchDefect(Effect.fail),
           Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 40 }),
           Effect.exit,
         );
