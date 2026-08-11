@@ -6439,6 +6439,18 @@ describe("non-plain and cyclic props through deploy", () => {
         expect(seen[0]).toBeInstanceOf(Date);
         expect(seen[0]!.toISOString()).toBe("2027-01-01T00:00:00.000Z");
 
+        // And it ROUND-TRIPS: read back out of the (durable, on-disk)
+        // store, the persisted prop is a real Date again — the DATE_MARKER
+        // envelope in StateEncoding, not a bare ISO string. This is what
+        // provider diff/delete/read receive as `olds` on a later run.
+        const persisted = (yield* getState("A"))?.props as {
+          expires: Date;
+        };
+        expect(persisted.expires).toBeInstanceOf(Date);
+        expect(persisted.expires.toISOString()).toBe(
+          "2027-01-01T00:00:00.000Z",
+        );
+
         // Same date again — no phantom update from Date handling.
         yield* program("2027-01-01").pipe(stack.deploy, hook(hooks));
         expect(updates).toEqual([]);
