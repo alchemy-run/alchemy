@@ -68,13 +68,20 @@ describe("StateEncoding Date round-trip", () => {
   });
 
   test("a user object that happens to carry the marker key is not corrupted into a Date", () => {
-    // reviveStateRecursive only rewrites EXACT single-key envelopes, so a
-    // user prop shaped `{ __date__: ..., other: ... }` survives untouched.
+    // Both revivers only rewrite EXACT single-key envelopes, so a user prop
+    // shaped `{ __date__: ..., other: ... }` survives untouched through the
+    // HTTP path and the local JSON.parse path alike.
     const suspicious = { [DATE_MARKER]: "2027-01-01T00:00:00.000Z", n: 1 };
-    const out = reviveStateRecursive(
+    const viaHttp = reviveStateRecursive(
       JSON.parse(JSON.stringify(suspicious)),
     ) as typeof suspicious;
-    expect(out.n).toBe(1);
-    expect(typeof out[DATE_MARKER]).toBe("string");
+    expect(viaHttp.n).toBe(1);
+    expect(typeof viaHttp[DATE_MARKER]).toBe("string");
+    const viaLocal = JSON.parse(
+      JSON.stringify(suspicious),
+      reviveState,
+    ) as typeof suspicious;
+    expect(viaLocal.n).toBe(1);
+    expect(typeof viaLocal[DATE_MARKER]).toBe("string");
   });
 });

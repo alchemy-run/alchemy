@@ -135,7 +135,11 @@ export const reviveState = (_key: string, value: unknown): unknown => {
       const decoded = decodeDuration(obj[DURATION_MARKER]);
       if (decoded !== undefined) return decoded;
     }
-    if (DATE_MARKER in obj) {
+    // Exact single-key match only — unlike the legacy REDACTED/DURATION
+    // markers there is no pre-marker data to tolerate, so a user object
+    // that merely CONTAINS the key alongside other fields is never
+    // collapsed into a Date (mirrors reviveStateRecursive's strictness).
+    if (DATE_MARKER in obj && Object.keys(obj).length === 1) {
       const decoded = decodeDate(obj[DATE_MARKER]);
       if (decoded !== undefined) return decoded;
     }
