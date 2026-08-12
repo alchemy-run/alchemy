@@ -28,6 +28,7 @@
  * ```
  */
 import { GitService } from "@alchemy.run/git";
+import GitWorker from "@alchemy.run/git/GitWorker";
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
@@ -38,13 +39,20 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     const git = yield* GitService();
 
-    // The GitHub-style SPA. The service URL is inlined into the client
-    // bundle at build time (import.meta.env.VITE_GIT_URL); deep links work
-    // because unknown paths fall back to index.html.
+    // ONE origin for everything: `src/worker.ts` fronts this site and
+    // forwards `/api/v1/**` + the git wire paths to the GitWorker over a
+    // private service binding, serving the SPA assets for the rest. Clone
+    // URLs are therefore same-host (no workers.dev — which ad-block lists
+    // sometimes block), and the SPA calls the API same-origin (the client
+    // defaults to `location.origin`; no VITE_GIT_URL needed).
     const web = yield* Cloudflare.Website.Vite("Web", {
-      assets: { notFoundHandling: "single-page-application" },
+      main: "src/worker.ts",
+      assets: {
+        notFoundHandling: "single-page-application",
+        runWorkerFirst: true,
+      },
       env: {
-        VITE_GIT_URL: git.url,
+        GIT: GitWorker,
       },
     });
 

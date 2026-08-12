@@ -20,19 +20,22 @@ export interface Connection {
   readonly token?: string | undefined;
 }
 
+/**
+ * Same-origin by default: the deployed site fronts the git service behind
+ * one host (see `src/worker.ts`), so with no explicit configuration the
+ * API is simply `location.origin`. A baked-in VITE_GIT_URL (split
+ * deployments, local `vite preview` against a remote service) overrides
+ * that; localStorage only matters when neither is set and the user
+ * connected to a service by hand.
+ */
 export const getConnection = (): Connection | null => {
-  // The build-time URL always wins: a redeploy moves the service to a new
-  // workers.dev host, and a URL persisted from a previous session would
-  // silently point every request at the dead one (surfacing as opaque
-  // CORS failures). localStorage only matters when no URL was baked in.
-  const url = builtinUrl ?? localStorage.getItem(URL_KEY);
-  if (!url) return null;
+  const url = builtinUrl ?? localStorage.getItem(URL_KEY) ?? location.origin;
   const token = localStorage.getItem(TOKEN_KEY);
   return { url: url.replace(/\/+$/, ""), token: token ?? undefined };
 };
 
 export const defaultUrl = (): string =>
-  builtinUrl ?? localStorage.getItem(URL_KEY) ?? "";
+  builtinUrl ?? localStorage.getItem(URL_KEY) ?? location.origin;
 
 export const saveConnection = (url: string, token?: string): void => {
   localStorage.setItem(URL_KEY, url.replace(/\/+$/, ""));
