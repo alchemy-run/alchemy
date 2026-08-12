@@ -43,9 +43,6 @@ export default Alchemy.Stack(
     // because unknown paths fall back to index.html.
     const web = yield* Cloudflare.Website.Vite("Web", {
       assets: { notFoundHandling: "single-page-application" },
-      domain: {
-        name: "git.alchemy.run",
-      },
       env: {
         VITE_GIT_URL: git.url,
       },
