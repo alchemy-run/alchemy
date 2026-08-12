@@ -1170,9 +1170,18 @@ export const providers = () =>
           ECR.RepositoryProvider(),
           ECS.CapacityProviderProvider(),
           flociDual(ECS.Cluster, () => ECS.ClusterProvider()),
-          flociDual(ECS.Service, () => ECS.ServiceProvider()),
+          // Dual: live ECS in deploy, floci-emulated (RPC-sidecar-hosted,
+          // hot-reloading real containers) in dev — see FlociServiceProvider
+          // / FlociTaskProvider.
+          ProviderLayer.dual(ECS.Service, {
+            live: () => ECS.ServiceProvider(),
+            local: () => ECS.FlociServiceProvider(),
+          }),
           flociDual(ECS.TaskDefinition, () => ECS.TaskDefinitionProvider()),
-          flociDual(ECS.Task, () => ECS.TaskProvider()),
+          ProviderLayer.dual(ECS.Task, {
+            live: () => ECS.TaskProvider(),
+            local: () => ECS.FlociTaskProvider(),
+          }),
           EFS.AccessPointProvider(),
           EFS.FileSystemProvider(),
           EFS.MountTargetProvider(),

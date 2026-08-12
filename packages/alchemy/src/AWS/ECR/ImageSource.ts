@@ -2,6 +2,7 @@ import * as ecr from "@distilled.cloud/aws/ecr";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
@@ -448,6 +449,48 @@ export const makeImageSource = Effect.gen(function* () {
   const { dotAlchemy } = yield* AlchemyContext;
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
 
+  /**
+   * The exact rolldown input/output options `bundleProgram` hands to
+   * `Bundle.build` — shared with {@link watchMain} so a dev watcher's
+   * `Bundle.watch` observes the identical module graph.
+   */
+  const mainBundleOptions = (
+    source: BundledImageSource,
+    entry: string,
+    cwd: string,
+    plugins?: rolldown.RolldownPluginOption,
+  ): {
+    inputOptions: rolldown.InputOptions;
+    outputOptions: rolldown.OutputOptions;
+  } => ({
+    inputOptions: {
+      ...source.build?.input,
+      input: entry,
+      cwd,
+      platform: "node",
+      // The container runs on `bun`; keep `bun`/`bun:*` external (the
+      // runtime provides them) and resolve the `bun` export condition
+      // so `@effect/platform-bun` picks its Bun implementations.
+      external: [
+        "bun",
+        "bun:*",
+        ...((source.build?.input?.external as string[] | undefined) ?? []),
+      ],
+      resolve: {
+        conditionNames: ["bun", "import", "module", "default"],
+        ...source.build?.input?.resolve,
+      },
+      plugins: [source.build?.input?.plugins, plugins],
+    },
+    outputOptions: {
+      ...source.build?.output,
+      format: "esm",
+      sourcemap: source.build?.output?.sourcemap ?? false,
+      minify: source.build?.output?.minify ?? false,
+      entryFileNames: "index.mjs",
+    },
+  });
+
   /** Bundle the Effect program behind a `main` source. */
   const bundleProgram = Effect.fn(function* (options: {
     source: BundledImageSource;
@@ -462,33 +505,10 @@ export const makeImageSource = Effect.gen(function* () {
       entry: string,
       plugins?: rolldown.RolldownPluginOption,
     ) {
+      const opts = mainBundleOptions(source, entry, cwd, plugins);
       return yield* Bundle.build(
-        {
-          ...source.build?.input,
-          input: entry,
-          cwd,
-          platform: "node",
-          // The container runs on `bun`; keep `bun`/`bun:*` external (the
-          // runtime provides them) and resolve the `bun` export condition
-          // so `@effect/platform-bun` picks its Bun implementations.
-          external: [
-            "bun",
-            "bun:*",
-            ...((source.build?.input?.external as string[] | undefined) ?? []),
-          ],
-          resolve: {
-            conditionNames: ["bun", "import", "module", "default"],
-            ...source.build?.input?.resolve,
-          },
-          plugins: [source.build?.input?.plugins, plugins],
-        },
-        {
-          ...source.build?.output,
-          format: "esm",
-          sourcemap: source.build?.output?.sourcemap ?? false,
-          minify: source.build?.output?.minify ?? false,
-          entryFileNames: "index.mjs",
-        },
+        opts.inputOptions,
+        opts.outputOptions,
         source.build,
       );
     });
@@ -793,7 +813,13 @@ export const makeImageSource = Effect.gen(function* () {
       // push of a multi-arch tag sends every locally-present variant — a
       // stale other-arch variant in the local cache would reach ECR and the
       // task would crash with `exec format error`.
-      yield* docker.image.push(imageUri, credentials, platform);
+      yield* docker.image.push(imageUri, credentials, platform).pipe(
+        Effect.retry({
+          while: (): boolean => true,
+          schedule: Schedule.exponential("2 seconds"),
+          times: 3,
+        }),
+      );
       yield* session.note(`Pushed ${imageUri}`);
       return { imageUri, repositoryName, repositoryUri, codeHash };
     }
@@ -897,7 +923,29 @@ export const makeImageSource = Effect.gen(function* () {
     return yield* computeStaticSourceHash(options.source, platform);
   });
 
-  return { resolve, hash };
+  /**
+   * The rolldown watch plan for a `main` source — the exact input/output
+   * options `resolve` bundles with, reusable verbatim with `Bundle.watch`
+   * so a dev watcher observes the identical module graph and rebuild
+   * triggers.
+   */
+  const watchMain = Effect.fn(function* (options: {
+    source: BundledImageSource;
+    isExternal?: boolean;
+    bootstrap: (importPath: string) => string;
+  }) {
+    const realMain = yield* resolveMainPath(options.source.main);
+    const cwd = yield* findCwdForBundle(realMain);
+    const opts = mainBundleOptions(
+      options.source,
+      realMain,
+      cwd,
+      options.isExternal ? undefined : virtualEntryPlugin(options.bootstrap),
+    );
+    return { ...opts, extra: options.source.build };
+  });
+
+  return { resolve, hash, watchMain };
 });
 
 /** The resolver service returned by {@link makeImageSource}. */
