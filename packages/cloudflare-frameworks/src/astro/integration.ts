@@ -373,12 +373,16 @@ export function distilledCloudflare(
             ? withDevSessionKv(options.vite, sessionKVBindingName)
             : options.vite;
 
-        const cloudflarePlugins = cloudflareVitePlugin(
-          makeIntegrationPluginOptions(viteOptions, {
+        const cloudflarePlugins = cloudflareVitePlugin({
+          ...makeIntegrationPluginOptions(viteOptions, {
             prerenderEnvironment,
             command,
           }),
-        ) as Array<vite.Plugin>;
+          // This integration owns the plugin for the whole Astro run — a
+          // `cloudflare({...})` the app's own vite config declares (for
+          // standalone builds) stands down against this instance.
+          injected: true,
+        }) as Array<vite.Plugin>;
 
         // Same trick as upstream (astro#16332): `build`/`sync` run type
         // generation, which creates a temporary Vite server and fires
