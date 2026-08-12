@@ -5,7 +5,6 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import type { PlatformError } from "effect/PlatformError";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 import { rootDir } from "./Profile.ts";
@@ -40,18 +39,6 @@ class LockTimeout extends Data.TaggedError("LockTimeout")<{
  */
 export const sanitizeLockKey = (key: string): string =>
   key.replace(/[^A-Za-z0-9._-]/g, "_");
-
-const errnoCode = (error: PlatformError): string | undefined => {
-  const cause = error.reason.cause;
-  return typeof cause === "object" && cause !== null && "code" in cause
-    ? String(cause.code)
-    : undefined;
-};
-
-/** File-system failures that mean "we cannot lock here at all". */
-const isUnlockable = (error: PlatformError): boolean =>
-  error.reason._tag === "PermissionDenied" ||
-  ["EROFS", "EACCES", "EPERM", "ENOSPC"].includes(errnoCode(error) ?? "");
 
 /**
  * Take the cross-process lock. On success the ambient scope owns it: a
@@ -151,9 +138,9 @@ const acquireFileLock = Effect.fn(function* (
  * lock directory whose mtime is refreshed while held so another process can
  * recover it after a crash).
  *
- * Best-effort: where the lock directory cannot be created at all (read-only
- * home in containers/CI), the effect runs unserialised with a warning — a
- * missed lock only risks a redundant credential refresh.
+ * Failure to create or acquire the lock is fatal. Authentication writes its
+ * profile state beneath the same root, so continuing without a writable lock
+ * cannot produce a valid deployment and would permit concurrent corruption.
  */
 export const withLock = <A, E, R>(
   key: string,
@@ -176,14 +163,7 @@ export const withLock = <A, E, R>(
       yield* acquireFileLock(
         lockPath,
         options?.timeout ?? DEFAULT_TIMEOUT,
-      ).pipe(
-        Effect.catchIf(isUnlockable, (error) =>
-          Effect.logWarning(
-            `auth lock unavailable (${errnoCode(error) ?? error.reason._tag} at '${lockPath}') — continuing without cross-process locking`,
-          ),
-        ),
-        Effect.orDie,
-      );
+      ).pipe(Effect.orDie);
       return yield* effect;
     }).pipe(Effect.scoped),
   );

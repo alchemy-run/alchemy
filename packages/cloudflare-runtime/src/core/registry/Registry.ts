@@ -56,7 +56,7 @@ export const RegistryLive = Layer.effect(
     const path = yield* Path.Path;
     const directory = yield* Paths.state("alchemy", "registry");
 
-    const ensureNonStale = (entryPath: string) =>
+    const isNonStale = (entryPath: string) =>
       Effect.zip(
         fs
           .stat(entryPath)
@@ -68,29 +68,28 @@ export const RegistryLive = Layer.effect(
           ([mtime, now]) =>
             !!mtime && mtime.getTime() > now.getTime() - STALE_AFTER_MS,
         ),
-        Effect.tap((valid) =>
-          valid ? Effect.void : fs.remove(entryPath).pipe(Effect.forkDetach),
-        ),
       );
 
     const readEntry = (entry: string) => {
       const entryPath = path.join(directory, entry);
-      return Effect.zipWith(
-        ensureNonStale(entryPath),
-        fs
-          .readFileString(entryPath)
-          .pipe(
-            Effect.map(
-              (content) =>
-                [
-                  decodeURIComponent(path.basename(entry, ".json")),
-                  JSON.parse(content),
-                ] as const,
-            ),
-          ),
-        (valid, entryContent) => (valid ? entryContent : undefined),
-        { concurrent: true },
-      ).pipe(Effect.orElseSucceed(() => undefined));
+      return isNonStale(entryPath).pipe(
+        Effect.flatMap((valid) =>
+          valid
+            ? fs
+                .readFileString(entryPath)
+                .pipe(
+                  Effect.map(
+                    (content) =>
+                      [
+                        decodeURIComponent(path.basename(entry, ".json")),
+                        JSON.parse(content),
+                      ] as const,
+                  ),
+                )
+            : fs.remove(entryPath).pipe(Effect.as(undefined)),
+        ),
+        Effect.orElseSucceed(() => undefined),
+      );
     };
 
     const readAll = fs.readDirectory(directory).pipe(

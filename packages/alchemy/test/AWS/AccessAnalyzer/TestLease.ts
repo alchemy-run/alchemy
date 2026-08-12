@@ -6,8 +6,10 @@ import * as Scope from "effect/Scope";
 
 // AWS permits only one ACCOUNT_UNUSED_ACCESS analyzer per account and Region.
 // Run the suite inside the same Effect-native, cross-process lock used by auth.
-// The manually-owned scope bridges the test runner's separate beforeAll and
-// afterAll effects; closing it interrupts the holder and runs the lock finalizer.
+// The test runner executes beforeAll and afterAll as separate Effects, so no
+// ambient scope spans the suite lifetime. Keep this manually-owned scope in
+// the lease closure: withLock's holder fiber and finalizer attach to it in
+// acquire, and release closes it to interrupt the holder and remove the lock.
 export const makeAccessAnalyzerTestLease = () => {
   let scope: Scope.Closeable | undefined;
 

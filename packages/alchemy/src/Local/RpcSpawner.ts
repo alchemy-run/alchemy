@@ -136,6 +136,9 @@ export const make = Effect.fn(function* ({
       Effect.ignore,
       Effect.forkScoped,
     );
+    // This scope is the child handle's sole owner. Graceful shutdown runs this
+    // finalizer; abrupt parent loss closes the RPC parent connection and the
+    // child self-terminates (both paths are covered by RpcSpawnerCleanup).
     const kill = handle.kill({ forceKillAfter: "500 millis" });
     yield* Effect.addFinalizer(() => kill.pipe(Effect.ignore));
     const url = yield* getRpcAddress(handle.stdout, (line) =>
