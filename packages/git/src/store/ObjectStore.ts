@@ -126,6 +126,24 @@ export interface ObjectStore extends ObjectSource {
     object: StagedObject,
   ) => Effect.Effect<InsertOutcome, StoreError>;
   /**
+   * Batched sibling of {@link ObjectStore.insertStaged} — the ingest hot
+   * path (DESIGN.md §16.6).
+   *
+   * Staging objects one at a time costs two statements each (an existence
+   * probe and an insert), so a 13.7k-object push ran ~27k statements and
+   * ~13.7k transactions inside a single-threaded Durable Object. This
+   * inserts a whole batch in **one** `transactionSync` with
+   * `INSERT OR IGNORE` (no probe), then adopts any rows left staged by a
+   * crashed push with one chunked `UPDATE`.
+   *
+   * Oversize objects (> 1 MiB compressed) still go through the per-object
+   * path, since each needs its own R2 write first.
+   */
+  readonly insertStagedBatch: (
+    pushId: string,
+    objects: ReadonlyArray<StagedObject>,
+  ) => Effect.Effect<void, StoreError>;
+  /**
    * The connectivity-check membership oracle: returns the subset of `oids`
    * that exist in **neither** the live store **nor** this push's staged
    * rows. An empty result means every referenced object is present and the
@@ -426,6 +444,56 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
       return map;
     });
 
+  const insertStagedOne = Effect.fn(function* (
+    pushId: string,
+    object: StagedObject,
+  ) {
+    const existing = yield* sql.first<{ staged_push: string | null }>(
+      `SELECT staged_push FROM objects WHERE oid = ?`,
+      object.oid,
+    );
+    if (existing !== undefined) {
+      if (existing.staged_push !== null && existing.staged_push !== pushId) {
+        // Adopt a row left staged by a crashed push so this push's
+        // connectivity check and live-flip see it.
+        yield* sql.run(
+          `UPDATE objects SET staged_push = ? WHERE oid = ? AND staged_push IS NOT NULL`,
+          pushId,
+          object.oid,
+        );
+      }
+      return "exists" as const;
+    }
+    if (object.zdata.byteLength > R2_OFFLOAD_THRESHOLD) {
+      // R2 write FIRST, then the metadata row — a crash between the two
+      // leaves only a harmless content-addressed R2 orphan.
+      const key = objectKey(repoId, object.oid);
+      yield* runR2(bucket.put(key, object.zdata), `R2 put ${key}`);
+      yield* sql.run(
+        `INSERT OR IGNORE INTO objects (oid, type, size, zsize, location, zdata, r2_key, staged_push)
+           VALUES (?, ?, ?, ?, 'r2', NULL, ?, ?)`,
+        object.oid,
+        object.type,
+        object.size,
+        object.zdata.byteLength,
+        key,
+        pushId,
+      );
+    } else {
+      yield* sql.run(
+        `INSERT OR IGNORE INTO objects (oid, type, size, zsize, location, zdata, staged_push)
+           VALUES (?, ?, ?, ?, 'row', ?, ?)`,
+        object.oid,
+        object.type,
+        object.size,
+        object.zdata.byteLength,
+        toArrayBuffer(object.zdata),
+        pushId,
+      );
+    }
+    return "inserted" as const;
+  });
+
   return {
     // ── ObjectSource (live objects only) ────────────────────────────────────
     has: (oid) =>
@@ -510,52 +578,60 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
     // ── Store-side surface ──────────────────────────────────────────────────
     getMetaBatch,
 
-    insertStaged: Effect.fn(function* (pushId: string, object: StagedObject) {
-      const existing = yield* sql.first<{ staged_push: string | null }>(
-        `SELECT staged_push FROM objects WHERE oid = ?`,
-        object.oid,
-      );
-      if (existing !== undefined) {
-        if (existing.staged_push !== null && existing.staged_push !== pushId) {
-          // Adopt a row left staged by a crashed push so this push's
-          // connectivity check and live-flip see it.
-          yield* sql.run(
-            `UPDATE objects SET staged_push = ? WHERE oid = ? AND staged_push IS NOT NULL`,
-            pushId,
-            object.oid,
-          );
+    insertStagedBatch: Effect.fn(function* (
+      pushId: string,
+      objects: ReadonlyArray<StagedObject>,
+    ) {
+      if (objects.length === 0) return;
+      const inline: Array<StagedObject> = [];
+      for (const object of objects) {
+        if (object.zdata.byteLength > R2_OFFLOAD_THRESHOLD) {
+          // Needs its own R2 write; rare enough to keep on the slow path.
+          yield* insertStagedOne(pushId, object);
+        } else {
+          inline.push(object);
         }
-        return "exists" as const;
       }
-      if (object.zdata.byteLength > R2_OFFLOAD_THRESHOLD) {
-        // R2 write FIRST, then the metadata row — a crash between the two
-        // leaves only a harmless content-addressed R2 orphan.
-        const key = objectKey(repoId, object.oid);
-        yield* runR2(bucket.put(key, object.zdata), `R2 put ${key}`);
-        yield* sql.run(
-          `INSERT OR IGNORE INTO objects (oid, type, size, zsize, location, zdata, r2_key, staged_push)
-           VALUES (?, ?, ?, ?, 'r2', NULL, ?, ?)`,
-          object.oid,
-          object.type,
-          object.size,
-          object.zdata.byteLength,
-          key,
-          pushId,
-        );
-      } else {
-        yield* sql.run(
-          `INSERT OR IGNORE INTO objects (oid, type, size, zsize, location, zdata, staged_push)
-           VALUES (?, ?, ?, ?, 'row', ?, ?)`,
-          object.oid,
-          object.type,
-          object.size,
-          object.zdata.byteLength,
-          toArrayBuffer(object.zdata),
-          pushId,
-        );
-      }
-      return "inserted" as const;
+      if (inline.length === 0) return;
+
+      // One transaction for the whole batch: `INSERT OR IGNORE` needs no
+      // existence probe, and a single commit replaces one per object.
+      const rows = inline.map((object) => ({
+        oid: object.oid,
+        type: object.type,
+        size: object.size,
+        zsize: object.zdata.byteLength,
+        zdata: toArrayBuffer(object.zdata),
+      }));
+      yield* sql
+        .transactionSync((raw) => {
+          for (const row of rows) {
+            raw.exec(
+              `INSERT OR IGNORE INTO objects (oid, type, size, zsize, location, zdata, staged_push)
+               VALUES (?, ?, ?, ?, 'row', ?, ?)`,
+              row.oid,
+              row.type,
+              row.size,
+              row.zsize,
+              row.zdata,
+              pushId,
+            );
+          }
+        })
+        .pipe(Effect.asVoid);
+
+      // Adopt rows a crashed push left staged, so this push's connectivity
+      // check and live-flip see them (the per-object path does this inline).
+      yield* sql.inChunks(
+        (ph) =>
+          `UPDATE objects SET staged_push = ? WHERE oid IN (${ph})
+             AND staged_push IS NOT NULL AND staged_push != ?`,
+        inline.map((object) => object.oid),
+        { prefix: [pushId], suffix: [pushId] },
+      );
     }),
+
+    insertStaged: insertStagedOne,
 
     missingObjects: (oids, pushId) =>
       Effect.gen(function* () {

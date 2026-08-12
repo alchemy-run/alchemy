@@ -155,6 +155,12 @@ export interface ResolvedEntry {
   readonly zdata: Uint8Array;
   /** `true` when the entry arrived as a delta and was re-deflated. */
   readonly fromDelta: boolean;
+  /**
+   * The inflated bytes. The parser already holds them at this point, so
+   * passing them through spares every consumer a second inflate just to
+   * read a commit or tree.
+   */
+  readonly content: Uint8Array;
 }
 
 /**
@@ -418,6 +424,7 @@ export const ingestPack = <E, R>(
           size: content.length,
           zdata,
           fromDelta: true,
+          content,
         });
       });
 
@@ -553,6 +560,7 @@ export const ingestPack = <E, R>(
           size: content.length,
           zdata,
           fromDelta: false,
+          content,
         });
       } else if (
         baseOid !== undefined &&

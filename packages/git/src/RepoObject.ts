@@ -139,6 +139,12 @@ import {
  */
 export const MAX_PACK_BYTES = 32 * 1024 * 1024;
 
+/** Objects staged per SQL transaction during ingest (DESIGN.md §16.6). */
+export const STAGE_BATCH_OBJECTS = 256;
+
+/** Byte budget per staging batch, so a batch of large blobs stays bounded. */
+export const STAGE_BATCH_BYTES = 8 * 1024 * 1024;
+
 /** Agent string advertised on the wire. */
 export const GIT_AGENT = "git-service/1";
 
@@ -998,25 +1004,44 @@ export const ingestPackFrom = (
       }
     });
 
+    // Stage in batches: one transaction per batch instead of one (plus an
+    // existence probe) per object. That per-object cost is what made a
+    // 13.7k-object push take ~20 s inside a single-threaded DO — the work
+    // is inherently serial, so the only lever is fewer operations
+    // (DESIGN.md §16.6).
+    let batch: Array<StagedObject> = [];
+    let batchBytes = 0;
+    const flush = Effect.fn(function* () {
+      if (batch.length === 0) return;
+      const pending = batch;
+      batch = [];
+      batchBytes = 0;
+      yield* store.insertStagedBatch(pushId, pending);
+    });
+
     const summary = yield* PackParser.ingestPack({
       source,
       store,
       maxObjectSize: MAX_OBJECT_SIZE,
       sink: (entry) =>
         Effect.gen(function* () {
-          yield* store.insertStaged(pushId, {
+          batch.push({
             oid: entry.oid,
             type: entry.type,
             size: entry.size,
             zdata: entry.zdata,
           });
+          batchBytes += entry.zdata.byteLength;
+          if (
+            batch.length >= STAGE_BATCH_OBJECTS ||
+            batchBytes >= STAGE_BATCH_BYTES
+          ) {
+            yield* flush();
+          }
+          // The parser hands us the inflated bytes, so commits/trees/tags
+          // are parsed without a second inflate; blobs need no parse at all.
           if (entry.type === ObjectType.blob) return;
-          const content = yield* Zlib.inflate(entry.zdata).pipe(
-            Effect.mapError(
-              (error) => new PackIngestError({ reason: error.reason }),
-            ),
-          );
-          yield* record(entry.oid, entry.type, content);
+          yield* record(entry.oid, entry.type, entry.content);
         }),
     }).pipe(
       Effect.mapError((error) =>
@@ -1025,6 +1050,8 @@ export const ingestPackFrom = (
           : new PackIngestError({ reason: packParserReason(error) }),
       ),
     );
+
+    yield* flush();
 
     return {
       objectCount: summary.count,

@@ -1031,7 +1031,34 @@ threshold ships at 32 MiB — comfortably inside a 128 MB isolate, covering
 the overwhelming majority of pushes at full speed, with anything larger
 merely slower instead of refused.
 
-### 16.5 What the measurements corrected
+### 16.5 Ingest batching, and what it revealed
+
+Staging cost **two statements per object** — an existence probe and an
+insert — so a 13.7k-object push ran ~27k statements and ~13.7k transactions
+inside one single-threaded Durable Object. Ingest now stages in batches of
+256 (or 8 MiB) via a single `transactionSync` with `INSERT OR IGNORE` (no
+probe), adopting crashed-push rows with one chunked `UPDATE`, and the
+parser hands the sink its already-inflated bytes so commits/trees are not
+inflated twice.
+
+    38 MiB alchemy push via R2:  44.4s -> 37.4s
+    clone back:                  18.5s -> 16.6s
+
+A 16% win, not the 5x the statement count suggested — which is the useful
+result: **transaction commits were not the dominant cost**. What remains is
+per-object work that batching cannot remove (inflate, sha1, one statement
+each, Effect frames) plus, importantly, *client-side* cost the measurement
+does not separate: `git push` also packs 13.7k objects locally and uploads
+38 MiB over the tester's uplink. Isolating server ingest needs either
+server-side timing or a loopback baseline — until then these numbers are an
+upper bound on server cost, not a measurement of it.
+
+The deeper point is that this work is **serial by construction**: one repo
+is one Durable Object, and a push is one request to it. No amount of
+horizontal Worker/R2 scale touches it. Making a single large push
+dramatically faster requires parallelism *within* the repo — see §17.
+
+### 16.6 What the measurements corrected
 
 1. **`repos.list` was O(N) Durable Object wakes** — the handler fanned out
    `getRepoMeta` per row, so listing 100 repos woke 100 DOs. **Fixed**:
