@@ -104,8 +104,10 @@ export const AssetsLive = Layer.effect(
       const { assetsIgnoreFunction } = yield* createAssetsIgnoreFunction(
         dir,
       ).pipe(
-        Effect.provideService(FileSystem.FileSystem, fs),
-        Effect.provideService(Path.Path, path),
+        Effect.provide([
+          Layer.succeed(FileSystem.FileSystem, fs),
+          Layer.succeed(Path.Path, path),
+        ]),
         Effect.mapError(
           (cause) =>
             new SystemError({

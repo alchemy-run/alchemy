@@ -17,9 +17,15 @@ const semaphores = new Map<string, Semaphore.Semaphore>();
 const STALE = Duration.seconds(30);
 const REFRESH = Duration.seconds(10);
 const RETRY_INTERVAL = Duration.millis(50);
-const DEFAULT_TIMEOUT: Duration.Input = "2 minutes";
+const DEFAULT_TIMEOUT = Duration.minutes(2);
 
 class LockHeld extends Data.TaggedError("LockHeld") {}
+
+class LockTimeout extends Data.TaggedError("LockTimeout")<{
+  readonly lockPath: string;
+  readonly timeout: Duration.Input;
+  readonly message: string;
+}> {}
 
 /**
  * Make a lock key safe to use as a file name on every platform.
@@ -73,12 +79,7 @@ const acquireFileLock = Effect.fn(function* (
     if (isStale) {
       yield* fs.remove(lockPath, { recursive: true, force: true });
     }
-  }).pipe(
-    Effect.catchIf(
-      (error) => error.reason._tag === "NotFound",
-      () => Effect.void,
-    ),
-  );
+  }).pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.void));
 
   // A non-recursive mkdir is the atomic test-and-set; the owner marker lets
   // release and refresh verify the lock wasn't reaped and re-taken.
@@ -100,18 +101,20 @@ const acquireFileLock = Effect.fn(function* (
     ),
     Effect.retry({
       while: (error) => error._tag === "LockHeld",
-      schedule: Schedule.spaced(RETRY_INTERVAL),
-      times: Math.ceil(
-        Duration.toMillis(timeout) / Duration.toMillis(RETRY_INTERVAL),
+      schedule: Schedule.spaced(RETRY_INTERVAL).pipe(
+        Schedule.upTo({ duration: timeout }),
       ),
     }),
     Effect.catchTag("LockHeld", () =>
       Effect.die(
-        new Error(
-          `Timed out waiting for the alchemy auth lock '${lockPath}' — another alchemy ` +
+        new LockTimeout({
+          lockPath,
+          timeout,
+          message:
+            `Timed out waiting for the alchemy auth lock '${lockPath}' — another alchemy ` +
             `process has held it for over ${Duration.toSeconds(timeout)}s. If no other ` +
             `alchemy process is running, delete the lock directory and retry.`,
-        ),
+        }),
       ),
     ),
   );
@@ -126,15 +129,18 @@ const acquireFileLock = Effect.fn(function* (
 
   yield* fs.readFileString(ownerPath).pipe(
     Effect.filterOrFail((current) => current === owner),
-    Effect.andThen(Clock.currentTimeMillis),
+    Effect.andThen(
+      Clock.currentTimeMillis.pipe(Effect.map((now) => new Date(now))),
+    ),
     // NB: utimes interprets a bare number as *seconds* since epoch.
-    Effect.flatMap((now) => fs.utimes(lockPath, new Date(now), new Date(now))),
+    Effect.flatMap((now) => fs.utimes(lockPath, now, now)),
     Effect.repeat(Schedule.spaced(REFRESH)),
     Effect.catch(() =>
       Effect.logWarning(
         `auth lock compromised (continuing): '${lockPath}' is no longer owned by this process`,
       ),
     ),
+    // Acquisition returns while this fiber refreshes until the lock scope ends.
     Effect.forkScoped,
   );
 });
@@ -161,26 +167,24 @@ export const withLock = <A, E, R>(
     semaphores.set(safeKey, semaphore);
   }
   return semaphore.withPermit(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const path = yield* Path.Path;
-        // Read `rootDir` here, not at module eval, so the
-        // `Profile -> AuthProvider -> Lock -> Profile` import cycle never
-        // sees it uninitialised.
-        const lockPath = path.join(rootDir, "lock", `${safeKey}.lock`);
-        yield* acquireFileLock(
-          lockPath,
-          options?.timeout ?? DEFAULT_TIMEOUT,
-        ).pipe(
-          Effect.catchIf(isUnlockable, (error) =>
-            Effect.logWarning(
-              `auth lock unavailable (${errnoCode(error) ?? error.reason._tag} at '${lockPath}') — continuing without cross-process locking`,
-            ),
+    Effect.gen(function* () {
+      const path = yield* Path.Path;
+      // Read `rootDir` here, not at module eval, so the
+      // `Profile -> AuthProvider -> Lock -> Profile` import cycle never
+      // sees it uninitialised.
+      const lockPath = path.join(rootDir, "lock", `${safeKey}.lock`);
+      yield* acquireFileLock(
+        lockPath,
+        options?.timeout ?? DEFAULT_TIMEOUT,
+      ).pipe(
+        Effect.catchIf(isUnlockable, (error) =>
+          Effect.logWarning(
+            `auth lock unavailable (${errnoCode(error) ?? error.reason._tag} at '${lockPath}') — continuing without cross-process locking`,
           ),
-          Effect.orDie,
-        );
-        return yield* effect;
-      }),
-    ),
+        ),
+        Effect.orDie,
+      );
+      return yield* effect;
+    }).pipe(Effect.scoped),
   );
 };
