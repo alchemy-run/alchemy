@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/pr-package",
-  "version": "2.0.0-beta.71",
+  "version": "2.0.0-beta.72",
   "description": "Self-hostable PR package registry for Cloudflare built with Alchemy.",
   "homepage": "https://alchemy.run",
   "license": "Apache-2.0",
