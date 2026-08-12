@@ -55,6 +55,7 @@ import * as Effect from "effect/Effect";
 import * as Encoding from "effect/Encoding";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Stream from "effect/Stream";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Etag from "effect/unstable/http/Etag";
@@ -86,9 +87,16 @@ import {
 } from "./Api.ts";
 import { GitAuthLive, parseBasicOrBearer, verifyAdminKey } from "./Auth.ts";
 import { parseCommit, parseTree, treeEntryKind } from "./git/ObjectCodec.ts";
+import { flushPkt, pktText } from "./git/Pkt.ts";
+import { progressMessage, wrapSideband } from "./git/Sideband.ts";
 import type { StoreError } from "./git/Store.ts";
 import {
   ADMIN_HEADER,
+  BUNDLE_COUNT_HEADER,
+  BUNDLE_HASH_HEADER,
+  BUNDLE_KEY_HEADER,
+  BUNDLE_SIDEBAND_HEADER,
+  GitObjectsBucket,
   GitRepo,
   GitRepoLive,
   WWW_AUTHENTICATE,
@@ -266,6 +274,10 @@ export default class GitWorker extends Cloudflare.Worker<GitWorker>()(
     // both DO classes declare `errors: [...]` (see DurableObjectProps.errors).
     const registry = yield* Registry;
     const repos = yield* GitRepo;
+    // The Worker streams clone bundles straight out of R2 (DESIGN.md §11):
+    // the DO plans the clone, the bytes bypass it entirely.
+    const objectsBucket =
+      yield* Cloudflare.R2.ReadWriteBucket(GitObjectsBucket);
     const adminKey = yield* Config.redacted(ADMIN_TOKEN_CONFIG_KEY);
 
     const registryStub = () => registry.getByName(REGISTRY_DO_NAME);
@@ -1114,9 +1126,47 @@ export default class GitWorker extends Cloudflare.Worker<GitWorker>()(
       if (isAdmin) {
         headers = Headers.set(headers, ADMIN_HEADER, "1");
       }
-      return yield* repos
+      const response = yield* repos
         .getByName(entry.repoId)
         .fetch(request.modify({ headers }));
+
+      // Clone-bundle splice (DESIGN.md §11): the DO answered with a marker
+      // naming an immutable R2 object rather than the pack itself. Stream
+      // those bytes to the client from here, so the pack never transits
+      // the Durable Object — this is what makes clone bandwidth scale with
+      // Workers/R2 instead of with one single-threaded object.
+      const bundleKeyHeader = response.headers[BUNDLE_KEY_HEADER];
+      if (bundleKeyHeader === undefined) {
+        return response;
+      }
+      const object = yield* Effect.result(objectsBucket.get(bundleKeyHeader));
+      if (Result.isFailure(object) || object.success === null) {
+        // The bundle vanished (GC raced us): fall back to a plain 500 —
+        // git retries, and the next attempt re-plans against a fresh
+        // bundle or the dynamic path.
+        return internalError;
+      }
+      const packBytes = object.success.body;
+      const nak = pktText("NAK");
+      const count = response.headers[BUNDLE_COUNT_HEADER] ?? "0";
+      const body =
+        response.headers[BUNDLE_SIDEBAND_HEADER] === "1"
+          ? Stream.fromArray([
+              nak,
+              progressMessage(`Enumerating objects: ${count}, done.`),
+            ]).pipe(
+              Stream.concat(packBytes.pipe(wrapSideband(1))),
+              Stream.concat(Stream.succeed(flushPkt)),
+            )
+          : Stream.fromArray([nak]).pipe(Stream.concat(packBytes));
+      return HttpServerResponse.stream(body, {
+        contentType: "application/x-git-upload-pack-result",
+        headers: {
+          "cache-control": "no-cache",
+          // Kept for observability; the internal marker headers are not.
+          [BUNDLE_HASH_HEADER]: response.headers[BUNDLE_HASH_HEADER] ?? "",
+        },
+      });
     });
 
     /** Auth + resolve for the raw REST reads; `undefined` = already replied. */
@@ -1261,6 +1311,8 @@ export default class GitWorker extends Cloudflare.Worker<GitWorker>()(
           Layer.provide(RegistryLive),
           Layer.provide(Cloudflare.R2.ReadWriteBucketBinding),
         ),
+        // The Worker itself reads R2 too (the clone-bundle splice).
+        Cloudflare.R2.ReadWriteBucketBinding,
       ),
     ),
   ),

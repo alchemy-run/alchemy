@@ -136,6 +136,18 @@ export const STAGING_TTL_MS = 24 * 60 * 60 * 1000;
 export const WWW_AUTHENTICATE = 'Basic realm="git-service"' as const;
 
 /**
+ * Worker↔DO headers for the clone-bundle splice (DESIGN.md §11): the DO
+ * answers an eligible clone with these *instead of* the pack, and the
+ * Worker streams the named R2 object to the client. Only
+ * {@link BUNDLE_HASH_HEADER} is kept on the client-visible response, as
+ * observable proof the fast path served the clone.
+ */
+export const BUNDLE_KEY_HEADER = "x-git-bundle-key" as const;
+export const BUNDLE_HASH_HEADER = "x-git-bundle" as const;
+export const BUNDLE_COUNT_HEADER = "x-git-bundle-count" as const;
+export const BUNDLE_SIDEBAND_HEADER = "x-git-bundle-sideband" as const;
+
+/**
  * Internal header the Worker sets (after verifying the deployer admin key
  * and stripping any inbound copy) so the DO can honor admin-key wire
  * access. Never trusted from outside — only the Worker can reach the DO.
@@ -1941,39 +1953,31 @@ export const GitRepoLive = GitRepo.make(
               clientShallow: req.clientShallow,
             })
           ) {
-            const body = yield* bucket
-              .get(bundle.key)
+            // The DO does NOT stream the pack: it hands the Worker a
+            // *marker* naming the R2 object, and the Worker streams those
+            // bytes to the client itself (DESIGN.md §11, serving plane).
+            // Auth and planning still happen here — where tokens and refs
+            // live — but no pack byte transits this object, which is the
+            // whole point of splitting the planes.
+            const found = yield* bucket
+              .head(bundle.key)
               .pipe(
                 Effect.mapError(
                   (error) =>
                     new StoreError({ reason: `bundle: ${error.message}` }),
                 ),
               );
-            if (body !== null) {
-              const packBytes = body.body.pipe(
-                Stream.mapError(
-                  (error) =>
-                    new StoreError({ reason: `bundle: ${error.message}` }),
-                ),
-              );
-              const head = pktText("NAK");
-              const bodyStream = sideband
-                ? Stream.fromArray([
-                    head,
-                    progressMessage(
-                      `Enumerating objects: ${bundle.objectCount}, done.`,
-                    ),
-                  ]).pipe(
-                    Stream.concat(packBytes.pipe(wrapSideband(1))),
-                    Stream.concat(Stream.succeed(flushPkt)),
-                  )
-                : Stream.fromArray([head]).pipe(Stream.concat(packBytes));
-              return HttpServerResponse.stream(bodyStream, {
-                contentType: resultType,
-                // Observable proof that the bundle fast path served this
-                // clone (git ignores unknown response headers); also lets
-                // an operator see cache/bundle behaviour from the outside.
-                headers: { ...noCache, "x-git-bundle": bundle.refsHash },
+            if (found !== null) {
+              return HttpServerResponse.empty({
+                status: 200,
+                headers: {
+                  ...noCache,
+                  "content-type": resultType,
+                  [BUNDLE_KEY_HEADER]: bundle.key,
+                  [BUNDLE_HASH_HEADER]: bundle.refsHash,
+                  [BUNDLE_COUNT_HEADER]: String(bundle.objectCount),
+                  [BUNDLE_SIDEBAND_HEADER]: sideband ? "1" : "0",
+                },
               });
             }
           }
