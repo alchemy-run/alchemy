@@ -13,52 +13,86 @@ import packageJson from "../../package.json" with { type: "json" };
 import { checkLatestVersion } from "./checkVersion.ts";
 import { handleCancellation } from "./handleCancellation.ts";
 
-const commandLoaders = {
-  aws: () => import("./commands/aws.ts").then(({ awsCommand }) => awsCommand),
-  cloudflare: () =>
-    import("./commands/cloudflare.ts").then(
-      ({ cloudflareCommand }) => cloudflareCommand,
-    ),
-  deploy: () =>
-    import("./commands/deploy.ts").then(({ deployCommand }) => deployCommand),
-  dev: () => import("./commands/dev.ts").then(({ devCommand }) => devCommand),
-  destroy: () =>
-    import("./commands/deploy.ts").then(({ destroyCommand }) => destroyCommand),
-  plan: () =>
-    import("./commands/deploy.ts").then(({ planCommand }) => planCommand),
-  tail: () =>
-    import("./commands/tail.ts").then(({ tailCommand }) => tailCommand),
-  logs: () =>
-    import("./commands/logs.ts").then(({ logsCommand }) => logsCommand),
-  login: () =>
-    import("./commands/login.ts").then(({ loginCommand }) => loginCommand),
-  profile: () =>
-    import("./commands/profile.ts").then(
-      ({ profileCommand }) => profileCommand,
-    ),
-  state: () =>
-    import("./commands/state.ts").then(({ stateCommand }) => stateCommand),
-  sync: () =>
-    import("./commands/sync.ts").then(({ syncCommand }) => syncCommand),
-  unsafe: () =>
-    import("./commands/nuke.ts").then(({ unsafeCommand }) => unsafeCommand),
-};
-type CommandName = keyof typeof commandLoaders;
-const commandNames = Object.keys(commandLoaders) as CommandName[];
+const commandNames = [
+  "aws",
+  "cloudflare",
+  "deploy",
+  "dev",
+  "destroy",
+  "plan",
+  "tail",
+  "logs",
+  "login",
+  "profile",
+  "state",
+  "sync",
+  "unsafe",
+] as const;
+type CommandName = (typeof commandNames)[number];
 
-const placeholder = (name: CommandName) =>
-  name === "unsafe"
-    ? Command.make(name, {}).pipe(
-        Command.withDescription("Dangerous, irreversible operations."),
-      )
-    : Command.make(name, {});
+const loadCommand = async (name: CommandName) => {
+  switch (name) {
+    case "aws": {
+      const { awsCommand } = await import("./commands/aws.ts");
+      return awsCommand;
+    }
+    case "cloudflare": {
+      const { cloudflareCommand } = await import("./commands/cloudflare.ts");
+      return cloudflareCommand;
+    }
+    case "deploy":
+    case "destroy":
+    case "plan": {
+      const commands = await import("./commands/deploy.ts");
+      return name === "deploy"
+        ? commands.deployCommand
+        : name === "destroy"
+          ? commands.destroyCommand
+          : commands.planCommand;
+    }
+    case "dev": {
+      const { devCommand } = await import("./commands/dev.ts");
+      return devCommand;
+    }
+    case "tail": {
+      const { tailCommand } = await import("./commands/tail.ts");
+      return tailCommand;
+    }
+    case "logs": {
+      const { logsCommand } = await import("./commands/logs.ts");
+      return logsCommand;
+    }
+    case "login": {
+      const { loginCommand } = await import("./commands/login.ts");
+      return loginCommand;
+    }
+    case "profile": {
+      const { profileCommand } = await import("./commands/profile.ts");
+      return profileCommand;
+    }
+    case "state": {
+      const { stateCommand } = await import("./commands/state.ts");
+      return stateCommand;
+    }
+    case "sync": {
+      const { syncCommand } = await import("./commands/sync.ts");
+      return syncCommand;
+    }
+    case "unsafe": {
+      const { unsafeCommand } = await import("./commands/nuke.ts");
+      return unsafeCommand;
+    }
+  }
+};
 
 const makeCli = async (args: readonly string[]) => {
   const selected = commandNames.find((name) => args.includes(name));
   const loadAll = args.includes("--completions");
+  // Effect needs every top-level name to render root help. Handlerless
+  // commands preserve that list without importing their implementations.
   const loadedCommands = await Promise.all(
     commandNames.map((name) =>
-      loadAll || name === selected ? commandLoaders[name]() : placeholder(name),
+      loadAll || name === selected ? loadCommand(name) : Command.make(name, {}),
     ),
   );
   const root = Command.make("alchemy", {}).pipe(
