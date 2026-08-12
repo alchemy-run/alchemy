@@ -36,6 +36,15 @@ export const packKey = (repoId: string, sha: string): string =>
   `${repoId}/packs/pack-${sha}.pack`;
 
 /**
+ * R2 key of a clone bundle for a ref snapshot (DESIGN.md §12.2):
+ * `{repoId}/bundles/bundle-{refsHash}.pack`. Immutable and
+ * content-addressed by the refs it covers, so it is safe to cache at the
+ * edge and safe to write concurrently.
+ */
+export const bundleKey = (repoId: string, refsHash: string): string =>
+  `${repoId}/bundles/bundle-${refsHash}.pack`;
+
+/**
  * R2 key for a streamed incoming push pack (v1.x upgrade seam, DESIGN.md
  * §3.6): `{repoId}/incoming/{pushId}.pack`. Reserved — unused in v1's
  * buffered ingest.

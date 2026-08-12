@@ -998,3 +998,129 @@ test(
   }).pipe(logLevel),
   { timeout: 120_000 },
 );
+
+test(
+  "clone bundles: a full clone is served from the R2 bundle, byte-identically",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const repo = yield* createRepo(url, "acme", "bundles");
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const tmp = yield* tempDir;
+
+    yield* mustGit(
+      tmp,
+      "-c",
+      "init.defaultBranch=main",
+      "clone",
+      repo.remote,
+      "work",
+    );
+    const work = path.join(tmp, "work");
+    yield* fs.writeFileString(path.join(work, "a.txt"), "one\n");
+    yield* fs.makeDirectory(path.join(work, "sub"), { recursive: true });
+    yield* fs.writeFileString(path.join(work, "sub", "b.txt"), "two\n");
+    yield* mustGit(work, "add", "-A");
+    yield* mustGit(work, "commit", "-m", "c1");
+    yield* mustGit(work, "push", "origin", "main");
+    const head = (yield* mustGit(work, "rev-parse", "HEAD")).stdout;
+
+    // The bundle is cut by the post-push alarm; wait for it to land, then
+    // clone — that clone is served straight from the R2 bundle bytes.
+    yield* Effect.sleep("4 seconds");
+    yield* mustGit(tmp, "clone", repo.remote, "fromBundle");
+    const fromBundle = path.join(tmp, "fromBundle");
+    yield* mustGit(fromBundle, "fsck", "--strict");
+    expect((yield* mustGit(fromBundle, "rev-parse", "HEAD")).stdout).toBe(head);
+    expect(yield* fs.readFileString(path.join(fromBundle, "a.txt"))).toBe(
+      "one\n",
+    );
+    expect(
+      yield* fs.readFileString(path.join(fromBundle, "sub", "b.txt")),
+    ).toBe("two\n");
+
+    // A push after the bundle was cut invalidates it: the next clone must
+    // still see the NEW commit (served dynamically, or from a fresh bundle).
+    yield* fs.writeFileString(path.join(work, "c.txt"), "three\n");
+    yield* mustGit(work, "add", "-A");
+    yield* mustGit(work, "commit", "-m", "c2");
+    yield* mustGit(work, "push", "origin", "main");
+    const head2 = (yield* mustGit(work, "rev-parse", "HEAD")).stdout;
+    yield* mustGit(tmp, "clone", repo.remote, "afterPush");
+    const afterPush = path.join(tmp, "afterPush");
+    yield* mustGit(afterPush, "fsck", "--strict");
+    expect((yield* mustGit(afterPush, "rev-parse", "HEAD")).stdout).toBe(head2);
+
+    // A single-branch clone is covered by the same (superset) bundle.
+    yield* Effect.sleep("4 seconds");
+    yield* mustGit(
+      tmp,
+      "clone",
+      "--single-branch",
+      "--branch",
+      "main",
+      repo.remote,
+      "single",
+    );
+    yield* mustGit(path.join(tmp, "single"), "fsck", "--strict");
+  }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test(
+  "clone bundles: the wire response proves the R2 fast path served it",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const repo = yield* createRepo(url, "acme", "bundle-wire");
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const tmp = yield* tempDir;
+
+    yield* mustGit(
+      tmp,
+      "-c",
+      "init.defaultBranch=main",
+      "clone",
+      repo.remote,
+      "work",
+    );
+    const work = path.join(tmp, "work");
+    yield* fs.writeFileString(path.join(work, "f.txt"), "hello\n");
+    yield* mustGit(work, "add", "-A");
+    yield* mustGit(work, "commit", "-m", "c1");
+    yield* mustGit(work, "push", "origin", "main");
+    const head = (yield* mustGit(work, "rev-parse", "HEAD")).stdout;
+
+    yield* Effect.sleep("4 seconds");
+
+    // Hand-built v0 upload-pack request: one `want`, flush, `done` — the
+    // shape a fresh clone sends. No capabilities, so the response is
+    // `NAK` followed by the raw pack.
+    const pkt = (line: string) =>
+      `${(line.length + 4).toString(16).padStart(4, "0")}${line}`;
+    const body = `${pkt(`want ${head}\n`)}0000${pkt("done\n")}`;
+    const client = yield* HttpClient.HttpClient;
+    const response = yield* client.execute(
+      HttpClientRequest.post(
+        `${url}/acme/bundle-wire.git/git-upload-pack`,
+      ).pipe(
+        HttpClientRequest.setHeaders({
+          authorization: `Bearer ${repo.token}`,
+          "content-type": "application/x-git-upload-pack-request",
+        }),
+        HttpClientRequest.bodyText(body),
+      ),
+    );
+    expect(response.status).toBe(200);
+    // The header is only set on the bundle path (DESIGN.md §12.2).
+    expect(response.headers["x-git-bundle"]).toBeDefined();
+
+    const bytes = yield* response.arrayBuffer.pipe(
+      Effect.map((buffer) => new Uint8Array(buffer)),
+    );
+    const text = new TextDecoder().decode(bytes.subarray(0, 8));
+    expect(text).toBe("0008NAK\n");
+    expect(new TextDecoder().decode(bytes.subarray(8, 12))).toBe("PACK");
+  }).pipe(logLevel),
+  { timeout: 120_000 },
+);

@@ -97,6 +97,7 @@ import {
 import * as Zlib from "./git/Zlib.ts";
 import { runImport, type ImportSource } from "./jobs/Import.ts";
 import { runForkJob, snapshotStream, type SnapshotChunk } from "./jobs/Fork.ts";
+import { bundleCovers, runBundleJob, type BundleInfo } from "./jobs/Bundle.ts";
 import { runCompactJob, shouldCompact } from "./jobs/Compact.ts";
 import { runPurgeJob } from "./jobs/Purge.ts";
 import { Registry, REGISTRY_DO_NAME, ulid } from "./RegistryObject.ts";
@@ -1919,6 +1920,58 @@ export const GitRepoLive = GitRepo.make(
             });
           }
 
+          // Bundle fast path (DESIGN.md §12.2): a full clone whose wants are
+          // all covered by the current bundle is served as bytes straight
+          // from R2 — no closure walk, no per-object reads. `bundleCovers`
+          // refuses anything with haves/depth/shallow state.
+          const bundle = yield* readBundle;
+          if (
+            req.done &&
+            bundle !== undefined &&
+            bundleCovers(bundle, {
+              wants: req.wants,
+              haves: req.haves,
+              depth: req.depth,
+              clientShallow: req.clientShallow,
+            })
+          ) {
+            const body = yield* bucket
+              .get(bundle.key)
+              .pipe(
+                Effect.mapError(
+                  (error) =>
+                    new StoreError({ reason: `bundle: ${error.message}` }),
+                ),
+              );
+            if (body !== null) {
+              const packBytes = body.body.pipe(
+                Stream.mapError(
+                  (error) =>
+                    new StoreError({ reason: `bundle: ${error.message}` }),
+                ),
+              );
+              const head = pktText("NAK");
+              const bodyStream = sideband
+                ? Stream.fromArray([
+                    head,
+                    progressMessage(
+                      `Enumerating objects: ${bundle.objectCount}, done.`,
+                    ),
+                  ]).pipe(
+                    Stream.concat(packBytes.pipe(wrapSideband(1))),
+                    Stream.concat(Stream.succeed(flushPkt)),
+                  )
+                : Stream.fromArray([head]).pipe(Stream.concat(packBytes));
+              return HttpServerResponse.stream(bodyStream, {
+                contentType: resultType,
+                // Observable proof that the bundle fast path served this
+                // clone (git ignores unknown response headers); also lets
+                // an operator see cache/bundle behaviour from the outside.
+                headers: { ...noCache, "x-git-bundle": bundle.refsHash },
+              });
+            }
+          }
+
           // A depth-limited import leaves the repo itself shallow; those
           // boundary commits must bound every walk and surface as
           // `shallow` lines so clones inherit the shallowness (fsck-clean).
@@ -2211,6 +2264,11 @@ export const GitRepoLive = GitRepo.make(
                       )
                     : Effect.void,
                 ),
+                // Re-cut the clone bundle for the new ref snapshot. Debounced
+                // by the alarm itself: rapid-fire pushes coalesce into one
+                // run because the job row is upserted, not queued.
+                Effect.flatMap(() => upsertJob("bundle", null)),
+                Effect.flatMap(() => armAlarmAt(Date.now() + 2_000)),
                 Effect.ignore,
               ),
             );
@@ -2251,6 +2309,50 @@ export const GitRepoLive = GitRepo.make(
           return;
         }
         yield* sql.run(`DELETE FROM jobs WHERE kind = 'compact'`);
+      });
+
+      /** The repo's current clone bundle, if one has been cut. */
+      const readBundle: Effect.Effect<BundleInfo | undefined, StoreError> =
+        getConfig("bundle").pipe(
+          Effect.map((value) =>
+            value === undefined ? undefined : (JSON.parse(value) as BundleInfo),
+          ),
+        );
+
+      /**
+       * Cuts a clone bundle for the current refs (DESIGN.md §12.2) so future
+       * clones are served as bytes from R2 instead of a fresh closure walk.
+       */
+      const runBundleAlarm = Effect.gen(function* () {
+        const meta = yield* requireMeta;
+        const objects = storeFor(meta.repoId);
+        const refRows = yield* sql.all<RefRow>(
+          `SELECT name, oid FROM refs ORDER BY name`,
+        );
+        const shallowRoots = JSON.parse(
+          (yield* getConfig("shallow_roots")) ?? "[]",
+        ) as ReadonlyArray<string>;
+        const closure = yield* computeClosure({ sql, objects })({
+          wants: refRows.map((ref) => ref.oid),
+          haves: [],
+          clientShallow: [],
+          repoShallow: shallowRoots,
+        }).pipe(
+          Effect.catchTag("ManifestTooLarge", (error) =>
+            Effect.fail(new StoreError({ reason: `bundle: ${error._tag}` })),
+          ),
+        );
+        const info = yield* runBundleJob({
+          repoId: meta.repoId,
+          refs: refRows.map((ref) => ({ name: ref.name, oid: ref.oid })),
+          entries: closure.entries,
+          packStream: (entries) => packStream(entries, objects),
+          bucket,
+        });
+        if (info !== undefined) {
+          yield* setConfig("bundle", JSON.stringify(info));
+        }
+        yield* sql.run(`DELETE FROM jobs WHERE kind = 'bundle'`);
       });
 
       const runImportAlarm = (job: JobRow) =>
@@ -3010,6 +3112,9 @@ export const GitRepoLive = GitRepo.make(
                     return false;
                   case "compact":
                     yield* runCompactAlarm;
+                    return false;
+                  case "bundle":
+                    yield* runBundleAlarm;
                     return false;
                   default:
                     yield* sql.run(`DELETE FROM jobs WHERE kind = ?`, job.kind);
