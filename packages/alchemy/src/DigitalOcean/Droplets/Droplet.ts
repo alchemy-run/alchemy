@@ -37,6 +37,9 @@ import type { Providers } from "../Providers.ts";
  * Datacenter region slug. The union is open (`string & {}`) so regions
  * newer than this list still typecheck — DigitalOcean adds them faster
  * than any published enum keeps up.
+ *
+ * Sourced from the live `GET /v2/regions` API (`available: true` slugs
+ * only), 2026-08-12.
  */
 export type RegionSlug =
   | "ams3"
