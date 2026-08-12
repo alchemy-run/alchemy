@@ -23,6 +23,8 @@ minimumReleaseAgeExcludes = [
   "@distilled.cloud/core",
   "@distilled.cloud/neon",
   "@distilled.cloud/planetscale",
+  # TODO: remove once we pin a drizzle 1.0.0-rc.5 stable that is >3 days old —
+  # excluded because we track fresh rc5-branch builds for effect beta.105 support.
   "drizzle-kit",
   "drizzle-orm",
   "effect",
