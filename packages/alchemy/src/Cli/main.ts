@@ -53,30 +53,14 @@ const placeholder = (name: CommandName) =>
       )
     : Command.make(name, {});
 
-const selectedCommand = (args: readonly string[]): CommandName | undefined => {
-  for (let index = 0; index < args.length; index++) {
-    const arg = args[index]!;
-    if (arg === "--log-level" || arg === "--completions") {
-      index++;
-      continue;
-    }
-    if (arg.startsWith("-")) continue;
-    return commandNames.includes(arg as CommandName)
-      ? (arg as CommandName)
-      : undefined;
-  }
-  return undefined;
-};
-
 const makeCli = async (args: readonly string[]) => {
-  const selected = selectedCommand(args);
-  const loadedCommands = args.includes("--completions")
-    ? await Promise.all(commandNames.map((name) => commandLoaders[name]()))
-    : await Promise.all(
-        commandNames.map((name) =>
-          name === selected ? commandLoaders[name]() : placeholder(name),
-        ),
-      );
+  const selected = commandNames.find((name) => args.includes(name));
+  const loadAll = args.includes("--completions");
+  const loadedCommands = await Promise.all(
+    commandNames.map((name) =>
+      loadAll || name === selected ? commandLoaders[name]() : placeholder(name),
+    ),
+  );
   const root = Command.make("alchemy", {}).pipe(
     Command.withSubcommands(loadedCommands),
   );
