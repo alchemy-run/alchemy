@@ -2,8 +2,8 @@ import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
+import * as accounts from "@distilled.cloud/cloudflare/accounts";
 import * as pipelines from "@distilled.cloud/cloudflare/pipelines";
-import * as user from "@distilled.cloud/cloudflare/user";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -53,7 +53,12 @@ const r2Credentials = Effect.gen(function* () {
     );
   }
   const token = Redacted.value(creds.apiToken);
-  const verified = yield* retryAuthBlip(user.verifyToken({}));
+  // Account-scoped rather than `user.verifyToken({})`: an account-owned
+  // token (what `alchemy cloudflare create-token` mints) is rejected by
+  // the user endpoint with `Invalid API Token`.
+  const verified = yield* retryAuthBlip(
+    accounts.verifyToken({ accountId: creds.accountId }),
+  );
   const secretAccessKey = yield* Effect.sync(() =>
     crypto.createHash("sha256").update(token).digest("hex"),
   );
@@ -163,7 +168,7 @@ test.provider(
       expect(binding).toMatchObject({
         type: "pipelines",
         name: "LEGACY",
-        pipeline: pipeline.name,
+        pipeline: pipeline.pipelineId,
       });
 
       yield* stack.destroy();

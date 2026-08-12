@@ -60,7 +60,15 @@ const sendEvent = (url: string, nonce: string) =>
     }),
   );
 
-const stack = beforeAll(deploy(Stack));
+const stack = beforeAll(
+  deploy(Stack).pipe(
+    Effect.retry({
+      while: (e) => String(e).includes("Unable to authenticate request"),
+      schedule: Schedule.exponential("1 second"),
+      times: 6,
+    }),
+  ),
+);
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 test(
