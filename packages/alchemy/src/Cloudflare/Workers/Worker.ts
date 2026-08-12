@@ -565,7 +565,10 @@ export interface WorkerVersionOptions {
 }
 
 export interface WorkerProps<
-  Bindings extends WorkerBindingProps = any,
+  // PERF: unconstrained for the same reason as `Worker<Bindings>` above —
+  // the `extends WorkerBindingProps` proof is expensive for generic mapped
+  // types and the call-site overloads already constrain user input.
+  Bindings = any,
   Assets extends WorkerAssetsConfig | undefined =
     | WorkerAssetsConfig
     | undefined,
@@ -1033,7 +1036,14 @@ export interface ViteOptions {
   };
 }
 
-export type Worker<Bindings extends WorkerBindings = any> = Resource<
+// PERF: deliberately NOT `Bindings extends WorkerBindings`. The constraint
+// forced the checker to prove the generic `NormalizedBindings<...>` mapped
+// type assignable to the ~30-member `WorkerBindingResource` union at every
+// `Worker<...>` instantiation — a single 28s structural relation that was 45%
+// of the whole program's check time. Input is already constrained at the
+// call boundary (`Bindings extends WorkerBindingProps`), so this type
+// argument is only ever produced from validated shapes.
+export type Worker<Bindings = any> = Resource<
   WorkerTypeId,
   WorkerProps<Bindings>,
   {

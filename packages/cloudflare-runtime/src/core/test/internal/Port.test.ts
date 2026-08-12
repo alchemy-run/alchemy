@@ -74,3 +74,27 @@ describe("Port.isUnsupportedHostError", () => {
     ).toBe(false);
   });
 });
+
+describe("Port.viteSupportsPortZero", () => {
+  it("accepts 8.2.1 and later", () => {
+    expect(Port.viteSupportsPortZero("8.2.1")).toBe(true);
+    expect(Port.viteSupportsPortZero("8.2.2")).toBe(true);
+    expect(Port.viteSupportsPortZero("8.3.0")).toBe(true);
+    expect(Port.viteSupportsPortZero("9.0.0")).toBe(true);
+    expect(Port.viteSupportsPortZero("9.0.0-beta.1")).toBe(true);
+  });
+
+  it("rejects versions before 8.2.1", () => {
+    expect(Port.viteSupportsPortZero("8.2.0")).toBe(false);
+    expect(Port.viteSupportsPortZero("8.1.9")).toBe(false);
+    expect(Port.viteSupportsPortZero("7.2.6")).toBe(false);
+    expect(Port.viteSupportsPortZero("6.0.0")).toBe(false);
+  });
+
+  it("rejects missing or malformed versions", () => {
+    expect(Port.viteSupportsPortZero(undefined)).toBe(false);
+    expect(Port.viteSupportsPortZero(null)).toBe(false);
+    expect(Port.viteSupportsPortZero("")).toBe(false);
+    expect(Port.viteSupportsPortZero("next")).toBe(false);
+  });
+});

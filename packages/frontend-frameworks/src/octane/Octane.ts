@@ -42,6 +42,7 @@ export interface ResolvedOctaneConfigSlice {
 
 /** The structural slice of the project's `vite` module this package drives. */
 export interface OctaneViteModule {
+  readonly version?: string;
   readonly build: (config: Record<string, unknown>) => Promise<unknown>;
   readonly createServer: (
     config: Record<string, unknown>,
@@ -299,7 +300,12 @@ export const make: (
   const dev: Framework["Service"]["dev"] = Effect.fn(function* (devOptions) {
     const root = devOptions?.root ?? baseRoot;
     const vite = yield* loadVite(root);
-    const port = devOptions?.port ?? options?.dev?.port ?? 0;
+    // `port: 0` (true OS-assigned) on Vite >= 8.2.1, probed ephemeral port
+    // on older Vite — see `resolveViteDevPort`.
+    const port = yield* FrameworkCore.resolveViteDevPort(
+      vite.version,
+      devOptions?.port ?? options?.dev?.port,
+    );
 
     const server = yield* Effect.acquireRelease(
       Effect.tryPromise({

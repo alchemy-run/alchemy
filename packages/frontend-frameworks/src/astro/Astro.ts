@@ -274,7 +274,28 @@ export const make = <TargetConfig = unknown>(
         const root = yield* resolveRoot(devOptions?.root);
         const target = yield* resolveTarget(root);
         const astro = yield* loadAstro(root);
-        const config = makeConfig(root, target, { port: devOptions?.port });
+        // `port: 0` (true OS-assigned) when the Vite under Astro is
+        // >= 8.2.1, probed ephemeral port otherwise — see
+        // `resolveViteDevPort`. Astro's dev server runs on Astro's own
+        // Vite dependency, so the version is resolved from the astro
+        // package's directory, not the project root.
+        const viteVersion = yield* FrameworkCore.resolveProjectPackageDirectory(
+          root,
+          "astro",
+        ).pipe(
+          Effect.flatMap((astroDirectory) =>
+            FrameworkCore.resolveInstalledPackageVersion(
+              astroDirectory,
+              "vite",
+            ),
+          ),
+          Effect.orElseSucceed(() => undefined),
+        );
+        const port = yield* FrameworkCore.resolveViteDevPort(
+          viteVersion,
+          devOptions?.port,
+        );
+        const config = makeConfig(root, target, { port });
         const server = yield* Effect.acquireRelease(
           Effect.tryPromise({
             try: async () => await astro.dev(config),
