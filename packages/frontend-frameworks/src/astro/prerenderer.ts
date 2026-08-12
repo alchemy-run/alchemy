@@ -43,6 +43,7 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as NodeFs from "node:fs/promises";
 import * as NodePath from "node:path";
 import { fileURLToPath } from "node:url";
+import { PlatformServices } from "../Platform.ts";
 import type {
   PrerenderRequest,
   StaticPathsResponse,
@@ -305,19 +306,6 @@ const moduleForFile = async (
   }
 };
 
-const importPlatformServices = Layer.unwrap(
-  Effect.promise(async () => {
-    try {
-      const BunServices = await import("@effect/platform-bun/BunServices");
-      return BunServices.layer;
-    } catch {
-      // ignore and fall back to NodeServices
-    }
-    const NodeServices = await import("@effect/platform-node/NodeServices");
-    return NodeServices.layer;
-  }),
-);
-
 /**
  * The default runtime context, mirroring the Cloudflare vite plugin's dev
  * server (`createDefaultContext`): the full `layerRuntime` stack, so local
@@ -333,7 +321,7 @@ const buildDefaultContext = (
       accountId: process.env.CLOUDFLARE_ACCOUNT_ID!,
     },
   }).pipe(
-    Layer.provideMerge(importPlatformServices),
+    Layer.provideMerge(PlatformServices),
     Layer.provide(Layer.merge(Credentials.fromEnv(), FetchHttpClient.layer)),
     Layer.buildWithScope(scope),
     Effect.runPromise,
