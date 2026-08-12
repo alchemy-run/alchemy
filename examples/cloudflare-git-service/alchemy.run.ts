@@ -24,6 +24,16 @@
  * git push origin main
  * ```
  */
-import { GitStack } from "@alchemy.run/git-service/Stack";
+import { GitService } from "@alchemy.run/git-service";
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
 
-export default GitStack({ name: "GitServiceExample" });
+export default Alchemy.Stack(
+  "GitServiceExample",
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  Effect.gen(function* () {
+    const git = yield* GitService();
+    return { url: git.url };
+  }),
+);

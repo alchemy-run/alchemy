@@ -6,7 +6,8 @@
  * - The REST contract ({@link GitApi}) with its schemas and tagged errors.
  * - Auth plumbing (credential parsing, token mint/hash helpers).
  * - The deployable pieces: {@link GitWorker}, the {@link GitRepo} /
- *   {@link Registry} Durable Objects, and the {@link GitStack} factory.
+ *   {@link Registry} Durable Objects, and the {@link GitService} construct
+ *   function (yielded inside your own `Alchemy.Stack`).
  *
  * Internals (wire-protocol codecs under `git/`, storage under `store/`,
  * alarm jobs under `jobs/`) are deliberately not re-exported here — deep
@@ -28,4 +29,4 @@ export {
   REGISTRY_DO_NAME,
   RESERVED_OWNERS,
 } from "./RegistryObject.ts";
-export { GitStack, type GitStackOptions } from "./Stack.ts";
+export { GitService, type GitServiceOptions } from "./Service.ts";

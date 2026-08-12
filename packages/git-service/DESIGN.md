@@ -50,7 +50,7 @@ Every place the two proposals disagreed, with the decision and the one-line reas
 | Repos | All private in v1. Anonymous = 401. `readOnly` flag rejects writes with a typed 403 | Cuts the visibility model; auth is one code path. |
 | Shallow | `shallow` + `deepen <n>` (depth only) in v1 | Without it `actions/checkout` (depth=1 default) fails hard. Bounded BFS + boundary lines — cheap. `deepen-since`/`deepen-not` cut. |
 | Fork / import / delete | Async DO-alarm jobs; status via `Repo.status`; forks share parent R2 keys | Reuses DO-resident ingest and purge code; zero new infrastructure; R2 immutability makes sharing safe. |
-| Free Workers plan | Unsupported | 10 ms CPU cannot inflate a pack. `GitStack` sets `limits.cpu_ms = 300_000`. |
+| Free Workers plan | Unsupported | 10 ms CPU cannot inflate a pack. `GitWorker` sets `limits.cpu_ms = 300_000`. |
 
 ---
 
@@ -590,7 +590,7 @@ packages/git-service/
   tsconfig.json               # composite, extends ../../tsconfig.base.json, refs ../alchemy, paths @/* → src/*
   tsconfig.test.json
   src/
-    index.ts                  # barrel: Api contract, error classes, GitWorker, Repo, Registry, GitStack
+    index.ts                  # barrel: Api contract, error classes, GitWorker, Repo, Registry, GitService
     Api.ts                    # §5 verbatim — HttpApi contract + schemas + tagged errors + GitAuth tag
     Auth.ts                   # Credentials service, GitAuthLive, credential parsing (Basic/Bearer),
                               # admin-key timing-safe compare (crypto.subtle.timingSafeEqual)
@@ -606,8 +606,9 @@ packages/git-service/
                               #   + in-memory push Semaphore
     RegistryObject.ts         # class Registry DO: createRepo, resolve, list, forkLineage,
                               #   bumpForkCount, markDeleted, remove
-    Stack.ts                  # GitStack({ name?, bucket? }): Alchemy.Stack wiring GitWorker + R2 Bucket +
-                              #   DO namespaces + admin-key secret; returns { url }
+    Service.ts                # GitService(options?): a function returning an Effect the user
+                              #   yields inside their OWN Alchemy.Stack; deploys GitWorker (+ DOs + R2
+                              #   transitively) and returns { worker, url }. No Stack is shipped.
     git/                      # pure protocol/codec modules — no DO/R2 imports, unit-testable
       Pkt.ts                  # pkt-line read/write, flush/delim, ERR pkt; Stream transforms
       Sideband.ts             # band-1/2/3 framing transform (65515 cap)
@@ -631,7 +632,7 @@ packages/git-service/
       Fork.ts                 # alarm job: parent snapshotRows Stream → batched inserts, r2_key sharing
       Purge.ts                # alarm job: bounded R2 prefix delete loop (fork-count-gated), deleteAll, Registry removal
   test/
-    fixtures/stack.ts         # Alchemy.Stack via GitStack — deployed once per suite
+    fixtures/stack.ts         # user-authored Alchemy.Stack over GitService() — one per suite
     fixtures/packs/*.pack     # generated once by real git, checked in (never at test time)
     codec.test.ts             # pure: pkt-line, varints, delta apply, object hashing, tree sort
     pack.test.ts              # pure: parse/write round-trips against checked-in fixture packs
@@ -640,7 +641,7 @@ packages/git-service/
     GitProtocol.wire.test.ts  # isomorphic-git in-process client: malformed packs, forced thin REF_DELTA,
                               # ERR-pkt / band-3 assertions
 examples/git-service/
-  alchemy.run.ts              # default-exports GitStack(...)
+  alchemy.run.ts              # user-authored Alchemy.Stack yielding GitService()
   package.json                # alchemy deploy | dev | destroy | logs | tail
 ```
 

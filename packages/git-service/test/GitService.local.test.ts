@@ -35,7 +35,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { GitApi, type Oid } from "../src/Api.ts";
-import GitWorker from "../src/GitWorker.ts";
+import { GitService } from "../src/Service.ts";
 import { TEST_ADMIN_TOKEN } from "./fixtures/stack.ts";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
@@ -51,16 +51,17 @@ const logLevel = Effect.provideService(
 );
 
 // The local suite must not touch the cloud, so it composes its own Stack over
-// `Alchemy.localState()` rather than reusing `GitStack` (whose state store is
-// `Cloudflare.state()`). Importing `./fixtures/stack.ts` above installed the
+// `Alchemy.localState()` — the same user pattern as production, just with a
+// local state store: yield the `GitService()` construct inside your own
+// Stack. Importing `./fixtures/stack.ts` above installed the
 // TEST_ADMIN_TOKEN into the deployer env before this plan resolves
 // `Config.redacted("GIT_SERVICE_ADMIN_TOKEN")`.
 const LocalStack = Alchemy.Stack(
   "GitServiceLocalStack",
   { providers: Cloudflare.providers(), state: Alchemy.localState() },
   Effect.gen(function* () {
-    const worker = yield* GitWorker;
-    return { url: worker.url.as<string>() };
+    const git = yield* GitService();
+    return { url: git.url };
   }),
 );
 

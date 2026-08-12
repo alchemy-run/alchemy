@@ -65,7 +65,7 @@
     //   "path": "./website/tsconfig.json"
     // },
     {
-      "path": "./examples/git-service/tsconfig.json"
+      "path": "./examples/cloudflare-git-service/tsconfig.json"
     },
     {
       "path": "./examples/aws-ec2/tsconfig.json"

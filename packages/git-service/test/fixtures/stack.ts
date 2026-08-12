@@ -1,11 +1,12 @@
 /**
  * Shared test-stack fixture for the git-service suites (DESIGN.md §9).
  *
- * Every suite deploys the same {@link GitWorker}-rooted stack, but under its
- * own stack name so concurrently-running suites never share (or race on) a
- * deployment. The cloud suites use {@link makeTestStack} (Cloudflare state,
- * the shape `GitStack` ships); the local dev suite composes its own
- * `Alchemy.Stack` with `Alchemy.localState()` directly in the test file.
+ * git-service ships no Stack of its own — {@link GitService} is a function
+ * returning an Effect that users instantiate inside their own
+ * `Alchemy.Stack`, and these suites do exactly that. Every suite deploys
+ * under its own stack name so concurrently-running suites never share (or
+ * race on) a deployment. The local dev suite composes its own Stack with
+ * `Alchemy.localState()` directly in the test file.
  *
  * The Worker resolves its admin secret from the deployer environment via
  * `Config.redacted("GIT_SERVICE_ADMIN_TOKEN")` at deploy time. So that suites
@@ -13,8 +14,11 @@
  * installed into `process.env` at module load — before any deploy plans run —
  * unless the caller already exported one.
  */
-import { GitStack } from "../../src/Stack.ts";
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
 import { ADMIN_TOKEN_CONFIG_KEY } from "../../src/GitWorker.ts";
+import { GitService } from "../../src/Service.ts";
 
 /**
  * The admin key every suite authenticates with. Honors a caller-provided
@@ -39,4 +43,12 @@ process.env[ADMIN_TOKEN_CONFIG_KEY] ??= TEST_ADMIN_TOKEN;
  * afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
  * ```
  */
-export const makeTestStack = (name: string) => GitStack({ name });
+export const makeTestStack = (name: string) =>
+  Alchemy.Stack(
+    name,
+    { providers: Cloudflare.providers(), state: Cloudflare.state() },
+    Effect.gen(function* () {
+      const git = yield* GitService();
+      return { url: git.url };
+    }),
+  );
