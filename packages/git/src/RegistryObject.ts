@@ -88,6 +88,21 @@ export interface RegistryEntry {
   readonly createdAt: number;
   /** Soft-delete marker set while the purge alarm runs, else `null`. */
   readonly deletedAt: number | null;
+  /**
+   * Denormalised display fields, pushed by the Repo DO on change so
+   * `repos.list` renders a page without waking one DO per row
+   * (DESIGN.md §15 bottleneck 7). The DO stays the source of truth.
+   */
+  readonly defaultBranch: string;
+  readonly readOnly: boolean;
+  readonly status: string;
+}
+
+/** Summary fields the Repo DO pushes to the Registry when they change. */
+export interface RepoSummary {
+  readonly defaultBranch: string;
+  readonly readOnly: boolean;
+  readonly status: string;
 }
 
 /** Input of {@link RegistryShape.createRepo}. */
@@ -174,6 +189,15 @@ export interface RegistryShape {
   readonly removeRow: (
     repoId: string,
   ) => Effect.Effect<void, StoreError, RuntimeContext>;
+  /**
+   * Refreshes the denormalised display fields for a repo. Called by the
+   * Repo DO whenever they change (create, metadata update, status
+   * transition), so listing never has to consult the DO.
+   */
+  readonly updateSummary: (
+    repoId: string,
+    summary: RepoSummary,
+  ) => Effect.Effect<void, StoreError, RuntimeContext>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -189,6 +213,9 @@ const toEntry = (row: RegistryRepoRow): RegistryEntry => ({
   forkCount: row.fork_count,
   createdAt: row.created_at,
   deletedAt: row.deleted_at,
+  defaultBranch: row.default_branch,
+  readOnly: row.read_only === 1,
+  status: row.status,
 });
 
 /** Encodes/decodes the opaque list cursor: base64url of `owner\0name`. */
@@ -281,6 +308,9 @@ export const RegistryLive = Registry.make(
                 owner,
                 name,
                 repoId,
+                defaultBranch: "main",
+                readOnly: false,
+                status: "ready",
                 description: input.description ?? null,
                 forkOf: input.forkOf ?? null,
                 forkCount: 0,
@@ -373,6 +403,20 @@ export const RegistryLive = Registry.make(
           yield* sql.run(
             `UPDATE repos SET deleted_at = ? WHERE repo_id = ? AND deleted_at IS NULL`,
             Date.now(),
+            repoId,
+          );
+        }),
+
+        updateSummary: Effect.fn(function* (
+          repoId: string,
+          summary: RepoSummary,
+        ) {
+          yield* sql.run(
+            `UPDATE repos SET default_branch = ?, read_only = ?, status = ?
+              WHERE repo_id = ?`,
+            summary.defaultBranch,
+            summary.readOnly ? 1 : 0,
+            summary.status,
             repoId,
           );
         }),

@@ -222,11 +222,12 @@ const registryFallbackRepo = (entry: RegistryEntry): Repo =>
     owner: entry.owner,
     name: entry.name,
     repoId: entry.repoId,
-    defaultBranch: "main",
+    defaultBranch: entry.defaultBranch,
     description: entry.description,
-    readOnly: false,
+    readOnly: entry.readOnly,
     forkOf: entry.forkOf,
-    status: entry.deletedAt !== null ? "deleting" : "ready",
+    status:
+      entry.deletedAt !== null ? "deleting" : (entry.status as Repo["status"]),
     createdAt: entry.createdAt,
     // No DO to ask (unseeded or mid-purge) — report an empty store.
     objects: new ObjectStats({ loose: 0, packed: 0, r2: 0, bytes: 0 }),
@@ -559,22 +560,12 @@ export default class GitWorker extends Cloudflare.Worker<GitWorker>()(
               .pipe(
                 Effect.catchTag("StoreError", (error) => Effect.die(error)),
               );
-            const items = yield* Effect.forEach(
-              page.items,
-              (entry) =>
-                repos
-                  .getByName(entry.repoId)
-                  .getRepoMeta({ kind: "admin" })
-                  .pipe(
-                    Effect.map(toRepo),
-                    Effect.catchTag(
-                      ["RepoNotFound", "Unauthorized", "Forbidden"],
-                      () => Effect.succeed(registryFallbackRepo(entry)),
-                    ),
-                    Effect.catchTag("StoreError", (error) => Effect.die(error)),
-                  ),
-              { concurrency: 10 },
-            );
+            // Rendered straight from the Registry's denormalised columns:
+            // listing must NOT wake one Durable Object per row (measured at
+            // ~30 ms per row — DESIGN.md §14.1 / §15 bottleneck 7). Live
+            // `objects` stats need the DO, so a listing reports zeros and
+            // callers who want them read the repo directly.
+            const items = page.items.map(registryFallbackRepo);
             return {
               items,
               nextCursor: page.nextCursor,

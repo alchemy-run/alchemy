@@ -121,6 +121,13 @@ export const REGISTRY_DDL: ReadonlyArray<string> = [
   fork_count  INTEGER NOT NULL DEFAULT 0,
   created_at  INTEGER NOT NULL,
   deleted_at  INTEGER,
+  -- Denormalised display fields, pushed here by the Repo DO whenever they
+  -- change (DESIGN.md section 15, bottleneck 7). The DO remains the source
+  -- of truth; these exist so listing repos does not have to wake one
+  -- Durable Object per listed row just to render a page.
+  default_branch TEXT NOT NULL DEFAULT 'main',
+  read_only      INTEGER NOT NULL DEFAULT 0,
+  status         TEXT NOT NULL DEFAULT 'ready',
   PRIMARY KEY (owner, name)
 ) WITHOUT ROWID`,
 ];
@@ -219,6 +226,10 @@ export interface RegistryRepoRow extends Record<string, SqlStorageValue> {
   readonly fork_count: number;
   readonly created_at: number;
   readonly deleted_at: number | null;
+  /** Denormalised from the Repo DO — see the DDL comment. */
+  readonly default_branch: string;
+  readonly read_only: number;
+  readonly status: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -429,8 +440,25 @@ export const initRepoSchema = Effect.fn(function* (sql: SqlClient) {
  * Idempotently applies the Registry DO DDL ({@link REGISTRY_DDL}). Run in
  * the Registry DO's outer init effect.
  */
+/**
+ * Additive column migrations for Registry tables created by an earlier
+ * version. `CREATE TABLE IF NOT EXISTS` leaves an existing table untouched,
+ * so new columns must be added explicitly; re-running is safe because
+ * "duplicate column name" is swallowed.
+ */
+const REGISTRY_MIGRATIONS: ReadonlyArray<string> = [
+  `ALTER TABLE repos ADD COLUMN default_branch TEXT NOT NULL DEFAULT 'main'`,
+  `ALTER TABLE repos ADD COLUMN read_only INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE repos ADD COLUMN status TEXT NOT NULL DEFAULT 'ready'`,
+];
+
 export const initRegistrySchema = Effect.fn(function* (sql: SqlClient) {
   for (const statement of REGISTRY_DDL) {
     yield* sql.run(statement);
+  }
+  for (const statement of REGISTRY_MIGRATIONS) {
+    // Already-applied migrations fail with "duplicate column name" — that
+    // is the success case on every run after the first.
+    yield* sql.run(statement).pipe(Effect.ignore);
   }
 });

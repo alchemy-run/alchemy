@@ -1759,6 +1759,12 @@ export const GitRepoLive = GitRepo.make(
           yield* setConfig("fork_of", input.forkOf);
         }
         yield* setConfig("status", status);
+        yield* readMeta.pipe(
+          Effect.flatMap((meta) =>
+            meta === undefined ? Effect.void : syncSummary(meta),
+          ),
+          Effect.ignore,
+        );
         const existing = yield* getConfig("created_at");
         if (existing === undefined) {
           yield* setConfig("created_at", String(createdAt));
@@ -2312,6 +2318,32 @@ export const GitRepoLive = GitRepo.make(
       });
 
       /** The repo's current clone bundle, if one has been cut. */
+      /**
+       * Pushes the denormalised display fields to the Registry so listing
+       * repos never has to wake this DO (DESIGN.md §15 bottleneck 7).
+       * Best-effort: the DO remains the source of truth, and a failed
+       * refresh only makes a listing momentarily stale.
+       */
+      const syncSummary = Effect.fn(function* (meta: RepoMetaData) {
+        yield* registry
+          .getByName(REGISTRY_DO_NAME)
+          .updateSummary(meta.repoId, {
+            defaultBranch: meta.defaultBranch,
+            readOnly: meta.readOnly,
+            status: meta.status,
+          })
+          .pipe(Effect.ignore);
+      });
+
+      /** Re-reads metadata and refreshes the Registry summary. */
+      const refreshSummary: Effect.Effect<void, never, RuntimeContext> =
+        readMeta.pipe(
+          Effect.flatMap((meta) =>
+            meta === undefined ? Effect.void : syncSummary(meta),
+          ),
+          Effect.ignore,
+        );
+
       const readBundle: Effect.Effect<BundleInfo | undefined, StoreError> =
         getConfig("bundle").pipe(
           Effect.map((value) =>
@@ -2377,6 +2409,8 @@ export const GitRepoLive = GitRepo.make(
               );
               // Give the empty repo back rather than wedging in 'importing'.
               yield* setConfig("status", "ready");
+              yield* refreshSummary;
+              yield* refreshSummary;
               return;
             }
             yield* sql.run(
@@ -2459,6 +2493,7 @@ export const GitRepoLive = GitRepo.make(
             yield* setConfig("default_branch", result.defaultBranch);
           }
           yield* setConfig("status", "ready");
+          yield* refreshSummary;
           yield* sql.run(`DELETE FROM jobs WHERE kind = 'import'`);
         });
 
@@ -2486,6 +2521,8 @@ export const GitRepoLive = GitRepo.make(
                 Date.now(),
               );
               yield* setConfig("status", "ready");
+              yield* refreshSummary;
+              yield* refreshSummary;
               return;
             }
             yield* sql.run(
@@ -2497,6 +2534,7 @@ export const GitRepoLive = GitRepo.make(
             return;
           }
           yield* setConfig("status", "ready");
+          yield* refreshSummary;
           yield* sql.run(`DELETE FROM jobs WHERE kind = 'fork'`);
         });
 
@@ -2569,6 +2607,7 @@ export const GitRepoLive = GitRepo.make(
           yield* requireMeta;
           yield* authorize(auth, "admin");
           yield* setConfig("status", "deleting");
+          yield* refreshSummary;
           yield* upsertJob("purge", null);
           yield* armAlarmAt(Date.now());
         }),
@@ -2611,7 +2650,10 @@ export const GitRepoLive = GitRepo.make(
             yield* setConfig("read_only", patch.readOnly ? "1" : "0");
           }
           const updated = yield* readMeta;
-          return updated ?? meta;
+          const result = updated ?? meta;
+          // Keep the Registry's denormalised copy in step (listing reads it).
+          yield* syncSummary(result);
+          return result;
         }),
 
         createToken: Effect.fn(function* (
