@@ -72,11 +72,13 @@ const createNamespaceName = (
       return props.namespace;
     }
     // Namespace names allow lowercase letters, numbers, and underscores only —
-    // no hyphens — so translate the DNS-style physical name.
+    // no hyphens — so translate the DNS-style physical name. Namespace names
+    // must not start with the reserved prefix `aws`.
     const base = yield* createPhysicalName({
       id,
       maxLength: 60,
       lowercase: true,
+      forbiddenPrefixes: ["aws"],
     });
     return base.replaceAll("-", "_");
   });

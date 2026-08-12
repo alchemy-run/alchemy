@@ -63,6 +63,15 @@ export interface ConfigureContext {
    * `{ method: "env" }`) so unattended runs work.
    */
   readonly ci: boolean;
+
+  /**
+   * Optional human-readable explanation of WHY credentials are being
+   * demanded right now — e.g. which resources in a dev plan require the
+   * real cloud (see `Auth/Demand.ts`). Interactive `configure`
+   * implementations should display it before their first prompt so the
+   * user knows what triggered the flow.
+   */
+  readonly reason?: string;
 }
 
 export interface AuthProviderImpl<

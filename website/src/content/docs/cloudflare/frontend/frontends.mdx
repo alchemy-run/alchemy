@@ -9,21 +9,26 @@ sidebar:
 Alchemy deploys frontends to Cloudflare with a family of
 `Cloudflare.Website` resources. Each one builds your project
 programmatically and deploys it as a Worker — server bundle plus
-static assets — with zero configuration files: no `wrangler.json`,
-no adapter setup.
+static assets — with no Cloudflare-specific configuration: no
+`wrangler.json`, no adapter setup. Your framework's own config file
+(`vite.config.ts`, `astro.config.*`, `nuxt.config.ts`, ...) loads
+natively; Alchemy layers its Cloudflare integration on top.
 
 - [`Vite`](/cloudflare/frontend/vite) — any pure-Vite app: SPAs and
   Vite-plugin frameworks like TanStack Start, React Router, Vue, and
-  SolidStart.
+  SolidStart; your `vite.config.ts` loads natively.
 - [`Astro`](/cloudflare/frontend/astro) — Astro sites, server-rendered
-  or fully static, with an auto-provisioned session KV namespace.
+  or fully static, with an auto-provisioned session KV namespace;
+  your `astro.config.*` loads natively.
 - [`Nextjs`](/cloudflare/frontend/nextjs) — Next.js apps built through
-  the OpenNext pipeline, with writable ISR on KV.
+  the OpenNext pipeline, with writable ISR on KV; your `next.config.*`
+  is honored as-is.
 - [`Nuxt`](/cloudflare/frontend/nuxt) — Nuxt apps built through
   nitro's `cloudflare_module` preset; your `nuxt.config.ts` loads
   natively.
 - [`SvelteKit`](/cloudflare/frontend/sveltekit) — SvelteKit apps with
-  a wrangler-free in-memory Cloudflare adapter.
+  a wrangler-free in-memory Cloudflare adapter; your `vite.config.ts`
+  loads natively.
 - [`Waku`](/cloudflare/frontend/waku) — Waku (React Server
   Components) apps.
 - [`Octane`](/cloudflare/frontend/octane) — OctaneJS fullstack apps

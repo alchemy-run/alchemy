@@ -7,7 +7,7 @@ sidebar:
 
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
-export const devDeps = "@alchemy.run/cloudflare-frameworks";
+export const devDeps = "@alchemy.run/frontend-frameworks";
 
 `Cloudflare.Website.Nuxt` deploys a [Nuxt](https://nuxt.com) app as
 a Cloudflare Worker. It builds the app through your project's own
@@ -20,7 +20,7 @@ run.
 ## Install
 
 The build integration is not bundled with alchemy. Install
-`@alchemy.run/cloudflare-frameworks`; the resource loads its `/nuxt`
+`@alchemy.run/frontend-frameworks`; the resource loads its `/nuxt`
 export from your project at deploy time. It is only used at build time,
 so a dev dependency is enough:
 
@@ -41,10 +41,22 @@ so a dev dependency is enough:
 
 ## Configure Nuxt
 
-There is no framework config to change: your `nuxt.config.ts` loads
-natively — modules, layers, and all. Deploy-specific overrides are
-merged over it via the `nuxt` prop (the override wins) — see
-[Prerendering](#prerendering) below for an example.
+Your `nuxt.config.ts` loads natively — modules, layers, and all —
+so configure Nuxt exactly as you would outside Alchemy:
+
+```typescript
+// nuxt.config.ts
+export default defineNuxtConfig({
+  modules: ["@nuxtjs/tailwindcss"],
+  routeRules: {
+    "/about": { prerender: true },
+  },
+});
+```
+
+Deploy-specific overrides are merged over it via the `nuxt` prop
+(the override wins) — see [Prerendering](#prerendering) below for an
+example.
 
 Don't set `nitro.preset` — the Cloudflare deploy target owns the
 preset, and a foreign preset is a hard error.

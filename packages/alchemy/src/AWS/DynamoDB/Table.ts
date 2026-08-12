@@ -549,6 +549,11 @@ export const TableProvider = () =>
           Effect.catchTag("PolicyNotFoundException", () =>
             Effect.succeed(undefined),
           ),
+          // Local emulators (floci/LocalStack) don't implement resource
+          // policies — treat "operation not supported" as "no policy".
+          Effect.catchTag("UnknownOperationException", () =>
+            Effect.succeed(undefined),
+          ),
           Effect.retry({
             while: isRetryableControlPlaneError,
             schedule: Schedule.max([
@@ -734,6 +739,12 @@ export const TableProvider = () =>
               ),
             ),
           }),
+          // Local emulators (floci/LocalStack) don't implement Contributor
+          // Insights — "operation not supported" means the feature is
+          // effectively disabled.
+          Effect.catchTag("UnknownOperationException", () =>
+            Effect.succeed("DISABLED" as const),
+          ),
         );
 
       // Enabling Contributor Insights makes DynamoDB create CloudWatch rules
@@ -761,6 +772,12 @@ export const TableProvider = () =>
                     name.includes(`-${tableName}-`),
                 ),
             ],
+          ),
+          // Local emulators (floci/LocalStack) don't implement CloudWatch
+          // insight rules — nothing to wait for.
+          Effect.catchTag(
+            ["UnknownOperationException", "UnsupportedOperation"],
+            () => Effect.succeed([] as string[]),
           ),
         );
 

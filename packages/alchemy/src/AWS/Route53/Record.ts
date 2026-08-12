@@ -329,13 +329,16 @@ export interface Record extends Resource<
  */
 export const Record = Resource<Record>("AWS.Route53.Record");
 
-const normalizeHostedZoneId = (hostedZoneId: string) =>
+/** @internal shared with `Records.ts` — not exported from the barrel. */
+export const normalizeHostedZoneId = (hostedZoneId: string) =>
   hostedZoneId.replace(/^\/hostedzone\//, "");
 
-const normalizeName = (name: string) =>
+/** @internal shared with `Records.ts` — not exported from the barrel. */
+export const normalizeName = (name: string) =>
   name.endsWith(".") ? name : `${name}.`;
 
-const toAliasTarget = (
+/** @internal shared with `Records.ts` — not exported from the barrel. */
+export const toAliasTarget = (
   aliasTarget: route53.AliasTarget | undefined,
 ): ResolvedRecordAliasTarget | undefined =>
   aliasTarget
@@ -420,8 +423,9 @@ const fromCidrRouting = (
  * Build the full `ResourceRecordSet` wire shape from props. Used for both the
  * UPSERT change batch and the DELETE change batch — DELETE requires an exact
  * match of every policy field, so this must round-trip the entire surface.
+ * @internal shared with `Records.ts` — not exported from the barrel.
  */
-const toRecordSet = (
+export const toRecordSet = (
   props: Pick<
     RecordProps,
     | "name"

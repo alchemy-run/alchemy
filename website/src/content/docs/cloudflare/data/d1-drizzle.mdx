@@ -5,8 +5,11 @@ description: Manage your Drizzle schema as a resource, apply migrations to D1 on
 
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
-export const drizzleDeps = `drizzle-orm@^1.0.0-rc.4 @effect/sql-d1`;
-export const drizzleDevDeps = `drizzle-kit@^1.0.0-rc.4`;
+{/* TODO: update to plain 1.0.0-rc.5 (or stable) once drizzle publishes it —
+    1.0.0-rc.5-ab785fc is a WIP rc5-branch build, pinned exactly because
+    rc.4 breaks against effect >= 4.0.0-beta.105. */}
+export const drizzleDeps = `drizzle-orm@1.0.0-rc.5-ab785fc @effect/sql-d1`;
+export const drizzleDevDeps = `drizzle-kit@1.0.0-rc.5-ab785fc`;
 
 D1 is serverless SQLite, so Drizzle needs no connection string, no
 Hyperdrive, and no Postgres driver — the Worker's native D1 binding
@@ -39,6 +42,14 @@ dependencies of `alchemy` — install them in your project:
     <Code code={`yarn add ${drizzleDeps}\nyarn add -D ${drizzleDevDeps}`} lang="sh" />
   </TabItem>
 </Tabs>
+
+:::caution
+The exact `1.0.0-rc.5-ab785fc` pin is deliberate: it's a pre-release
+build from drizzle's rc5 branch and currently the only drizzle release
+compatible with `effect >= 4.0.0-beta.105` — `1.0.0-rc.4` crashes at
+import time against it. Don't widen the version range until drizzle
+publishes a proper `1.0.0-rc.5` (or stable `1.0.0`).
+:::
 
 ## Define the schema
 

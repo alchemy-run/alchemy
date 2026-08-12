@@ -41,6 +41,7 @@ jobs:
       # The bun workspace includes `distilled/packages/*` from the
       # distilled submodule, so consumer checkouts must fetch it.
       submodules: "true"
+      node-version: "24"
       version: ${{ inputs.version }}
       force-latest: ${{ inputs.force-latest }}
       repo: alchemy-run/alchemy
@@ -61,7 +62,7 @@ jobs:
           { "dir": "packages/alchemy",            "name": "alchemy",                         "runner": "ubuntu-22-large" },
           { "dir": "packages/better-auth",        "name": "@alchemy.run/better-auth",        "runner": "ubuntu-22-large" },
           { "dir": "packages/cloudflare-runtime", "name": "@alchemy.run/cloudflare-runtime", "runner": "ubuntu-22-large" },
-          { "dir": "packages/cloudflare-frameworks",         "name": "@alchemy.run/cloudflare-frameworks",         "runner": "ubuntu-22-large" },
+          { "dir": "packages/frontend-frameworks",         "name": "@alchemy.run/frontend-frameworks",         "runner": "ubuntu-22-large" },
           { "dir": "packages/pr-package",         "name": "@alchemy.run/pr-package",         "runner": "ubuntu-22-large" }
         ]
     secrets: inherit

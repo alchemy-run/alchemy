@@ -13,7 +13,7 @@ export default Alchemy.Stack(
       // Only hash the files that affect the build, so unchanged sources
       // skip the Astro build (and the deploy) entirely.
       memo: {
-        include: ["src/**", "public/**", "package.json"],
+        include: ["src/**", "public/**", "package.json", "astro.config.ts"],
       },
       env: {
         GREETING: "Hello from Alchemy!",

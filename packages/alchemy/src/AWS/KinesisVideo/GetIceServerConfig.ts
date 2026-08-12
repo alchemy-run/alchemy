@@ -33,7 +33,7 @@ export interface GetIceServerConfigRequest extends Omit<
  * ```typescript
  * // Provide the GetIceServerConfigHttp layer on the Function's init Effect.
  * export default SignalingFunction.make(
- *   { main: import.meta.url, url: true, timeout: Duration.seconds(30) },
+ *   { main: import.meta.url, functionUrl: true, timeout: Duration.seconds(30) },
  *   Effect.gen(function* () {
  *     const channel = yield* AWS.KinesisVideo.SignalingChannel("Doorbell");
  *     const getIceServers = yield* AWS.KinesisVideo.GetIceServerConfig(channel);

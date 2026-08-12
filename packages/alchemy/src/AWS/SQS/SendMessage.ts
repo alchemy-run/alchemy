@@ -24,7 +24,7 @@ export interface SendMessageRequest extends Omit<
  * ) {}
  *
  * export default ApiFunction.make(
- *   { main: import.meta.url, url: true },
+ *   { main: import.meta.url, functionUrl: true },
  *   Effect.gen(function* () {
  *     const queue = yield* SQS.Queue("Jobs");
  *

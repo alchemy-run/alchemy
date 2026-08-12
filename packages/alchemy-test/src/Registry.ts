@@ -52,6 +52,20 @@ const currentContext = (): FileContext => {
 
 export const currentSuite = (): Suite => currentContext().current;
 
+/**
+ * The file currently being collected (path relative to the run root, e.g.
+ * `test/Cloudflare/R2/Bucket.test.ts`), or `undefined` when called outside
+ * of a collection (e.g. from a non-alchemy-test runner). Adapters use this
+ * at registration time to namespace per-test durable state by file.
+ */
+export const currentFile = (): string | undefined => {
+  let suite: Suite | undefined = storage.getStore()?.current;
+  while (suite?.parent !== undefined) suite = suite.parent;
+  return suite !== undefined && "file" in suite
+    ? (suite as FileSuite).file
+    : undefined;
+};
+
 /** Run `f` with `suite` as the current registration target. */
 export const withSuite = (suite: Suite, f: () => void): void => {
   const context = currentContext();

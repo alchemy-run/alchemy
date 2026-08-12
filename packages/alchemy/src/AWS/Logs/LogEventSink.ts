@@ -52,7 +52,7 @@ export type LogEventSinkError =
  * // LogEventSinkHttp batches over the PutLogEvents binding, so provide
  * // PutLogEventsHttp into it with Layer.provideMerge.
  * export default IngestFunction.make(
- *   { main: import.meta.url, url: true },
+ *   { main: import.meta.url, functionUrl: true },
  *   Effect.gen(function* () {
  *     const logGroup = yield* AWS.Logs.LogGroup("IngestLogs", {});
  *     yield* AWS.Logs.LogStream("IngestStream", {

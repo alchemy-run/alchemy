@@ -51,7 +51,7 @@ export interface EncryptRequest extends Omit<kms.EncryptRequest, "KeyId"> {}
  * // EncryptHttp layer on the Function's init Effect (merge the other
  * // KMS layers with Layer.mergeAll when using several bindings).
  * export default CryptoFunction.make(
- *   { main: import.meta.url, url: true },
+ *   { main: import.meta.url, functionUrl: true },
  *   Effect.gen(function* () {
  *     const key = yield* AWS.KMS.Key("AppKey");
  *     const encrypt = yield* AWS.KMS.Encrypt(key);

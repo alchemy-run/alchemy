@@ -2,6 +2,8 @@
   let { data } = $props();
 </script>
 
-<h1>SvelteKit on Cloudflare Workers</h1>
-<p>{data.greeting}</p>
-<a href="/about">about (prerendered)</a>
+<main class="mx-auto max-w-2xl p-8">
+  <h1 class="text-3xl font-bold">SvelteKit on Cloudflare Workers</h1>
+  <p class="mt-4 text-lg">{data.greeting}</p>
+  <a class="mt-4 inline-block underline" href="/about">about (prerendered)</a>
+</main>

@@ -1,0 +1,38 @@
+{
+  "name": "aws-website-waku",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "alchemy dev",
+    "deploy": "alchemy deploy",
+    "destroy": "alchemy destroy",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "alchemy": "workspace:*",
+    "effect": "catalog:",
+    "hono": "catalog:frameworks",
+    "react": "~19.2.6",
+    "react-dom": "~19.2.6",
+    "react-server-dom-webpack": "~19.2.6",
+    "waku": "catalog:frameworks"
+  },
+  "devDependencies": {
+    "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@distilled.cloud/aws": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "@tailwindcss/vite": "catalog:",
+    "@types/node": "^24.12.0",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "tailwindcss": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "examples/aws-website-waku"
+  }
+}

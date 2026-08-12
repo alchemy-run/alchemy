@@ -106,7 +106,7 @@ export type ConnectOptions = SecretConnectOptions | IamConnectOptions;
  * @example Resolve Credentials from a Secret
  * ```typescript
  * export default MyFunction.make(
- *   { main: import.meta.url, url: true },
+ *   { main: import.meta.url, functionUrl: true },
  *   Effect.gen(function* () {
  *     const db = yield* AWS.RDS.Aurora("AppDb", {
  *       subnetIds: [subnetA.subnetId, subnetB.subnetId],

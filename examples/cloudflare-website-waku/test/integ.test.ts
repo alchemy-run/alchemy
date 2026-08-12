@@ -55,6 +55,43 @@ test(
 );
 
 test(
+  "compiles tailwind from waku.config.ts",
+  Effect.gen(function* () {
+    const url = yield* base;
+    const res = yield* getWhenReady(url);
+    expect(res.status).toBe(200);
+    const html = yield* res.text;
+    // The utility class from src/pages/index.tsx made it into the markup.
+    expect(html).toContain("text-3xl");
+
+    // Locate the emitted stylesheet. Waku links the compiled CSS bundle in
+    // the document head; the @tailwindcss/vite plugin registered via
+    // waku.config.ts's `vite` field is what compiles it.
+    const links = [...html.matchAll(/<link\b[^>]*>/g)]
+      .map((m) => m[0])
+      .filter((tag) => /rel="stylesheet"/.test(tag))
+      .map((tag) => /href="([^"]+)"/.exec(tag)?.[1])
+      .filter((href): href is string => !!href);
+    expect(links.length).toBeGreaterThan(0);
+
+    let compiled = "";
+    for (const href of links) {
+      const cssUrl = href.startsWith("http")
+        ? href
+        : `${url}${href.startsWith("/") ? "" : "/"}${href}`;
+      const cssRes = yield* getWhenReady(cssUrl);
+      expect(cssRes.status).toBe(200);
+      compiled += yield* cssRes.text;
+    }
+    // The compiled rule proves tailwind ran through the plugin from
+    // waku.config.ts — not just that the class name appears in markup.
+    expect(compiled).toContain(".text-3xl");
+    expect(compiled).toContain("font-bold");
+  }),
+  { timeout: 180_000 },
+);
+
+test(
   "serves a static asset from public/",
   Effect.gen(function* () {
     const url = yield* base;

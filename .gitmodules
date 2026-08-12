@@ -64,3 +64,9 @@
 [submodule "distilled"]
 	path = distilled
 	url = https://github.com/alchemy-run/distilled.git
+[submodule "vendor/floci"]
+	path = .vendor/floci
+	url = https://github.com/alchemy-run/floci.git
+	shallow = true
+	update = none
+	ignore = all

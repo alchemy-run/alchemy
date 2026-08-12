@@ -94,6 +94,27 @@ test(
 );
 
 test(
+  "compiles tailwind from vite.config.ts",
+  Effect.gen(function* () {
+    const url = yield* base;
+    const res = yield* getWhenReady(url);
+    expect(res.status).toBe(200);
+    const html = yield* res.text;
+    // The page markup uses Tailwind utilities...
+    expect(html).toContain("text-3xl");
+    // ...and links the stylesheet Vite emitted via the project-owned
+    // vite.config.ts (the @tailwindcss/vite plugin), proving Alchemy loaded
+    // the config file natively instead of the programmatic fallback.
+    const match = html.match(/\/_app\/immutable\/assets\/[^"']+\.css/);
+    expect(match).not.toBeNull();
+    const css = yield* getBodyWhenReady(`${url}${match![0]}`, ".text-3xl");
+    expect(css).toContain(".text-3xl");
+    expect(css).toContain(".font-bold");
+  }),
+  { timeout: 180_000 },
+);
+
+test(
   "serves a static asset from static/",
   Effect.gen(function* () {
     const url = yield* base;

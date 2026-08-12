@@ -1,0 +1,39 @@
+{
+  "name": "aws-website-nextjs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "next build",
+    "dev": "alchemy dev",
+    "deploy": "alchemy deploy",
+    "destroy": "alchemy destroy",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "next": "catalog:frameworks",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@distilled.cloud/aws": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "@opennextjs/aws": "catalog:frameworks",
+    "@tailwindcss/postcss": "catalog:",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "alchemy": "workspace:*",
+    "effect": "catalog:",
+    "tailwindcss": "catalog:",
+    "typescript": "^6.0.3"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "examples/aws-website-nextjs"
+  }
+}

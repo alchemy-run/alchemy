@@ -55,7 +55,7 @@ export interface DecryptRequest extends Omit<kms.DecryptRequest, "KeyId"> {}
  * // Provide the DecryptHttp layer on the Function's init Effect,
  * // merged with the other KMS layers the function binds.
  * export default CryptoFunction.make(
- *   { main: import.meta.url, url: true },
+ *   { main: import.meta.url, functionUrl: true },
  *   Effect.gen(function* () {
  *     const key = yield* AWS.KMS.Key("AppKey");
  *     const encrypt = yield* AWS.KMS.Encrypt(key);

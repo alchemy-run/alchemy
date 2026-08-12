@@ -1,5 +1,5 @@
-import * as Astro from "@alchemy.run/cloudflare-frameworks/astro";
-import cloudflare from "@alchemy.run/cloudflare-frameworks/astro/cloudflare";
+import * as Astro from "@alchemy.run/frontend-frameworks/astro";
+import cloudflare from "@alchemy.run/frontend-frameworks/astro/cloudflare";
 import { Assets, Text } from "@alchemy.run/cloudflare-runtime/core/bindings";
 import * as Options from "@alchemy.run/cloudflare-test-tools/e2e/Options";
 
@@ -47,7 +47,7 @@ export default Options.make({
   // config rides alongside (the dev toolbar would differ between dev and the
   // built output, breaking the shared screenshots).
   framework: (options) =>
-    Astro.make({
+    Astro.layer({
       target: cloudflare({ worker: Options.resolveCloudflareOptions(options).worker }),
       astro: {
         devToolbar: { enabled: false },

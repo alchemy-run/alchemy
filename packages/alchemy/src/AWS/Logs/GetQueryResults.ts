@@ -39,7 +39,7 @@ export interface GetQueryResultsRequest extends Logs.GetQueryResultsRequest {}
  * // Provide the layer on the Function's init Effect, merged with
  * // StartQueryHttp since the two bindings are always used together.
  * export default InsightsFunction.make(
- *   { main: import.meta.url, url: true },
+ *   { main: import.meta.url, functionUrl: true },
  *   Effect.gen(function* () {
  *     const logGroup = yield* AWS.Logs.LogGroup("AppLogs", {});
  *     const startQuery = yield* AWS.Logs.StartQuery(logGroup);

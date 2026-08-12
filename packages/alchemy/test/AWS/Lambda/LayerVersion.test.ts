@@ -49,7 +49,7 @@ test.provider(
                 main: timeoutHandlerPath,
                 handler: "handler",
                 isExternal: true,
-                url: false,
+                functionUrl: false,
                 // Pass the resource itself — `layers` also accepts a raw ARN.
                 layers: layered ? [layer] : [],
               })
@@ -228,7 +228,7 @@ test.provider(
             main: timeoutHandlerPath,
             handler: "handler",
             isExternal: true,
-            url: false,
+            functionUrl: false,
             layers: [byArn ? layer.layerVersionArn : layer],
           });
           return { bucket, layer, fn };

@@ -39,6 +39,51 @@ test(
 );
 
 /**
+ * Better Auth on D1 (auto-migrated at deploy): sign-up + sign-in through
+ * the `/auth/*` routes served by `auth.fetch`, asserting a session cookie
+ * comes back. The assets auth panel (`index.html`) drives the same routes
+ * from the browser.
+ */
+test(
+  "better auth: sign-up and sign-in on D1",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const email = "auth-integ@example.com";
+    const password = "password1234";
+
+    const post = (path: string, body: unknown) =>
+      Effect.tryPromise(async (signal) => {
+        const response = await fetch(`${url}${path}`, {
+          method: "POST",
+          signal,
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        return {
+          status: response.status,
+          body: await response.text(),
+          cookies: response.headers.getSetCookie(),
+        };
+      });
+
+    // A leftover user from a prior NO_DESTROY run is fine — sign-in is the
+    // real assertion. Retries ride out workers.dev propagation.
+    yield* post("/auth/sign-up/email", { email, password, name: "Integ" }).pipe(
+      Effect.filterOrFail(
+        (r) => r.status === 200 || r.body.includes("USER_ALREADY_EXISTS"),
+        (r) => new Error(`sign-up failed: ${r.status} ${r.body.slice(0, 200)}`),
+      ),
+      Effect.retry({ schedule: Schedule.exponential("1 second"), times: 8 }),
+    );
+
+    const signIn = yield* post("/auth/sign-in/email", { email, password });
+    expect(signIn.status).toBe(200);
+    expect(signIn.cookies.length).toBeGreaterThan(0);
+  }),
+  { timeout: 120_000 },
+);
+
+/**
  * Regression guard for https://github.com/alchemy-run/alchemy/pull/172
  *
  * The stack now includes two Workers (`Api` and `SecondaryApi`) that both

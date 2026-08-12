@@ -20,7 +20,7 @@ export interface PutRecordRequest extends Omit<
  * @example Put a Record from a Handler
  * ```typescript
  * export default MyFunction.make(
- *   { main: import.meta.url, url: true },
+ *   { main: import.meta.url, functionUrl: true },
  *   Effect.gen(function* () {
  *     const stream = yield* AWS.Kinesis.Stream("OrdersStream");
  *     // init — bind the operation to the stream

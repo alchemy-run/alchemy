@@ -17,7 +17,7 @@ export interface PutMetricDataRequest extends cloudwatch.PutMetricDataInput {}
  * @example Publish a Custom Metric from a Lambda Function
  * ```typescript
  * export default MyFunction.make(
- *   { main: import.meta.url, url: true },
+ *   { main: import.meta.url, functionUrl: true },
  *   Effect.gen(function* () {
  *     // init — grants cloudwatch:PutMetricData to the function
  *     const putMetricData = yield* AWS.CloudWatch.PutMetricData();

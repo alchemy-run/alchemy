@@ -18,7 +18,7 @@ export interface PublishRequest extends iotdata.PublishRequest {}
  * @example Publish MQTT Messages from a Lambda
  * ```typescript
  * export default TelemetryFunction.make(
- *   { main: import.meta.url, url: true },
+ *   { main: import.meta.url, functionUrl: true },
  *   Effect.gen(function* () {
  *     // grants iot:Publish on sensors/* to this function
  *     const publish = yield* AWS.IoT.Publish("sensors/*");

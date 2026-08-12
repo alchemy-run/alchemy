@@ -90,7 +90,7 @@ export const BindingsFleetLive = Layer.effect(
 export default Ec2BindingsFunction.make(
   {
     main: import.meta.url,
-    url: true,
+    functionUrl: true,
   },
   Effect.gen(function* () {
     const { instance, group, volume } = yield* BindingsFleet;

@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as crypto from "node:crypto";
 import { isResolved } from "../../Diff.ts";
@@ -81,7 +82,16 @@ export const buildAndPushEcrImage = Effect.fn(function* (
     platform: options.platform,
     "build-arg": options.buildArgs,
   });
-  yield* docker.image.push(options.imageUri, credentials);
+  // Pushes are idempotent; transient registry-transport failures (Docker
+  // Desktop's embedded proxy timing out under load, ECR 503s, credential
+  // helper contention) resolve on a bounded re-attempt.
+  yield* docker.image.push(options.imageUri, credentials).pipe(
+    Effect.retry({
+      while: (): boolean => true,
+      schedule: Schedule.exponential("2 seconds"),
+      times: 3,
+    }),
+  );
   return options.imageUri;
 });
 

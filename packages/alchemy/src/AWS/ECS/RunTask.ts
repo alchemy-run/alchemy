@@ -23,7 +23,7 @@ export interface RunTaskRequest extends Omit<
  * ```typescript
  * const api = yield* AWS.Lambda.Function(
  *   "Api",
- *   { main: import.meta.url, url: true },
+ *   { main: import.meta.url, functionUrl: true },
  *   Effect.gen(function* () {
  *     // init: bind the launch (IAM grants happen here)
  *     const runTask = yield* AWS.ECS.RunTask(cluster, task);

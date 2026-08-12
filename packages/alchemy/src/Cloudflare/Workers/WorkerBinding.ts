@@ -18,6 +18,8 @@ import type { App as FlagshipApp } from "../Flagship/App.ts";
 import type { Connection as Hyperdrive } from "../Hyperdrive/Connection.ts";
 import type { ImagesBinding } from "../Images/ImagesBinding.ts";
 import type { Namespace } from "../KV/Namespace.ts";
+import type { LegacyPipeline } from "../Pipelines/LegacyPipeline.ts";
+import type { Stream as PipelinesStream } from "../Pipelines/Stream.ts";
 import type { Queue } from "../Queues/Queue.ts";
 import type { Bucket } from "../R2/Bucket.ts";
 import type { Secret } from "../SecretsStore/Secret.ts";
@@ -188,6 +190,8 @@ export type WorkerBindingResource =
   | FlagshipApp
   | ImagesBinding
   | StreamBinding
+  | PipelinesStream
+  | LegacyPipeline
   | Hyperdrive
   | VectorizeIndex
   | Secret

@@ -9,6 +9,7 @@
  * concurrency + timeouts itself.
  */
 import {
+  currentFile,
   exclusiveOf,
   registerHook,
   registerTest,
@@ -166,14 +167,20 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   const wrapProvider = (
     name: string,
     fn: (stack: ScratchStack) => Effect.Effect<void, any, any>,
+    file: string | undefined,
   ) => {
-    const scratch = Core.scratchStack(options, name);
+    // Durable, file-namespaced scratch state (`.alchemy/state`). A run that
+    // dies mid-delete — e.g. the runner abandons teardown 10s after a test
+    // timeout while a CloudFront disable-wait is still in flight — leaves
+    // its `deleting` rows on disk, so the NEXT run's leading
+    // `stack.destroy()` (or the ensuring teardown below) resumes and drains
+    // them instead of planning "no changes" and silently orphaning the
+    // cloud resource.
+    const scratch = Core.scratchStack(options, name, file);
     // Guarantee teardown. `test.provider` has no built-in cleanup, so a body
     // that fails (assertion, API error like a 409/Unauthorized) or is
     // interrupted (timeout) BEFORE its trailing `stack.destroy()` would
-    // otherwise leak every cloud resource it deployed: the scratch's
-    // in-memory state is discarded with the process, so no later run can
-    // reclaim the orphan (only an account-wide `nuke` can).
+    // otherwise leak every cloud resource it deployed.
     // `scratch.destroy()` is idempotent — a no-op when the body already
     // destroyed, and it reclaims the orphans otherwise. `Effect.ensuring`
     // runs the finalizer on success, failure, AND interruption.
@@ -193,15 +200,19 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     fn: (stack: ScratchStack) => Effect.Effect<void, any, any>,
     opts: TestOptions | undefined,
     mode: "run" | "skip",
-  ) =>
+  ) => {
+    // Captured at registration (module evaluation during collection) — the
+    // AsyncLocalStorage file context is gone by the time the body runs.
+    const file = currentFile();
     registerTest({
       name,
       mode,
       exclusive: exclusiveOf(opts),
       retry: retryOf(opts),
       timeout: timeoutOf(opts),
-      body: mode === "skip" ? undefined : () => wrapProvider(name, fn),
+      body: mode === "skip" ? undefined : () => wrapProvider(name, fn, file),
     });
+  };
 
   const provider = ((name, fn, opts) => {
     addProvider(name, fn, opts, "run");

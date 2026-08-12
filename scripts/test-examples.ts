@@ -6,12 +6,22 @@ const examples = [
   "./examples/cloudflare-tanstack",
   "./examples/cloudflare-tanstack-start-solid",
   "./examples/cloudflare-neon-drizzle",
+  "./examples/cloudflare-vue",
+  "./examples/cloudflare-solidstart",
+  "./examples/cloudflare-foldkit",
+  "./examples/cloudflare-octane",
   "./examples/cloudflare-website-astro",
   "./examples/cloudflare-website-nextjs",
   "./examples/cloudflare-website-nuxt",
   "./examples/cloudflare-website-sveltekit",
   "./examples/cloudflare-website-waku",
+  "./examples/aws-dev",
   "./examples/aws-lambda",
+  "./examples/aws-website-astro",
+  "./examples/aws-website-nextjs",
+  "./examples/aws-website-nuxt",
+  "./examples/aws-website-sveltekit",
+  "./examples/aws-website-waku",
 ] as const;
 
 type CommandResult = {
@@ -45,43 +55,87 @@ const elapsedSeconds = (state: TaskState): string => {
 
 const makeStatusRenderer = (states: readonly TaskState[]) => {
   const interactive = process.stdout.isTTY === true;
-  let renderedLines = 0;
+  let renderedRows = 0;
 
-  const lines = () => [
-    "Example tests",
-    ...states.map((state) => {
-      const icon =
-        state.status === "ok"
-          ? "ok"
-          : state.status === "failed"
-            ? "failed"
-            : state.status;
-      const exit =
-        state.exitCode === undefined || state.exitCode === 0
-          ? ""
-          : ` exit ${state.exitCode ?? "signal"}`;
-      return `  ${icon.padEnd(7)} ${state.label} ${elapsedSeconds(state)}${exit}`;
-    }),
-  ];
+  const taskLine = (state: TaskState) => {
+    const icon =
+      state.status === "ok"
+        ? "ok"
+        : state.status === "failed"
+          ? "failed"
+          : state.status;
+    const exit =
+      state.exitCode === undefined || state.exitCode === 0
+        ? ""
+        : ` exit ${state.exitCode ?? "signal"}`;
+    return `  ${icon.padEnd(7)} ${state.label} ${elapsedSeconds(state)}${exit}`;
+  };
+
+  // Physical rows a line occupies once the terminal wraps it.
+  const rowsFor = (line: string) => {
+    const columns = process.stdout.columns || 80;
+    return Math.max(1, Math.ceil(line.length / columns));
+  };
+  const rowsForAll = (output: readonly string[]) =>
+    output.reduce((total, line) => total + rowsFor(line), 0);
+
+  const fullLines = () => ["Example tests", ...states.map(taskLine)];
+
+  // The in-place repaint moves the cursor up with `\x1b[NF`, which cannot
+  // climb above the top of the viewport: if a paint is taller than the
+  // terminal (or lines wrap), the write scrolls and every repaint leaks its
+  // topmost rows into scrollback. Keep each paint strictly shorter than the
+  // viewport by collapsing finished tasks into the header once space runs
+  // out (`+ 1` accounts for the cursor parking on the row below the paint).
+  const lines = () => {
+    const rows = process.stdout.rows || 24;
+    const full = fullLines();
+    if (rowsForAll(full) + 1 <= rows) {
+      return full;
+    }
+    const done = states.filter((state) => state.status === "ok").length;
+    const active = states.filter((state) => state.status !== "ok");
+    const header = `Example tests (${done}/${states.length} ok)`;
+    const activeLines = active.map(taskLine);
+    let shown = activeLines.length;
+    const fits = (count: number) => {
+      const overflow = count < activeLines.length ? 1 : 0;
+      return (
+        rowsForAll([header, ...activeLines.slice(0, count)]) + overflow + 1 <=
+        rows
+      );
+    };
+    while (shown > 0 && !fits(shown)) {
+      shown--;
+    }
+    return shown === activeLines.length
+      ? [header, ...activeLines]
+      : [
+          header,
+          ...activeLines.slice(0, shown),
+          `  … ${activeLines.length - shown} more`,
+        ];
+  };
 
   return {
     render() {
       if (!interactive) {
         return;
       }
-      if (renderedLines > 0) {
-        process.stdout.write(`\x1b[${renderedLines}F\x1b[J`);
+      if (renderedRows > 0) {
+        process.stdout.write(`\x1b[${renderedRows}F\x1b[J`);
       }
       const output = lines();
       process.stdout.write(`${output.join("\n")}\n`);
-      renderedLines = output.length;
+      renderedRows = rowsForAll(output);
     },
     finish() {
-      if (interactive) {
-        this.render();
-        return;
+      if (interactive && renderedRows > 0) {
+        process.stdout.write(`\x1b[${renderedRows}F\x1b[J`);
+        renderedRows = 0;
       }
-      for (const line of lines()) {
+      // Always end with the full table (the live view may be compacted).
+      for (const line of fullLines()) {
         console.log(line);
       }
     },

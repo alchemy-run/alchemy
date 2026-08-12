@@ -240,11 +240,26 @@ async function main() {
     );
   }
 
-  // 5. Backwards-compat: keep the old /favicon.png reference (used by
+  // 5. Light brand mark on a true-white ground for consumers that cannot use
+  //    the warmer theme background or composite the transparent asset.
+  const { stroke, dot } = YANTRA_THEMES.light;
+  const whiteLogo = yantraSvg({
+    size: 512,
+    stroke,
+    dot,
+    bg: "#ffffff",
+    strokeWidth: 1.1,
+  });
+  await writeFile(
+    path.join(publicDir, "alchemy-logo-512-white-bg.png"),
+    rasterize(whiteLogo, 512),
+  );
+
+  // 6. Backwards-compat: keep the old /favicon.png reference (used by
   //    some cached nav code) pointing to the 32px raster.
   await writeFile(path.join(publicDir, "favicon.png"), rasterize(favLight, 32));
 
-  // 6. OG fallback (1200×630). Per-page OG images come from the static
+  // 7. OG fallback (1200×630). Per-page OG images come from the static
   //    endpoint; this is the bare-domain fallback, and the only asset with
   //    text, so the only one needing the brand font database.
   const ogSvg = ogFallbackSvg();
@@ -256,7 +271,7 @@ async function main() {
 
   // eslint-disable-next-line no-console
   console.log(
-    "[brand] wrote favicon.{svg,png}, favicon-{16,32}[-dark].png, apple-touch-icon.png, icon-512[-dark].png, alchemy-logo-{light,dark}.svg, alchemy-logo-{light,dark}-bg.png, og-default.{svg,png}",
+    "[brand] wrote favicon.{svg,png}, favicon-{16,32}[-dark].png, apple-touch-icon.png, icon-512[-dark].png, alchemy-logo-{light,dark}.svg, alchemy-logo-{light,dark}-bg.png, alchemy-logo-512-white-bg.png, og-default.{svg,png}",
   );
 }
 

@@ -90,7 +90,7 @@ test.provider(
           main: timeoutHandlerPath,
           handler: "handler",
           isExternal: true,
-          url: false,
+          functionUrl: false,
           timeout: Duration.seconds(15),
         }),
       );
@@ -105,7 +105,7 @@ test.provider(
           main: timeoutHandlerPath,
           handler: "handler",
           isExternal: true,
-          url: false,
+          functionUrl: false,
           timeout: Duration.seconds(45),
         }),
       );
@@ -146,7 +146,7 @@ test.provider(
           main: externalPackageHandlerPath,
           handler: "handler",
           isExternal: true,
-          url: true,
+          functionUrl: true,
           build: {
             install: ["uuid"],
           },
@@ -202,7 +202,7 @@ test.provider(
           main: lockfilePinnedHandlerPath(format),
           handler: "handler",
           isExternal: true,
-          url: true,
+          functionUrl: true,
           build: {
             install: ["make-dir"],
           },
@@ -262,7 +262,7 @@ test.provider(
           main: timeoutHandlerPath,
           handler: "handler",
           isExternal: true,
-          url: false,
+          functionUrl: false,
           architecture: "arm64",
         }),
       );
@@ -274,7 +274,7 @@ test.provider(
           main: timeoutHandlerPath,
           handler: "handler",
           isExternal: true,
-          url: false,
+          functionUrl: false,
         }),
       );
 
@@ -301,7 +301,7 @@ test.provider(
           main: timeoutHandlerPath,
           handler: "handler",
           isExternal: true,
-          url: false,
+          functionUrl: false,
         }),
       );
 
@@ -313,7 +313,7 @@ test.provider(
           main: timeoutHandlerPath,
           handler: "handler",
           isExternal: true,
-          url: false,
+          functionUrl: false,
           reservedConcurrentExecutions: 0,
         }),
       );
@@ -327,7 +327,7 @@ test.provider(
           main: timeoutHandlerPath,
           handler: "handler",
           isExternal: true,
-          url: false,
+          functionUrl: false,
         }),
       );
 
@@ -359,7 +359,7 @@ test.provider(
           main: timeoutHandlerPath,
           handler: "handler",
           isExternal: true,
-          url: false,
+          functionUrl: false,
         }),
       );
 
@@ -390,7 +390,7 @@ test.provider(
           main: timeoutHandlerPath,
           handler: "handler",
           isExternal: true,
-          url: true,
+          functionUrl: true,
         }),
       );
 
@@ -409,7 +409,7 @@ test.provider(
           main: timeoutHandlerPath,
           handler: "handler",
           isExternal: true,
-          url: {
+          functionUrl: {
             authType: "AWS_IAM",
             cors: {
               AllowHeaders: ["authorization", "content-type"],

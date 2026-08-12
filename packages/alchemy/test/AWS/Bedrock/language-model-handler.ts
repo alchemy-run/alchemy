@@ -56,7 +56,7 @@ export class BedrockLanguageModelFunction extends Lambda.Function<Lambda.Functio
 export default BedrockLanguageModelFunction.make(
   {
     main,
-    url: true,
+    functionUrl: true,
     // Model inference regularly exceeds Lambda's 3s default timeout.
     timeout: Duration.seconds(120),
   },

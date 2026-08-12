@@ -9,11 +9,11 @@ import { kCurrentWorker } from "miniflare";
  * the `WORKER_SELF_REFERENCE` self service binding.
  *
  * The dev (workerd) runtime auto-wires the DO queue and self-reference:
- * `@alchemy.run/cloudflare-frameworks/nextjs` detects the `DOQueueHandler` export in the
+ * `@alchemy.run/frontend-frameworks/nextjs` detects the `DOQueueHandler` export in the
  * built worker. The preview (miniflare) config declares them explicitly.
  */
 export default Options.make({
-  framework: "@alchemy.run/cloudflare-frameworks/nextjs",
+  framework: "@alchemy.run/frontend-frameworks/nextjs",
   vite: {
     compatibilityDate: "2026-05-12",
     compatibilityFlags: ["nodejs_compat", "global_fetch_strictly_public"],

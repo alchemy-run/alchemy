@@ -129,10 +129,10 @@ export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {
 const functionUrlEventToWebRequest = (
   event: LambdaFunctionURLEvent,
 ): Request => {
-  const protocol =
-    event.headers["x-forwarded-proto"] ??
-    event.requestContext.http.protocol ??
-    "https";
+  // `requestContext.http.protocol` is the HTTP version ("HTTP/1.1"), never a
+  // URL scheme — without `x-forwarded-proto` (real Function URLs always set
+  // it; local emulators may not) fall back to https.
+  const protocol = event.headers["x-forwarded-proto"] ?? "https";
   const host = event.headers.host ?? event.requestContext.domainName;
   const url = `${protocol}://${host}${event.rawPath}${event.rawQueryString ? `?${event.rawQueryString}` : ""}`;
   const method = event.requestContext.http.method;

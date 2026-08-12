@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "deploy": "alchemy deploy",
-    "destroy": "alchemy destroy"
+    "destroy": "alchemy destroy",
+    "test": "bun test test/integ.test.ts"
   },
   "dependencies": {
     "effect": "catalog:",
@@ -16,8 +17,10 @@
   },
   "devDependencies": {
     "@foldkit/vite-plugin": "^0.11.3",
+    "@tailwindcss/vite": "catalog:",
     "@types/node": "^24.12.0",
     "alchemy": "workspace:*",
+    "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:"
   },

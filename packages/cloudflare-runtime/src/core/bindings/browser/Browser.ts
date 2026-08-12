@@ -6,6 +6,7 @@ import type {
 } from "@puppeteer/browsers";
 import {
   Browser as ChromeBrowser,
+  Cache,
   CDP_WEBSOCKET_ENDPOINT_REGEX,
   detectBrowserPlatform,
   install,
@@ -245,6 +246,8 @@ export const remote = (binding: string) =>
 // Chrome launch (`workers-sdk/packages/miniflare/src/plugins/browser-rendering/index.ts`)
 // -----------------------------------------------------------------------------
 
+let installedBrowser: Promise<InstalledBrowser> | undefined;
+
 export async function launchBrowser({
   headful,
 }: {
@@ -273,8 +276,14 @@ export async function launchBrowser({
     downloadProgressCallback: makeDownloadProgressLogger(),
   };
 
-  const { executablePath } =
-    await installWithCorruptedCacheRecovery(installOptions);
+  installedBrowser ??= installWithCorruptedCacheRecovery(installOptions);
+  let executablePath: string;
+  try {
+    ({ executablePath } = await installedBrowser);
+  } catch (error) {
+    installedBrowser = undefined;
+    throw error;
+  }
 
   const tempUserData = NodePath.join(
     NodeOs.tmpdir(),
@@ -447,6 +456,60 @@ const CORRUPTED_CACHE_ERROR_PATTERN =
 async function installWithCorruptedCacheRecovery(
   installOptions: InstallOptions & { unpack?: true },
 ): Promise<InstalledBrowser> {
+  if (process.platform === "darwin") {
+    const platform = installOptions.platform;
+    if (!platform) {
+      throw new Error("The current platform is not supported.");
+    }
+    const cache = new Cache(installOptions.cacheDir);
+    const executablePath = cache.computeExecutablePath(installOptions);
+    try {
+      await NodeFs.promises.access(executablePath, NodeFs.constants.X_OK);
+      await new Promise<void>((resolve, reject) => {
+        NodeChildProcess.execFile(
+          executablePath,
+          ["--version"],
+          { timeout: 10_000 },
+          (error) => (error ? reject(error) : resolve()),
+        );
+      });
+      return await install(installOptions);
+    } catch {
+      await removeDir(
+        cache.installationDir(
+          installOptions.browser,
+          platform,
+          installOptions.buildId,
+        ),
+      );
+    }
+
+    // `extract-zip` creates executable entries with mode 0755 before their
+    // contents are complete. macOS 26 can stall that write partway through a
+    // signed Mach-O, leaving Chrome truncated indefinitely. The system unzip
+    // utility writes the same archive correctly, including its code signature.
+    const archivePath = await install({ ...installOptions, unpack: false });
+    const outputPath = cache.installationDir(
+      installOptions.browser,
+      platform,
+      installOptions.buildId,
+    );
+    await NodeFs.promises.mkdir(outputPath, { recursive: true });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        NodeChildProcess.execFile(
+          "unzip",
+          ["-q", archivePath, "-d", outputPath],
+          (error) => (error ? reject(error) : resolve()),
+        );
+      });
+      return await install(installOptions);
+    } catch (error) {
+      await removeDir(outputPath);
+      throw error;
+    }
+  }
+
   try {
     return await install(installOptions);
   } catch (e) {

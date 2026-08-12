@@ -68,6 +68,10 @@ const HUBS: Record<string, { href: string; blurb: string }> = {
     blurb: "Droplets, SSH keys, and Cloud Firewalls",
   },
   Axiom: { href: "/axiom", blurb: "Logs, traces, dashboards, and monitors" },
+  BetterAuth: {
+    href: "/better-auth",
+    blurb: "Typed Better Auth with a database layer per platform",
+  },
   GitHub: { href: "/github", blurb: "Repos, secrets, and webhook events" },
   Docker: {
     href: "/docker",
@@ -89,7 +93,10 @@ const HUBS: Record<string, { href: string; blurb: string }> = {
 
 const BLURBS: Record<string, string> = {};
 
-const DISPLAY_LABELS: Record<string, string> = { Planetscale: "PlanetScale" };
+const DISPLAY_LABELS: Record<string, string> = {
+  Planetscale: "PlanetScale",
+  BetterAuth: "Better Auth",
+};
 
 const providers = generatedSidebar() ?? [];
 const cards = providers.map((p) => {

@@ -18,9 +18,11 @@ import * as Test from "@/Test/Alchemy";
 import { assert, describe, expect } from "alchemy-test";
 import { Data, Layer } from "effect";
 import * as Cause from "effect/Cause";
+import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as Redacted from "effect/Redacted";
 import {
   AliasedWidget,
@@ -2611,6 +2613,50 @@ describe("from deleting state", () => {
         }).pipe(stack.deploy);
         expect((yield* getState("A"))?.status).toEqual("created");
         expect(output).toEqual("test-string");
+      }),
+  );
+
+  // A destroy interrupted while `provider.delete` is still in flight (the
+  // shape of a live delete stuck in a long provisioning wait — e.g.
+  // CloudFront's disable→wait→delete — when the test runner's timeout fires
+  // and teardown is abandoned) must keep the resource's state row. Deletes
+  // are idempotent and resumable: the engine commits a `deleting` row BEFORE
+  // calling `provider.delete` and only drops it after success, so the next
+  // destroy sees the row and drains it. Losing the row here is an invisible
+  // orphan — the next destroy plans "no changes" and the cloud resource
+  // leaks forever.
+  test.provider(
+    "interrupting a destroy mid-delete keeps a resumable deleting row",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", { string: "v1" });
+        }).pipe(stack.deploy);
+        expect((yield* getState("A"))?.status).toEqual("created");
+
+        // Destroy with a delete that signals entry and then never resolves,
+        // then interrupt the destroy once the delete is in flight —
+        // simulating the runner's timeout + teardown abandonment.
+        const deleteStarted = yield* Deferred.make<void>();
+        const fiber = yield* stack.destroy().pipe(
+          hook({
+            delete: () =>
+              Deferred.succeed(deleteStarted, void 0).pipe(
+                Effect.andThen(Effect.never),
+              ),
+          }),
+          Effect.forkChild,
+        );
+        yield* Deferred.await(deleteStarted);
+        yield* Fiber.interrupt(fiber);
+
+        // The row survives the interruption, parked at `deleting`.
+        expect((yield* getState("A"))?.status).toEqual("deleting");
+
+        // The next destroy resumes the delete and drains the row.
+        yield* stack.destroy();
+        expect(yield* getState("A")).toBeUndefined();
+        expect(yield* listState()).toEqual([]);
       }),
   );
 
@@ -6392,6 +6438,18 @@ describe("non-plain and cyclic props through deploy", () => {
         // The Date arrives in reconcile as a real Date, not `{}`.
         expect(seen[0]).toBeInstanceOf(Date);
         expect(seen[0]!.toISOString()).toBe("2027-01-01T00:00:00.000Z");
+
+        // And it ROUND-TRIPS: read back out of the (durable, on-disk)
+        // store, the persisted prop is a real Date again — the DATE_MARKER
+        // envelope in StateEncoding, not a bare ISO string. This is what
+        // provider diff/delete/read receive as `olds` on a later run.
+        const persisted = (yield* getState("A"))?.props as {
+          expires: Date;
+        };
+        expect(persisted.expires).toBeInstanceOf(Date);
+        expect(persisted.expires.toISOString()).toBe(
+          "2027-01-01T00:00:00.000Z",
+        );
 
         // Same date again — no phantom update from Date handling.
         yield* program("2027-01-01").pipe(stack.deploy, hook(hooks));
