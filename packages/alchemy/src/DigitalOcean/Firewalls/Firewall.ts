@@ -25,13 +25,13 @@ import type { Providers } from "../Providers.ts";
 
 export type FirewallRuleProtocol = "tcp" | "udp" | "icmp";
 
+/** Single port (`"22"`), inclusive range (`"8000-9000"`), or `"0"` for all ports. */
+export type FirewallRulePorts = `${number}` | `${number}-${number}`;
+
 export type FirewallInboundRule = {
   protocol: FirewallRuleProtocol;
-  /**
-   * Single port (`"22"`), range (`"8000-9000"`), or `"0"` for all ports.
-   * ICMP has no ports — the API always reports `"0"` for it.
-   */
-  ports: string;
+  /** ICMP has no ports — the API always reports `"0"` for it. */
+  ports: FirewallRulePorts;
   /** IPv4/IPv6 addresses and CIDRs allowed in, e.g. `"0.0.0.0/0"`, `"::/0"`. */
   addresses?: string[];
   /** Droplet ids allowed in. */
@@ -42,8 +42,7 @@ export type FirewallInboundRule = {
 
 export type FirewallOutboundRule = {
   protocol: FirewallRuleProtocol;
-  /** Single port (`"443"`), range, or `"0"` for all ports. */
-  ports: string;
+  ports: FirewallRulePorts;
   /** IPv4/IPv6 addresses and CIDRs allowed out. */
   addresses?: string[];
   /** Droplet ids allowed out. */
@@ -175,14 +174,16 @@ const stringsOnly = (u: unknown): string[] =>
   Array.isArray(u) ? u.filter((x): x is string => typeof x === "string") : [];
 
 /** ICMP has no ports; the API reports `"0"` regardless of what was sent. */
-const normalizePorts = (protocol: FirewallRuleProtocol, ports: string) =>
-  protocol === "icmp" ? "0" : ports;
+const normalizePorts = (
+  protocol: FirewallRuleProtocol,
+  ports: FirewallRulePorts,
+) => (protocol === "icmp" ? "0" : ports);
 
 const fromApiInbound = (
   rule: FirewallInboundRulesItem,
 ): FirewallInboundRule => ({
   protocol: rule.protocol,
-  ports: rule.ports,
+  ports: rule.ports as FirewallRulePorts,
   addresses: [...(rule.sources.addresses ?? [])],
   dropletIds: [...(rule.sources.droplet_ids ?? [])],
   tags: stringsOnly(rule.sources.tags),
@@ -192,7 +193,7 @@ const fromApiOutbound = (
   rule: FirewallOutboundRulesItem,
 ): FirewallOutboundRule => ({
   protocol: rule.protocol,
-  ports: rule.ports,
+  ports: rule.ports as FirewallRulePorts,
   addresses: [...(rule.destinations.addresses ?? [])],
   dropletIds: [...(rule.destinations.droplet_ids ?? [])],
   tags: stringsOnly(rule.destinations.tags),
