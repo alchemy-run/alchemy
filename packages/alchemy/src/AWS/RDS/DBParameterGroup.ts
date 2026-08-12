@@ -1,5 +1,6 @@
 import * as rds from "@distilled.cloud/aws/rds";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -21,6 +22,13 @@ export interface DBParameterGroupProps {
    * Human-readable description.
    */
   description?: string;
+  /**
+   * Instance parameter overrides, e.g. `{ time_zone: "Australia/Sydney" }`.
+   * Parameters removed from this map are reset to their engine defaults.
+   * Static parameters are applied with `pending-reboot`, dynamic parameters
+   * with `immediate`.
+   */
+  parameters?: Record<string, string>;
   /**
    * User-defined tags.
    */
@@ -47,6 +55,10 @@ export interface DBParameterGroup extends Resource<
      * Description of the parameter group.
      */
     description: string | undefined;
+    /**
+     * Non-default parameter values applied to the group.
+     */
+    parameters: Record<string, string>;
     /**
      * Tags on the parameter group.
      */
@@ -86,6 +98,19 @@ export const DBParameterGroup = Resource<DBParameterGroup>(
   "AWS.RDS.DBParameterGroup",
 );
 
+/**
+ * A parameter modify/reset issued immediately after another change fails with
+ * `InvalidDBParameterGroupStateFault` ("has pending changes") until the prior
+ * change settles — retry it on a short bounded schedule.
+ */
+const retryWhileParameterGroupBusy = <A, E extends { _tag: string }, R>(
+  self: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  Effect.retry(self, {
+    while: (e) => e._tag === "InvalidDBParameterGroupStateFault",
+    schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(10)]),
+  });
+
 export const DBParameterGroupProvider = () =>
   Provider.effect(
     DBParameterGroup,
@@ -107,6 +132,43 @@ export const DBParameterGroupProvider = () =>
           );
         return response?.DBParameterGroups?.[0];
       });
+
+      // All parameters (defaults + overrides) with their current values and
+      // apply types — the observed baseline for the parameter sync.
+      const readParameters = Effect.fn(function* (name: string) {
+        return yield* rds.describeDBParameters
+          .pages({ DBParameterGroupName: name })
+          .pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) => page.Parameters ?? []),
+            ),
+          );
+      });
+
+      // The subset the user has overridden (Source `user`) — used to compute
+      // resets when a prop entry is removed.
+      const readUserParameters = Effect.fn(function* (name: string) {
+        return yield* rds.describeDBParameters
+          .pages({ DBParameterGroupName: name, Source: "user" })
+          .pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) => page.Parameters ?? []),
+            ),
+          );
+      });
+
+      const toUserParameterRecord = (
+        parameters: rds.Parameter[],
+      ): Record<string, string> =>
+        Object.fromEntries(
+          parameters.flatMap((p) =>
+            p.ParameterName !== undefined && p.ParameterValue !== undefined
+              ? [[p.ParameterName, p.ParameterValue]]
+              : [],
+          ),
+        );
 
       return {
         stables: ["dbParameterGroupArn", "dbParameterGroupName"],
@@ -152,6 +214,8 @@ export const DBParameterGroupProvider = () =>
                     dbParameterGroupArn: g.DBParameterGroupArn,
                     family: g.DBParameterGroupFamily ?? "",
                     description: g.Description,
+                    // Like tags: a describe per group would be O(groups) calls.
+                    parameters: {} as Record<string, string>,
                     tags: {} as Record<string, string>,
                   })),
               ),
@@ -168,11 +232,16 @@ export const DBParameterGroupProvider = () =>
           if (!group?.DBParameterGroupName) {
             return undefined;
           }
+          // Unlike tags, parameters come back from the API.
+          const parameters = toUserParameterRecord(
+            yield* readUserParameters(group.DBParameterGroupName),
+          );
           return {
             dbParameterGroupName: group.DBParameterGroupName,
             dbParameterGroupArn: group.DBParameterGroupArn,
             family: group.DBParameterGroupFamily ?? olds?.family ?? "",
             description: group.Description,
+            parameters,
             tags: output?.tags ?? {},
           };
         }),
@@ -214,6 +283,67 @@ export const DBParameterGroupProvider = () =>
             }
           }
 
+          // Sync parameters — diff observed cloud values against desired.
+          const desiredParameters = news.parameters ?? {};
+          const byName = new Map(
+            (yield* readParameters(name)).map((p) => [p.ParameterName, p]),
+          );
+
+          const toModify: rds.Parameter[] = Object.entries(
+            desiredParameters,
+          ).flatMap(([ParameterName, ParameterValue]) => {
+            const current = byName.get(ParameterName);
+            if (current?.ParameterValue === ParameterValue) return [];
+            return [
+              {
+                ParameterName,
+                ParameterValue,
+                ApplyMethod:
+                  current?.ApplyType === "static"
+                    ? "pending-reboot"
+                    : "immediate",
+              },
+            ];
+          });
+          if (toModify.length > 0) {
+            // The API caps a single call at 20 parameters.
+            for (let i = 0; i < toModify.length; i += 20) {
+              yield* retryWhileParameterGroupBusy(
+                rds.modifyDBParameterGroup({
+                  DBParameterGroupName: name,
+                  Parameters: toModify.slice(i, i + 20),
+                }),
+              );
+            }
+          }
+
+          // Reset user-overridden parameters that were removed from props.
+          const toReset = (yield* readUserParameters(name)).flatMap((p) =>
+            p.ParameterName !== undefined &&
+            !(p.ParameterName in desiredParameters)
+              ? [
+                  {
+                    ParameterName: p.ParameterName,
+                    ApplyMethod:
+                      p.ApplyType === "static"
+                        ? ("pending-reboot" as const)
+                        : ("immediate" as const),
+                  },
+                ]
+              : [],
+          );
+          if (toReset.length > 0) {
+            for (let i = 0; i < toReset.length; i += 20) {
+              yield* retryWhileParameterGroupBusy(
+                rds.resetDBParameterGroup({
+                  DBParameterGroupName: name,
+                  ResetAllParameters: false,
+                  Parameters: toReset.slice(i, i + 20),
+                }),
+              );
+            }
+          }
+
           const dbParameterGroupArn = observed.DBParameterGroupArn;
 
           // Sync tags — diff prior recorded tags against desired (the
@@ -239,6 +369,7 @@ export const DBParameterGroupProvider = () =>
             dbParameterGroupArn,
             family: observed.DBParameterGroupFamily ?? news.family,
             description: observed.Description,
+            parameters: desiredParameters,
             tags: desiredTags,
           };
         }),
