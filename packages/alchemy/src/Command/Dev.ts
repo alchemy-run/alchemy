@@ -1,8 +1,8 @@
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import * as LocalProvider from "../Dev/LocalProvider.ts";
-import * as ProviderLayer from "../Dev/ProviderLayer.ts";
+import * as LocalProvider from "../Local/LocalProvider.ts";
+import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import {

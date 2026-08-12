@@ -22,6 +22,7 @@ export const TAB_ICONS: Record<string, string | undefined> = {
   Neon: b("neon"),
   Prisma: b("prisma"),
   Axiom: l("activity"),
+  "Better Auth": l("key-round"),
   GitHub: b("github"),
   Docker: b("docker"),
   Kubernetes: b("kubernetes"),

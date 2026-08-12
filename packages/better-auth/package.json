@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/better-auth",
-  "version": "2.0.0-beta.70",
+  "version": "2.0.0-beta.72",
   "description": "Better Auth integration for Alchemy.",
   "homepage": "https://alchemy.run",
   "license": "Apache-2.0",
@@ -22,24 +22,78 @@
   },
   "files": [
     "lib",
-    "src"
+    "src",
+    "NOTICE"
   ],
   "scripts": {
-    "build": "tsc -b"
+    "build": "tsc -b && bun ../../scripts/copy-package-files.ts better-auth",
+    "test": "alchemy-test"
   },
   "exports": {
     ".": {
+      "types": "./lib/index.d.ts",
       "bun": "./src/index.ts",
-      "default": "./lib/index.js",
-      "types": "./lib/index.d.ts"
-    }
-  },
-  "dependencies": {
-    "alchemy": "workspace:*",
-    "effect": "catalog:"
+      "worker": "./src/index.ts",
+      "import": "./lib/index.js"
+    },
+    "./*": {
+      "types": "./lib/*.d.ts",
+      "bun": "./src/*.ts",
+      "worker": "./src/*.ts",
+      "import": "./lib/*.js"
+    },
+    "./package.json": "./package.json"
   },
   "peerDependencies": {
-    "better-auth": "catalog:"
+    "@cloudflare/workers-types": "catalog:",
+    "@distilled.cloud/aws": "catalog:",
+    "@neondatabase/serverless": "catalog:",
+    "alchemy": "workspace:*",
+    "better-auth": "catalog:",
+    "drizzle-orm": "catalog:",
+    "effect": "catalog:",
+    "kysely": "catalog:",
+    "mysql2": "catalog:",
+    "pg": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@cloudflare/workers-types": {
+      "optional": true
+    },
+    "@distilled.cloud/aws": {
+      "optional": true
+    },
+    "@neondatabase/serverless": {
+      "optional": true
+    },
+    "drizzle-orm": {
+      "optional": true
+    },
+    "kysely": {
+      "optional": true
+    },
+    "mysql2": {
+      "optional": true
+    },
+    "pg": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:",
+    "@distilled.cloud/aws": "catalog:",
+    "@distilled.cloud/cloudflare": "catalog:",
+    "@effect/platform-bun": "catalog:",
+    "@neondatabase/serverless": "catalog:",
+    "@types/pg": "catalog:",
+    "alchemy": "workspace:*",
+    "alchemy-test": "workspace:*",
+    "better-auth": "catalog:",
+    "drizzle-orm": "catalog:",
+    "effect": "catalog:",
+    "kysely": "catalog:",
+    "mysql2": "catalog:",
+    "pg": "catalog:"
   },
   "publishConfig": {
     "access": "public"

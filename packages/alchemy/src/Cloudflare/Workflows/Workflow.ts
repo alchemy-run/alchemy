@@ -6,7 +6,7 @@ import type { Scope } from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
-import * as ProviderLayer from "../../Dev/ProviderLayer.ts";
+import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import { ALCHEMY_PHASE } from "../../Phase.ts";
 import type { PlatformServices } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";

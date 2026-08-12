@@ -1,12 +1,20 @@
 import * as Cause from "effect/Cause";
+import type { ConfigError } from "effect/Config";
 import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import type { PlatformError } from "effect/PlatformError";
 import type { Simplify } from "effect/Types";
 import type { ActionLike } from "./Action.ts";
 import { makeResolveContext } from "./ActionRuntimeContext.ts";
 import { stripUnowned, Unowned } from "./AdoptPolicy.ts";
+import { AlchemyContext } from "./AlchemyContext.ts";
+import type { AuthError } from "./Auth/AuthProvider.ts";
+import {
+  type CredentialsRequired,
+  demandPlanCredentials,
+} from "./Auth/Demand.ts";
 import {
   Artifacts,
   ArtifactStore,
@@ -95,10 +103,28 @@ export const apply = <P extends Plan>(
   | Output.InvalidReferenceError
   | Output.MissingSourceError
   | StateStoreError
-  | DestroyError,
+  | DestroyError
+  | CredentialsRequired
+  | AuthError
+  | PlatformError
+  | ConfigError,
   Cli | State | Stack | Stage
 > =>
   Effect.gen(function* () {
+    // Credential-free dev: a dev-mode plan that needs the real cloud
+    // (`Alchemy.remote()` rows, remote-proxied bindings, deletions of rows
+    // stamped `providerMode: "live"`) demands cloud credentials exactly
+    // once, up front, BEFORE any lifecycle operation runs — a fully-local
+    // dev plan demands nothing. Non-dev runs never enter the seam: live
+    // providers keep the pre-existing lazy credential flow. Wired here (not
+    // in Deploy/Destroy) because `apply` is the single choke point every
+    // path shares — CLI deploy/destroy, `Test.make` deploys, and
+    // `test.provider` scratch stacks. See `Auth/Demand.ts`.
+    const alchemy = yield* Effect.serviceOption(AlchemyContext);
+    if (Option.isSome(alchemy) && alchemy.value.dev) {
+      yield* demandPlanCredentials(plan);
+    }
+
     const cli = yield* Cli;
     const session = yield* cli.startApplySession(plan);
     const state = yield* yield* State;

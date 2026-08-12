@@ -1,9 +1,9 @@
 {
   "name": "@alchemy.run/cloudflare-runtime",
-  "version": "2.0.0-beta.70",
+  "version": "2.0.0-beta.72",
   "description": "Cloudflare Workers local runtime and build plugins for Alchemy.",
   "homepage": "https://alchemy.run",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "author": "Sam Goodwin <sam@alchemy.run>",
   "keywords": [
     "alchemy",
@@ -23,13 +23,15 @@
   "sideEffects": false,
   "files": [
     "src",
-    "dist"
+    "dist",
+    "NOTICE",
+    "THIRD_PARTY_LICENSES.md"
   ],
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
-    "build": "tsdown",
+    "build": "tsdown && bun ../../scripts/copy-package-files.ts cloudflare-runtime",
     "clean": "rm -rf dist",
     "test": "vitest run",
     "test:rolldown": "vitest run --project rolldown",
@@ -43,6 +45,7 @@
     "@alchemy.run/node-utils": "catalog:",
     "@cloudflare/unenv-preset": "catalog:workers",
     "@puppeteer/browsers": "catalog:cloudflare",
+    "capnp-es": "catalog:cloudflare",
     "magic-string": "catalog:cloudflare",
     "sharp": "catalog:cloudflare",
     "unenv": "catalog:workers",
@@ -57,7 +60,6 @@
     "@types/http-cache-semantics": "catalog:cloudflare",
     "@types/node": "catalog:",
     "@types/ws": "catalog:cloudflare",
-    "capnp-es": "catalog:cloudflare",
     "capnweb": "catalog:cloudflare",
     "http-cache-semantics": "catalog:cloudflare",
     "heap-js": "catalog:cloudflare",
@@ -73,7 +75,7 @@
     "ws": "catalog:cloudflare"
   },
   "peerDependencies": {
-    "@distilled.cloud/cloudflare": "catalog:",
+    "@distilled.cloud/cloudflare": "workspace:*",
     "@effect/platform-bun": "catalog:effect",
     "@effect/platform-node": "catalog:effect",
     "effect": "catalog:effect",
@@ -578,6 +580,12 @@
       "bun": "./src/core/internal/internal-worker.ts",
       "worker": "./src/core/internal/internal-worker.ts",
       "import": "./dist/core/node/internal/internal-worker.mjs"
+    },
+    "./core/internal/Port": {
+      "types": "./dist/core/node/internal/Port.d.mts",
+      "bun": "./src/core/internal/Port.ts",
+      "worker": "./src/core/internal/Port.ts",
+      "import": "./dist/core/node/internal/Port.mjs"
     },
     "./core/platform-proxy": {
       "types": "./dist/core/node/platform-proxy/index.d.mts",

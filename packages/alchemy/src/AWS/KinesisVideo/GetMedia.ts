@@ -34,7 +34,7 @@ export interface GetMediaRequest extends Omit<
  * // Provide the GetMediaHttp layer on the Function's init Effect; merge
  * // with the other KinesisVideo layers when using several bindings.
  * export default MediaFunction.make(
- *   { main: import.meta.url, url: true, timeout: Duration.seconds(30) },
+ *   { main: import.meta.url, functionUrl: true, timeout: Duration.seconds(30) },
  *   Effect.gen(function* () {
  *     const stream = yield* AWS.KinesisVideo.Stream("Camera", {
  *       mediaType: "video/h264",

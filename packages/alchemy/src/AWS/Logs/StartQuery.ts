@@ -33,7 +33,7 @@ export interface StartQueryRequest extends Omit<
  * // Insights queries are asynchronous: start one, then poll with the
  * // GetQueryResults binding. Provide both HTTP layers with Layer.mergeAll.
  * export default InsightsFunction.make(
- *   { main: import.meta.url, url: true },
+ *   { main: import.meta.url, functionUrl: true },
  *   Effect.gen(function* () {
  *     const logGroup = yield* AWS.Logs.LogGroup("AppLogs", {});
  *     const startQuery = yield* AWS.Logs.StartQuery(logGroup);

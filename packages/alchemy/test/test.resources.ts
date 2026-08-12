@@ -2,7 +2,7 @@ import { Unowned } from "@/AdoptPolicy";
 import { AlchemyContext } from "@/AlchemyContext.ts";
 import { Artifacts } from "@/Artifacts";
 import { isResolved } from "@/Diff.ts";
-import * as ProviderLayer from "@/Dev/ProviderLayer.ts";
+import * as ProviderLayer from "@/Local/ProviderLayer.ts";
 import * as Provider from "@/Provider.ts";
 import { LOCAL_ID_PREFIX, type ProviderMode } from "@/ProviderMode.ts";
 import { Resource, type ResourceBinding } from "@/Resource";

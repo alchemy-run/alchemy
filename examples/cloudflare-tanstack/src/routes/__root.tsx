@@ -5,6 +5,7 @@ import {
   Scripts,
   createRootRoute,
 } from "@tanstack/react-router";
+import appCss from "../styles.css?url";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -18,6 +19,12 @@ export const Route = createRootRoute({
       },
       {
         title: "TanStack Start",
+      },
+    ],
+    links: [
+      {
+        rel: "stylesheet",
+        href: appCss,
       },
     ],
   }),
@@ -38,14 +45,7 @@ function Document(props: Readonly<{ children: ReactNode }>) {
       <head>
         <HeadContent />
       </head>
-      <body
-        style={{
-          margin: 0,
-          fontFamily: "ui-sans-serif, system-ui, sans-serif",
-          background: "#f8fafc",
-          color: "#0f172a",
-        }}
-      >
+      <body className="m-0 bg-slate-50 font-sans text-slate-900">
         {props.children}
         <Scripts />
       </body>

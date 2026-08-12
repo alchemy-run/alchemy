@@ -1,3 +1,5 @@
+// Alchemy modifications are licensed under Apache-2.0.
+// This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
  * Parser for serialised HTTP responses, adapted from Miniflare's
  * `workers-sdk/packages/miniflare/src/workers/cache/cache.worker.ts`

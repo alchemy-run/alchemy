@@ -3,6 +3,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Scope from "effect/Scope";
+import * as NodeNet from "node:net";
 const ProxyWorker = {
   worker: () =>
     loadInternalWorker(
@@ -60,6 +61,23 @@ export const WorkerProxyLive = Layer.effect(
     const internet = yield* Internet.Internet;
     const ports = yield* Port.make({ cache: true });
 
+    // `localhost` resolves to BOTH 127.0.0.1 and ::1, and browsers prefer
+    // IPv6. A proxy bound only on 127.0.0.1 leaves `[::1]:port` free for any
+    // other process (e.g. a framework dev server hunting from its default
+    // port) to claim — after which `http://localhost:port` silently serves
+    // that other process instead of (or interleaved with) the proxy. When
+    // serving on the loopback default, bind an additional `[::1]` socket so
+    // the proxy owns its port on both address families. Machines without an
+    // IPv6 loopback are detected once and skip the extra socket.
+    const ipv6Loopback = yield* Effect.callback<boolean>((resume) => {
+      const server = NodeNet.createServer();
+      server.once("error", () => resume(Effect.succeed(false)));
+      server.listen({ port: 0, host: "::1", exclusive: true }, () =>
+        server.close(() => resume(Effect.succeed(true))),
+      );
+      return Effect.sync(() => server.close());
+    });
+
     const normalizeOptions = Effect.fnUntraced(function* (
       options: ServeOptions,
     ) {
@@ -69,9 +87,22 @@ export const WorkerProxyLive = Layer.effect(
         port:
           options.port && options.strictPort
             ? yield* ports.check(options.port)
-            : yield* ports.find(options.port ?? 0),
+            : options.port
+              ? // A configured (non-strict) port: a dev-session restart races
+                // the previous session's teardown, and an instant fallback
+                // would silently shift every configured port in the stack up
+                // by one in nondeterministic order — serving the wrong app on
+                // the ports the user knows. Wait out the teardown before
+                // falling back to the hunt (the caller warns on drift).
+                yield* ports
+                  .waitFor(options.port)
+                  .pipe(Effect.catch(() => ports.find(options.port!)))
+              : yield* ports.find(0),
         host,
         strictPort,
+        // Dual-bind only for the loopback default — an explicit host is
+        // served verbatim.
+        ipv6: options.host === undefined && ipv6Loopback,
         token: crypto.randomUUID(),
       };
     });
@@ -82,7 +113,7 @@ export const WorkerProxyLive = Layer.effect(
       formatInternalWorkerModules,
     );
 
-    const serve = ({ host, port, token }: ResolvedOptions) =>
+    const serve = ({ host, port, token, ipv6 }: ResolvedOptions) =>
       workerd
         .serve({
           sockets: [
@@ -91,6 +122,19 @@ export const WorkerProxyLive = Layer.effect(
               address: `${host}:${port}`,
               service: { name: "proxy:worker" },
             },
+            // The IPv6 half of `localhost` (see `ipv6Loopback` above). The
+            // port was probed across both families by `ports.find`/`check`,
+            // so this bind only fails on a genuine race — handled by
+            // `serveWithRetry` like any other collision.
+            ...(ipv6
+              ? [
+                  {
+                    name: "http-ipv6",
+                    address: `[::1]:${port}`,
+                    service: { name: "proxy:worker" },
+                  },
+                ]
+              : []),
           ],
           services: [
             {
@@ -154,6 +198,15 @@ export const WorkerProxyLive = Layer.effect(
       serve: Effect.fn("WorkerProxy.serve")(function* (options = {}) {
         const resolved = yield* normalizeOptions(options);
         const url = yield* serveWithRetry(resolved);
+        if (
+          options.port !== undefined &&
+          options.port !== 0 &&
+          Number(url.port) !== options.port
+        ) {
+          yield* Effect.logWarning(
+            `Port ${options.port} is in use by another process; serving on ${url.port} instead. Stop the other process, pick a different port, or set \`strictPort: true\` to fail instead.`,
+          );
+        }
         return {
           url,
           set: Effect.fn("WorkerProxyInstance.set")(function* (upstream) {

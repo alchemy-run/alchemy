@@ -17,8 +17,7 @@ import {
  * installed in the user's project — `loadSource` fails with a
  * `SourceProviderError` naming it otherwise.
  */
-const OCTANE_SOURCE_PROVIDER =
-  "@alchemy.run/cloudflare-frameworks/octane/source";
+const OCTANE_SOURCE_PROVIDER = "@alchemy.run/frontend-frameworks/octane/source";
 
 export interface OctaneProps<
   Bindings extends WorkerBindingProps = {},
@@ -66,7 +65,7 @@ export interface OctaneProps<
  * `dist/client` deploys as static assets — no Wrangler configuration and
  * no build command required.
  *
- * Requires the `@alchemy.run/cloudflare-frameworks` package to be installed in
+ * Requires the `@alchemy.run/frontend-frameworks` package to be installed in
  * your project; the integration is loaded from its `/octane` export. The
  * project also needs `octane`, `@octanejs/vite-plugin`, and
  * `@octanejs/adapter-cloudflare`. Input files are content-hashed

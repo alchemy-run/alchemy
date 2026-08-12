@@ -13,9 +13,11 @@
     "astro": "catalog:frameworks"
   },
   "devDependencies": {
-    "@alchemy.run/cloudflare-frameworks": "workspace:*",
+    "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@tailwindcss/vite": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
+    "tailwindcss": "catalog:",
     "typescript": "catalog:"
   },
   "engines": {

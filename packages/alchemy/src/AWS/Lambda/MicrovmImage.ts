@@ -541,7 +541,7 @@ export type MicrovmImageShape = Main<MicrovmImageServices>;
  * ```typescript
  * export default class Api extends AWS.Lambda.Function<Api>()(
  *   "Api",
- *   { main: import.meta.filename, url: true, timeout: Duration.seconds(120) },
+ *   { main: import.meta.filename, functionUrl: true, timeout: Duration.seconds(120) },
  *   Effect.gen(function* () {
  *     const runMicrovm = yield* AWS.Lambda.RunMicrovm(Sandbox);
  *     const getMicrovm = yield* AWS.Lambda.GetMicrovm(Sandbox);

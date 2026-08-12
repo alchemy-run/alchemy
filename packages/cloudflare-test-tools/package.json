@@ -2,15 +2,16 @@
   "name": "@alchemy.run/cloudflare-test-tools",
   "version": "0.0.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && bun ../../scripts/copy-package-files.ts cloudflare-test-tools",
     "e2e": "bun run src/e2e/Cli.ts",
     "typecheck": "bun run build"
   },
   "dependencies": {
     "@alchemy.run/cloudflare-runtime": "workspace:*",
-    "@alchemy.run/cloudflare-frameworks": "workspace:*",
+    "@alchemy.run/frontend-frameworks": "workspace:*",
     "@effect/platform-node": "catalog:effect",
     "effect": "catalog:effect",
     "miniflare": "catalog:workers"

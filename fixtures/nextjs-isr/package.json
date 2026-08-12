@@ -18,12 +18,12 @@
   "devDependencies": {
     "@alchemy.run/cloudflare-runtime": "workspace:*",
     "@alchemy.run/cloudflare-test-tools": "workspace:*",
-    "@alchemy.run/cloudflare-frameworks": "workspace:*",
+    "@alchemy.run/frontend-frameworks": "workspace:*",
     "@effect/platform-node": "catalog:effect",
     "@opennextjs/cloudflare": "catalog:frameworks",
     "@playwright/test": "catalog:",
     "effect": "catalog:effect",
     "miniflare": "catalog:workers",
-    "wrangler": "file:../../packages/cloudflare-frameworks/src/nextjs/wrangler-stub"
+    "wrangler": "file:../../packages/frontend-frameworks/src/nextjs/wrangler-stub"
   }
 }

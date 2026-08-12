@@ -43,7 +43,7 @@ test.provider(
             main: handlerPath,
             handler: "handler",
             isExternal: true,
-            url: false,
+            functionUrl: false,
             env: { VERSION: envVersion },
             reservedConcurrentExecutions,
           });

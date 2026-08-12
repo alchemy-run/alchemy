@@ -565,7 +565,10 @@ export interface WorkerVersionOptions {
 }
 
 export interface WorkerProps<
-  Bindings extends WorkerBindingProps = any,
+  // PERF: unconstrained for the same reason as `Worker<Bindings>` above —
+  // the `extends WorkerBindingProps` proof is expensive for generic mapped
+  // types and the call-site overloads already constrain user input.
+  Bindings = any,
   Assets extends WorkerAssetsConfig | undefined =
     | WorkerAssetsConfig
     | undefined,
@@ -1033,7 +1036,14 @@ export interface ViteOptions {
   };
 }
 
-export type Worker<Bindings extends WorkerBindings = any> = Resource<
+// PERF: deliberately NOT `Bindings extends WorkerBindings`. The constraint
+// forced the checker to prove the generic `NormalizedBindings<...>` mapped
+// type assignable to the ~30-member `WorkerBindingResource` union at every
+// `Worker<...>` instantiation — a single 28s structural relation that was 45%
+// of the whole program's check time. Input is already constrained at the
+// call boundary (`Bindings extends WorkerBindingProps`), so this type
+// argument is only ever produced from validated shapes.
+export type Worker<Bindings = any> = Resource<
   WorkerTypeId,
   WorkerProps<Bindings>,
   {
@@ -2108,7 +2118,9 @@ export const Worker: ResourceClassLike<Worker> &
         Self | Extract<Deps, Container.Application<any>> | Providers
       > &
         Named<Id> & {
-          new (_: never): MakeShape<Shape, WorkerShape> & Named<Id> & Tag;
+          new (
+            _: never,
+          ): MakeShape<Shape, WorkerShape> & Named<Id> & Tag<WorkerTypeId>;
           of(shape: Shape & WorkerShape): MakeShape<Shape, WorkerShape>;
           make<PropsReq = never, InitReq = never>(
             props:
@@ -2120,27 +2132,40 @@ export const Worker: ResourceClassLike<Worker> &
             never,
             | Extract<Deps, Container.Application<any>>
             | Providers
-            | Exclude<InitReq, Self | WorkerServices>
+            | Exclude<
+                PropsReq | InitReq,
+                Self | WorkerServices | Tag<WorkerTypeId>
+              >
           >;
         };
     };
     <Self>(): {
-      <const Id extends string, Shape extends WorkerShape, Req = never>(
+      <
+        const Id extends string,
+        Shape extends WorkerShape,
+        Req = never,
+        PropsReq = never,
+      >(
         id: Id,
-        props: InputProps<WorkerProps>,
+        props:
+          | InputProps<WorkerProps>
+          | Effect.Effect<InputProps<WorkerProps>, ConfigError, PropsReq>,
         impl: Effect.Effect<Shape, ConfigError, Req>,
       ): Effect.Effect<
         Worker & Rpc<Self>,
         never,
         // worker-ambient services are satisfied by the runtime
         // bridge; anything else the init needs (foreign resource
-        // constructors, provider collections — e.g. a GitHub `*Http`
-        // binding minting its PersonalAccessToken) flows OUT to the
-        // Stack, exactly as the props-only overload already lets it
-        Exclude<Req, WorkerServices | PlatformServices | Tag> | Providers
+        // constructors, provider collections, a Container.Application —
+        // e.g. a GitHub `*Http` binding minting its PersonalAccessToken)
+        // flows OUT to the Stack, exactly as the props-only overload
+        // already lets it
+        | Exclude<Req, WorkerServices | PlatformServices | Tag>
+        | Providers
+        | PropsReq
       > &
         Named<Id> & {
-          new (): MakeShape<Shape, WorkerShape> & Named<Id> & Tag;
+          new (): MakeShape<Shape, WorkerShape> & Named<Id> & Tag<WorkerTypeId>;
         };
       /**
        * Class form without an implementation — an external Worker (a plain
@@ -2160,7 +2185,7 @@ export const Worker: ResourceClassLike<Worker> &
           | Effect.Effect<InputProps<WorkerProps>, ConfigError, Req>,
       ): Effect.Effect<Worker & Rpc<{}>, never, Req | Providers> &
         Named<Id> & {
-          new (): Named<Id> & Tag;
+          new (): Named<Id> & Tag<WorkerTypeId>;
         };
     };
     <

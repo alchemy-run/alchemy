@@ -15,12 +15,14 @@
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
-    "@alchemy.run/cloudflare-frameworks": "workspace:*",
+    "@alchemy.run/frontend-frameworks": "workspace:*",
     "@opennextjs/cloudflare": "catalog:frameworks",
+    "@tailwindcss/postcss": "catalog:",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "alchemy": "workspace:*",
     "effect": "catalog:",
+    "tailwindcss": "catalog:",
     "typescript": "^6.0.3"
   },
   "engines": {

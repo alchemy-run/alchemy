@@ -28,7 +28,10 @@
       "path": "./packages/cloudflare-runtime/tsconfig.json"
     },
     {
-      "path": "./packages/cloudflare-frameworks/tsconfig.json"
+      "path": "./packages/frontend-frameworks/tsconfig.json"
+    },
+    {
+      "path": "./packages/floci/tsconfig.json"
     },
     {
       "path": "./packages/cloudflare-test-tools/tsconfig.json"
@@ -78,6 +81,9 @@
     },
     {
       "path": "./examples/aws-lambda-rpc/tsconfig.json"
+    },
+    {
+      "path": "./examples/aws-dev/tsconfig.json"
     },
     {
       "path": "./examples/aws-lambda/tsconfig.json"

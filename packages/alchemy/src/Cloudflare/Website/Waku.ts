@@ -17,7 +17,7 @@ import {
  * installed in the user's project — `loadSource` fails with a
  * `SourceProviderError` naming it otherwise.
  */
-const WAKU_SOURCE_PROVIDER = "@alchemy.run/cloudflare-frameworks/waku/source";
+const WAKU_SOURCE_PROVIDER = "@alchemy.run/frontend-frameworks/waku/source";
 
 export interface WakuProps<
   Bindings extends WorkerBindingProps = {},
@@ -51,20 +51,25 @@ export interface WakuProps<
    */
   rootDir?: string;
   /**
-   * Waku source directory, relative to {@link rootDir}.
-   * @default "src"
+   * Waku source directory, relative to {@link rootDir}. Setting this
+   * overrides a `srcDir` in the project's `waku.config.*`.
+   * @default the project's `waku.config.*` value, or waku's own default (`"src"`)
    */
   srcDir?: string;
   /**
    * Waku build output directory, relative to {@link rootDir}. The server
    * bundle is read from `<distDir>/server` and the client assets from
-   * `<distDir>/public`.
-   * @default "dist"
+   * `<distDir>/public`. Setting this overrides a `distDir` in the
+   * project's `waku.config.*` — if your config file customizes `distDir`,
+   * mirror it here (or exclude it via `memo`) so the build output doesn't
+   * pollute the rebuild hash.
+   * @default the project's `waku.config.*` value, or waku's own default (`"dist"`)
    */
   distDir?: string;
   /**
-   * Base path the app is served under.
-   * @default "/"
+   * Base path the app is served under. Setting this overrides a
+   * `basePath` in the project's `waku.config.*`.
+   * @default the project's `waku.config.*` value, or waku's own default (`"/"`)
    */
   basePath?: string;
   /**
@@ -92,11 +97,16 @@ export interface WakuProps<
  * A Cloudflare Worker deployed from a [Waku](https://waku.gg) project.
  *
  * `Waku` builds the project programmatically — no `waku.config.ts` edits,
- * no Wrangler configuration, and no build command required. The RSC server
+ * no Wrangler configuration, and no build command required. A project's
+ * `waku.config.*` loads natively (same as waku's CLI) as the base config,
+ * with `srcDir`/`distDir`/`basePath` from this resource winning per key;
+ * `unstable_adapter` is owned by Alchemy and must not be set. Note that a
+ * standalone `vite.config.ts` is NOT loaded (same as waku's CLI) — Vite
+ * config belongs in `waku.config.*`'s `vite` field. The RSC server
  * bundle deploys as the Worker script and the client output (including
  * SSG-prerendered pages) deploys as static assets.
  *
- * Requires the `@alchemy.run/cloudflare-frameworks` package to be installed in
+ * Requires the `@alchemy.run/frontend-frameworks` package to be installed in
  * your project; the integration is loaded from its `/waku` export. Input files
  * are content-hashed
  * (respecting `.gitignore` by default) so unchanged projects skip the

@@ -97,6 +97,29 @@ test(
 );
 
 test(
+  "compiles tailwind via postcss",
+  Effect.gen(function* () {
+    const url = yield* base;
+    // The page markup uses Tailwind utilities — proving the project's own
+    // postcss.config.mjs (@tailwindcss/postcss) ran inside `next build`.
+    const html = yield* getBodyWhenReady(url, "text-3xl");
+    expect(html).toContain("text-3xl");
+
+    // Next.js links the compiled stylesheet from under /_next/static/
+    // (chunks/*.css as of Next 16).
+    const match = html.match(/\/_next\/static\/[^"']+\.css/);
+    expect(match).not.toBeNull();
+
+    // The stylesheet must contain the compiled Tailwind rule, not just the
+    // class name in markup.
+    const css = yield* getBodyWhenReady(`${url}${match![0]}`, ".text-3xl");
+    expect(css).toContain(".text-3xl");
+    expect(css).toContain(".font-bold");
+  }),
+  { timeout: 180_000 },
+);
+
+test(
   "serves a static asset from public/",
   Effect.gen(function* () {
     const url = yield* base;

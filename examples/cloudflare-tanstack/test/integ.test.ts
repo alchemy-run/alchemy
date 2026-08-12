@@ -2,7 +2,9 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
 import { expect } from "bun:test";
 import * as Console from "effect/Console";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import Stack from "../alchemy.run.ts";
@@ -12,6 +14,35 @@ import Stack from "../alchemy.run.ts";
 // `Effect.retry` never fires — these helpers fail on the cold-start window and
 // retry until the real response (which may be 200/204/400) comes back.
 const { executeWhenReady, getWhenReady } = Test;
+
+class AssetNotReady extends Data.TaggedError("AssetNotReady")<{
+  body: string;
+}> {}
+
+// While the static-asset manifest is still propagating, requests can serve a
+// stale or placeholder body with a 200 — the status alone can't distinguish
+// "not yet" from "served", so retry until the body matches.
+const getBodyWhenReady = (url: string, expected: string) =>
+  Effect.gen(function* () {
+    const res = yield* getWhenReady(url);
+    expect(res.status).toBe(200);
+    const body = yield* res.text;
+    if (!body.includes(expected)) {
+      return yield* Effect.fail(new AssetNotReady({ body }));
+    }
+    return body;
+  }).pipe(
+    Effect.retry({
+      while: (error) => error instanceof AssetNotReady,
+      schedule: Schedule.max([
+        Schedule.min([
+          Schedule.exponential("500 millis"),
+          Schedule.spaced("3 seconds"),
+        ]),
+        Schedule.recurs(20),
+      ]),
+    }),
+  );
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
@@ -45,6 +76,30 @@ test(
   Effect.gen(function* () {
     const { websiteUrl } = yield* stack;
     expect(websiteUrl).toBeString();
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "compiles tailwind from vite.config.ts",
+  Effect.gen(function* () {
+    const { websiteUrl } = yield* stack;
+    const base = websiteUrl.replace(/\/+$/, "");
+    const res = yield* getWhenReady(base);
+    expect(res.status).toBe(200);
+    const html = yield* res.text;
+    // The SSR'd markup uses Tailwind utilities...
+    expect(html).toContain("text-3xl");
+    // ...and links the stylesheet Vite emitted via the project-owned
+    // vite.config.ts (the @tailwindcss/vite plugin), proving Alchemy loaded
+    // the config file natively instead of the programmatic fallback.
+    const match = html.match(/<link[^>]*href="([^"]+\.css[^"]*)"/);
+    expect(match).not.toBeNull();
+    const href = match![1]!;
+    const cssUrl = href.startsWith("http") ? href : `${base}${href}`;
+    const css = yield* getBodyWhenReady(cssUrl, ".text-3xl");
+    expect(css).toContain(".text-3xl");
+    expect(css).toContain(".font-bold");
   }),
   { timeout: 180_000 },
 );

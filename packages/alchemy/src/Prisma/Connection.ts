@@ -184,7 +184,7 @@ export interface Connection extends Resource<
  * ```typescript
  * export default AWS.Lambda.Function(
  *   "api",
- *   { main: import.meta.filename, url: true },
+ *   { main: import.meta.filename, functionUrl: true },
  *   Effect.gen(function* () {
  *     const db = yield* Prisma.Connect(connection);
  *     const sql = yield* SQL.Postgres({ url: db.databaseUrl });

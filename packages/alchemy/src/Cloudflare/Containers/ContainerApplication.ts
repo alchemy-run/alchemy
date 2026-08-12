@@ -1,7 +1,7 @@
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as Redacted from "effect/Redacted";
 import type * as Bundle from "../../Bundle/Bundle.ts";
-import * as ProviderLayer from "../../Dev/ProviderLayer.ts";
+import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import {
   type Main,
   type PlatformProps,

@@ -234,7 +234,10 @@ export const ClusterProvider = () =>
               ];
             });
           }),
-        reconcile: Effect.fn(function* ({ id, news, session }) {
+        reconcile: Effect.fn(function* ({ id, news: rawNews, session }) {
+          // Every ClusterProps field is optional, so `Cluster("Id")` (no
+          // props object at all) is a legal instantiation — normalize.
+          const news = rawNews ?? {};
           const { accountId, region } = yield* AWSEnvironment.current;
           const clusterName = yield* toClusterName(id, news);
           const clusterArn =

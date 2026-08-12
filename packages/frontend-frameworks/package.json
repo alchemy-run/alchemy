@@ -1,0 +1,313 @@
+{
+  "name": "@alchemy.run/frontend-frameworks",
+  "version": "2.0.0-beta.72",
+  "description": "Framework build and development integrations for Alchemy.",
+  "homepage": "https://alchemy.run",
+  "license": "Apache-2.0",
+  "author": "Sam Goodwin <sam@alchemy.run>",
+  "keywords": [
+    "alchemy",
+    "cloudflare",
+    "effect",
+    "infrastructure-as-code"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "packages/frontend-frameworks"
+  },
+  "bugs": {
+    "url": "https://github.com/alchemy-run/alchemy/issues"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "src",
+    "dist",
+    "NOTICE",
+    "THIRD_PARTY_LICENSES.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsdown && tsc -b --force tsconfig.json && cp src/nextjs/runner.mjs dist/nextjs/runner.mjs && bun ../../scripts/copy-package-files.ts frontend-frameworks",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:core": "vitest run src/core/test",
+    "test:astro": "vitest run src/astro/test",
+    "test:nextjs": "vitest run src/nextjs/test",
+    "test:nuxt": "vitest run src/nuxt/test",
+    "test:octane": "vitest run src/octane/test",
+    "test:sveltekit": "vitest run src/sveltekit/test",
+    "test:waku": "vitest run src/waku/test",
+    "typecheck": "tsc -b tsconfig.json && tsc --noEmit -p tsconfig.test.json"
+  },
+  "dependencies": {
+    "@alchemy.run/cloudflare-runtime": "workspace:*",
+    "@distilled.cloud/cloudflare": "workspace:*",
+    "@effect/platform-node": "catalog:effect",
+    "esbuild": "catalog:cloudflare",
+    "fast-glob": "catalog:cloudflare",
+    "rolldown": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:workers",
+    "@effect/platform-bun": "catalog:effect",
+    "@astrojs/internal-helpers": "catalog:frameworks",
+    "@astrojs/underscore-redirects": "catalog:frameworks",
+    "@octanejs/vite-plugin": "catalog:frameworks",
+    "@opennextjs/cloudflare": "catalog:frameworks",
+    "@sveltejs/kit": "catalog:frameworks",
+    "astro": "catalog:frameworks",
+    "effect": "catalog:effect",
+    "hono": "catalog:frameworks",
+    "nitropack": "catalog:frameworks",
+    "nuxt": "catalog:frameworks",
+    "tsdown": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:",
+    "waku": "catalog:frameworks"
+  },
+  "peerDependencies": {
+    "@effect/platform-bun": "catalog:effect",
+    "@effect/platform-node": "catalog:effect",
+    "@octanejs/vite-plugin": "catalog:cloudflare",
+    "@opennextjs/cloudflare": "catalog:frameworks",
+    "@sveltejs/kit": "catalog:cloudflare",
+    "astro": "catalog:cloudflare",
+    "effect": "catalog:effect",
+    "hono": "catalog:frameworks",
+    "nuxt": "catalog:cloudflare",
+    "vite": "catalog:cloudflare",
+    "waku": "catalog:frameworks"
+  },
+  "peerDependenciesMeta": {
+    "@effect/platform-bun": {
+      "optional": true
+    },
+    "@effect/platform-node": {
+      "optional": true
+    },
+    "@octanejs/vite-plugin": {
+      "optional": true
+    },
+    "@opennextjs/cloudflare": {
+      "optional": true
+    },
+    "@sveltejs/kit": {
+      "optional": true
+    },
+    "astro": {
+      "optional": true
+    },
+    "hono": {
+      "optional": true
+    },
+    "nuxt": {
+      "optional": true
+    },
+    "vite": {
+      "optional": true
+    },
+    "waku": {
+      "optional": true
+    }
+  },
+  "exports": {
+    "./aws-lambda": {
+      "types": "./dist/aws-lambda/index.d.ts",
+      "bun": "./dist/aws-lambda/index.js",
+      "worker": "./dist/aws-lambda/index.js",
+      "import": "./dist/aws-lambda/index.js"
+    },
+    "./core": {
+      "types": "./dist/core/index.d.ts",
+      "bun": "./dist/core/index.js",
+      "worker": "./dist/core/index.js",
+      "import": "./dist/core/index.js"
+    },
+    "./astro": {
+      "types": "./dist/astro/index.d.ts",
+      "bun": "./dist/astro/index.js",
+      "worker": "./dist/astro/index.js",
+      "import": "./dist/astro/index.js"
+    },
+    "./astro/aws": {
+      "types": "./dist/astro/aws.d.ts",
+      "bun": "./dist/astro/aws.js",
+      "worker": "./dist/astro/aws.js",
+      "import": "./dist/astro/aws.js"
+    },
+    "./astro/cloudflare": {
+      "types": "./dist/astro/cloudflare.d.ts",
+      "bun": "./dist/astro/cloudflare.js",
+      "worker": "./dist/astro/cloudflare.js",
+      "import": "./dist/astro/cloudflare.js"
+    },
+    "./astro/source": {
+      "types": "./dist/astro/source.d.ts",
+      "bun": "./dist/astro/source.js",
+      "worker": "./dist/astro/source.js",
+      "import": "./dist/astro/source.js"
+    },
+    "./astro/entrypoints/aws-server": {
+      "types": "./dist/astro/entrypoints/aws-server.d.ts",
+      "bun": "./dist/astro/entrypoints/aws-server.js",
+      "worker": "./dist/astro/entrypoints/aws-server.js",
+      "import": "./dist/astro/entrypoints/aws-server.js"
+    },
+    "./astro/entrypoints/server": {
+      "types": "./dist/astro/runtime/entrypoints/server.d.ts",
+      "bun": "./dist/astro/runtime/entrypoints/server.js",
+      "worker": "./dist/astro/runtime/entrypoints/server.js",
+      "import": "./dist/astro/runtime/entrypoints/server.js"
+    },
+    "./astro/entrypoints/server.js": {
+      "types": "./dist/astro/runtime/entrypoints/server.d.ts",
+      "bun": "./dist/astro/runtime/entrypoints/server.js",
+      "worker": "./dist/astro/runtime/entrypoints/server.js",
+      "import": "./dist/astro/runtime/entrypoints/server.js"
+    },
+    "./astro/image-passthrough-endpoint": {
+      "types": "./dist/astro/runtime/entrypoints/image-passthrough-endpoint.d.ts",
+      "bun": "./dist/astro/runtime/entrypoints/image-passthrough-endpoint.js",
+      "worker": "./dist/astro/runtime/entrypoints/image-passthrough-endpoint.js",
+      "import": "./dist/astro/runtime/entrypoints/image-passthrough-endpoint.js"
+    },
+    "./astro/types.d.ts": "./src/astro/types.d.ts",
+    "./nextjs": {
+      "types": "./dist/nextjs/index.d.ts",
+      "bun": "./dist/nextjs/index.js",
+      "worker": "./dist/nextjs/index.js",
+      "import": "./dist/nextjs/index.js"
+    },
+    "./nextjs/aws": {
+      "types": "./dist/nextjs/aws.d.ts",
+      "bun": "./dist/nextjs/aws.js",
+      "worker": "./dist/nextjs/aws.js",
+      "import": "./dist/nextjs/aws.js"
+    },
+    "./nextjs/source": {
+      "types": "./dist/nextjs/source.d.ts",
+      "bun": "./dist/nextjs/source.js",
+      "worker": "./dist/nextjs/source.js",
+      "import": "./dist/nextjs/source.js"
+    },
+    "./nuxt": {
+      "types": "./dist/nuxt/index.d.ts",
+      "bun": "./dist/nuxt/index.js",
+      "worker": "./dist/nuxt/index.js",
+      "import": "./dist/nuxt/index.js"
+    },
+    "./nuxt/aws": {
+      "types": "./dist/nuxt/aws.d.ts",
+      "bun": "./dist/nuxt/aws.js",
+      "worker": "./dist/nuxt/aws.js",
+      "import": "./dist/nuxt/aws.js"
+    },
+    "./nuxt/cloudflare": {
+      "types": "./dist/nuxt/cloudflare.d.ts",
+      "bun": "./dist/nuxt/cloudflare.js",
+      "worker": "./dist/nuxt/cloudflare.js",
+      "import": "./dist/nuxt/cloudflare.js"
+    },
+    "./nuxt/source": {
+      "types": "./dist/nuxt/source.d.ts",
+      "bun": "./dist/nuxt/source.js",
+      "worker": "./dist/nuxt/source.js",
+      "import": "./dist/nuxt/source.js"
+    },
+    "./octane": {
+      "types": "./dist/octane/index.d.ts",
+      "bun": "./dist/octane/index.js",
+      "worker": "./dist/octane/index.js",
+      "import": "./dist/octane/index.js"
+    },
+    "./octane/aws": {
+      "types": "./dist/octane/aws.d.ts",
+      "bun": "./dist/octane/aws.js",
+      "worker": "./dist/octane/aws.js",
+      "import": "./dist/octane/aws.js"
+    },
+    "./octane/aws-adapter": {
+      "types": "./dist/octane/aws-adapter.d.ts",
+      "bun": "./dist/octane/aws-adapter.js",
+      "worker": "./dist/octane/aws-adapter.js",
+      "import": "./dist/octane/aws-adapter.js"
+    },
+    "./octane/cloudflare": {
+      "types": "./dist/octane/cloudflare.d.ts",
+      "bun": "./dist/octane/cloudflare.js",
+      "worker": "./dist/octane/cloudflare.js",
+      "import": "./dist/octane/cloudflare.js"
+    },
+    "./octane/source": {
+      "types": "./dist/octane/source.d.ts",
+      "bun": "./dist/octane/source.js",
+      "worker": "./dist/octane/source.js",
+      "import": "./dist/octane/source.js"
+    },
+    "./sveltekit": {
+      "types": "./dist/sveltekit/index.d.ts",
+      "bun": "./dist/sveltekit/index.js",
+      "worker": "./dist/sveltekit/index.js",
+      "import": "./dist/sveltekit/index.js"
+    },
+    "./sveltekit/aws": {
+      "types": "./dist/sveltekit/aws.d.ts",
+      "bun": "./dist/sveltekit/aws.js",
+      "worker": "./dist/sveltekit/aws.js",
+      "import": "./dist/sveltekit/aws.js"
+    },
+    "./sveltekit/cloudflare": {
+      "types": "./dist/sveltekit/cloudflare.d.ts",
+      "bun": "./dist/sveltekit/cloudflare.js",
+      "worker": "./dist/sveltekit/cloudflare.js",
+      "import": "./dist/sveltekit/cloudflare.js"
+    },
+    "./sveltekit/source": {
+      "types": "./dist/sveltekit/source.d.ts",
+      "bun": "./dist/sveltekit/source.js",
+      "worker": "./dist/sveltekit/source.js",
+      "import": "./dist/sveltekit/source.js"
+    },
+    "./waku": {
+      "types": "./dist/waku/index.d.ts",
+      "bun": "./dist/waku/index.js",
+      "worker": "./dist/waku/index.js",
+      "import": "./dist/waku/index.js"
+    },
+    "./waku/adapter": {
+      "types": "./dist/waku/adapter.d.ts",
+      "bun": "./dist/waku/adapter.js",
+      "worker": "./dist/waku/adapter.js",
+      "import": "./dist/waku/adapter.js"
+    },
+    "./waku/aws": {
+      "types": "./dist/waku/aws.d.ts",
+      "bun": "./dist/waku/aws.js",
+      "worker": "./dist/waku/aws.js",
+      "import": "./dist/waku/aws.js"
+    },
+    "./waku/aws-adapter": {
+      "types": "./dist/waku/aws-adapter.d.ts",
+      "bun": "./dist/waku/aws-adapter.js",
+      "worker": "./dist/waku/aws-adapter.js",
+      "import": "./dist/waku/aws-adapter.js"
+    },
+    "./waku/cloudflare": {
+      "types": "./dist/waku/cloudflare.d.ts",
+      "bun": "./dist/waku/cloudflare.js",
+      "worker": "./dist/waku/cloudflare.js",
+      "import": "./dist/waku/cloudflare.js"
+    },
+    "./waku/source": {
+      "types": "./dist/waku/source.d.ts",
+      "bun": "./dist/waku/source.js",
+      "worker": "./dist/waku/source.js",
+      "import": "./dist/waku/source.js"
+    },
+    "./package.json": "./package.json"
+  }
+}
