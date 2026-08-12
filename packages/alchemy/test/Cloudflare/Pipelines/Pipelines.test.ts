@@ -3,7 +3,7 @@ import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
 import * as pipelines from "@distilled.cloud/cloudflare/pipelines";
-import * as accounts from "@distilled.cloud/cloudflare/accounts";
+import * as user from "@distilled.cloud/cloudflare/user";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -52,9 +52,7 @@ const r2Credentials = Effect.gen(function* () {
     );
   }
   const token = Redacted.value(creds.apiToken);
-  const verified = yield* retryAuthBlip(
-    accounts.verifyToken({ accountId: creds.accountId }),
-  );
+  const verified = yield* retryAuthBlip(user.verifyToken({}));
   const secretAccessKey = yield* Effect.sync(() =>
     crypto.createHash("sha256").update(token).digest("hex"),
   );
