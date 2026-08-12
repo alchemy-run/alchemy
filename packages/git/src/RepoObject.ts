@@ -129,20 +129,15 @@ import {
  * parked in R2 and parsed from there (DESIGN.md §3.6). A **buffering
  * threshold, not a limit** — a push larger than this is no longer rejected.
  *
- * 50 MiB is the memory-safe ceiling for the in-memory path (pack + delta
- * bases inside a 128 MB isolate) and is the measured-fast path: the
- * 38 MiB alchemy-repo push ingests in ~20 s here.
+ * 32 MiB keeps the in-memory path comfortably inside a 128 MB isolate
+ * (pack + delta bases + staging) while covering the overwhelming majority
+ * of pushes at full speed.
  *
- * MEASURED CAVEAT: the R2-backed path above this threshold is correct but
- * currently **much** slower — `PackParser` issues a read per entry, and an
- * entry-sized read against window-cached R2 costs a stitch/copy each time,
- * so a 13.7k-object pack takes minutes rather than seconds. Making large
- * pushes fast needs the parser to consume a *sequential cursor* (one
- * forward-only stream with a small pushback buffer) instead of random
- * reads; the seam is `RandomAccess`, so that change stays local to
- * `PackParser` + `store/PackSource.ts`.
+ * Measured on the 38 MiB alchemy-repo push: ~20 s in memory, ~44 s through
+ * R2. The R2 path costs about 2x, and is unbounded — so a push larger than
+ * this threshold is slower, never refused.
  */
-export const MAX_PACK_BYTES = 50 * 1024 * 1024;
+export const MAX_PACK_BYTES = 32 * 1024 * 1024;
 
 /** Agent string advertised on the wire. */
 export const GIT_AGENT = "git-service/1";

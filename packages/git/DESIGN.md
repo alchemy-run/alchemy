@@ -1013,19 +1013,23 @@ R2-backed `RandomAccess` with window-coalesced reads — the seam
 on `PackParser` (which the pack fixtures cover directly) rather than its
 own buffer-only copy.
 
-Measured caveat, found by pushing this repo through it: that path is
-correct but **much slower** than memory. `PackParser` issues a read per
-entry, and an entry-sized read against a window cache costs a stitch and a
-copy each time, so a 13.7k-object pack takes minutes instead of the ~20 s
-the in-memory path needs. The threshold therefore stays at 50 MiB — the
-memory-safe ceiling inside a 128 MB isolate, and the fast path for
-everything up to it.
+Getting there took one real fix. `PackParser` read **the entire remainder
+of the pack for every entry** (`source.read(offset, dataEnd - offset)`).
+On a buffer that is free — a subarray view — which is why nobody noticed;
+against R2 it copies ~19 MiB per entry, so a 13.7k-object pack moved
+hundreds of gigabytes and blew a 600 s timeout. Entries are a few KiB, so
+the parser now reads a bounded 512 KiB window and grows it only for the
+rare object whose compressed stream runs past it.
 
-Making large pushes *fast* needs the parser to consume a **sequential
-cursor** — one forward-only stream with a small pushback buffer, since pack
-parsing is almost entirely sequential and only delta-base resolution seeks
-backwards — instead of random reads. That change stays inside `PackParser`
-and `PackSource`; no protocol code moves.
+| 38 MiB alchemy push | before | after |
+|---|---|---|
+| via R2 (streamed ingest) | >600 s (timeout) | **44.4 s** |
+| in memory | 20.6 s | 20.6 s |
+
+So the R2 path costs about **2×** memory rather than 30×, and the
+threshold ships at 32 MiB — comfortably inside a 128 MB isolate, covering
+the overwhelming majority of pushes at full speed, with anything larger
+merely slower instead of refused.
 
 ### 16.5 What the measurements corrected
 

@@ -177,6 +177,14 @@ export const DEFAULT_CACHE_BYTES = 20 * 1024 * 1024;
 const MAX_CACHE_ENTRY_BYTES = 10 * 1024 * 1024;
 
 /**
+ * Bytes read per entry before growing (see the read in the main pass).
+ * Sized so virtually every git object — a few KiB — is covered by one read,
+ * which is what keeps ingest from a remote source proportional to the pack
+ * size rather than to entries × pack size.
+ */
+const ENTRY_WINDOW_BYTES = 512 * 1024;
+
+/**
  * Options for {@link ingestPack}.
  */
 export interface IngestPackOptions<E, R> {
@@ -421,7 +429,32 @@ export const ingestPack = <E, R>(
           reason: `truncated pack: entry ${i} of ${count} starts past the trailer`,
         });
       }
-      const window = yield* source.read(offset, dataEnd - offset);
+      // Read a BOUNDED window, not the rest of the pack.
+      //
+      // `source.read(offset, dataEnd - offset)` is free on a buffer (a
+      // subarray view) but catastrophic on a remote source: it copies the
+      // whole remainder once per entry, so a 13.7k-object pack in R2 moved
+      // hundreds of GB and took minutes instead of seconds. An entry is
+      // almost always a few KiB, so one small window covers it; the rare
+      // large object grows the window on demand (below).
+      let window = yield* source.read(
+        offset,
+        Math.min(ENTRY_WINDOW_BYTES, dataEnd - offset),
+      );
+      /**
+       * Re-reads a bigger window when an entry's compressed stream runs past
+       * the current one. Doubling from the entry window reaches the whole
+       * remainder in a handful of steps, and only for objects that need it.
+       */
+      const growWindow = Effect.fn(function* (needed: number) {
+        const size = Math.min(
+          Math.max(needed, window.length * 2),
+          dataEnd - offset,
+        );
+        if (size <= window.length) return false;
+        window = yield* source.read(offset, size);
+        return true;
+      });
       let header;
       try {
         header = decodeTypeSize(window, 0);
@@ -470,9 +503,23 @@ export const ingestPack = <E, R>(
         });
       }
 
-      const { bytesConsumed, content } = yield* inflateEntry(window, pos, {
-        maxOutput: maxObjectSize,
-      });
+      // An entry whose compressed stream runs past the window grows it and
+      // retries; virtually every object fits the first read.
+      let attempt = yield* Effect.result(
+        inflateEntry(window, pos, { maxOutput: maxObjectSize }),
+      );
+      while (
+        Result.isFailure(attempt) &&
+        (yield* growWindow(window.length * 2))
+      ) {
+        attempt = yield* Effect.result(
+          inflateEntry(window, pos, { maxOutput: maxObjectSize }),
+        );
+      }
+      if (Result.isFailure(attempt)) {
+        return yield* Effect.fail(attempt.failure);
+      }
+      const { bytesConsumed, content } = attempt.success;
       if (content.length !== header.size) {
         return yield* new PackFormatError({
           reason: `entry ${i}: inflated ${content.length} bytes, header declared ${header.size}`,
