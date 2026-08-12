@@ -1,5 +1,5 @@
 {
-  "name": "@alchemy.run/git-service",
+  "name": "@alchemy.run/git",
   "version": "2.0.0-beta.70",
   "description": "Git hosting service on Cloudflare Workers, Durable Objects, and R2 — built with Alchemy Effect-native Workers.",
   "homepage": "https://alchemy.run",
@@ -16,7 +16,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/alchemy-run/alchemy.git",
-    "directory": "packages/git-service"
+    "directory": "packages/git"
   },
   "bugs": {
     "url": "https://github.com/alchemy-run/alchemy/issues"
@@ -26,7 +26,7 @@
     "src"
   ],
   "scripts": {
-    "build": "tsc -b && bun ../../scripts/copy-package-files.ts git-service",
+    "build": "tsc -b && bun ../../scripts/copy-package-files.ts git",
     "test": "alchemy-test"
   },
   "exports": {

@@ -1,6 +1,6 @@
 # git-service — Final Design Document
 
-**A Git hosting service on Cloudflare Workers + Durable Objects + R2, built as `packages/git-service` with Alchemy Effect-native Workers.**
+**A Git hosting service on Cloudflare Workers + Durable Objects + R2, built as `packages/git` with Alchemy Effect-native Workers.**
 
 Stance: **protocol-first minimalist core (Proposal A's skeleton) with Proposal B's product ergonomics and scale seams grafted on.** v1 is the smallest system that real `git` clients (git ≥ 1.6.6 through current) can clone, fetch, and push against, with transactional refs and a typed REST management plane. Every cut has a named upgrade seam. The architecture is the ripgit/chr33s-validated shape (Worker router → one DO per repo → SQLite refs/objects + R2 overflow), re-expressed in Effect with real transactions (`transactionSync`), typed errors, streaming responses, and auth from day one.
 
@@ -578,13 +578,13 @@ export const GitApi = HttpApi.make("git-service")
 
 ---
 
-## 6. Package layout — `packages/git-service`
+## 6. Package layout — `packages/git`
 
 Shape: **library-with-deployable-stack**, modeled on `packages/better-auth` — exports Worker/DO classes + the HttpApi contract for users to compose into their own Stacks, plus a canonical Stack factory and an example app.
 
 ```
-packages/git-service/
-  package.json                # @alchemy.run/git-service; exports ".", "./*" (types/bun/worker→src, import→lib);
+packages/git/
+  package.json                # @alchemy.run/git; exports ".", "./*" (types/bun/worker→src, import→lib);
                               # peerDeps: alchemy workspace:*, effect catalog:, @cloudflare/workers-types catalog:;
                               # devDeps: alchemy-test workspace:*, isomorphic-git (test-only wire client)
   tsconfig.json               # composite, extends ../../tsconfig.base.json, refs ../alchemy, paths @/* → src/*

@@ -1,5 +1,5 @@
 /**
- * @alchemy.run/git-service — a Git hosting service on Cloudflare Workers,
+ * @alchemy.run/git — a Git hosting service on Cloudflare Workers,
  * Durable Objects, and R2, built with Alchemy Effect-native Workers.
  *
  * Public surface:
@@ -11,7 +11,7 @@
  *
  * Internals (wire-protocol codecs under `git/`, storage under `store/`,
  * alarm jobs under `jobs/`) are deliberately not re-exported here — deep
- * import them via `@alchemy.run/git-service/git/Pkt.ts` style paths when
+ * import them via `@alchemy.run/git/git/Pkt.ts` style paths when
  * needed.
  */
 export * from "./Api.ts";

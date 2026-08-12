@@ -17,7 +17,7 @@
     "tail": "alchemy tail"
   },
   "dependencies": {
-    "@alchemy.run/git-service": "workspace:*",
+    "@alchemy.run/git": "workspace:*",
     "alchemy": "workspace:*",
     "effect": "catalog:"
   }

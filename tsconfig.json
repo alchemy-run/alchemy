@@ -52,10 +52,10 @@
       "path": "./packages/better-auth/tsconfig.json"
     },
     {
-      "path": "./packages/git-service/tsconfig.json"
+      "path": "./packages/git/tsconfig.json"
     },
     {
-      "path": "./packages/git-service/tsconfig.test.json"
+      "path": "./packages/git/tsconfig.test.json"
     },
     {
       "path": "./packages/pr-package/tsconfig.json"

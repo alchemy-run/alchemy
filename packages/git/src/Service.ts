@@ -17,7 +17,7 @@
  * @section Deploying the service
  * @example Instantiate inside your own Stack
  * ```typescript
- * import { GitService } from "@alchemy.run/git-service";
+ * import { GitService } from "@alchemy.run/git";
  * import * as Alchemy from "alchemy";
  * import * as Cloudflare from "alchemy/Cloudflare";
  * import * as Effect from "effect/Effect";

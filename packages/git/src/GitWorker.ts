@@ -24,7 +24,7 @@
  * import * as Alchemy from "alchemy";
  * import * as Cloudflare from "alchemy/Cloudflare";
  * import * as Effect from "effect/Effect";
- * import GitWorker from "@alchemy.run/git-service/GitWorker";
+ * import GitWorker from "@alchemy.run/git/GitWorker";
  *
  * export default Alchemy.Stack(
  *   "GitService",
