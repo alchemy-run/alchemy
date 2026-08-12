@@ -80,3 +80,27 @@ export const resolveProjectPackageDirectory = (
         cause,
       }),
   });
+
+/**
+ * Best-effort version of `packageName` as resolved from `fromDirectory`
+ * (`undefined` when unresolvable). Used to feature-detect a dependency of a
+ * project package — e.g. the Vite that Astro itself resolves — without
+ * loading the module.
+ */
+export const resolveInstalledPackageVersion = (
+  fromDirectory: string,
+  packageName: string,
+): Effect.Effect<string | undefined> =>
+  Effect.sync(() => {
+    try {
+      const require = createRequire(
+        NodePath.join(fromDirectory, "package.json"),
+      );
+      const pkg = require(`${packageName}/package.json`) as {
+        version?: unknown;
+      };
+      return typeof pkg.version === "string" ? pkg.version : undefined;
+    } catch {
+      return undefined;
+    }
+  });
