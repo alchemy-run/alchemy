@@ -71,11 +71,11 @@ const program = Effect.scoped(
     );
     const source = config.source;
     const viteHost = "127.0.0.1";
-    // TODO(BlankParticle): replace this probe with `port: 0` once the Vite fix
-    // is released: https://github.com/vitejs/vite/pull/23158
-    // Vite currently treats `port: 0` as an absent value and falls back to
-    // its default port. Probe an ephemeral port ourselves until the fixed
-    // Vite release is available.
+    // TODO(vite>=8.2.1): replace this probe with `port: 0` — the Vite fix
+    // (https://github.com/vitejs/vite/pull/23158) shipped in Vite 8.2.1.
+    // Gated on the supported Vite floor: this runner drives the PROJECT's
+    // Vite install, and on older Vite `port: 0` is treated as absent and
+    // falls back to the 5173 default-port hunt.
     // `strictPort: false` still handles the small race between releasing the
     // probe socket and Vite binding the selected port.
     const vitePort = source ? undefined : yield* findAvailablePort(viteHost);

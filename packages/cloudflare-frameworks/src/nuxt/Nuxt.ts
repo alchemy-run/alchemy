@@ -547,10 +547,12 @@ export const make: (
         ),
       );
     }
-    // `nuxt.server.listen` is listhen-backed, and listhen treats `0` as
-    // "no port given" — it hunts upward from 3000, colliding with (or
-    // IPv6-shadowing) user-facing `alchemy dev` proxy ports. Allocate a
-    // real ephemeral port instead.
+    // `nuxt.server.listen` is listhen-backed. listhen hunts upward from
+    // 3000 when NO port is given — colliding with (or IPv6-shadowing)
+    // user-facing `alchemy dev` proxy ports — while an explicit `port: 0`
+    // resolves to get-port-please's `getRandomPort`, the same
+    // probe-and-release `findEphemeralPort` does. Probe explicitly for
+    // uniformity with the Vite-based frameworks (see DevPort's TODO).
     const port =
       (devOptions?.port ?? options?.dev?.port) ||
       (yield* FrameworkCore.findEphemeralPort());
