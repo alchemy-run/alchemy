@@ -15,7 +15,8 @@ builds the app through your project's own `@nuxt/kit` with nitro's
 with response streaming, and client assets plus prerendered pages are
 served from a private S3 bucket through CloudFront. A CloudFront
 Function routes each request at the edge — uploaded files go to S3,
-everything else streams from the Lambda.
+everything else streams from the Lambda. There is no `nitro.preset`
+to edit and no build command to run.
 
 ## Install
 
@@ -39,66 +40,138 @@ at build time, so a dev dependency is enough:
   </TabItem>
 </Tabs>
 
-## Deploy a Nuxt app
+## Configure Nuxt
 
-Point `rootDir` at the directory containing `nuxt.config.ts` and
-surface the site's URL from the Stack:
+Your `nuxt.config.ts` loads natively — modules, layers, and all —
+so configure Nuxt exactly as you would outside Alchemy:
+
+```typescript
+// nuxt.config.ts
+export default defineNuxtConfig({
+  modules: ["@nuxtjs/tailwindcss"],
+  routeRules: {
+    "/about": { prerender: true },
+  },
+});
+```
+
+Deploy-specific overrides are merged over it via the `nuxt` prop
+(the override wins) — see [Prerendering](#prerendering) below for an
+example.
+
+Don't set `nitro.preset` — the AWS deploy target owns the preset
+(`aws-lambda` with streaming enabled), and a foreign preset is a hard
+error.
+
+## Declare the Website
+
+Declare the site as a module-level const (rather than inline in the
+Stack):
+
+```typescript
+// alchemy.run.ts
+import * as AWS from "alchemy/AWS";
+
+export const Website = AWS.Website.Nuxt("Website");
+```
+
+## Add it to the Stack
+
+Yield the site from your Stack and return its URL:
 
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
 import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(
-  "MyNuxtApp",
+  "MyNuxtSite",
   {
     providers: AWS.providers(),
     state: AWS.state(),
   },
   Effect.gen(function* () {
-    const site = yield* AWS.Website.Nuxt("Web");
+    const site = yield* Website;
     return { url: site.url };
   }),
 );
 ```
 
-Your `nuxt.config.ts` loads natively — route rules, runtime config,
-and modules all apply. The deploy target owns `nitro.preset`
-(`aws-lambda` with streaming enabled), so there is nothing
-AWS-specific to add to your config. Prerendered routes
-(`routeRules: { "/about": { prerender: true } }`) are uploaded to S3
-and served from the edge without invoking the server.
+See
+[examples/aws-website-nuxt](https://github.com/alchemy-run/alchemy/tree/main/examples/aws-website-nuxt)
+for the checked-in example.
 
-## Local dev
+## Add environment variables
 
-`alchemy dev` runs Nuxt's own dev server — native HMR through your
-project's toolchain — instead of deploying anything:
+The server function's environment is configured under
+`server.environment` — plain values, or outputs from other resources
+in the Stack:
 
-```sh
-bun alchemy dev ./alchemy.run.ts
-```
-
-`site.url` is the dev server's `http://localhost:<port>` address and
-no AWS resources are created. Wrap the site in `Alchemy.remote()` to
-deploy the real infrastructure even during dev.
-
-## Tune the server function
-
-```typescript
-const site = yield* AWS.Website.Nuxt("Web", {
-  server: {
-    memorySize: 2048,
-    environment: {
-      NUXT_PUBLIC_API_BASE: api.url,
-    },
-  },
+```diff lang="typescript"
+// alchemy.run.ts
+export const Website = AWS.Website.Nuxt("Website", {
++  server: {
++    memorySize: 2048,
++    environment: {
++      NUXT_PUBLIC_API_BASE: api.url,
++    },
++  },
 });
 ```
 
 `environment` values are set on the Lambda on deploy and injected into
 the dev server's process environment under `alchemy dev`, so server
-code reads the same values in both modes.
+code reads the same values in both modes. The other `server` fields
+tune the Lambda itself (`memorySize`, `timeout`, `architecture`,
+`runtime`).
+
+## Read the environment in server code
+
+On AWS the nitro server runs in a plain Node Lambda, so server routes
+and SSR read the environment from `process.env` — or, the more
+idiomatic Nuxt way, through `runtimeConfig` overridden by
+`NUXT_`-prefixed environment variables:
+
+```typescript
+// server/api/hello.ts
+export default defineEventHandler(() => {
+  return { greeting: process.env.GREETING ?? "hello" };
+});
+```
+
+## Prerendering
+
+Routes marked for prerendering in `routeRules` (or via
+`nitro.prerender`) render at build time into `.output/public` and are
+uploaded to S3, served from the edge with no Lambda invocation:
+
+```typescript
+export const Website = AWS.Website.Nuxt("Website", {
+  nuxt: {
+    routeRules: {
+      "/about": { prerender: true },
+    },
+  },
+});
+```
+
+Nitro's `isr` route rule is implemented only by the Vercel and
+Netlify presets. On AWS Lambda it is silently ignored at build time,
+and the route renders on demand in the Lambda like any other SSR
+route. Use `prerender` for build-time static routes, or `cache` route
+rules for runtime caching.
+
+## Local dev
+
+```sh
+bun alchemy dev
+```
+
+`alchemy dev` runs Nuxt's own dev server (nitro dev, full HMR)
+instead of deploying anything; `site.url` is the dev server's
+`http://localhost:<port>` address and no AWS resources are created.
+Wrap the site in `Alchemy.remote()` to deploy the real infrastructure
+even during dev.
 
 ## Custom domain
 
@@ -119,7 +192,7 @@ Route 53.
 
 CloudFront distributions take minutes to create. To serve several
 sites (or a site plus an API) from one distribution, attach the site
-to an [`AWS.Website.Router`](/aws/frontend/static-site#compose-with-router):
+to an [`AWS.Website.Router`](/aws/frontend/static-site#compose-sites-with-a-router):
 
 ```typescript
 const router = yield* AWS.Website.Router("FrontDoor", {

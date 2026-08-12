@@ -16,6 +16,11 @@ const examples = [
   "./examples/cloudflare-website-sveltekit",
   "./examples/cloudflare-website-waku",
   "./examples/aws-lambda",
+  "./examples/aws-website-astro",
+  "./examples/aws-website-nextjs",
+  "./examples/aws-website-nuxt",
+  "./examples/aws-website-sveltekit",
+  "./examples/aws-website-waku",
 ] as const;
 
 type CommandResult = {

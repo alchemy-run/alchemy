@@ -847,8 +847,22 @@ export default defineConfig({
             {
               label: "Frontend",
               items: [
-                { label: "Websites", link: "/aws/frontend/websites" },
-                { label: "Static site", link: "/aws/frontend/static-site" },
+                {
+                  label: "Overview",
+                  link: "/aws/frontend/websites",
+                },
+                { label: "Astro", link: "/aws/frontend/astro" },
+                { label: "Next.js", link: "/aws/frontend/nextjs" },
+                { label: "Nuxt", link: "/aws/frontend/nuxt" },
+                {
+                  label: "Static sites",
+                  link: "/aws/frontend/static-site",
+                },
+                {
+                  label: "SvelteKit",
+                  link: "/aws/frontend/sveltekit",
+                },
+                { label: "Waku", link: "/aws/frontend/waku" },
               ],
             },
             {

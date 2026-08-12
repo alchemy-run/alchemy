@@ -530,6 +530,110 @@
         "vite": "catalog:",
       },
     },
+    "examples/aws-website-astro": {
+      "name": "aws-website-astro",
+      "version": "0.0.0",
+      "dependencies": {
+        "astro": "catalog:frameworks",
+      },
+      "devDependencies": {
+        "@alchemy.run/frontend-frameworks": "workspace:*",
+        "@distilled.cloud/aws": "catalog:",
+        "@effect/platform-node": "catalog:",
+        "@tailwindcss/vite": "catalog:",
+        "alchemy": "workspace:*",
+        "effect": "catalog:",
+        "tailwindcss": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
+    "examples/aws-website-nextjs": {
+      "name": "aws-website-nextjs",
+      "version": "0.0.0",
+      "dependencies": {
+        "next": "catalog:frameworks",
+        "react": "^19.2.0",
+        "react-dom": "^19.2.0",
+      },
+      "devDependencies": {
+        "@alchemy.run/frontend-frameworks": "workspace:*",
+        "@distilled.cloud/aws": "catalog:",
+        "@effect/platform-node": "catalog:",
+        "@opennextjs/aws": "catalog:frameworks",
+        "@tailwindcss/postcss": "catalog:",
+        "@types/react": "^19.2.2",
+        "@types/react-dom": "^19.2.2",
+        "alchemy": "workspace:*",
+        "effect": "catalog:",
+        "tailwindcss": "catalog:",
+        "typescript": "^6.0.3",
+      },
+    },
+    "examples/aws-website-nuxt": {
+      "name": "aws-website-nuxt",
+      "version": "0.0.0",
+      "dependencies": {
+        "alchemy": "workspace:*",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@alchemy.run/frontend-frameworks": "workspace:*",
+        "@distilled.cloud/aws": "catalog:",
+        "@effect/platform-node": "catalog:",
+        "@tailwindcss/vite": "catalog:",
+        "@types/node": "^24.12.0",
+        "nitropack": "catalog:frameworks",
+        "nuxt": "catalog:frameworks",
+        "tailwindcss": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
+    "examples/aws-website-sveltekit": {
+      "name": "aws-website-sveltekit",
+      "version": "0.0.0",
+      "dependencies": {
+        "alchemy": "workspace:*",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@alchemy.run/frontend-frameworks": "workspace:*",
+        "@distilled.cloud/aws": "catalog:",
+        "@effect/platform-node": "catalog:",
+        "@sveltejs/kit": "catalog:frameworks",
+        "@sveltejs/vite-plugin-svelte": "catalog:frameworks",
+        "@tailwindcss/vite": "catalog:",
+        "@types/node": "^24.12.0",
+        "svelte": "catalog:frameworks",
+        "tailwindcss": "catalog:",
+        "typescript": "catalog:",
+        "vite": "catalog:",
+      },
+    },
+    "examples/aws-website-waku": {
+      "name": "aws-website-waku",
+      "version": "0.0.0",
+      "dependencies": {
+        "alchemy": "workspace:*",
+        "effect": "catalog:",
+        "hono": "catalog:frameworks",
+        "react": "~19.2.6",
+        "react-dom": "~19.2.6",
+        "react-server-dom-webpack": "~19.2.6",
+        "waku": "catalog:frameworks",
+      },
+      "devDependencies": {
+        "@alchemy.run/frontend-frameworks": "workspace:*",
+        "@distilled.cloud/aws": "catalog:",
+        "@effect/platform-node": "catalog:",
+        "@tailwindcss/vite": "catalog:",
+        "@types/node": "^24.12.0",
+        "@types/react": "^19.2.17",
+        "@types/react-dom": "^19.2.3",
+        "tailwindcss": "catalog:",
+        "typescript": "catalog:",
+        "vite": "catalog:",
+      },
+    },
     "examples/cloudflare-agent": {
       "name": "cloudflare-agent",
       "version": "0.0.0",
@@ -4093,6 +4197,16 @@
 
     "aws-vite-example": ["aws-vite-example@workspace:examples/aws-vite"],
 
+    "aws-website-astro": ["aws-website-astro@workspace:examples/aws-website-astro"],
+
+    "aws-website-nextjs": ["aws-website-nextjs@workspace:examples/aws-website-nextjs"],
+
+    "aws-website-nuxt": ["aws-website-nuxt@workspace:examples/aws-website-nuxt"],
+
+    "aws-website-sveltekit": ["aws-website-sveltekit@workspace:examples/aws-website-sveltekit"],
+
+    "aws-website-waku": ["aws-website-waku@workspace:examples/aws-website-waku"],
+
     "aws4fetch": ["aws4fetch@1.0.20", "", {}, "sha512-/djoAN709iY65ETD6LKCtyyEI04XIBP5xVvfmNxsEP0uJB5tyaGBztSryRr4HqMStr9R06PisQE7m9zDTXKu6g=="],
 
     "axobject-query": ["axobject-query@4.1.0", "", {}, "sha512-qIj0G9wZbMGNLjLmg1PT6v2mE9AH2zlnADJD/2tC6E00hgmhUOfEB6greHPAfLRSufHqROIUTkw6E+M3lH0PTQ=="],
@@ -7063,6 +7177,14 @@
 
     "astro/zod": ["zod@4.4.3", "", {}, "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="],
 
+    "aws-website-nextjs/typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
+
+    "aws-website-nuxt/@types/node": ["@types/node@24.13.3", "", { "dependencies": { "undici-types": "~7.18.0" } }, "sha512-Dh8vAsV36ig5wa9OX4pXvMc9D3Veibfw2wix0CUwYODLD8nkj9UsLjASr49nPg+2eKzxhBV+v7L8pXvT4e639Q=="],
+
+    "aws-website-sveltekit/@types/node": ["@types/node@24.13.3", "", { "dependencies": { "undici-types": "~7.18.0" } }, "sha512-Dh8vAsV36ig5wa9OX4pXvMc9D3Veibfw2wix0CUwYODLD8nkj9UsLjASr49nPg+2eKzxhBV+v7L8pXvT4e639Q=="],
+
+    "aws-website-waku/@types/node": ["@types/node@24.13.3", "", { "dependencies": { "undici-types": "~7.18.0" } }, "sha512-Dh8vAsV36ig5wa9OX4pXvMc9D3Veibfw2wix0CUwYODLD8nkj9UsLjASr49nPg+2eKzxhBV+v7L8pXvT4e639Q=="],
+
     "babel-plugin-jsx-dom-expressions/@babel/helper-module-imports": ["@babel/helper-module-imports@7.18.6", "", { "dependencies": { "@babel/types": "^7.18.6" } }, "sha512-0NFvs3VkuSYbFi1x2Vd6tKrywq+z/cLeYC/RJNFrIX/30Bf5aiGYbtvGXolEktzJH8o5E5KJ3tT+nkxuuZFVlA=="],
 
     "better-auth/zod": ["zod@4.4.3", "", {}, "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="],
@@ -8240,6 +8362,12 @@
     "astro/sharp/@img/sharp-win32-ia32": ["@img/sharp-win32-ia32@0.35.2", "", { "os": "win32", "cpu": "ia32" }, "sha512-YYEhx9PImCC7T0tI8JDMi4DB9LwLCXCU5OWNYEXAxh5Q1ShKkyC6byxzoBJ3gEFDnH2lQckWuDe70G7mB2XJog=="],
 
     "astro/sharp/@img/sharp-win32-x64": ["@img/sharp-win32-x64@0.35.2", "", { "os": "win32", "cpu": "x64" }, "sha512-imoOyBcoM/iiUr4J6VPpCNjPnjvP/Gks95898yB8YqoGGYmHYbOyCuNv9FMhFgtaiHFGbHW8bxKqRV6VjtXThQ=="],
+
+    "aws-website-nuxt/@types/node/undici-types": ["undici-types@7.18.2", "", {}, "sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w=="],
+
+    "aws-website-sveltekit/@types/node/undici-types": ["undici-types@7.18.2", "", {}, "sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w=="],
+
+    "aws-website-waku/@types/node/undici-types": ["undici-types@7.18.2", "", {}, "sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w=="],
 
     "changelogen/c12/chokidar": ["chokidar@3.6.0", "", { "dependencies": { "anymatch": "~3.1.2", "braces": "~3.0.2", "glob-parent": "~5.1.2", "is-binary-path": "~2.1.0", "is-glob": "~4.0.1", "normalize-path": "~3.0.0", "readdirp": "~3.6.0" }, "optionalDependencies": { "fsevents": "~2.3.2" } }, "sha512-7VT13fmjotKpGipCW9JEQAusEPE+Ei8nl6/g4FBAmIm0GOOLMua9NDDo/DWp0ZAxCr3cPq5ZpBqmPAQgDda2Pw=="],
 
