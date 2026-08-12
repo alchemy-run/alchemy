@@ -262,6 +262,28 @@ export class ObjectStats extends Schema.Class<ObjectStats>("ObjectStats")({
   bytes: Schema.Number,
 }) {}
 
+/**
+ * Server-side timing of the most recent push (DESIGN.md §19 phase 0).
+ *
+ * Wall-clock `git push` time includes client-side packing and the upload,
+ * so it bounds server cost rather than measuring it. These are measured
+ * inside the Durable Object, around the work itself.
+ */
+export class PushStats extends Schema.Class<PushStats>("PushStats")({
+  /** Objects in the pushed pack. */
+  objects: Schema.Number,
+  /** Pack bytes received. */
+  bytes: Schema.Number,
+  /** Parsing + staging the pack (inflate, sha1, SQL). */
+  ingestMs: Schema.Number,
+  /** The connectivity check. */
+  connectivityMs: Schema.Number,
+  /** The ref CAS transaction. */
+  finalizeMs: Schema.Number,
+  /** Everything the DO did for this push. */
+  totalMs: Schema.Number,
+}) {}
+
 export class Repo extends Schema.Class<Repo>("Repo")({
   /** Owner (namespace) segment of the repo's URL. */
   owner: OwnerName,
@@ -286,6 +308,8 @@ export class Repo extends Schema.Class<Repo>("Repo")({
   createdAt: Schema.Number,
   /** Object storage breakdown (DESIGN.md §12.1). */
   objects: ObjectStats,
+  /** Server-side timing of the last push, if any (DESIGN.md §19). */
+  lastPush: Schema.NullOr(PushStats),
 }) {}
 
 /**

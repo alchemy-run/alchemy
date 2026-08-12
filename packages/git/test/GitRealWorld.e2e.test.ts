@@ -246,6 +246,18 @@ test.skipIf(skipHuge)(
       `[real-world] stored ${meta.objects.loose + meta.objects.packed + meta.objects.r2} objects, ` +
         `${(meta.objects.bytes / 1024 / 1024).toFixed(1)} MiB`,
     );
+    // Server-side timing (DESIGN.md §19 phase 0): the wall clock above also
+    // covers client packing and the upload, so this is what is actually ours.
+    if (meta.lastPush !== null) {
+      const p = meta.lastPush;
+      yield* Effect.logInfo(
+        `[real-world] SERVER ingest ${p.ingestMs}ms + connectivity ${p.connectivityMs}ms + ` +
+          `finalize ${p.finalizeMs}ms = ${p.totalMs}ms for ${p.objects} objects ` +
+          `(${(p.totalMs / Math.max(p.objects, 1)).toFixed(2)}ms/object); ` +
+          `client+network = ${(pushMs - p.totalMs).toFixed(0)}ms of the ${(pushMs / 1000).toFixed(1)}s wall clock`,
+      );
+      expect(p.objects).toBeGreaterThan(5_000);
+    }
     expect(
       meta.objects.loose + meta.objects.packed + meta.objects.r2,
     ).toBeGreaterThan(5_000);

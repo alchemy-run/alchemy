@@ -74,6 +74,7 @@ import {
   ImportFailed,
   ObjectStats,
   ObjectTooLarge,
+  PushStats,
   Ref,
   Repo,
   RepoAlreadyExists,
@@ -174,6 +175,7 @@ const toRepo = (meta: RepoMetaData): Repo =>
     status: meta.status,
     createdAt: meta.createdAt,
     objects: new ObjectStats(meta.objects),
+    lastPush: meta.lastPush === null ? null : new PushStats(meta.lastPush),
   });
 
 /** Maps a DO token row onto the REST `TokenInfo` schema class. */
@@ -239,6 +241,7 @@ const registryFallbackRepo = (entry: RegistryEntry): Repo =>
     createdAt: entry.createdAt,
     // No DO to ask (unseeded or mid-purge) — report an empty store.
     objects: new ObjectStats({ loose: 0, packed: 0, r2: 0, bytes: 0 }),
+    lastPush: null,
   });
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -1081,3 +1081,105 @@ dramatically faster requires parallelism *within* the repo — see §17.
    the DO (Cache API entry purged on push), which is a v2.1 item; the
    remaining per-clone DO cost is two small RPCs, and §16.2 shows that is
    not the ceiling.
+
+---
+
+# Part III — v3: the maximum-performance DO architecture
+
+## 17. Why v2 still has a floor
+
+v2 made *reads* scale (immutable bytes served by Workers from R2) and left
+*writes* where git semantics put them. But the measurements in §16 expose a
+floor that no amount of horizontal scale removes:
+
+- one repo = one Durable Object = **one thread**;
+- a push is **one request** to it;
+- ingest is ~13.7k objects × (inflate + sha1 + one statement + Effect
+  frames), strictly serial.
+
+Batching transactions bought 16% (§16.5) — proof that the remaining cost is
+per-object work, not commit overhead. Making a large push an order of
+magnitude faster requires parallelism **inside the repo**.
+
+The enabling observation: a repo holds two kinds of state with completely
+different constraints.
+
+| | mutability | ordering | consequence |
+|---|---|---|---|
+| refs, tokens | mutable | CAS, strictly serialized | must live in one DO |
+| objects | **immutable, content-addressed** | **none whatsoever** | can be written anywhere, in any order, in parallel |
+
+Object writes are serialized today only because they share a DO with the
+refs. That serialization is *accidental*, not essential.
+
+## 18. Target architecture
+
+| Tier | Instances | Holds | Why here |
+|---|---|---|---|
+| **Worker** | horizontal | pack parsing (inflate + sha1), fan-out, response assembly | stateless CPU; parsing has no reason to sit in a coordination point |
+| **Ref DO** | 1 / repo | refs, tokens, commit graph, push staging state, CAS | the only thing git forces to serialize |
+| **Object shard DO** | N / repo, by oid prefix | content-addressed objects (hot tier) | independent writes ⇒ N-way parallel; N × 10 GB ceiling |
+| **R2** | — | compacted packs, clone bundles | immutable bulk, ranged reads, no egress |
+
+**Sharding key: the oid itself.** An oid is a uniform hash, so a fixed
+2-hex-char prefix distributes perfectly with zero rebalancing. A trie or
+dynamic split solves skewed key distributions — a problem content
+addressing does not have. Fix `N = 256` at repo creation and never reshard:
+256 × 10 GB = 2.5 TB per repo.
+
+**Why fan-out is safe.** Staging across shards is not atomic and does not
+need to be: objects are immutable and content-addressed, so a partial write
+is inert (worst case some staged rows are GC'd). The only atomic step is
+the ref CAS in the ref DO, which runs after the connectivity check passes.
+Sharding never touches the consistency-critical path.
+
+**Cost shape.** DO *instances* are not billed; requests, active duration and
+storage are. Fan-out means one RPC per shard **touched** (objects batched
+per shard), so ~256 requests for a large push (~$0.00004) and far *less*
+total active duration, since 256 DOs busy ~50 ms beats one DO busy 20 s.
+The real costs are cold-start latency across shards and a wider failure
+surface — both mitigated by immutability making every retry free.
+
+## 19. Phases
+
+**Phase 0 — measure honestly (prerequisite). DONE — and it settled the
+question.** Repos now report `lastPush` timing measured inside the Durable
+Object. For the 38 MiB / 13,701-object alchemy push:
+
+| | |
+|---|---|
+| **server ingest** | **27.0 s** |
+| connectivity check | ~0 ms |
+| ref CAS finalize | ~0 ms |
+| **server total** | **28.7 s of a 32.3 s wall clock (89%)** |
+| client + network | 3.5 s |
+
+So the earlier suspicion that client packing and upload dominated was
+**wrong**: the server owns 89% of the time, and effectively all of it is
+the per-object ingest loop at **2.10 ms/object**. Connectivity and CAS —
+the parts that genuinely must be serialized — are free.
+
+That is the strongest possible argument for phases 1–2: the expensive work
+(inflate, sha1, one insert) is *per object* and has no ordering
+requirement, yet runs single-threaded because it shares a DO with the refs.
+At 2.10 ms/object, 16-way fan-out puts a 13.7k-object push at ~1.7 s.
+
+**Phase 1 — hoist pack parsing to the Worker.** Inflate + sha1 for every
+object currently runs on the ref DO's single thread; it is stateless CPU.
+Moving it to the Worker frees the DO and is the prerequisite for fan-out
+(the Worker must hold resolved objects to route them).
+
+**Phase 2 — shard the object store.** `ObjectShard` DO addressed
+`{repoId}:{oidPrefix}`; `ObjectStore` becomes a router that batches by
+prefix and writes shards in parallel. Connectivity checks become N parallel
+batched queries. Compaction runs per shard, producing per-shard R2 packs.
+
+**Phase 3 — parallel fetch assembly.** A dynamic fetch reads its manifest
+from N shards concurrently instead of walking one DO.
+
+**Phase 4 — reachability bitmaps.** With throughput fixed, the remaining
+ceiling is closure computation on multi-million-object repos: EWAH bitmaps
+over the commit graph replace the visited-set walk.
+
+Expected shape of the win: 13.7k objects at ~1.5 ms serial ≈ 20 s; fanned
+across even 16 shards with parsing overlapped in the Worker ≈ 1–2 s.

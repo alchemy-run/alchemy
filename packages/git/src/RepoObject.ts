@@ -225,6 +225,18 @@ export interface RepoMetaData {
   readonly createdAt: number;
   /** Object storage breakdown (DESIGN.md §12.1). */
   readonly objects: ObjectStatsData;
+  /** Server-side timing of the last push (DESIGN.md §19 phase 0). */
+  readonly lastPush: PushStatsData | null;
+}
+
+/** Server-side push timing — see the REST `PushStats` schema. */
+export interface PushStatsData {
+  readonly objects: number;
+  readonly bytes: number;
+  readonly ingestMs: number;
+  readonly connectivityMs: number;
+  readonly finalizeMs: number;
+  readonly totalMs: number;
 }
 
 /** Where a repo's objects live — see the REST `ObjectStats` schema. */
@@ -1559,6 +1571,10 @@ export const GitRepoLive = GitRepo.make(
             forkOf: map.get("fork_of") ?? null,
             status: (map.get("status") ?? "ready") as RepoStatus,
             createdAt: Number(map.get("created_at") ?? 0),
+            lastPush:
+              map.get("last_push") === undefined
+                ? null
+                : (JSON.parse(map.get("last_push")!) as PushStatsData),
             objects: {
               loose: byLocation.get("row")?.n ?? 0,
               packed: byLocation.get("pack")?.n ?? 0,
@@ -2375,6 +2391,15 @@ export const GitRepoLive = GitRepo.make(
           // the generator) can drop the parked pack.
           let parkedKey: string | undefined;
           return yield* Effect.gen(function* () {
+            // Phase-0 instrumentation (DESIGN.md §19): wall-clock `git push`
+            // includes client packing and the upload, so time the server's
+            // own work here to know what is actually ours.
+            const startedAt = yield* Effect.sync(() => performance.now());
+            const since = (from: number) =>
+              Effect.sync(() => performance.now() - from);
+            let ingestMs = 0;
+            let connectivityMs = 0;
+            let finalizeMs = 0;
             const pushId = yield* ulid();
             yield* sql.run(
               `INSERT INTO pushes (push_id, started_at, state) VALUES (?, ?, 'staging')`,
@@ -2413,12 +2438,14 @@ export const GitRepoLive = GitRepo.make(
                       size: packSlice.length,
                     });
                   });
+              const ingestStarted = yield* Effect.sync(() => performance.now());
               const outcome = yield* Effect.result(
                 ingestPackFrom(source, {
                   store: objects,
                   pushId,
                 }),
               );
+              ingestMs = yield* since(ingestStarted);
               if (Result.isFailure(outcome)) {
                 // Surface the actual reason: a bare "internal storage error"
                 // makes a failed push undiagnosable from the client side.
@@ -2437,10 +2464,14 @@ export const GitRepoLive = GitRepo.make(
             for (const cmd of parsed.commands) {
               if (cmd.newOid !== ZERO_OID) referenced.add(cmd.newOid);
             }
+            const connectivityStarted = yield* Effect.sync(() =>
+              performance.now(),
+            );
             const missing = yield* objects.missingObjects(
               Array.from(referenced),
               pushId,
             );
+            connectivityMs = yield* since(connectivityStarted);
             if (missing.length > 0) {
               return respond(
                 `missing objects (${missing.length})`,
@@ -2449,12 +2480,26 @@ export const GitRepoLive = GitRepo.make(
             }
 
             const graph = yield* computeGraphRows(ingest?.commits ?? []);
+            const finalizeStarted = yield* Effect.sync(() => performance.now());
             const results = yield* finalizeRefTxn({
               commands: parsed.commands,
               atomic: parsed.capabilities.has("atomic"),
               pushId,
               graph,
             });
+            finalizeMs = yield* since(finalizeStarted);
+
+            yield* setConfig(
+              "last_push",
+              JSON.stringify({
+                objects: ingest?.objectCount ?? 0,
+                bytes: hasPack ? body.length - parsed.packStart : 0,
+                ingestMs: Math.round(ingestMs),
+                connectivityMs: Math.round(connectivityMs),
+                finalizeMs: Math.round(finalizeMs),
+                totalMs: Math.round(yield* since(startedAt)),
+              } satisfies PushStatsData),
+            ).pipe(Effect.ignore);
 
             // Post-commit bookkeeping off the response path: staged-row GC
             // and, once enough loose bytes have accumulated, compaction into
