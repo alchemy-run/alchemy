@@ -623,3 +623,100 @@ test.skipIf(skipBench)(
   }).pipe(logLevel),
   { timeout: 900_000 },
 );
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Bottleneck 2 — subrequest limit vs. fragmented packs (DESIGN §15.2)
+// ═══════════════════════════════════════════════════════════════════════════
+
+test.skipIf(skipBench)(
+  "bench: dynamic fetch over a compacted repo with >1000 objects",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const repo = yield* freshRepo(url, "bench", "subreq");
+    const tmp = yield* tempDir;
+    // Comfortably past the Workers 1000-subrequest cap once compacted:
+    // one ranged R2 GET per object would fail outright.
+    const files = 1200;
+
+    yield* mustSh(
+      tmp,
+      `
+      rm -rf work && git -c init.defaultBranch=main clone '${repo.remote}' work
+      cd work
+      i=1
+      while [ $i -le ${files} ]; do
+        printf 'payload %s\\n' $i > "f$i.txt"
+        i=$((i+1))
+      done
+      git add -A && git commit -q -m bulk
+      git push -q origin main
+      `,
+    );
+
+    // Force everything into an R2 pack.
+    yield* repo.admin.repos.compact({
+      params: { owner: "bench", repo: "subreq" },
+    });
+    const packed = yield* repo.admin.repos
+      .get({ params: { owner: "bench", repo: "subreq" } })
+      .pipe(
+        Effect.map((found) => found.objects),
+        Effect.repeat({
+          schedule: Schedule.spaced("1 second"),
+          until: (objects: { loose: number; packed: number }) =>
+            objects.packed > 1000 && objects.loose === 0,
+          times: 120,
+        }),
+      );
+    expect(packed.packed).toBeGreaterThan(1000);
+
+    const head = (yield* mustSh(tmp, `cd work && git rev-parse HEAD`)).stdout;
+    const client = yield* HttpClient.HttpClient;
+    const pkt = (line: string) =>
+      `${(line.length + 4).toString(16).padStart(4, "0")}${line}`;
+
+    // A `have` the server does not know bypasses the bundle, so this is the
+    // dynamic path reading every object out of the pack.
+    yield* measure(
+      `dynamic fetch, ${packed.packed} packed objects`,
+      client
+        .execute(
+          HttpClientRequest.post(
+            `${url}/bench/subreq.git/git-upload-pack`,
+          ).pipe(
+            HttpClientRequest.setHeaders({
+              authorization: `Bearer ${repo.token}`,
+              "content-type": "application/x-git-upload-pack-request",
+            }),
+            HttpClientRequest.bodyText(
+              `${pkt(`want ${head}\n`)}${pkt(`have ${"f".repeat(40)}\n`)}0000${pkt("done\n")}`,
+            ),
+          ),
+        )
+        .pipe(
+          Effect.flatMap((response) =>
+            response.arrayBuffer.pipe(
+              Effect.map((buffer) => ({
+                status: response.status,
+                bytes: buffer.byteLength,
+              })),
+            ),
+          ),
+        ),
+      (result, ms) =>
+        `status ${result.status}, ${(result.bytes / 1024).toFixed(0)} KiB in ${(ms / 1000).toFixed(2)}s`,
+    ).pipe(
+      Effect.tap((result) => {
+        // The whole point: this must NOT fail on the subrequest cap.
+        expect(result.status).toBe(200);
+        expect(result.bytes).toBeGreaterThan(10_000);
+        return Effect.void;
+      }),
+    );
+
+    // And the repo still clones cleanly through the same path.
+    yield* mustSh(tmp, `rm -rf verify && git clone -q '${repo.remote}' verify`);
+    yield* mustSh(tmp, `cd verify && git fsck --strict`);
+  }).pipe(logLevel),
+  { timeout: 900_000 },
+);

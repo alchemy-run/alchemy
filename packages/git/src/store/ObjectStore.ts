@@ -55,6 +55,17 @@ export const R2_OFFLOAD_THRESHOLD = 1_048_576;
 export const MAX_OBJECT_SIZE = 67_108_864;
 
 /**
+ * Window size for coalesced reads out of compacted packs (DESIGN §15
+ * bottleneck 2). Touching one object in a window fetches the whole window,
+ * so a fetch that walks thousands of objects costs a handful of R2 GETs
+ * instead of thousands.
+ */
+export const WINDOW_BYTES = 4 * 1024 * 1024;
+
+/** Retained windows (insertion-ordered LRU) — bounds cache memory. */
+export const MAX_CACHED_WINDOWS = 6;
+
+/**
  * Raised (as a defect, via `Effect.die`) when a v1 code path reaches a
  * feature the design explicitly defers — currently only reads of
  * `location = 'pack'` objects, which exist starting with v1.1 compaction.
@@ -259,12 +270,67 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
   });
 
   /**
-   * Reads an object's zdata span out of a compacted R2 pack (DESIGN §12.1).
+   * Coalesced window cache over compacted packs (DESIGN §15 bottleneck 2).
+   *
+   * A pack read is one ranged R2 GET per object if done naively — and a
+   * fetch that walks a few thousand objects then costs a few thousand
+   * serialized round trips. Measured: **68 s to serve a 53 KiB fetch** over
+   * a 1202-object pack. Instead, reads are served out of window-aligned
+   * slabs: touching any object in a window fetches the whole window once,
+   * and every other object inside it is then free. A small pack collapses
+   * to a single GET.
+   *
+   * Bounded by construction: at most {@link MAX_CACHED_WINDOWS} windows of
+   * {@link WINDOW_BYTES} are retained (insertion-ordered LRU), so the cache
+   * cannot outgrow the isolate's memory budget.
+   */
+  const windows = new Map<string, { start: number; bytes: Uint8Array }>();
+
+  const readWindow = Effect.fn(function* (key: string, windowIndex: number) {
+    const cacheKey = `${key}:${windowIndex}`;
+    const hit = windows.get(cacheKey);
+    if (hit !== undefined) {
+      // Refresh recency (Map iterates in insertion order).
+      windows.delete(cacheKey);
+      windows.set(cacheKey, hit);
+      return hit;
+    }
+    const start = windowIndex * WINDOW_BYTES;
+    const body = yield* runR2(
+      bucket.get(key, { range: { offset: start, length: WINDOW_BYTES } }),
+      `R2 window get ${key}`,
+    );
+    if (body === null) {
+      return yield* Effect.fail(
+        new StoreError({ reason: `pack missing: ${key}` }),
+      );
+    }
+    const bytes = yield* body
+      .bytes()
+      .pipe(
+        Effect.mapError(
+          (error) =>
+            new StoreError({ reason: `R2 read ${key}: ${error.message}` }),
+        ),
+      );
+    const slab = { start, bytes };
+    windows.set(cacheKey, slab);
+    while (windows.size > MAX_CACHED_WINDOWS) {
+      const oldest = windows.keys().next().value;
+      if (oldest === undefined) break;
+      windows.delete(oldest);
+    }
+    return slab;
+  });
+
+  /**
+   * Reads an object's zdata span out of a compacted R2 pack (DESIGN §12.1),
+   * via the window cache above.
    *
    * `pack_offset` addresses the object's **zdata** directly (not the pack
-   * entry header), so one ranged GET returns exactly the stored compressed
-   * bytes — the same bytes a `location='row'` object holds in its BLOB.
-   * Entry headers are regenerated from `(type, size)` at emission time.
+   * entry header), so the slice is exactly the stored compressed bytes —
+   * the same bytes a `location='row'` object holds in its BLOB. Entry
+   * headers are regenerated from `(type, size)` at emission time.
    */
   const packBytes = Effect.fn(function* (oid: Oid, row: ZDataRow) {
     if (row.pack_id === null || row.pack_offset === null) {
@@ -275,10 +341,18 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
       );
     }
     const key = packKey(repoId, row.pack_id);
+    const offset = row.pack_offset;
+    const windowIndex = Math.floor(offset / WINDOW_BYTES);
+    const slab = yield* readWindow(key, windowIndex);
+    const relative = offset - slab.start;
+    if (relative >= 0 && relative + row.zsize <= slab.bytes.length) {
+      // Copy out: the slab is retained by the cache and must not be aliased.
+      return slab.bytes.slice(relative, relative + row.zsize);
+    }
+    // The object straddles the window boundary (or the window was short) —
+    // fall back to an exact ranged read for this one object.
     const body = yield* runR2(
-      bucket.get(key, {
-        range: { offset: row.pack_offset, length: row.zsize },
-      }),
+      bucket.get(key, { range: { offset, length: row.zsize } }),
       `R2 ranged get ${key}`,
     );
     if (body === null) {

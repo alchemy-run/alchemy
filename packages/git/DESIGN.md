@@ -902,10 +902,12 @@ write concurrency regardless of who hosts it.
    binary commit-graph + **reachability bitmaps** (EWAH), turning a 10M-node
    walk into bitmap ANDs over a few MB. This is the hardest real engineering
    on the path to enormous repos.
-2. **Subrequest limit (1000) vs. fragmented packs.** A fetch assembled from
-   thousands of R2 ranged reads hits the cap. Compaction must order packs so
-   a typical fetch reads a few contiguous ranges. Pack layout is a
-   *correctness* constraint here, not an optimization.
+2. ~~**Subrequest limit (1000) vs. fragmented packs.**~~ **Addressed**
+   (§16.2): pack reads are served from window-aligned slabs, so a fetch
+   costs a handful of R2 GETs rather than one per object (68.2 s → 1.16 s
+   on a 1202-object pack). Remaining work is pack *ordering* — laying out
+   compaction output so a typical fetch touches few windows — which is an
+   optimization now rather than a cliff.
 3. **Per-repo push serialization.** Inherent (see above); measured, not
    fixed.
 4. **Registry singleton** — ~500 control-plane ops/s globally. Resolve
@@ -955,6 +957,19 @@ the bundle while producing the identical pack) is like-for-like:
 | 1 | 4.7 clones/s, 2.4 MiB/s | 5.4 clones/s, 2.7 MiB/s |
 | 8 | 17.2 clones/s, 8.7 MiB/s | 17.9 clones/s, 9.1 MiB/s |
 | **32** | **20.2 clones/s, 10.2 MiB/s** | **62.1 clones/s, 31.5 MiB/s** |
+
+Dynamic fetch over a **compacted** repo (1202 objects in one R2 pack), the
+case bottleneck #2 warned about:
+
+| | |
+|---|---|
+| one ranged GET per object (naive) | **68.2 s** for a 53 KiB fetch |
+| coalesced window reads | **1.16 s** (59×) |
+
+Reading a pack object-by-object costs one serialized R2 round trip each.
+Window-aligned slabs (4 MiB, ≤6 retained) mean touching any object fetches
+its whole neighbourhood once, so a small pack collapses to a single GET —
+and the Workers subrequest budget stops being a correctness cliff.
 
 This is the design's central claim, measured. The dynamic path **saturates
 at ~20 clones/s** — one Durable Object's single-threaded ceiling, and more
