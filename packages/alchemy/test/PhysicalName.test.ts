@@ -156,6 +156,41 @@ describe("createPhysicalName", () => {
       ),
   );
 
+  it.effect(
+    "prepends a safe prefix when the name collides with a forbidden prefix",
+    () =>
+      Effect.gen(function* () {
+        // A stack named `AWS-…` (e.g. file-namespaced test stacks) collides
+        // with service-reserved prefixes like S3 Tables' / ResourceGroups' `aws`.
+        const awsStack: StackShape = { ...stack, name: "AWS-S3Tables-Test" };
+        const name = yield* createPhysicalName({
+          id: "bucket",
+          maxLength: 63,
+          lowercase: true,
+          forbiddenPrefixes: ["xn--", "sthree-", "amzn-s3-demo-", "aws"],
+        }).pipe(
+          Effect.provideService(Stack, awsStack),
+          Effect.provideService(Stage, awsStack.stage),
+          Effect.provideService(InstanceId, "0123456789abcdef0123456789abcdef"),
+        );
+        expect(name.startsWith("x-aws-s3tables-test-")).toBe(true);
+        expect(name.length).toBeLessThanOrEqual(63);
+      }),
+  );
+
+  it.effect("non-colliding names are unaffected by forbiddenPrefixes", () =>
+    provide(
+      Effect.gen(function* () {
+        const withOption = yield* createPhysicalName({
+          id: "api",
+          forbiddenPrefixes: ["aws"],
+        });
+        const withoutOption = yield* createPhysicalName({ id: "api" });
+        expect(withOption).toBe(withoutOption);
+      }),
+    ),
+  );
+
   it.effect("lowercase truncated names stay DNS-safe", () =>
     provide(
       Effect.gen(function* () {
