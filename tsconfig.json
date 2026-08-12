@@ -83,6 +83,9 @@
       "path": "./examples/aws-lambda-rpc/tsconfig.json"
     },
     {
+      "path": "./examples/aws-dev/tsconfig.json"
+    },
+    {
       "path": "./examples/aws-lambda/tsconfig.json"
     },
     {

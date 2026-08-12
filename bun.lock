@@ -414,6 +414,15 @@
         "effect": "catalog:",
       },
     },
+    "examples/aws-dev": {
+      "name": "aws-dev",
+      "version": "0.0.0",
+      "dependencies": {
+        "@effect/platform-node": "catalog:",
+        "alchemy": "workspace:*",
+        "effect": "catalog:",
+      },
+    },
     "examples/aws-ec2": {
       "name": "aws-ec2-example",
       "version": "0.0.0",
@@ -4172,6 +4181,8 @@
     "autoprefixer": ["autoprefixer@10.5.4", "", { "dependencies": { "browserslist": "^4.28.6", "caniuse-lite": "^1.0.30001806", "fraction.js": "^5.3.4", "picocolors": "^1.1.1", "postcss-value-parser": "^4.2.0" }, "peerDependencies": { "postcss": "^8.1.0" }, "bin": { "autoprefixer": "bin/autoprefixer" } }, "sha512-MaU0U/za7N3r6brxD4YB/l4NSrFzLPlANv6wEuQVaIPlD3L4W9rFcQPbL/EilY9BHhHvhfcz3gInDLrEtWT4EA=="],
 
     "aws-bedrock-ai": ["aws-bedrock-ai@workspace:examples/aws-bedrock-ai"],
+
+    "aws-dev": ["aws-dev@workspace:examples/aws-dev"],
 
     "aws-ec2-example": ["aws-ec2-example@workspace:examples/aws-ec2"],
 

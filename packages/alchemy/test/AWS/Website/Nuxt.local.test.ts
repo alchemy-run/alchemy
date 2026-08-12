@@ -2,6 +2,8 @@ import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
@@ -30,6 +32,9 @@ describe("AWS.Website.Nuxt local", () => {
     "dev runs Nuxt's own dev server with no cloud resources",
     (stack) =>
       Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+
         yield* stack.destroy();
 
         const rootDir = yield* cloneFixture(fixtureDir, {
@@ -84,6 +89,27 @@ describe("AWS.Website.Nuxt local", () => {
           "NUXT_AWS_API_MARKER",
           { label: "API route (dev)" },
         );
+
+        // ── HMR: edit the API route in place. The stack is NOT re-applied —
+        // nitro's dev rebuild must pick the change up and serve it through
+        // the same URL ───────────────────────────────────────────────────
+        const helloPath = path.join(rootDir, "server/api/hello.ts");
+        const hello = yield* fs.readFileString(helloPath);
+        yield* fs.writeFileString(
+          helloPath,
+          hello.replace("NUXT_AWS_API_MARKER", "NUXT_AWS_API_MARKER_V2"),
+        );
+        yield* expectUrlContains(
+          `${url}/api/hello?echo=dev`,
+          "NUXT_AWS_API_MARKER_V2",
+          { timeout: "90 seconds", label: "API route after HMR edit" },
+        );
+        // server.environment survived the dev rebuild — the injected env
+        // still reaches SSR after the reload (dev/live parity holds across
+        // hot updates, not just at boot).
+        yield* expectUrlContains(`${url}/`, "env:nuxt-aws-dev-env-marker", {
+          label: "server.environment after HMR edit",
+        });
 
         yield* stack.destroy();
       }),

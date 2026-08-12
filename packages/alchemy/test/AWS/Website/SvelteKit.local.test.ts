@@ -2,6 +2,8 @@ import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
@@ -28,6 +30,9 @@ describe("AWS.Website.SvelteKit local", () => {
     "dev runs SvelteKit's own dev server with no cloud resources",
     (stack) =>
       Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+
         yield* stack.destroy();
 
         const rootDir = yield* cloneFixture(fixtureDir, {
@@ -68,6 +73,28 @@ describe("AWS.Website.SvelteKit local", () => {
         );
         yield* expectUrlContains(`${url}/api/hello?echo=dev`, "dev", {
           label: "API route query echo (dev)",
+        });
+
+        // ── HMR: edit the API route in place. The stack is NOT re-applied —
+        // the kit/vite dev rebuild must pick the change up and serve it
+        // through the same URL ───────────────────────────────────────────
+        const helloPath = path.join(rootDir, "src/routes/api/hello/+server.ts");
+        const hello = yield* fs.readFileString(helloPath);
+        yield* fs.writeFileString(
+          helloPath,
+          hello.replace(
+            "SVELTEKIT_AWS_API_MARKER",
+            "SVELTEKIT_AWS_API_MARKER_V2",
+          ),
+        );
+        yield* expectUrlContains(
+          `${url}/api/hello?echo=dev`,
+          "SVELTEKIT_AWS_API_MARKER_V2",
+          { timeout: "90 seconds", label: "API route after HMR edit" },
+        );
+        // The route still round-trips its query after the reload.
+        yield* expectUrlContains(`${url}/api/hello?echo=post-hmr`, "post-hmr", {
+          label: "API route query echo after HMR edit",
         });
 
         yield* stack.destroy();

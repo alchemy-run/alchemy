@@ -2,6 +2,8 @@ import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import { spawn } from "node:child_process";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
@@ -62,6 +64,9 @@ describe("AWS.Website.Nextjs local", () => {
     "dev runs Next's own dev server with no cloud resources",
     (stack) =>
       Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+
         yield* stack.destroy();
 
         // Clone OUTSIDE the repo (OS temp dir): an in-workspace clone makes
@@ -114,6 +119,25 @@ describe("AWS.Website.Nextjs local", () => {
         );
         yield* expectUrlContains(`${url}/api/hello?echo=dev`, "dev", {
           label: "API route query echo (dev)",
+        });
+
+        // ── HMR: edit the App Router route in place. The stack is NOT
+        // re-applied — next dev must recompile the route and serve it
+        // through the same URL ───────────────────────────────────────────
+        const routePath = path.join(rootDir, "app/api/hello/route.ts");
+        const route = yield* fs.readFileString(routePath);
+        yield* fs.writeFileString(
+          routePath,
+          route.replace("NEXTJS_AWS_API_MARKER", "NEXTJS_AWS_API_MARKER_V2"),
+        );
+        yield* expectUrlContains(
+          `${url}/api/hello?echo=dev`,
+          "NEXTJS_AWS_API_MARKER_V2",
+          { timeout: "120 seconds", label: "API route after HMR edit" },
+        );
+        // The route still round-trips its query after the recompile.
+        yield* expectUrlContains(`${url}/api/hello?echo=post-hmr`, "post-hmr", {
+          label: "API route query echo after HMR edit",
         });
 
         yield* stack.destroy();
