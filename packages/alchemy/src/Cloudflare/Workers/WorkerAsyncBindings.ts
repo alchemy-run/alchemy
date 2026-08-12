@@ -20,7 +20,6 @@ import { isHyperdriveConnection } from "../Hyperdrive/Connection.ts";
 import { isImages } from "../Images/Images.ts";
 import { isNamespace as isKVNamespace } from "../KV/Namespace.ts";
 import { isLegacyPipeline } from "../Pipelines/LegacyPipeline.ts";
-// Aliased: `isStream` is Cloudflare Stream (video), imported below.
 import { isStream as isPipelinesStream } from "../Pipelines/Stream.ts";
 import { isQueue } from "../Queues/Queue.ts";
 import { maybeQueueShim } from "../Queues/QueueShim.ts";
@@ -531,17 +530,12 @@ const toBinding = (
       name: bindingName,
     };
   } else if (isPipelinesStream(binding)) {
-    // A Pipelines stream is addressed by its id (wrangler's `stream`
-    // field); the API metadata binding still names it `pipeline`.
     return {
       type: "pipelines",
       name: bindingName,
       pipeline: binding.streamId,
     };
   } else if (isLegacyPipeline(binding)) {
-    // A legacy pipeline is addressed by its name — the API identifier for
-    // that generation ("Name of the Pipeline to bind to"), unlike the
-    // stream above which is addressed by id.
     return {
       type: "pipelines",
       name: bindingName,

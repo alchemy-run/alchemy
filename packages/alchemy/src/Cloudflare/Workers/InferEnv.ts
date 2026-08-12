@@ -1,7 +1,5 @@
 /// <reference types="@cloudflare/workers-types" />
 
-// `Pipeline` is not an ambient global — it is only declared inside the
-// `cloudflare:pipelines` module by @cloudflare/workers-types.
 import type { Pipeline } from "cloudflare:pipelines";
 import type * as Effect from "effect/Effect";
 import type { Redacted } from "effect/Redacted";
