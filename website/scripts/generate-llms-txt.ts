@@ -367,7 +367,7 @@ const SECTIONS: Section[] = [
   {
     heading: "SQL",
     intro:
-      "One home for SQL in alchemy — low-level effect-sql clients (alchemy/SQL), Drizzle ORM, the migrationsDir contract, and the per-execution connection lifecycle; Worker runtime wiring lives under Cloudflare → Data.",
+      "One home for SQL in alchemy — low-level effect-sql clients (alchemy/SQL), Drizzle ORM, Prisma ORM v8 (prisma-next, Postgres-only), the migrationsDir contract, and the per-execution connection lifecycle; Worker runtime wiring lives under Cloudflare → Data.",
     pages: {
       slugs: [
         "sql/index",
@@ -378,6 +378,8 @@ const SECTIONS: Section[] = [
         "sql/drizzle/postgres",
         "sql/drizzle/d1",
         "sql/drizzle/migrations",
+        "sql/prisma/postgres",
+        "sql/prisma/migrations",
       ],
     },
   },

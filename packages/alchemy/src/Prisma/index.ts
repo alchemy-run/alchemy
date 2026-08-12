@@ -14,6 +14,7 @@ export * from "./CustomDomain.ts";
 export * from "./Database.ts";
 export * from "./EnvironmentVariable.ts";
 export * from "./Operations.ts";
+export * from "./ORM/index.ts";
 export * from "./PrismaEnvironment.ts";
 export * from "./PrismaLogs.ts";
 export * from "./Postgres.ts";

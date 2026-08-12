@@ -1,7 +1,20 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["package.json", "test"],
+  "include": [
+    "package.json",
+    "test",
+    // JSON modules imported by fixtures (plain `include: ["test"]` only
+    // sweeps .ts files).
+    "test/Cloudflare/Workers/fixtures/prisma-orm/generated/contract.json"
+  ],
   "exclude": [
+    // prisma-next migration packages are self-emitting Node scripts whose
+    // snapshot imports (`../../snapshots/<hash>/contract`) are extensionless
+    // and only resolve under prisma-next's own toolchain — not this project.
+    "test/Cloudflare/Workers/fixtures/prisma-orm/migrations",
+    // Executed by the prisma-next CLI (which resolves its own toolchain
+    // types); its inferred config type is not portable from this project.
+    "test/Cloudflare/Workers/fixtures/prisma-orm/prisma-next.config.ts",
     "test/Local/fixtures/rpc-server-entry.ts",
     "test/Local/fixtures/rpc-spawner-parent.ts",
     "test/Local/fixtures/rpc-spawner-devserver-parent.ts",

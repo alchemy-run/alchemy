@@ -441,6 +441,8 @@
     "nuxt": "catalog:frameworks",
     "octane": "catalog:frameworks",
     "pg": "catalog:",
+    "@prisma/orm-family-sql": "catalog:",
+    "@prisma/orm-postgres": "catalog:",
     "react-devtools-core": "^7.0.1",
     "react-dom": "catalog:fixtures",
     "react-router": "catalog:fixtures",
@@ -470,6 +472,7 @@
     "mongodb": "^6.10.0",
     "mysql2": "catalog:",
     "pg": "catalog:",
+    "@prisma/orm-postgres": "catalog:",
     "vite": "catalog:",
     "ws": "catalog:"
   },
@@ -505,6 +508,9 @@
       "optional": true
     },
     "pg": {
+      "optional": true
+    },
+    "@prisma/orm-postgres": {
       "optional": true
     },
     "vite": {

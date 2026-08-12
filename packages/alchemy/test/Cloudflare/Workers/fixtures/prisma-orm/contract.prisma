@@ -1,0 +1,6 @@
+// use prisma-next
+
+model Widget {
+  id   Int    @id @default(autoincrement())
+  name String
+}

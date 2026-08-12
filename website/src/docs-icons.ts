@@ -73,6 +73,7 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   Docker: b("docker"),
   Kubernetes: b("kubernetes"),
   Drizzle: b("drizzle"),
+  "Prisma ORM": b("prisma"),
   SQL: l("database"),
   "Effect SQL": l("database-zap"),
   Migrations: l("list-ordered"),

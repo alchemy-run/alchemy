@@ -1,6 +1,6 @@
 ---
 title: SQL
-description: One home for SQL in alchemy — low-level effect-sql clients, Drizzle ORM, schema migrations in the deploy graph, and the per-execution connection lifecycle.
+description: One home for SQL in alchemy — low-level effect-sql clients, Drizzle ORM, Prisma ORM v8, schema migrations in the deploy graph, and the per-execution connection lifecycle.
 ---
 
 An alchemy app talks SQL at whichever level fits: a raw
@@ -35,6 +35,13 @@ them, and the Durable Object client lives at
 [`@effect/sql`](https://effect.website) drivers and share one
 lifecycle.
 
+`alchemy/Prisma` adds a third family: Prisma ORM v8 (prisma-next),
+Postgres-only. `Prisma.Contract` and `Prisma.Migrate` put contract
+emission and migration application in the deploy graph, and the
+runtime client lives on its own subpath
+(`alchemy/Prisma/ORM/Postgres`) beside the
+[Prisma platform provider](/prisma).
+
 ```typescript
 import * as SQL from "alchemy/SQL/D1";
 import * as Drizzle from "alchemy/Drizzle";
@@ -63,7 +70,8 @@ explains why.
 | Typed schema + queries on Postgres | [Drizzle: Postgres](/sql/drizzle/postgres) |
 | Typed schema + queries on MySQL | [Drizzle: MySQL](/sql/drizzle/mysql) |
 | Typed schema + queries on D1 | [Drizzle: D1](/sql/drizzle/d1) |
-| Schema changes applied on deploy | [Drizzle migrations](/sql/drizzle/migrations) |
+| Prisma ORM v8 on Postgres | [Prisma ORM: Postgres](/sql/prisma/postgres) |
+| Schema changes applied on deploy | [Drizzle migrations](/sql/drizzle/migrations) / [Prisma ORM migrations](/sql/prisma/migrations) |
 | Hand-written `.sql` migrations | [Effect SQL migrations](/sql/effect-sql/migrations) |
 | A service that runs on any database | `SqlClient` + Layers — see [Provide as a service](/sql/effect-sql/postgres#provide-as-a-service) |
 
@@ -75,6 +83,8 @@ explains why.
 - [Drizzle: Postgres](/sql/drizzle/postgres) /
   [MySQL](/sql/drizzle/mysql) / [D1](/sql/drizzle/d1) — schema to
   queries, end to end.
+- [Prisma ORM: Postgres](/sql/prisma/postgres) — Prisma v8's
+  contract-first flow, deploy-integrated.
 - [Add Drizzle ORM](/cloudflare/data/drizzle) — full Worker wiring on
   Postgres via Hyperdrive.
 - [Drizzle on D1](/cloudflare/data/d1-drizzle) — full Worker wiring

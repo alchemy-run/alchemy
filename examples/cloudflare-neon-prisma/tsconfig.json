@@ -1,0 +1,27 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "include": [
+    "alchemy.run.ts",
+    "prisma-next.config.ts",
+    "src/**/*.ts",
+    "src/prisma/contract.json",
+    "test/**/*.ts"
+  ],
+  "exclude": [
+    // prisma-next migration packages are self-emitting Node scripts whose
+    // snapshot imports only resolve under prisma-next's own toolchain.
+    "migrations"
+  ],
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "module": "Preserve",
+    "moduleResolution": "Bundler",
+    "target": "ESNext"
+  },
+  "references": [
+    {
+      "path": "../../packages/alchemy/tsconfig.json"
+    }
+  ]
+}

@@ -1,0 +1,212 @@
+---
+title: Postgres
+description: Prisma ORM v8 (prisma-next) on Postgres — declare the contract, plan and apply migrations on deploy, and query from a Worker over Hyperdrive.
+---
+
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+export const deps = `@prisma/orm-postgres`;
+export const devDeps = `prisma-next`;
+
+Prisma ORM v8 (the `8.0.0-rc` line, a.k.a. **prisma-next**) on
+Postgres, end to end: a contract, a `Prisma.Contract` resource that
+emits it and plans migrations on deploy, a `Prisma.Migrate` resource
+that applies them, and a Worker that queries through the prisma-next
+client over Hyperdrive.
+
+:::caution
+Prisma v8 is a release candidate. It is a ground-up rewrite of Prisma
+ORM (contract-first, no `prisma generate`, a new migration system) and
+currently targets **PostgreSQL 17+ only** — no MySQL, no D1. Alchemy
+pins the exact RC version; expect small breaking changes per RC.
+:::
+
+Install the toolchain — all optional peers of alchemy:
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun add ${deps}\nbun add -d ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm install ${deps}\nnpm install -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm add ${deps}\npnpm add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn add ${deps}\nyarn add -D ${devDeps}`} lang="sh" />
+  </TabItem>
+</Tabs>
+
+## Define the contract
+
+Prisma v8 is contract-first: your models live in a `contract.prisma`
+(or a TypeScript builder), and everything — types, runtime IR, the
+migration graph — derives from it:
+
+```prisma
+// src/prisma/contract.prisma
+// use prisma-next
+
+model User {
+  id    Int     @id @default(autoincrement())
+  email String  @unique
+  name  String?
+  posts Post[]
+}
+
+model Post {
+  id       Int    @id @default(autoincrement())
+  title    String
+  author   User   @relation(fields: [authorId], references: [id])
+  authorId Int
+}
+```
+
+## Point the config at it
+
+`prisma-next.config.ts` is the single source of truth for the
+toolchain — the CLI and alchemy's resources both read it:
+
+```typescript
+// prisma-next.config.ts
+import { defineConfig } from "@prisma/orm-postgres/config";
+
+export default defineConfig({
+  contract: "./src/prisma/contract.prisma",
+  output: "./src/prisma", // contract.json + contract.d.ts land here
+});
+```
+
+## Declare the contract resource and database
+
+`Prisma.Contract` runs `prisma-next contract emit` on every deploy
+and — when the contract drifted from the migration graph — plans a new
+migration package. `Prisma.Migrate` applies pending packages to a
+database. Passing the contract's output creates the dependency edge:
+emit and plan first, apply second, in one `alchemy deploy`. On Neon:
+
+```typescript
+// src/db.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Neon from "alchemy/Neon";
+import * as Prisma from "alchemy/Prisma";
+import * as Effect from "effect/Effect";
+
+export const Db = Effect.gen(function* () {
+  const contract = yield* Prisma.Contract("contract");
+
+  const project = yield* Neon.Project("app-db");
+  const branch = yield* Neon.Branch("app-branch", { project });
+
+  yield* Prisma.Migrate("migrate", {
+    url: branch.connectionUri,
+    contract,
+  });
+
+  return branch;
+});
+
+export const Hyperdrive = Effect.gen(function* () {
+  const branch = yield* Db;
+  return yield* Cloudflare.Hyperdrive.Connection("app-hyperdrive", {
+    origin: branch.origin,
+  });
+});
+```
+
+Any Postgres 17+ works the same way — a [Prisma Postgres](/prisma)
+database's `directConnectionString`, an RDS instance, or a
+self-hosted URL. Register `Prisma.providers()` alongside your cloud
+providers in the Stack. [Migrations](/sql/prisma/migrations) covers
+what the deploy does — and what it refuses to decide for you.
+
+## Connect in a Worker
+
+Hyperdrive pools connections at the edge; the runtime client takes
+its connection string plus the emitted contract. The factory is
+curried so the contract type is explicit while everything else
+infers:
+
+```typescript
+// src/api.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as PrismaPostgres from "alchemy/Prisma/ORM/Postgres";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import type { Contract } from "./prisma/contract.d.ts";
+import contractJson from "./prisma/contract.json" with { type: "json" };
+import { Hyperdrive } from "./db.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
+    const db = yield* PrismaPostgres.Postgres<Contract>()(
+      conn.connectionString,
+      { contractJson },
+    );
+
+    return {
+      fetch: Effect.gen(function* () {
+        const users = yield* db.use((c) => c.orm.public.User.all());
+        return yield* HttpServerResponse.json({ users });
+      }),
+    };
+  }).pipe(Effect.provide(Cloudflare.Hyperdrive.ConnectBinding)),
+) {}
+```
+
+Nothing connects at init — the client is built per event, its pool
+opens on the first query, and `close()` runs when the event settles
+(see [Connection lifecycle](/sql/effect-sql/lifecycle)). Plan and
+deploy never open a connection.
+
+## Queries are Effects through `use`
+
+prisma-next's client is promise-based, so queries run through
+`db.use`, which converts each call into an Effect with
+`Prisma.PrismaError` in the typed error channel:
+
+```typescript
+const user = yield* db.use((c) =>
+  c.orm.public.User.where({ email }).first(),
+);
+
+const created = yield* db.use((c) =>
+  c.orm.public.Post.create({ title, authorId: user.id }),
+);
+
+// transactions run inside one use call
+const posts = yield* db.use((c) =>
+  c.transaction(async (tx) => tx.orm.public.Post.all()),
+);
+```
+
+The full client surface is available inside `use`: the `orm` lane
+(namespaced per Postgres schema — `c.orm.public.*`), the `sql` query
+builder lane, the `raw` tag, and `transaction`. Failures carry
+prisma-next's structured error code:
+
+```typescript
+const result = yield* db
+  .use((c) => c.orm.public.User.create({ email }))
+  .pipe(
+    Effect.catchTag("Prisma.PrismaError", (error) =>
+      Effect.succeed(`failed with ${error.code}`),
+    ),
+  );
+```
+
+## Where next
+
+- [Migrations](/sql/prisma/migrations) — what deploy-time contract
+  emission and migration planning actually do, and when a plan needs
+  your decision.
+- [Example: cloudflare-neon-prisma](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-prisma)
+  — the complete runnable project.
+- [Prisma Postgres](/prisma) — provision the database itself with the
+  Prisma platform provider.
+- [Effect SQL: Postgres](/sql/effect-sql/postgres) — tagged-template
+  SQL over the same pool, no ORM.
