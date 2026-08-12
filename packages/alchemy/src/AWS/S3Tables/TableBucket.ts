@@ -100,8 +100,14 @@ const createBucketName = (id: string, props: { name?: string | undefined }) =>
     if (props.name) {
       return props.name;
     }
-    // Table-bucket names follow S3-bucket DNS rules: lowercase, 3-63 chars.
-    return yield* createPhysicalName({ id, maxLength: 63, lowercase: true });
+    // Table-bucket names follow S3-bucket DNS rules: lowercase, 3-63 chars,
+    // and must not start with the service-reserved prefixes.
+    return yield* createPhysicalName({
+      id,
+      maxLength: 63,
+      lowercase: true,
+      forbiddenPrefixes: ["xn--", "sthree-", "amzn-s3-demo-", "aws"],
+    });
   });
 
 export const TableBucketProvider = () =>
