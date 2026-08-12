@@ -917,5 +917,71 @@ write concurrency regardless of who hosts it.
    minutes of alarm work; must use the bounded-per-run + re-arm pattern the
    purge job already uses (15-minute alarm budget).
 
-Each gets a benchmark in `test/*.bench.test.ts` (§16) so the table above
-becomes measured numbers rather than estimates.
+Each gets a benchmark in `test/GitBench.e2e.test.ts` (§16) so the table
+above becomes measured numbers rather than estimates.
+
+## 16. Measured (test/GitBench.e2e.test.ts, deployed, SCALE=1)
+
+Run: `bun run test test/GitBench.e2e.test.ts --profile testing`
+(`BENCH_SCALE=4` for 4× workloads). Each case asserts only correctness and
+prints a line, so a slow datacenter minute can never fail the suite.
+
+### 16.1 End-to-end (via the `git` CLI, so client cost is included)
+
+| Measurement | Result | Reading |
+|---|---|---|
+| push 300 commits | 2.0 s (147 commits/s) | one push, ingest-dominated |
+| clone — dynamic closure walk | 1.17 s | v1 path: walk + per-object reads |
+| **clone — R2 bundle** | **0.44 s** | **2.7× faster** |
+| clone — fully packed repo (ranged R2 reads) | 0.60 s | compaction costs ~35% vs bundle, still beats dynamic |
+| incremental fetch (1 commit) | 477 ms | 2 round trips + negotiation |
+| 8 concurrent clones, 256 KiB each | 9.9–10.7 clones/s | bound by `git` process spawn + TLS, **not** by the server |
+| 10 serial pushes (same branch) | 4.6 pushes/s | the predicted per-ref serialization floor |
+| 4 concurrent pushes (distinct branches) | 9.2 pushes/s | DO semaphore serializes ingest, by design |
+| 10 concurrent repo creates | 7.9–12 creates/s | Registry singleton |
+| repo GET (resolve-cached) | 25 ms | in-isolate cache hit |
+| repo LIST, 13 rows → 14 rows | **416 ms → 27 ms** | **15×** after fixing the N+1 (below) |
+| compact 202 loose objects → R2 | 0.9 s | ~220 objects/s |
+
+### 16.2 Server capacity — the v2 claim, measured
+
+Driving `git-upload-pack` over raw HTTP removes the client from the
+measurement. Comparing the bundle path against the dynamic closure walk
+(forced by sending a `have` the server does not know, which disqualifies
+the bundle while producing the identical pack) is like-for-like:
+
+| Concurrency | dynamic closure walk (v1 path) | R2 bundle via Worker (v2 path) |
+|---|---|---|
+| 1 | 4.7 clones/s, 2.4 MiB/s | 5.4 clones/s, 2.7 MiB/s |
+| 8 | 17.2 clones/s, 8.7 MiB/s | 17.9 clones/s, 9.1 MiB/s |
+| **32** | **20.2 clones/s, 10.2 MiB/s** | **62.1 clones/s, 31.5 MiB/s** |
+
+This is the design's central claim, measured. The dynamic path **saturates
+at ~20 clones/s** — one Durable Object's single-threaded ceiling, and more
+load does not improve it — while the bundle path keeps scaling with
+concurrency (3.1× at 32-way, still climbing). Serialized planes flatten;
+immutable content-addressed bytes served by Workers do not.
+
+### 16.3 What the measurements corrected
+
+1. **`repos.list` was O(N) Durable Object wakes** — the handler fanned out
+   `getRepoMeta` per row, so listing 100 repos woke 100 DOs. **Fixed**:
+   `default_branch` / `read_only` / `status` are denormalised onto the
+   registry row (the Repo DO pushes them on change and remains the source
+   of truth). 416 ms → 27 ms. Live `objects` stats still need the DO, so a
+   listing reports zeros there and callers who want them read the repo
+   directly. Note for future schema work: the Registry needed an explicit
+   `ALTER TABLE` migration, because `CREATE TABLE IF NOT EXISTS` silently
+   leaves an existing table's columns alone.
+2. **Small-clone throughput is round-trip-bound, not bandwidth-bound.** At
+   256 KiB per clone the git client's process spawn plus two HTTP round
+   trips dominate, so the bundle win shows up as latency; the bandwidth
+   ceiling only appears under raw concurrency (§16.2) or on much larger
+   repos.
+3. **Advertisement caching is deliberately NOT implemented.** A TTL cache
+   on `info/refs` would make "push, then fetch from another machine"
+   unreliable for the length of the TTL — a real correctness regression for
+   CI. Doing it properly means an epoch the Worker can read without asking
+   the DO (Cache API entry purged on push), which is a v2.1 item; the
+   remaining per-clone DO cost is two small RPCs, and §16.2 shows that is
+   not the ceiling.

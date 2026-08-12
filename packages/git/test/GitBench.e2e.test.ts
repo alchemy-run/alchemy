@@ -516,3 +516,110 @@ test.skipIf(skipBench)(
   }).pipe(logLevel),
   { timeout: 900_000 },
 );
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Bottleneck 1/2 — SERVER-side clone capacity (no git process in the way)
+// ═══════════════════════════════════════════════════════════════════════════
+
+test.skipIf(skipBench)(
+  "bench: raw upload-pack throughput (server capacity, no git CLI)",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const repo = yield* freshRepo(url, "bench", "raw");
+    const tmp = yield* tempDir;
+    const blobKiB = 512 * SCALE;
+
+    yield* mustSh(
+      tmp,
+      `
+      rm -rf work && git -c init.defaultBranch=main clone '${repo.remote}' work
+      cd work
+      head -c ${blobKiB * 1024} /dev/urandom | base64 > payload.txt
+      i=1; while [ $i -le 50 ]; do printf 'f %s\\n' $i > "f$i.txt"; i=$((i+1)); done
+      git add -A && git commit -q -m payload
+      git push -q origin main
+      `,
+    );
+    const head = (yield* mustSh(tmp, `cd work && git rev-parse HEAD`)).stdout;
+    yield* Effect.sleep("6 seconds"); // let the bundle land
+
+    const client = yield* HttpClient.HttpClient;
+    const pkt = (line: string) =>
+      `${(line.length + 4).toString(16).padStart(4, "0")}${line}`;
+    const body = `${pkt(`want ${head}\n`)}0000${pkt("done\n")}`;
+
+    /** One full clone over raw HTTP; resolves to bytes received. */
+    const rawClone = client
+      .execute(
+        HttpClientRequest.post(`${url}/bench/raw.git/git-upload-pack`).pipe(
+          HttpClientRequest.setHeaders({
+            authorization: `Bearer ${repo.token}`,
+            "content-type": "application/x-git-upload-pack-request",
+          }),
+          HttpClientRequest.bodyText(body),
+        ),
+      )
+      .pipe(
+        Effect.flatMap((response) => response.arrayBuffer),
+        Effect.map((buffer) => buffer.byteLength),
+      );
+
+    // Warm one request so the measurements exclude cold start.
+    const packBytes = yield* rawClone;
+    expect(packBytes).toBeGreaterThan(1024);
+
+    // The same clone, but with a `have` the server does not know. That
+    // disqualifies the bundle (bundleCovers refuses any request carrying
+    // haves) while producing the SAME pack, so the two lines below are a
+    // like-for-like v1-dynamic vs v2-bundle comparison.
+    const unknownHave = "f".repeat(40);
+    const dynamicClone = client
+      .execute(
+        HttpClientRequest.post(`${url}/bench/raw.git/git-upload-pack`).pipe(
+          HttpClientRequest.setHeaders({
+            authorization: `Bearer ${repo.token}`,
+            "content-type": "application/x-git-upload-pack-request",
+          }),
+          HttpClientRequest.bodyText(
+            `${pkt(`want ${head}\n`)}${pkt(`have ${unknownHave}\n`)}0000${pkt("done\n")}`,
+          ),
+        ),
+      )
+      .pipe(
+        Effect.flatMap((response) => response.arrayBuffer),
+        Effect.map((buffer) => buffer.byteLength),
+      );
+
+    const throughput = (
+      sizes: ReadonlyArray<number>,
+      ms: number,
+      n: number,
+    ) => {
+      const total = sizes.reduce((sum, bytes) => sum + bytes, 0);
+      return (
+        `${perSecond(n, ms)} clones, ` +
+        `${(total / 1024 / 1024 / (ms / 1000)).toFixed(1)} MiB/s`
+      );
+    };
+
+    for (const concurrency of [1, 8, 32]) {
+      yield* measure(
+        `raw clone x${concurrency} — bundle (${(packBytes / 1024).toFixed(0)} KiB)`,
+        Effect.all(
+          Array.from({ length: concurrency }, () => rawClone),
+          { concurrency },
+        ),
+        (sizes, ms) => throughput(sizes, ms, concurrency),
+      );
+      yield* measure(
+        `raw clone x${concurrency} — dynamic closure walk`,
+        Effect.all(
+          Array.from({ length: concurrency }, () => dynamicClone),
+          { concurrency },
+        ),
+        (sizes, ms) => throughput(sizes, ms, concurrency),
+      );
+    }
+  }).pipe(logLevel),
+  { timeout: 900_000 },
+);
