@@ -93,16 +93,20 @@ export interface Exec extends Resource<
  * ```
  *
  * @section Running a Command on Destroy
- * @example Final Backup Before Teardown
+ * @example Back Up Before Teardown
  * ```typescript
- * yield* Exec("final-backup", {
- *   command: "true",
+ * yield* Exec("migrate", {
+ *   command: "npm run db:migrate",
  *   destroyCommand: "npm run db:backup",
- *   memo: false,
  * });
  * ```
  */
 export const Exec = Resource<Exec>("Command.Exec");
+
+const withoutDestroyCommand = ({
+  destroyCommand: _destroyCommand,
+  ...props
+}: ExecProps): Omit<ExecProps, "destroyCommand"> => props;
 
 export const ExecProvider = () =>
   Provider.effect(
@@ -130,17 +134,33 @@ export const ExecProvider = () =>
             action: newHash === output.hash.input ? "noop" : "update",
           };
         }),
-        reconcile: Effect.fn(function* ({ news, session }) {
+        reconcile: Effect.fn(function* ({ news, olds, output, session }) {
+          const memo =
+            news.memo === false
+              ? undefined
+              : { cwd: news.cwd, memo: news.memo === true ? {} : news.memo };
+          // `destroyCommand` only ever runs on delete, so editing it must not
+          // re-run `command`. The edit still has to reach reconcile — a `noop`
+          // never persists props, and `delete` reads the command out of state
+          // — so the teardown-only case is caught here instead of in `diff`.
+          if (
+            memo !== undefined &&
+            olds !== undefined &&
+            output?.hash.input !== undefined &&
+            olds.destroyCommand !== news.destroyCommand &&
+            !havePropsChanged(
+              withoutDestroyCommand(olds),
+              withoutDestroyCommand(news),
+            )
+          ) {
+            const hash = yield* hashDirectory(memo);
+            if (hash === output.hash.input) return { hash: { input: hash } };
+          }
           yield* run(news, session);
           return {
             hash: {
               input:
-                news.memo === false
-                  ? undefined
-                  : yield* hashDirectory({
-                      cwd: news.cwd,
-                      memo: news.memo === true ? {} : news.memo,
-                    }),
+                memo === undefined ? undefined : yield* hashDirectory(memo),
             },
           };
         }),

@@ -5,6 +5,9 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import assert from "node:assert";
 import type * as rolldown from "rolldown";
+// `rolldown/filter` is the pure-JS filter-expression builder — it pulls in no
+// native binding, so the lazy `loadRolldown` below still holds.
+import { id as idFilter, importerId, include, or } from "rolldown/filter";
 import { sha256, sha256Object } from "../Util/sha256.ts";
 import {
   bundleAnalyzerPlugin,
@@ -359,22 +362,24 @@ export const virtualEntryPlugin = Effect.gen(function* () {
           );
         },
       },
-      async resolveId(id, importer) {
-        if (ENTRY_REGEX.test(id)) {
-          return entries.has(id) ? { id } : null;
-        }
-        // A virtual entry has no directory, so the default resolver falls
-        // back to the bundle cwd for its bare imports — which need not
-        // contain the packages the entry names (the real main may resolve
-        // them from a node_modules the cwd cannot see). Resolve them as if
-        // the entry sat beside the real main.
-        if (importer !== undefined && ENTRY_REGEX.test(importer)) {
-          const entry = entries.get(importer);
-          if (entry !== undefined && !path.isAbsolute(id)) {
-            return this.resolve(id, entry);
+      resolveId: {
+        // Native filter: the hook only crosses into JS for a virtual entry
+        // or for something a virtual entry imports.
+        filter: [include(or(idFilter(ENTRY_REGEX), importerId(ENTRY_REGEX)))],
+        handler(source, importer) {
+          // The virtual entry id itself.
+          if (ENTRY_REGEX.test(source)) {
+            return entries.has(source) ? { id: source } : null;
           }
-        }
-        return null;
+          // An import *from* a virtual entry. The entry has no directory, so
+          // the default resolver falls back to the bundle cwd for bare
+          // specifiers — a node_modules that need not hold what the entry
+          // names. Resolve as if the entry sat beside the real main.
+          const main =
+            importer === undefined ? undefined : entries.get(importer);
+          if (main === undefined || path.isAbsolute(source)) return null;
+          return this.resolve(source, main);
+        },
       },
       load: {
         filter: { id: ENTRY_REGEX },

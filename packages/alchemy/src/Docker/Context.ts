@@ -160,10 +160,33 @@ export const ContextProvider = () =>
             }
           }
 
+          const existing = yield* inspect(desired.name);
+
+          if (!existing) {
+            yield* docker.context.create({
+              name: desired.name,
+              ...(desired.docker ? { docker: desired.docker } : {}),
+              ...(desired.description.length > 0
+                ? { description: desired.description }
+                : {}),
+            });
+          } else {
+            const current = toContextAttributes(existing);
+            if (
+              current.description !== desired.description ||
+              current.docker !== desired.docker
+            ) {
+              yield* docker.context.update({
+                name: desired.name,
+                ...(desired.docker ? { docker: desired.docker } : {}),
+                description: desired.description,
+              });
+            }
+          }
+
           // A rename reaches reconcile when the converge pass re-evaluates
-          // late-resolved props (diff never sees them): the state's context
-          // and the desired one are different physical names. Drop the old
-          // name and fall through to create under the new one.
+          // late-resolved props (diff never sees them). Both names may
+          // coexist, so retire the old one only once the new one exists.
           if (output && output.id !== desired.name) {
             yield* docker.context
               .remove(output.id, true)
@@ -174,35 +197,6 @@ export const ContextProvider = () =>
                   () => Effect.void,
                 ),
               );
-          }
-
-          const existing = yield* inspect(desired.name);
-
-          if (!existing) {
-            const createArgs = {
-              name: desired.name,
-              ...(desired.docker ? { docker: desired.docker } : {}),
-              ...(desired.description.length > 0
-                ? { description: desired.description }
-                : {}),
-            };
-            yield* docker.context.create(createArgs);
-            return toContextAttributes(
-              yield* docker.context.inspect(desired.name),
-            );
-          }
-
-          const current = toContextAttributes(existing);
-          const needsUpdate =
-            current.description !== desired.description ||
-            current.docker !== desired.docker;
-
-          if (needsUpdate) {
-            yield* docker.context.update({
-              name: desired.name,
-              ...(desired.docker ? { docker: desired.docker } : {}),
-              description: desired.description,
-            });
           }
 
           return toContextAttributes(

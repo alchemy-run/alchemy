@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
-import { Unowned } from "../AdoptPolicy.ts";
+import { OwnedBySomeoneElse, Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
@@ -58,12 +58,16 @@ export interface ContainerProps {
   memory?: string;
   /**
    * Set `no-new-privileges`, preventing processes in the container from
-   * gaining privileges via setuid/setgid binaries. @default false
+   * gaining privileges via setuid/setgid binaries.
+   *
+   * @default false
    */
   noNewPrivileges?: boolean;
   /**
    * Mount the container's root filesystem read-only. Writable paths must
-   * be provided explicitly as volumes or tmpfs. @default false
+   * be provided explicitly as volumes or tmpfs.
+   *
+   * @default false
    */
   readOnly?: boolean;
 }
@@ -272,16 +276,20 @@ export const ContainerProvider = () =>
           }
         }
         // The attach set can shift under a restarting container between the
-        // inspect above and these calls, so docker's refusals for "already
-        // there" / "not there" describe the desired state, not a failure.
-        const tolerating = (marker: string) => (error: unknown) =>
-          String(error).includes(marker) ? Effect.void : Effect.fail(error);
+        // inspect above and these calls, so "already attached" / "not
+        // attached" describe the desired state, not a failure.
         yield* Effect.forEach(
           disconnect,
           (network) =>
             docker.network
               .disconnect({ network, container: live.Id, context })
-              .pipe(Effect.catch(tolerating("is not connected to network"))),
+              .pipe(
+                Effect.catchReason(
+                  "PlatformError",
+                  "NotFound",
+                  () => Effect.void,
+                ),
+              ),
           { concurrency: "unbounded" },
         );
         yield* Effect.forEach(
@@ -294,7 +302,13 @@ export const ContainerProvider = () =>
                 alias: network.aliases,
                 context,
               })
-              .pipe(Effect.catch(tolerating("already exists in network"))),
+              .pipe(
+                Effect.catchReason(
+                  "PlatformError",
+                  "AlreadyExists",
+                  () => Effect.void,
+                ),
+              ),
           { concurrency: "unbounded" },
         );
       });
@@ -355,7 +369,13 @@ export const ContainerProvider = () =>
             return { action: "update" as const };
           }
         }),
-        reconcile: Effect.fn(function* ({ id, instanceId, news, olds }) {
+        reconcile: Effect.fn(function* ({
+          id,
+          instanceId,
+          news,
+          olds,
+          output,
+        }) {
           const context = dockerContextName(news.context);
           const args = yield* makeCreateArgs(id, news, instanceId);
           const live = yield* docker.container
@@ -371,10 +391,10 @@ export const ContainerProvider = () =>
           if (live) {
             // In-place only when the desired create-args still match the
             // ones this container was created from. A container's config is
-            // immutable, and changed args do reach reconcile without a
-            // `replace` plan: the converge pass hands late-resolved Outputs
-            // (a rebuilt image id, changed env) straight here without
-            // re-running diff. Recreating is the only way to apply them.
+            // immutable, and changed args reach reconcile without a `replace`
+            // plan: the converge pass hands late-resolved Outputs (a rebuilt
+            // image id, changed env) straight here without re-running diff.
+            // Recreating is the only way to apply them.
             const oldArgs =
               olds !== undefined && olds.image !== undefined
                 ? yield* makeCreateArgs(id, olds, instanceId)
@@ -399,6 +419,30 @@ export const ContainerProvider = () =>
                 .pipe(
                   Effect.map((info) => toContainerAttributes(info, args.image)),
                 );
+            }
+            // Recreating destroys the live container, so refuse unless it is
+            // ours: either state points at this exact container (created or
+            // adopted by us) or it carries our labels.
+            const owned =
+              output?.id === live.Id ||
+              (yield* hasAlchemyTags(id, live.Config.Labels ?? undefined));
+            if (!owned) {
+              return yield* new OwnedBySomeoneElse({
+                message:
+                  `Container '${args.name}' (${live.Id}) already exists and ` +
+                  "is not managed by this stack/stage/logical-id, so it " +
+                  "cannot be replaced. Pick a different `name`, or re-run " +
+                  "with `--adopt` (or `adopt(true)`) to take it over.",
+                resourceType: Container.Type,
+                logicalId: id,
+                physicalName: args.name,
+              });
+            }
+            // Same teardown as `delete`: a graceful stop (honoring the
+            // container's configured stop-timeout) before removal, never a
+            // bare SIGKILL.
+            if (live.State.Status === "running") {
+              yield* docker.container.stop(live.Id, context);
             }
             yield* docker.container.remove(live.Id, true, context);
           }

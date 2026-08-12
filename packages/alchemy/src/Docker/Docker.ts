@@ -533,7 +533,12 @@ export const DockerLive = Layer.effect(
             /^Error response from daemon: /,
             "",
           );
-          if (stderr.match(/no such/i) || stderr.match(/not found/i)) {
+          if (
+            stderr.match(/no such/i) ||
+            stderr.match(/not found/i) ||
+            // `network disconnect` against an already-detached container
+            stderr.match(/is not connected to network/i)
+          ) {
             return systemError({
               _tag: "NotFound",
               args,
