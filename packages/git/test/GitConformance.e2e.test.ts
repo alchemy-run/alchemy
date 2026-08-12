@@ -218,7 +218,19 @@ const stack = beforeAll(
         // Printed so a failing live run can be probed by hand (curl/git).
         yield* Effect.logInfo(`git-service deployed at ${url}`);
         const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
-        yield* admin.repos.list({ query: {} }).pipe(edgeRetry);
+        // Readiness probe: retry on ANY failure, not just transport errors.
+        // Right after a rollout the edge briefly serves the PREVIOUS worker
+        // version, whose responses decode against the old schema — that
+        // surfaces as a SchemaError on a 200, which `edgeRetry` ignores by
+        // design. Waiting here means "the deployed version answers the
+        // schema this test binary was built against".
+        yield* admin.repos.list({ query: {} }).pipe(
+          edgeRetry,
+          Effect.retry({
+            schedule: Schedule.spaced("1500 millis"),
+            times: 40,
+          }),
+        );
       }),
     ),
     logLevel,

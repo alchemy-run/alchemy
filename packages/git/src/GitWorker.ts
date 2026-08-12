@@ -71,6 +71,7 @@ import {
   Forbidden,
   GitApi,
   ImportFailed,
+  ObjectStats,
   ObjectTooLarge,
   Ref,
   Repo,
@@ -164,6 +165,7 @@ const toRepo = (meta: RepoMetaData): Repo =>
     forkOf: meta.forkOf,
     status: meta.status,
     createdAt: meta.createdAt,
+    objects: new ObjectStats(meta.objects),
   });
 
 /** Maps a DO token row onto the REST `TokenInfo` schema class. */
@@ -226,6 +228,8 @@ const registryFallbackRepo = (entry: RegistryEntry): Repo =>
     forkOf: entry.forkOf,
     status: entry.deletedAt !== null ? "deleting" : "ready",
     createdAt: entry.createdAt,
+    // No DO to ask (unseeded or mid-purge) — report an empty store.
+    objects: new ObjectStats({ loose: 0, packed: 0, r2: 0, bytes: 0 }),
   });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -680,6 +684,29 @@ export default class GitWorker extends Cloudflare.Worker<GitWorker>()(
               remote,
               token: toCreatedToken(init.token),
             });
+          }),
+        )
+        .handle("compact", ({ params }) =>
+          Effect.gen(function* () {
+            const entry = yield* resolveOrNotFound(params.owner, params.repo);
+            const auth = yield* restAuth;
+            yield* repos
+              .getByName(entry.repoId)
+              .startCompact(auth)
+              .pipe(
+                Effect.catchTag("StoreError", (error) => Effect.die(error)),
+                Effect.catchTag("Unauthorized", () =>
+                  Effect.fail(new Forbidden({ required: "admin" })),
+                ),
+                Effect.catchTag("RepoNotFound", () =>
+                  Effect.fail(
+                    new RepoNotFound({
+                      owner: params.owner,
+                      repo: params.repo,
+                    }),
+                  ),
+                ),
+              );
           }),
         )
         .handle("import", ({ payload }) =>

@@ -246,6 +246,22 @@ export class GitAuth extends HttpApiMiddleware.Service<
 /**
  * A repository resource as returned by the management plane.
  */
+/**
+ * Where a repo's objects currently live (DESIGN.md §12.1). `loose` rows
+ * hold their bytes in DO SQLite; `packed` objects have been compacted into
+ * immutable R2 packs; `r2` objects are oversize singletons in R2.
+ */
+export class ObjectStats extends Schema.Class<ObjectStats>("ObjectStats")({
+  /** Objects whose bytes are still in DO SQLite rows. */
+  loose: Schema.Number,
+  /** Objects compacted into R2 packs. */
+  packed: Schema.Number,
+  /** Oversize objects stored as standalone R2 keys. */
+  r2: Schema.Number,
+  /** Total compressed bytes across all locations. */
+  bytes: Schema.Number,
+}) {}
+
 export class Repo extends Schema.Class<Repo>("Repo")({
   /** Owner (namespace) segment of the repo's URL. */
   owner: OwnerName,
@@ -268,6 +284,8 @@ export class Repo extends Schema.Class<Repo>("Repo")({
   status: RepoStatus,
   /** Creation time, epoch milliseconds. */
   createdAt: Schema.Number,
+  /** Object storage breakdown (DESIGN.md §12.1). */
+  objects: ObjectStats,
 }) {}
 
 /**

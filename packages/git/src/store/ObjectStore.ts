@@ -32,7 +32,7 @@ import {
   type ObjectSource,
 } from "../git/Store.ts";
 import * as Zlib from "../git/Zlib.ts";
-import { objectKey } from "./Keys.ts";
+import { objectKey, packKey } from "./Keys.ts";
 import type { ObjectMetaRow, SqlClient } from "./Sql.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -191,6 +191,12 @@ interface ZDataRow extends Record<
   readonly location: string;
   readonly zdata: ArrayBuffer | null;
   readonly r2_key: string | null;
+  /** sha1 of the containing pack when `location='pack'` (DESIGN §12.1). */
+  readonly pack_id: string | null;
+  /** Byte offset of this object's zdata span inside that pack. */
+  readonly pack_offset: number | null;
+  /** Length of the zdata span (mirrors `zsize`). */
+  readonly zsize: number;
 }
 
 /**
@@ -219,7 +225,8 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
 
   const readRow = (oid: Oid): Effect.Effect<ZDataRow | undefined, StoreError> =>
     sql.first<ZDataRow>(
-      `SELECT oid, location, zdata, r2_key FROM objects WHERE oid = ? AND staged_push IS NULL`,
+      `SELECT oid, location, zdata, r2_key, pack_id, pack_offset, zsize
+         FROM objects WHERE oid = ? AND staged_push IS NULL`,
       oid,
     );
 
@@ -251,6 +258,44 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
     return body;
   });
 
+  /**
+   * Reads an object's zdata span out of a compacted R2 pack (DESIGN §12.1).
+   *
+   * `pack_offset` addresses the object's **zdata** directly (not the pack
+   * entry header), so one ranged GET returns exactly the stored compressed
+   * bytes — the same bytes a `location='row'` object holds in its BLOB.
+   * Entry headers are regenerated from `(type, size)` at emission time.
+   */
+  const packBytes = Effect.fn(function* (oid: Oid, row: ZDataRow) {
+    if (row.pack_id === null || row.pack_offset === null) {
+      return yield* Effect.fail(
+        new StoreError({
+          reason: `object ${oid} has location='pack' but no pack coordinates`,
+        }),
+      );
+    }
+    const key = packKey(repoId, row.pack_id);
+    const body = yield* runR2(
+      bucket.get(key, {
+        range: { offset: row.pack_offset, length: row.zsize },
+      }),
+      `R2 ranged get ${key}`,
+    );
+    if (body === null) {
+      return yield* Effect.fail(
+        new StoreError({ reason: `pack missing: ${key}` }),
+      );
+    }
+    return yield* body
+      .bytes()
+      .pipe(
+        Effect.mapError(
+          (error) =>
+            new StoreError({ reason: `R2 read ${key}: ${error.message}` }),
+        ),
+      );
+  });
+
   /** Reads the stored compressed bytes fully into memory. */
   const readZBytes = Effect.fn(function* (oid: Oid) {
     const row = yield* requireRow(oid);
@@ -277,11 +322,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
         );
       }
       case "pack":
-        return yield* Effect.die(
-          new NotImplementedError({
-            feature: "location='pack' object reads (v1.1 pack compaction)",
-          }),
-        );
+        return yield* packBytes(oid, row);
       default:
         return yield* Effect.fail(
           new StoreError({
@@ -374,12 +415,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
               );
             }
             case "pack":
-              return yield* Effect.die(
-                new NotImplementedError({
-                  feature:
-                    "location='pack' object reads (v1.1 pack compaction)",
-                }),
-              );
+              return Stream.succeed(yield* packBytes(oid, row));
             default:
               return yield* Effect.fail(
                 new StoreError({

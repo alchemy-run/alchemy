@@ -123,6 +123,22 @@ const importRepo = HttpApiEndpoint.post("import", "/repos/import", {
 });
 export { importRepo as import };
 
+/**
+ * Forces a compaction run now (admin): moves loose object bytes into an
+ * immutable R2 pack. Normally armed automatically by size thresholds after
+ * a push — this is the operator/benchmark handle. Returns immediately; poll
+ * `GET /repos/:owner/:repo` and watch `objects.loose` fall to zero.
+ */
+export const compact = HttpApiEndpoint.post(
+  "compact",
+  "/repos/:owner/:repo/compact",
+  {
+    params: RepoPath,
+    success: HttpApiSchema.NoContent,
+    error: [RepoNotFound, Forbidden],
+  },
+);
+
 /** The assembled `repos` group. */
 export default HttpApiGroup.make("repos")
   .add(create)
@@ -132,4 +148,5 @@ export default HttpApiGroup.make("repos")
   .add(del)
   .add(fork)
   .add(importRepo)
+  .add(compact)
   .middleware(GitAuth);

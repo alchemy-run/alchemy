@@ -97,6 +97,7 @@ import {
 import * as Zlib from "./git/Zlib.ts";
 import { runImport, type ImportSource } from "./jobs/Import.ts";
 import { runForkJob, snapshotStream, type SnapshotChunk } from "./jobs/Fork.ts";
+import { runCompactJob, shouldCompact } from "./jobs/Compact.ts";
 import { runPurgeJob } from "./jobs/Purge.ts";
 import { Registry, REGISTRY_DO_NAME, ulid } from "./RegistryObject.ts";
 import { computeClosure } from "./store/Closure.ts";
@@ -187,6 +188,16 @@ export interface RepoMetaData {
   readonly forkOf: string | null;
   readonly status: RepoStatus;
   readonly createdAt: number;
+  /** Object storage breakdown (DESIGN.md §12.1). */
+  readonly objects: ObjectStatsData;
+}
+
+/** Where a repo's objects live — see the REST `ObjectStats` schema. */
+export interface ObjectStatsData {
+  readonly loose: number;
+  readonly packed: number;
+  readonly r2: number;
+  readonly bytes: number;
 }
 
 /** Patch accepted by {@link GitRepoShape.updateRepoMeta}. */
@@ -362,6 +373,14 @@ export interface GitRepoShape {
     input: StartForkInput,
   ) => Effect.Effect<InitRepoResult, StoreError, RuntimeContext>;
   /** Flips `status: deleting` and arms the purge alarm job. */
+  /**
+   * Arms a compaction run now (admin): loose object bytes are moved into an
+   * immutable R2 pack by the alarm (DESIGN.md §12.1). Normally armed
+   * automatically by the post-push size check.
+   */
+  readonly startCompact: (
+    auth: CallerAuth,
+  ) => Effect.Effect<void, RepoAuthError, RuntimeContext>;
   readonly startPurge: (
     auth: CallerAuth,
   ) => Effect.Effect<void, RepoAuthError, RuntimeContext>;
@@ -1324,6 +1343,15 @@ export const GitRepoLive = GitRepo.make(
           const map = new Map(rows.map((row) => [row.key, row.value]));
           const repoId = map.get("repo_id");
           if (repoId === undefined) return undefined;
+          const stats = yield* sql.all<{
+            location: string;
+            n: number;
+            bytes: number;
+          }>(
+            `SELECT location, COUNT(*) AS n, COALESCE(SUM(zsize), 0) AS bytes
+               FROM objects WHERE staged_push IS NULL GROUP BY location`,
+          );
+          const byLocation = new Map(stats.map((row) => [row.location, row]));
           return {
             repoId,
             owner: map.get("owner") ?? "",
@@ -1334,6 +1362,12 @@ export const GitRepoLive = GitRepo.make(
             forkOf: map.get("fork_of") ?? null,
             status: (map.get("status") ?? "ready") as RepoStatus,
             createdAt: Number(map.get("created_at") ?? 0),
+            objects: {
+              loose: byLocation.get("row")?.n ?? 0,
+              packed: byLocation.get("pack")?.n ?? 0,
+              r2: byLocation.get("r2")?.n ?? 0,
+              bytes: stats.reduce((sum, row) => sum + row.bytes, 0),
+            },
           } satisfies RepoMetaData;
         });
 
@@ -2163,10 +2197,20 @@ export const GitRepoLive = GitRepo.make(
               graph,
             });
 
-            // Post-commit bookkeeping off the response path.
+            // Post-commit bookkeeping off the response path: staged-row GC
+            // and, once enough loose bytes have accumulated, compaction into
+            // an R2 pack (DESIGN.md §12.1).
             yield* state.waitUntil(
               upsertJob("gc", null).pipe(
                 Effect.flatMap(() => armAlarmAt(Date.now() + STAGING_TTL_MS)),
+                Effect.flatMap(() => shouldCompact(sql)),
+                Effect.flatMap((due) =>
+                  due
+                    ? upsertJob("compact", null).pipe(
+                        Effect.flatMap(() => armAlarmAt(Date.now() + 1_000)),
+                      )
+                    : Effect.void,
+                ),
                 Effect.ignore,
               ),
             );
@@ -2188,6 +2232,25 @@ export const GitRepoLive = GitRepo.make(
           cutoff,
         );
         yield* sql.run(`DELETE FROM jobs WHERE kind = 'gc'`);
+      });
+
+      /**
+       * Compaction (DESIGN.md §12.1): moves loose object bytes out of DO
+       * SQLite into an immutable R2 pack, bounded per run and re-armed
+       * while more remain.
+       */
+      const runCompactAlarm = Effect.gen(function* () {
+        const meta = yield* requireMeta;
+        const outcome = yield* runCompactJob({
+          repoId: meta.repoId,
+          sql,
+          bucket,
+        });
+        if (outcome.more) {
+          yield* armAlarmAt(Date.now() + 1_000);
+          return;
+        }
+        yield* sql.run(`DELETE FROM jobs WHERE kind = 'compact'`);
       });
 
       const runImportAlarm = (job: JobRow) =>
@@ -2391,6 +2454,13 @@ export const GitRepoLive = GitRepo.make(
           );
           yield* armAlarmAt(Date.now());
           return result;
+        }),
+
+        startCompact: Effect.fn(function* (auth: CallerAuth) {
+          yield* requireMeta;
+          yield* authorize(auth, "admin");
+          yield* upsertJob("compact", null);
+          yield* armAlarmAt(Date.now());
         }),
 
         startPurge: Effect.fn(function* (auth: CallerAuth) {
@@ -2937,6 +3007,9 @@ export const GitRepoLive = GitRepo.make(
                     return false;
                   case "gc":
                     yield* runGcJob;
+                    return false;
+                  case "compact":
+                    yield* runCompactAlarm;
                     return false;
                   default:
                     yield* sql.run(`DELETE FROM jobs WHERE kind = ?`, job.kind);

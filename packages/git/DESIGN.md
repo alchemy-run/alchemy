@@ -753,3 +753,169 @@ Every cut, its consequence, and the seam that makes it additive (seams marked **
 ---
 
 *Implementable from this document plus the repo: start with `src/git/` (Tier-1 tests green offline), then `store/`, then `RepoObject.ts` choreography, then the Worker/API mount, then the e2e suite. `packages/alchemy/src/Cloudflare/StateStore/Api.ts` is the mounting reference; `test/Cloudflare/Workers/fixtures/http-api/` is the Worker+DO+R2 reference; `packages/better-auth` is the packaging reference.*
+---
+
+# Part II — v2: scaling to enormous repositories
+
+v1 is deliberately one Durable Object per repo holding **everything**: refs,
+the object index, and the object bytes. That buys transactional ref CAS for
+free and is provably correct (Part I), but it caps out on two axes:
+
+- **Storage** — DO SQLite is 10 GB, so bytes-in-rows caps a repo at ~10 GB.
+- **Bandwidth** — every clone byte transits one single-threaded DO in one
+  datacenter. No horizontal read scaling, no geographic spread.
+
+The v2 insight: **a git repo is 99.9% immutable content-addressed bytes and
+0.1% mutable transactional state.** Immutable content-addressed data needs
+*zero* coordination, so it should never live behind a coordination point.
+Sharding the DO would be solving a problem we should not have. Instead,
+split the planes.
+
+## 11. The three planes
+
+| Plane | Home | Holds | Scales by |
+|---|---|---|---|
+| **Refs** (mutable) | Repo DO | refs, tokens, config, push staging, commit graph | Nothing needed — kilobytes; the only thing that requires serialized CAS |
+| **Objects** (immutable) | R2 | content-addressed packs + pack indexes + clone bundles | R2 (unbounded, immutable keys, no per-key write contention) |
+| **Serving** (stateless) | Workers + Cache API | advertisement, negotiation, pack streaming | Per-PoP: every datacenter serves independently |
+
+The DO stays the authority for "what is the current tip", which is the only
+question that needs an authority. Everything else is content-addressed and
+therefore cacheable, shareable, and replicable without coordination.
+
+### 11.1 Why this is the right shape
+
+This is the same refs-in-database + objects-in-blob-store architecture that
+GitHub (Spokes), GitLab (Gitaly + object storage), and AWS CodeCommit
+(DynamoDB + S3) converged on, expressed in Cloudflare primitives. The
+difference from v1 is not "more machines" — it is *removing the byte path
+from the coordination point*.
+
+### 11.2 Request flows after v2
+
+```
+clone (warm)   client → Worker → Cache API hit                    (DO: 0 calls, R2: 0 gets)
+clone (cold)   client → Worker → DO.planClone (refs only, ~1 KB)
+                              → R2 GET bundle → stream to client  (DO: 1 tiny RPC)
+fetch (incr.)  client → Worker → DO.planFetch (negotiate on the
+                              commit graph) → R2 ranged reads     (DO: 1 tiny RPC)
+push           client → Worker → DO (ingest + CAS, unchanged)     (serialized, by design)
+```
+
+## 12. Object plane: packs, indexes, bundles
+
+### 12.1 Compaction (loose rows → R2 packs)
+
+An alarm fires when `SUM(zsize) WHERE location='row'` exceeds **1 GB** or the
+live loose count exceeds **50 000**. It streams a no-delta pack of the
+oldest N objects to R2 via multipart (5 MiB parts), then flips those rows to
+`location='pack'` with `pack_id`/`pack_offset` in one `transactionSync` and
+NULLs their `zdata`.
+
+Because objects are stored **pre-deflated** (v1's decision, made for CPU
+reasons), a pack is literally `varint header + zdata` concatenated — so
+compaction is a copy, not a recompression, and `pack_offset` points at a
+byte span that can be served by an R2 ranged read verbatim.
+
+Keys are content-addressed and immutable:
+
+```
+{repoId}/packs/pack-{sha1}.pack     compacted objects (immutable)
+{repoId}/bundles/bundle-{refsHash}.pack   full-clone bundle (immutable)
+{repoId}/objects/{oid}              oversize loose objects (v1, unchanged)
+```
+
+### 12.2 Clone bundles
+
+A clone is, on the wire, exactly one pack containing the closure of the
+advertised refs. v1 recomputes that pack per clone. A **bundle** computes it
+once, after pushes settle (debounced alarm), and stores it under a key
+derived from the ref snapshot it covers (`refsHash`).
+
+Serving a clone then becomes: match the request's wants against the current
+advertisement, and if they agree, stream the bundle bytes. No closure walk,
+no per-object reads, no compression — and the bytes are immutable, so the
+Cache API can serve them from every PoP.
+
+Staleness is handled in three escalating tiers:
+
+1. **Exact match** (v2.0) — bundle covers exactly the current refs → stream
+   it; otherwise fall back to dynamic assembly. Hot repos with bursty clone
+   traffic (CI fleets cloning the same tip) hit this nearly always.
+2. **`packfile-uris`** (v2.1, needs protocol v2) — the server hands the
+   client a CDN URL for the big pack and sends only the remainder in-band.
+   The bundle no longer has to be current, only *mostly* current.
+3. **`bundle-uri`** (v2.2, git ≥ 2.38) — advertise a base bundle plus
+   incrementals with `creationToken`s; the client fetches them all from
+   cache and then does an ordinary incremental fetch. Server work per clone
+   collapses to a tiny negotiation.
+
+Bundles are derived data: GC keeps the newest base plus K incrementals and
+deletes older ones lazily. Because keys are content-addressed, a new bundle
+never overwrites an in-flight one.
+
+### 12.3 The object index at scale
+
+If the index itself outgrows the DO (~10M+ objects), the answer is again not
+a shard: the **pack index files in R2 are the index** (binary-searchable by
+oid), and the oid's own hash prefix is a perfectly uniform partition key if
+they ever need splitting. Content addressing *is* the trie — there is no
+tree structure to invent.
+
+## 13. Serving plane: Workers + Cache API
+
+- **Advertisement caching.** `GET /info/refs` output changes only on push,
+  so it is cached under a key derived from the repo id + refs hash and
+  purged on push. A clone storm then costs the DO ~one call *per push*
+  rather than one per clone.
+- **Worker-side clone fast path.** The Worker asks the DO for a *plan*
+  (`planClone`: refs snapshot + bundle key, ~1 KB) and, when the plan says
+  "bundle", streams R2 → client itself, framing sideband as it goes. The DO
+  never touches a pack byte.
+- **Dynamic fetches** stay proxied to the DO in v2.0 (they need the commit
+  graph); v2.1 moves negotiation to the Worker over a cached commit-graph
+  file, leaving the DO purely as the ref authority.
+
+## 14. Scaling model (napkin math)
+
+Everything is per-repo; repos are independent DOs, so fleet capacity is the
+sum. These are estimates derived from platform limits and architecture, not
+measurements — §15 is the plan to replace them with numbers.
+
+| Dimension | v1 (as built) | v2 (this design) | Bound by |
+|---|---|---|---|
+| Clone bandwidth (per repo) | ~50–100 MB/s aggregate | edge line rate; Tbps-class aggregate | v1: one DO streams every byte. v2: immutable bytes in cache/R2 |
+| Clone TPS (per repo) | ~50–200/s | 10k+/s | v2: advertisement cached; DO called ~once per push |
+| Incremental fetch | ~1–5 s CPU per 1M-object closure | ms for recent tips | commit graph + (v2.1) bitmaps |
+| Push TPS (per repo) | ~3–10/s | ~5–20/s | **Inherent**: a ref is a serialization point in git's own semantics |
+| Repo size | ~10 GB | unbounded (R2) | DO SQLite cap lifted off the byte path |
+| Push size | 50 MiB | unbounded | `RandomAccess` seam → R2 multipart tee |
+
+**v2 makes reads scale like a CDN and leaves writes scaling like git** —
+which is the correct place to land, because git's semantics cap per-ref
+write concurrency regardless of who hosts it.
+
+## 15. Remaining bottlenecks (ranked) and how each is measured
+
+1. **Cold closure computation on enormous repos.** A 10M-object visited set
+   as a JS `Set` is ~400 MB–1 GB, over the Worker's 128 MB. Fix is git's own:
+   binary commit-graph + **reachability bitmaps** (EWAH), turning a 10M-node
+   walk into bitmap ANDs over a few MB. This is the hardest real engineering
+   on the path to enormous repos.
+2. **Subrequest limit (1000) vs. fragmented packs.** A fetch assembled from
+   thousands of R2 ranged reads hits the cap. Compaction must order packs so
+   a typical fetch reads a few contiguous ranges. Pack layout is a
+   *correctness* constraint here, not an optimization.
+3. **Per-repo push serialization.** Inherent (see above); measured, not
+   fixed.
+4. **Registry singleton** — ~500 control-plane ops/s globally. Resolve
+   caching shields reads; `getByName("registry:" + owner)` shards writes.
+5. **First-byte latency for distant clients** — the refs DO lives in one
+   datacenter. Cached advertisements hide most of it; location hints place
+   hot repos near their users.
+6. **R2 write throughput during compaction/bundling** — a large repack is
+   minutes of alarm work; must use the bounded-per-run + re-arm pattern the
+   purge job already uses (15-minute alarm budget).
+
+Each gets a benchmark in `test/*.bench.test.ts` (§16) so the table above
+becomes measured numbers rather than estimates.

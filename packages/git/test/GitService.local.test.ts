@@ -919,3 +919,82 @@ test(
   }).pipe(logLevel),
   { timeout: 120_000 },
 );
+
+// ═══════════════════════════════════════════════════════════════════════════
+// v2 storage plane: compaction (DESIGN.md §12.1)
+// ═══════════════════════════════════════════════════════════════════════════
+
+test(
+  "compaction: objects move into an R2 pack and clones stay byte-identical",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const repo = yield* createRepo(url, "acme", "compaction");
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const tmp = yield* tempDir;
+
+    // A history with enough distinct blobs that a compaction run has real
+    // work to do, plus one binary file whose bytes must survive exactly.
+    yield* mustGit(
+      tmp,
+      "-c",
+      "init.defaultBranch=main",
+      "clone",
+      repo.remote,
+      "work",
+    );
+    const work = path.join(tmp, "work");
+    const binary = new Uint8Array(4096);
+    for (let i = 0; i < binary.length; i++) binary[i] = (i * 31 + 7) & 0xff;
+    yield* fs.writeFile(path.join(work, "blob.bin"), binary);
+    for (let i = 0; i < 12; i++) {
+      yield* fs.writeFileString(path.join(work, `f${i}.txt`), `content ${i}\n`);
+    }
+    yield* mustGit(work, "add", "-A");
+    yield* mustGit(work, "commit", "-m", "seed");
+    yield* mustGit(work, "push", "origin", "main");
+
+    // Compaction is normally armed by size thresholds; force a run now so
+    // the test does not depend on repo size.
+    yield* repo.client.repos.compact({
+      params: { owner: "acme", repo: "compaction" },
+    });
+
+    const stats = yield* repo.client.repos
+      .get({ params: { owner: "acme", repo: "compaction" } })
+      .pipe(
+        Effect.map((found) => found.objects),
+        Effect.repeat({
+          schedule: Schedule.spaced("500 millis"),
+          until: (objects: { loose: number; packed: number }) =>
+            objects.packed > 0 && objects.loose === 0,
+          times: 40,
+        }),
+      );
+    expect(stats.packed).toBeGreaterThan(0);
+    expect(stats.loose).toBe(0);
+
+    // Everything now reads through R2 ranged GETs: a fresh clone must be
+    // fsck-clean and byte-identical, and REST blob reads must still work.
+    yield* mustGit(tmp, "clone", repo.remote, "verify");
+    const verify = path.join(tmp, "verify");
+    yield* mustGit(verify, "fsck", "--strict");
+    const round = yield* fs.readFile(path.join(verify, "blob.bin"));
+    expect(Array.from(round)).toEqual(Array.from(binary));
+    for (let i = 0; i < 12; i++) {
+      const text = yield* fs.readFileString(path.join(verify, `f${i}.txt`));
+      expect(text).toBe(`content ${i}\n`);
+    }
+
+    // ...and an incremental push on top of a fully packed repo still works.
+    yield* fs.writeFileString(path.join(work, "after.txt"), "after\n");
+    yield* mustGit(work, "add", "-A");
+    yield* mustGit(work, "commit", "-m", "after-compaction");
+    yield* mustGit(work, "push", "origin", "main");
+    yield* mustGit(verify, "pull", "origin", "main");
+    expect(yield* fs.readFileString(path.join(verify, "after.txt"))).toBe(
+      "after\n",
+    );
+  }).pipe(logLevel),
+  { timeout: 120_000 },
+);
