@@ -1508,7 +1508,7 @@
     },
     "packages/alchemy": {
       "name": "alchemy",
-      "version": "2.0.0-beta.70",
+      "version": "2.0.0-beta.71",
       "bin": {
         "alchemy": "./bin/cli.js",
       },
@@ -1658,7 +1658,7 @@
     },
     "packages/better-auth": {
       "name": "@alchemy.run/better-auth",
-      "version": "2.0.0-beta.70",
+      "version": "2.0.0-beta.71",
       "devDependencies": {
         "@cloudflare/workers-types": "catalog:",
         "@distilled.cloud/aws": "catalog:",
@@ -1699,7 +1699,7 @@
     },
     "packages/cloudflare-runtime": {
       "name": "@alchemy.run/cloudflare-runtime",
-      "version": "2.0.0-beta.70",
+      "version": "2.0.0-beta.71",
       "dependencies": {
         "@alchemy.run/node-utils": "catalog:",
         "@cloudflare/unenv-preset": "catalog:workers",
@@ -1778,7 +1778,7 @@
     },
     "packages/frontend-frameworks": {
       "name": "@alchemy.run/frontend-frameworks",
-      "version": "2.0.0-beta.70",
+      "version": "2.0.0-beta.71",
       "dependencies": {
         "@alchemy.run/cloudflare-runtime": "workspace:*",
         "@distilled.cloud/cloudflare": "catalog:",
@@ -1833,7 +1833,7 @@
     },
     "packages/pr-package": {
       "name": "@alchemy.run/pr-package",
-      "version": "2.0.0-beta.70",
+      "version": "2.0.0-beta.71",
       "dependencies": {
         "alchemy": "workspace:*",
         "effect": "catalog:",
