@@ -1,7 +1,12 @@
+import type { ConfigError } from "effect/Config";
 import * as Effect from "effect/Effect";
 import type { MemoOptions } from "../../Command/Memo.ts";
 import type { InputProps } from "../../Input.ts";
+import type { Named, Tag } from "../../Named.ts";
+import type { MakeShape, PlatformServices } from "../../Platform.ts";
+import type { Rpc } from "../../Rpc.ts";
 import { effectClass } from "../../Util/effect.ts";
+import type { Container } from "../Containers/Container.ts";
 import type { Providers } from "../Providers.ts";
 import type { AssetsConfig } from "../Workers/Assets.ts";
 import {
@@ -10,7 +15,10 @@ import {
   type WorkerAssetsConfig,
   type WorkerBindingProps,
   type WorkerProps,
+  type WorkerServices,
+  type WorkerTypeId,
 } from "../Workers/Worker.ts";
+import { validateImplAnchor, type WebsiteShape } from "./Effectful.ts";
 
 /**
  * The specifier of the Waku source-provider module. The package must be
@@ -209,6 +217,40 @@ export interface WakuProps<
  */
 export const Waku: {
   <Self>(): {
+    <
+      const Id extends string,
+      Shape extends WebsiteShape,
+      const Bindings extends WorkerBindingProps = {},
+      Req extends
+        | WorkerServices
+        | Container.Application<any>
+        | PlatformServices
+        | Tag = never,
+      PropsReq = never,
+    >(
+      id: Id,
+      props:
+        | InputProps<WakuProps<Bindings> & { main: string }>
+        | Effect.Effect<
+            InputProps<WakuProps<Bindings> & { main: string }>,
+            ConfigError,
+            PropsReq
+          >,
+      impl: Effect.Effect<Shape, ConfigError, Req>,
+    ): Effect.Effect<
+      Worker<{
+        [binding in keyof NormalizedBindings<
+          Bindings,
+          WorkerAssetsConfig
+        >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      }> &
+        Rpc<Self>,
+      never,
+      Extract<Req, Container.Application<any>> | Providers | PropsReq
+    > &
+      Named<Id> & {
+        new (): MakeShape<Shape, WebsiteShape> & Named<Id> & Tag<WorkerTypeId>;
+      };
     <const Bindings extends WorkerBindingProps = {}, Req = never>(
       id: string,
       propsEff?:
@@ -223,6 +265,28 @@ export const Waku: {
       }>;
     };
   };
+  <
+    const Id extends string,
+    Shape extends WebsiteShape,
+    const Bindings extends WorkerBindingProps = {},
+    Req extends WorkerServices | Container.Application<any> | PlatformServices =
+      never,
+  >(
+    id: Id,
+    props: InputProps<WakuProps<Bindings> & { main: string }>,
+    impl: Effect.Effect<Shape, ConfigError, Req>,
+  ): Effect.Effect<
+    Worker<{
+      [binding in keyof NormalizedBindings<
+        Bindings,
+        WorkerAssetsConfig
+      >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+    }> &
+      Rpc<Shape>,
+    never,
+    Extract<Req, Container.Application<any>> | Providers
+  > &
+    Named<Id>;
   <const Bindings extends WorkerBindingProps = {}, Req = never>(
     id: string,
     propsEff?:
@@ -238,14 +302,27 @@ export const Waku: {
     never,
     Req | Providers
   >;
-} = ((id?: any, propsEff?: any) =>
+} = ((id?: any, propsEff?: any, impl?: any) =>
   id === undefined
-    ? (id: string, propsEff: any) => effectClass(Waku(id, propsEff))
-    : Worker(
+    ? (id: string, propsEff: any, impl?: any) =>
+        impl === undefined
+          ? effectClass(Waku(id, propsEff))
+          : Waku(id, propsEff, impl)
+    : (Worker as any)(
         id,
-        Effect.map(
-          Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
-          (props) => ({
+        Effect.gen(function* () {
+          const props: any =
+            (Effect.isEffect(propsEff) ? yield* propsEff : propsEff) ?? {};
+          // With an impl, `main` anchors the Effect program's module
+          // (`main: import.meta.url`) — it is NOT the waku custom-entry
+          // seam, which the generated virtual wrapper owns (auto-inject
+          // tier). Without one, `main` keeps today's meaning: a
+          // hand-written entry wrapping `virtual:waku/server-entry`.
+          const anchor =
+            impl === undefined
+              ? undefined
+              : yield* validateImplAnchor(id, "Waku", props.main);
+          return {
             ...props,
             compatibility: {
               ...props?.compatibility,
@@ -264,7 +341,10 @@ export const Waku: {
               htmlHandling: "drop-trailing-slash" as const,
               ...props?.assets,
             },
-            main: undefined!,
+            main: anchor!,
+            ...(anchor !== undefined
+              ? { runtimeDelivery: "wrapper" as const }
+              : undefined),
             source: {
               provider: WAKU_SOURCE_PROVIDER,
               devMode: "server",
@@ -273,13 +353,14 @@ export const Waku: {
                 // Custom worker entry (wraps waku's handler via
                 // `virtual:waku/server-entry`); resolved against `rootDir`
                 // by the source provider.
-                main: props?.main,
+                main: impl === undefined ? props?.main : undefined,
                 srcDir: props?.srcDir,
                 distDir: props?.distDir,
                 basePath: props?.basePath,
                 memo: props?.memo,
               },
             },
-          }),
-        ),
+          };
+        }),
+        impl,
       )) as any;

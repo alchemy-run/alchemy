@@ -35,12 +35,17 @@ const program = Effect.gen(function* () {
   const config = yield* readConfig;
   const fs = yield* FileSystem.FileSystem;
   const { clientDirectory, base, serverBundle, externalWorkspaces } =
-    yield* viteBuildInProcess(config.rootDir, config.env, {
-      main: config.main,
-      compatibilityDate: config.compatibilityDate,
-      compatibilityFlags: config.compatibilityFlags,
-      viteEnvironments: config.viteEnvironments,
-    });
+    yield* viteBuildInProcess(
+      config.rootDir,
+      config.env,
+      {
+        main: config.main,
+        compatibilityDate: config.compatibilityDate,
+        compatibilityFlags: config.compatibilityFlags,
+        viteEnvironments: config.viteEnvironments,
+      },
+      config.entry,
+    );
   const [bundle, workspaces] = yield* Effect.all([
     serverBundle,
     externalWorkspaces,

@@ -1,17 +1,40 @@
+import type { ConfigError } from "effect/Config";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { MemoOptions } from "../../Command/Memo.ts";
 import type { InputProps } from "../../Input.ts";
+import type { Named, Tag } from "../../Named.ts";
+import type { MakeShape, PlatformServices } from "../../Platform.ts";
+import type { Rpc } from "../../Rpc.ts";
 import { effectClass } from "../../Util/effect.ts";
+import type { Container } from "../Containers/Container.ts";
 import { Namespace } from "../KV/Namespace.ts";
 import type { Providers } from "../Providers.ts";
 import type { AssetsConfig } from "../Workers/Assets.ts";
 import {
+  DEFAULT_SERVER_ROUTES,
   Worker,
   type NormalizedBindings,
   type WorkerAssetsConfig,
   type WorkerBindingProps,
   type WorkerProps,
+  type WorkerServices,
+  type WorkerTypeId,
 } from "../Workers/Worker.ts";
+import { validateImplAnchor, type WebsiteShape } from "./Effectful.ts";
+
+/**
+ * An effectful `Website.Astro` was declared with `astro: { output:
+ * "static" }`: a declared-static build prerenders every page and deploys
+ * assets-only — no Worker script runs at request time, so the Effect
+ * program's handlers could never execute. Raised as a defect at plan time.
+ */
+export class AstroEffectStaticOutputError extends Data.TaggedError(
+  "AstroEffectStaticOutputError",
+)<{
+  message: string;
+  websiteId: string;
+}> {}
 
 export interface AstroProps<
   Bindings extends WorkerBindingProps = {},
@@ -230,6 +253,40 @@ export interface AstroProps<
  */
 export const Astro: {
   <Self>(): {
+    <
+      const Id extends string,
+      Shape extends WebsiteShape,
+      const Bindings extends WorkerBindingProps = {},
+      Req extends
+        | WorkerServices
+        | Container.Application<any>
+        | PlatformServices
+        | Tag = never,
+      PropsReq = never,
+    >(
+      id: Id,
+      props:
+        | InputProps<AstroProps<Bindings> & { main: string }>
+        | Effect.Effect<
+            InputProps<AstroProps<Bindings> & { main: string }>,
+            ConfigError,
+            PropsReq
+          >,
+      impl: Effect.Effect<Shape, ConfigError, Req>,
+    ): Effect.Effect<
+      Worker<{
+        [binding in keyof NormalizedBindings<
+          Bindings,
+          WorkerAssetsConfig
+        >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      }> &
+        Rpc<Self>,
+      never,
+      Extract<Req, Container.Application<any>> | Providers | PropsReq
+    > &
+      Named<Id> & {
+        new (): MakeShape<Shape, WebsiteShape> & Named<Id> & Tag<WorkerTypeId>;
+      };
     <const Bindings extends WorkerBindingProps = {}, Req = never>(
       id: string,
       propsEff?:
@@ -244,6 +301,28 @@ export const Astro: {
       }>;
     };
   };
+  <
+    const Id extends string,
+    Shape extends WebsiteShape,
+    const Bindings extends WorkerBindingProps = {},
+    Req extends WorkerServices | Container.Application<any> | PlatformServices =
+      never,
+  >(
+    id: Id,
+    props: InputProps<AstroProps<Bindings> & { main: string }>,
+    impl: Effect.Effect<Shape, ConfigError, Req>,
+  ): Effect.Effect<
+    Worker<{
+      [binding in keyof NormalizedBindings<
+        Bindings,
+        WorkerAssetsConfig
+      >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+    }> &
+      Rpc<Shape>,
+    never,
+    Extract<Req, Container.Application<any>> | Providers
+  > &
+    Named<Id>;
   <const Bindings extends WorkerBindingProps = {}, Req = never>(
     id: string,
     propsEff?:
@@ -259,14 +338,40 @@ export const Astro: {
     never,
     Req | Providers
   >;
-} = ((id?: any, propsEff?: any) =>
+} = ((id?: any, propsEff?: any, impl?: any) =>
   id === undefined
-    ? (id: string, propsEff: any) => effectClass(Astro(id, propsEff))
-    : Worker(
+    ? (id: string, propsEff: any, impl?: any) =>
+        impl === undefined
+          ? effectClass(Astro(id, propsEff))
+          : Astro(id, propsEff, impl)
+    : (Worker as any)(
         id,
         Effect.gen(function* () {
           const props: any =
             (Effect.isEffect(propsEff) ? yield* propsEff : propsEff) ?? {};
+          // With an impl, `main` anchors the Effect program's module
+          // (`main: import.meta.url`) and the source's fetchable wrapper
+          // delivers the runtime half — auto-inject tier.
+          const anchor =
+            impl === undefined
+              ? undefined
+              : yield* validateImplAnchor(id, "Astro", props.main);
+          // A declared-static build deploys assets-only (no Worker script),
+          // so an Effect program's handlers could never run — fail fast.
+          if (anchor !== undefined && props.astro?.output === "static") {
+            return yield* Effect.die(
+              new AstroEffectStaticOutputError({
+                message:
+                  `Cloudflare.Website.Astro("${id}", ...) combines an Effect ` +
+                  `program with \`astro: { output: "static" }\` — a ` +
+                  `declared-static build prerenders every page and deploys ` +
+                  `assets-only, so no Worker script would ever run the ` +
+                  `program's handlers. Remove the static output override ` +
+                  `(server output is the default) or drop the Effect program.`,
+                websiteId: id,
+              }),
+            );
+          }
           const session = props.sessionKVBindingName;
           const sessionBindingName =
             typeof session === "string" ? session : "SESSION";
@@ -293,7 +398,10 @@ export const Astro: {
             // and needs `nodejs_compat`; `getCompatibility` already adds it
             // to every non-python Worker (honoring an explicit
             // `no_nodejs_compat` opt-out and the v2-mode date guard).
-            main: undefined!,
+            main: anchor!,
+            ...(anchor !== undefined
+              ? { runtimeDelivery: "wrapper" as const }
+              : undefined),
             source: {
               provider: "@alchemy.run/frontend-frameworks/astro/source",
               devMode: "server",
@@ -312,8 +420,23 @@ export const Astro: {
                 // file-level `output` is superseded; opt into a fully
                 // prerendered site with `astro: { output: "static" }`.
                 astro: { output: "server", ...props.astro },
+                // Effectful-Website delivery (auto tier): the integration
+                // pre-resolves Astro's `virtual:astro:fetchable` to a
+                // generated wrapper importing the program module — effect
+                // handlers first for `server.routes`, Astro's pipeline on
+                // passthrough. JSON-serializable by construction (it
+                // crosses the build-child and dev-sidecar boundaries).
+                ...(anchor !== undefined
+                  ? {
+                      effect: {
+                        mainPath: anchor,
+                        routes: props.server?.routes ?? DEFAULT_SERVER_ROUTES,
+                      },
+                    }
+                  : undefined),
               },
             },
           };
         }),
+        impl,
       )) as any;

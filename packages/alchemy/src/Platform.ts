@@ -313,6 +313,26 @@ export const Platform = <
      * wherever the props effect is, including inside deployed bundles.
      */
     transformProps?: (id: string, props: any) => Effect.Effect<any, any, any>;
+    /**
+     * Finalize the resolved props of an impl-carrying resource. Runs only
+     * on the impl path (`cls.make`), AFTER the init Effect has evaluated —
+     * so the props it receives already carry the merged env and the
+     * collected `exports` — and its return value becomes the resource's
+     * final `Props`. This is where a platform stamps derived props that
+     * depend on the impl's presence or shape (e.g. the Worker's
+     * collect-only `runtimeDelivery` stamp and `server.routes` routing
+     * compilation). The `runtimeContext` argument is the same instance
+     * `createRuntimeContext` produced, so the hook can observe what init
+     * registered (served shape, listeners). Like `transformProps`, the
+     * impl path is re-evaluated inside deployed bundles — implementations
+     * MUST be a no-op at runtime (guard on
+     * `globalThis.__ALCHEMY_RUNTIME__`).
+     */
+    finalizeProps?: (
+      id: string,
+      props: any,
+      runtimeContext: BaseRuntimeContext,
+    ) => Effect.Effect<any, never, any>;
   },
   methods?: { [key: string]: any },
 ): any => {
@@ -627,7 +647,7 @@ export const Platform = <
                 ),
               );
 
-              instance.Props = {
+              const finalProps = {
                 ...props,
                 env: {
                   ...props?.env,
@@ -637,6 +657,9 @@ export const Platform = <
                   ? yield* runtimeContext.exports
                   : undefined,
               };
+              instance.Props = hooks.finalizeProps
+                ? yield* hooks.finalizeProps(id, finalProps, runtimeContext)
+                : finalProps;
 
               return Object.assign(instance, {
                 RuntimeContext: runtimeContext,

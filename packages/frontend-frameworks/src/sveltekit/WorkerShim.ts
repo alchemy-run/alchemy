@@ -52,6 +52,37 @@
  * `.svelte-kit/output/server/**` — and is the input for the rolldown pass
  * that produces the final workerd-ready modules.
  */
+/**
+ * The effect arm of the shim (DESIGN §6.2b) — collect-only *wrapper*
+ * delivery for an effectful `Cloudflare.Website.SvelteKit`. When present,
+ * the shim wraps kit's fetch handler in `alchemy/serve/worker`'s
+ * `makeWebsiteExports`: the Effect fetch owns `routes` and dispatches
+ * BEFORE the shim's pragma-cache/static-asset checks — effect responses
+ * are never served from (or written to) the shim's edge cache — with
+ * passthrough/miss requests falling through to kit unchanged. Durable
+ * Object / Workflow classes from the site's exports are re-exported as
+ * bridge classes sharing the one-per-isolate layer build.
+ */
+export interface WorkerShimEffectOptions {
+  /**
+   * Absolute filesystem path of the user's site module (the impl anchor,
+   * `main: import.meta.url` converted to a path). The shim re-imports the
+   * Website class from here inside workerd; the rolldown finish pass
+   * bundles it as one more input edge.
+   */
+  readonly main: string;
+  /** Path globs the Effect fetch owns. Omitted = middleware mode. */
+  readonly routes?: ReadonlyArray<string> | undefined;
+  /** Durable Object class names exported by the site's Effect program. */
+  readonly durableObjects?: ReadonlyArray<string> | undefined;
+  /** Workflow class names exported by the site's Effect program. */
+  readonly workflows?: ReadonlyArray<string> | undefined;
+  /** Stack identity baked into Workflow bridge metadata. */
+  readonly stack?:
+    | { readonly name: string; readonly stage: string }
+    | undefined;
+}
+
 export interface WorkerShimOptions {
   /** Relative import path to kit's server entry (`.../output/server/index.js`). */
   readonly serverImport: string;
@@ -71,6 +102,12 @@ export interface WorkerShimOptions {
     | "404-page"
     | "single-page-application"
     | undefined;
+  /**
+   * Effectful-Website wrapper delivery (see
+   * {@link WorkerShimEffectOptions}). Absent for plain SvelteKit sites —
+   * the emitted module is then byte-equivalent to the historical shim.
+   */
+  readonly effect?: WorkerShimEffectOptions | undefined;
 }
 
 /**
@@ -111,11 +148,69 @@ const spaDeferral = (assetsBinding: string): string => /* js */ `
       }
 `;
 
+/** Imports the effect arm adds ahead of the shared shim internals. */
+const effectImports = (effect: WorkerShimEffectOptions): string => {
+  const hasDo = (effect.durableObjects?.length ?? 0) > 0;
+  const hasWf = (effect.workflows?.length ?? 0) > 0;
+  return [
+    `import { WorkerEntrypoint${hasDo ? ", DurableObject" : ""}${hasWf ? ", WorkflowEntrypoint" : ""} } from 'cloudflare:workers';`,
+    `import { makeWebsiteExports${hasDo ? ", DurableObjectBridge" : ""} } from "alchemy/serve/worker";`,
+    ...(hasWf
+      ? [`import { makeWorkflowBridge } from "alchemy/Cloudflare";`]
+      : []),
+    `import __alchemy_site from ${JSON.stringify(effect.main)};`,
+  ].join("\n");
+};
+
+/**
+ * The effect arm's exports: the `makeWebsiteExports` wrapper as the default
+ * export (Effect fetch for `routes` — dispatched before the pragma-cache /
+ * asset checks inside `kit_handler` — kit fallback on passthrough/miss,
+ * full non-fetch handler surface from the Worker bridge dispatch), plus DO
+ * / Workflow bridge class re-exports sharing the one-per-isolate build.
+ */
+const effectExports = (effect: WorkerShimEffectOptions): string => {
+  const doClasses = effect.durableObjects ?? [];
+  const wfClasses = effect.workflows ?? [];
+  return [
+    "// Effectful Website wrapper (alchemy auto-inject tier): the Effect",
+    "// fetch owns the routes below and runs BEFORE kit_handler's",
+    "// pragma-cache/asset checks — effect responses are never edge-cached",
+    "// by the shim. Passthrough/miss falls through to kit unchanged.",
+    "export default makeWebsiteExports(WorkerEntrypoint, {",
+    "  site: __alchemy_site,",
+    ...(effect.routes !== undefined
+      ? [`  routes: ${JSON.stringify(effect.routes)},`]
+      : []),
+    "  framework: () => Promise.resolve({ default: kit_handler }),",
+    "});",
+    ...(doClasses.length > 0
+      ? [
+          "const __alchemyDurableObjectBridge = DurableObjectBridge(DurableObject, { site: __alchemy_site });",
+          ...doClasses.map(
+            (name) =>
+              `export class ${name} extends __alchemyDurableObjectBridge(${JSON.stringify(name)}) {}`,
+          ),
+        ]
+      : []),
+    ...(wfClasses.length > 0
+      ? [
+          `const __alchemyWorkflowBridge = makeWorkflowBridge(WorkflowEntrypoint, { entrypoint: __alchemy_site, stack: { name: ${JSON.stringify(effect.stack?.name ?? "")}, stage: ${JSON.stringify(effect.stack?.stage ?? "")} } });`,
+          ...wfClasses.map(
+            (name) =>
+              `export class ${name} extends __alchemyWorkflowBridge(${JSON.stringify(name)}) {}`,
+          ),
+        ]
+      : []),
+  ].join("\n");
+};
+
 export const generateWorkerShim = (options: WorkerShimOptions): string =>
   /* js */ `
 import { Server } from ${JSON.stringify(options.serverImport)};
 import { manifest, prerendered, base_path } from ${JSON.stringify(options.manifestImport)};
 import { env } from 'cloudflare:workers';
+${options.effect !== undefined ? effectImports(options.effect) : ""}
 
 const server = new Server(manifest);
 
@@ -174,7 +269,7 @@ const initialized = server.init({
   },
 });
 
-export default {
+const kit_handler = {
   async fetch(req, env, ctx) {
     if (!origin) {
       origin = new URL(req.url).origin;
@@ -234,4 +329,6 @@ ${options.notFoundHandling === "single-page-application" ? spaDeferral(options.a
     return pragma && res.status < 400 ? cache_save(req, res, ctx) : res;
   },
 };
+
+${options.effect !== undefined ? effectExports(options.effect) : "export default kit_handler;"}
 `.trimStart();

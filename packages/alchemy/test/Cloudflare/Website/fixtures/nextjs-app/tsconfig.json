@@ -13,7 +13,25 @@
     "isolatedModules": true,
     "jsx": "preserve",
     "incremental": true,
-    "plugins": [{ "name": "next" }]
+    "plugins": [{ "name": "next" }],
+    // The effectful fixtures (src/site*.ts, and the explicit-tier route the
+    // hmr test writes) import alchemy by bare specifier. The workspace's
+    // `import` condition points at alchemy's built `lib/`, which is not
+    // built in test worktrees — these paths pin Next's resolution (webpack,
+    // turbopack, and the JS-API tsc all honor tsconfig paths) to the same
+    // `src/` TypeScript that bun and the takeover prebundle resolve via the
+    // `bun`/`worker` conditions. The fixture is cloned to
+    // `packages/alchemy/.tmp/<dir>/`, so `../../` is `packages/alchemy/`.
+    "baseUrl": ".",
+    "paths": {
+      "alchemy": ["../../src/index.ts"],
+      "alchemy/serve": ["../../src/Serve/index.ts"],
+      "alchemy/serve/next": ["../../src/Serve/next.ts"],
+      "alchemy/serve/worker": ["../../src/Serve/worker.ts"],
+      "alchemy/Cloudflare": ["../../src/Cloudflare/index.ts"],
+      "alchemy/Cloudflare/*": ["../../src/Cloudflare/*/index.ts"],
+      "alchemy/*": ["../../src/*.ts"]
+    }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
   "exclude": ["node_modules"]

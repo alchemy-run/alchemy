@@ -66,6 +66,18 @@ export interface AstroCloudflareConfig {
    * @default true
    */
   readonly sessionDevKV?: boolean | undefined;
+  /**
+   * Effectful-Website delivery: the effect program module (`mainPath`,
+   * absolute path or `file://` URL) and the path globs its `fetch` owns.
+   * Forwarded to the integration's fetchable wrapper (see
+   * `DistilledCloudflareOptions.effect`).
+   */
+  readonly effect?:
+    | {
+        readonly mainPath: string;
+        readonly routes: ReadonlyArray<string>;
+      }
+    | undefined;
 }
 
 export interface AstroCloudflareTarget extends AstroTarget<AstroCloudflareConfig> {}
@@ -103,6 +115,7 @@ export const target = (
         sessionKVBindingName: config.sessionKVBindingName,
         sessions: config.sessions,
         sessionDevKV: config.sessionDevKV,
+        effect: config.effect,
         onOriginalClientDir: (dir) => {
           // Normalize (drop the directory-URL trailing slash) so the
           // comparison with the collector's `resolve`d path is exact.

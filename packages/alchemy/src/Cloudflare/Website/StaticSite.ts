@@ -1,18 +1,23 @@
+import type { ConfigError } from "effect/Config";
 import * as Effect from "effect/Effect";
 import { cast } from "effect/Function";
 import * as Redacted from "effect/Redacted";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Command from "../../Command/index.ts";
 import type { Input, InputProps } from "../../Input.ts";
+import type { Named, Tag } from "../../Named.ts";
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
+import type { MakeShape, PlatformServices } from "../../Platform.ts";
 import { renamedFrom } from "../../Rename.ts";
+import type { Rpc } from "../../Rpc.ts";
 import {
   effectClass,
   isYieldableEffectLike,
   type YieldableEffectLike,
 } from "../../Util/effect.ts";
 import { asEffect } from "../../Util/types.ts";
+import type { Container } from "../Containers/Container.ts";
 import type { Providers } from "../Providers.ts";
 import type { AssetsConfig } from "../Workers/Assets.ts";
 import {
@@ -21,8 +26,11 @@ import {
   type WorkerAssetsConfig,
   type WorkerBindingProps,
   type WorkerProps,
+  type WorkerServices,
+  type WorkerTypeId,
 } from "../Workers/Worker.ts";
 import { isContainerDecl } from "../Workers/WorkerAsyncBindings.ts";
+import { validateImplAnchor, type WebsiteShape } from "./Effectful.ts";
 
 export interface StaticSiteProps<Bindings extends WorkerBindingProps = {}>
   extends
@@ -219,6 +227,34 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  */
 export const StaticSite: {
   <Self>(): {
+    <
+      const Id extends string,
+      Shape extends WebsiteShape,
+      const Bindings extends WorkerBindingProps = {},
+      Req extends
+        | WorkerServices
+        | Container.Application<any>
+        | PlatformServices
+        | Tag = never,
+      PropsReq = never,
+    >(
+      id: Id,
+      props:
+        | InputProps<StaticSiteProps<Bindings> & { main: string }, "dev">
+        | Effect.Effect<
+            InputProps<StaticSiteProps<Bindings> & { main: string }, "dev">,
+            ConfigError,
+            PropsReq
+          >,
+      impl: Effect.Effect<Shape, ConfigError, Req>,
+    ): Effect.Effect<
+      StaticSiteWorker<Bindings> & Rpc<Self>,
+      never,
+      Extract<Req, Container.Application<any>> | Providers | PropsReq
+    > &
+      Named<Id> & {
+        new (): MakeShape<Shape, WebsiteShape> & Named<Id> & Tag<WorkerTypeId>;
+      };
     <const Bindings extends WorkerBindingProps = {}, Req = never>(
       id: string,
       propsEff:
@@ -232,16 +268,33 @@ export const StaticSite: {
       new (): StaticSiteWorker<Bindings>;
     };
   };
+  <
+    const Id extends string,
+    Shape extends WebsiteShape,
+    const Bindings extends WorkerBindingProps = {},
+    Req extends WorkerServices | Container.Application<any> | PlatformServices =
+      never,
+  >(
+    id: Id,
+    props: InputProps<StaticSiteProps<Bindings> & { main: string }, "dev">,
+    impl: Effect.Effect<Shape, ConfigError, Req>,
+  ): Effect.Effect<
+    StaticSiteWorker<Bindings> & Rpc<Shape>,
+    never,
+    Extract<Req, Container.Application<any>> | Providers
+  > &
+    Named<Id>;
   <const Bindings extends WorkerBindingProps = {}, Req = never>(
     id: string,
     propsEff:
       | InputProps<StaticSiteProps<Bindings>, "dev">
       | Effect.Effect<InputProps<StaticSiteProps<Bindings>, "dev">, never, Req>,
   ): Effect.Effect<StaticSiteWorker<Bindings>, never, Req | Providers>;
-} = ((id?: any, propsEff?: any) =>
+} = ((id?: any, propsEff?: any, impl?: any) =>
   id === undefined
-    ? (id: string, propsEff: any) => effectClass(makeStaticSite(id, propsEff))
-    : makeStaticSite(id, propsEff)) as any;
+    ? (id: string, propsEff: any, impl?: any) =>
+        effectClass(makeStaticSite(id, propsEff, impl))
+    : makeStaticSite(id, propsEff, impl)) as any;
 
 const makeStaticSite = <
   const Bindings extends WorkerBindingProps = {},
@@ -251,10 +304,42 @@ const makeStaticSite = <
   propsEff:
     | InputProps<StaticSiteProps<Bindings>, "dev">
     | Effect.Effect<InputProps<StaticSiteProps<Bindings>, "dev">, never, Req>,
+  impl?: Effect.Effect<any, any, any>,
 ) =>
   Effect.gen(function* () {
+    // Runtime world: with an impl, the deployed bundle's virtual entry
+    // imports this module's default export and the worker bridge
+    // re-evaluates it inside workerd (and the local dev bundle does the
+    // same). `AlchemyContext` and the Build/Dev sub-resources are
+    // plan-only machinery whose services don't exist there — delegate
+    // straight to the Worker platform call, which owns the runtime
+    // re-evaluation contract (stub Stack, runtime ConfigProvider).
+    if (globalThis.__ALCHEMY_RUNTIME__) {
+      const props = yield* asEffect(propsEff);
+      return yield* (
+        impl === undefined
+          ? Worker(id, { ...props, assets: undefined, dev: undefined } as any)
+          : (Worker as any)(
+              id,
+              {
+                ...props,
+                assets: undefined,
+                dev: undefined,
+                server: (props as any).server ?? {},
+              },
+              impl,
+            )
+      ) as Effect.Effect<any, never, any>;
+    }
     const ctx = yield* AlchemyContext;
     const props = yield* asEffect(propsEff);
+    // With an impl, `main` anchors the Effect program's module
+    // (`main: import.meta.url`); the compiled program IS the worker in
+    // front of the assets — the existing rolldown effect pipeline, no
+    // collect-only mode.
+    if (impl !== undefined) {
+      yield* validateImplAnchor(id, "StaticSite", (props as any).main);
+    }
 
     // `Dev` and `Build` carry constant logical ids, so they are namespaced
     // under `id` to keep two sites on one stack from colliding. Nothing
@@ -304,7 +389,7 @@ const makeStaticSite = <
     // FQN instead of letting the engine plan a create+delete replacement
     // (a new physical name, a torn-down workers.dev URL, and a
     // custom-domain handover that crashes the deploy).
-    return yield* Worker<Bindings, WorkerAssetsConfig, Req>(id, {
+    const workerProps: InputProps<WorkerProps<Bindings, WorkerAssetsConfig>> = {
       ...props,
       assets: build
         ? cast({
@@ -318,7 +403,30 @@ const makeStaticSite = <
       // state with a stub Attributes shape.
       dev: dev ? { mode: "external", url: dev.url } : undefined,
       script: props.script,
-    }).pipe(renamedFrom(`${id}/Worker`));
+    };
+    // The `renamedFrom` shim migrates pre-#1053 `<id>/Worker` state rows —
+    // it only applies to the no-impl arm. Impl-carrying sites are new
+    // (there is no legacy row to migrate), and `RenamePolicy` is ambient
+    // at registration: wrapping the impl arm would leak the former-FQN
+    // claim onto every resource the Effect program's init registers (KV
+    // namespaces, Durable Objects, ...), which the planner rejects as
+    // conflicting claims.
+    return yield* impl === undefined
+      ? Worker<Bindings, WorkerAssetsConfig, Req>(id, workerProps).pipe(
+          renamedFrom(`${id}/Worker`),
+        )
+      : ((Worker as any)(
+          id,
+          {
+            ...workerProps,
+            // The effect worker fronts the assets — force the
+            // `server.routes` → `runWorkerFirst` compilation (default
+            // `["/api/*"]`) so the handlers are reachable even under
+            // SPA fallback.
+            server: (props as any).server ?? {},
+          },
+          impl,
+        ) as Effect.Effect<any, never, any>);
   });
 
 /**

@@ -6,8 +6,10 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
+import EffectfulViteSite, { Users } from "./effectful-vite-fixture/site.ts";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
 // matching the process topology of the real `alchemy dev` command. The
@@ -48,7 +50,7 @@ const getJsonReady = (url: string) =>
           : Effect.fail(new WorkerNotReady({ status: res.status })),
       ),
       Effect.retry({
-        while: (e): e is WorkerNotReady => e instanceof WorkerNotReady,
+        while: (e) => e instanceof WorkerNotReady,
         schedule: Schedule.max([
           Schedule.min([
             Schedule.exponential("500 millis"),
@@ -131,6 +133,118 @@ test.provider(
         }),
       );
       expect(received).toContain("vite-queue-hello");
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 240_000 },
+);
+
+const putTextJson = <T>(url: string, body: string) =>
+  HttpClient.execute(
+    HttpClientRequest.put(url).pipe(
+      HttpClientRequest.bodyText(body, "text/plain"),
+    ),
+  ).pipe(
+    Effect.flatMap((res) =>
+      Effect.gen(function* () {
+        if (res.status !== 200) {
+          return yield* Effect.fail(new WorkerNotReady({ status: res.status }));
+        }
+        return yield* res.json;
+      }),
+    ),
+    Effect.retry({
+      while: (e) => e instanceof WorkerNotReady,
+      schedule: Schedule.max([
+        Schedule.min([
+          Schedule.exponential("500 millis"),
+          Schedule.spaced("2 seconds"),
+        ]),
+        Schedule.recurs(15),
+      ]),
+    }),
+    Effect.orDie,
+  ) as Effect.Effect<T, never, HttpClient.HttpClient>;
+
+const getTextReady = (url: string) =>
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    const res = yield* client.get(url).pipe(
+      Effect.flatMap((res) =>
+        res.status === 200
+          ? Effect.succeed(res)
+          : Effect.fail(new WorkerNotReady({ status: res.status })),
+      ),
+      Effect.retry({
+        while: (e) => e instanceof WorkerNotReady,
+        schedule: Schedule.max([
+          Schedule.min([
+            Schedule.exponential("500 millis"),
+            Schedule.spaced("2 seconds"),
+          ]),
+          Schedule.recurs(15),
+        ]),
+      }),
+    );
+    return yield* res.text;
+  }).pipe(Effect.orDie);
+
+/**
+ * The flagship wrapper-delivery roundtrip (DESIGN §6.2a) under `alchemy
+ * dev`: the effectful Website's generated `virtual:alchemy:website-entry`
+ * wrapper is served through the vite module runner inside workerd, the KV
+ * capability binding resolves to the local simulator (a `dev:` id — proof
+ * no cloud call ran), `server.routes` scopes the effect fetch to `/api/*`,
+ * and the passthrough protocol falls through to the SPA asset layer.
+ */
+test.provider(
+  "Vite dev: effectful website serves effect routes, KV dev binding, and passthrough",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const users = yield* Users;
+          const site = yield* EffectfulViteSite;
+          return { users, site };
+        }),
+      );
+
+      // Local identities: the KV namespace is emulated and the site serves
+      // from the local dev proxy.
+      expect(deployed.users.namespaceId).toMatch(/^dev:/);
+      expect(deployed.site.url).toMatch(/^http:\/\/localhost:\d+/);
+      const base = deployed.site.url!;
+
+      // Outside `server.routes`: the SPA shell serves from the asset layer.
+      const shell = yield* getTextReady(`${base}/`);
+      expect(shell).toContain("Effectful Vite fixture");
+
+      // Inside `server.routes`: the effect fetch answers.
+      const marker = (yield* getJsonReady(`${base}/api/anything`)) as {
+        marker: string;
+        path: string;
+      };
+      expect(marker.marker).toBe("effect-fetch");
+      expect(marker.path).toBe("/api/anything");
+
+      // KV roundtrip through the ReadWriteNamespace binding against the
+      // local simulator.
+      const put = yield* putTextJson<{ ok: boolean }>(
+        `${base}/api/kv?key=greeting`,
+        "hello-from-dev",
+      );
+      expect(put.ok).toBe(true);
+      const got = (yield* getJsonReady(`${base}/api/kv?key=greeting`)) as {
+        value: string | null;
+      };
+      expect(got.value).toBe("hello-from-dev");
+
+      // Passthrough: the effect fetch declines and the request falls
+      // through to the asset layer, whose SPA fallback serves the shell.
+      const fallthrough = yield* getTextReady(`${base}/api/passthrough`);
+      expect(fallthrough).toContain("Effectful Vite fixture");
 
       yield* stack.destroy();
     }).pipe(logLevel),

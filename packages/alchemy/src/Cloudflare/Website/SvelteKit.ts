@@ -1,16 +1,25 @@
+import type { ConfigError } from "effect/Config";
 import * as Effect from "effect/Effect";
 import type { MemoOptions } from "../../Command/Memo.ts";
 import type { InputProps } from "../../Input.ts";
+import type { Named, Tag } from "../../Named.ts";
+import type { MakeShape, PlatformServices } from "../../Platform.ts";
+import type { Rpc } from "../../Rpc.ts";
 import { effectClass } from "../../Util/effect.ts";
+import type { Container } from "../Containers/Container.ts";
 import type { Providers } from "../Providers.ts";
 import type { AssetsConfig } from "../Workers/Assets.ts";
 import {
+  DEFAULT_SERVER_ROUTES,
   Worker,
   type NormalizedBindings,
   type WorkerAssetsConfig,
   type WorkerBindingProps,
   type WorkerProps,
+  type WorkerServices,
+  type WorkerTypeId,
 } from "../Workers/Worker.ts";
+import { validateImplAnchor, type WebsiteShape } from "./Effectful.ts";
 
 export interface SvelteKitProps<
   Bindings extends WorkerBindingProps = {},
@@ -181,6 +190,40 @@ export interface SvelteKitProps<
  */
 export const SvelteKit: {
   <Self>(): {
+    <
+      const Id extends string,
+      Shape extends WebsiteShape,
+      const Bindings extends WorkerBindingProps = {},
+      Req extends
+        | WorkerServices
+        | Container.Application<any>
+        | PlatformServices
+        | Tag = never,
+      PropsReq = never,
+    >(
+      id: Id,
+      props:
+        | InputProps<SvelteKitProps<Bindings> & { main: string }>
+        | Effect.Effect<
+            InputProps<SvelteKitProps<Bindings> & { main: string }>,
+            ConfigError,
+            PropsReq
+          >,
+      impl: Effect.Effect<Shape, ConfigError, Req>,
+    ): Effect.Effect<
+      Worker<{
+        [binding in keyof NormalizedBindings<
+          Bindings,
+          WorkerAssetsConfig
+        >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      }> &
+        Rpc<Self>,
+      never,
+      Extract<Req, Container.Application<any>> | Providers | PropsReq
+    > &
+      Named<Id> & {
+        new (): MakeShape<Shape, WebsiteShape> & Named<Id> & Tag<WorkerTypeId>;
+      };
     <const Bindings extends WorkerBindingProps = {}, Req = never>(
       id: string,
       propsEff?:
@@ -195,6 +238,28 @@ export const SvelteKit: {
       }>;
     };
   };
+  <
+    const Id extends string,
+    Shape extends WebsiteShape,
+    const Bindings extends WorkerBindingProps = {},
+    Req extends WorkerServices | Container.Application<any> | PlatformServices =
+      never,
+  >(
+    id: Id,
+    props: InputProps<SvelteKitProps<Bindings> & { main: string }>,
+    impl: Effect.Effect<Shape, ConfigError, Req>,
+  ): Effect.Effect<
+    Worker<{
+      [binding in keyof NormalizedBindings<
+        Bindings,
+        WorkerAssetsConfig
+      >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+    }> &
+      Rpc<Shape>,
+    never,
+    Extract<Req, Container.Application<any>> | Providers
+  > &
+    Named<Id>;
   <const Bindings extends WorkerBindingProps = {}, Req = never>(
     id: string,
     propsEff?:
@@ -210,15 +275,30 @@ export const SvelteKit: {
     never,
     Req | Providers
   >;
-} = ((id?: any, propsEff?: any) =>
+} = ((id?: any, propsEff?: any, impl?: any) =>
   id === undefined
-    ? (id: string, propsEff: any) => effectClass(SvelteKit(id, propsEff))
-    : Worker(
+    ? (id: string, propsEff: any, impl?: any) =>
+        impl === undefined
+          ? effectClass(SvelteKit(id, propsEff))
+          : SvelteKit(id, propsEff, impl)
+    : (Worker as any)(
         id,
-        Effect.map(
-          Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
-          (props) => ({
+        Effect.gen(function* () {
+          const props: any =
+            (Effect.isEffect(propsEff) ? yield* propsEff : propsEff) ?? {};
+          // With an impl, `main` anchors the Effect program's module
+          // (`main: import.meta.url`) and the generated worker shim's
+          // effect arm delivers the runtime half — auto-inject tier.
+          const anchor =
+            impl === undefined
+              ? undefined
+              : yield* validateImplAnchor(id, "SvelteKit", props.main);
+          return {
             ...props,
+            main: anchor!,
+            ...(anchor !== undefined
+              ? { runtimeDelivery: "wrapper" as const }
+              : undefined),
             // SvelteKit's server graph is built for Node and needs
             // `nodejs_compat` — `getCompatibility` already adds it to every
             // non-python Worker.
@@ -246,8 +326,25 @@ export const SvelteKit: {
                 memo: props?.memo,
                 kit: props?.kit,
                 adapter: props?.adapter,
+                // Wrapper-delivery carrier for DEV: the source's `dev()`
+                // runs in the vite-child process, whose DevContext
+                // hardcodes an external entry — the descriptor is the only
+                // channel that reaches it. The build path reads the richer
+                // `SourceContext.entry` (which adds DO/Workflow exports)
+                // instead.
+                ...(anchor !== undefined
+                  ? {
+                      effect: {
+                        main: anchor,
+                        routes: props?.server?.routes ?? [
+                          ...DEFAULT_SERVER_ROUTES,
+                        ],
+                      },
+                    }
+                  : undefined),
               },
             },
-          }),
-        ),
+          };
+        }),
+        impl,
       )) as any;

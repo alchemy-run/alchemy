@@ -2,3 +2,4 @@
 .output/
 .data/
 dist/
+.alchemy/

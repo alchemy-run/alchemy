@@ -51,6 +51,7 @@ import { fileURLToPath } from "node:url";
 import type * as vite from "vite";
 import { createConfigPlugin } from "./config-plugin.ts";
 import { NODE_ENVIRONMENTS } from "./environments.ts";
+import { createEffectFetchablePlugin } from "./fetchable-plugin.ts";
 import { buildAssetsHeadersContent } from "./headers.ts";
 import { createWorkerdPrerenderEnvironmentPlugin } from "./prerender-environment.ts";
 import { createNodePrerenderPlugin } from "./prerender-middleware.ts";
@@ -117,6 +118,22 @@ export interface DistilledCloudflareOptions {
    */
   readonly sessionDevKV?: boolean | undefined;
   /**
+   * Effectful-Website delivery (DESIGN §6.2c): pre-resolve Astro's
+   * `virtual:astro:fetchable` to a generated wrapper that runs the effect
+   * program's `fetch` for `routes` first and falls back to Astro's own
+   * pipeline (or the user's fetch file). `mainPath` is the user module
+   * default-exporting the Website class (`props.main` — absolute path or
+   * `file://` URL). Applies to the `ssr` and `astro` (dev) environments;
+   * the prerender worker keeps astro's default fetchable so prerendering
+   * never touches the effect graph.
+   */
+  readonly effect?:
+    | {
+        readonly mainPath: string;
+        readonly routes: ReadonlyArray<string>;
+      }
+    | undefined;
+  /**
    * Reports the absolute path of the *original* client build directory
    * (`config.build.client` before the `base !== "/"` remap nests it). The
    * cloudflare target's `finish` pass uses it to point
@@ -175,7 +192,7 @@ const assertSupportedOptions = (options: DistilledCloudflareOptions): void => {
         offending
           .map((key) => `  - \`${key}\`: ${UNSUPPORTED_UPSTREAM_OPTIONS[key]}`)
           .join("\n") +
-        "\nSupported options: `vite`, `prerenderEnvironment`, `sessionKVBindingName`, `sessions`, `sessionDevKV`.",
+        "\nSupported options: `vite`, `prerenderEnvironment`, `sessionKVBindingName`, `sessions`, `sessionDevKV`, `effect`.",
     );
   }
 };
@@ -525,6 +542,20 @@ export function distilledCloudflare(
                   }
                 },
               } satisfies vite.Plugin,
+              // Effectful-Website delivery: pre-resolve the fetchable to
+              // the generated effect wrapper (stands down when the user's
+              // own fetch file already mounts `alchemy/serve`).
+              ...(options.effect !== undefined
+                ? [
+                    createEffectFetchablePlugin({
+                      mainPath: options.effect.mainPath,
+                      routes: options.effect.routes,
+                      srcDir: config.srcDir,
+                      fetchFile: config.fetchFile,
+                      platform: "cloudflare",
+                    }),
+                  ]
+                : []),
               createConfigPlugin({
                 sessionKVBindingName,
                 compileImageConfig: null,

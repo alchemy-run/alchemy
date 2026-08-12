@@ -13,6 +13,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import { pathToFileURL } from "node:url";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
@@ -287,6 +288,94 @@ describe.concurrent("SvelteKit dev", () => {
             Effect.catchTag("NamespaceNotFound", () => Effect.succeed(true)),
           );
         expect(gone).toBe(true);
+      }).pipe(logLevel),
+    { timeout: 300_000 },
+  );
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Effectful SvelteKit (DESIGN §6.2b) under `alchemy dev`: the site's
+  // Effect program owns `/api/*` through the effect dev middleware
+  // mounted in front of kit's Vite dev server, with binding clients
+  // resolving against the same platform proxy that serves kit's
+  // `platform.env` — backed by the LOCAL simulators (`dev:` ids).
+  // ─────────────────────────────────────────────────────────────────────
+
+  const effectFixtureDir = pathe.resolve(
+    import.meta.dirname,
+    "fixtures",
+    "sveltekit-effect-app",
+  );
+
+  test.provider(
+    "SvelteKit dev: effectful site serves /api/* through the Effect fetch with local KV; passthrough and kit SSR keep working",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const rootDir = yield* cloneFixture(effectFixtureDir, {
+          prefix: "alchemy-sveltekit-dev-effect-",
+          tempRoot,
+          entries: ["package.json", "src"],
+        });
+
+        // The site module is cloned with the fixture, so it is imported
+        // dynamically from the clone (its `rootDir` prop derives from its
+        // own location). Bun resolves `alchemy/...` through the workspace
+        // symlink to the same module instances as `@/...`.
+        const siteModule = (yield* Effect.tryPromise(
+          () =>
+            import(pathToFileURL(pathe.join(rootDir, "src", "site.ts")).href),
+        )) as typeof import("./fixtures/sveltekit-effect-app/src/site.ts");
+
+        const { site, users } = yield* stack.deploy(
+          Effect.gen(function* () {
+            const users = yield* siteModule.Users;
+            const site = yield* siteModule.default;
+            return { site, users };
+          }),
+        );
+
+        // Local identity: the site serves from the alchemy dev proxy and
+        // the impl-bound KV namespace is the LOCAL simulator — proof no
+        // cloud call ran for it.
+        expect(site.url).toBeDefined();
+        expect(site.url).toMatch(/^http:\/\/localhost:\d+/);
+        expect(isLocalId(users.namespaceId)).toBe(true);
+        expect(users.namespaceId).toMatch(/^dev:/);
+
+        // ── Effect surface: /api/effect/kv round-trips the KV capability
+        // binding through the dev middleware + platform proxy. Random
+        // payload so a stale value persisted by an earlier run's local
+        // simulator can never satisfy the read ───────────────────────────
+        const kvValue = `sveltekit-dev-effect-${crypto.randomUUID()}`;
+        yield* putTextReady(`${site.url!}/api/effect/kv?key=greeting`, kvValue);
+        const kvRead = yield* fetchJsonReady<{ value: string | null }>(
+          `${site.url!}/api/effect/kv?key=greeting`,
+        );
+        expect(kvRead.value).toBe(kvValue);
+
+        // ── Passthrough: a KIT endpoint INSIDE /api/* still answers —
+        // the effect fetch declines it with `Serve.passthrough` and the
+        // middleware falls through to kit ────────────────────────────────
+        const ping = yield* fetchJsonReady<{
+          via: string;
+          binding: string | null;
+        }>(`${site.url!}/api/ping`);
+        expect(ping.via).toBe("kit");
+        expect(ping.binding).toBe(siteModule.BINDING_MARKER);
+
+        // ── Framework surface: a +page.svelte SSRs through kit's dev
+        // server with `platform.env` (outside the effect routes) ─────────
+        yield* expectUrlContains(
+          `${site.url!}/`,
+          `binding:${siteModule.BINDING_MARKER}`,
+          {
+            timeout: "120 seconds",
+            label: "sveltekit dev effect: kit SSR home",
+          },
+        );
+
+        yield* stack.destroy();
       }).pipe(logLevel),
     { timeout: 300_000 },
   );

@@ -48,7 +48,7 @@ import {
   makeScopedArtifacts,
 } from "../../Artifacts.ts";
 import { loadSource, SourceProviderError, type DevContext } from "./Source.ts";
-import { isSelfUrl, Worker } from "./Worker.ts";
+import { DEFAULT_SERVER_ROUTES, isSelfUrl, Worker } from "./Worker.ts";
 import { getCronBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
 import { WorkerBundle, type WorkerBundleOptions } from "./Sources/Rolldown.ts";
@@ -59,7 +59,11 @@ import {
   WorkerValidationError,
 } from "./RuntimeBindings.ts";
 import { startViteChild } from "./ViteChild.ts";
-import { DEFAULT_DEV_PORT, type ViteChildConfig } from "./ViteChild.shared.ts";
+import {
+  DEFAULT_DEV_PORT,
+  makeViteEffectEntry,
+  type ViteChildConfig,
+} from "./ViteChild.shared.ts";
 
 /** Local dev-server options (the worker-mode arm of `WorkerProps["dev"]`). */
 type DevServerOptions = Extract<WorkerProps["dev"], { mode?: "worker" }> & {
@@ -468,16 +472,39 @@ export const LocalWorkerProvider = () =>
             : undefined,
           viteEnvironments: props.vite?.viteEnvironments,
           viteRootDir: props.vite?.rootDir,
+          /**
+           * Effectful Website wrapper delivery (plain data, part of the
+           * hashed restart surface — editing `server.routes` or the impl
+           * anchor restarts the vite child).
+           */
+          // Self-gating (undefined unless wrapper delivery + main): applies
+          // to vite workers AND external source providers (Nextjs & co.) —
+          // the child's source dev ctx re-derives `SourceContext.entry`
+          // from it.
+          viteEntry: makeViteEffectEntry(props),
           bundleOptions: {
             id,
             main: props.main!,
             compatibility,
-            entry: props.isExternal
-              ? { kind: "external" as const }
-              : {
-                  kind: "effect" as const,
-                  exports: props.exports ?? {},
-                },
+            // Mirrors `makeSourceContext` (Source.ts): collect-only
+            // "external" delivery deploys the framework bundle
+            // byte-for-byte; "wrapper" delivery hands the source an effect
+            // entry (routes + impl anchor) to generate around — in dev
+            // exactly as at deploy.
+            entry:
+              props.isExternal || props.runtimeDelivery === "external"
+                ? { kind: "external" as const }
+                : props.runtimeDelivery === "wrapper"
+                  ? {
+                      kind: "effect" as const,
+                      exports: props.exports ?? {},
+                      routes: props.server?.routes ?? DEFAULT_SERVER_ROUTES,
+                      mainPath: props.main,
+                    }
+                  : {
+                      kind: "effect" as const,
+                      exports: props.exports ?? {},
+                    },
             stack: { name: stack.name, stage: stack.stage },
             extraOptions: props.build,
           } satisfies WorkerBundleOptions,
@@ -991,6 +1018,7 @@ export const LocalWorkerProvider = () =>
                         name: worker.name,
                         compatibility: worker.compatibility,
                         main: worker.viteMain,
+                        entry: worker.viteEntry,
                         viteEnvironments: worker.viteEnvironments,
                         hasAssets: worker.hasAssets,
                         bindingDescriptors: worker.bindingDescriptors,

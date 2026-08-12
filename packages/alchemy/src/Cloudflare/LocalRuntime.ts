@@ -11,16 +11,26 @@ import { CloudflareEnvironment } from "./CloudflareEnvironment.ts";
 import type { Queue } from "./Queues/Queue.ts";
 import type { Consumer } from "./Queues/Consumer.ts";
 
-export const LOCAL_ENTRY_URL = import.meta.resolve(
-  // `import.meta.resolve(<string>)` is a runtime API — TypeScript's
-  // `rewriteRelativeImportExtensions` does NOT touch the string literal, so
-  // we have to pick the right extension ourselves. `import.meta.url` reflects
-  // the actual on-disk extension of *this* file (`.ts` when loaded from
-  // `src/` under Bun or vitest, `.js` when loaded from the compiled `lib/`
-  // under Node), which is exactly the signal we need.
-  import.meta.url.endsWith(".ts") ? "./Local.ts" : "./Local.js",
-  import.meta.url,
-);
+export const LOCAL_ENTRY_URL = (() => {
+  try {
+    return import.meta.resolve(
+      // `import.meta.resolve(<string>)` is a runtime API — TypeScript's
+      // `rewriteRelativeImportExtensions` does NOT touch the string literal, so
+      // we have to pick the right extension ourselves. `import.meta.url` reflects
+      // the actual on-disk extension of *this* file (`.ts` when loaded from
+      // `src/` under Bun or vitest, `.js` when loaded from the compiled `lib/`
+      // under Node), which is exactly the signal we need.
+      import.meta.url.endsWith(".ts") ? "./Local.ts" : "./Local.js",
+      import.meta.url,
+    );
+  } catch {
+    // Inside a worker runtime that forbids `import.meta.resolve` (the vite
+    // dev module runner evaluates this module when an effectful Website's
+    // graph reaches the provider barrel). Local providers never run there,
+    // so an empty entry URL is inert.
+    return "";
+  }
+})();
 
 export class LocalRuntimeState extends Context.Service<
   LocalRuntimeState,

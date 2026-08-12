@@ -1,16 +1,25 @@
+import type { ConfigError } from "effect/Config";
 import * as Effect from "effect/Effect";
 import type { MemoOptions } from "../../Command/Memo.ts";
 import type { InputProps } from "../../Input.ts";
+import type { Named, Tag } from "../../Named.ts";
+import type { MakeShape, PlatformServices } from "../../Platform.ts";
+import type { Rpc } from "../../Rpc.ts";
 import { effectClass } from "../../Util/effect.ts";
+import type { Container } from "../Containers/Container.ts";
 import type { Providers } from "../Providers.ts";
 import type { AssetsConfig } from "../Workers/Assets.ts";
 import {
+  DEFAULT_SERVER_ROUTES,
   Worker,
   type NormalizedBindings,
   type WorkerAssetsConfig,
   type WorkerBindingProps,
   type WorkerProps,
+  type WorkerServices,
+  type WorkerTypeId,
 } from "../Workers/Worker.ts";
+import { validateImplAnchor, type WebsiteShape } from "./Effectful.ts";
 
 /**
  * The specifier of the Nuxt source-provider module. The package must be
@@ -213,6 +222,56 @@ export interface NuxtProps<
  * });
  * ```
  *
+ * @section Effectful Website (Effect program)
+ * Pass an Effect program as the third argument to serve an effect-native
+ * API from the same Worker as the Nuxt app — one deploy, one origin. The
+ * program lives in a dedicated module whose default export is the Website
+ * class, anchored by `main: import.meta.url` (exactly like
+ * `Cloudflare.Worker`). At plan time the program's capability bindings
+ * (KV, R2, D1, ...) are collected onto the Worker; at deploy time alchemy
+ * generates a nitro entry wrapper that dispatches `server.routes`
+ * (default `["/api/*"]`) to the effect fetch first — nitro's own runtime
+ * serves everything else, including passthrough
+ * (`yield* Serve.passthrough` or an `HttpRouter` miss) within the routes.
+ * Durable Object classes and event handlers (cron, queues) declared by
+ * the program deploy on the same Worker.
+ *
+ * Under `alchemy dev`, the effect fetch is auto-mounted as a nitro
+ * middleware inside Nuxt's own dev server, with bindings served by the
+ * local simulators; non-fetch handlers (cron, queues, Durable Objects)
+ * are production-only on Nuxt for now.
+ *
+ * @example Effectful Nuxt site
+ * ```typescript
+ * // src/site.ts
+ * import * as Cloudflare from "alchemy/Cloudflare";
+ * import { passthrough } from "alchemy/serve";
+ * import * as Effect from "effect/Effect";
+ * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+ * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ *
+ * export const Users = Cloudflare.KV.Namespace("Users");
+ *
+ * export default class Site extends Cloudflare.Website.Nuxt<Site>()(
+ *   "Site",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const users = yield* Cloudflare.KV.ReadWriteNamespace(yield* Users);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const request = yield* HttpServerRequest;
+ *         const url = new URL(request.url, "http://localhost");
+ *         if (url.pathname === "/api/user") {
+ *           const value = yield* users.get("current").pipe(Effect.orDie);
+ *           return yield* HttpServerResponse.json({ value });
+ *         }
+ *         return yield* passthrough; // nitro serves everything else
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(Cloudflare.KV.ReadWriteNamespaceBinding)),
+ * ) {}
+ * ```
+ *
  * @section Custom Rebuild Scope
  * By default, every non-gitignored file is hashed to decide whether a
  * rebuild is needed. Use `memo` to narrow the scope when the project
@@ -251,6 +310,40 @@ export interface NuxtProps<
  */
 export const Nuxt: {
   <Self>(): {
+    <
+      const Id extends string,
+      Shape extends WebsiteShape,
+      const Bindings extends WorkerBindingProps = {},
+      Req extends
+        | WorkerServices
+        | Container.Application<any>
+        | PlatformServices
+        | Tag = never,
+      PropsReq = never,
+    >(
+      id: Id,
+      props:
+        | InputProps<NuxtProps<Bindings> & { main: string }>
+        | Effect.Effect<
+            InputProps<NuxtProps<Bindings> & { main: string }>,
+            ConfigError,
+            PropsReq
+          >,
+      impl: Effect.Effect<Shape, ConfigError, Req>,
+    ): Effect.Effect<
+      Worker<{
+        [binding in keyof NormalizedBindings<
+          Bindings,
+          WorkerAssetsConfig
+        >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      }> &
+        Rpc<Self>,
+      never,
+      Extract<Req, Container.Application<any>> | Providers | PropsReq
+    > &
+      Named<Id> & {
+        new (): MakeShape<Shape, WebsiteShape> & Named<Id> & Tag<WorkerTypeId>;
+      };
     <const Bindings extends WorkerBindingProps = {}, Req = never>(
       id: string,
       propsEff?:
@@ -265,6 +358,28 @@ export const Nuxt: {
       }>;
     };
   };
+  <
+    const Id extends string,
+    Shape extends WebsiteShape,
+    const Bindings extends WorkerBindingProps = {},
+    Req extends WorkerServices | Container.Application<any> | PlatformServices =
+      never,
+  >(
+    id: Id,
+    props: InputProps<NuxtProps<Bindings> & { main: string }>,
+    impl: Effect.Effect<Shape, ConfigError, Req>,
+  ): Effect.Effect<
+    Worker<{
+      [binding in keyof NormalizedBindings<
+        Bindings,
+        WorkerAssetsConfig
+      >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+    }> &
+      Rpc<Shape>,
+    never,
+    Extract<Req, Container.Application<any>> | Providers
+  > &
+    Named<Id>;
   <const Bindings extends WorkerBindingProps = {}, Req = never>(
     id: string,
     propsEff?:
@@ -280,14 +395,27 @@ export const Nuxt: {
     never,
     Req | Providers
   >;
-} = ((id?: any, propsEff?: any) =>
+} = ((id?: any, propsEff?: any, impl?: any) =>
   id === undefined
-    ? (id: string, propsEff: any) => effectClass(Nuxt(id, propsEff))
-    : Worker(
+    ? (id: string, propsEff: any, impl?: any) =>
+        impl === undefined
+          ? effectClass(Nuxt(id, propsEff))
+          : Nuxt(id, propsEff, impl)
+    : (Worker as any)(
         id,
-        Effect.map(
-          Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
-          (props) => ({
+        Effect.gen(function* () {
+          const props: any =
+            (Effect.isEffect(propsEff) ? yield* propsEff : propsEff) ?? {};
+          // With an impl, `main` anchors the Effect program's module
+          // (`main: import.meta.url`) — it is NOT the nitro custom-entry
+          // seam, which the generated entry wrapper owns (auto-inject
+          // tier). Without one, `main` keeps today's meaning: a
+          // hand-written nitro entry forwarded to the source provider.
+          const anchor =
+            impl === undefined
+              ? undefined
+              : yield* validateImplAnchor(id, "Nuxt", props.main);
+          return {
             ...props,
             // The server build uses nitro's hybrid workerd node-compat
             // (`cloudflare.nodeCompat: true`), which relies on workerd's
@@ -295,17 +423,34 @@ export const Nuxt: {
             // `nodejs_compat` to every non-python Worker.
             // `main` is the source provider's user-entry seam (nitro's
             // entry), not the Worker's own bundling entry.
-            main: undefined!,
+            main: anchor!,
+            ...(anchor !== undefined
+              ? { runtimeDelivery: "wrapper" as const }
+              : undefined),
             source: {
               provider: NUXT_SOURCE_PROVIDER,
               devMode: "server",
               options: {
                 rootDir: props?.rootDir,
-                main: props?.main,
+                main: impl === undefined ? props?.main : undefined,
                 memo: props?.memo,
                 nuxt: props?.nuxt,
+                // Effect entry takeover (impl present): the site-module
+                // anchor + effect routes ride the source descriptor so the
+                // provider can generate the nitro entry wrapper (deploy)
+                // and the routes-scoped dev middleware (local dev, where
+                // the provider only sees the resolved config surface).
+                ...(anchor !== undefined
+                  ? {
+                      effect: {
+                        main: anchor,
+                        routes: props?.server?.routes ?? DEFAULT_SERVER_ROUTES,
+                      },
+                    }
+                  : undefined),
               },
             },
-          }),
-        ),
+          };
+        }),
+        impl,
       )) as any;

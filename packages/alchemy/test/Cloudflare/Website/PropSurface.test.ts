@@ -1,5 +1,7 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 /**
  * Compile-time pins for the framework Website resources' prop surfaces.
@@ -75,8 +77,82 @@ describe("Website prop surfaces", () => {
       }),
   ];
 
+  // Effectful (impl) arm pins. The no-impl arms above stay byte- and
+  // type-compatible; the 3-argument arms accept an Effect program, require
+  // the `main` module anchor, and accept the `server` routing options.
+  const okImpl = Effect.succeed({
+    fetch: Effect.succeed(HttpServerResponse.text("ok")),
+  });
+
+  const _implPins = [
+    // plain form: `main` anchor + `server` options accepted
+    () =>
+      Cloudflare.Website.Vite(
+        "V",
+        {
+          main: "src/site.ts",
+          server: { routes: ["/api/*"], verify: false, takeover: true },
+        },
+        okImpl,
+      ),
+    // constructs without a custom-entry seam gain `main` ONLY on the impl
+    // arm (it anchors the program's module, not a worker entry)
+    () =>
+      Cloudflare.Website.Astro(
+        "A",
+        { main: "src/site.ts", server: { routes: ["/rpc/*"] } },
+        okImpl,
+      ),
+    () => Cloudflare.Website.SvelteKit("S", { main: "src/site.ts" }, okImpl),
+    () => Cloudflare.Website.Nextjs("X", { main: "src/site.ts" }, okImpl),
+    () => Cloudflare.Website.Nuxt("N", { main: "src/site.ts" }, okImpl),
+    () => Cloudflare.Website.Waku("W", { main: "src/site.ts" }, okImpl),
+    () => Cloudflare.Website.Octane("O", { main: "src/site.ts" }, okImpl),
+    // curried-class form
+    () => {
+      class Site extends Cloudflare.Website.Vite<Site>()(
+        "Site",
+        { main: "src/site.ts", server: { routes: ["/api/*"] } },
+        okImpl,
+      ) {}
+      return Site;
+    },
+    () => {
+      class Site extends Cloudflare.Website.Astro<Site>()(
+        "Site",
+        { main: "src/site.ts" },
+        okImpl,
+      ) {}
+      return Site;
+    },
+    // the anchor is REQUIRED with an impl
+    () =>
+      Cloudflare.Website.Astro(
+        "A",
+        // @ts-expect-error `main` is required with an Effect program
+        {},
+        okImpl,
+      ),
+    () =>
+      Cloudflare.Website.Vite(
+        "V",
+        // @ts-expect-error `main` is required with an Effect program
+        { server: { routes: ["/api/*"] } },
+        okImpl,
+      ),
+    // source-dispatch props stay rejected on the impl arm too
+    () =>
+      Cloudflare.Website.Waku(
+        "W",
+        // @ts-expect-error `script` is owned by the source dispatch
+        { main: "src/site.ts", script: "export default {}" },
+        okImpl,
+      ),
+  ];
+
   it("rejects source-dispatch props at the type level", () => {
     // The pins above are compile-time only.
     expect(_pins.length).toBeGreaterThan(0);
+    expect(_implPins.length).toBeGreaterThan(0);
   });
 });

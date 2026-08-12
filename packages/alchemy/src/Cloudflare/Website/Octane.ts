@@ -1,7 +1,12 @@
+import type { ConfigError } from "effect/Config";
 import * as Effect from "effect/Effect";
 import type { MemoOptions } from "../../Command/Memo.ts";
 import type { InputProps } from "../../Input.ts";
+import type { Named, Tag } from "../../Named.ts";
+import type { MakeShape, PlatformServices } from "../../Platform.ts";
+import type { Rpc } from "../../Rpc.ts";
 import { effectClass } from "../../Util/effect.ts";
+import type { Container } from "../Containers/Container.ts";
 import type { Providers } from "../Providers.ts";
 import type { AssetsConfig } from "../Workers/Assets.ts";
 import {
@@ -10,7 +15,10 @@ import {
   type WorkerAssetsConfig,
   type WorkerBindingProps,
   type WorkerProps,
+  type WorkerServices,
+  type WorkerTypeId,
 } from "../Workers/Worker.ts";
+import { validateImplAnchor, type WebsiteShape } from "./Effectful.ts";
 
 /**
  * The specifier of the Octane source-provider module. The package must be
@@ -190,6 +198,40 @@ export interface OctaneProps<
  */
 export const Octane: {
   <Self>(): {
+    <
+      const Id extends string,
+      Shape extends WebsiteShape,
+      const Bindings extends WorkerBindingProps = {},
+      Req extends
+        | WorkerServices
+        | Container.Application<any>
+        | PlatformServices
+        | Tag = never,
+      PropsReq = never,
+    >(
+      id: Id,
+      props:
+        | InputProps<OctaneProps<Bindings> & { main: string }>
+        | Effect.Effect<
+            InputProps<OctaneProps<Bindings> & { main: string }>,
+            ConfigError,
+            PropsReq
+          >,
+      impl: Effect.Effect<Shape, ConfigError, Req>,
+    ): Effect.Effect<
+      Worker<{
+        [binding in keyof NormalizedBindings<
+          Bindings,
+          WorkerAssetsConfig
+        >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      }> &
+        Rpc<Self>,
+      never,
+      Extract<Req, Container.Application<any>> | Providers | PropsReq
+    > &
+      Named<Id> & {
+        new (): MakeShape<Shape, WebsiteShape> & Named<Id> & Tag<WorkerTypeId>;
+      };
     <const Bindings extends WorkerBindingProps = {}, Req = never>(
       id: string,
       propsEff?:
@@ -204,6 +246,28 @@ export const Octane: {
       }>;
     };
   };
+  <
+    const Id extends string,
+    Shape extends WebsiteShape,
+    const Bindings extends WorkerBindingProps = {},
+    Req extends WorkerServices | Container.Application<any> | PlatformServices =
+      never,
+  >(
+    id: Id,
+    props: InputProps<OctaneProps<Bindings> & { main: string }>,
+    impl: Effect.Effect<Shape, ConfigError, Req>,
+  ): Effect.Effect<
+    Worker<{
+      [binding in keyof NormalizedBindings<
+        Bindings,
+        WorkerAssetsConfig
+      >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+    }> &
+      Rpc<Shape>,
+    never,
+    Extract<Req, Container.Application<any>> | Providers
+  > &
+    Named<Id>;
   <const Bindings extends WorkerBindingProps = {}, Req = never>(
     id: string,
     propsEff?:
@@ -219,19 +283,36 @@ export const Octane: {
     never,
     Req | Providers
   >;
-} = ((id?: any, propsEff?: any) =>
+} = ((id?: any, propsEff?: any, impl?: any) =>
   id === undefined
-    ? (id: string, propsEff: any) => effectClass(Octane(id, propsEff))
-    : Worker(
+    ? (id: string, propsEff: any, impl?: any) =>
+        impl === undefined
+          ? effectClass(Octane(id, propsEff))
+          : Octane(id, propsEff, impl)
+    : (Worker as any)(
         id,
-        Effect.map(
-          Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
-          (props) => ({
+        Effect.gen(function* () {
+          const props: any =
+            (Effect.isEffect(propsEff) ? yield* propsEff : propsEff) ?? {};
+          // With an impl, `main` anchors the Effect program's module
+          // (`main: import.meta.url`). Octane is explicit-tier for now:
+          // upstream `@octanejs/adapter-cloudflare` owns the emitted
+          // worker entry, so the framework bundle deploys byte-for-byte
+          // and the user mounts the program via `alchemy/serve` in an
+          // Octane ServerRoute (the sentinel scan verifies the wiring).
+          const anchor =
+            impl === undefined
+              ? undefined
+              : yield* validateImplAnchor(id, "Octane", props.main);
+          return {
             ...props,
             // Octane's server bundle externalizes `node:` modules for
             // workerd's native node-compat — `getCompatibility` already
             // adds `nodejs_compat` to every non-python Worker.
-            main: undefined!,
+            main: anchor!,
+            ...(anchor !== undefined
+              ? { runtimeDelivery: "external" as const }
+              : undefined),
             source: {
               provider: OCTANE_SOURCE_PROVIDER,
               devMode: "server",
@@ -240,6 +321,7 @@ export const Octane: {
                 memo: props?.memo,
               },
             },
-          }),
-        ),
+          };
+        }),
+        impl,
       )) as any;

@@ -67,8 +67,15 @@ const fail = (message: string, cause?: unknown) =>
  */
 export const makeCloudflareTarget = (
   config: SvelteKitTargetConfig = {},
-): SvelteKitTarget =>
-  makeDeployTarget({
+): SvelteKitTarget => {
+  // The finishing pass needs the adapter's effect decision (stand-down on
+  // an explicit alchemy/serve mount; DO/Workflow export names) — `adapt()`
+  // records it on `result.current.effect`, and the target captures the
+  // adapter it constructed so `finish` can read it. A target instance is
+  // created per build invocation (`resolveDeployTarget` applies the
+  // factory each time), so the capture never crosses builds.
+  let lastAdapter: ReturnType<typeof makeCloudflareAdapter> | undefined;
+  return makeDeployTarget({
     platform: "cloudflare",
     config,
     bundle: {
@@ -76,9 +83,10 @@ export const makeCloudflareTarget = (
       external: ["cloudflare:"],
     },
     adapter: (context) =>
-      makeCloudflareAdapter({
+      (lastAdapter = makeCloudflareAdapter({
         ...config.adapter,
         root: context.root,
+        effect: config.effect,
         ...(context.dev !== undefined
           ? {
               platform: {
@@ -90,7 +98,7 @@ export const makeCloudflareTarget = (
               },
             }
           : undefined),
-      }),
+      })),
     finish: (output, context) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
@@ -116,11 +124,27 @@ export const makeCloudflareTarget = (
             ),
           );
 
+        // Effectful wrapper delivery: the shim re-exports DO/Workflow
+        // bridge classes (widen `exports` past ["default"]), and the
+        // bundle now carries the alchemy/effect runtime graph — fold the
+        // runtime flag so plan-only `host.bind` branches DCE out, and
+        // minify to keep the upload inside Worker size limits.
+        const effect = lastAdapter?.result.current?.effect;
+        const effectActive = effect?.active === true;
         const externalDirectories = yield* Effect.tryPromise({
           try: async () => {
             const bundle = await rolldown({
               cwd: root,
               input: entry,
+              ...(effectActive
+                ? {
+                    transform: {
+                      define: {
+                        "globalThis.__ALCHEMY_RUNTIME__": "true",
+                      },
+                    },
+                  }
+                : undefined),
               plugins: cloudflare({
                 ...(config.compatibilityDate !== undefined
                   ? { compatibilityDate: config.compatibilityDate }
@@ -128,7 +152,10 @@ export const makeCloudflareTarget = (
                 compatibilityFlags: config.compatibilityFlags ?? [
                   "nodejs_compat",
                 ],
-                exports: ["default"],
+                exports: [
+                  "default",
+                  ...(effectActive ? (effect?.exportNames ?? []) : []),
+                ],
               }),
             });
             try {
@@ -138,6 +165,9 @@ export const makeCloudflareTarget = (
                 entryFileNames: "index.js",
                 chunkFileNames: "chunks/[name].js",
                 sourcemap: false,
+                ...(effectActive
+                  ? { minify: true, keepNames: true }
+                  : undefined),
               });
               const directories = new Set<string>();
               for (const chunk of chunks) {
@@ -185,6 +215,7 @@ export const makeCloudflareTarget = (
         } satisfies FrameworkCore.BuildOutput;
       }),
   });
+};
 
 /**
  * The deploy-target module contract (`resolveDeployTarget` accepts the

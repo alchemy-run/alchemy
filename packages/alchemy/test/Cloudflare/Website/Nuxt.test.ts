@@ -13,6 +13,7 @@ import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as pathe from "pathe";
+import * as workers from "@distilled.cloud/cloudflare/workers";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
 import {
@@ -389,6 +390,134 @@ describe.concurrent("Nuxt", () => {
   // contract; only page rendering moves to the client.
   // ─────────────────────────────────────────────────────────────────────
 
+  // ─────────────────────────────────────────────────────────────────────
+  // Effect entry takeover (DESIGN Amendment §2.1.2): an effectful
+  // `Cloudflare.Website.Nuxt` — the impl passed as the third argument —
+  // deploys ONE Worker serving Nuxt SSR + assets AND the Effect program,
+  // through the alchemy-generated nitro entry wrapper (`makeWebsiteExports`
+  // over nitro's cloudflare-module runtime). Verifies the full surface:
+  //
+  // - `/api/effect/kv` — effect fetch with the plan-collected KV binding
+  //   (out-of-band read through the cloud KV API proves the real
+  //   namespace was hit);
+  // - `/api/effect/counter` — a Durable Object class export emitted by the
+  //   generated wrapper (state increments across requests on the deployed
+  //   worker);
+  // - the cron trigger collected from the impl is present in the uploaded
+  //   worker metadata (schedules API);
+  // - `/api/hello` (passthrough within the effect routes) and the SSR
+  //   page + static assets keep working through the wrapper's framework
+  //   fallback.
+  // ─────────────────────────────────────────────────────────────────────
+  test.provider(
+    "Nuxt: effect entry takeover deploys one worker with effect routes, DO export, and cron",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
+        yield* stack.destroy();
+
+        const rootDir = yield* cloneFixture(fixtureDir, {
+          prefix: "alchemy-nuxt-effect-",
+          tempRoot,
+          entries: [...fixtureEntries, "site-live.ts"],
+        });
+
+        // The site module is imported from the CLONE (its
+        // `main: import.meta.url` anchor must point at the tree nitro
+        // builds), so the class is loaded dynamically, per test run.
+        const site = yield* importEffectSite(rootDir, "site-live.ts");
+
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            const attrs = yield* site.default;
+            const kv = yield* site.LiveKv!;
+            return { attrs, kv };
+          }),
+        );
+
+        expect(deployed.attrs.url).toBeDefined();
+        yield* expectWorkerExists(deployed.attrs.workerName, accountId);
+        const base = deployed.attrs.url!;
+
+        // Effect fetch + KV binding, verified out-of-band via the cloud API.
+        const kvKey = "nuxt-effect-live-key";
+        const kvValue = "nuxt-effect-live-value";
+        const put = yield* putJsonReady<{ put: boolean }>(
+          `${base}/api/effect/kv?key=${kvKey}&value=${kvValue}`,
+        );
+        expect(put.put).toBe(true);
+        const got = yield* fetchJsonReady<{ value: string | null }>(
+          `${base}/api/effect/kv?key=${kvKey}`,
+        );
+        expect(got.value).toBe(kvValue);
+        const observed = yield* readNamespaceValue({
+          accountId,
+          namespaceId: deployed.kv.namespaceId,
+          keyName: kvKey,
+        });
+        expect(observed).toBe(kvValue);
+
+        // Durable Object export through the generated wrapper: state
+        // increments ACROSS requests — instance identity on the deployed
+        // worker proves the DO class rode the entry takeover.
+        const first = yield* postJsonReady<{ count: number }>(
+          `${base}/api/effect/counter`,
+          {},
+        );
+        const second = yield* postJsonReady<{ count: number }>(
+          `${base}/api/effect/counter`,
+          {},
+        );
+        expect(second.count).toBe(first.count + 1);
+        const read = yield* fetchJsonReady<{ count: number }>(
+          `${base}/api/effect/counter`,
+        );
+        expect(read.count).toBe(second.count);
+
+        // The cron trigger collected from the impl is in the uploaded
+        // worker metadata.
+        const schedule = yield* workers.getScriptSchedule({
+          accountId,
+          scriptName: deployed.attrs.workerName,
+        });
+        expect(schedule.schedules.map((entry) => entry.cron)).toContain(
+          "*/5 * * * *",
+        );
+
+        // Passthrough within the effect routes: nitro's own /api/hello
+        // still answers.
+        const hello = yield* fetchJsonReady<{ marker: string }>(
+          `${base}/api/hello`,
+        );
+        expect(hello.marker).toBe("api-route-ok");
+
+        // Framework fallback outside the effect routes: SSR page, static
+        // asset, and prerendered page all serve through the wrapper.
+        yield* expectUrlContains(`${base}/`, "NUXT_PAGE_MARKER", {
+          timeout: "120 seconds",
+          label: "SSR page through the effect entry wrapper",
+        });
+        yield* expectUrlContains(`${base}/robots.txt`, "User-agent", {
+          timeout: "60 seconds",
+          label: "static asset with effect entry wrapper",
+        });
+        yield* expectUrlContains(
+          `${base}/prerendered`,
+          "this-page-is-prerendered",
+          {
+            timeout: "60 seconds",
+            label: "prerendered page with effect entry wrapper",
+          },
+        );
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(deployed.attrs.workerName, accountId);
+        yield* waitForNamespaceToBeDeleted(deployed.kv.namespaceId, accountId);
+      }).pipe(logLevel),
+    { timeout: 600_000 },
+  );
+
   const spaFixtureDir = pathe.resolve(
     import.meta.dirname,
     "fixtures",
@@ -494,6 +623,29 @@ describe.concurrent("Nuxt", () => {
   );
 });
 
+/** Structural shape of a dynamically imported effect site fixture module. */
+interface EffectSiteModule {
+  readonly default: Effect.Effect<{
+    url?: string | undefined;
+    workerName: string;
+    hash?: { input?: string | undefined } | undefined;
+  }>;
+  readonly LiveKv?: Effect.Effect<{ namespaceId: string }>;
+}
+
+/** Import a site module from a fixture clone (path computed at runtime). */
+const importEffectSite = (rootDir: string, file: string) =>
+  Effect.tryPromise({
+    try: async () => {
+      const { pathToFileURL } = await import("node:url");
+      return (await import(
+        pathToFileURL(pathe.join(rootDir, file)).href
+      )) as EffectSiteModule;
+    },
+    catch: (cause) =>
+      new Error(`failed to import effect site module ${file}: ${cause}`),
+  });
+
 /**
  * GET `url` until it answers 200 with a JSON body (fresh workers.dev URLs
  * take a few seconds to start serving). Mirrors SvelteKit.test.ts's
@@ -511,7 +663,13 @@ const fetchJsonReady = <T>(url: string) =>
                 catch: () => new Error(`non-json body: ${body}`),
               }),
             )
-          : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+          : Effect.flatMap(res.text, (body) =>
+              Effect.fail(
+                new Error(
+                  `Worker not ready: ${res.status}: ${body.slice(0, 500)}`,
+                ),
+              ),
+            ),
       ),
       Effect.retry({
         // Capped interval, ~90s total budget: fresh workers.dev subdomains and
@@ -539,7 +697,13 @@ const postJsonReady = <T>(url: string, body: unknown) =>
               catch: () => new Error(`non-json body: ${responseBody}`),
             }),
           )
-        : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+        : Effect.flatMap(res.text, (body) =>
+            Effect.fail(
+              new Error(
+                `Worker not ready: ${res.status}: ${body.slice(0, 500)}`,
+              ),
+            ),
+          ),
     ),
     Effect.retry({
       // Capped interval, ~90s total budget (workers.dev / DO propagation).
@@ -562,7 +726,13 @@ const putJsonReady = <T>(url: string) =>
               catch: () => new Error(`non-json body: ${responseBody}`),
             }),
           )
-        : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+        : Effect.flatMap(res.text, (body) =>
+            Effect.fail(
+              new Error(
+                `Worker not ready: ${res.status}: ${body.slice(0, 500)}`,
+              ),
+            ),
+          ),
     ),
     Effect.retry({
       // Capped interval, ~90s total budget (workers.dev / DO propagation).

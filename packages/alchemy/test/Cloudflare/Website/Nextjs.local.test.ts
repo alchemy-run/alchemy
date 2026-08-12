@@ -39,6 +39,28 @@ const fixtureEntries = [
   "public",
 ];
 
+/** The effectful fixtures additionally need the site modules (`src/`). */
+const effectFixtureEntries = [...fixtureEntries, "src", "stubs"];
+
+/**
+ * The explicit-tier mount the hmr test writes into the clone
+ * (`app/api/effect/[[...slug]]/route.ts`) — the documented Next.js escape
+ * hatch: the catch-all route handler is compiled by Next itself, so effect
+ * routes work under the real `next dev` (fetch-only).
+ */
+const explicitRouteSource = [
+  // Relative into packages/alchemy/src (see the note in src/site-hmr.ts):
+  // the bare "alchemy/serve/next" specifier would resolve through the
+  // `import` condition to the unbuilt lib/ in this workspace.
+  `import { toRouteHandler } from "../../../../../../src/Serve/next.ts";`,
+  `import Site from "../../../../src/site-hmr";`,
+  `const handler = toRouteHandler(Site);`,
+  `export { handler as GET, handler as POST, handler as PUT,`,
+  `         handler as PATCH, handler as DELETE, handler as HEAD,`,
+  `         handler as OPTIONS };`,
+  ``,
+].join("\n");
+
 const memoInclude = [
   "app/**",
   "pages/**",
@@ -250,6 +272,198 @@ describe.concurrent("Nextjs dev", () => {
           `${site.url!}/api/binding`,
         );
         expect(still.value).toBe(bindingMarker);
+
+        yield* stack.destroy();
+      }).pipe(logLevel),
+    { timeout: 420_000 },
+  );
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Effectful Website, preview mode: the artifact takeover ships in the
+  // built worker module set, so effect routes (and the effect program's
+  // DO export) work in dev with production parity.
+  // ─────────────────────────────────────────────────────────────────────
+
+  test.provider(
+    "Nextjs dev (preview): artifact takeover serves effect routes, DO export, and framework fallback",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const rootDir = yield* cloneFixture(fixtureDir, {
+          prefix: "alchemy-nextjs-dev-effect-",
+          tempRoot,
+          entries: effectFixtureEntries,
+        });
+        yield* linkJsApiTypeScript(rootDir);
+
+        // Import the site module from the CLONE: its `main: import.meta.url`
+        // anchor (and rootDir) must point into the cloned project so the
+        // OpenNext build and the takeover prebundle share one root.
+        const mod = yield* Effect.promise(
+          () =>
+            import(pathe.join(rootDir, "src/site.ts")) as Promise<
+              typeof import("./fixtures/nextjs-app/src/site.ts")
+            >,
+        );
+
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            const site = yield* mod.default;
+            const users = yield* mod.EffectUsers;
+            return { site, users };
+          }),
+        );
+        const site = deployed.site;
+
+        // Local identity: dev proxy URL + emulated KV namespace (`dev:` id
+        // — proof no cloud API call ran).
+        expect(site.url).toMatch(/^http:\/\/localhost:\d+/);
+        expect(isLocalId(deployed.users.namespaceId)).toBe(true);
+
+        // Effect fetch inside `server.routes` (default /api/*).
+        const ping = yield* fetchJsonReady<{ marker: string }>(
+          `${site.url!}/api/effect/ping`,
+        );
+        expect(ping.marker).toBe("effect-fetch");
+
+        // KV round-trip through the collected capability binding against
+        // the local simulator.
+        const put = yield* HttpClient.execute(
+          HttpClientRequest.put(
+            `${site.url!}/api/effect/kv?key=effect-key`,
+          ).pipe(HttpClientRequest.bodyText("effect-value")),
+        ).pipe(
+          Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
+        );
+        expect(put.status).toBe(200);
+        const got = yield* fetchJsonReady<{ value: string | null }>(
+          `${site.url!}/api/effect/kv?key=effect-key`,
+        );
+        expect(got.value).toBe("effect-value");
+
+        // Non-fetch export: the effect program's Durable Object class is
+        // emitted by the takeover wrapper and served by local workerd.
+        const count1 = yield* fetchJsonReady<{ count: number }>(
+          `${site.url!}/api/effect/count`,
+        );
+        expect(count1.count).toBe(1);
+        const count2 = yield* fetchJsonReady<{ count: number }>(
+          `${site.url!}/api/effect/count`,
+        );
+        expect(count2.count).toBe(2);
+
+        // Passthrough: /api/hello is inside server.routes but not the
+        // effect program's — the OpenNext handler (middleware included)
+        // serves it.
+        const client = yield* HttpClient.HttpClient;
+        const hello = yield* client
+          .get(`${site.url!}/api/hello`)
+          .pipe(
+            Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
+          );
+        expect(hello.status).toBe(200);
+        expect(hello.headers["x-fixture-middleware"]).toBe("passed");
+        expect(((yield* hello.json) as { hello: string }).hello).toBe("world");
+
+        // Framework surface outside server.routes: SSR page + static asset.
+        yield* expectUrlContains(`${site.url!}/`, "NEXTJS_SSR_MARKER", {
+          timeout: "120 seconds",
+          label: "nextjs effect dev SSR home page",
+        });
+        yield* expectUrlContains(
+          `${site.url!}/static.txt`,
+          "NEXTJS_STATIC_ASSET_MARKER",
+          { timeout: "60 seconds", label: "nextjs effect dev static asset" },
+        );
+
+        yield* stack.destroy();
+      }).pipe(logLevel),
+    { timeout: 420_000 },
+  );
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Effectful Website, hmr mode: the real `next dev` cannot serve the
+  // takeover artifact — effect routes ride the explicit `toRouteHandler`
+  // catch-all mount (fetch-only), compiled by Next itself.
+  // ─────────────────────────────────────────────────────────────────────
+
+  test.provider(
+    "Nextjs dev (hmr): explicit toRouteHandler mount serves effect routes under next dev",
+    (stack) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+
+        yield* stack.destroy();
+
+        const rootDir = yield* cloneFixture(fixtureDir, {
+          prefix: "alchemy-nextjs-dev-effect-hmr-",
+          tempRoot,
+          entries: effectFixtureEntries,
+        });
+        yield* linkJsApiTypeScript(rootDir);
+
+        // Mount the explicit tier: the catch-all route handler module.
+        const routeDir = path.join(
+          rootDir,
+          "app",
+          "api",
+          "effect",
+          "[[...slug]]",
+        );
+        yield* fs.makeDirectory(routeDir, { recursive: true });
+        yield* fs.writeFileString(
+          path.join(routeDir, "route.ts"),
+          explicitRouteSource,
+        );
+
+        const mod = yield* Effect.promise(
+          () =>
+            import(pathe.join(rootDir, "src/site-hmr.ts")) as Promise<
+              typeof import("./fixtures/nextjs-app/src/site-hmr.ts")
+            >,
+        );
+
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            const site = yield* mod.default;
+            const users = yield* mod.HmrUsers;
+            return { site, users };
+          }),
+        );
+        const site = deployed.site;
+
+        expect(site.url).toMatch(/^http:\/\/localhost:\d+/);
+        expect(isLocalId(deployed.users.namespaceId)).toBe(true);
+
+        // The framework page proves next dev is serving.
+        yield* expectUrlContains(`${site.url!}/`, "NEXTJS_SSR_MARKER", {
+          timeout: "180 seconds",
+          label: "nextjs effect hmr SSR home page",
+        });
+
+        // Effect route through the explicit mount (first hit compiles the
+        // route + the alchemy graph under turbopack — be patient).
+        const ping = yield* fetchJsonReady<{ marker: string }>(
+          `${site.url!}/api/effect/ping`,
+        );
+        expect(ping.marker).toBe("effect-fetch");
+
+        // KV round-trip through the binding proxied onto
+        // getCloudflareContext() by the hmr dev server.
+        const put = yield* HttpClient.execute(
+          HttpClientRequest.put(`${site.url!}/api/effect/kv?key=hmr-key`).pipe(
+            HttpClientRequest.bodyText("hmr-value"),
+          ),
+        ).pipe(
+          Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
+        );
+        expect(put.status).toBe(200);
+        const got = yield* fetchJsonReady<{ value: string | null }>(
+          `${site.url!}/api/effect/kv?key=hmr-key`,
+        );
+        expect(got.value).toBe("hmr-value");
 
         yield* stack.destroy();
       }).pipe(logLevel),

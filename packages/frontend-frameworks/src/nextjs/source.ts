@@ -38,6 +38,7 @@ import type * as Scope from "effect/Scope";
 import * as NodeCrypto from "node:crypto";
 import { createRequire } from "node:module";
 import { runBuildChild } from "../core/BuildChild.ts";
+import { effectMainToPath } from "./EffectBundle.ts";
 import * as Nextjs from "./Nextjs.ts";
 
 const packageVersion: string = createRequire(import.meta.url)(
@@ -105,7 +106,52 @@ export interface SourceContext {
     readonly flags: Array<string>;
   };
   readonly assets?: string | Record<string, unknown> | undefined;
+  /**
+   * Effect-entry vs external-entry (mirror of alchemy's
+   * `SourceContext.entry`). `kind: "effect"` with a `mainPath` — collect-only
+   * wrapper delivery — triggers the OpenNext artifact takeover
+   * ({@link Nextjs.NextjsFrameworkOptions.effectEntry}).
+   */
+  readonly entry?:
+    | { readonly kind: "external" }
+    | {
+        readonly kind: "effect";
+        readonly exports: Record<string, unknown>;
+        readonly routes?: Array<string> | undefined;
+        readonly mainPath?: string | undefined;
+      }
+    | undefined;
 }
+
+/**
+ * Derive the plain-JSON takeover entry from `ctx.entry` (undefined when the
+ * Worker has no wrapper-delivery effect program). Export kinds are checked
+ * structurally (`kind: "durableObject" | "workflow"`) — this package
+ * deliberately does not import alchemy types.
+ */
+export const effectEntryOf = (
+  ctx: SourceContext,
+): Nextjs.NextjsFrameworkOptions["effectEntry"] => {
+  if (ctx.entry?.kind !== "effect" || ctx.entry.mainPath === undefined) {
+    return undefined;
+  }
+  const doClasses: Array<string> = [];
+  const wfClasses: Array<string> = [];
+  for (const [className, value] of Object.entries(ctx.entry.exports)) {
+    const kind = (value as { kind?: unknown } | null)?.kind;
+    if (kind === "durableObject") {
+      doClasses.push(className);
+    } else if (kind === "workflow") {
+      wfClasses.push(className);
+    }
+  }
+  return {
+    mainPath: ctx.entry.mainPath,
+    routes: ctx.entry.routes,
+    doClasses: doClasses.sort(),
+    wfClasses: wfClasses.sort(),
+  };
+};
 
 type WorkerWiring = Omit<
   RuntimeWorker<BindingHooks>,
@@ -358,6 +404,12 @@ const findUp = Effect.fn(function* (start: string, filenames: Array<string>) {
 const hashInputTree = Effect.fn(function* (
   root: string,
   options: NextjsSourceOptions,
+  /**
+   * Extra JSON-stable hash material (the effect-entry surface: routes,
+   * exported class names, and the site module's content hash) so effect
+   * edits redeploy without a framework-file change.
+   */
+  extra?: unknown,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const memo = options.memo ?? {};
@@ -407,8 +459,44 @@ const hashInputTree = Effect.fn(function* (
       },
       files: entries,
       lockfile: lockfileHash,
+      extra,
     }),
   );
+});
+
+/**
+ * The effect-entry hash material: routes/class names plus the site
+ * module's content hash (content, never its absolute path — hashes must be
+ * machine-independent). Transitive imports of the site module are covered
+ * only when they live under the project root (the tree hash); imports from
+ * outside the root do not bust the memo — documented limitation.
+ */
+const effectEntryHashMaterial = Effect.fn(function* (
+  effectEntry: Nextjs.NextjsFrameworkOptions["effectEntry"],
+) {
+  if (effectEntry === undefined) return undefined;
+  const fs = yield* FileSystem.FileSystem;
+  const mainHash = yield* fs
+    .readFile(effectMainToPath(effectEntry.mainPath))
+    .pipe(
+      Effect.flatMap(sha256Hex),
+      Effect.mapError(
+        (cause) =>
+          new SourceProviderError({
+            provider: PROVIDER,
+            message:
+              `Failed to read the effect program's module ` +
+              `(main: ${effectEntry.mainPath})`,
+            cause,
+          }),
+      ),
+    );
+  return {
+    routes: effectEntry.routes,
+    doClasses: effectEntry.doClasses,
+    wfClasses: effectEntry.wfClasses,
+    mainHash,
+  };
 });
 
 // ─────────────────────────────────────────────────────────────────────
@@ -556,6 +644,8 @@ export interface NextjsBuildChildConfig {
   readonly skipNextBuild: boolean | undefined;
   readonly minify: boolean | undefined;
   readonly debug: boolean | undefined;
+  /** Wrapper-delivery effect entry (triggers the artifact takeover). */
+  readonly effectEntry?: Nextjs.NextjsFrameworkOptions["effectEntry"];
 }
 
 export const buildInChild = (config: NextjsBuildChildConfig) =>
@@ -573,6 +663,7 @@ export const buildInChild = (config: NextjsBuildChildConfig) =>
         minify: config.minify,
         debug: config.debug,
       },
+      effectEntry: config.effectEntry,
     },
     (framework) => framework.build({ root: config.rootDir }),
   );
@@ -621,6 +712,7 @@ const makeProvider = (options: NextjsSourceOptions): SourceProvider => {
           skipNextBuild: options.skipNextBuild,
           minify: options.minify,
           debug: options.debug,
+          effectEntry: effectEntryOf(ctx),
         } satisfies NextjsBuildChildConfig,
       }).pipe(Effect.mapError(frameworkError));
       if (
@@ -646,7 +738,9 @@ const makeProvider = (options: NextjsSourceOptions): SourceProvider => {
         output.clientDirectory !== undefined
           ? readClientAssets(output.clientDirectory, assetsConfigOf(ctx))
           : Effect.succeed(undefined),
-        hashInputTree(root, options),
+        effectEntryHashMaterial(effectEntryOf(ctx)).pipe(
+          Effect.flatMap((extra) => hashInputTree(root, options, extra)),
+        ),
       ]);
       return {
         bundle: { files, hash: bundleHash },
@@ -662,9 +756,10 @@ const makeProvider = (options: NextjsSourceOptions): SourceProvider => {
 
     // Rebuild-free: the input-tree hash is the change signal (like the vite
     // source). `previous` is never consulted — state can be stale/foreign.
-    hash: Effect.fn(function* (_ctx, _previous) {
+    hash: Effect.fn(function* (ctx, _previous) {
       const root = yield* resolveRoot();
-      return { input: yield* hashInputTree(root, options) };
+      const extra = yield* effectEntryHashMaterial(effectEntryOf(ctx));
+      return { input: yield* hashInputTree(root, options, extra) };
     }),
 
     // Default ("preview"): always build on dev start (OpenNext memoizes
@@ -680,6 +775,11 @@ const makeProvider = (options: NextjsSourceOptions): SourceProvider => {
       const queueConsumers = yield* ctx.worker.queueConsumers;
       const devOptions: Nextjs.NextjsFrameworkOptions = {
         ...frameworkOptions(ctx),
+        // Preview dev serves the takeover artifact — effect routes work
+        // with production parity. (The "hmr" mode runs the real `next dev`
+        // in Node and ignores the entry: effect routes there require the
+        // explicit `toRouteHandler` mount, documented on the resource.)
+        effectEntry: effectEntryOf(ctx),
         // The host's runtime stack (includes remote-bindings support) — the
         // dev binding proxy is hosted in it instead of the credential-free
         // internal layer, so `Alchemy.remote()` bindings resolve in dev.

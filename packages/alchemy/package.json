@@ -302,6 +302,42 @@
       "worker": "./src/Server/index.ts",
       "import": "./lib/Server/index.js"
     },
+    "./serve": {
+      "types": "./lib/Serve/index.d.ts",
+      "bun": "./src/Serve/index.ts",
+      "worker": "./src/Serve/index.ts",
+      "import": "./lib/Serve/index.js"
+    },
+    "./serve/worker": {
+      "types": "./lib/Serve/worker.d.ts",
+      "bun": "./src/Serve/worker.ts",
+      "worker": "./src/Serve/worker.ts",
+      "import": "./lib/Serve/worker.js"
+    },
+    "./serve/sveltekit": {
+      "types": "./lib/Serve/sveltekit.d.ts",
+      "bun": "./src/Serve/sveltekit.ts",
+      "worker": "./src/Serve/sveltekit.ts",
+      "import": "./lib/Serve/sveltekit.js"
+    },
+    "./serve/astro": {
+      "types": "./lib/Serve/astro.d.ts",
+      "bun": "./src/Serve/astro.ts",
+      "worker": "./src/Serve/astro.ts",
+      "import": "./lib/Serve/astro.js"
+    },
+    "./serve/nitro": {
+      "types": "./lib/Serve/nitro.d.ts",
+      "bun": "./src/Serve/nitro.ts",
+      "worker": "./src/Serve/nitro.ts",
+      "import": "./lib/Serve/nitro.js"
+    },
+    "./serve/next": {
+      "types": "./lib/Serve/next.d.ts",
+      "bun": "./src/Serve/next.ts",
+      "worker": "./src/Serve/next.ts",
+      "import": "./lib/Serve/next.js"
+    },
     "./Stack": {
       "types": "./lib/Stack.d.ts",
       "bun": "./src/Stack.ts",

@@ -25,10 +25,11 @@ import { makeInlineScriptSource } from "./Sources/InlineScript.ts";
 import { makePrebuiltSource } from "./Sources/Prebuilt.ts";
 import { isPythonMain, makePythonSource } from "./Sources/Python.ts";
 import { makeRolldownSource } from "./Sources/Rolldown.ts";
-import type {
-  WorkerAssetsConfig,
-  WorkerProps,
-  WorkerSourceDescriptor,
+import {
+  DEFAULT_SERVER_ROUTES,
+  type WorkerAssetsConfig,
+  type WorkerProps,
+  type WorkerSourceDescriptor,
 } from "./Worker.ts";
 
 /**
@@ -90,6 +91,15 @@ export interface SourceContext {
     | {
         readonly kind: "effect";
         readonly exports: Record<string, DurableObjectExport | WorkflowExport>;
+        /**
+         * Collect-only wrapper delivery (impl + framework source with
+         * `runtimeDelivery: "wrapper"`): the path globs the Effect fetch
+         * owns and the user module (`props.main`, path or `file://` URL)
+         * the generated wrapper re-imports. Absent for classic effect
+         * Workers, where the rolldown virtual entry owns the whole bundle.
+         */
+        readonly routes?: string[];
+        readonly mainPath?: string;
       };
   readonly stack: { readonly name: string; readonly stage: string };
   /**
@@ -340,7 +350,11 @@ export const resolveSource = (
         ? "script"
         : props.vite
           ? "vite"
-          : props.main !== undefined
+          : // For an impl-carrying Worker (`isExternal` unset), `main` is not
+            // a competing entry — it anchors the Effect program's module
+            // (`main: import.meta.url`), which collect-only wrapper delivery
+            // re-imports through `SourceContext.entry.mainPath`.
+            props.main !== undefined && props.isExternal
             ? "main"
             : undefined;
     if (conflict) {
@@ -375,6 +389,23 @@ export const resolveSource = (
       makePrebuiltSource({ main: props.main!, rules: props.rules }),
     );
   }
+  // Never two bundling pipelines on one Worker: a collect-only Worker
+  // (impl + framework source, stamped `runtimeDelivery`) must resolve to
+  // the framework source above — reaching the rolldown effect-entry
+  // bundler here would compile the impl module into a SECOND bundle on
+  // top of the framework's.
+  if (props.runtimeDelivery !== undefined) {
+    return Effect.fail(
+      new SourceProviderError({
+        provider: "rolldown",
+        message:
+          `Worker props carry the collect-only stamp (runtimeDelivery: ` +
+          `"${props.runtimeDelivery}") but resolved to the rolldown bundler — ` +
+          `the framework source (source/vite/bundle: false) must own the ` +
+          `deployed bundle. This is a bug in the Website construct's props.`,
+      }),
+    );
+  }
   return Effect.succeed(makeRolldownSource({ main: props.main! }));
 };
 
@@ -393,9 +424,22 @@ export const makeSourceContext = (params: {
   id: params.id,
   workerName: params.workerName,
   compatibility: params.compatibility,
-  entry: params.props.isExternal
-    ? { kind: "external" }
-    : { kind: "effect", exports: params.props.exports ?? {} },
+  // Collect-only "external" delivery deliberately maps to an external
+  // entry: the impl ran at plan time for binding collection, but the
+  // framework-built bundle deploys byte-for-byte (the user mounts
+  // `alchemy/serve` themselves). Only "wrapper" delivery hands the source
+  // an effect entry to generate around.
+  entry:
+    params.props.isExternal || params.props.runtimeDelivery === "external"
+      ? { kind: "external" }
+      : params.props.runtimeDelivery === "wrapper"
+        ? {
+            kind: "effect",
+            exports: params.props.exports ?? {},
+            routes: params.props.server?.routes ?? DEFAULT_SERVER_ROUTES,
+            mainPath: params.props.main,
+          }
+        : { kind: "effect", exports: params.props.exports ?? {} },
   stack: { name: params.stack.name, stage: params.stack.stage },
   env: params.props.env,
   extraOptions: params.props.build,

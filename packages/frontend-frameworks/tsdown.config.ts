@@ -49,6 +49,10 @@ export default defineConfig([
     dts: false,
     shims: false,
     sourcemap: true,
+    // The OpenNext child-process entry is a plain .mjs (never compiled).
+    // Copying it here (not only in the package.json build script) keeps a
+    // bare `tsdown` run producing a servable dist.
+    copy: [{ from: "src/nextjs/runner.mjs", to: "dist/nextjs" }],
     deps: {
       alwaysBundle: [
         /^@astrojs\/internal-helpers(?:\/|$)/,

@@ -6,13 +6,18 @@ import type * as Plan from "@/Plan.ts";
 import { Stack } from "@/Stack";
 import { encodeState, type ResourceState, reviveState, State } from "@/State";
 import * as Test from "@/Test/Alchemy";
+import * as kv from "@distilled.cloud/cloudflare/kv";
 import { describe, expect } from "alchemy-test";
 import * as Config from "effect/Config";
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains, expectUrlHeader } from "../Utils/Http.ts";
@@ -20,6 +25,7 @@ import {
   expectWorkerExists,
   waitForWorkerToBeDeleted,
 } from "../Utils/Worker.ts";
+import EffectStaticSite, { SiteData } from "./fixtures/effect-static-site.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -924,7 +930,153 @@ describe.concurrent("StaticSite", () => {
       }).pipe(logLevel),
     { timeout: 360_000 },
   );
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Effectful StaticSite (DESIGN §6.2b): the compiled Effect program IS
+  // the worker in front of the assets. One deploy serves both surfaces:
+  // the asset layer (shell, SPA fallback, plain assets) and the Effect
+  // fetch on `/api/*` (worker-first, compiled from the default
+  // `server.routes`), with a real KV binding and a Durable Object export
+  // riding the same virtual entry as a plain effect worker.
+  // ─────────────────────────────────────────────────────────────────────
+  test.provider(
+    "StaticSite: effectful site serves the effect API and the static assets over HTTPS",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
+        yield* stack.destroy();
+
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            const site = yield* EffectStaticSite;
+            // The impl's `yield* SiteData` registers the namespace at the
+            // root (registration is idempotent per FQN) — this resolves
+            // the SAME row the binding uses.
+            const data = yield* SiteData;
+            return { site, data };
+          }),
+        );
+
+        // Real cloud identities.
+        expect(deployed.site.url).toBeDefined();
+        expect(deployed.data.namespaceId).not.toMatch(/^dev:/);
+        yield* expectWorkerExists(deployed.site.workerName, accountId);
+        const url = deployed.site.url!;
+
+        // The static shell serves at its real path. Long first-timeout:
+        // fresh workers.dev subdomains can take 60s+ to propagate.
+        yield* expectUrlContains(
+          `${url}/index.html`,
+          "effect-staticsite-shell",
+          {
+            timeout: "120 seconds",
+            label: "effectful shell",
+          },
+        );
+
+        // SPA fallback answers deep links with the shell — the compiled
+        // `runWorkerFirst: ["/api/*"]` must not swallow them.
+        yield* expectUrlContains(
+          `${url}/app/deep/route`,
+          "effect-staticsite-shell",
+          { timeout: "60 seconds", label: "effectful deep link" },
+        );
+
+        // A real asset serves its own bytes, not the shell.
+        const asset = yield* expectUrlContains(
+          `${url}/data.txt`,
+          "effect-staticsite-plain-asset",
+          { timeout: "60 seconds", label: "effectful plain asset" },
+        );
+        expect(asset).not.toContain("effect-staticsite-shell");
+
+        // `/api/*` routes worker-first into the Effect fetch: the KV
+        // binding round-trips against the real namespace. The put is
+        // idempotent, so the marker-retry is safe.
+        yield* expectUrlContains(
+          `${url}/api/kv?key=current&put=hello-live`,
+          '"value":"hello-live"',
+          { timeout: "60 seconds", label: "effectful KV put" },
+        );
+        yield* expectUrlContains(
+          `${url}/api/kv?key=current`,
+          '"value":"hello-live"',
+          { timeout: "60 seconds", label: "effectful KV get" },
+        );
+
+        // Out of band: the worker's write landed in the real namespace —
+        // the binding really hit the cloud KV, not an emulator.
+        const value = yield* kv
+          .getNamespaceValue({
+            accountId,
+            namespaceId: deployed.data.namespaceId,
+            keyName: "current",
+          })
+          .pipe(
+            Effect.flatMap((res) =>
+              Effect.tryPromise(() =>
+                new Response(
+                  Stream.toReadableStream(res.body) as BodyInit,
+                ).text(),
+              ),
+            ),
+            Effect.retry({
+              schedule: Schedule.exponential("1 second"),
+              times: 5,
+            }),
+          );
+        expect(value).toBe("hello-live");
+
+        // The Durable Object export works exactly as on a plain effect
+        // worker: sequential calls against one DO name observe increasing
+        // counts. (Not exact values — the readiness retry may invoke the
+        // handler more than once.)
+        const first = (yield* getJsonReady(`${url}/api/counter`)) as {
+          count: number;
+        };
+        const second = (yield* getJsonReady(`${url}/api/counter`)) as {
+          count: number;
+        };
+        expect(first.count).toBeGreaterThanOrEqual(1);
+        expect(second.count).toBeGreaterThan(first.count);
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(deployed.site.workerName, accountId);
+      }).pipe(logLevel),
+    { timeout: 360_000 },
+  );
 });
+
+class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
+  status: number;
+}> {}
+
+/** GET `url` until it answers 200, then parse the JSON body. */
+const getJsonReady = (url: string) =>
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    const res = yield* client.get(url).pipe(
+      Effect.flatMap((res) =>
+        res.status === 200
+          ? Effect.succeed(res)
+          : Effect.fail(new WorkerNotReady({ status: res.status })),
+      ),
+      Effect.retry({
+        while: (e): e is WorkerNotReady => e instanceof WorkerNotReady,
+        // Cap the backoff so a persistent non-200 fails fast instead of
+        // looking like a hang.
+        schedule: Schedule.max([
+          Schedule.min([
+            Schedule.exponential("500 millis"),
+            Schedule.spaced("2 seconds"),
+          ]),
+          Schedule.recurs(10),
+        ]),
+      }),
+    );
+    return yield* res.json;
+  }).pipe(Effect.orDie);
 
 const staticSiteProps = (cwd: string): Cloudflare.Website.StaticSiteProps => ({
   command: "bash build.sh",

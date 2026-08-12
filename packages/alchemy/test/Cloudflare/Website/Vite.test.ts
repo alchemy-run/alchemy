@@ -14,6 +14,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import { pathToFileURL } from "node:url";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
@@ -57,6 +58,10 @@ const tanstackDevBindingsFixtureDir = pathe.resolve(
 const viteChildFixtureDir = pathe.resolve(
   import.meta.dirname,
   "vite-child-fixture",
+);
+const effectfulFixtureDir = pathe.resolve(
+  import.meta.dirname,
+  "effectful-vite-fixture",
 );
 
 // Vite/Rollup's `vite:build-html` plugin chokes when the project root
@@ -997,6 +1002,93 @@ if (el) {
 
         yield* stack.destroy();
         yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+      }).pipe(logLevel),
+    { timeout: 360_000 },
+  );
+
+  // The flagship wrapper-delivery path (DESIGN §6.2a): one Worker serves the
+  // SPA assets AND the Effect program's `/api/*` routes through the generated
+  // `virtual:alchemy:website-entry` wrapper — KV capability binding collected
+  // at plan, passthrough falling through to the SPA asset layer. The fixture
+  // is cloned and its `site.ts` dynamically imported so the class's
+  // `import.meta.url` / `import.meta.dirname` anchors point at the clone
+  // (keeping the repo fixture pristine and isolated from the dev-mode test).
+  test.provider(
+    "Vite: effectful website deploys one worker serving assets + effect API",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
+        yield* stack.destroy();
+
+        const rootDir = yield* cloneFixture(effectfulFixtureDir, {
+          prefix: "alchemy-vite-effectful-",
+          tempRoot,
+          entries: [
+            "index.html",
+            "package.json",
+            "site.ts",
+            "src",
+            "vite.config.ts",
+          ],
+        });
+        const { default: EffectfulViteSite, Users } = (yield* Effect.promise(
+          () =>
+            import(
+              /* @vite-ignore */ pathToFileURL(pathe.join(rootDir, "site.ts"))
+                .href
+            ),
+        )) as typeof import("./effectful-vite-fixture/site.ts");
+
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            const users = yield* Users;
+            const site = yield* EffectfulViteSite;
+            return { users, site };
+          }),
+        );
+
+        // Real cloud identities — this is the live path.
+        expect(deployed.users.namespaceId).not.toMatch(/^dev:/);
+        expect(deployed.site.url).toBeDefined();
+        yield* expectWorkerExists(deployed.site.workerName, accountId);
+        const base = deployed.site.url!;
+
+        // Outside `server.routes`: the SPA shell serves from the asset layer.
+        yield* expectUrlContains(`${base}/`, "Effectful Vite fixture", {
+          timeout: "120 seconds",
+          label: "effectful vite shell",
+        });
+
+        // Inside `server.routes`: the effect fetch answers.
+        const marker = yield* fetchJsonReady<{ marker: string; path: string }>(
+          `${base}/api/anything`,
+        );
+        expect(marker.marker).toBe("effect-fetch");
+        expect(marker.path).toBe("/api/anything");
+
+        // KV roundtrip through the ReadWriteNamespace binding against the
+        // real namespace.
+        const put = yield* putTextJsonReady<{ ok: boolean }>(
+          `${base}/api/kv?key=greeting`,
+          "hello-from-live",
+        );
+        expect(put.ok).toBe(true);
+        const got = yield* fetchJsonReady<{ value: string | null }>(
+          `${base}/api/kv?key=greeting`,
+        );
+        expect(got.value).toBe("hello-from-live");
+
+        // Passthrough: the effect fetch declines inside its route scope and
+        // the request falls through to the asset layer's SPA fallback.
+        yield* expectUrlContains(
+          `${base}/api/passthrough`,
+          "Effectful Vite fixture",
+          { timeout: "60 seconds", label: "effectful vite passthrough" },
+        );
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(deployed.site.workerName, accountId);
       }).pipe(logLevel),
     { timeout: 360_000 },
   );

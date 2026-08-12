@@ -33,7 +33,27 @@ import type { Adapter, Builder, Emulator } from "@sveltejs/kit";
 import * as NodeFs from "node:fs";
 import * as NodePath from "node:path";
 import { pathToFileURL } from "node:url";
-import { generateWorkerShim } from "./WorkerShim.ts";
+import {
+  generateWorkerShim,
+  type WorkerShimEffectOptions,
+} from "./WorkerShim.ts";
+
+/**
+ * How the adapter resolved effectful (wrapper) delivery for this build —
+ * consumed by the Cloudflare target's finishing pass to widen the bundle's
+ * `exports` list and enable the runtime define/minification.
+ */
+export interface CloudflareAdapterEffectResult {
+  /**
+   * `true` when the worker shim was generated WITH the effect arm. `false`
+   * when an explicit `alchemy/serve` mount was detected in kit's built
+   * server graph and the wrapper generator stood down (DESIGN §6.3 — the
+   * explicit mount wins; no double bridging).
+   */
+  readonly active: boolean;
+  /** DO/Workflow bridge class names the shim re-exports (active only). */
+  readonly exportNames: ReadonlyArray<string>;
+}
 
 export interface CloudflareAdapterResult {
   /**
@@ -44,6 +64,8 @@ export interface CloudflareAdapterResult {
   readonly dest: string;
   /** The generated (unbundled) worker entry — input for the rolldown pass. */
   readonly workerEntry: string;
+  /** Present iff the adapter was constructed with `effect` options. */
+  readonly effect?: CloudflareAdapterEffectResult | undefined;
 }
 
 export interface CloudflareAdapterOptions {
@@ -85,6 +107,13 @@ export interface CloudflareAdapterOptions {
    * inert empty platform.
    */
   readonly platform?: CloudflareDevPlatformOptions | undefined;
+  /**
+   * Effectful-Website wrapper delivery: generate the worker shim's effect
+   * arm (see `WorkerShim.ts`). The adapter stands down — emitting the
+   * plain shim — when kit's built server graph already mounts
+   * `alchemy/serve` explicitly (the sentinel scan below).
+   */
+  readonly effect?: WorkerShimEffectOptions | undefined;
 }
 
 export interface CloudflareAdapter extends Adapter {
@@ -165,6 +194,51 @@ const generateFallbackInProcess = async (
   NodeFs.writeFileSync(dest, await response.text());
 };
 
+/**
+ * Signals of an explicit `alchemy/serve` mount inside kit's built server
+ * graph (`hooks.server.ts` importing `alchemy/serve/sveltekit`'s `toHandle`
+ * etc.): either the serve sentinel byte literal (when the bridge was
+ * bundled into the output) or an import of an `alchemy/serve` specifier
+ * (kit's Vite SSR build externalizes deps, leaving the specifier in the
+ * emitted chunks). Kept in sync with `alchemy/src/Serve/constants.ts` —
+ * duplicated here because this package deliberately carries no alchemy
+ * dependency.
+ */
+const SERVE_MOUNT_PATTERN =
+  /__ALCHEMY_SERVE_v1__|["']alchemy\/serve(?:\/[a-z-]+)?["']/;
+
+/**
+ * Scan kit's built server directory for an explicit `alchemy/serve` mount
+ * (DESIGN §6.3: auto tier stands down when the user mounted the bridge
+ * themselves). Synchronous framework-callback code, like the rest of
+ * `adapt()`.
+ */
+export const scanForExplicitServeMount = (directory: string): boolean => {
+  let entries: NodeFs.Dirent[];
+  try {
+    entries = NodeFs.readdirSync(directory, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  for (const entry of entries) {
+    const child = NodePath.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      if (scanForExplicitServeMount(child)) {
+        return true;
+      }
+    } else if (/\.(?:js|mjs|cjs)$/.test(entry.name)) {
+      try {
+        if (SERVE_MOUNT_PATTERN.test(NodeFs.readFileSync(child, "utf8"))) {
+          return true;
+        }
+      } catch {
+        // unreadable file — keep scanning
+      }
+    }
+  }
+  return false;
+};
+
 export const makeCloudflareAdapter = (
   options: CloudflareAdapterOptions = {},
 ): CloudflareAdapter => {
@@ -176,6 +250,19 @@ export const makeCloudflareAdapter = (
     async adapt(builder: Builder) {
       const root = options.root ?? process.cwd();
       const assetsBinding = options.assetsBinding ?? "ASSETS";
+      // Effectful wrapper delivery: stand down when kit's server graph
+      // already mounts alchemy/serve explicitly (the explicit tier wins —
+      // never two bridges on one worker).
+      const explicitServeMount =
+        options.effect !== undefined &&
+        scanForExplicitServeMount(builder.getServerDirectory());
+      if (explicitServeMount) {
+        builder.log.minor(
+          "alchemy: explicit alchemy/serve mount detected in the server " +
+            "graph - the generated worker shim's effect arm stands down",
+        );
+      }
+      const effect = explicitServeMount ? undefined : options.effect;
       const dest = builder.getBuildDirectory("cloudflare");
       const tmp = builder.getBuildDirectory("cloudflare-tmp");
 
@@ -227,6 +314,7 @@ export const makeCloudflareAdapter = (
           manifestImport: `./${posixify(NodePath.relative(dest, tmp))}/manifest.js`,
           assetsBinding,
           notFoundHandling: options.notFoundHandling,
+          effect,
         }),
       );
       if (
@@ -265,7 +353,23 @@ export const makeCloudflareAdapter = (
         generateAssetsIgnore(),
       );
 
-      result.current = { dest, workerEntry };
+      result.current = {
+        dest,
+        workerEntry,
+        effect:
+          options.effect !== undefined
+            ? {
+                active: effect !== undefined,
+                exportNames:
+                  effect !== undefined
+                    ? [
+                        ...(effect.durableObjects ?? []),
+                        ...(effect.workflows ?? []),
+                      ]
+                    : [],
+              }
+            : undefined,
+      };
     },
     emulate: () =>
       (emulator ??=

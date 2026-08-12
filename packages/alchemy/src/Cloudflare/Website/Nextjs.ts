@@ -1,7 +1,12 @@
+import type { ConfigError } from "effect/Config";
 import * as Effect from "effect/Effect";
 import type { MemoOptions } from "../../Command/Memo.ts";
 import type { InputProps } from "../../Input.ts";
+import type { Named, Tag } from "../../Named.ts";
+import type { MakeShape, PlatformServices } from "../../Platform.ts";
+import type { Rpc } from "../../Rpc.ts";
 import { effectClass } from "../../Util/effect.ts";
+import type { Container } from "../Containers/Container.ts";
 import type { Providers } from "../Providers.ts";
 import type { AssetsConfig } from "../Workers/Assets.ts";
 import {
@@ -11,7 +16,10 @@ import {
   type WorkerAssetsConfig,
   type WorkerBindingProps,
   type WorkerProps,
+  type WorkerServices,
+  type WorkerTypeId,
 } from "../Workers/Worker.ts";
+import { validateImplAnchor, type WebsiteShape } from "./Effectful.ts";
 
 /**
  * The module specifier of the Next.js source provider. Loaded with a
@@ -264,6 +272,55 @@ export interface NextjsProps<
  * });
  * ```
  *
+ * @section Effectful Website
+ * Pass an Effect program as the third argument and ONE Worker serves the
+ * Next.js app **and** your effect-native handlers. The program's capability
+ * bindings are collected at plan time exactly like an effect Worker's; at
+ * build time alchemy performs an OpenNext artifact takeover — the site
+ * module is prebundled next to `.open-next/worker.js` and a generated
+ * wrapper entry dispatches `server.routes` (default `/api/*`) to the effect
+ * fetch first, falling through to the OpenNext handler on
+ * `Serve.passthrough`/`RouteNotFound`. Durable Object exports and
+ * queue/scheduled/cron handlers ride the same wrapper (non-fetch surface).
+ *
+ * The program must live in a dedicated module whose default export is the
+ * class, anchored by `main: import.meta.url`. Local dev: `preview` mode
+ * serves the takeover artifact with full parity; `hmr` mode (`next dev`) is
+ * fetch-only via the explicit `toRouteHandler` mount from
+ * `alchemy/serve/next` (mounting it explicitly also makes the takeover
+ * stand down on deploy). `server: { takeover: false }` forces the explicit
+ * tier.
+ *
+ * @example Effectful Next.js site (src/site.ts)
+ * ```typescript
+ * import * as Cloudflare from "alchemy/Cloudflare";
+ * import { passthrough } from "alchemy/serve";
+ * import * as Effect from "effect/Effect";
+ * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+ * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ *
+ * export const Users = Cloudflare.KV.Namespace("Users");
+ *
+ * export default class Site extends Cloudflare.Website.Nextjs<Site>()(
+ *   "Site",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const users = yield* Cloudflare.KV.ReadWriteNamespace(yield* Users);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const request = yield* HttpServerRequest;
+ *         const url = new URL(request.url, "http://localhost");
+ *         if (url.pathname === "/api/user") {
+ *           const value = yield* users.get("current").pipe(Effect.orDie);
+ *           return yield* HttpServerResponse.json({ value });
+ *         }
+ *         return yield* passthrough; // Next serves everything else
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(Cloudflare.KV.ReadWriteNamespaceBinding)),
+ * ) {}
+ * ```
+ *
  * @section Class Form
  * Calling `Nextjs` with no arguments returns a constructor you can
  * `extend` to declare the Worker as a named class. The class is both an
@@ -281,6 +338,40 @@ export interface NextjsProps<
  */
 export const Nextjs: {
   <Self>(): {
+    <
+      const Id extends string,
+      Shape extends WebsiteShape,
+      const Bindings extends WorkerBindingProps = {},
+      Req extends
+        | WorkerServices
+        | Container.Application<any>
+        | PlatformServices
+        | Tag = never,
+      PropsReq = never,
+    >(
+      id: Id,
+      props:
+        | InputProps<NextjsProps<Bindings> & { main: string }>
+        | Effect.Effect<
+            InputProps<NextjsProps<Bindings> & { main: string }>,
+            ConfigError,
+            PropsReq
+          >,
+      impl: Effect.Effect<Shape, ConfigError, Req>,
+    ): Effect.Effect<
+      Worker<{
+        [binding in keyof NormalizedBindings<
+          Bindings,
+          WorkerAssetsConfig
+        >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      }> &
+        Rpc<Self>,
+      never,
+      Extract<Req, Container.Application<any>> | Providers | PropsReq
+    > &
+      Named<Id> & {
+        new (): MakeShape<Shape, WebsiteShape> & Named<Id> & Tag<WorkerTypeId>;
+      };
     <const Bindings extends WorkerBindingProps = {}, Req = never>(
       id: string,
       propsEff?:
@@ -295,6 +386,28 @@ export const Nextjs: {
       }>;
     };
   };
+  <
+    const Id extends string,
+    Shape extends WebsiteShape,
+    const Bindings extends WorkerBindingProps = {},
+    Req extends WorkerServices | Container.Application<any> | PlatformServices =
+      never,
+  >(
+    id: Id,
+    props: InputProps<NextjsProps<Bindings> & { main: string }>,
+    impl: Effect.Effect<Shape, ConfigError, Req>,
+  ): Effect.Effect<
+    Worker<{
+      [binding in keyof NormalizedBindings<
+        Bindings,
+        WorkerAssetsConfig
+      >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+    }> &
+      Rpc<Shape>,
+    never,
+    Extract<Req, Container.Application<any>> | Providers
+  > &
+    Named<Id>;
   <const Bindings extends WorkerBindingProps = {}, Req = never>(
     id: string,
     propsEff?:
@@ -310,15 +423,32 @@ export const Nextjs: {
     never,
     Req | Providers
   >;
-} = ((id?: any, propsEff?: any) =>
+} = ((id?: any, propsEff?: any, impl?: any) =>
   id === undefined
-    ? (id: string, propsEff: any) => effectClass(Nextjs(id, propsEff))
-    : Worker(
+    ? (id: string, propsEff: any, impl?: any) =>
+        impl === undefined
+          ? effectClass(Nextjs(id, propsEff))
+          : Nextjs(id, propsEff, impl)
+    : (Worker as any)(
         id,
-        Effect.map(
-          Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
-          (props) => ({
+        Effect.gen(function* () {
+          const props: any =
+            (Effect.isEffect(propsEff) ? yield* propsEff : propsEff) ?? {};
+          // With an impl, `main` anchors the Effect program's module
+          // (`main: import.meta.url`) and the OpenNext artifact-takeover
+          // wrapper delivers the runtime half — auto-inject tier
+          // (`server: { takeover: false }` forces the explicit route-handler
+          // mount instead).
+          const anchor =
+            impl === undefined
+              ? undefined
+              : yield* validateImplAnchor(id, "Nextjs", props.main);
+          return {
             ...props,
+            main: anchor!,
+            ...(anchor !== undefined
+              ? { runtimeDelivery: "wrapper" as const }
+              : undefined),
             // OpenNext's revalidation queues (memory-queue, do-queue) fetch
             // the worker back through `WORKER_SELF_REFERENCE`. Always wire
             // the self service binding — it's inert when unused, and its
@@ -354,7 +484,7 @@ export const Nextjs: {
                 root: props?.rootDir,
                 memo: props?.memo,
                 ...(props?.nextjs !== undefined
-                  ? (({ devMode, ...build }) => ({
+                  ? (({ devMode, ...build }: any) => ({
                       ...build,
                       ...(devMode !== undefined
                         ? { dev: { mode: devMode } }
@@ -363,6 +493,7 @@ export const Nextjs: {
                   : {}),
               },
             },
-          }),
-        ),
+          };
+        }),
+        impl,
       )) as any;

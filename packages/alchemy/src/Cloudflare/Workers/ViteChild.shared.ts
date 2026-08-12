@@ -5,9 +5,18 @@ import type {
   RuntimeWorker,
   Workflow,
 } from "@alchemy.run/cloudflare-runtime/core";
+import { fileURLToPath } from "node:url";
+import nodePath from "node:path";
 import type { BundleOutput } from "../../Bundle/Bundle.ts";
+import { isWorkflowExport } from "../Workflows/Workflow.ts";
+import { isDurableObjectExport } from "./DurableObject.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
-import type { WorkerAssetsConfig, WorkerSourceDescriptor } from "./Worker.ts";
+import {
+  DEFAULT_SERVER_ROUTES,
+  type WorkerAssetsConfig,
+  type WorkerProps,
+  type WorkerSourceDescriptor,
+} from "./Worker.ts";
 
 /**
  * Default first port of the local dev-server range. Vite and
@@ -15,6 +24,68 @@ import type { WorkerAssetsConfig, WorkerSourceDescriptor } from "./Worker.ts";
  * unless `strictPort` is set.
  */
 export const DEFAULT_DEV_PORT = 1337;
+
+/**
+ * Plain-data description of collect-only *wrapper* delivery for a vite-built
+ * Worker (an effectful Website: impl + `runtimeDelivery: "wrapper"`). This is
+ * everything the generated `virtual:alchemy:website-entry` module needs, kept
+ * V8-serializable so it can cross the engine → vite-child process boundary
+ * (see `ViteBuildChildConfig` / `ViteChildConfig`): module *paths* and class
+ * *names* only — never Effects or closures.
+ */
+export interface ViteEffectEntry {
+  /**
+   * Absolute filesystem path of the user's site module (the impl anchor,
+   * `main: import.meta.url` converted from a `file://` URL). The generated
+   * wrapper re-imports the Website class from here inside workerd.
+   */
+  readonly mainPath: string;
+  /** Path globs the Effect fetch owns (`server.routes`, default `/api/*`). */
+  readonly routes: string[];
+  /**
+   * DO/Workflow class exports (`props.exports`), reduced to plain names —
+   * the full export records carry Effects that cannot cross the child
+   * boundary and are not needed for codegen.
+   */
+  readonly exports: {
+    readonly name: string;
+    readonly kind: "durableObject" | "workflow";
+  }[];
+}
+
+/**
+ * Derive the {@link ViteEffectEntry} from resolved Worker props, or
+ * `undefined` when the Worker is not wrapper-delivery (plain vite sites,
+ * explicit-tier `runtimeDelivery: "external"`). Pure and cheap — safe inside
+ * the local provider's `resolveConfig` (runs on every plan) where its result
+ * participates in the restart-surface hash, so route/anchor edits restart
+ * the dev child.
+ */
+export const makeViteEffectEntry = (
+  props: Pick<WorkerProps, "main" | "server" | "exports" | "runtimeDelivery">,
+): ViteEffectEntry | undefined => {
+  if (props.runtimeDelivery !== "wrapper" || props.main === undefined) {
+    return undefined;
+  }
+  let mainPath: string;
+  try {
+    mainPath = fileURLToPath(props.main);
+  } catch {
+    mainPath = props.main;
+  }
+  return {
+    mainPath: nodePath.resolve(mainPath),
+    routes: props.server?.routes ?? [...DEFAULT_SERVER_ROUTES],
+    exports: Object.entries(props.exports ?? {}).flatMap(
+      ([name, entry]): ViteEffectEntry["exports"] =>
+        isDurableObjectExport(entry)
+          ? [{ name, kind: "durableObject" }]
+          : isWorkflowExport(entry)
+            ? [{ name, kind: "workflow" }]
+            : [],
+    ),
+  };
+};
 
 /** Plain-data configuration transferred from the provider to a Vite child. */
 export interface ViteChildConfig {
@@ -33,6 +104,8 @@ export interface ViteChildConfig {
     name: string;
     compatibility: { date: string; flags: string[] };
     main: string | undefined;
+    /** Wrapper-delivery effect entry (effectful Website); plain data. */
+    entry?: ViteEffectEntry | undefined;
     viteEnvironments: { entry?: string; children?: string[] } | undefined;
     hasAssets: boolean;
     bindingDescriptors: WorkerBinding[];
@@ -66,6 +139,8 @@ export interface ViteBuildChildConfig {
    */
   env: Record<string, unknown>;
   main: string | undefined;
+  /** Wrapper-delivery effect entry (effectful Website); plain data. */
+  entry?: ViteEffectEntry | undefined;
   compatibilityDate: string | undefined;
   compatibilityFlags: string[] | undefined;
   viteEnvironments: { entry?: string; children?: string[] } | undefined;

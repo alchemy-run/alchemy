@@ -1,0 +1,19 @@
+---
+// On-demand SSR: rendered inside the Worker on every request. Requests to
+// `/` are outside `server.routes`, so they never touch the effect fetch —
+// Astro serves them exactly as on a plain (non-effectful) site.
+const marker = "astro-effect-home";
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Astro Effect Fixture</title>
+  </head>
+  <body>
+    <h1>Astro Effect Fixture</h1>
+    <p id="mode">on-demand</p>
+    <p id="marker">{marker}</p>
+    <p><a href="/about/">about</a></p>
+  </body>
+</html>

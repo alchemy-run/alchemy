@@ -90,6 +90,18 @@ export interface NuxtOverridesInput {
    * `nuxt.config.ts` runtime config.
    */
   readonly runtimeConfig?: Record<string, unknown> | undefined;
+  /**
+   * Nitro event handlers to append (`nitro.handlers` — Nuxt portals the
+   * key onto `serverHandlers`). Handler values must be module paths, never
+   * closures: nitro bundles them into the (dev or prod) server bundle.
+   */
+  readonly nitroHandlers?:
+    | ReadonlyArray<{
+        readonly route?: string | undefined;
+        readonly middleware?: boolean | undefined;
+        readonly handler: string;
+      }>
+    | undefined;
 }
 
 /**
@@ -135,6 +147,16 @@ export const makeNuxtOverrides = (
                 ? (userNitro["plugins"] as Array<string>)
                 : []),
               ...input.nitroPlugins,
+            ],
+          }
+        : undefined),
+      ...(input.nitroHandlers !== undefined && input.nitroHandlers.length > 0
+        ? {
+            handlers: [
+              ...(Array.isArray(userNitro?.["handlers"])
+                ? (userNitro["handlers"] as Array<unknown>)
+                : []),
+              ...input.nitroHandlers,
             ],
           }
         : undefined),

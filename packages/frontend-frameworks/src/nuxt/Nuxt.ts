@@ -73,13 +73,70 @@ export interface NuxtDevListener {
 interface NitroInstanceSlice {
   readonly options: {
     entry?: string;
+    /** `@rollup/plugin-replace` values merged into nitro's replace plugin. */
+    replace?: Record<string, string>;
     readonly output: {
       readonly dir: string;
       readonly serverDir: string;
       readonly publicDir: string;
     };
   };
+  /** The nitro instance's own hookable (for instance-scoped build hooks). */
+  readonly hooks: {
+    readonly hook: (
+      name: string,
+      fn: (...args: Array<never>) => unknown,
+    ) => unknown;
+  };
 }
+
+/** The structural slice of the rollup config `rollup:before` receives. */
+interface RollupConfigSlice {
+  external?: unknown;
+}
+
+/**
+ * The virtual specifier the generated nitro entry wrapper imports the
+ * rolldown-prebundled effect module by. Kept EXTERNAL through nitro's
+ * rollup (so nitro never re-processes rolldown output — its unenv/replace
+ * passes differ from the effect pipeline's) and rewritten by the source
+ * provider to the module's relative path inside the deployed module set.
+ */
+export const EFFECT_VIRTUAL_SPECIFIER = "alchemy:nuxt-effect";
+
+/**
+ * Native-binary optional dependencies the alchemy/effect module graph can
+ * reach through lazy imports (the vite source arm). Nitro's workerd build
+ * inlines everything (`noExternals`), which would drag these in and fail —
+ * they are never evaluated inside the deployed worker, so they stay
+ * external exactly as alchemy's own rolldown effect bundles mark them.
+ * The prebundled effect module's virtual specifier is external for the
+ * same reason: it is delivered as a sibling module, never re-bundled.
+ */
+const EFFECT_ENTRY_EXTERNALS = [
+  "lightningcss",
+  "fsevents",
+  EFFECT_VIRTUAL_SPECIFIER,
+];
+
+const wrapRollupExternal = (rollupConfig: RollupConfigSlice): void => {
+  const previous = rollupConfig.external;
+  rollupConfig.external = (
+    id: string,
+    importer: string | undefined,
+    isResolved: boolean,
+  ): boolean =>
+    EFFECT_ENTRY_EXTERNALS.includes(id) ||
+    (typeof previous === "function"
+      ? (previous(id, importer, isResolved) ?? false)
+      : Array.isArray(previous)
+        ? previous.some((entry) =>
+            entry instanceof RegExp ? entry.test(id) : entry === id,
+          )
+        : previous instanceof RegExp
+          ? previous.test(id)
+          : false);
+};
 
 /** Inputs the framework passes when consulting the target's nitro hook. */
 export interface NuxtNitroContext {
@@ -237,6 +294,15 @@ export interface NuxtOptions {
    */
   readonly main?: string | undefined;
   /**
+   * `main` is an alchemy-generated effect entry wrapper (effect entry
+   * takeover). The build folds `globalThis.__ALCHEMY_RUNTIME__` to `true`
+   * in the server bundle (plan-only binding registration tree-shakes) and
+   * externalizes the native-binary optional deps the alchemy module graph
+   * can reach. Registered instance-scoped at `nitro:init` so the
+   * prerenderer's Node-preset clone is unaffected.
+   */
+  readonly effectEntry?: boolean | undefined;
+  /**
    * Nuxt config overrides merged over the project's own `nuxt.config.ts`
    * (highest-priority c12 layer; integration wins). The user's file remains
    * authoritative for everything not named here; `nitro.preset` is always
@@ -271,8 +337,27 @@ export interface NuxtOptions {
          * local-only.
          */
         readonly services?: unknown;
+        /**
+         * Nitro handlers injected into the DEV server through the overrides
+         * layer (`nitro.handlers` — Nuxt portals it to `serverHandlers`).
+         * Handler modules are bundled into nitro's dev SSR worker thread,
+         * so they run with the dev platform's `event.context.cloudflare`
+         * contract. Used by the effect entry takeover to mount the
+         * routes-scoped effect middleware in dev.
+         */
+        readonly serverHandlers?: ReadonlyArray<NuxtServerHandler> | undefined;
       }
     | undefined;
+}
+
+/** A nitro `NitroEventHandler` slice (module-path handler, dev injection). */
+export interface NuxtServerHandler {
+  /** Radix route (e.g. `"/api/**"`). Omit with `middleware: true`. */
+  readonly route?: string | undefined;
+  /** Mount as h3 middleware (runs on every request, may short-circuit). */
+  readonly middleware?: boolean | undefined;
+  /** Absolute path of the handler module. */
+  readonly handler: string;
 }
 
 const fail = (message: string, cause?: unknown) =>
@@ -432,6 +517,25 @@ export const make: (
             if (entry !== undefined) {
               nitro.options.entry = entry;
             }
+            // Effect entry takeover: fold the alchemy runtime flag (nitro's
+            // replace plugin has `preventAssignment`, so the bridge's own
+            // `globalThis.__ALCHEMY_RUNTIME__ = true` stamp is untouched
+            // while every `if (!globalThis.__ALCHEMY_RUNTIME__)` plan
+            // branch folds to dead code) and keep the native-binary
+            // optional deps external. Instance-scoped, like the entry:
+            // never leaks into the prerenderer clone.
+            if (options?.effectEntry === true) {
+              nitro.options.replace = {
+                ...nitro.options.replace,
+                "globalThis.__ALCHEMY_RUNTIME__": "true",
+              };
+              nitro.hooks.hook(
+                "rollup:before",
+                (_nitro: unknown, rollupConfig: RollupConfigSlice) => {
+                  wrapRollupExternal(rollupConfig);
+                },
+              );
+            }
           });
         });
 
@@ -531,6 +635,7 @@ export const make: (
             nitroExternalsInline: nitroPlugins?.map((plugin) =>
               path.dirname(plugin),
             ),
+            nitroHandlers: options?.dev?.serverHandlers,
             runtimeConfig: platform?.runtimeConfig,
           }),
         }),

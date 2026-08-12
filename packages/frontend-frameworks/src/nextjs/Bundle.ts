@@ -57,6 +57,20 @@ export interface BundleWorkerOptions {
   readonly outDirectory: string;
   /** Minify the emitted modules. @default false */
   readonly minify?: boolean | undefined;
+  /**
+   * The entry file (inside `openNextDirectory`) the pass compiles. The
+   * artifact-takeover flow points it at the generated `alchemy-worker.js`
+   * wrapper instead of OpenNext's own `worker.js`.
+   * @default WORKER_ENTRY_NAME
+   */
+  readonly entryName?: string | undefined;
+  /**
+   * Additional externals (esbuild wildcard patterns). The takeover flow
+   * keeps the rolldown-prebundled effect module external
+   * (`./alchemy-effect/*`) so esbuild never re-processes rolldown output —
+   * its files are copied into the module set verbatim instead.
+   */
+  readonly externals?: ReadonlyArray<string> | undefined;
 }
 
 export interface BundleWorkerResult {
@@ -103,7 +117,10 @@ export const bundleWorker = (
           absWorkingDir: options.openNextDirectory,
           plugins: [makeWranglerExternalsPlugin()],
           entryPoints: [
-            NodePath.join(options.openNextDirectory, WORKER_ENTRY_NAME),
+            NodePath.join(
+              options.openNextDirectory,
+              options.entryName ?? WORKER_ENTRY_NAME,
+            ),
           ],
           outdir: options.outDirectory,
           bundle: true,
@@ -115,7 +132,7 @@ export const bundleWorker = (
           minify: options.minify ?? false,
           sourcemap: false,
           metafile: true,
-          external: ["cloudflare:*", "node:*"],
+          external: ["cloudflare:*", "node:*", ...(options.externals ?? [])],
           loader: {
             ".wasm": "copy",
             ".bin": "copy",

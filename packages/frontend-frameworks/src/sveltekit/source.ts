@@ -43,9 +43,11 @@ import * as NodePath from "node:path";
 import { fileURLToPath } from "node:url";
 import { runBuildChild } from "../core/BuildChild.ts";
 import { makeCloudflareTarget } from "./cloudflare.ts";
+import { effectMainPath } from "./EffectDev.ts";
 import {
   make as makeSvelteKit,
   type SvelteKitAdapterOptions,
+  type SvelteKitEffectOptions,
   type SvelteKitOptions,
 } from "./SvelteKit.ts";
 
@@ -102,6 +104,23 @@ export interface SourceContext {
     readonly date: string;
     readonly flags: Array<string>;
   };
+  /**
+   * Mirror of alchemy's `SourceContext.entry`. For an effectful
+   * `Website.SvelteKit` (collect-only wrapper delivery) the live provider
+   * hands `{ kind: "effect", exports, routes, mainPath }` — everything the
+   * generated worker shim's effect arm needs. The `exports` values carry
+   * Effects (alchemy's `DurableObjectExport`/`WorkflowExport`); only their
+   * `kind` discriminant is read here.
+   */
+  readonly entry?:
+    | { readonly kind: "external" }
+    | {
+        readonly kind: "effect";
+        readonly exports?: Record<string, unknown> | undefined;
+        readonly routes?: ReadonlyArray<string> | undefined;
+        readonly mainPath?: string | undefined;
+      }
+    | undefined;
   readonly stack: { readonly name: string; readonly stage: string };
   readonly env: Record<string, unknown> | undefined;
   readonly assets: Record<string, unknown> | string | undefined;
@@ -194,6 +213,20 @@ export interface SvelteKitSourceOptions {
   readonly rootDir?: string | undefined;
   /** Narrows the rebuild-detection input hash. */
   readonly memo?: SvelteKitMemoOptions | undefined;
+  /**
+   * Effectful (wrapper) delivery descriptor, set by the construct when an
+   * Effect program is attached: the impl anchor (`main`, a path or
+   * `file://` URL) and the `server.routes` globs. Carried on the
+   * descriptor because `dev()` runs in a child process whose `DevContext`
+   * does not thread the wrapper entry (the build path reads the richer
+   * `ctx.entry`, which additionally carries DO/Workflow exports).
+   */
+  readonly effect?:
+    | {
+        readonly main: string;
+        readonly routes?: Array<string> | undefined;
+      }
+    | undefined;
   /**
    * SvelteKit configuration overrides. With a project-owned
    * `vite.config.*` (loaded natively), these merge over the options of the
@@ -383,6 +416,7 @@ const hashSvelteKitInput = Effect.fnUntraced(function* (
   rootDir: string,
   options: SvelteKitSourceOptions,
   workspaces: Iterable<string>,
+  effect?: SvelteKitEffectOptions | undefined,
 ) {
   const version = yield* packageVersion;
   const hashWorkspace = (cwd: string, memo?: SvelteKitMemoOptions) =>
@@ -405,6 +439,7 @@ const hashSvelteKitInput = Effect.fnUntraced(function* (
       memo: options.memo,
       kit: options.kit,
       adapter: options.adapter,
+      effect: effectHashSignal(rootDir, effect),
     },
     tree: [root, ...workspaceHashes.sort()],
   });
@@ -517,6 +552,61 @@ const wrapFrameworkError = (error: {
     cause: error.cause ?? error,
   });
 
+/**
+ * Derive the effectful (wrapper) delivery options for a BUILD from
+ * `ctx.entry` — the authoritative carrier on the live path (it includes
+ * the DO/Workflow exports collected from the impl at plan). `undefined`
+ * for plain SvelteKit sites and explicit-tier (`"external"`) delivery.
+ */
+const resolveEffectEntry = (
+  ctx: SourceContext,
+): SvelteKitEffectOptions | undefined => {
+  const entry = ctx.entry;
+  if (
+    entry === undefined ||
+    entry.kind !== "effect" ||
+    entry.mainPath === undefined
+  ) {
+    return undefined;
+  }
+  const durableObjects: Array<string> = [];
+  const workflows: Array<string> = [];
+  for (const [name, value] of Object.entries(entry.exports ?? {})) {
+    const kind = (value as { readonly kind?: unknown } | null)?.kind;
+    if (kind === "durableObject") {
+      durableObjects.push(name);
+    } else if (kind === "workflow") {
+      workflows.push(name);
+    }
+  }
+  return {
+    main: effectMainPath(entry.mainPath),
+    routes: entry.routes !== undefined ? [...entry.routes] : undefined,
+    durableObjects,
+    workflows,
+    stack: { name: ctx.stack.name, stage: ctx.stack.stage },
+  };
+};
+
+/**
+ * The machine-independent change signal of the effect arm, folded into the
+ * `input` hash: routes, class names, and the anchor path RELATIVE to the
+ * project root (never an absolute path). The site module's content itself
+ * is covered by the project-tree hash.
+ */
+const effectHashSignal = (
+  rootDir: string,
+  effect: SvelteKitEffectOptions | undefined,
+): unknown =>
+  effect === undefined
+    ? undefined
+    : {
+        main: NodePath.relative(rootDir, effectMainPath(effect.main)),
+        routes: effect.routes,
+        durableObjects: effect.durableObjects,
+        workflows: effect.workflows,
+      };
+
 const assetsConfig = (
   assets: SourceContext["assets"],
 ): Record<string, unknown> | undefined => {
@@ -568,6 +658,8 @@ export interface SvelteKitBuildChildConfig {
   readonly compatibilityFlags: Array<string>;
   readonly kit: Record<string, unknown> | undefined;
   readonly adapter: SvelteKitAdapterOptions | undefined;
+  /** Effectful wrapper delivery (plain data — strings only). */
+  readonly effect?: SvelteKitEffectOptions | undefined;
 }
 
 export const buildInChild = (config: SvelteKitBuildChildConfig) =>
@@ -579,6 +671,7 @@ export const buildInChild = (config: SvelteKitBuildChildConfig) =>
       compatibilityFlags: config.compatibilityFlags,
       kit: config.kit,
       adapter: config.adapter,
+      effect: config.effect,
     });
     return yield* framework.build({ root: config.rootDir });
   });
@@ -601,11 +694,25 @@ export const makeSvelteKitSource = (
     compatibilityFlags: ctx.compatibility.flags,
     kit: options.kit,
     adapter: options.adapter,
+    // Dev runs in the vite-child process, whose DevContext hardcodes an
+    // external entry — the descriptor's `effect` (set by the construct)
+    // is the wrapper-delivery carrier there. Class exports are a
+    // build-only concern (kit dev is Node SSR; DO/Workflow classes need
+    // the deployed worker), so only the anchor + routes + stack travel.
+    effect:
+      options.effect !== undefined
+        ? {
+            main: options.effect.main,
+            routes: options.effect.routes,
+            stack: { name: ctx.stack.name, stage: ctx.stack.stage },
+          }
+        : resolveEffectEntry(ctx),
     dev,
   });
   return {
     ownsAssets: true,
     build: Effect.fnUntraced(function* (ctx) {
+      const effect = resolveEffectEntry(ctx);
       const output = yield* runBuildChild({
         module: import.meta.url,
         rootDir,
@@ -616,6 +723,7 @@ export const makeSvelteKitSource = (
           compatibilityFlags: ctx.compatibility.flags,
           kit: options.kit,
           adapter: options.adapter,
+          effect,
         } satisfies SvelteKitBuildChildConfig,
       }).pipe(Effect.mapError(wrapFrameworkError));
       if (
@@ -651,7 +759,12 @@ export const makeSvelteKitSource = (
             NodePath.resolve(rootDir, output.clientDirectory),
             assetsConfig(ctx.assets),
           ),
-          hashSvelteKitInput(rootDir, options, output.externalWorkspaces),
+          hashSvelteKitInput(
+            rootDir,
+            options,
+            output.externalWorkspaces,
+            effect,
+          ),
         ],
         { concurrency: "unbounded" },
       );
@@ -666,11 +779,12 @@ export const makeSvelteKitSource = (
         },
       } satisfies SourceBuildOutput;
     }),
-    hash: Effect.fnUntraced(function* (_ctx, previous) {
+    hash: Effect.fnUntraced(function* (ctx, previous) {
       const { hash, workspaces } = yield* hashSvelteKitInput(
         rootDir,
         options,
         previous?.additionalWorkspaces ?? [],
+        resolveEffectEntry(ctx),
       );
       return { input: hash, additionalWorkspaces: workspaces };
     }),

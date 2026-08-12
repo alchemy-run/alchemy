@@ -15,9 +15,15 @@ import * as NodePath from "node:path";
 import { pathToFileURL } from "node:url";
 import type * as ViteModule from "vite";
 import {
+  makeEffectDevPlugin,
+  type SvelteKitEffectOptions,
+} from "./EffectDev.ts";
+import {
   DEFAULT_VITE_CONFIG_FILES,
   makeSvelteKitConfigPlugin,
 } from "./UserConfig.ts";
+
+export type { SvelteKitEffectOptions } from "./EffectDev.ts";
 
 /** The shape of the project's `@sveltejs/kit/vite` module. */
 interface KitViteModule {
@@ -81,6 +87,13 @@ export interface SvelteKitTargetConfig {
    * reconstruct the framework with the same options.
    */
   readonly kit?: Record<string, unknown> | undefined;
+  /**
+   * Effectful (wrapper) delivery for an effectful `Website.SvelteKit`
+   * ({@link SvelteKitOptions.effect}): the target's adapter generates its
+   * server entry's effect arm from it, and its finishing pass widens the
+   * bundle exports for the DO/Workflow bridge classes.
+   */
+  readonly effect?: SvelteKitEffectOptions | undefined;
 }
 
 /** Inputs the framework passes when asking the target for a kit `Adapter`. */
@@ -212,6 +225,14 @@ export interface SvelteKitOptions {
   readonly vite?: ViteModule.InlineConfig | undefined;
   /** Adapter behavior forwarded to the target via its config. */
   readonly adapter?: SvelteKitAdapterOptions | undefined;
+  /**
+   * Effectful (wrapper) delivery for an effectful `Website.SvelteKit`.
+   * Production builds: forwarded to the target via its config (the
+   * Cloudflare target's adapter generates the worker shim's effect arm
+   * and the finishing pass widens exports). Dev: mounts the effect
+   * middleware in front of kit's dev server (see `EffectDev.ts`).
+   */
+  readonly effect?: SvelteKitEffectOptions | undefined;
   readonly dev?:
     | {
         /** Default dev-server port (overridden by `FrameworkDevOptions.port`). */
@@ -376,6 +397,7 @@ export const make: (
     compatibilityFlags: options?.compatibilityFlags,
     adapter: options?.adapter,
     kit: options?.kit,
+    effect: options?.effect,
   };
 
   const resolveTarget = (root: string) =>
@@ -596,7 +618,22 @@ export const make: (
       }),
     );
     const vite = yield* loadVite(root);
-    const config = yield* resolveViteConfig(root, adapter);
+    let config = yield* resolveViteConfig(root, adapter);
+    if (options?.effect !== undefined) {
+      // Effectful Website: mount the effect middleware in front of kit
+      // (the dev analogue of the worker shim's effect arm). The plugin
+      // reads env from the same platform proxy `emulate()` serves kit.
+      config = {
+        ...config,
+        plugins: [
+          makeEffectDevPlugin({
+            effect: options.effect,
+            emulate: () => adapter.emulate?.(),
+          }),
+          ...(config.plugins ?? []),
+        ],
+      };
+    }
     // `port: 0` (true OS-assigned) on Vite >= 8.2.1, probed ephemeral port
     // on older Vite — see `resolveViteDevPort`.
     const port = yield* FrameworkCore.resolveViteDevPort(

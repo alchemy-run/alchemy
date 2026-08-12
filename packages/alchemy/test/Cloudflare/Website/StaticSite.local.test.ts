@@ -3,10 +3,13 @@ import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
@@ -15,6 +18,7 @@ import {
   findWorker,
   waitForWorkerToBeDeleted,
 } from "../Utils/Worker.ts";
+import EffectStaticSite, { SiteData } from "./fixtures/effect-static-site.ts";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
 // matching the process topology of the real `alchemy dev` command.
@@ -240,6 +244,130 @@ describe.concurrent("StaticSite dev", () => {
 
         // The cloud Worker is gone after destroy (stamped-mode delete).
         yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+      }).pipe(logLevel),
+    { timeout: 300_000 },
+  );
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// Effectful StaticSite (DESIGN §6.2b): the compiled Effect program IS
+// the worker in front of the assets — the existing rolldown effect
+// pipeline plus the forced `server.routes` → `runWorkerFirst` compile.
+// ─────────────────────────────────────────────────────────────────────
+
+class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
+  status: number;
+}> {}
+
+/** GET `url` until it answers 200, then parse the JSON body. */
+const getJsonReady = (url: string) =>
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    const res = yield* client.get(url).pipe(
+      Effect.flatMap((res) =>
+        res.status === 200
+          ? Effect.succeed(res)
+          : Effect.fail(new WorkerNotReady({ status: res.status })),
+      ),
+      Effect.retry({
+        while: (e): e is WorkerNotReady => e instanceof WorkerNotReady,
+        // Cap the backoff so a persistent non-200 fails fast instead of
+        // looking like a hang.
+        schedule: Schedule.max([
+          Schedule.min([
+            Schedule.exponential("500 millis"),
+            Schedule.spaced("2 seconds"),
+          ]),
+          Schedule.recurs(10),
+        ]),
+      }),
+    );
+    return yield* res.json;
+  }).pipe(Effect.orDie);
+
+describe.concurrent("StaticSite dev (effectful)", () => {
+  /**
+   * The effectful roundtrip in dev: one local worker serves the Effect
+   * fetch on `/api/*` (worker-first, compiled from the default
+   * `server.routes`), the static shell everywhere else, and the SPA
+   * fallback for deep links. The KV namespace bound by the impl is
+   * emulated locally (`dev:` id — proof no cloud call ran), and the
+   * Durable Object export rides the same virtual entry as a plain effect
+   * worker.
+   */
+  test.provider(
+    "effectful StaticSite dev: effect API, static shell, and SPA fallback share one local worker",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            const site = yield* EffectStaticSite;
+            // The impl's `yield* SiteData` registers the namespace at the
+            // root (registration is idempotent per FQN) — this resolves
+            // the SAME row the binding uses.
+            const data = yield* SiteData;
+            return { data, site };
+          }),
+        );
+
+        // Local identity: the KV namespace is emulated (`dev:` id) and the
+        // site serves from the local dev proxy.
+        expect(deployed.data.namespaceId).toMatch(/^dev:/);
+        expect(deployed.site.url).toMatch(/^http:\/\/localhost:\d+/);
+        const url = deployed.site.url!;
+
+        // The static shell serves at `/` (asset layer, worker not
+        // invoked). First hit warms the local bundle, so give it time.
+        yield* expectUrlContains(`${url}/`, "effect-staticsite-shell", {
+          timeout: "90 seconds",
+          label: "dev effectful shell",
+        });
+
+        // SPA fallback still answers deep links with the shell — the
+        // compiled `runWorkerFirst: ["/api/*"]` must not swallow them.
+        yield* expectUrlContains(
+          `${url}/app/deep/route`,
+          "effect-staticsite-shell",
+          { timeout: "30 seconds", label: "dev effectful deep link" },
+        );
+
+        // A real asset serves its own bytes, not the shell.
+        const asset = yield* expectUrlContains(
+          `${url}/data.txt`,
+          "effect-staticsite-plain-asset",
+          { timeout: "30 seconds", label: "dev effectful plain asset" },
+        );
+        expect(asset).not.toContain("effect-staticsite-shell");
+
+        // `/api/*` routes worker-first into the Effect fetch: the KV
+        // binding round-trips against the local simulator.
+        yield* expectUrlContains(
+          `${url}/api/kv?key=current&put=hello-local`,
+          '"value":"hello-local"',
+          { timeout: "30 seconds", label: "dev effectful KV put" },
+        );
+        yield* expectUrlContains(
+          `${url}/api/kv?key=current`,
+          '"value":"hello-local"',
+          { timeout: "30 seconds", label: "dev effectful KV get" },
+        );
+
+        // The Durable Object export works exactly as on a plain effect
+        // worker: sequential calls against one DO name observe increasing
+        // counts. (Not exact values — the readiness retry may invoke the
+        // handler more than once.)
+        const first = (yield* getJsonReady(`${url}/api/counter`)) as {
+          count: number;
+        };
+        const second = (yield* getJsonReady(`${url}/api/counter`)) as {
+          count: number;
+        };
+        expect(first.count).toBeGreaterThanOrEqual(1);
+        expect(second.count).toBeGreaterThan(first.count);
+
+        yield* stack.destroy();
       }).pipe(logLevel),
     { timeout: 300_000 },
   );

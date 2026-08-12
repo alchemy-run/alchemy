@@ -42,7 +42,23 @@ import * as NodePath from "node:path";
 import { fileURLToPath } from "node:url";
 import { runBuildChild } from "../core/BuildChild.ts";
 import { makeCloudflareTarget } from "./cloudflare.ts";
-import { make as makeNuxt, type NuxtOptions } from "./Nuxt.ts";
+import {
+  bundleNuxtEffectModule,
+  DEFAULT_EFFECT_ROUTES,
+  EFFECT_MODULE_DIR,
+  EFFECT_MODULE_NAME,
+  effectGeneratedDir,
+  effectMainToPath,
+  renderDevHandler,
+  renderWorkerEntry,
+  writeGeneratedModule,
+  type NuxtEffectOptions,
+} from "./effect.ts";
+import {
+  EFFECT_VIRTUAL_SPECIFIER,
+  make as makeNuxt,
+  type NuxtOptions,
+} from "./Nuxt.ts";
 
 const PROVIDER = "@alchemy.run/frontend-frameworks/nuxt/source";
 
@@ -97,6 +113,25 @@ export interface SourceContext {
     readonly date: string;
     readonly flags: Array<string>;
   };
+  /**
+   * Mirror of alchemy's `SourceContext.entry`. For collect-only wrapper
+   * delivery (`runtimeDelivery: "wrapper"`) the effect variant carries the
+   * routes the effect fetch owns, the site module the generated wrapper
+   * re-imports (`props.main`, path or `file://` URL), and the impl's
+   * Durable Object / Workflow exports (only their names and `kind`
+   * discriminators are read here).
+   */
+  readonly entry?:
+    | { readonly kind: "external" }
+    | {
+        readonly kind: "effect";
+        readonly exports?:
+          | Record<string, { readonly kind?: string } | undefined>
+          | undefined;
+        readonly routes?: ReadonlyArray<string> | undefined;
+        readonly mainPath?: string | undefined;
+      }
+    | undefined;
   readonly stack: { readonly name: string; readonly stage: string };
   readonly env: Record<string, unknown> | undefined;
   readonly assets: Record<string, unknown> | string | undefined;
@@ -199,6 +234,12 @@ export interface NuxtSourceOptions {
    * classes, ...). Relative paths resolve against `rootDir`.
    */
   readonly main?: string | undefined;
+  /**
+   * Effect entry takeover (set by `Cloudflare.Website.Nuxt` when an impl is
+   * present): the site-module anchor and the routes the effect fetch owns.
+   * Mutually exclusive with `main` — the generated wrapper IS the entry.
+   */
+  readonly effect?: NuxtEffectOptions | undefined;
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -320,6 +361,10 @@ const hashDirectory = Effect.fnUntraced(function* (
   const include = memo?.include ?? ["**/*"];
   const exclude = memo?.exclude ?? [
     "**/.git/**",
+    // Alchemy-generated artifacts (the effect entry wrapper / dev handler
+    // under `.alchemy/`) must never feed the memo: their content embeds
+    // machine-local absolute paths, and their inputs are hashed explicitly.
+    "**/.alchemy/**",
     ...gitignoreRulesToGlobs(yield* readGitIgnoreRules(fs, cwd)),
   ];
   const lockfile = memo?.lockfile ?? !(memo?.include || memo?.exclude);
@@ -378,6 +423,7 @@ const hashNuxtInput = Effect.fnUntraced(function* (
   rootDir: string,
   options: NuxtSourceOptions,
   workspaces: Iterable<string>,
+  effect?: ResolvedEffectEntry | undefined,
 ) {
   const version = yield* packageVersion;
   const hashWorkspace = (cwd: string, memo?: NuxtMemoOptions) =>
@@ -401,6 +447,19 @@ const hashNuxtInput = Effect.fnUntraced(function* (
       nuxt: options.nuxt,
       main: options.main,
     },
+    // The effect entry's generated-wrapper inputs (site module relative to
+    // the root — its CONTENT is covered by the tree hash — plus routes and
+    // export class names): a change to any regenerates a different wrapper,
+    // so it must bust the memo. Machine-independent by construction.
+    effect:
+      effect === undefined
+        ? undefined
+        : {
+            main: NodePath.relative(rootDir, effect.mainPath),
+            routes: effect.routes,
+            durableObjects: effect.durableObjects,
+            workflows: effect.workflows,
+          },
     tree: [root, ...workspaceHashes.sort()],
   });
   return {
@@ -561,6 +620,13 @@ export interface NuxtBuildChildConfig {
   readonly compatibilityFlags: Array<string>;
   readonly main: string | undefined;
   readonly nuxt: Record<string, unknown> | undefined;
+  /**
+   * `main` is an alchemy-generated effect entry wrapper: the framework
+   * half folds `globalThis.__ALCHEMY_RUNTIME__` to `true` in the server
+   * bundle and externalizes the native-binary optional deps the alchemy
+   * graph can reach (see `NuxtOptions.effectEntry`).
+   */
+  readonly effectEntry?: boolean | undefined;
 }
 
 export const buildInChild = (config: NuxtBuildChildConfig) =>
@@ -572,9 +638,143 @@ export const buildInChild = (config: NuxtBuildChildConfig) =>
       compatibilityFlags: config.compatibilityFlags,
       main: config.main,
       nuxt: config.nuxt,
+      effectEntry: config.effectEntry,
     });
     return yield* framework.build({ root: config.rootDir });
   });
+
+/**
+ * The effect-entry inputs, normalized from the engine-derived
+ * `SourceContext.entry` (authoritative — carries the impl's DO/Workflow
+ * exports) with the descriptor's `options.effect` as the fallback (the
+ * channel local dev uses, where the provider only receives the resolved
+ * config surface).
+ */
+interface ResolvedEffectEntry {
+  /** Absolute path of the user's site module. */
+  readonly mainPath: string;
+  readonly routes: Array<string>;
+  readonly durableObjects: Array<string>;
+  readonly workflows: Array<string>;
+}
+
+const resolveEffectEntry = (
+  ctx: SourceContext,
+  options: NuxtSourceOptions,
+): ResolvedEffectEntry | undefined => {
+  const entry = ctx.entry;
+  const fromCtx =
+    entry !== undefined &&
+    entry.kind === "effect" &&
+    entry.mainPath !== undefined
+      ? entry
+      : undefined;
+  const fromOptions = options.effect;
+  if (fromCtx === undefined && fromOptions === undefined) {
+    return undefined;
+  }
+  const durableObjects: Array<string> = [];
+  const workflows: Array<string> = [];
+  for (const [name, value] of Object.entries(fromCtx?.exports ?? {})) {
+    if (value?.kind === "durableObject") {
+      durableObjects.push(name);
+    } else if (value?.kind === "workflow") {
+      workflows.push(name);
+    }
+  }
+  return {
+    mainPath: effectMainToPath(fromCtx?.mainPath ?? fromOptions!.main),
+    routes: [
+      ...(fromCtx?.routes ?? fromOptions?.routes ?? DEFAULT_EFFECT_ROUTES),
+    ],
+    durableObjects: durableObjects.sort(),
+    workflows: workflows.sort(),
+  };
+};
+
+/** A built server module (mirror of framework-core's `ServerModule`). */
+interface EffectServerModule {
+  readonly name: string;
+  readonly content: string | Uint8Array;
+  readonly hash: string;
+}
+
+/**
+ * Deliver the prebundled effect module into the server module set:
+ *
+ * 1. rewrite {@link EFFECT_VIRTUAL_SPECIFIER} in nitro's emitted chunks to
+ *    the prebundle entry's relative path (recomputing those files' hashes);
+ * 2. append every prebundle file verbatim under
+ *    `server/alchemy-effect/...` — byte-identical to what rolldown wrote,
+ *    exactly like the classic effect-Worker pipeline deploys.
+ */
+const deliverEffectModule = Effect.fnUntraced(function* (
+  serverModules: ReadonlyArray<EffectServerModule>,
+  generatedDir: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const targetName = `server/${EFFECT_MODULE_DIR}/${EFFECT_MODULE_NAME}`;
+
+  const rewritten = yield* Effect.forEach(
+    serverModules,
+    Effect.fnUntraced(function* (module) {
+      if (!/\.(?:m|c)?js$/.test(module.name)) {
+        return module;
+      }
+      const text = yield* Effect.sync(() =>
+        typeof module.content === "string"
+          ? module.content
+          : Buffer.from(module.content).toString("utf8"),
+      );
+      if (!text.includes(EFFECT_VIRTUAL_SPECIFIER)) {
+        return module;
+      }
+      const relative = NodePath.posix.relative(
+        NodePath.posix.dirname(module.name),
+        targetName,
+      );
+      const specifier = relative.startsWith(".") ? relative : `./${relative}`;
+      const content = text.replaceAll(EFFECT_VIRTUAL_SPECIFIER, specifier);
+      const hash = yield* sha256Hex(content);
+      return { name: module.name, content, hash } satisfies EffectServerModule;
+    }),
+  );
+
+  const effectDir = NodePath.join(generatedDir, EFFECT_MODULE_DIR);
+  const entries = yield* fs.readDirectory(effectDir, { recursive: true }).pipe(
+    Effect.mapError(
+      (error) =>
+        new SourceProviderError({
+          provider: PROVIDER,
+          message: `Failed to read the prebundled effect module directory ${effectDir}`,
+          cause: error,
+        }),
+    ),
+  );
+  const effectModules = yield* Effect.forEach(
+    entries.filter((entry) => /\.(?:m|c)?js$/.test(entry)).sort(),
+    Effect.fnUntraced(function* (entry) {
+      const content = yield* fs.readFile(NodePath.join(effectDir, entry));
+      const hash = yield* sha256Hex(content);
+      return {
+        name: `server/${EFFECT_MODULE_DIR}/${entry.replaceAll("\\", "/")}`,
+        content,
+        hash,
+      } satisfies EffectServerModule;
+    }),
+  );
+
+  if (!effectModules.some((module) => module.name === targetName)) {
+    return yield* Effect.fail(
+      new SourceProviderError({
+        provider: PROVIDER,
+        message: `The effect prebundle produced no ${targetName} entry`,
+      }),
+    );
+  }
+
+  return [...rewritten, ...effectModules];
+});
 
 export const makeNuxtSource = (options: NuxtSourceOptions): SourceProvider => {
   const rootDir = NodePath.resolve(options.rootDir ?? process.cwd());
@@ -597,6 +797,52 @@ export const makeNuxtSource = (options: NuxtSourceOptions): SourceProvider => {
   return {
     ownsAssets: true,
     build: Effect.fnUntraced(function* (ctx) {
+      // Effect entry takeover: generate the nitro entry wrapper before the
+      // build child runs and hand it through the existing user-entry
+      // carriage (`main` → `nitro.options.entry`). Workflow class exports
+      // are not deliverable through this wrapper yet.
+      const effect = resolveEffectEntry(ctx, options);
+      if (effect !== undefined && effect.workflows.length > 0) {
+        return yield* Effect.fail(
+          new SourceProviderError({
+            provider: PROVIDER,
+            message:
+              `Workflow exports (${effect.workflows.join(", ")}) are not supported on ` +
+              "Cloudflare.Website.Nuxt entry takeover yet — host the Workflow on a " +
+              "separate effect Worker, or use a hand-written nitro entry.",
+          }),
+        );
+      }
+      let wrapperPath: string | undefined;
+      if (effect !== undefined) {
+        // 1. Rolldown-prebundle the site module (workerd conditions, unenv,
+        //    `__ALCHEMY_RUNTIME__` define, pure-annotation tree-shaking) so
+        //    nitro's rollup never sees the raw alchemy/effect import graph.
+        const generatedDir = effectGeneratedDir(rootDir, ctx.id);
+        yield* bundleNuxtEffectModule({
+          generatedDir,
+          rootDir,
+          sitePath: effect.mainPath,
+          routes: effect.routes,
+          durableObjects: effect.durableObjects,
+          compatibilityDate: ctx.compatibility.date,
+          compatibilityFlags: ctx.compatibility.flags,
+        }).pipe(
+          Effect.mapError(
+            (error) =>
+              new SourceProviderError({
+                provider: PROVIDER,
+                message: error.message,
+                cause: error.cause ?? error,
+              }),
+          ),
+        );
+        // 2. Generate the nitro entry wrapper importing the prebundle.
+        wrapperPath = yield* writeGeneratedModule(
+          NodePath.join(generatedDir, "worker-entry.mjs"),
+          renderWorkerEntry({ durableObjects: effect.durableObjects }),
+        );
+      }
       const output = yield* runBuildChild({
         module: import.meta.url,
         rootDir,
@@ -605,8 +851,9 @@ export const makeNuxtSource = (options: NuxtSourceOptions): SourceProvider => {
           rootDir,
           compatibilityDate: ctx.compatibility.date,
           compatibilityFlags: ctx.compatibility.flags,
-          main: options.main,
+          main: wrapperPath ?? options.main,
           nuxt: options.nuxt,
+          effectEntry: wrapperPath !== undefined ? true : undefined,
         } satisfies NuxtBuildChildConfig,
       }).pipe(Effect.mapError(wrapFrameworkError));
       if (
@@ -628,7 +875,20 @@ export const makeNuxtSource = (options: NuxtSourceOptions): SourceProvider => {
           }),
         );
       }
-      const files = output.serverModules.map(
+      // Effect entry takeover, delivery half: the prebundled effect module
+      // was kept EXTERNAL through nitro's rollup (nitro must never
+      // re-process rolldown output). Rewrite the virtual specifier in the
+      // emitted chunks to the module's in-set relative path and append the
+      // prebundle files verbatim as sibling modules (workerd resolves
+      // relative imports within the uploaded module set).
+      const serverModules =
+        effect === undefined
+          ? output.serverModules
+          : yield* deliverEffectModule(
+              output.serverModules,
+              effectGeneratedDir(rootDir, ctx.id),
+            );
+      const files = serverModules.map(
         (module): SourceBundleFile => ({
           path: module.name,
           content: module.content,
@@ -642,7 +902,7 @@ export const makeNuxtSource = (options: NuxtSourceOptions): SourceProvider => {
             NodePath.resolve(rootDir, output.clientDirectory),
             assetsConfig(ctx.assets),
           ),
-          hashNuxtInput(rootDir, options, output.externalWorkspaces),
+          hashNuxtInput(rootDir, options, output.externalWorkspaces, effect),
         ],
         { concurrency: "unbounded" },
       );
@@ -657,15 +917,39 @@ export const makeNuxtSource = (options: NuxtSourceOptions): SourceProvider => {
         },
       } satisfies SourceBuildOutput;
     }),
-    hash: Effect.fnUntraced(function* (_ctx, previous) {
+    hash: Effect.fnUntraced(function* (ctx, previous) {
       const { hash, workspaces } = yield* hashNuxtInput(
         rootDir,
         options,
         previous?.additionalWorkspaces ?? [],
+        resolveEffectEntry(ctx, options),
       );
       return { input: hash, additionalWorkspaces: workspaces };
     }),
     dev: Effect.fnUntraced(function* (ctx: SourceDevContext) {
+      // Effect dev delivery (fetch only): a generated nitro middleware
+      // module scoped to the effect routes, injected through the dev
+      // overrides layer (`nitro.handlers`). It runs inside nitro's dev SSR
+      // worker thread, where `event.context.cloudflare.env` — served by
+      // the platform proxy — carries the alchemy stack markers and the
+      // plan-collected bindings, so `alchemy/serve/nitro` resolves the
+      // same capabilities against the local simulators. Non-fetch
+      // handlers (queue/scheduled/DO classes) are production-only: the
+      // dev server runs nitro's dev preset entry, not the deploy entry.
+      const effect = resolveEffectEntry(ctx, options);
+      const devHandlerPath =
+        effect === undefined
+          ? undefined
+          : yield* writeGeneratedModule(
+              NodePath.join(
+                effectGeneratedDir(rootDir, ctx.id),
+                "dev-handler.mjs",
+              ),
+              renderDevHandler({
+                sitePath: effect.mainPath,
+                routes: effect.routes,
+              }),
+            );
       const framework = yield* makeNuxt(
         frameworkOptions(ctx, {
           env: resolveDevEnvOverrides(ctx.env),
@@ -675,6 +959,10 @@ export const makeNuxtSource = (options: NuxtSourceOptions): SourceProvider => {
           // credential-free internal layer, so `Alchemy.remote()` bindings
           // resolve in dev.
           services: ctx.runtimeContext,
+          serverHandlers:
+            devHandlerPath === undefined
+              ? undefined
+              : [{ middleware: true, handler: devHandlerPath }],
         }),
       );
       const server = yield* framework

@@ -48,6 +48,7 @@ const program = Effect.scoped(
     const {
       compatibility,
       main,
+      entry,
       viteEnvironments,
       hasAssets,
       bindingDescriptors,
@@ -89,7 +90,22 @@ const program = Effect.scoped(
               id: source.id,
               workerName: config.worker.name,
               compatibility,
-              entry: { kind: "external" },
+              // Re-derive `SourceContext.entry` from the serialized
+              // wrapper-delivery entry (routes + impl anchor + export
+              // kinds). Providers consume the export entries structurally
+              // (`kind` only) — the full DurableObjectExport/WorkflowExport
+              // objects cannot cross the child process boundary.
+              entry:
+                entry !== undefined
+                  ? {
+                      kind: "effect",
+                      exports: Object.fromEntries(
+                        entry.exports.map((e) => [e.name, { kind: e.kind }]),
+                      ) as never,
+                      routes: [...entry.routes],
+                      mainPath: entry.mainPath,
+                    }
+                  : { kind: "external" },
               stack: config.stack,
               env: config.env,
               extraOptions: undefined,
@@ -132,6 +148,7 @@ const program = Effect.scoped(
             port: vitePort,
             strictPort: false,
           },
+          entry,
         ).pipe(Effect.map((server) => server.resolvedUrls?.local[0]));
     if (!url) {
       return yield* Effect.die("Dev server child started without a local URL");

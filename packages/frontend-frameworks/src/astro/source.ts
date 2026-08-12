@@ -39,6 +39,7 @@ import type { PlatformError } from "effect/PlatformError";
 import type * as Scope from "effect/Scope";
 import * as NodeCrypto from "node:crypto";
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 import * as Astro from "./Astro.ts";
 import cloudflareTarget from "./cloudflare.ts";
 
@@ -93,6 +94,24 @@ export interface SourceContext {
     readonly date: string;
     readonly flags: Array<string>;
   };
+  /**
+   * Mirror of alchemy's `SourceContext.entry`. This source only inspects
+   * the effect variant's `exports`: entry-level Durable Object / Workflow
+   * classes cannot be delivered through the fetchable wrapper (fetch-only
+   * seam), so their presence fails the build with an actionable error.
+   * The wrapper's own inputs (`mainPath`, `routes`) travel on the
+   * descriptor's `options.effect` instead — the JSON channel that reaches
+   * both deploy and local dev.
+   */
+  readonly entry?:
+    | { readonly kind: "external" }
+    | {
+        readonly kind: "effect";
+        readonly exports: Record<string, unknown>;
+        readonly routes?: Array<string>;
+        readonly mainPath?: string;
+      }
+    | undefined;
   readonly stack: { readonly name: string; readonly stage: string };
   readonly env: Record<string, unknown> | undefined;
   /** Raw `props.assets` — a directory string or an asset-config object. */
@@ -238,6 +257,18 @@ export interface AstroSourceOptions {
     readonly publicDir?: string;
     readonly outDir?: string;
     readonly trailingSlash?: "always" | "never" | "ignore";
+  };
+  /**
+   * Effectful-Website delivery (set by `Cloudflare.Website.Astro` when an
+   * impl is passed): the effect program module (`props.main` — absolute
+   * path or `file://` URL) and the path globs its `fetch` owns. The
+   * integration pre-resolves `virtual:astro:fetchable` to a generated
+   * wrapper importing this module. Participates in the `input` hash so a
+   * route change rebuilds the wrapper.
+   */
+  readonly effect?: {
+    readonly mainPath: string;
+    readonly routes: ReadonlyArray<string>;
   };
 }
 
@@ -580,6 +611,7 @@ const hashAstroInput = (
     PlatformError,
     SourceServices
   >,
+  effect?: AstroSourceOptions["effect"],
 ): Effect.Effect<
   { hash: string; workspaces: Array<string> | undefined },
   PlatformError,
@@ -587,6 +619,22 @@ const hashAstroInput = (
 > =>
   Effect.gen(function* () {
     const path = yield* Path.Path;
+    // The effect-wrapper inputs are extra salt material (only when
+    // present, so classic astro sites keep their historical hashes): a
+    // route change regenerates the fetchable wrapper, which must bust the
+    // memo even though no project file changed. `mainPath` is folded in
+    // root-relative so the hash stays machine-independent.
+    const effectSalt =
+      effect === undefined
+        ? []
+        : [
+            JSON.stringify({
+              mainPath: path
+                .relative(rootDir, normalizeMainPath(effect.mainPath))
+                .replaceAll("\\", "/"),
+              routes: [...effect.routes],
+            }),
+          ];
     const salt = `${PROVIDER}@${packageVersion}`;
     // Normalize workspace directories to a root-relative, `/`-separated
     // form so the hash label is identical whether the workspace came
@@ -617,7 +665,12 @@ const hashAstroInput = (
         ],
         { concurrency: "unbounded" },
       );
-      const hash = yield* sha256Object([salt, root, ...workspaces.sort()]);
+      const hash = yield* sha256Object([
+        salt,
+        ...effectSalt,
+        root,
+        ...workspaces.sort(),
+      ]);
       return { hash, workspaces: undefined };
     }
     const [root, workspaces] = yield* Effect.all(
@@ -650,7 +703,12 @@ const hashAstroInput = (
       (cwd) => hashWorkspaceDirectory(cwd),
       { concurrency: "unbounded" },
     );
-    const hash = yield* sha256Object([salt, root, ...workspaceHashes.sort()]);
+    const hash = yield* sha256Object([
+      salt,
+      ...effectSalt,
+      root,
+      ...workspaceHashes.sort(),
+    ]);
     return { hash, workspaces: relativeWorkspaces };
   });
 
@@ -784,6 +842,62 @@ const failWith =
       cause,
     });
 
+/** `props.main` may be a `file://` URL (`main: import.meta.url`). */
+const normalizeMainPath = (main: string): string =>
+  main.startsWith("file:") ? fileURLToPath(main) : main;
+
+/** Resolve the effect-wrapper options with `mainPath` normalized to a path. */
+const resolveEffectOptions = (
+  effect: AstroSourceOptions["effect"],
+): { mainPath: string; routes: Array<string> } | undefined =>
+  effect === undefined
+    ? undefined
+    : {
+        mainPath: normalizeMainPath(effect.mainPath),
+        routes: [...effect.routes],
+      };
+
+/**
+ * The fetchable wrapper is a fetch-only seam: entry-level Durable Object /
+ * Workflow classes collected from the impl (`ctx.entry.exports`) have no
+ * delivery path on `Website.Astro` yet. Fail fast — from `hash()` too, so
+ * the error surfaces at plan time — with an actionable message.
+ */
+const rejectEntryExports = (
+  ctx: SourceContext,
+): Effect.Effect<void, SourceProviderError> => {
+  // Only entry-level *class* exports (Durable Objects / Workflows) are
+  // undeliverable; the collected exports map also carries the served
+  // `default` shape entry, which the fetchable wrapper delivers fine.
+  const isEntryClassExport = (value: unknown): boolean =>
+    typeof value === "object" &&
+    value !== null &&
+    "kind" in value &&
+    ((value as { kind: unknown }).kind === "durableObject" ||
+      (value as { kind: unknown }).kind === "workflow");
+  const entryExports =
+    ctx.entry?.kind === "effect"
+      ? Object.entries(ctx.entry.exports ?? {})
+          .filter(([, value]) => isEntryClassExport(value))
+          .map(([name]) => name)
+      : [];
+  if (entryExports.length === 0) {
+    return Effect.void;
+  }
+  return Effect.fail(
+    new SourceProviderError({
+      provider: PROVIDER,
+      message:
+        `Website.Astro "${ctx.id}" exports entry-level classes ` +
+        `(${entryExports.join(", ")}), but the Astro fetchable wrapper ` +
+        "delivers fetch handlers only — Astro owns the worker entry, so " +
+        "there is no seam to emit Durable Object / Workflow class exports " +
+        "through yet. Move the classes to a dedicated Cloudflare.Worker " +
+        "and bind it to the site.",
+    }),
+  );
+};
+
 /** Extract the asset-routing config from raw `props.assets` (drop non-config keys). */
 const assetConfigFromProps = (
   assets: SourceContext["assets"],
@@ -837,6 +951,10 @@ export interface AstroBuildChildConfig {
   readonly sessions: boolean | undefined;
   readonly sessionDevKV: boolean | undefined;
   readonly astro: AstroSourceOptions["astro"];
+  /** Effect-wrapper inputs, `mainPath` pre-normalized to a plain path. */
+  readonly effect:
+    | { readonly mainPath: string; readonly routes: Array<string> }
+    | undefined;
 }
 
 export const buildInChild = (config: AstroBuildChildConfig) =>
@@ -860,6 +978,7 @@ export const buildInChild = (config: AstroBuildChildConfig) =>
             sessionKVBindingName: config.sessionKVBindingName,
             sessions: config.sessions,
             sessionDevKV: config.sessionDevKV,
+            effect: config.effect,
           }),
           astro: config.astro,
         }),
@@ -889,6 +1008,7 @@ const makeAstroSourceProvider = (
             sessionKVBindingName: options.sessionKVBindingName,
             sessions: options.sessions,
             sessionDevKV: options.sessionDevKV,
+            effect: resolveEffectOptions(options.effect),
           }),
           astro: options.astro,
         }),
@@ -902,6 +1022,7 @@ const makeAstroSourceProvider = (
       Effect.gen(function* () {
         const path = yield* Path.Path;
         const rootDir = yield* resolveRoot;
+        yield* rejectEntryExports(ctx);
         const output = yield* runBuildChild({
           module: import.meta.url,
           rootDir,
@@ -915,6 +1036,7 @@ const makeAstroSourceProvider = (
             sessions: options.sessions,
             sessionDevKV: options.sessionDevKV,
             astro: options.astro,
+            effect: resolveEffectOptions(options.effect),
           } satisfies AstroBuildChildConfig,
         }).pipe(
           Effect.mapError((error) =>
@@ -943,6 +1065,7 @@ const makeAstroSourceProvider = (
               rootDir,
               options.memo,
               Effect.succeed(output.externalWorkspaces ?? []),
+              options.effect,
             ),
           ],
           { concurrency: "unbounded" },
@@ -972,13 +1095,17 @@ const makeAstroSourceProvider = (
         } satisfies SourceBuildOutput;
       }),
 
-    hash: (_ctx, previous) =>
+    hash: (ctx, previous) =>
       Effect.gen(function* () {
         const rootDir = yield* resolveRoot;
+        // Fail undeliverable DO/Workflow exports from `hash` too — diff
+        // runs it at plan time, so the error surfaces before any deploy.
+        yield* rejectEntryExports(ctx);
         const { hash, workspaces } = yield* hashAstroInput(
           rootDir,
           options.memo,
           Effect.succeed(previous?.additionalWorkspaces ?? []),
+          options.effect,
         );
         return { input: hash, additionalWorkspaces: workspaces };
       }),
@@ -986,6 +1113,7 @@ const makeAstroSourceProvider = (
     dev: (ctx) =>
       Effect.gen(function* () {
         const rootDir = yield* resolveRoot;
+        yield* rejectEntryExports(ctx);
         yield* applyWorkerEnvToProcess(ctx.env);
         const queueConsumers = yield* ctx.worker.queueConsumers;
         const astro = yield* framework(rootDir, {

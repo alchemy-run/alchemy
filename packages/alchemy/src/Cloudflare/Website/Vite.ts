@@ -1,6 +1,11 @@
+import type { ConfigError } from "effect/Config";
 import * as Effect from "effect/Effect";
 import type { InputProps } from "../../Input.ts";
+import type { Named, Tag } from "../../Named.ts";
+import type { MakeShape, PlatformServices } from "../../Platform.ts";
+import type { Rpc } from "../../Rpc.ts";
 import { effectClass } from "../../Util/effect.ts";
+import type { Container } from "../Containers/Container.ts";
 import type { Providers } from "../Providers.ts";
 import type { AssetsConfig } from "../Workers/Assets.ts";
 import {
@@ -10,7 +15,10 @@ import {
   type WorkerAssetsConfig,
   type WorkerBindingProps,
   type WorkerProps,
+  type WorkerServices,
+  type WorkerTypeId,
 } from "../Workers/Worker.ts";
+import { validateImplAnchor, type WebsiteShape } from "./Effectful.ts";
 
 export interface ViteProps<Bindings extends WorkerBindingProps = {}>
   extends Omit<WorkerProps<Bindings>, "vite" | "main" | "assets">, ViteOptions {
@@ -223,6 +231,40 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  */
 export const Vite: {
   <Self>(): {
+    <
+      const Id extends string,
+      Shape extends WebsiteShape,
+      const Bindings extends WorkerBindingProps = {},
+      Req extends
+        | WorkerServices
+        | Container.Application<any>
+        | PlatformServices
+        | Tag = never,
+      PropsReq = never,
+    >(
+      id: Id,
+      props:
+        | InputProps<ViteProps<Bindings> & { main: string }>
+        | Effect.Effect<
+            InputProps<ViteProps<Bindings> & { main: string }>,
+            ConfigError,
+            PropsReq
+          >,
+      impl: Effect.Effect<Shape, ConfigError, Req>,
+    ): Effect.Effect<
+      Worker<{
+        [binding in keyof NormalizedBindings<
+          Bindings,
+          WorkerAssetsConfig
+        >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      }> &
+        Rpc<Self>,
+      never,
+      Extract<Req, Container.Application<any>> | Providers | PropsReq
+    > &
+      Named<Id> & {
+        new (): MakeShape<Shape, WebsiteShape> & Named<Id> & Tag<WorkerTypeId>;
+      };
     <const Bindings extends WorkerBindingProps = {}, Req = never>(
       id: string,
       propsEff?:
@@ -237,6 +279,28 @@ export const Vite: {
       }>;
     };
   };
+  <
+    const Id extends string,
+    Shape extends WebsiteShape,
+    const Bindings extends WorkerBindingProps = {},
+    Req extends WorkerServices | Container.Application<any> | PlatformServices =
+      never,
+  >(
+    id: Id,
+    props: InputProps<ViteProps<Bindings> & { main: string }>,
+    impl: Effect.Effect<Shape, ConfigError, Req>,
+  ): Effect.Effect<
+    Worker<{
+      [binding in keyof NormalizedBindings<
+        Bindings,
+        WorkerAssetsConfig
+      >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+    }> &
+      Rpc<Shape>,
+    never,
+    Extract<Req, Container.Application<any>> | Providers
+  > &
+    Named<Id>;
   <const Bindings extends WorkerBindingProps = {}, Req = never>(
     id: string,
     propsEff?:
@@ -252,22 +316,52 @@ export const Vite: {
     never,
     Req | Providers
   >;
-} = ((id?: any, propsEff?: any) =>
+} = ((id?: any, propsEff?: any, impl?: any) =>
   id === undefined
-    ? (id: string, propsEff: any) => effectClass(Vite(id, propsEff))
-    : Worker(
-        id,
-        Effect.map(
-          Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
-          (props) => ({
-            ...props,
-            main: undefined!,
-            vite: {
-              main: props?.main,
-              rootDir: props?.rootDir,
-              memo: props?.memo,
-              viteEnvironments: props?.viteEnvironments,
-            },
+    ? (id: string, propsEff: any, impl?: any) =>
+        impl === undefined
+          ? effectClass(Vite(id, propsEff))
+          : Vite(id, propsEff, impl)
+    : impl === undefined
+      ? Worker(
+          id,
+          Effect.map(
+            Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
+            (props) => ({
+              ...props,
+              main: undefined!,
+              vite: {
+                main: props?.main,
+                rootDir: props?.rootDir,
+                memo: props?.memo,
+                viteEnvironments: props?.viteEnvironments,
+              },
+            }),
+          ),
+        )
+      : (Worker as any)(
+          id,
+          Effect.gen(function* () {
+            const props: any =
+              (Effect.isEffect(propsEff) ? yield* propsEff : propsEff) ?? {};
+            const main = yield* validateImplAnchor(id, "Vite", props.main);
+            return {
+              ...props,
+              // With an impl, `main` anchors the Effect program's module
+              // (`main: import.meta.url`); the deployed entry is the
+              // generated wrapper, so the vite custom-entry seam is not
+              // forwarded.
+              main,
+              // The vite pipeline is alchemy-owned — auto-inject tier.
+              // `server: { takeover: false }` downgrades to "external" in
+              // the engine's collect-only stamp.
+              runtimeDelivery: "wrapper",
+              vite: {
+                rootDir: props.rootDir,
+                memo: props.memo,
+                viteEnvironments: props.viteEnvironments,
+              },
+            };
           }),
-        ),
-      )) as any;
+          impl,
+        )) as any;

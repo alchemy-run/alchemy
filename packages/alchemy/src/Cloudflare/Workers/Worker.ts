@@ -564,6 +564,40 @@ export interface WorkerVersionOptions {
   tag?: string;
 }
 
+/**
+ * How an effectful Website's Effect program is delegated requests by the
+ * framework-built server bundle. Only meaningful when an impl is combined
+ * with a framework source (`vite`, an external `source` provider, or a
+ * prebuilt `bundle: false` artifact) — the "collect-only" mode where the
+ * framework's own build produces the deployed bundle and the impl runs at
+ * plan time for binding collection.
+ */
+export interface WorkerServerOptions {
+  /**
+   * Path globs the Effect program's `fetch` handler owns. Compiled into
+   * `assets.runWorkerFirst` rules (merged with any user rules) so matching
+   * requests route through the Worker ahead of the static-asset layer.
+   * `["/*"]` is middleware mode — the Effect fetch sees every request.
+   * @default ["/api/*"]
+   */
+  routes?: string[];
+  /**
+   * Verify at deploy time that the framework server bundle actually mounts
+   * the `alchemy/serve` bridge (the wiring handshake — a sentinel scan over
+   * the built bundle). Set `false` to skip the scan for exotic setups.
+   * @default true
+   */
+  verify?: boolean;
+  /**
+   * Whether alchemy may take over the framework's server entry to deliver
+   * the runtime half automatically (the auto-inject tier). Set `false` to
+   * force the explicit tier: the framework bundle deploys byte-for-byte
+   * and you mount the program yourself via `alchemy/serve`.
+   * @default the framework integration's tier (auto where supported)
+   */
+  takeover?: boolean;
+}
+
 export interface WorkerProps<
   // PERF: unconstrained for the same reason as `Worker<Bindings>` above —
   // the `extends WorkerBindingProps` proof is expensive for generic mapped
@@ -644,6 +678,21 @@ export interface WorkerProps<
    * `notFoundHandling` (including single-page-application fallback) itself.
    */
   assets?: Assets;
+  /**
+   * Routing and delivery options for an Effect program combined with a
+   * framework source (an effectful Website). See {@link WorkerServerOptions}.
+   */
+  server?: WorkerServerOptions;
+  /**
+   * How the impl's runtime half reaches the deployed bundle when combined
+   * with a framework source: `"wrapper"` (the source generates the entry
+   * wrapper — auto tier) or `"external"` (the framework bundle deploys
+   * byte-for-byte and the user mounts `alchemy/serve` — explicit tier).
+   * Stamped on the resolved props by the engine's collect-only mode;
+   * Website constructs pass their tier default. Do not set manually.
+   * @internal
+   */
+  runtimeDelivery?: "external" | "wrapper";
   /** @internal used by Cloudflare.Website.Vite resource */
   vite?: ViteOptions;
   /**
@@ -1289,6 +1338,188 @@ export const isSelf = (value: unknown): value is Self =>
   value !== null &&
   "~alchemy/Kind" in value &&
   (value as Self)["~alchemy/Kind"] === "Cloudflare.Workers.Self";
+
+/** The default URL scope an effectful Website's Effect fetch owns. */
+export const DEFAULT_SERVER_ROUTES = ["/api/*"];
+
+/**
+ * A `server.routes` configuration that can never work: invalid route
+ * globs, or a routing setup that makes the impl's fetch handler
+ * unreachable (SPA fallback answering every miss with `index.html` while
+ * worker-first routing is explicitly disabled). Raised as a defect at
+ * plan time.
+ */
+export class WorkerServerRoutingError extends Data.TaggedError(
+  "WorkerServerRoutingError",
+)<{
+  message: string;
+  workerId: string;
+}> {}
+
+/**
+ * The impl registered entry-level exports (Durable Object / Workflow
+ * classes) but the resolved delivery is `"external"` — the framework
+ * bundle deploys byte-for-byte, so there is no entry seam to emit the
+ * exports through. Raised as a defect at plan time.
+ */
+export class WorkerExportsDeliveryError extends Data.TaggedError(
+  "WorkerExportsDeliveryError",
+)<{
+  message: string;
+  workerId: string;
+  exports: string[];
+}> {}
+
+/**
+ * True when the Worker's deployed bundle is produced by a framework
+ * source rather than alchemy's own effect-entry bundler: the vite
+ * pipeline, an external `source` provider, or a prebuilt `bundle: false`
+ * artifact. An impl combined with such a source runs in "collect-only"
+ * mode — the init Effect executes at plan time for binding collection,
+ * and the framework bundle is left untouched.
+ *
+ * @internal
+ */
+export const isFrameworkSource = (props: WorkerProps): boolean =>
+  props.vite !== undefined ||
+  props.source !== undefined ||
+  (props.bundle === false && props.main !== undefined);
+
+const isEntryExport = (value: unknown): boolean =>
+  typeof value === "object" &&
+  value !== null &&
+  "kind" in value &&
+  ((value as { kind: unknown }).kind === "durableObject" ||
+    (value as { kind: unknown }).kind === "workflow");
+
+/**
+ * Finalize an impl-carrying Worker's resolved props (the Platform
+ * `finalizeProps` hook). No-op for classic effect Workers (rolldown owns
+ * the whole entry) and at runtime (the bridges re-evaluate the impl path
+ * inside deployed bundles). For collect-only Workers (impl + framework
+ * source) it:
+ *
+ * 1. stamps `runtimeDelivery` — `server.takeover: false` forces the
+ *    explicit tier (`"external"`); otherwise the Website construct's tier
+ *    default (carried on `props.runtimeDelivery`) wins, falling back to
+ *    `"wrapper"` for the alchemy-owned vite pipeline and `"external"`
+ *    for everything else;
+ * 2. compiles `server.routes` (default `["/api/*"]`) into
+ *    `assets.runWorkerFirst` rules when the impl serves a `fetch`
+ *    handler — merged with user rules; an explicit `runWorkerFirst`
+ *    boolean is honored, except that SPA fallback + explicit
+ *    `runWorkerFirst: false` makes the handlers unreachable and
+ *    fails fast;
+ * 3. rejects entry-level exports (Durable Objects / Workflows) when the
+ *    resolved delivery is `"external"` — a byte-for-byte framework
+ *    bundle has no entry seam to emit them through.
+ */
+const finalizeWorkerProps = (
+  id: string,
+  props: WorkerProps,
+  runtimeContext: WorkerRuntimeContext,
+): Effect.Effect<WorkerProps> =>
+  Effect.suspend(() => {
+    if (globalThis.__ALCHEMY_RUNTIME__) {
+      return Effect.succeed(props);
+    }
+    // Collect-only mode is the framework-source case. A rolldown-bundled
+    // effect Worker (e.g. StaticSite with an impl — the compiled program
+    // IS the worker in front of the assets) still compiles a declared
+    // `server` prop into routing rules, but is never stamped: the effect
+    // virtual entry owns the whole bundle.
+    const collectOnly = isFrameworkSource(props);
+    if (!collectOnly && props.server === undefined) {
+      return Effect.succeed(props);
+    }
+    const runtimeDelivery: "external" | "wrapper" | undefined = !collectOnly
+      ? undefined
+      : props.server?.takeover === false
+        ? "external"
+        : (props.runtimeDelivery ?? (props.vite ? "wrapper" : "external"));
+
+    const entryExports = Object.entries(props.exports ?? {})
+      .filter(([, value]) => isEntryExport(value))
+      .map(([name]) => name);
+    if (runtimeDelivery === "external" && entryExports.length > 0) {
+      return Effect.die(
+        new WorkerExportsDeliveryError({
+          message:
+            `Worker "${id}" exports entry-level classes (${entryExports.join(", ")}) ` +
+            `but its runtime delivery is "external" — the framework-built bundle ` +
+            `deploys byte-for-byte, so there is no entry seam to emit the exports ` +
+            `through. Remove \`server: { takeover: false }\` to let the framework ` +
+            `integration generate the entry wrapper, or move the Durable Object / ` +
+            `Workflow classes to a dedicated Effect Worker.`,
+          workerId: id,
+          exports: entryExports,
+        }),
+      );
+    }
+
+    // `shape()` is only populated when init returned a served shape
+    // (fetch and/or RPC methods); a pure-exports impl serves nothing.
+    const shape = runtimeContext.shape() as Record<string, unknown> | undefined;
+    const hasFetch = shape?.fetch !== undefined;
+    let assets: WorkerProps["assets"] = props.assets;
+    if (hasFetch) {
+      const routes = props.server?.routes ?? DEFAULT_SERVER_ROUTES;
+      const invalid = routes.filter(
+        (route) => !(route.startsWith("/") || route.startsWith("!/")),
+      );
+      if (invalid.length > 0) {
+        return Effect.die(
+          new WorkerServerRoutingError({
+            message:
+              `Worker "${id}" has invalid server.routes ${JSON.stringify(invalid)}: ` +
+              `rules must start with "/" (or "!/" for negative rules), e.g. "/api/*".`,
+            workerId: id,
+          }),
+        );
+      }
+      // A framework source's `assets` may be config-only (no `directory` —
+      // the build supplies it), so the merged shape is cast back onto the
+      // props union below.
+      const config: AssetsProps | AssetsWithHash | undefined =
+        typeof assets === "string" ? { directory: assets } : assets;
+      const runWorkerFirst = config?.runWorkerFirst;
+      if (runWorkerFirst === undefined) {
+        assets = { ...config, runWorkerFirst: routes } as WorkerAssetsConfig;
+      } else if (runWorkerFirst === false) {
+        // Explicit opt-out is the user's billing choice — honored, unless
+        // the SPA fallback would answer every miss with index.html and
+        // the Effect fetch could never run.
+        if (config?.notFoundHandling === "single-page-application") {
+          return Effect.die(
+            new WorkerServerRoutingError({
+              message:
+                `Worker "${id}" combines an Effect fetch handler with ` +
+                `\`notFoundHandling: "single-page-application"\` and an explicit ` +
+                `\`runWorkerFirst: false\` — the asset layer answers every miss ` +
+                `with index.html, so the handlers are unreachable. Remove ` +
+                `\`runWorkerFirst: false\` (server.routes are compiled into ` +
+                `worker-first rules automatically) or route the API paths ` +
+                `worker-first yourself.`,
+              workerId: id,
+            }),
+          );
+        }
+      } else if (Array.isArray(runWorkerFirst)) {
+        const merged = [...runWorkerFirst];
+        for (const route of routes) {
+          if (!merged.includes(route)) merged.push(route);
+        }
+        assets = { ...config, runWorkerFirst: merged } as WorkerAssetsConfig;
+      }
+      // `runWorkerFirst: true` already routes everything worker-first.
+    }
+
+    return Effect.succeed(
+      runtimeDelivery === undefined
+        ? { ...props, assets }
+        : { ...props, assets, runtimeDelivery },
+    );
+  });
 
 /**
  * A Cloudflare Worker host with deploy-time binding support and runtime export
@@ -2245,6 +2476,8 @@ export const Worker: ResourceClassLike<Worker> &
     onCreate: (resource, props) =>
       bindWorkerAsyncBindings(resource as Worker, props),
     createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
+    finalizeProps: (id, props, runtimeContext) =>
+      finalizeWorkerProps(id, props, runtimeContext as WorkerRuntimeContext),
   },
   { URL },
 );

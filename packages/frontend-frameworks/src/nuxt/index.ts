@@ -36,6 +36,7 @@ export {
   type NuxtKitModule,
   type NuxtNitroContext,
   type NuxtOptions,
+  type NuxtServerHandler,
   type NuxtTarget,
   type NuxtTargetConfig,
   type NuxtTargetInput,

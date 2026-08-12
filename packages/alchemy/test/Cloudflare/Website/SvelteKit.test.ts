@@ -12,6 +12,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import { pathToFileURL } from "node:url";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains, expectUrlRedirect } from "../Utils/Http.ts";
@@ -495,6 +496,142 @@ describe.concurrent("SvelteKit", () => {
 
         yield* stack.destroy();
         yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+      }).pipe(logLevel),
+    { timeout: 360_000 },
+  );
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Effectful SvelteKit (DESIGN §6.2b): the site class carries an Effect
+  // program whose fetch owns `/api/*` — delivered by the generated worker
+  // shim's effect arm (wrapper tier), with the KV capability binding
+  // collected at plan time. One worker serves kit SSR + the effect API.
+  // ─────────────────────────────────────────────────────────────────────
+
+  const effectFixtureDir = pathe.resolve(
+    import.meta.dirname,
+    "fixtures",
+    "sveltekit-effect-app",
+  );
+
+  test.provider(
+    "SvelteKit effectful: one worker serves the Effect fetch (KV binding, no shim edge-cache) and kit SSR/passthrough over HTTPS",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
+        yield* stack.destroy();
+
+        const rootDir = yield* cloneFixture(effectFixtureDir, {
+          prefix: "alchemy-sveltekit-effect-",
+          tempRoot,
+          entries: ["package.json", "src"],
+        });
+
+        // The site module is cloned with the fixture and imported
+        // dynamically from the clone (its `rootDir` prop derives from its
+        // own location); the deployed shim re-imports the same module by
+        // absolute path inside workerd.
+        const siteModule = (yield* Effect.tryPromise(
+          () =>
+            import(pathToFileURL(pathe.join(rootDir, "src", "site.ts")).href),
+        )) as typeof import("./fixtures/sveltekit-effect-app/src/site.ts");
+
+        const { site, users } = yield* stack.deploy(
+          Effect.gen(function* () {
+            const users = yield* siteModule.Users;
+            const site = yield* siteModule.default;
+            return { site, users };
+          }),
+        );
+
+        expect(site.url).toBeDefined();
+        expect(site.url).toMatch(/^https:\/\//);
+        expect(users.namespaceId).toBeDefined();
+        expect(users.namespaceId).not.toMatch(/^dev:/);
+        yield* expectWorkerExists(site.workerName, accountId);
+
+        // ── Effect surface over HTTPS: /api/effect/kv round-trips the KV
+        // capability binding collected at plan time ──────────────────────
+        const kvKey = "greeting";
+        // Random payload — a stale value from an earlier run can never
+        // satisfy the read.
+        const kvValue = `sveltekit-effect-${crypto.randomUUID()}`;
+        yield* putTextReady(`${site.url!}/api/effect/kv?key=${kvKey}`, kvValue);
+        const kvRead = yield* fetchJsonReady<{ value: string | null }>(
+          `${site.url!}/api/effect/kv?key=${kvKey}`,
+        ).pipe(
+          Effect.filterOrFail(
+            (r) => r.value === kvValue,
+            (r) => new Error(`kv value not visible yet: ${JSON.stringify(r)}`),
+          ),
+          Effect.retry({
+            schedule: Schedule.exponential("1 second", 1.5),
+            times: 8,
+          }),
+        );
+        expect(kvRead.value).toBe(kvValue);
+
+        // Out-of-band: the effect handler's write landed in the REAL
+        // namespace (distilled cloud API).
+        const cloudValue = yield* kv
+          .getNamespaceValue({
+            accountId,
+            namespaceId: users.namespaceId,
+            keyName: kvKey,
+          })
+          .pipe(
+            Effect.flatMap((res) =>
+              Effect.tryPromise(() =>
+                new Response(
+                  Stream.toReadableStream(res.body) as BodyInit,
+                ).text(),
+              ),
+            ),
+            Effect.retry({
+              schedule: Schedule.exponential("1 second", 1.5),
+              times: 5,
+            }),
+          );
+        expect(cloudValue).toBe(kvValue);
+
+        // ── Open question §11.4 pinned: effect responses dispatch BEFORE
+        // the shim's pragma cache, so even a `cache-control: public`
+        // effect response is never served from (or saved to) the edge
+        // cache — two plain GETs must produce different bodies ───────────
+        const uuid1 = yield* fetchJsonReady<{ id: string }>(
+          `${site.url!}/api/effect/uuid`,
+        );
+        const uuid2 = yield* fetchJsonReady<{ id: string }>(
+          `${site.url!}/api/effect/uuid`,
+        );
+        expect(uuid1.id).toMatch(/^[0-9a-f-]{36}$/);
+        expect(uuid2.id).toMatch(/^[0-9a-f-]{36}$/);
+        expect(uuid2.id).not.toBe(uuid1.id);
+
+        // ── Passthrough: a KIT endpoint INSIDE /api/* still answers (the
+        // effect fetch declines with `Serve.passthrough`; the shim falls
+        // through to kit's handler) ──────────────────────────────────────
+        const ping = yield* fetchJsonReady<{
+          via: string;
+          binding: string | null;
+        }>(`${site.url!}/api/ping`);
+        expect(ping.via).toBe("kit");
+        expect(ping.binding).toBe(siteModule.BINDING_MARKER);
+
+        // ── Framework surface: kit SSR outside the effect routes, with
+        // `platform.env` intact ──────────────────────────────────────────
+        yield* expectUrlContains(
+          `${site.url!}/`,
+          `binding:${siteModule.BINDING_MARKER}`,
+          {
+            timeout: "120 seconds",
+            label: "effectful sveltekit: kit SSR home",
+          },
+        );
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+        yield* waitForNamespaceToBeDeleted(users.namespaceId, accountId);
       }).pipe(logLevel),
     { timeout: 360_000 },
   );

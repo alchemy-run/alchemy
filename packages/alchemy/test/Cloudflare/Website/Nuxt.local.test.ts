@@ -36,6 +36,8 @@ const fixtureEntries = [
   "public",
 ];
 
+const effectFixtureEntries = [...fixtureEntries, "site.ts"];
+
 const memoInclude = [
   "app/**",
   "server/**",
@@ -260,7 +262,106 @@ describe.concurrent("Nuxt dev", () => {
       }).pipe(logLevel),
     { timeout: 300_000 },
   );
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Effect entry takeover (DESIGN Amendment §2.1.2), dev half: the impl's
+  // fetch is auto-mounted as an alchemy-generated nitro middleware
+  // (routes-scoped `alchemy/serve/nitro` toEventHandler) inside nitro's
+  // dev SSR worker thread — zero framework-file edits. The KV capability
+  // collected at plan resolves through the platform proxy to the LOCAL
+  // simulator (`dev:` namespace id — proof no cloud call ran). Non-fetch
+  // handlers (queue/scheduled/DO classes) are production-only on Nuxt:
+  // dev runs nitro's dev preset entry, not the generated deploy entry.
+  // ─────────────────────────────────────────────────────────────────────
+  test.provider(
+    "Nuxt dev: effectful site serves /api/* through the injected effect middleware",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const rootDir = yield* cloneFixture(fixtureDir, {
+          prefix: "alchemy-nuxt-effect-dev-",
+          tempRoot,
+          entries: effectFixtureEntries,
+        });
+
+        // The site module is imported from the CLONE (its `main:
+        // import.meta.url` anchor must point at the tree nitro serves),
+        // so the class is loaded dynamically, per test run.
+        const site = yield* importEffectSite(rootDir, "site.ts");
+
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            const attrs = yield* site.default;
+            const kv = yield* site.EffectKv!;
+            return { attrs, kv };
+          }),
+        );
+
+        // Local identity: dev proxy URL + `dev:` KV namespace id — the
+        // effect-collected binding was served by the local simulator.
+        expect(deployed.attrs.url).toMatch(/^http:\/\/localhost:\d+/);
+        expect(isLocalId(deployed.kv.namespaceId)).toBe(true);
+
+        const base = deployed.attrs.url!;
+
+        // Effect fetch through the injected middleware.
+        const marker = yield* fetchJsonReady<{ marker: string }>(
+          `${base}/api/effect/marker`,
+        );
+        expect(marker.marker).toBe("nuxt-effect-dev");
+
+        // KV capability round-trip against the local simulator.
+        const put = yield* putJsonReady<{ put: boolean }>(
+          `${base}/api/effect/kv?key=dev-key&value=dev-value`,
+        );
+        expect(put.put).toBe(true);
+        const got = yield* fetchJsonReady<{ value: string | null }>(
+          `${base}/api/effect/kv?key=dev-key`,
+        );
+        expect(got.value).toBe("dev-value");
+
+        // Passthrough: /api/hello is INSIDE the effect routes but
+        // unclaimed — the typed RouteNotFound decline lets nitro's own
+        // scanned route answer.
+        yield* expectUrlContains(`${base}/api/hello`, "api-route-ok", {
+          timeout: "60 seconds",
+          label: "nitro route via effect passthrough",
+        });
+
+        // Nuxt SSR outside the effect routes is untouched.
+        yield* expectUrlContains(`${base}/`, "NUXT_PAGE_MARKER", {
+          timeout: "60 seconds",
+          label: "nuxt dev SSR page alongside the effect middleware",
+        });
+
+        yield* stack.destroy();
+      }).pipe(logLevel),
+    { timeout: 300_000 },
+  );
 });
+
+/** Structural shape of a dynamically imported effect site fixture module. */
+interface EffectSiteModule {
+  readonly default: Effect.Effect<{
+    url?: string | undefined;
+    workerName: string;
+  }>;
+  readonly EffectKv?: Effect.Effect<{ namespaceId: string }>;
+}
+
+/** Import a site module from a fixture clone (path computed at runtime). */
+const importEffectSite = (rootDir: string, file: string) =>
+  Effect.tryPromise({
+    try: async () => {
+      const { pathToFileURL } = await import("node:url");
+      return (await import(
+        pathToFileURL(pathe.join(rootDir, file)).href
+      )) as EffectSiteModule;
+    },
+    catch: (cause) =>
+      new Error(`failed to import effect site module ${file}: ${cause}`),
+  });
 
 /** GET `url` until it answers 200 with a JSON body. */
 const fetchJsonReady = <T>(url: string) =>

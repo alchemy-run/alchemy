@@ -23,6 +23,7 @@ import { havePropsChanged, isResolved, stripEffects } from "../../Diff.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as Provider from "../../Provider.ts";
 import { type ResourceBinding } from "../../Resource.ts";
+import { SERVE_SENTINEL } from "../../Serve/constants.ts";
 import { Stack } from "../../Stack.ts";
 import { cachedFunction } from "../../Util/cached-function.ts";
 import { initialCwd } from "../../Util/Node.ts";
@@ -43,7 +44,9 @@ import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
 import { makeSourceContext, resolveSource } from "./Source.ts";
+import { makeViteEffectEntry } from "./ViteChild.shared.ts";
 import {
+  isFrameworkSource,
   isSelfUrl,
   Worker,
   type ViteOptions,
@@ -192,6 +195,92 @@ export class WorkerVersionConfigError extends Data.TaggedError(
 )<{
   message: string;
 }> {}
+
+/**
+ * The wiring handshake failed: this Worker carries an Effect program in
+ * collect-only `"external"` delivery — the framework-built bundle deploys
+ * byte-for-byte and the user is expected to mount the program via
+ * `alchemy/serve` in the framework's server entry — but the built bundle
+ * does not contain the serve sentinel, so the handlers would be dead code
+ * in production. The message carries a per-framework fix-it snippet.
+ * Opt out of the scan with `server: { verify: false }`.
+ */
+export class MissingServeMountError extends Data.TaggedError(
+  "MissingServeMountError",
+)<{
+  message: string;
+  workerId: string;
+  workerName: string;
+}> {}
+
+/**
+ * The per-framework "mount the bridge" snippet for
+ * {@link MissingServeMountError}, keyed off the Worker's source shape.
+ */
+const serveMountFixIt = (props: WorkerProps): string => {
+  const provider = props.source?.provider ?? "";
+  if (provider.includes("/nuxt/")) {
+    return (
+      `// server/middleware/alchemy.ts\n` +
+      `import { toEventHandler } from "alchemy/serve/nitro";\n` +
+      `import Site from "../../site.ts";\n` +
+      `export default toEventHandler(Site);`
+    );
+  }
+  if (provider.includes("/nextjs/")) {
+    return (
+      `// app/api/[[...slug]]/route.ts\n` +
+      `import { toRouteHandler } from "alchemy/serve/next";\n` +
+      `import Site from "@/site";\n` +
+      `const handler = toRouteHandler(Site);\n` +
+      `export { handler as GET, handler as POST, handler as PUT, handler as PATCH,\n` +
+      `         handler as DELETE, handler as HEAD, handler as OPTIONS };`
+    );
+  }
+  if (provider.includes("/sveltekit/")) {
+    return (
+      `// src/hooks.server.ts\n` +
+      `import { toHandle } from "alchemy/serve/sveltekit";\n` +
+      `import Site from "./site.ts";\n` +
+      `export const handle = toHandle(Site);`
+    );
+  }
+  if (provider.includes("/astro/")) {
+    return (
+      `// src/fetch.ts\n` +
+      `import { toFetchable } from "alchemy/serve/astro";\n` +
+      `import Site from "./site.ts";\n` +
+      `export default toFetchable(Site);`
+    );
+  }
+  return (
+    `// your framework's server entry (the module the deployed bundle is built from)\n` +
+    `import { Serve } from "alchemy/serve";\n` +
+    `import Site from "./site.ts";\n` +
+    `const site = Serve.make(Site);\n` +
+    `export default {\n` +
+    `  fetch: async (request) => (await site.match(request)) ?? frameworkHandler.fetch(request),\n` +
+    `};`
+  );
+};
+
+/** File extensions never scanned for the serve sentinel (binary modules). */
+const SENTINEL_SKIP_EXTENSIONS = /\.(wasm|bin)$/;
+
+/**
+ * Scan a built server bundle's modules for the `alchemy/serve` sentinel
+ * (`SERVE_SENTINEL`), the deploy-time half of the wiring handshake. The
+ * files are already in memory for upload, so the scan is a string search
+ * away from free.
+ */
+const scanForServeSentinel = Effect.fn(function* (files: File[] | undefined) {
+  for (const file of files ?? []) {
+    if (SENTINEL_SKIP_EXTENSIONS.test(file.name)) continue;
+    const text = yield* Effect.promise(() => file.text());
+    if (text.includes(SERVE_SENTINEL)) return true;
+  }
+  return false;
+});
 
 /**
  * Resolve the parent script *name* from a resolved `version.parent` prop or
@@ -2197,6 +2286,9 @@ export const LiveWorkerProvider = () =>
               compatibilityFlags: compatibility.flags,
               viteEnvironments: props.vite?.viteEnvironments,
             },
+            // Effectful Website (wrapper delivery): the deployed entry is
+            // the generated `virtual:alchemy:website-entry` wrapper.
+            makeViteEffectEntry(props),
           );
         const [assets, bundle, input] = yield* Effect.all(
           [
@@ -2980,6 +3072,46 @@ export const LiveWorkerProvider = () =>
           skipAssetsRead: prebuiltAssets?.skip,
           selfUrl,
         });
+        // The wiring handshake (collect-only mode): with `"external"`
+        // delivery the framework bundle deploys byte-for-byte and the user
+        // must have mounted the Effect program via `alchemy/serve` — verify
+        // the built bundle actually contains the serve sentinel before
+        // uploading, or the collected handlers would be dead code. The
+        // inverse (sentinel present but no impl — the entry is wired but
+        // the construct's third argument is missing) is only worth a
+        // warning: the bridge declines at runtime for lack of env markers.
+        // `"wrapper"` delivery skips the scan (the source generates the
+        // mount); `server: { verify: false }` opts out entirely.
+        if (news.server?.verify !== false && isFrameworkSource(news)) {
+          if (news.runtimeDelivery === "external") {
+            const mounted = yield* scanForServeSentinel(bundle.files);
+            if (!mounted) {
+              return yield* Effect.fail(
+                new MissingServeMountError({
+                  message:
+                    `Worker "${id}" collects bindings from an Effect program, but the ` +
+                    `framework-built server bundle never mounts it — the deployed ` +
+                    `handlers would be dead code. Mount the program in the ` +
+                    `framework's server entry:\n\n${serveMountFixIt(news)}\n\n` +
+                    `(or set server: { verify: false } to skip this check).`,
+                  workerId: id,
+                  workerName: name,
+                }),
+              );
+            }
+          } else if (news.isExternal) {
+            const mounted = yield* scanForServeSentinel(bundle.files);
+            if (mounted) {
+              yield* Effect.logWarning(
+                `Worker "${id}"'s server bundle mounts alchemy/serve, but the ` +
+                  `construct declares no Effect program (no third argument) — ` +
+                  `the mount will decline every request at runtime. Pass the ` +
+                  `program as the construct's third argument so its bindings ` +
+                  `and env are collected at deploy time.`,
+              );
+            }
+          }
+        }
         // When the caller supplied a precomputed hash (e.g. via
         // `Command.Build`), store *that* hash in output state so the
         // next diff can short-circuit by comparing it directly. The

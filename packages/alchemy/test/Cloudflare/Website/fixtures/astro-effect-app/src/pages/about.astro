@@ -1,0 +1,20 @@
+---
+// Prerendered at build time inside the workerd prerender worker — the
+// effect tier's guard case: the prerender environment keeps astro's
+// default fetchable (the effect wrapper only applies to `ssr`/`astro`),
+// so prerendering must succeed without ever loading the effect module
+// graph or resolving alchemy bindings.
+export const prerender = true;
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>About — Astro Effect Fixture</title>
+  </head>
+  <body>
+    <h1>About</h1>
+    <p id="mode">astro-effect-prerendered</p>
+    <p><a href="/">home</a></p>
+  </body>
+</html>

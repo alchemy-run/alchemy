@@ -31,6 +31,10 @@ const staticFixtureDir = pathe.resolve(
   import.meta.dirname,
   "fixtures/astro-static-app",
 );
+const effectFixtureDir = pathe.resolve(
+  import.meta.dirname,
+  "fixtures/astro-effect-app",
+);
 
 // Keep the temp clone under the alchemy package so the project root stays
 // within the workspace (same constraint as the Vite tests) and so the
@@ -857,5 +861,149 @@ describe.concurrent("Astro", () => {
         yield* waitForWorkerToBeDeleted(site.workerName, accountId);
       }).pipe(logLevel),
     { timeout: 360_000 },
+  );
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Effectful Website (DESIGN §6.2c): one Worker serves Astro SSR,
+  // prerendered/static assets, AND the Effect program's `/api/*` fetch —
+  // delivered by the generated fetchable wrapper the integration
+  // pre-resolves `virtual:astro:fetchable` to. The KV capability binding
+  // is collected at plan and served from the runtime env; passthrough
+  // delegates into Astro's own routes; `about.astro` prerendering inside
+  // the workerd prerender worker (which keeps astro's default fetchable)
+  // is the build-time guard case.
+  // ─────────────────────────────────────────────────────────────────────
+
+  test.provider(
+    "Astro: effectful Website — one Worker serves the Effect API, SSR, and prerendered assets",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
+        yield* stack.destroy();
+
+        // Private clone; the clone's own `site.ts` is the program module,
+        // so the generated wrapper imports the clone (never the
+        // source-controlled fixture) and concurrent suites can't share a
+        // build directory.
+        const rootDir = yield* cloneFixture(effectFixtureDir, {
+          prefix: "alchemy-astro-effect-",
+          tempRoot,
+          entries: [
+            "astro.config.mjs",
+            "package.json",
+            "public",
+            "site.ts",
+            "src",
+          ],
+        });
+        const siteModule = (yield* Effect.promise(
+          () => import(pathe.join(rootDir, "site.ts")),
+        )) as typeof import("./fixtures/astro-effect-app/site.ts");
+
+        const marker = `astro-effect-${Date.now()}`;
+
+        const { site, users } = yield* stack.deploy(
+          Effect.gen(function* () {
+            const site = yield* siteModule.default;
+            const users = yield* siteModule.Users;
+            return { site, users };
+          }),
+        );
+
+        expect(site.url).toBeDefined();
+        expect(site.hash?.input).toBeDefined();
+        // The framework build owns the bundle (collect-only mode): a
+        // server bundle was produced and deployed.
+        expect(site.hash?.bundle).toBeDefined();
+        yield* expectWorkerExists(site.workerName, accountId);
+
+        // SSR page outside `server.routes` — Astro serves it as usual.
+        yield* expectUrlContains(`${site.url!}/`, "astro-effect-home", {
+          timeout: "120 seconds",
+          label: "effect site SSR home",
+        });
+
+        // Prerendered page served from static assets — built inside the
+        // workerd prerender worker, which never loads the effect wrapper
+        // (the guard case: the build completing and this page serving
+        // proves prerendering stayed a no-op for the effect tier).
+        yield* expectUrlContains(
+          `${site.url!}/about/`,
+          "astro-effect-prerendered",
+          {
+            timeout: "60 seconds",
+            label: "effect site prerendered page",
+          },
+        );
+
+        // Plain static asset from public/.
+        yield* expectUrlContains(
+          `${site.url!}/static.txt`,
+          "astro-effect-static-asset",
+          {
+            timeout: "60 seconds",
+            label: "effect site static asset",
+          },
+        );
+
+        // The effect fetch owns `/api/*`: a plain effect-served route
+        // (also proves `server.routes` compiled into `runWorkerFirst` —
+        // without worker-first routing the asset layer would answer).
+        yield* expectUrlContains(
+          `${site.url!}/api/marker`,
+          "astro-effect-fetch",
+          {
+            timeout: "60 seconds",
+            label: "effect fetch route",
+          },
+        );
+
+        // KV round-trip through the capability binding (the fixture's
+        // `/api/kv` implements the same contract as `kvRoundTrip`).
+        yield* kvRoundTrip(site.url!, "astro-effect-key", marker);
+
+        // Out-of-band: the write landed in the REAL namespace the impl
+        // bound at plan time.
+        expect(users.namespaceId).toBeDefined();
+        const observed = yield* kv
+          .getNamespaceValue({
+            accountId,
+            namespaceId: users.namespaceId,
+            keyName: "astro-effect-key",
+          })
+          .pipe(
+            Effect.flatMap((res) =>
+              Effect.tryPromise(() =>
+                new Response(
+                  Stream.toReadableStream(res.body) as BodyInit,
+                ).text(),
+              ),
+            ),
+            Effect.retry({
+              schedule: Schedule.exponential("1 second", 1.5),
+              times: 8,
+            }),
+          );
+        expect(observed).toBe(marker);
+
+        // Passthrough: `/api/astro-echo` is inside the effect scope but
+        // the program declines it — Astro's own endpoint answers through
+        // the wrapper's fallback.
+        yield* expectUrlContains(
+          `${site.url!}/api/astro-echo`,
+          "astro-endpoint-echo",
+          {
+            timeout: "60 seconds",
+            label: "passthrough to astro endpoint",
+          },
+        );
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+        // Destroy must also clean up the impl-bound namespace.
+        yield* waitForNamespaceToBeDeleted(users.namespaceId, accountId);
+      }).pipe(logLevel),
+    { timeout: 420_000 },
   );
 });

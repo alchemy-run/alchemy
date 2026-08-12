@@ -30,6 +30,11 @@ const staticFixtureDir = pathe.resolve(
   "fixtures",
   "astro-static-app",
 );
+const effectFixtureDir = pathe.resolve(
+  import.meta.dirname,
+  "fixtures",
+  "astro-effect-app",
+);
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
 class DevResponseMismatch extends Data.TaggedError("DevResponseMismatch")<{
@@ -278,6 +283,135 @@ describe.concurrent("Astro dev", () => {
           `${site.url!}/definitely-not-a-page`,
           404,
           "static-404",
+        );
+
+        yield* stack.destroy();
+      }).pipe(logLevel),
+    { timeout: 300_000 },
+  );
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Effectful Website (DESIGN §6.2c): the Astro construct's third argument
+  // is an Effect program whose `fetch` owns `server.routes` — delivered in
+  // dev through the generated fetchable wrapper running in the ssr
+  // environment inside workerd. The KV capability binding collected at
+  // plan resolves to the LOCAL simulator (`dev:` id — proof no cloud call
+  // ran); passthrough delegates into Astro's own routes.
+  // ─────────────────────────────────────────────────────────────────────
+
+  test.provider(
+    "Astro dev: effectful Website serves /api/* through the Effect fetch with local bindings",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        // Private clone; the clone's own `site.ts` is the program module
+        // (`main: import.meta.url` anchors the cloned path, so the
+        // generated fetchable wrapper imports the clone, not the source
+        // fixture).
+        const rootDir = yield* cloneFixture(effectFixtureDir, {
+          prefix: "alchemy-astro-effect-dev-",
+          tempRoot,
+          entries: [
+            "astro.config.mjs",
+            "package.json",
+            "public",
+            "site.ts",
+            "src",
+          ],
+        });
+        const siteModule = (yield* Effect.promise(
+          () => import(pathe.join(rootDir, "site.ts")),
+        )) as typeof import("./fixtures/astro-effect-app/site.ts");
+
+        const { site, users } = yield* stack.deploy(
+          Effect.gen(function* () {
+            const site = yield* siteModule.default;
+            const users = yield* siteModule.Users;
+            return { site, users };
+          }),
+        );
+
+        // Local identity: the site is served by the alchemy dev proxy, and
+        // the impl-bound namespace is emulated locally — a `dev:` id is
+        // proof no cloud call ran.
+        expect(site.url).toMatch(/^http:\/\/localhost:\d+/);
+        expect(isLocalId(users.namespaceId)).toBe(true);
+
+        // SSR page outside `server.routes` renders through Astro as usual.
+        yield* expectUrlContains(`${site.url!}/`, "astro-effect-home", {
+          timeout: "120 seconds",
+          label: "astro dev effect SSR home",
+        });
+
+        // The effect fetch owns `/api/*`: a plain effect-served route...
+        yield* expectStatusBody(
+          `${site.url!}/api/marker`,
+          200,
+          "astro-effect-fetch",
+        );
+
+        // ...and a KV round-trip through the capability binding against
+        // the LOCAL simulator.
+        yield* Effect.tryPromise({
+          try: async (signal) => {
+            const res = await fetch(
+              `${site.url!}/api/kv?key=dev-key&value=astro-effect-dev`,
+              { signal, method: "PUT", cache: "no-store" },
+            );
+            return { status: res.status, body: await res.text() };
+          },
+          catch: (e) =>
+            new DevResponseMismatch({
+              url: `${site.url!}/api/kv`,
+              detail: e instanceof Error ? e.message : String(e),
+            }),
+        }).pipe(
+          Effect.filterOrFail(
+            (r) => r.status === 200,
+            (r) =>
+              new DevResponseMismatch({
+                url: `${site.url!}/api/kv`,
+                detail: `PUT ${r.status} ${r.body.slice(0, 240)}`,
+              }),
+          ),
+          devRetry,
+        );
+        yield* expectStatusBody(
+          `${site.url!}/api/kv?key=dev-key`,
+          200,
+          '"value":"astro-effect-dev"',
+        );
+
+        // Passthrough: `/api/astro-echo` is inside the effect scope but
+        // the program declines it (`Serve.passthrough`) — Astro's own
+        // endpoint answers.
+        yield* expectStatusBody(
+          `${site.url!}/api/astro-echo`,
+          200,
+          "astro-endpoint-echo",
+        );
+
+        // Prerender-marked pages render on demand in dev (the guard case
+        // proper — the prerender worker never loading the effect graph —
+        // is pinned by the live build test).
+        yield* expectUrlContains(
+          `${site.url!}/about/`,
+          "astro-effect-prerendered",
+          {
+            timeout: "60 seconds",
+            label: "astro dev effect prerender route",
+          },
+        );
+
+        // Static asset from `public/`.
+        yield* expectUrlContains(
+          `${site.url!}/static.txt`,
+          "astro-effect-static-asset",
+          {
+            timeout: "60 seconds",
+            label: "astro dev effect static asset",
+          },
         );
 
         yield* stack.destroy();

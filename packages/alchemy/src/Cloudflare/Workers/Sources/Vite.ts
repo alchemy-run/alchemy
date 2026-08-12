@@ -18,10 +18,19 @@ import { hashDirectory, type MemoOptions } from "../../../Command/Memo.ts";
 import { findAvailablePort, initialCwd } from "../../../Util/Node.ts";
 import { sha256Object } from "../../../Util/sha256.ts";
 import { readAssets } from "../Assets.ts";
-import type { SourceDevHandle, SourceProvider } from "../Source.ts";
+import type {
+  SourceContext,
+  SourceDevHandle,
+  SourceProvider,
+} from "../Source.ts";
 import { runViteBuildChild } from "../ViteChild.ts";
+import {
+  makeViteEffectEntry,
+  type ViteEffectEntry,
+} from "../ViteChild.shared.ts";
 import type { ViteOptions } from "../Worker.ts";
 import { isWorkerLoader } from "../WorkerLoader.ts";
+import { WEBSITE_ENTRY_ID, websiteEntryPlugin } from "./ViteWebsiteEntry.ts";
 
 /**
  * This module statically imports `@alchemy.run/cloudflare-runtime/vite`
@@ -99,11 +108,78 @@ const makeViteLogger = (console: ConsoleService.Console): vite.Logger => {
  */
 const ALCHEMY_CLOUDFLARE_VITE_INJECTED = "ALCHEMY_CLOUDFLARE_VITE_INJECTED";
 
+/**
+ * Compose the Cloudflare plugin (and, for effectful Websites, the
+ * alchemy website-entry plugin) for a dev server or build. With a
+ * {@link ViteEffectEntry} present, the deployed entry becomes the generated
+ * `virtual:alchemy:website-entry` wrapper — `pluginOptions.main` is
+ * overridden (impl mode never forwards a custom vite entry, so nothing is
+ * lost) and the wrapper flows through the standard
+ * `\0distilled:worker-entry:` wrapping (unenv + HMR handshake).
+ */
+const composePlugins = (
+  pluginOptions: CloudflareVitePluginOptions,
+  effectEntry: ViteEffectEntry | undefined,
+): {
+  pluginOptions: CloudflareVitePluginOptions;
+  plugins: vite.PluginOption[];
+} => {
+  if (!effectEntry) {
+    return { pluginOptions, plugins: [cloudflare(pluginOptions)] };
+  }
+  const environments: [string, ...string[]] = [
+    pluginOptions.viteEnvironments?.entry ?? "ssr",
+    ...(pluginOptions.viteEnvironments?.children ?? []),
+  ];
+  const options = { ...pluginOptions, main: WEBSITE_ENTRY_ID };
+  return {
+    pluginOptions: options,
+    plugins: [
+      cloudflare(options),
+      websiteEntryPlugin({ entry: effectEntry, environments }),
+    ],
+  };
+};
+
+/**
+ * The vite module runner's websocket init route inside the dev workerd
+ * (`INIT_PATH` in cloudflare-runtime's module-runner). The dev worker's
+ * asset layer routes exactly like production — so with
+ * `notFoundHandling: "single-page-application"` (or any assets-first
+ * config) the init upgrade would be answered by the SPA fallback instead
+ * of the wrapper worker, and the module runner fails with "Expected 101".
+ * Force the infra path to the user worker via static routing; production
+ * never sees this path, so deploy behavior is untouched.
+ */
+const MODULE_RUNNER_ROUTE = "/__vite_module_runner/*";
+
+const withModuleRunnerRoute = (
+  worker: NonNullable<CloudflareVitePluginOptions["worker"]>,
+): NonNullable<CloudflareVitePluginOptions["worker"]> => {
+  if (!worker.assets || worker.assets.runWorkerFirst === true) {
+    return worker;
+  }
+  const routes = Array.isArray(worker.assets.runWorkerFirst)
+    ? worker.assets.runWorkerFirst
+    : [];
+  if (routes.includes(MODULE_RUNNER_ROUTE)) {
+    return worker;
+  }
+  return {
+    ...worker,
+    assets: {
+      ...worker.assets,
+      runWorkerFirst: [MODULE_RUNNER_ROUTE, ...routes],
+    },
+  };
+};
+
 export const viteDev = (
   rootDir: string = initialCwd,
   env: Record<string, unknown>,
   pluginOptions: CloudflareVitePluginOptions,
   serverOptions: vite.ServerOptions,
+  effectEntry?: ViteEffectEntry,
 ) =>
   Effect.gen(function* () {
     yield* Effect.sync(() => {
@@ -127,13 +203,22 @@ export const viteDev = (
             ).pipe(Effect.orDie),
           }
         : serverOptions;
+    const composed = composePlugins(
+      {
+        ...pluginOptions,
+        worker: pluginOptions.worker
+          ? withModuleRunnerRoute(pluginOptions.worker)
+          : pluginOptions.worker,
+      },
+      effectEntry,
+    );
     return yield* Effect.acquireRelease(
       ConsoleService.consoleWith((console) =>
         Effect.promise(async () => {
           const devServer = await vite.createServer({
             root: rootDir,
             define: getDefine(env),
-            plugins: [cloudflare(pluginOptions)],
+            plugins: composed.plugins,
             server,
             customLogger: makeViteLogger(console),
           });
@@ -163,6 +248,7 @@ export const viteBuild = (
   rootDir: string = initialCwd,
   env: Record<string, unknown>,
   pluginOptions: CloudflareVitePluginOptions,
+  effectEntry?: ViteEffectEntry,
 ) =>
   ConsoleService.consoleWith((console) =>
     Effect.gen(function* () {
@@ -177,6 +263,7 @@ export const viteBuild = (
             Object.entries(env).filter(([key]) => key.startsWith("VITE_")),
           ),
           main: pluginOptions.main,
+          entry: effectEntry,
           compatibilityDate: pluginOptions.compatibilityDate,
           compatibilityFlags: pluginOptions.compatibilityFlags,
           viteEnvironments: pluginOptions.viteEnvironments,
@@ -203,12 +290,14 @@ export const viteBuildInProcess = (
   rootDir: string,
   env: Record<string, unknown>,
   pluginOptions: CloudflareVitePluginOptions,
+  effectEntry?: ViteEffectEntry,
 ) =>
   Effect.gen(function* () {
     const outputPlugin = yield* viteBuildOutputPlugin({
       entryEnvironment: pluginOptions.viteEnvironments?.entry ?? "ssr",
     });
     const console = yield* ConsoleService.Console;
+    const composed = composePlugins(pluginOptions, effectEntry);
     yield* Effect.promise(async () => {
       process.env[ALCHEMY_CLOUDFLARE_VITE_INJECTED] = "1";
       const vite = await loadVite(rootDir);
@@ -216,7 +305,7 @@ export const viteBuildInProcess = (
         {
           root: rootDir,
           define: getDefine(env),
-          plugins: [cloudflare(pluginOptions), outputPlugin.plugin],
+          plugins: [...composed.plugins, outputPlugin.plugin],
           customLogger: makeViteLogger(console),
           // Disables the NATIVE rolldown progress reporter ("transforming…",
           // "rendering chunks…", "computing gzip size…"): it prints from
@@ -375,18 +464,39 @@ export const hashViteInput = Effect.fn(function* <E, R>(
  * imports it, so its ~0.5s module cost is only paid for vite-based
  * workers.
  */
+/**
+ * Wrapper-delivery entry for an effectful Website, derived from the
+ * source context (`SourceContext.entry` is stamped by the engine's
+ * collect-only mode). `undefined` for external workers and explicit-tier
+ * (`runtimeDelivery: "external"`) sites.
+ */
+const effectEntryOf = (ctx: SourceContext): ViteEffectEntry | undefined =>
+  ctx.entry.kind === "effect" && ctx.entry.mainPath !== undefined
+    ? makeViteEffectEntry({
+        main: ctx.entry.mainPath,
+        server: { routes: ctx.entry.routes },
+        exports: ctx.entry.exports,
+        runtimeDelivery: "wrapper",
+      })
+    : undefined;
+
 export const makeViteSource = (vite: ViteOptions): SourceProvider => ({
   ownsAssets: true,
   build: Effect.fn(function* (ctx) {
     const path = yield* Path.Path;
     const env = yield* resolveViteEnv(ctx.env ?? {});
     const { clientDirectory, serverBundle, externalWorkspaces } =
-      yield* viteBuild(vite.rootDir, env, {
-        main: vite.main,
-        compatibilityDate: ctx.compatibility.date,
-        compatibilityFlags: ctx.compatibility.flags,
-        viteEnvironments: vite.viteEnvironments,
-      });
+      yield* viteBuild(
+        vite.rootDir,
+        env,
+        {
+          main: vite.main,
+          compatibilityDate: ctx.compatibility.date,
+          compatibilityFlags: ctx.compatibility.flags,
+          viteEnvironments: vite.viteEnvironments,
+        },
+        effectEntryOf(ctx),
+      );
     const [assets, bundle, input] = yield* Effect.all(
       [
         clientDirectory
@@ -452,6 +562,7 @@ export const makeViteSource = (vite: ViteOptions): SourceProvider => ({
         context: ctx.runtimeContext,
       },
       { port: 0 },
+      effectEntryOf(ctx),
     );
     return {
       mode: "server",

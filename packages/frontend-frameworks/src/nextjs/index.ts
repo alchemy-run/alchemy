@@ -23,6 +23,18 @@ export {
   type NextjsWorkerConfig,
 } from "./Nextjs.ts";
 export {
+  EFFECT_MODULE_DIR,
+  EFFECT_MODULE_NAME,
+  EffectBundleError,
+  makeEffectEntrySource,
+  makeTakeoverWorkerSource,
+  probeOpenNextDoExports,
+  scanForServeSentinel,
+  SERVE_SENTINEL,
+  TAKEOVER_ENTRY_NAME,
+  type NextjsEffectEntry,
+} from "./EffectBundle.ts";
+export {
   RunnerError,
   runnerPath,
   runOpenNextBuild,

@@ -23,6 +23,7 @@ import * as NodeNet from "node:net";
 import * as NodePath from "node:path";
 import * as Bundle from "./Bundle.ts";
 import * as DevServer from "./DevServer.ts";
+import * as EffectBundle from "./EffectBundle.ts";
 import * as Runner from "./Runner.ts";
 
 /**
@@ -95,6 +96,14 @@ export interface NextjsFrameworkOptions {
     | undefined;
   /** Project root. Defaults to the process working directory. */
   readonly root?: string | undefined;
+  /**
+   * The construct's effect program entry (wrapper delivery): triggers the
+   * OpenNext artifact takeover ({@link EffectBundle}) — the site module is
+   * rolldown-prebundled and a generated `alchemy-worker.js` wrapping
+   * `worker.js` becomes the final bundle pass's entry. Stands down when
+   * the app already mounts `alchemy/serve` explicitly (sentinel scan).
+   */
+  readonly effectEntry?: EffectBundle.NextjsEffectEntry | undefined;
   /**
    * The host's runtime stack (a `Context.Context<RuntimeServices>`, e.g.
    * alchemy's `DevContext.runtimeContext`). When provided, dev servers host
@@ -361,6 +370,108 @@ export const make = (
           }
         }
 
+        // 1.75. Artifact takeover (effectful Website): prebundle the site
+        // module, generate the wrapping entry, and point the final bundle
+        // pass at it. Stands down when the app compiled an explicit
+        // `alchemy/serve` mount (sentinel in the OpenNext output).
+        let takeover = false;
+        if (options?.effectEntry !== undefined) {
+          const effectEntry = options.effectEntry;
+          // Remove artifacts of a previous takeover build up-front so a
+          // stale wrapper can never leak into this build's output (and the
+          // sentinel scan below only ever sees OpenNext-owned files).
+          yield* fs
+            .remove(
+              NodePath.join(
+                p.openNextDirectory,
+                EffectBundle.TAKEOVER_ENTRY_NAME,
+              ),
+            )
+            .pipe(Effect.ignore);
+          yield* fs
+            .remove(
+              NodePath.join(
+                p.openNextDirectory,
+                EffectBundle.EFFECT_MODULE_DIR,
+              ),
+              { recursive: true },
+            )
+            .pipe(Effect.ignore);
+
+          const explicitMount = yield* EffectBundle.scanForServeSentinel(
+            p.openNextDirectory,
+          ).pipe(Effect.provideService(FileSystem.FileSystem, fs));
+          if (explicitMount) {
+            if (
+              effectEntry.doClasses.length > 0 ||
+              effectEntry.wfClasses.length > 0
+            ) {
+              return yield* Effect.fail(
+                fail(
+                  `The app mounts alchemy/serve explicitly (the ` +
+                    `"${EffectBundle.SERVE_SENTINEL}" sentinel is compiled into ` +
+                    `the OpenNext output), so the artifact takeover stands ` +
+                    `down — but the effect program exports Durable ` +
+                    `Object/Workflow classes (${[
+                      ...effectEntry.doClasses,
+                      ...effectEntry.wfClasses,
+                    ].join(
+                      ", ",
+                    )}) that only the takeover can deliver. Remove ` +
+                    `the explicit mount (or the class exports).`,
+                )(undefined),
+              );
+            }
+            yield* Effect.logInfo(
+              "alchemy: explicit alchemy/serve mount detected in the Next.js " +
+                "build — artifact takeover stands down (the framework-built " +
+                "worker deploys unchanged).",
+            );
+          } else {
+            yield* EffectBundle.bundleEffectModule({
+              openNextDirectory: p.openNextDirectory,
+              rootDir: root,
+              entry: effectEntry,
+              compatibilityDate:
+                options?.vite?.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
+              compatibilityFlags: [
+                ...new Set([
+                  "nodejs_compat",
+                  ...(options?.vite?.compatibilityFlags ?? []),
+                ]),
+              ],
+            }).pipe(
+              Effect.provideService(FileSystem.FileSystem, fs),
+              Effect.mapError((error) => fail(error.message)(error.cause)),
+            );
+            const workerSource = yield* fs
+              .readFileString(
+                NodePath.join(p.openNextDirectory, Bundle.WORKER_ENTRY_NAME),
+              )
+              .pipe(
+                Effect.mapError(
+                  fail("Failed to read the OpenNext worker entry"),
+                ),
+              );
+            yield* fs
+              .writeFileString(
+                NodePath.join(
+                  p.openNextDirectory,
+                  EffectBundle.TAKEOVER_ENTRY_NAME,
+                ),
+                EffectBundle.makeTakeoverWorkerSource({
+                  openNextDoExports:
+                    EffectBundle.probeOpenNextDoExports(workerSource),
+                  effectDoClasses: effectEntry.doClasses,
+                }),
+              )
+              .pipe(
+                Effect.mapError(fail("Failed to write the takeover entry")),
+              );
+            takeover = true;
+          }
+        }
+
         // 2. The final bundle pass (what wrangler does implicitly on deploy).
         yield* fs
           .remove(p.workerDirectory, { recursive: true })
@@ -369,7 +480,33 @@ export const make = (
           openNextDirectory: p.openNextDirectory,
           outDirectory: p.workerDirectory,
           minify: options?.nextjs?.minify ?? false,
+          ...(takeover
+            ? {
+                entryName: EffectBundle.TAKEOVER_ENTRY_NAME,
+                externals: [`./${EffectBundle.EFFECT_MODULE_DIR}/*`],
+              }
+            : {}),
         }).pipe(Effect.mapError((error) => fail(error.message)(error.cause)));
+
+        // 2.5. Ship the rolldown-prebundled effect module verbatim next to
+        // the esbuild output — workerd resolves the wrapper's relative
+        // `./alchemy-effect/…` imports against the uploaded module set.
+        if (takeover) {
+          yield* fs
+            .copy(
+              NodePath.join(
+                p.openNextDirectory,
+                EffectBundle.EFFECT_MODULE_DIR,
+              ),
+              NodePath.join(p.workerDirectory, EffectBundle.EFFECT_MODULE_DIR),
+              { overwrite: true },
+            )
+            .pipe(
+              Effect.mapError(
+                fail("Failed to copy the prebundled effect module"),
+              ),
+            );
+        }
 
         // 3. populateCache, static-assets flavor: prerendered ISR/fetch cache
         //    entries are served read-only through the ASSETS binding.
@@ -405,7 +542,9 @@ export const make = (
           clientDirectory: p.clientDirectory,
           serverModules: FrameworkCore.sortServerModules(
             files,
-            WORKER_ENTRY_MODULE,
+            takeover
+              ? `worker/${EffectBundle.TAKEOVER_ENTRY_NAME}`
+              : WORKER_ENTRY_MODULE,
           ),
           externalWorkspaces: new Set(),
         };

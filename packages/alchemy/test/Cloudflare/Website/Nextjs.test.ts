@@ -325,4 +325,139 @@ describe.concurrent("Nextjs", () => {
       }).pipe(logLevel),
     { timeout: 600_000 },
   );
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Effectful Website (artifact takeover, Amendment §2.1.1): one Worker
+  // serves the OpenNext app AND the Effect program — fetch routes, a
+  // Durable Object export, and a cron `scheduled` handler (non-fetch
+  // surface only the takeover wrapper can deliver).
+  // ─────────────────────────────────────────────────────────────────────
+
+  test.provider(
+    "Nextjs effectful: artifact takeover deploys effect routes, DO export, and cron scheduled handler",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const client = yield* HttpClient.HttpClient;
+
+        yield* stack.destroy();
+
+        const rootDir = yield* cloneFixture(fixtureDir, {
+          prefix: "alchemy-nextjs-effect-",
+          tempRoot,
+          entries: [
+            "package.json",
+            "tsconfig.json",
+            "next.config.mjs",
+            "open-next.config.ts",
+            "middleware.ts",
+            "app",
+            "pages",
+            "public",
+            "src",
+            "stubs",
+          ],
+        });
+        yield* linkJsApiTypeScript(rootDir);
+
+        // Import the site module from the CLONE: its `main` anchor and
+        // rootDir must point into the cloned project so the OpenNext build
+        // and the takeover prebundle share one root.
+        const mod = yield* Effect.promise(
+          () =>
+            import(pathe.join(rootDir, "src/site.ts")) as Promise<
+              typeof import("./fixtures/nextjs-app/src/site.ts")
+            >,
+        );
+
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            const site = yield* mod.default;
+            const users = yield* mod.EffectUsers;
+            return { site, users };
+          }),
+        );
+        const site = deployed.site;
+
+        expect(site.url).toBeDefined();
+        expect(deployed.users.namespaceId).toBeDefined();
+        expect(deployed.users.namespaceId).not.toMatch(/^dev:/);
+        yield* expectWorkerExists(site.workerName, accountId);
+
+        // Effect fetch inside `server.routes` (default /api/*), through the
+        // real edge.
+        const ping = yield* fetchJsonReady<{ marker: string }>(
+          `${site.url!}/api/effect/ping`,
+        );
+        expect(ping.marker).toBe("effect-fetch");
+
+        // KV round-trip through the collected capability binding.
+        const kvKey = `live-${site.hash?.input?.slice(0, 8)}`;
+        const putRes = yield* client
+          .execute(
+            HttpClientRequest.put(
+              `${site.url!}/api/effect/kv?key=${kvKey}`,
+            ).pipe(HttpClientRequest.bodyText("effect-live-value")),
+          )
+          .pipe(
+            Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
+          );
+        expect(putRes.status).toBe(200);
+        const got = yield* fetchJsonReady<{ value: string | null }>(
+          `${site.url!}/api/effect/kv?key=${kvKey}`,
+        );
+        expect(got.value).toBe("effect-live-value");
+
+        // Non-fetch export #1: the effect program's Durable Object class,
+        // re-exported by the generated wrapper next to OpenNext's own.
+        const count1 = yield* fetchJsonReady<{ count: number }>(
+          `${site.url!}/api/effect/count`,
+        );
+        const count2 = yield* fetchJsonReady<{ count: number }>(
+          `${site.url!}/api/effect/count`,
+        );
+        expect(count2.count).toBeGreaterThan(count1.count);
+
+        // Passthrough: /api/hello is inside server.routes but declined by
+        // the program — Next's route handler (and middleware) serve it.
+        const hello = yield* client
+          .get(`${site.url!}/api/hello`)
+          .pipe(
+            Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
+          );
+        expect(hello.status).toBe(200);
+        expect(hello.headers["x-fixture-middleware"]).toBe("passed");
+        expect(((yield* hello.json) as { hello: string }).hello).toBe("world");
+
+        // Framework surface outside server.routes.
+        yield* expectUrlContains(`${site.url!}/`, "NEXTJS_SSR_MARKER", {
+          timeout: "120 seconds",
+          label: "nextjs effectful SSR home page",
+        });
+        yield* expectUrlContains(
+          `${site.url!}/static.txt`,
+          "NEXTJS_STATIC_ASSET_MARKER",
+          { timeout: "60 seconds", label: "nextjs effectful static asset" },
+        );
+
+        // Non-fetch export #2: the cron `scheduled` handler (minimum
+        // granularity one minute) increments a DO counter — poll the effect
+        // route until the first fire lands (bounded; mirrors
+        // CronEventSource.test.ts).
+        const cron = yield* fetchJsonReady<{ fires: number }>(
+          `${site.url!}/api/effect/cron`,
+        ).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("5 seconds"),
+            until: (res) => res.fires > 0,
+            times: 36,
+          }),
+        );
+        expect(cron.fires).toBeGreaterThan(0);
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+      }).pipe(logLevel),
+    { timeout: 600_000 },
+  );
 });
