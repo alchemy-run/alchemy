@@ -6,6 +6,7 @@ import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 
 import { AlchemyContext } from "alchemy/AlchemyContext";
@@ -101,9 +102,6 @@ const refreshDistTags = Effect.fn(function* (cachePath: string) {
 });
 
 const refreshDistTagsWithClient = Effect.fn(function* (cachePath: string) {
-  const FetchHttpClient = yield* Effect.promise(
-    () => import("effect/unstable/http/FetchHttpClient"),
-  );
   // Build in the CLI's outer scope so a request that exceeds SYNC_WAIT keeps
   // its client alive and can still populate the cache in the background.
   const context = yield* Layer.build(FetchHttpClient.layer);

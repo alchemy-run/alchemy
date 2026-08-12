@@ -13,77 +13,31 @@ import packageJson from "../../package.json" with { type: "json" };
 import { checkLatestVersion } from "./checkVersion.ts";
 import { handleCancellation } from "./handleCancellation.ts";
 
-const commandNames = [
-  "aws",
-  "cloudflare",
-  "deploy",
-  "dev",
-  "destroy",
-  "plan",
-  "tail",
-  "logs",
-  "login",
-  "profile",
-  "state",
-  "sync",
-  "unsafe",
-] as const;
-type CommandName = (typeof commandNames)[number];
+const deploy = () => import("./commands/deploy.ts");
 
-const loadCommand = async (name: CommandName) => {
-  switch (name) {
-    case "aws": {
-      const { awsCommand } = await import("./commands/aws.ts");
-      return awsCommand;
-    }
-    case "cloudflare": {
-      const { cloudflareCommand } = await import("./commands/cloudflare.ts");
-      return cloudflareCommand;
-    }
-    case "deploy":
-    case "destroy":
-    case "plan": {
-      const commands = await import("./commands/deploy.ts");
-      return name === "deploy"
-        ? commands.deployCommand
-        : name === "destroy"
-          ? commands.destroyCommand
-          : commands.planCommand;
-    }
-    case "dev": {
-      const { devCommand } = await import("./commands/dev.ts");
-      return devCommand;
-    }
-    case "tail": {
-      const { tailCommand } = await import("./commands/tail.ts");
-      return tailCommand;
-    }
-    case "logs": {
-      const { logsCommand } = await import("./commands/logs.ts");
-      return logsCommand;
-    }
-    case "login": {
-      const { loginCommand } = await import("./commands/login.ts");
-      return loginCommand;
-    }
-    case "profile": {
-      const { profileCommand } = await import("./commands/profile.ts");
-      return profileCommand;
-    }
-    case "state": {
-      const { stateCommand } = await import("./commands/state.ts");
-      return stateCommand;
-    }
-    case "sync": {
-      const { syncCommand } = await import("./commands/sync.ts");
-      return syncCommand;
-    }
-    case "unsafe": {
-      const { unsafeCommand } = await import("./commands/nuke.ts");
-      return unsafeCommand;
-    }
-  }
+const commandLoaders = {
+  aws: () => import("./commands/aws.ts").then((aws) => aws.awsCommand),
+  cloudflare: () =>
+    import("./commands/cloudflare.ts").then(
+      (cloudflare) => cloudflare.cloudflareCommand,
+    ),
+  deploy: () => deploy().then((deploy) => deploy.deployCommand),
+  dev: () => import("./commands/dev.ts").then((dev) => dev.devCommand),
+  destroy: () => deploy().then((deploy) => deploy.destroyCommand),
+  plan: () => deploy().then((deploy) => deploy.planCommand),
+  tail: () => import("./commands/tail.ts").then((tail) => tail.tailCommand),
+  logs: () => import("./commands/logs.ts").then((logs) => logs.logsCommand),
+  login: () =>
+    import("./commands/login.ts").then((login) => login.loginCommand),
+  profile: () =>
+    import("./commands/profile.ts").then((profile) => profile.profileCommand),
+  state: () =>
+    import("./commands/state.ts").then((state) => state.stateCommand),
+  sync: () => import("./commands/sync.ts").then((sync) => sync.syncCommand),
+  unsafe: () => import("./commands/nuke.ts").then((nuke) => nuke.unsafeCommand),
 };
+type CommandName = keyof typeof commandLoaders;
+const commandNames = Object.keys(commandLoaders) as CommandName[];
 
 const makeCli = async (args: readonly string[]) => {
   const selected = commandNames.find((name) => args.includes(name));
@@ -92,7 +46,9 @@ const makeCli = async (args: readonly string[]) => {
   // commands preserve that list without importing their implementations.
   const loadedCommands = await Promise.all(
     commandNames.map((name) =>
-      loadAll || name === selected ? loadCommand(name) : Command.make(name, {}),
+      loadAll || name === selected
+        ? commandLoaders[name]()
+        : Command.make(name, {}),
     ),
   );
   const root = Command.make("alchemy", {}).pipe(
