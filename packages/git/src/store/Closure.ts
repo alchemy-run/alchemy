@@ -263,6 +263,7 @@ export const computeClosure = (options: ClosureOptions) =>
 
     // ── 2. Boundaries ───────────────────────────────────────────────────────
     // Haves are boundaries only if we actually have them as commits.
+    const repoShallowSet = new Set<Oid>(request.repoShallow ?? []);
     const haveNodes = yield* loadCommitNodes(sql, dedup(request.haves));
     const haveSet = new Set<Oid>(haveNodes.keys());
     const clientShallowSet = new Set<Oid>(request.clientShallow);
@@ -279,7 +280,17 @@ export const computeClosure = (options: ClosureOptions) =>
     const depthOf = new Map<Oid, number>();
     let minCandidateGen = Number.POSITIVE_INFINITY;
 
-    let frontier = dedup(commitSeeds).filter((oid) => !haveSet.has(oid));
+    // A `have` normally implies the client holds its whole ancestry — but
+    // NOT when that have is one of the client's shallow boundary tips and
+    // this is a deepen request: the whole point of `deepen <n>` is to fetch
+    // commits BEHIND those tips. Such seeds are walked through (so their
+    // ancestors enter the manifest) but stay excluded from the output via
+    // the common set.
+    const walkThroughHave = (oid: Oid): boolean =>
+      depth !== undefined && clientShallowSet.has(oid);
+    let frontier = dedup(commitSeeds).filter(
+      (oid) => !haveSet.has(oid) || walkThroughHave(oid),
+    );
     const visited = new Set<Oid>(frontier);
     for (const oid of frontier) {
       depthOf.set(oid, 1);
@@ -306,10 +317,13 @@ export const computeClosure = (options: ClosureOptions) =>
         if (depth !== undefined && d >= depth) {
           continue; // depth cut — do not expand parents
         }
+        if (repoShallowSet.has(oid)) {
+          continue; // repo-shallow boundary — parents were never ingested
+        }
         for (const parent of ps) {
           if (
             visited.has(parent) ||
-            haveSet.has(parent) ||
+            (haveSet.has(parent) && !walkThroughHave(parent)) ||
             (shallowStopsActive && clientShallowSet.has(parent))
           ) {
             continue;
@@ -330,7 +344,12 @@ export const computeClosure = (options: ClosureOptions) =>
     // ── 4. Common marking (have ancestry, generation-bounded) ───────────────
     const common = new Set<Oid>(haveSet);
     if (haveSet.size > 0 && candidateOrder.length > 0) {
-      let hFrontier = Array.from(haveSet);
+      // Client-shallow haves contribute themselves to `common` but NOT
+      // their ancestry — the client does not hold anything behind its
+      // shallow boundary (that is what a deepen fetches).
+      let hFrontier = Array.from(haveSet).filter(
+        (oid) => !clientShallowSet.has(oid),
+      );
       while (hFrontier.length > 0) {
         const parents = yield* loadParents(sql, hFrontier);
         const discovered: Array<Oid> = [];
@@ -361,7 +380,11 @@ export const computeClosure = (options: ClosureOptions) =>
 
     const shallow: Array<Oid> = [];
     const shallowSet = new Set<Oid>();
-    if (depth !== undefined || clientShallowSet.size > 0) {
+    if (
+      depth !== undefined ||
+      clientShallowSet.size > 0 ||
+      repoShallowSet.size > 0
+    ) {
       for (const commit of newCommits) {
         const ps = parentsOf.get(commit.oid) ?? [];
         const cut = ps.some(
@@ -376,8 +399,12 @@ export const computeClosure = (options: ClosureOptions) =>
         }
       }
     }
+    // A previously-shallow tip unshallows when this walk covered it (as a
+    // new commit OR as a walked-through common have) and it is no longer a
+    // boundary.
     const unshallow = Array.from(clientShallowSet).filter(
-      (oid) => included.has(oid) && !shallowSet.has(oid),
+      (oid) =>
+        (included.has(oid) || candidateSet.has(oid)) && !shallowSet.has(oid),
     );
 
     // ── 6. Tree/blob closure (shared visited set — the v1 fat) ──────────────

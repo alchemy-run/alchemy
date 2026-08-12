@@ -124,7 +124,7 @@ const importRepo = HttpApiEndpoint.post("import", "/repos/import", {
 export { importRepo as import };
 
 /** The assembled `repos` group. */
-export const Group = HttpApiGroup.make("repos")
+export default HttpApiGroup.make("repos")
   .add(create)
   .add(get)
   .add(update)

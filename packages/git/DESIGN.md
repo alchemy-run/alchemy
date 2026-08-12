@@ -735,7 +735,7 @@ Every cut, its consequence, and the seam that makes it additive (seams marked **
 | `thin-pack` / `ofs-delta` in **served** packs | Fatter fetches (~1.3–2×, no cross-object compression) | Delta-aware writer, or serve compaction packs (which may carry deltas) verbatim for clones. |
 | `filter` (partial clone) | v0 clients warn and ignore; `--filter` unavailable | Advertise `filter`; `blob:none`/`blob:limit` are manifest predicates — the walk already knows types/sizes. |
 | `include-tag` | Clients cope (fetch tags explicitly) | Tag-closure step in `Closure`. |
-| `deepen-since` / `deepen-not` | Rare flags fail | ▲ `commits.commit_time` already stored; add walk predicates. |
+| `deepen-since` / `deepen-not` / `deepen-relative` (`git fetch --deepen`) | Rare flags fail (absolute `--depth <n>` deepening works) | ▲ `commits.commit_time` already stored; add walk predicates. |
 | Multi-round minimal negotiation | Slightly fat incremental fetches (boundary snapshot redundancy) | ▲ Real common-ancestor negotiation over `commits`/`commit_parents` + `gen` — all data present. |
 | `packfile-uris` | — | Natural once compacted packs exist: presigned R2 URLs for whole packs. |
 | push-cert, push-options, hooks | Not advertised ⇒ clients don't send them | Advertise + parse; typed hook pipeline (pre-receive/update/post-receive) as an Effect service around `ReceivePack`. |

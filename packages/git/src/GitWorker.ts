@@ -83,7 +83,6 @@ import {
   Unauthorized,
   type Oid,
 } from "./Api.ts";
-import * as ApiErrors from "./Api.ts";
 import { GitAuthLive, parseBasicOrBearer, verifyAdminKey } from "./Auth.ts";
 import { parseCommit, parseTree, treeEntryKind } from "./git/ObjectCodec.ts";
 import type { StoreError } from "./git/Store.ts";
@@ -152,87 +151,6 @@ const HttpPlatformStub = Layer.succeed(HttpPlatform.HttpPlatform, {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const asOid = (value: string): Oid => value as Oid;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// DO RPC error revival
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * The REST error classes by `_tag`, for {@link reviveApiError}.
- */
-const API_ERROR_CLASSES: Record<string, { prototype: object }> = {
-  Unauthorized,
-  Forbidden,
-  ReadOnlyRepo: ApiErrors.ReadOnlyRepo,
-  RepoNotFound,
-  RepoAlreadyExists,
-  RepoNotReady,
-  RefNotFound: ApiErrors.RefNotFound,
-  RefConflict: ApiErrors.RefConflict,
-  ObjectNotFound: ApiErrors.ObjectNotFound,
-  WrongObjectType: ApiErrors.WrongObjectType,
-  ObjectTooLarge,
-  TokenNotFound: ApiErrors.TokenNotFound,
-  ImportFailed,
-  ValidationError: ApiErrors.ValidationError,
-};
-
-/**
- * Errors crossing the Worker↔DO RPC boundary keep their `_tag` and fields
- * but lose their class prototype (structured clone / RPC serialization), so
- * `Effect.catchTag` routing still works while the HttpApi error **encoder**
- * rejects them ("Expected RepoAlreadyExists"). Re-attach the prototype so
- * pass-through errors encode as their declared schema classes.
- */
-const reviveApiError = <E>(error: E): E => {
-  if (typeof error === "object" && error !== null && "_tag" in error) {
-    const cls = API_ERROR_CLASSES[(error as { _tag: string })._tag];
-    if (cls !== undefined && Object.getPrototypeOf(error) !== cls.prototype) {
-      Object.setPrototypeOf(error, cls.prototype);
-    }
-  }
-  return error;
-};
-
-/**
- * Wraps a DO stub so every Effect-returning RPC method revives failed
- * errors via {@link reviveApiError} before they reach handler `catchTag`s
- * and the HttpApi encoder.
- */
-const reviveStubErrors = <T extends object>(stub: T): T =>
-  new Proxy(stub, {
-    get(target, prop, receiver) {
-      const value = Reflect.get(target, prop, receiver);
-      if (typeof value !== "function") return value;
-      return (...args: ReadonlyArray<unknown>) => {
-        const result = Reflect.apply(value, target, args as unknown[]);
-        return Effect.isEffect(result)
-          ? Effect.mapError(
-              result as Effect.Effect<unknown, unknown, never>,
-              reviveApiError,
-            )
-          : result;
-      };
-    },
-  }) as T;
-
-/**
- * Wraps a DO namespace handle so every `getByName` stub revives RPC-boundary
- * errors (see {@link reviveStubErrors}).
- */
-const reviveNamespaceErrors = <
-  T extends { getByName: (...args: never[]) => object },
->(
-  namespace: T,
-): T =>
-  new Proxy(namespace, {
-    get(target, prop, receiver) {
-      const value = Reflect.get(target, prop, receiver);
-      if (prop !== "getByName" || typeof value !== "function") return value;
-      return (...args: ReadonlyArray<unknown>) =>
-        reviveStubErrors(Reflect.apply(value, target, args as unknown[]));
-    },
-  }) as T;
 
 /** Maps the Repo DO's plain metadata onto the REST `Repo` schema class. */
 const toRepo = (meta: RepoMetaData): Repo =>
@@ -338,9 +256,11 @@ export default class GitWorker extends Cloudflare.Worker<GitWorker>()(
   Effect.gen(function* () {
     // ── init: DO namespaces + admin key ────────────────────────────────────
     // Both namespaces are wrapped so RPC-boundary errors regain their class
-    // prototypes (see reviveNamespaceErrors above).
-    const registry = reviveNamespaceErrors(yield* Registry);
-    const repos = reviveNamespaceErrors(yield* GitRepo);
+    // ── init: DO namespaces + admin key ────────────────────────────────────
+    // RPC-boundary tagged errors are reconstructed by the stubs themselves —
+    // both DO classes declare `errors: [...]` (see DurableObjectProps.errors).
+    const registry = yield* Registry;
+    const repos = yield* GitRepo;
     const adminKey = yield* Config.redacted(ADMIN_TOKEN_CONFIG_KEY);
 
     const registryStub = () => registry.getByName(REGISTRY_DO_NAME);
@@ -369,7 +289,10 @@ export default class GitWorker extends Cloudflare.Worker<GitWorker>()(
         const hit = resolveCache.get(key);
         if (hit !== undefined && hit.expires > now) return hit.entry;
         const entry = yield* registryStub().resolve(owner, repo);
-        if (entry !== undefined) {
+        // Rows mid-purge are transient (removed when the purge alarm
+        // finishes) — never cache them, or a 60 s stale hit would keep
+        // reporting "deleting" after the name has freed.
+        if (entry !== undefined && entry.deletedAt === null) {
           yield* Effect.sync(() => {
             if (resolveCache.size >= RESOLVE_CACHE_MAX) {
               const oldest = resolveCache.keys().next().value;
@@ -384,14 +307,31 @@ export default class GitWorker extends Cloudflare.Worker<GitWorker>()(
         return entry;
       });
 
-    /** Resolve or fail with a typed 404. Storage failures are defects. */
-    const resolveOrNotFound = (owner: string, repo: string) =>
+    /**
+     * Resolve including rows whose async purge is still draining
+     * (`deletedAt` set) — only `repos.get` (report `status: "deleting"`)
+     * and `repos.delete` (idempotent 204) want those.
+     */
+    const resolveIncludingDeleting = (owner: string, repo: string) =>
       resolveCached(owner, repo).pipe(
         Effect.catchTag("StoreError", (error: StoreError) => Effect.die(error)),
         Effect.flatMap((entry) =>
           entry === undefined
             ? Effect.fail(new RepoNotFound({ owner, repo }))
             : Effect.succeed(entry),
+        ),
+      );
+
+    /**
+     * Resolve or fail with a typed 404. Rows mid-purge count as gone for
+     * every data-plane route (the name is reserved but the repo is dead).
+     * Storage failures are defects.
+     */
+    const resolveOrNotFound = (owner: string, repo: string) =>
+      resolveIncludingDeleting(owner, repo).pipe(
+        Effect.filterOrFail(
+          (entry) => entry.deletedAt === null,
+          () => new RepoNotFound({ owner, repo }),
         ),
       );
 
@@ -440,20 +380,70 @@ export default class GitWorker extends Cloudflare.Worker<GitWorker>()(
 
     // ── REST handler groups ────────────────────────────────────────────────
 
+    /**
+     * Inserts the registry row, repairing an ORPHAN first: a row whose Repo
+     * DO was never seeded (a create that died between the registry insert
+     * and `initRepo`). An orphan poisons the name permanently — `GET` 404s
+     * because the DO has no config, while `POST` 409s because the row
+     * exists — so detect it (registry row present + DO reports
+     * `RepoNotFound`), drop the row, and insert again.
+     */
+    const insertRepoRow = (input: {
+      readonly owner: string;
+      readonly name: string;
+      readonly description?: string | undefined;
+    }) =>
+      registryStub()
+        .createRepo(input)
+        .pipe(
+          Effect.catchTag("StoreError", (error) => Effect.die(error)),
+          Effect.catchTag("RepoAlreadyExists", (conflict) =>
+            Effect.gen(function* () {
+              const existing = yield* resolveCached(
+                input.owner,
+                input.name,
+              ).pipe(
+                Effect.catchTag("StoreError", (error) => Effect.die(error)),
+              );
+              if (existing === undefined) {
+                return yield* Effect.fail(conflict);
+              }
+              const orphaned = yield* repos
+                .getByName(existing.repoId)
+                .getRepoMeta({ kind: "admin" })
+                .pipe(
+                  Effect.as(false),
+                  Effect.catchTag("RepoNotFound", () => Effect.succeed(true)),
+                  Effect.catchCause(() => Effect.succeed(false)),
+                );
+              if (!orphaned) {
+                return yield* Effect.fail(conflict);
+              }
+              yield* registryStub()
+                .removeRow(existing.repoId)
+                .pipe(
+                  Effect.catchTag("StoreError", (error) => Effect.die(error)),
+                );
+              yield* dropCached(input.owner, input.name);
+              return yield* registryStub()
+                .createRepo(input)
+                .pipe(
+                  Effect.catchTag("StoreError", (error) => Effect.die(error)),
+                );
+            }),
+          ),
+        );
+
     const reposGroup = HttpApiBuilder.group(GitApi, "repos", (handlers) =>
       handlers
         .handle("create", ({ payload }) =>
           Effect.gen(function* () {
             yield* requireAdmin;
-            const entry = yield* registryStub()
-              .createRepo({
-                owner: payload.owner,
-                name: payload.name,
-                description: payload.description,
-              })
-              .pipe(
-                Effect.catchTag("StoreError", (error) => Effect.die(error)),
-              );
+            const entry = yield* insertRepoRow({
+              owner: payload.owner,
+              name: payload.name,
+              description: payload.description,
+            });
             const init = yield* repos
               .getByName(entry.repoId)
               .initRepo({
@@ -466,6 +456,16 @@ export default class GitWorker extends Cloudflare.Worker<GitWorker>()(
                 forkOf: null,
               })
               .pipe(
+                // Seeding the DO failed (or died): drop the row we just
+                // inserted rather than leave an orphan behind.
+                Effect.onError(() =>
+                  registryStub()
+                    .removeRow(entry.repoId)
+                    .pipe(
+                      Effect.ignore,
+                      Effect.andThen(dropCached(entry.owner, entry.name)),
+                    ),
+                ),
                 Effect.catchTag("StoreError", (error) => Effect.die(error)),
               );
             const remote = yield* remoteUrl(entry.owner, entry.name);
@@ -478,8 +478,18 @@ export default class GitWorker extends Cloudflare.Worker<GitWorker>()(
         )
         .handle("get", ({ params }) =>
           Effect.gen(function* () {
-            const entry = yield* resolveOrNotFound(params.owner, params.repo);
+            // Includes rows mid-purge: GET keeps reporting
+            // status "deleting" until the purge alarm frees the name (only
+            // then a 404), so "poll GET until 404 then re-create" never
+            // races the purge.
+            const entry = yield* resolveIncludingDeleting(
+              params.owner,
+              params.repo,
+            );
             const auth = yield* restAuth;
+            if (entry.deletedAt !== null) {
+              return registryFallbackRepo(entry);
+            }
             const meta = yield* repos
               .getByName(entry.repoId)
               .getRepoMeta(auth)
@@ -570,20 +580,32 @@ export default class GitWorker extends Cloudflare.Worker<GitWorker>()(
         )
         .handle("delete", ({ params }) =>
           Effect.gen(function* () {
-            const entry = yield* resolveOrNotFound(params.owner, params.repo);
+            const entry = yield* resolveIncludingDeleting(
+              params.owner,
+              params.repo,
+            );
             const auth = yield* restAuth;
+            // Always (re-)arm the purge — even when the row is already
+            // soft-deleted. A second DELETE mid-drain is an idempotent 204,
+            // and re-arming is what recovers a purge whose alarm was lost
+            // (crash between markDeleted and the first alarm run).
             yield* repos
               .getByName(entry.repoId)
               .startPurge(auth)
               .pipe(
                 Effect.catchTag("StoreError", (error) => Effect.die(error)),
+                // The registry row exists but the DO holds no state — an
+                // orphan, or a purge that already wiped storage. There is
+                // nothing to purge, so free the name directly (never 404:
+                // the caller can see this repo, so DELETE must remove it).
                 Effect.catchTag("RepoNotFound", () =>
-                  Effect.fail(
-                    new RepoNotFound({
-                      owner: params.owner,
-                      repo: params.repo,
-                    }),
-                  ),
+                  registryStub()
+                    .removeRow(entry.repoId)
+                    .pipe(
+                      Effect.catchTag("StoreError", (error) =>
+                        Effect.die(error),
+                      ),
+                    ),
                 ),
               );
             yield* registryStub()

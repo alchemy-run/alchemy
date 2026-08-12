@@ -22,10 +22,10 @@
  * keeping binary streaming out of schema land.
  */
 import * as HttpApi from "effect/unstable/httpapi/HttpApi";
-import * as Objects from "./api/Objects.ts";
-import * as Refs from "./api/Refs.ts";
-import * as Repos from "./api/Repos.ts";
-import * as Tokens from "./api/Tokens.ts";
+import ObjectsGroup from "./api/Objects.ts";
+import RefsGroup from "./api/Refs.ts";
+import ReposGroup from "./api/Repos.ts";
+import TokensGroup from "./api/Tokens.ts";
 
 export * from "./api/Schema.ts";
 export * as Objects from "./api/Objects.ts";
@@ -43,8 +43,8 @@ export * as Tokens from "./api/Tokens.ts";
  * only. Repo create / list-all / fork / import are admin-key-only.
  */
 export const GitApi = HttpApi.make("git-service")
-  .add(Repos.Group)
-  .add(Refs.Group)
-  .add(Objects.Group)
-  .add(Tokens.Group)
+  .add(ReposGroup)
+  .add(RefsGroup)
+  .add(ObjectsGroup)
+  .add(TokensGroup)
   .prefix("/api/v1");

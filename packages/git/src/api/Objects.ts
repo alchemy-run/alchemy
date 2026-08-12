@@ -87,7 +87,7 @@ export const blob = HttpApiEndpoint.get(
 );
 
 /** The assembled `objects` group. */
-export const Group = HttpApiGroup.make("objects")
+export default HttpApiGroup.make("objects")
   .add(commit)
   .add(log)
   .add(tree)

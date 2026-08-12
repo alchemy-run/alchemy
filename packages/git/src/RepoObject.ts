@@ -1246,6 +1246,26 @@ const noCache = { "cache-control": "no-cache" } as const;
  */
 export class GitRepo extends Cloudflare.DurableObject<GitRepo, GitRepoShape>()(
   "GitRepo",
+  {
+    // Every tagged error the RPC surface can fail with: the calling Worker
+    // reconstructs real class instances from the RPC wire (see the
+    // `DurableObjectProps.errors` doc), so catchTag/instanceof/HttpApi
+    // encoding all see the classes the DO actually failed with.
+    errors: [
+      Unauthorized,
+      Forbidden,
+      ReadOnlyRepo,
+      RepoNotFound,
+      RefNotFound,
+      RefConflict,
+      ObjectNotFound,
+      WrongObjectType,
+      TokenNotFound,
+      StoreError,
+      PackIngestError,
+      WireProtocolError,
+    ],
+  },
 ) {}
 
 /**
@@ -1853,20 +1873,31 @@ export const GitRepoLive = GitRepo.make(
           const commons = yield* objects.filterExisting(req.haves);
 
           // Negotiation round without done and nothing in common: answer
-          // NAK and wait for the next round (or done).
-          if (!req.done && commons.length === 0) {
+          // NAK and wait for the next round (or done). EXCEPT when the
+          // request carries `deepen` — the shallow/unshallow section must
+          // precede the NAK ("fatal: expected shallow/unshallow, got NAK"
+          // otherwise), so depth-carrying rounds fall through to the
+          // closure computation below.
+          if (!req.done && commons.length === 0 && req.depth === undefined) {
             return HttpServerResponse.uint8Array(pktText("NAK"), {
               contentType: resultType,
               headers: noCache,
             });
           }
 
+          // A depth-limited import leaves the repo itself shallow; those
+          // boundary commits must bound every walk and surface as
+          // `shallow` lines so clones inherit the shallowness (fsck-clean).
+          const shallowRoots = JSON.parse(
+            (yield* getConfig("shallow_roots")) ?? "[]",
+          ) as ReadonlyArray<string>;
           const closureResult = yield* Effect.result(
             computeClosure({ sql, objects })({
               wants: req.wants,
               haves: commons,
               depth: req.depth,
               clientShallow: req.clientShallow,
+              repoShallow: shallowRoots,
             }),
           );
           if (Result.isFailure(closureResult)) {
@@ -1879,8 +1910,20 @@ export const GitRepoLive = GitRepo.make(
           }
           const closure = closureResult.success;
 
+          // v0 clients only parse a shallow/unshallow section when THEY
+          // brought shallowness into the exchange (`deepen` or `shallow`
+          // lines). If this repo's own boundary truncated the walk for a
+          // client that did neither, an unsolicited section would derail
+          // its parser — refuse cleanly instead.
+          const clientShallowAware =
+            req.depth !== undefined || req.clientShallow.length > 0;
+          if (closure.shallow.length > 0 && !clientShallowAware) {
+            return errResponse(
+              "repository has shallow history (imported with depth); clone with --depth",
+            );
+          }
           const head: Array<Uint8Array> = [];
-          if (req.depth !== undefined) {
+          if (clientShallowAware) {
             for (const oid of closure.shallow) {
               head.push(pktText(`shallow ${oid}`));
             }
@@ -1888,6 +1931,19 @@ export const GitRepoLive = GitRepo.make(
               head.push(pktText(`unshallow ${oid}`));
             }
             head.push(flushPkt);
+          }
+
+          // Depth-carrying negotiation round with nothing in common and no
+          // done yet: the response is the shallow section ALONE (lines +
+          // flush) — no NAK, no pack. The stateless client buffers this
+          // response, sends `done`, and expects the NEXT response to begin
+          // with the shallow section again; a trailing NAK here would sit
+          // in its buffer and derail that parse ("expected shallow list").
+          if (!req.done && commons.length === 0) {
+            return HttpServerResponse.uint8Array(concatBytes(head), {
+              contentType: resultType,
+              headers: noCache,
+            });
           }
           const lastCommon = commons[commons.length - 1];
           if (req.done) {
@@ -2204,6 +2260,23 @@ export const GitRepoLive = GitRepo.make(
               });
             }
             graph = yield* computeGraphRows(ingest.commits);
+            // A depth-limited import leaves parents un-ingested: record the
+            // boundary commits so upload-pack serves this repo as shallow
+            // (walk bound + `shallow` lines — see handleUploadPack).
+            const parentOids = Array.from(
+              new Set(ingest.commits.flatMap((commit) => commit.parents)),
+            );
+            const missingParents = new Set(
+              yield* objects.missingObjects(parentOids, pushId),
+            );
+            if (missingParents.size > 0) {
+              const shallowRoots = ingest.commits
+                .filter((commit) =>
+                  commit.parents.some((parent) => missingParents.has(parent)),
+                )
+                .map((commit) => commit.oid);
+              yield* setConfig("shallow_roots", JSON.stringify(shallowRoots));
+            }
           }
           const commands: Array<RefCommand> = result.refs.map((ref) => ({
             oldOid: ZERO_OID,
@@ -2839,25 +2912,48 @@ export const GitRepoLive = GitRepo.make(
             const jobs = yield* sql.all<JobRow>(
               `SELECT * FROM jobs WHERE state = 'running'`,
             );
-            for (const job of jobs) {
-              switch (job.kind) {
-                case "purge": {
-                  const wiped = yield* runPurgeAlarm;
-                  if (wiped) return; // storage is gone — stop here
-                  break;
+            // `purge` runs FIRST and every job is individually isolated: a
+            // job that keeps crashing must never starve the others. (It
+            // did: a fork job dying on every alarm blocked the purge job
+            // behind it forever, wedging the repo in `status: deleting`
+            // and reserving its name.)
+            const order = (kind: string) =>
+              kind === "purge" ? 0 : kind === "gc" ? 2 : 1;
+            const ordered = [...jobs].sort(
+              (a, b) => order(a.kind) - order(b.kind),
+            );
+            for (const job of ordered) {
+              const isolated = Effect.gen(function* () {
+                switch (job.kind) {
+                  case "purge": {
+                    const wiped = yield* runPurgeAlarm;
+                    return wiped; // storage is gone — stop the whole alarm
+                  }
+                  case "import":
+                    yield* runImportAlarm(job);
+                    return false;
+                  case "fork":
+                    yield* runForkAlarm(job);
+                    return false;
+                  case "gc":
+                    yield* runGcJob;
+                    return false;
+                  default:
+                    yield* sql.run(`DELETE FROM jobs WHERE kind = ?`, job.kind);
+                    return false;
                 }
-                case "import":
-                  yield* runImportAlarm(job);
-                  break;
-                case "fork":
-                  yield* runForkAlarm(job);
-                  break;
-                case "gc":
-                  yield* runGcJob;
-                  break;
-                default:
-                  yield* sql.run(`DELETE FROM jobs WHERE kind = ?`, job.kind);
-              }
+              }).pipe(
+                Effect.catchCause((cause) =>
+                  Effect.as(
+                    Effect.logError(
+                      `repo alarm job '${job.kind}' failed`,
+                      cause,
+                    ),
+                    false,
+                  ),
+                ),
+              );
+              if (yield* isolated) return;
             }
           }).pipe(
             Effect.catchCause((cause) =>

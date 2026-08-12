@@ -71,10 +71,15 @@ const purgeRepo = Effect.fn(function* (
   repo: string,
 ) {
   const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
-  yield* admin.repos
-    .delete({ params: { owner, repo } })
-    .pipe(Effect.catchTag("RepoNotFound", () => Effect.void));
+  // edgeRetry on every step: a freshly deployed workers.dev route serves
+  // transient 5xx/1042s for a few seconds (typed 404s decode fine and are
+  // NOT retried — they end the poll).
+  yield* admin.repos.delete({ params: { owner, repo } }).pipe(
+    Effect.catchTag("RepoNotFound", () => Effect.void),
+    edgeRetry,
+  );
   yield* admin.repos.get({ params: { owner, repo } }).pipe(
+    edgeRetry,
     Effect.as(false),
     Effect.catchTag("RepoNotFound", () => Effect.succeed(true)),
     Effect.repeat({
@@ -92,7 +97,11 @@ class GitError extends Data.TaggedError("GitError")<{
   readonly exitCode: number;
   readonly stdout: string;
   readonly stderr: string;
-}> {}
+}> {
+  override get message(): string {
+    return `git ${this.args.join(" ")} exited ${this.exitCode}\n--- stdout ---\n${this.stdout}\n--- stderr ---\n${this.stderr}`;
+  }
+}
 
 const git = Effect.fn(function* (cwd: string, ...args: Array<string>) {
   const handle = yield* ChildProcess.make("git", args, {
@@ -163,9 +172,23 @@ const freshRepo = Effect.fn(function* (
   owner: string,
   name: string,
 ) {
-  yield* purgeRepo(url, owner, name);
   const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
-  const created = yield* admin.repos.create({ payload: { owner, name } });
+  // Retry the whole purge -> create CYCLE, never the bare POST: a create
+  // that commits server-side but loses its response (edge 5xx mid-rollout)
+  // leaves the name taken, so retrying just the POST would 409 forever.
+  const created = yield* Effect.gen(function* () {
+    yield* purgeRepo(url, owner, name);
+    return yield* admin.repos
+      .create({ payload: { owner, name } })
+      .pipe(edgeRetry);
+  }).pipe(
+    Effect.retry({
+      while: (error: { readonly _tag?: string }) =>
+        error._tag === "RepoAlreadyExists",
+      schedule: Schedule.spaced("1 second"),
+      times: 3,
+    }),
+  );
   return {
     admin,
     created,
@@ -192,6 +215,8 @@ const stack = beforeAll(
   deploy(Stack).pipe(
     Effect.tap(({ url }) =>
       Effect.gen(function* () {
+        // Printed so a failing live run can be probed by hand (curl/git).
+        yield* Effect.logInfo(`git-service deployed at ${url}`);
         const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
         yield* admin.repos.list({ query: {} }).pipe(edgeRetry);
       }),
@@ -513,7 +538,7 @@ test(
 // ── step 8: shallow clone + deepen ──────────────────────────────────────────
 
 test(
-  "shallow clone --depth 1 truncates history; fetch --deepen 1 extends it",
+  "shallow clone --depth 1 truncates history; fetch --depth 2 extends it",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const { remote } = yield* freshRepo(url, "e2e", "proto-shallow");
@@ -550,8 +575,9 @@ test(
     expect(yield* fs.exists(path.join(shallow, ".git", "shallow"))).toBe(true);
     expect(yield* fs.readFileString(path.join(shallow, "f.txt"))).toBe("c3\n");
 
-    // deepen by one — the boundary moves by exactly one commit
-    yield* mustGit(shallow, "fetch", "--deepen", "1", "origin");
+    // deepen by one commit — absolute --depth (v1 supports `deepen <n>`
+    // only; `--deepen` needs the deepen-relative capability, cut in v1)
+    yield* mustGit(shallow, "fetch", "--depth", "2", "origin");
     const deepened = (yield* mustGit(shallow, "rev-list", "--count", "HEAD"))
       .stdout;
     expect(deepened).toBe("2");
@@ -884,7 +910,9 @@ test.skipIf(!!process.env.FAST)(
       "e2e",
       "proto-import",
     );
-    yield* retryGit(tmp, "clone", importRemote, "imported");
+    // the import was depth-limited, so the repo's history is shallow —
+    // v0 can only serve that to a shallow-aware client (see handleUploadPack)
+    yield* retryGit(tmp, "clone", "--depth", "1", importRemote, "imported");
     yield* mustGit(path.join(tmp, "imported"), "fsck", "--strict");
 
     yield* purgeRepo(url, "e2e", "proto-import");

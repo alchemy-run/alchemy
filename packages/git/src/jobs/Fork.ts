@@ -19,7 +19,9 @@
  * re-streaming from the start and skipping already-copied rows.
  */
 import * as Effect from "effect/Effect";
+import * as Encoding from "effect/Encoding";
 import * as Option from "effect/Option";
+import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import { StoreError } from "../git/Store.ts";
 import type {
@@ -34,14 +36,22 @@ import type {
 // Snapshot wire shapes
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** A snapshotted `objects` row. `zdata` is `null` when `location != 'row'`. */
+/**
+ * A snapshotted `objects` row. `zdata` is `null` when `location != 'row'`.
+ *
+ * NOTE: `zdata` crosses the RPC boundary as **base64**, not raw bytes. The
+ * snapshot is a `Stream` of plain objects, which the RPC layer serializes
+ * as JSONL — a `Uint8Array` inside one of those objects would arrive as
+ * `{"0":31,"1":139,...}` and silently corrupt every forked object.
+ */
 export interface SnapshotObjectRow {
   readonly oid: string;
   readonly type: number;
   readonly size: number;
   readonly zsize: number;
   readonly location: string;
-  readonly zdata: Uint8Array | null;
+  /** base64 of `zlib(content)`, or `null` when the bytes live in R2. */
+  readonly zdata: string | null;
   /** Full R2 key — may point into the PARENT repo's prefix (shared). */
   readonly r2_key: string | null;
   readonly pack_id: string | null;
@@ -88,6 +98,18 @@ export type SnapshotChunk =
         readonly ord: number;
       }>;
     };
+
+/** Decodes a snapshot row's base64 `zdata` back into bytes. */
+const decodeZData = (
+  row: SnapshotObjectRow,
+): Effect.Effect<Uint8Array, StoreError> => {
+  const decoded = Encoding.decodeBase64(row.zdata ?? "");
+  return Result.isSuccess(decoded)
+    ? Effect.succeed(decoded.success)
+    : Effect.fail(
+        new StoreError({ reason: `fork: corrupt zdata for ${row.oid}` }),
+      );
+};
 
 /** Config keys that transfer from parent to fork. */
 const FORKED_CONFIG_KEYS = ["default_branch", "description"] as const;
@@ -162,7 +184,10 @@ export const snapshotStream = (
               size: row.size,
               zsize: row.zsize,
               location: row.location,
-              zdata: row.zdata === null ? null : new Uint8Array(row.zdata),
+              zdata:
+                row.zdata === null
+                  ? null
+                  : Encoding.encodeBase64(new Uint8Array(row.zdata)),
               r2_key: row.r2_key,
               pack_id: row.pack_id,
               pack_offset: row.pack_offset,
@@ -283,7 +308,7 @@ export const applySnapshotChunk = Effect.fn(function* (
           row.size,
           row.zsize,
           row.location,
-          row.zdata === null ? null : toArrayBuffer(row.zdata),
+          row.zdata === null ? null : toArrayBuffer(yield* decodeZData(row)),
           row.r2_key,
           row.pack_id,
           row.pack_offset,

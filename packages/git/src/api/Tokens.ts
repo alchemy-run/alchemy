@@ -62,7 +62,7 @@ export const revoke = HttpApiEndpoint.delete(
 );
 
 /** The assembled `tokens` group. */
-export const Group = HttpApiGroup.make("tokens")
+export default HttpApiGroup.make("tokens")
   .add(create)
   .add(list)
   .add(revoke)

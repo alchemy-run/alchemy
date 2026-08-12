@@ -78,7 +78,7 @@ export const remove = HttpApiEndpoint.delete(
 );
 
 /** The assembled `refs` group. */
-export const Group = HttpApiGroup.make("refs")
+export default HttpApiGroup.make("refs")
   .add(list)
   .add(get)
   .add(update)

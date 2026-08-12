@@ -124,6 +124,13 @@ export interface ClosureRequest {
   readonly depth?: number | undefined;
   /** The client's existing shallow tips (additional walk boundaries). */
   readonly clientShallow: ReadonlyArray<Oid>;
+  /**
+   * The REPO's own shallow boundary (commits whose parents were never
+   * ingested — a depth-limited import). These never expand in any walk and
+   * always surface as `shallow <oid>` lines when included in a pack, so
+   * clones of a shallow repo are themselves shallow (and fsck-clean).
+   */
+  readonly repoShallow?: ReadonlyArray<Oid> | undefined;
 }
 
 /**

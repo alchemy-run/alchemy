@@ -217,7 +217,10 @@ export const DEFAULT_LIST_LIMIT = 50;
 export class Registry extends Cloudflare.DurableObject<
   Registry,
   RegistryShape
->()("GitRegistry") {}
+>()("GitRegistry", {
+  // RPC-boundary error revival (see `DurableObjectProps.errors`).
+  errors: [RepoAlreadyExists, ValidationError, StoreError],
+}) {}
 
 /**
  * The Registry DO implementation Layer. Provide on the hosting Worker's
@@ -289,8 +292,13 @@ export const RegistryLive = Registry.make(
         }),
 
         resolve: Effect.fn(function* (owner: string, name: string) {
+          // Soft-deleted rows ARE returned (with `deletedAt` set): the name
+          // stays reserved until the purge alarm calls `removeRow`, and the
+          // Worker needs to see the in-flight deletion to report
+          // `status: "deleting"` on GET (instead of a premature 404 that
+          // would race re-creates against the purge).
           const row = yield* sql.first<RegistryRepoRow>(
-            `SELECT * FROM repos WHERE owner = ? AND name = ? AND deleted_at IS NULL`,
+            `SELECT * FROM repos WHERE owner = ? AND name = ?`,
             owner.toLowerCase(),
             name.toLowerCase(),
           );
@@ -342,12 +350,23 @@ export const RegistryLive = Registry.make(
               delta,
               repoId,
             );
+            const row = yield* sql.first<{ fork_count: number }>(
+              `SELECT fork_count FROM repos WHERE repo_id = ?`,
+              repoId,
+            );
+            return row?.fork_count ?? 0;
           }
-          const row = yield* sql.first<{ fork_count: number }>(
-            `SELECT fork_count FROM repos WHERE repo_id = ?`,
+          // The read path (delta 0) DERIVES the count from live fork rows
+          // rather than the stored column: the purge fork-pin must keep
+          // working after the parent's own registry row is removed (the
+          // name frees immediately on delete; only the R2 prefix stays
+          // pinned while forks reference it), and fork rows keep their
+          // `fork_of` pointer until their own purge completes.
+          const row = yield* sql.first<{ n: number }>(
+            `SELECT COUNT(*) AS n FROM repos WHERE fork_of = ?`,
             repoId,
           );
-          return row?.fork_count ?? 0;
+          return row?.n ?? 0;
         }),
 
         markDeleted: Effect.fn(function* (repoId: string) {

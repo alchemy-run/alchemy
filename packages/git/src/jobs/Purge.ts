@@ -4,12 +4,15 @@
  * `DELETE /repos/:o/:r` responds 204 immediately; this job then runs from
  * the Repo DO's alarm until everything is gone:
  *
- * 1. **R2 prefix** — a bounded list+delete loop over `{repoId}/`, but only
- *    while the Registry reports `fork_count == 0`: forks reference keys
- *    under the parent's prefix by full key (immutable, shared), so a
- *    forked repo's prefix is retained until its forks are gone.
- * 2. **SQLite** — dropped via `deleteAll`.
- * 3. **Registry row** — removed last, freeing the `owner/name` for reuse.
+ * 1. **Registry row** — removed FIRST, freeing the `owner/name` for reuse
+ *    right away (the fork pin below never reserves a name).
+ * 2. **R2 prefix** — a bounded list+delete loop over `{repoId}/`, but only
+ *    while no live fork rows reference this repo (`fork_of` count): forks
+ *    reference keys under the parent's prefix by full key (immutable,
+ *    shared), so a forked repo's prefix is retained until its forks are
+ *    gone.
+ * 3. **SQLite** — dropped via `deleteAll` once the pin clears and the
+ *    prefix is drained.
  *
  * The job is idempotent and alarm-re-armable: every step tolerates having
  * already run. A single alarm run deletes at most
@@ -51,7 +54,7 @@ export interface PurgeJobOptions {
   readonly forkCount: Effect.Effect<number, StoreError>;
   /** Drops the DO's entire SQLite/KV state (`storage.deleteAll`). */
   readonly deleteAllStorage: Effect.Effect<void, StoreError>;
-  /** Removes the Registry row (last step; idempotent). */
+  /** Removes the Registry row (FIRST step — frees the name; idempotent). */
   readonly removeRegistryRow: Effect.Effect<void, StoreError>;
 }
 
@@ -69,27 +72,35 @@ const r2ToStore =
     );
 
 /**
- * Runs one bounded purge round. Returns `"done"` when the repo is fully
- * gone; `"continue"` when the caller must re-arm the alarm (more R2 keys,
- * or the prefix is pinned by live forks — in which case SQLite and the
- * Registry row are still removed only once the pin clears, keeping the
- * `fork_count` bookkeeping alive until then).
+ * Runs one bounded purge round. The registry row is removed FIRST — the
+ * `owner/name` frees immediately, even while forks pin the R2 prefix.
+ * Returns `"done"` when the repo is fully gone; `"continue"` when the
+ * caller must re-arm the alarm (more R2 keys, or the prefix is pinned by
+ * live forks — the DO's SQLite survives until the pin clears so the alarm
+ * keeps re-arming with the repoId at hand).
  */
 export const runPurgeJob = (
   options: PurgeJobOptions,
 ): Effect.Effect<PurgeOutcome, StoreError> =>
   Effect.gen(function* () {
     const prefix = repoPrefix(options.repoId);
-    const forks = yield* options.forkCount;
 
+    // 1. Free the name IMMEDIATELY — even while fork-pinned. The pin only
+    //    protects the R2 prefix (forks read shared keys under it); the
+    //    `owner/name` must never stay reserved for the lifetime of a fork.
+    //    `forkCount` derives from live `fork_of` rows, so it keeps working
+    //    after this row is gone. Idempotent across alarm retries.
+    yield* options.removeRegistryRow;
+
+    const forks = yield* options.forkCount;
     if (forks > 0) {
-      // Fork-retention pin: leave the R2 prefix AND the registry row (it
-      // carries fork_count) in place; retry later. SQLite stays too so the
-      // jobs row keeps re-arming.
+      // Fork-retention pin: leave the R2 prefix in place and keep the DO's
+      // SQLite (config carries the repoId; jobs row keeps re-arming) until
+      // the last fork is purged.
       return { _tag: "continue", forkPinned: true } satisfies PurgeOutcome;
     }
 
-    // 1. Bounded R2 prefix drain.
+    // 2. Bounded R2 prefix drain.
     let drained = false;
     for (let page = 0; page < MAX_PAGES_PER_RUN; page++) {
       const listed = yield* r2ToStore(`R2 list ${prefix}`)(
@@ -109,12 +120,13 @@ export const runPurgeJob = (
       return { _tag: "continue", forkPinned: false } satisfies PurgeOutcome;
     }
 
-    // 2. Drop the DO's own state. NOTE: this wipes the `jobs` table — the
-    //    caller must not touch SQLite after this point.
+    // 3. Drop the DO's own state (the registry row is already gone — see
+    //    step 1; a crash that loses this `deleteAll` is harmless because a
+    //    re-created `owner/name` mints a fresh repoId and therefore a fresh
+    //    DO, so the stale storage is never addressed again). NOTE: this
+    //    wipes the `jobs` table — the caller must not touch SQLite after
+    //    this point.
     yield* options.deleteAllStorage;
-
-    // 3. Free the name.
-    yield* options.removeRegistryRow;
 
     return { _tag: "done" } satisfies PurgeOutcome;
   });
