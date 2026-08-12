@@ -393,24 +393,31 @@ export const buildStackProviders = Effect.fn("buildStackProviders")(function* (
  * even one the current stack doesn't wire up.
  */
 const loadBuiltinAuth = Effect.promise(async () => {
-  const [aws, axiom, cloudflare, github, neon, planetscale, prisma] =
-    await Promise.all([
-      import("../../AWS/AuthProvider.ts"),
-      import("../../Axiom/AuthProvider.ts"),
-      import("../../Cloudflare/Auth/AuthProvider.ts"),
-      import("../../GitHub/AuthProvider.ts"),
-      import("../../Neon/AuthProvider.ts"),
-      import("../../Planetscale/AuthProvider.ts"),
-      import("../../Prisma/AuthProvider.ts"),
-    ]);
+  const [
+    { AwsAuth },
+    { AxiomAuth },
+    { CloudflareAuth },
+    { GitHubAuth },
+    { NeonAuth },
+    { PlanetscaleAuth },
+    { PrismaAuth },
+  ] = await Promise.all([
+    import("../../AWS/AuthProvider.ts"),
+    import("../../Axiom/AuthProvider.ts"),
+    import("../../Cloudflare/Auth/AuthProvider.ts"),
+    import("../../GitHub/AuthProvider.ts"),
+    import("../../Neon/AuthProvider.ts"),
+    import("../../Planetscale/AuthProvider.ts"),
+    import("../../Prisma/AuthProvider.ts"),
+  ]);
   return Layer.mergeAll(
-    aws.AwsAuth,
-    axiom.AxiomAuth,
-    cloudflare.CloudflareAuth,
-    github.GitHubAuth,
-    neon.NeonAuth,
-    planetscale.PlanetscaleAuth,
-    prisma.PrismaAuth,
+    AwsAuth,
+    AxiomAuth,
+    CloudflareAuth,
+    GitHubAuth,
+    NeonAuth,
+    PlanetscaleAuth,
+    PrismaAuth,
   );
 });
 
