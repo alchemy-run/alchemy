@@ -45,7 +45,7 @@
   },
   "dependencies": {
     "@alchemy.run/cloudflare-runtime": "workspace:*",
-    "@distilled.cloud/cloudflare": "catalog:",
+    "@distilled.cloud/cloudflare": "workspace:*",
     "@effect/platform-node": "catalog:effect",
     "esbuild": "catalog:cloudflare",
     "fast-glob": "catalog:cloudflare",

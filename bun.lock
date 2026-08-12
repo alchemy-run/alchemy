@@ -1596,7 +1596,7 @@
       "version": "2.0.0-beta.71",
       "dependencies": {
         "@alchemy.run/cloudflare-runtime": "workspace:*",
-        "@distilled.cloud/cloudflare": "catalog:",
+        "@distilled.cloud/cloudflare": "workspace:*",
         "@effect/platform-node": "catalog:effect",
         "esbuild": "catalog:cloudflare",
         "fast-glob": "catalog:cloudflare",
@@ -1653,6 +1653,7 @@
         "@alchemy.run/node-utils": "catalog:",
         "@cloudflare/unenv-preset": "catalog:workers",
         "@puppeteer/browsers": "catalog:cloudflare",
+        "capnp-es": "catalog:cloudflare",
         "magic-string": "catalog:cloudflare",
         "sharp": "catalog:cloudflare",
         "unenv": "catalog:workers",
@@ -1667,7 +1668,6 @@
         "@types/http-cache-semantics": "catalog:cloudflare",
         "@types/node": "catalog:",
         "@types/ws": "catalog:cloudflare",
-        "capnp-es": "catalog:cloudflare",
         "capnweb": "catalog:cloudflare",
         "heap-js": "catalog:cloudflare",
         "http-cache-semantics": "catalog:cloudflare",
@@ -1683,7 +1683,7 @@
         "ws": "catalog:cloudflare",
       },
       "peerDependencies": {
-        "@distilled.cloud/cloudflare": "catalog:",
+        "@distilled.cloud/cloudflare": "workspace:*",
         "@effect/platform-bun": "catalog:effect",
         "@effect/platform-node": "catalog:effect",
         "effect": "catalog:effect",
