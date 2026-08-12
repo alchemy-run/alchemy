@@ -2118,7 +2118,9 @@ export const Worker: ResourceClassLike<Worker> &
         Self | Extract<Deps, Container.Application<any>> | Providers
       > &
         Named<Id> & {
-          new (_: never): MakeShape<Shape, WorkerShape> & Named<Id> & Tag;
+          new (
+            _: never,
+          ): MakeShape<Shape, WorkerShape> & Named<Id> & Tag<WorkerTypeId>;
           of(shape: Shape & WorkerShape): MakeShape<Shape, WorkerShape>;
           make<PropsReq = never, InitReq = never>(
             props:
@@ -2130,7 +2132,10 @@ export const Worker: ResourceClassLike<Worker> &
             never,
             | Extract<Deps, Container.Application<any>>
             | Providers
-            | Exclude<InitReq, Self | WorkerServices>
+            | Exclude<
+                PropsReq | InitReq,
+                Self | WorkerServices | Tag<WorkerTypeId>
+              >
           >;
         };
     };
@@ -2156,7 +2161,7 @@ export const Worker: ResourceClassLike<Worker> &
         Extract<Req, Container.Application<any>> | Providers | PropsReq
       > &
         Named<Id> & {
-          new (): MakeShape<Shape, WorkerShape> & Named<Id> & Tag;
+          new (): MakeShape<Shape, WorkerShape> & Named<Id> & Tag<WorkerTypeId>;
         };
       /**
        * Class form without an implementation — an external Worker (a plain
@@ -2176,7 +2181,7 @@ export const Worker: ResourceClassLike<Worker> &
           | Effect.Effect<InputProps<WorkerProps>, ConfigError, Req>,
       ): Effect.Effect<Worker & Rpc<{}>, never, Req | Providers> &
         Named<Id> & {
-          new (): Named<Id> & Tag;
+          new (): Named<Id> & Tag<WorkerTypeId>;
         };
     };
     <
