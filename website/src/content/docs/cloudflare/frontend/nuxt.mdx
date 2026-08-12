@@ -41,10 +41,22 @@ so a dev dependency is enough:
 
 ## Configure Nuxt
 
-There is no framework config to change: your `nuxt.config.ts` loads
-natively — modules, layers, and all. Deploy-specific overrides are
-merged over it via the `nuxt` prop (the override wins) — see
-[Prerendering](#prerendering) below for an example.
+Your `nuxt.config.ts` loads natively — modules, layers, and all —
+so configure Nuxt exactly as you would outside Alchemy:
+
+```typescript
+// nuxt.config.ts
+export default defineNuxtConfig({
+  modules: ["@nuxtjs/tailwindcss"],
+  routeRules: {
+    "/about": { prerender: true },
+  },
+});
+```
+
+Deploy-specific overrides are merged over it via the `nuxt` prop
+(the override wins) — see [Prerendering](#prerendering) below for an
+example.
 
 Don't set `nitro.preset` — the Cloudflare deploy target owns the
 preset, and a foreign preset is a hard error.

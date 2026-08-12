@@ -15,9 +15,11 @@
   },
   "devDependencies": {
     "@alchemy.run/web-frameworks": "workspace:*",
+    "@tailwindcss/vite": "catalog:",
     "@types/node": "^24.12.0",
     "nitropack": "catalog:frameworks",
     "nuxt": "catalog:frameworks",
+    "tailwindcss": "catalog:",
     "typescript": "catalog:"
   },
   "repository": {

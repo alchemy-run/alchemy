@@ -14,8 +14,10 @@
   },
   "devDependencies": {
     "@alchemy.run/web-frameworks": "workspace:*",
+    "@tailwindcss/vite": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
+    "tailwindcss": "catalog:",
     "typescript": "catalog:"
   },
   "engines": {

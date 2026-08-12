@@ -44,8 +44,23 @@ so a dev dependency is enough:
 No framework config is required — a fresh Waku project deploys
 as-is. If your project has a `waku.config.ts`, Alchemy loads it
 natively (exactly as Waku's own CLI does) and uses it as the base
-config; options set on the resource (`srcDir`, `distDir`,
-`basePath`) merge over it. The one key Alchemy owns is
+config — including Vite plugins under its `vite` field:
+
+```typescript
+// waku.config.ts
+import { defineConfig } from "waku/config";
+import tsconfigPaths from "vite-tsconfig-paths";
+
+export default defineConfig({
+  basePath: "/",
+  vite: {
+    plugins: [tsconfigPaths()],
+  },
+});
+```
+
+Options set on the resource (`srcDir`, `distDir`, `basePath`) merge
+over the file, per key. The one key Alchemy owns is
 `unstable_adapter` — setting it fails the build with an actionable
 error.
 

@@ -20,9 +20,11 @@
   },
   "devDependencies": {
     "@alchemy.run/web-frameworks": "workspace:*",
+    "@tailwindcss/vite": "catalog:",
     "@types/node": "^24.12.0",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:"
   },

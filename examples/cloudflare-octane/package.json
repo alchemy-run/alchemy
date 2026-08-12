@@ -6,7 +6,8 @@
     "dev": "vite dev",
     "build": "vite build",
     "deploy": "alchemy deploy",
-    "destroy": "alchemy destroy"
+    "destroy": "alchemy destroy",
+    "test": "bun test"
   },
   "dependencies": {
     "@alchemy.run/web-frameworks": "workspace:*",
@@ -20,7 +21,10 @@
   "engines": {
     "node": ">=22"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "@tailwindcss/vite": "catalog:",
+    "tailwindcss": "catalog:"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/alchemy-run/alchemy.git",
