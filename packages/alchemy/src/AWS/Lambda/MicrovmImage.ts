@@ -4,6 +4,7 @@ import type * as microvms from "@distilled.cloud/aws/lambda-microvms";
 
 import * as Effect from "effect/Effect";
 import type * as Bundle from "../../Bundle/Bundle.ts";
+import type { Host } from "../../Docker/Host.ts";
 import { Platform } from "../../Platform.ts";
 import type { Main } from "../../Platform.ts";
 import type { Resource } from "../../Resource.ts";
@@ -182,6 +183,17 @@ export interface MicrovmImageProps {
    * @internal Platform-managed: signals a non-Effect-native (external) image.
    */
   isExternal?: boolean;
+
+  /**
+   * @internal Per-architecture Dockerfile statements contributed by
+   * bindings during init via `Docker.Host` — populated by the MicroVM
+   * platform, never written by hand. Participates in the artifact hash,
+   * so a changed contribution rebuilds the image. Requires a
+   * single-architecture {@link cpuConfigurations} (an image version
+   * builds once per architecture from ONE Dockerfile, so per-arch
+   * statements cannot fan out).
+   */
+  imageStatements?: Host.Statements;
 }
 
 export interface MicrovmImage extends Resource<

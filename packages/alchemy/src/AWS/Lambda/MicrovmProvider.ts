@@ -10,6 +10,7 @@ import * as Stream from "effect/Stream";
 import type { ValidationException } from "@distilled.cloud/aws/Errors";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
+import { hostStatementsFor, type Host } from "../../Docker/Host.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
@@ -133,11 +134,55 @@ const defaultBaseImageArn = Effect.fn(function* () {
 });
 
 // Materialize + upload the code artifact and compute its build identity hash.
+/**
+ * The single target architecture of a MicroVM image, in Docker naming.
+ * An image VERSION fans out to one server-side build per configured
+ * architecture from ONE Dockerfile — so binding-contributed statements
+ * (which are rendered per-arch) require the config to pin exactly one.
+ */
+const resolveImageArchitecture = (
+  news: MicrovmImageProps,
+): Effect.Effect<Host.Architecture> => {
+  const arches = [
+    ...new Set(
+      (news.cpuConfigurations ?? []).map(
+        (config): Host.Architecture =>
+          config.architecture === "ARM_64" ? "arm64" : "amd64",
+      ),
+    ),
+  ];
+  // AWS defaults an unset cpuConfigurations to X86_64
+  if (arches.length === 0) return Effect.succeed("amd64");
+  if (arches.length > 1 && hasHostStatements(news)) {
+    return Effect.die(
+      new Error(
+        "A binding contributed Dockerfile statements (via Docker.Host.install), but this MicroVM image builds for MULTIPLE architectures — per-arch statements cannot fan out into one Dockerfile. Pin a single architecture in `cpuConfigurations`.",
+      ),
+    );
+  }
+  return Effect.succeed(arches[0]!);
+};
+
+const hasHostStatements = (news: MicrovmImageProps): boolean =>
+  (news.imageStatements?.amd64.length ?? 0) > 0 ||
+  (news.imageStatements?.arm64.length ?? 0) > 0;
+
 const resolveArtifact = Effect.fn(function* (
   news: MicrovmImageProps,
   session: ScopedPlanStatusSession,
 ) {
   const propsId = buildPropsIdentity(news);
+
+  if (!news.main && hasHostStatements(news)) {
+    // bindings contributed Dockerfile fragments, but this image ships a
+    // user-owned build context — the contribution would be silently
+    // dropped, so fail loud instead
+    return yield* Effect.die(
+      new Error(
+        "A binding contributed Dockerfile statements (via Docker.Host.install), but this MicroVM image does not generate its Dockerfile — only `main` (Effect-native) images accept contributions. Install the binding's system dependencies in your own Dockerfile, or switch to `main`.",
+      ),
+    );
+  }
 
   if (news.main) {
     const runtime = news.runtime ?? "node";
@@ -151,7 +196,12 @@ const resolveArtifact = Effect.fn(function* (
       port,
       build: news.build,
     });
-    const dockerfile = buildMicrovmDockerfile(news.dockerfile, runtime, port);
+    const dockerfile = buildMicrovmDockerfile(
+      news.dockerfile,
+      runtime,
+      port,
+      hostStatementsFor(news, yield* resolveImageArchitecture(news)),
+    );
     const hash = yield* sha256(`${bundleHash}:${dockerfile}:${propsId}`);
     const archive = yield* zipFiles([
       { path: "Dockerfile", content: dockerfile },

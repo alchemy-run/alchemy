@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import { makeHostCollector } from "../../Docker/Host.ts";
 import { HttpServer, type HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import { serveRpc } from "../../Rpc.ts";
@@ -64,6 +65,10 @@ export const makeMicrovmRuntimeContext = (id: string): Local.ProcessContext => {
         runners.push(effect);
       })) as unknown as Local.ProcessContext["run"],
     serve,
+    // the Docker.Host seam: bindings contribute Dockerfile fragments
+    // during (plan-time) init; rendered per-arch onto
+    // `props.imageStatements` via planProps
+    ...makeHostCollector(),
     exports: Effect.sync(() => ({
       default: Effect.all(
         runners.map((eff) =>

@@ -10,6 +10,7 @@ import { getStableContextDir } from "../../Bundle/TempRoot.ts";
 import { hashDirectory } from "../../Command/Memo.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import { Docker } from "../../Docker/Docker.ts";
+import { hostStatementsFor } from "../../Docker/Host.ts";
 import * as Provider from "../../Provider.ts";
 import { type ResourceBinding } from "../../Resource.ts";
 import { sha256Object } from "../../Util/sha256.ts";
@@ -234,6 +235,8 @@ export const LiveContainerProvider = () =>
             runtime,
             props.external,
             props.autoInstallExternals,
+            // the deployed image is always amd64 (Cloudflare's platform)
+            hostStatementsFor(props, "amd64"),
           );
           const imageHash = (yield* sha256Object({
             bundleHash,
@@ -420,6 +423,7 @@ export const LiveContainerProvider = () =>
             runtime,
             props.external,
             props.autoInstallExternals,
+            hostStatementsFor(props, "amd64"),
           );
           yield* docker.materialize({
             context: contextDir,

@@ -29,6 +29,15 @@ export interface BaseRuntimeContext {
   /** additional services to provide to the plan  */
   planServices?: Layer.Layer<any>;
   /**
+   * Extra props the platform contributes AFTER init has run, merged
+   * into the resource's Props alongside the collected `env` — the
+   * lowering channel for plan-time state a runtime context accumulates
+   * during init (e.g. Dockerfile statements contributed by bindings via
+   * `Docker.Host`). Must be cheap and pure at runtime (init re-runs
+   * inside deployed bundles, where nothing accumulates).
+   */
+  planProps?: Effect.Effect<Record<string, unknown>>;
+  /**
    * Telemetry exporter Layer registered during init via
    * `Telemetry.layer(...)` / `Telemetry.layerOtlp(...)` (see Telemetry.ts).
    * The runtime bridges build it into every event's request scope,

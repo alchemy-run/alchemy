@@ -17,6 +17,11 @@ import {
   isInlineDockerfile,
   type InlineDockerfile,
 } from "../../Docker/Dockerfile.ts";
+import {
+  architectureOfPlatform,
+  hostStatementsFor,
+  type Host,
+} from "../../Docker/Host.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { buildAndPushEcrImage, getEcrRegistryCredentials } from "./Image.ts";
 
@@ -97,6 +102,13 @@ export interface BundledImageSource {
    * additional packages via `pure.packages`, or disable with `pure: false`.
    */
   build?: Bundle.BundleConfig;
+  /**
+   * @internal Per-architecture Dockerfile statements contributed by
+   * bindings during init via `Docker.Host` — populated by the hosting
+   * platform (ECS Task/Service), never written by hand. Participates in
+   * the code hash, so a changed contribution rebuilds the image.
+   */
+  imageStatements?: Host.Statements;
 }
 
 /**
@@ -146,6 +158,7 @@ export interface ImageSourceLike {
   context?: string;
   dockerfile?: string | InlineDockerfile;
   image?: string;
+  imageStatements?: Host.Statements;
 }
 
 export type ImageSourceKind = "main" | "context" | "image";
@@ -197,6 +210,19 @@ export const validateImageSource = (
     return Effect.die(
       new Error(
         `'${id}': inline 'dockerfile' content builds with no context — use a path dockerfile with 'context', or drop 'context'`,
+      ),
+    );
+  }
+  const contributed =
+    (source.imageStatements?.amd64.length ?? 0) > 0 ||
+    (source.imageStatements?.arm64.length ?? 0) > 0;
+  if (contributed && imageSourceKind(source) !== "main") {
+    // bindings contributed Dockerfile fragments (Docker.Host install),
+    // but this source ships an image Alchemy doesn't generate — the
+    // contribution would be silently dropped, so fail loud instead
+    return Effect.die(
+      new Error(
+        `'${id}': a binding contributed Dockerfile statements (via Docker.Host.install), but this image source does not generate its Dockerfile — only 'main' (Effect-native) sources accept contributions. Install the binding's system dependencies in your own image, or switch to 'main'.`,
       ),
     );
   }
@@ -555,6 +581,10 @@ export const makeImageSource = Effect.gen(function* () {
       options.source,
       options.port,
       isPathEnv ? "<env>" : undefined,
+      hostStatementsFor(
+        options.source,
+        architectureOfPlatform(options.platform),
+      ),
     );
     const codeHash = (yield* sha256Object({
       bundleHash: bundled.hash,
@@ -577,6 +607,12 @@ export const makeImageSource = Effect.gen(function* () {
     source: BundledImageSource,
     port?: number,
     envFrom?: string,
+    /**
+     * Binding-contributed statements (`Docker.Host`), already rendered
+     * for the image's target architecture. Spliced after the
+     * environment preamble so their layers cache across code changes.
+     */
+    statements: ReadonlyArray<string> = [],
   ) => {
     const preamble =
       envFrom !== undefined
@@ -587,6 +623,7 @@ export const makeImageSource = Effect.gen(function* () {
           : `FROM ${source.image ?? "oven/bun:1"}`;
     const lines = [
       preamble,
+      ...statements.map((statement) => statement.trim()),
       `WORKDIR /app`,
       `COPY index.mjs /app/index.mjs`,
       // Copy any additional rolldown chunks (`chunk-XXX.js`,
@@ -740,6 +777,7 @@ export const makeImageSource = Effect.gen(function* () {
               source as BundledImageSource,
               options.port,
               envFrom,
+              hostStatementsFor(source, architectureOfPlatform(platform)),
             );
 
       const realMain = yield* resolveMainPath(

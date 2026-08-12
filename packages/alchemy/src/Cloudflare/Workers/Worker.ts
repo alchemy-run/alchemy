@@ -39,14 +39,14 @@ import type { Reference as ZoneReference } from "../Zone/lookup.ts";
 import { type Assets, type AssetsProps } from "./Assets.ts";
 import { type DurableObjectExport } from "./DurableObject.ts";
 import { Request } from "./Request.ts";
+import type { ModuleRule } from "./Sources/Prebuilt.ts";
+import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
 import { bindWorkerAsyncBindings } from "./WorkerAsyncBindings.ts";
 import type {
   WorkerBinding,
   WorkerBindingResource,
   WorkerBindings,
 } from "./WorkerBinding.ts";
-import type { ModuleRule } from "./Sources/Prebuilt.ts";
-import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
 import {
   makeWorkerRuntimeContext,
   type WorkerRuntimeContext,

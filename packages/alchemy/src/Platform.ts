@@ -713,6 +713,12 @@ export const Platform = <
                 exports: runtimeContext.exports
                   ? yield* runtimeContext.exports
                   : undefined,
+                // platform-accumulated plan state (e.g. Dockerfile
+                // statements contributed by bindings) — see
+                // BaseRuntimeContext.planProps
+                ...(runtimeContext.planProps
+                  ? yield* runtimeContext.planProps
+                  : {}),
               };
 
               return Object.assign(instance, {

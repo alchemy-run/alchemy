@@ -8,6 +8,7 @@ import { Scope } from "effect/Scope";
 import type { Stdio } from "effect/Stdio";
 import type { Terminal } from "effect/Terminal";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
+import { makeHostCollector } from "../Docker/Host.ts";
 import type { HttpEffect } from "../Http.ts";
 import * as Http from "../Http.ts";
 import * as Output from "../Output.ts";
@@ -198,6 +199,10 @@ export const createContainerRuntimeContext =
   (type: string) =>
   (id: string): HostRuntimeContext => {
     const base = createHostRuntimeContext(type)(id);
+    // Container platforms generate their image, so they host the
+    // Docker.Host seam: bindings contribute Dockerfile fragments during
+    // (plan-time) init, rendered per-arch onto `props.imageStatements`.
+    const hostImage = makeHostCollector();
     // Capture the host serve BEFORE Object.assign overwrites `base.serve`
     // with the wrapper below — calling `base.serve` inside the wrapper would
     // resolve to the wrapper itself (property lookup happens at call time)
@@ -217,5 +222,9 @@ export const createContainerRuntimeContext =
           yield* serveBase(handler, options);
         }
       }) as Effect.Effect<void, never, never>;
-    return Object.assign(base, { serve });
+    return Object.assign(base, {
+      serve,
+      planServices: hostImage.planServices,
+      planProps: hostImage.planProps,
+    });
   };

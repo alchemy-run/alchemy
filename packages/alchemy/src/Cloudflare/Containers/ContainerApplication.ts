@@ -11,6 +11,7 @@ import { Resource } from "../../Resource.ts";
 import * as Local from "../../Local/index.ts";
 import type { Providers } from "../Providers.ts";
 import type { InlineDockerfile } from "../../Docker/Dockerfile.ts";
+import type { Host } from "../../Docker/Host.ts";
 import { ContainerTypeId } from "./Container.ts";
 import { LiveContainerProvider } from "./ContainerProvider.ts";
 import { LocalContainerProvider } from "./LocalContainerProvider.ts";
@@ -267,6 +268,39 @@ export interface EffectfulContainerProps extends ContainerApplicationPropsBase {
    * additional packages via `pure.packages`, or disable with `pure: false`.
    */
   build?: Bundle.BundleConfig;
+  /**
+   * Local-dev (`alchemy dev`) options for this container. Deploys are
+   * unaffected — the deployed image always builds `linux/amd64`,
+   * Cloudflare's container platform.
+   */
+  dev?: {
+    /**
+     * Platform for the LOCAL dev image.
+     *
+     * `"native"` (the default) builds for the host CPU — on Apple
+     * Silicon this avoids amd64 emulation, which makes heavy builds
+     * (apt installs, compiles) take minutes instead of seconds. Safe
+     * for Effect-native containers because the generated Dockerfile and
+     * binding-contributed fragments (see `Docker.Host`) are
+     * architecture-parameterized.
+     *
+     * Pin `"linux/amd64"` to permanently opt this container out of
+     * native builds — production parity via emulation — when its image
+     * depends on architecture-specific behavior the generated
+     * Dockerfile doesn't abstract (e.g. a hardcoded amd64 binary in an
+     * inline {@link dockerfile} preamble).
+     *
+     * @default "native"
+     */
+    platform?: "native" | "linux/amd64";
+  };
+  /**
+   * @internal Per-architecture Dockerfile statements contributed by
+   * bindings during init via `Docker.Host` — populated by the
+   * Container platform, never written by hand. Participates in the
+   * image hash, so a changed contribution rebuilds the image.
+   */
+  imageStatements?: Host.Statements;
 }
 
 /**
@@ -338,6 +372,8 @@ export interface AnyContainerApplicationProps extends ContainerApplicationPropsB
   external?: string[];
   autoInstallExternals?: boolean;
   build?: Bundle.BundleConfig;
+  dev?: { platform?: "native" | "linux/amd64" };
+  imageStatements?: Host.Statements;
 }
 
 export type ContainerServices =
@@ -773,6 +809,12 @@ export declare namespace DevContainerImage {
     readonly dockerfile: string;
     readonly context?: string;
     readonly buildArgs?: Record<string, string>;
+    /**
+     * Docker platform for the local build (e.g. `"linux/arm64"`).
+     * Resolved by the local provider from the props' `dev.platform`
+     * (`"native"` → the host architecture). Absent = `linux/amd64`.
+     */
+    readonly platform?: string;
   }
   export interface Pull extends Base {
     readonly imageUri: string;

@@ -27,6 +27,13 @@ export const buildMicrovmDockerfile = (
   userDockerfile: string | undefined,
   runtime: "bun" | "node",
   port: number,
+  /**
+   * Binding-contributed Dockerfile statements (`Docker.Host`), already
+   * rendered for the image's single target architecture. Spliced after
+   * the runtime install and before the bundled program so their layers
+   * cache across code changes.
+   */
+  statements: ReadonlyArray<string> = [],
 ): string => {
   const base = userDockerfile?.trim() ?? `FROM ${MICROVM_BASE_DOCKER_IMAGE}`;
   const installRuntime =
@@ -40,6 +47,7 @@ export const buildMicrovmDockerfile = (
     base,
     "",
     installRuntime,
+    ...statements.flatMap((statement) => ["", statement.trim()]),
     "WORKDIR /app",
     // The entry (`index.mjs`) and every rolldown chunk are emitted with a
     // `.mjs` extension, which Node always treats as ESM — so the entry's named
