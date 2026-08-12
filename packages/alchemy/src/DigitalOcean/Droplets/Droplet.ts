@@ -33,14 +33,38 @@ import { sameElements } from "../../Util/equal.ts";
 import { listAllPages } from "../paginate.ts";
 import type { Providers } from "../Providers.ts";
 
+/**
+ * Datacenter region slug. The union is open (`string & {}`) so regions
+ * newer than this list still typecheck — DigitalOcean adds them faster
+ * than any published enum keeps up.
+ */
+export type RegionSlug =
+  | "ams3"
+  | "atl1"
+  | "blr1"
+  | "fra1"
+  | "lon1"
+  | "mem1"
+  | "mkc1"
+  | "nyc1"
+  | "nyc2"
+  | "nyc3"
+  | "ric1"
+  | "sfo2"
+  | "sfo3"
+  | "sgp1"
+  | "syd1"
+  | "tor1"
+  | (string & {});
+
 export type DropletProps = {
   /**
    * Droplet name (also its hostname). Defaults to a generated physical
    * name. Renames in place.
    */
   name?: string;
-  /** Region slug to deploy into, e.g. `sfo3`, `nyc1`. Replaces. */
-  region: string;
+  /** Region slug to deploy into. Replaces. */
+  region: RegionSlug;
   /** Size slug, e.g. `s-1vcpu-1gb`, `s-2vcpu-4gb`. Replaces. */
   size: string;
   /** Public image slug (`ubuntu-24-04-x64`) or private image id. Replaces. */
