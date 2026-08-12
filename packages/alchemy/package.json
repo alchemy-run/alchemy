@@ -39,7 +39,6 @@
     "publish:npm": "bun publish",
     "test": "alchemy-test",
     "test:benchmark": "tsx --tsconfig tsconfig.test.json test/types.benchmark.ts",
-    "benchmark:startup": "bun benchmark/startup/measure.ts",
     "nuke": "cd ../../ && bun nuke"
   },
   "exports": {
