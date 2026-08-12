@@ -17,8 +17,10 @@
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@sveltejs/kit": "catalog:frameworks",
     "@sveltejs/vite-plugin-svelte": "catalog:frameworks",
+    "@tailwindcss/vite": "catalog:",
     "@types/node": "^24.12.0",
     "svelte": "catalog:frameworks",
+    "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:"
   },

@@ -316,11 +316,21 @@ export const destroy = (
 /**
  * In-test scratch stack handed to `test.provider(name, (stack) => ...)`.
  *
- * Each scratch stack owns a private in-memory state store that is shared
- * between successive `deploy`/`destroy` calls AND visible to the user's test
- * body (so `yield* State` / `state.get(...)` see the same store the deploys
+ * Each scratch stack owns a private state store that is shared between
+ * successive `deploy`/`destroy` calls AND visible to the user's test body
+ * (so `yield* State` / `state.get(...)` see the same store the deploys
  * mutated). This makes create / update / replace / delete paths exercisable
- * without polluting `.alchemy/` or other tests in the same file.
+ * without polluting other tests in the same file.
+ *
+ * When the adapter can name the test file (the alchemy-test runner), the
+ * store is DURABLE — rows live under `.alchemy/state/{file}-{test}/{stage}`
+ * on disk. Durability is what makes an interrupted destroy recoverable: the
+ * engine persists a `deleting` row before every `provider.delete` and only
+ * drops it on success, so a run killed mid-delete (e.g. the runner's
+ * teardown-abandonment after a test timeout) leaves resumable rows that the
+ * NEXT run's leading `stack.destroy()` (or the `Effect.ensuring` teardown)
+ * picks up and drains. An in-memory scratch dies with the process, silently
+ * orphaning every cloud resource whose delete was still in flight.
  */
 export interface ScratchStack<ROut = any> {
   readonly name: string;
@@ -347,24 +357,41 @@ const sanitizeStackName = (name: string) =>
   name.replaceAll(/[^a-zA-Z0-9_]/g, "-").replace(/-+/g, "-");
 
 /**
- * Build a fresh `ScratchStack` for `test.provider`. Allocates a private
- * in-memory state store so the test is isolated from `.alchemy/` and from
- * other tests in the same file.
+ * Turn a test-file path (relative to the run root) into a stack-name
+ * namespace: `test/AWS/Website/Router.test.ts` -> `AWS/Website/Router`.
+ * Test names repeat across files (e.g. "create and delete bucket with
+ * default props"), so the durable per-test store MUST be namespaced by file
+ * or two concurrently-running same-named tests would read, write and — far
+ * worse — destroy each other's rows.
+ */
+const scratchNamespace = (file: string) =>
+  file.replace(/^test[/\\]/, "").replace(/\.test\.ts$/, "");
+
+/**
+ * Build a fresh `ScratchStack` for `test.provider`.
+ *
+ * With `file` (the registration-time test file, supplied by the
+ * alchemy-test adapter): the store is the durable `.alchemy/state` local
+ * store and the stack name is namespaced by file so interrupted destroys
+ * leave resumable rows for the next run (see {@link ScratchStack}).
+ *
+ * Without `file` (bun/vitest adapters, which cannot name their file at
+ * registration time): falls back to a private in-memory store — isolated,
+ * but discarded with the process.
  */
 export const scratchStack = <ROut>(
   options: MakeOptions<ROut>,
   name: string,
+  file?: string,
 ): ScratchStack<ROut> => {
   const stage = options.stage ?? "test";
-  const stackName = sanitizeStackName(name);
-  const inMemory: Record<
-    string,
-    Record<string, Record<string, State.ResourceState>>
-  > = {};
-  const stateLayer = Layer.succeed(
-    State.State,
-    State.InMemoryService(inMemory),
+  const stackName = sanitizeStackName(
+    file === undefined ? name : `${scratchNamespace(file)}-${name}`,
   );
+  const stateLayer: Layer.Layer<State.State> =
+    file === undefined
+      ? Layer.succeed(State.State, State.InMemoryService({}))
+      : Layer.provide(State.localState(), PlatformServices);
 
   const buildAndApply = (effect: Effect.Effect<any, any, any>) =>
     (effect as Effect.Effect<any, any, never>).pipe(

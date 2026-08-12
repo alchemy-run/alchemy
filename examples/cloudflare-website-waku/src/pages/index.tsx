@@ -9,8 +9,10 @@ export default async function HomePage() {
   const greeting = getEnv("GREETING") ?? "Hello";
   return (
     <div>
-      <h1>{greeting}</h1>
-      <p>This page is rendered by the Worker on every request.</p>
+      <h1 className="text-3xl font-bold">{greeting}</h1>
+      <p className="mt-2 text-gray-600">
+        This page is rendered by the Worker on every request.
+      </p>
       <Counter />
     </div>
   );
