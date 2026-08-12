@@ -23,6 +23,8 @@ minimumReleaseAgeExcludes = [
   "@distilled.cloud/core",
   "@distilled.cloud/neon",
   "@distilled.cloud/planetscale",
+  "drizzle-kit",
+  "drizzle-orm",
   "effect",
   "fast-check",
   "foldkit",
