@@ -128,9 +128,14 @@ export const VectorBucketProvider = () =>
         id: string,
         props: Pick<VectorBucketProps, "vectorBucketName">,
       ) {
+        // The service rejects bucket names starting with `aws` as reserved.
         return (
           props.vectorBucketName ??
-          (yield* createPhysicalName({ id, maxLength: 63 })).toLowerCase()
+          (yield* createPhysicalName({
+            id,
+            maxLength: 63,
+            forbiddenPrefixes: ["aws"],
+          })).toLowerCase()
         );
       });
 
