@@ -1004,7 +1004,30 @@ directory diff also compares things git does not track (empty directories,
 submodule mount points), which legitimately differ between a working tree
 and a fresh clone of it.
 
-### 16.4 What the measurements corrected
+### 16.4 Push size: the cap is gone, the large path needs a cursor
+
+A push larger than the in-memory threshold is **no longer rejected**. The
+body is parked in R2 and parsed back through `store/PackSource.ts`, an
+R2-backed `RandomAccess` with window-coalesced reads — the seam
+`PackParser` was written against from the start. The DO's ingest now runs
+on `PackParser` (which the pack fixtures cover directly) rather than its
+own buffer-only copy.
+
+Measured caveat, found by pushing this repo through it: that path is
+correct but **much slower** than memory. `PackParser` issues a read per
+entry, and an entry-sized read against a window cache costs a stitch and a
+copy each time, so a 13.7k-object pack takes minutes instead of the ~20 s
+the in-memory path needs. The threshold therefore stays at 50 MiB — the
+memory-safe ceiling inside a 128 MB isolate, and the fast path for
+everything up to it.
+
+Making large pushes *fast* needs the parser to consume a **sequential
+cursor** — one forward-only stream with a small pushback buffer, since pack
+parsing is almost entirely sequential and only delta-base resolution seeks
+backwards — instead of random reads. That change stays inside `PackParser`
+and `PackSource`; no protocol code moves.
+
+### 16.5 What the measurements corrected
 
 1. **`repos.list` was O(N) Durable Object wakes** — the handler fanned out
    `getRepoMeta` per row, so listing 100 repos woke 100 DOs. **Fixed**:

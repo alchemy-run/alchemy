@@ -54,6 +54,8 @@ import {
 } from "./Api.ts";
 import { hashToken, mintToken, parseBasicOrBearer } from "./Auth.ts";
 import { applyDelta } from "./git/Delta.ts";
+import * as PackParser from "./git/PackParser.ts";
+import { bufferRandomAccess, type RandomAccess } from "./git/PackParser.ts";
 import {
   bytesToHex,
   concatBytes,
@@ -99,6 +101,8 @@ import { runImport, type ImportSource } from "./jobs/Import.ts";
 import { runForkJob, snapshotStream, type SnapshotChunk } from "./jobs/Fork.ts";
 import { bundleCovers, runBundleJob, type BundleInfo } from "./jobs/Bundle.ts";
 import { runCompactJob, shouldCompact } from "./jobs/Compact.ts";
+import { incomingKey } from "./store/Keys.ts";
+import { r2RandomAccess } from "./store/PackSource.ts";
 import { runPurgeJob } from "./jobs/Purge.ts";
 import { Registry, REGISTRY_DO_NAME, ulid } from "./RegistryObject.ts";
 import { computeClosure } from "./store/Closure.ts";
@@ -120,7 +124,24 @@ import {
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Hard cap on a buffered push pack (DESIGN.md §1): 50 MiB. */
+/**
+ * Pushes up to this size are ingested straight from memory; larger ones are
+ * parked in R2 and parsed from there (DESIGN.md §3.6). A **buffering
+ * threshold, not a limit** — a push larger than this is no longer rejected.
+ *
+ * 50 MiB is the memory-safe ceiling for the in-memory path (pack + delta
+ * bases inside a 128 MB isolate) and is the measured-fast path: the
+ * 38 MiB alchemy-repo push ingests in ~20 s here.
+ *
+ * MEASURED CAVEAT: the R2-backed path above this threshold is correct but
+ * currently **much** slower — `PackParser` issues a read per entry, and an
+ * entry-sized read against window-cached R2 costs a stitch/copy each time,
+ * so a 13.7k-object pack takes minutes rather than seconds. Making large
+ * pushes fast needs the parser to consume a *sequential cursor* (one
+ * forward-only stream with a small pushback buffer) instead of random
+ * reads; the seam is `RandomAccess`, so that change stays local to
+ * `PackParser` + `store/PackSource.ts`.
+ */
 export const MAX_PACK_BYTES = 50 * 1024 * 1024;
 
 /** Agent string advertised on the wire. */
@@ -902,6 +923,147 @@ export interface IngestOptions {
  * is `pack: Uint8Array` random access — swapping in an R2-backed
  * `RandomAccess` touches this implementation, not the protocol drivers.
  */
+/**
+ * Ingests a pack from a {@link RandomAccess} source — the path that has **no
+ * size cap** (DESIGN.md §3.6). Memory is bounded by the source's read
+ * window and the delta LRU rather than by the pack, so the source can be an
+ * R2 object of any size (see `store/PackSource.ts`).
+ *
+ * Delegates the wire-format work to the pure `PackParser` (which the pack
+ * fixtures in `test/pack.test.ts` cover directly) and does the repo-side
+ * work in its sink: stage the object, and record commit-graph edges.
+ * Blobs are staged without inflating — only commits, trees and tags need
+ * their content parsed, and those are small.
+ */
+export const ingestPackFrom = (
+  source: RandomAccess,
+  options: IngestOptions,
+): Effect.Effect<IngestResult, PackIngestError | StoreError> =>
+  Effect.gen(function* () {
+    const { store, pushId } = options;
+    const commits: Array<StagedCommitInfo> = [];
+    const referenced = new Set<Oid>();
+    const referencedParents = new Set<Oid>();
+
+    const record = Effect.fn(function* (
+      oid: Oid,
+      type: ObjectType,
+      content: Uint8Array,
+    ) {
+      switch (type) {
+        case ObjectType.commit: {
+          const parsed = yield* parseCommit(content).pipe(
+            Effect.mapError(
+              (error) =>
+                new PackIngestError({
+                  reason: `bad commit ${oid}: ${error.reason}`,
+                }),
+            ),
+          );
+          commits.push({
+            oid,
+            tree: parsed.tree,
+            parents: parsed.parents,
+            commitTime: parsed.committer.when,
+          });
+          referenced.add(parsed.tree);
+          for (const parent of parsed.parents) referencedParents.add(parent);
+          return;
+        }
+        case ObjectType.tree: {
+          const parsed = yield* parseTree(content).pipe(
+            Effect.mapError(
+              (error) =>
+                new PackIngestError({
+                  reason: `bad tree ${oid}: ${error.reason}`,
+                }),
+            ),
+          );
+          for (const entry of parsed) {
+            if (treeEntryKind(entry.mode) !== "commit") {
+              referenced.add(entry.oid);
+            }
+          }
+          return;
+        }
+        case ObjectType.tag: {
+          const parsed = yield* parseTag(content).pipe(
+            Effect.mapError(
+              (error) =>
+                new PackIngestError({
+                  reason: `bad tag ${oid}: ${error.reason}`,
+                }),
+            ),
+          );
+          referenced.add(parsed.object);
+          return;
+        }
+        case ObjectType.blob:
+          return;
+      }
+    });
+
+    const summary = yield* PackParser.ingestPack({
+      source,
+      store,
+      maxObjectSize: MAX_OBJECT_SIZE,
+      sink: (entry) =>
+        Effect.gen(function* () {
+          yield* store.insertStaged(pushId, {
+            oid: entry.oid,
+            type: entry.type,
+            size: entry.size,
+            zdata: entry.zdata,
+          });
+          if (entry.type === ObjectType.blob) return;
+          const content = yield* Zlib.inflate(entry.zdata).pipe(
+            Effect.mapError(
+              (error) => new PackIngestError({ reason: error.reason }),
+            ),
+          );
+          yield* record(entry.oid, entry.type, content);
+        }),
+    }).pipe(
+      Effect.mapError((error) =>
+        error._tag === "StoreError" || error._tag === "PackIngestError"
+          ? error
+          : new PackIngestError({ reason: packParserReason(error) }),
+      ),
+    );
+
+    return {
+      objectCount: summary.count,
+      // The parser verifies the trailer itself; the checksum is not used
+      // downstream, so it is not re-derived here.
+      packSha: "",
+      commits,
+      referenced: Array.from(referenced),
+      referencedParents: Array.from(referencedParents),
+    } satisfies IngestResult;
+  });
+
+/** Renders a `PackParser` failure as an in-band `unpack <reason>` string. */
+const packParserReason = (error: {
+  readonly _tag: string;
+  readonly reason?: string;
+  readonly expected?: string;
+  readonly actual?: string;
+  readonly baseOid?: string;
+  readonly size?: number;
+  readonly limit?: number;
+}): string => {
+  switch (error._tag) {
+    case "PackChecksumMismatch":
+      return "pack checksum mismatch";
+    case "MissingDeltaBaseError":
+      return `missing delta base ${error.baseOid ?? ""}`.trim();
+    case "ObjectTooLargeError":
+      return `object too large (${error.size ?? 0} > ${error.limit ?? 0})`;
+    default:
+      return error.reason ?? error._tag;
+  }
+};
+
 export const ingestPack = (
   pack: Uint8Array,
   options: IngestOptions,
@@ -2095,21 +2257,9 @@ export const GitRepoLive = GitRepo.make(
           if (!authed) return wire401;
           const resultType = "application/x-git-receive-pack-result";
 
-          const contentLength = Number.parseInt(
-            request.headers["content-length"] ?? "",
-            10,
-          );
-          if (
-            Number.isInteger(contentLength) &&
-            contentLength > MAX_PACK_BYTES + 65536
-          ) {
-            // Too large to even buffer — an in-band report is impossible
-            // without reading the body, so reject at the HTTP layer.
-            return HttpServerResponse.text("pack exceeds 50 MiB limit", {
-              status: 413,
-            });
-          }
-
+          // No size check: a push of any size is accepted. Large ones are
+          // parked in R2 and parsed from there (below) so ingest memory is
+          // bounded by the read window rather than by the pack.
           const rawBody = new Uint8Array(yield* request.arrayBuffer);
           const bodyResult = yield* Effect.result(
             gunzipIfNeeded(rawBody, request.headers["content-encoding"]),
@@ -2190,12 +2340,6 @@ export const GitRepoLive = GitRepo.make(
           if (meta.readOnly) {
             return respond("ok", allNg("repository is read-only"));
           }
-          if (body.length - parsed.packStart > MAX_PACK_BYTES) {
-            return respond(
-              "pack exceeds 50 MiB limit",
-              allNg("pack exceeds 50 MiB limit"),
-            );
-          }
 
           // One push at a time (DESIGN.md §2.1): wait ≤ 30 s for the permit.
           const permit = yield* Semaphore.take(pushSemaphore, 1).pipe(
@@ -2205,6 +2349,9 @@ export const GitRepoLive = GitRepo.make(
             return wire503;
           }
 
+          // Declared out here so the `ensuring` below (which runs outside
+          // the generator) can drop the parked pack.
+          let parkedKey: string | undefined;
           return yield* Effect.gen(function* () {
             const pushId = yield* ulid();
             yield* sql.run(
@@ -2217,17 +2364,44 @@ export const GitRepoLive = GitRepo.make(
 
             let ingest: IngestResult | undefined;
             if (hasPack) {
+              const packSlice = body.subarray(parsed.packStart);
+              // Small packs parse straight out of memory. Larger ones are
+              // parked in R2 first and read back through bounded windows, so
+              // a push is never limited by the isolate's memory (DESIGN §3.6).
+              const source = yield* packSlice.length <= MAX_PACK_BYTES
+                ? Effect.succeed(bufferRandomAccess(packSlice))
+                : Effect.gen(function* () {
+                    const key = incomingKey(meta.repoId, pushId);
+                    yield* bucket
+                      .put(key, packSlice, {
+                        contentLength: packSlice.length,
+                      })
+                      .pipe(
+                        Effect.mapError(
+                          (error) =>
+                            new StoreError({
+                              reason: `incoming pack put: ${error.message}`,
+                            }),
+                        ),
+                      );
+                    parkedKey = key;
+                    return r2RandomAccess({
+                      bucket,
+                      key,
+                      size: packSlice.length,
+                    });
+                  });
               const outcome = yield* Effect.result(
-                ingestPack(body.subarray(parsed.packStart), {
+                ingestPackFrom(source, {
                   store: objects,
                   pushId,
                 }),
               );
               if (Result.isFailure(outcome)) {
-                const reason =
-                  outcome.failure._tag === "PackIngestError"
-                    ? outcome.failure.reason
-                    : "internal storage error";
+                // Surface the actual reason: a bare "internal storage error"
+                // makes a failed push undiagnosable from the client side.
+                const reason = outcome.failure.reason;
+                yield* Effect.logError("push ingest failed", outcome.failure);
                 return respond(reason, allNg("unpacker error"));
               }
               ingest = outcome.success;
@@ -2284,7 +2458,16 @@ export const GitRepoLive = GitRepo.make(
             );
 
             return respond("ok", results);
-          }).pipe(Effect.ensuring(Semaphore.release(pushSemaphore, 1)));
+          }).pipe(
+            Effect.ensuring(
+              Effect.suspend(() =>
+                parkedKey === undefined
+                  ? Effect.void
+                  : bucket.delete(parkedKey).pipe(Effect.ignore),
+              ),
+            ),
+            Effect.ensuring(Semaphore.release(pushSemaphore, 1)),
+          );
         });
 
       // ── alarm jobs ───────────────────────────────────────────────────────
