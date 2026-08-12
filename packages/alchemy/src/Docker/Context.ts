@@ -160,9 +160,23 @@ export const ContextProvider = () =>
             }
           }
 
-          const existing = output
-            ? yield* inspect(output.id)
-            : yield* inspect(desired.name);
+          // A rename reaches reconcile when the converge pass re-evaluates
+          // late-resolved props (diff never sees them): the state's context
+          // and the desired one are different physical names. Drop the old
+          // name and fall through to create under the new one.
+          if (output && output.id !== desired.name) {
+            yield* docker.context
+              .remove(output.id, true)
+              .pipe(
+                Effect.catchReason(
+                  "PlatformError",
+                  "NotFound",
+                  () => Effect.void,
+                ),
+              );
+          }
+
+          const existing = yield* inspect(desired.name);
 
           if (!existing) {
             const createArgs = {
