@@ -21,14 +21,18 @@ export interface Connection {
 }
 
 export const getConnection = (): Connection | null => {
-  const url = localStorage.getItem(URL_KEY) ?? builtinUrl;
+  // The build-time URL always wins: a redeploy moves the service to a new
+  // workers.dev host, and a URL persisted from a previous session would
+  // silently point every request at the dead one (surfacing as opaque
+  // CORS failures). localStorage only matters when no URL was baked in.
+  const url = builtinUrl ?? localStorage.getItem(URL_KEY);
   if (!url) return null;
   const token = localStorage.getItem(TOKEN_KEY);
   return { url: url.replace(/\/+$/, ""), token: token ?? undefined };
 };
 
 export const defaultUrl = (): string =>
-  localStorage.getItem(URL_KEY) ?? builtinUrl ?? "";
+  builtinUrl ?? localStorage.getItem(URL_KEY) ?? "";
 
 export const saveConnection = (url: string, token?: string): void => {
   localStorage.setItem(URL_KEY, url.replace(/\/+$/, ""));
