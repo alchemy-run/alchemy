@@ -78,14 +78,15 @@ const makeCli = async (args: readonly string[]) => {
         ),
       );
   const root = Command.make("alchemy", {}).pipe(
-    Command.withSubcommands(
-      loadedCommands as ReadonlyArray<Command.Command.Any>,
-    ),
+    Command.withSubcommands(loadedCommands),
   );
-  return {
-    cli: Command.run(root, { version: packageJson.version }),
-    needsCommandServices: selected !== undefined,
-  };
+  const cli = Command.run(root, { version: packageJson.version });
+  return selected === undefined
+    ? {
+        cli: cli as Effect.Effect<void, any, never>,
+        needsCommandServices: false as const,
+      }
+    : { cli, needsCommandServices: true as const };
 };
 
 const baseServices = Layer.mergeAll(
@@ -114,18 +115,17 @@ const commandServices = Layer.unwrap(
 );
 
 const program = Effect.promise(() => makeCli(process.argv.slice(2))).pipe(
-  Effect.flatMap(({ cli, needsCommandServices }) =>
-    Effect.gen(function* () {
-      yield* checkLatestVersion;
-      return yield* cli;
-    }).pipe(
-      Effect.provide(
-        needsCommandServices
-          ? Layer.merge(baseServices, commandServices)
-          : baseServices,
-      ),
-    ),
-  ),
+  Effect.flatMap((command) => {
+    return command.needsCommandServices
+      ? Effect.gen(function* () {
+          yield* checkLatestVersion;
+          return yield* command.cli;
+        }).pipe(Effect.provide(Layer.merge(baseServices, commandServices)))
+      : Effect.gen(function* () {
+          yield* checkLatestVersion;
+          return yield* command.cli;
+        }).pipe(Effect.provide(baseServices));
+  }),
   Effect.scoped,
 );
 
