@@ -414,19 +414,65 @@ layer(services, { excludeTestServices: true })((it) => {
     () =>
       Effect.gen(function* () {
         const proxy = yield* WorkerProxy.WorkerProxy;
-        const base = yield* PortHelpers.find(0);
 
         // Simulate a dev restart racing the old session's teardown: the old
         // session still holds the middle configured port when the new
         // session's proxies start. Without a grace window the middle worker
         // silently drifts onto a neighbor's configured port — serving the
         // wrong app on a port the user knows.
-        const stale = yield* Effect.forkChild(
-          Effect.scoped(
-            Effect.gen(function* () {
-              yield* PortHelpers.occupy(base + 1);
-              yield* Effect.sleep("750 millis");
-            }),
+        //
+        // The suite runs many port tests concurrently, so a freshly probed
+        // port's neighbors may already be taken — stage the trio by
+        // retrying until the "stale" listener actually binds base + 1 and
+        // base + 2 probes free.
+        const tryBind = (port: number) =>
+          Effect.callback<NodeNet.Server | undefined>((resume) => {
+            const server = NodeNet.createServer();
+            server.once("error", () => resume(Effect.succeed(undefined)));
+            server.listen({ port, exclusive: true }, () =>
+              resume(Effect.succeed(server)),
+            );
+            return Effect.sync(() => server.close());
+          });
+        let base!: number;
+        let stale!: NodeNet.Server;
+        for (let attempt = 0; ; attempt++) {
+          const candidate = yield* PortHelpers.find(0);
+          const staleCandidate = yield* tryBind(candidate + 1);
+          if (staleCandidate !== undefined) {
+            const neighbor = yield* tryBind(candidate + 2);
+            if (neighbor !== undefined) {
+              yield* Effect.callback<void>((resume) =>
+                neighbor.close(() => resume(Effect.void)),
+              );
+              base = candidate;
+              stale = staleCandidate;
+              break;
+            }
+            yield* Effect.callback<void>((resume) =>
+              staleCandidate.close(() => resume(Effect.void)),
+            );
+          }
+          if (attempt >= 9) {
+            return yield* Effect.die(
+              "could not stage a stale listener on a free port trio",
+            );
+          }
+        }
+        // The finalizer makes the close idempotent if the test fails early.
+        yield* Effect.addFinalizer(() =>
+          Effect.callback<void>((resume) =>
+            stale.close(() => resume(Effect.void)),
+          ),
+        );
+        // The "old session" releases the port mid-grace-window.
+        yield* Effect.forkChild(
+          Effect.sleep("750 millis").pipe(
+            Effect.andThen(
+              Effect.callback<void>((resume) =>
+                stale.close(() => resume(Effect.void)),
+              ),
+            ),
           ),
         );
 
@@ -438,7 +484,6 @@ layer(services, { excludeTestServices: true })((it) => {
           ],
           { concurrency: "unbounded" },
         );
-        yield* Fiber.join(stale);
 
         expect(Number(a.url.port)).toBe(base);
         expect(Number(b.url.port)).toBe(base + 1);
