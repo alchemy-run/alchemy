@@ -64,7 +64,8 @@ export type DropletProps = {
    * Maximum droplet age before a deploy replaces it. Age is measured from
    * the droplet's `createdAt`: once exceeded, the next deploy rebuilds the
    * host on a fresh image — phoenix-style patching, where kernel and base
-   * image updates arrive by replacement instead of in-place mutation.
+   * image updates arrive by replacement instead of in-place mutation
+   * (see https://martinfowler.com/bliki/PhoenixServer.html).
    * Pass millis or a duration string (`"30 days"`); these serialize into
    * state, unlike `Duration` values. Changing the policy itself never
    * triggers a replace; only crossing the age horizon does. Omit to keep
