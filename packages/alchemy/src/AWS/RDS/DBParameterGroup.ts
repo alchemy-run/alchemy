@@ -2,7 +2,7 @@ import * as rds from "@distilled.cloud/aws/rds";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { isResolved } from "../../Diff.ts";
+import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -24,7 +24,17 @@ export interface DBParameterGroupProps {
   description?: string;
   /**
    * Instance parameter overrides, e.g. `{ time_zone: "Australia/Sydney" }`.
-   * Parameters removed from this map are reset to their engine defaults.
+   *
+   * When set, this map is the group's entire user-owned surface: entries are
+   * written, and any parameter RDS reports as user-set but absent here is
+   * reset to its engine default. `{}` therefore resets every override, while
+   * OMITTING the prop leaves parameters alone entirely — which is what makes
+   * it safe to adopt a group that was tuned elsewhere.
+   *
+   * Values must be in the form RDS reports back (it canonicalises some — a
+   * boolean set as `ON` reads back as `1`), or the two never compare equal
+   * and every deploy re-issues the modify.
+   *
    * Static parameters are applied with `pending-reboot`, dynamic parameters
    * with `immediate`.
    */
@@ -56,7 +66,8 @@ export interface DBParameterGroup extends Resource<
      */
     description: string | undefined;
     /**
-     * Non-default parameter values applied to the group.
+     * The parameter overrides this resource manages; `{}` when `parameters`
+     * is omitted and the group's settings are owned elsewhere.
      */
     parameters: Record<string, string>;
     /**
@@ -73,7 +84,7 @@ export interface DBParameterGroup extends Resource<
  * `DBInstance` (as opposed to the cluster-wide `DBClusterParameterGroup`).
  *
  * Name, family, and description changes force a replacement (RDS has no
- * modify API for these); tags update in place.
+ * modify API for these); parameters and tags update in place.
  * @resource
  * @section Creating a Parameter Group
  * @example Parameter Group for Aurora Postgres 16 Instances
@@ -83,6 +94,20 @@ export interface DBParameterGroup extends Resource<
  *   description: "Instance-level settings for the app database",
  * });
  * ```
+ *
+ * @example Set Engine Parameters
+ * ```typescript
+ * const params = yield* DBParameterGroup("MysqlParams", {
+ *   family: "mysql8.4",
+ *   parameters: {
+ *     time_zone: "Australia/Sydney",
+ *     max_connections: "200",
+ *   },
+ * });
+ * ```
+ * Dynamic parameters apply immediately, static ones on the next reboot.
+ * Cluster-wide settings belong on `DBClusterParameterGroup` instead — Postgres
+ * `timezone`, for example, is a cluster parameter on Aurora.
  *
  * @example Attach to an Instance
  * ```typescript
@@ -172,7 +197,7 @@ export const DBParameterGroupProvider = () =>
 
       return {
         stables: ["dbParameterGroupArn", "dbParameterGroupName"],
-        diff: Effect.fn(function* ({ id, olds, news }) {
+        diff: Effect.fn(function* ({ id, olds, news, output }) {
           if (!isResolved(news)) return undefined;
           if (
             (yield* toName(id, olds ?? ({} as DBParameterGroupProps))) !==
@@ -185,6 +210,16 @@ export const DBParameterGroupProvider = () =>
             olds?.description !== news.description
           ) {
             return { action: "replace" } as const;
+          }
+          // Props alone would miss an out-of-band edit: the engine's fallback
+          // compares props, so a console change to a parameter this resource
+          // owns would never schedule the reconcile that corrects it.
+          if (
+            news.parameters !== undefined &&
+            output !== undefined &&
+            !deepEqual(news.parameters, output.parameters)
+          ) {
+            return { action: "update" } as const;
           }
         }),
         list: () =>
@@ -284,63 +319,72 @@ export const DBParameterGroupProvider = () =>
           }
 
           // Sync parameters — diff observed cloud values against desired.
-          const desiredParameters = news.parameters ?? {};
-          const byName = new Map(
-            (yield* readParameters(name)).map((p) => [p.ParameterName, p]),
-          );
+          // Only when the prop is present: reconcile also runs on adopt, so
+          // defaulting an omitted map to {} would reset every override on a
+          // group that was tuned elsewhere.
+          const desiredParameters = news.parameters;
+          if (desiredParameters !== undefined) {
+            const byName = new Map(
+              (yield* readParameters(name)).flatMap((p) =>
+                p.ParameterName !== undefined
+                  ? [[p.ParameterName, p] as const]
+                  : [],
+              ),
+            );
 
-          const toModify: rds.Parameter[] = Object.entries(
-            desiredParameters,
-          ).flatMap(([ParameterName, ParameterValue]) => {
-            const current = byName.get(ParameterName);
-            if (current?.ParameterValue === ParameterValue) return [];
-            return [
-              {
-                ParameterName,
-                ParameterValue,
-                ApplyMethod:
-                  current?.ApplyType === "static"
-                    ? "pending-reboot"
-                    : "immediate",
-              },
-            ];
-          });
-          if (toModify.length > 0) {
-            // The API caps a single call at 20 parameters.
-            for (let i = 0; i < toModify.length; i += 20) {
-              yield* retryWhileParameterGroupBusy(
-                rds.modifyDBParameterGroup({
-                  DBParameterGroupName: name,
-                  Parameters: toModify.slice(i, i + 20),
-                }),
-              );
+            const toModify: rds.Parameter[] = Object.entries(
+              desiredParameters,
+            ).flatMap(([ParameterName, ParameterValue]) => {
+              const current = byName.get(ParameterName);
+              if (current?.ParameterValue === ParameterValue) return [];
+              return [
+                {
+                  ParameterName,
+                  ParameterValue,
+                  ApplyMethod:
+                    current?.ApplyType === "static"
+                      ? "pending-reboot"
+                      : "immediate",
+                },
+              ];
+            });
+            if (toModify.length > 0) {
+              // The API caps a single call at 20 parameters.
+              for (let i = 0; i < toModify.length; i += 20) {
+                yield* retryWhileParameterGroupBusy(
+                  rds.modifyDBParameterGroup({
+                    DBParameterGroupName: name,
+                    Parameters: toModify.slice(i, i + 20),
+                  }),
+                );
+              }
             }
-          }
 
-          // Reset user-overridden parameters that were removed from props.
-          const toReset = (yield* readUserParameters(name)).flatMap((p) =>
-            p.ParameterName !== undefined &&
-            !(p.ParameterName in desiredParameters)
-              ? [
-                  {
-                    ParameterName: p.ParameterName,
-                    ApplyMethod:
-                      p.ApplyType === "static"
-                        ? ("pending-reboot" as const)
-                        : ("immediate" as const),
-                  },
-                ]
-              : [],
-          );
-          if (toReset.length > 0) {
-            for (let i = 0; i < toReset.length; i += 20) {
-              yield* retryWhileParameterGroupBusy(
-                rds.resetDBParameterGroup({
-                  DBParameterGroupName: name,
-                  ResetAllParameters: false,
-                  Parameters: toReset.slice(i, i + 20),
-                }),
-              );
+            // Reset user-overridden parameters that were removed from props.
+            const toReset = (yield* readUserParameters(name)).flatMap((p) =>
+              p.ParameterName !== undefined &&
+              !(p.ParameterName in desiredParameters)
+                ? [
+                    {
+                      ParameterName: p.ParameterName,
+                      ApplyMethod:
+                        p.ApplyType === "static"
+                          ? ("pending-reboot" as const)
+                          : ("immediate" as const),
+                    },
+                  ]
+                : [],
+            );
+            if (toReset.length > 0) {
+              for (let i = 0; i < toReset.length; i += 20) {
+                yield* retryWhileParameterGroupBusy(
+                  rds.resetDBParameterGroup({
+                    DBParameterGroupName: name,
+                    ResetAllParameters: false,
+                    Parameters: toReset.slice(i, i + 20),
+                  }),
+                );
+              }
             }
           }
 
@@ -369,7 +413,7 @@ export const DBParameterGroupProvider = () =>
             dbParameterGroupArn,
             family: observed.DBParameterGroupFamily ?? news.family,
             description: observed.Description,
-            parameters: desiredParameters,
+            parameters: desiredParameters ?? {},
             tags: desiredTags,
           };
         }),
