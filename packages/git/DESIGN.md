@@ -977,7 +977,34 @@ load does not improve it — while the bundle path keeps scaling with
 concurrency (3.1× at 32-way, still climbing). Serialized planes flatten;
 immutable content-addressed bytes served by Workers do not.
 
-### 16.3 What the measurements corrected
+### 16.3 Real world: this repository (test/GitRealWorld.e2e.test.ts)
+
+The strongest test we have is pushing the alchemy monorepo itself — a
+depth-1 tree re-committed as one root commit, which keeps the real object
+count and byte volume while staying fully connected (pushing from a shallow
+clone would reference parents the server does not have, which receive-pack
+correctly refuses):
+
+| Step | Result |
+|---|---|
+| push 12,315 files / 13,699 objects / 38.1 MiB | 20.6 s |
+| clone back, loose objects | 19.5 s |
+| **clone back after compaction (R2 packs)** | **3.4 s — 5.7×** |
+| `git fsck --strict`, HEAD and tree oid equality | identical |
+| incremental push on top | works |
+
+Compaction making clones **5.7× faster** on a real repo is the v2 storage
+plane paying off end to end: the same objects, read as a few large ranged
+GETs out of an immutable pack instead of thousands of row reads.
+
+Verification note: the suite deliberately does **not** `diff -r` the two
+working trees. Tree-oid equality is the stronger and correct assertion —
+identical tree oids mean every path, mode and blob matches — whereas a
+directory diff also compares things git does not track (empty directories,
+submodule mount points), which legitimately differ between a working tree
+and a fresh clone of it.
+
+### 16.4 What the measurements corrected
 
 1. **`repos.list` was O(N) Durable Object wakes** — the handler fanned out
    `getRepoMeta` per row, so listing 100 repos woke 100 DOs. **Fixed**:
