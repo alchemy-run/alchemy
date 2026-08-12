@@ -60,6 +60,57 @@ export type RegionSlug =
   | "tor1"
   | (string & {});
 
+/**
+ * Droplet size slug. Open union, like {@link RegionSlug} — unlisted
+ * slugs still typecheck.
+ *
+ * Sourced from the live `GET /v2/sizes` API (`available: true` slugs
+ * only), 2026-08-12.
+ */
+export type SizeSlug =
+  | "s-1vcpu-512mb-10gb"
+  | "s-1vcpu-1gb"
+  | "s-1vcpu-1gb-intel"
+  | "s-1vcpu-1gb-35gb-intel"
+  | "s-1vcpu-2gb"
+  | "s-1vcpu-2gb-intel"
+  | "s-1vcpu-2gb-70gb-intel"
+  | "s-2vcpu-2gb"
+  | "s-2vcpu-2gb-intel"
+  | "s-2vcpu-2gb-90gb-intel"
+  | "s-2vcpu-4gb"
+  | "s-2vcpu-4gb-intel"
+  | "s-2vcpu-4gb-120gb-intel"
+  | "s-2vcpu-8gb-160gb-intel"
+  | "s-4vcpu-8gb"
+  | "s-4vcpu-8gb-intel"
+  | "s-4vcpu-8gb-240gb-intel"
+  | "c-2"
+  | "c-4"
+  | "g-2vcpu-8gb"
+  | "gd-2vcpu-8gb"
+  | "m-2vcpu-16gb"
+  | "gpu-4000adax1-20gb"
+  | "gpu-6000adax1-48gb"
+  | "gpu-l40sx1-48gb"
+  | "gpu-h100x1-80gb"
+  | "gpu-h100x8-640gb"
+  | "gpu-h200x1-141gb"
+  | "gpu-h200x8-1128gb"
+  | "gpu-mi300x1-192gb"
+  | "gpu-mi300x8-1536gb"
+  | "gpu-mi325x1-256gb"
+  | "gpu-mi325x8-2048gb"
+  | "gpu-b300x1-288gb-spot"
+  | "gpu-b300x1-288gb-lc-spot"
+  | "gpu-b300x8-2304gb-spot"
+  | "gpu-b300x8-2304gb-lc-spot"
+  | "gpu-mi350x1-288gb-spot"
+  | "gpu-mi350x8-2304gb-spot"
+  | "gpu-mi355x1-288gb-spot"
+  | "gpu-mi355x8-2304gb-spot"
+  | (string & {});
+
 export type DropletProps = {
   /**
    * Droplet name (also its hostname). Defaults to a generated physical
@@ -68,8 +119,8 @@ export type DropletProps = {
   name?: string;
   /** Region slug to deploy into. Replaces. */
   region: RegionSlug;
-  /** Size slug, e.g. `s-1vcpu-1gb`, `s-2vcpu-4gb`. Replaces. */
-  size: string;
+  /** Droplet size slug. Replaces. */
+  size: SizeSlug;
   /** Public image slug (`ubuntu-24-04-x64`) or private image id. Replaces. */
   image: string | number;
   /**
