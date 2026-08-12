@@ -4,6 +4,7 @@ import { Stack, type StackSpec } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 
 type StackShape = Omit<StackSpec, "output">;
 
@@ -15,15 +16,20 @@ const stack: StackShape = {
   actions: {},
 };
 
-const provide = <A, E>(
-  effect: Effect.Effect<A, E, Stack | Stage | InstanceId>,
+const environment = (
+  spec: StackShape = stack,
   instanceId = "0123456789abcdef0123456789abcdef",
 ) =>
-  effect.pipe(
-    Effect.provideService(Stack, stack),
-    Effect.provideService(Stage, stack.stage),
-    Effect.provideService(InstanceId, instanceId),
+  Layer.mergeAll(
+    Layer.succeed(Stack, spec),
+    Layer.succeed(Stage, spec.stage),
+    Layer.succeed(InstanceId, instanceId),
   );
+
+const provide = <A, E>(
+  effect: Effect.Effect<A, E, Stack | Stage | InstanceId>,
+  instanceId?: string,
+) => effect.pipe(Effect.provide(environment(stack, instanceId)));
 
 describe("createPhysicalName", () => {
   it.effect("keeps short names untruncated", () =>
@@ -168,11 +174,7 @@ describe("createPhysicalName", () => {
           maxLength: 63,
           lowercase: true,
           forbiddenPrefixes: ["xn--", "sthree-", "amzn-s3-demo-", "aws"],
-        }).pipe(
-          Effect.provideService(Stack, awsStack),
-          Effect.provideService(Stage, awsStack.stage),
-          Effect.provideService(InstanceId, "0123456789abcdef0123456789abcdef"),
-        );
+        }).pipe(Effect.provide(environment(awsStack)));
         expect(name.startsWith("x-aws-s3tables-test-")).toBe(true);
         expect(name.length).toBeLessThanOrEqual(63);
       }),
