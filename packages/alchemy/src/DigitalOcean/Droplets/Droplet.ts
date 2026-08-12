@@ -111,6 +111,34 @@ export type SizeSlug =
   | "gpu-mi355x8-2304gb-spot"
   | (string & {});
 
+/**
+ * Public image slug. Lists the distribution images; Marketplace
+ * 1-Click slugs (~400 of them) pass through the open union. Like
+ * {@link RegionSlug}, unlisted slugs still typecheck.
+ *
+ * Sourced from the live `GET /v2/images?type=distribution` API
+ * (public, `available` slugs only), 2026-08-12.
+ */
+export type ImageSlug =
+  | "ubuntu-22-04-x64"
+  | "ubuntu-24-04-x64"
+  | "ubuntu-26-04-x64"
+  | "debian-13-x64"
+  | "fedora-43-x64"
+  | "fedora-44-x64"
+  | "almalinux-8-x64"
+  | "almalinux-9-x64"
+  | "almalinux-10-x64"
+  | "rockylinux-8-x64"
+  | "rockylinux-9-x64"
+  | "rockylinux-10-x64"
+  | "centos-stream-9-x64"
+  | "centos-stream-10-x64"
+  | "gpu-amd-base"
+  | "gpu-h100x1-base"
+  | "gpu-h100x8-base"
+  | (string & {});
+
 export type DropletProps = {
   /**
    * Droplet name (also its hostname). Defaults to a generated physical
@@ -121,8 +149,8 @@ export type DropletProps = {
   region: RegionSlug;
   /** Droplet size slug. Replaces. */
   size: SizeSlug;
-  /** Public image slug (`ubuntu-24-04-x64`) or private image id. Replaces. */
-  image: string | number;
+  /** Public image slug or private image id. Replaces. */
+  image: ImageSlug | number;
   /**
    * SSH key ids or fingerprints to embed in the root account. Keys must
    * already exist on the team. Replaces.
