@@ -1,0 +1,24 @@
+{
+  "name": "git-service-example",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "examples/git-service"
+  },
+  "type": "module",
+  "scripts": {
+    "deploy": "alchemy deploy",
+    "dev": "alchemy dev",
+    "destroy": "alchemy destroy",
+    "logs": "alchemy logs",
+    "tail": "alchemy tail"
+  },
+  "dependencies": {
+    "@alchemy.run/git-service": "workspace:*",
+    "alchemy": "workspace:*",
+    "effect": "catalog:"
+  }
+}

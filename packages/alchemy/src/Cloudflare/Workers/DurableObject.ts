@@ -120,6 +120,7 @@ export interface DurableObjectShape {
 export type DurableObjectServices =
   | DurableObject
   | DurableObjectState
+  | DurableObjectScope
   | WorkerServices
   | WorkerEnvironment
   | PlatformServices;
@@ -288,9 +289,13 @@ export interface DurableObjectClass extends Effect.Effect<
             RuntimeContext | DurableObjectState | Scope
           >,
           never,
-          DurableObjectServices | Req
+          Req
         >,
-      ): Layer.Layer<Self, never, Worker | Req>;
+        // `Exclude` (rather than `DurableObjectServices | Req` inference)
+        // so ambient DO services resolved in the outer init effect never
+        // leak into the host Worker's requirements — mirrors Worker.make's
+        // `Exclude<InitReq, Self | WorkerServices>`.
+      ): Layer.Layer<Self, never, Worker | Exclude<Req, DurableObjectServices>>;
     };
   };
   <Self>(): {

@@ -1,0 +1,1227 @@
+/**
+ * The stateless git-service Worker (DESIGN.md §2.1, §2.2, §5, §8).
+ *
+ * The Worker is the front door for both planes:
+ *
+ * - `/api/v1/**` — the typed REST management plane (`GitApi` from
+ *   `Api.ts`), mounted via `HttpApiBuilder.layer` with the `GitAuth`
+ *   credential-parsing middleware. Handlers resolve `owner/name → repoId`
+ *   through the singleton Registry DO (with a 60 s in-isolate LRU cache)
+ *   and call typed Repo-DO RPCs, which are the enforcement point.
+ * - `/:owner/:repo[.git]/**` — the git smart-HTTP wire endpoints
+ *   (`info/refs`, `git-upload-pack`, `git-receive-pack`), registered as
+ *   raw `HttpRouter` routes on the same router and proxied untouched to
+ *   the Repo DO's `fetch` (the protocol runs inside the DO, §2.1).
+ *
+ * The Worker never verifies repo tokens itself — only the deployer admin
+ * key (`GIT_SERVICE_ADMIN_TOKEN`, timing-safe compare). Admin-verified
+ * requests are forwarded to the DO with the internal {@link ADMIN_HEADER}
+ * set (any inbound copy of that header is always stripped first).
+ *
+ * @section Deploying
+ * @example Compose the Worker into a Stack
+ * ```typescript
+ * import * as Alchemy from "alchemy";
+ * import * as Cloudflare from "alchemy/Cloudflare";
+ * import * as Effect from "effect/Effect";
+ * import GitWorker from "@alchemy.run/git-service/GitWorker";
+ *
+ * export default Alchemy.Stack(
+ *   "GitService",
+ *   { providers: Cloudflare.providers(), state: Cloudflare.state() },
+ *   Effect.gen(function* () {
+ *     const worker = yield* GitWorker;
+ *     return { url: worker.url.as<string>() };
+ *   }),
+ * );
+ * ```
+ *
+ * @section Using the deployed service
+ * @example Create a repo and push to it
+ * ```sh
+ * curl -X POST "$URL/api/v1/repos" \
+ *   -H "Authorization: Bearer $GIT_SERVICE_ADMIN_TOKEN" \
+ *   -H "Content-Type: application/json" \
+ *   -d '{"owner":"acme","name":"web"}'
+ * # → { repo, remote, token: { token: "gs_..." } }
+ *
+ * git remote add origin "https://x:gs_...@<host>/acme/web.git"
+ * git push origin main
+ * ```
+ */
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as Encoding from "effect/Encoding";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
+import * as Etag from "effect/unstable/http/Etag";
+import * as Headers from "effect/unstable/http/Headers";
+import * as HttpPlatform from "effect/unstable/http/HttpPlatform";
+import * as HttpRouter from "effect/unstable/http/HttpRouter";
+import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+import {
+  CommitInfo,
+  CreatedToken,
+  Credentials,
+  Forbidden,
+  GitApi,
+  ImportFailed,
+  ObjectTooLarge,
+  Ref,
+  Repo,
+  RepoAlreadyExists,
+  RepoCreated,
+  RepoNotFound,
+  RepoNotReady,
+  TokenInfo,
+  TreeEntry,
+  Unauthorized,
+  type Oid,
+} from "./Api.ts";
+import * as ApiErrors from "./Api.ts";
+import { GitAuthLive, parseBasicOrBearer, verifyAdminKey } from "./Auth.ts";
+import { parseCommit, parseTree, treeEntryKind } from "./git/ObjectCodec.ts";
+import type { StoreError } from "./git/Store.ts";
+import {
+  ADMIN_HEADER,
+  GitRepo,
+  GitRepoLive,
+  WWW_AUTHENTICATE,
+  type CallerAuth,
+  type CommitData,
+  type CreatedTokenData,
+  type RefData,
+  type RepoMetaData,
+  type TokenData,
+} from "./RepoObject.ts";
+import {
+  Registry,
+  RegistryLive,
+  REGISTRY_DO_NAME,
+  type RegistryEntry,
+} from "./RegistryObject.ts";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Constants
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The Config key of the deployer admin secret. Resolved at deploy time from
+ * the deployer's environment and bound to the Worker as a secret binding
+ * (DESIGN.md §8). Grants: repo create/update/delete/list-all, fork/import,
+ * and implicit `admin` scope on every repo.
+ */
+export const ADMIN_TOKEN_CONFIG_KEY = "GIT_SERVICE_ADMIN_TOKEN" as const;
+
+/** TTL of the in-isolate `owner/name → repoId` cache (DESIGN.md §2.1). */
+export const RESOLVE_CACHE_TTL_MS = 60_000;
+
+/** Max entries of the in-isolate resolve cache (insertion-order eviction). */
+export const RESOLVE_CACHE_MAX = 1024;
+
+/** Blobs above this size are 422 on the JSON endpoint (use `/raw`). */
+export const MAX_JSON_BLOB_BYTES = 1024 * 1024;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared layers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Stub `HttpPlatform` for Workers (no FileSystem): file responses die,
+ * compression is disabled. Copied verbatim from the canonical composition
+ * in `packages/alchemy/src/Cloudflare/StateStore/Api.ts`.
+ */
+const HttpPlatformStub = Layer.succeed(HttpPlatform.HttpPlatform, {
+  platform: "web",
+  compression: {
+    algorithms: new Set<HttpPlatform.CompressionAlgorithm>(),
+    compressResponse: (response) => Effect.succeed(response),
+  },
+  fileResponse: () => Effect.die("HttpPlatform.fileResponse not supported"),
+  fileWebResponse: () =>
+    Effect.die("HttpPlatform.fileWebResponse not supported"),
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pure mapping helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+const asOid = (value: string): Oid => value as Oid;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DO RPC error revival
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The REST error classes by `_tag`, for {@link reviveApiError}.
+ */
+const API_ERROR_CLASSES: Record<string, { prototype: object }> = {
+  Unauthorized,
+  Forbidden,
+  ReadOnlyRepo: ApiErrors.ReadOnlyRepo,
+  RepoNotFound,
+  RepoAlreadyExists,
+  RepoNotReady,
+  RefNotFound: ApiErrors.RefNotFound,
+  RefConflict: ApiErrors.RefConflict,
+  ObjectNotFound: ApiErrors.ObjectNotFound,
+  WrongObjectType: ApiErrors.WrongObjectType,
+  ObjectTooLarge,
+  TokenNotFound: ApiErrors.TokenNotFound,
+  ImportFailed,
+  ValidationError: ApiErrors.ValidationError,
+};
+
+/**
+ * Errors crossing the Worker↔DO RPC boundary keep their `_tag` and fields
+ * but lose their class prototype (structured clone / RPC serialization), so
+ * `Effect.catchTag` routing still works while the HttpApi error **encoder**
+ * rejects them ("Expected RepoAlreadyExists"). Re-attach the prototype so
+ * pass-through errors encode as their declared schema classes.
+ */
+const reviveApiError = <E>(error: E): E => {
+  if (typeof error === "object" && error !== null && "_tag" in error) {
+    const cls = API_ERROR_CLASSES[(error as { _tag: string })._tag];
+    if (cls !== undefined && Object.getPrototypeOf(error) !== cls.prototype) {
+      Object.setPrototypeOf(error, cls.prototype);
+    }
+  }
+  return error;
+};
+
+/**
+ * Wraps a DO stub so every Effect-returning RPC method revives failed
+ * errors via {@link reviveApiError} before they reach handler `catchTag`s
+ * and the HttpApi encoder.
+ */
+const reviveStubErrors = <T extends object>(stub: T): T =>
+  new Proxy(stub, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver);
+      if (typeof value !== "function") return value;
+      return (...args: ReadonlyArray<unknown>) => {
+        const result = Reflect.apply(value, target, args as unknown[]);
+        return Effect.isEffect(result)
+          ? Effect.mapError(
+              result as Effect.Effect<unknown, unknown, never>,
+              reviveApiError,
+            )
+          : result;
+      };
+    },
+  }) as T;
+
+/**
+ * Wraps a DO namespace handle so every `getByName` stub revives RPC-boundary
+ * errors (see {@link reviveStubErrors}).
+ */
+const reviveNamespaceErrors = <
+  T extends { getByName: (...args: never[]) => object },
+>(
+  namespace: T,
+): T =>
+  new Proxy(namespace, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver);
+      if (prop !== "getByName" || typeof value !== "function") return value;
+      return (...args: ReadonlyArray<unknown>) =>
+        reviveStubErrors(Reflect.apply(value, target, args as unknown[]));
+    },
+  }) as T;
+
+/** Maps the Repo DO's plain metadata onto the REST `Repo` schema class. */
+const toRepo = (meta: RepoMetaData): Repo =>
+  new Repo({
+    owner: meta.owner,
+    name: meta.name,
+    repoId: meta.repoId,
+    defaultBranch: meta.defaultBranch,
+    description: meta.description,
+    readOnly: meta.readOnly,
+    forkOf: meta.forkOf,
+    status: meta.status,
+    createdAt: meta.createdAt,
+  });
+
+/** Maps a DO token row onto the REST `TokenInfo` schema class. */
+const toTokenInfo = (token: TokenData): TokenInfo =>
+  new TokenInfo({
+    id: token.id,
+    name: token.name,
+    scope: token.scope,
+    createdAt: token.createdAt,
+    expiresAt: token.expiresAt,
+    lastUsedAt: token.lastUsedAt,
+  });
+
+/** Maps a freshly minted DO token onto the REST `CreatedToken` class. */
+const toCreatedToken = (token: CreatedTokenData): CreatedToken =>
+  new CreatedToken({
+    id: token.id,
+    name: token.name,
+    scope: token.scope,
+    createdAt: token.createdAt,
+    expiresAt: token.expiresAt,
+    lastUsedAt: token.lastUsedAt,
+    token: token.token,
+  });
+
+/** Maps a DO ref onto the REST `Ref` schema class. */
+const toRef = (ref: RefData): Ref =>
+  ref.peeled === undefined
+    ? new Ref({ name: ref.name, oid: asOid(ref.oid) })
+    : new Ref({
+        name: ref.name,
+        oid: asOid(ref.oid),
+        peeled: asOid(ref.peeled),
+      });
+
+/** Maps a DO commit onto the REST `CommitInfo` schema class. */
+const toCommitInfo = (commit: CommitData): CommitInfo =>
+  new CommitInfo({
+    oid: asOid(commit.oid),
+    tree: asOid(commit.tree),
+    parents: commit.parents.map(asOid),
+    author: commit.author,
+    committer: commit.committer,
+    message: commit.message,
+  });
+
+/**
+ * Registry-derived fallback `Repo` for list pages when a Repo DO cannot be
+ * consulted (e.g. its config was never seeded because the create crashed
+ * between the Registry insert and `initRepo`).
+ */
+const registryFallbackRepo = (entry: RegistryEntry): Repo =>
+  new Repo({
+    owner: entry.owner,
+    name: entry.name,
+    repoId: entry.repoId,
+    defaultBranch: "main",
+    description: entry.description,
+    readOnly: false,
+    forkOf: entry.forkOf,
+    status: entry.deletedAt !== null ? "deleting" : "ready",
+    createdAt: entry.createdAt,
+  });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The Worker
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The git-service Worker. Hosts the `GitRepo` and `GitRegistry` Durable
+ * Objects (their Live layers are provided on this Worker's init effect)
+ * plus the shared R2 objects bucket binding, and serves both the REST
+ * management plane and the git smart-HTTP wire protocol.
+ *
+ * Requires `nodejs_compat` (node:zlib / node:crypto in the DO) and a
+ * raised CPU limit (`cpu_ms: 300_000`) — pack inflation cannot run under
+ * the free plan's 10 ms budget (DESIGN.md §1).
+ */
+export default class GitWorker extends Cloudflare.Worker<GitWorker>()(
+  "GitWorker",
+  {
+    main: import.meta.url,
+    compatibility: {
+      flags: ["nodejs_compat"],
+      date: "2026-03-17",
+    },
+    observability: { enabled: true },
+    limits: { cpuMs: 300_000 },
+  },
+  Effect.gen(function* () {
+    // ── init: DO namespaces + admin key ────────────────────────────────────
+    // Both namespaces are wrapped so RPC-boundary errors regain their class
+    // prototypes (see reviveNamespaceErrors above).
+    const registry = reviveNamespaceErrors(yield* Registry);
+    const repos = reviveNamespaceErrors(yield* GitRepo);
+    const adminKey = yield* Config.redacted(ADMIN_TOKEN_CONFIG_KEY);
+
+    const registryStub = () => registry.getByName(REGISTRY_DO_NAME);
+
+    // ── owner/name → RegistryEntry, 60 s in-isolate LRU (DESIGN.md §2.1) ──
+    // A stale hit fails safe: the Repo DO stores its own (owner, name) and
+    // 404s mismatched requests, and cache entries are dropped on delete.
+    interface CacheSlot {
+      readonly entry: RegistryEntry;
+      readonly expires: number;
+    }
+    const resolveCache = new Map<string, CacheSlot>();
+
+    const cacheKey = (owner: string, repo: string) =>
+      `${owner.toLowerCase()}/${repo.toLowerCase()}`;
+
+    const dropCached = (owner: string, repo: string) =>
+      Effect.sync(() => {
+        resolveCache.delete(cacheKey(owner, repo));
+      });
+
+    const resolveCached = (owner: string, repo: string) =>
+      Effect.gen(function* () {
+        const key = cacheKey(owner, repo);
+        const now = yield* Effect.sync(() => Date.now());
+        const hit = resolveCache.get(key);
+        if (hit !== undefined && hit.expires > now) return hit.entry;
+        const entry = yield* registryStub().resolve(owner, repo);
+        if (entry !== undefined) {
+          yield* Effect.sync(() => {
+            if (resolveCache.size >= RESOLVE_CACHE_MAX) {
+              const oldest = resolveCache.keys().next().value;
+              if (oldest !== undefined) resolveCache.delete(oldest);
+            }
+            resolveCache.set(key, {
+              entry,
+              expires: now + RESOLVE_CACHE_TTL_MS,
+            });
+          });
+        }
+        return entry;
+      });
+
+    /** Resolve or fail with a typed 404. Storage failures are defects. */
+    const resolveOrNotFound = (owner: string, repo: string) =>
+      resolveCached(owner, repo).pipe(
+        Effect.catchTag("StoreError", (error: StoreError) => Effect.die(error)),
+        Effect.flatMap((entry) =>
+          entry === undefined
+            ? Effect.fail(new RepoNotFound({ owner, repo }))
+            : Effect.succeed(entry),
+        ),
+      );
+
+    // ── credentials → CallerAuth ───────────────────────────────────────────
+    /**
+     * Classifies the parsed credential: the deployer admin key (verified
+     * here, timing-safe) or an opaque repo token (verified by the Repo DO).
+     */
+    const callerAuthFor = (
+      token: Redacted.Redacted<string>,
+    ): Effect.Effect<CallerAuth> =>
+      verifyAdminKey(token, adminKey).pipe(
+        Effect.map(
+          (isAdmin): CallerAuth =>
+            isAdmin
+              ? { kind: "admin" }
+              : { kind: "token", token: Redacted.value(token) },
+        ),
+      );
+
+    /** The REST caller's auth, from the `GitAuth`-provided credentials. */
+    const restAuth = Effect.gen(function* () {
+      const credentials = yield* Credentials;
+      return yield* callerAuthFor(credentials.token);
+    });
+
+    /** Admin-or-403 gate for the admin-key-only endpoints (DESIGN.md §5). */
+    const requireAdmin = Effect.gen(function* () {
+      const credentials = yield* Credentials;
+      const isAdmin = yield* verifyAdminKey(credentials.token, adminKey);
+      if (!isAdmin) {
+        return yield* new Forbidden({ required: "admin" });
+      }
+    });
+
+    /** HTTPS clone URL for a repo, derived from the incoming Host header. */
+    const remoteUrl = (owner: string, name: string) =>
+      Effect.gen(function* () {
+        const request = yield* HttpServerRequest.HttpServerRequest;
+        const host = request.headers.host;
+        const proto = request.headers["x-forwarded-proto"] ?? "https";
+        return host === undefined
+          ? `/${owner}/${name}.git`
+          : `${proto}://${host}/${owner}/${name}.git`;
+      });
+
+    // ── REST handler groups ────────────────────────────────────────────────
+
+    const reposGroup = HttpApiBuilder.group(GitApi, "repos", (handlers) =>
+      handlers
+        .handle("create", ({ payload }) =>
+          Effect.gen(function* () {
+            yield* requireAdmin;
+            const entry = yield* registryStub()
+              .createRepo({
+                owner: payload.owner,
+                name: payload.name,
+                description: payload.description,
+              })
+              .pipe(
+                Effect.catchTag("StoreError", (error) => Effect.die(error)),
+              );
+            const init = yield* repos
+              .getByName(entry.repoId)
+              .initRepo({
+                repoId: entry.repoId,
+                owner: entry.owner,
+                name: entry.name,
+                defaultBranch: payload.defaultBranch ?? "main",
+                description: payload.description ?? null,
+                readOnly: payload.readOnly ?? false,
+                forkOf: null,
+              })
+              .pipe(
+                Effect.catchTag("StoreError", (error) => Effect.die(error)),
+              );
+            const remote = yield* remoteUrl(entry.owner, entry.name);
+            return new RepoCreated({
+              repo: toRepo(init.meta),
+              remote,
+              token: toCreatedToken(init.token),
+            });
+          }),
+        )
+        .handle("get", ({ params }) =>
+          Effect.gen(function* () {
+            const entry = yield* resolveOrNotFound(params.owner, params.repo);
+            const auth = yield* restAuth;
+            const meta = yield* repos
+              .getByName(entry.repoId)
+              .getRepoMeta(auth)
+              .pipe(
+                Effect.catchTag("StoreError", (error) => Effect.die(error)),
+                // `get` declares only RepoNotFound — an insufficient scope
+                // is indistinguishable from a bad token here.
+                Effect.catchTag("Forbidden", () =>
+                  Effect.fail(new Unauthorized()),
+                ),
+                Effect.catchTag("RepoNotFound", () =>
+                  Effect.fail(
+                    new RepoNotFound({
+                      owner: params.owner,
+                      repo: params.repo,
+                    }),
+                  ),
+                ),
+              );
+            return toRepo(meta);
+          }),
+        )
+        .handle("update", ({ params, payload }) =>
+          Effect.gen(function* () {
+            const entry = yield* resolveOrNotFound(params.owner, params.repo);
+            const auth = yield* restAuth;
+            const meta = yield* repos
+              .getByName(entry.repoId)
+              .updateRepoMeta(auth, {
+                description: payload.description,
+                defaultBranch: payload.defaultBranch,
+                readOnly: payload.readOnly,
+              })
+              .pipe(
+                Effect.catchTag("StoreError", (error) => Effect.die(error)),
+                Effect.catchTag("RepoNotFound", () =>
+                  Effect.fail(
+                    new RepoNotFound({
+                      owner: params.owner,
+                      repo: params.repo,
+                    }),
+                  ),
+                ),
+              );
+            return toRepo(meta);
+          }),
+        )
+        .handle("list", ({ query }) =>
+          Effect.gen(function* () {
+            // list-all is admin-key-only; `list` declares no Forbidden, so
+            // a non-admin caller gets the middleware's 401.
+            const credentials = yield* Credentials;
+            const isAdmin = yield* verifyAdminKey(credentials.token, adminKey);
+            if (!isAdmin) {
+              return yield* new Unauthorized();
+            }
+            const page = yield* registryStub()
+              .list({
+                owner: query.owner,
+                cursor: query.cursor,
+                limit: query.limit,
+              })
+              .pipe(
+                Effect.catchTag("StoreError", (error) => Effect.die(error)),
+              );
+            const items = yield* Effect.forEach(
+              page.items,
+              (entry) =>
+                repos
+                  .getByName(entry.repoId)
+                  .getRepoMeta({ kind: "admin" })
+                  .pipe(
+                    Effect.map(toRepo),
+                    Effect.catchTag(
+                      ["RepoNotFound", "Unauthorized", "Forbidden"],
+                      () => Effect.succeed(registryFallbackRepo(entry)),
+                    ),
+                    Effect.catchTag("StoreError", (error) => Effect.die(error)),
+                  ),
+              { concurrency: 10 },
+            );
+            return {
+              items,
+              nextCursor: page.nextCursor,
+              hasMore: page.hasMore,
+            };
+          }),
+        )
+        .handle("delete", ({ params }) =>
+          Effect.gen(function* () {
+            const entry = yield* resolveOrNotFound(params.owner, params.repo);
+            const auth = yield* restAuth;
+            yield* repos
+              .getByName(entry.repoId)
+              .startPurge(auth)
+              .pipe(
+                Effect.catchTag("StoreError", (error) => Effect.die(error)),
+                Effect.catchTag("RepoNotFound", () =>
+                  Effect.fail(
+                    new RepoNotFound({
+                      owner: params.owner,
+                      repo: params.repo,
+                    }),
+                  ),
+                ),
+              );
+            yield* registryStub()
+              .markDeleted(entry.repoId)
+              .pipe(
+                Effect.catchTag("StoreError", (error) => Effect.die(error)),
+              );
+            yield* dropCached(params.owner, params.repo);
+          }),
+        )
+        .handle("fork", ({ params, payload }) =>
+          Effect.gen(function* () {
+            yield* requireAdmin;
+            const source = yield* resolveOrNotFound(params.owner, params.repo);
+            const sourceMeta = yield* repos
+              .getByName(source.repoId)
+              .getRepoMeta({ kind: "admin" })
+              .pipe(
+                Effect.catchTag(["StoreError", "Unauthorized"], (error) =>
+                  Effect.die(error),
+                ),
+                Effect.catchTag("RepoNotFound", () =>
+                  Effect.fail(
+                    new RepoNotFound({
+                      owner: params.owner,
+                      repo: params.repo,
+                    }),
+                  ),
+                ),
+              );
+            if (sourceMeta.status !== "ready") {
+              return yield* new RepoNotReady({ status: sourceMeta.status });
+            }
+            const entry = yield* registryStub()
+              .createRepo({
+                owner: payload.targetOwner,
+                name: payload.targetName,
+                description: sourceMeta.description ?? undefined,
+                forkOf: source.repoId,
+              })
+              .pipe(
+                Effect.catchTag("StoreError", (error) => Effect.die(error)),
+                // `fork` declares no ValidationError (reserved target
+                // owner) — surface it as the closest declared conflict.
+                Effect.catchTag("ValidationError", () =>
+                  Effect.fail(
+                    new RepoAlreadyExists({
+                      owner: payload.targetOwner,
+                      repo: payload.targetName,
+                    }),
+                  ),
+                ),
+              );
+            const init = yield* repos
+              .getByName(entry.repoId)
+              .startFork({
+                repoId: entry.repoId,
+                owner: entry.owner,
+                name: entry.name,
+                defaultBranch: sourceMeta.defaultBranch,
+                description: sourceMeta.description,
+                readOnly: false,
+                forkOf: source.repoId,
+                parentRepoId: source.repoId,
+              })
+              .pipe(
+                Effect.catchTag("StoreError", (error) => Effect.die(error)),
+              );
+            const remote = yield* remoteUrl(entry.owner, entry.name);
+            return new RepoCreated({
+              repo: toRepo(init.meta),
+              remote,
+              token: toCreatedToken(init.token),
+            });
+          }),
+        )
+        .handle("import", ({ payload }) =>
+          Effect.gen(function* () {
+            yield* requireAdmin;
+            const entry = yield* registryStub()
+              .createRepo({
+                owner: payload.owner,
+                name: payload.name,
+              })
+              .pipe(
+                Effect.catchTag("StoreError", (error) => Effect.die(error)),
+                // `import` declares no ValidationError — a reserved owner
+                // is an import that can never succeed.
+                Effect.catchTag("ValidationError", (error) =>
+                  Effect.fail(new ImportFailed({ reason: error.message })),
+                ),
+              );
+            const init = yield* repos
+              .getByName(entry.repoId)
+              .startImport({
+                repoId: entry.repoId,
+                owner: entry.owner,
+                name: entry.name,
+                defaultBranch: "main",
+                description: null,
+                readOnly: false,
+                forkOf: null,
+                source: {
+                  url: payload.source.url,
+                  ref: payload.source.ref,
+                  depth: payload.source.depth,
+                },
+              })
+              .pipe(
+                Effect.catchTag("StoreError", (error) => Effect.die(error)),
+              );
+            const remote = yield* remoteUrl(entry.owner, entry.name);
+            return new RepoCreated({
+              repo: toRepo(init.meta),
+              remote,
+              token: toCreatedToken(init.token),
+            });
+          }),
+        ),
+    );
+
+    const refsGroup = HttpApiBuilder.group(GitApi, "refs", (handlers) =>
+      handlers
+        .handle("list", ({ params, query }) =>
+          Effect.gen(function* () {
+            const entry = yield* resolveOrNotFound(params.owner, params.repo);
+            const auth = yield* restAuth;
+            const page = yield* repos
+              .getByName(entry.repoId)
+              .listRefs(auth, query.prefix)
+              .pipe(
+                Effect.catchTag("StoreError", (error) => Effect.die(error)),
+                Effect.catchTag("Forbidden", () =>
+                  Effect.fail(new Unauthorized()),
+                ),
+                Effect.catchTag("RepoNotFound", () =>
+                  Effect.fail(
+                    new RepoNotFound({
+                      owner: params.owner,
+                      repo: params.repo,
+                    }),
+                  ),
+                ),
+              );
+            return { head: page.head, refs: page.refs.map(toRef) };
+          }),
+        )
+        .handle("get", ({ params, query }) =>
+          Effect.gen(function* () {
+            const entry = yield* resolveOrNotFound(params.owner, params.repo);
+            const auth = yield* restAuth;
+            const ref = yield* repos
+              .getByName(entry.repoId)
+              .getRef(auth, query.name)
+              .pipe(
+                Effect.catchTag("StoreError", (error) => Effect.die(error)),
+                Effect.catchTag("Forbidden", () =>
+                  Effect.fail(new Unauthorized()),
+                ),
+                Effect.catchTag("RepoNotFound", () =>
+                  Effect.fail(
+                    new RepoNotFound({
+                      owner: params.owner,
+                      repo: params.repo,
+                    }),
+                  ),
+                ),
+              );
+            return toRef(ref);
+          }),
+        )
+        .handle("update", ({ params, query, payload }) =>
+          Effect.gen(function* () {
+            const entry = yield* resolveOrNotFound(params.owner, params.repo);
+            const auth = yield* restAuth;
+            const ref = yield* repos
+              .getByName(entry.repoId)
+              .updateRef(auth, {
+                name: query.name,
+                newOid: payload.newOid,
+                expectedOid: payload.expectedOid,
+              })
+              .pipe(
+                Effect.catchTag("StoreError", (error) => Effect.die(error)),
+                Effect.catchTag("RepoNotFound", () =>
+                  Effect.fail(
+                    new RepoNotFound({
+                      owner: params.owner,
+                      repo: params.repo,
+                    }),
+                  ),
+                ),
+              );
+            return toRef(ref);
+          }),
+        )
+        .handle("remove", ({ params, query, payload }) =>
+          Effect.gen(function* () {
+            const entry = yield* resolveOrNotFound(params.owner, params.repo);
+            const auth = yield* restAuth;
+            yield* repos
+              .getByName(entry.repoId)
+              .removeRef(auth, {
+                name: query.name,
+                expectedOid: payload.expectedOid,
+              })
+              .pipe(
+                Effect.catchTag("StoreError", (error) => Effect.die(error)),
+                Effect.catchTag("RepoNotFound", () =>
+                  Effect.fail(
+                    new RepoNotFound({
+                      owner: params.owner,
+                      repo: params.repo,
+                    }),
+                  ),
+                ),
+              );
+          }),
+        ),
+    );
+
+    const objectsGroup = HttpApiBuilder.group(GitApi, "objects", (handlers) =>
+      handlers
+        .handle("commit", ({ params }) =>
+          Effect.gen(function* () {
+            const entry = yield* resolveOrNotFound(params.owner, params.repo);
+            const auth = yield* restAuth;
+            const data = yield* repos
+              .getByName(entry.repoId)
+              .readObject(auth, { oid: params.oid, expect: "commit" })
+              .pipe(
+                Effect.catchTag("StoreError", (error) => Effect.die(error)),
+                Effect.catchTag("Forbidden", () =>
+                  Effect.fail(new Unauthorized()),
+                ),
+                Effect.catchTag("RepoNotFound", () =>
+                  Effect.fail(
+                    new RepoNotFound({
+                      owner: params.owner,
+                      repo: params.repo,
+                    }),
+                  ),
+                ),
+              );
+            // A stored commit that fails to parse is corrupt — a defect.
+            const parsed = yield* parseCommit(data.content).pipe(Effect.orDie);
+            return new CommitInfo({
+              oid: params.oid,
+              tree: asOid(parsed.tree),
+              parents: parsed.parents.map(asOid),
+              author: {
+                name: parsed.author.name,
+                email: parsed.author.email,
+                date: parsed.author.when,
+                tz: parsed.author.tz,
+              },
+              committer: {
+                name: parsed.committer.name,
+                email: parsed.committer.email,
+                date: parsed.committer.when,
+                tz: parsed.committer.tz,
+              },
+              message: parsed.message,
+            });
+          }),
+        )
+        .handle("log", ({ params, query }) =>
+          Effect.gen(function* () {
+            const entry = yield* resolveOrNotFound(params.owner, params.repo);
+            const auth = yield* restAuth;
+            const page = yield* repos
+              .getByName(entry.repoId)
+              .readCommitLog(auth, {
+                ref: query.ref,
+                cursor: query.cursor,
+                limit: query.limit,
+              })
+              .pipe(
+                Effect.catchTag("StoreError", (error) => Effect.die(error)),
+                Effect.catchTag("Forbidden", () =>
+                  Effect.fail(new Unauthorized()),
+                ),
+                Effect.catchTag("RepoNotFound", () =>
+                  Effect.fail(
+                    new RepoNotFound({
+                      owner: params.owner,
+                      repo: params.repo,
+                    }),
+                  ),
+                ),
+              );
+            return {
+              items: page.items.map(toCommitInfo),
+              nextCursor: page.nextCursor,
+              hasMore: page.hasMore,
+            };
+          }),
+        )
+        .handle("tree", ({ params }) =>
+          Effect.gen(function* () {
+            const entry = yield* resolveOrNotFound(params.owner, params.repo);
+            const auth = yield* restAuth;
+            const data = yield* repos
+              .getByName(entry.repoId)
+              .readObject(auth, { oid: params.oid, expect: "tree" })
+              .pipe(
+                Effect.catchTag("StoreError", (error) => Effect.die(error)),
+                Effect.catchTag("Forbidden", () =>
+                  Effect.fail(new Unauthorized()),
+                ),
+                Effect.catchTag("RepoNotFound", () =>
+                  Effect.fail(
+                    new RepoNotFound({
+                      owner: params.owner,
+                      repo: params.repo,
+                    }),
+                  ),
+                ),
+              );
+            const entries = yield* parseTree(data.content).pipe(Effect.orDie);
+            return {
+              oid: params.oid,
+              entries: entries.map(
+                (item) =>
+                  new TreeEntry({
+                    mode: item.mode,
+                    name: item.name,
+                    oid: asOid(item.oid),
+                    type: treeEntryKind(item.mode),
+                  }),
+              ),
+            };
+          }),
+        )
+        .handle("blob", ({ params }) =>
+          Effect.gen(function* () {
+            const entry = yield* resolveOrNotFound(params.owner, params.repo);
+            const auth = yield* restAuth;
+            const data = yield* repos
+              .getByName(entry.repoId)
+              .readObject(auth, { oid: params.oid, expect: "blob" })
+              .pipe(
+                Effect.catchTag("StoreError", (error) => Effect.die(error)),
+                Effect.catchTag("Forbidden", () =>
+                  Effect.fail(new Unauthorized()),
+                ),
+                Effect.catchTag("RepoNotFound", () =>
+                  Effect.fail(
+                    new RepoNotFound({
+                      owner: params.owner,
+                      repo: params.repo,
+                    }),
+                  ),
+                ),
+              );
+            if (data.size > MAX_JSON_BLOB_BYTES) {
+              return yield* new ObjectTooLarge({
+                oid: params.oid,
+                size: data.size,
+              });
+            }
+            return {
+              oid: params.oid,
+              size: data.size,
+              encoding: "base64" as const,
+              content: Encoding.encodeBase64(data.content),
+            };
+          }),
+        ),
+    );
+
+    const tokensGroup = HttpApiBuilder.group(GitApi, "tokens", (handlers) =>
+      handlers
+        .handle("create", ({ params, payload }) =>
+          Effect.gen(function* () {
+            const entry = yield* resolveOrNotFound(params.owner, params.repo);
+            const auth = yield* restAuth;
+            const created = yield* repos
+              .getByName(entry.repoId)
+              .createToken(auth, {
+                name: payload.name,
+                scope: payload.scope,
+                ttlSeconds: payload.ttlSeconds,
+              })
+              .pipe(
+                Effect.catchTag("StoreError", (error) => Effect.die(error)),
+                Effect.catchTag("RepoNotFound", () =>
+                  Effect.fail(
+                    new RepoNotFound({
+                      owner: params.owner,
+                      repo: params.repo,
+                    }),
+                  ),
+                ),
+              );
+            return toCreatedToken(created);
+          }),
+        )
+        .handle("list", ({ params }) =>
+          Effect.gen(function* () {
+            const entry = yield* resolveOrNotFound(params.owner, params.repo);
+            const auth = yield* restAuth;
+            const tokens = yield* repos
+              .getByName(entry.repoId)
+              .listTokens(auth)
+              .pipe(
+                Effect.catchTag("StoreError", (error) => Effect.die(error)),
+                Effect.catchTag("RepoNotFound", () =>
+                  Effect.fail(
+                    new RepoNotFound({
+                      owner: params.owner,
+                      repo: params.repo,
+                    }),
+                  ),
+                ),
+              );
+            return tokens.map(toTokenInfo);
+          }),
+        )
+        .handle("revoke", ({ params }) =>
+          Effect.gen(function* () {
+            const entry = yield* resolveOrNotFound(params.owner, params.repo);
+            const auth = yield* restAuth;
+            yield* repos
+              .getByName(entry.repoId)
+              .revokeToken(auth, params.id)
+              .pipe(
+                Effect.catchTag("StoreError", (error) => Effect.die(error)),
+                Effect.catchTag("RepoNotFound", () =>
+                  Effect.fail(
+                    new RepoNotFound({
+                      owner: params.owner,
+                      repo: params.repo,
+                    }),
+                  ),
+                ),
+              );
+          }),
+        ),
+    );
+
+    // ── raw routes ─────────────────────────────────────────────────────────
+
+    const wire401 = HttpServerResponse.empty({
+      status: 401,
+      headers: { "www-authenticate": WWW_AUTHENTICATE },
+    });
+    const notFound = HttpServerResponse.text("repository not found", {
+      status: 404,
+    });
+    const internalError = HttpServerResponse.text("internal error", {
+      status: 500,
+    });
+
+    /**
+     * Shared git wire proxy (`info/refs`, `git-upload-pack`,
+     * `git-receive-pack`): parse Basic/Bearer, resolve through the cache,
+     * verify the admin key (setting {@link ADMIN_HEADER} when it matches,
+     * always stripping any inbound copy), then forward the request
+     * untouched to the Repo DO — which re-verifies owner/name, enforces
+     * the token, and runs the protocol (DESIGN.md §2.3).
+     */
+    const wireProxy = Effect.gen(function* () {
+      const request = yield* HttpServerRequest.HttpServerRequest;
+      const params = yield* HttpRouter.params;
+      const owner = (params.owner ?? "").toLowerCase();
+      let repo = (params.repo ?? "").toLowerCase();
+      if (repo.endsWith(".git")) repo = repo.slice(0, -4);
+
+      const credentials = parseBasicOrBearer(request.headers);
+      if (credentials === undefined) {
+        // 401 + WWW-Authenticate makes the git client retry with creds.
+        return wire401;
+      }
+
+      const resolved = yield* Effect.result(resolveCached(owner, repo));
+      if (Result.isFailure(resolved)) {
+        return internalError;
+      }
+      const entry = resolved.success;
+      if (entry === undefined) {
+        return notFound;
+      }
+
+      const isAdmin = yield* verifyAdminKey(credentials.token, adminKey);
+      // Never trust an inbound admin header — only the Worker mints it.
+      let headers = Headers.remove(request.headers, ADMIN_HEADER);
+      if (isAdmin) {
+        headers = Headers.set(headers, ADMIN_HEADER, "1");
+      }
+      return yield* repos
+        .getByName(entry.repoId)
+        .fetch(request.modify({ headers }));
+    });
+
+    /** Auth + resolve for the raw REST reads; `undefined` = already replied. */
+    const rawRestPrelude = (ownerRaw: string, repoRaw: string) =>
+      Effect.gen(function* () {
+        const request = yield* HttpServerRequest.HttpServerRequest;
+        const credentials = parseBasicOrBearer(request.headers);
+        if (credentials === undefined) {
+          return { kind: "halt", response: wire401 } as const;
+        }
+        const resolved = yield* Effect.result(resolveCached(ownerRaw, repoRaw));
+        if (Result.isFailure(resolved)) {
+          return { kind: "halt", response: internalError } as const;
+        }
+        if (resolved.success === undefined) {
+          return { kind: "halt", response: notFound } as const;
+        }
+        const auth = yield* callerAuthFor(credentials.token);
+        return { kind: "ok", entry: resolved.success, auth } as const;
+      });
+
+    /**
+     * `GET /api/v1/repos/:owner/:repo/blobs/:oid/raw` — raw blob bytes,
+     * octet-stream, no size cap (the per-object 64 MiB ingest cap is the
+     * outer bound). Outside HttpApi schema-land by design (DESIGN.md §5).
+     */
+    const blobRawRoute = Effect.gen(function* () {
+      const params = yield* HttpRouter.params;
+      const prelude = yield* rawRestPrelude(
+        params.owner ?? "",
+        params.repo ?? "",
+      );
+      if (prelude.kind === "halt") return prelude.response;
+      return yield* repos
+        .getByName(prelude.entry.repoId)
+        .readObject(prelude.auth, { oid: params.oid ?? "", expect: "blob" })
+        .pipe(
+          Effect.map((data) =>
+            HttpServerResponse.uint8Array(data.content, {
+              contentType: "application/octet-stream",
+            }),
+          ),
+          Effect.catchTag("Unauthorized", () => Effect.succeed(wire401)),
+          Effect.catchTag("Forbidden", () =>
+            Effect.succeed(
+              HttpServerResponse.text("forbidden", { status: 403 }),
+            ),
+          ),
+          Effect.catchTag(["RepoNotFound", "ObjectNotFound"], () =>
+            Effect.succeed(
+              HttpServerResponse.text("not found", { status: 404 }),
+            ),
+          ),
+          Effect.catchTag("WrongObjectType", (error) =>
+            Effect.succeed(
+              HttpServerResponse.text(
+                `object ${error.oid} is a ${error.actual}, not a ${error.expected}`,
+                { status: 422 },
+              ),
+            ),
+          ),
+          Effect.catchTag("StoreError", () => Effect.succeed(internalError)),
+        );
+    });
+
+    /**
+     * `GET /api/v1/repos/:owner/:repo/file?ref=<refname|oid>&path=<path>` —
+     * file-at-path bytes via tree walk, octet-stream (DESIGN.md §2.2).
+     */
+    const fileRoute = Effect.gen(function* () {
+      const request = yield* HttpServerRequest.HttpServerRequest;
+      const params = yield* HttpRouter.params;
+      const url = new URL(request.url, "http://worker");
+      const path = url.searchParams.get("path");
+      const ref = url.searchParams.get("ref") ?? undefined;
+      if (path === null || path.length === 0) {
+        return HttpServerResponse.text("missing ?path", { status: 400 });
+      }
+      const prelude = yield* rawRestPrelude(
+        params.owner ?? "",
+        params.repo ?? "",
+      );
+      if (prelude.kind === "halt") return prelude.response;
+      return yield* repos
+        .getByName(prelude.entry.repoId)
+        .readFileAtPath(prelude.auth, { ref, path })
+        .pipe(
+          Effect.map((file) =>
+            HttpServerResponse.uint8Array(file.content, {
+              contentType: "application/octet-stream",
+            }),
+          ),
+          Effect.catchTag("Unauthorized", () => Effect.succeed(wire401)),
+          Effect.catchTag("Forbidden", () =>
+            Effect.succeed(
+              HttpServerResponse.text("forbidden", { status: 403 }),
+            ),
+          ),
+          Effect.catchTag(
+            ["RepoNotFound", "RefNotFound", "ObjectNotFound"],
+            () =>
+              Effect.succeed(
+                HttpServerResponse.text("not found", { status: 404 }),
+              ),
+          ),
+          Effect.catchTag("StoreError", () => Effect.succeed(internalError)),
+        );
+    });
+
+    const rawRoutes = Layer.mergeAll(
+      HttpRouter.add("GET", "/:owner/:repo/info/refs", wireProxy),
+      HttpRouter.add("POST", "/:owner/:repo/git-upload-pack", wireProxy),
+      HttpRouter.add("POST", "/:owner/:repo/git-receive-pack", wireProxy),
+      HttpRouter.add(
+        "GET",
+        "/api/v1/repos/:owner/:repo/blobs/:oid/raw",
+        blobRawRoute,
+      ),
+      HttpRouter.add("GET", "/api/v1/repos/:owner/:repo/file", fileRoute),
+    );
+
+    // ── mount (canonical StateStore/Api.ts composition) ────────────────────
+    return {
+      fetch: HttpApiBuilder.layer(GitApi).pipe(
+        Layer.provide([reposGroup, refsGroup, objectsGroup, tokensGroup]),
+        Layer.provide(GitAuthLive),
+        Layer.merge(rawRoutes),
+        Layer.provide([Etag.layer, HttpPlatformStub, Path.layer]),
+        HttpRouter.toHttpEffect,
+      ),
+    };
+  }).pipe(
+    // The Worker hosts both DOs; their Live layers (and the R2 binding the
+    // Repo DO's init resolves) are provided here so they bundle into this
+    // script and register their bindings at plan time. One Effect.provide
+    // call with a merged layer so the shared RegistryLive builds once
+    // (MemoMap dedupe on the module-level layer reference).
+    Effect.provide(
+      Layer.mergeAll(
+        RegistryLive,
+        GitRepoLive.pipe(
+          Layer.provide(RegistryLive),
+          Layer.provide(Cloudflare.R2.ReadWriteBucketBinding),
+        ),
+      ),
+    ),
+  ),
+) {}

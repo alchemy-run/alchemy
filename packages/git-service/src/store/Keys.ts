@@ -1,0 +1,79 @@
+/**
+ * R2 key scheme (DESIGN.md §3.2).
+ *
+ * All R2 keys are **immutable and content-addressed** — this sidesteps the
+ * 1-write/s/key limit, makes conditional-put re-runs (idempotent alarm jobs)
+ * safe, and makes cross-repo fork references safe: a fork's `objects.r2_key`
+ * may point into the parent repo's prefix, since the bytes at a key never
+ * change once written.
+ *
+ * ```
+ * {repoId}/objects/{oid}            oversize loose objects, zlib(content)
+ * {repoId}/packs/pack-{sha1}.pack   v1.1 compaction output
+ * {repoId}/incoming/{pushId}.pack   v1.x streaming-push tee (reserved)
+ * {repoId}/lfs/{sha256}             LFS objects (reserved)
+ * ```
+ *
+ * `list()` is never used on a hot path — the `objects` table is the sole
+ * inventory. The prefix helpers exist for the delete-purge and GC alarm jobs
+ * only.
+ */
+
+/**
+ * R2 key for an oversize loose object: `{repoId}/objects/{oid}`.
+ *
+ * The stored bytes are `zlib(content)` without the loose header — byte-equal
+ * to what an `objects.location = 'row'` row would hold in `zdata`.
+ */
+export const objectKey = (repoId: string, oid: string): string =>
+  `${repoId}/objects/${oid}`;
+
+/**
+ * R2 key for a compacted pack (v1.1): `{repoId}/packs/pack-{sha1}.pack`.
+ * The `sha1` is the pack's trailer checksum, making the key content-addressed.
+ */
+export const packKey = (repoId: string, sha: string): string =>
+  `${repoId}/packs/pack-${sha}.pack`;
+
+/**
+ * R2 key for a streamed incoming push pack (v1.x upgrade seam, DESIGN.md
+ * §3.6): `{repoId}/incoming/{pushId}.pack`. Reserved — unused in v1's
+ * buffered ingest.
+ */
+export const incomingKey = (repoId: string, pushId: string): string =>
+  `${repoId}/incoming/${pushId}.pack`;
+
+/**
+ * R2 key reserved for a future LFS object (DESIGN.md §10):
+ * `{repoId}/lfs/{sha256}`.
+ */
+export const lfsKey = (repoId: string, sha256: string): string =>
+  `${repoId}/lfs/${sha256}`;
+
+/**
+ * The whole-repo R2 prefix (`{repoId}/`) — the unit the delete-purge alarm
+ * job lists and deletes (retained while the Registry reports
+ * `fork_count > 0`, since forks reference keys under it).
+ */
+export const repoPrefix = (repoId: string): string => `${repoId}/`;
+
+/**
+ * Prefix of all oversize loose objects for a repo: `{repoId}/objects/`.
+ */
+export const objectsPrefix = (repoId: string): string => `${repoId}/objects/`;
+
+/**
+ * Prefix of all compacted packs for a repo (v1.1): `{repoId}/packs/`.
+ */
+export const packsPrefix = (repoId: string): string => `${repoId}/packs/`;
+
+/**
+ * Prefix of all in-flight streamed push packs for a repo (reserved):
+ * `{repoId}/incoming/`.
+ */
+export const incomingPrefix = (repoId: string): string => `${repoId}/incoming/`;
+
+/**
+ * Prefix of all LFS objects for a repo (reserved): `{repoId}/lfs/`.
+ */
+export const lfsPrefix = (repoId: string): string => `${repoId}/lfs/`;

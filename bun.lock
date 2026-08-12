@@ -965,6 +965,15 @@
         "effect": "catalog:",
       },
     },
+    "examples/git-service": {
+      "name": "git-service-example",
+      "version": "0.0.0",
+      "dependencies": {
+        "@alchemy.run/git-service": "workspace:*",
+        "alchemy": "workspace:*",
+        "effect": "catalog:",
+      },
+    },
     "examples/monorepo-multi-stack/backend": {
       "name": "@monorepo-multi-stack/backend",
       "version": "0.0.0",
@@ -1703,6 +1712,22 @@
         "vite": "catalog:",
       },
     },
+    "packages/git-service": {
+      "name": "@alchemy.run/git-service",
+      "version": "2.0.0-beta.70",
+      "devDependencies": {
+        "@cloudflare/workers-types": "catalog:",
+        "@effect/platform-bun": "catalog:",
+        "alchemy": "workspace:*",
+        "alchemy-test": "workspace:*",
+        "effect": "catalog:",
+      },
+      "peerDependencies": {
+        "@cloudflare/workers-types": "catalog:",
+        "alchemy": "workspace:*",
+        "effect": "catalog:",
+      },
+    },
     "packages/pr-package": {
       "name": "@alchemy.run/pr-package",
       "version": "2.0.0-beta.70",
@@ -1920,6 +1945,8 @@
     "@alchemy.run/cloudflare-runtime": ["@alchemy.run/cloudflare-runtime@workspace:packages/cloudflare-runtime"],
 
     "@alchemy.run/cloudflare-test-tools": ["@alchemy.run/cloudflare-test-tools@workspace:packages/cloudflare-test-tools"],
+
+    "@alchemy.run/git-service": ["@alchemy.run/git-service@workspace:packages/git-service"],
 
     "@alchemy.run/node-utils": ["@alchemy.run/node-utils@0.0.5", "", {}, "sha512-5agdhQxWBodxa5hDRyjnpx91RTU3g+qd5fxYB7uNDCaOzB0XC47UU/KHR6zf6jhz/NXf61gJS+vhYwn8NHeRoQ=="],
 
@@ -4710,6 +4737,8 @@
     "get-uri": ["get-uri@6.0.5", "", { "dependencies": { "basic-ftp": "^5.0.2", "data-uri-to-buffer": "^6.0.2", "debug": "^4.3.4" } }, "sha512-b1O07XYq8eRuVzBNgJLstU6FYc1tS6wnMtF1I1D9lE8LxZSOGZ7LhxN54yPP6mGw5f2CkXY2BQUL9Fx41qvcIg=="],
 
     "giget": ["giget@3.3.1", "", { "bin": { "giget": "dist/cli.mjs" } }, "sha512-r+mvuDjrjMpsdw46Kmeydb8bdHm7wOKw8wNBtTndkjbPjgAp5oUJUxRE76wZFknxIPokfWvep2qSXK37aXE6zg=="],
+
+    "git-service-example": ["git-service-example@workspace:examples/git-service"],
 
     "github-slugger": ["github-slugger@2.0.0", "", {}, "sha512-IaOQ9puYtjrkq7Y0Ygl9KDZnrf/aiUJYUpVf89y8kyaxbRG7Y1SrX/jaumrv81vc61+kiMempujsM3Yw7w5qcw=="],
 
