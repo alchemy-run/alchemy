@@ -597,7 +597,12 @@ export const make: (
     );
     const vite = yield* loadVite(root);
     const config = yield* resolveViteConfig(root, adapter);
-    const port = devOptions?.port ?? options?.dev?.port;
+    // `port: 0` (true OS-assigned) on Vite >= 8.2.1, probed ephemeral port
+    // on older Vite — see `resolveViteDevPort`.
+    const port = yield* FrameworkCore.resolveViteDevPort(
+      vite.version,
+      devOptions?.port ?? options?.dev?.port,
+    );
     const host = devOptions?.host;
 
     const server = yield* Effect.acquireRelease(
@@ -607,7 +612,7 @@ export const make: (
             ...config,
             server: {
               ...config.server,
-              ...(port !== undefined ? { port } : undefined),
+              port,
               ...(host !== undefined ? { host } : undefined),
             },
           });
