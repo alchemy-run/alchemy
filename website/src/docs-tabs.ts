@@ -61,6 +61,14 @@ export const DOCS_TABS: DocsTab[] = [
     slot: "primary",
   },
   {
+    label: "DigitalOcean",
+    href: "/digitalocean",
+    prefixes: ["/digitalocean", "/providers/digitalocean"],
+    slot: "more",
+    category: "Compute",
+    hint: "droplets · ssh keys · firewalls",
+  },
+  {
     label: "Axiom",
     href: "/axiom",
     prefixes: ["/axiom", "/providers/axiom"],

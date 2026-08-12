@@ -1,0 +1,106 @@
+---
+title: DigitalOcean
+description: Droplets, SSH keys, and Cloud Firewalls as Stack resources — Linux VMs declared, keyed, and firewalled in the same Stack as the rest of your infrastructure.
+---
+
+DigitalOcean gives you plain Linux virtual machines. With alchemy a
+Droplet is a resource like any other: the host, the SSH key baked
+into its root account, and the firewall in front of it are declared
+together in one Stack, and a change to any of them is a reviewable
+diff.
+
+New here? [Set up credentials](/digitalocean/setup) first.
+
+## Resources
+
+A `Droplet` is the VM, an `SshKey` is a public key registered on the
+team, and a `Firewall` is a free network-level allowlist applied to
+droplets by id or tag:
+
+```typescript
+import * as Alchemy from "alchemy";
+import * as DigitalOcean from "alchemy/DigitalOcean";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export default Alchemy.Stack(
+  "MyStack",
+  {
+    providers: Layer.mergeAll(DigitalOcean.providers()),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const key = yield* DigitalOcean.SshKey("deploy-key", {
+      publicKey: process.env.SSH_PUBLIC_KEY!,
+    });
+
+    const host = yield* DigitalOcean.Droplet("app", {
+      region: "sfo3",
+      size: "s-2vcpu-4gb",
+      image: "docker-24-04",
+      sshKeys: [key.fingerprint],
+      monitoring: true,
+    });
+
+    yield* DigitalOcean.Firewall("edge", {
+      dropletIds: [host.dropletId],
+      inboundRules: [
+        { protocol: "tcp", ports: "22", addresses: ["0.0.0.0/0", "::/0"] },
+        { protocol: "tcp", ports: "443", addresses: ["0.0.0.0/0", "::/0"] },
+      ],
+      // outboundRules omitted — allow all outbound.
+    });
+
+    return { ip: host.ipv4 };
+  }),
+);
+```
+
+Names are optional everywhere — omit them and alchemy generates
+stable physical names from the Stack, logical ID, and stage.
+
+Droplets are cattle, not pets: only `name` updates in place (a
+rename action), and changing `region`, `size`, `image`, or anything
+else replaces the host. Provision with `userData` (cloud-init) so a
+replacement converges on its own, and set `replaceAfter: "30 days"`
+to have the next deploy rebuild the droplet on a fresh image once it
+crosses that age — kernel and base-image updates arrive by
+replacement instead of in-place mutation.
+
+An `SshKey` is identified by its key material: DigitalOcean derives
+the `fingerprint` from `publicKey`, so changing the key replaces the
+resource while renaming it updates in place. Feed `key.fingerprint`
+into a droplet's `sshKeys` to embed it in the root account.
+
+A `Firewall` is the opposite — the API takes a full desired
+representation, so every property updates in place. Traffic not
+matched by an inbound rule is dropped; omitting `outboundRules`
+allows all outbound (pass `[]` to deliberately drop it all). Target
+droplets by `dropletIds` for an exact set, or by `tags` to cover
+every droplet carrying the tag as hosts come and go.
+
+## Compose with your cloud
+
+`providers()` merges like any other layer, so a droplet's public
+address can be the content of a Cloudflare DNS record in the same
+deploy:
+
+```typescript
+providers: Layer.mergeAll(Cloudflare.providers(), DigitalOcean.providers()),
+```
+
+```typescript
+yield* Cloudflare.DNS.Record("AppA", {
+  zoneId: zone.zoneId,
+  name: "app.example.com",
+  type: "A",
+  content: host.ipv4!,
+  proxied: true,
+});
+```
+
+## Reference
+
+[Droplet](/providers/digitalocean/droplets/droplet) ·
+[SshKey](/providers/digitalocean/sshkeys/sshkey) ·
+[Firewall](/providers/digitalocean/firewalls/firewall)

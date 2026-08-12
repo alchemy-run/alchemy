@@ -323,6 +323,14 @@ const SECTIONS: Section[] = [
     },
   },
   {
+    heading: "DigitalOcean",
+    intro:
+      "Linux VMs as Stack resources — droplets, SSH keys, and Cloud Firewalls. Droplets are replaced rather than mutated; provision them with cloud-init.",
+    pages: {
+      slugs: ["digitalocean/index", "digitalocean/setup"],
+    },
+  },
+  {
     heading: "Axiom",
     intro:
       "Observability as Stack resources — datasets, monitors, notifiers. The exporter-Layer pattern is documented in Concepts → Observability.",
