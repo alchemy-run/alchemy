@@ -9,6 +9,30 @@ import { ConfigError, SystemError } from "../RuntimeError.shared.ts";
 export const MAX_PORT = 65535;
 
 /**
+ * Whether the given Vite version treats `server.port: 0` as a true
+ * OS-assigned random port (vitejs/vite#23158, shipped in Vite 8.2.1).
+ * Older Vite treats `0` as "no port given" and hunts upward from its 5173
+ * default — colliding with (or IPv6-shadowing) user-facing dev ports.
+ *
+ * Callers drive the PROJECT's Vite install, so this is a runtime check on
+ * the loaded module's `version` export: prefer `port: 0` (race-free at
+ * bind) when supported, fall back to an ephemeral-port probe otherwise.
+ */
+export const viteSupportsPortZero = (
+  version: string | null | undefined,
+): boolean => {
+  if (typeof version !== "string") return false;
+  const match = /^(\d+)\.(\d+)\.(\d+)/.exec(version);
+  if (!match) return false;
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  const patch = Number(match[3]);
+  return (
+    major > 8 || (major === 8 && (minor > 2 || (minor === 2 && patch >= 1)))
+  );
+};
+
+/**
  * Upper bound on how many candidate ports `find` scans past the requested
  * starting port. An unbounded scan (up to `MAX_PORT`) multiplied by the
  * per-port availability probes is a socket storm: on Windows CI, where an

@@ -588,12 +588,12 @@ export const make: (
     );
     const vite = yield* loadVite(root);
     const config = yield* resolveViteConfig(root, adapter);
-    // Without an explicit port Vite hunts upward from its default (5173),
-    // which can collide with (or IPv6-shadow) other dev servers'
-    // user-facing ports. Allocate a real ephemeral port instead.
-    const port =
-      (devOptions?.port ?? options?.dev?.port) ||
-      (yield* FrameworkCore.findEphemeralPort());
+    // `port: 0` (true OS-assigned) on Vite >= 8.2.1, probed ephemeral port
+    // on older Vite — see `resolveViteDevPort`.
+    const port = yield* FrameworkCore.resolveViteDevPort(
+      vite.version,
+      devOptions?.port ?? options?.dev?.port,
+    );
 
     const server = yield* Effect.acquireRelease(
       Effect.tryPromise({

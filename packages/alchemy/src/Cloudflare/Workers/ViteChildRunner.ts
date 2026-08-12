@@ -13,7 +13,6 @@ import {
 import { CloudflareAuth } from "../Auth/AuthProvider.ts";
 import * as Credentials from "../Credentials.ts";
 import * as RpcServerEnvironment from "../../Local/RpcServerEnvironment.ts";
-import { findAvailablePort } from "../../Util/Node.ts";
 import { PlatformServices, runMain } from "../../Util/PlatformServices.ts";
 import { materializeRuntimeBindings } from "./RuntimeBindings.ts";
 import { loadSource, SourceProviderError } from "./Source.ts";
@@ -71,14 +70,10 @@ const program = Effect.scoped(
     );
     const source = config.source;
     const viteHost = "127.0.0.1";
-    // TODO(vite>=8.2.1): replace this probe with `port: 0` — the Vite fix
-    // (https://github.com/vitejs/vite/pull/23158) shipped in Vite 8.2.1.
-    // Gated on the supported Vite floor: this runner drives the PROJECT's
-    // Vite install, and on older Vite `port: 0` is treated as absent and
-    // falls back to the 5173 default-port hunt.
-    // `strictPort: false` still handles the small race between releasing the
-    // probe socket and Vite binding the selected port.
-    const vitePort = source ? undefined : yield* findAvailablePort(viteHost);
+    // `viteDev` resolves `port: 0` per the loaded Vite: a true OS-assigned
+    // random port on Vite >= 8.2.1 (vitejs/vite#23158), a probed ephemeral
+    // port on older Vite.
+    const vitePort = source ? undefined : 0;
     const url = source
       ? yield* loadSource(source.descriptor).pipe(
           // `loadSource` is typed against the full `SourceServices` union
