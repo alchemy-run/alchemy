@@ -102,7 +102,8 @@ import { runForkJob, snapshotStream, type SnapshotChunk } from "./jobs/Fork.ts";
 import { bundleCovers, runBundleJob, type BundleInfo } from "./jobs/Bundle.ts";
 import { runCompactJob, shouldCompact } from "./jobs/Compact.ts";
 import { incomingKey } from "./store/Keys.ts";
-import { r2RandomAccess } from "./store/PackSource.ts";
+import { r2RandomAccess, sliceRandomAccess } from "./store/PackSource.ts";
+import { receiveWireBody } from "./store/IncomingBody.ts";
 import { runPurgeJob } from "./jobs/Purge.ts";
 import { Registry, REGISTRY_DO_NAME, ulid } from "./RegistryObject.ts";
 import { computeClosure } from "./store/Closure.ts";
@@ -129,15 +130,17 @@ import {
  * parked in R2 and parsed from there (DESIGN.md §3.6). A **buffering
  * threshold, not a limit** — a push larger than this is no longer rejected.
  *
- * 32 MiB keeps the in-memory path comfortably inside a 128 MB isolate
- * (pack + delta bases + staging) while covering the overwhelming majority
- * of pushes at full speed.
+ * The spill threshold of the streaming receive (`receiveWireBody`): bodies
+ * up to this size are buffered and parsed from memory (the fast path, at
+ * 50 MiB the bound v1 validated for a 128 MB isolate); larger bodies are
+ * never materialized — they stream into an R2 multipart upload as they
+ * arrive and are parsed back through bounded windows.
  *
- * Measured on the 38 MiB alchemy-repo push: ~20 s in memory, ~44 s through
- * R2. The R2 path costs about 2x, and is unbounded — so a push larger than
- * this threshold is slower, never refused.
+ * Measured on the 38 MiB alchemy-repo push: ~20 s in memory, ~37 s through
+ * R2. The R2 path costs about 2x, and is unbounded — the full 67 MiB
+ * alchemy history (44k objects) pushed in 92 s.
  */
-export const MAX_PACK_BYTES = 32 * 1024 * 1024;
+export const MAX_PACK_BYTES = 50 * 1024 * 1024;
 
 /** Objects staged per SQL transaction during ingest (DESIGN.md §16.6). */
 export const STAGE_BATCH_OBJECTS = 256;
@@ -2303,238 +2306,273 @@ export const GitRepoLive = GitRepo.make(
           if (!authed) return wire401;
           const resultType = "application/x-git-receive-pack-result";
 
-          // No size check: a push of any size is accepted. Large ones are
-          // parked in R2 and parsed from there (below) so ingest memory is
-          // bounded by the read window rather than by the pack.
-          const rawBody = new Uint8Array(yield* request.arrayBuffer);
-          const bodyResult = yield* Effect.result(
-            gunzipIfNeeded(rawBody, request.headers["content-encoding"]),
+          // No size check — and no buffering: `request.arrayBuffer` on a
+          // 100 MiB push OOMs a 128 MB isolate (found by pushing the full
+          // alchemy history). The body is streamed instead: it buffers only
+          // up to MAX_PACK_BYTES, beyond which the whole body spills to R2
+          // via multipart upload as it arrives (DESIGN.md §3.6).
+          // Declared before the receive so every exit path (parse error,
+          // probe, read-only, semaphore timeout) drops the spilled object
+          // through the single `ensuring` at the bottom.
+          let parkedKey: string | undefined;
+          const receiveId = yield* ulid();
+          const receivedResult = yield* Effect.result(
+            receiveWireBody(request.stream, {
+              bucket,
+              key: incomingKey(meta.repoId, receiveId),
+              spillThreshold: MAX_PACK_BYTES,
+            }),
           );
-          if (Result.isFailure(bodyResult)) {
+          if (Result.isFailure(receivedResult)) {
             return HttpServerResponse.uint8Array(
-              errPkt(bodyResult.failure.reason),
+              errPkt(receivedResult.failure.reason),
               { contentType: resultType, headers: noCache },
             );
           }
-          const body = bodyResult.success;
+          const incoming = receivedResult.success;
+          parkedKey = incoming.parkedKey;
 
-          const parsedResult = yield* Effect.result(
-            parseReceivePackRequest(body),
-          );
-          if (Result.isFailure(parsedResult)) {
-            return HttpServerResponse.uint8Array(
-              errPkt(parsedResult.failure.reason),
-              { contentType: resultType, headers: noCache },
+          return yield* Effect.gen(function* () {
+            // git gzips a push body only when it buffered the whole request
+            // (small pushes), so a spilled body is never gzip — reject the
+            // combination rather than decompressing unboundedly.
+            let body: Uint8Array;
+            if (incoming.parkedKey === undefined) {
+              const bodyResult = yield* Effect.result(
+                gunzipIfNeeded(
+                  incoming.head,
+                  request.headers["content-encoding"],
+                ),
+              );
+              if (Result.isFailure(bodyResult)) {
+                return HttpServerResponse.uint8Array(
+                  errPkt(bodyResult.failure.reason),
+                  { contentType: resultType, headers: noCache },
+                );
+              }
+              body = bodyResult.success;
+            } else {
+              if (incoming.head[0] === 0x1f && incoming.head[1] === 0x8b) {
+                return HttpServerResponse.uint8Array(
+                  errPkt("gzip-encoded push too large to stream"),
+                  { contentType: resultType, headers: noCache },
+                );
+              }
+              body = incoming.head;
+            }
+
+            const parsedResult = yield* Effect.result(
+              parseReceivePackRequest(body),
             );
-          }
-          const parsed = parsedResult.success;
+            if (Result.isFailure(parsedResult)) {
+              return HttpServerResponse.uint8Array(
+                errPkt(parsedResult.failure.reason),
+                { contentType: resultType, headers: noCache },
+              );
+            }
+            const parsed = parsedResult.success;
 
-          if (parsed.probe) {
-            // git's empty-flush probe when the payload exceeds
-            // http.postBuffer: reply empty 200 so it retries with the body.
-            return HttpServerResponse.empty({
-              status: 200,
-              headers: { ...noCache, "content-type": resultType },
-            });
-          }
-
-          const sideband = parsed.capabilities.has("side-band-64k");
-          const wantReport =
-            parsed.capabilities.has("report-status") ||
-            parsed.capabilities.has("report-status-v2");
-
-          const respond = (
-            unpack: string,
-            results: ReadonlyArray<{
-              readonly ref: string;
-              readonly ok: boolean;
-              readonly reason?: string | undefined;
-            }>,
-          ) => {
-            if (!wantReport) {
+            if (parsed.probe) {
+              // git's empty-flush probe when the payload exceeds
+              // http.postBuffer: reply empty 200 so it retries with the body.
               return HttpServerResponse.empty({
                 status: 200,
                 headers: { ...noCache, "content-type": resultType },
               });
             }
-            const lines: Array<Uint8Array> = [pktText(`unpack ${unpack}`)];
-            for (const result of results) {
-              lines.push(
-                result.ok
-                  ? pktText(`ok ${result.ref}`)
-                  : pktText(`ng ${result.ref} ${result.reason ?? "failed"}`),
-              );
-            }
-            lines.push(flushPkt);
-            const report = concatBytes(lines);
-            const bytes = sideband
-              ? concatBytes([...sidebandFrames(1, report), flushPkt])
-              : report;
-            return HttpServerResponse.uint8Array(bytes, {
-              contentType: resultType,
-              headers: noCache,
-            });
-          };
 
-          const allNg = (reason: string) =>
-            parsed.commands.map((cmd) => ({
-              ref: cmd.ref,
-              ok: false,
-              reason,
-            }));
+            const sideband = parsed.capabilities.has("side-band-64k");
+            const wantReport =
+              parsed.capabilities.has("report-status") ||
+              parsed.capabilities.has("report-status-v2");
 
-          if (meta.readOnly) {
-            return respond("ok", allNg("repository is read-only"));
-          }
-
-          // One push at a time (DESIGN.md §2.1): wait ≤ 30 s for the permit.
-          const permit = yield* Semaphore.take(pushSemaphore, 1).pipe(
-            Effect.timeoutOption(PUSH_WAIT_TIMEOUT),
-          );
-          if (Option.isNone(permit)) {
-            return wire503;
-          }
-
-          // Declared out here so the `ensuring` below (which runs outside
-          // the generator) can drop the parked pack.
-          let parkedKey: string | undefined;
-          return yield* Effect.gen(function* () {
-            // Phase-0 instrumentation (DESIGN.md §19): wall-clock `git push`
-            // includes client packing and the upload, so time the server's
-            // own work here to know what is actually ours.
-            const startedAt = yield* Effect.sync(() => performance.now());
-            const since = (from: number) =>
-              Effect.sync(() => performance.now() - from);
-            let ingestMs = 0;
-            let connectivityMs = 0;
-            let finalizeMs = 0;
-            const pushId = yield* ulid();
-            yield* sql.run(
-              `INSERT INTO pushes (push_id, started_at, state) VALUES (?, ?, 'staging')`,
-              pushId,
-              Date.now(),
-            );
-            const objects = storeFor(meta.repoId);
-            const hasPack = parsed.packStart < body.length;
-
-            let ingest: IngestResult | undefined;
-            if (hasPack) {
-              const packSlice = body.subarray(parsed.packStart);
-              // Small packs parse straight out of memory. Larger ones are
-              // parked in R2 first and read back through bounded windows, so
-              // a push is never limited by the isolate's memory (DESIGN §3.6).
-              const source = yield* packSlice.length <= MAX_PACK_BYTES
-                ? Effect.succeed(bufferRandomAccess(packSlice))
-                : Effect.gen(function* () {
-                    const key = incomingKey(meta.repoId, pushId);
-                    yield* bucket
-                      .put(key, packSlice, {
-                        contentLength: packSlice.length,
-                      })
-                      .pipe(
-                        Effect.mapError(
-                          (error) =>
-                            new StoreError({
-                              reason: `incoming pack put: ${error.message}`,
-                            }),
-                        ),
-                      );
-                    parkedKey = key;
-                    return r2RandomAccess({
-                      bucket,
-                      key,
-                      size: packSlice.length,
-                    });
-                  });
-              const ingestStarted = yield* Effect.sync(() => performance.now());
-              const outcome = yield* Effect.result(
-                ingestPackFrom(source, {
-                  store: objects,
-                  pushId,
-                }),
-              );
-              ingestMs = yield* since(ingestStarted);
-              if (Result.isFailure(outcome)) {
-                // Surface the actual reason: a bare "internal storage error"
-                // makes a failed push undiagnosable from the client side.
-                const reason = outcome.failure.reason;
-                yield* Effect.logError("push ingest failed", outcome.failure);
-                return respond(reason, allNg("unpacker error"));
+            const respond = (
+              unpack: string,
+              results: ReadonlyArray<{
+                readonly ref: string;
+                readonly ok: boolean;
+                readonly reason?: string | undefined;
+              }>,
+            ) => {
+              if (!wantReport) {
+                return HttpServerResponse.empty({
+                  status: 200,
+                  headers: { ...noCache, "content-type": resultType },
+                });
               }
-              ingest = outcome.success;
+              const lines: Array<Uint8Array> = [pktText(`unpack ${unpack}`)];
+              for (const result of results) {
+                lines.push(
+                  result.ok
+                    ? pktText(`ok ${result.ref}`)
+                    : pktText(`ng ${result.ref} ${result.reason ?? "failed"}`),
+                );
+              }
+              lines.push(flushPkt);
+              const report = concatBytes(lines);
+              const bytes = sideband
+                ? concatBytes([...sidebandFrames(1, report), flushPkt])
+                : report;
+              return HttpServerResponse.uint8Array(bytes, {
+                contentType: resultType,
+                headers: noCache,
+              });
+            };
+
+            const allNg = (reason: string) =>
+              parsed.commands.map((cmd) => ({
+                ref: cmd.ref,
+                ok: false,
+                reason,
+              }));
+
+            if (meta.readOnly) {
+              return respond("ok", allNg("repository is read-only"));
             }
 
-            // Full connectivity check (§3.6 step 5).
-            const referenced = new Set<string>(ingest?.referenced ?? []);
-            for (const parent of ingest?.referencedParents ?? []) {
-              referenced.add(parent);
-            }
-            for (const cmd of parsed.commands) {
-              if (cmd.newOid !== ZERO_OID) referenced.add(cmd.newOid);
-            }
-            const connectivityStarted = yield* Effect.sync(() =>
-              performance.now(),
+            // One push at a time (DESIGN.md §2.1): wait ≤ 30 s for the permit.
+            const permit = yield* Semaphore.take(pushSemaphore, 1).pipe(
+              Effect.timeoutOption(PUSH_WAIT_TIMEOUT),
             );
-            const missing = yield* objects.missingObjects(
-              Array.from(referenced),
-              pushId,
-            );
-            connectivityMs = yield* since(connectivityStarted);
-            if (missing.length > 0) {
-              return respond(
-                `missing objects (${missing.length})`,
-                allNg("missing necessary objects"),
+            if (Option.isNone(permit)) {
+              return wire503;
+            }
+
+            return yield* Effect.gen(function* () {
+              // Phase-0 instrumentation (DESIGN.md §19): wall-clock `git push`
+              // includes client packing and the upload, so time the server's
+              // own work here to know what is actually ours.
+              const startedAt = yield* Effect.sync(() => performance.now());
+              const since = (from: number) =>
+                Effect.sync(() => performance.now() - from);
+              let ingestMs = 0;
+              let connectivityMs = 0;
+              let finalizeMs = 0;
+              const pushId = yield* ulid();
+              yield* sql.run(
+                `INSERT INTO pushes (push_id, started_at, state) VALUES (?, ?, 'staging')`,
+                pushId,
+                Date.now(),
               );
-            }
+              const objects = storeFor(meta.repoId);
+              const bodyLength =
+                incoming.parkedKey === undefined ? body.length : incoming.total;
+              const hasPack = parsed.packStart < bodyLength;
+              const packLength = hasPack ? bodyLength - parsed.packStart : 0;
 
-            const graph = yield* computeGraphRows(ingest?.commits ?? []);
-            const finalizeStarted = yield* Effect.sync(() => performance.now());
-            const results = yield* finalizeRefTxn({
-              commands: parsed.commands,
-              atomic: parsed.capabilities.has("atomic"),
-              pushId,
-              graph,
-            });
-            finalizeMs = yield* since(finalizeStarted);
+              let ingest: IngestResult | undefined;
+              if (hasPack) {
+                // A body that fit in memory parses straight out of it; a
+                // spilled one is read back from R2 through bounded windows,
+                // offset past the command section. Either way ingest memory
+                // never scales with the pack (DESIGN §3.6).
+                const source =
+                  incoming.parkedKey === undefined
+                    ? bufferRandomAccess(body.subarray(parsed.packStart))
+                    : sliceRandomAccess(
+                        r2RandomAccess({
+                          bucket,
+                          key: incoming.parkedKey,
+                          size: incoming.total,
+                        }),
+                        parsed.packStart,
+                      );
+                const ingestStarted = yield* Effect.sync(() =>
+                  performance.now(),
+                );
+                const outcome = yield* Effect.result(
+                  ingestPackFrom(source, {
+                    store: objects,
+                    pushId,
+                  }),
+                );
+                ingestMs = yield* since(ingestStarted);
+                if (Result.isFailure(outcome)) {
+                  // Surface the actual reason: a bare "internal storage error"
+                  // makes a failed push undiagnosable from the client side.
+                  const reason = outcome.failure.reason;
+                  yield* Effect.logError("push ingest failed", outcome.failure);
+                  return respond(reason, allNg("unpacker error"));
+                }
+                ingest = outcome.success;
+              }
 
-            yield* setConfig(
-              "last_push",
-              JSON.stringify({
-                objects: ingest?.objectCount ?? 0,
-                bytes: hasPack ? body.length - parsed.packStart : 0,
-                ingestMs: Math.round(ingestMs),
-                stageMs: Math.round(ingest?.stageMs ?? 0),
-                connectivityMs: Math.round(connectivityMs),
-                finalizeMs: Math.round(finalizeMs),
-                totalMs: Math.round(yield* since(startedAt)),
-              } satisfies PushStatsData),
-            ).pipe(Effect.ignore);
+              // Full connectivity check (§3.6 step 5).
+              const referenced = new Set<string>(ingest?.referenced ?? []);
+              for (const parent of ingest?.referencedParents ?? []) {
+                referenced.add(parent);
+              }
+              for (const cmd of parsed.commands) {
+                if (cmd.newOid !== ZERO_OID) referenced.add(cmd.newOid);
+              }
+              const connectivityStarted = yield* Effect.sync(() =>
+                performance.now(),
+              );
+              const missing = yield* objects.missingObjects(
+                Array.from(referenced),
+                pushId,
+              );
+              connectivityMs = yield* since(connectivityStarted);
+              if (missing.length > 0) {
+                return respond(
+                  `missing objects (${missing.length})`,
+                  allNg("missing necessary objects"),
+                );
+              }
 
-            // Post-commit bookkeeping off the response path: staged-row GC
-            // and, once enough loose bytes have accumulated, compaction into
-            // an R2 pack (DESIGN.md §12.1).
-            yield* state.waitUntil(
-              upsertJob("gc", null).pipe(
-                Effect.flatMap(() => armAlarmAt(Date.now() + STAGING_TTL_MS)),
-                Effect.flatMap(() => shouldCompact(sql)),
-                Effect.flatMap((due) =>
-                  due
-                    ? upsertJob("compact", null).pipe(
-                        Effect.flatMap(() => armAlarmAt(Date.now() + 1_000)),
-                      )
-                    : Effect.void,
+              const graph = yield* computeGraphRows(ingest?.commits ?? []);
+              const finalizeStarted = yield* Effect.sync(() =>
+                performance.now(),
+              );
+              const results = yield* finalizeRefTxn({
+                commands: parsed.commands,
+                atomic: parsed.capabilities.has("atomic"),
+                pushId,
+                graph,
+              });
+              finalizeMs = yield* since(finalizeStarted);
+
+              yield* setConfig(
+                "last_push",
+                JSON.stringify({
+                  objects: ingest?.objectCount ?? 0,
+                  bytes: packLength,
+                  ingestMs: Math.round(ingestMs),
+                  stageMs: Math.round(ingest?.stageMs ?? 0),
+                  connectivityMs: Math.round(connectivityMs),
+                  finalizeMs: Math.round(finalizeMs),
+                  totalMs: Math.round(yield* since(startedAt)),
+                } satisfies PushStatsData),
+              ).pipe(Effect.ignore);
+
+              // Post-commit bookkeeping off the response path: staged-row GC
+              // and, once enough loose bytes have accumulated, compaction into
+              // an R2 pack (DESIGN.md §12.1).
+              yield* state.waitUntil(
+                upsertJob("gc", null).pipe(
+                  Effect.flatMap(() => armAlarmAt(Date.now() + STAGING_TTL_MS)),
+                  Effect.flatMap(() => shouldCompact(sql)),
+                  Effect.flatMap((due) =>
+                    due
+                      ? upsertJob("compact", null).pipe(
+                          Effect.flatMap(() => armAlarmAt(Date.now() + 1_000)),
+                        )
+                      : Effect.void,
+                  ),
+                  // Re-cut the clone bundle for the new ref snapshot. Debounced
+                  // by the alarm itself: rapid-fire pushes coalesce into one
+                  // run because the job row is upserted, not queued.
+                  Effect.flatMap(() => upsertJob("bundle", null)),
+                  Effect.flatMap(() => armAlarmAt(Date.now() + 2_000)),
+                  Effect.ignore,
                 ),
-                // Re-cut the clone bundle for the new ref snapshot. Debounced
-                // by the alarm itself: rapid-fire pushes coalesce into one
-                // run because the job row is upserted, not queued.
-                Effect.flatMap(() => upsertJob("bundle", null)),
-                Effect.flatMap(() => armAlarmAt(Date.now() + 2_000)),
-                Effect.ignore,
-              ),
-            );
+              );
 
-            return respond("ok", results);
+              return respond("ok", results);
+            }).pipe(Effect.ensuring(Semaphore.release(pushSemaphore, 1)));
           }).pipe(
+            // Single owner of the spilled body: whatever path exits, the
+            // parked R2 object is dropped after ingest (or non-ingest).
             Effect.ensuring(
               Effect.suspend(() =>
                 parkedKey === undefined
@@ -2542,7 +2580,6 @@ export const GitRepoLive = GitRepo.make(
                   : bucket.delete(parkedKey).pipe(Effect.ignore),
               ),
             ),
-            Effect.ensuring(Semaphore.release(pushSemaphore, 1)),
           );
         });
 

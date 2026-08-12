@@ -1031,7 +1031,34 @@ threshold ships at 32 MiB — comfortably inside a 128 MB isolate, covering
 the overwhelming majority of pushes at full speed, with anything larger
 merely slower instead of refused.
 
-### 16.5 Ingest batching, and what it revealed
+### 16.5 The push cap was still there — request buffering
+
+Pushing the **full alchemy history** (~100 MiB pack) found the residual
+cap: the DO read the request with `request.arrayBuffer`, materializing the
+whole body inside the 128 MB isolate before any parsing — OOM, 500, after
+~7 s. Everything downstream (R2 parking, windowed parsing) was already
+size-independent; the *receive* wasn't.
+
+The fix is `store/IncomingBody.ts`: the body is consumed as a stream.
+Bodies that finish within `MAX_PACK_BYTES` return as one buffer (the fast
+path); the moment the threshold is crossed, everything received and
+everything still arriving spills to R2 via **multipart upload** in uniform
+8 MiB parts, so peak memory is ~threshold + one part no matter how large
+the push. A 1 MiB head is retained for the pkt-line command section, and
+the pack is parsed back off R2 through `sliceRandomAccess` + windowed
+reads. gzip bodies (git only gzips requests it fully buffered, i.e. small
+ones) keep the buffered path; a spilled gzip body is rejected in-band.
+
+Measured, full alchemy `main` (44,051 objects, 67 MiB thin pack):
+
+    push:        92 s wall — server ingest 76.8 s (SQL 5.7 s)
+    clone back:  50.6 s, 152.8 MiB; `git fsck --strict` clean, HEAD identical
+
+Also worth recording: Cloudflare's edge caps request bodies at 100 MB on
+most plans, so beyond that git needs its transfer split (`git push` per
+ref / partial history first) regardless of what this service does.
+
+### 16.6 Ingest batching, and what it revealed
 
 Staging cost **two statements per object** — an existence probe and an
 insert — so a 13.7k-object push ran ~27k statements and ~13.7k transactions
@@ -1058,7 +1085,7 @@ is one Durable Object, and a push is one request to it. No amount of
 horizontal Worker/R2 scale touches it. Making a single large push
 dramatically faster requires parallelism *within* the repo — see §17.
 
-### 16.6 What the measurements corrected
+### 16.7 What the measurements corrected
 
 1. **`repos.list` was O(N) Durable Object wakes** — the handler fanned out
    `getRepoMeta` per row, so listing 100 repos woke 100 DOs. **Fixed**:

@@ -118,3 +118,15 @@ export const r2RandomAccess = (options: {
       }),
   };
 };
+
+/**
+ * A view of `source` starting at `start` — used to address the pack that
+ * follows the command section inside a spilled receive-pack body.
+ */
+export const sliceRandomAccess = (
+  source: RandomAccess,
+  start: number,
+): RandomAccess => ({
+  size: source.size - start,
+  read: (offset, length) => source.read(start + offset, length),
+});
