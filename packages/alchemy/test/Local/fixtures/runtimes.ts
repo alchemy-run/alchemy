@@ -17,12 +17,10 @@ const hasBin = (bin: string): boolean => {
   }
 };
 
-const nodeVersion = spawnSync("node", ["-p", "process.versions.node"], {
-  encoding: "utf-8",
-}).stdout.trim();
-const [nodeMajor, nodeMinor] = nodeVersion.split(".").map(Number);
 const canTransformTypes =
-  (nodeMajor === 22 && nodeMinor >= 7) || (nodeMajor >= 23 && nodeMajor < 26);
+  spawnSync("node", ["-p", 'process.features.typescript === "transform"'], {
+    encoding: "utf-8",
+  }).stdout.trim() === "true";
 const transformTypesFlags = canTransformTypes
   ? ["--experimental-transform-types", "--no-warnings=ExperimentalWarning"]
   : [];

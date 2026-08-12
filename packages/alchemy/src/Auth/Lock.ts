@@ -82,9 +82,8 @@ const acquireFileLock = Effect.fn(function* (
           ),
         ),
     ),
-    Effect.catchIf(
-      (error) => error.reason._tag === "AlreadyExists",
-      () => reapStale.pipe(Effect.andThen(Effect.fail(new LockHeld()))),
+    Effect.catchReason("PlatformError", "AlreadyExists", () =>
+      reapStale.pipe(Effect.andThen(Effect.fail(new LockHeld()))),
     ),
     Effect.retry({
       while: (error) => error._tag === "LockHeld",
