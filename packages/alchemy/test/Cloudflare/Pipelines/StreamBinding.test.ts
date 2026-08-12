@@ -37,6 +37,8 @@ const asyncWorkerScript = `export default {
 };
 `;
 
+// A freshly-deployed workers.dev URL takes a few seconds to start serving,
+// so the first request is retried until the worker answers.
 const sendEvent = (url: string, nonce: string) =>
   HttpClient.get(`${url}/send?nonce=${nonce}`).pipe(
     Effect.flatMap((res) =>
@@ -60,25 +62,35 @@ const sendEvent = (url: string, nonce: string) =>
     }),
   );
 
-const stack = beforeAll(
-  deploy(Stack).pipe(
-    Effect.retry({
-      while: (e) => String(e).includes("Unable to authenticate request"),
-      schedule: Schedule.exponential("1 second"),
-      times: 6,
-    }),
-  ),
-);
+const stack = beforeAll(deploy(Stack));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 test(
   "async worker sends events through the env Pipelines stream binding",
   Effect.gen(function* () {
-    const { url } = yield* stack;
+    const { asyncWorkerUrl } = yield* stack;
 
-    const body = yield* sendEvent(url, "roundtrip");
+    const body = yield* sendEvent(asyncWorkerUrl, "async");
 
-    expect(body).toMatchObject({ sent: true, kind: "function" });
+    // `send` only exists on a real `pipelines` binding — a `json` binding
+    // would deliver the stream's attributes as a plain object.
+    expect(body).toMatchObject({ mode: "async", sent: true, kind: "function" });
+  }),
+  { timeout: 240_000 },
+);
+
+test(
+  "effect worker sends events through the env Pipelines stream binding",
+  Effect.gen(function* () {
+    const { effectWorkerUrl } = yield* stack;
+
+    const body = yield* sendEvent(effectWorkerUrl, "effect");
+
+    expect(body).toMatchObject({
+      mode: "effect",
+      sent: true,
+      kind: "function",
+    });
   }),
   { timeout: 240_000 },
 );

@@ -10,8 +10,16 @@ export default {
           nonce: url.searchParams.get("nonce") ?? "none",
         },
       ]);
-      return Response.json({ sent: true, kind: typeof env.EVENTS.send });
+      return Response.json({
+        mode: "async",
+        sent: true,
+        kind: typeof env.EVENTS.send,
+      });
     }
-    return Response.json({ sent: false, kind: typeof env.EVENTS.send });
+    return Response.json({
+      mode: "async",
+      sent: false,
+      kind: typeof env.EVENTS.send,
+    });
   },
 };
