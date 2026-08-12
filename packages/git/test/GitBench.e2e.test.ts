@@ -1,0 +1,518 @@
+/**
+ * Throughput benchmarks against a **deployed** git-service stack
+ * (DESIGN.md §14–15): turns the estimated scaling table into measured
+ * numbers, one benchmark per named bottleneck.
+ *
+ * These are measurements, not assertions about performance: each case
+ * prints a line and asserts only *correctness* (every operation succeeded),
+ * so the suite can never fail because a datacenter had a slow minute. Read
+ * the printed table to see where the service actually stands.
+ *
+ * Run:
+ *   bun run test test/GitBench.e2e.test.ts --profile testing
+ *   BENCH_SCALE=4 ... to make every workload 4x bigger
+ *
+ * Skipped under `--fast`.
+ */
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Test from "alchemy/Test/Alchemy";
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import { GitApi } from "../src/Api.ts";
+import { makeTestStack, TEST_ADMIN_TOKEN } from "./fixtures/stack.ts";
+
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Cloudflare.providers(),
+});
+
+const logLevel = Effect.provideService(
+  MinimumLogLevel,
+  process.env.DEBUG ? "Debug" : "Info",
+);
+
+const Stack = makeTestStack("GitBenchStack");
+
+/** Scales every workload; 1 keeps a full run inside the alarm/test budget. */
+const SCALE = Number.parseInt(process.env.BENCH_SCALE ?? "1", 10) || 1;
+
+const skipBench = !!process.env.FAST;
+
+// ── plumbing ────────────────────────────────────────────────────────────────
+
+const makeClient = (url: string, token: string) =>
+  HttpApiClient.make(GitApi, {
+    baseUrl: url,
+    transformClient: HttpClient.mapRequest((request) =>
+      request.pipe(HttpClientRequest.bearerToken(token)),
+    ),
+  });
+
+class ShellError extends Data.TaggedError("ShellError")<{
+  readonly script: string;
+  readonly exitCode: number;
+  readonly stdout: string;
+  readonly stderr: string;
+}> {
+  override get message(): string {
+    return `bench shell exited ${this.exitCode}\n${this.script}\n${this.stderr}`;
+  }
+}
+
+const sh = Effect.fn(function* (cwd: string, script: string) {
+  const handle = yield* ChildProcess.make("sh", ["-ec", script], {
+    cwd,
+    env: {
+      GIT_TERMINAL_PROMPT: "0",
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_AUTHOR_NAME: "Bench Bot",
+      GIT_AUTHOR_EMAIL: "bench@example.com",
+      GIT_COMMITTER_NAME: "Bench Bot",
+      GIT_COMMITTER_EMAIL: "bench@example.com",
+      GIT_AUTHOR_DATE: "2026-01-01T00:00:00Z",
+      GIT_COMMITTER_DATE: "2026-01-01T00:00:00Z",
+    },
+    extendEnv: true,
+  });
+  const [exitCode, stdout, stderr] = yield* Effect.all(
+    [
+      handle.exitCode,
+      Stream.mkString(Stream.decodeText(handle.stdout)),
+      Stream.mkString(Stream.decodeText(handle.stderr)),
+    ],
+    { concurrency: 3 },
+  );
+  return { script, exitCode, stdout: stdout.trim(), stderr };
+}, Effect.timeout("240 seconds"));
+
+const mustSh = Effect.fn(function* (cwd: string, script: string) {
+  const result = yield* sh(cwd, script);
+  if (result.exitCode !== 0) return yield* new ShellError(result);
+  return result;
+});
+
+const tempDir = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  return yield* fs.makeTempDirectory({ prefix: "git-bench-" });
+});
+
+const edgeRetry = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(
+    Effect.timeout("15 seconds"),
+    Effect.retry({ schedule: Schedule.spaced("1500 millis"), times: 40 }),
+  );
+
+const purgeRepo = Effect.fn(function* (
+  url: string,
+  owner: string,
+  repo: string,
+) {
+  const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
+  yield* admin.repos.delete({ params: { owner, repo } }).pipe(
+    Effect.catchTag("RepoNotFound", () => Effect.void),
+    edgeRetry,
+  );
+  yield* admin.repos.get({ params: { owner, repo } }).pipe(
+    edgeRetry,
+    Effect.as(false),
+    Effect.catchTag("RepoNotFound", () => Effect.succeed(true)),
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      until: (gone) => gone,
+      times: 60,
+    }),
+  );
+});
+
+const freshRepo = Effect.fn(function* (
+  url: string,
+  owner: string,
+  name: string,
+) {
+  const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
+  const created = yield* Effect.gen(function* () {
+    yield* purgeRepo(url, owner, name);
+    return yield* admin.repos
+      .create({ payload: { owner, name } })
+      .pipe(edgeRetry);
+  }).pipe(
+    Effect.retry({
+      while: (error: { readonly _tag?: string }) =>
+        error._tag === "RepoAlreadyExists",
+      schedule: Schedule.spaced("1 second"),
+      times: 3,
+    }),
+  );
+  const parsed = new URL(url);
+  return {
+    admin,
+    token: created.token.token,
+    remote: `${parsed.protocol}//x:${created.token.token}@${parsed.host}/${owner}/${name}.git`,
+  };
+});
+
+// ── measurement ─────────────────────────────────────────────────────────────
+
+const results: Array<string> = [];
+
+/** Times an effect, records a bench line, and returns the value. */
+const measure = <A, E, R>(
+  label: string,
+  effect: Effect.Effect<A, E, R>,
+  describe: (value: A, ms: number) => string,
+) =>
+  Effect.gen(function* () {
+    const started = yield* Effect.sync(() => performance.now());
+    const value = yield* effect;
+    const ms = yield* Effect.sync(() => performance.now() - started);
+    const line = `${label.padEnd(46)} ${describe(value, ms)}`;
+    results.push(line);
+    yield* Effect.logInfo(`[bench] ${line}`);
+    return value;
+  });
+
+const perSecond = (count: number, ms: number) =>
+  `${((count / ms) * 1000).toFixed(1)}/s`;
+
+const stack = beforeAll(
+  deploy(Stack).pipe(
+    Effect.tap(({ url }) =>
+      Effect.gen(function* () {
+        yield* Effect.logInfo(`git-service deployed at ${url}`);
+        const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
+        yield* admin.repos.list({ query: {} }).pipe(
+          edgeRetry,
+          Effect.retry({
+            schedule: Schedule.spaced("1500 millis"),
+            times: 40,
+          }),
+        );
+      }),
+    ),
+    logLevel,
+  ),
+);
+
+afterAll(
+  Effect.gen(function* () {
+    if (results.length > 0) {
+      yield* Effect.logInfo(
+        ["", "═══ git-service throughput ═══", ...results, ""].join("\n"),
+      );
+    }
+  }),
+);
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Bottleneck 1 — closure computation / clone bandwidth on deep history
+// ═══════════════════════════════════════════════════════════════════════════
+
+test.skipIf(skipBench)(
+  "bench: deep history — push, cold clone, bundle clone, incremental fetch",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const repo = yield* freshRepo(url, "bench", "deep");
+    const tmp = yield* tempDir;
+    const commits = 300 * SCALE;
+
+    // Build the history locally first so the measurement is server-side.
+    yield* mustSh(
+      tmp,
+      `
+      rm -rf work && git -c init.defaultBranch=main clone '${repo.remote}' work
+      cd work
+      i=1
+      while [ $i -le ${commits} ]; do
+        printf 'line %s\\n' $i >> history.txt
+        printf 'file %s\\n' $i > "f$i.txt"
+        git add -A && git commit -q -m "c$i"
+        i=$((i+1))
+      done
+      `,
+    );
+
+    yield* measure(
+      `push ${commits} commits`,
+      mustSh(tmp, `cd work && git push origin main`),
+      (_, ms) =>
+        `${(ms / 1000).toFixed(1)}s (${perSecond(commits, ms)} commits)`,
+    );
+
+    // Cold clone: no bundle yet (the post-push alarm needs a moment), so
+    // this measures the dynamic closure walk + pack emission path.
+    yield* measure(
+      "clone (dynamic closure walk)",
+      mustSh(tmp, `rm -rf cold && git clone -q '${repo.remote}' cold`),
+      (_, ms) => `${(ms / 1000).toFixed(2)}s`,
+    );
+
+    // Give the bundle alarm time to cut, then clone again: same repo, same
+    // client, but served as bytes from R2 (DESIGN §12.2).
+    yield* Effect.sleep("6 seconds");
+    yield* measure(
+      "clone (R2 bundle fast path)",
+      mustSh(tmp, `rm -rf warm && git clone -q '${repo.remote}' warm`),
+      (_, ms) => `${(ms / 1000).toFixed(2)}s`,
+    );
+
+    // Incremental fetch of a single new commit — the negotiation path.
+    yield* mustSh(
+      tmp,
+      `cd work && echo tip >> history.txt && git add -A && git commit -q -m tip && git push -q origin main`,
+    );
+    yield* measure(
+      "incremental fetch (1 commit)",
+      mustSh(tmp, `cd cold && git fetch -q origin main`),
+      (_, ms) => `${ms.toFixed(0)}ms`,
+    );
+
+    yield* mustSh(tmp, `cd warm && git fsck --strict`);
+  }).pipe(logLevel),
+  { timeout: 900_000 },
+);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Bottleneck 1/2 — clone TPS and bandwidth under concurrency
+// ═══════════════════════════════════════════════════════════════════════════
+
+test.skipIf(skipBench)(
+  "bench: concurrent clone storm (clone TPS on one repo)",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const repo = yield* freshRepo(url, "bench", "storm");
+    const tmp = yield* tempDir;
+    const blobKiB = 256 * SCALE;
+    const clones = 8 * SCALE;
+
+    yield* mustSh(
+      tmp,
+      `
+      rm -rf work && git -c init.defaultBranch=main clone '${repo.remote}' work
+      cd work
+      head -c ${blobKiB * 1024} /dev/urandom > blob.bin
+      i=1; while [ $i -le 20 ]; do printf 'f %s\\n' $i > "f$i.txt"; i=$((i+1)); done
+      git add -A && git commit -q -m payload
+      git push -q origin main
+      `,
+    );
+    // Let the bundle land so the storm hits the fast path.
+    yield* Effect.sleep("6 seconds");
+
+    yield* measure(
+      `${clones} concurrent clones (~${blobKiB} KiB each)`,
+      Effect.all(
+        Array.from({ length: clones }, (_, i) =>
+          mustSh(tmp, `rm -rf c${i} && git clone -q '${repo.remote}' c${i}`),
+        ),
+        { concurrency: clones },
+      ),
+      (_, ms) =>
+        `${(ms / 1000).toFixed(2)}s total, ${perSecond(clones, ms)} clones, ` +
+        `~${((clones * blobKiB) / 1024 / (ms / 1000)).toFixed(1)} MiB/s`,
+    );
+  }).pipe(logLevel),
+  { timeout: 900_000 },
+);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Bottleneck 3 — push serialization (inherent: a ref is a serialization point)
+// ═══════════════════════════════════════════════════════════════════════════
+
+test.skipIf(skipBench)(
+  "bench: push TPS, serial and concurrent-to-distinct-branches",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const repo = yield* freshRepo(url, "bench", "push");
+    const tmp = yield* tempDir;
+    const pushes = 10 * SCALE;
+
+    yield* mustSh(
+      tmp,
+      `
+      rm -rf work && git -c init.defaultBranch=main clone '${repo.remote}' work
+      cd work && echo base > base.txt && git add -A && git commit -q -m base
+      git push -q origin main
+      `,
+    );
+
+    yield* measure(
+      `${pushes} serial pushes (same branch)`,
+      mustSh(
+        tmp,
+        `
+        cd work
+        i=1
+        while [ $i -le ${pushes} ]; do
+          printf '%s\\n' $i >> base.txt
+          git add -A && git commit -q -m "p$i"
+          git push -q origin main
+          i=$((i+1))
+        done
+        `,
+      ),
+      (_, ms) => `${(ms / 1000).toFixed(1)}s (${perSecond(pushes, ms)})`,
+    );
+
+    // Distinct branches: the DO's push semaphore serializes ingest, so this
+    // measures the serialization floor rather than parallel speedup.
+    const branches = 4 * SCALE;
+    yield* mustSh(
+      tmp,
+      `
+      cd work
+      i=1
+      while [ $i -le ${branches} ]; do
+        git branch -f "side$i" HEAD
+        printf 'side %s\\n' $i > "side$i.txt"
+        i=$((i+1))
+      done
+      `,
+    );
+    yield* measure(
+      `${branches} concurrent pushes (distinct branches)`,
+      Effect.all(
+        Array.from({ length: branches }, (_, i) =>
+          mustSh(tmp, `cd work && git push -q origin side${i + 1}`),
+        ),
+        { concurrency: branches },
+      ),
+      (_, ms) => `${(ms / 1000).toFixed(2)}s (${perSecond(branches, ms)})`,
+    );
+  }).pipe(logLevel),
+  { timeout: 900_000 },
+);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Bottleneck 4 — Registry singleton (control-plane TPS)
+// ═══════════════════════════════════════════════════════════════════════════
+
+test.skipIf(skipBench)(
+  "bench: control plane — repo create/list/delete through the Registry",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
+    const repos = 10 * SCALE;
+    const names = Array.from({ length: repos }, (_, i) => `ctl-${i}`);
+
+    yield* Effect.all(
+      names.map((name) => purgeRepo(url, "bench", name)),
+      { concurrency: 5 },
+    );
+
+    yield* measure(
+      `${repos} concurrent repo creates`,
+      Effect.all(
+        names.map((name) =>
+          admin.repos.create({ payload: { owner: "bench", name } }),
+        ),
+        { concurrency: repos },
+      ),
+      (created, ms) => {
+        expect(created.length).toBe(repos);
+        return `${(ms / 1000).toFixed(2)}s (${perSecond(repos, ms)})`;
+      },
+    );
+
+    yield* measure(
+      "repo list (single Registry read)",
+      admin.repos.list({ query: { owner: "bench" } }),
+      (page, ms) => `${page.items.length} rows in ${ms.toFixed(0)}ms`,
+    );
+
+    yield* measure(
+      "resolve-cached repo reads (20 sequential GETs)",
+      Effect.all(
+        Array.from({ length: 20 }, () =>
+          admin.repos.get({ params: { owner: "bench", repo: names[0]! } }),
+        ),
+        { concurrency: 1 },
+      ),
+      (_, ms) => `${(ms / 20).toFixed(0)}ms each (${perSecond(20, ms)})`,
+    );
+
+    yield* Effect.all(
+      names.map((name) =>
+        admin.repos
+          .delete({ params: { owner: "bench", repo: name } })
+          .pipe(Effect.catchTag("RepoNotFound", () => Effect.void)),
+      ),
+      { concurrency: 5 },
+    );
+  }).pipe(logLevel),
+  { timeout: 900_000 },
+);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Bottleneck 6 — compaction throughput (R2 write path)
+// ═══════════════════════════════════════════════════════════════════════════
+
+test.skipIf(skipBench)(
+  "bench: compaction — loose rows into an R2 pack, then packed reads",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const repo = yield* freshRepo(url, "bench", "compact");
+    const tmp = yield* tempDir;
+    const files = 200 * SCALE;
+
+    yield* mustSh(
+      tmp,
+      `
+      rm -rf work && git -c init.defaultBranch=main clone '${repo.remote}' work
+      cd work
+      i=1
+      while [ $i -le ${files} ]; do
+        head -c 4096 /dev/urandom | base64 > "b$i.txt"
+        i=$((i+1))
+      done
+      git add -A && git commit -q -m payload
+      git push -q origin main
+      `,
+    );
+
+    const before = yield* repo.admin.repos.get({
+      params: { owner: "bench", repo: "compact" },
+    });
+
+    yield* measure(
+      `compact ${before.objects.loose} loose objects into R2`,
+      Effect.gen(function* () {
+        yield* repo.admin.repos.compact({
+          params: { owner: "bench", repo: "compact" },
+        });
+        return yield* repo.admin.repos
+          .get({ params: { owner: "bench", repo: "compact" } })
+          .pipe(
+            Effect.map((found) => found.objects),
+            Effect.repeat({
+              schedule: Schedule.spaced("500 millis"),
+              until: (objects: { loose: number; packed: number }) =>
+                objects.packed > 0 && objects.loose === 0,
+              times: 120,
+            }),
+          );
+      }),
+      (objects, ms) =>
+        `${objects.packed} packed, ${(objects.bytes / 1024 / 1024).toFixed(1)} MiB in ${(ms / 1000).toFixed(1)}s`,
+    );
+
+    // Every object now reads through ranged R2 GETs.
+    yield* measure(
+      "clone from a fully packed repo (ranged R2 reads)",
+      mustSh(tmp, `rm -rf packed && git clone -q '${repo.remote}' packed`),
+      (_, ms) => `${(ms / 1000).toFixed(2)}s`,
+    );
+    yield* mustSh(tmp, `cd packed && git fsck --strict`);
+  }).pipe(logLevel),
+  { timeout: 900_000 },
+);
