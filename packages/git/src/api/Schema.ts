@@ -276,6 +276,13 @@ export class PushStats extends Schema.Class<PushStats>("PushStats")({
   bytes: Schema.Number,
   /** Parsing + staging the pack (inflate, sha1, SQL). */
   ingestMs: Schema.Number,
+  /**
+   * The SQL staging portion of `ingestMs`. `ingestMs - stageMs` is CPU:
+   * inflate, sha1, delta resolution, commit/tree parsing. The split decides
+   * whether sharding storage or hoisting parsing is the real win
+   * (DESIGN.md §19).
+   */
+  stageMs: Schema.Number,
   /** The connectivity check. */
   connectivityMs: Schema.Number,
   /** The ref CAS transaction. */

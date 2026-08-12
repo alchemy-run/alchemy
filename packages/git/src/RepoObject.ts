@@ -234,6 +234,7 @@ export interface PushStatsData {
   readonly objects: number;
   readonly bytes: number;
   readonly ingestMs: number;
+  readonly stageMs: number;
   readonly connectivityMs: number;
   readonly finalizeMs: number;
   readonly totalMs: number;
@@ -856,6 +857,8 @@ export interface StagedCommitInfo {
 export interface IngestResult {
   /** Objects in the pack (including already-existing re-pushed ones). */
   readonly objectCount: number;
+  /** SQL staging time, when measured by the streaming ingest path. */
+  readonly stageMs?: number | undefined;
   /** The pack's trailer checksum (hex). */
   readonly packSha: string;
   /** Staged commits (commit-graph rows are inserted at finalize). */
@@ -1023,12 +1026,16 @@ export const ingestPackFrom = (
     // (DESIGN.md §16.6).
     let batch: Array<StagedObject> = [];
     let batchBytes = 0;
+    /** Time spent in SQL staging; the rest of ingest is CPU. */
+    let stageMs = 0;
     const flush = Effect.fn(function* () {
       if (batch.length === 0) return;
       const pending = batch;
       batch = [];
       batchBytes = 0;
+      const at = yield* Effect.sync(() => performance.now());
       yield* store.insertStagedBatch(pushId, pending);
+      stageMs += yield* Effect.sync(() => performance.now() - at);
     });
 
     const summary = yield* PackParser.ingestPack({
@@ -1066,6 +1073,7 @@ export const ingestPackFrom = (
     yield* flush();
 
     return {
+      stageMs,
       objectCount: summary.count,
       // The parser verifies the trailer itself; the checksum is not used
       // downstream, so it is not re-derived here.
@@ -2495,6 +2503,7 @@ export const GitRepoLive = GitRepo.make(
                 objects: ingest?.objectCount ?? 0,
                 bytes: hasPack ? body.length - parsed.packStart : 0,
                 ingestMs: Math.round(ingestMs),
+                stageMs: Math.round(ingest?.stageMs ?? 0),
                 connectivityMs: Math.round(connectivityMs),
                 finalizeMs: Math.round(finalizeMs),
                 totalMs: Math.round(yield* since(startedAt)),

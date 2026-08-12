@@ -51,7 +51,100 @@ const CHUNK = 65536;
  * streams fail with {@link ZlibError}, as does output growing past
  * `options.maxOutput`.
  */
+/**
+ * Synchronous single-entry inflate — the fast path.
+ *
+ * The streaming implementation below builds a `zlib.createInflate()`
+ * Transform (EventEmitter, internal buffers) and takes an async event-loop
+ * round trip **per object**. Measured on a 13.7k-object push: ~1.49 ms of
+ * CPU per object, roughly 50x the cost of actually inflating ~2.7 KB.
+ *
+ * `_processChunk` is what Node's own `zlib.inflateSync` uses internally: it
+ * drives the engine synchronously and leaves the consumed-input count in
+ * `bytesWritten`, which is exactly the pair a pack parser needs. It is an
+ * internal API, so this returns `undefined` when it is unavailable (or
+ * behaves unexpectedly) and the caller falls back to the stream path —
+ * notably relevant on workerd, whose `node:zlib` is a compatibility shim.
+ */
+const inflateEntryUnsafeSync = (
+  buf: Uint8Array,
+  offset: number,
+  maxOutput: number | undefined,
+  expectedSize: number | undefined,
+): InflatedEntry | undefined => {
+  const engine = zlib.createInflate() as unknown as {
+    _processChunk?: (chunk: Uint8Array, flushFlag: number) => Uint8Array;
+    bytesWritten?: number;
+    close?: () => void;
+  };
+  if (typeof engine._processChunk !== "function") {
+    engine.close?.();
+    return undefined;
+  }
+  try {
+    const output = engine._processChunk(
+      buf.subarray(offset),
+      zlib.constants.Z_SYNC_FLUSH,
+    );
+    const bytesConsumed = engine.bytesWritten;
+    if (typeof bytesConsumed !== "number" || bytesConsumed <= 0) {
+      return undefined;
+    }
+    if (maxOutput !== undefined && output.length > maxOutput) {
+      // Let the caller's streaming path produce the typed error.
+      return undefined;
+    }
+    // MUST verify: workerd's `node:zlib` shim returns only the first chunk
+    // (observed: 525,107 bytes of a 1,337,267-byte object) instead of
+    // looping like Node's implementation, and reports a plausible
+    // `bytesWritten` with it. Checking against the size the pack header
+    // already declares turns that silent truncation into a fallback.
+    if (expectedSize !== undefined && output.length !== expectedSize) {
+      return undefined;
+    }
+    return {
+      content: new Uint8Array(output.buffer, output.byteOffset, output.length),
+      bytesConsumed,
+    };
+  } catch {
+    // Corrupt stream, truncated window, or an unsupported shim — the
+    // stream path re-runs it and reports the real error.
+    return undefined;
+  } finally {
+    engine.close?.();
+  }
+};
+
 export const inflateEntry = (
+  buf: Uint8Array,
+  offset: number,
+  options?: {
+    readonly maxOutput?: number | undefined;
+    /**
+     * The uncompressed size the pack header declares for this entry. Used
+     * to validate the synchronous fast path (see above); without it the
+     * fast path is skipped, because an unverified result cannot be trusted.
+     */
+    readonly expectedSize?: number | undefined;
+  },
+): Effect.Effect<InflatedEntry, ZlibError> =>
+  Effect.suspend(() => {
+    const fast =
+      offset >= 0 && offset < buf.length && options?.expectedSize !== undefined
+        ? inflateEntryUnsafeSync(
+            buf,
+            offset,
+            options.maxOutput,
+            options.expectedSize,
+          )
+        : undefined;
+    return fast === undefined
+      ? inflateEntryStreaming(buf, offset, options)
+      : Effect.succeed(fast);
+  });
+
+/** The portable fallback: a real zlib stream per entry. */
+const inflateEntryStreaming = (
   buf: Uint8Array,
   offset: number,
   options?: { readonly maxOutput?: number | undefined },

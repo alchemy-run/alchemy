@@ -512,15 +512,20 @@ export const ingestPack = <E, R>(
 
       // An entry whose compressed stream runs past the window grows it and
       // retries; virtually every object fits the first read.
+      const inflateOptions = {
+        maxOutput: maxObjectSize,
+        // Lets the synchronous fast path verify itself (see Zlib.ts).
+        expectedSize: header.size,
+      };
       let attempt = yield* Effect.result(
-        inflateEntry(window, pos, { maxOutput: maxObjectSize }),
+        inflateEntry(window, pos, inflateOptions),
       );
       while (
         Result.isFailure(attempt) &&
         (yield* growWindow(window.length * 2))
       ) {
         attempt = yield* Effect.result(
-          inflateEntry(window, pos, { maxOutput: maxObjectSize }),
+          inflateEntry(window, pos, inflateOptions),
         );
       }
       if (Result.isFailure(attempt)) {

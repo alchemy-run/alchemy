@@ -1159,7 +1159,41 @@ So the earlier suspicion that client packing and upload dominated was
 the per-object ingest loop at **2.10 ms/object**. Connectivity and CAS —
 the parts that genuinely must be serialized — are free.
 
-That is the strongest possible argument for phases 1–2: the expensive work
+**Phase 0b — where the ingest time actually goes.** Splitting `ingestMs`
+settled the next question too:
+
+| | | |
+|---|---|---|
+| SQL staging | 2.0 s | **9%** |
+| CPU (inflate, sha1, parse, Effect frames) | 20.4 s | **91%** |
+
+So **sharding storage addresses only 9%** of push cost. It remains valuable
+for the 10 GB → 2.5 TB capacity ceiling, but it is not the throughput fix.
+The throughput fix is per-object CPU — and 1.49 ms to inflate ~2.7 KB and
+hash it is ~50x the cost of the actual work, i.e. it is overhead, not
+computation.
+
+First cut at that overhead: `zlib.createInflate()` built a Node Transform
+stream (EventEmitter, buffers) and took an async event-loop round trip **per
+object**. Driving the engine synchronously the way Node's own `inflateSync`
+does removes both:
+
+    CPU        20.4s -> 15.9s     per object  1.74ms -> 1.42ms
+    wall clock 28.1s -> 23.2s
+
+with a hard-won caveat baked into the code: workerd's `node:zlib` shim
+returns only the *first chunk* (observed: 525,107 bytes of a 1,337,267-byte
+object) and reports a plausible `bytesWritten` alongside it, where Node
+loops until done. The fast path therefore validates its output against the
+size the pack header already declares and falls back to the stream path on
+any mismatch — silent truncation would otherwise corrupt objects. Pack
+fixtures alone would not have caught this; only the deployed push did.
+
+Remaining per-object overhead to attack next, in order: `crypto.createHash`
+allocated per object (same shape of problem as `createInflate`), Effect
+frames in the sink, and window slicing.
+
+That is still the argument for phases 1–2, but with corrected weights: the expensive work
 (inflate, sha1, one insert) is *per object* and has no ordering
 requirement, yet runs single-threaded because it shares a DO with the refs.
 At 2.10 ms/object, 16-way fan-out puts a 13.7k-object push at ~1.7 s.
