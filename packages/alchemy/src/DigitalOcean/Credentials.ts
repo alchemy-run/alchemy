@@ -48,7 +48,7 @@ export const fromAuthProvider = () =>
         Effect.mapError(
           (e) =>
             new ConfigError({
-              message: `Failed to resolve DigitalOcean credentials for profile '${profileName}': ${(e as { message?: string }).message ?? String(e)}`,
+              message: `Failed to resolve DigitalOcean credentials for profile '${profileName}': ${String(e)}`,
             }),
         ),
         Effect.orDie,

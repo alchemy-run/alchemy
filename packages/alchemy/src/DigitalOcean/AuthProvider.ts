@@ -102,12 +102,10 @@ export const DigitalOceanAuth = AuthProviderLayer<
       );
 
     const configureCredentials = (profileName: string, ctx: ConfigureContext) =>
-      Effect.gen(function* () {
-        if (ctx.ci) {
-          return { method: "env" as const };
-        }
-        return yield* configureInteractive(profileName);
-      }).pipe(
+      (ctx.ci
+        ? Effect.succeed({ method: "env" as const })
+        : configureInteractive(profileName)
+      ).pipe(
         Effect.mapError(
           (e) =>
             new AuthError({
@@ -122,9 +120,8 @@ export const DigitalOceanAuth = AuthProviderLayer<
       config: DigitalOceanAuthConfig,
     ): Effect.Effect<DigitalOceanResolvedCredentials, AuthError> =>
       Match.value(config).pipe(
-        Match.when(
-          { method: "env" },
-          Effect.fn(function* () {
+        Match.when({ method: "env" }, () =>
+          Effect.gen(function* () {
             const env = yield* getEnvToken;
             if (!env) {
               return yield* new AuthError({
@@ -230,10 +227,9 @@ export const DigitalOceanAuth = AuthProviderLayer<
           const sourceStr = creds.source.details
             ? `${creds.source.type} - ${creds.source.details}`
             : creds.source.type;
-          return Effect.all([
-            Console.log(`  apiToken: ${displayRedacted(creds.apiToken, 9)}`),
-            Console.log(`  source: ${sourceStr}`),
-          ]);
+          return Console.log(
+            `  apiToken: ${displayRedacted(creds.apiToken, 9)}`,
+          ).pipe(Effect.andThen(Console.log(`  source: ${sourceStr}`)));
         }),
       );
 

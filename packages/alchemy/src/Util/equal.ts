@@ -39,6 +39,16 @@ export const arrayEqualsUnordered = <T extends string | number>(
 };
 
 /**
+ * Order-insensitive equality where an omitted list and an empty list
+ * describe the same desired state — the usual contract for optional
+ * list-shaped resource props.
+ */
+export const sameElements = <T extends string | number>(
+  a: ReadonlyArray<T> | undefined,
+  b: ReadonlyArray<T> | undefined,
+): boolean => arrayEqualsUnordered(a ?? [], b ?? []);
+
+/**
  * Shallow equality of two string records (same keys, same values).
  */
 export const recordsEqual = (

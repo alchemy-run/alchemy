@@ -4,26 +4,9 @@ import * as Test from "@/Test/Alchemy";
 import { firewallsGet } from "@distilled.cloud/digitalocean/firewalls";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import { MinimumLogLevel } from "effect/References";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import { hasDigitalOceanCreds, logLevel, outOfBand } from "../support.ts";
 
 const { test } = Test.make({ providers: DigitalOcean.providers() });
-
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
-
-const hasDigitalOceanCreds = !!(
-  process.env.DIGITALOCEAN_TOKEN || process.env.DIGITALOCEAN_ACCESS_TOKEN
-);
-
-// Out-of-band verification context: raw distilled calls, credentials from
-// env — independent of the provider layer under test.
-const outOfBand = Effect.provide(
-  Layer.mergeAll(DigitalOcean.CredentialsFromEnv, FetchHttpClient.layer),
-);
 
 const FIREWALL_NAME = "alchemy-test-firewall";
 
@@ -62,8 +45,8 @@ test.provider.skipIf(!hasDigitalOceanCreds)(
       const remote = yield* firewallsGet({
         firewall_id: created.firewallId,
       }).pipe(outOfBand);
-      expect(remote.firewall?.name).toEqual(FIREWALL_NAME);
-      expect(remote.firewall?.inbound_rules ?? []).toHaveLength(1);
+      expect(remote.firewall.name).toEqual(FIREWALL_NAME);
+      expect(remote.firewall.inbound_rules ?? []).toHaveLength(1);
 
       // Same logical id, wider rules — everything updates in place, so the
       // physical firewall id must survive.

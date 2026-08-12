@@ -3,29 +3,12 @@ import * as Test from "@/Test/Alchemy";
 import { dropletsGet } from "@distilled.cloud/digitalocean/droplets";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import { MinimumLogLevel } from "effect/References";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import { hasDigitalOceanCreds, logLevel, outOfBand } from "../support.ts";
 
 const { test } = Test.make({ providers: DigitalOcean.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
-
-const hasDigitalOceanCreds = !!(
-  process.env.DIGITALOCEAN_TOKEN || process.env.DIGITALOCEAN_ACCESS_TOKEN
-);
-
-// Out-of-band verification context: raw distilled calls, credentials from
-// env — independent of the provider layer under test.
-const outOfBand = Effect.provide(
-  Layer.mergeAll(DigitalOcean.CredentialsFromEnv, FetchHttpClient.layer),
-);
-
 const DROPLET_NAME = "alchemy-test-droplet";
-const RENAMED = "alchemy-test-droplet-renamed";
+const RENAMED_DROPLET_NAME = "alchemy-test-droplet-renamed";
 // Cheapest size/image that exists in every region — a live droplet bills by
 // the minute, so this suite creates exactly one and always destroys it.
 const REGION = "sfo3";
@@ -33,7 +16,7 @@ const SIZE = "s-1vcpu-512mb-10gb";
 const IMAGE = "ubuntu-24-04-x64";
 
 test.provider.skipIf(!hasDigitalOceanCreds)(
-  "droplet lifecycle: create active with an IP, rename in place, destroy",
+  "droplet lifecycle: create active with an IP, rename and retag in place, destroy",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -49,45 +32,48 @@ test.provider.skipIf(!hasDigitalOceanCreds)(
           });
         }),
       );
-      // Reconcile waits for "active", so the public IP must be present.
       expect(created.name).toEqual(DROPLET_NAME);
       expect(created.status).toEqual("active");
       expect(created.region).toEqual(REGION);
       expect(created.sizeSlug).toEqual(SIZE);
+      // Reconcile waits for "active", so the public IP must be present.
       expect(created.ipv4).toMatch(/^\d+\.\d+\.\d+\.\d+$/);
       expect(created.tags).toEqual(["alchemy-test"]);
 
-      // Out-of-band: the droplet exists and carries the ownership marker
-      // tag alongside the user tag.
+      // Out-of-band: the droplet carries the ownership tag beside the user
+      // tag.
       const remote = yield* dropletsGet({ droplet_id: created.dropletId }).pipe(
         outOfBand,
       );
-      expect(remote.droplet?.name).toEqual(DROPLET_NAME);
-      expect(remote.droplet?.tags.some((t) => t.startsWith("alchemy:"))).toBe(
+      expect(remote.droplet.name).toEqual(DROPLET_NAME);
+      expect(remote.droplet.tags.some((t) => t.startsWith("alchemy:"))).toBe(
         true,
       );
 
-      // Same logical id, new name — an in-place rename action; the physical
-      // droplet (and its IP) must survive.
+      // Same logical id, new name and tags — both sync in place; the
+      // physical droplet (and its IP) must survive.
       const renamed = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* DigitalOcean.Droplet("TestDroplet", {
-            name: RENAMED,
+            name: RENAMED_DROPLET_NAME,
             region: REGION,
             size: SIZE,
             image: IMAGE,
-            tags: ["alchemy-test"],
+            tags: ["alchemy-test", "alchemy-test-extra"],
           });
         }),
       );
       expect(renamed.dropletId).toEqual(created.dropletId);
-      expect(renamed.name).toEqual(RENAMED);
+      expect(renamed.name).toEqual(RENAMED_DROPLET_NAME);
       expect(renamed.ipv4).toEqual(created.ipv4);
+      expect([...renamed.tags].sort()).toEqual([
+        "alchemy-test",
+        "alchemy-test-extra",
+      ]);
 
       yield* stack.destroy();
 
-      // Typed wait-until-gone: delete already polls until the API answers
-      // NotFound, so a single probe suffices.
+      // Delete polls until the API answers NotFound, so one probe suffices.
       const gone = yield* dropletsGet({ droplet_id: created.dropletId }).pipe(
         Effect.map(() => false),
         Effect.catchTag("NotFound", () => Effect.succeed(true)),
@@ -96,26 +82,4 @@ test.provider.skipIf(!hasDigitalOceanCreds)(
       expect(gone).toBe(true);
     }).pipe(logLevel),
   { timeout: 900_000 },
-);
-
-// `replaceAfter` never touches the API — the age policy is a pure predicate
-// over the deployed droplet's createdAt, so it is tested without credentials.
-test(
-  "isOlderThan drives replaceAfter off createdAt",
-  Effect.sync(() => {
-    const createdAt = "2026-01-01T00:00:00Z";
-    const day = 24 * 60 * 60 * 1000;
-    const created = new Date(createdAt).getTime();
-
-    expect(
-      DigitalOcean.isOlderThan(createdAt, "30 days", created + 29 * day),
-    ).toBe(false);
-    expect(
-      DigitalOcean.isOlderThan(createdAt, "30 days", created + 30 * day),
-    ).toBe(true);
-    // Millis form is interpreted the same way.
-    expect(
-      DigitalOcean.isOlderThan(createdAt, 30 * day, created + 31 * day),
-    ).toBe(true);
-  }),
 );

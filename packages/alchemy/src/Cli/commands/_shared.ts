@@ -26,6 +26,7 @@ import {
 import { AwsAuth } from "../../AWS/AuthProvider.ts";
 import { AxiomAuth } from "../../Axiom/AuthProvider.ts";
 import { CloudflareAuth } from "../../Cloudflare/Auth/AuthProvider.ts";
+import { DigitalOceanAuth } from "../../DigitalOcean/AuthProvider.ts";
 import { GitHubAuth } from "../../GitHub/AuthProvider.ts";
 import { NeonAuth } from "../../Neon/AuthProvider.ts";
 import { PlanetscaleAuth } from "../../Planetscale/AuthProvider.ts";
@@ -458,6 +459,7 @@ export const builtinAuth = Layer.mergeAll(
   AwsAuth,
   AxiomAuth,
   CloudflareAuth,
+  DigitalOceanAuth,
   GitHubAuth,
   NeonAuth,
   PlanetscaleAuth,
