@@ -271,8 +271,7 @@ export const CertRequestProvider = () =>
       }
 
       // Ensure — key or names changed (or first reconcile): mint a fresh
-      // CSR. Downstream certificate resources see the new `csr` value and
-      // reissue on their own terms.
+      // CSR.
       const csr = yield* Effect.try({
         try: () => buildCsr(key, keyType, news.commonName, dnsNames),
         catch: (cause) =>
@@ -288,7 +287,6 @@ export const CertRequestProvider = () =>
     // Nothing to delete — the CSR only ever existed in state.
     delete: () => Effect.void,
     read: ({ output }) => Effect.succeed(output),
-    // Non-listable: the CSR is generated client-side and lives only in
-    // alchemy state. There is no remote service to enumerate.
+    // Non-listable — no remote service to enumerate.
     list: () => Effect.succeed([]),
   });
