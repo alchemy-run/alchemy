@@ -1,8 +1,4 @@
 import { spawnSync } from "node:child_process";
-import {
-  isTransformTypesSupported,
-  transformTypesFlags,
-} from "../../../src/Util/Node.ts";
 
 export interface Runtime {
   readonly name: "bun" | "node";
@@ -24,6 +20,12 @@ const hasBin = (bin: string): boolean => {
 const nodeVersion = spawnSync("node", ["-p", "process.versions.node"], {
   encoding: "utf-8",
 }).stdout.trim();
+const [nodeMajor, nodeMinor] = nodeVersion.split(".").map(Number);
+const canTransformTypes =
+  (nodeMajor === 22 && nodeMinor >= 7) || (nodeMajor >= 23 && nodeMajor < 26);
+const transformTypesFlags = canTransformTypes
+  ? ["--experimental-transform-types", "--no-warnings=ExperimentalWarning"]
+  : [];
 
 export const runtimes = (): Array<Runtime> => [
   {
@@ -33,10 +35,10 @@ export const runtimes = (): Array<Runtime> => [
   },
   {
     name: "node",
-    argv: (entry) => ["node", ...transformTypesFlags(nodeVersion), entry],
+    argv: (entry) => ["node", ...transformTypesFlags, entry],
     // Node 26 removed transform-types and its built-in strip-only loader
     // cannot execute parameter properties used by Alchemy's source graph.
     // Published JS remains supported; only these source-level fixtures skip.
-    available: hasBin("node") && isTransformTypesSupported(nodeVersion),
+    available: hasBin("node") && canTransformTypes,
   },
 ];
