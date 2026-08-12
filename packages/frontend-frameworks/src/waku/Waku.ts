@@ -859,7 +859,15 @@ export const make = (
           process.env.NODE_ENV = INITIAL_NODE_ENV ?? "development";
         });
         const wakuConfig = yield* makeConfig(project, root, hooks);
-        const port = devOptions?.port ?? options?.port;
+        // `port: 0` (true OS-assigned) on Vite >= 8.2.1, probed ephemeral
+        // port on older Vite — see `resolveViteDevPort`. strictPort stays
+        // off for allocated ports so a probe race just moves to the next
+        // ephemeral port.
+        const explicitPort = devOptions?.port || options?.port;
+        const port = yield* FrameworkCore.resolveViteDevPort(
+          project.vite.version,
+          explicitPort,
+        );
         const host = devOptions?.host;
         // The dev server *starts* under the project root cwd (waku
         // resolves its html shell and relative inputs from the cwd at
@@ -875,19 +883,11 @@ export const make = (
                   plugins: [
                     project.vitePlugins.unstable_combinedPlugins(wakuConfig),
                   ],
-                  ...(port !== undefined || host !== undefined
-                    ? {
-                        server: {
-                          ...(port !== undefined
-                            ? {
-                                port,
-                                strictPort: devOptions?.port !== undefined,
-                              }
-                            : undefined),
-                          ...(host !== undefined ? { host } : undefined),
-                        },
-                      }
-                    : undefined),
+                  server: {
+                    port,
+                    strictPort: !!explicitPort,
+                    ...(host !== undefined ? { host } : undefined),
+                  },
                 });
                 return await server.listen();
               },

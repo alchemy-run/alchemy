@@ -581,6 +581,12 @@
       "worker": "./src/core/internal/internal-worker.ts",
       "import": "./dist/core/node/internal/internal-worker.mjs"
     },
+    "./core/internal/Port": {
+      "types": "./dist/core/node/internal/Port.d.mts",
+      "bun": "./src/core/internal/Port.ts",
+      "worker": "./src/core/internal/Port.ts",
+      "import": "./dist/core/node/internal/Port.mjs"
+    },
     "./core/platform-proxy": {
       "types": "./dist/core/node/platform-proxy/index.d.mts",
       "bun": "./src/core/platform-proxy/index.ts",

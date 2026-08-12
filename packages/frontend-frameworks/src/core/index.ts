@@ -43,6 +43,7 @@ export type {
   DeployTargetServer,
   DeployTargetServices,
 } from "./DeployTarget.ts";
+export { findEphemeralPort, resolveViteDevPort } from "./DevPort.ts";
 export { Framework, FrameworkError } from "./Framework.ts";
 export type {
   FrameworkBuildOptions,
@@ -52,5 +53,6 @@ export type {
 export {
   loadProjectModule,
   ModuleLoadError,
+  resolveInstalledPackageVersion,
   resolveProjectPackageDirectory,
 } from "./Loader.ts";
