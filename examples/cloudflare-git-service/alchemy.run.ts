@@ -34,7 +34,7 @@ import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(
   "GitServiceExample",
-  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  { providers: Cloudflare.providers(), state: Alchemy.localState() },
   Effect.gen(function* () {
     const git = yield* GitService();
 
@@ -43,6 +43,9 @@ export default Alchemy.Stack(
     // because unknown paths fall back to index.html.
     const web = yield* Cloudflare.Website.Vite("Web", {
       assets: { notFoundHandling: "single-page-application" },
+      domain: {
+        name: "git.alchemy.run",
+      },
       env: {
         VITE_GIT_URL: git.url,
       },

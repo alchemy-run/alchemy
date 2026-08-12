@@ -6,6 +6,7 @@ import {
   deleteRepo,
   listTokens,
   revokeToken,
+  updateRepo,
   type CreatedToken,
   type TokenInfo,
   type TokenScope,
@@ -67,6 +68,43 @@ const StorageCard = ({ context }: { context: RepoContext }) => {
           {compacting ? "Compaction scheduled ✓" : "Compact loose objects"}
         </Button>
       </div>
+      {error != null && <ErrorBox error={error} />}
+    </section>
+  );
+};
+
+const VisibilityCard = ({ context }: { context: RepoContext }) => {
+  const [isPublic, setIsPublic] = useState(context.repo.public);
+  const [error, setError] = useState<unknown>(null);
+  const [busy, setBusy] = useState(false);
+  return (
+    <section className="rounded-md border border-border-muted p-4">
+      <h2 className="mb-2 font-semibold">Visibility</h2>
+      <p className="mb-3 text-sm text-fg-muted">
+        {isPublic
+          ? "Public — anyone can browse and clone this repository without a token."
+          : "Private — reads and clones require a token."}
+      </p>
+      <Button
+        disabled={busy}
+        onClick={() => {
+          setBusy(true);
+          setError(null);
+          updateRepo(context.connection, context.repo.owner, context.repo.name, {
+            public: !isPublic,
+          })
+            .then((updated) => {
+              setIsPublic(updated.public);
+              setBusy(false);
+            })
+            .catch((cause) => {
+              setError(cause);
+              setBusy(false);
+            });
+        }}
+      >
+        {busy ? "Saving…" : isPublic ? "Make private" : "Make public"}
+      </Button>
       {error != null && <ErrorBox error={error} />}
     </section>
   );
@@ -218,6 +256,7 @@ const DangerCard = ({ context }: { context: RepoContext }) => {
 export const SettingsTab = ({ context }: { context: RepoContext }) => (
   <div className="space-y-4">
     <StorageCard context={context} />
+    <VisibilityCard context={context} />
     <TokensCard context={context} />
     <DangerCard context={context} />
   </div>

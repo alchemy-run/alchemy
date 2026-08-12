@@ -1031,6 +1031,21 @@ threshold ships at 32 MiB — comfortably inside a 128 MB isolate, covering
 the overwhelming majority of pushes at full speed, with anything larger
 merely slower instead of refused.
 
+### 16.5 Public repos — anonymous read access
+
+Repos carry a `public` flag (GitHub's model). Tokenless callers are
+`{ kind: "anonymous" }` in `CallerAuth` and get exactly one grant: `read`
+on repos whose flag is set — REST reads, raw file/blob routes, the
+advertisement, and `upload-pack` (tokenless `git clone`). Writes, token
+management, and everything on private repos still require a token;
+anonymous wire requests to private repos answer `401 + WWW-Authenticate`
+so git prompts. Listing is visibility-filtered: the admin key sees all
+rows, everyone else sees `is_public = 1` only (denormalized into the
+Registry, like the other list columns). Enforcement stays in the Repo DO
+(`authorize`/`wireAuth`) — the Worker middleware only parses credentials,
+and a missing `Authorization` header now parses to anonymous instead of
+401.
+
 ### 16.5 The push cap was still there — request buffering
 
 Pushing the **full alchemy history** (~100 MiB pack) found the residual

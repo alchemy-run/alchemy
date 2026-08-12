@@ -213,7 +213,13 @@ export class WireProtocolError extends Schema.TaggedError<WireProtocolError>()(
  */
 export type CallerAuth =
   | { readonly kind: "admin" }
-  | { readonly kind: "token"; readonly token: string };
+  | { readonly kind: "token"; readonly token: string }
+  /**
+   * No credential presented. Allowed exactly one thing: `read` on a repo
+   * whose `public` flag is set — the GitHub public-repo model. Everything
+   * else fails `Unauthorized` in {@link authorize}/`wireAuth`.
+   */
+  | { readonly kind: "anonymous" };
 
 /** Repo metadata as stored in the `config` table. */
 export interface RepoMetaData {
@@ -223,6 +229,8 @@ export interface RepoMetaData {
   readonly defaultBranch: string;
   readonly description: string | null;
   readonly readOnly: boolean;
+  /** Anyone can read/clone without a token (GitHub public-repo model). */
+  readonly public: boolean;
   readonly forkOf: string | null;
   readonly status: RepoStatus;
   readonly createdAt: number;
@@ -257,6 +265,8 @@ export interface RepoMetaPatch {
   /** Must resolve to an existing branch. */
   readonly defaultBranch?: string | undefined;
   readonly readOnly?: boolean | undefined;
+  /** Anyone can read/clone without a token when `true`. */
+  readonly public?: boolean | undefined;
 }
 
 /** One ref (peeled target present for annotated tags). */
@@ -296,6 +306,8 @@ export interface InitRepoInput {
   readonly defaultBranch: string;
   readonly description: string | null;
   readonly readOnly: boolean;
+  /** Anyone can read/clone without a token when `true`. */
+  readonly public: boolean;
   readonly forkOf: string | null;
 }
 
@@ -1579,6 +1591,7 @@ export const GitRepoLive = GitRepo.make(
             defaultBranch: map.get("default_branch") ?? "main",
             description: map.get("description") ?? null,
             readOnly: map.get("read_only") === "1",
+            public: map.get("public") === "1",
             forkOf: map.get("fork_of") ?? null,
             status: (map.get("status") ?? "ready") as RepoStatus,
             createdAt: Number(map.get("created_at") ?? 0),
@@ -1658,6 +1671,13 @@ export const GitRepoLive = GitRepo.make(
         required: TokenScope,
       ) {
         if (auth.kind === "admin") return;
+        if (auth.kind === "anonymous") {
+          // Tokenless callers get read (and nothing else) on public repos.
+          if (required === "read" && (yield* getConfig("public")) === "1") {
+            return;
+          }
+          return yield* new Unauthorized();
+        }
         const hash = yield* hashToken(auth.token);
         yield* verifyTokenHash(hash, required);
       });
@@ -1978,6 +1998,7 @@ export const GitRepoLive = GitRepo.make(
           yield* setConfig("description", input.description);
         }
         yield* setConfig("read_only", input.readOnly ? "1" : "0");
+        yield* setConfig("public", input.public ? "1" : "0");
         if (input.forkOf !== null) {
           yield* setConfig("fork_of", input.forkOf);
         }
@@ -2053,7 +2074,12 @@ export const GitRepoLive = GitRepo.make(
         Effect.gen(function* () {
           if (request.headers[ADMIN_HEADER] === "1") return true;
           const creds = parseBasicOrBearer(request.headers);
-          if (creds === undefined) return false;
+          if (creds === undefined) {
+            // Anonymous: read-only wire access (advertisement +
+            // upload-pack) on public repos; a `false` here answers 401 +
+            // WWW-Authenticate so git prompts for credentials.
+            return required === "read" && (yield* getConfig("public")) === "1";
+          }
           const hash = yield* hashToken(Redacted.value(creds.token));
           const result = yield* verifyTokenHash(hash, required).pipe(
             Effect.map(() => true),
@@ -2631,6 +2657,7 @@ export const GitRepoLive = GitRepo.make(
             defaultBranch: meta.defaultBranch,
             readOnly: meta.readOnly,
             status: meta.status,
+            public: meta.public,
           })
           .pipe(Effect.ignore);
       });
@@ -2948,6 +2975,9 @@ export const GitRepoLive = GitRepo.make(
           }
           if (patch.readOnly !== undefined) {
             yield* setConfig("read_only", patch.readOnly ? "1" : "0");
+          }
+          if (patch.public !== undefined) {
+            yield* setConfig("public", patch.public ? "1" : "0");
           }
           const updated = yield* readMeta;
           const result = updated ?? meta;

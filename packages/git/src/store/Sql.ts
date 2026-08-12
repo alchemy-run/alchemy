@@ -127,6 +127,7 @@ export const REGISTRY_DDL: ReadonlyArray<string> = [
   -- Durable Object per listed row just to render a page.
   default_branch TEXT NOT NULL DEFAULT 'main',
   read_only      INTEGER NOT NULL DEFAULT 0,
+  is_public      INTEGER NOT NULL DEFAULT 0,
   status         TEXT NOT NULL DEFAULT 'ready',
   PRIMARY KEY (owner, name)
 ) WITHOUT ROWID`,
@@ -229,6 +230,7 @@ export interface RegistryRepoRow extends Record<string, SqlStorageValue> {
   /** Denormalised from the Repo DO — see the DDL comment. */
   readonly default_branch: string;
   readonly read_only: number;
+  readonly is_public: number;
   readonly status: string;
 }
 
@@ -449,6 +451,7 @@ export const initRepoSchema = Effect.fn(function* (sql: SqlClient) {
 const REGISTRY_MIGRATIONS: ReadonlyArray<string> = [
   `ALTER TABLE repos ADD COLUMN default_branch TEXT NOT NULL DEFAULT 'main'`,
   `ALTER TABLE repos ADD COLUMN read_only INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE repos ADD COLUMN is_public INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE repos ADD COLUMN status TEXT NOT NULL DEFAULT 'ready'`,
 ];
 

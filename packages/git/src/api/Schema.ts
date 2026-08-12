@@ -213,8 +213,13 @@ export class ValidationError extends Schema.TaggedError<ValidationError>()(
 export class Credentials extends Context.Service<
   Credentials,
   {
-    /** The raw secret presented by the client (repo token or admin key). */
-    readonly token: Redacted.Redacted<string>;
+    /**
+     * The raw secret presented by the client (repo token or admin key),
+     * or `undefined` for an anonymous request — public repos allow
+     * unauthenticated reads (REST reads + `git clone`), exactly like
+     * GitHub's public repositories.
+     */
+    readonly token: Redacted.Redacted<string> | undefined;
   }
 >()("git-service/Credentials") {}
 
@@ -307,6 +312,11 @@ export class Repo extends Schema.Class<Repo>("Repo")({
   description: Schema.NullOr(Schema.String),
   /** When `true`, receive-pack and REST ref writes are rejected. */
   readOnly: Schema.Boolean,
+  /**
+   * Public repos are readable (REST reads and `git clone`/`fetch`)
+   * without any token; writes always require one.
+   */
+  public: Schema.Boolean,
   /** Parent `repoId` when this repo is a fork, else `null`. */
   forkOf: Schema.NullOr(Schema.String),
   /** Lifecycle status; poll this for async fork/import/delete progress. */

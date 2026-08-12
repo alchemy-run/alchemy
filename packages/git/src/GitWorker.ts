@@ -172,6 +172,7 @@ const toRepo = (meta: RepoMetaData): Repo =>
     defaultBranch: meta.defaultBranch,
     description: meta.description,
     readOnly: meta.readOnly,
+    public: meta.public,
     forkOf: meta.forkOf,
     status: meta.status,
     createdAt: meta.createdAt,
@@ -236,6 +237,7 @@ const registryFallbackRepo = (entry: RegistryEntry): Repo =>
     defaultBranch: entry.defaultBranch,
     description: entry.description,
     readOnly: entry.readOnly,
+    public: entry.public,
     forkOf: entry.forkOf,
     status:
       entry.deletedAt !== null ? "deleting" : (entry.status as Repo["status"]),
@@ -373,16 +375,27 @@ export default class GitWorker extends Cloudflare.Worker<GitWorker>()(
         ),
       );
 
-    /** The REST caller's auth, from the `GitAuth`-provided credentials. */
-    const restAuth = Effect.gen(function* () {
-      const credentials = yield* Credentials;
-      return yield* callerAuthFor(credentials.token);
-    });
+    /**
+     * The REST caller's auth, from the `GitAuth`-provided credentials.
+     * A missing token is an ANONYMOUS caller — the Repo DO grants it read
+     * (and nothing else) on public repos.
+     */
+    const restAuth: Effect.Effect<CallerAuth, never, Credentials> = Effect.gen(
+      function* () {
+        const credentials = yield* Credentials;
+        if (credentials.token === undefined) {
+          return { kind: "anonymous" } as const;
+        }
+        return yield* callerAuthFor(credentials.token);
+      },
+    );
 
     /** Admin-or-403 gate for the admin-key-only endpoints (DESIGN.md §5). */
     const requireAdmin = Effect.gen(function* () {
       const credentials = yield* Credentials;
-      const isAdmin = yield* verifyAdminKey(credentials.token, adminKey);
+      const isAdmin =
+        credentials.token !== undefined &&
+        (yield* verifyAdminKey(credentials.token, adminKey));
       if (!isAdmin) {
         return yield* new Forbidden({ required: "admin" });
       }
@@ -413,6 +426,7 @@ export default class GitWorker extends Cloudflare.Worker<GitWorker>()(
       readonly owner: string;
       readonly name: string;
       readonly description?: string | undefined;
+      readonly public?: boolean | undefined;
     }) =>
       registryStub()
         .createRepo(input)
@@ -464,6 +478,7 @@ export default class GitWorker extends Cloudflare.Worker<GitWorker>()(
               owner: payload.owner,
               name: payload.name,
               description: payload.description,
+              public: payload.public,
             });
             const init = yield* repos
               .getByName(entry.repoId)
@@ -474,6 +489,7 @@ export default class GitWorker extends Cloudflare.Worker<GitWorker>()(
                 defaultBranch: payload.defaultBranch ?? "main",
                 description: payload.description ?? null,
                 readOnly: payload.readOnly ?? false,
+                public: payload.public ?? false,
                 forkOf: null,
               })
               .pipe(
@@ -543,6 +559,7 @@ export default class GitWorker extends Cloudflare.Worker<GitWorker>()(
                 description: payload.description,
                 defaultBranch: payload.defaultBranch,
                 readOnly: payload.readOnly,
+                public: payload.public,
               })
               .pipe(
                 Effect.catchTag("StoreError", (error) => Effect.die(error)),
@@ -560,18 +577,18 @@ export default class GitWorker extends Cloudflare.Worker<GitWorker>()(
         )
         .handle("list", ({ query }) =>
           Effect.gen(function* () {
-            // list-all is admin-key-only; `list` declares no Forbidden, so
-            // a non-admin caller gets the middleware's 401.
+            // The admin key lists everything; everyone else (tokenless
+            // included) sees public repos only — GitHub's model.
             const credentials = yield* Credentials;
-            const isAdmin = yield* verifyAdminKey(credentials.token, adminKey);
-            if (!isAdmin) {
-              return yield* new Unauthorized();
-            }
+            const isAdmin =
+              credentials.token !== undefined &&
+              (yield* verifyAdminKey(credentials.token, adminKey));
             const page = yield* registryStub()
               .list({
                 owner: query.owner,
                 cursor: query.cursor,
                 limit: query.limit,
+                publicOnly: !isAdmin,
               })
               .pipe(
                 Effect.catchTag("StoreError", (error) => Effect.die(error)),
@@ -679,6 +696,8 @@ export default class GitWorker extends Cloudflare.Worker<GitWorker>()(
                 defaultBranch: sourceMeta.defaultBranch,
                 description: sourceMeta.description,
                 readOnly: false,
+                // Forks inherit the source's visibility.
+                public: sourceMeta.public,
                 forkOf: source.repoId,
                 parentRepoId: source.repoId,
               })
@@ -741,6 +760,7 @@ export default class GitWorker extends Cloudflare.Worker<GitWorker>()(
                 defaultBranch: "main",
                 description: null,
                 readOnly: false,
+                public: false,
                 forkOf: null,
                 source: {
                   url: payload.source.url,
@@ -1109,11 +1129,10 @@ export default class GitWorker extends Cloudflare.Worker<GitWorker>()(
       let repo = (params.repo ?? "").toLowerCase();
       if (repo.endsWith(".git")) repo = repo.slice(0, -4);
 
+      // Anonymous wire requests are forwarded to the DO, which allows
+      // read-only access (advertisement + upload-pack) on public repos and
+      // answers 401 + WWW-Authenticate otherwise so git prompts for creds.
       const credentials = parseBasicOrBearer(request.headers);
-      if (credentials === undefined) {
-        // 401 + WWW-Authenticate makes the git client retry with creds.
-        return wire401;
-      }
 
       const resolved = yield* Effect.result(resolveCached(owner, repo));
       if (Result.isFailure(resolved)) {
@@ -1124,7 +1143,9 @@ export default class GitWorker extends Cloudflare.Worker<GitWorker>()(
         return notFound;
       }
 
-      const isAdmin = yield* verifyAdminKey(credentials.token, adminKey);
+      const isAdmin =
+        credentials !== undefined &&
+        (yield* verifyAdminKey(credentials.token, adminKey));
       // Never trust an inbound admin header — only the Worker mints it.
       let headers = Headers.remove(request.headers, ADMIN_HEADER);
       if (isAdmin) {
@@ -1178,9 +1199,6 @@ export default class GitWorker extends Cloudflare.Worker<GitWorker>()(
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
         const credentials = parseBasicOrBearer(request.headers);
-        if (credentials === undefined) {
-          return { kind: "halt", response: wire401 } as const;
-        }
         const resolved = yield* Effect.result(resolveCached(ownerRaw, repoRaw));
         if (Result.isFailure(resolved)) {
           return { kind: "halt", response: internalError } as const;
@@ -1188,7 +1206,12 @@ export default class GitWorker extends Cloudflare.Worker<GitWorker>()(
         if (resolved.success === undefined) {
           return { kind: "halt", response: notFound } as const;
         }
-        const auth = yield* callerAuthFor(credentials.token);
+        // Tokenless raw reads reach the DO as anonymous; it grants read on
+        // public repos and 401s the rest.
+        const auth: CallerAuth =
+          credentials === undefined
+            ? { kind: "anonymous" }
+            : yield* callerAuthFor(credentials.token);
         return { kind: "ok", entry: resolved.success, auth } as const;
       });
 

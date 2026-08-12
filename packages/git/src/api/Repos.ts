@@ -36,6 +36,11 @@ export const create = HttpApiEndpoint.post("create", "/repos", {
     /** Default branch short name. @default "main" */
     defaultBranch: Schema.optional(Schema.String),
     description: Schema.optional(Schema.String),
+    /**
+     * Anyone can read/clone without a token when `true`.
+     * @default false
+     */
+    public: Schema.optional(Schema.Boolean),
     /** @default false */
     readOnly: Schema.optional(Schema.Boolean),
   }),
@@ -58,6 +63,8 @@ export const update = HttpApiEndpoint.patch("update", "/repos/:owner/:repo", {
     /** Must resolve to an existing branch. */
     defaultBranch: Schema.optional(Schema.String),
     readOnly: Schema.optional(Schema.Boolean),
+    /** Anyone can read/clone without a token when `true`. */
+    public: Schema.optional(Schema.Boolean),
   }),
   success: Repo,
   error: [RepoNotFound, RefNotFound, Forbidden],

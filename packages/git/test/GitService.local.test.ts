@@ -122,6 +122,10 @@ const makeClient = (url: string, token: string) =>
     ),
   });
 
+/** A client that sends NO Authorization header — the anonymous caller. */
+const makeAnonymousClient = (url: string) =>
+  HttpApiClient.make(GitApi, { baseUrl: url });
+
 const asOid = (oid: string): Oid => oid as Oid;
 
 /** Assert an effect fails with the given tagged error. */
@@ -312,14 +316,20 @@ test(
       "Unauthorized",
     );
 
-    // repo tokens are not the admin key: create → 403, list → 401
+    // repo tokens are not the admin key: create → 403; list succeeds but
+    // shows PUBLIC repos only, so this private repo is not in it.
     const repoToken = yield* makeClient(url, created.token.token);
     const forbidden = yield* expectTag(
       repoToken.repos.create({ payload: { owner: "acme", name: "other" } }),
       "Forbidden",
     );
     expect((forbidden as { required?: string }).required).toBe("admin");
-    yield* expectTag(repoToken.repos.list({ query: {} }), "Unauthorized");
+    const nonAdminListing = yield* repoToken.repos.list({ query: {} });
+    expect(
+      nonAdminListing.items.some(
+        (row) => row.owner === "acme" && row.name === "rest-repos",
+      ),
+    ).toBe(false);
   }).pipe(logLevel),
   { timeout: 120_000 },
 );
@@ -1122,5 +1132,114 @@ test(
     expect(text).toBe("0008NAK\n");
     expect(new TextDecoder().decode(bytes.subarray(8, 12))).toBe("PACK");
   }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// (j) public repos — anonymous read access (GitHub model)
+// ═══════════════════════════════════════════════════════════════════════════
+
+test(
+  "public repos: anonymous REST reads + tokenless clone; writes still need a token",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const admin = yield* makeClient(url, TEST_ADMIN_TOKEN);
+    const anonymous = yield* makeAnonymousClient(url);
+    const tmp = yield* tempDir;
+    const path = yield* Path.Path;
+
+    // A public repo with one commit pushed by its owner.
+    const repo = yield* createRepo(url, "acme", "town-square");
+    yield* admin.repos.update({
+      params: { owner: "acme", repo: "town-square" },
+      payload: { public: true },
+    });
+    const fs = yield* FileSystem.FileSystem;
+    const pub = path.join(tmp, "pub");
+    yield* fs.makeDirectory(pub, { recursive: true });
+    yield* mustGit(pub, "init", "-q", "-b", "main");
+    yield* fs.writeFileString(
+      path.join(pub, "greeting.txt"),
+      "hello anonymous\n",
+    );
+    yield* mustGit(pub, "add", "-A");
+    yield* mustGit(pub, "commit", "-qm", "public commit");
+    yield* mustGit(pub, "push", "-q", repo.remote, "main");
+
+    // Anonymous REST: repo meta, refs, log, tree, blob — no token anywhere.
+    const meta = yield* anonymous.repos.get({
+      params: { owner: "acme", repo: "town-square" },
+    });
+    expect(meta.public).toBe(true);
+    const refs = yield* anonymous.refs.list({
+      params: { owner: "acme", repo: "town-square" },
+      query: {},
+    });
+    expect(refs.head).toBe("refs/heads/main");
+    const head = refs.refs.find((ref) => ref.name === "refs/heads/main")!;
+    const commit = yield* anonymous.objects.commit({
+      params: { owner: "acme", repo: "town-square", oid: head.oid },
+    });
+    expect(commit.message).toContain("public commit");
+    const log = yield* anonymous.objects.log({
+      params: { owner: "acme", repo: "town-square" },
+      query: {},
+    });
+    expect(log.items.length).toBe(1);
+
+    // Anonymous listing shows the public repo (admin key not required).
+    const listing = yield* anonymous.repos.list({ query: {} });
+    expect(listing.items.some((row) => row.name === "town-square")).toBe(true);
+
+    // Tokenless clone over the wire.
+    const parsed = new URL(url);
+    const anonymousRemote = `${parsed.protocol}//${parsed.host}/acme/town-square.git`;
+    yield* mustGit(tmp, `clone`, `-q`, anonymousRemote, `anon-clone`);
+    const cloned = yield* mustGit(
+      path.join(tmp, "anon-clone"),
+      `show`,
+      `HEAD:greeting.txt`,
+    );
+    expect(cloned.stdout.trim()).toBe("hello anonymous");
+
+    // Writes stay locked: anonymous push is rejected (401 → git fails).
+    const anonWork = path.join(tmp, "anon-clone");
+    yield* fs.writeFileString(
+      path.join(anonWork, "greeting.txt"),
+      "hello anonymous\nmore\n",
+    );
+    yield* mustGit(anonWork, "add", "-A");
+    yield* mustGit(anonWork, "commit", "-qm", "anon write");
+    const push = yield* Effect.result(
+      mustGit(anonWork, "push", "-q", "origin", "main"),
+    );
+    expect(Result.isFailure(push)).toBe(true);
+
+    // Anonymous token management is rejected too.
+    yield* expectTag(
+      anonymous.tokens.list({
+        params: { owner: "acme", repo: "town-square" },
+      }),
+      "Unauthorized",
+    );
+
+    // Flipping back to private locks anonymous readers out again.
+    yield* admin.repos.update({
+      params: { owner: "acme", repo: "town-square" },
+      payload: { public: false },
+    });
+    yield* expectTag(
+      anonymous.repos.get({ params: { owner: "acme", repo: "town-square" } }),
+      "Unauthorized",
+    );
+    const privateListing = yield* anonymous.repos.list({ query: {} });
+    expect(privateListing.items.some((row) => row.name === "town-square")).toBe(
+      false,
+    );
+    const privateClone = yield* Effect.result(
+      mustGit(tmp, `clone`, `-q`, anonymousRemote, `anon-clone-private`),
+    );
+    expect(Result.isFailure(privateClone)).toBe(true);
+  }),
   { timeout: 120_000 },
 );

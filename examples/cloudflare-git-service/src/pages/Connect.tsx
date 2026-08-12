@@ -14,9 +14,11 @@ export const ConnectPage = ({ onConnected }: { onConnected: () => void }) => {
     setError(null);
     try {
       const trimmed = url.trim().replace(/\/+$/, "");
-      // Probe with the connection before persisting it.
-      await listRepos({ url: trimmed, token: token.trim() }, { limit: 1 });
-      saveConnection(trimmed, token.trim());
+      const secret = token.trim() === "" ? undefined : token.trim();
+      // Probe with the connection before persisting it — anonymous works
+      // too (the service lists public repos to tokenless callers).
+      await listRepos({ url: trimmed, token: secret }, { limit: 1 });
+      saveConnection(trimmed, secret);
       onConnected();
     } catch (cause) {
       setError(cause);
@@ -48,7 +50,9 @@ export const ConnectPage = ({ onConnected }: { onConnected: () => void }) => {
           />
         </label>
         <label className="block space-y-1.5">
-          <span className="text-sm font-medium">Admin token</span>
+          <span className="text-sm font-medium">
+            Token <span className="font-normal text-fg-muted">(optional)</span>
+          </span>
           <Input
             value={token}
             onChange={setToken}
@@ -57,12 +61,14 @@ export const ConnectPage = ({ onConnected }: { onConnected: () => void }) => {
             mono
           />
           <span className="block text-xs text-fg-muted">
-            The deployer secret (<code>GIT_SERVICE_ADMIN_TOKEN</code>). Stored
-            in this browser's localStorage only.
+            Leave empty to browse public repos anonymously. The admin key
+            (<code>GIT_SERVICE_ADMIN_TOKEN</code>) or a repo token unlocks
+            private repos and writes. Stored in this browser's localStorage
+            only.
           </span>
         </label>
         {error != null && <ErrorBox error={error} />}
-        <Button kind="primary" disabled={busy || !url || !token} type="submit">
+        <Button kind="primary" disabled={busy || !url} type="submit">
           {busy ? "Connecting…" : "Connect"}
         </Button>
       </form>

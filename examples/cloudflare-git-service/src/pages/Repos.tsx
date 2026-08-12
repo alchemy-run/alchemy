@@ -38,6 +38,7 @@ const RepoRow = ({ repo }: { repo: Repo }) => (
             </span>
           </Badge>
         )}
+        <Badge>{repo.public ? "Public" : "Private"}</Badge>
         {repo.readOnly && <Badge tone="attention">read-only</Badge>}
         {repo.status !== "ready" && <Badge tone="danger">{repo.status}</Badge>}
       </div>
@@ -83,6 +84,7 @@ const NewRepoForm = ({
   const [owner, setOwner] = useState("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [isPublic, setIsPublic] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
 
@@ -93,6 +95,7 @@ const NewRepoForm = ({
       const created = await createRepo(connection, {
         owner: owner.trim(),
         name: name.trim(),
+        public: isPublic,
         ...(description.trim() ? { description: description.trim() } : {}),
       });
       onCreated(created);
@@ -121,6 +124,14 @@ const NewRepoForm = ({
         onChange={setDescription}
         placeholder="Description (optional)"
       />
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={isPublic}
+          onChange={(event) => setIsPublic(event.target.checked)}
+        />
+        Public — anyone can read and clone without a token
+      </label>
       {error != null && <ErrorBox error={error} />}
       <Button kind="primary" type="submit" disabled={busy || !owner || !name}>
         {busy ? "Creating…" : "Create repository"}

@@ -14,7 +14,7 @@
  */
 import React, { useState } from "react";
 import ReactDOM from "react-dom/client";
-import { clearConnection, getConnection } from "./api.ts";
+import { getConnection, signOut } from "./api.ts";
 import { RepoIcon } from "./components.tsx";
 import { ConnectPage } from "./pages/Connect.tsx";
 import { RepoPage } from "./pages/Repo.tsx";
@@ -22,8 +22,15 @@ import { ReposPage } from "./pages/Repos.tsx";
 import { Link, Router, segments, useRouter } from "./router.tsx";
 import "./styles.css";
 
-const Header = ({ onDisconnect }: { onDisconnect: () => void }) => {
+const Header = ({
+  onSignIn,
+  onSignOut,
+}: {
+  onSignIn: () => void;
+  onSignOut: () => void;
+}) => {
   const connection = getConnection();
+  const signedIn = connection?.token !== undefined;
   return (
     <header className="border-b border-border-muted bg-canvas-subtle">
       <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
@@ -37,13 +44,23 @@ const Header = ({ onDisconnect }: { onDisconnect: () => void }) => {
               {new URL(connection.url).host}
             </span>
           )}
-          <button
-            type="button"
-            onClick={onDisconnect}
-            className="cursor-pointer rounded-md border border-border-muted px-2 py-1 hover:text-danger"
-          >
-            Disconnect
-          </button>
+          {signedIn ? (
+            <button
+              type="button"
+              onClick={onSignOut}
+              className="cursor-pointer rounded-md border border-border-muted px-2 py-1 hover:text-danger"
+            >
+              Sign out
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onSignIn}
+              className="cursor-pointer rounded-md border border-border-muted px-2 py-1 hover:text-accent"
+            >
+              Sign in
+            </button>
+          )}
         </div>
       </div>
     </header>
@@ -52,20 +69,32 @@ const Header = ({ onDisconnect }: { onDisconnect: () => void }) => {
 
 const Routes = () => {
   const { path } = useRouter();
-  // Re-render the app when the connection changes (connect / disconnect).
+  // Re-render the app when the connection changes (sign in / sign out).
   const [, setGeneration] = useState(0);
+  const [showSignIn, setShowSignIn] = useState(false);
   const connection = getConnection();
 
-  if (connection === null) {
-    return <ConnectPage onConnected={() => setGeneration((n) => n + 1)} />;
+  // Browsing is ANONYMOUS by default — public repos need no token. The
+  // connect screen appears only when no service URL is known at all, or
+  // when the user explicitly opens Sign in (for admin/private access).
+  if (connection === null || showSignIn) {
+    return (
+      <ConnectPage
+        onConnected={() => {
+          setShowSignIn(false);
+          setGeneration((n) => n + 1);
+        }}
+      />
+    );
   }
 
   const parts = segments(path);
   return (
     <>
       <Header
-        onDisconnect={() => {
-          clearConnection();
+        onSignIn={() => setShowSignIn(true)}
+        onSignOut={() => {
+          signOut();
           setGeneration((n) => n + 1);
         }}
       />

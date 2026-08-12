@@ -118,11 +118,17 @@ export const parseBasicOrBearer = (
 export const GitAuthLive: Layer.Layer<GitAuth> = Layer.succeed(GitAuth, {
   bearer: (httpEffect, { credential }) =>
     Redacted.value(credential) === ""
-      ? Effect.fail(new Unauthorized())
+      ? // Fail so the dispatcher falls through to `basic` (a Basic header
+        // decodes as an empty bearer credential).
+        Effect.fail(new Unauthorized())
       : Effect.provideService(httpEffect, Credentials, { token: credential }),
   basic: (httpEffect, { credential }) =>
     Redacted.value(credential.password) === ""
-      ? Effect.fail(new Unauthorized())
+      ? // Last scheme: no usable credential anywhere means the request is
+        // ANONYMOUS, not rejected — public repos allow tokenless reads.
+        // Enforcement stays in the Repo DO, which knows the repo's
+        // visibility; endpoints that need auth fail there with 401/403.
+        Effect.provideService(httpEffect, Credentials, { token: undefined })
       : Effect.provideService(httpEffect, Credentials, {
           // git convention: username ignored, password carries the token.
           token: credential.password,

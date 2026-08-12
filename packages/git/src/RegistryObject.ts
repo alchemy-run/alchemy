@@ -86,6 +86,8 @@ export interface RegistryEntry {
   readonly forkCount: number;
   /** Epoch milliseconds. */
   readonly createdAt: number;
+  /** Anyone can read/clone without a token (GitHub public-repo model). */
+  readonly public: boolean;
   /** Soft-delete marker set while the purge alarm runs, else `null`. */
   readonly deletedAt: number | null;
   /**
@@ -102,6 +104,8 @@ export interface RegistryEntry {
 export interface RepoSummary {
   readonly defaultBranch: string;
   readonly readOnly: boolean;
+  /** Anyone can read/clone without a token (GitHub public-repo model). */
+  readonly public: boolean;
   readonly status: string;
 }
 
@@ -110,6 +114,8 @@ export interface CreateRepoInput {
   readonly owner: string;
   readonly name: string;
   readonly description?: string | undefined;
+  /** Anyone can read/clone without a token when `true`. */
+  readonly public?: boolean | undefined;
   /** Parent repoId when creating a fork target row. */
   readonly forkOf?: string | undefined;
 }
@@ -119,6 +125,8 @@ export interface ListReposInput {
   readonly owner?: string | undefined;
   readonly cursor?: string | undefined;
   readonly limit?: number | undefined;
+  /** Restrict to public repos — the anonymous/non-admin listing. */
+  readonly publicOnly?: boolean | undefined;
 }
 
 /** Result page of {@link RegistryShape.list}. */
@@ -215,6 +223,7 @@ const toEntry = (row: RegistryRepoRow): RegistryEntry => ({
   deletedAt: row.deleted_at,
   defaultBranch: row.default_branch,
   readOnly: row.read_only === 1,
+  public: row.is_public === 1,
   status: row.status,
 });
 
@@ -289,12 +298,13 @@ export const RegistryLive = Registry.make(
                 rollback(new RepoAlreadyExists({ owner, repo: name }));
               }
               raw.exec(
-                `INSERT INTO repos (owner, name, repo_id, description, fork_of, fork_count, created_at, deleted_at)
-               VALUES (?, ?, ?, ?, ?, 0, ?, NULL)`,
+                `INSERT INTO repos (owner, name, repo_id, description, is_public, fork_of, fork_count, created_at, deleted_at)
+               VALUES (?, ?, ?, ?, ?, ?, 0, ?, NULL)`,
                 owner,
                 name,
                 repoId,
                 input.description ?? null,
+                input.public === true ? 1 : 0,
                 input.forkOf ?? null,
                 createdAt,
               );
@@ -310,6 +320,7 @@ export const RegistryLive = Registry.make(
                 repoId,
                 defaultBranch: "main",
                 readOnly: false,
+                public: input.public === true,
                 status: "ready",
                 description: input.description ?? null,
                 forkOf: input.forkOf ?? null,
@@ -344,6 +355,9 @@ export const RegistryLive = Registry.make(
             input.cursor === undefined ? undefined : decodeCursor(input.cursor);
           const conditions: Array<string> = ["deleted_at IS NULL"];
           const bindings: Array<string | number> = [];
+          if (input.publicOnly === true) {
+            conditions.push("is_public = 1");
+          }
           if (input.owner !== undefined) {
             conditions.push("owner = ?");
             bindings.push(input.owner.toLowerCase());
@@ -412,10 +426,11 @@ export const RegistryLive = Registry.make(
           summary: RepoSummary,
         ) {
           yield* sql.run(
-            `UPDATE repos SET default_branch = ?, read_only = ?, status = ?
+            `UPDATE repos SET default_branch = ?, read_only = ?, is_public = ?, status = ?
               WHERE repo_id = ?`,
             summary.defaultBranch,
             summary.readOnly ? 1 : 0,
+            summary.public ? 1 : 0,
             summary.status,
             repoId,
           );

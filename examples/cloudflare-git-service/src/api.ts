@@ -16,25 +16,27 @@ const builtinUrl: string | undefined = import.meta.env.VITE_GIT_URL;
 
 export interface Connection {
   readonly url: string;
-  readonly token: string;
+  /** Absent = anonymous: public repos are readable without any token. */
+  readonly token?: string | undefined;
 }
 
 export const getConnection = (): Connection | null => {
   const url = localStorage.getItem(URL_KEY) ?? builtinUrl;
+  if (!url) return null;
   const token = localStorage.getItem(TOKEN_KEY);
-  if (!url || !token) return null;
-  return { url: url.replace(/\/+$/, ""), token };
+  return { url: url.replace(/\/+$/, ""), token: token ?? undefined };
 };
 
 export const defaultUrl = (): string =>
   localStorage.getItem(URL_KEY) ?? builtinUrl ?? "";
 
-export const saveConnection = (url: string, token: string): void => {
+export const saveConnection = (url: string, token?: string): void => {
   localStorage.setItem(URL_KEY, url.replace(/\/+$/, ""));
-  localStorage.setItem(TOKEN_KEY, token);
+  if (token) localStorage.setItem(TOKEN_KEY, token);
+  else localStorage.removeItem(TOKEN_KEY);
 };
 
-export const clearConnection = (): void => {
+export const signOut = (): void => {
   localStorage.removeItem(TOKEN_KEY);
 };
 
@@ -67,6 +69,8 @@ export interface Repo {
   defaultBranch: string;
   description: string | null;
   readOnly: boolean;
+  /** Readable (REST + clone) without a token. */
+  public: boolean;
   forkOf: string | null;
   status: RepoStatus;
   createdAt: number;
@@ -174,7 +178,9 @@ const request = async <T>(
   const res = await fetch(`${connection.url}/api/v1${path}`, {
     method,
     headers: {
-      Authorization: `Bearer ${connection.token}`,
+      // Anonymous requests carry no Authorization header at all — the
+      // service grants read on public repos to tokenless callers.
+      ...(connection.token ? { Authorization: `Bearer ${connection.token}` } : {}),
       ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -206,8 +212,25 @@ export const getRepo = (c: Connection, owner: string, repo: string) =>
 
 export const createRepo = (
   c: Connection,
-  payload: { owner: string; name: string; description?: string },
+  payload: {
+    owner: string;
+    name: string;
+    description?: string;
+    public?: boolean;
+  },
 ) => request<RepoCreated>(c, "POST", `/repos`, payload);
+
+export const updateRepo = (
+  c: Connection,
+  owner: string,
+  repo: string,
+  payload: {
+    description?: string | null;
+    defaultBranch?: string;
+    readOnly?: boolean;
+    public?: boolean;
+  },
+) => request<Repo>(c, "PATCH", `/repos/${seg(owner)}/${seg(repo)}`, payload);
 
 export const deleteRepo = (c: Connection, owner: string, repo: string) =>
   request<unknown>(c, "DELETE", `/repos/${seg(owner)}/${seg(repo)}`);
@@ -275,7 +298,9 @@ export const getFile = async (
   if (options.ref) params.set("ref", options.ref);
   const res = await fetch(
     `${c.url}/api/v1/repos/${seg(owner)}/${seg(repo)}/file?${params}`,
-    { headers: { Authorization: `Bearer ${c.token}` } },
+    {
+      headers: c.token ? { Authorization: `Bearer ${c.token}` } : {},
+    },
   );
   if (!res.ok) throw await parseError(res);
   return new Uint8Array(await res.arrayBuffer());
