@@ -133,6 +133,12 @@
       "worker": "./src/Docker/index.ts",
       "import": "./lib/Docker/index.js"
     },
+    "./FUSE": {
+      "types": "./lib/FUSE/index.d.ts",
+      "bun": "./src/FUSE/index.ts",
+      "worker": "./src/FUSE/index.ts",
+      "import": "./lib/FUSE/index.js"
+    },
     "./Kubernetes": {
       "types": "./lib/Kubernetes/index.d.ts",
       "bun": "./src/Kubernetes/index.ts",

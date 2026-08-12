@@ -10,30 +10,20 @@ import { SandboxContainerImage } from "./SandboxContainer.ts";
  * toolbox actually shells out to.
  *
  * - `git` + `ca-certificates` — clones and pushes;
- * - `ripgrep` — the `grep`/`glob` tools run `rg`;
- * - `fuse3` + `tigrisfs` — the FUSE adapter `Cloudflare.R2.FuseMount`
- *   uses to mount an R2 bucket as a filesystem, so state can outlive
- *   this (ephemeral) container.
+ * - `ripgrep` — the `grep`/`glob` tools run `rg`.
  *
- * `tigrisfs` ships prebuilt release tarballs, so it costs one layer
- * rather than a Go toolchain.
+ * Deliberately NOTHING mount-related: bindings carry their own system
+ * dependencies into the image (`FUSE.MountTigrisfs`
+ * contributes `fuse3` + `tigrisfs` when a mount is bound — see
+ * `ContainerImage`). Exported so custom container runtimes can reuse
+ * the same toolbox base.
  */
-const SANDBOX_DOCKERFILE = Dockerfile.inline`
+export const SANDBOX_DOCKERFILE = Dockerfile.inline`
   FROM oven/bun:1
 
-  # NOTE: the tigrisfs version is inlined LITERALLY (bump it here). The
-  # template must not interpolate: \`Dockerfile.inline\` turns any
-  # interpolation into an \`Output\`, which the image build cannot read.
-  # Shell vars use \`$ARCH\` (no braces) for the same reason.
   RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-      ca-certificates curl git ripgrep fuse3 openssh-client \
-    && ARCH="$(dpkg --print-architecture)" \
-    && curl -fsSL "https://github.com/tigrisdata/tigrisfs/releases/download/v1.2.1/tigrisfs_1.2.1_linux_$ARCH.deb" \
-      -o /tmp/tigrisfs.deb \
-    && dpkg -i /tmp/tigrisfs.deb \
-    && rm /tmp/tigrisfs.deb \
-    && echo "user_allow_other" >> /etc/fuse.conf \
+      ca-certificates curl git ripgrep openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
   WORKDIR /workspace

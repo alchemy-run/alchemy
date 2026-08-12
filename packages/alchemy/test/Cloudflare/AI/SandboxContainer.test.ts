@@ -155,12 +155,14 @@ test(
   "the image carries the tools the toolbox shells out to",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    // `rg` backs the grep/glob tools; `git` backs checkouts
+    // `rg` backs the grep/glob tools; `git` backs checkouts. (FUSE
+    // tooling is NOT in the base image — `FUSE.MountTigrisfs` contributes
+    // it to images that actually bind a mount.)
     const versions = value(
       yield* op<{ exitCode: number; stdout: string }>(
         url,
         "exec",
-        "git --version && rg --version | head -1 && tigrisfs --version 2>&1 | head -1",
+        "git --version && rg --version | head -1",
       ),
     );
     expect(versions.exitCode).toBe(0);
