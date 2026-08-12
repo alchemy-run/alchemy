@@ -376,7 +376,6 @@
     "@distilled.cloud/planetscale": "workspace:*",
     "@effect/sql-d1": "catalog:",
     "@effect/sql-sqlite-do": "catalog:",
-    "@effect/vitest": "catalog:",
     "@libsql/client": "catalog:",
     "@octokit/rest": "^22.0.1",
     "@octokit/webhooks": "^14.2.0",
@@ -401,6 +400,7 @@
   },
   "devDependencies": {
     "@aws/durable-execution-sdk-js": "^2.1.0",
+    "@effect/vitest": "catalog:",
     "@cloudflare/containers": "catalog:",
     "@cloudflare/puppeteer": "^1.1.0",
     "@cloudflare/workers-types": "catalog:",
