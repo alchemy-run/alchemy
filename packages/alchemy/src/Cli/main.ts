@@ -39,30 +39,6 @@ const commandLoaders = {
 type CommandName = keyof typeof commandLoaders;
 const commandNames = Object.keys(commandLoaders) as CommandName[];
 
-const makeCli = async (args: readonly string[]) => {
-  const selected = commandNames.find((name) => args.includes(name));
-  const loadAll = args.includes("--completions");
-  // Effect needs every top-level name to render root help. Handlerless
-  // commands preserve that list without importing their implementations.
-  const loadedCommands = await Promise.all(
-    commandNames.map((name) =>
-      loadAll || name === selected
-        ? commandLoaders[name]()
-        : Command.make(name, {}),
-    ),
-  );
-  const root = Command.make("alchemy", {}).pipe(
-    Command.withSubcommands(loadedCommands),
-  );
-  const cli = Command.run(root, { version: packageJson.version });
-  return selected === undefined
-    ? {
-        cli: cli as Effect.Effect<void, any, never>,
-        needsCommandServices: false as const,
-      }
-    : { cli, needsCommandServices: true as const };
-};
-
 const baseServices = Layer.mergeAll(
   Layer.provideMerge(AlchemyContextLive, PlatformServices),
   ConfigProvider.layer(ConfigProvider.fromEnv()),
@@ -88,19 +64,42 @@ const commandServices = Layer.unwrap(
   }),
 );
 
-const program = Effect.promise(() => makeCli(process.argv.slice(2))).pipe(
-  Effect.flatMap((command) => {
-    return command.needsCommandServices
-      ? Effect.gen(function* () {
-          yield* checkLatestVersion;
-          return yield* command.cli;
-        }).pipe(Effect.provide(Layer.merge(baseServices, commandServices)))
-      : Effect.gen(function* () {
-          yield* checkLatestVersion;
-          return yield* command.cli;
-        }).pipe(Effect.provide(baseServices));
-  }),
-  Effect.scoped,
-);
+const makeCli = Effect.fn(function* (args: readonly string[]) {
+  const selected = commandNames.find((name) => args.includes(name));
+  const loadAll = args.includes("--completions");
+
+  if (selected === undefined && !loadAll) {
+    const root = Command.make("alchemy", {}).pipe(
+      Command.withSubcommands(
+        commandNames.map((name) => Command.make(name, {})),
+      ),
+    );
+    return yield* Effect.gen(function* () {
+      yield* checkLatestVersion;
+      return yield* Command.run(root, { version: packageJson.version });
+    }).pipe(Effect.provide(baseServices));
+  }
+
+  // Effect needs every top-level name to render command help. Handlerless
+  // commands preserve that list without importing their implementations.
+  const loadedCommands = yield* Effect.promise(() =>
+    Promise.all(
+      commandNames.map((name) =>
+        loadAll || name === selected
+          ? commandLoaders[name]()
+          : Command.make(name, {}),
+      ),
+    ),
+  );
+  const root = Command.make("alchemy", {}).pipe(
+    Command.withSubcommands(loadedCommands),
+  );
+  return yield* Effect.gen(function* () {
+    yield* checkLatestVersion;
+    return yield* Command.run(root, { version: packageJson.version });
+  }).pipe(Effect.provide(Layer.merge(baseServices, commandServices)));
+});
+
+const program = makeCli(process.argv.slice(2)).pipe(Effect.scoped);
 
 export const main = handleCancellation(program);
