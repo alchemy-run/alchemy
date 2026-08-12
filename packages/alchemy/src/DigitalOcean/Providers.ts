@@ -26,12 +26,11 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
  * import * as Alchemy from "alchemy";
  * import * as DigitalOcean from "alchemy/DigitalOcean";
  * import * as Effect from "effect/Effect";
- * import * as Layer from "effect/Layer";
  *
  * export default Alchemy.Stack(
  *   "MyStack",
  *   {
- *     providers: Layer.mergeAll(DigitalOcean.providers()),
+ *     providers: DigitalOcean.providers(),
  *     state: Alchemy.localState(),
  *   },
  *   Effect.gen(function* () {

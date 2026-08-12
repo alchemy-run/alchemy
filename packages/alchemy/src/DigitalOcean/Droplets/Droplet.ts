@@ -133,7 +133,7 @@ export type Droplet = Resource<
  * @see https://docs.digitalocean.com/reference/api/digitalocean/#tag/Droplets
  *
  * @section Creating a Droplet
- * @example Docker host reachable over SSH
+ * @example Host reachable over SSH
  * ```typescript
  * const key = yield* DigitalOcean.SshKey("deploy-key", {
  *   publicKey: process.env.SSH_PUBLIC_KEY!,
@@ -141,7 +141,7 @@ export type Droplet = Resource<
  * const host = yield* DigitalOcean.Droplet("app", {
  *   region: "sfo3",
  *   size: "s-2vcpu-4gb",
- *   image: "docker-24-04",
+ *   image: "ubuntu-24-04-x64",
  *   sshKeys: [key.fingerprint],
  *   monitoring: true,
  * });
@@ -160,6 +160,31 @@ export type Droplet = Resource<
  *     "runcmd:",
  *     "  - docker compose -f /opt/app/compose.yaml up -d",
  *   ].join("\n"),
+ * });
+ * ```
+ *
+ * @section Replacing on a schedule
+ * @example Rebuild monthly on a fresh image
+ * ```typescript
+ * const host = yield* DigitalOcean.Droplet("app", {
+ *   region: "sfo3",
+ *   size: "s-2vcpu-4gb",
+ *   image: "ubuntu-24-04-x64",
+ *   // Duration string or milliseconds. Once the droplet is older
+ *   // than this, the next deploy replaces it — new host, new IP.
+ *   replaceAfter: "30 days",
+ *   userData: "#cloud-config\npackages: [docker.io]",
+ * });
+ * ```
+ *
+ * @section Tagging
+ * @example Tag droplets so a firewall can target them by role
+ * ```typescript
+ * const host = yield* DigitalOcean.Droplet("app", {
+ *   region: "sfo3",
+ *   size: "s-2vcpu-4gb",
+ *   image: "ubuntu-24-04-x64",
+ *   tags: ["web"], // synced in place; no replacement
  * });
  * ```
  */

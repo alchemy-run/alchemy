@@ -21,12 +21,11 @@ droplets by id or tag:
 import * as Alchemy from "alchemy";
 import * as DigitalOcean from "alchemy/DigitalOcean";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 
 export default Alchemy.Stack(
   "MyStack",
   {
-    providers: Layer.mergeAll(DigitalOcean.providers()),
+    providers: DigitalOcean.providers(),
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {
@@ -37,7 +36,7 @@ export default Alchemy.Stack(
     const host = yield* DigitalOcean.Droplet("app", {
       region: "sfo3",
       size: "s-2vcpu-4gb",
-      image: "docker-24-04",
+      image: "ubuntu-24-04-x64",
       sshKeys: [key.fingerprint],
       monitoring: true,
     });
@@ -57,20 +56,40 @@ export default Alchemy.Stack(
 ```
 
 Names are optional everywhere — omit them and alchemy generates
-stable physical names from the Stack, logical ID, and stage.
+unique physical names from the Stack, logical ID, and stage.
+`region`, `size`, and `image` take DigitalOcean slugs — list them
+with `doctl compute region list`, `doctl compute size list`, and
+`doctl compute image list-distribution` (or `list-application` for
+Marketplace 1-Click images).
 
-Droplets are cattle, not pets: only `name` updates in place (a
-rename action), and changing `region`, `size`, `image`, or anything
-else replaces the host. Provision with `userData` (cloud-init) so a
-replacement converges on its own, and set `replaceAfter: "30 days"`
-to have the next deploy rebuild the droplet on a fresh image once it
-crosses that age — kernel and base-image updates arrive by
-replacement instead of in-place mutation.
+Droplets are cattle, not pets: `name` and `tags` sync in place (a
+rename action, and tag assign/unassign); changing `region`, `size`,
+`image`, `sshKeys`, `userData`, or anything else replaces the host.
+Provision with `userData` (cloud-init) so a replacement converges on
+its own, and set `replaceAfter: "30 days"` — a duration string or a
+number of milliseconds — to have the next deploy rebuild the droplet
+on a fresh image once it crosses that age, so kernel and base-image
+updates arrive by replacement instead of in-place mutation. A
+replacement gets a new public IP: pass `host.ipv4` through as an
+`Output` rather than copying the literal.
+
+Droplet names are not unique, so alchemy stamps an
+`alchemy:{stack}:{stage}:{id}` tag on every droplet it creates and
+re-finds the host through it after a lost state store. A same-named
+droplet without that tag belongs to someone else — the deploy fails
+until you re-run with `--adopt`; see
+[Adopting resources](/cli/adopting-resources).
 
 An `SshKey` is identified by its key material: DigitalOcean derives
 the `fingerprint` from `publicKey`, so changing the key replaces the
 resource while renaming it updates in place. Feed `key.fingerprint`
-into a droplet's `sshKeys` to embed it in the root account.
+into a droplet's `sshKeys` to embed it in the root account. A key
+you already uploaded through the DigitalOcean dashboard is not
+automatically yours: identical key material proves possession, not
+that alchemy registered it, so the deploy fails until you re-run
+with `--adopt`. The same applies to an explicitly named `Firewall`
+that already exists — firewalls carry no ownership marker, so a name
+match proves nothing. Omit `name` and neither case can arise.
 
 A `Firewall` is the opposite — the API takes a full desired
 representation, so every property updates in place. Traffic not
@@ -90,11 +109,12 @@ providers: Layer.mergeAll(Cloudflare.providers(), DigitalOcean.providers()),
 ```
 
 ```typescript
+// `zone` is your Cloudflare.Zone resource (or lookup) for example.com
 yield* Cloudflare.DNS.Record("AppA", {
   zoneId: zone.zoneId,
   name: "app.example.com",
   type: "A",
-  content: host.ipv4!,
+  content: host.ipv4.as<string>(),
   proxied: true,
 });
 ```

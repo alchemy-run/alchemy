@@ -72,8 +72,9 @@ on the CLI. `memory` caps the container in Docker's byte-suffix
 format (`"512m"`, `"2g"`) so the kernel OOM-kills the container
 rather than the host, `readOnly: true` mounts the root filesystem
 read-only, and `noNewPrivileges: true` blocks privilege escalation
-through setuid binaries. [Run local
-services](/docker/local-services) walks through this composition.
+through setuid binaries.
+[Run local services](/docker/local-services) walks through this
+composition.
 
 `Image` builds from a Dockerfile:
 

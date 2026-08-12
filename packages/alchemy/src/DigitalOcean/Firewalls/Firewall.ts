@@ -118,7 +118,7 @@ export type Firewall = Resource<
  * const host = yield* DigitalOcean.Droplet("app", {
  *   region: "sfo3",
  *   size: "s-2vcpu-4gb",
- *   image: "docker-24-04",
+ *   image: "ubuntu-24-04-x64",
  * });
  * yield* DigitalOcean.Firewall("edge", {
  *   dropletIds: [host.dropletId],
@@ -128,6 +128,18 @@ export type Firewall = Resource<
  *     { protocol: "tcp", ports: "443", addresses: ["0.0.0.0/0", "::/0"] },
  *   ],
  *   // outboundRules omitted — allow all outbound.
+ * });
+ * ```
+ *
+ * @section Targeting by tag
+ * @example Protect every droplet carrying a tag
+ * ```typescript
+ * yield* DigitalOcean.Firewall("web-tier", {
+ *   tags: ["web"], // covers droplets as they come and go
+ *   inboundRules: [
+ *     { protocol: "tcp", ports: "443", addresses: ["0.0.0.0/0", "::/0"] },
+ *   ],
+ *   outboundRules: [], // deliberately drop all outbound
  * });
  * ```
  */

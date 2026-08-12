@@ -56,10 +56,9 @@ an `Exec` never reverses its side effects on its own — set
 `destroyCommand` to run a teardown step instead:
 
 ```typescript
-yield* Command.Exec("final-backup", {
-  command: "true",
+yield* Command.Exec("migrate", {
+  command: "npm run db:migrate",
   destroyCommand: "npm run db:backup",
-  memo: false,
 });
 ```
 

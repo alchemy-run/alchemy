@@ -325,7 +325,7 @@ const SECTIONS: Section[] = [
   {
     heading: "DigitalOcean",
     intro:
-      "Linux VMs as Stack resources — droplets, SSH keys, and Cloud Firewalls. Droplets are replaced rather than mutated; provision them with cloud-init.",
+      "Linux VMs as Stack resources — droplets, SSH keys, and Cloud Firewalls. Only name and tags mutate in place; everything else replaces the host, so provision with cloud-init.",
     pages: {
       slugs: ["digitalocean/index", "digitalocean/setup"],
     },
