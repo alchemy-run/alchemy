@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { transformTypesFlags } from "../../../src/Util/Node.ts";
 
 export interface Runtime {
   readonly name: "bun" | "node";
@@ -25,12 +26,7 @@ export const runtimes = (): Array<Runtime> => [
   },
   {
     name: "node",
-    argv: (entry) => [
-      "node",
-      "--experimental-transform-types",
-      "--no-warnings=ExperimentalWarning",
-      entry,
-    ],
+    argv: (entry) => ["node", ...transformTypesFlags(), entry],
     available: hasBin("node"),
   },
 ];
