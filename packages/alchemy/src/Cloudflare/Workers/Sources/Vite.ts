@@ -96,6 +96,13 @@ const makeViteLogger = (console: ConsoleService.Console): vite.Logger => {
  * race a save/restore. A process that ran an Alchemy build never also
  * runs a standalone (non-Alchemy) Vite build, so the flag staying set is
  * correct for the process lifetime.
+ *
+ * DEPRECATED as a user-facing guard: the plugin is now self-deduplicating
+ * (`injected: true` on the orchestrated instance; a config-file instance
+ * detects it via its `apply` clause and stands down), so configs can
+ * declare `cloudflare({...})` unguarded. The variable is still set for
+ * configs that guard on it — their ternary yields `null`, which is
+ * equally correct.
  */
 const ALCHEMY_CLOUDFLARE_VITE_INJECTED = "ALCHEMY_CLOUDFLARE_VITE_INJECTED";
 
@@ -133,7 +140,7 @@ export const viteDev = (
           const devServer = await vite.createServer({
             root: rootDir,
             define: getDefine(env),
-            plugins: [cloudflare(pluginOptions)],
+            plugins: [cloudflare({ ...pluginOptions, injected: true })],
             server,
             customLogger: makeViteLogger(console),
           });
@@ -216,7 +223,10 @@ export const viteBuildInProcess = (
         {
           root: rootDir,
           define: getDefine(env),
-          plugins: [cloudflare(pluginOptions), outputPlugin.plugin],
+          plugins: [
+            cloudflare({ ...pluginOptions, injected: true }),
+            outputPlugin.plugin,
+          ],
           customLogger: makeViteLogger(console),
           // Disables the NATIVE rolldown progress reporter ("transforming…",
           // "rendering chunks…", "computing gzip size…"): it prints from

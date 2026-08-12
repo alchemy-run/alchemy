@@ -129,13 +129,17 @@ export const makeWakuCloudflareTarget = (
       }),
     vitePlugins: (context) =>
       Effect.sync(() => [
-        cloudflareVitePlugin(
-          makeWakuPluginOptions({
+        cloudflareVitePlugin({
+          ...makeWakuPluginOptions({
             root: context.root,
             wakuDirectory: context.wakuDirectory,
             pluginOptions: config,
           }),
-        ),
+          // The target owns the plugin for the whole Waku run — a
+          // `cloudflare({...})` the app's own vite config declares (for
+          // standalone builds) stands down against this instance.
+          injected: true,
+        }),
       ]),
   });
 
