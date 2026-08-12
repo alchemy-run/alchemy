@@ -1,3 +1,51 @@
+## v2.0.0-beta.71
+
+### &nbsp;&nbsp;&nbsp;🚨 Breaking Changes
+
+- **cloudflare**: Assets-first dev routing, asset MIME/hash fixes; SPA/static/dev-mode test coverage &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy/issues/1121 [<samp>(e63fe)</samp>](https://github.com/alchemy-run/alchemy/commit/e63fea1f9)
+- **deps**: Upgrade to effect 4.0.0-beta.105 &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy/issues/1132 [<samp>(6bbad)</samp>](https://github.com/alchemy-run/alchemy/commit/6bbadc1b8)
+- **drizzle**: Subpath-only MySQL/Postgres/DurableObject; defer optional driver imports &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy/issues/1119 [<samp>(b3800)</samp>](https://github.com/alchemy-run/alchemy/commit/b3800e338)
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- Integrate Cloudflare tooling packages &nbsp;-&nbsp; by **Rahul Mishra** in https://github.com/alchemy-run/alchemy/issues/1122 [<samp>(1b7ad)</samp>](https://github.com/alchemy-run/alchemy/commit/1b7ad6c12)
+- **better-auth**: Effectful wrapper + a database layer per platform &nbsp;-&nbsp; by **sam** and **Claude Fable 5** in https://github.com/alchemy-run/alchemy/issues/1157 [<samp>(7a73b)</samp>](https://github.com/alchemy-run/alchemy/commit/7a73bbe9f)
+- **website**: Cache incremental Astro builds &nbsp;-&nbsp; by **Rahul Mishra** in https://github.com/alchemy-run/alchemy/issues/1128 [<samp>(98641)</samp>](https://github.com/alchemy-run/alchemy/commit/986412a08)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **aws**:
+  - Avoid name collisions with Resource Groups, S3 Tables and S3 Vectors &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy/issues/1186 [<samp>(6eefd)</samp>](https://github.com/alchemy-run/alchemy/commit/6eefd51d1)
+  - **ec2**: Ride out lingering public-IP ENIs on InternetGateway detach &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy/issues/1125 [<samp>(c534c)</samp>](https://github.com/alchemy-run/alchemy/commit/c534c8da9)
+- **cloudflare**:
+  - Queue consumers on Website.Vite workers in alchemy dev &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy/issues/1113 [<samp>(fd2c8)</samp>](https://github.com/alchemy-run/alchemy/commit/fd2c8879a)
+  - Child-process framework builds; Alchemy.remote() stale preview sessions &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy/issues/1139 [<samp>(3fb98)</samp>](https://github.com/alchemy-run/alchemy/commit/3fb98ada2)
+  - Allow Worker Props to be an Effect &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy/issues/1172 [<samp>(e6f65)</samp>](https://github.com/alchemy-run/alchemy/commit/e6f655f56)
+  - **queues**:
+    - Map consumer settings to the local broker's field names &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy/issues/1126 [<samp>(8d0ce)</samp>](https://github.com/alchemy-run/alchemy/commit/8d0ce935d)
+    - Recover queue/consumer wiring wedged by pre-stamping dev runs &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy/issues/1133 [<samp>(97c34)</samp>](https://github.com/alchemy-run/alchemy/commit/97c34c196)
+  - **website**:
+    - Set NODE_ENV for vite build and update all examples to test plugins &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy/issues/1178 [<samp>(0a443)</samp>](https://github.com/alchemy-run/alchemy/commit/0a44303ef)
+- **deps**:
+  - Unblock npm-driven builds and patch drizzle-orm for effect beta.105 &nbsp;-&nbsp; by **sam** and **Cursor** [<samp>(ba705)</samp>](https://github.com/alchemy-run/alchemy/commit/ba705bede)
+- **dev**:
+  - Configured dev ports must not cascade on restart or be IPv6-shadowed on localhost &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy/issues/1129 [<samp>(03a06)</samp>](https://github.com/alchemy-run/alchemy/commit/03a066728)
+- **docker**:
+  - Pass environment values to the container create child process &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy/issues/1118 [<samp>(0cdde)</samp>](https://github.com/alchemy-run/alchemy/commit/0cdde8575)
+- **engine**:
+  - Alchemy dev leaked resources deployed before beta.66 &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy/issues/1110 [<samp>(ef79d)</samp>](https://github.com/alchemy-run/alchemy/commit/ef79dfda4)
+  - Route legacy dev:-marker state rows to the local provider &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy/issues/1130 [<samp>(f12b8)</samp>](https://github.com/alchemy-run/alchemy/commit/f12b834a2)
+- **test**:
+  - Durable file-namespaced scratch state so interrupted destroys resume &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy/issues/1164 [<samp>(1904f)</samp>](https://github.com/alchemy-run/alchemy/commit/1904f8a57)
+
+### &nbsp;&nbsp;&nbsp;🏎 Performance
+
+- **tsconfig**: Fix IDE language-server hangs &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy/issues/1179 [<samp>(b9fc7)</samp>](https://github.com/alchemy-run/alchemy/commit/b9fc7d2db)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.70...HEAD)
+
+---
+
 ## v2.0.0-beta.70
 
 *No significant changes*
