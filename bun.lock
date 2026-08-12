@@ -1520,8 +1520,6 @@
       },
       "optionalPeers": [
         "@aws/durable-execution-sdk-js",
-        "@effect/platform-bun",
-        "@effect/platform-node",
         "@effect/sql-mysql2",
         "@effect/sql-pg",
         "@vercel/nft",

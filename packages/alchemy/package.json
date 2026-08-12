@@ -477,12 +477,6 @@
     "@aws/durable-execution-sdk-js": {
       "optional": true
     },
-    "@effect/platform-bun": {
-      "optional": true
-    },
-    "@effect/platform-node": {
-      "optional": true
-    },
     "@effect/sql-mysql2": {
       "optional": true
     },
