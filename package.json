@@ -137,7 +137,10 @@
       "dotenv": "^16.5.0",
       "oxfmt": "^0.36.0",
       "oxlint": "^1.51.0",
-      "pathe": "^2.0.3"
+      "pathe": "^2.0.3",
+      "tailwindcss": "^4.1.13",
+      "@tailwindcss/vite": "^4.1.13",
+      "@tailwindcss/postcss": "^4.1.13"
     },
     "catalogs": {
       "cloudflare": {

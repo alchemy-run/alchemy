@@ -212,16 +212,33 @@ sites, since no Worker code runs at request time.
 
 Your `astro.config.*` is the primary place to configure Astro —
 integrations, Vite plugins, and every other option (serializable or
-not) work as usual. The `astro` prop exposes common serializable
-options for deploy-specific overrides; Astro merges them *over* the
-config file (scalars override, arrays like `integrations` and
+not) work as usual:
+
+```typescript
+// astro.config.ts
+import { defineConfig } from "astro/config";
+import react from "@astrojs/react";
+import tailwindcss from "@tailwindcss/vite";
+
+export default defineConfig({
+  site: "https://blog.example.com",
+  integrations: [react()],
+  vite: {
+    plugins: [tailwindcss()],
+  },
+});
+```
+
+The `astro` prop on the resource exposes common serializable options
+for deploy-specific overrides; Astro merges them *over* the config
+file (scalars override, arrays like `integrations` and
 `vite.plugins` concatenate after the file's):
 
 ```typescript
+// alchemy.run.ts
 export const Website = Cloudflare.Website.Astro("Website", {
   astro: {
-    site: "https://blog.example.com",
-    srcDir: "./app",
+    site: "https://preview.example.com",
   },
 });
 ```

@@ -4,7 +4,7 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["bun", "react", "react-dom"],
+    "types": ["bun", "react", "react-dom", "vite/client"],
     "jsx": "react-jsx",
     "verbatimModuleSyntax": true,
     "allowImportingTsExtensions": true,
