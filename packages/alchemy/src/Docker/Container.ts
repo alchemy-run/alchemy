@@ -271,21 +271,30 @@ export const ContainerProvider = () =>
             disconnect.add(key);
           }
         }
+        // The attach set can shift under a restarting container between the
+        // inspect above and these calls, so docker's refusals for "already
+        // there" / "not there" describe the desired state, not a failure.
+        const tolerating = (marker: string) => (error: unknown) =>
+          String(error).includes(marker) ? Effect.void : Effect.fail(error);
         yield* Effect.forEach(
           disconnect,
           (network) =>
-            docker.network.disconnect({ network, container: live.Id, context }),
+            docker.network
+              .disconnect({ network, container: live.Id, context })
+              .pipe(Effect.catch(tolerating("is not connected to network"))),
           { concurrency: "unbounded" },
         );
         yield* Effect.forEach(
           connect.values(),
           (network) =>
-            docker.network.connect({
-              network: network.name,
-              container: live.Id,
-              alias: network.aliases,
-              context,
-            }),
+            docker.network
+              .connect({
+                network: network.name,
+                container: live.Id,
+                alias: network.aliases,
+                context,
+              })
+              .pipe(Effect.catch(tolerating("already exists in network"))),
           { concurrency: "unbounded" },
         );
       });
@@ -346,7 +355,7 @@ export const ContainerProvider = () =>
             return { action: "update" as const };
           }
         }),
-        reconcile: Effect.fn(function* ({ id, instanceId, news }) {
+        reconcile: Effect.fn(function* ({ id, instanceId, news, olds }) {
           const context = dockerContextName(news.context);
           const args = yield* makeCreateArgs(id, news, instanceId);
           const live = yield* docker.container
@@ -360,17 +369,38 @@ export const ContainerProvider = () =>
             );
 
           if (live) {
-            yield* reconcileNetworks(live, news);
-            if (news.start && live.State.Status !== "running") {
-              yield* docker.container.start(live.Id, context);
-            } else if (!news.start && live.State.Status === "running") {
-              yield* docker.container.stop(live.Id, context);
+            // In-place only when the desired create-args still match the
+            // ones this container was created from. A container's config is
+            // immutable, and changed args do reach reconcile without a
+            // `replace` plan: the converge pass hands late-resolved Outputs
+            // (a rebuilt image id, changed env) straight here without
+            // re-running diff. Recreating is the only way to apply them.
+            const oldArgs =
+              olds !== undefined && olds.image !== undefined
+                ? yield* makeCreateArgs(id, olds, instanceId)
+                : undefined;
+            const wantsThisContainer =
+              oldArgs !== undefined
+                ? Equal.equals(oldArgs, args)
+                : // Prior args unknowable (a `creating` row that lost its
+                  // Output-valued image, #736): keep the container only if
+                  // it already runs the desired image — identical desired
+                  // config must not churn it.
+                  live.Config.Image === args.image;
+            if (wantsThisContainer) {
+              yield* reconcileNetworks(live, news);
+              if (news.start && live.State.Status !== "running") {
+                yield* docker.container.start(live.Id, context);
+              } else if (!news.start && live.State.Status === "running") {
+                yield* docker.container.stop(live.Id, context);
+              }
+              return yield* docker.container
+                .inspect(live.Id, context)
+                .pipe(
+                  Effect.map((info) => toContainerAttributes(info, args.image)),
+                );
             }
-            return yield* docker.container
-              .inspect(live.Id, context)
-              .pipe(
-                Effect.map((info) => toContainerAttributes(info, args.image)),
-              );
+            yield* docker.container.remove(live.Id, true, context);
           }
 
           const internalTags = yield* createInternalTags(id);

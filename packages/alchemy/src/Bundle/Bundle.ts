@@ -359,11 +359,22 @@ export const virtualEntryPlugin = Effect.gen(function* () {
           );
         },
       },
-      resolveId: {
-        filter: { id: ENTRY_REGEX },
-        handler(id) {
+      async resolveId(id, importer) {
+        if (ENTRY_REGEX.test(id)) {
           return entries.has(id) ? { id } : null;
-        },
+        }
+        // A virtual entry has no directory, so the default resolver falls
+        // back to the bundle cwd for its bare imports — which need not
+        // contain the packages the entry names (the real main may resolve
+        // them from a node_modules the cwd cannot see). Resolve them as if
+        // the entry sat beside the real main.
+        if (importer !== undefined && ENTRY_REGEX.test(importer)) {
+          const entry = entries.get(importer);
+          if (entry !== undefined && !path.isAbsolute(id)) {
+            return this.resolve(id, entry);
+          }
+        }
+        return null;
       },
       load: {
         filter: { id: ENTRY_REGEX },
