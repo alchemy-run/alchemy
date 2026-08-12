@@ -1,8 +1,10 @@
 /**
- * Deployable git-service example app.
+ * Deployable git-service example app: the service plus a GitHub-style
+ * web UI for browsing it.
  *
  * Deploys the whole service — the GitWorker front door, the GitRepo and
- * GitRegistry Durable Objects, and the GitObjects R2 bucket — as one stack.
+ * GitRegistry Durable Objects, and the GitObjects R2 bucket — and a Vite
+ * React SPA (`index.html` + `src/`) that drives the service's REST API.
  *
  * Set the deployer admin secret before deploying:
  *
@@ -11,7 +13,8 @@
  * bun run deploy
  * ```
  *
- * Then create a repo and push to it:
+ * Then open the printed `webUrl`, sign in with the admin token, and create
+ * a repo — or drive it from the terminal:
  *
  * ```sh
  * curl -X POST "$URL/api/v1/repos" \
@@ -34,6 +37,17 @@ export default Alchemy.Stack(
   { providers: Cloudflare.providers(), state: Cloudflare.state() },
   Effect.gen(function* () {
     const git = yield* GitService();
-    return { url: git.url };
+
+    // The GitHub-style SPA. The service URL is inlined into the client
+    // bundle at build time (import.meta.env.VITE_GIT_URL); deep links work
+    // because unknown paths fall back to index.html.
+    const web = yield* Cloudflare.Website.Vite("Web", {
+      assets: { notFoundHandling: "single-page-application" },
+      env: {
+        VITE_GIT_URL: git.url,
+      },
+    });
+
+    return { url: git.url, webUrl: web.url };
   }),
 );

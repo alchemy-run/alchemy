@@ -1,0 +1,111 @@
+@import "tailwindcss";
+
+/* GitHub-ish palette accents that Tailwind's default scale doesn't cover. */
+@theme {
+  --color-canvas: #ffffff;
+  --color-canvas-subtle: #f6f8fa;
+  --color-border-muted: #d1d9e0;
+  --color-fg-default: #1f2328;
+  --color-fg-muted: #59636e;
+  --color-accent: #0969da;
+  --color-success: #1a7f37;
+  --color-danger: #d1242f;
+  --color-attention: #9a6700;
+}
+
+@media (prefers-color-scheme: dark) {
+  @theme {
+    --color-canvas: #0d1117;
+    --color-canvas-subtle: #151b23;
+    --color-border-muted: #3d444d;
+    --color-fg-default: #f0f6fc;
+    --color-fg-muted: #9198a1;
+    --color-accent: #4493f8;
+    --color-success: #3fb950;
+    --color-danger: #f85149;
+    --color-attention: #d29922;
+  }
+}
+
+body {
+  background-color: var(--color-canvas);
+  color: var(--color-fg-default);
+}
+
+/* README rendering (marked output). */
+.markdown-body {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  word-wrap: break-word;
+}
+.markdown-body h1,
+.markdown-body h2 {
+  font-size: 1.5em;
+  font-weight: 600;
+  margin: 1em 0 0.5em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--color-border-muted);
+}
+.markdown-body h2 {
+  font-size: 1.25em;
+}
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5 {
+  font-weight: 600;
+  margin: 1em 0 0.5em;
+}
+.markdown-body p,
+.markdown-body ul,
+.markdown-body ol,
+.markdown-body blockquote {
+  margin: 0 0 0.75em;
+}
+.markdown-body ul {
+  list-style: disc;
+  padding-left: 1.5em;
+}
+.markdown-body ol {
+  list-style: decimal;
+  padding-left: 1.5em;
+}
+.markdown-body a {
+  color: var(--color-accent);
+}
+.markdown-body a:hover {
+  text-decoration: underline;
+}
+.markdown-body code {
+  background-color: color-mix(in srgb, var(--color-fg-muted) 15%, transparent);
+  border-radius: 4px;
+  padding: 0.15em 0.35em;
+  font-size: 0.85em;
+}
+.markdown-body pre {
+  background-color: var(--color-canvas-subtle);
+  border-radius: 6px;
+  padding: 1em;
+  overflow-x: auto;
+  margin: 0 0 0.75em;
+}
+.markdown-body pre code {
+  background: none;
+  padding: 0;
+}
+.markdown-body blockquote {
+  border-left: 4px solid var(--color-border-muted);
+  padding-left: 1em;
+  color: var(--color-fg-muted);
+}
+.markdown-body table {
+  border-collapse: collapse;
+  margin: 0 0 0.75em;
+}
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid var(--color-border-muted);
+  padding: 0.3em 0.75em;
+}
+.markdown-body img {
+  max-width: 100%;
+}

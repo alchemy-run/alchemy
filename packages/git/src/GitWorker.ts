@@ -64,6 +64,7 @@ import * as HttpPlatform from "effect/unstable/http/HttpPlatform";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpMiddleware from "effect/unstable/http/HttpMiddleware";
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 import {
   CommitInfo,
@@ -1299,6 +1300,18 @@ export default class GitWorker extends Cloudflare.Worker<GitWorker>()(
         Layer.merge(rawRoutes),
         Layer.provide([Etag.layer, HttpPlatformStub, Path.layer]),
         HttpRouter.toHttpEffect,
+        // Browser clients (e.g. the example SPA) call the REST plane
+        // cross-origin with a bearer token. Tokens are sent explicitly via
+        // `Authorization` (never cookies), so echoing any origin without
+        // credentials is safe. `toHttpEffect` yields the handler effect, so
+        // the middleware wraps via `Effect.map`.
+        Effect.map(
+          HttpMiddleware.cors({
+            allowedMethods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+            allowedHeaders: ["Authorization", "Content-Type"],
+            maxAge: 86_400,
+          }),
+        ),
       ),
     };
   }).pipe(
