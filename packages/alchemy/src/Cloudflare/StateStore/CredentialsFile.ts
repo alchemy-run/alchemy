@@ -13,6 +13,17 @@ import type { HttpStateStoreCredentials } from "../../State/HttpStateStore.ts";
 export const CREDENTIALS_FILE = "cloudflare-state-store";
 
 /**
+ * Per-store credentials cache file. The default store keeps the
+ * historical {@link CREDENTIALS_FILE} name; named stores (see
+ * `Cloudflare.state({ workerName })`) each get their own file so two
+ * stores never share a cached `{ url, authToken }` pair.
+ */
+export const stateStoreCredentialsFile = (workerName: string) =>
+  workerName === "alchemy-state-store"
+    ? CREDENTIALS_FILE
+    : `${CREDENTIALS_FILE}-${workerName}`;
+
+/**
  * On-disk shape of the cached Cloudflare state-store credentials.
  *
  * Extends the generic {@link HttpStateStoreCredentials} (`{ url, authToken }`)
