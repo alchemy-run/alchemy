@@ -20,7 +20,9 @@
     "@alchemy.run/git": "workspace:*",
     "alchemy": "workspace:*",
     "effect": "catalog:",
+    "highlight.js": "^11.11.1",
     "marked": "^16.4.1",
+    "marked-highlight": "^2.2.2",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },

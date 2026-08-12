@@ -1,7 +1,99 @@
 /** Shared UI atoms — GitHub-flavored. */
-import { marked } from "marked";
+import hljs from "highlight.js/lib/core";
+import bash from "highlight.js/lib/languages/bash";
+import cLang from "highlight.js/lib/languages/c";
+import cpp from "highlight.js/lib/languages/cpp";
+import css from "highlight.js/lib/languages/css";
+import diff from "highlight.js/lib/languages/diff";
+import go from "highlight.js/lib/languages/go";
+import java from "highlight.js/lib/languages/java";
+import javascript from "highlight.js/lib/languages/javascript";
+import json from "highlight.js/lib/languages/json";
+import markdown from "highlight.js/lib/languages/markdown";
+import python from "highlight.js/lib/languages/python";
+import rust from "highlight.js/lib/languages/rust";
+import sql from "highlight.js/lib/languages/sql";
+import typescript from "highlight.js/lib/languages/typescript";
+import xml from "highlight.js/lib/languages/xml";
+import yaml from "highlight.js/lib/languages/yaml";
+import { Marked } from "marked";
+import { markedHighlight } from "marked-highlight";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ApiError } from "./api.ts";
+
+// ── markdown rendering ──────────────────────────────────────────────────────
+
+for (const [name, language] of Object.entries({
+  bash,
+  c: cLang,
+  cpp,
+  css,
+  diff,
+  go,
+  java,
+  javascript,
+  json,
+  markdown,
+  python,
+  rust,
+  sql,
+  typescript,
+  xml,
+  yaml,
+})) {
+  hljs.registerLanguage(name, language);
+}
+hljs.registerAliases(["ts", "tsx", "mts", "cts"], { languageName: "typescript" });
+hljs.registerAliases(["js", "jsx", "mjs", "cjs"], { languageName: "javascript" });
+hljs.registerAliases(["sh", "shell", "zsh"], { languageName: "bash" });
+hljs.registerAliases(["yml"], { languageName: "yaml" });
+hljs.registerAliases(["html", "svg"], { languageName: "xml" });
+hljs.registerAliases(["py"], { languageName: "python" });
+hljs.registerAliases(["md"], { languageName: "markdown" });
+
+const escapeHtml = (code: string): string =>
+  code
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+
+const highlightExtension = markedHighlight({
+  langPrefix: "hljs language-",
+  highlight(code, lang) {
+    const language = lang.split(/\s/)[0] ?? "";
+    // Always return HTML we produced: either highlighted tokens or the
+    // escaped source — never the raw code string.
+    return hljs.getLanguage(language) !== undefined
+      ? hljs.highlight(code, { language }).value
+      : escapeHtml(code);
+  },
+});
+
+const renderer = new Marked(highlightExtension);
+
+/**
+ * Resolves a README-relative asset path against the repo's raw-file
+ * endpoint, so `![](./docs/logo.png)` renders. Handles `./`, `../`, and
+ * root-relative (`/images/x.png`) forms; absolute URLs pass through.
+ */
+export const makeAssetResolver =
+  (options: {
+    /** Base URL of the file endpoint for the browsed repo. */
+    readonly fileUrl: (path: string) => string;
+    /** Directory (path segments) the markdown file lives in. */
+    readonly dir: ReadonlyArray<string>;
+  }) =>
+  (href: string): string => {
+    if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(href)) return href;
+    const root = href.startsWith("/");
+    const segments: Array<string> = root ? [] : [...options.dir];
+    for (const part of href.replace(/^\//, "").split("/")) {
+      if (part === "" || part === ".") continue;
+      if (part === "..") segments.pop();
+      else segments.push(part);
+    }
+    return options.fileUrl(segments.join("/"));
+  };
 
 // ── icons (Octicon paths, MIT) ──────────────────────────────────────────────
 
@@ -204,12 +296,54 @@ export const CopyButton = ({ text }: { text: string }) => {
 };
 
 /**
- * README / markdown rendering. The content is the viewer's own repo,
- * reached with their own bearer token — same trust model as an IDE
- * preview — so `marked` output is injected without a sanitizer pass.
+ * README / markdown rendering: code blocks are syntax-highlighted
+ * (highlight.js over marked) and relative image paths resolve through
+ * `resolveAsset` to the repo's raw-file endpoint. Repo content is the
+ * same trust model as an IDE preview, so `marked` output is injected
+ * without a sanitizer pass.
  */
-export const Markdown = ({ source }: { source: string }) => {
-  const html = useMemo(() => marked.parse(source, { async: false }), [source]);
+export const Markdown = ({
+  source,
+  resolveAsset,
+}: {
+  source: string;
+  /** Maps a relative image/link target to a fetchable URL. */
+  resolveAsset?: ((href: string) => string) | undefined;
+}) => {
+  const html = useMemo(() => {
+    const walked =
+      resolveAsset === undefined
+        ? renderer
+        : new Marked(highlightExtension, {
+            walkTokens(token) {
+              if (token.type === "image" && typeof token.href === "string") {
+                token.href = resolveAsset(token.href);
+              }
+              // READMEs routinely use raw `<img>` HTML (centered heroes,
+              // width attributes) — rewrite those src values too.
+              if (
+                (token.type === "html" || token.type === "text") &&
+                typeof token.text === "string" &&
+                token.text.includes("<img")
+              ) {
+                token.text = token.text.replace(
+                  /(<img\b[^>]*?\bsrc=)("([^"]*)"|'([^']*)')/gi,
+                  (
+                    _match,
+                    prefix: string,
+                    _quoted,
+                    doubleQuoted,
+                    singleQuoted,
+                  ) => {
+                    const href = (doubleQuoted ?? singleQuoted) as string;
+                    return `${prefix}"${resolveAsset(href)}"`;
+                  },
+                );
+              }
+            },
+          });
+    return walked.parse(source, { async: false });
+  }, [source, resolveAsset]);
   return (
     <div
       className="markdown-body"
