@@ -14,11 +14,13 @@
     "effect": "catalog:"
   },
   "devDependencies": {
-    "@distilled.cloud/sveltekit": "workspace:*",
-    "@sveltejs/kit": "3.0.0-next.9",
-    "@sveltejs/vite-plugin-svelte": "^7.2.0",
+    "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@sveltejs/kit": "catalog:frameworks",
+    "@sveltejs/vite-plugin-svelte": "catalog:frameworks",
+    "@tailwindcss/vite": "catalog:",
     "@types/node": "^24.12.0",
-    "svelte": "^5.56.6",
+    "svelte": "catalog:frameworks",
+    "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:"
   },

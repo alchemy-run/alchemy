@@ -1,5 +1,5 @@
 import * as Cloudflare from "@/Cloudflare";
-import * as Drizzle from "@/Drizzle";
+import * as Drizzle from "@/Drizzle/Cloudflare.ts";
 import { sql } from "drizzle-orm";
 import * as Effect from "effect/Effect";
 // The exact artifacts `drizzle-kit generate` emits for

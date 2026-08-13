@@ -40,7 +40,7 @@ export interface RecognizeTextRequest extends Omit<
  * // Bind the alias in the init phase, call in the handler, and provide
  * // the RecognizeTextHttp layer on the Function's init Effect.
  * export default ChatFunction.make(
- *   { main: import.meta.url, url: true },
+ *   { main: import.meta.url, functionUrl: true },
  *   Effect.gen(function* () {
  *     const alias = yield* AWS.LexV2.BotAlias("Live", {
  *       botId: version.botId,

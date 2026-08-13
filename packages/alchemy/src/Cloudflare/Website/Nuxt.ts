@@ -17,7 +17,7 @@ import {
  * installed in the user's project — `loadSource` fails with a
  * `SourceProviderError` naming it otherwise.
  */
-const NUXT_SOURCE_PROVIDER = "@distilled.cloud/nuxt/source";
+const NUXT_SOURCE_PROVIDER = "@alchemy.run/frontend-frameworks/nuxt/source";
 
 export interface NuxtProps<
   Bindings extends WorkerBindingProps = {},
@@ -59,8 +59,8 @@ export interface NuxtProps<
   memo?: MemoOptions;
   /**
    * Nuxt configuration overrides merged over the project's own
-   * `nuxt.config.ts` (the override wins). Unlike some siblings, the
-   * project's config file IS loaded natively — this is for
+   * `nuxt.config.ts` (the override wins). The project's config file is
+   * loaded natively — modules, layers, and all — so this is for
    * deploy-specific tweaks (`routeRules`, `runtimeConfig`, ...). Must be
    * JSON-serializable (it persists in state). Do not set `nitro.preset`
    * here — the Cloudflare deploy target owns the preset and a foreign
@@ -84,8 +84,9 @@ export interface NuxtProps<
  * deploys as the Worker script; client assets and prerendered pages
  * (`.output/public`) deploy as Worker static assets.
  *
- * Requires the `@distilled.cloud/nuxt` package to be installed in your
- * project (alongside `nuxt` itself). Input files are content-hashed
+ * Requires the `@alchemy.run/frontend-frameworks` package to be installed in
+ * your project; the integration is loaded from its `/nuxt` export. Input files
+ * are content-hashed
  * (respecting `.gitignore` by default) so unchanged projects skip the
  * build and deploy entirely.
  *

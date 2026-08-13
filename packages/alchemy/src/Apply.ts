@@ -1,12 +1,20 @@
 import * as Cause from "effect/Cause";
+import type { ConfigError } from "effect/Config";
 import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import type { PlatformError } from "effect/PlatformError";
 import type { Simplify } from "effect/Types";
 import type { ActionLike } from "./Action.ts";
 import { makeResolveContext } from "./ActionRuntimeContext.ts";
 import { stripUnowned, Unowned } from "./AdoptPolicy.ts";
+import { AlchemyContext } from "./AlchemyContext.ts";
+import type { AuthError } from "./Auth/AuthProvider.ts";
+import {
+  type CredentialsRequired,
+  demandPlanCredentials,
+} from "./Auth/Demand.ts";
 import { RuntimeContext } from "./RuntimeContext.ts";
 import {
   Artifacts,
@@ -36,7 +44,7 @@ import {
   missingProviderError,
   tryFindProviderByType,
 } from "./Provider.ts";
-import type { ProviderMode } from "./ProviderMode.ts";
+import { stampedMode, type ProviderMode } from "./ProviderMode.ts";
 import type { ResourceBinding } from "./Resource.ts";
 import { Stack } from "./Stack.ts";
 import { Stage } from "./Stage.ts";
@@ -145,10 +153,28 @@ export const apply = <P extends Plan>(
   | Output.InvalidReferenceError
   | Output.MissingSourceError
   | StateStoreError
-  | DestroyError,
+  | DestroyError
+  | CredentialsRequired
+  | AuthError
+  | PlatformError
+  | ConfigError,
   Cli | State | Stack | Stage
 > =>
   Effect.gen(function* () {
+    // Credential-free dev: a dev-mode plan that needs the real cloud
+    // (`Alchemy.remote()` rows, remote-proxied bindings, deletions of rows
+    // stamped `providerMode: "live"`) demands cloud credentials exactly
+    // once, up front, BEFORE any lifecycle operation runs — a fully-local
+    // dev plan demands nothing. Non-dev runs never enter the seam: live
+    // providers keep the pre-existing lazy credential flow. Wired here (not
+    // in Deploy/Destroy) because `apply` is the single choke point every
+    // path shares — CLI deploy/destroy, `Test.make` deploys, and
+    // `test.provider` scratch stacks. See `Auth/Demand.ts`.
+    const alchemy = yield* Effect.serviceOption(AlchemyContext);
+    if (Option.isSome(alchemy) && alchemy.value.dev) {
+      yield* demandPlanCredentials(plan);
+    }
+
     const cli = yield* Cli;
     const session = yield* cli.startApplySession(plan);
     const state = yield* yield* State;
@@ -166,6 +192,53 @@ export const apply = <P extends Plan>(
         providerMode?: ProviderMode;
       }
     >();
+
+    // ── FQN migrations (renamedFrom) ──
+    // Persist renames before any lifecycle operation runs: a node whose row
+    // was found under a former FQN carries that row pre-remapped in
+    // `node.state` (see Plan's rename resolution). Commit it at the current
+    // FQN FIRST, then drop the former row — in that order, so an
+    // interruption leaves rows at both FQNs with the same instanceId, which
+    // the next plan recognizes as an in-flight migration (and never as an
+    // orphan to delete).
+    //
+    // In a same-deploy shift (A→B while B→C), C's former FQN `B` is
+    // simultaneously B's migration TARGET. C must NOT delete it: B's own
+    // `state.set` supersedes the stale copy, and the migrations run
+    // concurrently — the delete could land after B's write and destroy the
+    // freshly migrated row.
+    const migrationTargets = new Set(
+      Object.values(plan.resources)
+        .filter((node) => node.renamedFrom?.length && node.state !== undefined)
+        .map((node) => node.resource.FQN),
+    );
+    yield* Effect.forEach(
+      Object.values(plan.resources),
+      (node) => {
+        const { renamedFrom, state: row } = node;
+        return renamedFrom === undefined ||
+          renamedFrom.length === 0 ||
+          row === undefined
+          ? Effect.void
+          : Effect.gen(function* () {
+              yield* state.set({
+                stack: stackName,
+                stage,
+                fqn: node.resource.FQN,
+                value: row,
+              });
+              yield* Effect.forEach(
+                renamedFrom.filter(
+                  (formerFqn) => !migrationTargets.has(formerFqn),
+                ),
+                (formerFqn) =>
+                  state.delete({ stack: stackName, stage, fqn: formerFqn }),
+                { concurrency: "unbounded" },
+              );
+            });
+      },
+      { concurrency: "unbounded" },
+    );
 
     yield* executePlan(
       plan,
@@ -503,6 +576,16 @@ const executeNode = (
           status,
           providerMode: node.mode,
         });
+        // A local dev instance announces where it's serving: any
+        // local-mode row whose fresh Attributes carry a string `url`
+        // (Workers expose their dev-proxy URL this way) gets a
+        // `[id] ready at http://localhost:1337` line.
+        if (node.mode === "local") {
+          const url = (tracker[fqn]?.output as { url?: unknown })?.url;
+          if (typeof url === "string" && url.length > 0) {
+            yield* scopedSession.note(`ready at ${url}`);
+          }
+        }
         // Emit immediately so the CLI surfaces the terminal status as soon
         // as the resource is actually done — instead of batching every
         // resource's "created"/"updated" event to the end of apply(), which
@@ -990,12 +1073,12 @@ const executeNode = (
               // Delete each old generation with the provider variant of the
               // mode that created it — after a local ⇄ live switch,
               // `node.provider` (the new mode) cannot tear down the other
-              // runtime's instance. `providerMode: undefined` (legacy row or
-              // mode-agnostic provider) resolves to the provider as
-              // registered.
+              // runtime's instance. Unstamped rows (legacy or written by a
+              // mode-agnostic provider) are physically live, unless their
+              // attrs carry the `dev:` identity marker — see stampedMode.
               const oldProvider = yield* findProviderByType(
                 node.resource.Type,
-                old.providerMode,
+                stampedMode(old),
               );
               yield* oldProvider
                 .delete({
@@ -1766,8 +1849,9 @@ const collectGarbage = Effect.fn(function* (
               downstream: node.downstream,
               props: node.state.props,
               attr: node.state.attr,
-              // Plan resolved this provider for the row's persisted
-              // `providerMode` (see the deletions builder in Plan.ts).
+              // Plan resolved this provider for the row's persisted (or
+              // marker-inferred) `providerMode` (see the deletions builder
+              // in Plan.ts).
               provider: node.provider,
               providerMode: node.state.providerMode,
             }
@@ -1784,10 +1868,12 @@ const collectGarbage = Effect.fn(function* (
               // rows (see the deletions builder in Plan.ts); this guards
               // the replaced-chain generations that bypass plan. The old
               // generation is torn down with the provider variant of the
-              // mode that created it (local ⇄ live replacements).
+              // mode that created it (local ⇄ live replacements);
+              // unstamped rows are physically live unless their attrs
+              // carry the `dev:` identity marker (see stampedMode).
               provider: yield* tryFindProviderByType(
                 node.old.resourceType,
-                node.old.providerMode,
+                stampedMode(node.old),
               ).pipe(
                 Effect.flatMap(
                   Option.match({

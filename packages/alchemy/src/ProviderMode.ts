@@ -60,6 +60,62 @@ export class ConflictingProviderModeError extends Data.TaggedError(
 }> {}
 
 /**
+ * Prefix marking a locally-emulated resource's physical identity. Local
+ * providers fabricate ids/names with this prefix (`dev:<uuid>` queue and
+ * namespace ids, `dev:`-prefixed bucket names, ...) so a resource's
+ * persisted attributes reveal which runtime hosts it even without the
+ * `providerMode` stamp.
+ */
+export const LOCAL_ID_PREFIX = "dev:";
+
+/**
+ * Does a persisted attributes value carry a local identity marker — any
+ * string value (at any depth) with the {@link LOCAL_ID_PREFIX}? Persisted
+ * attrs are plain JSON (state commits strip unresolved values), so a
+ * structural scan is safe.
+ */
+export const hasLocalIdentity = (value: unknown): boolean => {
+  if (typeof value === "string") return value.startsWith(LOCAL_ID_PREFIX);
+  if (Array.isArray(value)) return value.some(hasLocalIdentity);
+  if (typeof value === "object" && value !== null) {
+    return Object.values(value).some(hasLocalIdentity);
+  }
+  return false;
+};
+
+/**
+ * The mode a persisted state row was actually reconciled with: its stamped
+ * `providerMode`, or — for legacy rows written before stamping existed —
+ * `"local"` when the persisted attributes carry a {@link LOCAL_ID_PREFIX}
+ * identity marker, `"live"` otherwise.
+ *
+ * An unstamped row without a marker predates provider modes or was written
+ * by a mode-agnostic provider — in both cases the write acted on the REAL
+ * cloud, so the row's physical resource is `"live"`. Assuming the current
+ * run's mode instead silently adopts a deployed cloud resource as a local
+ * instance during `alchemy dev`: the row noops (or restarts locally over
+ * the live attrs), gets re-stamped `"local"`, and the live resource becomes
+ * untracked — it is never deleted by a later destroy or replacement, and
+ * its deployed URL keeps serving.
+ *
+ * An unstamped row WITH a marker (e.g. a queue with a `dev:<uuid>` id
+ * written by `alchemy dev` on a pre-stamping version) is the mirror case:
+ * assuming `"live"` hands the `dev:` identity to the live provider, which
+ * sends it to the real cloud API (Cloudflare rejects it as a malformed
+ * parameter, permanently wedging the destroy). The marker proves the row
+ * was reconciled locally, so it is handled as `"local"`.
+ *
+ * For mode-agnostic providers the returned mode is harmless either way:
+ * `providerForMode` ignores the mode when the provider has a single
+ * implementation.
+ */
+export const stampedMode = (row: {
+  readonly providerMode?: ProviderMode | undefined;
+  readonly attr?: unknown;
+}): ProviderMode =>
+  row.providerMode ?? (hasLocalIdentity(row.attr) ? "local" : "live");
+
+/**
  * Run the wrapped resources **remotely (against the real cloud) even during
  * `alchemy dev`** — the opt-out from local emulation. During `alchemy deploy`
  * this is a no-op (everything is remote).

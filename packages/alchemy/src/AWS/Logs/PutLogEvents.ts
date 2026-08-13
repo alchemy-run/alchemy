@@ -35,7 +35,7 @@ export interface PutLogEventsRequest extends Omit<
  * // Bind in the init phase, call in the handler, and provide the
  * // PutLogEventsHttp layer on the Function's init Effect.
  * export default AuditFunction.make(
- *   { main: import.meta.url, url: true },
+ *   { main: import.meta.url, functionUrl: true },
  *   Effect.gen(function* () {
  *     const logGroup = yield* AWS.Logs.LogGroup("AuditLogs", {
  *       retention: "30 days",

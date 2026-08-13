@@ -226,7 +226,10 @@ describe.concurrent("Nuxt dev", () => {
           .pipe(
             Effect.retry({
               while: (e): boolean => e._tag === "KeyNotFound",
-              schedule: Schedule.exponential("1 second"),
+              schedule: Schedule.min([
+                Schedule.exponential("1 second"),
+                Schedule.spaced("3 seconds"),
+              ]),
               times: 8,
             }),
             Effect.flatMap((res) =>
@@ -275,8 +278,11 @@ const fetchJsonReady = <T>(url: string) =>
           : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
       ),
       Effect.retry({
-        schedule: Schedule.exponential("500 millis"),
-        times: 15,
+        schedule: Schedule.min([
+          Schedule.exponential("500 millis"),
+          Schedule.spaced("2 seconds"),
+        ]),
+        times: 10,
       }),
     );
   });
@@ -295,7 +301,10 @@ const putJsonReady = <T>(url: string) =>
         : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
     ),
     Effect.retry({
-      schedule: Schedule.exponential("500 millis"),
-      times: 15,
+      schedule: Schedule.min([
+        Schedule.exponential("500 millis"),
+        Schedule.spaced("2 seconds"),
+      ]),
+      times: 10,
     }),
   );

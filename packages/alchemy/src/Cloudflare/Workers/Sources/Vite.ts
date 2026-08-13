@@ -1,6 +1,6 @@
 import cloudflare, {
   type CloudflareVitePluginOptions,
-} from "@distilled.cloud/cloudflare-vite-plugin";
+} from "@alchemy.run/cloudflare-runtime/vite";
 import * as ConsoleService from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
@@ -13,8 +13,9 @@ import {
   viteBuildOutputPlugin,
   type ViteBuildOutput,
 } from "../../../Bundle/Vite.ts";
+import { viteSupportsPortZero } from "@alchemy.run/cloudflare-runtime/core/internal/Port";
 import { hashDirectory, type MemoOptions } from "../../../Command/Memo.ts";
-import { initialCwd } from "../../../Util/Node.ts";
+import { findAvailablePort, initialCwd } from "../../../Util/Node.ts";
 import { sha256Object } from "../../../Util/sha256.ts";
 import { readAssets } from "../Assets.ts";
 import type { SourceDevHandle, SourceProvider } from "../Source.ts";
@@ -23,7 +24,7 @@ import type { ViteOptions } from "../Worker.ts";
 import { isWorkerLoader } from "../WorkerLoader.ts";
 
 /**
- * This module statically imports `@distilled.cloud/cloudflare-vite-plugin`
+ * This module statically imports `@alchemy.run/cloudflare-runtime/vite`
  * (~0.5s to load), which is only needed for vite-based workers. Importers
  * MUST load it lazily (`Effect.promise(() => import("./Sources/Vite.ts"))`
  * from the dispatch in `Source.ts`, or the legacy vite arms in the
@@ -104,27 +105,48 @@ export const viteDev = (
   pluginOptions: CloudflareVitePluginOptions,
   serverOptions: vite.ServerOptions,
 ) =>
-  Effect.acquireRelease(
-    ConsoleService.consoleWith((console) =>
-      Effect.promise(async () => {
-        process.env[ALCHEMY_CLOUDFLARE_VITE_INJECTED] = "1";
-        const vite = await loadVite(rootDir);
-        const devServer = await vite.createServer({
-          root: rootDir,
-          define: getDefine(env),
-          plugins: [cloudflare(pluginOptions)],
-          server: serverOptions,
-          customLogger: makeViteLogger(console),
-        });
-        await devServer.listen();
-        return devServer;
-      }),
-    ),
-    (devServer) =>
-      Effect.promise(async () => {
-        await devServer.close();
-      }),
-  );
+  Effect.gen(function* () {
+    yield* Effect.sync(() => {
+      process.env[ALCHEMY_CLOUDFLARE_VITE_INJECTED] = "1";
+    });
+    const vite = yield* Effect.promise(() => loadVite(rootDir));
+    // `port: 0` is a true OS-assigned random port on Vite >= 8.2.1
+    // (vitejs/vite#23158); older Vite treats it as "no port given" and
+    // hunts upward from the 5173 default — colliding with (or
+    // IPv6-shadowing) user-facing dev ports. Substitute a probed
+    // ephemeral port there; `strictPort: false` handles the small
+    // probe→bind race by moving to the next ephemeral port.
+    const server =
+      serverOptions.port === 0 && !viteSupportsPortZero(vite.version)
+        ? {
+            ...serverOptions,
+            port: yield* findAvailablePort(
+              typeof serverOptions.host === "string"
+                ? serverOptions.host
+                : undefined,
+            ).pipe(Effect.orDie),
+          }
+        : serverOptions;
+    return yield* Effect.acquireRelease(
+      ConsoleService.consoleWith((console) =>
+        Effect.promise(async () => {
+          const devServer = await vite.createServer({
+            root: rootDir,
+            define: getDefine(env),
+            plugins: [cloudflare(pluginOptions)],
+            server,
+            customLogger: makeViteLogger(console),
+          });
+          await devServer.listen();
+          return devServer;
+        }),
+      ),
+      (devServer) =>
+        Effect.promise(async () => {
+          await devServer.close();
+        }),
+    );
+  });
 
 /**
  * Run a production Vite build in a child process rooted at the project

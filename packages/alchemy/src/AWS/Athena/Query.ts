@@ -65,7 +65,7 @@ export class AthenaQueryFailed extends Data.TaggedError("AthenaQueryFailed")<{
  * ) {}
  *
  * export default QueryFunction.make(
- *   { main: import.meta.url, url: true, timeout: Duration.seconds(60) },
+ *   { main: import.meta.url, functionUrl: true, timeout: Duration.seconds(60) },
  *   Effect.gen(function* () {
  *     const bucket = yield* S3.Bucket("Results", { forceDestroy: true });
  *     const workGroup = yield* Athena.WorkGroup("Analytics", {

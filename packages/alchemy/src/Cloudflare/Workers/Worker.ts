@@ -39,14 +39,14 @@ import type { Reference as ZoneReference } from "../Zone/lookup.ts";
 import { type Assets, type AssetsProps } from "./Assets.ts";
 import { type DurableObjectExport } from "./DurableObject.ts";
 import { Request } from "./Request.ts";
+import type { ModuleRule } from "./Sources/Prebuilt.ts";
+import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
 import { bindWorkerAsyncBindings } from "./WorkerAsyncBindings.ts";
 import type {
   WorkerBinding,
   WorkerBindingResource,
   WorkerBindings,
 } from "./WorkerBinding.ts";
-import type { ModuleRule } from "./Sources/Prebuilt.ts";
-import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
 import {
   makeWorkerRuntimeContext,
   type WorkerRuntimeContext,
@@ -565,7 +565,10 @@ export interface WorkerVersionOptions {
 }
 
 export interface WorkerProps<
-  Bindings extends WorkerBindingProps = any,
+  // PERF: unconstrained for the same reason as `Worker<Bindings>` above —
+  // the `extends WorkerBindingProps` proof is expensive for generic mapped
+  // types and the call-site overloads already constrain user input.
+  Bindings = any,
   Assets extends WorkerAssetsConfig | undefined =
     | WorkerAssetsConfig
     | undefined,
@@ -627,6 +630,13 @@ export interface WorkerProps<
    * noop. Supplying a precomputed `hash` (e.g. from a Build resource) makes
    * that hash authoritative instead — the directory is not read during
    * planning at all.
+   *
+   * Requests are served assets-first by default: a request matching a file
+   * never invokes the Worker. `runWorkerFirst` inverts that — `true` routes
+   * every request through the Worker ahead of the asset layer (serve files
+   * yourself via the `ASSETS` binding), and a glob array (e.g. `["/api/*"]`)
+   * routes only matching paths worker-first. The same routing applies under
+   * `alchemy dev`.
    *
    * When neither {@link main} nor {@link script} is provided, the Worker is
    * deployed **assets-only**: no script is uploaded at all and Cloudflare's
@@ -1026,7 +1036,14 @@ export interface ViteOptions {
   };
 }
 
-export type Worker<Bindings extends WorkerBindings = any> = Resource<
+// PERF: deliberately NOT `Bindings extends WorkerBindings`. The constraint
+// forced the checker to prove the generic `NormalizedBindings<...>` mapped
+// type assignable to the ~30-member `WorkerBindingResource` union at every
+// `Worker<...>` instantiation — a single 28s structural relation that was 45%
+// of the whole program's check time. Input is already constrained at the
+// call boundary (`Bindings extends WorkerBindingProps`), so this type
+// argument is only ever produced from validated shapes.
+export type Worker<Bindings = any> = Resource<
   WorkerTypeId,
   WorkerProps<Bindings>,
   {
@@ -2101,7 +2118,9 @@ export const Worker: ResourceClassLike<Worker> &
         Self | Extract<Deps, Container.Application<any>> | Providers
       > &
         Named<Id> & {
-          new (_: never): MakeShape<Shape, WorkerShape> & Named<Id> & Tag;
+          new (
+            _: never,
+          ): MakeShape<Shape, WorkerShape> & Named<Id> & Tag<WorkerTypeId>;
           of(shape: Shape & WorkerShape): MakeShape<Shape, WorkerShape>;
           make<PropsReq = never, InitReq = never>(
             props:
@@ -2113,7 +2132,10 @@ export const Worker: ResourceClassLike<Worker> &
             never,
             | Extract<Deps, Container.Application<any>>
             | Providers
-            | Exclude<InitReq, Self | WorkerServices>
+            | Exclude<
+                PropsReq | InitReq,
+                Self | WorkerServices | Tag<WorkerTypeId>
+              >
           >;
         };
     };
@@ -2126,17 +2148,20 @@ export const Worker: ResourceClassLike<Worker> &
           | Container.Application<any>
           | PlatformServices
           | Tag,
+        PropsReq = never,
       >(
         id: Id,
-        props: InputProps<WorkerProps>,
+        props:
+          | InputProps<WorkerProps>
+          | Effect.Effect<InputProps<WorkerProps>, ConfigError, PropsReq>,
         impl: Effect.Effect<Shape, ConfigError, Req>,
       ): Effect.Effect<
         Worker & Rpc<Self>,
         never,
-        Extract<Req, Container.Application<any>> | Providers
+        Extract<Req, Container.Application<any>> | Providers | PropsReq
       > &
         Named<Id> & {
-          new (): MakeShape<Shape, WorkerShape> & Named<Id> & Tag;
+          new (): MakeShape<Shape, WorkerShape> & Named<Id> & Tag<WorkerTypeId>;
         };
       /**
        * Class form without an implementation — an external Worker (a plain
@@ -2156,7 +2181,7 @@ export const Worker: ResourceClassLike<Worker> &
           | Effect.Effect<InputProps<WorkerProps>, ConfigError, Req>,
       ): Effect.Effect<Worker & Rpc<{}>, never, Req | Providers> &
         Named<Id> & {
-          new (): Named<Id> & Tag;
+          new (): Named<Id> & Tag<WorkerTypeId>;
         };
     };
     <

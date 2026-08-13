@@ -19,6 +19,8 @@ import { getHyperdriveDevOrigin } from "../Hyperdrive/ConnectBinding.ts";
 import { isHyperdriveConnection } from "../Hyperdrive/Connection.ts";
 import { isImages } from "../Images/Images.ts";
 import { isNamespace as isKVNamespace } from "../KV/Namespace.ts";
+import { isLegacyPipeline } from "../Pipelines/LegacyPipeline.ts";
+import { isStream as isPipelinesStream } from "../Pipelines/Stream.ts";
 import { isQueue } from "../Queues/Queue.ts";
 import { maybeQueueShim } from "../Queues/QueueShim.ts";
 import { isBucket } from "../R2/Bucket.ts";
@@ -150,6 +152,7 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
               workflowName,
               className,
               scriptName: resource.workerName,
+              limits: binding.limits,
             });
           }
         }
@@ -526,6 +529,18 @@ const toBinding = (
     return {
       type: "worker_loader",
       name: bindingName,
+    };
+  } else if (isPipelinesStream(binding)) {
+    return {
+      type: "pipelines",
+      name: bindingName,
+      pipeline: binding.streamId,
+    };
+  } else if (isLegacyPipeline(binding)) {
+    return {
+      type: "pipelines",
+      name: bindingName,
+      pipeline: binding.name,
     };
   } else if (Output.isOutput(binding)) {
     return Output.map(

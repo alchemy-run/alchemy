@@ -13,11 +13,6 @@ const Website = Cloudflare.Website.StaticSite(
     (stack) =>
       ({
         command: "bun run build",
-        name:
-          stack.stage === "prod"
-            ? // FUCK: i deleted state lol, let's adopt this to avoid potential DNS prop issue
-              "alchemyeffectwebsite-worker-prod-piyvp3qw7565vvin"
-            : undefined,
         main: "./src/worker.ts",
         outdir: "dist",
         workersDev: stack.stage === "prod" ? false : undefined,

@@ -22,7 +22,7 @@ export class AppRunnerTestFunction extends Lambda.Function<Lambda.Function>()(
 export default AppRunnerTestFunction.make(
   {
     main,
-    url: true,
+    functionUrl: true,
     // Pause/resume calls fan out SDK calls; AWS's 3s default intermittently
     // times out on a cold start.
     timeout: Duration.seconds(30),

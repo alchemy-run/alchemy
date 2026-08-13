@@ -20,10 +20,65 @@ export interface Assets {
 export const isAssets = (value: any): value is Assets =>
   value?.kind === "Cloudflare.Workers.Assets";
 
-export interface AssetsConfig extends Exclude<
-  Exclude<workers.PutScriptRequest["metadata"]["assets"], undefined>["config"],
-  undefined
-> {}
+/**
+ * Routing configuration for a Worker's static assets — sent to Cloudflare
+ * as `metadata.assets.config` on script upload. Declared explicitly (not
+ * derived from the distilled API schema) so alchemy owns and documents its
+ * public surface.
+ */
+export interface AssetsConfig {
+  /**
+   * Determines the redirects and rewrites of requests for HTML content:
+   * whether `/page` serves `page.html`, and whether trailing slashes are
+   * added or dropped.
+   *
+   * @default "auto-trailing-slash"
+   */
+  htmlHandling?:
+    | "auto-trailing-slash"
+    | "force-trailing-slash"
+    | "drop-trailing-slash"
+    | "none";
+  /**
+   * Determines the response when a request does not match a static asset:
+   * `"404-page"` serves the nearest `404.html`, and
+   * `"single-page-application"` serves `index.html` for client-side
+   * routing. When the Worker has a script, an unmatched request falls
+   * through to the Worker instead.
+   *
+   * @default "none"
+   */
+  notFoundHandling?: "none" | "404-page" | "single-page-application";
+  /**
+   * Routes requests through the Worker *before* static-asset matching.
+   *
+   * Assets-first by default: a request matching a file is served directly
+   * and never invokes the Worker. `true` routes every request through the
+   * Worker ahead of the asset layer — serve files yourself via the
+   * `ASSETS` binding. A path-rule array routes only matching paths
+   * worker-first (e.g. `["/api/*"]`): glob (`*`) and negative (`!`) rules
+   * are supported, rules must start with `/` or `!/`, and negative rules
+   * take precedence. The same routing applies under `alchemy dev`.
+   *
+   * @default false
+   */
+  runWorkerFirst?: boolean | string[];
+  /**
+   * Legacy routing flag predating `runWorkerFirst`.
+   */
+  serveDirectly?: boolean;
+  /**
+   * Raw contents of a `_headers` file — header rules applied by the asset
+   * layer. Overrides a `_headers` file read from the assets directory.
+   */
+  headers?: string;
+  /**
+   * Raw contents of a `_redirects` file — redirect rules applied by the
+   * asset layer. Overrides a `_redirects` file read from the assets
+   * directory.
+   */
+  redirects?: string;
+}
 
 export interface AssetReadResult {
   directory: string;
@@ -117,23 +172,56 @@ export class AssetUploadSessionError extends Data.TaggedError(
   workerName: string;
 }> {}
 
+const contentTypesByExtension: Record<string, string> = {
+  html: "text/html",
+  htm: "text/html",
+  txt: "text/plain",
+  md: "text/markdown",
+  sql: "text/sql",
+  json: "application/json",
+  // Source maps are JSON; serving them as such lets devtools consume them.
+  map: "application/json",
+  jsonld: "application/ld+json",
+  xml: "application/xml",
+  csv: "text/csv",
+  // Browsers only accept JavaScript module scripts when the MIME type is a
+  // "JavaScript MIME type" (e.g. text/javascript). application/javascript+module
+  // is not valid and causes strict module loading to fail.
+  js: "text/javascript; charset=utf-8",
+  mjs: "text/javascript; charset=utf-8",
+  css: "text/css",
+  wasm: "application/wasm",
+  pdf: "application/pdf",
+  // images
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  avif: "image/avif",
+  svg: "image/svg+xml",
+  ico: "image/x-icon",
+  bmp: "image/bmp",
+  // fonts
+  woff: "font/woff",
+  woff2: "font/woff2",
+  ttf: "font/ttf",
+  otf: "font/otf",
+  eot: "application/vnd.ms-fontobject",
+  // media
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  ogg: "audio/ogg",
+  mp4: "video/mp4",
+  webm: "video/webm",
+  // app manifests
+  webmanifest: "application/manifest+json",
+};
+
 const getContentType = (name: string) => {
-  if (name.endsWith(".html")) return "text/html";
-  if (name.endsWith(".txt")) return "text/plain";
-  if (name.endsWith(".sql")) return "text/sql";
-  if (name.endsWith(".json")) return "application/json";
-  if (name.endsWith(".js") || name.endsWith(".mjs")) {
-    // Browsers only accept JavaScript module scripts when the MIME type is a
-    // "JavaScript MIME type" (e.g. text/javascript). application/javascript+module
-    // is not valid and causes strict module loading to fail.
-    return "text/javascript; charset=utf-8";
-  }
-  if (name.endsWith(".css")) return "text/css";
-  if (name.endsWith(".wasm")) return "application/wasm";
-  if (name.endsWith(".png")) return "image/png";
-  if (name.endsWith(".svg")) return "image/svg+xml";
-  if (name.endsWith(".ico")) return "image/x-icon";
-  return "application/octet-stream";
+  const dot = name.lastIndexOf(".");
+  const ext = dot === -1 ? "" : name.slice(dot + 1).toLowerCase();
+  return contentTypesByExtension[ext] ?? "application/octet-stream";
 };
 
 const maybeReadString = Effect.fn(function* (file: string) {
@@ -254,7 +342,21 @@ export const readAssets = Effect.fn(function* ({
           size,
         });
       }
+      // Hash content + extension (matching wrangler): the upload API stores
+      // one blob + content type per hash, so two identical bodies under
+      // different extensions must not collapse into a single entry — the
+      // second file would serve with the first file's content type.
+      const extension = name.slice(name.lastIndexOf(".") + 1).toLowerCase();
       const hash = yield* fs.readFile(file).pipe(
+        Effect.flatMap((content) =>
+          Effect.sync(() => {
+            const extBytes = new TextEncoder().encode(extension);
+            const hashed = new Uint8Array(content.length + extBytes.length);
+            hashed.set(content);
+            hashed.set(extBytes, content.length);
+            return hashed;
+          }),
+        ),
         Effect.flatMap(sha256),
         Effect.map((hash) => hash.slice(0, 32)),
       );

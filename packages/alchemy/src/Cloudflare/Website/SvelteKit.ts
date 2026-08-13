@@ -33,12 +33,15 @@ export interface SvelteKitProps<
    */
   memo?: MemoOptions;
   /**
-   * SvelteKit configuration passed to the `sveltekit(config)` Vite plugin.
-   * Since kit v3 the configuration lives in memory (a `svelte.config.js` on
-   * disk is an upstream error), so this is the place for `alias`, `paths`,
-   * `prerender`, and the rest of the kit config surface. The `adapter`
-   * field is injected by Alchemy's wrangler-free Cloudflare adapter — do
-   * not set it here. Must be JSON-serializable (it persists in state).
+   * SvelteKit configuration overrides. A project-owned `vite.config.*`
+   * loads natively — its `sveltekit(...)` call is the primary config
+   * source — and these options are merged OVER it (the override wins).
+   * Without a config file, this is the whole kit config. Construction-time
+   * options (`preprocess`, `extensions`, `compilerOptions`, `vitePlugin`)
+   * only apply in the no-config-file case — put them in your own
+   * `sveltekit(...)` call otherwise. The `adapter` field is injected by
+   * Alchemy's wrangler-free Cloudflare adapter — do not set it here. Must
+   * be JSON-serializable (it persists in state).
    */
   kit?: Record<string, unknown>;
   /**
@@ -77,13 +80,15 @@ export interface SvelteKitProps<
  *
  * `SvelteKit` builds the app with SvelteKit's own Vite pipeline and a
  * wrangler-free in-memory Cloudflare adapter, then re-bundles the
- * Node-flavored server output for workerd — no `svelte.config.js`, no
+ * Node-flavored server output for workerd. A project-owned
+ * `vite.config.*` loads natively (its `sveltekit(...)` options apply) —
+ * no `svelte.config.js` (kit v3 dropped it), no
  * `@sveltejs/adapter-cloudflare`, no Wrangler configuration required.
  * Client assets and prerendered pages are deployed as Worker static
  * assets; dynamic routes are served by the generated Worker.
  *
- * The `@distilled.cloud/sveltekit` package must be installed in your
- * project — it is loaded dynamically at deploy time.
+ * The `@alchemy.run/frontend-frameworks` package must be installed in your
+ * project — its `/sveltekit` export is loaded dynamically at deploy time.
  *
  * Input files are content-hashed (respecting `.gitignore` by default) so
  * unchanged projects skip the build and deploy entirely.
@@ -130,7 +135,9 @@ export interface SvelteKitProps<
  * ```
  *
  * @section Kit and Adapter Options
- * The kit config surface is passed in-memory via `kit`; the generated
+ * Kit options normally live in the `sveltekit(...)` call in your
+ * `vite.config.ts`, which loads natively; `kit` is a deploy-time
+ * override layer merged over them (the override wins). The generated
  * Cloudflare adapter is configured via `adapter`.
  *
  * @example SPA-style 404 fallback
@@ -232,7 +239,7 @@ export const SvelteKit: {
                   }
                 : props?.assets,
             source: {
-              provider: "@distilled.cloud/sveltekit/source",
+              provider: "@alchemy.run/frontend-frameworks/sveltekit/source",
               devMode: "server",
               options: {
                 rootDir: props?.rootDir,

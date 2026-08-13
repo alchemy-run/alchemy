@@ -182,10 +182,32 @@ bun generate:api-reference   # -> website/src/content/docs/providers/{Cloud}/{Re
 
 This is the only doc generator that produces user-facing output. ([scripts/generate-api-reference.ts](./scripts/generate-api-reference.ts)) does the following:
 
-1. Discovers resource files in `packages/alchemy/src/{Cloud}/{Service}/`
+1. Discovers documented files across its configured source roots — `packages/alchemy/src/{Cloud}/{Service}/` plus flat single-provider packages like `packages/better-auth/src/` (mapped onto a synthetic provider directory, e.g. `BetterAuth/`)
 2. Parses TypeScript with `ts-morph`
-3. Extracts the resource-level summary plus `@section` / `@example` blocks from JSDoc
-4. Writes one markdown file per resource at `website/src/content/docs/providers/{Cloud}/{Resource}.md`
+3. Extracts the page-level summary plus `@section` / `@example` blocks from JSDoc on the export tagged `@resource`, `@binding`, or `@layer`
+4. Writes one markdown file per page at `website/src/content/docs/providers/{Provider}/{Name}.md`
+
+**Layer pages** (`@layer`) document exported Layer factories — the pluggable implementations of a Context service (e.g. better-auth's database layers). Alongside the shared tags, a Layer declares what it satisfies and needs:
+
+```typescript
+/**
+ * Neon database layer for Better Auth over Neon's serverless driver.
+ *
+ * @layer
+ * @provides BetterAuth.Database
+ * @peer @neondatabase/serverless
+ * @product Neon
+ *
+ * @section Connecting from a Worker or Lambda
+ * @example ...
+ */
+export const Neon = (url: ConnectionSource, options?: NeonOptions): Layer.Layer<Database> => ...
+```
+
+- `@provides <Service.Tag>` — the Context service tag(s) the Layer satisfies (repeatable)
+- `@peer <package>` — optional peer dependencies the Layer needs at runtime (repeatable)
+
+Both render as a metadata line under the page's `Source:` blockquote. Every Layer implementation should carry these annotations — a Layer without them is an undocumented integration surface.
 
 After editing JSDoc on a resource, run `bun generate:api-reference` to refresh the website docs.
 
@@ -765,7 +787,7 @@ Some resource types have TWO implementations: a **live** provider (converges rea
 Engine semantics (never re-implement these per provider):
 
 - **Register both variants with `ProviderLayer.dual(cls, { live: () => ..., local: () => ... })`** — never select one at layer build. The run-default variant builds eagerly; the other is lazy and memoized, so mode-specific dependency layers (workerd, Docker) MUST compose *inside* the `local` thunk (e.g. `LocalWorkerProvider().pipe(Layer.provide(localRuntimeServices()))`), never globally — a plain deploy must not construct local machinery unless a local-mode row needs deleting. Dep layers shared across several local providers must be **module-memoized layer references** so the build MemoMap dedupes them to one instance.
-- **Every state commit stamps `providerMode`.** A persisted mode that differs from the resolved mode plans a REPLACEMENT (the provider diff is not consulted), and every delete — replacement old generations, GC chain draining, orphans, `destroy`, `sync`/`tail`/`logs` — resolves the provider variant of the row's *stamped* mode via `findProviderByType(type, mode)`. Legacy rows without a stamp are assumed to be the current run's mode (no churn; re-stamped on next write).
+- **Every state commit stamps `providerMode`.** A persisted mode that differs from the resolved mode plans a REPLACEMENT (the provider diff is not consulted), and every delete — replacement old generations, GC chain draining, orphans, `destroy`, `sync`/`tail`/`logs` — resolves the provider variant of the row's *stamped* mode via `findProviderByType(type, mode)`. Legacy rows without a stamp are assumed **live** (pre-mode engines and mode-agnostic providers only ever acted on the real cloud), so a dev run replaces them like any stamped live row — assuming the run's mode instead would silently adopt a deployed live resource as a local instance and leak it untracked. The exception is an unstamped row whose attrs carry the local identity marker (`dev:`-prefixed ids, see `stampedMode` in `ProviderMode.ts`): it was reconciled by a pre-stamping `alchemy dev` run and is treated as **local**, so a plain destroy/deploy never hands its `dev:` identity to the live cloud API.
 - **`Alchemy.remote()`** opts a resource or scope OUT of local emulation during dev (captured at registration like `adopt()`; a no-op during deploy). There is deliberately no `local()` — dev mode IS the local default; tests simulate a dev run by overriding `AlchemyContext.dev` (`inDev` in [test.resources.ts](./packages/alchemy/test/test.resources.ts)) or `Test.make({ dev: true })`. Conflicting decorations on one FQN die with `ConflictingProviderModeError`. Single-implementation providers are **mode-agnostic**: they satisfy any requested mode, never stamp, never replace on a switch — dev runs over constructs mixing emulatable and live-only resources (R2) just work.
 
 ## `LocalProvider.make` — long-running local providers

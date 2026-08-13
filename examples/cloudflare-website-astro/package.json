@@ -10,12 +10,14 @@
     "test": "bun test"
   },
   "dependencies": {
-    "astro": "7.1.0"
+    "astro": "catalog:frameworks"
   },
   "devDependencies": {
-    "@distilled.cloud/astro": "workspace:*",
+    "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@tailwindcss/vite": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
+    "tailwindcss": "catalog:",
     "typescript": "catalog:"
   },
   "engines": {

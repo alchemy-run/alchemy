@@ -1,7 +1,7 @@
 import type {
   BindingHook,
   BindingServices,
-} from "@distilled.cloud/cloudflare-runtime";
+} from "@alchemy.run/cloudflare-runtime/core";
 import {
   Ai,
   AiSearch,
@@ -35,14 +35,14 @@ import {
   WasmModule,
   WorkerLoader,
   Workflows,
-} from "@distilled.cloud/cloudflare-runtime/bindings";
+} from "@alchemy.run/cloudflare-runtime/core/bindings";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import { isLocalId } from "../LocalRuntime.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
 
-export class WorkerValidationError extends Schema.TaggedErrorClass<WorkerValidationError>()(
+export class WorkerValidationError extends Schema.TaggedError<WorkerValidationError>()(
   "WorkerValidationError",
   {
     message: Schema.String,

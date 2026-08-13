@@ -28,7 +28,7 @@ import { ContainerPlatform } from "./ContainerPlatform.ts";
 /**
  * Local (dev) provider for Cloudflare Container applications.
  *
- * The Docker build/run is owned by `@distilled.cloud/cloudflare-runtime`; this
+ * The Docker build/run is owned by `@alchemy.run/cloudflare-runtime/core`; this
  * provider's only job is to resolve the `dev` image the runtime should use —
  * a build context to `docker build` (Effect-native `main` or a user-supplied
  * Dockerfile) or a remote image to `docker pull` — mirroring the three image

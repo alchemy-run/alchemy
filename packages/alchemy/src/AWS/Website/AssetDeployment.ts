@@ -7,6 +7,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { initialCwd } from "../../Util/Node.ts";
 import type { Providers } from "../Providers.ts";
 import type { WebsiteTextEncoding } from "./shared.ts";
 
@@ -82,6 +83,13 @@ export interface AssetDeployment extends Resource<
      * Number of files uploaded in this deployment.
      */
     fileCount: number;
+    /**
+     * POSIX-relative paths of every uploaded file (before the `prefix` is
+     * applied), sorted. Downstream consumers derive routing manifests from
+     * this list (e.g. `StaticSite`'s CloudFront KV file manifest), so the
+     * manifest always reflects exactly what was uploaded.
+     */
+    files: string[];
   },
   never,
   Providers
@@ -155,10 +163,15 @@ export const AssetDeploymentProvider = () =>
       const reconcileSync = Effect.fn(function* (news: AssetDeploymentProps) {
         const bucketName = news.bucket.bucketName;
         const prefix = normalizePrefix(news.prefix);
-        const root = news.sourcePath;
+        // Resolve against the process's INITIAL cwd, never the live cwd:
+        // Server persists build dirs relative to initialCwd, and a sibling
+        // framework build may transiently chdir this shared process while
+        // the upload walks the tree.
+        const root = path.resolve(initialCwd, news.sourcePath);
         const files = yield* Effect.tryPromise(() => walk(root));
         const hash = createHash("sha256");
         const desiredKeys = new Set<string>();
+        const uploadedFiles: string[] = [];
 
         // Observe — list every key already under the prefix and capture
         // its ETag (S3 ETag for non-multipart PUTs is the hex MD5 of the
@@ -188,6 +201,7 @@ export const AssetDeploymentProvider = () =>
           hash.update(options.cacheControl);
 
           desiredKeys.add(key);
+          uploadedFiles.push(normalizedRelativePath);
 
           // Sync — diff observed object hash against desired body hash,
           // and only PUT when the content has changed. ETag is wrapped in
@@ -221,6 +235,7 @@ export const AssetDeploymentProvider = () =>
           prefix,
           version: hash.digest("hex"),
           fileCount: files.length,
+          files: uploadedFiles,
         };
       });
 

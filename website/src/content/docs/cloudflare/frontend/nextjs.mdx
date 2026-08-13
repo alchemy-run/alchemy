@@ -7,7 +7,7 @@ sidebar:
 
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
-export const devDeps = "@distilled.cloud/nextjs @opennextjs/cloudflare";
+export const devDeps = "@alchemy.run/frontend-frameworks @opennextjs/cloudflare";
 
 `Cloudflare.Website.Nextjs` deploys a [Next.js](https://nextjs.org)
 app as a Cloudflare Worker. It runs `next build` through the OpenNext
@@ -22,11 +22,10 @@ and `getServerSideProps` pages all run in the Worker.
 
 ## Install
 
-The build integration is not bundled with alchemy — the resource
-dynamically imports `@distilled.cloud/nextjs` (and its peer,
-OpenNext) from your project at deploy time, so both must be installed
-alongside your framework. They are only used at build time, so dev
-dependencies are enough:
+The build integration is not bundled with alchemy. Install
+`@alchemy.run/frontend-frameworks` and its OpenNext peer; the resource
+loads the package's `/nextjs` export from your project at deploy time.
+They are only used at build time, so dev dependencies are enough:
 
 <Tabs syncKey="pkgManager">
   <TabItem label="bun" icon="bun">
@@ -45,10 +44,11 @@ dependencies are enough:
 
 ## Configure OpenNext
 
-Your `next.config.*` stays untouched. OpenNext needs one config file
-next to it — the static-assets incremental cache is the
-zero-infrastructure default, where prerendered ISR pages serve their
-build-time payloads:
+Your `next.config.*` is loaded and honored as-is — the build runs a
+real `next build`, and Alchemy never rewrites the file. OpenNext
+needs one config file next to it — the static-assets incremental
+cache is the zero-infrastructure default, where prerendered ISR
+pages serve their build-time payloads:
 
 ```typescript
 // open-next.config.ts

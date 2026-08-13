@@ -242,7 +242,11 @@ export const GroupProvider = () =>
     Group,
     Effect.gen(function* () {
       const createName = Effect.fn(function* (id: string, props: GroupProps) {
-        return props.groupName ?? (yield* createPhysicalName({ id }));
+        // Group names must not start with 'AWS' (reserved by the service).
+        return (
+          props.groupName ??
+          (yield* createPhysicalName({ id, forbiddenPrefixes: ["aws"] }))
+        );
       });
 
       const readGroupTags = (groupArn: string) =>

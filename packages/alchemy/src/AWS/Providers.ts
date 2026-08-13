@@ -21,6 +21,8 @@ import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import * as Command from "../Command/index.ts";
 import { DockerLive } from "../Docker/Docker.ts";
 import { KeyPair, KeyPairProvider } from "../KeyPair.ts";
+import * as ProviderLayer from "../Local/ProviderLayer.ts";
+import { flociDual } from "./Local/FlociServices.ts";
 import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
 import * as AccessAnalyzer from "./AccessAnalyzer/index.ts";
@@ -816,6 +818,7 @@ export const providers = () =>
       Route53.HostedZone,
       Route53.QueryLoggingConfig,
       Route53.Record,
+      Route53.Records,
       Route53.VpcAssociationAuthorization,
       Route53.ZoneVpcAssociation,
       Route53Profiles.Profile,
@@ -941,6 +944,7 @@ export const providers = () =>
       WAFv2.WebACL,
       WAFv2.WebACLAssociation,
       Website.AssetDeployment,
+      Website.Server,
       XRay.Group,
       XRay.ResourcePolicy,
       XRay.SamplingRule,
@@ -1134,7 +1138,7 @@ export const providers = () =>
           DevOpsGuru.NotificationChannelProvider(),
           DevOpsGuru.ResourceCollectionProvider(),
           DevOpsGuru.ServiceIntegrationProvider(),
-          DynamoDB.TableProvider(),
+          flociDual(DynamoDB.Table, () => DynamoDB.TableProvider()),
           EC2.DhcpOptionsProvider(),
           EC2.EgressOnlyInternetGatewayProvider(),
           EC2.EIPProvider(),
@@ -1165,10 +1169,19 @@ export const providers = () =>
           ECR.RegistryPolicyProvider(),
           ECR.RepositoryProvider(),
           ECS.CapacityProviderProvider(),
-          ECS.ClusterProvider(),
-          ECS.ServiceProvider(),
-          ECS.TaskDefinitionProvider(),
-          ECS.TaskProvider(),
+          flociDual(ECS.Cluster, () => ECS.ClusterProvider()),
+          // Dual: live ECS in deploy, floci-emulated (RPC-sidecar-hosted,
+          // hot-reloading real containers) in dev — see FlociServiceProvider
+          // / FlociTaskProvider.
+          ProviderLayer.dual(ECS.Service, {
+            live: () => ECS.ServiceProvider(),
+            local: () => ECS.FlociServiceProvider(),
+          }),
+          flociDual(ECS.TaskDefinition, () => ECS.TaskDefinitionProvider()),
+          ProviderLayer.dual(ECS.Task, {
+            live: () => ECS.TaskProvider(),
+            local: () => ECS.FlociTaskProvider(),
+          }),
           EFS.AccessPointProvider(),
           EFS.FileSystemProvider(),
           EFS.MountTargetProvider(),
@@ -1189,9 +1202,9 @@ export const providers = () =>
           EventBridge.ApiDestinationProvider(),
           EventBridge.ArchiveProvider(),
           EventBridge.ConnectionProvider(),
-          EventBridge.EventBusProvider(),
+          flociDual(EventBridge.EventBus, () => EventBridge.EventBusProvider()),
           EventBridge.PermissionProvider(),
-          EventBridge.RuleProvider(),
+          flociDual(EventBridge.Rule, () => EventBridge.RuleProvider()),
           FIS.ExperimentTemplateProvider(),
           FIS.TargetAccountConfigurationProvider(),
           Firehose.DeliveryStreamProvider(),
@@ -1215,7 +1228,7 @@ export const providers = () =>
           IAM.LoginProfileProvider(),
           IAM.OpenIDConnectProviderProvider(),
           IAM.PolicyProvider(),
-          IAM.RoleProvider(),
+          flociDual(IAM.Role, () => IAM.RoleProvider()),
           IAM.SAMLProviderProvider(),
           IAM.ServerCertificateProvider(),
           IAM.ServiceLinkedRoleProvider(),
@@ -1254,8 +1267,18 @@ export const providers = () =>
           LakeFormation.PermissionsProvider(),
           LakeFormation.ResourceProvider(),
           Lambda.AliasProvider(),
-          Lambda.EventSourceMappingProvider(),
-          Lambda.FunctionProvider(),
+          // Requires the alchemy floci fork ≥ 1.6.0-alchemy.2: the
+          // reconciler's ownership scan calls lambda ListTags on
+          // `event-source-mapping:` ARNs, which stock floci 1.6.0 rejects.
+          flociDual(Lambda.EventSourceMapping, () =>
+            Lambda.EventSourceMappingProvider(),
+          ),
+          // Dual: live Lambda in deploy, floci-emulated (RPC-sidecar-hosted,
+          // hot-reloading) Lambda in dev — see FlociFunctionProvider.
+          ProviderLayer.dual(Lambda.Function, {
+            live: () => Lambda.FunctionProvider(),
+            local: () => Lambda.FlociFunctionProvider(),
+          }),
           Lambda.LayerVersionProvider(),
           Lambda.VersionProvider(),
           Lambda.MicrovmImageProvider(),
@@ -1356,13 +1379,16 @@ export const providers = () =>
           Route53.HostedZoneProvider(),
           Route53.QueryLoggingConfigProvider(),
           Route53.RecordProvider(),
+          Route53.RecordsProvider(),
           Route53.VpcAssociationAuthorizationProvider(),
           Route53.ZoneVpcAssociationProvider(),
-          S3.BucketProvider(),
+          flociDual(S3.Bucket, () => S3.BucketProvider()),
           Scheduler.ScheduleGroupProvider(),
           Scheduler.ScheduleProvider(),
           SecretsManager.RotationScheduleProvider(),
-          SecretsManager.SecretProvider(),
+          flociDual(SecretsManager.Secret, () =>
+            SecretsManager.SecretProvider(),
+          ),
           SES.AccountSettingsProvider(),
           SES.ActiveReceiptRuleSetProvider(),
           SES.ConfigurationSetEventDestinationProvider(),
@@ -1382,10 +1408,10 @@ export const providers = () =>
           SES.TenantResourceAssociationProvider(),
           SNS.PlatformApplicationProvider(),
           SNS.SubscriptionProvider(),
-          SNS.TopicProvider(),
+          flociDual(SNS.Topic, () => SNS.TopicProvider()),
           SocialMessaging.LinkedWhatsAppBusinessAccountProvider(),
-          SQS.QueueProvider(),
-          SSM.ParameterProvider(),
+          flociDual(SQS.Queue, () => SQS.QueueProvider()),
+          flociDual(SSM.Parameter, () => SSM.ParameterProvider()),
           StepFunctions.ActivityProvider(),
           StepFunctions.StateMachineProvider(),
           WAFv2.IPSetProvider(),
@@ -1395,6 +1421,7 @@ export const providers = () =>
           WAFv2.WebACLAssociationProvider(),
           WAFv2.WebACLProvider(),
           Website.AssetDeploymentProvider(),
+          Website.ServerProvider(),
           XRay.GroupProvider(),
           XRay.ResourcePolicyProvider(),
           XRay.SamplingRuleProvider(),

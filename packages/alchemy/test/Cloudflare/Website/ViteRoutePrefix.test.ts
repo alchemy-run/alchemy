@@ -65,7 +65,12 @@ const htmlPage = `<!doctype html>
 </html>
 `;
 
-const forbiddenRetrySchedule = Schedule.exponential("500 millis");
+// Capped: an uncapped exponential over 8 recurs sums to ~2 minutes and turns
+// a persistent 403 into an apparent hang.
+const forbiddenRetrySchedule = Schedule.min([
+  Schedule.exponential("500 millis"),
+  Schedule.spaced("2 seconds"),
+]);
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
@@ -176,7 +181,9 @@ const probeStable = (url: string) =>
     Effect.repeat({
       schedule: Schedule.spaced("3 seconds"),
       until: (r: ProbeResult) => !isPropagating(r),
-      times: 20,
+      // ~90s: workers.dev/zone-route propagation slows down when many
+      // concurrent deploys enable fresh subdomains at once.
+      times: 30,
     }),
     Effect.retry({
       while: (e) => e._tag === "ProbeFailed",

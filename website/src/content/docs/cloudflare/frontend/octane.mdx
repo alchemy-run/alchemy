@@ -7,7 +7,7 @@ sidebar:
 
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
-export const devDeps = "@distilled.cloud/octane @octanejs/adapter-cloudflare";
+export const devDeps = "@alchemy.run/frontend-frameworks @octanejs/adapter-cloudflare";
 
 `Cloudflare.Website.Octane` deploys an [OctaneJS](https://octanejs.dev)
 fullstack app as a Cloudflare Worker. Octane wraps Vite, so the resource
@@ -20,10 +20,10 @@ command to run.
 
 ## Install
 
-The build integration is not bundled with alchemy — the resource
-dynamically imports `@distilled.cloud/octane` from your project at
-deploy time, so it must be installed alongside Octane's own
-Cloudflare adapter. Both are only used at build time, so dev
+The build integration is not bundled with alchemy. Install
+`@alchemy.run/frontend-frameworks` alongside Octane's Cloudflare
+adapter; the resource loads the package's `/octane` export from your
+project at deploy time. Both are only used at build time, so dev
 dependencies are enough:
 
 <Tabs syncKey="pkgManager">
