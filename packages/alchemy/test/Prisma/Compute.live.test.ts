@@ -210,6 +210,92 @@ test.provider.skipIf(!runLive)(
 );
 
 test.provider.skipIf(!runLive)(
+  "live deploys, serves, and destroys a Prisma static site",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const appDir = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-static-site-",
+      });
+      const binDir = path.join(appDir, "node_modules", ".bin");
+      yield* fs.makeDirectory(binDir, { recursive: true });
+      yield* fs.writeFileString(
+        path.join(appDir, "package.json"),
+        JSON.stringify({ devDependencies: { vite: "0.0.0-test" } }),
+      );
+      yield* fs.writeFileString(
+        path.join(appDir, "build.mjs"),
+        [
+          'import { mkdir } from "node:fs/promises";',
+          'await mkdir("dist/assets", { recursive: true });',
+          'await Bun.write("dist/index.html", "alchemy static shell");',
+          'await Bun.write("dist/assets/app.js", "alchemy static asset");',
+          "",
+        ].join("\n"),
+      );
+      const viteBin = path.join(binDir, "vite");
+      yield* fs.writeFileString(
+        viteBin,
+        `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} build.mjs\n`,
+      );
+      yield* fs.chmod(viteBin, 0o755);
+
+      const suffix = yield* Effect.sync(() => Date.now().toString(36));
+      const name = `alchemy-static-site-${suffix}`;
+
+      yield* stack.destroy();
+
+      yield* Effect.gen(function* () {
+        const output = yield* stack.deploy(
+          Effect.gen(function* () {
+            const project = yield* Prisma.Project("Project", {
+              name,
+              createDatabase: false,
+            });
+            const site = yield* Prisma.Compute("Site", {
+              project: project.projectId,
+              appName: name,
+              path: appDir,
+              build: "auto",
+              healthCheck: { path: "/" },
+              timeoutSeconds: 240,
+              destroyOldDeployment: true,
+            });
+            return { project, site };
+          }),
+        );
+
+        expect(output.site.url).toBeDefined();
+        expect(yield* fetchText(`${output.site.url}/`)).toBe(
+          "alchemy static shell",
+        );
+        expect(yield* fetchText(`${output.site.url}/assets/app.js`)).toBe(
+          "alchemy static asset",
+        );
+        expect(yield* fetchText(`${output.site.url}/client/route`)).toBe(
+          "alchemy static shell",
+        );
+
+        yield* stack.destroy();
+        yield* expectGone(
+          "Prisma project",
+          Prisma.getProject(output.project.projectId),
+        );
+        yield* expectGone("Prisma App", Prisma.getApp(output.site.appId));
+      }).pipe(
+        Effect.ensuring(
+          Effect.gen(function* () {
+            yield* stack.destroy().pipe(Effect.ignore);
+            yield* fs.remove(appDir, { recursive: true }).pipe(Effect.ignore);
+          }),
+        ),
+      );
+    }).pipe(logLevel),
+  { timeout: 600_000 },
+);
+
+test.provider.skipIf(!runLive)(
   "live rolls a Prisma App back to an existing deployment",
   (stack) =>
     Effect.gen(function* () {

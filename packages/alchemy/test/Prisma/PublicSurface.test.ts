@@ -126,6 +126,7 @@ const publicExports = [
   "normalizeEntrypoint",
   "runBuildCommand",
   "runComputeAutoBuild",
+  "runComputeStaticBuild",
   "parseDeploymentLogRecord",
   "tailDeploymentLogs",
   "waitForDeploymentStatus",

@@ -41,6 +41,7 @@ import {
 import {
   runBuildCommand,
   runComputeAutoBuild,
+  runComputeStaticBuild,
   type ComputeAutoBuildFramework,
 } from "./ComputeBuild.ts";
 import { createComputeArchive, normalizeEntrypoint } from "./ComputeArchive.ts";
@@ -176,7 +177,32 @@ export interface ComputeAutoBuild {
   timeoutSeconds?: number;
 }
 
-export type ComputeBuild = ComputeCommandBuild | ComputeAutoBuild;
+export interface ComputeStaticBuild extends Omit<
+  ComputeCommandBuild,
+  "entrypoint"
+> {
+  /**
+   * Build a static site and package it with a production HTTP server.
+   */
+  type: "static";
+  /**
+   * HTML file served at the root and for SPA fallbacks.
+   *
+   * @default "index.html"
+   */
+  indexPage?: string;
+  /**
+   * Serve the index page when no static file matches the request.
+   *
+   * @default false
+   */
+  spa?: boolean;
+}
+
+export type ComputeBuild =
+  | ComputeCommandBuild
+  | ComputeAutoBuild
+  | ComputeStaticBuild;
 
 export interface ComputeBundleOptions {
   /**
@@ -308,8 +334,8 @@ export interface ComputeProps extends PlatformProps {
   /**
    * Build command and output directory. Set to `"auto"` or `{ type: "auto" }`
    * to use Prisma Compute-style framework detection for Next.js, Nuxt, Astro,
-   * TanStack Start, or Bun. Set to `false` to upload `path` as a pre-built
-   * artifact.
+   * TanStack Start, Vite, or Bun. Set to `false` to upload `path` as a
+   * pre-built artifact.
    */
   build?: ComputeBuild | false | "auto";
   /**
@@ -674,6 +700,20 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  *   path: "./apps/web",
  *   build: "auto",
  *   destroyOldDeployment: true,
+ * });
+ * ```
+ *
+ * @example Deploy a static site
+ * ```typescript
+ * const web = yield* Prisma.Compute("web", {
+ *   project,
+ *   path: "./apps/web",
+ *   build: {
+ *     type: "static",
+ *     command: "bun run build",
+ *     outdir: "dist",
+ *     spa: true,
+ *   },
  * });
  * ```
  *
@@ -1341,6 +1381,14 @@ const isAutoBuild = (
     "type" in build &&
     build.type === "auto");
 
+const isStaticBuild = (
+  build: ComputeProps["build"],
+): build is ComputeStaticBuild =>
+  typeof build === "object" &&
+  build !== null &&
+  "type" in build &&
+  build.type === "static";
+
 const readPackageMain = Effect.fn(function* (directory: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -1637,6 +1685,37 @@ const resolveArtifact = Effect.fn(function* (props: ComputeProps) {
       env: auto?.env,
       outputLimitBytes: auto?.outputLimitBytes,
       timeoutSeconds: auto?.timeoutSeconds,
+    });
+    const file = yield* createComputeArchive({
+      directory: artifact.directory,
+      entrypoint: artifact.entrypoint,
+      ignore: props.archiveIgnore,
+      output: "file",
+    }).pipe(Effect.ensuring(artifact.cleanup));
+    port = props.port ?? artifact.defaultPort ?? 8080;
+    return {
+      file,
+      hash: yield* sha256Object({
+        artifact: file.sha256,
+        env,
+        envClass,
+        port,
+      }),
+      port,
+    };
+  }
+
+  if (isStaticBuild(props.build)) {
+    const artifact = yield* runComputeStaticBuild({
+      appPath,
+      command: props.build.command,
+      cwd: props.build.cwd,
+      outdir: props.build.outdir,
+      indexPage: props.build.indexPage,
+      spa: props.build.spa,
+      env: props.build.env,
+      outputLimitBytes: props.build.outputLimitBytes,
+      timeoutSeconds: props.build.timeoutSeconds,
     });
     const file = yield* createComputeArchive({
       directory: artifact.directory,
