@@ -1,4 +1,4 @@
-import { withLock } from "../../../src/Auth/Lock.ts";
+import { withLock } from "@/Auth/Lock.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 
