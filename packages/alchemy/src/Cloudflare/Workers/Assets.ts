@@ -8,7 +8,7 @@ import type { PlatformError } from "effect/PlatformError";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { sha256, sha256Object } from "../../Util/index.ts";
 import { initialCwd } from "../../Util/Node.ts";
-import createIgnore from "@alchemy.run/cloudflare-runtime/core/internal/ignore";
+import createIgnore from "@alchemy.run/node-utils/ignore";
 
 const MAX_ASSET_SIZE = 1024 * 1024 * 25; // 25MB
 const MAX_ASSET_COUNT = 20_000;

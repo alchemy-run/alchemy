@@ -106,7 +106,7 @@ PERFORMANCE OF THIS SOFTWARE.
 
 ## node-ignore
 
-`packages/cloudflare-runtime/src/core/internal/ignore.ts` is a TypeScript port
+`packages/node-utils/src/ignore.ts` is a TypeScript port
 of `ignore` (node-ignore) v7.0.5.
 
 Copyright (c) 2013 Kael Zhang <i@kael.me>, contributors

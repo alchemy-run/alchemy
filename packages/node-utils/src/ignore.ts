@@ -467,8 +467,9 @@ class RuleManager {
 
   _add(pattern: string | Ignore | PatternParams): void {
     // #32
-    if (pattern instanceof Ignore) {
-      this._rules = this._rules.concat(pattern._rules._rules);
+    const ignorePattern = pattern as Ignore & Record<PropertyKey, unknown>;
+    if (pattern && ignorePattern[KEY_IGNORE]) {
+      this._rules = this._rules.concat(ignorePattern._rules._rules);
       this._added = true;
       return;
     }
@@ -479,8 +480,9 @@ class RuleManager {
       };
     }
 
-    if (checkPattern(pattern.pattern)) {
-      const rule = createRule(pattern, this._ignoreCase);
+    const patternParams = pattern as PatternParams;
+    if (checkPattern(patternParams.pattern)) {
+      const rule = createRule(patternParams, this._ignoreCase);
       this._added = true;
       this._rules.push(rule);
     }

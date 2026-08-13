@@ -366,7 +366,7 @@
   "dependencies": {
     "@alchemy.run/cloudflare-runtime": "workspace:*",
     "@alchemy.run/floci": "workspace:*",
-    "@alchemy.run/node-utils": "catalog:",
+    "@alchemy.run/node-utils": "workspace:*",
     "@aws-sdk/credential-providers": "catalog:",
     "@clack/prompts": "^1.7.0",
     "@distilled.cloud/aws": "workspace:*",

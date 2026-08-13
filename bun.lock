@@ -1554,7 +1554,7 @@
       "dependencies": {
         "@alchemy.run/cloudflare-runtime": "workspace:*",
         "@alchemy.run/floci": "workspace:*",
-        "@alchemy.run/node-utils": "catalog:",
+        "@alchemy.run/node-utils": "workspace:*",
         "@aws-sdk/credential-providers": "catalog:",
         "@clack/prompts": "^1.7.0",
         "@distilled.cloud/aws": "workspace:*",
@@ -1742,7 +1742,7 @@
       "name": "@alchemy.run/cloudflare-runtime",
       "version": "2.0.0-beta.72",
       "dependencies": {
-        "@alchemy.run/node-utils": "catalog:",
+        "@alchemy.run/node-utils": "workspace:*",
         "@cloudflare/unenv-preset": "catalog:workers",
         "@puppeteer/browsers": "catalog:cloudflare",
         "capnp-es": "catalog:cloudflare",
@@ -1872,6 +1872,14 @@
         "waku",
       ],
     },
+    "packages/node-utils": {
+      "name": "@alchemy.run/node-utils",
+      "version": "2.0.0-beta.72",
+      "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "catalog:",
+      },
+    },
     "packages/pr-package": {
       "name": "@alchemy.run/pr-package",
       "version": "2.0.0-beta.72",
@@ -1928,7 +1936,6 @@
   },
   "catalog": {
     "@alchemy.run/cloudflare-runtime": "workspace:*",
-    "@alchemy.run/node-utils": "0.0.5",
     "@aws-crypto/crc32": "^5.2.0",
     "@aws-crypto/util": "^5.2.0",
     "@aws-sdk/credential-providers": "^3.0.0",
@@ -2094,7 +2101,7 @@
 
     "@alchemy.run/frontend-frameworks": ["@alchemy.run/frontend-frameworks@workspace:packages/frontend-frameworks"],
 
-    "@alchemy.run/node-utils": ["@alchemy.run/node-utils@0.0.5", "", {}, "sha512-5agdhQxWBodxa5hDRyjnpx91RTU3g+qd5fxYB7uNDCaOzB0XC47UU/KHR6zf6jhz/NXf61gJS+vhYwn8NHeRoQ=="],
+    "@alchemy.run/node-utils": ["@alchemy.run/node-utils@workspace:packages/node-utils"],
 
     "@alchemy.run/pr-package": ["@alchemy.run/pr-package@workspace:packages/pr-package"],
 

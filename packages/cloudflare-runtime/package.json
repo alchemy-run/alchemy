@@ -42,6 +42,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@alchemy.run/node-utils": "workspace:*",
     "@cloudflare/unenv-preset": "catalog:workers",
     "@puppeteer/browsers": "catalog:cloudflare",
     "capnp-es": "catalog:cloudflare",
@@ -711,12 +712,6 @@
       "bun": "./src/core/RuntimeServices.ts",
       "worker": "./src/core/RuntimeServices.ts",
       "import": "./dist/core/node/RuntimeServices.mjs"
-    },
-    "./core/internal/ignore": {
-      "types": "./dist/core/node/internal/ignore.d.mts",
-      "bun": "./src/core/internal/ignore.ts",
-      "worker": "./src/core/internal/ignore.ts",
-      "import": "./dist/core/node/internal/ignore.mjs"
     },
     "./core/RuntimeWorker": {
       "types": "./dist/core/node/RuntimeWorker.d.mts",
