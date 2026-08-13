@@ -194,12 +194,6 @@ export interface NextjsSourceOptions {
   readonly memo?: NextjsMemoOptions | undefined;
   /** Path of the OpenNext config, relative to the project root. @default "open-next.config.ts" */
   readonly configPath?: string | undefined;
-  /**
-   * The command the OpenNext pipeline runs to build the Next.js app. A
-   * `buildCommand` in the project's `open-next.config.ts` takes precedence.
-   * @default `next build` via the detected package runner (bunx/npx/yarn/pnpm exec)
-   */
-  readonly buildCommand?: string | undefined;
   /** Skip the internal `next build` (reuse an existing `.next`). */
   readonly skipNextBuild?: boolean | undefined;
   /** Minify the OpenNext bundling steps and the final bundle pass. */
@@ -401,7 +395,6 @@ const hashInputTree = Effect.fn(function* (
       version: packageVersion,
       options: {
         configPath: options.configPath,
-        buildCommand: options.buildCommand,
         skipNextBuild: options.skipNextBuild,
         minify: options.minify,
       },
@@ -552,7 +545,6 @@ export interface NextjsBuildChildConfig {
   readonly compatibilityDate: string;
   readonly compatibilityFlags: Array<string>;
   readonly configPath: string | undefined;
-  readonly buildCommand: string | undefined;
   readonly skipNextBuild: boolean | undefined;
   readonly minify: boolean | undefined;
   readonly debug: boolean | undefined;
@@ -568,7 +560,6 @@ export const buildInChild = (config: NextjsBuildChildConfig) =>
       },
       nextjs: {
         configPath: config.configPath,
-        buildCommand: config.buildCommand,
         skipNextBuild: config.skipNextBuild,
         minify: config.minify,
         debug: config.debug,
@@ -588,7 +579,6 @@ const makeProvider = (options: NextjsSourceOptions): SourceProvider => {
     },
     nextjs: {
       configPath: options.configPath,
-      buildCommand: options.buildCommand,
       skipNextBuild: options.skipNextBuild,
       minify: options.minify,
       debug: options.debug,
@@ -617,7 +607,6 @@ const makeProvider = (options: NextjsSourceOptions): SourceProvider => {
           compatibilityDate: ctx.compatibility.date,
           compatibilityFlags: ctx.compatibility.flags,
           configPath: options.configPath,
-          buildCommand: options.buildCommand,
           skipNextBuild: options.skipNextBuild,
           minify: options.minify,
           debug: options.debug,

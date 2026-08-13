@@ -58,13 +58,6 @@ export interface NextjsFrameworkOptions {
          * @default "open-next.config.ts"
          */
         readonly configPath?: string | undefined;
-        /**
-         * The command the OpenNext pipeline runs to build the Next.js app.
-         * A `buildCommand` set in the project's `open-next.config.ts` takes
-         * precedence over this option.
-         * @default `next build` via the detected package runner (bunx/npx/yarn/pnpm exec)
-         */
-        readonly buildCommand?: string | undefined;
         /** Skip the internal `next build` (reuse an existing `.next`). */
         readonly skipNextBuild?: boolean | undefined;
         /** Minify the OpenNext bundling steps and the final bundle pass. */
@@ -145,7 +138,6 @@ export const makeRunnerConfig = (
   skipNextBuild: options?.nextjs?.skipNextBuild ?? false,
   minify: options?.nextjs?.minify ?? false,
   debug: options?.nextjs?.debug ?? false,
-  buildCommand: options?.nextjs?.buildCommand,
 });
 
 /**

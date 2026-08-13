@@ -14,9 +14,7 @@
 // `wrangler-stub` package this integration ships.)
 //
 // Usage: node runner.mjs '<json>' where json is Build.ts's RunnerConfig:
-//   { appDir, configPath, compatibilityDate, skipNextBuild, minify, debug,
-//     buildCommand }
-import fs from "node:fs";
+//   { appDir, configPath, compatibilityDate, skipNextBuild, minify, debug }
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -58,38 +56,6 @@ const { config, buildDir } = await compileOpenNextConfig(configPath, {
 });
 ensureCloudflareConfig(config);
 
-// The app's package.json `build` script is `e2e build` (which would recurse
-// back into this runner) — run `next build` directly unless the app's
-// open-next.config.ts overrides the command itself. The default runs through
-// the project's package runner, detected from the nearest lockfile the same
-// way OpenNext does (sync mirror of ../nextjs/packager.ts — this script is
-// standalone and cannot import it).
-const detectPackager = (start) => {
-  let current = start;
-  while (true) {
-    // bun before yarn: `bun install --yarn` can emit a yarn.lock too.
-    for (const [file, packager] of [
-      ["bun.lockb", "bun"],
-      ["bun.lock", "bun"],
-      ["package-lock.json", "npm"],
-      ["yarn.lock", "yarn"],
-      ["pnpm-lock.yaml", "pnpm"],
-    ]) {
-      if (fs.existsSync(path.join(current, file))) return packager;
-    }
-    const parent = path.dirname(current);
-    if (parent === current) return "npm";
-    current = parent;
-  }
-};
-const defaultBuildCommand = {
-  bun: "bunx next build",
-  pnpm: "pnpm exec next build",
-  yarn: "yarn next build",
-  npm: "npx next build",
-}[detectPackager(appDir)];
-config.buildCommand ??= runnerConfig.buildCommand ?? defaultBuildCommand;
-
 // --- getNormalizedOptions equivalent (utils.ts) ---
 const openNextDistDir = path.dirname(
   cfRequire.resolve("@opennextjs/aws/index.js"),
@@ -105,9 +71,35 @@ const wranglerConfig = {
   assets: { run_worker_first: true },
 };
 
+// The Next.js build runs programmatically through the project's own
+// `next/dist/build` — no shelled build command. A `buildCommand` the
+// project's open-next.config.ts sets explicitly is still honored through
+// OpenNext's native (execSync) path. Every parameter after `dir` is
+// defaulted on Next 15 and 16, so the bare call is version-tolerant; the
+// standalone env set by setStandaloneBuildMode reaches it directly (same
+// process).
+const skipNextBuild = !!runnerConfig.skipNextBuild;
+const programmaticNextBuild = !skipNextBuild && !config.buildCommand;
+if (programmaticNextBuild) {
+  const { setStandaloneBuildMode } = await importAws("build/buildNextApp.js");
+  setStandaloneBuildMode(options);
+  // next/dist/build is CJS — under dynamic import the module.exports lands
+  // on `.default`, and the build function on ITS `.default`.
+  const nextBuildModule = await import(
+    pathToFileURL(require.resolve("next/dist/build")).href
+  );
+  const nextBuild =
+    typeof nextBuildModule.default === "function"
+      ? nextBuildModule.default
+      : nextBuildModule.default.default;
+  const nextAppDir = path.dirname(options.appPackageJsonPath);
+  console.log(`Building Next.js app programmatically in ${nextAppDir}`);
+  await nextBuild(nextAppDir);
+}
+
 const projectOptions = {
   sourceDir: appDir,
-  skipNextBuild: !!runnerConfig.skipNextBuild,
+  skipNextBuild: skipNextBuild || programmaticNextBuild,
   skipWranglerConfigCheck: true,
   minify: !!runnerConfig.minify,
 };

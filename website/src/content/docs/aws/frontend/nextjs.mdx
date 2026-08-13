@@ -49,12 +49,25 @@ are enough:
 
 ## Configure OpenNext
 
-Your `next.config.*` is loaded and honored as-is — the build runs a
-real `next build`, and Alchemy never rewrites the file. An
-`open-next.config.ts` is optional: when the project has none, a
-minimal default with the streaming server wrapper is generated for
-you. Keep your own file next to `next.config.*` to customize the
-OpenNext build:
+Your `next.config.*` is loaded and honored as-is — the build runs
+Next's own programmatic build (no shell command, no `build` script
+required), and Alchemy never rewrites the file. OpenNext is
+configured through the `openNext` prop, deep-merged over Alchemy's
+streaming default:
+
+```typescript
+export const Website = AWS.Website.Nextjs("Website", {
+  openNext: {
+    dangerous: { disableIncrementalCache: true },
+  },
+});
+```
+
+The merged config is written to a synthesized `open-next.config.ts`
+(marked as generated and regenerated whenever the props change). If
+you author your own `open-next.config.ts` — for example to use
+function-valued overrides — it takes precedence and is honored
+as-is:
 
 ```typescript
 // open-next.config.ts
@@ -66,23 +79,6 @@ export default {
   },
 };
 ```
-
-## Configure the build command
-
-By default the build runs your package.json `build` script, or `next
-build` through your package runner (`bunx` / `npx` / `yarn` / `pnpm
-exec`, detected from the nearest lockfile) when there is none. Set
-`build: { command }` to override it:
-
-```typescript
-export const Website = AWS.Website.Nextjs("Website", {
-  build: { command: "npx next build --turbopack" },
-});
-```
-
-The command takes precedence over the package.json `build` script and
-a `buildCommand` in `open-next.config.ts`, and changing it re-runs
-the build.
 
 ## Declare the Website
 

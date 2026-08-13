@@ -36,14 +36,6 @@ export interface NextjsBuildOptions {
    */
   configPath?: string;
   /**
-   * The command the OpenNext pipeline runs to build the Next.js app.
-   * Prefer the top-level `build: { command }` prop, which takes precedence
-   * over this option; a `buildCommand` set in the project's
-   * `open-next.config.ts` takes precedence over both.
-   * @default `next build` via the detected package runner (bunx/npx/yarn/pnpm exec)
-   */
-  buildCommand?: string;
-  /**
    * Skip the internal `next build` and reuse an existing `.next` directory.
    * @default false
    */
@@ -77,14 +69,7 @@ export interface NextjsProps<
   Bindings extends WorkerBindingProps = {},
 > extends Omit<
   WorkerProps<Bindings>,
-  | "vite"
-  | "main"
-  | "assets"
-  | "script"
-  | "build"
-  | "bundle"
-  | "source"
-  | "rules"
+  "vite" | "main" | "assets" | "script" | "bundle" | "source" | "rules"
 > {
   /**
    * The Next.js project root (the directory containing `next.config.*` and
@@ -99,19 +84,6 @@ export interface NextjsProps<
    * `include`/`exclude` globs when the default is too broad.
    */
   memo?: MemoOptions;
-  /**
-   * Build configuration for the OpenNext build.
-   */
-  build?: {
-    /**
-     * Command that builds the Next.js app, run from `rootDir` (e.g.
-     * `"npx next build --turbopack"`). Takes precedence over
-     * `nextjs.buildCommand`; a `buildCommand` set in the project's
-     * `open-next.config.ts` takes precedence over both.
-     * @default `next build` via the detected package runner (bunx/npx/yarn/pnpm exec)
-     */
-    command?: string;
-  };
   /** Next.js/OpenNext-specific build and dev configuration. */
   nextjs?: NextjsBuildOptions;
   /**
@@ -272,14 +244,14 @@ export interface NextjsProps<
  * ```
  *
  * @section Build Configuration
- * `build: { command }` sets the build command; the `nextjs` prop tunes the
- * rest of the OpenNext pipeline (minification, reusing an existing `.next`
- * build).
+ * The `nextjs` prop tunes the OpenNext pipeline: minification, or reusing
+ * an existing `.next` build. The Next.js build itself runs programmatically
+ * through the project's own `next/dist/build` (a `buildCommand` set in the
+ * project's `open-next.config.ts` is still honored).
  *
- * @example Minified build with a custom command
+ * @example Minified build
  * ```typescript
  * const site = yield* Cloudflare.Website.Nextjs("Site", {
- *   build: { command: "npx next build --no-lint" },
  *   nextjs: {
  *     minify: true,
  *   },
@@ -340,10 +312,7 @@ export const Nextjs: {
         Effect.map(
           Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
           (props) => ({
-            // `build` is the OpenNext build config (forwarded through the
-            // source provider below), not the Worker's rolldown options —
-            // keep it out of the Worker props.
-            ...(({ build: _build, ...worker }) => worker)(props ?? {}),
+            ...props,
             // OpenNext's revalidation queues (memory-queue, do-queue) fetch
             // the worker back through `WORKER_SELF_REFERENCE`. Always wire
             // the self service binding — it's inert when unused, and its
@@ -385,9 +354,6 @@ export const Nextjs: {
                         ? { dev: { mode: devMode } }
                         : {}),
                     }))(props.nextjs)
-                  : {}),
-                ...(props?.build?.command !== undefined
-                  ? { buildCommand: props.build.command }
                   : {}),
               },
             },

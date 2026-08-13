@@ -25,7 +25,6 @@ describe("makeRunnerConfig", () => {
       skipNextBuild: false,
       minify: false,
       debug: false,
-      buildCommand: undefined,
     });
   });
 
@@ -34,7 +33,6 @@ describe("makeRunnerConfig", () => {
       vite: { compatibilityDate: "2026-01-01" },
       nextjs: {
         configPath: "custom.config.ts",
-        buildCommand: "npx next build --debug",
         skipNextBuild: true,
         minify: true,
         debug: true,
@@ -47,7 +45,6 @@ describe("makeRunnerConfig", () => {
       skipNextBuild: true,
       minify: true,
       debug: true,
-      buildCommand: "npx next build --debug",
     });
   });
 });

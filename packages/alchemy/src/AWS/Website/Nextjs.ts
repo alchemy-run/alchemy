@@ -42,17 +42,35 @@ export interface NextjsProps {
    */
   rootDir?: string;
   /**
-   * Build configuration for the OpenNext build.
+   * OpenNext configuration, expressed as alchemy props. Deep-merged over
+   * the streaming default (`default.override.wrapper:
+   * "aws-lambda-streaming"`) and written to the synthesized
+   * `open-next.config.ts`. JSON-serializable values only — for
+   * function-valued overrides, author your own `open-next.config.ts` (a
+   * user-authored file takes precedence over this prop).
    */
-  build?: {
-    /**
-     * Command that builds the Next.js app, run from `rootDir` (e.g.
-     * `"npx next build --turbopack"`). Takes precedence over the
-     * package.json `build` script and a `buildCommand` in
-     * `open-next.config.ts`.
-     * @default the package.json `build` script, or `next build` via the detected package runner (bunx/npx/yarn/pnpm exec) when there is none
-     */
-    command?: string;
+  openNext?: {
+    /** The default server function's configuration. */
+    default?: {
+      /**
+       * Named overrides (wrapper, converter, incrementalCache, queue,
+       * tagCache, ...). Alchemy's default sets
+       * `wrapper: "aws-lambda-streaming"` — required by the streaming
+       * Lambda Function URL this resource deploys.
+       */
+      override?: Record<string, unknown>;
+      minify?: boolean;
+      [key: string]: unknown;
+    };
+    /** Additional (split) server functions. */
+    functions?: Record<string, unknown>;
+    /** Image-optimization function configuration. */
+    imageOptimization?: Record<string, unknown>;
+    /** Middleware configuration. */
+    middleware?: Record<string, unknown>;
+    /** OpenNext escape hatches (e.g. `disableIncrementalCache`). */
+    dangerous?: Record<string, unknown>;
+    [key: string]: unknown;
   };
   /**
    * Controls which files are hashed to decide whether the build re-runs.
@@ -214,7 +232,7 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
       env: props.server?.environment,
       memo: props.memo,
       dev: props.dev,
-      options: props.build ? { build: props.build } : undefined,
+      options: props.openNext ? { openNext: props.openNext } : undefined,
     });
 
     if (isLocal) {
