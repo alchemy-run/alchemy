@@ -4,21 +4,23 @@ Deploys a SvelteKit app to AWS with `AWS.Website.SvelteKit` — no `svelte.confi
 
 The resource builds the app with SvelteKit's own Vite pipeline and a wrangler-free in-memory AWS adapter, deploys the server output on a streaming Lambda Function URL, and serves client assets + prerendered pages from S3 behind CloudFront.
 
-The site is **effectful**: `src/backend.ts` passes an Effect program as the third argument, and the program's RPC methods ARE the API surface — no routes, no URL parsing (the S3 bucket's name lands as an env var and its IAM policy on the Lambda role, collected at plan time):
+## The demo
+
+A DynamoDB-backed visits counter. The site is **effectful**: `src/backend.ts` passes an Effect program as the third argument, and the program's RPC methods ARE the API surface — no routes, no URL parsing (the table name lands as an env var and its IAM policy on the Lambda role, collected at plan time):
 
 ```ts
 export default class Site extends SvelteKit<Site>()(
   "SvelteKitSite",
   { main: import.meta.url },
   Effect.gen(function* () {
-    const bucket = yield* SiteData;
-    const putObject = yield* S3.PutObject(bucket);
-    const getObject = yield* S3.GetObject(bucket);
+    const table = yield* Visits;
+    const getItem = yield* DynamoDB.GetItem(table);
+    const putItem = yield* DynamoDB.PutItem(table);
     return {
-      get: () => Effect.gen(function* () { /* read from S3 */ }),
-      save: (value: string) => Effect.gen(function* () { /* write to S3 */ }),
+      visits: () => Effect.gen(function* () { /* read the counter */ }),
+      bump: () => Effect.gen(function* () { /* increment + persist */ }),
     };
-  }).pipe(Effect.provide([S3.PutObjectHttp, S3.GetObjectHttp])),
+  }).pipe(Effect.provide([DynamoDB.GetItemHttp, DynamoDB.PutItemHttp])),
 ) {}
 ```
 
@@ -28,17 +30,24 @@ Methods are called through `createClient` (`alchemy/client`), which has two form
 // SSR (src/routes/+page.server.ts): VALUE import — direct in-process dispatch
 import Backend from "../backend.ts";
 const backend = createClient(Backend);
-export const load = async () => ({ message: await backend.get() });
+export const load = async () => ({ visits: await backend.visits() });
 
-// Browser (+page.svelte): TYPE-ONLY import — zero backend bytes in the client
-// bundle; each call POSTs the wire protocol (/api/__rpc/save)
+// Browser (src/routes/+page.svelte): TYPE-ONLY import — zero backend bytes in
+// the client bundle; each call POSTs the wire protocol (/api/__rpc/bump)
 import { createClient } from "alchemy/client";
 import type Backend from "../backend.ts";
 const backend = createClient<typeof Backend>();
-await backend.save(draft);
+const count = await backend.bump();
 ```
 
-The home page renders the S3-backed message during SSR and saves a new one from the browser over the wire — both through the same typed backend methods, in the deployed Lambda and in `vite dev` alike.
+The home page renders "Server-rendered visits: N" during SSR and a "Bump visits" button re-calls the backend from the browser over the wire — both through the same typed backend methods, in the deployed Lambda and in `vite dev` alike.
+
+## Mechanics
+
+- Zero-setup mount: on SvelteKit the rpc wire path is served without any project file — the deploy target wires the backend into the server bundle (and `vite dev`) automatically.
+- `src/routes/about` is prerendered at build time — prerendered pages must not call the backend server-side.
+- `@alchemy.run/frontend-frameworks` must be installed in the project — the server's source provider is loaded from its `/sveltekit` export at deploy time.
+- Unchanged projects skip the build and deploy entirely (the project tree is content-hashed, respecting `.gitignore`).
 
 ## Commands
 
@@ -48,9 +57,4 @@ bun alchemy dev      # SvelteKit's Vite dev server (Node SSR, HMR)
 bun alchemy destroy  # tear down
 ```
 
-## Notes
-
-- `@alchemy.run/frontend-frameworks` must be installed in the project — the server's source provider is loaded from its `/sveltekit` export at deploy time.
-- Unchanged projects skip the build and deploy entirely (the project tree is content-hashed, respecting `.gitignore`).
-- In `alchemy dev`, the site is kit's own Vite dev server (plain Node SSR) — already the AWS Lambda programming model, `process.env` included. The site itself creates no cloud resources in dev, but the S3 bucket bound by the effect program is pinned `remote()` in `src/backend.ts`, so both `createClient` forms hit the real bucket with your ambient credentials.
-- `src/routes/about` is prerendered at build time — prerendered pages must not call the backend server-side.
+In `alchemy dev`, the site is kit's own Vite dev server (plain Node SSR) — already the AWS Lambda programming model, `process.env` included. The site itself creates no cloud resources in dev, but the DynamoDB table bound by the effect program is pinned `remote()` in `src/backend.ts`, so both `createClient` forms hit the real table with your ambient credentials.

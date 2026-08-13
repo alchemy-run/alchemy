@@ -4,33 +4,56 @@ Deploys a [TanStack Start](https://tanstack.com/start) app to Cloudflare
 Workers with `Cloudflare.Website.Vite` — one Worker serves the frontend
 AND a typed backend, bridged by `createClient`.
 
+## The demo
+
+Every effectful website example is the same app: a visit counter in a KV
+namespace (`Visits`, key `count`) exposed by two RPC methods on the
+backend program — `visits()` reads the count and `bump()` increments it.
+The page server-renders `Server-rendered visits: {n}` and a "Bump visits"
+button calls `bump()` from the browser. Only the framework and cloud
+mechanics vary between examples.
+
 - `src/backend.ts` declares the Website class with an Effect program as
-  its third argument. Its RPC METHODS are the API surface (`get`, `save`
-  — backed by an R2 bucket through a typed capability binding, collected
-  automatically at plan time). No routes, no URL parsing.
-- `src/lib/backend.ts` builds ONE shared backend client — the same file
-  layout as the oRPC adapter — picked per world by `createIsomorphicFn`:
+  its third argument. Its RPC METHODS (`visits`, `bump`) are the API
+  surface, backed by the KV namespace through a typed capability binding —
+  collected automatically at plan time. No routes, no URL parsing.
+- `src/routes/index.tsx` is the UI: the route `loader` server-renders the
+  count and the button bumps it from the browser.
 
-  ```ts
-  const getBackend = createIsomorphicFn()
-    // SSR: VALUE form — direct in-process dispatch, no HTTP; headers
-    // resolve per call from TanStack's ambient accessor.
-    .server(() =>
-      createClient(Backend, {
-        headers: () => Object.fromEntries(getRequestHeaders().entries()),
-      }),
-    )
-    // Browser: TYPE-ONLY form — POST /api/__rpc/<method>, zero backend
-    // bytes in the client bundle.
-    .client(() => createClient<typeof Backend>());
+## createClient — both forms
 
-  export const backend = getBackend();
-  ```
+`src/lib/backend.ts` builds ONE shared backend client — the same file
+layout as the oRPC adapter — picked per world by `createIsomorphicFn`:
 
-- `src/routes/index.tsx` uses that one client in both worlds: the route
-  `loader` calls `backend.get()` (in-process during SSR, over the wire on
-  client-side navigation), and the Save button calls `backend.save(...)`
-  from the browser.
+```ts
+// src/lib/backend.ts
+const getBackend = createIsomorphicFn()
+  // SSR: VALUE form — direct in-process dispatch, no HTTP; headers
+  // resolve per call from TanStack's ambient accessor.
+  .server(() =>
+    createClient(Backend, {
+      headers: () => Object.fromEntries(getRequestHeaders().entries()),
+    }),
+  )
+  // Browser: TYPE-ONLY form — POST /api/__rpc/<method>, zero backend
+  // bytes in the client bundle.
+  .client(() => createClient<typeof Backend>());
+
+export const backend = getBackend();
+```
+
+`src/routes/index.tsx` uses that one client in both worlds: the route
+`loader` calls `backend.visits()` (in-process during SSR, over the wire on
+client-side navigation), and the Bump button calls `backend.bump()` from
+the browser.
+
+## Mechanics
+
+- The SSR seam is the shared isomorphic client in `src/lib/backend.ts` —
+  routes never import the backend value directly.
+- `main: import.meta.url` anchors `src/backend.ts`: the engine imports it
+  for plan-time binding collection and the generated worker entry
+  re-imports it inside the vite graph.
 
 ## Deploy
 

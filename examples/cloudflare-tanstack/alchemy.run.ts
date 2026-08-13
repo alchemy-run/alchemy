@@ -10,7 +10,7 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-    // The Website class (and its Effect API + R2 binding) is defined in
+    // The Website class (and its Effect API + KV binding) is defined in
     // ./src/backend.ts — yielding it deploys the whole thing: one Worker
     // serving the TanStack Start frontend and the Effect-native /api/*.
     const website = yield* Site;

@@ -10,8 +10,7 @@ import { createClient } from "alchemy/client";
 import Backend from "../backend.ts";
 
 const backend = createClient(Backend);
-const count = await backend.visit();
-const now = new Date().toISOString();
+const visits = await backend.visits();
 ---
 
 <html lang="en">
@@ -20,38 +19,40 @@ const now = new Date().toISOString();
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Astro on AWS</title>
   </head>
-  <body class="bg-slate-50 p-8 text-slate-900">
-    <main class="mx-auto max-w-2xl rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
-      <h1 class="text-3xl font-bold">Astro on AWS</h1>
-      <p class="mt-4 text-slate-600">
-        This page is server-rendered in an AWS Lambda at {now}.
-      </p>
-      <p class="mt-2 text-slate-600">
-        You are visitor <span id="visits" class="font-semibold">{count}</span> —
-        counted in DynamoDB by the backend's <code>visit</code> method (called
-        in-process during SSR).
-      </p>
-      <button
-        id="again"
-        class="mt-4 rounded border border-slate-300 px-3 py-1 hover:bg-slate-100"
-      >
-        Visit again
-      </button>
-      <p class="mt-4">
-        <a href="/about/" class="text-blue-600 underline">A prerendered page</a>
-      </p>
+  <body class="bg-slate-50 text-slate-900">
+    <main class="mx-auto max-w-2xl p-8">
+      <div class="rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
+        <h1 class="text-3xl font-bold">Astro on AWS</h1>
+        <p class="mt-4">
+          Server-rendered visits: <span id="visits" class="font-semibold">{visits}</span>
+        </p>
+        <button
+          id="bump"
+          class="mt-2 rounded border border-slate-300 px-3 py-1 hover:bg-slate-100"
+        >
+          Bump visits
+        </button>
+        <p id="client-bump" class="mt-2" hidden>
+          Client bump → <span id="bump-count" class="font-semibold"></span>
+        </p>
+        <p class="mt-4">
+          <a href="/about/" class="underline">about (prerendered)</a>
+        </p>
+      </div>
     </main>
     <script>
       // Browser side: TYPE-ONLY import + type-only form — zero backend
       // bytes in the client bundle. Each call POSTs the wire protocol
-      // (`/api/__rpc/visit`) to the same Lambda.
+      // (`/api/__rpc/bump`) to the same Lambda.
       import { createClient } from "alchemy/client";
       import type Backend from "../backend.ts";
 
       const backend = createClient<typeof Backend>();
-      document.querySelector("#again")!.addEventListener("click", async () => {
-        const count = await backend.visit();
-        document.querySelector("#visits")!.textContent = String(count);
+      document.querySelector("#bump")!.addEventListener("click", async () => {
+        const count = await backend.bump();
+        document.querySelector("#bump-count")!.textContent = String(count);
+        document.querySelector<HTMLParagraphElement>("#client-bump")!.hidden =
+          false;
       });
     </script>
   </body>

@@ -91,6 +91,9 @@ test(
     expect(res.status).toBe(200);
     const html = yield* res.text;
     expect(html).toContain("Nuxt on AWS");
+    // The SSR seam (useAsyncData server branch, the value form) rendered
+    // the counter.
+    expect(html).toContain("Server-rendered visits:");
   }),
   { timeout: 180_000 },
 );
@@ -149,21 +152,20 @@ test(
   "serves the backend methods over the rpc wire path",
   Effect.gen(function* () {
     const url = yield* base;
-    // `POST /api/__rpc/<method>` is the exact wire request the browser's
+    // `POST /api/__rpc/bump` is the exact wire request the browser's
     // type-only `createClient<typeof Backend>()` sends. It is dispatched
     // by the middleware mount (toEventHandler at
     // server/middleware/alchemy.ts, compiled by nitro into the same
-    // server Lambda) before route matching. The S3 capability bindings
-    // (env + IAM) were collected at plan time.
-    const saved = yield* rpcWhenReady(url, "save", ["hello-from-integ-test"]);
-    expect(saved.status).toBe(200);
-    expect((yield* saved.json) as { value: string }).toEqual({
-      value: "hello-from-integ-test",
-    });
-    const res = yield* rpcWhenReady(url, "get");
+    // server Lambda) before route matching. The DynamoDB capability
+    // bindings (env + IAM) were collected at plan time.
+    const res = yield* rpcWhenReady(url, "bump");
     expect(res.status).toBe(200);
-    const body = (yield* res.json) as { value: string | null };
-    expect(body.value).toBe("hello-from-integ-test");
+    const body = (yield* res.json) as { value: number };
+    expect(body.value).toBeGreaterThanOrEqual(1);
+    // A second call increments — the method really runs per request.
+    const again = yield* rpcWhenReady(url, "bump");
+    const next = (yield* again.json) as { value: number };
+    expect(next.value).toBeGreaterThan(body.value);
   }),
   { timeout: 180_000 },
 );
@@ -172,12 +174,14 @@ test(
   "SSR renders the backend value loaded in-process by useAsyncData",
   Effect.gen(function* () {
     const url = yield* base;
-    // The previous test saved through the wire; the page's useAsyncData
-    // handler reads the same S3 object with the VALUE form of
+    // The previous test bumped through the wire; the page's useAsyncData
+    // handler reads the same DynamoDB counter with the VALUE form of
     // createClient (direct in-process dispatch) during SSR and renders
     // it into the HTML.
-    const html = yield* getBodyWhenReady(url, "hello-from-integ-test");
-    expect(html).toContain("hello-from-integ-test");
+    const html = yield* getBodyWhenReady(url, "Server-rendered visits:");
+    const visits = html.match(/Server-rendered visits:[\s\S]{0,200}?(\d+)/);
+    expect(visits).not.toBeNull();
+    expect(Number(visits![1])).toBeGreaterThanOrEqual(2);
   }),
   { timeout: 180_000 },
 );

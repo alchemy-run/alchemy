@@ -74,7 +74,7 @@ test(
   "server-renders the backend value into the home page (value form)",
   Effect.gen(function* () {
     const url = yield* base;
-    // app/pages/index.vue calls `backend.visit()` in its useAsyncData
+    // app/pages/index.vue calls `backend.visits()` in its useAsyncData
     // server branch through the VALUE form of createClient (direct
     // in-process dispatch) — the KV-backed count is already in the
     // server-rendered HTML.
@@ -82,10 +82,10 @@ test(
     expect(res.status).toBe(200);
     const html = yield* res.text;
     expect(html).toContain("Nuxt on Cloudflare Workers");
-    expect(html).toContain("rendered on the server via the backend client");
+    expect(html).toContain("Server-rendered visits:");
     const count = html.match(/data-testid="count"[^>]*>(\d+)/);
     expect(count).not.toBeNull();
-    expect(Number(count![1])).toBeGreaterThanOrEqual(1);
+    expect(Number(count![1])).toBeGreaterThanOrEqual(0);
   }),
   { timeout: 180_000 },
 );
@@ -110,7 +110,7 @@ test(
 );
 
 test(
-  "serves the createClient wire protocol (POST /api/__rpc/visit)",
+  "serves the createClient wire protocol (POST /api/__rpc/bump)",
   Effect.gen(function* () {
     const url = yield* base;
     // The wire-level proof of the browser's type-only form: the universal
@@ -118,7 +118,7 @@ test(
     // envelope-encodes the RPC method result — backed by the KV binding
     // collected at plan time.
     const res = yield* executeWhenReady(
-      HttpClientRequest.post(`${url}/api/__rpc/visit`).pipe(
+      HttpClientRequest.post(`${url}/api/__rpc/bump`).pipe(
         HttpClientRequest.bodyText("[]", "application/json"),
       ),
     );

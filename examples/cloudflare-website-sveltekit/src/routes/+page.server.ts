@@ -13,5 +13,5 @@ import Backend from "../backend.ts";
  */
 export const load = async ({ request }: { request: Request }) => {
   const backend = createClient(Backend, { headers: request.headers });
-  return { visits: await backend.visit() };
+  return { visits: await backend.visits() };
 };

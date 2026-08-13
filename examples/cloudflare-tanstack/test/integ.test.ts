@@ -60,8 +60,8 @@ afterAll(
 );
 
 // The createClient wire protocol served by the same Worker as the frontend —
-// src/backend.ts exposes RPC methods (`get`, `save`) backed by R2, dispatched
-// at the universal `POST /api/__rpc/<method>` path.
+// src/backend.ts exposes RPC methods (`visits`, `bump`) backed by KV,
+// dispatched at the universal `POST /api/__rpc/<method>` path.
 const rpc = (url: string, method: string, args: unknown[]) =>
   executeWhenReady(
     HttpClientRequest.post(`${url}/api/__rpc/${method}`).pipe(
@@ -103,20 +103,22 @@ test(
 );
 
 test(
-  "RPC methods round-trip through R2 (save then get over /api/__rpc)",
+  "RPC methods round-trip through KV (bump then visits over /api/__rpc)",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const base = url.replace(/\/+$/, "");
 
-    // The wire-level proof: `POST /api/__rpc/save` with a JSON array of
+    // The wire-level proof: `POST /api/__rpc/bump` with a JSON array of
     // positional args answers the success envelope.
-    const saved = yield* rpc(base, "save", ["hello-from-createClient"]);
-    expect(saved.status).toBe(200);
-    expect(yield* saved.json).toEqual({ value: "hello-from-createClient" });
+    const bumped = yield* rpc(base, "bump", []);
+    expect(bumped.status).toBe(200);
+    const bumpedBody = (yield* bumped.json) as { value: number };
+    expect(bumpedBody.value).toBeGreaterThanOrEqual(1);
 
-    const got = yield* rpc(base, "get", []);
+    const got = yield* rpc(base, "visits", []);
     expect(got.status).toBe(200);
-    expect(yield* got.json).toEqual({ value: "hello-from-createClient" });
+    const gotBody = (yield* got.json) as { value: number };
+    expect(gotBody.value).toBeGreaterThanOrEqual(bumpedBody.value);
   }),
   { timeout: 180_000 },
 );
@@ -127,14 +129,14 @@ test(
     const { url } = yield* stack;
     const base = url.replace(/\/+$/, "");
 
-    // Seed R2 through the RPC surface, then assert the server-rendered
-    // page contains the value — the loader called `backend.get()` via the
-    // value form (direct in-process dispatch) during SSR.
-    const saved = yield* rpc(base, "save", ["ssr-rendered-message"]);
-    expect(saved.status).toBe(200);
-
-    const html = yield* getBodyWhenReady(base, "ssr-rendered-message");
-    expect(html).toContain("ssr-rendered-message");
+    // The loader called `backend.visits()` via the value form (direct
+    // in-process dispatch) during SSR — the KV-backed count is already in
+    // the server-rendered HTML.
+    const html = yield* getBodyWhenReady(base, "Server-rendered visits:");
+    expect(html).toContain("Server-rendered visits:");
+    const count = html.match(/data-testid="count"[^>]*>(?:<!--[^>]*-->)?\s*(\d+)/);
+    expect(count).not.toBeNull();
+    expect(Number(count![1])).toBeGreaterThanOrEqual(0);
   }),
   { timeout: 180_000 },
 );
@@ -147,7 +149,7 @@ test(
 
     // Warm the route first (a real RPC 404 is indistinguishable from the
     // cold-start 404 that `executeWhenReady` retries through).
-    const warm = yield* rpc(base, "get", []);
+    const warm = yield* rpc(base, "visits", []);
     expect(warm.status).toBe(200);
 
     const client = yield* HttpClient.HttpClient;

@@ -12,14 +12,11 @@ export default async function Home() {
   // Server components never ship to the browser, so the value import is
   // safe here; client components use the type-only form (see visits.tsx).
   const backend = createClient(Backend);
-  const visits = await backend.visit();
+  const visits = await backend.visits();
 
   return (
     <main className="mx-auto max-w-2xl p-8">
       <h1 className="text-3xl font-bold">Next.js on Cloudflare Workers</h1>
-      <p className="mt-2 text-sm text-gray-500">
-        Rendered at {new Date().toISOString()}
-      </p>
       <Visits initial={visits} />
     </main>
   );

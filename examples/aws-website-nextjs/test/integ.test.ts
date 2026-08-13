@@ -99,6 +99,9 @@ test.skipIf(lambdaRoutesBroken)(
     expect(res.status).toBe(200);
     const html = yield* res.text;
     expect(html).toContain("Next.js on AWS");
+    // The SSR seam (async server component, the value form) rendered the
+    // counter.
+    expect(html).toContain("Server-rendered visits:");
   }),
   { timeout: 180_000 },
 );
@@ -142,21 +145,20 @@ test.skipIf(lambdaRoutesBroken)(
   "serves the backend methods over the rpc wire path",
   Effect.gen(function* () {
     const url = yield* base;
-    // `POST /api/__rpc/<method>` is the exact wire request the browser's
+    // `POST /api/__rpc/bump` is the exact wire request the browser's
     // type-only `createClient<typeof Backend>()` sends. It rides through
     // the catch-all route handler at app/api/[[...slug]]/route.ts
     // (toRouteHandler dispatches the rpc path before route matching),
-    // compiled by Next into the same server Lambda. The S3 capability
-    // bindings (env + IAM) were collected at plan time.
-    const saved = yield* rpcWhenReady(url, "save", ["hello-from-integ-test"]);
-    expect(saved.status).toBe(200);
-    expect((yield* saved.json) as { value: string }).toEqual({
-      value: "hello-from-integ-test",
-    });
-    const res = yield* rpcWhenReady(url, "get");
+    // compiled by Next into the same server Lambda. The DynamoDB
+    // capability bindings (env + IAM) were collected at plan time.
+    const res = yield* rpcWhenReady(url, "bump");
     expect(res.status).toBe(200);
-    const body = (yield* res.json) as { value: string | null };
-    expect(body.value).toBe("hello-from-integ-test");
+    const body = (yield* res.json) as { value: number };
+    expect(body.value).toBeGreaterThanOrEqual(1);
+    // A second call increments — the method really runs per request.
+    const again = yield* rpcWhenReady(url, "bump");
+    const next = (yield* again.json) as { value: number };
+    expect(next.value).toBeGreaterThan(body.value);
   }),
   { timeout: 180_000 },
 );
@@ -165,11 +167,13 @@ test.skipIf(lambdaRoutesBroken)(
   "SSR renders the backend value loaded in-process by the server component",
   Effect.gen(function* () {
     const url = yield* base;
-    // The previous test saved through the wire; the async server
-    // component reads the same S3 object with the VALUE form of
+    // The previous test bumped through the wire; the async server
+    // component reads the same DynamoDB counter with the VALUE form of
     // createClient (direct in-process dispatch) and renders it.
-    const html = yield* getBodyWhenReady(url, "hello-from-integ-test");
-    expect(html).toContain("hello-from-integ-test");
+    const html = yield* getBodyWhenReady(url, "Server-rendered visits:");
+    const visits = html.match(/Server-rendered visits:[\s\S]{0,200}?(\d+)/);
+    expect(visits).not.toBeNull();
+    expect(Number(visits![1])).toBeGreaterThanOrEqual(2);
   }),
   { timeout: 180_000 },
 );

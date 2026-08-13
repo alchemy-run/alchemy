@@ -90,12 +90,12 @@ test(
     const res = yield* getWhenReady(url);
     expect(res.status).toBe(200);
     const html = yield* res.text;
-    expect(html).toContain("server-rendered in an AWS Lambda");
-    // The frontmatter called `backend.visit()` in-process (the value form
+    expect(html).toContain("Server-rendered visits:");
+    // The frontmatter called `backend.visits()` in-process (the value form
     // of createClient) — the rendered HTML carries the DynamoDB count.
     const visits = html.match(/id="visits"[^>]*>(\d+)</);
     expect(visits).not.toBeNull();
-    expect(Number(visits![1])).toBeGreaterThanOrEqual(1);
+    expect(Number(visits![1])).toBeGreaterThanOrEqual(0);
   }),
   { timeout: 180_000 },
 );
@@ -145,17 +145,17 @@ test(
   "serves the backend method over the rpc wire path",
   Effect.gen(function* () {
     const url = yield* base;
-    // `POST /api/__rpc/visit` is the exact wire request the browser's
+    // `POST /api/__rpc/bump` is the exact wire request the browser's
     // type-only `createClient<typeof Backend>()` sends. The CloudFront
     // edge router forwards the universal rpc claim to the server Lambda,
     // and the DynamoDB capability bindings (env + IAM) were collected at
     // plan time.
-    const res = yield* rpcWhenReady(url, "visit");
+    const res = yield* rpcWhenReady(url, "bump");
     expect(res.status).toBe(200);
     const body = (yield* res.json) as { value: number };
     expect(body.value).toBeGreaterThanOrEqual(1);
     // A second call increments — the method really runs per request.
-    const again = yield* rpcWhenReady(url, "visit");
+    const again = yield* rpcWhenReady(url, "bump");
     const next = (yield* again.json) as { value: number };
     expect(next.value).toBeGreaterThan(body.value);
   }),

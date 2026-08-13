@@ -4,16 +4,16 @@
 // module in that graph. The provider barrel would drag the entire IaC
 // engine into it — the service-level subpaths keep it to the construct +
 // capability slice.
-import * as R2 from "alchemy/Cloudflare/R2";
+import * as KV from "alchemy/Cloudflare/KV";
 import * as Website from "alchemy/Cloudflare/Website";
 import * as Effect from "effect/Effect";
 
 /**
- * R2 bucket bound by the site's Effect program. Registered on the stack
+ * KV namespace bound by the site's Effect program. Registered on the stack
  * when the program's init Effect runs at plan time — no separate wiring in
  * alchemy.run.ts needed.
  */
-export const Bucket = R2.Bucket("Bucket");
+export const Visits = KV.Namespace("Visits");
 
 /**
  * ONE Worker serves the TanStack Start app AND a typed backend API: the
@@ -23,7 +23,7 @@ export const Bucket = R2.Bucket("Bucket");
  * form) and by direct in-process dispatch from SSR loaders (value form).
  * No routes, no URL parsing, no envelope handling: just typed methods.
  *
- * The R2 capability the program uses is collected automatically at plan
+ * The KV capability the program uses is collected automatically at plan
  * time — no separate backend worker, service binding, proxy route, or env
  * shim.
  *
@@ -40,23 +40,23 @@ export default class Site extends Website.Vite<Site>()(
     },
   },
   Effect.gen(function* () {
-    // Init: runs at plan time in the engine (collects the R2 binding) and
+    // Init: runs at plan time in the engine (collects the KV binding) and
     // again inside the Worker on first request (builds the runtime client).
-    const bucket = yield* R2.ReadWriteBucket(Bucket);
+    const visits = yield* KV.ReadWriteNamespace(yield* Visits);
     return {
-      // RPC methods — reads/writes R2 through the typed binding. Served to
-      // `createClient` at the universal `POST /api/__rpc/<method>` dispatch,
-      // and invoked directly (no HTTP) by the value form during SSR.
-      get: () =>
+      // RPC methods — the KV-backed visit counter. Served to `createClient`
+      // at the universal `POST /api/__rpc/<method>` dispatch, and invoked
+      // directly (no HTTP) by the value form during SSR.
+      visits: () =>
         Effect.gen(function* () {
-          const object = yield* bucket.get("message");
-          return object === null ? null : yield* object.text();
+          return Number((yield* visits.get("count")) ?? "0");
         }).pipe(Effect.orDie),
-      save: (message: string) =>
+      bump: () =>
         Effect.gen(function* () {
-          yield* bucket.put("message", message);
-          return message;
+          const count = Number((yield* visits.get("count")) ?? "0") + 1;
+          yield* visits.put("count", String(count));
+          return count;
         }).pipe(Effect.orDie),
     };
-  }).pipe(Effect.provide(R2.ReadWriteBucketBinding)),
+  }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),
 ) {}

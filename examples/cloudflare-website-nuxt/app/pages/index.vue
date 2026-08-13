@@ -13,13 +13,15 @@ const backend = createClient<typeof Backend>();
 const { data: visits } = await useAsyncData("visits", async () => {
   if (import.meta.server) {
     const { default: Backend } = await import("../backend");
-    return createClient(Backend).visit();
+    return createClient(Backend).visits();
   }
-  return backend.visit();
+  return backend.visits();
 });
 
-async function visitAgain() {
-  visits.value = await backend.visit();
+const bumped = ref<number | null>(null);
+
+async function bump() {
+  bumped.value = await backend.bump();
 }
 </script>
 
@@ -30,15 +32,17 @@ async function visitAgain() {
       class="mt-6 max-w-md rounded-xl border border-slate-300 bg-white p-6 shadow-sm"
     >
       <p class="m-0 text-sm text-gray-500">
-        Visits (rendered on the server via the backend client):
+        Server-rendered visits: <span data-testid="count">{{ visits }}</span>
       </p>
-      <p class="mt-2 text-4xl font-bold" data-testid="count">{{ visits }}</p>
       <button
         class="mt-4 cursor-pointer rounded-lg bg-slate-900 px-4 py-2 text-white"
-        @click="visitAgain"
+        @click="bump"
       >
-        Visit again
+        Bump visits
       </button>
+      <p v-if="bumped !== null" class="mt-4 text-sm" data-testid="bumped">
+        Client bump → {{ bumped }}
+      </p>
     </div>
     <NuxtLink class="mt-6 inline-block underline" to="/about"
       >about (prerendered)</NuxtLink

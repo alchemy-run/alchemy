@@ -1,9 +1,9 @@
 <script setup lang="ts">
 // Browser side: TYPE-ONLY import + type-only form — zero backend bytes
 // in the client bundle. Each call POSTs the wire protocol
-// (`/api/__rpc/<method>`), dispatched by the alchemy server middleware.
+// (`/api/__rpc/bump`), dispatched by the alchemy server middleware.
 import { createClient } from "alchemy/client";
-import type Backend from "../backend";
+import type Backend from "../../server/backend";
 
 const backend = createClient<typeof Backend>();
 
@@ -12,41 +12,41 @@ const backend = createClient<typeof Backend>();
 // hop). The `import.meta.server` guard keeps the dynamic backend import
 // out of the client bundle; on client-side navigation the handler takes
 // the wire path through the same typed client.
-const { data: message } = await useAsyncData("message", async () => {
+const { data: visits } = await useAsyncData("visits", async () => {
   if (import.meta.server) {
-    const { default: Backend } = await import("../backend");
-    return createClient(Backend).get();
+    const { default: Backend } = await import("../../server/backend");
+    return createClient(Backend).visits();
   }
-  return backend.get();
+  return backend.visits();
 });
 
-const draft = ref("");
+const bumped = ref<number | null>(null);
 
-const save = async () => {
-  message.value = await backend.save(draft.value);
-  draft.value = "";
+const bump = async () => {
+  bumped.value = await backend.bump();
 };
 </script>
 
 <template>
   <main class="mx-auto max-w-2xl p-8">
-    <div class="rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
+    <div class="rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
       <h1 class="text-3xl font-bold">Nuxt on AWS</h1>
       <p class="mt-4">
-        Server-rendered message (S3-backed, loaded in-process during SSR):
-        <span class="font-semibold">{{ message ?? "(nothing saved yet)" }}</span>
+        Server-rendered visits:
+        <span id="visits" class="font-semibold">{{ visits }}</span>
       </p>
-      <form class="mt-2 flex gap-2" @submit.prevent="save">
-        <input
-          v-model="draft"
-          class="rounded border px-2 py-1"
-          placeholder="say something"
-        />
-        <button class="rounded border px-3 py-1" type="submit">Save</button>
-      </form>
-      <NuxtLink class="mt-4 inline-block underline" to="/about"
-        >about (prerendered)</NuxtLink
+      <button
+        class="mt-2 rounded border border-slate-300 px-3 py-1 hover:bg-slate-100"
+        @click="bump"
       >
+        Bump visits
+      </button>
+      <p v-if="bumped !== null" class="mt-2">
+        Client bump → <span class="font-semibold">{{ bumped }}</span>
+      </p>
+      <p class="mt-4">
+        <NuxtLink class="underline" to="/about">about (prerendered)</NuxtLink>
+      </p>
     </div>
   </main>
 </template>

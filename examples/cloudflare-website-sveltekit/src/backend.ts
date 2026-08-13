@@ -44,7 +44,7 @@ export default class Site extends SvelteKit<Site>()(
         Effect.gen(function* () {
           return Number((yield* visits.get("count")) ?? "0");
         }).pipe(Effect.orDie),
-      visit: () =>
+      bump: () =>
         Effect.gen(function* () {
           const count = Number((yield* visits.get("count")) ?? "0") + 1;
           yield* visits.put("count", String(count));

@@ -7,5 +7,5 @@ import Backend from "../backend.ts";
 const backend = createClient(Backend);
 
 export const load = async () => ({
-  message: await backend.get(),
+  visits: await backend.visits(),
 });

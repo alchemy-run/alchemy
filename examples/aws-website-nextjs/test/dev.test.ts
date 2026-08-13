@@ -10,10 +10,10 @@
  *   - SSR             → `/` renders through the framework dev server
  *   - API route       → `/api/hello` serves the route handler
  *   - static assets   → `/robots.txt` from public/
- *   - RPC wire path   → `POST /api/__rpc/save` (createClient's wire
+ *   - RPC wire path   → `POST /api/__rpc/bump` (createClient's wire
  *                       protocol) serves through the catch-all route
- *                       handler against the real S3 bucket, and the
- *                       async server component renders the saved value
+ *                       handler against the real DynamoDB table, and the
+ *                       async server component renders the counter
  *   - HOT RELOAD      → editing app/page.tsx is served by Next's HMR
  *                       without a redeploy
  */
@@ -166,19 +166,20 @@ test(
     // The rpc wire path rides `next dev` too (through the catch-all route
     // handler): this is the exact request the browser's type-only
     // createClient sends, served by the backend method against the REAL
-    // S3 bucket (remote()).
-    const rpc = await fetch(new URL("/api/__rpc/save", url), {
+    // DynamoDB table (remote()).
+    const rpc = await fetch(new URL("/api/__rpc/bump", url), {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(["hello-from-dev-test"]),
+      body: "[]",
     });
     expect(rpc.status).toBe(200);
-    expect(await rpc.json()).toEqual({ value: "hello-from-dev-test" });
+    const envelope = (await rpc.json()) as { value: number };
+    expect(envelope.value).toBeGreaterThanOrEqual(1);
 
     // ...and the async server component (the value form) renders the
-    // saved value into the page.
+    // counter into the page.
     const ssr = await (await fetchOk(url)).text();
-    expect(ssr).toContain("hello-from-dev-test");
+    expect(ssr).toContain("Server-rendered visits:");
 
     // ── HOT RELOAD: rewrite the index page with the CLI still running —
     // the framework dev server serves the new markup without a deploy ──

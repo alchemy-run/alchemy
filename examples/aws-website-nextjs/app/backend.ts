@@ -1,25 +1,25 @@
 // The effectful site module: default-exports the Website class, anchored
 // by `main: import.meta.url`. The engine imports it at plan time (binding
-// collection — bucket-name env var + IAM onto the server Lambda) and the
+// collection — table-name env var + IAM onto the server Lambda) and the
 // route-handler mount (app/api/[[...slug]]/route.ts) imports it inside the
 // OpenNext server bundle to serve the backend's RPC methods.
 //
-// Narrow subpath imports only (`alchemy/AWS/S3`, not `alchemy/AWS`): this
-// module is compiled by Next into the server bundle — the provider barrel
-// would drag the whole IaC engine along with it.
-import * as S3 from "alchemy/AWS/S3";
+// Narrow subpath imports only (`alchemy/AWS/DynamoDB`, not `alchemy/AWS`):
+// this module is compiled by Next into the server bundle — the provider
+// barrel would drag the whole IaC engine along with it.
+import * as DynamoDB from "alchemy/AWS/DynamoDB";
 import { Nextjs } from "alchemy/AWS/Website";
 import { remote } from "alchemy/ProviderMode";
 import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
 
 /**
- * S3 bucket bound by the site's program. `remote()` keeps the bucket REAL
- * even under `alchemy dev` — the dev server's capability clients hit AWS
- * directly with your ambient credentials.
+ * DynamoDB table bound by the site's program. `remote()` keeps the table
+ * REAL even under `alchemy dev` — the dev server's capability clients hit
+ * AWS directly with your ambient credentials.
  */
-export const SiteData = S3.Bucket("SiteData", {
-  forceDestroy: true,
+export const Visits = DynamoDB.Table("Visits", {
+  partitionKey: "pk",
+  attributes: { pk: "S" },
 }).pipe(remote());
 
 /**
@@ -56,29 +56,32 @@ export default class Site extends Nextjs<Site>()(
     forceDestroy: true,
   },
   Effect.gen(function* () {
-    const bucket = yield* SiteData;
-    const putObject = yield* S3.PutObject(bucket);
-    const getObject = yield* S3.GetObject(bucket);
+    const table = yield* Visits;
+    const getItem = yield* DynamoDB.GetItem(table);
+    const putItem = yield* DynamoDB.PutItem(table);
     return {
-      /** Read the saved message from the S3 bucket (null when unset). */
-      get: () =>
+      /** Read the visit counter (0 when unset). */
+      visits: () =>
         Effect.gen(function* () {
-          const object = yield* getObject({ Key: "message" }).pipe(
-            Effect.catchTag("NoSuchKey", () => Effect.succeed(undefined)),
-            Effect.orDie,
-          );
-          return object?.Body === undefined
-            ? null
-            : yield* Stream.mkString(Stream.decodeText(object.Body)).pipe(
-                Effect.orDie,
-              );
+          const current = yield* getItem({
+            Key: { pk: { S: "count" } },
+            ConsistentRead: true,
+          }).pipe(Effect.orDie);
+          return Number(current.Item?.count?.N ?? "0");
         }),
-      /** Save a message to the S3 bucket and return it. */
-      save: (value: string) =>
+      /** Increment the counter, persist it, and return the new count. */
+      bump: () =>
         Effect.gen(function* () {
-          yield* putObject({ Key: "message", Body: value }).pipe(Effect.orDie);
-          return value;
+          const current = yield* getItem({
+            Key: { pk: { S: "count" } },
+            ConsistentRead: true,
+          }).pipe(Effect.orDie);
+          const count = Number(current.Item?.count?.N ?? "0") + 1;
+          yield* putItem({
+            Item: { pk: { S: "count" }, count: { N: String(count) } },
+          }).pipe(Effect.orDie);
+          return count;
         }),
     };
-  }).pipe(Effect.provide([S3.PutObjectHttp, S3.GetObjectHttp])),
+  }).pipe(Effect.provide([DynamoDB.GetItemHttp, DynamoDB.PutItemHttp])),
 ) {}

@@ -53,19 +53,25 @@ export default class Site extends Astro<Site>()(
     const getItem = yield* DynamoDB.GetItem(table);
     const putItem = yield* DynamoDB.PutItem(table);
     return {
-      /**
-       * Record one visit and return the new total — the DynamoDB-backed
-       * counter behind both the SSR render and the browser button.
-       */
-      visit: () =>
+      /** Read the visit counter (0 when unset). */
+      visits: () =>
         Effect.gen(function* () {
           const current = yield* getItem({
-            Key: { pk: { S: "visits" } },
+            Key: { pk: { S: "count" } },
+            ConsistentRead: true,
+          }).pipe(Effect.orDie);
+          return Number(current.Item?.count?.N ?? "0");
+        }),
+      /** Increment the counter, persist it, and return the new count. */
+      bump: () =>
+        Effect.gen(function* () {
+          const current = yield* getItem({
+            Key: { pk: { S: "count" } },
             ConsistentRead: true,
           }).pipe(Effect.orDie);
           const count = Number(current.Item?.count?.N ?? "0") + 1;
           yield* putItem({
-            Item: { pk: { S: "visits" }, count: { N: String(count) } },
+            Item: { pk: { S: "count" }, count: { N: String(count) } },
           }).pipe(Effect.orDie);
           return count;
         }),

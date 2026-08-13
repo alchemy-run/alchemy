@@ -10,7 +10,7 @@
  *   - SSR             → `/` renders through the framework dev server
  *   - routing         → `/about/` (prerendered route) serves
  *   - static assets   → `/robots.txt` from public/
- *   - RPC wire path   → `POST /api/__rpc/visit` (createClient's wire
+ *   - RPC wire path   → `POST /api/__rpc/bump` (createClient's wire
  *                       protocol) serves through the dev server against
  *                       the real DynamoDB table
  *   - HOT RELOAD      → editing src/pages/index.astro is served by the
@@ -40,8 +40,8 @@ const STAGE = "dev-cli-test";
 // with the CLI running, then restores it.
 const pagePath = path.join(root, "src", "pages", "index.astro");
 const pageSource = fs.readFileSync(pagePath, "utf8");
-const MARKER = "server-rendered in an AWS Lambda";
-const MARKER_V2 = "server-rendered in an AWS Lambda [dev-v2]";
+const MARKER = "Astro on AWS";
+const MARKER_V2 = "Astro on AWS [dev-v2]";
 
 let proc: ReturnType<typeof spawn> | undefined;
 let output = "";
@@ -151,6 +151,8 @@ test(
 
     const home = await (await fetchOk(url)).text();
     expect(home).toContain(MARKER);
+    // The SSR seam (frontmatter, the value form) rendered the counter.
+    expect(home).toContain("Server-rendered visits:");
 
     // Prerendered route serves through the dev server.
     const about = await fetchOk(new URL("/about/", url));
@@ -163,7 +165,7 @@ test(
     // The rpc wire path rides the dev server too: this is the exact
     // request the browser's type-only createClient sends, served by the
     // backend method against the REAL DynamoDB table (remote()).
-    const rpc = await fetch(new URL("/api/__rpc/visit", url), {
+    const rpc = await fetch(new URL("/api/__rpc/bump", url), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: "[]",
