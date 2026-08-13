@@ -221,6 +221,10 @@ export default class NextEffectLiveSite extends Nextjs<NextEffectLiveSite>()(
   "NextEffectSite",
   {
     main: import.meta.url,
+    // The running Lambda writes ISR/fetch-cache entries into the composite's
+    // CacheBucket during the test — without forceDestroy the teardown races
+    // a fresh cache write and dies with BucketNotEmpty.
+    forceDestroy: true,
     // Plan-only (guarded: undefined when the module re-evaluates inside a
     // deployed bundle where import.meta has no path).
     rootDir: import.meta.dirname
