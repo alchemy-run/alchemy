@@ -11,6 +11,12 @@ import {
   type WriteBucketClient,
 } from "./WriteBucket.ts";
 
+export interface ReadWriteBucket extends Binding.Service<
+  ReadWriteBucket,
+  "Prisma.ReadWriteBucket",
+  (bucket: Bucket) => Effect.Effect<ReadWriteBucketClient>
+> {}
+
 /**
  * Full-access client for a Prisma Object Store bucket: every operation of
  * {@link ReadBucketClient} and {@link WriteBucketClient}.
@@ -23,7 +29,7 @@ export interface ReadWriteBucketClient
  * Lambda Function, or Cloudflare Worker with read and write access, and obtain
  * the typed runtime client.
  *
- * Binding creates a read-write `Prisma.BucketKey` for the bucket and carries
+ * Binding creates a read-write `Prisma.BucketAccessKey` for the bucket and carries
  * its S3 credentials into the host environment, so the caller never handles a
  * credential themselves.
  *
@@ -57,12 +63,6 @@ export interface ReadWriteBucketClient
  *
  * @binding
  */
-export interface ReadWriteBucket extends Binding.Service<
-  ReadWriteBucket,
-  "Prisma.ReadWriteBucket",
-  (bucket: Bucket) => Effect.Effect<ReadWriteBucketClient>
-> {}
-
 export const ReadWriteBucket = Binding.Service<ReadWriteBucket>(
   "Prisma.ReadWriteBucket",
 );

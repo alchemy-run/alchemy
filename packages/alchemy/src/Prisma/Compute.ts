@@ -765,7 +765,11 @@ export const Compute: Platform<
       env,
       set: (bindingId: string, output: Output.Output) =>
         Effect.sync(() => {
-          const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
+          // Prisma env keys are validated to the uppercase POSIX shape
+          // ([A-Z_][A-Z0-9_]*), so the storage key is uppercased here. The
+          // runtime `get` receives the key this returns, so both halves
+          // agree without a second mapping.
+          const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_").toUpperCase();
           env[key] = output.pipe(
             Output.map((value) =>
               Redacted.isRedacted(value)

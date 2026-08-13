@@ -1,9 +1,9 @@
 import { Bucket, BucketProvider, type BucketProps } from "@/Prisma/Bucket";
 import {
-  BucketKey,
-  BucketKeyProvider,
-  type BucketKeyProps,
-} from "@/Prisma/BucketKey";
+  BucketAccessKey,
+  BucketAccessKeyProvider,
+  type BucketAccessKeyProps,
+} from "@/Prisma/BucketAccessKey";
 import {
   PrismaApiError,
   PrismaClient,
@@ -22,8 +22,8 @@ import { AlchemyContext } from "@/AlchemyContext";
 
 const createdAt = "2026-01-01T00:00:00.000Z";
 const instanceId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-// physicalBucketKeyName(logical id "BucketKey", instanceId above)
-const expectedKeyName = "BucketKey-aaaaaaaaaaaa";
+// physicalBucketAccessKeyName(logical id "BucketAccessKey", instanceId above)
+const expectedKeyName = "BucketAccessKey-aaaaaaaaaaaa";
 
 const apiBucket = (id: string, name: string): ApiBucket => ({
   id,
@@ -65,8 +65,8 @@ const apiBucketKeyWithSecret = (id: string): BucketKeyWithSecret => ({
   bucketName: "user-bucket-1",
 });
 
-const persistedKeyAttrs = (id: string): BucketKey["Attributes"] => ({
-  bucketKeyId: id,
+const persistedKeyAttrs = (id: string): BucketAccessKey["Attributes"] => ({
+  bucketAccessKeyId: id,
   bucketId: "bucket-1",
   accessKeyId: "AKIAEXAMPLE",
   secretAccessKey: Redacted.make("one-time-secret"),
@@ -95,7 +95,7 @@ const bucketLayer = (client: PrismaManagementClient) =>
   );
 
 const bucketKeyLayer = (client: PrismaManagementClient) =>
-  BucketKeyProvider().pipe(
+  BucketAccessKeyProvider().pipe(
     Layer.provide(Layer.succeed(PrismaClient, client)),
     Layer.provide(liveProviderContext),
   );
@@ -367,7 +367,7 @@ describe("Prisma Bucket provider", () => {
   });
 });
 
-describe("Prisma BucketKey provider", () => {
+describe("Prisma BucketAccessKey provider", () => {
   it.effect(
     "creates a key under its deterministic name and redacts the secret",
     () => {
@@ -388,16 +388,16 @@ describe("Prisma BucketKey provider", () => {
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const provider = yield* BucketKey.Provider;
+        const provider = yield* BucketAccessKey.Provider;
         const attrs = yield* provider.reconcile(
-          reconcileInput("BucketKey", {
+          reconcileInput("BucketAccessKey", {
             bucket: "bucket-1",
             role: "read_write" as const,
           }),
         );
 
         expect(creates).toBe(1);
-        expect(attrs.bucketKeyId).toBe("key-1");
+        expect(attrs.bucketAccessKeyId).toBe("key-1");
         expect(attrs.bucketId).toBe("bucket-1");
         expect(attrs.accessKeyId).toBe("AKIAEXAMPLE");
         expect(Redacted.value(attrs.secretAccessKey)).toBe("one-time-secret");
@@ -432,9 +432,9 @@ describe("Prisma BucketKey provider", () => {
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const provider = yield* BucketKey.Provider;
+        const provider = yield* BucketAccessKey.Provider;
         const attrs = yield* provider.reconcile(
-          reconcileInput("BucketKey", {
+          reconcileInput("BucketAccessKey", {
             bucket: "bucket-1",
             role: "read_write" as const,
           }),
@@ -442,7 +442,7 @@ describe("Prisma BucketKey provider", () => {
 
         expect(deletes).toBe(1);
         expect(creates).toBe(1);
-        expect(attrs.bucketKeyId).toBe("key-2");
+        expect(attrs.bucketAccessKeyId).toBe("key-2");
       }).pipe(Effect.provide(bucketKeyLayer(client)));
     },
   );
@@ -458,17 +458,17 @@ describe("Prisma BucketKey provider", () => {
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const provider = yield* BucketKey.Provider;
+        const provider = yield* BucketAccessKey.Provider;
         const error = yield* provider
           .reconcile(
-            reconcileInput("BucketKey", {
+            reconcileInput("BucketAccessKey", {
               bucket: "bucket-1",
               role: "read_write" as const,
             }),
           )
           .pipe(Effect.flip);
 
-        expect(error._tag).toBe("PrismaAmbiguousBucketKeyError");
+        expect(error._tag).toBe("AmbiguousBucketAccessKeyError");
         expect(error.message).toContain("refusing to select one arbitrarily");
       }).pipe(Effect.provide(bucketKeyLayer(client)));
     },
@@ -490,10 +490,10 @@ describe("Prisma BucketKey provider", () => {
       const persisted = persistedKeyAttrs("key-1");
 
       return Effect.gen(function* () {
-        const provider = yield* BucketKey.Provider;
+        const provider = yield* BucketAccessKey.Provider;
         const attrs = yield* provider.reconcile(
           reconcileInput(
-            "BucketKey",
+            "BucketAccessKey",
             { bucket: "bucket-1", role: "read_write" as const },
             persisted,
             { bucket: "bucket-1", role: "read_write" as const },
@@ -506,8 +506,8 @@ describe("Prisma BucketKey provider", () => {
         expect(attrs).toBe(persisted);
 
         const observed = yield* provider.read!({
-          id: "BucketKey",
-          fqn: "BucketKey",
+          id: "BucketAccessKey",
+          fqn: "BucketAccessKey",
           instanceId,
           olds: { bucket: "bucket-1", role: "read_write" as const },
           output: persisted,
@@ -531,11 +531,11 @@ describe("Prisma BucketKey provider", () => {
     const persisted = persistedKeyAttrs("key-1");
 
     return Effect.gen(function* () {
-      const provider = yield* BucketKey.Provider;
+      const provider = yield* BucketAccessKey.Provider;
 
       const observed = yield* provider.read!({
-        id: "BucketKey",
-        fqn: "BucketKey",
+        id: "BucketAccessKey",
+        fqn: "BucketAccessKey",
         instanceId,
         olds: { bucket: "bucket-1", role: "read_write" as const },
         output: persisted,
@@ -544,29 +544,32 @@ describe("Prisma BucketKey provider", () => {
 
       const attrs = yield* provider.reconcile(
         reconcileInput(
-          "BucketKey",
+          "BucketAccessKey",
           { bucket: "bucket-1", role: "read_write" as const },
           persisted,
           { bucket: "bucket-1", role: "read_write" as const },
         ),
       );
       expect(creates).toBe(1);
-      expect(attrs.bucketKeyId).toBe("key-2");
+      expect(attrs.bucketAccessKeyId).toBe("key-2");
     }).pipe(Effect.provide(bucketKeyLayer(client)));
   });
 
   it.effect("replaces on bucket, role, or name changes", () => {
     const client = {} as unknown as PrismaManagementClient;
-    const olds: BucketKeyProps = { bucket: "bucket-1", role: "read_write" };
+    const olds: BucketAccessKeyProps = {
+      bucket: "bucket-1",
+      role: "read_write",
+    };
     const output = persistedKeyAttrs("key-1");
 
     return Effect.gen(function* () {
-      const provider = yield* BucketKey.Provider;
+      const provider = yield* BucketAccessKey.Provider;
 
       expect(
         yield* provider.diff!(
           diffInput(
-            "BucketKey",
+            "BucketAccessKey",
             olds,
             { bucket: "bucket-2", role: "read_write" as const },
             output,
@@ -576,7 +579,7 @@ describe("Prisma BucketKey provider", () => {
       expect(
         yield* provider.diff!(
           diffInput(
-            "BucketKey",
+            "BucketAccessKey",
             olds,
             { bucket: "bucket-1", role: "read" as const },
             output,
@@ -586,7 +589,7 @@ describe("Prisma BucketKey provider", () => {
       expect(
         yield* provider.diff!(
           diffInput(
-            "BucketKey",
+            "BucketAccessKey",
             olds,
             { bucket: "bucket-1", role: "read_write" as const, name: "next" },
             output,
@@ -594,7 +597,7 @@ describe("Prisma BucketKey provider", () => {
         ),
       ).toEqual({ action: "replace" });
       expect(
-        yield* provider.diff!(diffInput("BucketKey", olds, olds, output)),
+        yield* provider.diff!(diffInput("BucketAccessKey", olds, olds, output)),
       ).toBeUndefined();
     }).pipe(Effect.provide(bucketKeyLayer(client)));
   });
@@ -615,10 +618,10 @@ describe("Prisma BucketKey provider", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const provider = yield* BucketKey.Provider;
+      const provider = yield* BucketAccessKey.Provider;
       yield* provider.delete({
-        id: "BucketKey",
-        fqn: "BucketKey",
+        id: "BucketAccessKey",
+        fqn: "BucketAccessKey",
         instanceId,
         olds: { bucket: "bucket-1", role: "read_write" },
         output: persistedKeyAttrs("key-1"),

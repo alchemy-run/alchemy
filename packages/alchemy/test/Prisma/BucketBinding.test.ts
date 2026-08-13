@@ -1,4 +1,4 @@
-import { bucketEnvKeys, bucketKeyLogicalId } from "@/Prisma/BucketBinding";
+import { bucketAccessKeyLogicalId } from "@/Prisma/BucketBinding";
 import type { Bucket as PrismaBucket } from "@/Prisma/Bucket";
 import type { ReadBucketClient } from "@/Prisma/ReadBucket";
 import type { ReadWriteBucketClient } from "@/Prisma/ReadWriteBucket";
@@ -40,53 +40,19 @@ const bucket = {
 } as PrismaBucket;
 
 describe("Prisma bucket binding identity", () => {
-  it("derives capability-scoped env keys", () => {
-    expect(
-      bucketEnvKeys({ FQN: "Uploads", LogicalId: "Uploads" }, "Read"),
-    ).toEqual({
-      endpoint: "PRISMA_UPLOADS_READ_ENDPOINT",
-      bucketName: "PRISMA_UPLOADS_READ_BUCKET_NAME",
-      accessKeyId: "PRISMA_UPLOADS_READ_ACCESS_KEY_ID",
-      secretAccessKey: "PRISMA_UPLOADS_READ_SECRET_ACCESS_KEY",
-    });
-    expect(
-      bucketEnvKeys({ FQN: "Api/Uploads", LogicalId: "Uploads" }, "ReadWrite")
-        .endpoint,
-    ).toBe("PRISMA_API_UPLOADS_READ_WRITE_ENDPOINT");
-    expect(
-      bucketEnvKeys({ FQN: "Uploads", LogicalId: "Uploads" }, "Write").endpoint,
-    ).toBe("PRISMA_UPLOADS_WRITE_ENDPOINT");
-  });
-
-  it("keeps each access level in its own env namespace", () => {
-    const read = bucketEnvKeys(bucket, "Read");
-    const write = bucketEnvKeys(bucket, "Write");
-    const readWrite = bucketEnvKeys(bucket, "ReadWrite");
-
-    expect(
-      new Set([read.endpoint, write.endpoint, readWrite.endpoint]).size,
-    ).toBe(3);
-  });
-
-  it("does not collide env keys after lossy normalization", () => {
-    expect(
-      bucketEnvKeys({ FQN: "up-loads", LogicalId: "up-loads" }, "Read")
-        .accessKeyId,
-    ).not.toBe(
-      bucketEnvKeys({ FQN: "up_loads", LogicalId: "up_loads" }, "Read")
-        .accessKeyId,
-    );
-  });
-
   it("derives a stable bucket key logical id per bucket and access level", () => {
-    expect(bucketKeyLogicalId(bucket, "Read")).toBe("UploadsReadBucketKey");
-    expect(bucketKeyLogicalId(bucket, "Write")).toBe("UploadsWriteBucketKey");
-    expect(bucketKeyLogicalId(bucket, "ReadWrite")).toBe(
-      "UploadsReadWriteBucketKey",
+    expect(bucketAccessKeyLogicalId(bucket, "Read")).toBe(
+      "UploadsReadBucketAccessKey",
+    );
+    expect(bucketAccessKeyLogicalId(bucket, "Write")).toBe(
+      "UploadsWriteBucketAccessKey",
+    );
+    expect(bucketAccessKeyLogicalId(bucket, "ReadWrite")).toBe(
+      "UploadsReadWriteBucketAccessKey",
     );
     // Stable across calls: the deployed bundle has to derive the same id.
-    expect(bucketKeyLogicalId(bucket, "Read")).toBe(
-      bucketKeyLogicalId({ LogicalId: "Uploads" }, "Read"),
+    expect(bucketAccessKeyLogicalId(bucket, "Read")).toBe(
+      bucketAccessKeyLogicalId({ LogicalId: "Uploads" }, "Read"),
     );
   });
 });

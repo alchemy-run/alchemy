@@ -42,7 +42,7 @@ export const readRoutes = (store: ReadBucketClient, url: URL) =>
         keys: result.objects.map((o) => o.key),
         delimitedPrefixes: result.delimitedPrefixes,
         truncated: result.truncated,
-        cursor: result.cursor ?? null,
+        cursor: result.truncated ? result.cursor : null,
       });
     }
     // The app mints the URL from its bound credentials and hands it back; the

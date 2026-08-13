@@ -11,7 +11,7 @@ import { PrismaAuth } from "./AuthProvider.ts";
 import { App, AppProvider } from "./App.ts";
 import { Branch, BranchProvider } from "./Branch.ts";
 import { Bucket, BucketProvider } from "./Bucket.ts";
-import { BucketKey, BucketKeyProvider } from "./BucketKey.ts";
+import { BucketAccessKey, BucketAccessKeyProvider } from "./BucketAccessKey.ts";
 import {
   PrismaClient,
   PrismaClientLive,
@@ -185,7 +185,7 @@ export const providers = () =>
       Connection,
       Branch,
       Bucket,
-      BucketKey,
+      BucketAccessKey,
       Compute,
       App,
       Deployment,
@@ -201,7 +201,7 @@ export const providers = () =>
         ConnectionProvider(),
         BranchProvider(),
         BucketProvider(),
-        BucketKeyProvider(),
+        BucketAccessKeyProvider(),
         ComputeProvider(),
         AppProvider(),
         DeploymentProvider(),

@@ -57,7 +57,7 @@ const forbiddenPatterns = [
 const documentedResources = [
   "Branch",
   "Bucket",
-  "BucketKey",
+  "BucketAccessKey",
   "Compute",
   "App",
   "Deployment",

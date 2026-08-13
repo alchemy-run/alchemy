@@ -79,7 +79,7 @@ describe("Prisma providers", () => {
         Prisma.Connection.Type,
         Prisma.Branch.Type,
         Prisma.Bucket.Type,
-        Prisma.BucketKey.Type,
+        Prisma.BucketAccessKey.Type,
         Prisma.Compute.Type,
         Prisma.App.Type,
         Prisma.Deployment.Type,
@@ -94,9 +94,9 @@ describe("Prisma providers", () => {
         [Prisma.Branch.Type, ["branchId"]],
         [Prisma.Bucket.Type, ["bucketId"]],
         [
-          Prisma.BucketKey.Type,
+          Prisma.BucketAccessKey.Type,
           [
-            "bucketKeyId",
+            "bucketAccessKeyId",
             "bucketId",
             "accessKeyId",
             "secretAccessKey",
@@ -153,7 +153,7 @@ describe("Prisma providers", () => {
         Prisma.Bucket.Type as any,
       );
       const bucketKeyProvider = yield* Provider.findProviderByType(
-        Prisma.BucketKey.Type as any,
+        Prisma.BucketAccessKey.Type as any,
       );
 
       const project = (yield* projectProvider.reconcile(
@@ -190,8 +190,8 @@ describe("Prisma providers", () => {
         reconcileInput("Bucket", { project, name: "uploads" }),
       )) as Prisma.Bucket["Attributes"];
       const bucketKey = (yield* bucketKeyProvider.reconcile(
-        reconcileInput("BucketKey", { bucket, role: "read_write" }),
-      )) as Prisma.BucketKey["Attributes"];
+        reconcileInput("BucketAccessKey", { bucket, role: "read_write" }),
+      )) as Prisma.BucketAccessKey["Attributes"];
 
       expect(project.projectId).toBe("dev:project:Project");
       expect(app.projectId).toBe(project.projectId);
@@ -203,7 +203,9 @@ describe("Prisma providers", () => {
       expect(bucket.bucketId).toBe("dev:bucket:Bucket");
       expect(bucket.name).toBe("uploads");
       expect(bucket.projectId).toBe(project.projectId);
-      expect(bucketKey.bucketKeyId).toBe("dev:bucket-key:BucketKey");
+      expect(bucketKey.bucketAccessKeyId).toBe(
+        "dev:bucket-access-key:BucketAccessKey",
+      );
       expect(bucketKey.bucketId).toBe(bucket.bucketId);
       expect(Redacted.isRedacted(bucketKey.secretAccessKey)).toBe(true);
     }).pipe(providePrismaDev),

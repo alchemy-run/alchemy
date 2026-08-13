@@ -1,10 +1,10 @@
 ---
 title: Buckets
-description: Prisma Buckets provision S3-compatible object storage inside a project, and Bucket Keys mint the S3 credentials — access key, one-time secret, endpoint, and the provider-side bucket name.
+description: Prisma Buckets provision S3-compatible object storage inside a project, and Bucket access keys mint the S3 credentials — access key, one-time secret, endpoint, and the provider-side bucket name.
 ---
 
 A `Prisma.Bucket` is an Object Store bucket inside a Prisma
-project. A `Prisma.BucketKey` is an access key for one bucket and
+project. A `Prisma.BucketAccessKey` is an access key for one bucket and
 yields the S3 credentials your app connects with.
 
 ```typescript
@@ -15,13 +15,13 @@ const bucket = yield* Prisma.Bucket("uploads", {
   name: "uploads",
 });
 
-const key = yield* Prisma.BucketKey("uploads-key", {
+const key = yield* Prisma.BucketAccessKey("uploads-key", {
   bucket,
   role: "read_write",
 });
 ```
 
-## Bucket key outputs
+## Bucket access key outputs
 
 ```typescript
 key.accessKeyId; //     S3 access key ID
@@ -59,7 +59,7 @@ key and mints fresh credentials.
 ## Deletion
 
 Destroying a bucket deletes its objects and revokes any remaining
-keys server-side. A `Prisma.BucketKey` destroyed after its bucket
+keys server-side. A `Prisma.BucketAccessKey` destroyed after its bucket
 tolerates the already-revoked key.
 
 ## Branch-scoped buckets
@@ -73,3 +73,35 @@ const previewBucket = yield* Prisma.Bucket("preview-uploads", {
   branchId: preview.branchId,
 });
 ```
+
+## The bucket bindings
+
+Inside a Prisma Compute app, AWS Lambda function, or Cloudflare Worker, bind the bucket instead of wiring credentials by hand. `Prisma.ReadBucket`, `Prisma.WriteBucket`, and `Prisma.ReadWriteBucket` each mint a scoped `Prisma.BucketAccessKey` for the bucket, carry its credentials into the host, and resolve to a typed client at runtime:
+
+```typescript
+Effect.gen(function* () {
+  const uploads = yield* Prisma.ReadWriteBucket(bucket);
+
+  return {
+    fetch: Effect.gen(function* () {
+      yield* uploads.put("hits", "1");
+      const object = yield* uploads.get("hits");
+      return yield* HttpServerResponse.text(
+        object === null ? "" : yield* object.text(),
+      );
+    }),
+  };
+}).pipe(Effect.provide(Prisma.ReadWriteBucketBinding));
+```
+
+`ReadBucket` mints a `read`-role key, so its credential genuinely cannot write. The store has no write-only role, so `WriteBucket` carries a `read_write` credential and enforces write-only at the client.
+
+## Where next
+
+- [Compute](/prisma/compute/apps) — the host the bindings deliver to.
+
+Reference:
+
+- [Bucket API reference](/providers/prisma/bucket)
+- [BucketAccessKey API reference](/providers/prisma/bucketaccesskey)
+- [ReadBucket](/providers/prisma/readbucket) / [WriteBucket](/providers/prisma/writebucket) / [ReadWriteBucket](/providers/prisma/readwritebucket)

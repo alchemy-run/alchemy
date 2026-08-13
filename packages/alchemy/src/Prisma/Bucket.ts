@@ -30,7 +30,7 @@ export interface BucketProps {
   /**
    * Bucket display name. Prisma generates a name when omitted. The display
    * name is not the provider-side S3 bucket name — S3 clients must use the
-   * `bucketName` attribute of `Prisma.BucketKey`.
+   * `bucketName` attribute of `Prisma.BucketAccessKey`.
    */
   name?: string;
   /**
@@ -49,7 +49,7 @@ export interface Bucket extends Resource<
     bucketId: string;
     /**
      * Bucket display name. Not the provider-side S3 bucket name; S3 clients
-     * must use the `bucketName` attribute of `Prisma.BucketKey`.
+     * must use the `bucketName` attribute of `Prisma.BucketAccessKey`.
      */
     name: string;
     /**
@@ -86,7 +86,7 @@ export interface Bucket extends Resource<
  * @section Accessing a Bucket
  * @example S3 credentials for a bucket
  * ```typescript
- * const key = yield* Prisma.BucketKey("uploads-key", {
+ * const key = yield* Prisma.BucketAccessKey("uploads-key", {
  *   bucket,
  *   role: "read_write",
  * });
@@ -100,7 +100,7 @@ export const Bucket = Resource<Bucket>("Prisma.Bucket");
  * than acting on a bucket that is not the one this resource manages.
  */
 export class BucketProjectMismatchError extends Data.TaggedError(
-  "PrismaBucketProjectMismatchError",
+  "BucketProjectMismatchError",
 )<{
   bucketId: string;
   actualProjectId: string;

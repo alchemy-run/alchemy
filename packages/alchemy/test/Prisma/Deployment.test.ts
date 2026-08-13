@@ -1880,7 +1880,7 @@ describe("Prisma Deployment", () => {
     ),
   );
   it.effect(
-    "records a redacted redeployOn fingerprint and replaces when a value changes",
+    "records a redacted triggers fingerprint and replaces when a value changes",
     () => {
       const secret = "REDEPLOY_SECRET_SENTINEL";
       const client = redeployClient();
@@ -1894,7 +1894,7 @@ describe("Prisma Deployment", () => {
           news: {
             app: "app-1",
             skipCodeUpload: true,
-            redeployOn: { DATABASE_URL: Redacted.make(secret) },
+            triggers: { DATABASE_URL: Redacted.make(secret) },
           },
           olds: undefined,
           output: undefined,
@@ -1902,37 +1902,37 @@ describe("Prisma Deployment", () => {
           bindings: [],
         });
 
-        expect(Redacted.isRedacted(output.redeployHash!)).toBe(true);
-        const fingerprint = Redacted.value(output.redeployHash!);
+        expect(Redacted.isRedacted(output.triggersHash!)).toBe(true);
+        const fingerprint = Redacted.value(output.triggersHash!);
         expect(fingerprint).not.toBe(secret);
         expect(fingerprint).not.toContain(secret);
         // encodeState unwraps Redacted, so this is what a state store writes.
         expect(JSON.stringify(encodeState(output))).not.toContain(secret);
 
         const unchanged = yield* provider.diff!({
-          ...redeployDiffBase(output.redeployHash),
+          ...triggersDiffBase(output.triggersHash),
           olds: {
             app: "app-1",
             skipCodeUpload: true,
-            redeployOn: { DATABASE_URL: Redacted.make(secret) },
+            triggers: { DATABASE_URL: Redacted.make(secret) },
           },
           news: {
             app: "app-1",
             skipCodeUpload: true,
-            redeployOn: { DATABASE_URL: Redacted.make(secret) },
+            triggers: { DATABASE_URL: Redacted.make(secret) },
           },
         } as never);
         const changed = yield* provider.diff!({
-          ...redeployDiffBase(output.redeployHash),
+          ...triggersDiffBase(output.triggersHash),
           olds: {
             app: "app-1",
             skipCodeUpload: true,
-            redeployOn: { DATABASE_URL: Redacted.make(secret) },
+            triggers: { DATABASE_URL: Redacted.make(secret) },
           },
           news: {
             app: "app-1",
             skipCodeUpload: true,
-            redeployOn: { DATABASE_URL: Redacted.make(`${secret}-rotated`) },
+            triggers: { DATABASE_URL: Redacted.make(`${secret}-rotated`) },
           },
         } as never);
 
@@ -1947,22 +1947,22 @@ describe("Prisma Deployment", () => {
     },
   );
 
-  it.effect("replaces when a plain redeployOn value changes", () => {
+  it.effect("replaces when a plain triggers value changes", () => {
     const client = {} as PrismaManagementClient;
 
     return Effect.gen(function* () {
       const provider = yield* PrismaDeployment.Provider;
       const diff = yield* provider.diff!({
-        ...redeployDiffBase(Redacted.make("recorded-fingerprint")),
+        ...triggersDiffBase(Redacted.make("recorded-fingerprint")),
         olds: {
           app: "app-1",
           skipCodeUpload: true,
-          redeployOn: { FEATURE_FLAG: "off" },
+          triggers: { FEATURE_FLAG: "off" },
         },
         news: {
           app: "app-1",
           skipCodeUpload: true,
-          redeployOn: { FEATURE_FLAG: "on" },
+          triggers: { FEATURE_FLAG: "on" },
         },
       } as never);
 
@@ -1976,23 +1976,23 @@ describe("Prisma Deployment", () => {
   });
 
   it.effect(
-    "keeps a deployment recorded before redeployOn existed when nothing changed",
+    "keeps a deployment recorded before triggers existed when nothing changed",
     () => {
       const client = {} as PrismaManagementClient;
 
       return Effect.gen(function* () {
         const provider = yield* PrismaDeployment.Provider;
         const diff = yield* provider.diff!({
-          ...redeployDiffBase(undefined),
+          ...triggersDiffBase(undefined),
           olds: {
             app: "app-1",
             skipCodeUpload: true,
-            redeployOn: { FEATURE_FLAG: "on" },
+            triggers: { FEATURE_FLAG: "on" },
           },
           news: {
             app: "app-1",
             skipCodeUpload: true,
-            redeployOn: { FEATURE_FLAG: "on" },
+            triggers: { FEATURE_FLAG: "on" },
           },
         } as never);
 
@@ -2006,50 +2006,47 @@ describe("Prisma Deployment", () => {
     },
   );
 
-  it.effect(
-    "replaces when redeployOn cannot be resolved while planning",
-    () => {
-      const client = {} as PrismaManagementClient;
+  it.effect("replaces when triggers cannot be resolved while planning", () => {
+    const client = {} as PrismaManagementClient;
 
-      return Effect.gen(function* () {
-        const provider = yield* PrismaDeployment.Provider;
-        const recorded = yield* provider.diff!({
-          ...redeployDiffBase(Redacted.make("recorded-fingerprint")),
-          olds: {
-            app: "app-1",
-            skipCodeUpload: true,
-            redeployOn: { DATABASE_URL: "postgres://old" },
-          },
-          news: {
-            app: "app-1",
-            skipCodeUpload: true,
-            redeployOn: { DATABASE_URL: Output.asOutput("postgres://new") },
-          },
-        } as never);
-        const neverRecorded = yield* provider.diff!({
-          ...redeployDiffBase(undefined),
-          olds: {
-            app: "app-1",
-            skipCodeUpload: true,
-            redeployOn: { DATABASE_URL: "postgres://old" },
-          },
-          news: {
-            app: "app-1",
-            skipCodeUpload: true,
-            redeployOn: { DATABASE_URL: Output.asOutput("postgres://new") },
-          },
-        } as never);
+    return Effect.gen(function* () {
+      const provider = yield* PrismaDeployment.Provider;
+      const recorded = yield* provider.diff!({
+        ...triggersDiffBase(Redacted.make("recorded-fingerprint")),
+        olds: {
+          app: "app-1",
+          skipCodeUpload: true,
+          triggers: { DATABASE_URL: "postgres://old" },
+        },
+        news: {
+          app: "app-1",
+          skipCodeUpload: true,
+          triggers: { DATABASE_URL: Output.asOutput("postgres://new") },
+        },
+      } as never);
+      const neverRecorded = yield* provider.diff!({
+        ...triggersDiffBase(undefined),
+        olds: {
+          app: "app-1",
+          skipCodeUpload: true,
+          triggers: { DATABASE_URL: "postgres://old" },
+        },
+        news: {
+          app: "app-1",
+          skipCodeUpload: true,
+          triggers: { DATABASE_URL: Output.asOutput("postgres://new") },
+        },
+      } as never);
 
-        expect(recorded).toEqual({ action: "replace" });
-        expect(neverRecorded).toBeUndefined();
-      }).pipe(
-        Effect.provide(deploymentProviderLive()),
-        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(FetchHttpClient.layer),
-        Effect.provide(PlatformServices),
-      );
-    },
-  );
+      expect(recorded).toEqual({ action: "replace" });
+      expect(neverRecorded).toBeUndefined();
+    }).pipe(
+      Effect.provide(deploymentProviderLive()),
+      Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
+      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(PlatformServices),
+    );
+  });
 });
 
 const redeployClient = () =>
@@ -2073,8 +2070,8 @@ const redeployClient = () =>
       }),
   }) as unknown as PrismaManagementClient;
 
-const redeployDiffBase = (
-  redeployHash: Redacted.Redacted<string> | undefined,
+const triggersDiffBase = (
+  triggersHash: Redacted.Redacted<string> | undefined,
 ) => ({
   id: "Deployment",
   fqn: "Deployment",
@@ -2088,7 +2085,7 @@ const redeployDiffBase = (
     status: "new",
     previewDomain: null,
     artifactHash: undefined,
-    redeployHash,
+    triggersHash,
     appEndpointDomain: undefined,
     createdAt: "2026-01-01T00:00:00Z",
   },

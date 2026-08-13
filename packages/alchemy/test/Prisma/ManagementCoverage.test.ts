@@ -85,8 +85,8 @@ const lifecycleResources = [
     ],
   },
   {
-    name: "BucketKey",
-    resource: Prisma.BucketKey,
+    name: "BucketAccessKey",
+    resource: Prisma.BucketAccessKey,
     routes: [
       "GET /v1/buckets/{bucketId}/keys",
       "POST /v1/buckets/{bucketId}/keys",

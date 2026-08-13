@@ -6,19 +6,25 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Bucket } from "./Bucket.ts";
 import { makeBucketBinding } from "./BucketBinding.ts";
 import type {
+  BucketCredentials,
   BucketBody,
   BucketError,
   BucketObject,
-  PresignOptions,
+  PresignPutOptions,
   PutOptions,
 } from "./BucketTypes.ts";
-import type { BucketCredentials } from "./BucketTypes.ts";
 import {
   makeBucketAccess,
   objectFrom,
   toBucketError,
   type BucketAccess,
 } from "./Internal/BucketClient.ts";
+
+export interface WriteBucket extends Binding.Service<
+  WriteBucket,
+  "Prisma.WriteBucket",
+  (bucket: Bucket) => Effect.Effect<WriteBucketClient>
+> {}
 
 /**
  * Write-only client for a Prisma Object Store bucket. It deliberately exposes
@@ -49,7 +55,7 @@ export interface WriteBucketClient {
    */
   presignPut(
     key: string,
-    options?: PresignOptions,
+    options?: PresignPutOptions,
   ): Effect.Effect<string, BucketError, RuntimeContext>;
 }
 
@@ -58,7 +64,7 @@ export interface WriteBucketClient {
  * Lambda Function, or Cloudflare Worker with write access, and obtain the
  * typed runtime client.
  *
- * Binding creates a `Prisma.BucketKey` for the bucket and carries its S3
+ * Binding creates a `Prisma.BucketAccessKey` for the bucket and carries its S3
  * credentials into the host environment, so the caller never handles a
  * credential themselves.
  *
@@ -94,12 +100,6 @@ export interface WriteBucketClient {
  *
  * @binding
  */
-export interface WriteBucket extends Binding.Service<
-  WriteBucket,
-  "Prisma.WriteBucket",
-  (bucket: Bucket) => Effect.Effect<WriteBucketClient>
-> {}
-
 export const WriteBucket = Binding.Service<WriteBucket>("Prisma.WriteBucket");
 
 /**
@@ -145,12 +145,12 @@ export const writeBucketOperations = (
         Effect.forEach(
           typeof keys === "string" ? [keys] : keys,
           (key) => access.authorize(S3.deleteObject({ Bucket, Key: key })),
-          { concurrency: "unbounded", discard: true },
+          { concurrency: 16, discard: true },
         ),
       ),
       Effect.mapError(toBucketError),
     ),
-  presignPut: (key: string, options?: PresignOptions) =>
+  presignPut: (key: string, options?: PresignPutOptions) =>
     access.presign({
       method: "PUT",
       key,

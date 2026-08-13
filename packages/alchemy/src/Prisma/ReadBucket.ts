@@ -6,15 +6,15 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Bucket } from "./Bucket.ts";
 import { makeBucketBinding } from "./BucketBinding.ts";
 import type {
+  BucketCredentials,
   BucketError,
   BucketObject,
   BucketObjectBody,
   GetOptions,
   ListOptions,
   ListResult,
-  PresignOptions,
+  PresignGetOptions,
 } from "./BucketTypes.ts";
-import type { BucketCredentials } from "./BucketTypes.ts";
 import {
   makeBucketAccess,
   objectBodyFrom,
@@ -24,6 +24,12 @@ import {
   toBucketError,
   type BucketAccess,
 } from "./Internal/BucketClient.ts";
+
+export interface ReadBucket extends Binding.Service<
+  ReadBucket,
+  "Prisma.ReadBucket",
+  (bucket: Bucket) => Effect.Effect<ReadBucketClient>
+> {}
 
 /**
  * Read-only client for a Prisma Object Store bucket. It deliberately exposes
@@ -56,7 +62,7 @@ export interface ReadBucketClient {
    */
   presignGet(
     key: string,
-    options?: PresignOptions,
+    options?: PresignGetOptions,
   ): Effect.Effect<string, BucketError, RuntimeContext>;
 }
 
@@ -65,7 +71,7 @@ export interface ReadBucketClient {
  * Lambda Function, or Cloudflare Worker with read-only access, and obtain the
  * typed runtime client.
  *
- * Binding creates a read-scoped `Prisma.BucketKey` for the bucket and carries
+ * Binding creates a read-scoped `Prisma.BucketAccessKey` for the bucket and carries
  * its S3 credentials into the host environment, so the caller never handles a
  * credential themselves.
  *
@@ -99,12 +105,6 @@ export interface ReadBucketClient {
  *
  * @binding
  */
-export interface ReadBucket extends Binding.Service<
-  ReadBucket,
-  "Prisma.ReadBucket",
-  (bucket: Bucket) => Effect.Effect<ReadBucketClient>
-> {}
-
 export const ReadBucket = Binding.Service<ReadBucket>("Prisma.ReadBucket");
 
 /**
@@ -154,24 +154,28 @@ export const readBucketOperations = (
           }),
         ),
       ),
-      Effect.map(
-        (response): ListResult => ({
-          objects: (response.Contents ?? []).map(objectFromListEntry),
-          delimitedPrefixes: (response.CommonPrefixes ?? []).flatMap(
-            (prefix) => (prefix.Prefix === undefined ? [] : [prefix.Prefix]),
-          ),
-          truncated: response.IsTruncated ?? false,
-          cursor: response.NextContinuationToken,
-        }),
-      ),
+      Effect.map((response): ListResult => {
+        const objects = (response.Contents ?? []).map(objectFromListEntry);
+        const delimitedPrefixes = (response.CommonPrefixes ?? []).flatMap(
+          (prefix) => (prefix.Prefix === undefined ? [] : [prefix.Prefix]),
+        );
+        return response.IsTruncated && response.NextContinuationToken
+          ? {
+              objects,
+              delimitedPrefixes,
+              truncated: true,
+              cursor: response.NextContinuationToken,
+            }
+          : { objects, delimitedPrefixes, truncated: false };
+      }),
       Effect.mapError(toBucketError),
     ),
-  presignGet: (key: string, options?: PresignOptions) =>
+  presignGet: (key: string, options?: PresignGetOptions) =>
     access.presign({
       method: "GET",
       key,
       expiresIn: options?.expiresIn,
-      contentType: options?.contentType,
+      responseContentType: options?.contentType,
     }),
 });
 

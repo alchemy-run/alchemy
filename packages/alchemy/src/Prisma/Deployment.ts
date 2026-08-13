@@ -91,10 +91,12 @@ export interface DeploymentProps {
    */
   promote?: boolean;
   /**
-   * Inputs the deployment is recreated for. When the resolved value changes,
-   * the next deploy replaces the deployment (create-before-delete) even if the
-   * artifact is unchanged. Values are folded into the deployment fingerprint
-   * as a salted hash and persisted `Redacted`; plaintext never lands in state.
+   * Opaque key/value map; when any resolved value changes, a replacement
+   * deployment is planned (create-before-delete) even if the artifact is
+   * unchanged — the same contract as `AWS.ApiGateway.Deployment.triggers`.
+   * Because values here may be secrets, they are folded into the deployment
+   * fingerprint as a salted hash and persisted `Redacted` rather than
+   * compared as plaintext; plaintext never lands in state.
    *
    * Prisma snapshots environment variables into a deployment when the
    * deployment is created, so changing only an environment variable's value
@@ -109,10 +111,10 @@ export interface DeploymentProps {
    * changing — the diff cannot prove the fingerprint is unchanged, and the
    * engine offers no later opportunity to plan a replacement. The deployment
    * is then replaced conservatively, but only once a fingerprint has already
-   * been recorded: adding `redeployOn` to an existing deployment records its
+   * been recorded: adding `triggers` to an existing deployment records its
    * fingerprint through a plain update rather than forcing a replacement.
    *
-   * Leaving `redeployOn` unset tracks nothing, so removing it from a
+   * Leaving `triggers` unset tracks nothing, so removing it from a
    * deployment that had it does not trigger a replacement on its own.
    *
    * @example
@@ -120,13 +122,13 @@ export interface DeploymentProps {
    * const deployment = yield* Prisma.Deployment("web", {
    *   app,
    *   artifactPath: "./dist/app.tar.gz",
-   *   redeployOn: { DATABASE_URL: Redacted.make(databaseUrl) },
+   *   triggers: { DATABASE_URL: Redacted.make(databaseUrl) },
    *   start: true,
    *   promote: true,
    * });
    * ```
    */
-  redeployOn?: unknown;
+  triggers?: Record<string, unknown>;
 }
 
 export interface Deployment extends Resource<
@@ -159,11 +161,11 @@ export interface Deployment extends Resource<
      */
     artifactHash?: string;
     /**
-     * Salted fingerprint of the resolved `redeployOn` inputs this deployment
+     * Salted fingerprint of the resolved `triggers` inputs this deployment
      * was created for. Held `Redacted` so the inputs stay out of plaintext
-     * state; absent when `redeployOn` is unset.
+     * state; absent when `triggers` is unset.
      */
-    redeployHash?: Redacted.Redacted<string>;
+    triggersHash?: Redacted.Redacted<string>;
     /**
      * Stable App endpoint domain after promotion.
      */
@@ -245,7 +247,7 @@ const attrsFrom = (
   appId: string,
   extra?: {
     artifactHash?: string;
-    redeployHash?: Redacted.Redacted<string>;
+    triggersHash?: Redacted.Redacted<string>;
     appEndpointDomain?: string;
   },
 ): Deployment["Attributes"] => ({
@@ -255,7 +257,7 @@ const attrsFrom = (
   status: deployment.status,
   previewDomain: deployment.previewDomain,
   artifactHash: extra?.artifactHash,
-  redeployHash: extra?.redeployHash,
+  triggersHash: extra?.triggersHash,
   appEndpointDomain: extra?.appEndpointDomain,
   createdAt: deployment.createdAt,
 });
@@ -355,11 +357,11 @@ const artifactHashOf = Effect.fn(function* (props: DeploymentProps) {
 });
 
 /**
- * Domain separator so a `redeployOn` fingerprint is never the bare SHA-256 of
+ * Domain separator so a `triggers` fingerprint is never the bare SHA-256 of
  * a secret value, which would otherwise be comparable against a precomputed
  * digest of a guessed value.
  */
-const REDEPLOY_HASH_SALT = "alchemy/Prisma.Deployment/redeployOn/v1";
+const TRIGGERS_HASH_SALT = "alchemy/Prisma.Deployment/triggers/v1";
 
 const unwrapRedacted = (value: unknown): unknown => {
   if (Redacted.isRedacted(value)) return unwrapRedacted(Redacted.value(value));
@@ -372,18 +374,18 @@ const unwrapRedacted = (value: unknown): unknown => {
   return value;
 };
 
-const redeployHashOf = (redeployOn: unknown) =>
+const triggersHashOf = (triggers: unknown) =>
   sha256Object({
-    salt: REDEPLOY_HASH_SALT,
-    redeployOn: unwrapRedacted(redeployOn) ?? null,
+    salt: TRIGGERS_HASH_SALT,
+    triggers: unwrapRedacted(triggers) ?? null,
   });
 
-const persistedRedeployHash = (
+const persistedTriggersHash = (
   value: Redacted.Redacted<string> | string | undefined,
 ) => (Redacted.isRedacted(value) ? Redacted.value(value) : value);
 
 /**
- * Whether the declared `redeployOn` inputs differ from the fingerprint the
+ * Whether the declared `triggers` inputs differ from the fingerprint the
  * running deployment was created for.
  *
  * Only `diff` can plan a replacement — `reconcile` has no way to ask for one —
@@ -392,17 +394,17 @@ const persistedRedeployHash = (
  * value and is itself changing, in which case the value most likely changed
  * too; the cost of being wrong is one extra create-before-delete replacement.
  * Without a recorded fingerprint there is nothing to compare against, so the
- * first deploy that declares `redeployOn` records it through the engine's
+ * first deploy that declares `triggers` records it through the engine's
  * default update instead of replacing the deployment.
  */
-const redeployOnChanged = Effect.fn(function* (
-  redeployOn: unknown,
+const triggersChanged = Effect.fn(function* (
+  triggers: unknown,
   persisted: Redacted.Redacted<string> | string | undefined,
 ) {
-  const recorded = persistedRedeployHash(persisted);
-  if (redeployOn === undefined || recorded === undefined) return false;
-  if (!isResolved({ redeployOn })) return true;
-  return (yield* redeployHashOf(redeployOn)) !== recorded;
+  const recorded = persistedTriggersHash(persisted);
+  if (triggers === undefined || recorded === undefined) return false;
+  if (!isResolved({ triggers })) return true;
+  return (yield* triggersHashOf(triggers)) !== recorded;
 });
 
 export const uploadArtifact = (
@@ -465,7 +467,7 @@ const ProviderLive = () =>
           // Checked before the resolved-content early return below: a
           // deferred diff falls back to an update, which reuses the running
           // deployment and would never apply the changed inputs.
-          if (yield* redeployOnChanged(news.redeployOn, output?.redeployHash)) {
+          if (yield* triggersChanged(news.triggers, output?.triggersHash)) {
             return { action: "replace" } as const;
           }
           const replacementContent = {
@@ -604,10 +606,10 @@ const ProviderLive = () =>
                   contentType:
                     news.artifactContentType ?? "application/octet-stream",
                 });
-          const redeployHash =
-            news.redeployOn === undefined
+          const triggersHash =
+            news.triggers === undefined
               ? undefined
-              : Redacted.make(yield* redeployHashOf(news.redeployOn));
+              : Redacted.make(yield* triggersHashOf(news.triggers));
           const appId = yield* resolveAppId(news.app);
           const deploymentId = isPrismaDevId(output?.deploymentId)
             ? undefined
@@ -753,7 +755,7 @@ const ProviderLive = () =>
 
           return attrsFrom(deployment, appId, {
             artifactHash,
-            redeployHash,
+            triggersHash,
             appEndpointDomain,
           });
         }),
@@ -783,7 +785,7 @@ const ProviderLocal = () =>
     status: "new",
     previewDomain: undefined,
     artifactHash: undefined,
-    redeployHash: undefined,
+    triggersHash: undefined,
     appEndpointDomain: undefined,
     createdAt: DEV_TIMESTAMP,
   }));

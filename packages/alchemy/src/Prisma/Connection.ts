@@ -26,7 +26,7 @@ import {
   deriveConnectionAttrs,
   hasCanonicalConnectionSecrets,
 } from "./Internal/DatabaseSecrets.ts";
-import { fnv1a64 } from "./Internal/EnvName.ts";
+import { physicalInstanceName } from "./Internal/EnvName.ts";
 import type { PostgresOrigin } from "./PostgresOrigin.ts";
 import type { Providers } from "./Providers.ts";
 import {
@@ -353,16 +353,6 @@ const recoverGeneratedConnectionAfterConflict = (
 const physicalConnectionPrefix = (name: string) =>
   `${name.trim().slice(0, 52)}-`;
 
-const physicalConnectionName = (name: string, instanceId: string) => {
-  const instanceToken = instanceId.replaceAll(/[^a-zA-Z0-9]/g, "");
-  const effectiveSuffix =
-    instanceToken.length >= 12
-      ? instanceToken.slice(0, 12)
-      : fnv1a64(instanceId).slice(0, 12);
-  const maxPrefixLength = 65 - effectiveSuffix.length - 1;
-  return `${name.trim().slice(0, maxPrefixLength)}-${effectiveSuffix}`;
-};
-
 const isGeneratedPhysicalConnectionName = (
   physicalName: string,
   logicalName: string,
@@ -474,7 +464,7 @@ const ProviderLive = () =>
           const databaseId = unresolvedDatabaseIdOf(olds.database);
           if (!databaseId) return undefined;
           const name = yield* validateConnectionName(olds.name ?? id);
-          const expectedName = physicalConnectionName(name, instanceId);
+          const expectedName = physicalInstanceName(name, instanceId);
           const owned = yield* uniqueConnection(
             client,
             databaseId,
@@ -523,7 +513,7 @@ const ProviderLive = () =>
                 )
             : undefined;
 
-          const expectedName = physicalConnectionName(name, instanceId);
+          const expectedName = physicalInstanceName(name, instanceId);
           const physicalName =
             connectionId && output ? output.connectionName : expectedName;
           if (

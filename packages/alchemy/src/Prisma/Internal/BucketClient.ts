@@ -29,12 +29,21 @@ import {
  */
 export const BUCKET_SIGNING_REGION = "auto";
 
-export interface PresignRequest {
-  method: "GET" | "PUT";
-  key: string;
-  expiresIn?: number | undefined;
-  contentType?: string | undefined;
-}
+export type PresignRequest =
+  | {
+      method: "GET";
+      key: string;
+      expiresIn?: number | undefined;
+      /** Signed `response-content-type` override for the download. */
+      responseContentType?: string | undefined;
+    }
+  | {
+      method: "PUT";
+      key: string;
+      expiresIn?: number | undefined;
+      /** `Content-Type` header the uploader must send, signed into the URL. */
+      contentType?: string | undefined;
+    };
 
 /**
  * The transport a capability client is built against: the resolved bucket
@@ -110,7 +119,12 @@ export const makeBucketAccess = (
             key: request.key,
             region: BUCKET_SIGNING_REGION,
             expiresIn: request.expiresIn,
-            contentType: request.contentType,
+            contentType:
+              request.method === "PUT" ? request.contentType : undefined,
+            responseContentType:
+              request.method === "GET"
+                ? request.responseContentType
+                : undefined,
           }).pipe(Effect.provide(layer)),
         ),
         Effect.mapError(toBucketError),
