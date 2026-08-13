@@ -24,9 +24,8 @@ export default class Site extends Astro<Site>()(
 ```
 
 - `src/pages/index.astro` is server-rendered in the Lambda on every
-  request, reads `GREETING` from the environment, and calls
-  `/api/visits` — the DynamoDB-backed visit counter declared in
-  `src/backend.ts`.
+  request and calls `/api/visits` — the DynamoDB-backed visit counter
+  declared in `src/backend.ts`.
 - Delivery is automatic for Astro: the effect `fetch` serves
   `server.routes` (default `["/api/*"]`) in the production Lambda and in
   `astro dev` alike. Inside the routes the program is authoritative

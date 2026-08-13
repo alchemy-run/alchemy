@@ -24,10 +24,7 @@ const handler = toRouteHandler(Site);
 export { handler as GET, handler as POST /* ... */ };
 ```
 
-- `app/page.jsx` is server-rendered in the Lambda on every request and
-  reads the `GREETING` environment value declared in `src/backend.ts` via
-  `process.env`; its `EffectMessage` island round-trips `/api/message`
-  through the Effect program's S3 binding.
+- `app/page.jsx` is server-rendered in the Lambda on every request.
 - `app/api/hello/route.ts` is an ordinary app-router route handler —
   more-specific routes keep winning over the catch-all, so Next's own
   routing and the effect API coexist under `/api/*`.

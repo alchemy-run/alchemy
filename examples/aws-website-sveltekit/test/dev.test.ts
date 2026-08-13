@@ -7,7 +7,7 @@
  * Coverage:
  *   - stack output    → `url` is a local dev-server address (port is
  *                       whatever the framework bound — never hard-coded)
- *   - SSR env parity  → `/` renders the GREETING declared in alchemy.run.ts
+ *   - SSR             → `/` renders through the framework dev server
  *                       (read via `process.env` in +page.server.ts)
  *   - routing         → `/about` (prerendered route) serves
  *   - static assets   → `/robots.txt` from static/
@@ -147,10 +147,7 @@ test(
     expect(new URL(url).hostname).toBe("localhost");
     expect(url).not.toContain("cloudfront.net");
 
-    // SSR env parity: GREETING from alchemy.run.ts reaches the dev server
-    // (read via `process.env` in +page.server.ts's load).
     const home = await (await fetchOk(url)).text();
-    expect(home).toContain("Hello from alchemy");
     expect(home).toContain(MARKER);
 
     // Prerendered route serves through the dev server.

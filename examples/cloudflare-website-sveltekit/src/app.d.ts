@@ -4,9 +4,7 @@
 declare global {
   namespace App {
     interface Platform {
-      env?: {
-        GREETING?: string;
-      };
+      env?: Record<string, unknown>;
     }
   }
 }

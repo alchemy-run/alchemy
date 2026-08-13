@@ -7,7 +7,7 @@
  * Coverage:
  *   - stack output    → `url` is a local dev-server address (port is
  *                       whatever the framework bound — never hard-coded)
- *   - SSR env parity  → `/` renders the GREETING declared in alchemy.run.ts
+ *   - SSR             → `/` renders through the framework dev server
  *   - routing         → `/about` (prerendered route) serves
  *   - API route       → `/api/hello` serves the nitro handler
  *   - static assets   → `/robots.txt` from public/
@@ -147,9 +147,7 @@ test(
     expect(new URL(url).hostname).toBe("localhost");
     expect(url).not.toContain("cloudfront.net");
 
-    // SSR env parity: GREETING from alchemy.run.ts reaches the dev server.
     const home = await (await fetchOk(url)).text();
-    expect(home).toContain("Hello from alchemy");
     expect(home).toContain(MARKER);
 
     // Prerendered route serves through the dev server.
@@ -159,8 +157,8 @@ test(
     // Nitro API route serves through the dev server.
     const hello = (await (
       await fetchOk(new URL("/api/hello", url))
-    ).json()) as { greeting: string | null };
-    expect(hello).toEqual({ greeting: "Hello from alchemy" });
+    ).json()) as { hello: string };
+    expect(hello).toEqual({ hello: "from nitro" });
 
     // Static asset from public/.
     const robots = await (await fetchOk(new URL("/robots.txt", url))).text();

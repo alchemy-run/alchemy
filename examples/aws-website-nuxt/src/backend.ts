@@ -47,12 +47,7 @@ export default class Site extends Nuxt<Site>()(
   {
     main: import.meta.url,
     forceDestroy: true,
-    server: {
-      routes,
-      environment: {
-        GREETING: "Hello from alchemy",
-      },
-    },
+    server: { routes },
   },
   Effect.gen(function* () {
     const bucket = yield* SiteData;

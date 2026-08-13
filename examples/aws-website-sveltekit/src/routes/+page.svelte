@@ -1,5 +1,4 @@
 <script>
-  let { data } = $props();
 
   // The effect fetch owns /api/* — /api/message is the S3-backed handler
   // declared in src/backend.ts, served by the same Lambda as this page.
@@ -24,7 +23,6 @@
 
 <main class="mx-auto max-w-2xl p-8">
   <h1 class="text-3xl font-bold">SvelteKit on AWS</h1>
-  <p class="mt-4 text-lg">{data.greeting}</p>
   <p class="mt-4">
     Saved message (from <code>/api/message</code>, S3-backed): {message}
   </p>

@@ -9,7 +9,7 @@ The Website class lives in `src/backend.ts` and takes an Effect program as its t
 ```ts
 export default class Site extends SvelteKit<Site>()(
   "SvelteKitSite",
-  { main: import.meta.url, env: { GREETING: "Hello from alchemy" } },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const visits = yield* KV.ReadWriteNamespace(yield* Visits);
     return {

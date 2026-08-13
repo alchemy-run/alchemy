@@ -52,11 +52,6 @@ export default class Site extends Nextjs<Site>()(
       ],
     },
     forceDestroy: true,
-    server: {
-      environment: {
-        GREETING: "Hello from Alchemy!",
-      },
-    },
   },
   Effect.gen(function* () {
     const bucket = yield* SiteData;

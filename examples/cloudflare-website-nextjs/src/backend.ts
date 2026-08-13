@@ -57,9 +57,6 @@ export default class Site extends Nextjs<Site>()(
         "tsconfig.json",
       ],
     },
-    env: {
-      GREETING: "Hello from Alchemy!",
-    },
   },
   Effect.gen(function* () {
     // Init: runs at plan time in the engine (collects the KV binding) and

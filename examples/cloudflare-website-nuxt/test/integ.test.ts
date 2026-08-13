@@ -76,10 +76,6 @@ test(
     expect(res.status).toBe(200);
     const html = yield* res.text;
     expect(html).toContain("Nuxt on Cloudflare Workers");
-    // The `GREETING` env value from alchemy.run.ts, read via
-    // `event.context.cloudflare.env` during SSR — proves the Worker
-    // rendered it at request time.
-    expect(html).toContain("Hello from alchemy");
   }),
   { timeout: 180_000 },
 );
@@ -92,7 +88,7 @@ test(
       `${url}/api/hello`,
       "Hello from alchemy",
     );
-    expect(JSON.parse(body)).toEqual({ greeting: "Hello from alchemy" });
+    expect(JSON.parse(body)).toEqual({ hello: "from nitro" });
   }),
   { timeout: 180_000 },
 );

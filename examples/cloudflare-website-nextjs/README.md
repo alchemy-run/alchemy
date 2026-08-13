@@ -15,9 +15,8 @@ prerendered pages) alongside it.
   takeover is automatic (no route.ts mount); inside the routes the
   program is authoritative (even its 404s), while the `!/api/hello`
   exclusion statically hands that path back to Next's own route handler.
-- `app/page.jsx` is server-rendered in the Worker on every request,
-  reads the `GREETING` binding via OpenNext's `getCloudflareContext()`,
-  and calls `/api/visits` from the browser to show the KV-backed visit
+- `app/page.jsx` is server-rendered in the Worker on every request and
+  calls `/api/visits` from the browser to show the KV-backed visit
   counter.
 - `app/api/hello/route.js` is an app-router API route handler.
 - Everything under `public/` deploys as static assets.

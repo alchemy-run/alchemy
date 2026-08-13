@@ -89,10 +89,6 @@ test.skipIf(lambdaRoutesBroken)(
     expect(res.status).toBe(200);
     const html = yield* res.text;
     expect(html).toContain("Next.js on AWS");
-    // The `GREETING` env value from alchemy.run.ts, read via
-    // `process.env` in the force-dynamic page — proves the Lambda
-    // rendered it at request time.
-    expect(html).toContain("Hello from Alchemy!");
   }),
   { timeout: 180_000 },
 );

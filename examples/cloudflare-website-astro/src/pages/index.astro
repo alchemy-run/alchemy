@@ -1,12 +1,9 @@
 ---
-import { env } from "cloudflare:workers";
 // Tailwind is wired through astro.config.ts (@tailwindcss/vite) — Alchemy
 // loads the project's own config natively, so the utilities below compile.
 import "../styles/global.css";
 
 // Server-rendered on every request inside the Cloudflare Worker.
-// Bindings declared in alchemy.run.ts are available on `env`.
-const greeting = (env as Record<string, unknown>).GREETING ?? "Hello!";
 const now = new Date().toISOString();
 ---
 
@@ -17,7 +14,7 @@ const now = new Date().toISOString();
     <title>Astro on Cloudflare</title>
   </head>
   <body class="bg-slate-50 p-8 text-slate-900">
-    <h1 class="text-3xl font-bold">{greeting}</h1>
+    <h1 class="text-3xl font-bold">Astro on Cloudflare Workers</h1>
     <p class="mt-4 text-slate-600">
       This page is server-rendered in a Cloudflare Worker at {now}.
     </p>

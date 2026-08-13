@@ -46,9 +46,6 @@ export default class Site extends Astro<Site>()(
         "src/backend.ts",
       ],
     },
-    env: {
-      GREETING: "Hello from Alchemy!",
-    },
   },
   Effect.gen(function* () {
     // Init: runs at plan time in the engine (collects the KV binding) and

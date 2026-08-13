@@ -38,9 +38,6 @@ export default class Site extends Nuxt<Site>()(
     // own route from the claim — exclusions win, so nitro serves it;
     // every other /api/* path is answered by the program (even 404s).
     server: { routes: ["/api/*", "!/api/hello"] },
-    env: {
-      GREETING: "Hello from alchemy",
-    },
   },
   Effect.gen(function* () {
     // Init: runs at plan time in the engine (collects the KV binding) and

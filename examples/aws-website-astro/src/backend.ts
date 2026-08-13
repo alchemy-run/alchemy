@@ -49,11 +49,6 @@ export default class Site extends Astro<Site>()(
       ],
     },
     forceDestroy: true,
-    server: {
-      environment: {
-        GREETING: "Hello from Alchemy!",
-      },
-    },
   },
   Effect.gen(function* () {
     const table = yield* Visits;

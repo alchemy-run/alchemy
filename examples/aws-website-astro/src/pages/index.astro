@@ -6,7 +6,6 @@ import "../styles/global.css";
 // Server-rendered on every request inside the AWS Lambda function.
 // Environment values declared in alchemy.run.ts are available on
 // `process.env`.
-const greeting = process.env.GREETING ?? "Hello!";
 const now = new Date().toISOString();
 ---
 
@@ -17,7 +16,7 @@ const now = new Date().toISOString();
     <title>Astro on AWS</title>
   </head>
   <body class="bg-slate-50 p-8 text-slate-900">
-    <h1 class="text-3xl font-bold">{greeting}</h1>
+    <h1 class="text-3xl font-bold">Astro on AWS</h1>
     <p class="mt-4 text-slate-600">
       This page is server-rendered in an AWS Lambda at {now}.
     </p>

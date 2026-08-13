@@ -11,8 +11,8 @@ Wrangler configuration.
   collected automatically at plan time, no extra wiring in
   `alchemy.run.ts`.
 - `src/pages/index.astro` is server-rendered in the Worker on every
-  request, reads the `GREETING` binding, and calls `/api/visits` from
-  the browser to show the KV-backed visit counter.
+  request and calls `/api/visits` from the browser to show the
+  KV-backed visit counter.
 - `src/pages/about.astro` opts into prerendering
   (`export const prerender = true`) and is served as a static asset.
 - Everything under `public/` deploys as static assets.

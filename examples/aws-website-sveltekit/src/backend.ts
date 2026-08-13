@@ -38,11 +38,6 @@ export default class Site extends SvelteKit<Site>()(
   {
     main: import.meta.url,
     forceDestroy: true,
-    server: {
-      environment: {
-        GREETING: "Hello from alchemy",
-      },
-    },
   },
   Effect.gen(function* () {
     const bucket = yield* SiteData;

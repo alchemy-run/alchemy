@@ -80,10 +80,6 @@ test(
     const res = yield* getWhenReady(url);
     expect(res.status).toBe(200);
     const html = yield* res.text;
-    // The `GREETING` env value from alchemy.run.ts, read via
-    // `process.env` in the page frontmatter — proves the Lambda
-    // rendered it at request time.
-    expect(html).toContain("Hello from Alchemy!");
     expect(html).toContain("server-rendered in an AWS Lambda");
   }),
   { timeout: 180_000 },

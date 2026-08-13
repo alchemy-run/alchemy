@@ -33,9 +33,6 @@ export default class Site extends SvelteKit<Site>()(
   "SvelteKitSite",
   {
     main: import.meta.url,
-    env: {
-      GREETING: "Hello from alchemy",
-    },
   },
   Effect.gen(function* () {
     // Init: runs at plan time in the engine (collects the KV binding) and
