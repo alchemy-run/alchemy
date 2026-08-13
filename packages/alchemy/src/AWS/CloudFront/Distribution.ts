@@ -1130,45 +1130,114 @@ export const DistributionProvider = () =>
           yield* Effect.logInfo(
             `CloudFront Distribution delete: distribution=${output.distributionId}`,
           );
-          const current = yield* getCurrent(output.distributionId);
-          if (!current) {
-            yield* Effect.logInfo(
-              `CloudFront Distribution delete: ${output.distributionId} already absent`,
-            );
-            return;
-          }
 
-          if (current.config.Enabled) {
-            yield* Effect.logInfo(
-              `CloudFront Distribution delete: disabling ${output.distributionId} before delete`,
-            );
-            yield* cloudfront.updateDistribution({
-              Id: output.distributionId,
-              IfMatch: current.etag,
-              DistributionConfig: {
-                ...current.config,
-                Enabled: false,
-              },
-            });
-          }
+          // Every network call below is bounded, and a timeout re-enters the
+          // loop rather than failing: the disable PUT was observed blocking
+          // ~28 minutes on a wedged connection (2026-08-13) while the reads
+          // around it were already timeout-guarded. A timed-out mutation may
+          // still have landed server-side, so the loop re-observes fresh
+          // cloud state (fresh etag) instead of reusing anything — which also
+          // makes the etag-race errors (InvalidIfMatchVersion,
+          // PreconditionFailed) plain retries.
+          class DistributionDeletePending extends Data.TaggedError(
+            "DistributionDeletePending",
+          )<{
+            message: string;
+          }> {}
 
-          const latest = yield* waitForDeletionReady(output.distributionId);
-          if (!latest) {
-            yield* Effect.logInfo(
-              `CloudFront Distribution delete: ${output.distributionId} disappeared before delete`,
+          yield* Effect.gen(function* () {
+            const current = yield* getCurrent(output.distributionId).pipe(
+              Effect.timeout(30_000),
+              Effect.catchTag("TimeoutError", () =>
+                Effect.fail(
+                  new DistributionDeletePending({
+                    message: `Timed out reading distribution ${output.distributionId} before delete`,
+                  }),
+                ),
+              ),
             );
-            return;
-          }
+            if (!current) {
+              yield* Effect.logInfo(
+                `CloudFront Distribution delete: ${output.distributionId} already absent`,
+              );
+              return;
+            }
 
-          yield* Effect.logInfo(
-            `CloudFront Distribution delete: deleting ${output.distributionId} with etag=${latest.etag ?? "missing"}`,
+            if (current.config.Enabled) {
+              yield* Effect.logInfo(
+                `CloudFront Distribution delete: disabling ${output.distributionId} before delete`,
+              );
+              yield* cloudfront
+                .updateDistribution({
+                  Id: output.distributionId,
+                  IfMatch: current.etag,
+                  DistributionConfig: {
+                    ...current.config,
+                    Enabled: false,
+                  },
+                })
+                .pipe(
+                  Effect.timeout(60_000),
+                  Effect.catchTag(
+                    [
+                      "TimeoutError",
+                      "InvalidIfMatchVersion",
+                      "PreconditionFailed",
+                    ],
+                    (error) =>
+                      Effect.fail(
+                        new DistributionDeletePending({
+                          message: `Disable of ${output.distributionId} did not settle (${error._tag}); re-observing`,
+                        }),
+                      ),
+                  ),
+                );
+            }
+
+            const latest = yield* waitForDeletionReady(output.distributionId);
+            if (!latest) {
+              yield* Effect.logInfo(
+                `CloudFront Distribution delete: ${output.distributionId} disappeared before delete`,
+              );
+              return;
+            }
+
+            yield* Effect.logInfo(
+              `CloudFront Distribution delete: deleting ${output.distributionId} with etag=${latest.etag ?? "missing"}`,
+            );
+            yield* cloudfront
+              .deleteDistribution({
+                Id: output.distributionId,
+                IfMatch: latest.etag,
+              })
+              .pipe(
+                Effect.timeout(60_000),
+                Effect.catchTag(
+                  [
+                    "TimeoutError",
+                    "InvalidIfMatchVersion",
+                    "PreconditionFailed",
+                    "DistributionNotDisabled",
+                  ],
+                  (error) =>
+                    Effect.fail(
+                      new DistributionDeletePending({
+                        message: `Delete of ${output.distributionId} did not settle (${error._tag}); re-observing`,
+                      }),
+                    ),
+                ),
+                Effect.catchTag("NoSuchDistribution", () => Effect.void),
+              );
+          }).pipe(
+            Effect.retry({
+              while: (error): boolean =>
+                error._tag === "DistributionDeletePending",
+              schedule: Schedule.max([
+                Schedule.fixed("10 seconds"),
+                Schedule.recurs(30),
+              ]),
+            }),
           );
-          yield* cloudfront
-            .deleteDistribution({
-              Id: output.distributionId,
-              IfMatch: latest.etag,
-            })
-            .pipe(Effect.catchTag("NoSuchDistribution", () => Effect.void));
         }),
       };
     }),

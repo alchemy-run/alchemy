@@ -43,6 +43,21 @@ const cappedKvsRetrySchedule = Schedule.max([
   ),
 );
 
+/**
+ * Bounded, jittered backoff for KVS optimistic-concurrency (etag) races.
+ *
+ * The exponential MUST be clamped: a raw
+ * `Schedule.max([Schedule.exponential("100 millis"), Schedule.recurs(24)])`
+ * lets the delay double without bound, so a handful of contended attempts
+ * (e.g. two resources deleting entries from the same store concurrently
+ * during a destroy) schedules sleeps of many minutes to hours — observed as
+ * a destroy that sat "hung" for ~35 minutes mid-plan. Jitter de-synchronizes
+ * the racing writers so they stop colliding on every attempt.
+ */
+export const kvsEtagRetrySchedule = cappedKvsRetrySchedule.pipe(
+  Schedule.jittered,
+);
+
 export const retryForKvsReadiness = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.retry({
