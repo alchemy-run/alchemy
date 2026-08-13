@@ -1,0 +1,663 @@
+import * as AWS from "@/AWS";
+import { makeFunctionBundler } from "@/AWS/Lambda/FunctionBundle.ts";
+import {
+  makeEffectFrameworkSite,
+  prepareServerWrapperEntry,
+} from "@/AWS/Website/FrameworkSite.ts";
+import * as Test from "@/Test/Alchemy";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { describe, expect, it } from "alchemy-test";
+import * as Cause from "effect/Cause";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+// The engine's ConfigProvider (`loadConfigProvider` → `fromEnv()`)
+// SNAPSHOTS `process.env` at construction — seed the plan-only config value
+// at module scope, before any harness stack builds its provider. The key is
+// unique to this suite, so leaving it set is inert for every other test.
+process.env.EFFECTFUL_SITE_PLAN_SECRET = "site-plan-secret";
+
+const { test } = Test.make({ providers: AWS.providers() });
+
+/**
+ * Plan-level coverage for the effectful AWS Website composites (collect-only
+ * threading): the impl runs at plan time in the engine process — bindings
+ * collect env vars + IAM policy statements onto the composite's server
+ * Lambda, `server.routes` threads into the collect-only props and the edge
+ * `serverRoutes` compile, and the resolved Lambda props are stamped with
+ * `runtimeDelivery` — without any build or cloud call. Nothing in this file
+ * deploys.
+ */
+
+const mountedDist = new URL(
+  "./fixtures/effectful-server/index.mjs",
+  import.meta.url,
+).pathname;
+const unmountedDist = new URL(
+  "./fixtures/effectful-server-unmounted/index.mjs",
+  import.meta.url,
+).pathname;
+
+const nodeOf = (plan: any, logicalId: string, type?: string) =>
+  (Object.values(plan.resources) as any[]).find(
+    (node: any) =>
+      node.resource?.LogicalId === logicalId &&
+      (type === undefined || node.resource?.Type === type),
+  );
+
+/** The defect of a died plan, if any. */
+const defectOf = (exit: Exit.Exit<any, any>): any => {
+  if (!Exit.isFailure(exit)) return undefined;
+  const die = exit.cause.reasons.find(Cause.isDieReason);
+  return die?.defect;
+};
+
+/** The typed failure of a failed exit, if any. */
+const failureOf = (exit: Exit.Exit<any, any>): any => {
+  if (!Exit.isFailure(exit)) return undefined;
+  const fail = exit.cause.reasons.find(
+    (reason: any) => reason._tag === "Fail",
+  ) as any;
+  return fail?.error;
+};
+
+const okFetch = {
+  fetch: Effect.succeed(HttpServerResponse.text("ok")),
+};
+
+describe.concurrent("effectful Website composites plan (collect-only)", () => {
+  test.provider(
+    "Astro impl arm: collect-only server Lambda stamps external delivery and collects the DynamoDB binding",
+    (stack) =>
+      Effect.gen(function* () {
+        const plan = yield* stack.plan(
+          Effect.gen(function* () {
+            const table = yield* AWS.DynamoDB.Table("PlanVisits", {
+              partitionKey: "pk",
+              attributes: { pk: "S" },
+            });
+            yield* AWS.Website.Astro(
+              "AstroSite",
+              { main: import.meta.url },
+              Effect.gen(function* () {
+                const getItem = yield* AWS.DynamoDB.GetItem(table);
+                void getItem;
+                return okFetch;
+              }).pipe(Effect.provide(AWS.DynamoDB.GetItemHttp)),
+            );
+          }),
+        );
+
+        // The framework build resource is planned unchanged.
+        const build = nodeOf(plan, "Build", "AWS.Website.Server");
+        expect(build).toBeDefined();
+        expect(build.action).toBe("create");
+
+        // The composite's server Lambda runs in collect-only mode: the
+        // framework artifact ships as-is (`bundle: false`, `handler`
+        // preserved). Astro is the auto-inject (wrapper) tier — the AWS
+        // deploy target's integration pre-resolves Astro's
+        // `virtual:astro:fetchable` to a generated wrapper mounting the
+        // AWS serve shell, driven by the `effectOptions` build option.
+        const server = nodeOf(plan, "Server", "AWS.Lambda.Function");
+        expect(server).toBeDefined();
+        expect(server.action).toBe("create");
+        expect(server.props.runtimeDelivery).toBe("wrapper");
+        expect(server.props.bundle).toBe(false);
+        expect(server.props.handler).toBe("handler");
+        expect(server.props.isExternal).toBeUndefined();
+        // The default routes thread into the collect-only server props
+        // (the same list compiles into the edge router's serverRoutes).
+        expect(server.props.server.routes).toEqual(["/api/*"]);
+        // The fetchable-wrapper inputs ride the framework build options
+        // (`targetConfig.effect` -> the AWS deploy target's config).
+        const buildTargetConfig = build.props.options?.targetConfig as
+          | { effect?: { main?: string; routes?: string[] } }
+          | undefined;
+        expect(buildTargetConfig?.effect?.routes).toEqual(["/api/*"]);
+        expect(buildTargetConfig?.effect?.main).toContain(
+          "EffectfulPlan.test.ts",
+        );
+
+        // The impl's init ran at plan time: the DynamoDB capability
+        // collected an IAM policy row through the binding channel.
+        const statements = (server.bindings ?? []).flatMap(
+          (binding: any) => binding.data?.policyStatements ?? [],
+        );
+        expect(
+          statements.some((statement: any) =>
+            (statement.Action ?? []).includes("dynamodb:GetItem"),
+          ),
+        ).toBe(true);
+
+        // ... and the table's physical name rode the env channel.
+        const envKeys = Object.keys(server.props.env ?? {});
+        expect(envKeys.some((key) => key.includes("tableName"))).toBe(true);
+
+        // ... and the bound table resource itself is planned.
+        expect(nodeOf(plan, "PlanVisits")).toBeDefined();
+      }),
+  );
+
+  test.provider(
+    "custom server.routes / verify / takeover thread into the collect-only props",
+    (stack) =>
+      Effect.gen(function* () {
+        const plan = yield* stack.plan(
+          Effect.gen(function* () {
+            yield* AWS.Website.Waku(
+              "WakuSite",
+              {
+                main: import.meta.url,
+                server: {
+                  routes: ["/rpc/*", "!/rpc/health"],
+                  verify: false,
+                  takeover: false,
+                },
+              },
+              Effect.succeed(okFetch),
+            );
+          }),
+        );
+        const server = nodeOf(plan, "Server", "AWS.Lambda.Function");
+        expect(server.props.runtimeDelivery).toBe("external");
+        expect(server.props.server).toMatchObject({
+          routes: ["/rpc/*", "!/rpc/health"],
+          verify: false,
+          takeover: false,
+        });
+      }),
+  );
+
+  test.provider(
+    "every composite overload plans: Nuxt, Octane, SvelteKit (class form)",
+    (stack) =>
+      Effect.gen(function* () {
+        // Plain impl arms.
+        for (const make of [
+          () =>
+            AWS.Website.Nuxt(
+              "NuxtSite",
+              { main: import.meta.url },
+              Effect.succeed(okFetch),
+            ),
+          () =>
+            AWS.Website.Octane(
+              "OctaneSite",
+              { main: import.meta.url },
+              Effect.succeed(okFetch),
+            ),
+        ]) {
+          const plan = yield* stack.plan(
+            Effect.gen(function* () {
+              yield* make();
+            }),
+          );
+          const server = nodeOf(plan, "Server", "AWS.Lambda.Function");
+          expect(server).toBeDefined();
+          expect(server.props.runtimeDelivery).toBe("external");
+          expect(server.props.bundle).toBe(false);
+          expect(server.props.server.routes).toEqual(["/api/*"]);
+        }
+
+        // Curried class form: the class is a real Effect and plans the
+        // same collect-only server Lambda. SvelteKit is the auto-inject
+        // (wrapper) tier: the deploy target's generated Lambda entry
+        // composes the effect fetch itself, driven by the `effect` build
+        // options on the framework build.
+        class SvelteSite extends AWS.Website.SvelteKit<SvelteSite>()(
+          "SvelteSite",
+          { main: import.meta.url },
+          Effect.succeed(okFetch),
+        ) {}
+        const plan = yield* stack.plan(
+          Effect.gen(function* () {
+            yield* SvelteSite;
+          }),
+        );
+        const server = nodeOf(plan, "Server", "AWS.Lambda.Function");
+        expect(server).toBeDefined();
+        expect(server.props.runtimeDelivery).toBe("wrapper");
+        expect(server.props.bundle).toBe(false);
+        const build = nodeOf(plan, "Build", "AWS.Website.Server");
+        expect(build).toBeDefined();
+        const options = build.props.options as {
+          effect: { main: string; routes: string[] };
+          effectHash: string;
+        };
+        expect(options.effect.routes).toEqual(["/api/*"]);
+        expect(options.effect.main).toContain("EffectfulPlan.test.ts");
+        expect(typeof options.effectHash).toBe("string");
+      }),
+  );
+
+  test.provider(
+    "Nextjs impl arm: collect-only stamp rides the OpenNext topology",
+    (stack) =>
+      Effect.gen(function* () {
+        const plan = yield* stack.plan(
+          Effect.gen(function* () {
+            yield* AWS.Website.Nextjs(
+              "NextSite",
+              { main: import.meta.url },
+              Effect.succeed(okFetch),
+            );
+          }),
+        );
+        const server = nodeOf(plan, "Server", "AWS.Lambda.Function");
+        expect(server).toBeDefined();
+        expect(server.props.runtimeDelivery).toBe("external");
+        expect(server.props.bundle).toBe(false);
+        expect(server.props.server.routes).toEqual(["/api/*"]);
+        // The OpenNext cache env names survive the impl threading (the
+        // collected env merges INTO them, never replaces them).
+        const envKeys = Object.keys(server.props.env ?? {});
+        for (const key of [
+          "CACHE_BUCKET_NAME",
+          "CACHE_BUCKET_KEY_PREFIX",
+          "REVALIDATION_QUEUE_URL",
+          "CACHE_DYNAMO_TABLE",
+        ]) {
+          expect(envKeys).toContain(key);
+        }
+        // The rest of the OpenNext topology is planned unchanged.
+        expect(nodeOf(plan, "RevalidationQueue")).toBeDefined();
+        expect(nodeOf(plan, "TagCache")).toBeDefined();
+        expect(nodeOf(plan, "ImageOptimization")).toBeDefined();
+      }),
+  );
+
+  test.provider(
+    "no-impl arms are untouched: external server Lambda, no stamp, no route threading",
+    (stack) =>
+      Effect.gen(function* () {
+        const plan = yield* stack.plan(
+          Effect.gen(function* () {
+            yield* AWS.Website.Astro("PlainAstro", {});
+          }),
+        );
+        const server = nodeOf(plan, "Server", "AWS.Lambda.Function");
+        expect(server).toBeDefined();
+        expect(server.action).toBe("create");
+        expect(server.props.isExternal).toBe(true);
+        expect(server.props.bundle).toBe(false);
+        expect(server.props.runtimeDelivery).toBeUndefined();
+        expect(server.props.server).toBeUndefined();
+        expect(server.props.functionUrl).toMatchObject({
+          authType: "NONE",
+          invokeMode: "RESPONSE_STREAM",
+        });
+        expect(nodeOf(plan, "Build", "AWS.Website.Server")).toBeDefined();
+      }),
+  );
+
+  test.provider("invalid server.routes fail fast at plan", (stack) =>
+    Effect.gen(function* () {
+      const exit = yield* Effect.exit(
+        stack.plan(
+          Effect.gen(function* () {
+            yield* AWS.Website.Nuxt(
+              "BadRoutes",
+              { main: import.meta.url, server: { routes: ["api/*"] } },
+              Effect.succeed(okFetch),
+            );
+          }),
+        ),
+      );
+      expect(defectOf(exit)?._tag).toBe("WebsiteServerRoutingError");
+    }),
+  );
+
+  test.provider("impl without a main anchor fails fast at plan", (stack) =>
+    Effect.gen(function* () {
+      const exit = yield* Effect.exit(
+        stack.plan(
+          Effect.gen(function* () {
+            yield* (AWS.Website.SvelteKit as any)(
+              "NoAnchor",
+              {},
+              Effect.succeed(okFetch),
+            );
+          }),
+        ),
+      );
+      const defect = defectOf(exit);
+      expect(defect?._tag).toBe("WebsiteImplAnchorError");
+      expect(String(defect?.message)).toContain("main: import.meta.url");
+    }),
+  );
+
+  test.provider(
+    "Astro static output rejects an Effect program at plan",
+    (stack) =>
+      Effect.gen(function* () {
+        const exit = yield* Effect.exit(
+          stack.plan(
+            Effect.gen(function* () {
+              yield* AWS.Website.Astro(
+                "StaticEffect",
+                { main: import.meta.url, astro: { output: "static" } },
+                Effect.succeed(okFetch),
+              );
+            }),
+          ),
+        );
+        const defect = defectOf(exit);
+        expect(defect?._tag).toBe("AstroEffectStaticOutputError");
+        expect(String(defect?.message)).toContain("assets-only");
+      }),
+  );
+
+  test.provider(
+    "wrapper tier: config.wrapperEntry generates the entry, threads options.main + effectHash, stamps wrapper",
+    (stack) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectory({
+          prefix: "alchemy-aws-wrapper-plan-",
+        });
+
+        const plan = yield* stack.plan(
+          Effect.gen(function* () {
+            yield* makeEffectFrameworkSite(
+              "WrapperSite",
+              { main: import.meta.url, rootDir: root },
+              {
+                name: "TestFramework",
+                framework: "@alchemy.run/frontend-frameworks/nuxt",
+                target: "@alchemy.run/frontend-frameworks/nuxt/aws",
+                wrapperEntry: ({ mainPath, routes }) =>
+                  `// generated by alchemy (test)\n` +
+                  `import Site from ${JSON.stringify(mainPath)};\n` +
+                  `export const routes = ${JSON.stringify(routes)};\n`,
+              },
+              Effect.succeed(okFetch),
+            );
+          }),
+        );
+
+        // The generated entry exists on disk BEFORE any build would run,
+        // under the project root so the framework toolchain can bundle it.
+        const entryPath = path.join(
+          root,
+          ".alchemy",
+          "generated",
+          "WrapperSite",
+          "entry.mjs",
+        );
+        expect(yield* fs.exists(entryPath)).toBe(true);
+        const entry = yield* fs.readFileString(entryPath);
+        expect(entry).toContain('"/api/*"');
+
+        // The build resource carries the wrapper path on the deploy
+        // target's user-entry seam plus the effect-module content hash
+        // (the memo surface that redeploys on effect edits).
+        const build = nodeOf(plan, "Build", "AWS.Website.Server");
+        expect(build.props.options.main).toBe(entryPath);
+        expect(String(build.props.options.effectHash)).toMatch(
+          /^[0-9a-f]{64}$/,
+        );
+
+        // ... and the server Lambda is stamped with the auto-inject tier.
+        const server = nodeOf(plan, "Server", "AWS.Lambda.Function");
+        expect(server.props.runtimeDelivery).toBe("wrapper");
+
+        yield* fs.remove(root, { recursive: true });
+      }),
+  );
+
+  test.provider(
+    "wrapper tier stands down on takeover: false (external, no generated entry)",
+    (stack) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectory({
+          prefix: "alchemy-aws-wrapper-optout-",
+        });
+
+        const plan = yield* stack.plan(
+          Effect.gen(function* () {
+            yield* makeEffectFrameworkSite(
+              "OptOutSite",
+              {
+                main: import.meta.url,
+                rootDir: root,
+                server: { takeover: false },
+              },
+              {
+                name: "TestFramework",
+                framework: "@alchemy.run/frontend-frameworks/nuxt",
+                target: "@alchemy.run/frontend-frameworks/nuxt/aws",
+                wrapperEntry: () => "// never generated\n",
+              },
+              Effect.succeed(okFetch),
+            );
+          }),
+        );
+
+        expect(
+          yield* fs.exists(
+            path.join(root, ".alchemy", "generated", "OptOutSite"),
+          ),
+        ).toBe(false);
+        const build = nodeOf(plan, "Build", "AWS.Website.Server");
+        expect(build.props.options?.main).toBeUndefined();
+        const server = nodeOf(plan, "Server", "AWS.Lambda.Function");
+        expect(server.props.runtimeDelivery).toBe("external");
+
+        yield* fs.remove(root, { recursive: true });
+      }),
+  );
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// Dev mode: no CDN resources; the effect program deploys as the local
+// emulator sibling and the collected env map (plus the alchemy stack
+// markers the in-process `alchemy/serve` mount needs) is lowered into the
+// dev `Server` resource's env — which applies it to the framework dev
+// server's process environment (`Server.ts` start).
+// ─────────────────────────────────────────────────────────────────────
+
+const dev = Test.make({
+  providers: AWS.providers(),
+  dev: true,
+  sidecar: false,
+});
+
+describe.concurrent("effectful Website composites plan (dev)", () => {
+  dev.test.provider(
+    "dev: collected env (and stack markers) lower into the dev Server resource",
+    (stack) =>
+      Effect.gen(function* () {
+        const plan = yield* stack.plan(
+          Effect.gen(function* () {
+            yield* AWS.Website.Nuxt(
+              "DevSite",
+              {
+                main: import.meta.url,
+                server: { environment: { SITE_DEV_VAR: "dev-var" } },
+              },
+              Effect.gen(function* () {
+                const secret = yield* Config.string(
+                  "EFFECTFUL_SITE_PLAN_SECRET",
+                );
+                void secret;
+                return okFetch;
+              }),
+            );
+          }),
+        );
+
+        // The framework dev server resource carries the lowered env:
+        // user-provided vars, the intercepted Config read (packed), and
+        // the stack markers that make the in-process serve mount engage
+        // (`hasStackMarkers`). `ALCHEMY_PHASE` is NOT lowered — the serve
+        // bridge forces the runtime phase itself, and stamping it into the
+        // sidecar's process env could confuse engine-side code.
+        const build = nodeOf(plan, "Build", "AWS.Website.Server");
+        expect(build).toBeDefined();
+        const env = build.props.env ?? {};
+        expect(env.SITE_DEV_VAR).toBe("dev-var");
+        const envKeys = Object.keys(env);
+        expect(envKeys).toContain("EFFECTFUL_SITE_PLAN_SECRET");
+        expect(envKeys).toContain("ALCHEMY_STACK_NAME");
+        expect(envKeys).toContain("ALCHEMY_STAGE");
+        expect(env.ALCHEMY_PHASE).toBeUndefined();
+
+        // The effect program deploys as its own effect-native Lambda (the
+        // local emulator sibling) — normal effect pipeline, not
+        // collect-only: `main` is the program anchor and there is no
+        // delivery stamp.
+        const server = nodeOf(plan, "Server", "AWS.Lambda.Function");
+        expect(server).toBeDefined();
+        expect(server.props.main).toBe(import.meta.url);
+        expect(server.props.bundle).toBeUndefined();
+        expect(server.props.runtimeDelivery).toBeUndefined();
+
+        // No CDN resources are declared in dev.
+        expect(nodeOf(plan, "Distribution")).toBeUndefined();
+        expect(nodeOf(plan, "Bucket")).toBeUndefined();
+      }),
+  );
+
+  dev.test.provider(
+    "dev: SvelteKit (wrapper tier) threads the effect build options into the dev Server",
+    (stack) =>
+      Effect.gen(function* () {
+        const plan = yield* stack.plan(
+          Effect.gen(function* () {
+            yield* AWS.Website.SvelteKit(
+              "DevSvelte",
+              { main: import.meta.url },
+              Effect.succeed(okFetch),
+            );
+          }),
+        );
+        // The framework's `make()` mounts the effect dev middleware from
+        // these options — the dev analogue of the generated Lambda entry's
+        // effect arm.
+        const build = nodeOf(plan, "Build", "AWS.Website.Server");
+        expect(build).toBeDefined();
+        const options = build.props.options as {
+          effect: { main: string; routes: string[] };
+        };
+        expect(options.effect.routes).toEqual(["/api/*"]);
+        expect(options.effect.main).toContain("EffectfulPlan.test.ts");
+      }),
+  );
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// The wiring handshake over a framework-shaped prebuilt artifact: the
+// composite ships the server directory as-is (`bundle: false`), so the
+// deploy-time sentinel scan is the only proof the user actually mounted
+// the program via `alchemy/serve` on the explicit tier.
+// ─────────────────────────────────────────────────────────────────────
+
+describe.concurrent("composite artifact sentinel scan (bundler unit)", () => {
+  const bundler = Effect.provide(makeFunctionBundler, NodeServices.layer);
+
+  it.effect(
+    "external delivery over an unmounted framework dist fails the handshake",
+    () =>
+      Effect.gen(function* () {
+        const { bundleCode } = yield* bundler;
+        const exit = yield* Effect.exit(
+          bundleCode("Server", {
+            // The exact props shape the effectful composites produce.
+            main: unmountedDist,
+            handler: "handler",
+            bundle: false,
+            server: { routes: ["/api/*"] },
+            runtimeDelivery: "external",
+          } as any).pipe(Effect.provide(NodeServices.layer)),
+        );
+        const failure = failureOf(exit);
+        expect(failure?._tag).toBe("MissingServeMountError");
+        expect(String(failure?.message)).toContain("alchemy/serve");
+      }),
+  );
+
+  it.effect("a mounted framework dist passes the handshake", () =>
+    Effect.gen(function* () {
+      const { bundleCode } = yield* bundler;
+      const result = yield* bundleCode("Server", {
+        main: mountedDist,
+        handler: "handler",
+        bundle: false,
+        server: { routes: ["/api/*"] },
+        runtimeDelivery: "external",
+      } as any).pipe(Effect.provide(NodeServices.layer));
+      expect(result.identityHash.length).toBeGreaterThan(0);
+    }),
+  );
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// The wrapper-entry helper itself (plumbing for the auto-inject tier).
+// ─────────────────────────────────────────────────────────────────────
+
+describe.concurrent("prepareServerWrapperEntry", () => {
+  it.effect("writes the entry under <root>/.alchemy/generated/<id>", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-aws-wrapper-entry-",
+      });
+      const mainA = path.join(root, "site-a.ts");
+      yield* fs.writeFileString(mainA, "export default 1;\n");
+
+      const prepared = yield* prepareServerWrapperEntry({
+        id: "Site",
+        rootDir: root,
+        main: mainA,
+        routes: ["/api/*"],
+        code: ({ mainPath, routes }) =>
+          `import Site from ${JSON.stringify(mainPath)};\n` +
+          `export const routes = ${JSON.stringify(routes)};\n`,
+      });
+      expect(prepared.entryPath).toBe(
+        path.join(root, ".alchemy", "generated", "Site", "entry.mjs"),
+      );
+      const written = yield* fs.readFileString(prepared.entryPath);
+      expect(written).toContain(JSON.stringify(mainA));
+      expect(written).toContain('"/api/*"');
+      expect(prepared.effectHash).toMatch(/^[0-9a-f]{64}$/);
+
+      // The hash keys on the effect module's CONTENT: an edit changes it
+      // (that is what folds into the Server memo surface so effect edits
+      // rebuild), while an identical re-run is stable.
+      const stable = yield* prepareServerWrapperEntry({
+        id: "Site",
+        rootDir: root,
+        main: mainA,
+        routes: ["/api/*"],
+        code: ({ mainPath, routes }) =>
+          `import Site from ${JSON.stringify(mainPath)};\n` +
+          `export const routes = ${JSON.stringify(routes)};\n`,
+      });
+      expect(stable.effectHash).toBe(prepared.effectHash);
+
+      yield* fs.writeFileString(mainA, "export default 2;\n");
+      const edited = yield* prepareServerWrapperEntry({
+        id: "Site",
+        rootDir: root,
+        main: mainA,
+        routes: ["/api/*"],
+        code: ({ mainPath, routes }) =>
+          `import Site from ${JSON.stringify(mainPath)};\n` +
+          `export const routes = ${JSON.stringify(routes)};\n`,
+      });
+      expect(edited.effectHash).not.toBe(prepared.effectHash);
+
+      yield* fs.remove(root, { recursive: true });
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+});

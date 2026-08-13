@@ -1,0 +1,1 @@
+astro-aws-effect-static-asset

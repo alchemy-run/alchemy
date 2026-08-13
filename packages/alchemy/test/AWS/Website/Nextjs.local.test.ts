@@ -1,13 +1,19 @@
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
+import * as s3 from "@distilled.cloud/aws/s3";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import { spawn } from "node:child_process";
+import { pathToFileURL } from "node:url";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
+import { dockerAvailable } from "../Local/fixtures/raw.ts";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
 // matching the process topology of the real `alchemy dev` command.
@@ -141,6 +147,292 @@ describe("AWS.Website.Nextjs local", () => {
         });
 
         yield* stack.destroy();
+      }),
+    { timeout: 600_000 },
+  );
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// Effectful Next.js (explicit tier, DESIGN §7-AWS): the Effect program
+// rides the `toRouteHandler` catch-all mount (`app/api/effect/[[...slug]]/
+// route.ts`), compiled by Next itself — under `next dev` the mount runs
+// in-process in the sidecar-hosted dev server, its env lowered by the
+// composite (stack markers + packed binding values + AWS_REGION), its
+// credentials resolved from the developer's ambient profile (the AWS dev
+// model: bindings hit real cloud, so the bound bucket is `remote()`),
+// while the effect program also deploys into the floci Lambda emulator as
+// the dev server Lambda. Docker required (floci); live credentials
+// required (--profile testing).
+// ─────────────────────────────────────────────────────────────────────
+
+// Clone INSIDE the workspace (unlike the plain dev test above, which
+// clones to the OS temp dir for OpenNext's monorepo detection — no
+// OpenNext build runs in dev): the generated site module and route mount
+// import `packages/alchemy/src` by relative path, so the current sources
+// (not a stale built `lib/`) are compiled by Next in the dev server and
+// imported by bun in the plan world.
+const inWorkspaceTempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
+const alchemySrcFrom = (relDepth: number) => `${"../".repeat(relDepth)}src`;
+
+/**
+ * The effectful site module written into the clone at `src/site.ts`
+ * (clone sits at `packages/alchemy/.tmp/<dir>/`, so `../../../src` is
+ * `packages/alchemy/src`).
+ */
+const nextEffectSiteSource = `
+import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as NodePath from "node:path";
+import { Bucket } from "${alchemySrcFrom(3)}/AWS/S3/Bucket.ts";
+import { GetObject } from "${alchemySrcFrom(3)}/AWS/S3/GetObject.ts";
+import { GetObjectHttp } from "${alchemySrcFrom(3)}/AWS/S3/GetObjectHttp.ts";
+import { PutObject } from "${alchemySrcFrom(3)}/AWS/S3/PutObject.ts";
+import { PutObjectHttp } from "${alchemySrcFrom(3)}/AWS/S3/PutObjectHttp.ts";
+import { Nextjs } from "${alchemySrcFrom(3)}/AWS/Website/Nextjs.ts";
+import { remote } from "${alchemySrcFrom(3)}/ProviderMode.ts";
+
+/**
+ * S3 bucket bound by the effectful site's program. \`remote()\`: the AWS
+ * dev model — capability bindings hit the REAL cloud with ambient
+ * credentials, so the bound bucket opts out of local emulation.
+ */
+export const SiteData = Bucket("NextEffectLocalData", {
+  forceDestroy: true,
+}).pipe(remote());
+
+export default class NextEffectSite extends Nextjs<NextEffectSite>()(
+  "NextEffectSite",
+  {
+    main: import.meta.url,
+    // Plan-only (guarded: undefined when the module re-evaluates inside a
+    // deployed bundle where import.meta has no path).
+    rootDir: import.meta.dirname
+      ? NodePath.dirname(import.meta.dirname)
+      : undefined,
+  },
+  Effect.gen(function* () {
+    const bucket = yield* SiteData;
+    const putObject = yield* PutObject(bucket);
+    const getObject = yield* GetObject(bucket);
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const url = new URL(request.url, "http://fixture");
+        if (url.pathname === "/api/effect/ping") {
+          return yield* HttpServerResponse.json({ marker: "effect-fetch" });
+        }
+        if (url.pathname === "/api/effect/s3") {
+          const key = url.searchParams.get("key") ?? "current";
+          const put = url.searchParams.get("put");
+          if (put !== null) {
+            yield* putObject({ Key: key, Body: put }).pipe(Effect.orDie);
+          }
+          const object = yield* getObject({ Key: key }).pipe(Effect.orDie);
+          const value =
+            object.Body === undefined
+              ? undefined
+              : yield* Stream.mkString(Stream.decodeText(object.Body)).pipe(
+                  Effect.orDie,
+                );
+          return yield* HttpServerResponse.json({ value });
+        }
+        return yield* HttpServerResponse.json(
+          { error: "unknown effect route" },
+          { status: 404 },
+        );
+      }),
+    };
+  }).pipe(Effect.provide([PutObjectHttp, GetObjectHttp])),
+) {}
+`;
+
+/**
+ * The explicit-tier mount (`app/api/effect/[[...slug]]/route.ts` inside the
+ * clone — six levels above is `packages/alchemy`). Relative into
+ * `packages/alchemy/src` so the mount runs the CURRENT serve sources.
+ */
+const nextRouteMountSource = [
+  `import { toRouteHandler } from "${alchemySrcFrom(6)}/Serve/next.ts";`,
+  `import Site from "../../../../src/site.ts";`,
+  `const handler = toRouteHandler(Site);`,
+  `export { handler as GET, handler as POST, handler as PUT,`,
+  `         handler as PATCH, handler as DELETE, handler as HEAD,`,
+  `         handler as OPTIONS };`,
+  ``,
+].join("\n");
+
+/** GET `url` until it answers 200 JSON — bounded (first hit compiles the
+ * route + the alchemy graph under turbopack, be patient). */
+const fetchJsonReady = <T>(url: string, times = 60) =>
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    return yield* client.get(url).pipe(
+      Effect.flatMap((res) =>
+        Effect.flatMap(res.text, (body) =>
+          res.status === 200
+            ? Effect.try({
+                try: () => JSON.parse(body) as T,
+                catch: () => new Error(`non-json body: ${body.slice(0, 300)}`),
+              })
+            : Effect.fail(
+                new Error(`not ready (${res.status}): ${body.slice(0, 300)}`),
+              ),
+        ),
+      ),
+      Effect.retry({ schedule: Schedule.spaced("3 seconds"), times }),
+    );
+  });
+
+describe("AWS.Website.Nextjs local (effectful)", () => {
+  test.provider.skipIf(!dockerAvailable)(
+    "effectful Next.js dev: toRouteHandler mount serves /api/effect/* with the real S3 binding",
+    (stack) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        yield* stack.destroy();
+        const rootDir = yield* cloneFixture(fixtureDir, {
+          prefix: "alchemy-nextjs-aws-effect-dev-",
+          tempRoot: inWorkspaceTempRoot,
+          entries: fixtureEntries,
+        });
+        // Hoisted install in the clone: `next dev` requires a project-local
+        // `typescript` (the fixture has tsconfig.json + TS route files) —
+        // without it the boot BLOCKS on Next's install-TypeScript flow and
+        // the dev server never binds its port.
+        yield* run({
+          cmd: "bun",
+          args: ["install", "--linker=hoisted"],
+          cwd: rootDir,
+        });
+
+        // Write the site module + the explicit route mount into the clone.
+        yield* fs.makeDirectory(path.join(rootDir, "src"), {
+          recursive: true,
+        });
+        yield* fs.writeFileString(
+          path.join(rootDir, "src", "site.ts"),
+          nextEffectSiteSource,
+        );
+        const routeDir = path.join(
+          rootDir,
+          "app",
+          "api",
+          "effect",
+          "[[...slug]]",
+        );
+        yield* fs.makeDirectory(routeDir, { recursive: true });
+        yield* fs.writeFileString(
+          path.join(routeDir, "route.ts"),
+          nextRouteMountSource,
+        );
+
+        // Bun resolves the clone's relative imports to the same
+        // `packages/alchemy/src` modules as `@/...`.
+        const mod = (yield* Effect.tryPromise(
+          () =>
+            import(pathToFileURL(path.join(rootDir, "src", "site.ts")).href),
+        )) as {
+          default: any;
+          SiteData: Effect.Effect<AWS.S3.Bucket, never, any>;
+        };
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            // The impl's `yield* SiteData` registers the bucket at the
+            // caller's namespace (registration is idempotent per FQN) —
+            // this resolves the SAME row the binding uses.
+            const data = yield* mod.SiteData;
+            const site = yield* mod.default;
+            return { data, site };
+          }),
+        );
+
+        // The site is `next dev`; no CDN resources exist; the effect
+        // program deployed into the floci Lambda emulator (dummy-account
+        // ARN — proof no real cloud call ran for it).
+        const url = deployed.site.url! as string;
+        expect(url).toMatch(
+          /^http:\/\/(localhost|127\.0\.0\.1|\[[0-9a-fA-F:]+\])/,
+        );
+        expect(deployed.site.distribution).toBeUndefined();
+        expect(deployed.site.bucket).toBeUndefined();
+        expect(deployed.site.server).toBeDefined();
+        expect(deployed.site.server!.functionArn).toContain(":000000000000:");
+        // The remote() bucket is REAL — a live-cloud ARN, not the
+        // emulator's dummy account.
+        expect(deployed.data.bucketArn).not.toContain(":000000000000:");
+
+        // The framework page proves next dev serves.
+        yield* expectUrlContains(`${url}/`, "NEXTJS_AWS_PAGE_MARKER", {
+          timeout: "240 seconds",
+          label: "effectful dev SSR home page",
+        });
+        // Next's own API route INSIDE /api/* still answers — the effect
+        // mount owns only /api/effect/*.
+        yield* expectUrlContains(
+          `${url}/api/hello?echo=dev`,
+          "NEXTJS_AWS_API_MARKER",
+          { label: "framework API route untouched" },
+        );
+
+        // Effect route through the explicit mount.
+        const ping = yield* fetchJsonReady<{ marker: string }>(
+          `${url}/api/effect/ping`,
+        );
+        expect(ping.marker).toBe("effect-fetch");
+
+        // S3 round-trip through the binding: the mount's capability
+        // clients resolve ambient credentials (`Credentials.fromChain()`)
+        // against the REAL remote() bucket. Random payload so a stale
+        // object can never satisfy the read.
+        const value = `nextjs-aws-effect-${crypto.randomUUID()}`;
+        const written = yield* fetchJsonReady<{ value: string | undefined }>(
+          `${url}/api/effect/s3?key=greeting&put=${value}`,
+        );
+        expect(written.value).toBe(value);
+        const read = yield* fetchJsonReady<{ value: string | undefined }>(
+          `${url}/api/effect/s3?key=greeting`,
+        );
+        expect(read.value).toBe(value);
+
+        // Out-of-band: the write is visible through the cloud S3 API —
+        // the dev binding really hit the live bucket.
+        const observed = yield* s3
+          .getObject({
+            Bucket: deployed.data.bucketName as string,
+            Key: "greeting",
+          })
+          .pipe(
+            Effect.flatMap((res) =>
+              Stream.mkString(Stream.decodeText(res.Body!)),
+            ),
+            Effect.retry({
+              schedule: Schedule.exponential("1 second", 1.5),
+              times: 5,
+            }),
+          );
+        expect(observed).toBe(value);
+
+        yield* stack.destroy();
+
+        // The remote() bucket's state row is stamped live, so the live
+        // provider deleted it from the cloud even in a dev run.
+        const gone = yield* s3
+          .headBucket({ Bucket: deployed.data.bucketName as string })
+          .pipe(
+            Effect.as(false),
+            Effect.catchTag(["NotFound", "NoSuchBucket"], () =>
+              Effect.succeed(true),
+            ),
+            Effect.repeat({
+              until: (deleted): boolean => deleted,
+              schedule: Schedule.spaced("3 seconds"),
+              times: 10,
+            }),
+          );
+        expect(gone).toBe(true);
       }),
     { timeout: 600_000 },
   );

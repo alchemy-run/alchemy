@@ -6,9 +6,11 @@ import type {
   LambdaFunctionURLEvent,
   LambdaFunctionURLResult,
 } from "aws-lambda";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import type { Scope } from "effect/Scope";
+import * as EffectHttp from "effect/unstable/http/HttpEffect";
 import * as HttpMiddleware from "effect/unstable/http/HttpMiddleware";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -43,6 +45,60 @@ export const isAlbEvent = (event: any): event is ALBEvent => {
     typeof event?.httpMethod === "string" &&
     event?.requestContext?.elb !== undefined
   );
+};
+
+/**
+ * The fetch-shaped variant of {@link makeFunctionHttpHandler}: a web
+ * `Request` in, a web `Response` out, with **streamed bodies preserved** —
+ * a streaming `HttpServerResponse` body becomes the `Response`'s
+ * `ReadableStream` instead of being buffered into a Lambda result object.
+ *
+ * This is the composition primitive for effectful Website server Lambdas
+ * (DESIGN §6.2 AWS mechanics): the generated wrapper entry composes the
+ * Effect fetch with the framework's fetch handler **at the fetch layer,
+ * before the single `awslambda.streamifyResponse` wrap**, so streamed
+ * effect responses ride the framework's `toLambdaHandler` pipe untouched.
+ *
+ * The request `Scope` is managed internally: `toHandled` opens a fresh
+ * scope per invocation (`Effect.addFinalizer` in the handler attaches to
+ * it) and settles it inline **before** the `Response` resolves — Lambda
+ * semantics, request finalizers block the response tail. When the response
+ * body is a stream, ownership of that scope is instead transferred to the
+ * stream (`scopeTransferToStream`): the `Response` resolves immediately
+ * and the finalizers run when the body stream completes.
+ */
+export const makeFunctionFetchHandler = <Req = never>(
+  handler: Http.HttpEffect<Req> | Effect.Effect<Http.HttpEffect<Req>>,
+): ((
+  webRequest: Request,
+) => Effect.Effect<
+  Response,
+  never,
+  Exclude<Req, HttpServerRequest.HttpServerRequest | Scope>
+>) => {
+  const safeHandler = Http.safeHttpEffect(handler);
+  return (webRequest: Request) =>
+    Effect.gen(function* () {
+      const request = HttpServerRequest.fromWeb(webRequest);
+      // `toHandled` exposes the final response through this callback, not
+      // its return value (mirrors the Worker bridge's
+      // `toHandledWebResponse`). It also applies the tracer middleware, so
+      // the `http.server` root span matches the buffered bridge's.
+      const context = yield* Effect.context();
+      const webResponse = yield* Deferred.make<Response>();
+      yield* EffectHttp.toHandled(safeHandler, (req, response) =>
+        Deferred.succeed(
+          webResponse,
+          HttpServerResponse.toWeb(EffectHttp.scopeTransferToStream(response), {
+            withoutBody: req.method === "HEAD",
+            context,
+          }),
+        ),
+      ).pipe(
+        Effect.provideService(HttpServerRequest.HttpServerRequest, request),
+      );
+      return yield* Deferred.await(webResponse);
+    }) as any;
 };
 
 export const makeFunctionHttpHandler = <Req>(handler: Http.HttpEffect<Req>) => {

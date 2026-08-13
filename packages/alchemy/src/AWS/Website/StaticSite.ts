@@ -1,3 +1,5 @@
+import type { ConfigError } from "effect/Config";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import { createHash } from "node:crypto";
@@ -5,12 +7,16 @@ import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Command from "../../Command/index.ts";
 import { toPath } from "../../FQN.ts";
 import type { Input } from "../../Input.ts";
+import type { Named, Tag } from "../../Named.ts";
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
+import type { MakeShape, PlatformServices } from "../../Platform.ts";
 import { ProviderModePolicy } from "../../ProviderMode.ts";
 import { isResource } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
+import { effectClass } from "../../Util/effect.ts";
+import { asEffect } from "../../Util/types.ts";
 import { Certificate } from "../ACM/Certificate.ts";
 import { CachePolicy } from "../CloudFront/CachePolicy.ts";
 import { Distribution } from "../CloudFront/Distribution.ts";
@@ -25,10 +31,25 @@ import {
 } from "../CloudFront/ManagedPolicies.ts";
 import { OriginAccessControl } from "../CloudFront/OriginAccessControl.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import type { Providers } from "../Providers.ts";
+import {
+  Function as LambdaFunction,
+  type FunctionArchitecture,
+  type FunctionServices,
+  type FunctionTypeId,
+} from "../Lambda/Function.ts";
 import { Record as Route53Record } from "../Route53/Record.ts";
 import { Bucket } from "../S3/Bucket.ts";
 import { AssetDeployment } from "./AssetDeployment.ts";
 import { buildHostRedirectInjection, CF_ROUTER_INJECTION } from "./cfcode.ts";
+import {
+  compileServerRoutes,
+  DEFAULT_SERVER_ROUTES,
+  validateImplAnchor,
+  type CompiledServerRoutes,
+  type WebsiteServerOptions,
+  type WebsiteShape,
+} from "./Effectful.ts";
 import {
   normalizeWebsiteDomain,
   type StaticSiteBuildProps,
@@ -168,6 +189,93 @@ export interface StaticSiteProps {
 }
 
 /**
+ * Server options for an *effectful* `StaticSite` (an Effect program as the
+ * third argument): the routes the effect `fetch` owns plus tuning for the
+ * server Lambda the program deploys as.
+ */
+export interface EffectStaticSiteServerOptions extends WebsiteServerOptions {
+  /**
+   * Extra environment variables for the server Lambda (binding-collected
+   * env vars and intercepted `Config` values are added automatically).
+   */
+  environment?: Record<string, Input<string>>;
+  /**
+   * Memory for the server Lambda, in MB.
+   * @default 1024
+   */
+  memorySize?: number;
+  /**
+   * Timeout for the server Lambda.
+   * @default 30 seconds
+   */
+  timeout?: Duration.Duration;
+  /**
+   * Node.js runtime for the server Lambda.
+   */
+  runtime?: "nodejs22.x" | "nodejs24.x";
+  /**
+   * Instruction set architecture for the server Lambda.
+   * @default "x86_64"
+   */
+  architecture?: FunctionArchitecture;
+}
+
+/**
+ * Props for the effectful `StaticSite` arms — today's props plus the
+ * required `main` module anchor and the `server` options.
+ */
+export interface EffectStaticSiteProps extends StaticSiteProps {
+  /**
+   * The module URL default-exporting this class (`main: import.meta.url`)
+   * — identical to `AWS.Lambda.Function`'s Effect form. Required with an
+   * impl: the deployed bundle re-imports the program by path.
+   */
+  main: string;
+  /**
+   * Server routing + Lambda tuning. `server.routes` (default `["/api/*"]`)
+   * is the URL space the effect `fetch` owns — compiled into the
+   * viewer-request CloudFront Function so matching requests reach the
+   * server Lambda before the asset manifest, even under `spa: true`.
+   */
+  server?: EffectStaticSiteServerOptions;
+}
+
+/**
+ * The attributes a deployed `StaticSite` resolves to. In dev mode
+ * (`alchemy dev` with a `dev.command`) every cloud-resource attribute is
+ * `undefined` and `url` is the external dev server's address.
+ */
+export interface StaticSiteAttributes {
+  /** S3 bucket holding the uploaded assets (`undefined` in dev). */
+  bucket: Bucket | undefined;
+  /** The `build.command` run, when configured (`undefined` in dev). */
+  build: Command.Build | undefined;
+  /** The uploaded asset deployment (`undefined` in dev). */
+  files: AssetDeployment | undefined;
+  /** The standalone CloudFront distribution (`undefined` in dev and for Router-attached sites). */
+  distribution: Distribution | undefined;
+  /** The CloudFront invalidation issued for this deployment, if enabled. */
+  invalidation: Invalidation | undefined;
+  /** The site's namespace prefix in the CloudFront KeyValueStore. */
+  kvNamespace: string | undefined;
+  /** The most significant URL the site serves at — always `urls[0]`. */
+  url: Input<string | undefined>;
+  /** Every URL that serves this site, most significant first. */
+  urls: Input<string | undefined>[];
+}
+
+/**
+ * Attributes of an effectful `StaticSite`: the static-site attributes plus
+ * the effect-native server Lambda.
+ */
+export interface EffectStaticSiteAttributes extends StaticSiteAttributes {
+  /** The effect-native `AWS.Lambda.Function` serving `server.routes`. */
+  server: LambdaFunction;
+  /** The server Lambda's Function URL. */
+  serverUrl: Input<string | undefined>;
+}
+
+/**
  * Deploy a static website to S3 and CloudFront using KV-based edge routing.
  *
  * `StaticSite` uploads site files to a private S3 bucket, creates a CloudFront
@@ -254,8 +362,111 @@ export interface StaticSiteProps {
  *   },
  * });
  * ```
+ *
+ * @section Effectful Site
+ * Pass an Effect program as the third argument to serve an effect-native
+ * API from the same site: the program deploys as an `AWS.Lambda.Function`
+ * (bindings collect env vars and IAM at deploy time, exactly like an
+ * effect Lambda), and the generated CloudFront edge router forwards
+ * `server.routes` (default `["/api/*"]`) to it BEFORE the static-asset
+ * manifest — an uploaded file can never shadow an API path, and the API
+ * stays reachable under `spa: true`. The program must live in a dedicated
+ * module whose default export is the class, anchored by
+ * `main: import.meta.url`.
+ *
+ * @example Static site with an effect-native API
+ * ```typescript
+ * // src/site.ts
+ * export default class Site extends AWS.Website.StaticSite<Site>()(
+ *   "Site",
+ *   {
+ *     path: "./dist",
+ *     spa: true,
+ *     main: import.meta.url,
+ *     server: { routes: ["/api/*"] },
+ *   },
+ *   Effect.gen(function* () {
+ *     const bucket = yield* AWS.S3.Bucket("Data");
+ *     const getObject = yield* AWS.S3.GetObject(bucket);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const request = yield* HttpServerRequest;
+ *         const object = yield* getObject({ Key: "hello.txt" }).pipe(Effect.orDie);
+ *         return HttpServerResponse.text(String(object.Body));
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide([AWS.S3.GetObjectHttp])),
+ * ) {}
+ * ```
  */
-export const StaticSite = (id: string, props: StaticSiteProps) =>
+export const StaticSite: {
+  <Self>(): {
+    <
+      const Id extends string,
+      Shape extends WebsiteShape,
+      InitReq extends FunctionServices | PlatformServices | LambdaFunction =
+        never,
+    >(
+      id: Id,
+      props: EffectStaticSiteProps,
+      impl: Effect.Effect<Shape, ConfigError, InitReq>,
+    ): Effect.Effect<
+      EffectStaticSiteAttributes,
+      never,
+      | Providers
+      | Exclude<InitReq, FunctionServices | PlatformServices | LambdaFunction>
+    > &
+      Named<Id> & {
+        new (): MakeShape<Shape, WebsiteShape> &
+          Named<Id> &
+          Tag<FunctionTypeId>;
+      };
+    (
+      id: string,
+      props: StaticSiteProps,
+    ): Effect.Effect<StaticSiteAttributes, never, Providers> & {
+      new (): StaticSiteAttributes;
+    };
+  };
+  <
+    const Id extends string,
+    Shape extends WebsiteShape,
+    InitReq extends FunctionServices | PlatformServices | LambdaFunction =
+      never,
+  >(
+    id: Id,
+    props: EffectStaticSiteProps,
+    impl: Effect.Effect<Shape, ConfigError, InitReq>,
+  ): Effect.Effect<
+    EffectStaticSiteAttributes,
+    never,
+    | Providers
+    | Exclude<InitReq, FunctionServices | PlatformServices | LambdaFunction>
+  > &
+    Named<Id>;
+  (
+    id: string,
+    props: StaticSiteProps,
+  ): Effect.Effect<StaticSiteAttributes, never, Providers>;
+} = ((id?: any, props?: any, impl?: any) =>
+  id === undefined
+    ? (id: string, props: any, impl?: any) =>
+        effectClass(makeStaticSite(id, props, impl))
+    : makeStaticSite(id, props, impl)) as any;
+
+const makeStaticSite = (
+  id: string,
+  propsEff: any,
+  impl?: Effect.Effect<any, any, any>,
+): Effect.Effect<any, never, any> =>
+  impl === undefined
+    ? makePlainStaticSite(id, propsEff)
+    : makeEffectStaticSite(id, propsEff, impl);
+
+const makePlainStaticSite = (
+  id: string,
+  props: StaticSiteProps,
+): Effect.Effect<any, never, any> =>
   Effect.gen(function* () {
     const ctx = yield* AlchemyContext;
     const remoted = yield* ProviderModePolicy;
@@ -290,6 +501,128 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
   }).pipe(Namespace.push(id));
 
 /**
+ * Lambda props for the effectful arm's server Function — the effect
+ * program deploys through the ordinary `FunctionBundle` machinery (virtual
+ * entry, binding collection, packed Config env); this is the one AWS
+ * Website case where the Effect program IS the server.
+ */
+const serverFunctionProps = (props: EffectStaticSiteProps) => ({
+  main: props.main,
+  // The Effect HTTP bridge is buffered — a BUFFERED public Function URL,
+  // not the framework composites' RESPONSE_STREAM.
+  functionUrl: { authType: "NONE" as const },
+  memorySize: props.server?.memorySize ?? 1024,
+  // Ship the JSON round-trip shape (`{_id:"Duration",...}`) instead of the
+  // live `Duration` instance: `toTimeoutSeconds` explicitly supports it,
+  // and the dev dual's RPC-sidecar serialization (capnweb) rejects class
+  // instances like Duration.
+  timeout: JSON.parse(
+    JSON.stringify(props.server?.timeout ?? Duration.seconds(30)),
+  ) as Duration.Duration,
+  runtime: props.server?.runtime,
+  architecture: props.server?.architecture,
+  env: props.server?.environment as Record<string, any> | undefined,
+});
+
+const makeEffectStaticSite = (
+  id: string,
+  propsEff:
+    | EffectStaticSiteProps
+    | Effect.Effect<EffectStaticSiteProps, any, any>,
+  impl: Effect.Effect<any, any, any>,
+): Effect.Effect<any, never, any> =>
+  // Prop-effect ConfigError surfaces as a defect at plan time (matching the
+  // typed overloads, whose result error channel is `never`).
+  Effect.gen(function* () {
+    // Runtime world: the deployed bundle's virtual entry imports this
+    // module's default export and re-evaluates the program inside the
+    // Lambda. `AlchemyContext` and the CDN sub-resources are plan-only
+    // machinery whose services don't exist there — delegate straight to
+    // the Lambda platform call, which owns the runtime re-evaluation
+    // contract (stub Stack, runtime ConfigProvider).
+    if (globalThis.__ALCHEMY_RUNTIME__) {
+      const props = yield* asEffect(propsEff);
+      return yield* (LambdaFunction as any)(
+        id,
+        serverFunctionProps(props),
+        impl,
+      ) as Effect.Effect<any, never, any>;
+    }
+    const ctx = yield* AlchemyContext;
+    const remoted = yield* ProviderModePolicy;
+    const props = yield* asEffect(propsEff);
+    yield* validateImplAnchor(id, "StaticSite", props.main);
+    const routes = props.server?.routes ?? DEFAULT_SERVER_ROUTES;
+    // Validate the route globs eagerly — a plan-time defect even in dev,
+    // where the edge compile never runs.
+    yield* compileServerRoutes(id, routes);
+
+    // The effect program IS the server: an effect-native Lambda Function
+    // at the caller's namespace under the site's own id — mirroring
+    // Cloudflare, where the Worker IS the site — so resources the impl's
+    // init declares resolve exactly as on a plain `AWS.Lambda.Function`.
+    const server = (yield* (LambdaFunction as any)(
+      id,
+      serverFunctionProps(props),
+      impl,
+    ) as Effect.Effect<any, never, any>) as LambdaFunction;
+
+    // Dev: the effect Lambda runs in the local emulator (the Function
+    // provider's dev dual); the frontend is the external `dev.command`
+    // server. No CDN resources are declared; `Alchemy.remote()` opts back
+    // into the full live deployment.
+    const isLocal = ctx.dev && remoted !== true;
+    if (isLocal) {
+      const dev = props.dev
+        ? yield* Command.Dev("Dev", {
+            command: props.dev.command,
+            cwd:
+              props.dev.cwd ??
+              (typeof props.path === "string" ? props.path : undefined),
+            env: props.dev.env,
+          }).pipe(Namespace.push(id))
+        : undefined;
+      const devUrl = dev
+        ? Output.map(dev.url, (url) => url ?? props.dev?.url)
+        : undefined;
+      const url = (devUrl ?? server.functionUrl) as Input<string | undefined>;
+      return {
+        bucket: undefined,
+        build: undefined,
+        files: undefined,
+        distribution: undefined,
+        invalidation: undefined,
+        kvNamespace: undefined,
+        server,
+        serverUrl: server.functionUrl as Input<string | undefined>,
+        url,
+        urls: [url],
+      };
+    }
+
+    const serverHost = Output.map((url: string | undefined) => {
+      if (!url) {
+        throw new Error(
+          `AWS.Website.StaticSite("${id}"): the server function did not produce a Function URL.`,
+        );
+      }
+      return new URL(url).hostname;
+    })(server.functionUrl as any) as Input<string>;
+
+    const site = yield* makeKvSite(id, props, {
+      serverHost,
+      serverRoutes: routes,
+      serverRoutesOnly: true,
+    }).pipe(Namespace.push(id));
+
+    return {
+      ...site,
+      server,
+      serverUrl: server.functionUrl as Input<string | undefined>,
+    };
+  }) as Effect.Effect<any, never, any>;
+
+/**
  * Dynamic server origin for {@link makeKvSite} — the KV metadata gains a
  * `servers` entry so requests that match no uploaded file are forwarded to
  * the server instead of a static fallback.
@@ -311,6 +644,22 @@ export interface KvSiteServerOptions {
     route: string;
     host: Input<string>;
   };
+  /**
+   * Route globs the server owns — matched at the edge BEFORE the asset
+   * manifest lookup (see the `serverRoutes` check in `routeSite`,
+   * cfcode.ts), so a static file can never shadow a server path. Uses the
+   * `runWorkerFirst` glob dialect (`*` matches any run including `/`;
+   * leading `!` marks an exclusion).
+   */
+  serverRoutes?: string[];
+  /**
+   * The server serves ONLY {@link serverRoutes}: manifest misses outside
+   * them use the static fallback rules (`spa` / index page) instead of
+   * being forwarded to the server, and the distribution's default origin
+   * stays the S3 bucket. This is the effectful-`StaticSite` shape — a
+   * fullstack framework site (SSR misses) leaves this unset.
+   */
+  serverRoutesOnly?: boolean;
 }
 
 /**
@@ -385,9 +734,22 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
       `Cannot provide both "spa" and "errorPage". A SPA answers misses with the index page (200); "errorPage" answers them with a real 404.`,
     );
   }
-  if (server && (props.spa || props.errorPage)) {
+  if (server && props.errorPage) {
     return yield* Effect.die(
-      `A site with a server origin routes misses to the server; "spa" and "errorPage" do not apply.`,
+      `Cannot provide both "errorPage" and a server origin: "errorPage" uses CloudFront custom error responses, which rewrite every 403/404 the distribution returns — including the server's own API responses. Use "spa" (with scoped server routes) or serve error pages from the app.`,
+    );
+  }
+  if (server && props.spa && !server.serverRoutesOnly) {
+    return yield* Effect.die(
+      `A site whose server origin answers manifest misses routes them to the server; "spa" does not apply. Scope the server to explicit routes (an effectful site's "server.routes") to combine it with "spa".`,
+    );
+  }
+  const compiledServerRoutes = server?.serverRoutes?.length
+    ? yield* compileServerRoutes(id, server.serverRoutes)
+    : undefined;
+  if (server?.serverRoutesOnly && !compiledServerRoutes) {
+    return yield* Effect.die(
+      `"serverRoutesOnly" requires "serverRoutes" — without routes the server would be unreachable.`,
     );
   }
 
@@ -459,6 +821,8 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
     serverHost: server?.serverHost,
     imageRoute: server?.image?.route,
     imageHost: server?.image?.host,
+    serverRoutes: compiledServerRoutes,
+    serverRoutesOnly: server?.serverRoutesOnly === true,
   });
 
   let distributionId: Input<string>;
@@ -665,22 +1029,26 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
     // function's origin switch — CloudFront's custom-error-page fetches
     // in particular — still resolve; server-backed sites point at the
     // server so misses stream from it even if the function is bypassed.
-    const oac = server
-      ? undefined
-      : yield* OriginAccessControl("OriginAccessControl", {
+    // A `serverRoutesOnly` server (the effectful StaticSite) is
+    // static-first: the default origin stays the bucket and only the edge
+    // function's `serverRoutes` match switches to the server.
+    const staticDefaultOrigin = !server || server.serverRoutesOnly === true;
+    const oac = staticDefaultOrigin
+      ? yield* OriginAccessControl("OriginAccessControl", {
           originType: "s3",
           description: `${id} origin access control`,
-        });
+        })
+      : undefined;
 
     distribution = yield* Distribution("Distribution", {
       aliases: domain
         ? [domain.name, ...(domain.aliases ?? []), ...(domain.redirects ?? [])]
         : undefined,
       origins: [
-        server
+        !staticDefaultOrigin
           ? {
               id: "default",
-              domainName: server.serverHost,
+              domainName: server!.serverHost,
               customOriginConfig: {
                 httpPort: 80,
                 httpsPort: 443,
@@ -850,6 +1218,8 @@ const buildKvEntries = (args: {
   serverHost: Input<string> | undefined;
   imageRoute: string | undefined;
   imageHost: Input<string> | undefined;
+  serverRoutes: CompiledServerRoutes | undefined;
+  serverRoutesOnly: boolean;
 }): Input<Record<string, string>> =>
   Output.map(
     ([fileList, bucketDomain, serverHost, imageHost]: [
@@ -869,8 +1239,10 @@ const buildKvEntries = (args: {
           args.routerPathPrefix && args.routerPathPrefix !== "/"
             ? args.routerPathPrefix
             : undefined,
+        // A `serverRoutesOnly` server owns only its routes — misses keep
+        // the static fallback (SPA/index rewrite) instead of the server.
         custom404:
-          serverHost !== undefined || args.errorPage
+          (serverHost !== undefined && !args.serverRoutesOnly) || args.errorPage
             ? undefined
             : errorPagePath,
         errorResponseCode:
@@ -886,6 +1258,9 @@ const buildKvEntries = (args: {
             ? { route: args.imageRoute, host: imageHost }
             : undefined,
         redirect: args.redirect,
+        serverRoutes: serverHost !== undefined ? args.serverRoutes : undefined,
+        serverRoutesOnly:
+          serverHost !== undefined && args.serverRoutesOnly ? true : undefined,
       };
       entries["metadata"] = JSON.stringify(metadata);
       return entries;
@@ -926,6 +1301,17 @@ interface KvSiteMetadata {
    * the `metadata.redirect` check in `routeSite` in cfcode.ts.
    */
   redirect?: { hosts: string[]; to: string } | undefined;
+  /**
+   * Compiled `server.routes` (anchored regex sources): matched requests
+   * switch to the server origin BEFORE the manifest lookup — see the
+   * `serverRoutes` check in `routeSite` in cfcode.ts.
+   */
+  serverRoutes?: CompiledServerRoutes | undefined;
+  /**
+   * The server serves only {@link serverRoutes}: manifest misses use the
+   * static fallback rules and never forward to the server.
+   */
+  serverRoutesOnly?: true | undefined;
 }
 
 const buildRequestFunctionCode = ({

@@ -1,12 +1,19 @@
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
+import { Region } from "@distilled.cloud/aws/Region";
+import * as S3 from "@distilled.cloud/aws/s3";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import { pathToFileURL } from "node:url";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
+import { dockerAvailable } from "../Local/fixtures/raw.ts";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
 // matching the process topology of the real `alchemy dev` command.
@@ -98,6 +105,181 @@ describe("AWS.Website.SvelteKit local", () => {
         });
 
         yield* stack.destroy();
+      }),
+    { timeout: 600_000 },
+  );
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// Effectful SvelteKit (DESIGN §6.2b / §7-AWS) under `alchemy dev`: the
+// site's Effect program owns `/api/*` through the effect dev middleware
+// mounted in front of kit's Vite dev server, running in the RPC-sidecar
+// process with env lowered by the composite. Bindings hit the REAL cloud
+// with ambient credentials (the AWS dev model — no local S3 emulator),
+// while the effect program also deploys into the floci Lambda emulator as
+// the sibling function (docker required).
+// ─────────────────────────────────────────────────────────────────────
+
+const effectFixtureDir = pathe.resolve(
+  import.meta.dirname,
+  "fixtures",
+  "sveltekit-effect-app",
+);
+
+/** GET a JSON body, retrying until the dev server + layer build settle. */
+const fetchJsonReady = <T>(url: string) =>
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    return yield* client.get(url).pipe(
+      Effect.flatMap((res) =>
+        res.status === 200
+          ? Effect.flatMap(res.text, (body) =>
+              Effect.try({
+                try: () => JSON.parse(body) as T,
+                catch: () => new Error(`non-json body: ${body}`),
+              }),
+            )
+          : Effect.fail(new Error(`dev server not ready: ${res.status}`)),
+      ),
+      Effect.retry({
+        schedule: Schedule.min([
+          Schedule.exponential("500 millis"),
+          Schedule.spaced("4 seconds"),
+        ]),
+        times: 15,
+      }),
+    );
+  });
+
+describe("AWS.Website.SvelteKit local (effectful)", () => {
+  test.provider.skipIf(!dockerAvailable)(
+    "effectful SvelteKit dev: /api/* serves through the effect middleware with real S3; passthrough, SSR, and streamed bodies work",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const rootDir = yield* cloneFixture(effectFixtureDir, {
+          prefix: "alchemy-sveltekit-aws-effect-dev-",
+          tempRoot,
+          entries: ["package.json", "src"],
+        });
+
+        // The site module is cloned with the fixture, so it is imported
+        // dynamically from the clone (its `rootDir` prop derives from its
+        // own location). Bun resolves `alchemy/...` through the workspace
+        // symlink to the same module instances as `@/...`.
+        const siteModule = (yield* Effect.tryPromise(
+          () =>
+            import(pathToFileURL(pathe.join(rootDir, "src", "site.ts")).href),
+        )) as typeof import("./fixtures/sveltekit-effect-app/src/site.ts");
+
+        const { site, data } = yield* stack.deploy(
+          Effect.gen(function* () {
+            // The impl's `yield* SiteData` registers the bucket at the
+            // root (registration is idempotent per FQN) — this resolves
+            // the SAME row the binding uses.
+            const data = yield* siteModule.SiteData;
+            const site = yield* siteModule.default;
+            return { data, site };
+          }),
+        );
+
+        // The site's url is kit's own Vite dev server; no CDN resources
+        // exist. The `remote()` S3 bucket is REAL (the AWS dev model —
+        // bindings hit real cloud), while the effect sibling Lambda runs
+        // in the floci emulator (dummy-account ARN).
+        const url = site.url! as string;
+        expect(url).toMatch(
+          /^http:\/\/(localhost|127\.0\.0\.1|\[[0-9a-fA-F:]+\])/,
+        );
+        expect(site.distribution).toBeUndefined();
+        expect(site.bucket).toBeUndefined();
+        expect(site.files).toBeUndefined();
+        expect(site.server.functionArn).toContain(":000000000000:");
+        expect(data.bucketArn).not.toContain(":000000000000:");
+
+        // ── Effect surface: /api/effect/s3 write+read round-trips the S3
+        // capability bindings through the dev middleware, against the REAL
+        // bucket with ambient credentials. Random payload so a stale
+        // object from an earlier run can never satisfy the read ──────────
+        const s3Value = `sveltekit-aws-effect-${crypto.randomUUID()}`;
+        const s3Write = yield* fetchJsonReady<{ value: string | undefined }>(
+          `${url}/api/effect/s3?key=greeting&put=${s3Value}`,
+        );
+        expect(s3Write.value).toBe(s3Value);
+        const s3Read = yield* fetchJsonReady<{ value: string | undefined }>(
+          `${url}/api/effect/s3?key=greeting`,
+        );
+        expect(s3Read.value).toBe(s3Value);
+
+        // Out-of-band: the write is visible through the cloud API — the
+        // dev binding really hit the live bucket. Pinned to the bucket's
+        // own region: the harness context may resolve a different default
+        // region than the provider that created the bucket.
+        const inBucketRegion = Effect.provideService(
+          Region,
+          Effect.succeed(data.region),
+        );
+        const cloudBody = yield* S3.getObject({
+          Bucket: data.bucketName,
+          Key: "greeting",
+        }).pipe(
+          Effect.flatMap((res) =>
+            Stream.mkString(Stream.decodeText(res.Body!)),
+          ),
+          Effect.retry({
+            schedule: Schedule.exponential("1 second", 1.5),
+            times: 5,
+          }),
+          inBucketRegion,
+        );
+        expect(cloudBody).toBe(s3Value);
+
+        // ── Streamed effect response through the dev middleware ──────────
+        yield* expectUrlContains(
+          `${url}/api/effect/stream`,
+          siteModule.STREAM_MARKER,
+          { timeout: "60 seconds", label: "streamed effect response (dev)" },
+        );
+
+        // ── Passthrough: a KIT endpoint INSIDE /api/* still answers — the
+        // effect fetch declines it (RouteNotFound) and the middleware
+        // falls through to kit ───────────────────────────────────────────
+        const hello = yield* fetchJsonReady<{
+          marker: string;
+          via: string;
+          echo: string | null;
+        }>(`${url}/api/hello?echo=dev`);
+        expect(hello.marker).toBe("SVELTEKIT_AWS_EFFECT_KIT_API");
+        expect(hello.via).toBe("kit");
+        expect(hello.echo).toBe("dev");
+
+        // ── Framework surface: kit SSR outside the effect routes ─────────
+        yield* expectUrlContains(
+          `${url}/`,
+          "SVELTEKIT_AWS_EFFECT_PAGE_MARKER",
+          { timeout: "120 seconds", label: "kit SSR home (dev)" },
+        );
+
+        yield* stack.destroy();
+
+        // The REAL bucket was deleted on destroy (its row is
+        // mode-agnostic, so the live provider handles the delete even in a
+        // dev run).
+        yield* S3.headBucket({ Bucket: data.bucketName }).pipe(
+          Effect.flatMap(() => Effect.fail(new Error("BucketStillExists"))),
+          Effect.retry({
+            while: (e): boolean =>
+              e instanceof Error && e.message === "BucketStillExists",
+            schedule: Schedule.max([
+              Schedule.exponential("200 millis"),
+              Schedule.recurs(10),
+            ]),
+          }),
+          Effect.catchTag("NotFound", () => Effect.void),
+          Effect.catch(() => Effect.void),
+          inBucketRegion,
+        );
       }),
     { timeout: 600_000 },
   );

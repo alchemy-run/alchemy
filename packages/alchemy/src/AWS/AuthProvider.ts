@@ -110,6 +110,15 @@ export interface AwsResolvedCredentials {
    * every AWS SDK call.
    */
   endpoint?: string;
+  /**
+   * The AWS (`~/.aws/config`) profile name credentials were resolved from,
+   * when the method is profile-backed (`sso`). Flows into
+   * `AWSEnvironment.profile` so dev-mode machinery (e.g. the effectful
+   * Website composites' env lowering) can point ambient-credential
+   * consumers (`Credentials.fromChain()` in a framework dev server) at the
+   * SAME profile the engine authenticated with.
+   */
+  profile?: string;
   source: {
     type: AwsAuthConfig["method"];
     details?: string;
@@ -498,6 +507,7 @@ export const AwsAuth = AuthProviderLayer<
                     Effect.orDie,
                   ),
                 region: profile?.region!,
+                profile: config.ssoProfile,
                 source: { type: "sso" as const, details: config.ssoProfile },
               } satisfies AwsResolvedCredentials;
             }),

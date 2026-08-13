@@ -1,5 +1,25 @@
+import type { ConfigError } from "effect/Config";
+import type * as Effect from "effect/Effect";
+import type { Named, Tag } from "../../Named.ts";
 import * as Namespace from "../../Namespace.ts";
-import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
+import type { MakeShape, PlatformServices } from "../../Platform.ts";
+import { effectClass } from "../../Util/effect.ts";
+import type {
+  Function as LambdaFunctionResource,
+  FunctionServices,
+  FunctionTypeId,
+} from "../Lambda/Function.ts";
+import type { Providers } from "../Providers.ts";
+import type { WebsiteShape } from "./Effectful.ts";
+import {
+  makeEffectFrameworkSite,
+  makeFrameworkSite,
+  type EffectFrameworkServerProps,
+  type EffectFrameworkSiteAttributes,
+  type FrameworkSiteAttributes,
+  type FrameworkSiteConfig,
+  type FrameworkSiteProps,
+} from "./FrameworkSite.ts";
 
 /** The framework-integration package that drives the Octane build. */
 export const OCTANE_FRAMEWORK_SPECIFIER =
@@ -16,6 +36,24 @@ export interface OctaneProps extends FrameworkSiteProps {
    * @default "."
    */
   rootDir?: string;
+}
+
+/**
+ * Props for the effectful `Octane` arms — today's props plus the required
+ * `main` module anchor and the widened `server` options.
+ */
+export interface EffectOctaneProps extends OctaneProps {
+  /**
+   * The module URL default-exporting this class (`main: import.meta.url`).
+   * Required with an impl: the framework-built server bundle re-imports
+   * the program by path.
+   */
+  main: string;
+  /**
+   * Server routing + delivery + Lambda tuning (`server.routes` defaults to
+   * `["/api/*"]`).
+   */
+  server?: EffectFrameworkServerProps;
 }
 
 /**
@@ -74,10 +112,119 @@ export interface OctaneProps extends FrameworkSiteProps {
  *   },
  * });
  * ```
+ *
+ * @section Effectful Site
+ * Pass an Effect program as the third argument to serve an effect-native
+ * API from the same site: the program threads into the server Lambda in
+ * collect-only mode (bindings collect env vars and IAM at deploy time)
+ * while the Octane-built bundle ships as-is, and the CloudFront edge
+ * router forwards `server.routes` (default `["/api/*"]`) to the server
+ * BEFORE the static-asset manifest. The program must live in a dedicated
+ * module whose default export is the class (`main: import.meta.url`) and
+ * be mounted in Octane's server entry via `alchemy/serve`.
+ *
+ * @example Octane site with an effect-native API
+ * ```typescript
+ * // src/site.ts
+ * export default class Site extends AWS.Website.Octane<Site>()(
+ *   "Site",
+ *   { main: import.meta.url, server: { routes: ["/api/*"] } },
+ *   Effect.gen(function* () {
+ *     const bucket = yield* AWS.S3.Bucket("Data");
+ *     const getObject = yield* AWS.S3.GetObject(bucket);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const object = yield* getObject({ Key: "hello.txt" }).pipe(
+ *           Effect.orDie,
+ *         );
+ *         return HttpServerResponse.text(String(object.Body));
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(AWS.S3.GetObjectHttp)),
+ * ) {}
+ * ```
  */
-export const Octane = (id: string, props: OctaneProps = {}) =>
-  makeFrameworkSite(id, props, {
-    name: "Octane",
-    framework: OCTANE_FRAMEWORK_SPECIFIER,
-    target: OCTANE_AWS_TARGET_SPECIFIER,
-  }).pipe(Namespace.push(id));
+export const Octane: {
+  <Self>(): {
+    <
+      const Id extends string,
+      Shape extends WebsiteShape,
+      InitReq extends
+        | FunctionServices
+        | PlatformServices
+        | LambdaFunctionResource = never,
+    >(
+      id: Id,
+      props: EffectOctaneProps,
+      impl: Effect.Effect<Shape, ConfigError, InitReq>,
+    ): Effect.Effect<
+      EffectFrameworkSiteAttributes,
+      never,
+      | Providers
+      | Exclude<
+          InitReq,
+          FunctionServices | PlatformServices | LambdaFunctionResource
+        >
+    > &
+      Named<Id> & {
+        new (): MakeShape<Shape, WebsiteShape> &
+          Named<Id> &
+          Tag<FunctionTypeId>;
+      };
+    (
+      id: string,
+      props?: OctaneProps,
+    ): Effect.Effect<FrameworkSiteAttributes, never, Providers> & {
+      new (): FrameworkSiteAttributes;
+    };
+  };
+  <
+    const Id extends string,
+    Shape extends WebsiteShape,
+    InitReq extends
+      | FunctionServices
+      | PlatformServices
+      | LambdaFunctionResource = never,
+  >(
+    id: Id,
+    props: EffectOctaneProps,
+    impl: Effect.Effect<Shape, ConfigError, InitReq>,
+  ): Effect.Effect<
+    EffectFrameworkSiteAttributes,
+    never,
+    | Providers
+    | Exclude<
+        InitReq,
+        FunctionServices | PlatformServices | LambdaFunctionResource
+      >
+  > &
+    Named<Id>;
+  (
+    id: string,
+    props?: OctaneProps,
+  ): Effect.Effect<FrameworkSiteAttributes, never, Providers>;
+} = ((id?: any, props?: any, impl?: any) =>
+  id === undefined
+    ? (id: string, props: any, impl?: any) =>
+        effectClass(makeOctane(id, props, impl))
+    : makeOctane(id, props, impl)) as any;
+
+const octaneConfig = (): FrameworkSiteConfig => ({
+  name: "Octane",
+  framework: OCTANE_FRAMEWORK_SPECIFIER,
+  target: OCTANE_AWS_TARGET_SPECIFIER,
+});
+
+const makeOctane = (
+  id: string,
+  props: OctaneProps = {},
+  impl?: Effect.Effect<any, any, any>,
+): Effect.Effect<any, never, any> =>
+  impl === undefined
+    ? makeFrameworkSite(id, props, octaneConfig()).pipe(Namespace.push(id))
+    : makeEffectFrameworkSite(
+        id,
+        props as EffectOctaneProps,
+        octaneConfig(),
+        impl,
+      );

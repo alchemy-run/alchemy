@@ -33,6 +33,12 @@ import type { Adapter, Builder, Emulator } from "@sveltejs/kit";
 import * as NodeFs from "node:fs";
 import * as NodePath from "node:path";
 import { pathToFileURL } from "node:url";
+import { scanForExplicitServeMount } from "./EffectDev.ts";
+
+// Re-exported for callers that historically imported the scan from the
+// adapter module (it moved to the cloud-agnostic `EffectDev.ts` so the AWS
+// target can share it without importing this Cloudflare-specific module).
+export { scanForExplicitServeMount } from "./EffectDev.ts";
 import {
   generateWorkerShim,
   type WorkerShimEffectOptions,
@@ -192,51 +198,6 @@ const generateFallbackInProcess = async (
     );
   }
   NodeFs.writeFileSync(dest, await response.text());
-};
-
-/**
- * Signals of an explicit `alchemy/serve` mount inside kit's built server
- * graph (`hooks.server.ts` importing `alchemy/serve/sveltekit`'s `toHandle`
- * etc.): either the serve sentinel byte literal (when the bridge was
- * bundled into the output) or an import of an `alchemy/serve` specifier
- * (kit's Vite SSR build externalizes deps, leaving the specifier in the
- * emitted chunks). Kept in sync with `alchemy/src/Serve/constants.ts` —
- * duplicated here because this package deliberately carries no alchemy
- * dependency.
- */
-const SERVE_MOUNT_PATTERN =
-  /__ALCHEMY_SERVE_v1__|["']alchemy\/serve(?:\/[a-z-]+)?["']/;
-
-/**
- * Scan kit's built server directory for an explicit `alchemy/serve` mount
- * (DESIGN §6.3: auto tier stands down when the user mounted the bridge
- * themselves). Synchronous framework-callback code, like the rest of
- * `adapt()`.
- */
-export const scanForExplicitServeMount = (directory: string): boolean => {
-  let entries: NodeFs.Dirent[];
-  try {
-    entries = NodeFs.readdirSync(directory, { withFileTypes: true });
-  } catch {
-    return false;
-  }
-  for (const entry of entries) {
-    const child = NodePath.join(directory, entry.name);
-    if (entry.isDirectory()) {
-      if (scanForExplicitServeMount(child)) {
-        return true;
-      }
-    } else if (/\.(?:js|mjs|cjs)$/.test(entry.name)) {
-      try {
-        if (SERVE_MOUNT_PATTERN.test(NodeFs.readFileSync(child, "utf8"))) {
-          return true;
-        }
-      } catch {
-        // unreadable file — keep scanning
-      }
-    }
-  }
-  return false;
 };
 
 export const makeCloudflareAdapter = (

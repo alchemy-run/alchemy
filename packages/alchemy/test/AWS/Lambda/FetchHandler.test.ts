@@ -1,0 +1,239 @@
+/**
+ * Unit coverage for the AWS fetch-shaped runtime bridge (pure-local, no
+ * cloud):
+ *
+ *   - `makeFunctionFetchHandler` preserves STREAMED response bodies — the
+ *     web `Response` resolves while the body stream is still being
+ *     produced (the Phase-0 spike obligation: streaming survives the
+ *     fetch-layer composition that rides a framework's `toLambdaHandler`
+ *     pipe), and the request scope is transferred to the stream (its
+ *     finalizers run at stream completion) instead of settling inline;
+ *   - `makeWebsiteHandlers` dispatch: routes → effect fetch, outside
+ *     routes → decline, RouteNotFound → passthrough (never 404-sniffed),
+ *     the four-worlds guard (no stack markers → decline without building
+ *     layers), and `fetch`'s fallback/404 answers.
+ *
+ * The `makeWebsiteHandlers` tests stamp `globalThis.__ALCHEMY_RUNTIME__`
+ * (as any real bridge construction does) — process-global state — so they
+ * take the runner's whole-process write lock via `{ exclusive: true }` and
+ * restore the flag in `finally`.
+ */
+import * as AWS from "@/AWS";
+import { makeFunctionFetchHandler } from "@/AWS/Lambda/HttpServer.ts";
+import { makeWebsiteHandlers } from "@/AWS/Lambda/WebsiteHandlers.ts";
+import { describe, expect, it } from "alchemy-test";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
+import { RouteNotFound } from "effect/unstable/http/HttpServerError";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+const markers = {
+  ALCHEMY_STACK_NAME: "fetch-handler-test",
+  ALCHEMY_STAGE: "test",
+};
+
+const encode = (text: string) => new TextEncoder().encode(text);
+const decode = (bytes: Uint8Array | undefined) =>
+  bytes === undefined ? "" : new TextDecoder().decode(bytes);
+
+/** Run `body` with the runtime flag restored afterwards (exclusive tests). */
+const restoringRuntimeFlag = async (body: () => Promise<void>) => {
+  const previous = globalThis.__ALCHEMY_RUNTIME__;
+  try {
+    await body();
+  } finally {
+    globalThis.__ALCHEMY_RUNTIME__ = previous;
+  }
+};
+
+/**
+ * An effectful site class hosted on the Lambda platform — the value shape a
+ * user's `site.ts` default-exports. Constructing the class is lazy; the
+ * impl only evaluates when `makeWebsiteHandlers` builds the layer stack.
+ */
+class FetchSite extends AWS.Website.StaticSite<FetchSite>()(
+  "FetchHandlerSite",
+  { path: import.meta.dirname, main: import.meta.url },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        if (request.url.startsWith("/api/hello")) {
+          return HttpServerResponse.text("hi from effect");
+        }
+        if (request.url.startsWith("/api/gone")) {
+          // A handler that matched and chose 404: must stay a real 404,
+          // never be sniffed into passthrough.
+          return HttpServerResponse.text("really gone", { status: 404 });
+        }
+        return yield* Effect.fail(new RouteNotFound({ request }));
+      }),
+    };
+  }),
+) {}
+
+describe("makeFunctionFetchHandler", () => {
+  it("returns buffered responses; request finalizers settle before the Response", async () => {
+    let finalized = false;
+    const response = await Effect.runPromise(
+      makeFunctionFetchHandler(
+        Effect.gen(function* () {
+          // Attaches to `toHandled`'s internal request scope.
+          yield* Effect.addFinalizer(() =>
+            Effect.sync(() => {
+              finalized = true;
+            }),
+          );
+          return HttpServerResponse.text("hello world");
+        }),
+      )(new Request("http://localhost/api/hello")),
+    );
+    expect(response.status).toBe(200);
+    // Lambda semantics: the request scope settles inline, BEFORE the
+    // Response resolves to the caller.
+    expect(finalized).toBe(true);
+    expect(await response.text()).toBe("hello world");
+  });
+
+  it("preserves streamed bodies (the Response resolves before the body finishes)", async () => {
+    const gate = Effect.runSync(Deferred.make<void>());
+    let finalized: (() => void) | undefined;
+    const finalizerRan = new Promise<void>((resolve) => {
+      finalized = resolve;
+    });
+    let finalizerDone = false;
+    const body = Stream.concat(
+      Stream.succeed(encode("first-chunk;")),
+      // The tail chunk is gated: if the bridge buffered the body, awaiting
+      // the Response below would deadlock (the gate only opens after the
+      // Response arrived).
+      Stream.fromEffect(
+        Deferred.await(gate).pipe(Effect.as(encode("second-chunk"))),
+      ),
+    );
+
+    const response = await Effect.runPromise(
+      makeFunctionFetchHandler(
+        Effect.gen(function* () {
+          yield* Effect.addFinalizer(() =>
+            Effect.sync(() => {
+              finalizerDone = true;
+              finalized!();
+            }),
+          );
+          return HttpServerResponse.stream(body, {
+            contentType: "text/plain",
+          });
+        }),
+      )(new Request("http://localhost/api/stream")),
+    );
+    expect(response.status).toBe(200);
+    // Ownership of the request scope transferred to the stream: the
+    // Response resolved while the body is still open, and the request
+    // finalizer has NOT run yet.
+    expect(finalizerDone).toBe(false);
+
+    const reader = response.body!.getReader();
+    const first = await reader.read();
+    expect(first.done).toBe(false);
+    expect(decode(first.value)).toContain("first-chunk");
+    expect(finalizerDone).toBe(false);
+
+    // Only now let the producer emit the rest.
+    Effect.runSync(Deferred.succeed(gate, undefined));
+    let rest = "";
+    for (;;) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      rest += decode(chunk.value);
+    }
+    expect(rest).toContain("second-chunk");
+
+    // ... and the request scope closes when the stream completes.
+    await finalizerRan;
+    expect(finalizerDone).toBe(true);
+  });
+});
+
+describe("makeWebsiteHandlers", () => {
+  it(
+    "dispatches routes to the effect fetch with the passthrough protocol",
+    () =>
+      restoringRuntimeFlag(async () => {
+        const site = makeWebsiteHandlers({
+          site: FetchSite,
+          routes: ["/api/*"],
+          env: markers,
+        });
+
+        // Outside routes → decline without touching the effect fetch.
+        expect(
+          await site.match(new Request("http://localhost/assets/app.js")),
+        ).toBeUndefined();
+
+        // Inside routes → effect fetch.
+        const hit = await site.match(new Request("http://localhost/api/hello"));
+        expect(hit?.status).toBe(200);
+        expect(await hit!.text()).toBe("hi from effect");
+
+        // RouteNotFound → passthrough (framework's turn).
+        expect(
+          await site.match(new Request("http://localhost/api/unknown")),
+        ).toBeUndefined();
+
+        // A real 404 from a matched handler is never sniffed.
+        const gone = await site.match(new Request("http://localhost/api/gone"));
+        expect(gone?.status).toBe(404);
+        expect(await gone!.text()).toBe("really gone");
+
+        // fetch answers declines via the fallback, else 404.
+        const fromFallback = await site.fetch(
+          new Request("http://localhost/api/unknown"),
+          { fallback: async () => new Response("framework") },
+        );
+        expect(await fromFallback.text()).toBe("framework");
+        const notFound = await site.fetch(
+          new Request("http://localhost/api/unknown"),
+        );
+        expect(notFound.status).toBe(404);
+      }),
+    { exclusive: true, timeout: 60_000 },
+  );
+
+  it(
+    "declines without alchemy env markers (four-worlds guard)",
+    () =>
+      restoringRuntimeFlag(async () => {
+        // A fake class proves no layer build is attempted on decline.
+        class NeverBuilt {
+          static readonly LogicalId = "NeverBuilt";
+        }
+        const site = makeWebsiteHandlers({
+          site: NeverBuilt as any,
+          routes: ["/api/*"],
+          env: { NOT_ALCHEMY: "1" },
+        });
+        expect(
+          await site.match(new Request("http://localhost/api/hello")),
+        ).toBeUndefined();
+      }),
+    { exclusive: true },
+  );
+
+  it(
+    "middleware mode (no routes) offers every request to the effect fetch",
+    () =>
+      restoringRuntimeFlag(async () => {
+        const site = makeWebsiteHandlers({ site: FetchSite, env: markers });
+        const hit = await site.match(new Request("http://localhost/api/hello"));
+        expect(await hit!.text()).toBe("hi from effect");
+        // Unclaimed paths still pass through via RouteNotFound.
+        expect(
+          await site.match(new Request("http://localhost/anything")),
+        ).toBeUndefined();
+      }),
+    { exclusive: true, timeout: 60_000 },
+  );
+});

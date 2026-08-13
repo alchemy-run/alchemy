@@ -1,12 +1,18 @@
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
+import * as s3 from "@distilled.cloud/aws/s3";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import { pathToFileURL } from "node:url";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
+import { dockerAvailable } from "../Local/fixtures/raw.ts";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
 // matching the process topology of the real `alchemy dev` command.
@@ -112,6 +118,266 @@ describe("AWS.Website.Nuxt local", () => {
         });
 
         yield* stack.destroy();
+      }),
+    { timeout: 600_000 },
+  );
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// Effectful Nuxt (explicit tier, DESIGN §7-AWS): the Effect program rides
+// the `toEventHandler` server-middleware mount, compiled by nitro into the
+// dev worker — env lowered by the composite (stack markers + packed
+// binding values + AWS_REGION), credentials resolved from the developer's
+// ambient profile (the AWS dev model: bindings hit real cloud, so the
+// bound bucket is `remote()`) — while the effect program also deploys into
+// the floci Lambda emulator as the dev server Lambda. Docker required
+// (floci); live credentials required (--profile testing).
+// ─────────────────────────────────────────────────────────────────────
+
+/**
+ * The effectful site module written into the clone at `src/site.ts`
+ * (clone sits at `packages/alchemy/.tmp/<dir>/`, so `../../../src` is
+ * `packages/alchemy/src` — the CURRENT sources, not a stale built `lib/`).
+ */
+const nuxtEffectSiteSource = `
+import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as NodePath from "node:path";
+import { Bucket } from "../../../src/AWS/S3/Bucket.ts";
+import { GetObject } from "../../../src/AWS/S3/GetObject.ts";
+import { GetObjectHttp } from "../../../src/AWS/S3/GetObjectHttp.ts";
+import { PutObject } from "../../../src/AWS/S3/PutObject.ts";
+import { PutObjectHttp } from "../../../src/AWS/S3/PutObjectHttp.ts";
+import { Nuxt } from "../../../src/AWS/Website/Nuxt.ts";
+import { remote } from "../../../src/ProviderMode.ts";
+import { passthrough } from "../../../src/Serve/Passthrough.ts";
+
+/**
+ * S3 bucket bound by the effectful site's program. \`remote()\`: the AWS
+ * dev model — capability bindings hit the REAL cloud with ambient
+ * credentials, so the bound bucket opts out of local emulation.
+ */
+export const SiteData = Bucket("NuxtEffectLocalData", {
+  forceDestroy: true,
+}).pipe(remote());
+
+export default class NuxtEffectSite extends Nuxt<NuxtEffectSite>()(
+  "NuxtEffectSite",
+  {
+    main: import.meta.url,
+    // Plan-only (guarded: undefined when the module re-evaluates inside a
+    // deployed bundle where import.meta has no path).
+    rootDir: import.meta.dirname
+      ? NodePath.dirname(import.meta.dirname)
+      : undefined,
+  },
+  Effect.gen(function* () {
+    const bucket = yield* SiteData;
+    const putObject = yield* PutObject(bucket);
+    const getObject = yield* GetObject(bucket);
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const url = new URL(request.url, "http://fixture");
+        if (url.pathname === "/api/effect/ping") {
+          return yield* HttpServerResponse.json({ marker: "effect-fetch" });
+        }
+        if (url.pathname === "/api/effect/s3") {
+          const key = url.searchParams.get("key") ?? "current";
+          const put = url.searchParams.get("put");
+          if (put !== null) {
+            yield* putObject({ Key: key, Body: put }).pipe(Effect.orDie);
+          }
+          const object = yield* getObject({ Key: key }).pipe(Effect.orDie);
+          const value =
+            object.Body === undefined
+              ? undefined
+              : yield* Stream.mkString(Stream.decodeText(object.Body)).pipe(
+                  Effect.orDie,
+                );
+          return yield* HttpServerResponse.json({ value });
+        }
+        // Typed "not mine": the middleware offers EVERY request — nitro's
+        // own routes (/, /api/hello) must keep answering.
+        return yield* passthrough;
+      }),
+    };
+  }).pipe(Effect.provide([PutObjectHttp, GetObjectHttp])),
+) {}
+`;
+
+/**
+ * The explicit-tier mount (`server/middleware/alchemy.ts` inside the clone
+ * — four levels above is `packages/alchemy`). Nitro scans it into the dev
+ * worker bundle; the handler answers matched effect routes and returns
+ * `undefined` on passthrough so nitro continues to its own handlers.
+ */
+const nuxtMiddlewareSource = [
+  `import { toEventHandler } from "../../../../src/Serve/nitro.ts";`,
+  `import Site from "../../src/site.ts";`,
+  `export default toEventHandler(Site);`,
+  ``,
+].join("\n");
+
+/** GET `url` until it answers 200 JSON — bounded (the first hit boots the
+ * dev worker bundle including the alchemy graph, be patient). */
+const fetchJsonReady = <T>(url: string, times = 60) =>
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    return yield* client.get(url).pipe(
+      Effect.flatMap((res) =>
+        Effect.flatMap(res.text, (body) =>
+          res.status === 200
+            ? Effect.try({
+                try: () => JSON.parse(body) as T,
+                catch: () => new Error(`non-json body: ${body.slice(0, 300)}`),
+              })
+            : Effect.fail(
+                new Error(`not ready (${res.status}): ${body.slice(0, 300)}`),
+              ),
+        ),
+      ),
+      Effect.retry({ schedule: Schedule.spaced("3 seconds"), times }),
+    );
+  });
+
+describe("AWS.Website.Nuxt local (effectful)", () => {
+  test.provider.skipIf(!dockerAvailable)(
+    "effectful Nuxt dev: toEventHandler middleware serves /api/effect/* with the real S3 binding",
+    (stack) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+
+        yield* stack.destroy();
+
+        const rootDir = yield* cloneFixture(fixtureDir, {
+          prefix: "alchemy-nuxt-aws-effect-dev-",
+          tempRoot,
+          entries: fixtureEntries,
+        });
+
+        // Write the site module + the explicit middleware mount into the
+        // clone.
+        yield* fs.makeDirectory(path.join(rootDir, "src"), {
+          recursive: true,
+        });
+        yield* fs.writeFileString(
+          path.join(rootDir, "src", "site.ts"),
+          nuxtEffectSiteSource,
+        );
+        yield* fs.makeDirectory(path.join(rootDir, "server", "middleware"), {
+          recursive: true,
+        });
+        yield* fs.writeFileString(
+          path.join(rootDir, "server", "middleware", "alchemy.ts"),
+          nuxtMiddlewareSource,
+        );
+
+        // Bun resolves the clone's relative imports to the same
+        // `packages/alchemy/src` modules as `@/...`.
+        const mod = (yield* Effect.tryPromise(
+          () =>
+            import(pathToFileURL(path.join(rootDir, "src", "site.ts")).href),
+        )) as {
+          default: any;
+          SiteData: Effect.Effect<AWS.S3.Bucket, never, any>;
+        };
+
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            const data = yield* mod.SiteData;
+            const site = yield* mod.default;
+            return { data, site };
+          }),
+        );
+
+        // The site is `nuxt dev`; no CDN resources; the effect program
+        // deployed into the floci Lambda emulator (dummy-account ARN).
+        const url = deployed.site.url! as string;
+        expect(url).toMatch(
+          /^http:\/\/(localhost|127\.0\.0\.1|\[[0-9a-fA-F:]+\])/,
+        );
+        expect(deployed.site.distribution).toBeUndefined();
+        expect(deployed.site.bucket).toBeUndefined();
+        expect(deployed.site.server).toBeDefined();
+        expect(deployed.site.server!.functionArn).toContain(":000000000000:");
+        // The remote() bucket is REAL — a live-cloud ARN, not the
+        // emulator's dummy account.
+        expect(deployed.data.bucketArn).not.toContain(":000000000000:");
+
+        // The framework page proves nuxt dev serves (middleware passes /
+        // through).
+        yield* expectUrlContains(`${url}/`, "NUXT_AWS_PAGE_MARKER", {
+          timeout: "240 seconds",
+          label: "effectful dev SSR home page",
+        });
+        // Nitro's own API route INSIDE /api/* still answers — the effect
+        // fetch declines it (passthrough) and nitro continues.
+        yield* expectUrlContains(
+          `${url}/api/hello?echo=dev`,
+          "NUXT_AWS_API_MARKER",
+          { label: "framework API route untouched (passthrough)" },
+        );
+
+        // Effect route through the middleware mount.
+        const ping = yield* fetchJsonReady<{ marker: string }>(
+          `${url}/api/effect/ping`,
+        );
+        expect(ping.marker).toBe("effect-fetch");
+
+        // S3 round-trip through the binding: the mount's capability
+        // clients resolve ambient credentials (`Credentials.fromChain()`)
+        // against the REAL remote() bucket. Random payload so a stale
+        // object can never satisfy the read.
+        const value = `nuxt-aws-effect-${crypto.randomUUID()}`;
+        const written = yield* fetchJsonReady<{ value: string | undefined }>(
+          `${url}/api/effect/s3?key=greeting&put=${value}`,
+        );
+        expect(written.value).toBe(value);
+        const read = yield* fetchJsonReady<{ value: string | undefined }>(
+          `${url}/api/effect/s3?key=greeting`,
+        );
+        expect(read.value).toBe(value);
+
+        // Out-of-band: the write is visible through the cloud S3 API —
+        // the dev binding really hit the live bucket.
+        const observed = yield* s3
+          .getObject({
+            Bucket: deployed.data.bucketName as string,
+            Key: "greeting",
+          })
+          .pipe(
+            Effect.flatMap((res) =>
+              Stream.mkString(Stream.decodeText(res.Body!)),
+            ),
+            Effect.retry({
+              schedule: Schedule.exponential("1 second", 1.5),
+              times: 5,
+            }),
+          );
+        expect(observed).toBe(value);
+
+        yield* stack.destroy();
+
+        // The remote() bucket's state row is stamped live, so the live
+        // provider deleted it from the cloud even in a dev run.
+        const gone = yield* s3
+          .headBucket({ Bucket: deployed.data.bucketName as string })
+          .pipe(
+            Effect.as(false),
+            Effect.catchTag(["NotFound", "NoSuchBucket"], () =>
+              Effect.succeed(true),
+            ),
+            Effect.repeat({
+              until: (deleted): boolean => deleted,
+              schedule: Schedule.spaced("3 seconds"),
+              times: 10,
+            }),
+          );
+        expect(gone).toBe(true);
       }),
     { timeout: 600_000 },
   );

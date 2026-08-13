@@ -35,6 +35,11 @@ import * as Path from "effect/Path";
 import { rolldown } from "rolldown";
 import { runBuildChild } from "../core/BuildChild.ts";
 import {
+  effectMainPath,
+  scanForExplicitServeMount,
+  type SvelteKitEffectOptions,
+} from "./EffectDev.ts";
+import {
   make,
   type SvelteKitAdapter,
   type SvelteKitAdapterResult,
@@ -63,25 +68,73 @@ export const SERVER_ENTRY_NAME = NodePath.join("server", "index.mjs");
 const posixify = (str: string): string => str.replace(/\\/g, "/");
 
 /**
+ * The effect arm of the generated Lambda entry (DESIGN §6.2b, AWS wrapper
+ * mechanics) — collect-only *wrapper* delivery for an effectful
+ * `AWS.Website.SvelteKit`. Plain data threaded from alchemy's composite
+ * through the build options (`options.effect`).
+ */
+export interface LambdaEntryEffectOptions {
+  /** Absolute filesystem path of the user's site module (the impl anchor). */
+  readonly main: string;
+  /** Path globs the Effect fetch owns. Omitted = middleware mode. */
+  readonly routes?: ReadonlyArray<string> | undefined;
+}
+
+/**
  * The generated (unbundled) Lambda entry: kit's `Server` + the route
  * manifest, wrapped with the aws-lambda web adapter. The
  * `@alchemy.run/frontend-frameworks/aws-lambda` import is inlined by the
  * finishing pass's rolldown bundle, so the shipped `dist/server` has no
  * runtime dependency on this package.
+ *
+ * With `effect` set, the ONE `toLambdaHandler` wrap composes
+ * `site.match(request) ?? respond(request)` — effect dispatch happens at
+ * the fetch layer BEFORE the single `awslambda.streamifyResponse` wrap, so
+ * streamed effect bodies ride the exact same streaming pipe as kit's own
+ * responses. `makeWebsiteHandlers` (alchemy's AWS serve shell) owns the
+ * routes gate, the four-worlds env guard, the passthrough protocol
+ * (`RouteNotFound` ⇒ fall through to kit), and the instance-lifetime layer
+ * build; it also embeds the serve sentinel, so the wiring handshake holds
+ * for any bundle produced from this entry.
  */
-const generateLambdaEntry = (options: {
+export const generateLambdaEntry = (options: {
   readonly serverImport: string;
   readonly manifestImport: string;
   readonly streaming: boolean;
+  readonly effect?: LambdaEntryEffectOptions | undefined;
 }): string => {
   const wrap = options.streaming
     ? "toLambdaHandler"
     : "toBufferedLambdaHandler";
+  const effect = options.effect;
+  const effectImports =
+    effect !== undefined
+      ? `import { makeWebsiteHandlers } from 'alchemy/AWS/Lambda/WebsiteHandlers';\n` +
+        `import __alchemy_site from ${JSON.stringify(effect.main)};\n`
+      : "";
+  const exports =
+    effect !== undefined
+      ? `// Effectful Website wrapper (alchemy auto-inject tier): the Effect
+// fetch owns the routes below and dispatches BEFORE kit's respond —
+// composed at the fetch layer, ahead of the single ${wrap} wrap, so
+// streamed effect bodies ride the same streaming pipe as kit's.
+// Passthrough/decline falls through to kit unchanged.
+const __alchemy_handlers = makeWebsiteHandlers({
+  site: __alchemy_site,${
+    effect.routes !== undefined
+      ? `\n  routes: ${JSON.stringify(effect.routes)},`
+      : ""
+  }
+});
+
+export const handler = ${wrap}(async (request) =>
+  (await __alchemy_handlers.match(request)) ?? respond(request));`
+      : `export const handler = ${wrap}(respond);`;
   return /* js */ `
 import { Server } from ${JSON.stringify(options.serverImport)};
 import { manifest } from ${JSON.stringify(options.manifestImport)};
 import { ${wrap} } from '@alchemy.run/frontend-frameworks/aws-lambda';
-
+${effectImports}
 const server = new Server(manifest);
 const initialized = server.init({ env: process.env });
 
@@ -94,9 +147,35 @@ const respond = async (request) => {
   });
 };
 
-export const handler = ${wrap}(respond);
+${exports}
 `.trimStart();
 };
+
+/**
+ * How the adapter resolved effectful (wrapper) delivery for this build —
+ * consumed by the target's finishing pass to fold the runtime define into
+ * the Node bundle.
+ */
+export interface SvelteKitAwsAdapterEffectResult {
+  /**
+   * `true` when the Lambda entry was generated WITH the effect arm.
+   * `false` when an explicit `alchemy/serve` mount was detected in kit's
+   * built server graph and the wrapper generator stood down (DESIGN §6.3 —
+   * the explicit mount wins; no double bridging).
+   */
+  readonly active: boolean;
+}
+
+/** The AWS adapter's result: the shared shape plus the effect decision. */
+export interface SvelteKitAwsAdapterResult extends SvelteKitAdapterResult {
+  /** Present iff the adapter was constructed with `effect` options. */
+  readonly effect?: SvelteKitAwsAdapterEffectResult | undefined;
+}
+
+/** A {@link SvelteKitAdapter} whose result carries the effect decision. */
+export interface SvelteKitAwsAdapter extends SvelteKitAdapter {
+  readonly result: { current?: SvelteKitAwsAdapterResult | undefined };
+}
 
 /**
  * The in-memory kit `Adapter` for AWS: writes the static-assets directory
@@ -106,12 +185,32 @@ export const handler = ${wrap}(respond);
  */
 export const makeAwsAdapter = (options: {
   readonly streaming?: boolean | undefined;
-}): SvelteKitAdapter => {
-  const result: { current?: SvelteKitAdapterResult | undefined } = {};
+  /**
+   * Effectful-Website wrapper delivery: generate the Lambda entry's effect
+   * arm (see {@link generateLambdaEntry}). The adapter stands down —
+   * emitting the plain entry — when kit's built server graph already
+   * mounts `alchemy/serve` explicitly.
+   */
+  readonly effect?: SvelteKitEffectOptions | undefined;
+}): SvelteKitAwsAdapter => {
+  const result: { current?: SvelteKitAwsAdapterResult | undefined } = {};
   return {
     name: "@alchemy.run/frontend-frameworks/sveltekit/aws",
     result,
     async adapt(builder: Builder) {
+      // Effectful wrapper delivery: stand down when kit's server graph
+      // already mounts alchemy/serve explicitly (the explicit tier wins —
+      // never two bridges on one Lambda).
+      const explicitServeMount =
+        options.effect !== undefined &&
+        scanForExplicitServeMount(builder.getServerDirectory());
+      if (explicitServeMount) {
+        builder.log.minor(
+          "alchemy: explicit alchemy/serve mount detected in the server " +
+            "graph - the generated Lambda entry's effect arm stands down",
+        );
+      }
+      const effect = explicitServeMount ? undefined : options.effect;
       const dest = builder.getBuildDirectory("aws");
       const tmp = builder.getBuildDirectory("aws-tmp");
 
@@ -146,6 +245,10 @@ export const makeAwsAdapter = (options: {
           serverImport: `./${posixify(NodePath.relative(tmp, builder.getServerDirectory()))}/index.js`,
           manifestImport: "./manifest.js",
           streaming: options.streaming ?? true,
+          effect:
+            effect !== undefined
+              ? { main: effectMainPath(effect.main), routes: effect.routes }
+              : undefined,
         }),
       );
       if (
@@ -161,7 +264,14 @@ export const makeAwsAdapter = (options: {
         });
       }
 
-      result.current = { dest, workerEntry };
+      result.current = {
+        dest,
+        workerEntry,
+        effect:
+          options.effect !== undefined
+            ? { active: effect !== undefined }
+            : undefined,
+      };
     },
     dispose: async () => {},
   };
@@ -175,8 +285,15 @@ export const makeAwsAdapter = (options: {
  */
 const makeAwsAdapterTarget = (
   config: SvelteKitAwsTargetConfig = {},
-): SvelteKitTarget =>
-  makeDeployTarget({
+): SvelteKitTarget => {
+  // The finishing pass needs the adapter's effect decision (stand-down on
+  // an explicit alchemy/serve mount) — `adapt()` records it on
+  // `result.current.effect`, and the target captures the adapter it
+  // constructed so `finish` can read it. A target instance is created per
+  // build invocation (`resolveDeployTarget` applies the factory each
+  // time), so the capture never crosses builds.
+  let lastAdapter: SvelteKitAwsAdapter | undefined;
+  return makeDeployTarget({
     platform: "aws",
     config,
     bundle: {
@@ -184,9 +301,10 @@ const makeAwsAdapterTarget = (
       external: ["@aws-sdk/"],
     },
     adapter: (_context) =>
-      makeAwsAdapter({
+      (lastAdapter = makeAwsAdapter({
         streaming: config.streaming,
-      }),
+        effect: config.effect,
+      })),
     finish: (output, context) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
@@ -212,6 +330,16 @@ const makeAwsAdapterTarget = (
             ),
           );
 
+        // Effectful wrapper delivery: the entry now imports the user's
+        // site module + alchemy's AWS serve shell. Resolve with the `bun`
+        // condition FIRST (mirroring `FunctionBundle`) so alchemy and
+        // distilled bundle from `src` — a fresh workspace/regenerated
+        // service is immediately build-visible without a `lib` rebuild —
+        // and fold the runtime flag so plan-only `host.bind` branches DCE
+        // out of the shipped bundle.
+        const effectActive =
+          lastAdapter?.result.current?.effect?.active === true;
+
         // Re-bundle the entry (kit's server graph + the aws-lambda adapter)
         // for Node. `dist/server` must be self-contained: the Lambda ships
         // it as-is (`bundle: false`), so only Node builtins and the
@@ -223,9 +351,20 @@ const makeAwsAdapterTarget = (
               input: entry,
               platform: "node",
               resolve: {
-                conditionNames: ["node", "import", "module"],
+                conditionNames: effectActive
+                  ? ["bun", "node", "import", "module"]
+                  : ["node", "import", "module"],
               },
               external: [/^@aws-sdk\//, /^node:/],
+              ...(effectActive
+                ? {
+                    transform: {
+                      define: {
+                        "globalThis.__ALCHEMY_RUNTIME__": "true",
+                      },
+                    },
+                  }
+                : undefined),
             });
             try {
               await bundle.write({
@@ -259,6 +398,7 @@ const makeAwsAdapterTarget = (
         } satisfies FrameworkCore.BuildOutput;
       }),
   });
+};
 
 /**
  * SvelteKit resolves its config (and the postbuild analyse/prerender worker

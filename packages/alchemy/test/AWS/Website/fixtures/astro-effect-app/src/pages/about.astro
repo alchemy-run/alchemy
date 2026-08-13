@@ -1,0 +1,20 @@
+---
+// Prerendered at build time — the effect tier's guard case: the prerender
+// environment keeps astro's default fetchable (the effect wrapper only
+// applies to `ssr`/`astro`), so prerendering must succeed without ever
+// loading the effect module graph or resolving alchemy bindings. On
+// deploy the page ships to S3 and is served by directory-index match.
+export const prerender = true;
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>About — Astro Effect AWS Fixture</title>
+  </head>
+  <body>
+    <h1>About</h1>
+    <p id="mode">astro-aws-effect-prerendered</p>
+    <p><a href="/">home</a></p>
+  </body>
+</html>

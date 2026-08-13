@@ -58,6 +58,23 @@ async function routeSite(kvNamespace, metadata) {
     ? event.request.uri.replace(metadata.base, "")
     : event.request.uri;
 
+  // server.routes — the URL space an effectful Website's fetch handler
+  // owns. Checked BEFORE the static-asset manifest lookup so a static
+  // file can never shadow an API path (the AWS analogue of Cloudflare's
+  // runWorkerFirst), and so /api/* reaches the server even under spa mode.
+  if (metadata.serverRoutes && metadata.servers && matchesServerRoute(baselessUri, metadata.serverRoutes)) {
+    setForwardedHost();
+    for (var srKey in event.request.querystring) {
+      if (srKey.includes("/")) {
+        event.request.querystring[encodeURIComponent(srKey)] = event.request.querystring[srKey];
+        delete event.request.querystring[srKey];
+      }
+    }
+    if (isRequestHeaderTooLarge()) return buildOversizedHeadersResponse();
+    setUrlOrigin(findNearestServer(metadata.servers), metadata.origin);
+    return;
+  }
+
   try {
     var u = decodeURIComponent(baselessUri);
     var postfixes = u.endsWith("/")
@@ -91,7 +108,7 @@ async function routeSite(kvNamespace, metadata) {
     return;
   }
 
-  if (metadata.s3 && !metadata.servers) {
+  if (metadata.s3 && (!metadata.servers || metadata.serverRoutesOnly)) {
     event.request.uri = metadata.s3.dir + event.request.uri;
     setS3Origin(metadata.s3.domain);
     return;
@@ -104,7 +121,7 @@ async function routeSite(kvNamespace, metadata) {
     return;
   }
 
-  if (metadata.servers) {
+  if (metadata.servers && !metadata.serverRoutesOnly) {
     setForwardedHost();
     for (var key in event.request.querystring) {
       if (key.includes("/")) {
@@ -114,6 +131,16 @@ async function routeSite(kvNamespace, metadata) {
     }
     if (isRequestHeaderTooLarge()) return buildOversizedHeadersResponse();
     setUrlOrigin(findNearestServer(metadata.servers), metadata.origin);
+  }
+
+  function matchesServerRoute(uri, routes) {
+    for (var i = 0; i < routes.exclude.length; i++) {
+      if (new RegExp(routes.exclude[i]).test(uri)) return false;
+    }
+    for (var i = 0; i < routes.include.length; i++) {
+      if (new RegExp(routes.include[i]).test(uri)) return true;
+    }
+    return false;
   }
 
   function findNearestServer(servers) {

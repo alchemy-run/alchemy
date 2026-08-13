@@ -35,6 +35,7 @@ import {
   type ServerEntryChunk,
 } from "../core/index.ts";
 import { make } from "./Astro.ts";
+import { createEffectFetchablePlugin } from "./fetchable-plugin.ts";
 import type { AstroTarget, AstroTargetBuildContext } from "./Target.ts";
 
 /**
@@ -56,6 +57,25 @@ export interface AstroAwsConfig {
    * @default true
    */
   readonly streaming?: boolean | undefined;
+  /**
+   * Effectful-Website delivery (DESIGN §6.2c, set by `AWS.Website.Astro`
+   * when an Effect program is passed): the effect program module (`main` —
+   * `props.main`, an absolute path or `file://` URL) and the path globs
+   * its `fetch` owns. The adapter integration pre-resolves Astro's
+   * `virtual:astro:fetchable` to a generated wrapper that runs the effect
+   * program first for `routes` (via the AWS serve shell,
+   * `alchemy/AWS/Lambda/WebsiteHandlers`) and falls back to Astro's own
+   * pipeline — in the production `ssr` build (bundled self-contained into
+   * `dist/server`) and in Astro's own Node dev server alike. The
+   * build-time prerenderer keeps astro's default fetchable, so
+   * prerendering never touches the effect module graph.
+   */
+  readonly effect?:
+    | {
+        readonly main: string;
+        readonly routes: ReadonlyArray<string>;
+      }
+    | undefined;
 }
 
 export interface AstroAwsTarget extends AstroTarget<AstroAwsConfig> {}
@@ -64,6 +84,8 @@ export interface AstroAwsTarget extends AstroTarget<AstroAwsConfig> {}
 export interface DistilledAwsOptions {
   /** See {@link AstroAwsConfig.streaming}. @default true */
   readonly streaming?: boolean | undefined;
+  /** See {@link AstroAwsConfig.effect}. */
+  readonly effect?: AstroAwsConfig["effect"];
   /**
    * Reports the resolved build output mode (`astro:config:done`'s
    * `buildOutput`): `"static"` when every route is prerendered, `"server"`
@@ -111,6 +133,27 @@ export const distilledAws = (
             adapter: {
               name: "@alchemy.run/frontend-frameworks/astro-aws",
               hooks: {},
+            },
+          });
+        }
+        // Effectful-Website delivery: pre-resolve `virtual:astro:fetchable`
+        // to the generated effect wrapper — the AWS/Node arm mounts the
+        // AWS serve shell (`makeWebsiteHandlers`), applying to the `ssr`
+        // (production build; bundled self-contained into `dist/server`)
+        // and `astro` (Node dev server) environments. Stands down when the
+        // user's own fetch file already mounts the bridge.
+        if (options.effect !== undefined) {
+          updateConfig({
+            vite: {
+              plugins: [
+                createEffectFetchablePlugin({
+                  mainPath: options.effect.main,
+                  routes: options.effect.routes,
+                  srcDir: config.srcDir,
+                  fetchFile: config.fetchFile,
+                  platform: "node",
+                }),
+              ],
             },
           });
         }
@@ -200,6 +243,7 @@ const makeAwsAdapterTarget = (config: AstroAwsConfig = {}): AstroAwsTarget => {
     integration: () =>
       distilledAws({
         streaming: config.streaming,
+        effect: config.effect,
         onBuildOutput: (mode) => {
           buildOutput = mode;
         },

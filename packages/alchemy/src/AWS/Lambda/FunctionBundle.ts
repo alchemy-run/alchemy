@@ -13,11 +13,13 @@
  * and post-process each incremental output into a deployable archive.
  */
 
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import type { PlatformError } from "effect/PlatformError";
 import type * as rolldown from "rolldown";
 import * as Bundle from "../../Bundle/Bundle.ts";
+import { SERVE_SENTINEL } from "../../Serve/constants.ts";
 import {
   hashPackageInstallIdentity,
   installResolvedPackages,
@@ -50,6 +52,22 @@ export const matchesConfiguredExternal = (
     typeof matcher === "string" ? matcher === moduleId : matcher.test(moduleId),
   );
 };
+
+/**
+ * A collect-only Function (impl + `bundle: false`) whose runtime delivery is
+ * `"external"` shipped a framework artifact that never mounts the
+ * `alchemy/serve` bridge — the wiring handshake (a sentinel scan over the
+ * prebuilt directory) found no `SERVE_SENTINEL` byte sequence, so the
+ * Effect program's handlers would be dead code in the deployed Lambda.
+ */
+export class MissingServeMountError extends Data.TaggedError(
+  "MissingServeMountError",
+)<{
+  message: string;
+  functionId: string;
+  /** The prebuilt directory that was scanned. */
+  directory: string;
+}> {}
 
 /**
  * The resolved rolldown configuration for a `bundle: true` Function — the
@@ -115,18 +133,52 @@ export const makeFunctionBundler = Effect.gen(function* () {
   // CJS `require`s of exports-mapped subpaths.
   const prebuiltCode: (
     realMain: string,
+    options?: { requireServeSentinel?: { functionId: string } },
   ) => Effect.Effect<FunctionBundleResult, any, any> = Effect.fn(function* (
     realMain: string,
+    options?: { requireServeSentinel?: { functionId: string } },
   ) {
     const lastSlash = realMain.lastIndexOf("/");
     const dir = realMain.slice(0, lastSlash);
     const files = yield* walkFiles(dir);
     const archiveFiles: ZipFile[] = [];
     const fileHashes: Record<string, string> = {};
+    let sentinelFound = false;
     for (const rel of files) {
       const content = yield* fs.readFile(`${dir}/${rel}`);
       archiveFiles.push({ path: rel, content });
       fileHashes[rel] = yield* sha256(content);
+      if (options?.requireServeSentinel !== undefined && !sentinelFound) {
+        sentinelFound = Buffer.from(
+          content.buffer,
+          content.byteOffset,
+          content.byteLength,
+        ).includes(SERVE_SENTINEL);
+      }
+    }
+    // The wiring handshake (DESIGN §6.3): a collect-only Function with
+    // "external" delivery knows the impl exists but not whether the user
+    // mounted the `alchemy/serve` bridge in the framework's server entry —
+    // the sentinel byte sequence survives any bundler/minifier, so its
+    // absence from the shipped directory means the Effect handlers would be
+    // dead code.
+    if (options?.requireServeSentinel !== undefined && !sentinelFound) {
+      yield* Effect.fail(
+        new MissingServeMountError({
+          message:
+            `Function "${options.requireServeSentinel.functionId}" carries an ` +
+            `Effect program with "external" runtime delivery, but the shipped ` +
+            `server directory (${dir}) never mounts the alchemy/serve bridge ` +
+            `— the program's handlers would be dead code. Mount it in the ` +
+            `framework's server entry (e.g. \`Serve.make(Site)\` in a ` +
+            `fetch-shaped entry, \`toRouteHandler(Site)\` in a Next.js ` +
+            `catch-all route, \`toEventHandler(Site)\` in a Nuxt server ` +
+            `middleware), or set \`server: { verify: false }\` to skip this ` +
+            `check.`,
+          functionId: options.requireServeSentinel.functionId,
+          directory: dir,
+        }),
+      );
     }
     const identityHash = yield* sha256Object(fileHashes);
     const buildArchive = Effect.gen(function* () {
@@ -417,7 +469,15 @@ export default handler;
   ) {
     if (props.bundle === false) {
       const realMain = yield* TempRoot.resolveMainPath(props.main);
-      return yield* prebuiltCode(realMain);
+      return yield* prebuiltCode(
+        realMain,
+        // Wiring handshake: only for collect-only Functions on the explicit
+        // tier ("wrapper" delivery generates the mounting entry itself), and
+        // only unless the user opted out via `server.verify: false`.
+        props.runtimeDelivery === "external" && props.server?.verify !== false
+          ? { requireServeSentinel: { functionId: _id } }
+          : undefined,
+      );
     }
     const plan = yield* resolveBundlePlan(props);
     const bundleOutput = yield* Bundle.build(

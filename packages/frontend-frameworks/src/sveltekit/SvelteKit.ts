@@ -629,6 +629,9 @@ export const make: (
           makeEffectDevPlugin({
             effect: options.effect,
             emulate: () => adapter.emulate?.(),
+            // Selects the serve bridge: the AWS target mounts alchemy's
+            // Lambda serve shell over `process.env` (no platform proxy).
+            platform: target.platform,
           }),
           ...(config.plugins ?? []),
         ],

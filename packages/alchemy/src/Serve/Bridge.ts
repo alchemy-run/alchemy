@@ -30,12 +30,16 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { CloudflareEnvironment } from "../Cloudflare/CloudflareEnvironment.ts";
 import { makeRequestEffect } from "../Cloudflare/Workers/HttpServer.ts";
+// The RuntimeEnvironment leaf, NOT Worker.ts: the bridge is compiled by
+// foreign bundlers (Next/turbopack, nitro rollup), and Worker.ts's provider
+// import graph reaches the workerd native binary through the local-runtime
+// chain — unparseable there.
 import {
   WorkerEnvironment,
   WorkerExecutionContext,
   deferredExecutionContext,
   fromExecutionContext,
-} from "../Cloudflare/Workers/Worker.ts";
+} from "../Cloudflare/Workers/RuntimeEnvironment.ts";
 import { isScopeEjected } from "../Http.ts";
 import { makeEntrypointLayer, reifyBoundConfigProvider } from "../Runtime.ts";
 import type { BaseRuntimeContext } from "../RuntimeContext.ts";

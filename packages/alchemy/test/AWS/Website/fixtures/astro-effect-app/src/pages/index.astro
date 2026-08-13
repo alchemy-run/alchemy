@@ -1,0 +1,20 @@
+---
+// On-demand SSR: rendered by the Lambda (or the Node dev server) on every
+// request. Requests to `/` are outside `server.routes`, so they never
+// touch the effect fetch — Astro serves them exactly as on a plain
+// (non-effectful) site.
+const marker = "astro-aws-effect-home";
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Astro Effect AWS Fixture</title>
+  </head>
+  <body>
+    <h1>Astro Effect AWS Fixture</h1>
+    <p id="mode">on-demand</p>
+    <p id="marker">{marker}</p>
+    <p><a href="/about/">about</a></p>
+  </body>
+</html>

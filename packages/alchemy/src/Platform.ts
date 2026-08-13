@@ -260,7 +260,7 @@ export interface Platform<
     const Id extends string,
     Shape extends MainShape,
     PropsReq = never,
-    InitReq extends Services | PlatformServices = never,
+    InitReq extends Services | PlatformServices | Resource = never,
   >(
     id: Id,
     props:
@@ -272,7 +272,7 @@ export interface Platform<
     never,
     | Resource["Providers"]
     | PropsReq
-    | Exclude<InitReq, Services | PlatformServices>
+    | Exclude<InitReq, Services | PlatformServices | Resource>
   > &
     Named<Id>;
 }

@@ -3,7 +3,9 @@
  * `enforce: "pre"` vite plugin that pre-resolves Astro 7's
  * `virtual:astro:fetchable` (the `fetchFile` advanced-routing seam — astro
  * core delegates every `App.render` through it, prod and dev, on every
- * adapter) to a generated wrapper module:
+ * adapter) to a generated wrapper module (the Cloudflare shape shown; the
+ * `"node"`/AWS arm calls `makeWebsiteHandlers` from
+ * `alchemy/AWS/Lambda/WebsiteHandlers` instead — see `platform` below):
  *
  * ```js
  * import { FetchState, astro } from "astro/fetch";
@@ -153,6 +155,7 @@ const OPTIMIZE_EXCLUDES = [
   "@effect/platform-node",
   "@effect/platform-bun",
   "@alchemy.run/cloudflare-runtime",
+  "@distilled.cloud/aws",
   "@distilled.cloud/cloudflare",
   "@distilled.cloud/core",
   ...Object.keys(NODE_STUBS),
@@ -160,11 +163,14 @@ const OPTIMIZE_EXCLUDES = [
 
 /**
  * Marks a user fetch file that already mounts the alchemy runtime bridge
- * (the explicit tier): the serve sentinel literal, or an `alchemy/serve`
- * import specifier. Either one makes the wrapper generator stand down.
+ * (the explicit tier): the serve sentinel literal, an `alchemy/serve`
+ * import specifier, or the AWS serve shell
+ * (`alchemy/AWS/Lambda/WebsiteHandlers`). Any one makes the wrapper
+ * generator stand down.
  */
 const mountsServe = (source: string): boolean =>
-  source.includes("__ALCHEMY_SERVE_v1__") || /["']alchemy\/serve/.test(source);
+  source.includes("__ALCHEMY_SERVE_v1__") ||
+  /["']alchemy\/(?:serve|AWS\/Lambda\/WebsiteHandlers)/.test(source);
 
 export interface EffectFetchablePluginOptions {
   /**
@@ -191,9 +197,16 @@ export interface EffectFetchablePluginOptions {
    *   adapter) and hands it to the bridge — no reliance on the guarded
    *   dynamic-import ladder inside the vite module runner. Applies to the
    *   `ssr` environment only.
-   * - `"node"` (a Node/Lambda target): no `cloudflare:workers` import —
-   *   the bridge's env ladder resolves `process.env`. Applies to the
-   *   `ssr` and `astro` (dev) environments.
+   * - `"node"` (the AWS Lambda / Node target): the wrapper calls
+   *   `makeWebsiteHandlers` from `alchemy/AWS/Lambda/WebsiteHandlers` —
+   *   the AWS serve shell (Credentials/Region layer recipe, Lambda
+   *   shutdown extension, sentinel literal) — which resolves the alchemy
+   *   env from `process.env` (the Lambda sandbox env, or the dev-server
+   *   process env `alchemy dev` lowered the packed binding values into).
+   *   Deliberately NOT `alchemy/serve/astro`: the Cloudflare-flavored
+   *   bridge would drag the whole `@distilled.cloud/cloudflare` graph
+   *   into every AWS server bundle. Applies to the `ssr` and `astro`
+   *   (dev) environments.
    *
    * @default "node"
    */
@@ -315,25 +328,43 @@ export const createEffectFetchablePlugin = (
                 imports: `import { FetchState, astro } from "astro/fetch";`,
                 call: "astro(new FetchState(request))",
               };
+        if (platform === "node") {
+          // The AWS Lambda / Node arm: `makeWebsiteHandlers` is the AWS
+          // serve shell — Credentials.fromChain() / Region.fromEnv() layer
+          // recipe (the chain also resolves the developer's ambient
+          // profile under `alchemy dev`), the Lambda shutdown extension,
+          // and the wiring-handshake sentinel literal (so the deploy-time
+          // sentinel scan over the shipped `dist/server` passes). `match`
+          // resolves `undefined` on decline (outside `routes`, typed
+          // passthrough, marker-less build worlds) and the wrapper falls
+          // through to Astro.
+          return {
+            code: [
+              `globalThis.__ALCHEMY_RUNTIME__ = true;`,
+              `import { makeWebsiteHandlers } from "alchemy/AWS/Lambda/WebsiteHandlers";`,
+              fallback.imports,
+              `import Site from ${JSON.stringify(mainPath)};`,
+              `const site = makeWebsiteHandlers({ site: Site, routes: ${JSON.stringify(options.routes)} });`,
+              `export default {`,
+              `  async fetch(request) {`,
+              `    return (await site.match(request)) ?? (await ${fallback.call});`,
+              `  },`,
+              `};`,
+            ].join("\n"),
+          };
+        }
         // On Cloudflare the `ssr` environment always executes in workerd
         // (prod and dev-in-module-runner alike), so the wrapper hands the
         // importable workerd env to the bridge directly instead of relying
         // on the guarded dynamic-import ladder.
-        const env =
-          platform === "cloudflare"
-            ? {
-                imports: `import { env as __alchemyWorkerEnv } from "cloudflare:workers";`,
-                option: ", env: __alchemyWorkerEnv",
-              }
-            : { imports: "", option: "" };
         return {
           code: [
             `globalThis.__ALCHEMY_RUNTIME__ = true;`,
             `import { toFetchable } from "alchemy/serve/astro";`,
-            ...(env.imports === "" ? [] : [env.imports]),
+            `import { env as __alchemyWorkerEnv } from "cloudflare:workers";`,
             fallback.imports,
             `import Site from ${JSON.stringify(mainPath)};`,
-            `const site = toFetchable(Site, { routes: ${JSON.stringify(options.routes)}${env.option} });`,
+            `const site = toFetchable(Site, { routes: ${JSON.stringify(options.routes)}, env: __alchemyWorkerEnv });`,
             `export default {`,
             `  async fetch(request) {`,
             `    return (await site.fetch(request)) ?? (await ${fallback.call});`,

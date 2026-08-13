@@ -25,6 +25,7 @@
  * This module is Vite-plugin callback code (like `UserConfig.ts`), not an
  * Effect service.
  */
+import * as NodeFs from "node:fs";
 import type * as NodeHttp from "node:http";
 import * as NodePath from "node:path";
 import { Readable } from "node:stream";
@@ -91,6 +92,52 @@ export const matchServerRoutes = (
   return false;
 };
 
+/**
+ * Signals of an explicit `alchemy/serve` mount inside kit's built server
+ * graph (`hooks.server.ts` importing `alchemy/serve/sveltekit`'s `toHandle`
+ * etc.): either the serve sentinel byte literal (when the bridge was
+ * bundled into the output) or an import of an `alchemy/serve` specifier
+ * (kit's Vite SSR build externalizes deps, leaving the specifier in the
+ * emitted chunks). Kept in sync with `alchemy/src/Serve/constants.ts` —
+ * duplicated here because this package deliberately carries no alchemy
+ * dependency.
+ */
+const SERVE_MOUNT_PATTERN =
+  /__ALCHEMY_SERVE_v1__|["']alchemy\/serve(?:\/[a-z-]+)?["']/;
+
+/**
+ * Scan kit's built server directory for an explicit `alchemy/serve` mount
+ * (DESIGN §6.3: auto tier stands down when the user mounted the bridge
+ * themselves). Synchronous framework-callback code, shared by the
+ * Cloudflare and AWS adapters — cloud-agnostic, so it lives here rather
+ * than in a platform target module.
+ */
+export const scanForExplicitServeMount = (directory: string): boolean => {
+  let entries: NodeFs.Dirent[];
+  try {
+    entries = NodeFs.readdirSync(directory, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  for (const entry of entries) {
+    const child = NodePath.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      if (scanForExplicitServeMount(child)) {
+        return true;
+      }
+    } else if (/\.(?:js|mjs|cjs)$/.test(entry.name)) {
+      try {
+        if (SERVE_MOUNT_PATTERN.test(NodeFs.readFileSync(child, "utf8"))) {
+          return true;
+        }
+      } catch {
+        // unreadable file — keep scanning
+      }
+    }
+  }
+  return false;
+};
+
 /** The subset of a kit `Emulator` the middleware needs. */
 interface EmulatorLike {
   readonly platform?: (details: {
@@ -106,6 +153,20 @@ export interface EffectDevPluginArgs {
    * request; the emulator memoizes the proxy internally.
    */
   readonly emulate: () => EmulatorLike | Promise<EmulatorLike> | undefined;
+  /**
+   * The deploy target's platform id (`DeployTarget.platform`). Selects the
+   * serve bridge the virtual module mounts:
+   *
+   * - `"aws"` — `makeWebsiteHandlers` (alchemy's AWS Lambda serve shell):
+   *   env resolves from `process.env` (the sidecar process `alchemy dev`
+   *   lowered the packed binding env + stack markers into) and the layer
+   *   recipe carries `Credentials.fromChain()` / `Region.fromEnv()`, so
+   *   dev bindings hit the real cloud with the developer's ambient
+   *   profile — the AWS dev model.
+   * - anything else (default) — `alchemy/serve`'s `make`, with env served
+   *   by the adapter's platform proxy ({@link emulate}).
+   */
+  readonly platform?: string | undefined;
 }
 
 const VIRTUAL_ID = "virtual:alchemy-sveltekit-effect";
@@ -190,24 +251,59 @@ export const makeEffectDevPlugin = (
   const mainPath = effectMainPath(args.effect.main);
   const routes = args.effect.routes;
   const stack = args.effect.stack;
+  const isAws = args.platform === "aws";
   return {
     name: "alchemy-sveltekit-effect-dev",
     apply: "serve",
     enforce: "pre",
     // One alchemy instance for the whole dev server: the site module's
-    // alchemy imports and the virtual module's `alchemy/serve` both
+    // alchemy imports and the virtual module's serve bridge both
     // resolve through the host runtime instead of a vite-transformed
-    // (linked-workspace) copy of the alchemy graph.
-    config: () => ({ ssr: { external: ["alchemy"] } }),
+    // (linked-workspace) copy of the alchemy graph. Under a bun host
+    // (the `alchemy dev` sidecar), externalized imports resolve with the
+    // `bun` condition FIRST so alchemy (and distilled) load from `src` —
+    // mirroring the test runner and `FunctionBundle`: a fresh workspace
+    // never silently exercises a stale `lib` build.
+    config: () => ({
+      ssr: {
+        external: ["alchemy"],
+        // Under a bun host (the `alchemy dev` sidecar), resolve alchemy
+        // (and distilled) with the `bun` condition FIRST so they load from
+        // `src` — mirroring the test runner and `FunctionBundle`: a fresh
+        // workspace never silently exercises a stale `lib` build. The
+        // remaining conditions are vite's server defaults.
+        ...(typeof (globalThis as { Bun?: unknown }).Bun !== "undefined"
+          ? {
+              resolve: {
+                conditions: ["bun", "module", "node", "development|production"],
+                externalConditions: ["bun", "node"],
+              },
+            }
+          : undefined),
+      },
+    }),
     resolveId: (id) => (id === VIRTUAL_ID ? RESOLVED_VIRTUAL_ID : undefined),
     load: (id) =>
       id === RESOLVED_VIRTUAL_ID
-        ? [
-            `import Site from ${JSON.stringify(mainPath)};`,
-            `import { make } from "alchemy/serve";`,
-            `export const handle = make(Site);`,
-            `export default Site;`,
-          ].join("\n")
+        ? (isAws
+            ? [
+                `import Site from ${JSON.stringify(mainPath)};`,
+                `import { makeWebsiteHandlers } from "alchemy/AWS/Lambda/WebsiteHandlers";`,
+                // Env resolves from process.env (the sidecar process the
+                // dev server runs in — `alchemy dev` lowered the packed
+                // binding env + stack markers into it). The middleware
+                // already gates routes, so the handlers run in middleware
+                // mode.
+                `export const handle = makeWebsiteHandlers({ site: Site });`,
+                `export default Site;`,
+              ]
+            : [
+                `import Site from ${JSON.stringify(mainPath)};`,
+                `import { make } from "alchemy/serve";`,
+                `export const handle = make(Site);`,
+                `export default Site;`,
+              ]
+          ).join("\n")
         : undefined,
     configureServer(server) {
       // Mounted synchronously in `configureServer`, so it runs BEFORE
@@ -233,26 +329,34 @@ export const makeEffectDevPlugin = (
           const mod = (await server.ssrLoadModule(
             VIRTUAL_ID,
           )) as unknown as VirtualEffectModule;
-          const emulator = await args.emulate();
-          const platform = (await emulator?.platform?.({
-            config: {},
-            prerender: false,
-          })) as { env?: Record<string, unknown> } | undefined;
-          const env: Record<string, unknown> = {
-            ...platform?.env,
-            // The markers `putWorker` appends in prod — the bridge's
-            // four-worlds guard and Stack layer key off them.
-            ...(stack !== undefined
-              ? {
-                  ALCHEMY_PHASE: "runtime",
-                  ALCHEMY_STACK_NAME: stack.name,
-                  ALCHEMY_STAGE: stack.stage,
-                }
-              : undefined),
-          };
-          const response = await mod.handle.match(toWebRequest(req, url), {
-            env,
-          });
+          let response: Response | undefined;
+          if (isAws) {
+            // AWS: `makeWebsiteHandlers` resolves env from `process.env`
+            // itself (the sidecar process carries the lowered binding env
+            // + stack markers) — no platform proxy exists on this target.
+            response = await mod.handle.match(toWebRequest(req, url));
+          } else {
+            const emulator = await args.emulate();
+            const platform = (await emulator?.platform?.({
+              config: {},
+              prerender: false,
+            })) as { env?: Record<string, unknown> } | undefined;
+            const env: Record<string, unknown> = {
+              ...platform?.env,
+              // The markers `putWorker` appends in prod — the bridge's
+              // four-worlds guard and Stack layer key off them.
+              ...(stack !== undefined
+                ? {
+                    ALCHEMY_PHASE: "runtime",
+                    ALCHEMY_STACK_NAME: stack.name,
+                    ALCHEMY_STAGE: stack.stage,
+                  }
+                : undefined),
+            };
+            response = await mod.handle.match(toWebRequest(req, url), {
+              env,
+            });
+          }
           if (response === undefined) {
             next();
             return;

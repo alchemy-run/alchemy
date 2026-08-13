@@ -16,10 +16,30 @@
 
 import * as Data from "effect/Data";
 import { markRuntime, matchSite, type ServeOptions } from "./Bridge.ts";
+import { SERVE_SHELL_KEY } from "./constants.ts";
 
 export type { ServeOptions } from "./Bridge.ts";
 export { Passthrough, passthrough } from "./Passthrough.ts";
 export { SERVE_SENTINEL } from "./constants.ts";
+
+/**
+ * A cloud-specific serve shell a Website class may carry under
+ * {@link SERVE_SHELL_KEY}: the runtime half {@link make} dispatches matched
+ * requests to instead of the default (Cloudflare-flavored) bridge. AWS
+ * Website classes attach the Lambda/Node shell here at class construction
+ * so it rides the site module's own import graph — `alchemy/serve` never
+ * statically imports both clouds' runtime recipes.
+ */
+export interface ServeShell {
+  match(
+    site: object,
+    request: Request,
+    options?: ServeOptions,
+  ): Promise<Response | undefined>;
+}
+
+const shellOf = (site: object): ServeShell | undefined =>
+  (site as Record<string, unknown>)[SERVE_SHELL_KEY] as ServeShell | undefined;
 
 /**
  * Any effectful Website Platform class — the value default-exported by the
@@ -71,10 +91,20 @@ export const make = <S extends AnyWebsiteClass>(
   markRuntime();
   const merged = (options?: ServeOptions): ServeOptions | undefined =>
     defaults === undefined ? options : { ...defaults, ...options };
+  // A class carrying its own cloud-specific shell (AWS Lambda/Node) is
+  // served by that shell; everything else takes the default bridge.
+  const shell = shellOf(site);
+  const match = (
+    request: Request,
+    options?: ServeOptions,
+  ): Promise<Response | undefined> =>
+    shell !== undefined
+      ? shell.match(site, request, merged(options))
+      : matchSite(site, request, merged(options));
   return {
-    match: (request, options) => matchSite(site, request, merged(options)),
+    match,
     fetch: async (request, options) => {
-      const matched = await matchSite(site, request, merged(options));
+      const matched = await match(request, options);
       if (matched !== undefined) {
         return matched;
       }

@@ -1,10 +1,15 @@
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
+import * as s3 from "@distilled.cloud/aws/s3";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import { spawn } from "node:child_process";
+import { pathToFileURL } from "node:url";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
@@ -170,6 +175,256 @@ describe.skipIf(!runLive)("AWS.Website.Nextjs", () => {
         );
         expect(imageResponse.status).toBe(200);
         expect(imageResponse.headers["content-type"] ?? "").toMatch(/^image\//);
+
+        const distributionId = deployed.site.distribution!.distributionId;
+
+        if (!process.env.NO_DESTROY) {
+          yield* stack.destroy();
+          yield* assertDistributionDeleted(distributionId);
+        }
+      }),
+    { timeout: 2_400_000 },
+  );
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// Effectful Next.js live (explicit tier, DESIGN §7-AWS): the Effect
+// program rides the `toRouteHandler` catch-all route compiled by Next into
+// the OpenNext server function (collect-only mode — the artifact ships
+// as-is; the deploy-time sentinel scan proves the mount), and the edge
+// serverRoutes check forwards /api/* to the server BEFORE the manifest.
+//
+// The clone lives OUTSIDE the workspace (OpenNext monorepo detection), so
+// `alchemy`/`effect` are injected as `link:` dependencies resolving to
+// this workspace — the site module imports the PACKAGE surface, which
+// resolves through the `import` condition to the built `lib/`. The gated
+// live suite runs at wave gates, after the coordinator's `bun tsc -b` has
+// rebuilt `lib/` — a stale lib would miss the effectful construct arms.
+// ─────────────────────────────────────────────────────────────────────
+
+const workspaceRoot = pathe.resolve(import.meta.dirname, "../../../../..");
+
+/** The live effectful site module (written into the clone at `src/site.ts`). */
+const nextEffectLiveSiteSource = `
+import { Bucket, GetObject, GetObjectHttp, PutObject, PutObjectHttp } from "alchemy/AWS/S3";
+import { Nextjs } from "alchemy/AWS/Website";
+import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as NodePath from "node:path";
+
+/** S3 bucket bound by the effectful site's program. */
+export const SiteData = Bucket("NextEffectLiveData", { forceDestroy: true });
+
+export default class NextEffectLiveSite extends Nextjs<NextEffectLiveSite>()(
+  "NextEffectSite",
+  {
+    main: import.meta.url,
+    // Plan-only (guarded: undefined when the module re-evaluates inside a
+    // deployed bundle where import.meta has no path).
+    rootDir: import.meta.dirname
+      ? NodePath.dirname(import.meta.dirname)
+      : undefined,
+  },
+  Effect.gen(function* () {
+    const bucket = yield* SiteData;
+    const putObject = yield* PutObject(bucket);
+    const getObject = yield* GetObject(bucket);
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const url = new URL(request.url, "http://fixture");
+        if (url.pathname === "/api/effect/ping") {
+          return yield* HttpServerResponse.json({ marker: "effect-fetch" });
+        }
+        if (url.pathname === "/api/effect/s3") {
+          const key = url.searchParams.get("key") ?? "current";
+          const put = url.searchParams.get("put");
+          if (put !== null) {
+            yield* putObject({ Key: key, Body: put }).pipe(Effect.orDie);
+          }
+          const object = yield* getObject({ Key: key }).pipe(Effect.orDie);
+          const value =
+            object.Body === undefined
+              ? undefined
+              : yield* Stream.mkString(Stream.decodeText(object.Body)).pipe(
+                  Effect.orDie,
+                );
+          return yield* HttpServerResponse.json({ value });
+        }
+        return yield* HttpServerResponse.json(
+          { error: "unknown effect route" },
+          { status: 404 },
+        );
+      }),
+    };
+  }).pipe(Effect.provide([PutObjectHttp, GetObjectHttp])),
+) {}
+`;
+
+/** The explicit-tier mount (`app/api/effect/[[...slug]]/route.ts`). */
+const nextLiveRouteMountSource = [
+  `import { toRouteHandler } from "alchemy/serve/next";`,
+  `import Site from "../../../../src/site.ts";`,
+  `const handler = toRouteHandler(Site);`,
+  `export { handler as GET, handler as POST, handler as PUT,`,
+  `         handler as PATCH, handler as DELETE, handler as HEAD,`,
+  `         handler as OPTIONS };`,
+  ``,
+].join("\n");
+
+/** GET `url` until it answers 200 JSON — bounded. */
+const fetchJsonReady = <T>(url: string, times = 40) =>
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    return yield* client.get(url).pipe(
+      Effect.flatMap((res) =>
+        Effect.flatMap(res.text, (body) =>
+          res.status === 200
+            ? Effect.try({
+                try: () => JSON.parse(body) as T,
+                catch: () => new Error(`non-json body: ${body.slice(0, 300)}`),
+              })
+            : Effect.fail(
+                new Error(`not ready (${res.status}): ${body.slice(0, 300)}`),
+              ),
+        ),
+      ),
+      Effect.retry({ schedule: Schedule.spaced("3 seconds"), times }),
+    );
+  });
+
+describe.skipIf(!runLive)("AWS.Website.Nextjs (effectful)", () => {
+  test.provider(
+    "effectful site: toRouteHandler mount serves /api/effect/* through CloudFront with the S3 binding",
+    (stack) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+
+        yield* stack.destroy();
+
+        const rootDir = yield* cloneFixture(fixtureDir, {
+          prefix: "alchemy-nextjs-aws-effect-",
+          entries: fixtureEntries,
+        });
+
+        // Link this workspace's alchemy + effect into the clone so Next
+        // compiles the site module and the serve mount from the package
+        // surface (App Router bundles dependencies into the server chunk).
+        const packageJsonPath = path.join(rootDir, "package.json");
+        const packageJson = JSON.parse(
+          yield* fs.readFileString(packageJsonPath),
+        ) as { dependencies?: Record<string, string> };
+        packageJson.dependencies = {
+          ...packageJson.dependencies,
+          alchemy: `link:${pathe.join(workspaceRoot, "packages", "alchemy")}`,
+          effect: `link:${pathe.join(workspaceRoot, "node_modules", "effect")}`,
+        };
+        yield* fs.writeFileString(
+          packageJsonPath,
+          `${JSON.stringify(packageJson, null, 2)}\n`,
+        );
+        yield* run({
+          cmd: "bun",
+          args: ["install", "--linker=hoisted"],
+          cwd: rootDir,
+        });
+
+        // Write the site module + the explicit route mount into the clone.
+        yield* fs.makeDirectory(path.join(rootDir, "src"), {
+          recursive: true,
+        });
+        yield* fs.writeFileString(
+          path.join(rootDir, "src", "site.ts"),
+          nextEffectLiveSiteSource,
+        );
+        const routeDir = path.join(
+          rootDir,
+          "app",
+          "api",
+          "effect",
+          "[[...slug]]",
+        );
+        yield* fs.makeDirectory(routeDir, { recursive: true });
+        yield* fs.writeFileString(
+          path.join(routeDir, "route.ts"),
+          nextLiveRouteMountSource,
+        );
+
+        const mod = (yield* Effect.tryPromise(
+          () =>
+            import(pathToFileURL(path.join(rootDir, "src", "site.ts")).href),
+        )) as {
+          default: any;
+          SiteData: Effect.Effect<AWS.S3.Bucket, never, any>;
+        };
+
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            const data = yield* mod.SiteData;
+            const site = yield* mod.default;
+            return { data, site };
+          }),
+        );
+
+        const url = deployed.site.url! as string;
+        expect(url).toMatch(/^https:\/\//);
+        yield* Effect.log(
+          `site url: ${url} | server url: ${deployed.site.serverUrl}`,
+        );
+
+        // SSR still serves (the collect-only OpenNext artifact shipped
+        // as-is).
+        yield* expectUrlContains(`${url}/`, "NEXTJS_AWS_PAGE_MARKER", {
+          timeout: "300 seconds",
+          label: "SSR home page (effectful)",
+        });
+        // Next's own API route INSIDE /api/* still answers — the effect
+        // mount owns only /api/effect/*.
+        yield* expectUrlContains(
+          `${url}/api/hello?echo=roundtrip`,
+          "NEXTJS_AWS_API_MARKER",
+          { label: "framework API route untouched" },
+        );
+
+        // Effect fetch through CloudFront (edge serverRoutes → server
+        // Lambda → Next router → catch-all mount).
+        const ping = yield* fetchJsonReady<{ marker: string }>(
+          `${url}/api/effect/ping`,
+        );
+        expect(ping.marker).toBe("effect-fetch");
+
+        // S3 round-trip through the binding collected onto the server
+        // Lambda (env + IAM). Random payload defeats stale objects.
+        const value = `nextjs-aws-effect-live-${crypto.randomUUID()}`;
+        const written = yield* fetchJsonReady<{ value: string | undefined }>(
+          `${url}/api/effect/s3?key=greeting&put=${value}`,
+        );
+        expect(written.value).toBe(value);
+        const read = yield* fetchJsonReady<{ value: string | undefined }>(
+          `${url}/api/effect/s3?key=greeting`,
+        );
+        expect(read.value).toBe(value);
+
+        // Out-of-band: the write landed in the real bucket — the binding's
+        // env + IAM reached the OpenNext server Lambda.
+        const observed = yield* s3
+          .getObject({
+            Bucket: deployed.data.bucketName as string,
+            Key: "greeting",
+          })
+          .pipe(
+            Effect.flatMap((res) =>
+              Stream.mkString(Stream.decodeText(res.Body!)),
+            ),
+            Effect.retry({
+              schedule: Schedule.exponential("1 second", 1.5),
+              times: 6,
+            }),
+          );
+        expect(observed).toBe(value);
 
         const distributionId = deployed.site.distribution!.distributionId;
 

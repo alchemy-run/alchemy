@@ -8,7 +8,12 @@ import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as Http from "../../Http.ts";
 import { Request } from "./Request.ts";
-import { isWorkerEvent, type WorkerServices } from "./Worker.ts";
+// `isWorkerEvent` comes from the RuntimeEnvironment leaf (NOT Worker.ts):
+// this module is compiled by foreign bundlers through the serve bridge, and
+// Worker.ts's provider graph reaches the workerd native binary. The
+// `WorkerServices` import is type-only (erased).
+import { isWorkerEvent } from "./RuntimeEnvironment.ts";
+import type { WorkerServices } from "./Worker.ts";
 
 export type HttpEffect = Http.HttpEffect<WorkerServices>;
 

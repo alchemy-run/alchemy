@@ -25,7 +25,7 @@ export interface BaseRuntimeContext {
     handler: HttpEffect<Req>,
     options?: { shape?: Record<string, unknown> },
   ): Effect.Effect<void, never, Req>;
-  shape?: () => Record<string, unknown>;
+  shape?: () => Record<string, unknown> | undefined;
   /** additional services to provide to the plan  */
   planServices?: Layer.Layer<any>;
   /**

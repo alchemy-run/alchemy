@@ -1,9 +1,16 @@
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
+import * as s3 from "@distilled.cloud/aws/s3";
+import * as sqs from "@distilled.cloud/aws/sqs";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import { pathToFileURL } from "node:url";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
@@ -201,6 +208,278 @@ describe.skipIf(!runLive)("AWS.Website.Nuxt", () => {
         );
 
         const distributionId = deployed.router.distributionId as string;
+
+        if (!process.env.NO_DESTROY) {
+          yield* stack.destroy();
+          yield* assertDistributionDeleted(distributionId);
+        }
+      }),
+    { timeout: 2_400_000 },
+  );
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// Effectful Nuxt live (explicit tier + sibling, DESIGN §2.1.3 / §7-AWS):
+// ONE Website whose Effect program owns /api/effect/* through the
+// `toEventHandler` middleware compiled into the nitro Lambda (collect-only
+// mode — the artifact ships as-is, bindings collected env + IAM at plan),
+// while its SQS consumer rides the SIBLING effect Lambda deployed from the
+// same site module with the event-source mapping targeting it.
+// ─────────────────────────────────────────────────────────────────────
+
+/**
+ * The live effectful site module (written into the clone at `src/site.ts`;
+ * the clone sits at `packages/alchemy/.tmp/<dir>/`, so `../../../src` is
+ * `packages/alchemy/src` — the CURRENT sources, compiled by nitro into the
+ * server bundle and by FunctionBundle into the sibling).
+ */
+const nuxtEffectLiveSiteSource = `
+import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as NodePath from "node:path";
+import { QueueEventSource } from "../../../src/AWS/Lambda/QueueEventSource.ts";
+import { Bucket } from "../../../src/AWS/S3/Bucket.ts";
+import { GetObject } from "../../../src/AWS/S3/GetObject.ts";
+import { GetObjectHttp } from "../../../src/AWS/S3/GetObjectHttp.ts";
+import { PutObject } from "../../../src/AWS/S3/PutObject.ts";
+import { PutObjectHttp } from "../../../src/AWS/S3/PutObjectHttp.ts";
+import { Queue } from "../../../src/AWS/SQS/Queue.ts";
+import { consumeQueueMessages } from "../../../src/AWS/SQS/QueueEventSource.ts";
+import { Nuxt } from "../../../src/AWS/Website/Nuxt.ts";
+import { passthrough } from "../../../src/Serve/Passthrough.ts";
+
+/** S3 bucket bound by both surfaces (fetch round-trip + queue handler). */
+export const SiteData = Bucket("NuxtEffectLiveData", { forceDestroy: true });
+
+/** SQS queue consumed by the sibling effect Lambda. */
+export const Jobs = Queue("NuxtEffectLiveJobs", {
+  // Lambda event-source polling needs the visibility timeout to cover the
+  // consumer function's timeout (30s) with headroom.
+  visibilityTimeout: "2 minutes",
+});
+
+export default class NuxtEffectLiveSite extends Nuxt<NuxtEffectLiveSite>()(
+  "NuxtEffectSite",
+  {
+    main: import.meta.url,
+    // Plan-only (guarded: undefined when the module re-evaluates inside a
+    // deployed bundle where import.meta has no path).
+    rootDir: import.meta.dirname
+      ? NodePath.dirname(import.meta.dirname)
+      : undefined,
+  },
+  Effect.gen(function* () {
+    const bucket = yield* SiteData;
+    const queue = yield* Jobs;
+    const putObject = yield* PutObject(bucket);
+    const getObject = yield* GetObject(bucket);
+
+    // Non-fetch surface (rides the sibling effect Lambda): each SQS
+    // message body is written to the bucket so the test can observe
+    // delivery out-of-band.
+    yield* consumeQueueMessages(queue, (records) =>
+      records.pipe(
+        Stream.runForEach((record) =>
+          putObject({
+            Key: \`sqs/\${record.body}\`,
+            Body: record.body,
+          }).pipe(Effect.orDie),
+        ),
+        Effect.orDie,
+      ),
+    );
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const url = new URL(request.url, "http://fixture");
+        if (url.pathname === "/api/effect/ping") {
+          return yield* HttpServerResponse.json({ marker: "effect-fetch" });
+        }
+        if (url.pathname === "/api/effect/s3") {
+          const key = url.searchParams.get("key") ?? "current";
+          const put = url.searchParams.get("put");
+          if (put !== null) {
+            yield* putObject({ Key: key, Body: put }).pipe(Effect.orDie);
+          }
+          const object = yield* getObject({ Key: key }).pipe(Effect.orDie);
+          const value =
+            object.Body === undefined
+              ? undefined
+              : yield* Stream.mkString(Stream.decodeText(object.Body)).pipe(
+                  Effect.orDie,
+                );
+          return yield* HttpServerResponse.json({ value });
+        }
+        // Typed "not mine": nitro's own routes keep answering.
+        return yield* passthrough;
+      }),
+    };
+  }).pipe(
+    Effect.provide([PutObjectHttp, GetObjectHttp]),
+    Effect.provide(QueueEventSource),
+  ),
+) {}
+`;
+
+/** The explicit-tier mount (`server/middleware/alchemy.ts` in the clone). */
+const nuxtLiveMiddlewareSource = [
+  `import { toEventHandler } from "../../../../src/Serve/nitro.ts";`,
+  `import Site from "../../src/site.ts";`,
+  `export default toEventHandler(Site);`,
+  ``,
+].join("\n");
+
+/** GET `url` until it answers 200 JSON — bounded. */
+const fetchJsonReady = <T>(url: string, times = 40) =>
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    return yield* client.get(url).pipe(
+      Effect.flatMap((res) =>
+        Effect.flatMap(res.text, (body) =>
+          res.status === 200
+            ? Effect.try({
+                try: () => JSON.parse(body) as T,
+                catch: () => new Error(`non-json body: ${body.slice(0, 300)}`),
+              })
+            : Effect.fail(
+                new Error(`not ready (${res.status}): ${body.slice(0, 300)}`),
+              ),
+        ),
+      ),
+      Effect.retry({ schedule: Schedule.spaced("3 seconds"), times }),
+    );
+  });
+
+describe.skipIf(!runLive)("AWS.Website.Nuxt (effectful)", () => {
+  test.provider(
+    "effectful site: /api/effect/* through the edge serverRoutes + queue handler on the sibling Lambda",
+    (stack) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+
+        yield* stack.destroy();
+
+        const rootDir = yield* cloneFixture(fixtureDir, {
+          prefix: "alchemy-nuxt-aws-effect-",
+          tempRoot,
+          entries: fixtureEntries,
+        });
+        yield* fs.makeDirectory(path.join(rootDir, "src"), {
+          recursive: true,
+        });
+        yield* fs.writeFileString(
+          path.join(rootDir, "src", "site.ts"),
+          nuxtEffectLiveSiteSource,
+        );
+        yield* fs.makeDirectory(path.join(rootDir, "server", "middleware"), {
+          recursive: true,
+        });
+        yield* fs.writeFileString(
+          path.join(rootDir, "server", "middleware", "alchemy.ts"),
+          nuxtLiveMiddlewareSource,
+        );
+
+        const mod = (yield* Effect.tryPromise(
+          () =>
+            import(pathToFileURL(path.join(rootDir, "src", "site.ts")).href),
+        )) as {
+          default: any;
+          SiteData: Effect.Effect<AWS.S3.Bucket, never, any>;
+          Jobs: Effect.Effect<AWS.SQS.Queue, never, any>;
+        };
+
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            // Idempotent per-FQN registration: these resolve the SAME rows
+            // the impl's bindings use.
+            const data = yield* mod.SiteData;
+            const jobs = yield* mod.Jobs;
+            const site = yield* mod.default;
+            return { data, jobs, site };
+          }),
+        );
+
+        const url = deployed.site.url! as string;
+        expect(url).toMatch(/^https:\/\//);
+        yield* Effect.log(
+          `site url: ${url} | server url: ${deployed.site.serverUrl}`,
+        );
+
+        // SSR still serves (the collect-only artifact shipped as-is).
+        yield* expectUrlContains(`${url}/`, "NUXT_AWS_PAGE_MARKER", {
+          timeout: "300 seconds",
+          label: "SSR home page (effectful)",
+        });
+        // Nitro's own API route INSIDE /api/* still answers — the effect
+        // fetch declines it (passthrough) and nitro continues.
+        yield* expectUrlContains(
+          `${url}/api/hello?echo=roundtrip`,
+          "NUXT_AWS_API_MARKER",
+          { label: "framework API route (passthrough)" },
+        );
+
+        // Effect fetch through CloudFront: the edge serverRoutes check
+        // forwards /api/* to the server BEFORE the asset manifest.
+        const ping = yield* fetchJsonReady<{ marker: string }>(
+          `${url}/api/effect/ping`,
+        );
+        expect(ping.marker).toBe("effect-fetch");
+
+        // S3 round-trip through the binding collected onto the server
+        // Lambda (env + IAM). Random payload defeats stale objects.
+        const value = `nuxt-aws-effect-live-${crypto.randomUUID()}`;
+        const written = yield* fetchJsonReady<{ value: string | undefined }>(
+          `${url}/api/effect/s3?key=greeting&put=${value}`,
+        );
+        expect(written.value).toBe(value);
+
+        // Out-of-band: the write landed in the real bucket.
+        const observedFetchWrite = yield* s3
+          .getObject({
+            Bucket: deployed.data.bucketName as string,
+            Key: "greeting",
+          })
+          .pipe(
+            Effect.flatMap((res) =>
+              Stream.mkString(Stream.decodeText(res.Body!)),
+            ),
+            Effect.retry({
+              schedule: Schedule.exponential("1 second", 1.5),
+              times: 6,
+            }),
+          );
+        expect(observedFetchWrite).toBe(value);
+
+        // ── Sibling non-fetch delivery: send an SQS message out-of-band;
+        // the SIBLING effect Lambda's consumer writes it to the bucket ──
+        const messageBody = `sibling-${crypto.randomUUID()}`;
+        yield* sqs.sendMessage({
+          QueueUrl: deployed.jobs.queueUrl as string,
+          MessageBody: messageBody,
+        });
+        const observedSibling = yield* s3
+          .getObject({
+            Bucket: deployed.data.bucketName as string,
+            Key: `sqs/${messageBody}`,
+          })
+          .pipe(
+            Effect.flatMap((res) =>
+              Stream.mkString(Stream.decodeText(res.Body!)),
+            ),
+            Effect.retry({
+              while: (error): boolean =>
+                "_tag" in error && error._tag === "NoSuchKey",
+              schedule: Schedule.spaced("5 seconds"),
+              times: 36,
+            }),
+          );
+        expect(observedSibling).toBe(messageBody);
+
+        const distributionId = deployed.site.distribution!.distributionId;
 
         if (!process.env.NO_DESTROY) {
           yield* stack.destroy();
