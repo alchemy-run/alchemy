@@ -4,7 +4,7 @@ Deploys a Nuxt app to AWS with `AWS.Website.Nuxt` — no `nitro.preset` edits, n
 
 The resource builds the app through the project's own `@nuxt/kit` with nitro's `aws-lambda` preset (your `nuxt.config.ts` loads natively), deploys the nitro server bundle on a streaming Lambda Function URL, and serves client assets + prerendered pages from S3 behind CloudFront.
 
-The site is **effectful**: `src/backend.ts` passes an Effect program as the third argument, and the program's RPC methods ARE the API surface — no routes, no URL parsing (the S3 bucket's name lands as an env var and its IAM policy on the Lambda role, collected at plan time):
+The site is **effectful**: `server/backend.ts` passes an Effect program as the third argument, and the program's RPC methods ARE the API surface — no routes, no URL parsing (the S3 bucket's name lands as an env var and its IAM policy on the Lambda role, collected at plan time):
 
 ```ts
 export default class Site extends Nuxt<Site>()(
@@ -27,7 +27,7 @@ On Nuxt the wire path mounts explicitly through one file — a nitro server midd
 ```ts
 // server/middleware/alchemy.ts
 import { toEventHandler } from "alchemy/serve/nitro";
-import Site from "../../src/backend.ts";
+import Site from "../backend.ts";
 
 export default toEventHandler(Site);
 ```
@@ -37,13 +37,13 @@ Methods are called through `createClient` (`alchemy/client`), which has two form
 ```ts
 // SSR (useAsyncData handler, guarded by import.meta.server): VALUE import —
 // direct in-process dispatch, no HTTP
-const { default: Backend } = await import("../../src/backend");
+const { default: Backend } = await import("../backend");
 const message = await createClient(Backend).get();
 
 // Browser: TYPE-ONLY import — zero backend bytes in the client bundle;
 // each call POSTs the wire protocol (/api/__rpc/save)
 import { createClient } from "alchemy/client";
-import type Backend from "../../src/backend";
+import type Backend from "../backend";
 const backend = createClient<typeof Backend>();
 await backend.save(draft);
 ```
@@ -62,6 +62,6 @@ bun alchemy destroy  # tear down
 
 - `@alchemy.run/frontend-frameworks` must be installed in the project — the server's source provider is loaded from its `/nuxt` export at deploy time.
 - Unchanged projects skip the build and deploy entirely (the project tree is content-hashed, respecting `.gitignore`).
-- In `alchemy dev`, the site is Nuxt's own dev server (native HMR). The site itself creates no AWS resources in dev, but the S3 bucket bound by the effect program is pinned `remote()` in `src/backend.ts`, so both `createClient` forms hit the real bucket with your ambient credentials.
+- In `alchemy dev`, the site is Nuxt's own dev server (native HMR). The site itself creates no AWS resources in dev, but the S3 bucket bound by the effect program is pinned `remote()` in `server/backend.ts`, so both `createClient` forms hit the real bucket with your ambient credentials.
 - `/about` is prerendered at build time — prerendered pages must not call the backend server-side (nitro's `isr` route rule is Vercel/Netlify-only and ignored on AWS Lambda; use `prerender` or `cache` route rules instead).
 - `test/integ.test.ts` deploys the stack and asserts SSR (including the backend-rendered value), the rpc wire path, the nitro route, the prerendered page, and static assets over HTTP.

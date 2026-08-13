@@ -6,6 +6,6 @@
 // declined (the backend exposes no `fetch`), so nitro continues to its
 // own handlers — `/api/hello` stays a plain nitro route.
 import { toEventHandler } from "alchemy/serve/nitro";
-import Site from "../../src/backend.ts";
+import Site from "../backend.ts";
 
 export default toEventHandler(Site);

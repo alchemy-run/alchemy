@@ -2,7 +2,7 @@
 // The TYPE-ONLY form for the browser: zero backend bytes in the client
 // bundle — methods POST to /api/__rpc/<method> on this same Worker.
 import { createClient } from "alchemy/client";
-import type Backend from "../../src/backend";
+import type Backend from "../backend";
 
 const backend = createClient<typeof Backend>();
 
@@ -12,7 +12,7 @@ const backend = createClient<typeof Backend>();
 // where the type-only client above serves client-side navigations instead.
 const { data: visits } = await useAsyncData("visits", async () => {
   if (import.meta.server) {
-    const { default: Backend } = await import("../../src/backend");
+    const { default: Backend } = await import("../backend");
     return createClient(Backend).visit();
   }
   return backend.visit();

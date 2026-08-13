@@ -94,7 +94,7 @@ test(
   "the exclusion glob hands /api/hello back to nitro",
   Effect.gen(function* () {
     const url = yield* base;
-    // src/backend.ts claims ["/api/*", "!/api/hello"] — exclusions win,
+    // server/backend.ts claims ["/api/*", "!/api/hello"] — exclusions win,
     // so nitro's own route answers /api/hello...
     const body = yield* getBodyWhenReady(`${url}/api/hello`, "from nitro");
     expect(JSON.parse(body)).toEqual({ hello: "from nitro" });

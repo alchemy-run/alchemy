@@ -3,7 +3,7 @@
 // in the client bundle. Each call POSTs the wire protocol
 // (`/api/__rpc/<method>`), dispatched by the alchemy server middleware.
 import { createClient } from "alchemy/client";
-import type Backend from "../../src/backend";
+import type Backend from "../backend";
 
 const backend = createClient<typeof Backend>();
 
@@ -14,7 +14,7 @@ const backend = createClient<typeof Backend>();
 // the wire path through the same typed client.
 const { data: message } = await useAsyncData("message", async () => {
   if (import.meta.server) {
-    const { default: Backend } = await import("../../src/backend");
+    const { default: Backend } = await import("../backend");
     return createClient(Backend).get();
   }
   return backend.get();

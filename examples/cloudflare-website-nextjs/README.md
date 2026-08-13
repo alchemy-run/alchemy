@@ -7,7 +7,7 @@ integration runs `next build` through `@opennextjs/cloudflare`, bundles
 the resulting worker, and deploys the static assets (including
 prerendered pages) alongside it.
 
-- `src/backend.ts` declares the Website class with an Effect program as its
+- `app/backend.ts` declares the Website class with an Effect program as its
   third argument: ONE Worker serves the Next.js app and a typed backend
   API. The program's RPC METHODS (`visit`, `visits`) are the API surface,
   backed by a KV namespace through a typed capability binding — collected
@@ -19,7 +19,7 @@ prerendered pages) alongside it.
   `createClient` — direct in-process dispatch, no HTTP hop:
 
   ```tsx
-  import Backend from "../src/backend";
+  import Backend from "./backend";
   const backend = createClient(Backend);
   const visits = await backend.visit();
   ```
@@ -30,7 +30,7 @@ prerendered pages) alongside it.
 
   ```tsx
   import { createClient } from "alchemy/client";
-  import type Backend from "../src/backend";
+  import type Backend from "./backend";
   const backend = createClient<typeof Backend>();
   await backend.visit();
   ```

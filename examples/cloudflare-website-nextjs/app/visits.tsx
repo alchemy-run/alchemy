@@ -2,7 +2,7 @@
 
 import { createClient } from "alchemy/client";
 import { useState } from "react";
-import type Backend from "../src/backend";
+import type Backend from "./backend";
 
 // The TYPE-ONLY form: zero backend bytes in the client bundle — methods
 // POST to /api/__rpc/<method> on this same Worker. The initial value is

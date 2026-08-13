@@ -2,7 +2,7 @@
 // dispatches directly in-process (no HTTP hop) inside the async server
 // component, in the deployed Lambda and under `next dev` alike.
 import { createClient } from "alchemy/client";
-import Backend from "../src/backend.ts";
+import Backend from "./backend.ts";
 import MessageForm from "./message-form.tsx";
 
 // Server-rendered in the Lambda on every request — a prerendered page

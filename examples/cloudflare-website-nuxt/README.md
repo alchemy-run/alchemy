@@ -4,7 +4,7 @@ Deploys a Nuxt app to Cloudflare Workers with `Cloudflare.Website.Nuxt` — no `
 
 The resource builds the app through the project's own `@nuxt/kit` with nitro's `cloudflare_module` preset (your `nuxt.config.ts` loads natively), deploys the nitro server bundle as the Worker, and serves client assets + prerendered pages as Worker static assets. Values passed via `env` are exposed to server routes and SSR through `event.context.cloudflare.env`.
 
-The Website class lives in `src/backend.ts` and takes an Effect program as its third argument: ONE Worker serves the Nuxt app and a typed backend API. The program's RPC METHODS (`visit`, `visits`) are the API surface, backed by a KV namespace through a typed capability binding — collected automatically at plan time. The program also keeps a `fetch` owning `server.routes` (`["/api/*", "!/api/hello"]`) to demonstrate route ownership: inside the claim the program is authoritative (even its 404s); the `!/api/hello` exclusion statically hands that path back to nitro, so the app's own route keeps answering.
+The Website class lives in `server/backend.ts` and takes an Effect program as its third argument: ONE Worker serves the Nuxt app and a typed backend API. The program's RPC METHODS (`visit`, `visits`) are the API surface, backed by a KV namespace through a typed capability binding — collected automatically at plan time. The program also keeps a `fetch` owning `server.routes` (`["/api/*", "!/api/hello"]`) to demonstrate route ownership: inside the claim the program is authoritative (even its 404s); the `!/api/hello` exclusion statically hands that path back to nitro, so the app's own route keeps answering.
 
 ```ts
 export default class Site extends Nuxt<Site>()(
@@ -37,14 +37,14 @@ export default class Site extends Nuxt<Site>()(
 // browser: TYPE-ONLY form — POST /api/__rpc/<method>, zero backend bytes
 // in the client bundle
 import { createClient } from "alchemy/client";
-import type Backend from "../../src/backend";
+import type Backend from "../backend";
 const backend = createClient<typeof Backend>();
 
 // SSR: VALUE form — direct in-process dispatch (compiled out of the
 // client bundle by the import.meta.server guard)
 const { data: visits } = await useAsyncData("visits", async () => {
   if (import.meta.server) {
-    const { default: Backend } = await import("../../src/backend");
+    const { default: Backend } = await import("../backend");
     return createClient(Backend).visit();
   }
   return backend.visit();

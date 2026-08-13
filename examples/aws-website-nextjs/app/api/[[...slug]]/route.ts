@@ -6,7 +6,7 @@
 // catch-all and is dispatched before route matching. More-specific
 // routes (e.g. /api/hello) keep winning over the catch-all.
 import { toRouteHandler } from "alchemy/serve/next";
-import Site from "../../../src/backend.ts";
+import Site from "../../backend.ts";
 
 const handler = toRouteHandler(Site);
 export {

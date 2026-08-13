@@ -32,7 +32,6 @@
   "include": [
     "alchemy.run.ts",
     "app/**/*",
-    "src/**/*",
     "test",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"

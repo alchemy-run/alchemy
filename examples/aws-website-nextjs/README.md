@@ -8,7 +8,7 @@ pages) deploy to S3 behind CloudFront, images are optimized by a
 dedicated Lambda at `/_next/image`, and ISR revalidation flows through
 an SQS FIFO queue plus a DynamoDB tag-cache table.
 
-The site is **effectful**: `src/backend.ts` passes an Effect program as the
+The site is **effectful**: `app/backend.ts` passes an Effect program as the
 third argument, and the program's RPC methods ARE the API surface — no
 routes, no URL parsing (the S3 bucket's name lands as an env var and its
 IAM policy on the Lambda role, collected at plan time). On Next.js the
@@ -18,7 +18,7 @@ compiled by Next itself:
 ```ts
 // app/api/[[...slug]]/route.ts
 import { toRouteHandler } from "alchemy/serve/next";
-import Site from "../../../src/backend.ts";
+import Site from "../../backend.ts";
 
 const handler = toRouteHandler(Site);
 export { handler as GET, handler as POST /* ... */ };
@@ -30,7 +30,7 @@ two forms:
 ```tsx
 // SSR (app/page.tsx, async server component): VALUE import — direct
 // in-process dispatch, no HTTP
-import Backend from "../src/backend.ts";
+import Backend from "./backend.ts";
 const backend = createClient(Backend);
 const message = await backend.get();
 
@@ -38,7 +38,7 @@ const message = await backend.get();
 // backend bytes in the client bundle; each call POSTs the wire protocol
 // (/api/__rpc/save) through the catch-all route handler
 import { createClient } from "alchemy/client";
-import type Backend from "../src/backend.ts";
+import type Backend from "./backend.ts";
 const backend = createClient<typeof Backend>();
 await backend.save(draft);
 ```
@@ -91,7 +91,7 @@ bun run dev
 
 Local dev is Next's own dev server (`next dev`, native HMR). The site
 itself creates no cloud resources in dev, but the S3 bucket bound by the
-effect program is pinned `remote()` in `src/backend.ts`, so both
+effect program is pinned `remote()` in `app/backend.ts`, so both
 `createClient` forms hit the real bucket with your ambient credentials.
 
 ## Destroy

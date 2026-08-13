@@ -1,5 +1,5 @@
 import { createClient } from "alchemy/client";
-import Backend from "../src/backend";
+import Backend from "./backend";
 import Visits from "./visits";
 
 // Server-rendered in the Worker on every request — the value form must

@@ -6,7 +6,7 @@
 // route handler at app/api/[[...slug]]/route.ts.
 import { createClient } from "alchemy/client";
 import { useState, type FormEvent } from "react";
-import type Backend from "../src/backend.ts";
+import type Backend from "./backend.ts";
 
 const backend = createClient<typeof Backend>();
 
