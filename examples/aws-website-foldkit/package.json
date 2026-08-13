@@ -1,5 +1,5 @@
 {
-  "name": "cloudflare-foldkit",
+  "name": "aws-website-foldkit",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -16,6 +16,9 @@
     "foldkit": "^0.137.0"
   },
   "devDependencies": {
+    "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@distilled.cloud/aws": "catalog:",
+    "@effect/platform-node": "catalog:",
     "@foldkit/vite-plugin": "^0.11.3",
     "@tailwindcss/vite": "catalog:",
     "@types/node": "^24.12.0",
@@ -27,6 +30,6 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/alchemy-run/alchemy.git",
-    "directory": "examples/cloudflare-foldkit"
+    "directory": "examples/aws-website-foldkit"
   }
 }
