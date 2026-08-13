@@ -104,11 +104,11 @@ export interface ComputeStaticBuildOptions {
    */
   appPath: string;
   /**
-   * Shell command that creates the static output directory.
+   * Optional shell command that creates the static output directory.
    */
-  command: string;
+  command?: string;
   /**
-   * Working directory for the build command.
+   * Working directory for the build command and static output.
    *
    * @default appPath
    */
@@ -577,13 +577,15 @@ export const runComputeStaticBuild = Effect.fn(function* (
     );
   }
 
-  yield* runBuildCommand({
-    command: options.command,
-    cwd,
-    env: processBuildEnv(options.env),
-    outputLimitBytes: options.outputLimitBytes,
-    timeoutSeconds: options.timeoutSeconds,
-  });
+  if (options.command !== undefined) {
+    yield* runBuildCommand({
+      command: options.command,
+      cwd,
+      env: processBuildEnv(options.env),
+      outputLimitBytes: options.outputLimitBytes,
+      timeoutSeconds: options.timeoutSeconds,
+    });
+  }
 
   const sourceDir = path.resolve(cwd, outdir);
   if (!(yield* directoryExists(sourceDir))) {

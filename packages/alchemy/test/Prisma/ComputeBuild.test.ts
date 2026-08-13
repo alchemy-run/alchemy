@@ -930,6 +930,32 @@ describe("Prisma Compute auto-build", () => {
 });
 
 describe("Prisma Compute static-site build", () => {
+  it.effect("packages a prebuilt index without running a command", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-static-index-",
+      });
+      yield* fs.writeFileString(path.join(root, "index.html"), "hello static");
+
+      const artifact = yield* runComputeStaticBuild({
+        appPath: root,
+        outdir: ".",
+      });
+
+      yield* withStaticSiteServer(artifact.directory, (origin) =>
+        Effect.gen(function* () {
+          const response = yield* request(`${origin}/`);
+          expect(response.status).toBe(200);
+          expect(yield* responseText(response)).toBe("hello static");
+        }),
+      );
+
+      yield* artifact.cleanup;
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
   it.effect("packages and serves static files with SPA fallback", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;

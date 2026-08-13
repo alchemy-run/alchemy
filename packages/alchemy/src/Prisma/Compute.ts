@@ -177,14 +177,26 @@ export interface ComputeAutoBuild {
   timeoutSeconds?: number;
 }
 
-export interface ComputeStaticBuild extends Omit<
-  ComputeCommandBuild,
-  "entrypoint"
-> {
+export interface ComputeStaticBuild {
   /**
    * Build a static site and package it with a production HTTP server.
    */
   type: "static";
+  /**
+   * Static output directory, relative to `cwd`.
+   */
+  outdir: string;
+  /**
+   * Optional shell command that creates the static output directory. Omit it
+   * when `outdir` already contains the files to deploy.
+   */
+  command?: string;
+  /**
+   * Working directory for the build command and `outdir`.
+   *
+   * @default path
+   */
+  cwd?: string;
   /**
    * HTML file served at the root and for SPA fallbacks.
    *
@@ -197,6 +209,32 @@ export interface ComputeStaticBuild extends Omit<
    * @default false
    */
   spa?: boolean;
+  /**
+   * Environment variables supplied to the build command.
+   * Ambient `PRISMA_SERVICE_TOKEN` and `PRISMA_API_TOKEN` credentials are not
+   * inherited; include one here explicitly only when the application build
+   * genuinely needs Prisma Management API access.
+   *
+   * Plain strings are persisted in Alchemy state. Wrap secrets with
+   * `Redacted.make(secret)`.
+   *
+   * ```typescript
+   * env: { NPM_TOKEN: Redacted.make(process.env.NPM_TOKEN!) }
+   * ```
+   */
+  env?: Record<string, string | Redacted.Redacted<string> | undefined>;
+  /**
+   * Maximum bytes retained from each build output stream.
+   *
+   * @default 1048576 (1 MiB)
+   */
+  outputLimitBytes?: number;
+  /**
+   * Maximum wall-clock time for the build command.
+   *
+   * @default 900 (15 minutes)
+   */
+  timeoutSeconds?: number;
 }
 
 export type ComputeBuild =
@@ -708,12 +746,10 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  * ```typescript
  * const web = yield* Prisma.Compute("web", {
  *   project,
- *   path: "./apps/web",
+ *   path: "./site",
  *   build: {
  *     type: "static",
- *     command: "bun run build",
- *     outdir: "dist",
- *     spa: true,
+ *     outdir: ".",
  *   },
  * });
  * ```

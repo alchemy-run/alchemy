@@ -40,10 +40,23 @@ outputs explicitly as shown in [Connections](/prisma/data/connections).
 
 ## Static sites
 
-Generic Vite apps work with `build: "auto"`. For another static build command
-or output directory, set `build.type` to `"static"`. Alchemy packages the files
-with the HTTP entrypoint Prisma Compute requires; the application does not need
-its own server file or runtime dependency:
+Generic Vite apps work with `build: "auto"`. To deploy a directory that already
+contains static files, set `build.type` to `"static"` and point `outdir` at it.
+Alchemy packages the files with the HTTP entrypoint Prisma Compute requires;
+the application does not need its own server file or runtime dependency:
+
+```typescript
+const site = yield* Prisma.Compute("web", {
+  project,
+  path: "./site",
+  build: {
+    type: "static",
+    outdir: ".",
+  },
+});
+```
+
+Add `command` when the output directory needs to be built first:
 
 ```typescript
 const site = yield* Prisma.Compute("web", {
