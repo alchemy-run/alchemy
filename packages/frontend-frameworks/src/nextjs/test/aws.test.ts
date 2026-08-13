@@ -6,7 +6,9 @@ import { makeProject, run } from "../../core/test/helpers.ts";
 import {
   DEFAULT_BUILD_COMMAND,
   DEFAULT_OPEN_NEXT_CONFIG,
+  defaultBuildCommand,
   deriveServerEntryName,
+  detectPackager,
   make,
   makeDefaultOpenNextConfig,
   makeOverrideOpenNextConfig,
@@ -113,6 +115,50 @@ describe("build pre-flight", () => {
       "utf8",
     );
     expect(config).toBe(DEFAULT_OPEN_NEXT_CONFIG);
+  });
+});
+
+describe("packager detection", () => {
+  it("maps packagers to their local-binary runners", () => {
+    expect(defaultBuildCommand("bun")).toBe("bunx next build");
+    expect(defaultBuildCommand("pnpm")).toBe("pnpm exec next build");
+    expect(defaultBuildCommand("yarn")).toBe("yarn next build");
+    expect(defaultBuildCommand("npm")).toBe(DEFAULT_BUILD_COMMAND);
+  });
+
+  it("detects the packager from the nearest lockfile, preferring bun", async () => {
+    const root = await makeProject({
+      "package.json": packageJson(),
+      "bun.lock": "",
+      "yarn.lock": "",
+    });
+    expect(await run(detectPackager(root))).toBe("bun");
+  });
+
+  it("generates a config with the detected packager's runner when package.json has no build script", async () => {
+    const root = await makeProject({
+      "package.json": packageJson(),
+      "pnpm-lock.yaml": "",
+    });
+    const error = await buildError(root);
+    expect(error.message).toContain("@opennextjs/aws");
+    const config = await NodeFsPromises.readFile(
+      NodePath.join(root, "open-next.config.ts"),
+      "utf8",
+    );
+    expect(config).toContain(`buildCommand: "pnpm exec next build"`);
+  });
+
+  it("suggests the detected runner in the missing-build-script error", async () => {
+    const root = await makeProject({
+      "package.json": packageJson(),
+      "bun.lock": "",
+      "open-next.config.ts": `const config = {};\nexport default config;\n`,
+    });
+    const error = await buildError(root);
+    expect(error.message).toBe(
+      missingBuildScriptMessage("open-next.config.ts", "bunx next build"),
+    );
   });
 });
 

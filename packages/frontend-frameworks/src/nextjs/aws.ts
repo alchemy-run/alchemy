@@ -15,8 +15,10 @@
  *   project has no `open-next.config.ts`, a minimal default is generated with
  *   the `aws-lambda-streaming` wrapper so the emitted handler streams on a
  *   Lambda Function URL (`invokeMode: RESPONSE_STREAM`) — and, when
- *   `package.json` has no `build` script, with `buildCommand: "npx next
- *   build"` so the build works without one. After the build, the
+ *   `package.json` has no `build` script, with a `buildCommand` that runs
+ *   `next build` through the project's detected package runner
+ *   (bunx/npx/yarn/pnpm exec) so the build works without one. After the
+ *   build, the
  *   authoritative `.open-next/open-next.output.json` manifest is read to
  *   verify the default origin is a streaming function.
  * - **`dev`** runs the real `next dev` through Next's documented custom-server
@@ -83,7 +85,7 @@ export interface NextjsAwsOptions {
          * project root (e.g. `"npx next build --turbopack"`). Takes
          * precedence over the package.json `build` script and a
          * `buildCommand` in `open-next.config.ts`.
-         * @default the package.json `build` script, or `npx next build` when there is none
+         * @default the package.json `build` script, or `next build` via the detected package runner (bunx/npx/yarn/pnpm exec) when there is none
          */
         readonly command?: string | undefined;
       }
@@ -112,13 +114,65 @@ export const deriveServerEntryName = (origin: {
 };
 
 /**
- * The `buildCommand` written into the generated config when the project's
- * `package.json` has no `build` script. OpenNext's default is
- * `{packager} run build`, which dies with a raw `Script not found "build"`
- * when the script is missing; `npx next build` resolves the project's own
- * `next` regardless (the same default the Cloudflare runner uses).
+ * The `buildCommand` fallback for npm projects (and when no lockfile is
+ * found). OpenNext's default is `{packager} run build`, which dies with a
+ * raw `Script not found "build"` when the script is missing;
+ * `npx next build` resolves the project's own `next` regardless.
  */
 export const DEFAULT_BUILD_COMMAND = "npx next build";
+
+/** The package manager detected from the project's lockfile. */
+export type Packager = "bun" | "npm" | "yarn" | "pnpm";
+
+// Mirrors @opennextjs/aws's findPackagerAndRoot: walk up from the project
+// root to the nearest lockfile. bun is checked before yarn because
+// `bun install --yarn` can emit a yarn.lock alongside bun's own.
+const PACKAGER_LOCKFILES: ReadonlyArray<readonly [string, Packager]> = [
+  ["bun.lockb", "bun"],
+  ["bun.lock", "bun"],
+  ["package-lock.json", "npm"],
+  ["yarn.lock", "yarn"],
+  ["pnpm-lock.yaml", "pnpm"],
+];
+
+/**
+ * Detect the project's package manager the same way OpenNext does (nearest
+ * lockfile, walking up), so the default build command uses the runner the
+ * rest of the build already agreed on. Falls back to npm.
+ */
+export const detectPackager: (
+  root: string,
+) => Effect.Effect<Packager, never, FileSystem.FileSystem | Path.Path> =
+  Effect.fnUntraced(function* (root: string) {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    let current = root;
+    while (true) {
+      for (const [file, packager] of PACKAGER_LOCKFILES) {
+        const exists = yield* fs
+          .exists(path.join(current, file))
+          .pipe(Effect.orElseSucceed(() => false));
+        if (exists) return packager;
+      }
+      const parent = path.dirname(current);
+      if (parent === current) return "npm";
+      current = parent;
+    }
+  });
+
+/** The `next build` invocation through the packager's local-binary runner. */
+export const defaultBuildCommand = (packager: Packager): string => {
+  switch (packager) {
+    case "bun":
+      return "bunx next build";
+    case "pnpm":
+      return "pnpm exec next build";
+    case "yarn":
+      return "yarn next build";
+    case "npm":
+      return DEFAULT_BUILD_COMMAND;
+  }
+};
 
 /**
  * Render the minimal `open-next.config.ts` generated when the project has
@@ -186,9 +240,12 @@ export default {
  * has no `build` script — the OpenNext build would die with a raw
  * `Script not found "build"` buried in child-process output.
  */
-export const missingBuildScriptMessage = (configPath: string): string =>
+export const missingBuildScriptMessage = (
+  configPath: string,
+  command: string = DEFAULT_BUILD_COMMAND,
+): string =>
   `Your package.json has no "build" script, so the OpenNext build cannot ` +
-  `build your Next.js app. Set \`build: { command: "${DEFAULT_BUILD_COMMAND}" }\` ` +
+  `build your Next.js app. Set \`build: { command: "${command}" }\` ` +
   `on the site, add a \`"build"\` script to package.json, or set ` +
   `\`buildCommand\` in ${configPath}.`;
 
@@ -471,13 +528,12 @@ export const make: (
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
 
+    const fsPathLayer = Layer.merge(
+      Layer.succeed(FileSystem.FileSystem)(fs),
+      Layer.succeed(Path.Path)(path),
+    );
     const spawnerLayer = NodeChildProcessSpawner.layer.pipe(
-      Layer.provide(
-        Layer.merge(
-          Layer.succeed(FileSystem.FileSystem)(fs),
-          Layer.succeed(Path.Path)(path),
-        ),
-      ),
+      Layer.provide(fsPathLayer),
     );
 
     const resolveRoot = (override: string | undefined) =>
@@ -518,6 +574,9 @@ export const make: (
       const hasConfig = yield* fs
         .exists(absoluteConfigPath)
         .pipe(Effect.orElseSucceed(() => false));
+      const fallbackCommand = defaultBuildCommand(
+        yield* detectPackager(root).pipe(Effect.provide(fsPathLayer)),
+      );
       if (!hasConfig) {
         yield* fs
           .writeFileString(
@@ -526,7 +585,7 @@ export const make: (
               buildCommand:
                 hasBuildScript || explicitCommand !== undefined
                   ? undefined
-                  : DEFAULT_BUILD_COMMAND,
+                  : fallbackCommand,
             }),
           )
           .pipe(
@@ -565,7 +624,9 @@ export const make: (
           .pipe(Effect.orElseSucceed(() => ""));
         if (!configText.includes("buildCommand")) {
           return yield* Effect.fail(
-            fail(missingBuildScriptMessage(configPath))(undefined),
+            fail(missingBuildScriptMessage(configPath, fallbackCommand))(
+              undefined,
+            ),
           );
         }
       }

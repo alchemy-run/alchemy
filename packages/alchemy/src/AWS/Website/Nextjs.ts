@@ -50,7 +50,7 @@ export interface NextjsProps {
      * `"npx next build --turbopack"`). Takes precedence over the
      * package.json `build` script and a `buildCommand` in
      * `open-next.config.ts`.
-     * @default the package.json `build` script, or `npx next build` when there is none
+     * @default the package.json `build` script, or `next build` via the detected package runner (bunx/npx/yarn/pnpm exec) when there is none
      */
     command?: string;
   };
