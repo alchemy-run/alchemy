@@ -42,6 +42,19 @@ export interface NextjsProps {
    */
   rootDir?: string;
   /**
+   * Build configuration for the OpenNext build.
+   */
+  build?: {
+    /**
+     * Command that builds the Next.js app, run from `rootDir` (e.g.
+     * `"npx next build --turbopack"`). Takes precedence over the
+     * package.json `build` script and a `buildCommand` in
+     * `open-next.config.ts`.
+     * @default the package.json `build` script, or `npx next build` when there is none
+     */
+    command?: string;
+  };
+  /**
    * Controls which files are hashed to decide whether the build re-runs.
    * @default true
    */
@@ -201,6 +214,7 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
       env: props.server?.environment,
       memo: props.memo,
       dev: props.dev,
+      options: props.build ? { build: props.build } : undefined,
     });
 
     if (isLocal) {

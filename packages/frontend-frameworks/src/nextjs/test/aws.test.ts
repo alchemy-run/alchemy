@@ -9,7 +9,9 @@ import {
   deriveServerEntryName,
   make,
   makeDefaultOpenNextConfig,
+  makeOverrideOpenNextConfig,
   missingBuildScriptMessage,
+  OVERRIDE_OPEN_NEXT_CONFIG_PATH,
 } from "../aws.ts";
 
 const packageJson = (scripts?: Record<string, string>) =>
@@ -20,10 +22,10 @@ const packageJson = (scripts?: Record<string, string>) =>
     ...(scripts === undefined ? {} : { scripts }),
   });
 
-/** Run `make({ root }).build()` and return the failure. */
-const buildError = (root: string) =>
+/** Run `make(options).build()` and return the failure. */
+const buildError = (root: string, options?: { build?: { command?: string } }) =>
   run(
-    make({ root }).pipe(
+    make({ root, ...options }).pipe(
       Effect.flatMap((service) => service.build()),
       Effect.flip,
     ),
@@ -73,7 +75,7 @@ describe("build pre-flight", () => {
     expect(error.message).toBe(
       missingBuildScriptMessage("open-next.config.ts"),
     );
-    expect(error.message).toContain(`"build": "next build"`);
+    expect(error.message).toContain(`build: { command: "npx next build" }`);
   });
 
   it("proceeds when the user's config sets buildCommand", async () => {
@@ -111,5 +113,61 @@ describe("build pre-flight", () => {
       "utf8",
     );
     expect(config).toBe(DEFAULT_OPEN_NEXT_CONFIG);
+  });
+});
+
+describe("build.command", () => {
+  it("applies an explicit command through the override config", async () => {
+    const root = await makeProject({
+      "package.json": packageJson({ build: "next build" }),
+      "open-next.config.ts": `const config = {};\nexport default config;\n`,
+    });
+    const error = await buildError(root, {
+      build: { command: "npx next build --turbopack" },
+    });
+    // The pre-flight passes; the build then fails resolving the (absent)
+    // @opennextjs/aws dependency instead.
+    expect(error.message).toContain("@opennextjs/aws");
+    const override = await NodeFsPromises.readFile(
+      NodePath.join(root, OVERRIDE_OPEN_NEXT_CONFIG_PATH),
+      "utf8",
+    );
+    expect(override).toBe(
+      makeOverrideOpenNextConfig({
+        configPath: "open-next.config.ts",
+        buildCommand: "npx next build --turbopack",
+      }),
+    );
+    expect(override).toContain(`import config from "./open-next.config.ts"`);
+    expect(override).toContain(`buildCommand: "npx next build --turbopack"`);
+  });
+
+  it("beats the missing-build-script pre-flight", async () => {
+    const root = await makeProject({
+      "package.json": packageJson(),
+      "open-next.config.ts": `const config = {};\nexport default config;\n`,
+    });
+    const error = await buildError(root, {
+      build: { command: "npx next build" },
+    });
+    expect(error.message).toContain("@opennextjs/aws");
+  });
+
+  it("generates the default config without buildCommand and overrides via the wrapper", async () => {
+    const root = await makeProject({ "package.json": packageJson() });
+    const error = await buildError(root, {
+      build: { command: "bun x next build" },
+    });
+    expect(error.message).toContain("@opennextjs/aws");
+    const config = await NodeFsPromises.readFile(
+      NodePath.join(root, "open-next.config.ts"),
+      "utf8",
+    );
+    expect(config).toBe(DEFAULT_OPEN_NEXT_CONFIG);
+    const override = await NodeFsPromises.readFile(
+      NodePath.join(root, OVERRIDE_OPEN_NEXT_CONFIG_PATH),
+      "utf8",
+    );
+    expect(override).toContain(`buildCommand: "bun x next build"`);
   });
 });
