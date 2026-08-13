@@ -73,7 +73,7 @@ deployment is created, so changing only a value updates the
 platform's variable record but never reaches the running app.
 
 Declare the values the deployment must be recreated for with
-`redeployOn`. When the resolved value changes, the next deploy
+`triggers`. When the resolved value changes, the next deploy
 replaces the deployment (create-before-delete) even though the
 artifact is unchanged:
 
@@ -81,7 +81,7 @@ artifact is unchanged:
 const deployment = yield* Prisma.Deployment("web", {
   app,
   artifactPath: "./dist/app.tar.gz",
-  redeployOn: { DATABASE_URL: Redacted.make(databaseUrl) },
+  triggers: { DATABASE_URL: Redacted.make(databaseUrl) },
   start: true,
   promote: true,
 });
