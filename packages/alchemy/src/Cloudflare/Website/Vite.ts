@@ -242,7 +242,7 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * inside workerd, and the `alchemy/Cloudflare` provider barrel would
  * drag the entire IaC engine along with it.
  *
- * @example Effectful Vite site (src/site.ts)
+ * @example Effectful Vite site (src/backend.ts)
  * ```typescript
  * import * as KV from "alchemy/Cloudflare/KV";
  * import * as Website from "alchemy/Cloudflare/Website";

@@ -103,7 +103,7 @@ const toWebRequest = async (
  * @example server/middleware/alchemy.ts
  * ```typescript
  * import { toEventHandler } from "alchemy/serve/nitro";
- * import Site from "../../src/site.ts";
+ * import Site from "../../src/backend.ts";
  *
  * export default toEventHandler(Site);
  * ```

@@ -5,7 +5,7 @@
  *
  * Importing this module has no plan-observable side effects (in particular
  * it does NOT set `__ALCHEMY_RUNTIME__` — that is stamped when a bridge is
- * constructed), so `site.ts` may import from `alchemy/serve` and still be
+ * constructed), so `src/backend.ts` may import from `alchemy/serve` and still be
  * evaluated by the engine at plan time.
  */
 export * from "./Serve.ts";

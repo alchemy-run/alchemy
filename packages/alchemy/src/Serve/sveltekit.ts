@@ -7,7 +7,7 @@
  * // src/hooks.server.ts
  * import { sequence } from "@sveltejs/kit/hooks";
  * import { toHandle } from "alchemy/serve/sveltekit";
- * import Site from "./site.ts";
+ * import Site from "./src/backend.ts";
  * export const handle = sequence(toHandle(Site));
  * ```
  *
@@ -53,7 +53,7 @@ export interface SvelteKitHandleInput<Event extends SvelteKitRequestEvent> {
  * ```typescript
  * import { sequence } from "@sveltejs/kit/hooks";
  * import { toHandle } from "alchemy/serve/sveltekit";
- * import Site from "./site.ts";
+ * import Site from "./src/backend.ts";
  *
  * export const handle = sequence(toHandle(Site));
  * ```

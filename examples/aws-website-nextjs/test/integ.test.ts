@@ -136,7 +136,7 @@ test.skipIf(lambdaRoutesBroken)(
   "serves the effect API through the catch-all route handler",
   Effect.gen(function* () {
     const url = yield* base;
-    // /api/message is served by the Effect program in src/site.ts,
+    // /api/message is served by the Effect program in src/backend.ts,
     // mounted via toRouteHandler at app/api/[[...slug]]/route.ts and
     // compiled by Next into the same server Lambda. The S3 capability
     // bindings (env + IAM) were collected at plan time.

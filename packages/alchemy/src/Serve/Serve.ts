@@ -6,7 +6,7 @@
  * // src/server.ts (TanStack shown — any fetch-shaped entry)
  * import handler from "@tanstack/react-start/server-entry";
  * import { Serve } from "alchemy/serve";
- * import Site from "./site.ts";
+ * import Site from "./src/backend.ts";
  * const site = Serve.make(Site);
  * export default {
  *   fetch: async (req) => (await site.match(req)) ?? handler.fetch(req),
@@ -44,7 +44,7 @@ const shellOf = (site: object): ServeShell | undefined =>
 
 /**
  * Any effectful Website Platform class — the value default-exported by the
- * user's `site.ts` (`class Site extends
+ * user's `src/backend.ts` (`class Site extends
  * Cloudflare.Website.Vite<Site>()(...) {}`). Identified by the `Named`
  * phantom brand the Website class-form types carry; at runtime the class
  * also exposes a real `LogicalId` static (set by `Platform.make`).
@@ -136,7 +136,7 @@ export interface ServeHandle {
  * ```typescript
  * import handler from "@tanstack/react-start/server-entry";
  * import * as Serve from "alchemy/serve";
- * import Site from "./site.ts";
+ * import Site from "./src/backend.ts";
  *
  * const site = Serve.make(Site);
  *
@@ -154,7 +154,7 @@ export interface ServeHandle {
  * @example Standalone fetch entry
  * ```typescript
  * import * as Serve from "alchemy/serve";
- * import Site from "./site.ts";
+ * import Site from "./src/backend.ts";
  *
  * const site = Serve.make(Site);
  *

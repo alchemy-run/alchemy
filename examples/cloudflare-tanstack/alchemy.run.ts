@@ -1,7 +1,7 @@
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
-import Site from "./src/site.ts";
+import Site from "./src/backend.ts";
 
 export default Alchemy.Stack(
   "CloudflareTanstackExample",
@@ -11,7 +11,7 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     // The Website class (and its Effect API + R2 binding) is defined in
-    // ./src/site.ts — yielding it deploys the whole thing: one Worker
+    // ./src/backend.ts — yielding it deploys the whole thing: one Worker
     // serving the TanStack Start frontend and the Effect-native /api/*.
     const website = yield* Site;
 

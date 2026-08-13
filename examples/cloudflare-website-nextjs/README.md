@@ -7,7 +7,7 @@ integration runs `next build` through `@opennextjs/cloudflare`, bundles
 the resulting worker, and deploys the static assets (including
 prerendered pages) alongside it.
 
-- `site.ts` declares the Website class with an Effect program as its
+- `src/backend.ts` declares the Website class with an Effect program as its
   third argument: ONE Worker serves the Next.js app and an Effect-native
   API. The program's `fetch` owns `server.routes`
   (`["/api/*", "!/api/hello"]` here) and uses a KV namespace through a

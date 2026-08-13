@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 // The effect fetch owns unmatched /api/* routes through the catch-all
 // route handler (app/api/[[...slug]]/route.ts) — /api/message is the
-// S3-backed handler declared in src/site.ts, served by the same Lambda
+// S3-backed handler declared in src/backend.ts, served by the same Lambda
 // that renders this page.
 export default function EffectMessage() {
   const [message, setMessage] = useState("…");

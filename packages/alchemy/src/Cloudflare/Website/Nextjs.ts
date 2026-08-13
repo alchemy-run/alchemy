@@ -294,7 +294,7 @@ export interface NextjsProps<
  * stand down on deploy). `server: { takeover: false }` forces the explicit
  * tier.
  *
- * @example Effectful Next.js site (src/site.ts)
+ * @example Effectful Next.js site (src/backend.ts)
  * ```typescript
  * // Narrow subpath imports keep the IaC engine out of the framework
  * // bundle graph; never import the `alchemy/Cloudflare` provider barrel

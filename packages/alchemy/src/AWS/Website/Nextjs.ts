@@ -293,7 +293,7 @@ export interface EffectNextjsAttributes extends NextjsAttributes {
  *
  * @example Next.js site with an effect-native API
  * ```typescript
- * // src/site.ts — narrow subpath imports keep the IaC engine out of the
+ * // src/backend.ts — narrow subpath imports keep the IaC engine out of the
  * // Next bundle graph; never import the `alchemy/AWS` provider barrel
  * // from a site module.
  * import { Bucket, GetObject, GetObjectHttp } from "alchemy/AWS/S3";
@@ -336,7 +336,7 @@ export interface EffectNextjsAttributes extends NextjsAttributes {
  * keep winning over the catch-all.
  * ```typescript
  * import { toRouteHandler } from "alchemy/serve/next";
- * import Site from "../../../src/site.ts";
+ * import Site from "../../../src/backend.ts";
  *
  * const handler = toRouteHandler(Site);
  * export { handler as GET, handler as POST, handler as PUT,

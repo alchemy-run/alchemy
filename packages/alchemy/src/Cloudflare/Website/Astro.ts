@@ -261,7 +261,7 @@ export interface AstroProps<
  * `alchemy/Cloudflare` provider barrel would drag the entire IaC engine
  * along with it.
  *
- * @example Effectful Astro site (src/site.ts)
+ * @example Effectful Astro site (src/backend.ts)
  * ```typescript
  * import * as KV from "alchemy/Cloudflare/KV";
  * import * as Website from "alchemy/Cloudflare/Website";

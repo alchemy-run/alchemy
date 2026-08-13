@@ -26,7 +26,7 @@ const now = new Date().toISOString();
       <a href="/about/" class="text-blue-600 underline">A prerendered page</a>
     </p>
     <script>
-      // Calls the Effect API served by this same Worker — site.ts owns
+      // Calls the Effect API served by this same Worker — src/backend.ts owns
       // /api/* and backs it with a KV namespace.
       const res = await fetch("/api/visits");
       const { visits } = (await res.json()) as { visits: number };

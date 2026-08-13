@@ -240,7 +240,7 @@ export const compileServerRoutes = (
 // through which event-source events (SQS batches, DynamoDB stream records,
 // schedules, …) could reach the Effect program. So on AWS the non-fetch
 // half of an effectful Website's program rides a SIBLING effect Lambda:
-// the same `site.ts` impl deployed through the normal FunctionBundle
+// the same `src/backend.ts` impl deployed through the normal FunctionBundle
 // pipeline (the bundle re-imports the module; the runtime world delegates
 // to the Lambda platform call, whose exports handler dispatches the
 // event-source listeners), with the event-source mappings and their IAM
@@ -387,7 +387,7 @@ export interface SiblingHandlers {
  *    surface) cannot re-target event sources at the framework artifact.
  *
  * At runtime the sibling's generated FunctionBundle entry re-imports
- * `site.ts`; the Website construct's `__ALCHEMY_RUNTIME__` world delegates
+ * `src/backend.ts`; the Website construct's `__ALCHEMY_RUNTIME__` world delegates
  * to the Lambda platform call, whose exports handler dispatches
  * event-source listeners first — HTTP never arrives (no Function URL).
  * @internal

@@ -4,7 +4,7 @@ Deploys a SvelteKit app to AWS with `AWS.Website.SvelteKit` — no `svelte.confi
 
 The resource builds the app with SvelteKit's own Vite pipeline and a wrangler-free in-memory AWS adapter, deploys the server output on a streaming Lambda Function URL, and serves client assets + prerendered pages from S3 behind CloudFront. Values passed via `server.environment` are exposed to server routes through `process.env`.
 
-The site is **effectful**: `src/site.ts` passes an Effect program as the third argument, so the same Lambda that renders the kit app also serves an effect-native API under `/api/*` with typed AWS capabilities (the S3 bucket's name lands as an env var and its IAM policy on the Lambda role, collected at plan time):
+The site is **effectful**: `src/backend.ts` passes an Effect program as the third argument, so the same Lambda that renders the kit app also serves an effect-native API under `/api/*` with typed AWS capabilities (the S3 bucket's name lands as an env var and its IAM policy on the Lambda role, collected at plan time):
 
 ```ts
 export default class Site extends SvelteKit<Site>()(
@@ -33,4 +33,4 @@ bun alchemy destroy  # tear down
 
 - `@alchemy.run/frontend-frameworks` must be installed in the project — the server's source provider is loaded from its `/sveltekit` export at deploy time.
 - Unchanged projects skip the build and deploy entirely (the project tree is content-hashed, respecting `.gitignore`).
-- In `alchemy dev`, the site is kit's own Vite dev server (plain Node SSR) — already the AWS Lambda programming model, `process.env` included. The site itself creates no cloud resources in dev, but the S3 bucket bound by the effect program is pinned `remote()` in `src/site.ts`, so `/api/message` hits the real bucket with your ambient credentials.
+- In `alchemy dev`, the site is kit's own Vite dev server (plain Node SSR) — already the AWS Lambda programming model, `process.env` included. The site itself creates no cloud resources in dev, but the S3 bucket bound by the effect program is pinned `remote()` in `src/backend.ts`, so `/api/message` hits the real bucket with your ambient credentials.

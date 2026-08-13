@@ -112,7 +112,7 @@ export interface EffectNuxtProps extends NuxtProps {
  *
  * @example Nuxt site with an effect-native API
  * ```typescript
- * // src/site.ts — narrow subpath imports keep the IaC engine out of the
+ * // src/backend.ts — narrow subpath imports keep the IaC engine out of the
  * // nitro bundle graph; never import the `alchemy/AWS` provider barrel
  * // from a site module.
  * import { Bucket, GetObject, GetObjectHttp } from "alchemy/AWS/S3";
@@ -157,7 +157,7 @@ export interface EffectNuxtProps extends NuxtProps {
  * no-ops, letting nitro continue to its own handlers.
  * ```typescript
  * import { toEventHandler } from "alchemy/serve/nitro";
- * import Site from "../../src/site.ts";
+ * import Site from "../../src/backend.ts";
  *
  * export default toEventHandler(Site);
  * ```

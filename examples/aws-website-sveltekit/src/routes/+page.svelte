@@ -2,7 +2,7 @@
   let { data } = $props();
 
   // The effect fetch owns /api/* — /api/message is the S3-backed handler
-  // declared in src/site.ts, served by the same Lambda as this page.
+  // declared in src/backend.ts, served by the same Lambda as this page.
   let message = $state("…");
   let draft = $state("");
 

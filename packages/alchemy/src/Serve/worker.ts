@@ -6,7 +6,7 @@
  * ```ts
  * import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
  * import { makeWebsiteExports, DurableObjectBridge } from "alchemy/serve/worker";
- * import Site from "/abs/path/to/src/site.ts";
+ * import Site from "/abs/path/to/src/backend.ts";
  * export default makeWebsiteExports(WorkerEntrypoint, {
  *   site: Site,
  *   routes: ["/api/*"],
@@ -62,7 +62,7 @@ const lazyStack = {
 };
 
 export interface WebsiteExportsOptions {
-  /** The user's Website class (the default export of `site.ts`). */
+  /** The user's Website class (the default export of `src/backend.ts`). */
   site: AnyWebsiteClass;
   /**
    * Path globs the effect fetch owns (the construct's `server.routes`).

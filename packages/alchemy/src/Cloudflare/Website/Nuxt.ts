@@ -245,7 +245,7 @@ export interface NuxtProps<
  *
  * @example Effectful Nuxt site
  * ```typescript
- * // src/site.ts — narrow subpath imports keep the IaC engine out of the
+ * // src/backend.ts — narrow subpath imports keep the IaC engine out of the
  * // framework/dev server graph; never import the `alchemy/Cloudflare`
  * // provider barrel from a site module.
  * import * as KV from "alchemy/Cloudflare/KV";

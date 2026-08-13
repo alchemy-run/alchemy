@@ -4,7 +4,7 @@ Deploys an [Astro](https://astro.build) site to Cloudflare Workers with
 `Cloudflare.Website.Astro` — no `astro.config.*`, adapter setup, or
 Wrangler configuration.
 
-- `site.ts` declares the Website class with an Effect program as its
+- `src/backend.ts` declares the Website class with an Effect program as its
   third argument: ONE Worker serves the Astro frontend and an
   Effect-native API. The program's `fetch` owns `/api/*` and uses a KV
   namespace through a typed capability binding — the binding is

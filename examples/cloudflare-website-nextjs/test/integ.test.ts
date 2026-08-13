@@ -88,7 +88,7 @@ test(
   "serves the dynamic API route",
   Effect.gen(function* () {
     const url = yield* base;
-    // /api/hello is excluded from the effect claim in site.ts
+    // /api/hello is excluded from the effect claim in src/backend.ts
     // (routes: ["/api/*", "!/api/hello"]) — exclusions win, so Next's own
     // route handler answers. This doubles as exclusion-glob proof.
     const res = yield* getWhenReady(`${url}/api/hello`);
@@ -103,7 +103,7 @@ test(
   "serves the Effect API route",
   Effect.gen(function* () {
     const url = yield* base;
-    // Served by the Effect fetch in site.ts (which owns /api/*), backed by
+    // Served by the Effect fetch in src/backend.ts (which owns /api/*), backed by
     // the KV namespace binding collected at plan time.
     const res = yield* getWhenReady(`${url}/api/visits`);
     expect(res.status).toBe(200);

@@ -101,7 +101,7 @@ test(
   "serves the Effect API route",
   Effect.gen(function* () {
     const url = yield* base;
-    // Served by the Effect fetch in site.ts (which owns the /api/* claim),
+    // Served by the Effect fetch in src/backend.ts (which owns the /api/* claim),
     // backed by the KV namespace binding collected at plan time. The
     // framework route test above doubles as exclusion-glob proof:
     // /api/hello is excluded from the claim ("!/api/hello"), so nitro's

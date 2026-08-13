@@ -45,7 +45,7 @@ export default class Site extends Astro<Site>()(
         "public/**",
         "package.json",
         "astro.config.ts",
-        "site.ts",
+        "src/backend.ts",
       ],
     },
     forceDestroy: true,

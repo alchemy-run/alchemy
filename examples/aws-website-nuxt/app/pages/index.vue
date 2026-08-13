@@ -12,7 +12,7 @@ const greeting = useState("greeting", () => {
 });
 
 // The effect fetch is mounted as nitro server middleware — /api/message
-// is the S3-backed handler declared in src/site.ts, served by the same
+// is the S3-backed handler declared in src/backend.ts, served by the same
 // Lambda as this page (client-only so SSR stays snappy).
 const message = ref("…");
 const draft = ref("");

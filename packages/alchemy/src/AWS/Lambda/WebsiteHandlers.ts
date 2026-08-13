@@ -231,7 +231,7 @@ const getLambdaSiteRuntime = (
 export interface WebsiteHandlersOptions {
   /**
    * The effectful Website (or Lambda Function) class — the value
-   * default-exported by the user's `site.ts`.
+   * default-exported by the user's `src/backend.ts`.
    */
   site: AnyWebsiteClass;
   /**
@@ -279,7 +279,7 @@ export interface WebsiteHandlers {
  *
  * Runtime-only — constructing the handlers stamps
  * `globalThis.__ALCHEMY_RUNTIME__` (so every `host.bind` guard in the
- * re-imported `site.ts` is a no-op) and registers the internal Lambda
+ * re-imported `src/backend.ts` is a no-op) and registers the internal Lambda
  * extension once, buying the Shutdown phase (SIGTERM + 500 ms) in which
  * the instance scope is closed. Outside a Lambda sandbox the registration
  * is a no-op.

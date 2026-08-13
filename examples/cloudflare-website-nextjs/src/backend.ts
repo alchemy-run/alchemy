@@ -53,7 +53,7 @@ export default class Site extends Nextjs<Site>()(
         "next.config.mjs",
         "postcss.config.mjs",
         "open-next.config.ts",
-        "site.ts",
+        "src/backend.ts",
         "tsconfig.json",
       ],
     },

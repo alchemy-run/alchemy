@@ -70,7 +70,7 @@ const SENTINEL: typeof SERVE_SENTINEL = "__ALCHEMY_SERVE_v1__";
  * even when the framework's bundler defined nothing.
  *
  * Deliberately NOT a module-evaluation side effect: `alchemy/serve` is
- * imported by the user's `site.ts`, which the engine also imports at plan
+ * imported by the user's `src/backend.ts`, which the engine also imports at plan
  * time — a module-eval flag would poison the plan world (DESIGN §5.3 world
  * 1 requires the flag unset there).
  */

@@ -123,7 +123,7 @@ test(
   "serves the effect API from the same Lambda",
   Effect.gen(function* () {
     const url = yield* base;
-    // /api/message is served by the Effect program in src/site.ts — the
+    // /api/message is served by the Effect program in src/backend.ts — the
     // CloudFront edge router forwards `server.routes` to the server
     // Lambda before the asset manifest, and the S3 capability bindings
     // (env + IAM) were collected at plan time.

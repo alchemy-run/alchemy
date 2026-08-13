@@ -125,7 +125,7 @@ export interface EffectOctaneProps extends OctaneProps {
  *
  * @example Octane site with an effect-native API
  * ```typescript
- * // src/site.ts — narrow subpath imports keep the IaC engine out of the
+ * // src/backend.ts — narrow subpath imports keep the IaC engine out of the
  * // Octane server graph; never import the `alchemy/AWS` provider barrel
  * // from a site module.
  * import { Bucket, GetObject, GetObjectHttp } from "alchemy/AWS/S3";

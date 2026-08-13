@@ -30,7 +30,7 @@ const now = new Date().toISOString();
     </p>
     <script>
       // The effect fetch owns /api/* — this hits the DynamoDB-backed
-      // handler declared in site.ts.
+      // handler declared in src/backend.ts.
       const res = await fetch("/api/visits");
       const { count } = await res.json();
       document.querySelector("#visits")!.textContent = String(count);

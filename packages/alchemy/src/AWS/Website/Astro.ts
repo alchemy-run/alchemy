@@ -184,7 +184,7 @@ export interface EffectAstroProps extends AstroProps {
  *
  * @example Astro site with an effect-native API
  * ```typescript
- * // src/site.ts — narrow subpath imports keep the IaC engine out of the
+ * // src/backend.ts — narrow subpath imports keep the IaC engine out of the
  * // Astro server graph; never import the `alchemy/AWS` provider barrel
  * // from a site module.
  * import { GetItem, GetItemHttp, Table } from "alchemy/AWS/DynamoDB";

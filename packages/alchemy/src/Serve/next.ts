@@ -49,7 +49,7 @@ import { make, type AnyWebsiteClass, type MakeOptions } from "./Serve.ts";
  * @example app/api/[[...slug]]/route.ts
  * ```typescript
  * import { toRouteHandler } from "alchemy/serve/next";
- * import Site from "../../../src/site.ts";
+ * import Site from "../../../src/backend.ts";
  *
  * const handler = toRouteHandler(Site);
  * export { handler as GET, handler as POST, handler as PUT,

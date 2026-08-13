@@ -5,7 +5,7 @@
   let visits = $state(null);
 
   onMount(async () => {
-    // Calls the Effect API served by this same Worker — src/site.ts owns
+    // Calls the Effect API served by this same Worker — src/backend.ts owns
     // /api/* and backs it with a KV namespace.
     const res = await fetch("/api/visits");
     visits = (await res.json()).visits;

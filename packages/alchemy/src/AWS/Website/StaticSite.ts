@@ -376,7 +376,7 @@ export interface EffectStaticSiteAttributes extends StaticSiteAttributes {
  *
  * @example Static site with an effect-native API
  * ```typescript
- * // src/site.ts — narrow subpath imports keep the IaC engine out of any
+ * // src/backend.ts — narrow subpath imports keep the IaC engine out of any
  * // graph that re-imports this module; never import the `alchemy/AWS`
  * // provider barrel from a site module.
  * import { Bucket, GetObject, GetObjectHttp } from "alchemy/AWS/S3";

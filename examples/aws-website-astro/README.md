@@ -6,7 +6,7 @@ CloudFormation templates. The server bundle runs on a streaming Lambda
 Function URL; static assets deploy to S3 behind a CloudFront
 distribution.
 
-The site is **effectful**: `site.ts` passes an Effect program as the
+The site is **effectful**: `src/backend.ts` passes an Effect program as the
 third argument, so the same Lambda that renders Astro pages also serves
 an effect-native API under `/api/*` with typed AWS capabilities:
 
@@ -26,7 +26,7 @@ export default class Site extends Astro<Site>()(
 - `src/pages/index.astro` is server-rendered in the Lambda on every
   request, reads `GREETING` from the environment, and calls
   `/api/visits` — the DynamoDB-backed visit counter declared in
-  `site.ts`.
+  `src/backend.ts`.
 - Delivery is automatic for Astro: the effect `fetch` serves
   `server.routes` (default `["/api/*"]`) in the production Lambda and in
   `astro dev` alike. Inside the routes the program is authoritative
@@ -60,7 +60,7 @@ bun run dev
 
 Astro's own dev server serves the frontend; `/api/*` runs the same
 Effect program against the real DynamoDB table (pinned `remote()` in
-`site.ts`) using your ambient AWS credentials.
+`src/backend.ts`) using your ambient AWS credentials.
 
 ## Destroy
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-// Calls the Effect API served by this same Worker — site.ts owns /api/*
+// Calls the Effect API served by this same Worker — src/backend.ts owns /api/*
 // and backs it with a KV namespace.
 export default function Visits() {
   const [visits, setVisits] = useState(null);

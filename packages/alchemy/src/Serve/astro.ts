@@ -8,7 +8,7 @@
  * // src/fetch.ts
  * import { FetchState, astro } from "astro/fetch";
  * import { toFetchable } from "alchemy/serve/astro";
- * import Site from "./site.ts";
+ * import Site from "./src/backend.ts";
  * const site = toFetchable(Site, { routes: ["/api/*"] });
  * export default {
  *   async fetch(request: Request): Promise<Response> {
@@ -70,7 +70,7 @@ export interface AstroFetchable {
  * ```typescript
  * import { FetchState, astro } from "astro/fetch";
  * import { toFetchable } from "alchemy/serve/astro";
- * import Site from "./site.ts";
+ * import Site from "./src/backend.ts";
  *
  * const site = toFetchable(Site, { routes: ["/api/*"] });
  *

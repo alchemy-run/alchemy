@@ -4,7 +4,7 @@ Deploys a Nuxt app to AWS with `AWS.Website.Nuxt` — no `nitro.preset` edits, n
 
 The resource builds the app through the project's own `@nuxt/kit` with nitro's `aws-lambda` preset (your `nuxt.config.ts` loads natively), deploys the nitro server bundle on a streaming Lambda Function URL, and serves client assets + prerendered pages from S3 behind CloudFront. Values passed via `server.environment` are exposed to server routes and SSR through `process.env`.
 
-The site is **effectful**: `src/site.ts` passes an Effect program as the third argument, so the same Lambda that serves the Nuxt app also serves an effect-native API with typed AWS capabilities (the S3 bucket's name lands as an env var and its IAM policy on the Lambda role, collected at plan time):
+The site is **effectful**: `src/backend.ts` passes an Effect program as the third argument, so the same Lambda that serves the Nuxt app also serves an effect-native API with typed AWS capabilities (the S3 bucket's name lands as an env var and its IAM policy on the Lambda role, collected at plan time):
 
 ```ts
 export default class Site extends Nuxt<Site>()(
@@ -24,12 +24,12 @@ On Nuxt the program mounts explicitly through one file — a nitro server middle
 ```ts
 // server/middleware/alchemy.ts
 import { toEventHandler } from "alchemy/serve/nitro";
-import Site, { routes } from "../../src/site.ts";
+import Site, { routes } from "../../src/backend.ts";
 
 export default toEventHandler(Site, { routes });
 ```
 
-The shared `routes` claim (`["/api/*", "!/api/hello"]` in `src/site.ts`) decides who serves each path: inside the claim the Effect program is authoritative (even its 404s); outside it the middleware declines and nitro's own handlers answer — `/api/hello` stays a plain nitro route via the exclusion glob while `/api/message` round-trips through the program's S3 binding (the home page demos both).
+The shared `routes` claim (`["/api/*", "!/api/hello"]` in `src/backend.ts`) decides who serves each path: inside the claim the Effect program is authoritative (even its 404s); outside it the middleware declines and nitro's own handlers answer — `/api/hello` stays a plain nitro route via the exclusion glob while `/api/message` round-trips through the program's S3 binding (the home page demos both).
 
 ## Commands
 
@@ -43,6 +43,6 @@ bun alchemy destroy  # tear down
 
 - `@alchemy.run/frontend-frameworks` must be installed in the project — the server's source provider is loaded from its `/nuxt` export at deploy time.
 - Unchanged projects skip the build and deploy entirely (the project tree is content-hashed, respecting `.gitignore`).
-- In `alchemy dev`, the site is Nuxt's own dev server (native HMR). The site itself creates no AWS resources in dev, but the S3 bucket bound by the effect program is pinned `remote()` in `src/site.ts`, so `/api/message` hits the real bucket with your ambient credentials.
+- In `alchemy dev`, the site is Nuxt's own dev server (native HMR). The site itself creates no AWS resources in dev, but the S3 bucket bound by the effect program is pinned `remote()` in `src/backend.ts`, so `/api/message` hits the real bucket with your ambient credentials.
 - Nitro's `isr` route rule is Vercel/Netlify-only and ignored on AWS Lambda — use `prerender` (as `/about` does here) or `cache` route rules instead.
 - `test/integ.test.ts` deploys the stack and asserts SSR, the API route, the prerendered page, and static assets over HTTP.

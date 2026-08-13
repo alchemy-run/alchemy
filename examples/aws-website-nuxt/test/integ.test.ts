@@ -146,7 +146,7 @@ test(
   "serves the effect API from the same Lambda",
   Effect.gen(function* () {
     const url = yield* base;
-    // /api/message is served by the Effect program in src/site.ts,
+    // /api/message is served by the Effect program in src/backend.ts,
     // mounted via toEventHandler at server/middleware/alchemy.ts and
     // compiled by nitro into the same server Lambda. The S3 capability
     // bindings (env + IAM) were collected at plan time.

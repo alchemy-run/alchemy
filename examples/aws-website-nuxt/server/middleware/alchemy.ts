@@ -5,6 +5,6 @@
 // effect fetch is authoritative (its 404s are real 404s); outside it the
 // handler returns undefined so nitro continues to its own handlers.
 import { toEventHandler } from "alchemy/serve/nitro";
-import Site, { routes } from "../../src/site.ts";
+import Site, { routes } from "../../src/backend.ts";
 
 export default toEventHandler(Site, { routes });

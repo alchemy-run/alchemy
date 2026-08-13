@@ -15,7 +15,7 @@ const greeting = useState("greeting", () => {
   return "Hello (no cloudflare env)";
 });
 
-// Calls the Effect API served by this same Worker — site.ts owns /api/*
+// Calls the Effect API served by this same Worker — src/backend.ts owns /api/*
 // and backs it with a KV namespace. Client-only (`server: false`): during
 // SSR nitro's internal fetch bypasses the Worker entry where the Effect
 // routes are mounted.

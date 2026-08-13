@@ -4,7 +4,7 @@
 // `next dev` alike. More-specific routes (e.g. /api/hello) keep winning
 // over this catch-all.
 import { toRouteHandler } from "alchemy/serve/next";
-import Site from "../../../src/site.ts";
+import Site from "../../../src/backend.ts";
 
 const handler = toRouteHandler(Site);
 export {
