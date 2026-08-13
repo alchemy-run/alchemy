@@ -72,9 +72,21 @@ const objectExists =
     sharedRepository,
   )) !== undefined;
 
+let checkoutCommit = desiredCommit;
 if (!objectExists) {
   console.log(`Fetching distilled commit ${desiredCommit}...`);
-  await git(["fetch", "origin", desiredCommit], sharedRepository, false);
+  const fetchedCommit = await tryGit(
+    ["fetch", "origin", desiredCommit],
+    sharedRepository,
+  );
+
+  if (fetchedCommit === undefined) {
+    console.warn(
+      `Could not fetch distilled commit ${desiredCommit}; falling back to origin/main.`,
+    );
+    await git(["fetch", "origin", "main"], sharedRepository, false);
+    checkoutCommit = await git(["rev-parse", "FETCH_HEAD"], sharedRepository);
+  }
 }
 
 if (existsSync(checkout)) {
@@ -98,7 +110,7 @@ if (existsSync(checkout)) {
       ["symbolic-ref", "--short", "-q", "HEAD"],
       checkout,
     );
-    if (currentCommit === desiredCommit) {
+    if (currentCommit === checkoutCommit) {
       if (
         desiredBranch !== undefined &&
         currentBranch !== desiredBranch &&
@@ -106,7 +118,7 @@ if (existsSync(checkout)) {
       ) {
         // Same commit, wrong (or detached) HEAD — just move the branch over.
         await git(
-          ["checkout", "-B", desiredBranch, desiredCommit],
+          ["checkout", "-B", desiredBranch, checkoutCommit],
           checkout,
           false,
         );
@@ -116,23 +128,23 @@ if (existsSync(checkout)) {
 
     if ((await git(["status", "--porcelain"], checkout)) !== "") {
       console.error(
-        `Cannot update distilled to ${desiredCommit}: ${checkout} has uncommitted changes.`,
+        `Cannot update distilled to ${checkoutCommit}: ${checkout} has uncommitted changes.`,
       );
       process.exit(1);
     }
 
-    console.log(`Updating distilled to ${desiredCommit}...`);
+    console.log(`Updating distilled to ${checkoutCommit}...`);
     if (
       desiredBranch !== undefined &&
       (currentBranch === desiredBranch || !(await branchInUseElsewhere()))
     ) {
       await git(
-        ["checkout", "-B", desiredBranch, desiredCommit],
+        ["checkout", "-B", desiredBranch, checkoutCommit],
         checkout,
         false,
       );
     } else {
-      await git(["checkout", "--detach", desiredCommit], checkout, false);
+      await git(["checkout", "--detach", checkoutCommit], checkout, false);
     }
     process.exit(0);
   }
@@ -147,11 +159,11 @@ if (existsSync(checkout)) {
   rmdirSync(checkout);
 }
 
-console.log(`Creating distilled worktree at ${desiredCommit}...`);
+console.log(`Creating distilled worktree at ${checkoutCommit}...`);
 await git(
   desiredBranch !== undefined && !(await branchInUseElsewhere())
-    ? ["worktree", "add", "-B", desiredBranch, checkout, desiredCommit]
-    : ["worktree", "add", "--detach", checkout, desiredCommit],
+    ? ["worktree", "add", "-B", desiredBranch, checkout, checkoutCommit]
+    : ["worktree", "add", "--detach", checkout, checkoutCommit],
   sharedRepository,
   false,
 );
