@@ -1072,7 +1072,7 @@ When many agents work concurrently (see **The Resource Factory Process**), do NO
 Use `bun build:clean` when you encounter stale build artifacts or dependency issues. It runs:
 
 1. `bun clean .` - Removes all untracked files except .env
-2. `bun i` - Reinstalls dependencies
+2. `pnpm install` - Reinstalls dependencies
 3. `bun run build` - Builds the project
 4. `bun download:env` - Downloads environment files
 

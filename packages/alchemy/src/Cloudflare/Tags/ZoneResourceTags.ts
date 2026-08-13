@@ -179,19 +179,17 @@ export const ZoneResourceTagsProvider = () =>
             Array.from(chunk).flatMap((page) =>
               (page.result ?? [])
                 .filter((item): item is ZoneScopedTagging => "zoneId" in item)
-                .map(
-                  (item): ZoneResourceTagsAttributes => ({
-                    zoneId: item.zoneId,
-                    resourceType: item.type,
-                    resourceId: item.id,
-                    accessApplicationId:
-                      "accessApplicationId" in item
-                        ? item.accessApplicationId
-                        : undefined,
-                    tags: narrowTags(item.tags),
-                    etag: item.etag,
-                  }),
-                ),
+                .map((item): ZoneResourceTagsAttributes => ({
+                  zoneId: item.zoneId,
+                  resourceType: item.type,
+                  resourceId: item.id,
+                  accessApplicationId:
+                    "accessApplicationId" in item
+                      ? item.accessApplicationId
+                      : undefined,
+                  tags: narrowTags(item.tags),
+                  etag: item.etag,
+                })),
             ),
           ),
         );

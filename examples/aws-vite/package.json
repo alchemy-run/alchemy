@@ -18,14 +18,14 @@
     "destroy": "alchemy destroy"
   },
   "dependencies": {
-    "@cloudflare/vite-plugin": "catalog:",
-    "@distilled.cloud/aws": "catalog:",
-    "@effect/platform-node": "catalog:",
+    "@cloudflare/vite-plugin": "catalog:cloudflare",
+    "@distilled.cloud/aws": "workspace:*",
+    "@effect/platform-node": "catalog:effect",
     "alchemy": "workspace:*",
-    "effect": "catalog:"
+    "effect": "catalog:effect"
   },
   "devDependencies": {
-    "typescript": "catalog:",
-    "vite": "catalog:"
+    "typescript": "catalog:build",
+    "vite": "catalog:build"
   }
 }

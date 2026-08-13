@@ -234,19 +234,17 @@ const normalize = (
   name: rule.name ?? "",
   enabled: rule.enabled ?? true,
   priority: rule.priority ?? 0,
-  matchers: (rule.matchers ?? []).map(
-    (m): Matcher =>
-      m.type === "all"
-        ? { type: "all" }
-        : { type: "literal", field: "to", value: m.value ?? "" },
+  matchers: (rule.matchers ?? []).map((m): Matcher =>
+    m.type === "all"
+      ? { type: "all" }
+      : { type: "literal", field: "to", value: m.value ?? "" },
   ),
-  actions: (rule.actions ?? []).map(
-    (a): Action =>
-      a.type === "drop"
-        ? { type: "drop" }
-        : a.type === "forward"
-          ? { type: "forward", value: a.value ?? [] }
-          : { type: "worker", value: a.value ?? [] },
+  actions: (rule.actions ?? []).map((a): Action =>
+    a.type === "drop"
+      ? { type: "drop" }
+      : a.type === "forward"
+        ? { type: "forward", value: a.value ?? [] }
+        : { type: "worker", value: a.value ?? [] },
   ),
 });
 

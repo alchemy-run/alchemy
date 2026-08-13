@@ -39,7 +39,7 @@
   },
   "dependencies": {
     "alchemy": "workspace:*",
-    "effect": "catalog:"
+    "effect": "catalog:effect"
   },
   "publishConfig": {
     "access": "public"

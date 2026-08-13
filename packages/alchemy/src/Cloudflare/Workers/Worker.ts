@@ -2353,10 +2353,9 @@ export const Worker: ResourceClassLike<Worker> &
           >,
     ): Effect.Effect<
       Worker<{
-        [binding in keyof NormalizedBindings<
-          Bindings,
-          Assets
-        >]: NormalizedBindings<Bindings, Assets>[binding];
+        [
+          binding in keyof NormalizedBindings<Bindings, Assets>
+        ]: NormalizedBindings<Bindings, Assets>[binding];
       }> &
         Rpc<{}>,
       never,

@@ -288,19 +288,17 @@ type ObservedToken = aisearch.CreateTokenResponse;
  */
 const getToken = (accountId: string, id: string) =>
   aisearch.readToken({ accountId, id }).pipe(
-    Effect.map(
-      (t): ObservedToken => ({
-        id: t.id ?? id,
-        name: t.name ?? "",
-        cfApiId: t.cfApiId ?? "",
-        createdAt: t.createdAt ?? "",
-        modifiedAt: t.modifiedAt ?? "",
-        createdBy: t.createdBy,
-        enabled: t.enabled,
-        legacy: t.legacy,
-        modifiedBy: t.modifiedBy,
-      }),
-    ),
+    Effect.map((t): ObservedToken => ({
+      id: t.id ?? id,
+      name: t.name ?? "",
+      cfApiId: t.cfApiId ?? "",
+      createdAt: t.createdAt ?? "",
+      modifiedAt: t.modifiedAt ?? "",
+      createdBy: t.createdBy,
+      enabled: t.enabled,
+      legacy: t.legacy,
+      modifiedBy: t.modifiedBy,
+    })),
     Effect.catchTag("TokenNotFound", () => Effect.succeed(undefined)),
   );
 

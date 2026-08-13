@@ -2,6 +2,12 @@
   "name": "@alchemy.run/node-utils",
   "version": "2.0.0-beta.72",
   "description": "Gitignore-compatible path matching for Alchemy packages.",
+  "homepage": "https://alchemy.run",
+  "author": "Sam Goodwin <sam@alchemy.run>",
+  "keywords": ["alchemy", "gitignore", "node", "utilities"],
+  "bugs": {
+    "url": "https://github.com/alchemy-run/alchemy/issues"
+  },
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -24,7 +30,7 @@
   },
   "publishConfig": { "access": "public" },
   "devDependencies": {
-    "@types/bun": "latest",
-    "typescript": "catalog:"
+    "@types/bun": "catalog:tooling",
+    "typescript": "catalog:build"
   }
 }

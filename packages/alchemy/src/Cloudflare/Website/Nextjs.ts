@@ -288,10 +288,9 @@ export const Nextjs: {
         | Effect.Effect<InputProps<NextjsProps<Bindings>>, never, Req>,
     ): Effect.Effect<Self, never, Req | Providers> & {
       new (): Worker<{
-        [binding in keyof NormalizedBindings<
-          Bindings,
-          WorkerAssetsConfig
-        >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+        [
+          binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
+        ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
       }>;
     };
   };
@@ -302,10 +301,9 @@ export const Nextjs: {
       | Effect.Effect<InputProps<NextjsProps<Bindings>>, never, Req>,
   ): Effect.Effect<
     Worker<{
-      [binding in keyof NormalizedBindings<
-        Bindings,
-        WorkerAssetsConfig
-      >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      [
+        binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
+      ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
     }>,
     never,
     Req | Providers

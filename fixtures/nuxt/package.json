@@ -12,15 +12,15 @@
     "test:update-snapshots": "playwright test --update-snapshots"
   },
   "dependencies": {
-    "nitropack": "catalog:frameworks",
-    "nuxt": "catalog:frameworks"
+    "nitropack": "catalog:frontend",
+    "nuxt": "catalog:frontend"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "catalog:workers",
+    "@cloudflare/workers-types": "catalog:cloudflare-runtime",
     "@alchemy.run/cloudflare-runtime": "workspace:*",
     "@alchemy.run/cloudflare-test-tools": "workspace:*",
     "@alchemy.run/frontend-frameworks": "workspace:*",
-    "@playwright/test": "catalog:",
+    "@playwright/test": "catalog:testing",
     "@types/node": "^24.12.0",
     "effect": "catalog:effect"
   }
