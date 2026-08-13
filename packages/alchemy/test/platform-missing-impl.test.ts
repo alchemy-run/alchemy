@@ -112,6 +112,42 @@ const PlainStack = Alchemy.Stack(
   }),
 );
 
+/**
+ * Forward reference: the tag is yielded OUTSIDE the Layer's region — before
+ * the Layer has built — and again inside it. This is the #874 shape (a
+ * worker tag in another worker's `env` resolves during that worker's
+ * async-binding pass) reduced to the minimal harness: the first yield
+ * registers with `undefined` props, the Layer's build repairs them, and the
+ * plan must see the repaired registration.
+ */
+class FwdWidget extends Widget()("FwdWidget") {}
+const FwdWidgetLive = FwdWidget.make({ name: "forward" }, Effect.succeed({}));
+
+const ForwardRefStack = Alchemy.Stack(
+  "PlatformForwardRefStack",
+  { providers, state },
+  Effect.gen(function* () {
+    yield* yieldWidget(FwdWidget);
+    const real = yield* yieldWidget(FwdWidget).pipe(
+      Effect.provide([FwdWidgetLive as Layer.Layer<never>]),
+    );
+    return { name: real.name };
+  }),
+);
+
+/** The bare tag yielded twice — registration must stay idempotent. */
+class DoubleBareWidget extends Widget()("DoubleBareWidget") {}
+
+const DoubleBareStack = Alchemy.Stack(
+  "PlatformDoubleBareStack",
+  { providers, state },
+  Effect.gen(function* () {
+    yield* yieldWidget(DoubleBareWidget);
+    yield* yieldWidget(DoubleBareWidget);
+    return {};
+  }),
+);
+
 describe("tagged platform resource yielded without its impl layer", () => {
   test(
     "fails fast, naming the class and its layer",
@@ -157,6 +193,30 @@ describe("tagged platform resource yielded without its impl layer", () => {
       const exit = yield* runDeploy(PlainStack);
       expect(Exit.isSuccess(exit)).toBe(true);
       expect((observed.news as any)?.name).toBe("plain");
+    }),
+    { timeout: 60_000 },
+  );
+
+  test(
+    "a forward reference yielded before the layer builds still deploys",
+    Effect.gen(function* () {
+      const exit = yield* runDeploy(ForwardRefStack);
+      expect(Exit.isSuccess(exit)).toBe(true);
+      // The provider must see the Layer's props, not the forward
+      // reference's `undefined`.
+      expect((observed.news as any)?.name).toBe("forward");
+    }),
+    { timeout: 60_000 },
+  );
+
+  test(
+    "yielding the bare tag twice registers once and still fails fast",
+    Effect.gen(function* () {
+      const exit = yield* runDeploy(DoubleBareStack);
+      expect(Exit.isFailure(exit)).toBe(true);
+      const message = String(Exit.isFailure(exit) ? exit.cause : "");
+      expect(message).toContain("Test.PlatformWidget<DoubleBareWidget>");
+      expect(observed.ran).toBe(false);
     }),
     { timeout: 60_000 },
   );
