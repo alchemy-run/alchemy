@@ -24,7 +24,6 @@ import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import type { ScopedPlanStatusSession } from "../Cli/Cli.ts";
 import { isNonInteractive } from "../Util/interactive.ts";
-import { registerExitKill } from "../Util/killProcessGroup.ts";
 import {
   makeCommandRedactor,
   redactPlatformReason,
@@ -332,7 +331,6 @@ export const CommandExecutorLive = () =>
               }),
             ),
           ),
-          Effect.tap((child) => registerExitKill(child.pid)),
           Effect.map((child) =>
             redactChildProcessHandle(child, makeCommandRedactor(props.env)),
           ),

@@ -1,4 +1,3 @@
-import { exitHook } from "@alchemy.run/node-utils/exit-hook";
 import * as Cache from "effect/Cache";
 import type * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
@@ -18,7 +17,6 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import { fileURLToPath } from "node:url";
-import { killProcessGroup } from "../Util/killProcessGroup.ts";
 import { transformTypesFlags } from "../Util/Node.ts";
 import { httpServer } from "../Util/PlatformServices.ts";
 import { SPAWNER_URL_ENV_KEY } from "./RpcProviderProxy.ts";
@@ -138,12 +136,10 @@ export const make = Effect.fn(function* ({
       Effect.ignore,
       Effect.forkScoped,
     );
-    const unregister = exitHook(() => {
-      killProcessGroup(handle.pid, "SIGKILL");
-    });
-    const kill = handle
-      .kill({ forceKillAfter: "500 millis" })
-      .pipe(Effect.tap(() => Effect.sync(unregister)));
+    // This scope is the child handle's sole owner. Graceful shutdown runs this
+    // finalizer; abrupt parent loss closes the RPC parent connection and the
+    // child self-terminates (both paths are covered by RpcSpawnerCleanup).
+    const kill = handle.kill({ forceKillAfter: "500 millis" });
     yield* Effect.addFinalizer(() => kill.pipe(Effect.ignore));
     const url = yield* getRpcAddress(handle.stdout, (line) =>
       publish({ channel: "stdout", line }),

@@ -9,7 +9,6 @@ import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
-import * as NodeChildProcess from "node:child_process";
 import * as NodeHttp from "node:http";
 import * as NodeStream from "node:stream";
 import { getAddress } from "./internal/get-address.ts";
@@ -52,7 +51,6 @@ export class Docker extends Context.Service<
     readonly validate: (tag: string) => Effect.Effect<void, ConfigError>;
     readonly removeImageTag: (tag: string) => Effect.Effect<void>;
     readonly removeContainer: (tag: string) => Effect.Effect<void, SystemError>;
-    readonly removeContainerSync: (tag: string) => void;
   }
 >()("cloudflare-runtime/Docker") {}
 
@@ -503,44 +501,6 @@ export const DockerLive = Layer.effect(
               }),
           ),
         ),
-      removeContainerSync: (tag) => {
-        try {
-          const output = NodeChildProcess.execFileSync(
-            bin,
-            [
-              "ps",
-              "-a",
-              "--no-trunc",
-              "--filter",
-              `ancestor=${tag}`,
-              "--format",
-              "{{.ID}} {{.Names}} {{.Image}}",
-            ],
-            {
-              stdio: "pipe",
-              encoding: "utf-8",
-            },
-          );
-          const containers = output
-            .split("\n")
-            .map((line) => {
-              const [id, name, image] = line.split(" ");
-              return { id, name, image };
-            })
-            .filter((container) => container.image === tag);
-          if (containers.length === 0) return;
-          NodeChildProcess.execFileSync(bin, [
-            "rm",
-            "--force",
-            ...containers.flatMap((container) => [
-              container.id,
-              `${container.name}-proxy`,
-            ]),
-          ]);
-        } catch {
-          // best-effort cleanup; ignore errors
-        }
-      },
     });
   }),
 );

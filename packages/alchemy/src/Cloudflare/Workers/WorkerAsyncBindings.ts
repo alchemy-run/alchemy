@@ -152,6 +152,7 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
               workflowName,
               className,
               scriptName: resource.workerName,
+              limits: binding.limits,
             });
           }
         }

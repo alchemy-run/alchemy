@@ -775,9 +775,8 @@ export const TableProvider = () =>
           ),
           // Local emulators (floci/LocalStack) don't implement CloudWatch
           // insight rules — nothing to wait for.
-          Effect.catchTag(
-            ["UnknownOperationException", "UnsupportedOperation"],
-            () => Effect.succeed([] as string[]),
+          Effect.catchTag("UnknownOperationException", () =>
+            Effect.succeed([] as string[]),
           ),
         );
 

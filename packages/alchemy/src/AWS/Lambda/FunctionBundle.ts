@@ -192,6 +192,7 @@ import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as Effect from "effect/Effect";
+import * as Endpoint from "@distilled.cloud/aws/Endpoint";
 import * as Exit from "effect/Exit";
 import { layer as fetchHttpClientLayer } from "effect/unstable/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -243,6 +244,11 @@ const entryLayer = layer.pipe(
   Layer.provideMerge(stack),
   Layer.provideMerge(Credentials.fromEnv()),
   Layer.provideMerge(Region.fromEnv()),
+  // AWS_ENDPOINT_URL is the LocalStack-standard override injected by local
+  // emulators (floci) into the Lambda container — without it, runtime
+  // bindings in \`alchemy dev\` would call REAL AWS with dummy credentials.
+  // Resolves undefined when unset, so live deploys are unaffected.
+  Layer.provideMerge(Endpoint.fromEnv()),
   Layer.provideMerge(platform),
   Layer.provideMerge(
     Layer.succeed(

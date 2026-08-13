@@ -48,6 +48,7 @@ jobs:
             astro-${{ runner.os }}-main-
 
       - run: bun install
+      - run: bun --cwd packages/node-utils test
       - run: bun tsc -b
       # An internal PR carrying `deploy-website` gets a full Astro build in
       # website.yml via StaticSite. That build runs the same output validators,

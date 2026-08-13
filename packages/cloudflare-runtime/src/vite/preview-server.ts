@@ -1,6 +1,7 @@
 import type { BindingHooks, Module } from "../core/index.ts";
 import * as Runtime from "../core/Runtime.ts";
 import * as RuntimeServices from "../core/RuntimeServices.ts";
+import { PlatformServices } from "../Platform.ts";
 import * as Credentials from "@distilled.cloud/cloudflare/Credentials";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -124,26 +125,13 @@ const makeHandleSweep = (): (() => void) => {
   };
 };
 
-const importPlatformServices = Layer.unwrap(
-  Effect.promise(async () => {
-    try {
-      const BunServices = await import("@effect/platform-bun/BunServices");
-      return BunServices.layer;
-    } catch {
-      // ignore and fall back to NodeServices
-    }
-    const NodeServices = await import("@effect/platform-node/NodeServices");
-    return NodeServices.layer;
-  }),
-);
-
 const makePreviewContext = () =>
   RuntimeServices.layerRuntime({
     api: {
       accountId: process.env.CLOUDFLARE_ACCOUNT_ID!,
     },
   }).pipe(
-    Layer.provideMerge(importPlatformServices),
+    Layer.provideMerge(PlatformServices),
     Layer.provide(Layer.merge(Credentials.fromEnv(), FetchHttpClient.layer)),
   );
 

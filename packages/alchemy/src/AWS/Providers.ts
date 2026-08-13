@@ -1144,7 +1144,10 @@ export const providers = () =>
           EC2.EIPProvider(),
           EC2.FlowLogProvider(),
           EC2.InstanceProvider(),
-          EC2.InternetGatewayProvider(),
+          // Dual EC2 networking glue: local (floci) ECS services/tasks run
+          // inside an emulated VPC — a live VPC can't host local containers
+          // and local target groups can't reference a live vpcId.
+          flociDual(EC2.InternetGateway, () => EC2.InternetGatewayProvider()),
           EC2.KeyPairProvider(),
           EC2.NatGatewayProvider(),
           EC2.NetworkAclAssociationProvider(),
@@ -1153,18 +1156,22 @@ export const providers = () =>
           EC2.NetworkInterfaceProvider(),
           EC2.NetworkInterfaceAttachmentProvider(),
           EC2.PrefixListProvider(),
-          EC2.RouteProvider(),
-          EC2.RouteTableAssociationProvider(),
-          EC2.RouteTableProvider(),
-          EC2.SecurityGroupProvider(),
-          EC2.SecurityGroupRuleProvider(),
+          flociDual(EC2.Route, () => EC2.RouteProvider()),
+          flociDual(EC2.RouteTableAssociation, () =>
+            EC2.RouteTableAssociationProvider(),
+          ),
+          flociDual(EC2.RouteTable, () => EC2.RouteTableProvider()),
+          flociDual(EC2.SecurityGroup, () => EC2.SecurityGroupProvider()),
+          flociDual(EC2.SecurityGroupRule, () =>
+            EC2.SecurityGroupRuleProvider(),
+          ),
           EC2.SnapshotProvider(),
-          EC2.SubnetProvider(),
+          flociDual(EC2.Subnet, () => EC2.SubnetProvider()),
           EC2.VolumeProvider(),
           EC2.VolumeAttachmentProvider(),
           EC2.VpcEndpointProvider(),
           EC2.VpcPeeringConnectionProvider(),
-          EC2.VpcProvider(),
+          flociDual(EC2.Vpc, () => EC2.VpcProvider()),
           ECR.ImageProvider(),
           ECR.RegistryPolicyProvider(),
           ECR.RepositoryProvider(),
@@ -1192,18 +1199,26 @@ export const providers = () =>
           EKS.NodegroupProvider(),
           EKS.PodIdentityAssociationProvider(),
           ElastiCache.ServerlessCacheProvider(),
-          ELBv2.ListenerProvider(),
+          // Dual ELBv2: floci emulates ALBs with locally-resolvable DNS
+          // (`*.elb.localhost.floci.io` → 127.0.0.1, host-routed on the
+          // gateway port) so local ECS services are reachable behind a
+          // local load balancer in dev.
+          flociDual(ELBv2.Listener, () => ELBv2.ListenerProvider()),
           ELBv2.ListenerCertificateProvider(),
-          ELBv2.ListenerRuleProvider(),
-          ELBv2.LoadBalancerProvider(),
-          ELBv2.TargetGroupProvider(),
+          flociDual(ELBv2.ListenerRule, () => ELBv2.ListenerRuleProvider()),
+          flociDual(ELBv2.LoadBalancer, () => ELBv2.LoadBalancerProvider()),
+          flociDual(ELBv2.TargetGroup, () => ELBv2.TargetGroupProvider()),
           ELBv2.TargetGroupAttachmentProvider(),
           ELBv2.TrustStoreProvider(),
           EventBridge.ApiDestinationProvider(),
           EventBridge.ArchiveProvider(),
           EventBridge.ConnectionProvider(),
           flociDual(EventBridge.EventBus, () => EventBridge.EventBusProvider()),
-          EventBridge.PermissionProvider(),
+          // Dual like EventBus/Rule: a live PutPermission against a
+          // floci-emulated bus would fail with ResourceNotFoundException.
+          flociDual(EventBridge.Permission, () =>
+            EventBridge.PermissionProvider(),
+          ),
           flociDual(EventBridge.Rule, () => EventBridge.RuleProvider()),
           FIS.ExperimentTemplateProvider(),
           FIS.TargetAccountConfigurationProvider(),
@@ -1283,7 +1298,9 @@ export const providers = () =>
           Lambda.VersionProvider(),
           Lambda.MicrovmImageProvider(),
           Lambda.NetworkConnectorProvider(),
-          Lambda.PermissionProvider(),
+          // Dual: glue onto the (dual) Lambda Function — a live addPermission
+          // against a floci function ARN fails with ResourceNotFoundException.
+          flociDual(Lambda.Permission, () => Lambda.PermissionProvider()),
           Logs.DestinationProvider(),
           Logs.LogGroupProvider(),
           Logs.LogStreamProvider(),
@@ -1383,8 +1400,13 @@ export const providers = () =>
           Route53.VpcAssociationAuthorizationProvider(),
           Route53.ZoneVpcAssociationProvider(),
           flociDual(S3.Bucket, () => S3.BucketProvider()),
-          Scheduler.ScheduleGroupProvider(),
-          Scheduler.ScheduleProvider(),
+          // Dual: schedules created by e.g. `AWS.ECS.every` reference local
+          // cluster/task/role ARNs in dev — a live PutSchedule with a floci
+          // role ARN fails validation.
+          flociDual(Scheduler.ScheduleGroup, () =>
+            Scheduler.ScheduleGroupProvider(),
+          ),
+          flociDual(Scheduler.Schedule, () => Scheduler.ScheduleProvider()),
           SecretsManager.RotationScheduleProvider(),
           flociDual(SecretsManager.Secret, () =>
             SecretsManager.SecretProvider(),
@@ -1407,7 +1429,9 @@ export const providers = () =>
           SES.TenantProvider(),
           SES.TenantResourceAssociationProvider(),
           SNS.PlatformApplicationProvider(),
-          SNS.SubscriptionProvider(),
+          // Dual: glue onto the (dual) SNS Topic — a live subscribe with a
+          // floci topic ARN fails with InvalidParameterException: TopicArn.
+          flociDual(SNS.Subscription, () => SNS.SubscriptionProvider()),
           flociDual(SNS.Topic, () => SNS.TopicProvider()),
           SocialMessaging.LinkedWhatsAppBusinessAccountProvider(),
           flociDual(SQS.Queue, () => SQS.QueueProvider()),

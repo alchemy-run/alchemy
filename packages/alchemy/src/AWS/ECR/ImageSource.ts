@@ -305,6 +305,7 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as Effect from "effect/Effect";
+import * as Endpoint from "@distilled.cloud/aws/Endpoint";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
@@ -363,6 +364,12 @@ const program = tag.pipe(
       // (AWS_CONTAINER_CREDENTIALS_RELATIVE_URI), not environment variables.
       Layer.provideMerge(Credentials.fromChain()),
       Layer.provideMerge(Region.fromEnv()),
+      // AWS_ENDPOINT_URL is the LocalStack-standard override injected by
+      // local emulators (floci) into task containers — without it, runtime
+      // bindings in \`alchemy dev\` would call REAL AWS with dummy
+      // credentials. Resolves undefined when unset, so live deploys are
+      // unaffected.
+      Layer.provideMerge(Endpoint.fromEnv()),
       Layer.provideMerge(BunHttpServer()),
       Layer.provideMerge(platform),
       Layer.provideMerge(

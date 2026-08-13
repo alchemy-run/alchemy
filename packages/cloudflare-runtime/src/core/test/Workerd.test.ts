@@ -320,7 +320,6 @@ layer(services)((it) => {
       }),
     { timeout: 60_000, retry: 2 },
   );
-
   // Pins the persistent-wedge failure mode: against a server that accepts
   // connections but never responds (the shape of the CI wedge — workerd's
   // listener was up, the first response never came), the bounded fetch
@@ -376,6 +375,7 @@ layer(services)((it) => {
     { timeout: 30_000 },
   );
 
+  it.skip("TODO: workerd shuts down after an uncatchable parent SIGKILL", () => {});
   it.effect(
     "starts many workers concurrently",
     () =>

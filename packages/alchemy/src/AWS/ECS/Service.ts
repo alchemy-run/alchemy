@@ -2909,6 +2909,10 @@ export const ServiceProvider = () =>
         if (!dnsName) {
           return undefined;
         }
+        // Works unchanged against the local emulator: floci's ALB DNS
+        // (`*.elb.localhost.floci.io`) resolves to 127.0.0.1 and its data
+        // plane serves each listener on the listener's own port, which
+        // `ensureFloci` publishes on the managed container (80/443).
         const protocol = (ingress.listenerProtocol ?? "HTTP").toLowerCase();
         const port = ingress.listenerPort;
         const isDefaultPort =
