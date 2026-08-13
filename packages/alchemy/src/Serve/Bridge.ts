@@ -52,6 +52,7 @@ import { Stack } from "../Stack.ts";
 import { buildEventTelemetry } from "../Telemetry.ts";
 import type { SERVE_SENTINEL } from "./constants.ts";
 import { envString, hasStackMarkers, resolveServeEnv } from "./Env.ts";
+import { dispatchRpc } from "./Rpc.ts";
 
 // The wiring-handshake sentinel, written as a literal (type-checked against
 // `constants.ts`) so the exact byte sequence provably survives bundling and
@@ -295,16 +296,43 @@ export interface SiteFetchOptions {
  * Resolves the web `Response`, or `undefined` only when the site exposes no
  * fetch handler.
  */
-export const runSiteFetch = async (
+export const runSiteFetch = (
   runtime: SiteRuntime,
   request: Request,
   options?: SiteFetchOptions,
 ): Promise<Response | undefined> => {
   const fetchHandler = runtime.shape()?.fetch;
   if (fetchHandler === undefined) {
-    return undefined;
+    return Promise.resolve(undefined);
   }
+  return runSiteHandler(runtime, request, fetchHandler, options);
+};
 
+/**
+ * Run one RPC dispatch event against a built site: the same per-event
+ * pipeline as {@link runSiteFetch} (fresh request `Scope`, telemetry,
+ * `HttpServerRequest` in context) with the serve core's `dispatchRpc` as
+ * the handler. Always answers — a method-less shape (or an impl that
+ * served nothing) envelope-encodes `RpcMethodNotFound`.
+ */
+export const runSiteRpc = (
+  runtime: SiteRuntime,
+  request: Request,
+  options?: SiteFetchOptions,
+): Promise<Response> =>
+  runSiteHandler(
+    runtime,
+    request,
+    dispatchRpc(runtime.shape()),
+    options,
+  ) as Promise<Response>;
+
+const runSiteHandler = async (
+  runtime: SiteRuntime,
+  request: Request,
+  handler: Effect.Effect<any, any, any>,
+  options?: SiteFetchOptions,
+): Promise<Response | undefined> => {
   const scope = Scope.makeUnsafe();
 
   const executionContextLayer =
@@ -327,7 +355,7 @@ export const runSiteFetch = async (
           )
         : Layer.empty;
 
-  const exit = await makeRequestEffect(request as any, fetchHandler).pipe(
+  const exit = await makeRequestEffect(request as any, handler).pipe(
     // Per-event services take precedence over the built isolate context:
     // the real (or synthesized) WorkerExecutionContext shadows the deferred
     // one, and the fresh request `Scope` is what `Effect.addFinalizer` in a
@@ -399,4 +427,30 @@ export const matchSite = async (
     options?.waitUntil ?? noopPin,
   );
   return runSiteFetch(runtime, request, { waitUntil: options?.waitUntil });
+};
+
+/**
+ * The RPC twin of {@link matchSite}: env ladder + four-worlds guard, then
+ * one `dispatchRpc` run through the same per-event pipeline. Resolves
+ * `undefined` only in a marker-less (build-time prerender) world — the
+ * caller falls through to the framework, which 404s the reserved path.
+ */
+export const rpcSite = async (
+  site: object,
+  request: Request,
+  options?: ServeOptions,
+): Promise<Response | undefined> => {
+  markRuntime();
+  const env = await resolveServeEnv(options?.env);
+  if (!hasStackMarkers(env)) {
+    return undefined;
+  }
+  const runtime = await getSiteRuntime(
+    site,
+    env,
+    options?.waitUntil ?? noopPin,
+  );
+  return runSiteRpc(runtime, request, {
+    waitUntil: options?.waitUntil,
+  });
 };

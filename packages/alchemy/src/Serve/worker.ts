@@ -34,9 +34,10 @@ import {
   getWorkerExport,
   makeWorkerBridge,
 } from "../Cloudflare/Workers/WorkerBridge.ts";
-import { markRuntime, runSiteFetch } from "./Bridge.ts";
+import { markRuntime, runSiteFetch, runSiteRpc } from "./Bridge.ts";
 import { envString, hasStackMarkers, workersEnvOrEmpty } from "./Env.ts";
 import { DEFAULT_SERVER_ROUTES, matchRoutes } from "./Routes.ts";
+import { isRpcPath } from "./Rpc.ts";
 import type { AnyWebsiteClass } from "./Serve.ts";
 
 markRuntime();
@@ -134,10 +135,26 @@ export const makeWebsiteExports = (
       // concurrently.
       (this as any).fetch = async (request: Request): Promise<Response> => {
         const ctx = (this as any).ctx;
-        if (
-          !hasStackMarkers(env) ||
-          !matchRoutes(routes, new URL(request.url).pathname)
-        ) {
+        const pathname = new URL(request.url).pathname;
+        if (!hasStackMarkers(env)) {
+          return frameworkFetch(request, env, ctx);
+        }
+        // The universal rpc path ("/api/__rpc") is checked BEFORE routes
+        // matching — the RPC dispatch needs no routes claim, and its
+        // answer (404 envelopes included) is always final.
+        if (isRpcPath(pathname)) {
+          const built = await build((promise) => ctx.waitUntil(promise));
+          return runSiteRpc(
+            {
+              context: built.context,
+              shape: built.shape,
+              telemetry: built.telemetry,
+            },
+            request,
+            { executionContext: ctx },
+          );
+        }
+        if (!matchRoutes(routes, pathname)) {
           return frameworkFetch(request, env, ctx);
         }
         const built = await build((promise) => ctx.waitUntil(promise));

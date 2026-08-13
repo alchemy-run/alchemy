@@ -58,6 +58,7 @@ import { Self } from "../../Self.ts";
 import type { SERVE_SENTINEL } from "../../Serve/constants.ts";
 import { envString, hasStackMarkers } from "../../Serve/Env.ts";
 import { DEFAULT_SERVER_ROUTES, matchRoutes } from "../../Serve/Routes.ts";
+import { dispatchRpc, isRpcPath } from "../../Serve/Rpc.ts";
 import type { AnyWebsiteClass } from "../../Serve/Serve.ts";
 import { Stack } from "../../Stack.ts";
 import { buildEventTelemetry } from "../../Telemetry.ts";
@@ -294,35 +295,28 @@ export const makeWebsiteHandlers = (
   const extension = registerLambdaExtension();
 
   const routes = options.routes ?? DEFAULT_SERVER_ROUTES;
-  const match = async (request: Request): Promise<Response | undefined> => {
-    // Strict route ownership: outside the claim the framework serves and
-    // the effect fetch is never invoked.
-    if (!matchRoutes(routes, new URL(request.url).pathname)) {
-      return undefined;
-    }
-    const env =
-      options.env ??
-      (typeof process !== "undefined"
-        ? (process.env as Record<string, unknown>)
-        : undefined);
-    // The four-worlds guard (DESIGN §5.3): no stack markers means a
-    // build-time prerender/SSG world — decline without building layers.
-    if (!hasStackMarkers(env)) {
-      return undefined;
-    }
+
+  const resolveEnv = (): Record<string, unknown> | undefined =>
+    options.env ??
+    (typeof process !== "undefined"
+      ? (process.env as Record<string, unknown>)
+      : undefined);
+
+  /** One handler run through the shared per-event pipeline. */
+  const runHandler = async (
+    request: Request,
+    handler: Effect.Effect<any, any, any>,
+  ): Promise<Response> => {
+    const env = resolveEnv();
     await extension;
-    const runtime = await getLambdaSiteRuntime(options.site, env);
-    const fetchHandler = runtime.shape()?.fetch;
-    if (fetchHandler === undefined) {
-      return undefined;
-    }
+    const runtime = await getLambdaSiteRuntime(options.site, env!);
 
     // Per-event outer scope carrying the telemetry exporters (handler
     // finalizers attach to `toHandled`'s internal request scope, which is
     // settled inline — or transferred to a streaming body — inside
     // `makeFunctionFetchHandler`).
     const scope = Scope.makeUnsafe();
-    const exit = await makeFunctionFetchHandler(fetchHandler)(request).pipe(
+    const exit = await makeFunctionFetchHandler(handler)(request).pipe(
       Effect.provide(
         Layer.mergeAll(
           Layer.succeed(Scope.Scope, scope),
@@ -346,10 +340,41 @@ export const makeWebsiteHandlers = (
     if (exit._tag !== "Success") {
       throw Cause.squash(exit.cause);
     }
+    return exit.value as Response;
+  };
+
+  const match = async (request: Request): Promise<Response | undefined> => {
+    const pathname = new URL(request.url).pathname;
+    const env = resolveEnv();
+    // The four-worlds guard (DESIGN §5.3): no stack markers means a
+    // build-time prerender/SSG world — decline without building layers.
+    if (!hasStackMarkers(env)) {
+      return undefined;
+    }
+    // The universal rpc path ("/api/__rpc") is checked BEFORE routes
+    // matching — the RPC dispatch needs no routes claim, and its answer
+    // (404 envelopes included) is always final. It runs through the same
+    // per-event pipeline as fetch.
+    if (isRpcPath(pathname)) {
+      await extension;
+      const runtime = await getLambdaSiteRuntime(options.site, env!);
+      return runHandler(request, dispatchRpc(runtime.shape()));
+    }
+    // Strict route ownership: outside the claim the framework serves and
+    // the effect fetch is never invoked.
+    if (!matchRoutes(routes, pathname)) {
+      return undefined;
+    }
+    await extension;
+    const runtime = await getLambdaSiteRuntime(options.site, env!);
+    const fetchHandler = runtime.shape()?.fetch;
+    if (fetchHandler === undefined) {
+      return undefined;
+    }
     // The effect fetch is authoritative inside the routes: every response
     // — including the 404 `safeHttpEffect` renders for a `RouteNotFound`
     // failure — is the final answer.
-    return exit.value as Response;
+    return runHandler(request, fetchHandler);
   };
 
   return {

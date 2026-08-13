@@ -110,6 +110,15 @@ export interface WebsiteServerOptions {
 export const DEFAULT_SERVER_ROUTES = ["/api/*"];
 
 /**
+ * The universal `createClient` RPC claim (`"/api/__rpc*"`): every
+ * effectful AWS Website appends it to the CloudFront `serverRoutes`
+ * metadata so `POST /api/__rpc/<method>` always reaches the server
+ * Lambda regardless of `server.routes` — the serve bridge dispatches the
+ * rpc path BEFORE routes matching. Re-exported from the serve core.
+ */
+export { RPC_CLAIM } from "../../Serve/Rpc.ts";
+
+/**
  * An effectful AWS Website construct was given an Effect program without
  * the `main` module anchor. The program must live in a dedicated module
  * whose default export is the Website class, anchored by

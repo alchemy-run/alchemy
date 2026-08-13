@@ -1,3 +1,4 @@
+import { createClient } from "@/Client/index.ts";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
@@ -255,6 +256,52 @@ test.provider(
       const missing = yield* client.get(`${base}/api/missing`);
       expect(missing.status).toBe(404);
       expect(yield* missing.text).not.toContain("Effectful Vite fixture");
+
+      // The createClient wire protocol over the dev worker: the universal
+      // `POST /api/__rpc/<method>` dispatch (checked BEFORE server.routes)
+      // envelope-encodes the method result. (The site is already warm from
+      // the requests above — no readiness retry needed.)
+      const rpcPost = (method: string, body: string) =>
+        HttpClient.execute(
+          HttpClientRequest.post(`${base}/api/__rpc/${method}`).pipe(
+            HttpClientRequest.bodyText(body, "application/json"),
+          ),
+        );
+      const bumped = yield* rpcPost("bump", "[41]");
+      expect(bumped.status).toBe(200);
+      expect(yield* bumped.json).toEqual({ value: 42 });
+
+      // A method using the KV capability binding inside its body.
+      const stored1 = yield* rpcPost("bumpStored", '["rpc-counter"]');
+      expect(yield* stored1.json).toEqual({ value: 1 });
+      const stored2 = yield* rpcPost("bumpStored", '["rpc-counter"]');
+      expect(yield* stored2.json).toEqual({ value: 2 });
+
+      // Unknown method: the 404 envelope is final — never the SPA shell
+      // and never the effect fetch.
+      const unknownMethod = yield* rpcPost("nope", "[]");
+      expect(unknownMethod.status).toBe(404);
+      expect(yield* unknownMethod.json).toEqual({
+        error: { _tag: "RpcMethodNotFound", method: "nope" },
+      });
+
+      // Non-POST verbs at the reserved path → 405 envelope.
+      const wrongVerb = yield* client.get(`${base}/api/__rpc/bump`);
+      expect(wrongVerb.status).toBe(405);
+
+      // createClient end-to-end: the type-only HTTP form (the browser
+      // world's bridge) drives the same dev worker through the wire
+      // protocol — typed success values and decoded envelope rejections.
+      const backend = createClient<typeof EffectfulViteSite>({ url: base });
+      expect(yield* Effect.promise(() => backend.bump(41))).toBe(42);
+      expect(
+        yield* Effect.promise(() => backend.bumpStored("client-counter")),
+      ).toBe(1);
+      const missingMethod = yield* Effect.tryPromise({
+        try: () => (backend as any).nope() as Promise<unknown>,
+        catch: (error) => error as { _tag?: string },
+      }).pipe(Effect.flip);
+      expect(missingMethod._tag).toBe("RpcMethodNotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),

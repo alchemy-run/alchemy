@@ -34,6 +34,7 @@ import {
   compileServerRoutes,
   DEFAULT_SERVER_ROUTES,
   deploySiblingHandlers,
+  RPC_CLAIM,
   validateImplAnchor,
   type WebsiteServerOptions,
   type WebsiteShape,
@@ -820,8 +821,12 @@ const makeNextjsSite = Effect.fn("AWS.Website.Nextjs")(function* (
     serverHost,
     image: { route: "/_next/image", host: imageHost },
     // Effect routes reach the server BEFORE the asset-manifest lookup;
-    // manifest misses keep forwarding to the same server for SSR.
-    ...(routes !== undefined ? { serverRoutes: [...routes] } : undefined),
+    // manifest misses keep forwarding to the same server for SSR. The
+    // universal rpc claim rides alongside so `POST /api/__rpc/<method>`
+    // always reaches the server Lambda.
+    ...(routes !== undefined
+      ? { serverRoutes: [...routes, RPC_CLAIM] }
+      : undefined),
   });
 
   // Seed the ISR/fetch cache: `.open-next/cache/<buildId>/...` uploaded

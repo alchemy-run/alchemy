@@ -8,7 +8,7 @@
  * of the server.
  */
 import { CF_ROUTER_INJECTION } from "@/AWS/Website/cfcode.ts";
-import { compileServerRoutes } from "@/AWS/Website/Effectful.ts";
+import { compileServerRoutes, RPC_CLAIM } from "@/AWS/Website/Effectful.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -119,6 +119,29 @@ describe("AWS.Website cfcode serverRoutes", () => {
         expect(result.headers["x-forwarded-host"]!.value).toBe(
           "site.example.com",
         );
+      }),
+  );
+
+  it.effect(
+    "the universal rpc claim routes /api/__rpc/<method> to the server (outside the user's routes)",
+    () =>
+      Effect.gen(function* () {
+        // The effect arms append RPC_CLAIM ("/api/__rpc*") to the user's
+        // server.routes before the edge compile — even a claim that owns
+        // only /other/* keeps the rpc dispatch reachable.
+        const compiled = yield* compileServerRoutes("RpcClaim", [
+          "/other/*",
+          RPC_CLAIM,
+        ]);
+        const result = yield* routeSite({
+          metadata: effectfulMetadata({ serverRoutes: compiled }),
+          uri: "/api/__rpc/bump",
+          files: ["/index.html"],
+        });
+        expect(result.response).toBeUndefined();
+        expect(result.origins).toHaveLength(1);
+        expect(result.origins[0]!.domainName).toBe(SERVER_HOST);
+        expect(result.uri).toBe("/api/__rpc/bump");
       }),
   );
 

@@ -308,6 +308,13 @@
       "worker": "./src/Serve/index.ts",
       "import": "./lib/Serve/index.js"
     },
+    "./client": {
+      "types": "./lib/Client/index.d.ts",
+      "bun": "./src/Client/index.ts",
+      "worker": "./src/Client/index.ts",
+      "browser": "./lib/Client/browser.js",
+      "import": "./lib/Client/index.js"
+    },
     "./serve/worker": {
       "types": "./lib/Serve/worker.d.ts",
       "bun": "./src/Serve/worker.ts",

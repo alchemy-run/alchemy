@@ -45,6 +45,7 @@ import { buildHostRedirectInjection, CF_ROUTER_INJECTION } from "./cfcode.ts";
 import {
   compileServerRoutes,
   DEFAULT_SERVER_ROUTES,
+  RPC_CLAIM,
   validateImplAnchor,
   type CompiledServerRoutes,
   type WebsiteServerOptions,
@@ -629,7 +630,9 @@ const makeEffectStaticSite = (
 
     const site = yield* makeKvSite(id, props, {
       serverHost,
-      serverRoutes: routes,
+      // The universal rpc claim rides alongside the user's routes so
+      // `POST /api/__rpc/<method>` always reaches the server Lambda.
+      serverRoutes: [...routes, RPC_CLAIM],
       serverRoutesOnly: true,
     }).pipe(Namespace.push(id));
 

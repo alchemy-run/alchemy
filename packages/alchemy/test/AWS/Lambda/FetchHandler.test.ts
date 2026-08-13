@@ -23,7 +23,9 @@
 import * as AWS from "@/AWS";
 import { makeFunctionFetchHandler } from "@/AWS/Lambda/HttpServer.ts";
 import { makeWebsiteHandlers } from "@/AWS/Lambda/WebsiteHandlers.ts";
+import { RPC_PATH } from "@/Serve/Rpc.ts";
 import { describe, expect, it } from "alchemy-test";
+import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -77,6 +79,42 @@ class FetchSite extends AWS.Website.StaticSite<FetchSite>()(
     };
   }),
 ) {}
+
+class RpcFetchError extends Data.TaggedError("RpcFetchError")<{
+  reason: string;
+}> {}
+
+/**
+ * An effectful site with RPC methods beside the fetch handler — the shape
+ * `createClient` dispatches to over `POST /api/__rpc/<method>`.
+ */
+class RpcFetchSite extends AWS.Website.StaticSite<RpcFetchSite>()(
+  "RpcFetchHandlerSite",
+  { path: import.meta.dirname, main: import.meta.url },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.gen(function* () {
+        return HttpServerResponse.text("fetched");
+      }),
+      bump: (n: number) => Effect.succeed(n + 1),
+      whoami: () =>
+        Effect.gen(function* () {
+          // Self-authorization: the per-event pipeline puts
+          // `HttpServerRequest` in context for RPC methods.
+          const request = yield* HttpServerRequest;
+          return request.headers["x-user"] ?? null;
+        }),
+      fail: (reason: string) => Effect.fail(new RpcFetchError({ reason })),
+    };
+  }),
+) {}
+
+const rpcPost = (method: string, body?: string, headers?: HeadersInit) =>
+  new Request(`http://localhost${RPC_PATH}/${method}`, {
+    method: "POST",
+    ...(headers !== undefined ? { headers } : {}),
+    ...(body !== undefined ? { body } : {}),
+  });
 
 describe("makeFunctionFetchHandler", () => {
   it("returns buffered responses; request finalizers settle before the Response", async () => {
@@ -262,6 +300,59 @@ describe("makeWebsiteHandlers", () => {
         ).toBeUndefined();
       }),
     { exclusive: true },
+  );
+
+  it(
+    "rpc dispatch: value + typed failure envelopes through the per-event pipeline",
+    () =>
+      restoringRuntimeFlag(async () => {
+        const site = makeWebsiteHandlers({
+          site: RpcFetchSite,
+          // The rpc path is outside the routes claim on purpose — the
+          // dispatch is checked BEFORE routes and needs no claim.
+          routes: ["/other/*"],
+          env: markers,
+        });
+
+        const hit = await site.match(rpcPost("bump", "[41]"));
+        expect(hit?.status).toBe(200);
+        expect(await hit!.json()).toEqual({ value: 42 });
+
+        // Typed failures ride the error envelope with _tag + props.
+        const failed = await site.match(rpcPost("fail", '["denied"]'));
+        expect(failed?.status).toBe(400);
+        const failBody = (await failed!.json()) as any;
+        expect(failBody.error._tag).toBe("RpcFetchError");
+        expect(failBody.error.reason).toBe("denied");
+
+        // Unknown method: the 404 envelope is final — never `undefined`
+        // (the framework is not consulted at the reserved path).
+        const miss = await site.match(rpcPost("nope", "[]"));
+        expect(miss?.status).toBe(404);
+        expect(await miss!.json()).toEqual({
+          error: { _tag: "RpcMethodNotFound", method: "nope" },
+        });
+
+        // ... while a plain path outside the claim still declines.
+        expect(
+          await site.match(new Request("http://localhost/api/x")),
+        ).toBeUndefined();
+      }),
+    { exclusive: true, timeout: 60_000 },
+  );
+
+  it(
+    "rpc methods see the request headers (HttpServerRequest in context)",
+    () =>
+      restoringRuntimeFlag(async () => {
+        const site = makeWebsiteHandlers({ site: RpcFetchSite, env: markers });
+        const res = await site.match(
+          rpcPost("whoami", "[]", { "x-user": "sam" }),
+        );
+        expect(res?.status).toBe(200);
+        expect(await res!.json()).toEqual({ value: "sam" });
+      }),
+    { exclusive: true, timeout: 60_000 },
   );
 
   it(

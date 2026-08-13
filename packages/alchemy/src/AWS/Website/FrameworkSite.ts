@@ -27,6 +27,7 @@ import {
   compileServerRoutes,
   DEFAULT_SERVER_ROUTES,
   deploySiblingHandlers,
+  RPC_CLAIM,
   validateImplAnchor,
   type WebsiteServerOptions,
 } from "./Effectful.ts";
@@ -797,7 +798,9 @@ const makeEffectSite = Effect.fn("AWS.Website.EffectFrameworkSite")(function* (
   // plain composites.
   const site = yield* makeKvSite(id, siteProps, {
     serverHost,
-    serverRoutes: [...routes],
+    // The universal rpc claim rides alongside the user's routes so
+    // `POST /api/__rpc/<method>` always reaches the server Lambda.
+    serverRoutes: [...routes, RPC_CLAIM],
   });
 
   return {

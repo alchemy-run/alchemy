@@ -27,6 +27,7 @@ import {
 } from "../../Resource.ts";
 import type { Rpc } from "../../Rpc.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
+import { withRpcClaim } from "../../Serve/Rpc.ts";
 import type { Self as SelfService } from "../../Self.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Container } from "../Containers/Container.ts";
@@ -1335,50 +1336,67 @@ const finalizeWorkerProps = (
     const shape = runtimeContext.shape() as Record<string, unknown> | undefined;
     const hasFetch = shape?.fetch !== undefined;
     let assets: WorkerProps["assets"] = props.assets;
-    if (hasFetch) {
-      const routes = props.server?.routes ?? DEFAULT_SERVER_ROUTES;
-      const invalid = routes.filter(
-        (route) => !(route.startsWith("/") || route.startsWith("!/")),
-      );
-      if (invalid.length > 0) {
-        return Effect.die(
-          new WorkerServerRoutingError({
-            message:
-              `Worker "${id}" has invalid server.routes ${JSON.stringify(invalid)}: ` +
-              `rules must start with "/" (or "!/" for negative rules), e.g. "/api/*".`,
-            workerId: id,
-          }),
+    {
+      const workerFirstRoutes: string[] = [];
+      if (hasFetch) {
+        const routes = props.server?.routes ?? DEFAULT_SERVER_ROUTES;
+        const invalid = routes.filter(
+          (route) => !(route.startsWith("/") || route.startsWith("!/")),
+        );
+        if (invalid.length > 0) {
+          return Effect.die(
+            new WorkerServerRoutingError({
+              message:
+                `Worker "${id}" has invalid server.routes ${JSON.stringify(invalid)}: ` +
+                `rules must start with "/" (or "!/" for negative rules), e.g. "/api/*".`,
+              workerId: id,
+            }),
+          );
+        }
+        // Only the INCLUSION globs compile into `runWorkerFirst`. A
+        // `!`-excluded path must NOT become a negative run_worker_first
+        // rule: Cloudflare's router sends negative-rule matches directly to
+        // the asset worker with no user-worker fallback, so a framework SSR
+        // route carved out by an exclusion glob could never be served. Left
+        // uncompiled, the excluded path takes the default
+        // assets-first-then-worker flow — the wrapper's route gate (which
+        // keeps the exclusion) declines it and the framework side serves.
+        workerFirstRoutes.push(
+          ...routes.filter((route) => !route.startsWith("!")),
         );
       }
-      // Only the INCLUSION globs compile into `runWorkerFirst`. A
-      // `!`-excluded path must NOT become a negative run_worker_first
-      // rule: Cloudflare's router sends negative-rule matches directly to
-      // the asset worker with no user-worker fallback, so a framework SSR
-      // route carved out by an exclusion glob could never be served. Left
-      // uncompiled, the excluded path takes the default
-      // assets-first-then-worker flow — the wrapper's route gate (which
-      // keeps the exclusion) declines it and the framework side serves.
-      const workerFirstRoutes = routes.filter(
-        (route) => !route.startsWith("!"),
-      );
       // A framework source's `assets` may be config-only (no `directory` —
       // the build supplies it), so the merged shape is cast back onto the
-      // props union below.
+      // props union below. Without any assets config on a non-framework
+      // worker there is no asset layer to claim against — leave `assets`
+      // untouched (a `runWorkerFirst`-only config would be meaningless).
       const config: AssetsProps | AssetsWithHash | undefined =
         typeof assets === "string" ? { directory: assets } : assets;
-      const runWorkerFirst = config?.runWorkerFirst;
+      const runWorkerFirst =
+        config === undefined && !collectOnly
+          ? (false as const)
+          : config?.runWorkerFirst;
       if (runWorkerFirst === undefined) {
-        if (workerFirstRoutes.length > 0) {
+        // Every effectful Website ALWAYS claims the universal rpc path
+        // ("/api/__rpc*") — no plan-time shape sniffing: method-less
+        // backends 404-envelope at the dispatch. `withRpcClaim` skips the
+        // append when an existing glob already covers it (Cloudflare's
+        // run_worker_first parser rejects redundant rules).
+        const rules = withRpcClaim(workerFirstRoutes);
+        if (rules.length > 0) {
           assets = {
             ...config,
-            runWorkerFirst: workerFirstRoutes,
+            runWorkerFirst: rules,
           } as WorkerAssetsConfig;
         }
       } else if (runWorkerFirst === false) {
         // Explicit opt-out is the user's billing choice — honored, unless
         // the SPA fallback would answer every miss with index.html and
         // the Effect fetch could never run.
-        if (config?.notFoundHandling === "single-page-application") {
+        if (
+          hasFetch &&
+          config?.notFoundHandling === "single-page-application"
+        ) {
           return Effect.die(
             new WorkerServerRoutingError({
               message:
@@ -1398,7 +1416,11 @@ const finalizeWorkerProps = (
         for (const route of workerFirstRoutes) {
           if (!merged.includes(route)) merged.push(route);
         }
-        assets = { ...config, runWorkerFirst: merged } as WorkerAssetsConfig;
+        assets = {
+          ...config,
+          // The rpc claim rides the merge too, unless already covered.
+          runWorkerFirst: withRpcClaim(merged),
+        } as WorkerAssetsConfig;
       }
       // `runWorkerFirst: true` already routes everything worker-first.
     }
