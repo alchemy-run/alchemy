@@ -366,7 +366,7 @@
   "dependencies": {
     "@alchemy.run/cloudflare-runtime": "workspace:*",
     "@alchemy.run/floci": "workspace:*",
-    "@alchemy.run/node-utils": "catalog:",
+    "@alchemy.run/node-utils": "workspace:*",
     "@aws-sdk/credential-providers": "catalog:",
     "@clack/prompts": "^1.7.0",
     "@distilled.cloud/aws": "workspace:*",
@@ -377,7 +377,6 @@
     "@distilled.cloud/planetscale": "workspace:*",
     "@effect/sql-d1": "catalog:",
     "@effect/sql-sqlite-do": "catalog:",
-    "@effect/vitest": "catalog:",
     "@libsql/client": "catalog:",
     "@octokit/rest": "^22.0.1",
     "@octokit/webhooks": "^14.2.0",
@@ -402,6 +401,7 @@
   },
   "devDependencies": {
     "@aws/durable-execution-sdk-js": "^2.1.0",
+    "@effect/vitest": "catalog:",
     "@cloudflare/containers": "catalog:",
     "@cloudflare/puppeteer": "^1.1.0",
     "@cloudflare/workers-types": "catalog:",
@@ -465,6 +465,7 @@
     "@effect/platform-node": "catalog:",
     "@effect/sql-mysql2": "catalog:",
     "@effect/sql-pg": "catalog:",
+    "@effect/vitest": "catalog:",
     "@vercel/nft": "^1.10.2",
     "drizzle-kit": "catalog:",
     "drizzle-orm": "catalog:",
@@ -489,6 +490,9 @@
       "optional": true
     },
     "@effect/sql-pg": {
+      "optional": true
+    },
+    "@effect/vitest": {
       "optional": true
     },
     "@vercel/nft": {

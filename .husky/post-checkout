@@ -8,4 +8,6 @@ common_dir="$(git rev-parse --path-format=absolute --git-common-dir)"
 # needs bootstrapping when Git has just created (or switched) a linked worktree.
 [ "$git_dir" != "$common_dir" ] || exit 0
 
-exec bun scripts/bootstrap-distilled-worktree.ts
+bun scripts/bootstrap-distilled-worktree.ts >/dev/null 2>&1 || true
+
+exit 0

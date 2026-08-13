@@ -25,6 +25,9 @@
     },
     // Consolidated Cloudflare runtime, framework, and test-tool projects.
     {
+      "path": "./packages/node-utils/tsconfig.json"
+    },
+    {
       "path": "./packages/cloudflare-runtime/tsconfig.json"
     },
     {

@@ -9,6 +9,7 @@ import * as DurableObjectNamespace from "../core/bindings/DurableObjectNamespace
 import * as Json from "../core/bindings/Json.ts";
 import * as Loopback from "../core/bindings/Loopback.ts";
 import * as UnsafeEval from "../core/bindings/UnsafeEval.ts";
+import { PlatformServices } from "../Platform.ts";
 import * as Credentials from "@distilled.cloud/cloudflare/Credentials";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -68,19 +69,6 @@ export const startServer = async <B extends BindingHooks = BindingHooks>(
   };
 };
 
-const importPlatformServices = Layer.unwrap(
-  Effect.promise(async () => {
-    try {
-      const BunServices = await import("@effect/platform-bun/BunServices");
-      return BunServices.layer;
-    } catch {
-      // ignore and fall back to NodeServices
-    }
-    const NodeServices = await import("@effect/platform-node/NodeServices");
-    return NodeServices.layer;
-  }),
-);
-
 export const createDefaultContext = async (): Promise<
   Context.Context<RuntimeServices.RuntimeServices>
 > => {
@@ -91,7 +79,7 @@ export const createDefaultContext = async (): Promise<
       accountId: process.env.CLOUDFLARE_ACCOUNT_ID!,
     },
   }).pipe(
-    Layer.provideMerge(importPlatformServices),
+    Layer.provideMerge(PlatformServices),
     Layer.provide(Layer.merge(Credentials.fromEnv(), FetchHttpClient.layer)),
     Layer.buildWithScope(scope),
     Effect.runPromise,

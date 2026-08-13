@@ -9,7 +9,6 @@ import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawne
 import { fileURLToPath } from "node:url";
 import * as NodeV8 from "node:v8";
 import { BundleError } from "../../Bundle/Bundle.ts";
-import { registerExitKill } from "../../Util/killProcessGroup.ts";
 import { transformTypesFlags } from "../../Util/Node.ts";
 import { unwrapRedacted } from "../../Util/index.ts";
 import {
@@ -65,7 +64,6 @@ export const startViteChild = (
         },
       ),
     );
-    yield* registerExitKill(child.pid);
 
     const ready = yield* Deferred.make<URL>();
     yield* child.stdout.pipe(
@@ -164,7 +162,6 @@ export const runViteBuildChild = (
           },
         ),
       );
-      yield* registerExitKill(child.pid);
 
       const tail: string[] = [];
       const forward = (channel: "stdout" | "stderr") => (line: string) =>

@@ -138,6 +138,8 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  *   },
  * });
  * ```
+ * {@link Foldkit | Cloudflare.Website.Foldkit} is the same thing with that
+ * default already applied.
  *
  * @example Octane SPA
  * A client-only [OctaneJS](https://octanejs.dev) app (no `octane.config.ts`
