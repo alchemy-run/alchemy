@@ -258,6 +258,19 @@ export interface ResourceOptions {
 }
 
 /**
+ * Marks a resource registered as a bare-tag FORWARD REFERENCE (`undefined`
+ * props) whose `.make(props, impl)` Layer has not (yet) built. The Layer's
+ * build erases the marker when it repairs the registration's `Props`;
+ * `Plan.make` dies on any marker that survives the whole program — the tag
+ * was yielded but its Layer was never provided (#1054). A symbol key so the
+ * resource proxy's `get` trap returns the stored value (or `undefined`)
+ * rather than fabricating an `Output` prop expression.
+ */
+export const MissingImplementationMarker = Symbol.for(
+  "alchemy/MissingImplementation",
+);
+
+/**
  * Creates a resource constructor for a concrete resource type.
  *
  * The returned constructor registers the resource on the current stack,

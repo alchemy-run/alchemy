@@ -22,7 +22,11 @@ import type { Named, Tag } from "./Named.ts";
 import * as Output from "./Output.ts";
 import { ALCHEMY_PHASE } from "./Phase.ts";
 import type { Provider, ProviderCollectionLike } from "./Provider.ts";
-import { Resource, type ResourceLike } from "./Resource.ts";
+import {
+  MissingImplementationMarker,
+  Resource,
+  type ResourceLike,
+} from "./Resource.ts";
 import type { Rpc } from "./Rpc.ts";
 import {
   CurrentRuntimeContext,
@@ -442,15 +446,33 @@ export const Platform = <
                 // — same isExternal marking; without props, this is a bare
                 // tag whose props/impl arrive later via `.make`.
                 onNone: () =>
-                  // No props AND no impl means every scrap of configuration
-                  // lives on the missing `.make(...)` Layer — registering the
-                  // resource with `undefined` props just defers the failure
-                  // to whichever provider first reads one. Name the class and
-                  // its Layer instead. Guarded to plan/deploy so the runtime
-                  // bridges keep their current behaviour (and the branch is
-                  // folded out of deployed bundles).
                   props === undefined && !globalThis.__ALCHEMY_RUNTIME__
-                    ? Effect.die(missingImplementation(type, id))
+                    ? Effect.map(
+                        resource(id, applyTransformProps(id, props)),
+                        (instance: any) => {
+                          // A bare tag yielded here is a FORWARD REFERENCE:
+                          // its `.make(props, impl)` Layer may register the
+                          // real props before or after this yield (e.g. a
+                          // worker tag bound in another worker's `env` — the
+                          // #874 circular-binding pattern — resolves during
+                          // that worker's async-binding pass, outside the
+                          // Layer's own context and possibly before the
+                          // Layer builds). So this site cannot decide whether
+                          // the Layer is missing. Stamp the registration
+                          // instead; the Layer's build erases the marker when
+                          // it repairs `Props`, and `Plan.make` dies on any
+                          // marker that survives — naming the class and its
+                          // Layer instead of letting a provider read
+                          // `undefined` props. Guarded to plan/deploy so the
+                          // runtime bridges keep their current behaviour (and
+                          // the branch is folded out of deployed bundles).
+                          if (instance.Props === undefined) {
+                            instance[MissingImplementationMarker] =
+                              missingImplementation(type, id);
+                          }
+                          return instance;
+                        },
+                      )
                     : resource(
                         id,
                         props === undefined
@@ -695,6 +717,10 @@ export const Platform = <
                   ? yield* runtimeContext.exports
                   : undefined,
               };
+              // This build supplied the tag's props/impl — a bare-tag yield
+              // that ran BEFORE this Layer built (a forward reference, e.g.
+              // the #874 circular env-tag pattern) is now satisfied.
+              delete (instance as any)[MissingImplementationMarker];
 
               return Object.assign(instance, {
                 RuntimeContext: runtimeContext,

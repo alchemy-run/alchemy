@@ -47,6 +47,7 @@ import {
 } from "./ProviderMode.ts";
 import {
   isResource,
+  MissingImplementationMarker,
   type ResourceBinding,
   type ResourceLike,
 } from "./Resource.ts";
@@ -298,6 +299,19 @@ export const make = <A>(
 
     const resources = Object.values(stack.resources);
     const actions = Object.values(stack.actions ?? {});
+
+    // A bare platform tag yielded as a forward reference is stamped with
+    // this marker at registration; its `.make(props, impl)` Layer erases it
+    // when the build repairs the registration's `Props`. A marker that
+    // survived the whole program means the tag was yielded but its Layer was
+    // never provided — fail fast naming the class and its Layer instead of
+    // letting a provider read `undefined` props (#1054).
+    for (const resource of resources) {
+      const missingImpl = (resource as any)[MissingImplementationMarker];
+      if (missingImpl !== undefined) {
+        yield* Effect.die(missingImpl);
+      }
+    }
 
     // TODO(sam): rename terminology to Stack
     const stackName = stack.name;
