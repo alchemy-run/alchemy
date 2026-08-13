@@ -463,6 +463,7 @@
     "@effect/platform-node": "catalog:",
     "@effect/sql-mysql2": "catalog:",
     "@effect/sql-pg": "catalog:",
+    "@effect/vitest": "catalog:",
     "@vercel/nft": "^1.10.2",
     "drizzle-kit": "catalog:",
     "drizzle-orm": "catalog:",
@@ -487,6 +488,9 @@
       "optional": true
     },
     "@effect/sql-pg": {
+      "optional": true
+    },
+    "@effect/vitest": {
       "optional": true
     },
     "@vercel/nft": {
