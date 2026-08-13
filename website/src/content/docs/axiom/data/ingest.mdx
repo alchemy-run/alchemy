@@ -83,6 +83,13 @@ flushed per request. See the
 [end-to-end guide](/cloudflare/observability/axiom-observability)
 for the full pattern.
 
+On Lambda, do not point the invocation-scoped exporter directly at
+Axiom when remote network latency must stay off the response path.
+Use the [Collector extension
+pattern](/infrastructure-as-effects/telemetry#lambda-export-through-a-collector-extension)
+instead: Effect flushes OTLP to localhost, then the external
+Collector extension exports remotely.
+
 - `otelTracesEndpoint` / `otelLogsEndpoint` / `otelMetricsEndpoint` —
   the per-signal OTLP/HTTP URLs.
 - `otelEndpoint` — the root; most exporters auto-append the signal
@@ -119,6 +126,78 @@ yield* Axiom.ApiToken("query", {
   },
 });
 ```
+
+## Export from Lambda
+
+`Axiom.LambdaCollector` is the whole wiring: it attaches the pinned
+Collector extension layer, ships a configuration with separate
+exporters for the traces and logs datasets, binds the ingest
+credential, and points Effect's telemetry at the local Collector.
+
+```typescript
+export default class Api extends AWS.Lambda.Function<Api>()(
+  "Api",
+  { main: import.meta.url, architecture: "arm64" },
+  Effect.gen(function* () {
+    return { fetch: handler };
+  }).pipe(
+    Effect.provide(
+      Axiom.LambdaCollector({ token: Ingest, traces: Traces, logs: Logs }),
+    ),
+  ),
+) {}
+```
+
+Traces and logs get separate exporters because Axiom routes by
+dataset header. The ingest token is `Redacted` and stays that way:
+the `Bearer ` prefix is applied inside the redaction, so the
+credential binds as a secret and never enters the layer archive —
+which matters because a Lambda layer is a downloadable artifact.
+
+An `Axiom.ApiToken` can be scoped to existing, externally owned
+datasets without declaring those datasets as Alchemy resources:
+
+```typescript
+const ingest = yield* Axiom.ApiToken("LambdaIngest", {
+  name: "lambda-ingest",
+  datasetCapabilities: {
+    "existing-traces": { ingest: ["create"] },
+    "existing-logs": { ingest: ["create"] },
+  },
+});
+```
+
+Pass the token as `Axiom.LambdaCollector`'s `token`, and the dataset
+names as `traces`/`logs`. The Collector owns the vendor
+configuration, but this is not secret isolation: external extensions
+share the Function's environment variables, IAM role, CPU, and
+memory.
+
+The vendor-neutral
+[`aws-lambda-opentelemetry`](https://github.com/alchemy-run/alchemy/tree/main/examples/aws-lambda-opentelemetry)
+example shows the complete Function, config layer, and managed
+Collector extension composition. Alchemy's provider suite separately
+tests delivery into existing Axiom datasets.
+
+### Axiom's Lambda platform extension
+
+Axiom also publishes a separate Lambda extension for function logs
+and Lambda platform events. Attach its pinned, Region- and
+architecture-specific layer and configure `AXIOM_TOKEN` and
+`AXIOM_DATASET`. This is supplementary to Effect's OTLP pipeline: it
+provides Lambda platform records and Axiom's Lambda dashboard, not
+Effect application spans.
+
+If both extensions are attached, check for duplicate function logs
+and measure cold-start, memory, and billed-duration overhead. Axiom
+recommends disabling CloudWatch delivery in production when its
+extension owns the logs, but retaining CloudWatch can be useful for
+diagnostics during an isolated test.
+
+See Axiom's
+[Lambda extension](https://axiom.co/docs/send-data/aws-lambda) and
+[ADOT Lambda](https://axiom.co/docs/send-data/aws-lambda-dot)
+guides.
 
 ## Token rotation
 
@@ -170,6 +249,9 @@ tearing down a preview stage deletes its data with it. See
 - [Ship Worker telemetry to Axiom](/cloudflare/observability/axiom-observability) —
   the end-to-end guide: datasets, token, env wiring, and the
   zero-exporter Cloudflare push path.
+- [Effect OpenTelemetry on Lambda](https://github.com/alchemy-run/alchemy/tree/main/examples/aws-lambda-opentelemetry) —
+  localhost Collector extension export without putting Axiom on the
+  response path.
 - [Alerting](/axiom/guides/alerting) — monitors and notifiers over
   the data you just ingested.
 - [Telemetry](/infrastructure-as-effects/telemetry) — the built-in

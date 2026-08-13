@@ -69,22 +69,23 @@ your charts — see [Dashboards as Code](/axiom/guides/dashboards).
 
 ## Compose with your cloud
 
-Wire the dataset's OTLP endpoints and the ingest token into your
-Worker or Lambda's environment, and Effect's OpenTelemetry output
-flows into Axiom with no code changes — see
-[Observability](/testing/observability) for the exporter-as-a-Layer
-pattern:
+On Cloudflare, wire the dataset's OTLP endpoints and ingest token
+into the Worker through `Axiom.Telemetry`:
 
 ```typescript
-vars: {
-  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: traces.otelTracesEndpoint,
-  OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: logs.otelLogsEndpoint,
-},
+Axiom.Telemetry({ token: ingest, traces, logs })
 ```
 
 For a full end-to-end walkthrough — dataset, token, Worker wiring,
 and a monitor on top — follow
 [Observability with Axiom](/cloudflare/observability/axiom-observability).
+
+On Lambda, a direct remote exporter makes the Axiom request part of
+the handler's response path. Point Effect at a localhost
+OpenTelemetry Collector extension instead, and let that extension
+own the Axiom endpoints, headers, and remote lifecycle. See
+[Datasets & ingest: Export from
+Lambda](/axiom/data/ingest#export-from-lambda).
 
 ## Reference
 

@@ -1,0 +1,534 @@
+/**
+ * The OpenTelemetry Collector as a Lambda extension, wired in one call.
+ *
+ * Effect's telemetry exports over OTLP/HTTP to a Collector running *inside*
+ * the execution environment, and the Collector owns the remote export:
+ *
+ * ```text
+ * Effect telemetry -> OTLP/HTTP on localhost -> Collector extension -> backend
+ * ```
+ *
+ * The handler's invocation-scoped exporter flushes to loopback, which is
+ * fast and local. The Collector's `decouple` processor then ships to the
+ * remote backend on the extension's own lifecycle, so backend latency does
+ * not sit in front of the response. Delivery is best-effort, not durable —
+ * a frozen or reclaimed environment can drop what is still queued, and a
+ * slow backend can still consume billed duration or delay environment
+ * reuse. Business-critical events belong in durable storage written by the
+ * handler.
+ *
+ * @packageDocumentation
+ */
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import type * as Redacted from "effect/Redacted";
+import { AlchemyContext } from "../../AlchemyContext.ts";
+import * as Binding from "../../Binding.ts";
+import type { Input } from "../../Input.ts";
+import { layerOtlp } from "../../Telemetry.ts";
+import { AWSEnvironment } from "../Environment.ts";
+import type { EmittedCollectorConfig } from "./CollectorConfig.ts";
+import type { Function, FunctionArchitecture } from "./Function.ts";
+import { LayerVersion } from "./LayerVersion.ts";
+
+/**
+ * Narrow the ambient binding host to a Lambda Function.
+ *
+ * Deliberately NOT `isBindingHost`: that predicate also admits ECS Tasks and
+ * Kubernetes workloads, which share the `{ env, policyStatements }` contract
+ * but have no notion of a layer. The Collector ships as a layer, so a
+ * Lambda Function is the only host it can attach to.
+ */
+const isLambdaFunction = (value: unknown): value is Function =>
+  typeof value === "object" &&
+  value !== null &&
+  (value as { Type?: string }).Type === "AWS.Lambda.Function";
+
+/**
+ * Narrow `config` to something {@link import("./CollectorConfig.ts").collector
+ * | collector} produced.
+ *
+ * The type already says so, which is the whole point of the typed surface —
+ * this is the backstop for a JavaScript caller still passing the directory
+ * path the pre-typed API accepted, so it fails with the migration hint
+ * instead of packaging a layer whose `collector.yaml` is `undefined`.
+ */
+const isEmittedCollectorConfig = (
+  value: unknown,
+): value is EmittedCollectorConfig =>
+  typeof value === "object" &&
+  value !== null &&
+  typeof (value as { content?: unknown }).content === "string" &&
+  typeof (value as { env?: unknown }).env === "object";
+
+/**
+ * Where the Collector's local OTLP receiver listens. The in-process
+ * exporter and the packaged `collector.yaml` must agree on this, so it is
+ * one constant rather than two settings.
+ */
+const LOOPBACK_ENDPOINT = "http://127.0.0.1:4318";
+
+/** Path the extension reads its configuration from inside `/opt`. */
+const CONFIG_URI = "/opt/collector.yaml";
+
+/**
+ * AWS account that publishes the upstream `opentelemetry-collector` Lambda
+ * layers. Same id in every commercial region.
+ */
+const COLLECTOR_PUBLISHER_ACCOUNT_ID = "184161586896";
+
+/**
+ * The upstream release this version of alchemy is pinned to. Pinned rather
+ * than tracked so an upstream publish can never change a deployment
+ * implicitly — override via {@link CollectorExtension} to move.
+ */
+export const COLLECTOR_RELEASE = "0_22_0";
+
+/** Published layer version of {@link COLLECTOR_RELEASE}. */
+export const COLLECTOR_LAYER_VERSION = 1;
+
+/**
+ * Pinning and ARN derivation for the managed Collector extension layer.
+ * Every field has a default; override only what your account needs.
+ */
+export interface CollectorExtension {
+  /**
+   * Upstream collector release, as it appears in the layer name.
+   * @default "0_22_0"
+   */
+  release?: string;
+  /**
+   * Published layer version for {@link release} in this region.
+   * @default 1
+   */
+  layerVersion?: number;
+  /**
+   * Account publishing the layer.
+   * @default "184161586896"
+   */
+  publisherAccountId?: string;
+  /**
+   * ARN partition — set for `aws-cn` / `aws-us-gov`.
+   * @default "aws"
+   */
+  partition?: string;
+  /**
+   * Region the layer is resolved in. Layer ARNs are region-scoped and a
+   * Function can only attach layers from its own region.
+   * @default the deploy region (`AWS.AWSEnvironment.current`)
+   */
+  region?: string;
+  /**
+   * Instruction set the extension binary must match.
+   * @default the host Function's `architecture` prop (`"x86_64"` when unset)
+   */
+  architecture?: FunctionArchitecture;
+}
+
+/**
+ * A fully-resolved layer version ARN, bypassing derivation entirely. Use
+ * this for a mirrored/private copy of the extension, or a region where the
+ * upstream layer version differs.
+ */
+export interface CollectorExtensionArn {
+  layerVersionArn: Input<string>;
+}
+
+export interface CollectorProps {
+  /**
+   * The Collector configuration, assembled by
+   * {@link import("./CollectorConfig.ts").collector | collector}.
+   *
+   * Packaged into an `AWS.Lambda.LayerVersion` and attached — there is no
+   * file on disk and no YAML to hand-write. Each component is validated by
+   * the generated codec at the constructor call that declared it, the
+   * `receivers`/`processors`/`exporters`/`extensions` sections are derived
+   * from what the pipelines reference, and `Output` and `Redacted` leaves
+   * are bound as environment variables rather than written into the layer.
+   */
+  config: EmittedCollectorConfig;
+  /**
+   * Logical id of the generated configuration `LayerVersion`.
+   *
+   * Resources memoize by logical id, so the default gives every Function its
+   * own layer and two Functions share one by naming the same id. Sharing
+   * requires the two configurations to be identical; they are compared, and
+   * a mismatch fails the build rather than silently deploying the first
+   * Function's configuration to the second.
+   *
+   * @default `CollectorConfig-${the host Function's logical id}`
+   */
+  configId?: string;
+  /**
+   * Extra variables on the deployed Function's environment.
+   *
+   * This is NOT how a value reaches the configuration — a configuration
+   * carries its own values, as `Output`s, `Redacted`s and `Config`
+   * references. It is for everything that shares the Function's environment
+   * without being the collector: the extension's own settings
+   * (`OPENTELEMETRY_EXTENSION_LOG_LEVEL`), a sibling module that reads a
+   * token by a name it chose, and the variables a `Config` leaf in the
+   * configuration refers to.
+   *
+   * `Redacted` values bind as secrets, exactly like {@link layerOtlp}
+   * headers, so a token passed here never lands in plaintext state. The
+   * configuration's generated variables are all prefixed `ALCHEMY_OTEL_`, so
+   * the two sets cannot collide silently: a name declared here that a
+   * generated one would shadow fails the build.
+   */
+  env?: Record<
+    string,
+    Input<string> | Input<Redacted.Redacted<string>> | undefined
+  >;
+  /** Managed extension layer pinning, or a resolved ARN to use verbatim. */
+  extension?: CollectorExtension | CollectorExtensionArn;
+  /**
+   * Where the in-process exporter sends OTLP, which must match the
+   * `otlp` receiver in the configuration.
+   * @default "http://127.0.0.1:4318"
+   */
+  endpoint?: string;
+  /**
+   * Attach nothing and export nothing.
+   *
+   * Defaults to `true` during `alchemy dev`: the extension is a real
+   * published layer on a real Lambda, so it cannot run against a local
+   * emulator, and a dev iteration should not be shipping spans to a
+   * production backend. Set `false` to opt a dev run back in.
+   * @default true in dev, false otherwise
+   */
+  disabled?: boolean;
+  /**
+   * The exported `service.name`.
+   * @default the deployed Function's physical name
+   */
+  serviceName?: Input<string>;
+}
+
+const isArnOverride = (
+  extension: CollectorProps["extension"],
+): extension is CollectorExtensionArn =>
+  extension !== undefined && "layerVersionArn" in extension;
+
+/**
+ * Build the managed extension layer's ARN.
+ *
+ * The upstream layers are published per architecture under the *Go* name
+ * for it (`amd64`), not Lambda's (`x86_64`), so the two vocabularies have
+ * to be translated. Exported for tests; callers use {@link Collector}.
+ */
+export const collectorExtensionLayerArn = (options: {
+  region: string;
+  architecture: FunctionArchitecture;
+  release?: string;
+  layerVersion?: number;
+  publisherAccountId?: string;
+  partition?: string;
+}): string => {
+  if (options.region.trim() === "") {
+    throw new Error(
+      "AWS.Lambda.Collector: a region is required to derive the extension layer ARN",
+    );
+  }
+  const layerArchitecture =
+    options.architecture === "x86_64" ? "amd64" : options.architecture;
+  const release = options.release ?? COLLECTOR_RELEASE;
+  const version = options.layerVersion ?? COLLECTOR_LAYER_VERSION;
+  const account = options.publisherAccountId ?? COLLECTOR_PUBLISHER_ACCOUNT_ID;
+  const partition = options.partition ?? "aws";
+  return `arn:${partition}:lambda:${options.region}:${account}:layer:opentelemetry-collector-${layerArchitecture}-${release}:${version}`;
+};
+
+/**
+ * Run the OpenTelemetry Collector as a Lambda extension and point this
+ * Function's telemetry at it.
+ *
+ * Building the layer attaches the pinned managed extension layer and your
+ * configuration layer to the host Function through the binding channel,
+ * binds the extension's environment, and installs the in-process OTLP
+ * exporter aimed at loopback. It composes with any other telemetry layer
+ * merged alongside it — destinations accumulate rather than clobber.
+ *
+ * @section Attaching the Collector
+ * @example Configure the Collector in TypeScript
+ * ```typescript
+ * import * as AWS from "alchemy/AWS";
+ *
+ * export default class Api extends AWS.Lambda.Function<Api>()(
+ *   "Api",
+ *   { main: import.meta.url, architecture: "arm64" },
+ *   Effect.gen(function* () {
+ *     return { fetch: handler };
+ *   }).pipe(
+ *     Effect.provide(
+ *       AWS.Lambda.Collector({
+ *         config: AWS.Lambda.collector({
+ *           pipelines: {
+ *             traces: AWS.Lambda.pipeline({
+ *               receivers: [
+ *                 AWS.Lambda.Receiver.otlp({
+ *                   protocols: { http: { endpoint: "127.0.0.1:4318" } },
+ *                 }),
+ *               ],
+ *               processors: [
+ *                 AWS.Lambda.Processor.memoryLimiter({
+ *                   checkInterval: Duration.seconds(1),
+ *                   limitMib: 128,
+ *                 }),
+ *                 AWS.Lambda.Processor.batch({ timeout: Duration.seconds(1) }),
+ *                 AWS.Lambda.Processor.decouple({ maxQueueSize: 200 }),
+ *               ],
+ *               exporters: [
+ *                 AWS.Lambda.Exporter.otlpHttp("backend", {
+ *                   // An Output: bound as an env var, never baked into the
+ *                   // layer, so repointing the backend does not republish it.
+ *                   endpoint: backend.url,
+ *                   // A Redacted: bound through the secret channel. A layer
+ *                   // is a downloadable artifact — a token baked in is a
+ *                   // token published.
+ *                   headers: { authorization: token.value },
+ *                 }),
+ *               ],
+ *             }),
+ *           },
+ *         }),
+ *       }),
+ *     ),
+ *   ),
+ * ) {}
+ * ```
+ *
+ * @example A literal prefix in front of a secret
+ * ```typescript
+ * // `Bearer ` is not part of the token, and applying it must not drag the
+ * // token into the layer archive to do it. `interpolate` concatenates and
+ * // nothing else: the literal bakes, the `Redacted` still binds.
+ * AWS.Lambda.Exporter.otlpHttp("backend", {
+ *   endpoint: "https://api.example.com",
+ *   headers: {
+ *     authorization: AWS.Lambda.interpolate`Bearer ${token.value}`,
+ *   },
+ * })
+ * ```
+ *
+ * @example A variable the deployed environment already provides
+ * ```typescript
+ * // A `Config` primitive NAMES a variable rather than carrying a value: it
+ * // renders as that exact name and binds nothing, so the emitted file — and
+ * // therefore the config layer — is identical whatever the variable holds.
+ * // Reach for it when something other than this deploy provisions the value.
+ * AWS.Lambda.Exporter.otlpHttp("backend", {
+ *   endpoint: Config.string("BACKEND_URL"),
+ *   headers: {
+ *     authorization: AWS.Lambda.interpolate`Bearer ${Config.redacted("INGEST_TOKEN")}`,
+ *   },
+ * })
+ * ```
+ *
+ * @section Sharing one configuration layer
+ * @example One layer, several Functions
+ * ```typescript
+ * // Each Function gets its own config layer by default. Name the same
+ * // `configId` from two Functions to share one — their configurations must
+ * // be identical, and a mismatch fails the build.
+ * const collectorConfig = AWS.Lambda.collector({
+ *   pipelines: { traces: tracesPipeline },
+ * });
+ *
+ * AWS.Lambda.Collector({ config: collectorConfig, configId: "SharedCollectorConfig" });
+ * ```
+ *
+ * @section Pinning and overrides
+ * @example Move to another upstream release
+ * ```typescript
+ * AWS.Lambda.Collector({
+ *   config: collectorConfig,
+ *   extension: { release: "0_23_0", layerVersion: 1 },
+ * })
+ * ```
+ *
+ * @example A mirrored or private extension layer
+ * ```typescript
+ * AWS.Lambda.Collector({
+ *   config: collectorConfig,
+ *   extension: { layerVersionArn: mirroredLayer.layerVersionArn },
+ * })
+ * ```
+ *
+ * @example Deploy the layer in a fixed region
+ * ```typescript
+ * // Layer ARNs are region-scoped; override when the deploy region and the
+ * // Function's region are derived separately.
+ * AWS.Lambda.Collector({
+ *   config: collectorConfig,
+ *   extension: { region: "us-east-1", architecture: "arm64" },
+ * })
+ * ```
+ *
+ * @section Dev mode
+ * @example Opt a dev run back into real export
+ * ```typescript
+ * // The extension is a published layer on a real Lambda, so it is disabled
+ * // during `alchemy dev` by default.
+ * AWS.Lambda.Collector({ config: collectorConfig, disabled: false })
+ * ```
+ *
+ * @section Sharing the layer between Functions
+ * The returned layer is `Layer.fresh`: attaching is a build-time side effect
+ * against the ambient `Binding.Host`, so one value provided to several
+ * Functions must build once per host. Without `fresh`, layer memoization
+ * hands every host after the first the original build — a Function that
+ * silently deploys with no telemetry at all. The configuration LayerVersion
+ * is unaffected: resources memoize by logical id, so two Functions naming
+ * the same `configId` still register exactly one resource. Freshness does not
+ * propagate upward — an application layer that wraps this one and is itself
+ * shared as a module constant reintroduces the hazard, so mark such wrappers
+ * `Layer.fresh` too.
+ */
+export const Collector = (props: CollectorProps): Layer.Layer<never> =>
+  Layer.fresh(
+    Layer.unwrap(
+      Effect.gen(function* () {
+        // `AlchemyContext.dev` is the engine's single source of truth for dev
+        // mode — the same flag the local providers and `Alchemy.remote()`
+        // resolve against — never a raw env var, which is not set for
+        // programmatic runs. Read optionally: this same Effect is re-executed
+        // inside the deployed bundle, where the engine's context is absent.
+        const dev = Option.match(yield* Effect.serviceOption(AlchemyContext), {
+          onNone: () => false,
+          onSome: (context) => context.dev,
+        });
+        if (props.disabled ?? dev) {
+          // Nothing bound means nothing to read back, so the runtime half of
+          // `layerOtlp` resolves zero destinations and exports nothing — the
+          // decision made here at deploy time holds at runtime for free.
+          return Layer.empty;
+        }
+
+        if (!globalThis.__ALCHEMY_RUNTIME__) {
+          // Resolve the host BEFORE declaring the configuration layer: a wrong
+          // host should fail without having registered a resource for a
+          // Function that can never use it.
+          const host = yield* Binding.Host;
+          if (!isLambdaFunction(host)) {
+            return yield* Effect.die(
+              new Error(
+                `AWS.Lambda.Collector: unsupported host ${host?.Type ?? "(none)"} — the Collector runs as a Lambda extension layer, so it is only attachable to an AWS.Lambda.Function`,
+              ),
+            );
+          }
+
+          if (!isEmittedCollectorConfig(props.config)) {
+            return yield* Effect.die(
+              new Error(
+                "AWS.Lambda.Collector: `config` must be built by `collector({ pipelines })` — the collector is configured in TypeScript, not from a YAML file on disk",
+              ),
+            );
+          }
+
+          // The configuration arrived already emitted: `collector()` validated
+          // every component against its generated codec and produced file
+          // content plus environment pairs. From here on it is an ordinary
+          // `content`-packaged LayerVersion, so nothing downstream knows the
+          // configuration was ever anything but a layer.
+          const emitted = props.config;
+
+          const collision = Object.keys(emitted.env).find(
+            (name) => props.env?.[name] !== undefined,
+          );
+          if (collision !== undefined) {
+            return yield* Effect.die(
+              new Error(
+                `AWS.Lambda.Collector: \`env.${collision}\` collides with a placeholder generated from the configuration — rename it, or move the value into the configuration itself`,
+              ),
+            );
+          }
+
+          // Per-host by default: two Functions with different configurations
+          // must not collide on one logical id, because registration is
+          // idempotent by id and the second would silently inherit the
+          // first's layer. Naming the same id explicitly is how you opt INTO
+          // sharing one layer.
+          const configId =
+            props.configId ?? `CollectorConfig-${String(host.LogicalId)}`;
+          const configLayer = yield* LayerVersion(configId, {
+            content: { "collector.yaml": emitted.content },
+            description: "OpenTelemetry Collector configuration",
+          });
+
+          // Registration returned an EXISTING resource if this id was already
+          // used — which is the sharing path, and is only correct when both
+          // Functions asked for the same configuration.
+          const registered = configLayer.Props?.content?.["collector.yaml"];
+          if (
+            typeof registered === "string" &&
+            registered !== emitted.content
+          ) {
+            return yield* Effect.die(
+              new Error(
+                `AWS.Lambda.Collector: \`configId: "${configId}"\` is already registered with a different configuration — two Functions can share one config layer only if their configurations are identical. Give this one its own \`configId\`.`,
+              ),
+            );
+          }
+
+          const extension = props.extension;
+          const extensionArn = isArnOverride(extension)
+            ? extension.layerVersionArn
+            : collectorExtensionLayerArn({
+                // Cast per the AWS binding-layer idiom: the deploy environment
+                // is provided by the stack, and erasing the requirement keeps
+                // this a `Layer<never>` for the caller.
+                region:
+                  extension?.region ??
+                  (yield* AWSEnvironment.current as unknown as Effect.Effect<{
+                    region: string;
+                  }>).region,
+                architecture: extension?.architecture ?? architectureOf(host),
+                release: extension?.release,
+                layerVersion: extension?.layerVersion,
+                publisherAccountId: extension?.publisherAccountId,
+                partition: extension?.partition,
+              });
+
+          yield* host.bind`AWS.Lambda.Collector(${configLayer})`({
+            // The managed extension first: `/opt` is populated in layer order,
+            // so the extension binary lands before the config beside it.
+            layers: [extensionArn, configLayer],
+            env: {
+              OPENTELEMETRY_COLLECTOR_CONFIG_URI: CONFIG_URI,
+              ...emitted.env,
+              ...props.env,
+            },
+          });
+        }
+
+        // The app exports to loopback only; the extension owns remote export.
+        return layerOtlp({
+          url: props.endpoint ?? LOOPBACK_ENDPOINT,
+          serviceName: props.serviceName,
+        });
+        // Named so publishing the config layer and binding the extension are
+        // attributable in a deploy trace rather than anonymous work under
+        // whichever Function happened to build this layer.
+      }).pipe(Effect.withSpan("collector.attach")),
+    ),
+  ) as Layer.Layer<never>;
+
+/**
+ * The architecture the extension binary has to match.
+ *
+ * Read from the host Function's props, mirroring the provider's own
+ * `"x86_64"` default for an unset `architecture`. An `Output`-valued
+ * architecture cannot be resolved at bind time (the ARN is a string built
+ * now), so it fails loudly and points at the explicit override.
+ */
+const architectureOf = (host: Function): FunctionArchitecture => {
+  const architecture = host.Props?.architecture ?? "x86_64";
+  if (architecture !== "x86_64" && architecture !== "arm64") {
+    throw new Error(
+      `AWS.Lambda.Collector: cannot derive the extension layer ARN from ${String(host.LogicalId)}'s architecture — set \`extension.architecture\` explicitly`,
+    );
+  }
+  return architecture;
+};

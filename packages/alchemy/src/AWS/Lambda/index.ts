@@ -2,6 +2,8 @@ export * from "./Alias.ts";
 export * from "./AppConfigDeploymentEventSource.ts";
 export * from "./BrokerEventSource.ts";
 export * from "./BucketEventSource.ts";
+export * from "./Collector.ts";
+export * from "./CollectorConfig.ts";
 export * from "./CreateAuthToken.ts";
 export * from "./CreateAuthTokenHttp.ts";
 export * from "./CreateShellAuthToken.ts";

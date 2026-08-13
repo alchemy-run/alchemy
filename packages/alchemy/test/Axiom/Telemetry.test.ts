@@ -32,6 +32,9 @@ const queryTraces = Effect.gen(function* () {
       HttpClientRequest.setHeaders({
         Authorization: `Bearer ${process.env.AXIOM_TOKEN ?? process.env.AXIOM_API_KEY}`,
         "Content-Type": "application/json",
+        ...(process.env.AXIOM_ORG_ID
+          ? { "X-Axiom-Org-Id": process.env.AXIOM_ORG_ID }
+          : {}),
       }),
       HttpClientRequest.bodyJsonUnsafe({
         apl: `['${TRACES_DATASET}'] | where _time > ago(10m) | limit 1000`,

@@ -89,6 +89,9 @@
       "path": "./examples/aws-lambda/tsconfig.json"
     },
     {
+      "path": "./examples/aws-lambda-opentelemetry/tsconfig.json"
+    },
+    {
       "path": "./examples/aws-rds/tsconfig.json"
     },
     {

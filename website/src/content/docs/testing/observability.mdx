@@ -41,6 +41,12 @@ export never delays a response). See
 [Telemetry](/infrastructure-as-effects/telemetry) for the full
 mechanics.
 
+Lambda has no `waitUntil`. Direct remote export therefore delays the
+handler response; production Lambda functions should flush to a
+localhost [Collector
+extension](/infrastructure-as-effects/telemetry#lambda-export-through-a-collector-extension)
+and let the extension perform the remote export.
+
 ## Provision the receiving end
 
 The endpoint the exporter targets is a resource. An

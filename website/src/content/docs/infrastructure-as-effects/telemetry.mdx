@@ -131,8 +131,9 @@ flushed when that scope closes:
 
 - On Cloudflare, the flush is registered with `ctx.waitUntil`, so it
   happens after the response is sent and never adds latency.
-- On Lambda, the flush settles inline before the invocation returns —
-  the response isn't released until the invoke completes anyway.
+- On Lambda, the flush settles inline before the handler returns.
+  Exporting directly to a remote backend therefore puts that network
+  request on the response-critical path.
 
 This per-event lifecycle is what makes export work on workerd, where
 timers and fetches are pinned to the request that created them: a
@@ -143,6 +144,162 @@ Server runtimes — Cloudflare Containers, ECS Tasks, EC2 hosts,
 Lambda microVMs — are long-lived processes, so they build the
 exporters once at startup instead: telemetry batches on the standard
 export intervals and the final flush runs at graceful shutdown.
+
+## Lambda: export through a Collector extension
+
+For production Lambda telemetry that should not wait on a remote
+backend, point the Effect exporter at an OpenTelemetry Collector
+running on localhost as an **external Lambda extension**:
+
+```text
+Effect invocation
+  -> invocation-scope flush to 127.0.0.1:4318
+  -> Collector external extension
+  -> remote OTLP backend
+```
+
+The local flush remains on the handler's critical path, but it only
+needs to hand the batch to a process in the same execution
+environment. After the Lambda runtime sends the response, the
+extension can finish its remote export before it signals that it is
+ready for the next invocation. That remote work does not have to
+delay the caller, but it still consumes billed duration and prevents
+the environment from accepting another invocation.
+
+A Lambda **layer** is only how the Collector binary is attached. The
+binary starts as an external **extension**, a separate lifecycle
+participant registered with Lambda's Extensions API.
+
+`AWS.Lambda.Collector` assembles all of that from inside the
+Function's Effect: it derives and attaches the pinned managed
+extension layer, serializes the configuration into a second,
+config-only `AWS.Lambda.LayerVersion` at `/opt/collector.yaml`, binds
+the extension's environment, and points the in-process exporter at the
+loopback receiver.
+
+```typescript
+import * as AWS from "alchemy/AWS";
+
+export default class Api extends AWS.Lambda.Function<Api>()(
+  "Api",
+  { main: import.meta.url, architecture: "arm64" },
+  Effect.gen(function* () {
+    return { fetch: handler };
+  }).pipe(
+    Effect.provide(
+      AWS.Lambda.Collector({
+        config: AWS.Lambda.collector({
+          pipelines: {
+            traces: AWS.Lambda.pipeline({
+              receivers: [
+                AWS.Lambda.Receiver.otlp({
+                  protocols: { http: { endpoint: "127.0.0.1:4318" } },
+                }),
+              ],
+              processors: [
+                AWS.Lambda.Processor.memoryLimiter({
+                  checkInterval: Duration.seconds(1),
+                  limitMib: 128,
+                }),
+                AWS.Lambda.Processor.batch({ timeout: Duration.seconds(1) }),
+                AWS.Lambda.Processor.decouple({ maxQueueSize: 200 }),
+              ],
+              exporters: [
+                AWS.Lambda.Exporter.otlpHttp("backend", {
+                  // An Output — bound as an env var, never baked into the
+                  // layer. A `Redacted` header value binds as a secret.
+                  endpoint: backend.url,
+                }),
+              ],
+            }),
+          },
+        }),
+      }),
+    ),
+  ),
+) {}
+```
+
+The Collector is configured in TypeScript rather than YAML. The
+component types are generated from the collector's own Go config
+structs, so a misspelt field fails at the constructor call that wrote
+it, with a JSON path, and the component set is exactly the one the
+pinned extension ships.
+
+Nothing writes a config section by hand. A pipeline holds component
+*values*, so `receivers:`, `processors:` and `exporters:` are derived
+from what the pipelines use; an exporter's `auth.authenticator` holds
+an extension *value*, so `extensions:` and `service.extensions` are
+derived from the exporters. Deduplication is by reference identity —
+one value shared by two pipelines is one emitted instance.
+
+A string leaf is written as the value it is, never as a
+`${env:...}` placeholder — that syntax is the emitter's output, not its
+input. A plain string bakes into the file. An `Output` or `Redacted`
+binds to a generated variable, so a token never reaches the layer
+archive and rotating one does not republish the layer. A `Config`
+primitive *names* a variable the deployed Function already provides,
+and renders as exactly that name:
+
+```typescript
+AWS.Lambda.Exporter.otlpHttp("backend", {
+  // Provisioned elsewhere: rendered as `${env:BACKEND_URL}`, bound to
+  // nothing.
+  endpoint: Config.string("BACKEND_URL"),
+  headers: {
+    // `Bearer ` bakes; the token still binds as a secret.
+    authorization: AWS.Lambda.interpolate`Bearer ${token.value}`,
+  },
+});
+```
+
+`interpolate` is how a literal prefix and a reference share one leaf.
+Each hole keeps the meaning it has alone — the combinator adds
+concatenation and nothing else. A derived `Config` (`map`, `orElse`,
+`withDefault`, `nested`) has no single name to render and is refused at
+the declaration that wrote it.
+
+You do not add `Alchemy.Telemetry.layerOtlp` yourself — `Collector`
+installs it, aimed at loopback, so the handler never learns the remote
+endpoint.
+
+Put `memory_limiter` before `batch`, keep `batch` before `decouple`,
+and keep `decouple` last in each Collector pipeline. `decouple` is
+currently an alpha component: size its in-memory queue, watch
+backpressure and dropped telemetry. Managed layer ARNs are regional
+and architecture-specific (`amd64` for Lambda's `x86_64`, or
+`arm64`); `Collector` derives the ARN from the Function's Region and
+architecture rather than copying one global ARN, and pins the
+upstream release — override either with `extension: { release,
+layerVersion }`, or bypass derivation entirely with
+`extension: { layerVersionArn }`.
+
+This is the vendor-neutral path when Effect is already producing the
+telemetry and a remote OTLP backend is the destination. For
+AWS-native X-Ray and Application Signals, AWS recommends its
+[optimized ADOT Lambda layers](https://aws-otel.github.io/docs/getting-started/lambda/),
+which export without a dedicated Collector and have lower overhead.
+Do not add a Node auto-instrumentation wrapper to an Effect-instrumented
+Function by default: it solves a different problem and can duplicate
+spans.
+
+The extension should own the remote endpoint, headers, and vendor
+configuration; application telemetry should know only the localhost
+endpoint. This is lifecycle and configuration separation, not a
+security boundary: an external extension shares the Function's
+environment variables, IAM role, CPU, and memory.
+
+This pattern improves response latency and remote-export
+reliability, but it is still **best-effort telemetry**, not durable
+delivery. A timeout, reset, out-of-memory failure, full queue,
+extension crash, or forced sandbox termination can lose buffered
+data. Persist business-critical events to a queue or database from
+the handler itself.
+
+See the complete
+[`aws-lambda-opentelemetry` example](https://github.com/alchemy-run/alchemy/tree/main/examples/aws-lambda-opentelemetry),
+the [OpenTelemetry Lambda Collector guide](https://opentelemetry.io/docs/platforms/faas/lambda-collector/),
+and [AWS's extension lifecycle](https://docs.aws.amazon.com/lambda/latest/dg/runtimes-extensions-api.html).
 
 ## HTTP request spans
 

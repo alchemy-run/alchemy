@@ -106,8 +106,13 @@ export const makeAssumeRoleResolver = (options: {
           ? creds.SecretAccessKey
           : Redacted.make(creds.SecretAccessKey),
         sessionToken: Redacted.make(creds.SessionToken),
-        region: options.region ?? "us-east-1",
         expiration: creds.Expiration?.getTime(),
+        // The region the credentials authenticated against, which
+        // `@distilled.cloud/aws` falls back to when nothing provides the
+        // optional `Region` override. STS `AssumeRole` is global, so this is
+        // the STS endpoint's region; every caller that dispatches elsewhere
+        // provides its own `Region`.
+        region: options.region ?? "us-east-1",
       } satisfies ResolvedCredentials;
     }).pipe(
       // Sign AssumeRole with the static base credentials, and provide a
