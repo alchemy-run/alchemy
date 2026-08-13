@@ -181,8 +181,22 @@ export interface EffectAstroProps extends AstroProps {
  *
  * @example Astro site with an effect-native API
  * ```typescript
- * // src/site.ts
- * export default class Site extends AWS.Website.Astro<Site>()(
+ * // src/site.ts — narrow subpath imports keep the IaC engine out of the
+ * // Astro server graph; never import the `alchemy/AWS` provider barrel
+ * // from a site module.
+ * import { GetItem, GetItemHttp, Table } from "alchemy/AWS/DynamoDB";
+ * import { Astro } from "alchemy/AWS/Website";
+ * import { passthrough } from "alchemy/serve";
+ * import * as Effect from "effect/Effect";
+ * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+ * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ *
+ * export const Visits = Table("Visits", {
+ *   partitionKey: "pk",
+ *   attributes: { pk: "S" },
+ * });
+ *
+ * export default class Site extends Astro<Site>()(
  *   "Site",
  *   {
  *     rootDir: ".",
@@ -190,20 +204,22 @@ export interface EffectAstroProps extends AstroProps {
  *     server: { routes: ["/api/*"] },
  *   },
  *   Effect.gen(function* () {
- *     const table = yield* AWS.DynamoDB.Table("Visits", {
- *       partitionKey: "pk",
- *       attributes: { pk: "S" },
- *     });
- *     const getItem = yield* AWS.DynamoDB.GetItem(table);
+ *     const getItem = yield* GetItem(yield* Visits);
  *     return {
  *       fetch: Effect.gen(function* () {
- *         const result = yield* getItem({ Key: { pk: { S: "current" } } }).pipe(
- *           Effect.orDie,
- *         );
- *         return yield* HttpServerResponse.json(result.Item);
+ *         const request = yield* HttpServerRequest;
+ *         const url = new URL(request.url, "http://localhost");
+ *         if (url.pathname === "/api/visits") {
+ *           const result = yield* getItem({
+ *             Key: { pk: { S: "current" } },
+ *           }).pipe(Effect.orDie);
+ *           return yield* HttpServerResponse.json(result.Item);
+ *         }
+ *         // Not ours — Astro endpoints and pages serve the rest.
+ *         return yield* passthrough;
  *       }),
  *     };
- *   }).pipe(Effect.provide(AWS.DynamoDB.GetItemHttp)),
+ *   }).pipe(Effect.provide(GetItemHttp)),
  * ) {}
  * ```
  */

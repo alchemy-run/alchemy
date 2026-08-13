@@ -195,8 +195,8 @@ describe.skipIf(!runLive)("AWS.Website.Nextjs", () => {
 // serverRoutes check forwards /api/* to the server BEFORE the manifest.
 //
 // The clone lives OUTSIDE the workspace (OpenNext monorepo detection), so
-// `alchemy`/`effect` are injected as `link:` dependencies resolving to
-// this workspace — the site module imports the PACKAGE surface, which
+// `alchemy`/`effect` are symlinked into the clone post-install (the
+// `bun link` topology) — the site module imports the PACKAGE surface, which
 // resolves through the `import` condition to the built `lib/`. The gated
 // live suite runs at wave gates, after the coordinator's `bun tsc -b` has
 // rebuilt `lib/` — a stale lib would miss the effectful construct arms.
@@ -266,7 +266,7 @@ export default class NextEffectLiveSite extends Nextjs<NextEffectLiveSite>()(
 /** The explicit-tier mount (`app/api/effect/[[...slug]]/route.ts`). */
 const nextLiveRouteMountSource = [
   `import { toRouteHandler } from "alchemy/serve/next";`,
-  `import Site from "../../../../src/site.ts";`,
+  `import Site from "../../../../src/site";`,
   `const handler = toRouteHandler(Site);`,
   `export { handler as GET, handler as POST, handler as PUT,`,
   `         handler as PATCH, handler as DELETE, handler as HEAD,`,
@@ -317,11 +317,6 @@ describe.skipIf(!runLive)("AWS.Website.Nextjs (effectful)", () => {
         const packageJson = JSON.parse(
           yield* fs.readFileString(packageJsonPath),
         ) as { dependencies?: Record<string, string> };
-        packageJson.dependencies = {
-          ...packageJson.dependencies,
-          alchemy: `link:${pathe.join(workspaceRoot, "packages", "alchemy")}`,
-          effect: `link:${pathe.join(workspaceRoot, "node_modules", "effect")}`,
-        };
         yield* fs.writeFileString(
           packageJsonPath,
           `${JSON.stringify(packageJson, null, 2)}\n`,
@@ -331,6 +326,48 @@ describe.skipIf(!runLive)("AWS.Website.Nextjs (effectful)", () => {
           args: ["install", "--linker=hoisted"],
           cwd: rootDir,
         });
+        // Symlink this workspace's alchemy + effect into the clone (what
+        // `bun link` produces). A `link:`/`file:` dependency cannot work
+        // here: `link:` needs the global link registry, and `file:` copies
+        // alchemy's package.json whose `workspace:*` deps only resolve
+        // inside the workspace. A plain symlink resolves the package
+        // surface through its realpath, so alchemy's own dependencies come
+        // from the workspace root as usual.
+        const cloneModules = path.join(rootDir, "node_modules");
+        const effectRealpath = yield* fs.realPath(
+          pathe.join(workspaceRoot, "node_modules", "effect"),
+        );
+        for (const [name, target] of [
+          ["alchemy", pathe.join(workspaceRoot, "packages", "alchemy")],
+          // Realpath, not the workspace symlink: turbopack refuses to
+          // resolve a symlink chain (link -> workspace link -> .bun store).
+          ["effect", effectRealpath],
+        ] as const) {
+          const linkPath = path.join(cloneModules, name);
+          yield* fs.remove(linkPath, { recursive: true }).pipe(Effect.ignore);
+          yield* fs.symlink(target, linkPath);
+        }
+        // Build with webpack: Turbopack refuses to resolve the symlinked
+        // packages outside its root (which OpenNext pins to the app dir via
+        // outputFileTracingRoot), while webpack follows them to their
+        // realpaths. Same default config alchemy generates, plus the
+        // buildCommand override.
+        yield* fs.writeFileString(
+          path.join(rootDir, "open-next.config.ts"),
+          [
+            `const config = {`,
+            `  default: {`,
+            `    override: {`,
+            `      wrapper: "aws-lambda-streaming",`,
+            `    },`,
+            `  },`,
+            `  buildCommand: "npx next build --webpack",`,
+            `};`,
+            ``,
+            `export default config;`,
+            ``,
+          ].join("\n"),
+        );
 
         // Write the site module + the explicit route mount into the clone.
         yield* fs.makeDirectory(path.join(rootDir, "src"), {

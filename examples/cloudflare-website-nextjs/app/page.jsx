@@ -1,4 +1,5 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
+import Visits from "./visits.jsx";
 
 // Server-rendered in the Worker on every request.
 export const dynamic = "force-dynamic";
@@ -12,6 +13,7 @@ export default function Home() {
       <p className="mt-2 text-sm text-gray-500">
         Rendered at {new Date().toISOString()}
       </p>
+      <Visits />
     </main>
   );
 }

@@ -238,6 +238,61 @@ export interface AstroProps<
  * });
  * ```
  *
+ * @section Effectful Website
+ * Pass an Effect program as the third argument and ONE Worker serves the
+ * Astro app **and** your effect-native handlers. The program's capability
+ * bindings (KV, R2, D1, ...) are collected at plan time exactly like an
+ * effect Worker's; alchemy pre-resolves Astro's fetchable seam
+ * (`virtual:astro:fetchable`) to a generated wrapper that runs the effect
+ * fetch first for `server.routes` (default `["/api/*"]`) and falls back
+ * to Astro's own pipeline on `Serve.passthrough` (or an `HttpRouter`
+ * `RouteNotFound`) — in the production build and in `astro dev` alike. A
+ * declared-static build (`astro: { output: "static" }`) deploys no
+ * Worker code and therefore rejects an Effect program at plan time.
+ *
+ * The program must live in a dedicated module whose default export is
+ * the class, anchored by `main: import.meta.url` (exactly like
+ * `Cloudflare.Worker`). Use **narrow subpath imports** in that module
+ * (`alchemy/Cloudflare/KV`, `alchemy/Cloudflare/Website`, ...) — the
+ * site module is re-imported inside the Astro server graph, and the
+ * `alchemy/Cloudflare` provider barrel would drag the entire IaC engine
+ * along with it.
+ *
+ * @example Effectful Astro site (src/site.ts)
+ * ```typescript
+ * import * as KV from "alchemy/Cloudflare/KV";
+ * import * as Website from "alchemy/Cloudflare/Website";
+ * import { passthrough } from "alchemy/serve";
+ * import * as Effect from "effect/Effect";
+ * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+ * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ *
+ * export const Users = KV.Namespace("Users");
+ *
+ * export default class Site extends Website.Astro<Site>()(
+ *   "Site",
+ *   {
+ *     main: import.meta.url,
+ *     server: { routes: ["/api/*"] },
+ *   },
+ *   Effect.gen(function* () {
+ *     const users = yield* KV.ReadWriteNamespace(yield* Users);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const request = yield* HttpServerRequest;
+ *         const url = new URL(request.url, "http://localhost");
+ *         if (url.pathname === "/api/user") {
+ *           const value = yield* users.get("current").pipe(Effect.orDie);
+ *           return yield* HttpServerResponse.json({ value });
+ *         }
+ *         // Not ours — Astro endpoints and pages serve the rest.
+ *         return yield* passthrough;
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),
+ * ) {}
+ * ```
+ *
  * @section Class Form
  * Calling `Astro` with no arguments returns a constructor you can
  * `extend` to declare the Worker as a named class. The class is both an

@@ -208,6 +208,63 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * });
  * ```
  *
+ * @section Effectful Website
+ * Pass an Effect program as the third argument and the compiled program
+ * IS the Worker in front of the assets: capability bindings (KV, R2, D1,
+ * ...) are collected at plan time exactly like an effect Worker's, the
+ * effect fetch owns `server.routes` (default `["/api/*"]`), and every
+ * other request is served by the asset layer. The routes are
+ * auto-compiled into `assets.runWorkerFirst`, so the API stays reachable
+ * even under `single-page-application` not-found handling. Durable
+ * Object classes and queue/scheduled/cron handlers declared by the
+ * program deploy on the same Worker. There is no framework behind a
+ * StaticSite, so a `RouteNotFound`/`Serve.passthrough` inside the routes
+ * falls through to the asset layer.
+ *
+ * The program must live in a dedicated module whose default export is
+ * the class, anchored by `main: import.meta.url` (exactly like
+ * `Cloudflare.Worker` — with an impl, `main` is the program's module
+ * anchor, not a hand-written Worker entry).
+ *
+ * @example Static site with an effect-native API (src/site.ts)
+ * ```typescript
+ * import * as KV from "alchemy/Cloudflare/KV";
+ * import * as Website from "alchemy/Cloudflare/Website";
+ * import * as Effect from "effect/Effect";
+ * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+ * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ *
+ * export const Users = KV.Namespace("Users");
+ *
+ * export default class Site extends Website.StaticSite<Site>()(
+ *   "Site",
+ *   {
+ *     command: "npm run build",
+ *     outdir: "dist",
+ *     main: import.meta.url,
+ *     assets: { notFoundHandling: "single-page-application" },
+ *     server: { routes: ["/api/*"] },
+ *   },
+ *   Effect.gen(function* () {
+ *     const users = yield* KV.ReadWriteNamespace(yield* Users);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const request = yield* HttpServerRequest;
+ *         const url = new URL(request.url, "http://localhost");
+ *         if (url.pathname === "/api/user") {
+ *           const value = yield* users.get("current").pipe(Effect.orDie);
+ *           return yield* HttpServerResponse.json({ value });
+ *         }
+ *         return yield* HttpServerResponse.json(
+ *           { error: "unknown api route" },
+ *           { status: 404 },
+ *         );
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),
+ * ) {}
+ * ```
+ *
  * @section Class Form
  * Calling `StaticSite` with no arguments returns a constructor you can
  * `extend` to declare the Worker as a named class. The class is both

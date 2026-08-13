@@ -525,6 +525,113 @@ export const normalizeFunctionUrl = (
   };
 };
 
+/** Default URL space owned by an effectful Website's fetch handler. */
+export const DEFAULT_SERVER_ROUTES = ["/api/*"];
+
+/**
+ * The Lambda flavor of the Serverless FunctionContext, extended with the
+ * introspection surface the collect-only mode (and the `alchemy/serve`
+ * runtime bridge) needs: the served impl shape and the number of
+ * registered listeners.
+ *
+ * @internal
+ */
+export interface FunctionRuntimeContext extends Serverless.FunctionContext {
+  /** The impl's served shape, once `serve` has run during init. */
+  shape: () => Record<string, unknown> | undefined;
+  /** Number of registered event listeners (the served fetch included). */
+  listenerCount: () => number;
+}
+
+/**
+ * Finalize an impl-carrying Function's resolved props (the Platform
+ * `finalizeProps` hook). No-op for classic effect Functions (the generated
+ * FunctionBundle entry owns the artifact) and at runtime (the bridges
+ * re-evaluate the impl path inside deployed bundles). For collect-only
+ * Functions (impl + `bundle: false` — the effectful Website server Lambda)
+ * it:
+ *
+ * 1. stamps `runtimeDelivery` — `server.takeover: false` forces the
+ *    explicit tier (`"external"`); otherwise the Website composite's tier
+ *    default (carried on `props.runtimeDelivery`) wins, falling back to
+ *    `"external"`;
+ * 2. validates `server.routes` globs (they must start with `/` or `!/`);
+ * 3. rejects non-fetch listeners (event sources) when the resolved
+ *    delivery is `"external"` — a byte-for-byte framework artifact has no
+ *    entry seam to dispatch their events through; non-fetch handlers on
+ *    AWS ride a sibling effect Lambda instead (DESIGN §2.1.3).
+ */
+const finalizeFunctionProps = (
+  id: string,
+  props: FunctionProps,
+  runtimeContext: FunctionRuntimeContext,
+): Effect.Effect<FunctionProps> =>
+  Effect.suspend(() => {
+    if (globalThis.__ALCHEMY_RUNTIME__) {
+      return Effect.succeed(props);
+    }
+    // Collect-only mode is the prebuilt-framework-artifact case: the
+    // framework's own build produced the deployed code and the impl runs
+    // for binding collection only.
+    const collectOnly = props.bundle === false;
+    if (!collectOnly && props.server === undefined) {
+      return Effect.succeed(props);
+    }
+
+    const routes = props.server?.routes;
+    if (routes !== undefined) {
+      const invalid = routes.filter(
+        (route) => !(route.startsWith("/") || route.startsWith("!/")),
+      );
+      if (invalid.length > 0) {
+        return Effect.die(
+          new FunctionServerRoutingError({
+            message:
+              `Function "${id}" has invalid server.routes ${JSON.stringify(invalid)}: ` +
+              `rules must start with "/" (or "!/" for negative rules), e.g. "/api/*".`,
+            functionId: id,
+          }),
+        );
+      }
+    }
+
+    const runtimeDelivery: "external" | "wrapper" | undefined = !collectOnly
+      ? undefined
+      : props.server?.takeover === false
+        ? "external"
+        : (props.runtimeDelivery ?? "external");
+
+    if (runtimeDelivery === "external") {
+      // The served fetch/RPC surface registers exactly one listener (via
+      // `serve`); anything beyond it is an event-source listener that the
+      // byte-for-byte framework artifact cannot dispatch.
+      const served = runtimeContext.shape() !== undefined ? 1 : 0;
+      const nonFetchListeners = runtimeContext.listenerCount() - served;
+      if (nonFetchListeners > 0) {
+        return Effect.die(
+          new FunctionExportsDeliveryError({
+            message:
+              `Function "${id}" registers ${nonFetchListeners} non-fetch ` +
+              `listener(s) (event sources) but its runtime delivery is ` +
+              `"external" — the framework-built artifact deploys ` +
+              `byte-for-byte, so their events would invoke the framework's ` +
+              `handler. Move the event-source subscriptions to a dedicated ` +
+              `Effect Function (the sibling-function pattern), or let the ` +
+              `framework integration generate the entry wrapper by removing ` +
+              `\`server: { takeover: false }\` where the integration ` +
+              `supports it.`,
+            functionId: id,
+            listeners: nonFetchListeners,
+          }),
+        );
+      }
+    }
+
+    return Effect.succeed(
+      runtimeDelivery === undefined ? props : { ...props, runtimeDelivery },
+    );
+  });
+
 /**
  * An AWS Lambda host resource that combines code bundling, IAM role
  * provisioning, and runtime binding collection.
@@ -630,6 +737,38 @@ export const normalizeFunctionUrl = (
  *     };
  *   }),
  * ) {}
+ * ```
+ *
+ * @section Framework Server Functions (collect-only)
+ * Combining an Effect implementation with a **prebuilt framework
+ * artifact** (`bundle: false`) puts the Function in *collect-only* mode:
+ * the framework's own build output (nitro's `.output/server`, OpenNext's
+ * server functions, ...) deploys byte-for-byte as the Lambda code, while
+ * the Effect program runs at plan time only — its capability bindings
+ * collect env vars, IAM policy statements, and VPC/EFS requests onto the
+ * function. At runtime the program is re-imported and served *inside*
+ * the framework bundle through the `alchemy/serve` bridge.
+ *
+ * This mode is what the effectful `AWS.Website.*` composites drive under
+ * the hood — reach for those rather than wiring it by hand. `server`
+ * configures the delegation: `server.routes` is the URL space the
+ * effect `fetch` owns (consumed by the Website composites' CloudFront
+ * edge router and the runtime bridge's dispatch), `server.verify`
+ * controls the deploy-time sentinel scan proving the framework bundle
+ * actually mounts the bridge, and `server.takeover` opts out of
+ * automatic entry takeover where a framework integration supports it.
+ *
+ * @example Collect-only server Lambda (what a Website composite deploys)
+ * ```typescript
+ * const server = yield* AWS.Lambda.Function(
+ *   "Server",
+ *   {
+ *     main: ".output/server/index.mjs", // framework-built, ships as-is
+ *     bundle: false,
+ *     server: { routes: ["/api/*"] },
+ *   },
+ *   impl, // plan time: bindings collect env + IAM onto this function
+ * );
  * ```
  *
  * @section Configuration
@@ -886,113 +1025,6 @@ export const normalizeFunctionUrl = (
  * );
  * ```
  */
-/** Default URL space owned by an effectful Website's fetch handler. */
-export const DEFAULT_SERVER_ROUTES = ["/api/*"];
-
-/**
- * The Lambda flavor of the Serverless FunctionContext, extended with the
- * introspection surface the collect-only mode (and the `alchemy/serve`
- * runtime bridge) needs: the served impl shape and the number of
- * registered listeners.
- *
- * @internal
- */
-export interface FunctionRuntimeContext extends Serverless.FunctionContext {
-  /** The impl's served shape, once `serve` has run during init. */
-  shape: () => Record<string, unknown> | undefined;
-  /** Number of registered event listeners (the served fetch included). */
-  listenerCount: () => number;
-}
-
-/**
- * Finalize an impl-carrying Function's resolved props (the Platform
- * `finalizeProps` hook). No-op for classic effect Functions (the generated
- * FunctionBundle entry owns the artifact) and at runtime (the bridges
- * re-evaluate the impl path inside deployed bundles). For collect-only
- * Functions (impl + `bundle: false` — the effectful Website server Lambda)
- * it:
- *
- * 1. stamps `runtimeDelivery` — `server.takeover: false` forces the
- *    explicit tier (`"external"`); otherwise the Website composite's tier
- *    default (carried on `props.runtimeDelivery`) wins, falling back to
- *    `"external"`;
- * 2. validates `server.routes` globs (they must start with `/` or `!/`);
- * 3. rejects non-fetch listeners (event sources) when the resolved
- *    delivery is `"external"` — a byte-for-byte framework artifact has no
- *    entry seam to dispatch their events through; non-fetch handlers on
- *    AWS ride a sibling effect Lambda instead (DESIGN §2.1.3).
- */
-const finalizeFunctionProps = (
-  id: string,
-  props: FunctionProps,
-  runtimeContext: FunctionRuntimeContext,
-): Effect.Effect<FunctionProps> =>
-  Effect.suspend(() => {
-    if (globalThis.__ALCHEMY_RUNTIME__) {
-      return Effect.succeed(props);
-    }
-    // Collect-only mode is the prebuilt-framework-artifact case: the
-    // framework's own build produced the deployed code and the impl runs
-    // for binding collection only.
-    const collectOnly = props.bundle === false;
-    if (!collectOnly && props.server === undefined) {
-      return Effect.succeed(props);
-    }
-
-    const routes = props.server?.routes;
-    if (routes !== undefined) {
-      const invalid = routes.filter(
-        (route) => !(route.startsWith("/") || route.startsWith("!/")),
-      );
-      if (invalid.length > 0) {
-        return Effect.die(
-          new FunctionServerRoutingError({
-            message:
-              `Function "${id}" has invalid server.routes ${JSON.stringify(invalid)}: ` +
-              `rules must start with "/" (or "!/" for negative rules), e.g. "/api/*".`,
-            functionId: id,
-          }),
-        );
-      }
-    }
-
-    const runtimeDelivery: "external" | "wrapper" | undefined = !collectOnly
-      ? undefined
-      : props.server?.takeover === false
-        ? "external"
-        : (props.runtimeDelivery ?? "external");
-
-    if (runtimeDelivery === "external") {
-      // The served fetch/RPC surface registers exactly one listener (via
-      // `serve`); anything beyond it is an event-source listener that the
-      // byte-for-byte framework artifact cannot dispatch.
-      const served = runtimeContext.shape() !== undefined ? 1 : 0;
-      const nonFetchListeners = runtimeContext.listenerCount() - served;
-      if (nonFetchListeners > 0) {
-        return Effect.die(
-          new FunctionExportsDeliveryError({
-            message:
-              `Function "${id}" registers ${nonFetchListeners} non-fetch ` +
-              `listener(s) (event sources) but its runtime delivery is ` +
-              `"external" — the framework-built artifact deploys ` +
-              `byte-for-byte, so their events would invoke the framework's ` +
-              `handler. Move the event-source subscriptions to a dedicated ` +
-              `Effect Function (the sibling-function pattern), or let the ` +
-              `framework integration generate the entry wrapper by removing ` +
-              `\`server: { takeover: false }\` where the integration ` +
-              `supports it.`,
-            functionId: id,
-            listeners: nonFetchListeners,
-          }),
-        );
-      }
-    }
-
-    return Effect.succeed(
-      runtimeDelivery === undefined ? props : { ...props, runtimeDelivery },
-    );
-  });
-
 export const Function: Platform<
   Function,
   FunctionServices,

@@ -1,3 +1,5 @@
+import EffectMessage from "./effect-message.jsx";
+
 // Server-rendered in the Lambda on every request.
 export const dynamic = "force-dynamic";
 
@@ -9,6 +11,7 @@ export default function Home() {
       <p className="mt-2 text-sm text-gray-500">
         Rendered at {new Date().toISOString()}
       </p>
+      <EffectMessage />
     </main>
   );
 }

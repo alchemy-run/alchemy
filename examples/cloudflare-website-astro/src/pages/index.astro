@@ -21,8 +21,17 @@ const now = new Date().toISOString();
     <p class="mt-4 text-slate-600">
       This page is server-rendered in a Cloudflare Worker at {now}.
     </p>
+    <p class="mt-2 text-slate-600" id="visits">Loading visits…</p>
     <p class="mt-2">
       <a href="/about/" class="text-blue-600 underline">A prerendered page</a>
     </p>
+    <script>
+      // Calls the Effect API served by this same Worker — site.ts owns
+      // /api/* and backs it with a KV namespace.
+      const res = await fetch("/api/visits");
+      const { visits } = (await res.json()) as { visits: number };
+      const el = document.getElementById("visits");
+      if (el) el.textContent = `This page has been visited ${visits} times.`;
+    </script>
   </body>
 </html>

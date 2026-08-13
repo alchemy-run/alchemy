@@ -92,6 +92,10 @@ test(
 test(
   "serves the api route with the environment value",
   Effect.gen(function* () {
+    // /api/hello is a plain nitro route INSIDE the effect scope — the
+    // middleware mount offers it to the Effect program, which declines
+    // with the typed passthrough, so nitro's own handler answers. This
+    // pins the delegation protocol end-to-end.
     const url = yield* base;
     const body = yield* getBodyWhenReady(
       `${url}/api/hello`,
@@ -134,6 +138,26 @@ test(
     }
     expect(css).toContain(".text-3xl");
     expect(css).toContain("font-bold");
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "serves the effect API from the same Lambda",
+  Effect.gen(function* () {
+    const url = yield* base;
+    // /api/message is served by the Effect program in src/site.ts,
+    // mounted via toEventHandler at server/middleware/alchemy.ts and
+    // compiled by nitro into the same server Lambda. The S3 capability
+    // bindings (env + IAM) were collected at plan time.
+    const put = yield* getWhenReady(
+      `${url}/api/message?put=hello-from-integ-test`,
+    );
+    expect(put.status).toBe(200);
+    const res = yield* getWhenReady(`${url}/api/message`);
+    expect(res.status).toBe(200);
+    const body = (yield* res.json) as { message: string | null };
+    expect(body.message).toBe("hello-from-integ-test");
   }),
   { timeout: 180_000 },
 );

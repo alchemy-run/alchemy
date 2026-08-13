@@ -59,23 +59,18 @@ afterAll(
   }),
 );
 
-const route = (url: string, params: Record<string, string>) =>
-  `${url}/api/hello?${new URLSearchParams(params).toString()}`;
-
-// Stable per-option keys so re-runs (e.g. NO_DESTROY=1) overwrite cleanly
-// instead of leaving stale objects behind.
-const KEYS = {
-  binding: "integ:via-binding",
-  fetch: "integ:via-fetch",
-  rpc: "integ:via-rpc",
-  httpClient: "integ:via-http-client",
-};
+// The Effect API route served by the same Worker as the frontend —
+// src/site.ts owns /api/* and backs /api/hello with R2.
+const route = (url: string, key?: string) =>
+  key === undefined
+    ? `${url}/api/hello`
+    : `${url}/api/hello?key=${encodeURIComponent(key)}`;
 
 test(
   "deploys and exposes a url",
   Effect.gen(function* () {
-    const { websiteUrl } = yield* stack;
-    expect(websiteUrl).toBeString();
+    const { url } = yield* stack;
+    expect(url).toBeString();
   }),
   { timeout: 180_000 },
 );
@@ -83,8 +78,8 @@ test(
 test(
   "compiles tailwind from vite.config.ts",
   Effect.gen(function* () {
-    const { websiteUrl } = yield* stack;
-    const base = websiteUrl.replace(/\/+$/, "");
+    const { url } = yield* stack;
+    const base = url.replace(/\/+$/, "");
     const res = yield* getWhenReady(base);
     expect(res.status).toBe(200);
     const html = yield* res.text;
@@ -105,95 +100,24 @@ test(
 );
 
 test(
-  "option 1 — direct R2 binding round-trips through PUT and GET",
+  "Effect API round-trips through R2 (PUT then GET /api/hello)",
   Effect.gen(function* () {
-    const { websiteUrl } = yield* stack;
+    const { url } = yield* stack;
     const client = yield* HttpClient.HttpClient;
-    const key = KEYS.binding;
+    // Stable key so re-runs (e.g. NO_DESTROY=1) overwrite cleanly instead
+    // of leaving stale objects behind.
+    const key = "integ:roundtrip";
 
     const put = yield* executeWhenReady(
-      HttpClientRequest.put(route(websiteUrl, { key, via: "binding" })).pipe(
-        HttpClientRequest.bodyText("hello-binding", "text/plain"),
+      HttpClientRequest.put(route(url, key)).pipe(
+        HttpClientRequest.bodyText("hello-effect", "text/plain"),
       ),
     );
     expect(put.status).toBe(204);
 
-    const get = yield* client.get(route(websiteUrl, { key, via: "binding" }));
+    const get = yield* client.get(route(url, key));
     expect(get.status).toBe(200);
-    expect(yield* get.text).toBe("hello-binding");
-  }),
-  { timeout: 180_000 },
-);
-
-test(
-  "option 2 — service-binding fetch into the Backend worker",
-  Effect.gen(function* () {
-    const { websiteUrl } = yield* stack;
-    const client = yield* HttpClient.HttpClient;
-    const key = KEYS.fetch;
-
-    // Write through option 2's PUT path (Backend's fetch handler stores it
-    // in R2), then read it back through option 2's GET (also Backend.fetch).
-    const put = yield* executeWhenReady(
-      HttpClientRequest.put(route(websiteUrl, { key, via: "fetch" })).pipe(
-        HttpClientRequest.bodyText("hello-fetch", "text/plain"),
-      ),
-    );
-    expect(put.status).toBe(204);
-
-    const get = yield* client.get(route(websiteUrl, { key, via: "fetch" }));
-    expect(get.status).toBe(200);
-    expect(yield* get.text).toBe("hello-fetch");
-  }),
-  { timeout: 180_000 },
-);
-
-test(
-  "option 3 — service-binding RPC method via toPromiseApi",
-  Effect.gen(function* () {
-    const { websiteUrl } = yield* stack;
-    const client = yield* HttpClient.HttpClient;
-    const key = KEYS.rpc;
-
-    // Seed the bucket via option 1 (direct binding) so the RPC `hello`
-    // method has something to read.
-    const seed = yield* executeWhenReady(
-      HttpClientRequest.put(route(websiteUrl, { key, via: "binding" })).pipe(
-        HttpClientRequest.bodyText("hello-rpc", "text/plain"),
-      ),
-    );
-    expect(seed.status).toBe(204);
-
-    // RPC GET reads through Backend.hello — exercises toPromiseApi.
-    const get = yield* client.get(route(websiteUrl, { key, via: "rpc" }));
-    expect(get.status).toBe(200);
-    expect(yield* get.text).toBe("hello-rpc");
-  }),
-  { timeout: 180_000 },
-);
-
-test(
-  "option 4 — service-binding HTTP client",
-  Effect.gen(function* () {
-    const { websiteUrl } = yield* stack;
-    const client = yield* HttpClient.HttpClient;
-    const key = KEYS.httpClient;
-
-    // Seed the bucket via option 1 (direct binding) so the RPC `hello`
-    // method has something to read.
-    const seed = yield* executeWhenReady(
-      HttpClientRequest.put(
-        route(websiteUrl, { key, via: "http-client" }),
-      ).pipe(HttpClientRequest.bodyText("hello-http-client", "text/plain")),
-    );
-    expect(seed.status).toBe(204);
-
-    // HTTP client GET reads through Backend.hello — exercises toPromiseApi.
-    const get = yield* client.get(
-      route(websiteUrl, { key, via: "http-client" }),
-    );
-    expect(get.status).toBe(200);
-    expect(yield* get.text).toBe("hello-http-client");
+    expect(yield* get.text).toBe("hello-effect");
   }),
   { timeout: 180_000 },
 );
@@ -201,38 +125,22 @@ test(
 test(
   "missing `key` returns 400",
   Effect.gen(function* () {
-    const { websiteUrl } = yield* stack;
+    const { url } = yield* stack;
 
     // `400` is the real answer; `getWhenReady` only retries the propagation
     // `404`/`5xx` window, so it returns the `400` as soon as the route is live.
-    const res = yield* getWhenReady(route(websiteUrl, { via: "binding" }));
+    const res = yield* getWhenReady(route(url));
     expect(res.status).toBe(400);
   }),
 );
 
 test(
-  "RPC for a non-existent key returns 404",
+  "GET for a non-existent key returns 404",
   Effect.gen(function* () {
-    const { websiteUrl } = yield* stack;
+    const { url } = yield* stack;
     const client = yield* HttpClient.HttpClient;
 
-    const res = yield* client.get(
-      route(websiteUrl, { key: "integ:does-not-exist", via: "rpc" }),
-    );
+    const res = yield* client.get(route(url, "integ:does-not-exist"));
     expect(res.status).toBe(404);
-  }),
-);
-
-test(
-  "PUT via=rpc returns 400 (RPC `hello` is read-only)",
-  Effect.gen(function* () {
-    const { websiteUrl } = yield* stack;
-
-    const res = yield* executeWhenReady(
-      HttpClientRequest.put(
-        route(websiteUrl, { key: "integ:via-options", via: "rpc" }),
-      ).pipe(HttpClientRequest.bodyText("nope")),
-    );
-    expect(res.status).toBe(400);
   }),
 );

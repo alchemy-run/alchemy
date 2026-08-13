@@ -4,12 +4,21 @@ Deploys a Nuxt app to Cloudflare Workers with `Cloudflare.Website.Nuxt` — no `
 
 The resource builds the app through the project's own `@nuxt/kit` with nitro's `cloudflare_module` preset (your `nuxt.config.ts` loads natively), deploys the nitro server bundle as the Worker, and serves client assets + prerendered pages as Worker static assets. Values passed via `env` are exposed to server routes and SSR through `event.context.cloudflare.env`.
 
+The Website class lives in `site.ts` and takes an Effect program as its third argument: ONE Worker serves the Nuxt app and an Effect-native API. The program's `fetch` owns `/api/*` (the default `server.routes`) and uses a KV namespace through a typed capability binding — collected automatically at plan time. Routes it doesn't claim (like the app's own `/api/hello`) fall through to nitro via the typed `passthrough`.
+
 ```ts
-const site = yield* Cloudflare.Website.Nuxt("NuxtSite", {
-  env: {
-    GREETING: "Hello from alchemy",
-  },
-});
+export default class Site extends Nuxt<Site>()(
+  "NuxtSite",
+  { main: import.meta.url, env: { GREETING: "Hello from alchemy" } },
+  Effect.gen(function* () {
+    const visits = yield* KV.ReadWriteNamespace(yield* Visits);
+    return {
+      fetch: Effect.gen(function* () {
+        // ... /api/visits handled here; everything else `passthrough`s
+      }),
+    };
+  }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),
+) {}
 ```
 
 ## Commands

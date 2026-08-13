@@ -293,23 +293,55 @@ export interface EffectNextjsAttributes extends NextjsAttributes {
  *
  * @example Next.js site with an effect-native API
  * ```typescript
- * // src/site.ts
- * export default class Site extends AWS.Website.Nextjs<Site>()(
+ * // src/site.ts — narrow subpath imports keep the IaC engine out of the
+ * // Next bundle graph; never import the `alchemy/AWS` provider barrel
+ * // from a site module.
+ * import { Bucket, GetObject, GetObjectHttp } from "alchemy/AWS/S3";
+ * import { Nextjs } from "alchemy/AWS/Website";
+ * import * as Effect from "effect/Effect";
+ * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+ * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ *
+ * export const Data = Bucket("Data");
+ *
+ * export default class Site extends Nextjs<Site>()(
  *   "Site",
  *   { main: import.meta.url, server: { routes: ["/api/*"] } },
  *   Effect.gen(function* () {
- *     const bucket = yield* AWS.S3.Bucket("Data");
- *     const getObject = yield* AWS.S3.GetObject(bucket);
+ *     const getObject = yield* GetObject(yield* Data);
  *     return {
  *       fetch: Effect.gen(function* () {
- *         const object = yield* getObject({ Key: "hello.txt" }).pipe(
- *           Effect.orDie,
+ *         const request = yield* HttpServerRequest;
+ *         const url = new URL(request.url, "http://localhost");
+ *         if (url.pathname === "/api/hello") {
+ *           const object = yield* getObject({ Key: "hello.txt" }).pipe(
+ *             Effect.orDie,
+ *           );
+ *           return HttpServerResponse.text(String(object.Body));
+ *         }
+ *         return yield* HttpServerResponse.json(
+ *           { error: "unknown api route" },
+ *           { status: 404 },
  *         );
- *         return HttpServerResponse.text(String(object.Body));
  *       }),
  *     };
- *   }).pipe(Effect.provide(AWS.S3.GetObjectHttp)),
+ *   }).pipe(Effect.provide(GetObjectHttp)),
  * ) {}
+ * ```
+ *
+ * @example Mounting the program (app/api/[[...slug]]/route.ts)
+ * The catch-all route handler is compiled by Next itself, so it runs in
+ * `next build` output and `next dev` alike. Next's router prefers more
+ * specific routes, so your own route handlers (e.g. `app/api/hello/route.ts`)
+ * keep winning over the catch-all.
+ * ```typescript
+ * import { toRouteHandler } from "alchemy/serve/next";
+ * import Site from "../../../src/site.ts";
+ *
+ * const handler = toRouteHandler(Site);
+ * export { handler as GET, handler as POST, handler as PUT,
+ *          handler as PATCH, handler as DELETE, handler as HEAD,
+ *          handler as OPTIONS };
  * ```
  */
 export const Nextjs: {

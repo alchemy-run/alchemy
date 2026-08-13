@@ -112,13 +112,21 @@ export interface EffectWakuProps extends WakuProps {
  *
  * @example Waku site with an effect-native API
  * ```typescript
- * // src/site.ts
- * export default class Site extends AWS.Website.Waku<Site>()(
+ * // src/site.ts — narrow subpath imports keep the IaC engine out of the
+ * // Waku server graph; never import the `alchemy/AWS` provider barrel
+ * // from a site module.
+ * import { Bucket, GetObject, GetObjectHttp } from "alchemy/AWS/S3";
+ * import { Waku } from "alchemy/AWS/Website";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ *
+ * export const Data = Bucket("Data");
+ *
+ * export default class Site extends Waku<Site>()(
  *   "Site",
  *   { main: import.meta.url, server: { routes: ["/api/*"] } },
  *   Effect.gen(function* () {
- *     const bucket = yield* AWS.S3.Bucket("Data");
- *     const getObject = yield* AWS.S3.GetObject(bucket);
+ *     const getObject = yield* GetObject(yield* Data);
  *     return {
  *       fetch: Effect.gen(function* () {
  *         const object = yield* getObject({ Key: "hello.txt" }).pipe(
@@ -127,7 +135,7 @@ export interface EffectWakuProps extends WakuProps {
  *         return HttpServerResponse.text(String(object.Body));
  *       }),
  *     };
- *   }).pipe(Effect.provide(AWS.S3.GetObjectHttp)),
+ *   }).pipe(Effect.provide(GetObjectHttp)),
  * ) {}
  * ```
  */

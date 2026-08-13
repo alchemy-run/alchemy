@@ -112,23 +112,50 @@ export interface EffectNuxtProps extends NuxtProps {
  *
  * @example Nuxt site with an effect-native API
  * ```typescript
- * // src/site.ts
- * export default class Site extends AWS.Website.Nuxt<Site>()(
+ * // src/site.ts — narrow subpath imports keep the IaC engine out of the
+ * // nitro bundle graph; never import the `alchemy/AWS` provider barrel
+ * // from a site module.
+ * import { Bucket, GetObject, GetObjectHttp } from "alchemy/AWS/S3";
+ * import { Nuxt } from "alchemy/AWS/Website";
+ * import { passthrough } from "alchemy/serve";
+ * import * as Effect from "effect/Effect";
+ * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+ * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ *
+ * export const Data = Bucket("Data");
+ *
+ * export default class Site extends Nuxt<Site>()(
  *   "Site",
  *   { main: import.meta.url, server: { routes: ["/api/*"] } },
  *   Effect.gen(function* () {
- *     const bucket = yield* AWS.S3.Bucket("Data");
- *     const getObject = yield* AWS.S3.GetObject(bucket);
+ *     const getObject = yield* GetObject(yield* Data);
  *     return {
  *       fetch: Effect.gen(function* () {
- *         const object = yield* getObject({ Key: "hello.txt" }).pipe(
- *           Effect.orDie,
- *         );
- *         return HttpServerResponse.text(String(object.Body));
+ *         const request = yield* HttpServerRequest;
+ *         const url = new URL(request.url, "http://localhost");
+ *         if (url.pathname === "/api/hello") {
+ *           const object = yield* getObject({ Key: "hello.txt" }).pipe(
+ *             Effect.orDie,
+ *           );
+ *           return HttpServerResponse.text(String(object.Body));
+ *         }
+ *         // Not ours — nitro's own scanned routes serve it.
+ *         return yield* passthrough;
  *       }),
  *     };
- *   }).pipe(Effect.provide(AWS.S3.GetObjectHttp)),
+ *   }).pipe(Effect.provide(GetObjectHttp)),
  * ) {}
+ * ```
+ *
+ * @example Mounting the program (server/middleware/alchemy.ts)
+ * The middleware is compiled by nitro itself, so it runs in the deployed
+ * Lambda and in `nuxt dev` alike. It answers matched effect routes and
+ * no-ops on passthrough/miss, letting nitro continue to its own handlers.
+ * ```typescript
+ * import { toEventHandler } from "alchemy/serve/nitro";
+ * import Site from "../../src/site.ts";
+ *
+ * export default toEventHandler(Site);
  * ```
  */
 export const Nuxt: {

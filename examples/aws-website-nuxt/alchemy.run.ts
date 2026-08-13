@@ -1,6 +1,7 @@
 import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
 import * as Effect from "effect/Effect";
+import Site from "./src/site.ts";
 
 export default Alchemy.Stack(
   "AwsWebsiteNuxtExample",
@@ -9,14 +10,9 @@ export default Alchemy.Stack(
     state: AWS.state(),
   },
   Effect.gen(function* () {
-    const site = yield* AWS.Website.Nuxt("NuxtSite", {
-      forceDestroy: true,
-      server: {
-        environment: {
-          GREETING: "Hello from alchemy",
-        },
-      },
-    });
+    // The Website class (declared in src/site.ts with its Effect program)
+    // is itself the construct — yielding it deploys the site.
+    const site = yield* Site;
 
     return {
       url: site.url,

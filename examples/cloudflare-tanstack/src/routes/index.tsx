@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export const getServerTime = createServerFn({
   method: "GET",
@@ -17,6 +17,20 @@ export const Route = createFileRoute("/")({
 function Home() {
   const initialData = Route.useLoaderData();
   const [data, setData] = useState(initialData);
+  const [greeting, setGreeting] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Round-trips through the Effect API served by this same Worker:
+    // src/site.ts owns /api/* and reads/writes R2 through a typed binding.
+    (async () => {
+      await fetch("/api/hello?key=welcome", {
+        method: "PUT",
+        body: "Hello from R2, via the Effect API!",
+      });
+      const res = await fetch("/api/hello?key=welcome");
+      setGreeting(await res.text());
+    })().catch(() => {});
+  }, []);
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-16">
@@ -36,6 +50,9 @@ function Home() {
       >
         Refresh from server
       </button>
+      <p className="mt-6 rounded-lg bg-slate-200 px-4 py-3 font-mono">
+        {greeting ?? "Loading from /api/hello…"}
+      </p>
     </main>
   );
 }

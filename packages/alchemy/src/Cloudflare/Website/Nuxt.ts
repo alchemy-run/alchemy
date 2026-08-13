@@ -243,20 +243,23 @@ export interface NuxtProps<
  *
  * @example Effectful Nuxt site
  * ```typescript
- * // src/site.ts
- * import * as Cloudflare from "alchemy/Cloudflare";
+ * // src/site.ts — narrow subpath imports keep the IaC engine out of the
+ * // framework/dev server graph; never import the `alchemy/Cloudflare`
+ * // provider barrel from a site module.
+ * import * as KV from "alchemy/Cloudflare/KV";
+ * import * as Website from "alchemy/Cloudflare/Website";
  * import { passthrough } from "alchemy/serve";
  * import * as Effect from "effect/Effect";
  * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
  * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  *
- * export const Users = Cloudflare.KV.Namespace("Users");
+ * export const Users = KV.Namespace("Users");
  *
- * export default class Site extends Cloudflare.Website.Nuxt<Site>()(
+ * export default class Site extends Website.Nuxt<Site>()(
  *   "Site",
- *   { main: import.meta.url },
+ *   { main: import.meta.url, server: { routes: ["/api/*"] } },
  *   Effect.gen(function* () {
- *     const users = yield* Cloudflare.KV.ReadWriteNamespace(yield* Users);
+ *     const users = yield* KV.ReadWriteNamespace(yield* Users);
  *     return {
  *       fetch: Effect.gen(function* () {
  *         const request = yield* HttpServerRequest;
@@ -268,7 +271,7 @@ export interface NuxtProps<
  *         return yield* passthrough; // nitro serves everything else
  *       }),
  *     };
- *   }).pipe(Effect.provide(Cloudflare.KV.ReadWriteNamespaceBinding)),
+ *   }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),
  * ) {}
  * ```
  *

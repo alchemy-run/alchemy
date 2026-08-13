@@ -52,6 +52,38 @@ export interface AstroFetchable {
   fetch(request: Request): Promise<Response | undefined>;
 }
 
+/**
+ * Mount an effectful Website in Astro's fetchable (`src/fetch.ts`, Astro
+ * 7 `fetchFile`) — the explicit-tier escape hatch (the auto tier
+ * pre-resolves `virtual:astro:fetchable` to a generated wrapper that
+ * composes this same helper). Astro's `App.render` requires the
+ * fetchable to return a `Response` — there is no undefined-falls-through
+ * contract in astro core — so the mounting module composes the fallback
+ * itself: `site.fetch` resolves `undefined` on passthrough, miss, or
+ * outside-`routes`, and the caller then runs Astro's own pipeline (or
+ * any other fallback).
+ *
+ * @binding
+ * @product Serve
+ *
+ * @section Mounting the fetchable
+ * @example src/fetch.ts
+ * ```typescript
+ * import { FetchState, astro } from "astro/fetch";
+ * import { toFetchable } from "alchemy/serve/astro";
+ * import Site from "./site.ts";
+ *
+ * const site = toFetchable(Site, { routes: ["/api/*"] });
+ *
+ * export default {
+ *   async fetch(request: Request): Promise<Response> {
+ *     return (
+ *       (await site.fetch(request)) ?? astro(new FetchState(request))
+ *     );
+ *   },
+ * };
+ * ```
+ */
 export const toFetchable = (
   site: AnyWebsiteClass,
   options?: AstroFetchableOptions,

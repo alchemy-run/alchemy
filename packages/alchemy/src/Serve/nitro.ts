@@ -80,9 +80,28 @@ const toWebRequest = async (
 };
 
 /**
- * Build the h3 event handler. Marked with h3's `__is_handler__` flag so
- * nitro accepts it without a `defineEventHandler` wrapper (and without
- * alchemy depending on `h3`).
+ * Mount an effectful Website as Nuxt/nitro server middleware — the
+ * explicit Nuxt mount, both clouds. The middleware is compiled by nitro
+ * itself, so the program serves in the deployed server bundle and in the
+ * nitro dev worker alike. It answers matched effect routes with a web
+ * `Response` (h3 ≥ 1.8 sends it natively) and returns `undefined` on
+ * passthrough/miss so nitro continues to the framework's own handlers.
+ *
+ * The returned handler carries h3's `__is_handler__` flag, so nitro
+ * accepts it without a `defineEventHandler` wrapper — alchemy does not
+ * depend on `h3` (structural types only).
+ *
+ * @binding
+ * @product Serve
+ *
+ * @section Mounting the middleware
+ * @example server/middleware/alchemy.ts
+ * ```typescript
+ * import { toEventHandler } from "alchemy/serve/nitro";
+ * import Site from "../../src/site.ts";
+ *
+ * export default toEventHandler(Site);
+ * ```
  */
 export const toEventHandler = (
   site: AnyWebsiteClass,

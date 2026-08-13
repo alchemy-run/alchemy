@@ -443,6 +443,10 @@ export default defineConfig({
                   link: "/infrastructure-as-effects/functions-and-servers",
                 },
                 {
+                  label: "Effectful Websites",
+                  link: "/infrastructure-as-effects/effectful-websites",
+                },
+                {
                   label: "Bindings",
                   link: "/infrastructure-as-effects/binding",
                 },

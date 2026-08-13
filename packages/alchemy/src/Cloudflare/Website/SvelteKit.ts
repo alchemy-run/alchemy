@@ -173,6 +173,61 @@ export interface SvelteKitProps<
  * });
  * ```
  *
+ * @section Effectful Website
+ * Pass an Effect program as the third argument and ONE Worker serves the
+ * SvelteKit app **and** your effect-native handlers. The program's
+ * capability bindings (KV, R2, D1, ...) are collected at plan time
+ * exactly like an effect Worker's; the generated Worker entry dispatches
+ * `server.routes` (default `["/api/*"]`) to the effect fetch first,
+ * falling through to kit's own `respond` on `Serve.passthrough` (or an
+ * `HttpRouter` `RouteNotFound`) — so kit `+server` endpoints inside the
+ * scope keep working. Under `alchemy dev`, the same dispatch mounts as a
+ * middleware in front of kit's Vite dev server. An explicit
+ * `alchemy/serve/sveltekit` mount in `hooks.server.ts` remains available
+ * as an escape hatch.
+ *
+ * The program must live in a dedicated module whose default export is
+ * the class, anchored by `main: import.meta.url` (exactly like
+ * `Cloudflare.Worker`). Use **narrow subpath imports** in that module
+ * (`alchemy/Cloudflare/KV`, `alchemy/Cloudflare/Website`, ...) — the
+ * site module is re-imported inside the kit server graph, and the
+ * `alchemy/Cloudflare` provider barrel would drag the entire IaC engine
+ * along with it.
+ *
+ * @example Effectful SvelteKit site (src/site.ts)
+ * ```typescript
+ * import * as KV from "alchemy/Cloudflare/KV";
+ * import * as Website from "alchemy/Cloudflare/Website";
+ * import { passthrough } from "alchemy/serve";
+ * import * as Effect from "effect/Effect";
+ * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+ * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ *
+ * export const Users = KV.Namespace("Users");
+ *
+ * export default class Site extends Website.SvelteKit<Site>()(
+ *   "Site",
+ *   {
+ *     main: import.meta.url,
+ *     server: { routes: ["/api/*"] },
+ *   },
+ *   Effect.gen(function* () {
+ *     const users = yield* KV.ReadWriteNamespace(yield* Users);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const request = yield* HttpServerRequest;
+ *         const url = new URL(request.url, "http://localhost");
+ *         if (url.pathname === "/api/user") {
+ *           const value = yield* users.get("current").pipe(Effect.orDie);
+ *           return yield* HttpServerResponse.json({ value });
+ *         }
+ *         return yield* passthrough; // kit serves everything else
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),
+ * ) {}
+ * ```
+ *
  * @section Class Form
  * Calling `SvelteKit` with no arguments returns a constructor you can
  * `extend` to declare the Worker as a named class. The class is both an

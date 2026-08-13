@@ -4,12 +4,21 @@ Deploys a SvelteKit app to Cloudflare Workers with `Cloudflare.Website.SvelteKit
 
 The resource builds the app with SvelteKit's own Vite pipeline and a wrangler-free in-memory Cloudflare adapter, re-bundles the server output for workerd, and deploys client assets + prerendered pages as Worker static assets. Values passed via `env` are exposed to server routes through `platform.env`.
 
+The Website class lives in `src/site.ts` and takes an Effect program as its third argument: ONE Worker serves the SvelteKit app and an Effect-native API. The program's `fetch` owns `/api/*` (the default `server.routes`) and uses a KV namespace through a typed capability binding — collected automatically at plan time.
+
 ```ts
-const site = yield* Cloudflare.Website.SvelteKit("SvelteKitSite", {
-  env: {
-    GREETING: "Hello from alchemy",
-  },
-});
+export default class Site extends SvelteKit<Site>()(
+  "SvelteKitSite",
+  { main: import.meta.url, env: { GREETING: "Hello from alchemy" } },
+  Effect.gen(function* () {
+    const visits = yield* KV.ReadWriteNamespace(yield* Visits);
+    return {
+      fetch: Effect.gen(function* () {
+        // ... /api/visits handled here; everything else `passthrough`s
+      }),
+    };
+  }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),
+) {}
 ```
 
 ## Commands

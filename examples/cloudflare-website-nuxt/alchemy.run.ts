@@ -1,6 +1,7 @@
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
+import Site from "./site.ts";
 
 export default Alchemy.Stack(
   "CloudflareWebsiteNuxtExample",
@@ -9,11 +10,9 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-    const site = yield* Cloudflare.Website.Nuxt("NuxtSite", {
-      env: {
-        GREETING: "Hello from alchemy",
-      },
-    });
+    // The Website class (and its Effect API + KV binding) is defined in
+    // ./site.ts — yielding it deploys the whole thing.
+    const site = yield* Site;
 
     return {
       url: site.url,

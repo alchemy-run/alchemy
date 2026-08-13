@@ -21,8 +21,19 @@ const now = new Date().toISOString();
     <p class="mt-4 text-slate-600">
       This page is server-rendered in an AWS Lambda at {now}.
     </p>
+    <p class="mt-2 text-slate-600">
+      You are visitor <span id="visits">…</span> — counted by the Effect
+      program's <code>/api/visits</code> route (DynamoDB, same Lambda).
+    </p>
     <p class="mt-2">
       <a href="/about/" class="text-blue-600 underline">A prerendered page</a>
     </p>
+    <script>
+      // The effect fetch owns /api/* — this hits the DynamoDB-backed
+      // handler declared in site.ts.
+      const res = await fetch("/api/visits");
+      const { count } = await res.json();
+      document.querySelector("#visits")!.textContent = String(count);
+    </script>
   </body>
 </html>

@@ -132,6 +132,26 @@ test.skipIf(lambdaRoutesBroken)(
   { timeout: 180_000 },
 );
 
+test.skipIf(lambdaRoutesBroken)(
+  "serves the effect API through the catch-all route handler",
+  Effect.gen(function* () {
+    const url = yield* base;
+    // /api/message is served by the Effect program in src/site.ts,
+    // mounted via toRouteHandler at app/api/[[...slug]]/route.ts and
+    // compiled by Next into the same server Lambda. The S3 capability
+    // bindings (env + IAM) were collected at plan time.
+    const put = yield* getWhenReady(
+      `${url}/api/message?put=hello-from-integ-test`,
+    );
+    expect(put.status).toBe(200);
+    const res = yield* getWhenReady(`${url}/api/message`);
+    expect(res.status).toBe(200);
+    const body = (yield* res.json) as { message: string | null };
+    expect(body.message).toBe("hello-from-integ-test");
+  }),
+  { timeout: 180_000 },
+);
+
 test(
   "serves a static asset from public/",
   Effect.gen(function* () {

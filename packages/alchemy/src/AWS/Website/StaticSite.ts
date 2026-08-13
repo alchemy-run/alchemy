@@ -376,8 +376,18 @@ export interface EffectStaticSiteAttributes extends StaticSiteAttributes {
  *
  * @example Static site with an effect-native API
  * ```typescript
- * // src/site.ts
- * export default class Site extends AWS.Website.StaticSite<Site>()(
+ * // src/site.ts — narrow subpath imports keep the IaC engine out of any
+ * // graph that re-imports this module; never import the `alchemy/AWS`
+ * // provider barrel from a site module.
+ * import { Bucket, GetObject, GetObjectHttp } from "alchemy/AWS/S3";
+ * import { StaticSite } from "alchemy/AWS/Website";
+ * import * as Effect from "effect/Effect";
+ * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+ * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ *
+ * export const Data = Bucket("Data");
+ *
+ * export default class Site extends StaticSite<Site>()(
  *   "Site",
  *   {
  *     path: "./dist",
@@ -386,16 +396,24 @@ export interface EffectStaticSiteAttributes extends StaticSiteAttributes {
  *     server: { routes: ["/api/*"] },
  *   },
  *   Effect.gen(function* () {
- *     const bucket = yield* AWS.S3.Bucket("Data");
- *     const getObject = yield* AWS.S3.GetObject(bucket);
+ *     const getObject = yield* GetObject(yield* Data);
  *     return {
  *       fetch: Effect.gen(function* () {
  *         const request = yield* HttpServerRequest;
- *         const object = yield* getObject({ Key: "hello.txt" }).pipe(Effect.orDie);
- *         return HttpServerResponse.text(String(object.Body));
+ *         const url = new URL(request.url, "http://localhost");
+ *         if (url.pathname === "/api/hello") {
+ *           const object = yield* getObject({ Key: "hello.txt" }).pipe(
+ *             Effect.orDie,
+ *           );
+ *           return HttpServerResponse.text(String(object.Body));
+ *         }
+ *         return yield* HttpServerResponse.json(
+ *           { error: "unknown api route" },
+ *           { status: 404 },
+ *         );
  *       }),
  *     };
- *   }).pipe(Effect.provide([AWS.S3.GetObjectHttp])),
+ *   }).pipe(Effect.provide(GetObjectHttp)),
  * ) {}
  * ```
  */

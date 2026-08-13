@@ -78,11 +78,63 @@ export interface ServeHandle {
 }
 
 /**
- * Create the runtime handle for a Website class. The isolate-scope layer
- * build is lazy — nothing happens until the first matched request — and
- * memoized per class per process.
+ * Create the runtime handle for an effectful Website class — the
+ * `alchemy/serve` bridge that runs the class's Effect `fetch` inside a
+ * framework-built server bundle (the explicit tier of effectful
+ * Websites). The isolate-scope layer build is lazy — nothing happens
+ * until the first matched request — and memoized per class per process.
  *
- * `defaults` seed every call's options; per-call options win.
+ * `defaults` seed every call's options; per-call options win. Env
+ * resolution when `options.env` is not given: the guarded
+ * `cloudflare:workers` env, then `getCloudflareContext()`-shaped
+ * globals, then `process.env`. When the resolved env carries no alchemy
+ * stack markers (build-time prerender/SSG worlds), `match` declines
+ * every request instead of building the runtime.
+ *
+ * Prefer the per-framework mounts where one exists — `toRouteHandler`
+ * (`alchemy/serve/next`), `toEventHandler` (`alchemy/serve/nitro`),
+ * `toHandle` (`alchemy/serve/sveltekit`), `toFetchable`
+ * (`alchemy/serve/astro`) — and reach for `make` in any other
+ * fetch-shaped server entry.
+ *
+ * @binding
+ * @product Serve
+ *
+ * @section Mounting in a fetch-shaped entry
+ * `match` resolves `undefined` when the request is declined (a
+ * `RouteNotFound` failure or `Serve.passthrough`), so the entry composes
+ * the framework handler as the fallback.
+ *
+ * @example TanStack Start server entry (src/server.ts)
+ * ```typescript
+ * import handler from "@tanstack/react-start/server-entry";
+ * import * as Serve from "alchemy/serve";
+ * import Site from "./site.ts";
+ *
+ * const site = Serve.make(Site);
+ *
+ * export default {
+ *   fetch: async (request: Request) =>
+ *     (await site.match(request)) ?? handler.fetch(request),
+ * };
+ * ```
+ *
+ * @section The handler owns the entry
+ * Use `fetch` instead of `match` when the mounting module IS the
+ * handler — declined requests go to the optional `fallback`, or a plain
+ * 404.
+ *
+ * @example Standalone fetch entry
+ * ```typescript
+ * import * as Serve from "alchemy/serve";
+ * import Site from "./site.ts";
+ *
+ * const site = Serve.make(Site);
+ *
+ * export default {
+ *   fetch: (request: Request) => site.fetch(request),
+ * };
+ * ```
  */
 export const make = <S extends AnyWebsiteClass>(
   site: S,

@@ -89,6 +89,10 @@ export interface OctaneProps<
  * where the `octane()` compiler plugin composes with the injected
  * Cloudflare Vite plugin.
  *
+ * Note: full support for the effectful Website arm (an Effect program as
+ * the third argument — see `Cloudflare.Website.Vite` for the pattern)
+ * lands for Octane in a later release.
+ *
  * @resource
  * @product Website
  * @category Workers & Compute

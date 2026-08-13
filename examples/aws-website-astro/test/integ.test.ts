@@ -131,6 +131,22 @@ test(
 );
 
 test(
+  "serves the effect API from the same Lambda",
+  Effect.gen(function* () {
+    const url = yield* base;
+    // /api/visits is served by the Effect program in site.ts — the
+    // CloudFront edge router forwards `server.routes` to the server
+    // Lambda before the asset manifest, and the DynamoDB capability
+    // bindings (env + IAM) were collected at plan time.
+    const res = yield* getWhenReady(`${url}/api/visits`);
+    expect(res.status).toBe(200);
+    const body = (yield* res.json) as { count: number };
+    expect(body.count).toBeGreaterThanOrEqual(1);
+  }),
+  { timeout: 180_000 },
+);
+
+test(
   "serves a static asset from public/",
   Effect.gen(function* () {
     const url = yield* base;

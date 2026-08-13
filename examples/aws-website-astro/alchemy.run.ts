@@ -1,6 +1,7 @@
 import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
 import * as Effect from "effect/Effect";
+import Site from "./site.ts";
 
 export default Alchemy.Stack(
   "AwsWebsiteAstroExample",
@@ -9,19 +10,9 @@ export default Alchemy.Stack(
     state: AWS.state(),
   },
   Effect.gen(function* () {
-    const site = yield* AWS.Website.Astro("Astro", {
-      // Only hash the files that affect the build, so unchanged sources
-      // skip the Astro build (and the deploy) entirely.
-      memo: {
-        include: ["src/**", "public/**", "package.json", "astro.config.ts"],
-      },
-      forceDestroy: true,
-      server: {
-        environment: {
-          GREETING: "Hello from Alchemy!",
-        },
-      },
-    });
+    // The Website class (declared in site.ts with its Effect program) is
+    // itself the construct — yielding it deploys the site.
+    const site = yield* Site;
 
     return {
       url: site.url,

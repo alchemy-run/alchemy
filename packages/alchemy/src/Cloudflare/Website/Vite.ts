@@ -216,6 +216,62 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * });
  * ```
  *
+ * @section Effectful Website
+ * Pass an Effect program as the third argument and ONE Worker serves the
+ * Vite app **and** your effect-native handlers. The program's capability
+ * bindings (KV, R2, D1, ...) are collected at plan time exactly like an
+ * effect Worker's; at build time alchemy generates a wrapper entry that
+ * dispatches `server.routes` (default `["/api/*"]`) to the effect fetch
+ * first, falling through to the asset layer / framework handler on
+ * `Serve.passthrough` (or an `HttpRouter` `RouteNotFound`). Durable
+ * Object classes and queue/scheduled/cron handlers declared by the
+ * program ride the same wrapper. With SPA not-found handling, the routes
+ * are auto-compiled into `assets.runWorkerFirst` so a static shell can
+ * never shadow the API.
+ *
+ * The program must live in a dedicated module whose default export is
+ * the class, anchored by `main: import.meta.url` (exactly like
+ * `Cloudflare.Worker`). Use **narrow subpath imports** in that module
+ * (`alchemy/Cloudflare/KV`, `alchemy/Cloudflare/Website`, ...) — in dev
+ * the vite module runner evaluates the site module's whole import graph
+ * inside workerd, and the `alchemy/Cloudflare` provider barrel would
+ * drag the entire IaC engine along with it.
+ *
+ * @example Effectful Vite site (src/site.ts)
+ * ```typescript
+ * import * as KV from "alchemy/Cloudflare/KV";
+ * import * as Website from "alchemy/Cloudflare/Website";
+ * import { passthrough } from "alchemy/serve";
+ * import * as Effect from "effect/Effect";
+ * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+ * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ *
+ * export const Users = KV.Namespace("Users");
+ *
+ * export default class Site extends Website.Vite<Site>()(
+ *   "Site",
+ *   {
+ *     main: import.meta.url,
+ *     assets: { notFoundHandling: "single-page-application" },
+ *     server: { routes: ["/api/*"] },
+ *   },
+ *   Effect.gen(function* () {
+ *     const users = yield* KV.ReadWriteNamespace(yield* Users);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const request = yield* HttpServerRequest;
+ *         const url = new URL(request.url, "http://localhost");
+ *         if (url.pathname === "/api/user") {
+ *           const value = yield* users.get("current").pipe(Effect.orDie);
+ *           return yield* HttpServerResponse.json({ value });
+ *         }
+ *         return yield* passthrough; // assets/framework serve the rest
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),
+ * ) {}
+ * ```
+ *
  * @section Class Form
  * Calling `Vite` with no arguments returns a constructor you can
  * `extend` to declare the Worker as a named class. The class is both

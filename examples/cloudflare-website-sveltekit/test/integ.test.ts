@@ -84,6 +84,20 @@ test(
 );
 
 test(
+  "serves the Effect API route",
+  Effect.gen(function* () {
+    const url = yield* base;
+    // Served by the Effect fetch in src/site.ts (which owns /api/*), backed
+    // by the KV namespace binding collected at plan time.
+    const res = yield* getWhenReady(`${url}/api/visits`);
+    expect(res.status).toBe(200);
+    const body = (yield* res.json) as { visits: number };
+    expect(body.visits).toBeGreaterThanOrEqual(1);
+  }),
+  { timeout: 180_000 },
+);
+
+test(
   "serves the prerendered about page",
   Effect.gen(function* () {
     const url = yield* base;

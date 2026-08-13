@@ -24,6 +24,35 @@ import type { ServeOptions } from "./Bridge.ts";
 import { cloudflareContextSymbol } from "./Env.ts";
 import { make, type AnyWebsiteClass } from "./Serve.ts";
 
+/**
+ * Mount an effectful Website as a Next.js app-router catch-all route
+ * handler — the explicit Next mount, both clouds. The route file is
+ * compiled by Next itself, so the program serves in the production build
+ * and in `next dev` alike. Next's router prefers more specific routes,
+ * so your own route handlers keep winning over the catch-all; a
+ * passthrough/decline inside the catch-all has no framework handler left
+ * to fall back to and becomes a plain 404.
+ *
+ * Env resolves from OpenNext's `getCloudflareContext()`-shaped global on
+ * Cloudflare and `process.env` on AWS/Node. During `next build`
+ * prerendering neither carries alchemy stack markers, so the handler
+ * declines instead of building the runtime.
+ *
+ * @binding
+ * @product Serve
+ *
+ * @section Mounting the catch-all route
+ * @example app/api/[[...slug]]/route.ts
+ * ```typescript
+ * import { toRouteHandler } from "alchemy/serve/next";
+ * import Site from "../../../src/site.ts";
+ *
+ * const handler = toRouteHandler(Site);
+ * export { handler as GET, handler as POST, handler as PUT,
+ *          handler as PATCH, handler as DELETE, handler as HEAD,
+ *          handler as OPTIONS };
+ * ```
+ */
 export const toRouteHandler = (
   site: AnyWebsiteClass,
   options?: ServeOptions,

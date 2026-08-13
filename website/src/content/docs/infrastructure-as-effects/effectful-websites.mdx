@@ -1,0 +1,265 @@
+---
+title: Effectful Websites
+description: Website constructs accept the same Effect program as a Worker or Lambda Function — one deploy serves your framework app and an effect-native API from a single origin, on Cloudflare and AWS alike.
+---
+
+Every `Website` construct — `Cloudflare.Website.*` and `AWS.Website.*` —
+accepts the same third argument as a Worker or Lambda Function: an
+[Effectful Constructor](/infrastructure-as-effects/functions-and-servers).
+One deploy then serves your framework app **and** your effect-native API
+from a single origin:
+
+```typescript
+export default class Site extends Website.Vite<Site>()(
+  "Site",
+  { main: import.meta.url, server: { routes: ["/api/*"] } },
+  Effect.gen(function* () {
+    const users = yield* KV.ReadWriteNamespace(yield* Users); // binding
+    return {
+      fetch: Effect.gen(function* () {
+        /* your API */
+      }),
+    };
+  }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),
+) {}
+```
+
+The program works exactly like a Worker's or Lambda's: the init Effect
+runs at plan time to collect [Bindings](/infrastructure-as-effects/binding)
+(env vars and native bindings on Cloudflare, env vars and IAM on AWS)
+onto the site's server, and runs again inside the deployed
+runtime to serve requests. The framework's own build ships unchanged.
+
+## The two-file DX
+
+The program must live in a **dedicated module whose default export is
+the class**, anchored by `main: import.meta.url` — identical to
+`Cloudflare.Worker`. The deployed bundle re-imports the program by path,
+so it cannot live inline in `alchemy.run.ts`.
+
+```typescript
+// src/site.ts — the class + program
+import * as KV from "alchemy/Cloudflare/KV";
+import * as Website from "alchemy/Cloudflare/Website";
+import { passthrough } from "alchemy/serve";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+export const Users = KV.Namespace("Users");
+
+export default class Site extends Website.Vite<Site>()(
+  "Site",
+  {
+    main: import.meta.url,
+    assets: { notFoundHandling: "single-page-application" },
+    server: { routes: ["/api/*"] },
+  },
+  Effect.gen(function* () {
+    const users = yield* KV.ReadWriteNamespace(yield* Users);
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const url = new URL(request.url, "http://localhost");
+        if (url.pathname === "/api/user") {
+          const value = yield* users.get("current").pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({ value });
+        }
+        return yield* passthrough; // not ours — the framework serves it
+      }),
+    };
+  }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),
+) {}
+```
+
+```typescript
+// alchemy.run.ts — deploy it like any resource
+import Site from "./src/site.ts";
+
+const site = yield* Site;
+```
+
+:::caution[Use narrow subpath imports in site modules]
+A `site.ts` module is re-imported inside the framework's server graph —
+and, in dev, evaluated module-by-module by the Vite module runner inside
+workerd. Import the **service-level subpaths** it actually needs:
+
+```typescript
+import * as KV from "alchemy/Cloudflare/KV"; // ✅
+import * as Website from "alchemy/Cloudflare/Website"; // ✅
+import { Bucket, GetObject } from "alchemy/AWS/S3"; // ✅
+import { passthrough } from "alchemy/serve"; // ✅
+
+import * as Cloudflare from "alchemy/Cloudflare"; // ❌ never
+import * as AWS from "alchemy/AWS"; // ❌ never
+```
+
+The provider barrels drag the entire IaC engine — bundlers, local
+runtimes, credential chains — into the framework graph, which at best
+bloats the server bundle and at worst runs workerd out of memory in dev.
+:::
+
+## Routing semantics
+
+One mental model, both clouds:
+
+```
+request
+  ├─ path matches server.routes? ─ yes ─► Effect fetch ─ passthrough? ─► framework fetch
+  └─ no ─► platform asset layer ─► framework fetch (SSR / framework API routes)
+```
+
+`server.routes` (default `["/api/*"]`) is the URL space the Effect
+`fetch` owns. Globs use the `runWorkerFirst` dialect: `*` matches any
+run of characters including `/`, and a leading `!` marks an exclusion.
+On Cloudflare the routes are compiled into `assets.runWorkerFirst`; on
+AWS into the generated CloudFront viewer-request router, checked
+**before** the static-asset manifest — so a static file can never shadow
+an API path, even under SPA fallback.
+
+Inside the scope, a handler that doesn't own the request **passes it
+through** to the framework with `yield* passthrough` (from
+`alchemy/serve`). Passthrough is typed — it extends `HttpRouter`'s
+`RouteNotFound`, so a fetch built on `HttpRouter` delegates unmatched
+routes automatically. It is never 404-sniffing: a handler that matched
+and chose 404 returns a real 404.
+
+`server.routes: ["/*"]` is middleware mode — the Effect fetch is offered
+every request first.
+
+## Per-framework support
+
+How the program's `fetch` reaches the deployed server differs per
+framework. *Automatic* means alchemy delivers it for you (a generated
+entry wrapper, entry takeover, or the framework's fetchable seam);
+*one-file mount* means you add one framework-native file that mounts the
+program via `alchemy/serve`.
+
+| Framework | Cloudflare | AWS |
+| --- | --- | --- |
+| StaticSite | automatic — the program **is** the Worker in front of the assets | automatic — the program **is** the server Lambda |
+| Vite (TanStack Start, …) | automatic | — |
+| Astro | automatic | automatic |
+| SvelteKit | automatic | automatic |
+| Nuxt | automatic | one-file mount — `server/middleware/alchemy.ts` with [`toEventHandler`](/providers/serve/toeventhandler) |
+| Next.js | automatic (`next dev` HMR uses the explicit mount) | one-file mount — `app/api/[[...slug]]/route.ts` with [`toRouteHandler`](/providers/serve/toroutehandler) |
+| Waku | later release | one-file mount — `Serve.make` in the server entry |
+| Octane | later release | one-file mount — `Serve.make` in the server entry |
+
+The explicit mounts are always available as an escape hatch, even where
+delivery is automatic — mounting one makes the generated arm stand down,
+and `server: { takeover: false }` forces the explicit tier outright:
+
+```typescript
+// Next.js — app/api/[[...slug]]/route.ts (both clouds)
+import { toRouteHandler } from "alchemy/serve/next";
+import Site from "../../../src/site.ts";
+
+const handler = toRouteHandler(Site);
+export { handler as GET, handler as POST, handler as PUT,
+         handler as PATCH, handler as DELETE, handler as HEAD,
+         handler as OPTIONS };
+```
+
+```typescript
+// Nuxt — server/middleware/alchemy.ts (both clouds)
+import { toEventHandler } from "alchemy/serve/nitro";
+import Site from "../../src/site.ts";
+
+export default toEventHandler(Site);
+```
+
+For any other fetch-shaped server entry, compose
+[`Serve.make`](/providers/serve/make) yourself:
+
+```typescript
+// src/server.ts (TanStack Start shown)
+import handler from "@tanstack/react-start/server-entry";
+import * as Serve from "alchemy/serve";
+import Site from "./site.ts";
+
+const site = Serve.make(Site);
+export default {
+  fetch: async (req: Request) => (await site.match(req)) ?? handler.fetch(req),
+};
+```
+
+## Beyond fetch
+
+On Cloudflare, the program's non-fetch surface — Durable Object classes,
+queue consumers, cron `scheduled` handlers — deploys on the same Worker
+through the generated entry (Vite, StaticSite, and the Next.js entry
+takeover today; Nuxt's non-fetch surface is production-only).
+
+On AWS there is no entry seam in a pre-streamified framework bundle, so
+the non-fetch half of the program rides a **sibling effect Lambda**
+(`<SiteId>-Handlers`), deployed automatically from the same impl: event
+sources register their mappings and IAM against the sibling, and a
+fetch-only program deploys no extra Lambda at all. You still write one
+program.
+
+## Dev mode
+
+`alchemy dev` runs each framework's own dev server (full HMR) with the
+effect routes mounted in front of it — the same routing semantics as
+production:
+
+- **Cloudflare** — bindings resolve against the local simulators
+  (workerd, Miniflare-style KV/R2/D1). The site module's identity stays
+  `dev:`-prefixed; nothing touches the real cloud unless a resource is
+  piped through `Alchemy.remote()`. Next.js dev has two modes: `preview`
+  serves the takeover artifact with full parity (non-fetch included),
+  `hmr` runs `next dev` with the explicit mount (fetch-only).
+- **AWS** — capability bindings hit the real cloud with your ambient
+  credentials (capability resources are typically piped through
+  `Alchemy.remote()` under dev); the effectful StaticSite's Lambda runs
+  in the local emulator.
+
+## Migrating from two workers
+
+Before effectful Websites, a fullstack app was typically a Website plus
+a separate API Worker, wired together with routes or a service binding:
+
+```typescript
+// before: two resources, two origins (or manual route wiring)
+const api = yield* Api; // a Cloudflare.Worker serving /api/*
+const site = yield* Cloudflare.Website.Vite("Site", {
+  env: { API_URL: api.url },
+});
+```
+
+Move the API Worker's Effect program into the Website's third argument
+and delete the separate Worker:
+
+```diff lang="typescript"
+-export default class Api extends Cloudflare.Worker<Api>()(
+-  "Api",
+-  { main: import.meta.url },
++export default class Site extends Website.Vite<Site>()(
++  "Site",
++  { main: import.meta.url, server: { routes: ["/api/*"] } },
+   Effect.gen(function* () {
+     const users = yield* KV.ReadWriteNamespace(yield* Users);
+     return { fetch: /* unchanged */ };
+   }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),
+ ) {}
+```
+
+The API now serves same-origin under `/api/*` — no CORS, no second
+deploy, no `API_URL` plumbing — and the frontend calls `fetch("/api/…")`
+directly. Bindings, RPC methods, and (on Cloudflare) Durable Objects and
+event handlers move over unchanged.
+
+## Where to go next
+
+- [Functions & Servers](/infrastructure-as-effects/functions-and-servers) —
+  the Effectful Constructor pattern the program uses
+- [Bindings](/infrastructure-as-effects/binding) — how capabilities
+  collect env/IAM at plan time
+- [`Serve.make`](/providers/serve/make),
+  [`passthrough`](/providers/serve/passthrough) — the runtime bridge
+- Construct reference:
+  [Cloudflare Vite](/providers/cloudflare/website/vite),
+  [Cloudflare StaticSite](/providers/cloudflare/website/staticsite),
+  [AWS StaticSite](/providers/aws/website/staticsite),
+  [AWS Next.js](/providers/aws/website/nextjs)

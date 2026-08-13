@@ -7,9 +7,16 @@ integration runs `next build` through `@opennextjs/cloudflare`, bundles
 the resulting worker, and deploys the static assets (including
 prerendered pages) alongside it.
 
-- `app/page.jsx` is server-rendered in the Worker on every request and
-  reads the `GREETING` binding declared in `alchemy.run.ts` via
-  OpenNext's `getCloudflareContext()`.
+- `site.ts` declares the Website class with an Effect program as its
+  third argument: ONE Worker serves the Next.js app and an Effect-native
+  API. The program's `fetch` owns `/api/*` and uses a KV namespace
+  through a typed capability binding — collected automatically at plan
+  time. The takeover is automatic (no route.ts mount); unclaimed routes
+  like `/api/hello` fall through to Next via the typed `passthrough`.
+- `app/page.jsx` is server-rendered in the Worker on every request,
+  reads the `GREETING` binding via OpenNext's `getCloudflareContext()`,
+  and calls `/api/visits` from the browser to show the KV-backed visit
+  counter.
 - `app/api/hello/route.js` is an app-router API route handler.
 - Everything under `public/` deploys as static assets.
 - `open-next.config.ts` selects the read-only static-assets incremental

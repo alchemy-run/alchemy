@@ -126,6 +126,10 @@ export interface WakuProps<
  * served at their extensionless URLs (`/about`) via the default
  * `drop-trailing-slash` asset handling.
  *
+ * Note: full support for the effectful Website arm (an Effect program as
+ * the third argument — see `Cloudflare.Website.Vite` for the pattern)
+ * lands for Waku in a later release.
+ *
  * @resource
  * @product Website
  * @category Workers & Compute
