@@ -285,6 +285,16 @@ export const RequiresImplementationPolicy = Context.Reference<boolean>(
 );
 
 /**
+ * Marks registrations inside `effect` as bare-tag forward references (see
+ * {@link RequiresImplementationPolicy}) — the same combinator shape as
+ * `adopt`/`remote`. Applied by `Platform.ts` to the bare-tag yield path.
+ */
+export const requiresImplementation = <A, E, R>(
+  effect: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  effect.pipe(Effect.provideService(RequiresImplementationPolicy, true));
+
+/**
  * A tagged platform resource declared with neither props nor an inline
  * implementation was `yield*`ed, but its `.make(props, impl)` Layer never
  * built.

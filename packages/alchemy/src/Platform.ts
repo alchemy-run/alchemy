@@ -22,7 +22,7 @@ import * as Output from "./Output.ts";
 import { ALCHEMY_PHASE } from "./Phase.ts";
 import type { Provider, ProviderCollectionLike } from "./Provider.ts";
 import {
-  RequiresImplementationPolicy,
+  requiresImplementation,
   Resource,
   type ResourceLike,
 } from "./Resource.ts";
@@ -410,10 +410,7 @@ export const Platform = <
                   // provided (#1054).
                   props === undefined
                     ? resource(id, applyTransformProps(id, props)).pipe(
-                        Effect.provideService(
-                          RequiresImplementationPolicy,
-                          true,
-                        ),
+                        requiresImplementation,
                       )
                     : resource(id, externalProps()),
                 onSome: Effect.succeed,
