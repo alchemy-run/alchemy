@@ -1,7 +1,7 @@
 /**
- * Type-level regression tests for the Engineer's WIRE surface
- * (alchemy/AI/Wire.ts): the charter's Layer type carries every tool
- * its prose can mention, so renderer coverage is compiler-checked.
+ * Type-level regression tests for the org's WIRE surfaces (Engineer +
+ * ReviewBot): a charter's Layer type carries every tool its prose can
+ * mention, so renderer coverage is compiler-checked.
  *
  * This file never runs — it exists to fail `tsc` if the inference
  * regresses. Every `@ts-expect-error` is load-bearing twice over: it
@@ -12,6 +12,8 @@
  */
 import type * as AI from "alchemy/AI";
 import type { GeneralEngineer } from "../src/Engineer.ts";
+import type { ReviewBotLive } from "../src/ReviewBot.ts";
+import type { QualityAssuranceGeneral } from "../src/skills/QualityAssurance.ts";
 
 type Names = AI.ToolNames<typeof GeneralEngineer>;
 
@@ -66,3 +68,67 @@ const _complete: Registry<typeof GeneralEngineer> = {
   readOutput: (input) => (input.outputId satisfies string, 1),
   writeFile: (input) => (input.content satisfies string, 1),
 };
+
+/* ── the ReviewBot's wire ─────────────────────────────────────── */
+
+type ReviewNames = AI.ToolNames<typeof ReviewBotLive>;
+
+// the full surface: inline tools AND class-tool splices
+const _reviewNames: ReviewNames[] = [
+  "add_comment",
+  "submit_review",
+  "comment",
+  "sync_checkout",
+  "readDiff",
+  "readIssue",
+];
+
+// @ts-expect-error — not on the wire
+const _unknownReview: ReviewNames = "not_a_tool";
+
+const _readDiff: AI.ToolInput<typeof ReviewBotLive, "readDiff"> = {
+  pr: { owner: "o", repository: "r", number: 1, url: "https://x" },
+};
+
+// @ts-expect-error — sync_checkout has no renderer
+const _incompleteReview: Registry<typeof ReviewBotLive> = {
+  add_comment: () => 1,
+  submit_review: () => 1,
+  comment: () => 1,
+  readDiff: () => 1,
+  readIssue: () => 1,
+};
+
+const _completeReview: Registry<typeof ReviewBotLive> = {
+  // input is the tool's ACTUAL parameter type, not Record<string, any>
+  add_comment: (input) => (
+    input.path satisfies string,
+    input.line satisfies number,
+    input.startLine satisfies number | undefined,
+    1
+  ),
+  submit_review: (input) => (
+    input.verdict satisfies "approve" | "request_changes",
+    1
+  ),
+  comment: (input) => (input.message satisfies string, 1),
+  readDiff: (input) => (input.pr.number satisfies number, 1),
+  readIssue: (input) => (input.issue.number satisfies number, 1),
+  sync_checkout: () => 1,
+};
+
+// a SKILL's teaching carries its own wire — its tools never surface on
+// the host agent's type (encapsulation, mirroring the R channel), so
+// coverage for the pack is checked against the skill's make Layer
+type SkillNames = AI.ToolNames<typeof QualityAssuranceGeneral>;
+const _skillNames: SkillNames[] = [
+  "bash",
+  "grep",
+  "glob",
+  "listDirectory",
+  "readFile",
+  "readOutput",
+];
+
+// @ts-expect-error — the QA skill grants no editor (judge, not author)
+const _noEditor: SkillNames = "editFile";

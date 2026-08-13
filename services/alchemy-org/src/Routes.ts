@@ -1,9 +1,16 @@
 import * as AI from "alchemy/AI";
+import * as GitHub from "alchemy/GitHub";
+import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { buildBoard } from "./lib/Board.ts";
+import { testAlchemy } from "./Repos.ts";
+import { ReviewBot } from "./ReviewBot.ts";
 
 /** `${term}:${key}` → the session it names (the key may contain `:`). */
 const parseSessionId = (id: string): { term: string; key: string } => {
@@ -14,22 +21,88 @@ const parseSessionId = (id: string): { term: string; key: string } => {
 };
 
 /**
- * The engineer's HTTP surface — deliberately tiny. The board comes
- * from the {@link AI.SessionIndex} (the one cross-session aggregate);
- * each transcript comes from the session's OWN storage
+ * The org's HTTP surface. The chat list comes from the
+ * {@link AI.SessionIndex} (the one cross-session aggregate); each
+ * transcript comes from the session's OWN storage
  * (`ThreadStorage.observations` shaped by `AI.toUIMessages`); the
  * live tail rides the session socket (`/attach`, wired by the
- * entrypoint).
+ * entrypoint). The BOARD is the review pipeline's projection: one
+ * ReviewBot session per pull request, joined with GitHub's open-PR
+ * list.
  */
-export const engineerRoutes = Effect.gen(function* () {
+export const orgRoutes = Effect.gen(function* () {
   const index = yield* AI.SessionIndex;
   const storage = yield* AI.ThreadStorage;
+  const bot = yield* ReviewBot;
+  const listPullRequests = yield* GitHub.ListPullRequests(testAlchemy);
+  const getPullRequest = yield* GitHub.GetPullRequest(testAlchemy);
+
+  const sseHeaders = {
+    "content-type": "text/event-stream",
+    "cache-control": "no-cache",
+    connection: "keep-alive",
+    "x-accel-buffering": "no",
+  };
+  const encoder = new TextEncoder();
+
+  const identity = yield* GitHub.resolveRepository(testAlchemy);
+  const repoName = `${identity.owner}/${identity.repository}`;
+
+  const readBoard = Effect.gen(function* () {
+    const [sessions, openPrs] = yield* Effect.all(
+      [
+        index.list(),
+        listPullRequests({ state: "open" }).pipe(
+          Effect.map((list) =>
+            list.map((pull) => ({ number: pull.number, title: pull.title })),
+          ),
+          // GitHub down ≠ board down: states degrade to "unknown"
+          Effect.catch(() => Effect.succeed(undefined)),
+        ),
+      ] as const,
+      { concurrency: 2 },
+    );
+    return buildBoard(repoName, sessions, openPrs);
+  });
 
   const listSessions = HttpRouter.add(
     "GET",
     "/api/chats",
     Effect.gen(function* () {
       return yield* HttpServerResponse.json(yield* index.list());
+    }),
+  );
+
+  const board = HttpRouter.add(
+    "GET",
+    "/api/board",
+    Effect.gen(function* () {
+      return yield* HttpServerResponse.json(yield* readBoard);
+    }),
+  );
+
+  /** Directory feed: SSE snapshots of the board as sessions change. */
+  const boardStream = HttpRouter.add(
+    "GET",
+    "/api/board/stream",
+    Effect.gen(function* () {
+      let previous = "";
+      const stream = Stream.fromEffectSchedule(
+        readBoard,
+        Schedule.spaced("1 second"),
+      ).pipe(
+        Stream.map((next) => {
+          const payload = JSON.stringify(next);
+          if (payload === previous) return undefined;
+          previous = payload;
+          return `data: ${payload}\n\n`;
+        }),
+        Stream.filter((line): line is string => line !== undefined),
+        Stream.interruptWhen(Effect.sleep("30 minutes")),
+        Stream.map((line) => encoder.encode(line)),
+        Stream.catch(() => Stream.empty),
+      ) as Stream.Stream<Uint8Array>;
+      return HttpServerResponse.stream(stream, { headers: sseHeaders });
     }),
   );
 
@@ -63,7 +136,7 @@ export const engineerRoutes = Effect.gen(function* () {
       );
       const handle = yield* storage.open(term, key);
       const log = yield* handle.observations(0);
-      const limitRaw = new URL(request.url, "http://engineer").searchParams.get(
+      const limitRaw = new URL(request.url, "http://org").searchParams.get(
         "limit",
       );
       const limit = limitRaw === null ? undefined : Number(limitRaw);
@@ -76,5 +149,82 @@ export const engineerRoutes = Effect.gen(function* () {
     }),
   );
 
-  return Layer.mergeAll(listSessions, sessionMessages, sessionLog);
+  /**
+   * The operator's door: REQUEST a review for a PR with no session on
+   * the board — a PR whose events predate this deploy, or one the
+   * poller missed. The server synthesizes the same `PullRequestOpened`
+   * shape the wire delivers and sends it to the bot; the session
+   * appears on the board stream.
+   */
+  const requestReview = HttpRouter.add(
+    "POST",
+    "/api/prs/:number/review",
+    Effect.gen(function* () {
+      const params = yield* HttpRouter.params;
+      const number = Number(params.number);
+      if (!Number.isFinite(number)) {
+        return yield* HttpServerResponse.json(
+          { error: "bad pull request number" },
+          { status: 400 },
+        );
+      }
+      const pull = yield* getPullRequest({ pull_number: number }).pipe(
+        Effect.catch((error) =>
+          Effect.succeed({ error: `${error.operation}: ${error.message}` }),
+        ),
+      );
+      if ("error" in pull) {
+        return yield* HttpServerResponse.json(pull, { status: 404 });
+      }
+      yield* bot
+        .send(
+          {
+            _tag: "PullRequestOpened",
+            repository: {
+              name: identity.repository,
+              owner: { login: identity.owner },
+            },
+            pullRequest: {
+              number: pull.number,
+              title: pull.title,
+              body: pull.body,
+              merged: false,
+            },
+          },
+          { key: `${identity.owner}/${identity.repository}#${number}` },
+        )
+        .pipe(Effect.provide(RuntimeContext.phantom));
+      return yield* HttpServerResponse.json({ requested: number });
+    }),
+  );
+
+  const status = HttpRouter.add(
+    "GET",
+    "/api/status",
+    Effect.gen(function* () {
+      const snapshot = yield* listPullRequests({ state: "open" }).pipe(
+        Effect.map((list) => ({
+          phase: "running",
+          openPullRequests: list.map((pull) => ({
+            number: pull.number,
+            title: pull.title,
+          })),
+        })),
+        Effect.catch((error) =>
+          Effect.succeed({ phase: "degraded", error: String(error) } as const),
+        ),
+      );
+      return yield* HttpServerResponse.json(snapshot);
+    }),
+  );
+
+  return Layer.mergeAll(
+    listSessions,
+    board,
+    boardStream,
+    sessionMessages,
+    sessionLog,
+    requestReview,
+    status,
+  );
 });

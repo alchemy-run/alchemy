@@ -1,55 +1,111 @@
 /**
- * The engineer, running on your machine — an Effectful
- * {@link Local.Vite} service hosting the agent as a detached
- * local process: the {@link Local} provide-list (DriverCore with
- * sqlite durability, the read/run/write toolbox) under the HTTP
- * surface (Routes.ts), with the UI built by Vite and served from the
- * same address.
+ * The org, running on your machine — an Effectful {@link Local.Vite}
+ * service hosting both agents as a detached local process:
  *
- * Long-lived machinery (driver run loops) registers on the process
- * Scope — so plain `Effect.provide(Local)` is enough; the fibers
- * survive init returning. Running needs `ANTHROPIC_API_KEY` in the
- * operator's environment (the reconciler passes the shell env
- * through).
+ * - the ENGINEER — the resident coding agent, one durable chat per
+ *   thread, working the operator's own checkout;
+ * - the REVIEW BOT — the pipeline over the sandbox repository: every
+ *   pull request opened there admits a durable review session that
+ *   checks out `pull/N/head`, verifies by reading and RUNNING, and
+ *   posts one review.
+ *
+ * Both interpret on the SAME driver assembly (services/Driver.ts:
+ * sqlite session storage + the Anthropic LanguageModel + the session
+ * index riding the event stream), under one HTTP surface (Routes.ts),
+ * with the UI built by Vite and served from the same address.
+ *
+ * Long-lived machinery (the GitHub poller, driver run loops)
+ * registers on the process Scope — so plain `Effect.provide(Org)` is
+ * enough; the fibers survive init returning. GitHub credentials
+ * resolve from the alchemy profile (`alchemy login`) or the GitHub
+ * App env (`GITHUB_APP_ID` + `GITHUB_APP_PRIVATE_KEY`); running
+ * additionally needs `ANTHROPIC_API_KEY` in the operator's
+ * environment (the reconciler passes the shell env through).
  */
 import * as AI from "alchemy/AI";
+import * as Git from "alchemy/Git";
+import * as GitHub from "alchemy/GitHub";
 import * as Local from "alchemy/Local";
 import * as Workspace from "alchemy/Workspace";
-import { Layer } from "effect";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { GeneralEngineer } from "./Engineer.ts";
-import { engineerRoutes } from "./Routes.ts";
+import { ReviewBotEvents, ReviewBotLive } from "./ReviewBot.ts";
+import { orgRoutes } from "./Routes.ts";
 import { DriverLocal } from "./services/Driver.ts";
+import { EventsLocal } from "./services/Events.ts";
+import { Credentials, GitHubLocal } from "./services/GitHubLocal.ts";
+import { SqliteLedger } from "./services/LedgerSqlite.ts";
+import { QualityAssuranceGeneral } from "./skills/QualityAssurance.ts";
+import { ReadDiffLive, ReadIssueLive } from "./tools/index.ts";
 import { ReadTools, RunTools, WriteTools } from "./tools/Toolbox.ts";
 
+/** The engineer's desk: the operator's own checkout. */
 const workspaceRoot = process.env.CODER_WORKSPACE ?? `${process.cwd()}/../..`;
 
-const WorkspaceLive = Workspace.fixed(workspaceRoot);
+/**
+ * The review worktrees ROOT — one directory holds the central blobless
+ * clone and the per-PR worktrees (`Git.WorkspacesWorktree` populates
+ * it). `ORG_WORKSPACE` overrides the location.
+ */
+const worktreesRoot =
+  process.env.ORG_WORKSPACE ?? `${process.cwd()}/.alchemy/workspaces`;
+
+/** Checkouts as a capability: central clone + one worktree per PR.
+ *  ONE instance — the charter's init checkout and the toolbox root
+ *  share the cache (same const, memoized by reference). */
+const WorkspacesLive = Git.WorkspacesWorktree({ root: worktreesRoot }).pipe(
+  Layer.provide(GitHub.GitCredentials),
+  Layer.provide(Credentials),
+);
 
 /**
- * The whole engineer over LOCAL physics — the charter, the
- * read/run/write toolbox over the trusted-host sandbox
- * (AI.SandboxLocal over one fixed workspace), and the org's
- * assembled driver (services/Driver.ts: AI.DriverLocal +
- * ThreadStorageSqlite + Model + SessionIndexSqlite + ref store). The
- * driver bundle is provideMERGED because the HTTP edge consumes it
- * too: `SessionSockets` for the `/attach` door, `SessionIndex` for
- * the board, `ThreadStorage` for transcripts. Swapping the sandbox
- * layer (a Cloudflare Container, a MicroVM) is the ONLY change a
- * different placement needs — the toolbox is sandbox-agnostic.
+ * ONE toolbox for both agents — layers memoize by reference, so a
+ * single Sandbox over a single routed Workspace serves everyone: a
+ * review session's tools resolve its PR worktree (`Workspace.perRun`
+ * derives the root from `AI.Thread` at call time), the engineer's
+ * sessions (no checkout) fall back to the fixed desk. Capability
+ * still splits by MENTION: the review charter names only read/run
+ * tools, so the editor in context is not in its toolkit.
  */
-export const EngineerLocal = GeneralEngineer.pipe(
-  Layer.provide([ReadTools, RunTools, WriteTools]),
+const Toolbox = Layer.mergeAll(ReadTools, RunTools, WriteTools).pipe(
   Layer.provide(AI.SandboxLocal),
-  Layer.provide(WorkspaceLive),
+  Layer.provide(Workspace.perRun({ fallback: workspaceRoot })),
+);
+
+/** The engineer over the shared toolbox and driver. */
+const EngineerLocal = GeneralEngineer.pipe(Layer.provide(Toolbox));
+
+/** The review pipeline: router + charter + review-only capabilities. */
+const ReviewBotLocal = ReviewBotEvents.pipe(
+  // provideMERGE: the HTTP edge addresses the bot too (the operator's
+  // click-to-review sends it a synthetic opened event)
+  Layer.provideMerge(Layer.suspend(() => ReviewBotLive)),
+  Layer.provide([QualityAssuranceGeneral, ReadDiffLive, ReadIssueLive]),
+  Layer.provide(Toolbox),
+  Layer.provide(EventsLocal),
+  Layer.provideMerge(SqliteLedger(".alchemy/review-ledger.sqlite")),
+);
+
+/**
+ * The whole org over LOCAL physics. The driver bundle is
+ * provideMERGED because the HTTP edge consumes it too:
+ * `SessionSockets` for the `/attach` door, `SessionIndex` for the
+ * board, `ThreadStorage` for transcripts. GitHub physics
+ * (profile/app credentials, REST polling, the Local bindings) and
+ * the worktree cache sit under both agents.
+ */
+export const Org = Layer.mergeAll(EngineerLocal, ReviewBotLocal).pipe(
   Layer.provideMerge(DriverLocal),
+  Layer.provideMerge(WorkspacesLive),
+  Layer.provideMerge(GitHubLocal),
   Layer.orDie,
 );
 
-export default class EngineerServer extends Local.Vite<EngineerServer>()(
+export default class OrgServer extends Local.Vite<OrgServer>()(
   "Engineer",
   {
     // no port pinned: the runtime binds an ephemeral one and reports it
@@ -63,7 +119,7 @@ export default class EngineerServer extends Local.Vite<EngineerServer>()(
   },
   Effect.gen(function* () {
     const gateway = yield* AI.SessionSockets;
-    const api = yield* HttpRouter.toHttpEffect(yield* engineerRoutes);
+    const api = yield* HttpRouter.toHttpEffect(yield* orgRoutes);
 
     return {
       fetch: Effect.gen(function* () {
@@ -85,5 +141,5 @@ export default class EngineerServer extends Local.Vite<EngineerServer>()(
         return yield* api;
       }),
     };
-  }).pipe(Effect.provide(EngineerLocal)),
+  }).pipe(Effect.provide(Org)),
 ) {}

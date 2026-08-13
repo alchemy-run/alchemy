@@ -7,11 +7,17 @@
  */
 import {
   AlarmClock,
+  CircleCheck,
+  CircleX,
+  FileDiff,
   FilePen,
   FilePlus2,
   FileText,
   FolderSearch,
   FolderTree,
+  MessageSquare,
+  MessageSquarePlus,
+  RefreshCw,
   ScrollText,
   Search,
   Sparkles,
@@ -21,6 +27,9 @@ import {
 import type * as AI from "alchemy/AI";
 import { useState, type ReactNode } from "react";
 import type { GeneralEngineer } from "../../src/Engineer.ts";
+import type { ReviewBotLive } from "../../src/ReviewBot.ts";
+import { DiffCard, splitDiffOutput } from "@/components/code";
+import { RefHoverCard } from "@/components/ref-hover-card";
 import { useAnchoredToggle } from "@/lib/anchor";
 import { cn } from "@/lib/utils";
 
@@ -177,6 +186,150 @@ type Renderers<L> = {
   ) => ToolCallView;
 };
 
+
+/** `#N` as a link into GitHub — issues and PRs share the /issues/N
+ *  door (GitHub redirects PR numbers), and PullRequestRefs carry an
+ *  explicit `url`. */
+const RefLink = ({ refValue }: { refValue: any }) => {
+  if (
+    !refValue ||
+    typeof refValue !== "object" ||
+    typeof refValue.number !== "number"
+  ) {
+    return null;
+  }
+  const href =
+    typeof refValue.url === "string" && refValue.url.startsWith("http")
+      ? refValue.url
+      : typeof refValue.owner === "string" &&
+          typeof refValue.repository === "string"
+        ? `https://github.com/${refValue.owner}/${refValue.repository}/issues/${refValue.number}`
+        : undefined;
+  if (href === undefined) return <>#{refValue.number}</>;
+  const repo =
+    typeof refValue.owner === "string" &&
+    typeof refValue.repository === "string"
+      ? `${refValue.owner}/${refValue.repository}`
+      : href.match(/github\.com\/([\w.-]+\/[\w.-]+)\//)?.[1];
+  const anchor = (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      onClick={(event) => event.stopPropagation()}
+      className="underline decoration-border underline-offset-2 hover:text-foreground hover:decoration-foreground"
+    >
+      #{refValue.number}
+    </a>
+  );
+  return repo ? (
+    <RefHoverCard repo={repo} number={refValue.number}>
+      {anchor}
+    </RefHoverCard>
+  ) : (
+    anchor
+  );
+};
+
+/**
+ * Cards for the ReviewBot's OWN wire, typed straight off the charter:
+ * `ReviewBotLive`'s TYPE carries every tool its prose can mention
+ * (mention-is-presence, lifted into the type system), and the
+ * annotation holds this object to it: mention a new tool in the
+ * charter without adding its card → this object errors, naming the
+ * missing tool; each renderer's `input` is that tool's ACTUAL
+ * parameter type. The import is type-only: erased at build, no
+ * server code reaches the browser bundle.
+ */
+const REVIEW_BOT: Renderers<typeof ReviewBotLive> = {
+  readDiff: (input, output) => {
+    const stat = output === undefined ? undefined : diffStat(output);
+    const split = output === undefined ? undefined : splitDiffOutput(output);
+    return {
+      icon: FileDiff,
+      title: (
+        <>
+          Read diff of PR <RefLink refValue={input.pr} />
+        </>
+      ),
+      badge: stat && (
+        <DiffStatBadge added={stat.added} removed={stat.removed} />
+      ),
+      body:
+        split === undefined ? undefined : (
+          <div>
+            {split.header.length > 0 && <Mono>{clamp(split.header, 1200)}</Mono>}
+            {split.patch !== undefined ? (
+              <DiffCard patch={split.patch} />
+            ) : (
+              <DiffText text={output ?? ""} />
+            )}
+          </div>
+        ),
+    };
+  },
+
+  readIssue: (input, output) => ({
+    icon: FileText,
+    title: (
+      <>
+        Read issue <RefLink refValue={input.issue} />
+      </>
+    ),
+    body: output === undefined ? undefined : <WindowedText text={output} />,
+  }),
+
+  add_comment: (input) => ({
+    icon: MessageSquarePlus,
+    title: (
+      <>
+        Review comment on{" "}
+        <span className="font-mono text-mist">
+          {input.path}:
+          {input.startLine !== undefined ? `${input.startLine}–` : ""}
+          {input.line}
+        </span>
+      </>
+    ),
+    badge: (
+      <span className="shrink-0 text-[11px] text-muted-foreground">
+        buffered
+      </span>
+    ),
+    body: input.message ? <Mono>{input.message}</Mono> : undefined,
+  }),
+
+  submit_review: (input, output) => ({
+    icon: input.verdict === "approve" ? CircleCheck : CircleX,
+    title: (
+      <>
+        Submit review{" "}
+        <span
+          className={cn(
+            "font-medium",
+            input.verdict === "approve" ? "text-moss" : "text-brick",
+          )}
+        >
+          {input.verdict === "approve" ? "APPROVE" : "REQUEST CHANGES"}
+        </span>
+      </>
+    ),
+    summary: output === undefined ? undefined : lastLine(output),
+    body: input.message ? <Mono>{input.message}</Mono> : undefined,
+  }),
+
+  comment: (input) => ({
+    icon: MessageSquare,
+    title: <>Comment on the pull request</>,
+    body: input.message ? <Mono>{input.message}</Mono> : undefined,
+  }),
+
+  sync_checkout: (_input, output, running) => ({
+    icon: RefreshCw,
+    title: <>Sync checkout to the pull request&apos;s head</>,
+    summary: running || output === undefined ? undefined : lastLine(output),
+  }),
+};
 
 /**
  * Cards for the Engineer's wire, typed straight off the charter:
@@ -406,11 +559,12 @@ const EXTRAS: Record<string, Renderer> = {
   }),
 };
 
-/** The transcript's lookup table: the typed, charter-checked pack
+/** The transcript's lookup table: the typed, charter-checked packs
  *  layered over the untyped remainder. */
 const RENDERERS: Record<string, Renderer> = {
   ...EXTRAS,
   ...CODER,
+  ...REVIEW_BOT,
 };
 
 /** Whether a compact per-tool card exists for this tool name. */

@@ -10,6 +10,8 @@ export * from "./EditFile.ts";
 export * from "./Glob.ts";
 export * from "./Grep.ts";
 export * from "./ListDirectory.ts";
+export * from "./ReadDiff.ts";
 export * from "./ReadFile.ts";
+export * from "./ReadIssue.ts";
 export * from "./ReadOutput.ts";
 export * from "./WriteFile.ts";

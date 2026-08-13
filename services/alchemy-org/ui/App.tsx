@@ -56,12 +56,73 @@ interface BoardThread {
   firstInput?: string | null;
 }
 
+interface BoardPullRequest {
+  number: number;
+  title: string;
+  state: "open" | "closed" | "unknown";
+  updatedAt: number;
+  /** The review session, once the bot has been admitted for this PR. */
+  session: BoardThread | undefined;
+}
+
+interface Board {
+  /** `owner/repo` — the repository the bot reviews. */
+  repo: string;
+  prs: BoardPullRequest[];
+}
+
 /** Every thread is one SESSION of the engineer: `Engineer:<key>`. */
 const DEFAULT_THREAD = "Engineer:main";
 
 const threadFromHash = (): string => {
   const raw = decodeURIComponent(window.location.hash.slice(1));
-  return raw.startsWith("Engineer:") ? raw : DEFAULT_THREAD;
+  return raw.startsWith("Engineer:") || raw.startsWith("ReviewBot:")
+    ? raw
+    : DEFAULT_THREAD;
+};
+
+const ISSUE_STATE: Record<BoardPullRequest["state"], string> = {
+  open: "text-moss border-moss/40",
+  closed: "text-terracotta border-terracotta/40",
+  unknown: "text-muted-foreground border-border",
+};
+
+/** The `#N` pill — GitHub-linked (with hover preview) when the repo
+ *  is known (the review session's key IS the repository ref). */
+const IssueBadge = ({
+  number,
+  state,
+  repo,
+}: {
+  number: number;
+  state: BoardPullRequest["state"];
+  repo: string | undefined;
+}) => {
+  const badge = (
+    <span
+      className={cn(
+        "rounded-full border px-1.5 py-0 font-mono text-[10px] leading-4",
+        ISSUE_STATE[state],
+        repo && "hover:bg-accent",
+      )}
+    >
+      #{number}
+    </span>
+  );
+  return repo ? (
+    <RefHoverCard repo={repo} number={number}>
+      <a
+        href={`https://github.com/${repo}/issues/${number}`}
+        target="_blank"
+        rel="noreferrer"
+        onClick={(event) => event.stopPropagation()}
+      >
+        {badge}
+      </a>
+    </RefHoverCard>
+  ) : (
+    badge
+  );
 };
 
 /** Short relative age for the sidebar; the tooltip has the full form. */
@@ -90,10 +151,14 @@ const threadTitle = (thread: BoardThread | undefined): string => {
 
 export const App = () => {
   const [threads, setThreads] = useState<BoardThread[]>([]);
+  const [board, setBoard] = useState<Board>({ repo: "", prs: [] });
   const [activeId, setActiveId] = useState<string>(threadFromHash);
   // visited threads stay MOUNTED (visibility-hidden) so switching
   // back preserves scroll position and the streaming tail
   const [visited, setVisited] = useState<string[]>(() => [threadFromHash()]);
+  // PRs whose review the user requested — auto-select when the
+  // session lands on the board stream
+  const [requested, setRequested] = useState<Set<number>>(() => new Set());
 
   const open = (id: string) => {
     window.location.hash = encodeURIComponent(id);
@@ -101,6 +166,19 @@ export const App = () => {
     setVisited((current) =>
       current.includes(id) ? current : [...current, id],
     );
+  };
+
+  /** A PR with no review session: clicking REQUESTS its review — the
+   *  server synthesizes the opened event and the session appears. */
+  const requestReview = (number: number) => {
+    setRequested((current) => new Set(current).add(number));
+    void fetch(`/api/prs/${number}/review`, { method: "POST" }).catch(() => {
+      setRequested((current) => {
+        const next = new Set(current);
+        next.delete(number);
+        return next;
+      });
+    });
   };
 
   // back/forward navigation drives the same path
@@ -116,8 +194,8 @@ export const App = () => {
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
-  // the board: poll — threads appear the moment their session is
-  // admitted (opening a thread attaches, which admits)
+  // the thread list: poll — threads appear the moment their session
+  // is admitted (opening a thread attaches, which admits)
   useEffect(() => {
     let live = true;
     const load = () =>
@@ -138,14 +216,63 @@ export const App = () => {
     };
   }, []);
 
+  // The PR board: SSE of snapshots (falls back to polling when the
+  // stream is unavailable — old deploys, proxy buffers, …).
+  useEffect(() => {
+    let live = true;
+    const apply = (data: Board) => {
+      if (live) setBoard(data);
+    };
+    const source = new EventSource("/api/board/stream");
+    source.onmessage = (event) => {
+      try {
+        apply(JSON.parse(event.data) as Board);
+      } catch {
+        // ignore malformed frames
+      }
+    };
+    let interval: ReturnType<typeof setInterval> | undefined;
+    source.onerror = () => {
+      if (interval !== undefined) return;
+      const tick = () =>
+        fetch("/api/board")
+          .then((response) => response.json() as Promise<Board>)
+          .then(apply)
+          .catch(() => {});
+      tick();
+      interval = setInterval(tick, 3000);
+    };
+    return () => {
+      live = false;
+      source.close();
+      if (interval !== undefined) clearInterval(interval);
+    };
+  }, []);
+
+  // a REQUESTED review's session just appeared — jump to it
+  useEffect(() => {
+    for (const pull of board.prs) {
+      if (pull.session !== undefined && requested.has(pull.number)) {
+        setRequested((current) => {
+          const next = new Set(current);
+          next.delete(pull.number);
+          return next;
+        });
+        open(pull.session.id);
+        return;
+      }
+    }
+  }, [board.prs, requested]);
+
   const newThread = () =>
     open(`Engineer:t-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`);
 
   // newest first; the active thread is listed even before the board
-  // knows it (a just-created thread has no row yet)
+  // knows it (a just-created thread has no row yet). Review sessions
+  // live in the PR section, never here.
   const list = useMemo(() => {
     const byId = new Map(threads.map((thread) => [thread.id, thread]));
-    if (!byId.has(activeId)) {
+    if (!byId.has(activeId) && activeId.startsWith("Engineer:")) {
       byId.set(activeId, {
         id: activeId,
         term: "Engineer",
@@ -162,8 +289,58 @@ export const App = () => {
 
   return (
     <div className="flex h-screen bg-background text-foreground">
-      <aside className="flex w-64 shrink-0 flex-col border-r border-border">
+      <aside className="flex w-72 shrink-0 flex-col border-r border-border">
+        {/* THE PULL REQUESTS — one review session each */}
         <div className="flex items-center justify-between border-b border-border px-3 py-2">
+          <span className="truncate font-mono text-xs text-muted-foreground">
+            {board.repo || "pull requests"}
+          </span>
+        </div>
+        <div className="max-h-[45%] shrink-0 overflow-y-auto">
+          {board.prs.map((pull) => {
+            const repo = board.repo || pull.session?.key.split("#")[0];
+            return (
+              <button
+                key={pull.number}
+                type="button"
+                onClick={() =>
+                  pull.session !== undefined
+                    ? open(pull.session.id)
+                    : requestReview(pull.number)
+                }
+                className={cn(
+                  "flex w-full items-center gap-2 border-b border-border/50 px-3 py-2.5 text-left hover:bg-accent/50",
+                  pull.session?.id === activeId && "bg-accent",
+                )}
+              >
+                <IssueBadge
+                  number={pull.number}
+                  state={pull.state}
+                  repo={repo}
+                />
+                <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
+                  {pull.title}
+                </span>
+                {pull.session?.status === "running" && (
+                  <span className="size-2 shrink-0 animate-pulse rounded-full bg-moss" />
+                )}
+                {pull.session === undefined && (
+                  <span className="shrink-0 text-[10px] text-muted-foreground">
+                    {requested.has(pull.number) ? "reviewing…" : "review"}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+          {board.prs.length === 0 && (
+            <div className="px-3 py-4 text-xs text-muted-foreground">
+              No pull requests yet — open one on the repository and the
+              bot reviews it.
+            </div>
+          )}
+        </div>
+        {/* THE THREADS — the engineer's chats */}
+        <div className="flex items-center justify-between border-b border-t border-border px-3 py-2">
           <span className="font-mono text-xs text-muted-foreground">
             threads
           </span>

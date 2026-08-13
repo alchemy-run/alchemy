@@ -200,6 +200,16 @@ export const perRun = (options?: {
    * must have acquired the checkout itself.
    */
   readonly remote?: Git.Remote;
+  /**
+   * The FIXED containment root for sessions with no checkout —
+   * mixed-agent processes share one Workspace layer this way: a
+   * reviewer's session resolves its PR worktree, the resident
+   * engineer's session (no checkout) falls back to this desk.
+   * Created (and canonicalized) lazily on first use, like
+   * {@link fixed}. Without it, a session with no checkout fails
+   * model-visibly.
+   */
+  readonly fallback?: string;
 }): Layer.Layer<
   Workspace,
   never,
@@ -211,6 +221,19 @@ export const perRun = (options?: {
       const path = yield* Path.Path;
       const fs = yield* FileSystem.FileSystem;
       const workspaces = yield* Git.Workspaces;
+
+      const fallbackRoot =
+        options?.fallback === undefined
+          ? undefined
+          : yield* Effect.cached(
+              Effect.gen(function* () {
+                const resolved = path.resolve(options.fallback!);
+                yield* fs
+                  .makeDirectory(resolved, { recursive: true })
+                  .pipe(Effect.orDie);
+                return yield* fs.realPath(resolved).pipe(Effect.orDie);
+              }),
+            );
 
       // AI.Thread is a runtime fact the driver provides to handlers;
       // the Workspace interface deliberately hides the requirement
@@ -225,6 +248,7 @@ export const perRun = (options?: {
             .pipe(Effect.mapError((error) => error.message));
           return checkout.root;
         }
+        if (fallbackRoot !== undefined) return yield* fallbackRoot;
         return yield* Effect.fail(
           `no checkout for run '${key}' — the charter acquires one in init`,
         );
