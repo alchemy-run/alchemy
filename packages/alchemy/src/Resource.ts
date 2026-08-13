@@ -1,4 +1,3 @@
-import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Effectable from "effect/Effectable";
@@ -140,12 +139,12 @@ export interface ResourceLike<
    */
   Mode: ProviderMode | undefined;
   /**
-   * Captured from the ambient {@link RequiresImplementationPolicy} at
-   * registration time. `true` when the resource was first registered as a
-   * bare platform tag — a forward reference whose props/impl are supplied
-   * by its `.make(props, impl)` Layer. `Plan.make` fails fast with
-   * {@link MissingImplementationError} when this is set and {@link Props}
-   * are still `undefined` after the whole program has evaluated.
+   * Copied from {@link ResourceOptions.requiresImplementation} at
+   * registration: `true` for platform-typed resources, whose registrations
+   * must have resolved {@link Props} by plan time. `Plan.make` fails fast
+   * with {@link MissingImplementationError} when this is set and `Props`
+   * are still `undefined` after the whole program has evaluated — a bare
+   * tag was yielded but its `.make(props, impl)` Layer was never provided.
    */
   RequiresImplementation: boolean | undefined;
   /**
@@ -266,33 +265,21 @@ export interface ResourceOptions {
    * ```
    */
   aliases?: string[];
+  /**
+   * Marks every registration of this type as requiring resolved props by
+   * plan time. Set by `Platform(...)` on its resource class: every
+   * legitimate platform construction (a `.make(props, impl)` Layer build,
+   * a tag declared with props, a plain `Worker("id", props)` call) produces
+   * defined `Props` — the only way a platform-typed registration reaches
+   * the planner with `Props === undefined` is a bare-tag FORWARD REFERENCE
+   * whose `.make` Layer never built. `Plan.make` fails fast with
+   * {@link MissingImplementationError} in that case, instead of letting a
+   * provider read `undefined` props. Plain (non-platform) resources leave
+   * this unset so a no-props reference yield (`yield* Queue("MyQueue")`)
+   * keeps planning as a noop.
+   */
+  requiresImplementation?: boolean;
 }
-
-/**
- * Marks the current registration site as a bare platform tag — a resource
- * whose props AND implementation are supplied by its `.make(props, impl)`
- * Layer rather than at the yield site. Captured onto the registration as
- * {@link ResourceLike.RequiresImplementation} (same idiom as
- * `AdoptPolicy`/`ProviderModePolicy`); `Plan.make` fails fast with
- * {@link MissingImplementationError} when such a resource's `Props` are
- * still `undefined` after the whole program has evaluated — the Layer was
- * never provided. Engine-internal: provided only by `Platform.ts`'s
- * bare-tag yield path.
- */
-export const RequiresImplementationPolicy = Context.Reference<boolean>(
-  "RequiresImplementationPolicy",
-  { defaultValue: () => false },
-);
-
-/**
- * Marks registrations inside `effect` as bare-tag forward references (see
- * {@link RequiresImplementationPolicy}) — the same combinator shape as
- * `adopt`/`remote`. Applied by `Platform.ts` to the bare-tag yield path.
- */
-export const requiresImplementation = <A, E, R>(
-  effect: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E, R> =>
-  effect.pipe(Effect.provideService(RequiresImplementationPolicy, true));
 
 /**
  * A tagged platform resource declared with neither props nor an inline
@@ -376,10 +363,6 @@ export function Resource<R extends ResourceLike>(
       const ambientMode: ProviderMode | undefined = ambientPolicy
         ? "live"
         : undefined;
-
-      // `true` only at Platform.ts's bare-tag yield site: this registration
-      // is a forward reference whose props/impl arrive via a `.make` Layer.
-      const requiresImplementation = yield* RequiresImplementationPolicy;
 
       const existing = stack.resources[fqn];
       if (existing) {
@@ -482,7 +465,7 @@ export function Resource<R extends ResourceLike>(
           Effect.map(Option.getOrUndefined),
         ),
         Mode: ambientMode,
-        RequiresImplementation: requiresImplementation || undefined,
+        RequiresImplementation: options?.requiresImplementation || undefined,
         // Bare-string former ids resolve against the SAME namespace as the
         // resource's own id, so `renamedFrom("Site/Worker")` declared at the
         // caller's level claims `<callerNs>/Site/Worker`; the `{ fqn }` form
