@@ -224,6 +224,21 @@
         "effect": "catalog:",
       },
     },
+    "distilled/packages/huggingface": {
+      "name": "@distilled.cloud/huggingface",
+      "version": "1.0.0-rc.4",
+      "dependencies": {
+        "@distilled.cloud/core": "workspace:*",
+      },
+      "devDependencies": {
+        "@effect/platform-bun": "catalog:",
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "catalog:",
+      },
+    },
     "distilled/packages/kubernetes": {
       "name": "@distilled.cloud/kubernetes",
       "version": "1.0.0-rc.4",
@@ -1638,6 +1653,7 @@
         "@effect/platform-node": "catalog:",
         "@effect/sql-mysql2": "catalog:",
         "@effect/sql-pg": "catalog:",
+        "@effect/vitest": "catalog:",
         "@vercel/nft": "^1.10.2",
         "drizzle-kit": "catalog:",
         "drizzle-orm": "catalog:",
@@ -1654,6 +1670,7 @@
         "@effect/platform-node",
         "@effect/sql-mysql2",
         "@effect/sql-pg",
+        "@effect/vitest",
         "@vercel/nft",
         "drizzle-kit",
         "drizzle-orm",
@@ -2480,6 +2497,8 @@
     "@distilled.cloud/gcp": ["@distilled.cloud/gcp@workspace:distilled/packages/gcp"],
 
     "@distilled.cloud/github": ["@distilled.cloud/github@workspace:distilled/packages/github"],
+
+    "@distilled.cloud/huggingface": ["@distilled.cloud/huggingface@workspace:distilled/packages/huggingface"],
 
     "@distilled.cloud/kubernetes": ["@distilled.cloud/kubernetes@workspace:distilled/packages/kubernetes"],
 
@@ -6656,6 +6675,8 @@
     "@distilled.cloud/gcp/@types/node": ["@types/node@26.2.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-5IviulTZeRNp2vAJ514cc/HUlY5nZ9fCbq9DMyC52BrhFZACo3nI0R7qBxhQmo/d27NFe96ur/b7Wwxklda+kg=="],
 
     "@distilled.cloud/github/@types/node": ["@types/node@26.2.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-5IviulTZeRNp2vAJ514cc/HUlY5nZ9fCbq9DMyC52BrhFZACo3nI0R7qBxhQmo/d27NFe96ur/b7Wwxklda+kg=="],
+
+    "@distilled.cloud/huggingface/@types/node": ["@types/node@26.2.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-5IviulTZeRNp2vAJ514cc/HUlY5nZ9fCbq9DMyC52BrhFZACo3nI0R7qBxhQmo/d27NFe96ur/b7Wwxklda+kg=="],
 
     "@distilled.cloud/kubernetes/@types/node": ["@types/node@26.2.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-5IviulTZeRNp2vAJ514cc/HUlY5nZ9fCbq9DMyC52BrhFZACo3nI0R7qBxhQmo/d27NFe96ur/b7Wwxklda+kg=="],
 
