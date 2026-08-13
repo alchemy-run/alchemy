@@ -42,7 +42,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@alchemy.run/node-utils": "catalog:",
+    "@alchemy.run/node-utils": "workspace:*",
     "@cloudflare/unenv-preset": "catalog:workers",
     "@puppeteer/browsers": "catalog:cloudflare",
     "capnp-es": "catalog:cloudflare",

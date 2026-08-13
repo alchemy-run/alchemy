@@ -75,6 +75,30 @@ describe("Website prop surfaces", () => {
         // @ts-expect-error `source` is owned by the resource itself
         source: { provider: "x", options: {} },
       }),
+    () =>
+      Cloudflare.Website.Foldkit("F", {
+        // @ts-expect-error `script` is owned by the source dispatch
+        script: "export default {}",
+      }),
+    () =>
+      Cloudflare.Website.Foldkit("F", {
+        // @ts-expect-error `bundle` is owned by the source dispatch
+        bundle: false,
+      }),
+    () =>
+      Cloudflare.Website.Foldkit("F", {
+        // @ts-expect-error `source` is owned by the resource itself
+        source: { provider: "x", options: {} },
+      }),
+    () =>
+      Cloudflare.Website.Foldkit("F", {
+        // @ts-expect-error `viteEnvironments` is not supported (Foldkit has no RSC split)
+        viteEnvironments: { entry: "rsc", children: ["ssr"] },
+      }),
+    // `main` IS supported — a Foldkit deployment may carry a custom Worker
+    // entry (API routes, error reporting, Durable Objects) alongside the
+    // client build. Pinned positively so an `Omit` can't quietly drop it.
+    () => Cloudflare.Website.Foldkit("F", { main: "src/worker.ts" }),
   ];
 
   // Effectful (impl) arm pins. The no-impl arms above stay byte- and

@@ -101,8 +101,22 @@ export const AssetsLive = Layer.effect(
             }),
         ),
       );
-      const { assetsIgnoreFunction } = yield* Effect.promise(() =>
-        createAssetsIgnoreFunction(dir),
+      const { assetsIgnoreFunction } = yield* createAssetsIgnoreFunction(
+        dir,
+      ).pipe(
+        Effect.provide([
+          Layer.succeed(FileSystem.FileSystem, fs),
+          Layer.succeed(Path.Path, path),
+        ]),
+        Effect.mapError(
+          (cause) =>
+            new SystemError({
+              subtag: "Assets",
+              message: `Failed to read assets ignore file in "${dir}": ${cause.message}`,
+              detail: { directory: dir },
+              cause,
+            }),
+        ),
       );
       const manifest: Array<ManifestEntry> = [];
       const assetsReverseMap: AssetReverseMap = {};

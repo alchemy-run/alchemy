@@ -1,5 +1,6 @@
 export * from "./Astro.ts";
 export * from "./Effectful.ts";
+export * from "./Foldkit.ts";
 export * from "./Nextjs.ts";
 export * from "./Nuxt.ts";
 export * from "./Octane.ts";

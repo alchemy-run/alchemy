@@ -58,8 +58,10 @@ export const isTransformTypesSupported = (
  * entry points work the same way they do under Bun. Empty when the running
  * Node doesn't support (or no longer needs) the experimental flag.
  */
-export const transformTypesFlags = (): string[] =>
-  isTransformTypesSupported()
+export const transformTypesFlags = (
+  version = process.versions.node,
+): string[] =>
+  isTransformTypesSupported(version)
     ? ["--experimental-transform-types", "--no-warnings=ExperimentalWarning"]
     : [];
 
