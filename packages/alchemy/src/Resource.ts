@@ -1,3 +1,5 @@
+import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Effectable from "effect/Effectable";
 import * as Layer from "effect/Layer";
@@ -138,6 +140,15 @@ export interface ResourceLike<
    */
   Mode: ProviderMode | undefined;
   /**
+   * Captured from the ambient {@link RequiresImplementationPolicy} at
+   * registration time. `true` when the resource was first registered as a
+   * bare platform tag — a forward reference whose props/impl are supplied
+   * by its `.make(props, impl)` Layer. `Plan.make` fails fast with
+   * {@link MissingImplementationError} when this is set and {@link Props}
+   * are still `undefined` after the whole program has evaluated.
+   */
+  RequiresImplementation: boolean | undefined;
+  /**
    * Former FQNs this resource's state may still be persisted under,
    * captured from the ambient {@link RenamePolicy} at registration (via
    * `.pipe(renamedFrom("OldId"))`) and resolved against the same namespace
@@ -258,17 +269,70 @@ export interface ResourceOptions {
 }
 
 /**
- * Marks a resource registered as a bare-tag FORWARD REFERENCE (`undefined`
- * props) whose `.make(props, impl)` Layer has not (yet) built. The Layer's
- * build erases the marker when it repairs the registration's `Props`;
- * `Plan.make` dies on any marker that survives the whole program — the tag
- * was yielded but its Layer was never provided (#1054). A symbol key so the
- * resource proxy's `get` trap returns the stored value (or `undefined`)
- * rather than fabricating an `Output` prop expression.
+ * Marks the current registration site as a bare platform tag — a resource
+ * whose props AND implementation are supplied by its `.make(props, impl)`
+ * Layer rather than at the yield site. Captured onto the registration as
+ * {@link ResourceLike.RequiresImplementation} (same idiom as
+ * `AdoptPolicy`/`ProviderModePolicy`); `Plan.make` fails fast with
+ * {@link MissingImplementationError} when such a resource's `Props` are
+ * still `undefined` after the whole program has evaluated — the Layer was
+ * never provided. Engine-internal: provided only by `Platform.ts`'s
+ * bare-tag yield path.
  */
-export const MissingImplementationMarker = Symbol.for(
-  "alchemy/MissingImplementation",
+export const RequiresImplementationPolicy = Context.Reference<boolean>(
+  "RequiresImplementationPolicy",
+  { defaultValue: () => false },
 );
+
+/**
+ * A tagged platform resource declared with neither props nor an inline
+ * implementation was `yield*`ed, but its `.make(props, impl)` Layer never
+ * built.
+ *
+ * Such a tag carries no configuration on its own — props AND impl both live
+ * on the Layer — so its registration is a forward reference with `undefined`
+ * props that the Layer's build repairs (in either order; see the #874
+ * circular env-tag pattern). Props still `undefined` once the whole program
+ * has evaluated means the Layer was never provided; `Plan.make` fails fast
+ * with this error instead of letting the failure surface deep inside
+ * whichever provider first reads a prop (e.g. `TypeError: undefined is not
+ * an object (evaluating 'news.name')` in the Cloudflare Worker pre-create).
+ */
+export class MissingImplementationError extends Data.TaggedError(
+  "MissingImplementationError",
+)<{
+  message: string;
+  /** Resource type of the platform, e.g. `Cloudflare.Worker`. */
+  type: string;
+  /** Logical id of the tagged resource (its class name by convention). */
+  id: string;
+}> {}
+
+export const missingImplementation = (type: string, id: string) =>
+  new MissingImplementationError({
+    type,
+    id,
+    message: [
+      `${type}<${id}> was yielded without its implementation.`,
+      "",
+      `\`${id}\` is declared as a bare tag — no props, no inline implementation — so both come from its \`.make(...)\` Layer:`,
+      "",
+      `  export class ${id} extends ${type}<${id}>()("${id}") {}`,
+      `  export const ${id}Live = ${id}.make({ /* props */ }, Effect.gen(function* () { /* ... */ }));`,
+      "",
+      `That Layer is not in scope where \`${id}\` is yielded. Provide it to the Stack's program:`,
+      "",
+      "  Alchemy.Stack(",
+      `    "my-stack",`,
+      "    { providers, state },",
+      "    Effect.gen(function* () {",
+      `      const instance = yield* ${id};`,
+      `    }).pipe(Effect.provide([${id}Live])),`,
+      "  )",
+      "",
+      `If \`${id}\` is not Effect-native, declare it with props instead: \`()("${id}", { /* props */ })\`.`,
+    ].join("\n"),
+  });
 
 /**
  * Creates a resource constructor for a concrete resource type.
@@ -302,6 +366,10 @@ export function Resource<R extends ResourceLike>(
       const ambientMode: ProviderMode | undefined = ambientPolicy
         ? "live"
         : undefined;
+
+      // `true` only at Platform.ts's bare-tag yield site: this registration
+      // is a forward reference whose props/impl arrive via a `.make` Layer.
+      const requiresImplementation = yield* RequiresImplementationPolicy;
 
       const existing = stack.resources[fqn];
       if (existing) {
@@ -404,6 +472,7 @@ export function Resource<R extends ResourceLike>(
           Effect.map(Option.getOrUndefined),
         ),
         Mode: ambientMode,
+        RequiresImplementation: requiresImplementation || undefined,
         // Bare-string former ids resolve against the SAME namespace as the
         // resource's own id, so `renamedFrom("Site/Worker")` declared at the
         // caller's level claims `<callerNs>/Site/Worker`; the `{ fqn }` form
