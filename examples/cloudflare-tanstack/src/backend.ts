@@ -7,8 +7,6 @@
 import * as R2 from "alchemy/Cloudflare/R2";
 import * as Website from "alchemy/Cloudflare/Website";
 import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 /**
  * R2 bucket bound by the site's Effect program. Registered on the stack
@@ -18,26 +16,25 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 export const Bucket = R2.Bucket("Bucket");
 
 /**
- * ONE Worker serves the TanStack Start app AND an Effect-native API: the
+ * ONE Worker serves the TanStack Start app AND a typed backend API: the
  * third argument is an Effect program (the same shape as
- * `Cloudflare.Worker`) whose `fetch` owns exactly `server.routes` —
- * claimed narrowly here as `/api/hello`, so every other path (including
- * the rest of /api/*) stays TanStack Start's. The R2 capability the
- * program uses is collected automatically at plan time — no separate
- * backend worker, service binding, proxy route, or env shim.
+ * `Cloudflare.Worker`) whose RPC METHODS are the API surface. `createClient`
+ * calls them — over `POST /api/__rpc/<method>` from the browser (type-only
+ * form) and by direct in-process dispatch from SSR loaders (value form).
+ * No routes, no URL parsing, no envelope handling: just typed methods.
+ *
+ * The R2 capability the program uses is collected automatically at plan
+ * time — no separate backend worker, service binding, proxy route, or env
+ * shim.
  *
  * `main: import.meta.url` anchors this module — the engine imports it for
- * plan-time binding collection and the generated worker entry re-imports
- * it inside the vite graph.
+ * plan-time binding collection and the generated worker entry re-imports it
+ * inside the vite graph.
  */
 export default class Site extends Website.Vite<Site>()(
   "Website",
   {
     main: import.meta.url,
-    // Claim only the route the program actually implements — inside the
-    // claim the effect fetch is authoritative; everything else is served
-    // by TanStack Start and the program is never invoked.
-    server: { routes: ["/api/hello"] },
     compatibility: {
       flags: ["nodejs_compat"],
     },
@@ -47,42 +44,19 @@ export default class Site extends Website.Vite<Site>()(
     // again inside the Worker on first request (builds the runtime client).
     const bucket = yield* R2.ReadWriteBucket(Bucket);
     return {
-      // GET/PUT /api/hello?key=<key> — reads/writes R2 through the typed
-      // binding. Only /api/hello is claimed by `server.routes`, so this
-      // fetch never sees any other path.
-      fetch: Effect.gen(function* () {
-        const request = yield* HttpServerRequest;
-        const url = new URL(request.url, "http://site");
-        const key = url.searchParams.get("key");
-        if (!key) {
-          return HttpServerResponse.text("Missing 'key' query parameter", {
-            status: 400,
-          });
-        }
-
-        if (request.method === "GET") {
-          const object = yield* bucket.get(key);
-          if (object === null) {
-            return HttpServerResponse.text("Not found", { status: 404 });
-          }
-          return HttpServerResponse.stream(object.body);
-        }
-
-        if (request.method === "PUT") {
-          yield* bucket.put(key, request.stream, {
-            contentLength: Number(request.headers["content-length"] ?? 0),
-          });
-          return HttpServerResponse.empty({ status: 204 });
-        }
-
-        return HttpServerResponse.text("Method not allowed", { status: 405 });
-      }).pipe(
-        Effect.catchTag("R2Error", (error) =>
-          Effect.succeed(
-            HttpServerResponse.text(error.message, { status: 500 }),
-          ),
-        ),
-      ),
+      // RPC methods — reads/writes R2 through the typed binding. Served to
+      // `createClient` at the universal `POST /api/__rpc/<method>` dispatch,
+      // and invoked directly (no HTTP) by the value form during SSR.
+      get: () =>
+        Effect.gen(function* () {
+          const object = yield* bucket.get("message");
+          return object === null ? null : yield* object.text();
+        }).pipe(Effect.orDie),
+      save: (message: string) =>
+        Effect.gen(function* () {
+          yield* bucket.put("message", message);
+          return message;
+        }).pipe(Effect.orDie),
     };
   }).pipe(Effect.provide(R2.ReadWriteBucketBinding)),
 ) {}

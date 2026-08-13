@@ -6,7 +6,6 @@
 import * as KV from "alchemy/Cloudflare/KV";
 import { Nuxt } from "alchemy/Cloudflare/Website";
 import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 /**
@@ -17,14 +16,20 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 export const Visits = KV.Namespace("Visits");
 
 /**
- * ONE Worker serves the Nuxt app AND an Effect-native API: the third
+ * ONE Worker serves the Nuxt app AND a typed backend API: the third
  * argument is an Effect program (the same shape as `Cloudflare.Worker`)
- * whose `fetch` owns `server.routes`. Capability bindings the program
- * uses (the KV namespace here) are collected automatically at plan time.
+ * whose RPC METHODS are the API surface. `createClient` calls them — over
+ * `POST /api/__rpc/<method>` from the browser (type-only form) and by
+ * direct in-process dispatch during SSR (value form). Capability bindings
+ * the program uses (the KV namespace here) are collected automatically at
+ * plan time.
  *
- * Inside the routes the program is authoritative (even its 404s); the
- * exclusion glob `!/api/hello` statically hands that path back to nitro,
- * so the app's own `/api/hello` route keeps working.
+ * The program also keeps a `fetch` to demonstrate `server.routes`
+ * ownership: inside the claim the program is authoritative (even its
+ * 404s), while the exclusion glob `!/api/hello` statically hands that path
+ * back to nitro, so the app's own `/api/hello` route keeps working. (The
+ * RPC dispatch at `/api/__rpc/*` needs no claim — it is checked before
+ * `server.routes` on every effectful Website.)
  *
  * `main: import.meta.url` anchors this module — the engine imports it for
  * plan-time binding collection and the generated entry re-imports it at
@@ -44,23 +49,26 @@ export default class Site extends Nuxt<Site>()(
     // again inside the Worker on first request (builds the runtime client).
     const visits = yield* KV.ReadWriteNamespace(yield* Visits);
     return {
-      fetch: Effect.gen(function* () {
-        const request = yield* HttpServerRequest;
-        const url = new URL(request.url, "http://site");
-        if (url.pathname === "/api/visits") {
-          const count =
-            Number((yield* visits.get("count").pipe(Effect.orDie)) ?? "0") + 1;
-          yield* visits.put("count", String(count)).pipe(Effect.orDie);
-          return yield* HttpServerResponse.json({ visits: count });
-        }
-        // The program owns everything inside `server.routes` (with
-        // /api/hello excluded above), so unknown /api/* paths get its own
-        // 404 — never nitro.
-        return yield* HttpServerResponse.json(
-          { error: "unknown effect route" },
-          { status: 404 },
-        );
-      }),
+      // The program owns everything inside `server.routes` (with
+      // /api/hello excluded above), so /api/* paths get its own 404 —
+      // never nitro. The real API surface is the RPC methods below.
+      fetch: HttpServerResponse.json(
+        { error: "unknown effect route" },
+        { status: 404 },
+      ),
+      // RPC methods — the KV-backed visit counter. Served to `createClient`
+      // at the universal `POST /api/__rpc/<method>` dispatch, and invoked
+      // directly (no HTTP) by the value form during SSR.
+      visits: () =>
+        Effect.gen(function* () {
+          return Number((yield* visits.get("count")) ?? "0");
+        }).pipe(Effect.orDie),
+      visit: () =>
+        Effect.gen(function* () {
+          const count = Number((yield* visits.get("count")) ?? "0") + 1;
+          yield* visits.put("count", String(count));
+          return count;
+        }).pipe(Effect.orDie),
     };
   }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),
 ) {}

@@ -1,43 +1,52 @@
 <script setup lang="ts">
-// The effect fetch is mounted as nitro server middleware — /api/message
-// is the S3-backed handler declared in src/backend.ts, served by the same
-// Lambda as this page (client-only so SSR stays snappy).
-const message = ref("…");
+// Browser side: TYPE-ONLY import + type-only form — zero backend bytes
+// in the client bundle. Each call POSTs the wire protocol
+// (`/api/__rpc/<method>`), dispatched by the alchemy server middleware.
+import { createClient } from "alchemy/client";
+import type Backend from "../../src/backend";
+
+const backend = createClient<typeof Backend>();
+
+// SSR seam: `useAsyncData` runs the handler on the server during SSR —
+// there the VALUE form dispatches the backend method in-process (no HTTP
+// hop). The `import.meta.server` guard keeps the dynamic backend import
+// out of the client bundle; on client-side navigation the handler takes
+// the wire path through the same typed client.
+const { data: message } = await useAsyncData("message", async () => {
+  if (import.meta.server) {
+    const { default: Backend } = await import("../../src/backend");
+    return createClient(Backend).get();
+  }
+  return backend.get();
+});
+
 const draft = ref("");
 
-const refresh = async () => {
-  const body = await $fetch<{ message: string | null }>("/api/message");
-  message.value = body.message ?? "(nothing saved yet)";
-};
-
 const save = async () => {
-  const body = await $fetch<{ message: string | null }>(
-    `/api/message?put=${encodeURIComponent(draft.value)}`,
-  );
-  message.value = body.message ?? "";
+  message.value = await backend.save(draft.value);
   draft.value = "";
 };
-
-onMounted(refresh);
 </script>
 
 <template>
   <main class="mx-auto max-w-2xl p-8">
-    <h1 class="text-3xl font-bold">Nuxt on AWS</h1>
-    <p class="mt-4">
-      Saved message (from <code>/api/message</code>, S3-backed):
-      {{ message }}
-    </p>
-    <form class="mt-2 flex gap-2" @submit.prevent="save">
-      <input
-        v-model="draft"
-        class="rounded border px-2 py-1"
-        placeholder="say something"
-      />
-      <button class="rounded border px-3 py-1" type="submit">Save</button>
-    </form>
-    <NuxtLink class="mt-4 inline-block underline" to="/about"
-      >about (prerendered)</NuxtLink
-    >
+    <div class="rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
+      <h1 class="text-3xl font-bold">Nuxt on AWS</h1>
+      <p class="mt-4">
+        Server-rendered message (S3-backed, loaded in-process during SSR):
+        <span class="font-semibold">{{ message ?? "(nothing saved yet)" }}</span>
+      </p>
+      <form class="mt-2 flex gap-2" @submit.prevent="save">
+        <input
+          v-model="draft"
+          class="rounded border px-2 py-1"
+          placeholder="say something"
+        />
+        <button class="rounded border px-3 py-1" type="submit">Save</button>
+      </form>
+      <NuxtLink class="mt-4 inline-block underline" to="/about"
+        >about (prerendered)</NuxtLink
+      >
+    </div>
   </main>
 </template>

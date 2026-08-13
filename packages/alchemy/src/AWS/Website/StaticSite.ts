@@ -375,6 +375,12 @@ export interface EffectStaticSiteAttributes extends StaticSiteAttributes {
  * module whose default export is the class, anchored by
  * `main: import.meta.url`.
  *
+ * The impl's non-`fetch` methods are **RPC methods** — the typed API
+ * surface, served at the reserved `POST /api/__rpc/<method>` path
+ * (claimed on the edge router automatically) and called through
+ * `createClient` from `alchemy/client` in the static frontend. A
+ * `fetch` handler is only needed for hand-rolled routes.
+ *
  * @example Static site with an effect-native API
  * ```typescript
  * // src/backend.ts — narrow subpath imports keep the IaC engine out of any
@@ -383,8 +389,6 @@ export interface EffectStaticSiteAttributes extends StaticSiteAttributes {
  * import { Bucket, GetObject, GetObjectHttp } from "alchemy/AWS/S3";
  * import { StaticSite } from "alchemy/AWS/Website";
  * import * as Effect from "effect/Effect";
- * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
- * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  *
  * export const Data = Bucket("Data");
  *
@@ -394,28 +398,28 @@ export interface EffectStaticSiteAttributes extends StaticSiteAttributes {
  *     path: "./dist",
  *     spa: true,
  *     main: import.meta.url,
- *     server: { routes: ["/api/*"] },
  *   },
  *   Effect.gen(function* () {
  *     const getObject = yield* GetObject(yield* Data);
  *     return {
- *       fetch: Effect.gen(function* () {
- *         const request = yield* HttpServerRequest;
- *         const url = new URL(request.url, "http://localhost");
- *         if (url.pathname === "/api/hello") {
- *           const object = yield* getObject({ Key: "hello.txt" }).pipe(
- *             Effect.orDie,
- *           );
- *           return HttpServerResponse.text(String(object.Body));
- *         }
- *         return yield* HttpServerResponse.json(
- *           { error: "unknown api route" },
- *           { status: 404 },
- *         );
- *       }),
+ *       hello: () =>
+ *         getObject({ Key: "hello.txt" }).pipe(
+ *           Effect.map((object) => String(object.Body)),
+ *         ),
  *     };
  *   }).pipe(Effect.provide(GetObjectHttp)),
  * ) {}
+ * ```
+ *
+ * @example Calling it from the frontend (createClient)
+ * ```typescript
+ * // frontend code — TYPE-ONLY backend import, zero backend bytes
+ * import { createClient } from "alchemy/client";
+ * import type Backend from "../src/backend.ts";
+ *
+ * const backend = createClient<typeof Backend>();
+ *
+ * const text = await backend.hello(); // POST /api/__rpc/hello
  * ```
  */
 export const StaticSite: {

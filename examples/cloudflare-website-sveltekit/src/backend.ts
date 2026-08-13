@@ -6,8 +6,6 @@
 import * as KV from "alchemy/Cloudflare/KV";
 import { SvelteKit } from "alchemy/Cloudflare/Website";
 import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 /**
  * KV namespace bound by the site's Effect program. Registered on the stack
@@ -17,13 +15,13 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 export const Visits = KV.Namespace("Visits");
 
 /**
- * ONE Worker serves the SvelteKit app AND an Effect-native API: the third
+ * ONE Worker serves the SvelteKit app AND a typed backend API: the third
  * argument is an Effect program (the same shape as `Cloudflare.Worker`)
- * whose `fetch` owns `/api/*` (the default `server.routes`) — inside
- * that space the program is authoritative (even its 404s); outside it
- * SvelteKit serves and the program is never invoked. Capability bindings
- * the program uses (the KV namespace here) are collected automatically
- * at plan time.
+ * whose RPC METHODS are the API surface. `createClient` calls them — over
+ * `POST /api/__rpc/<method>` from the browser (type-only form) and by
+ * direct in-process dispatch from `+page.server.ts` load functions (value
+ * form). Capability bindings the program uses (the KV namespace here) are
+ * collected automatically at plan time.
  *
  * `main: import.meta.url` anchors this module — the engine imports it for
  * plan-time binding collection and the generated Worker shim re-imports it
@@ -39,23 +37,19 @@ export default class Site extends SvelteKit<Site>()(
     // again inside the Worker on first request (builds the runtime client).
     const visits = yield* KV.ReadWriteNamespace(yield* Visits);
     return {
-      fetch: Effect.gen(function* () {
-        const request = yield* HttpServerRequest;
-        const url = new URL(request.url, "http://site");
-        if (url.pathname === "/api/visits") {
-          const count =
-            Number((yield* visits.get("count").pipe(Effect.orDie)) ?? "0") + 1;
-          yield* visits.put("count", String(count)).pipe(Effect.orDie);
-          return yield* HttpServerResponse.json({ visits: count });
-        }
-        // The program owns everything inside `server.routes`, so unknown
-        // /api/* paths get its own 404 — never SvelteKit. To hand a path
-        // back to kit, exclude it: routes: ["/api/*", "!/api/foo"].
-        return yield* HttpServerResponse.json(
-          { error: "unknown effect route" },
-          { status: 404 },
-        );
-      }),
+      // RPC methods — the KV-backed visit counter. Served to `createClient`
+      // at the universal `POST /api/__rpc/<method>` dispatch, and invoked
+      // directly (no HTTP) by the value form during SSR.
+      visits: () =>
+        Effect.gen(function* () {
+          return Number((yield* visits.get("count")) ?? "0");
+        }).pipe(Effect.orDie),
+      visit: () =>
+        Effect.gen(function* () {
+          const count = Number((yield* visits.get("count")) ?? "0") + 1;
+          yield* visits.put("count", String(count));
+          return count;
+        }).pipe(Effect.orDie),
     };
   }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),
 ) {}

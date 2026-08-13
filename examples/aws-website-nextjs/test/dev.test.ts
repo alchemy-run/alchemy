@@ -10,7 +10,11 @@
  *   - SSR             → `/` renders through the framework dev server
  *   - API route       → `/api/hello` serves the route handler
  *   - static assets   → `/robots.txt` from public/
- *   - HOT RELOAD      → editing app/page.jsx is served by Next's HMR
+ *   - RPC wire path   → `POST /api/__rpc/save` (createClient's wire
+ *                       protocol) serves through the catch-all route
+ *                       handler against the real S3 bucket, and the
+ *                       async server component renders the saved value
+ *   - HOT RELOAD      → editing app/page.tsx is served by Next's HMR
  *                       without a redeploy
  */
 import { afterAll, expect, test } from "bun:test";
@@ -35,7 +39,7 @@ const STAGE = "dev-cli-test";
 
 // Hot-reload surface: the SSR index page. The test rewrites it in place
 // with the CLI running, then restores it.
-const pagePath = path.join(root, "app", "page.jsx");
+const pagePath = path.join(root, "app", "page.tsx");
 const pageSource = fs.readFileSync(pagePath, "utf8");
 const MARKER = "Next.js on AWS";
 const MARKER_V2 = "Next.js on AWS [dev-v2]";
@@ -158,6 +162,23 @@ test(
     // Static asset from public/.
     const robots = await (await fetchOk(new URL("/robots.txt", url))).text();
     expect(robots).toContain("User-agent:");
+
+    // The rpc wire path rides `next dev` too (through the catch-all route
+    // handler): this is the exact request the browser's type-only
+    // createClient sends, served by the backend method against the REAL
+    // S3 bucket (remote()).
+    const rpc = await fetch(new URL("/api/__rpc/save", url), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(["hello-from-dev-test"]),
+    });
+    expect(rpc.status).toBe(200);
+    expect(await rpc.json()).toEqual({ value: "hello-from-dev-test" });
+
+    // ...and the async server component (the value form) renders the
+    // saved value into the page.
+    const ssr = await (await fetchOk(url)).text();
+    expect(ssr).toContain("hello-from-dev-test");
 
     // ── HOT RELOAD: rewrite the index page with the CLI still running —
     // the framework dev server serves the new markup without a deploy ──

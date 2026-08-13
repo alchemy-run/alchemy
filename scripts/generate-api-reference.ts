@@ -75,10 +75,13 @@ interface PageDoc {
 
 const normalizeSlashes = (value: string) => value.split(path.sep).join("/");
 
+// index.ts files are scanned too: most are plain re-export barrels (no
+// tagged export, so no page), but subpath entry modules whose public
+// surface IS the index (e.g. `Client/index.ts` — `alchemy/client`) carry
+// their tagged docs there.
 const isSourceFile = (baseName: string) =>
   (baseName.endsWith(".ts") || baseName.endsWith(".tsx")) &&
-  !baseName.endsWith(".d.ts") &&
-  baseName !== "index.ts";
+  !baseName.endsWith(".d.ts");
 
 async function discoverFiles(root: SourceRoot): Promise<FileEntry[]> {
   const entries: FileEntry[] = [];

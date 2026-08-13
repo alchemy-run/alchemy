@@ -5,13 +5,23 @@ import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import Stack from "../alchemy.run.ts";
 
 // A fresh CloudFront distribution (and the Lambda behind it) can serve
 // transient 404/5xx responses while it propagates. `Test.getWhenReady`
 // fails on that cold-start window and retries until the site serves a
 // real response.
-const { getWhenReady } = Test;
+const { executeWhenReady, getWhenReady } = Test;
+
+// One RPC wire call, exactly as `createClient`'s type-only form sends it:
+// `POST /api/__rpc/<method>` with a JSON array of positional args.
+const rpcWhenReady = (url: string, method: string, args: unknown[] = []) =>
+  executeWhenReady(
+    HttpClientRequest.post(`${url}/api/__rpc/${method}`).pipe(
+      HttpClientRequest.bodyText(JSON.stringify(args), "application/json"),
+    ),
+  );
 
 class AssetNotReady extends Data.TaggedError("AssetNotReady")<{
   body: string;
@@ -129,21 +139,37 @@ test.skipIf(lambdaRoutesBroken)(
 );
 
 test.skipIf(lambdaRoutesBroken)(
-  "serves the effect API through the catch-all route handler",
+  "serves the backend methods over the rpc wire path",
   Effect.gen(function* () {
     const url = yield* base;
-    // /api/message is served by the Effect program in src/backend.ts,
-    // mounted via toRouteHandler at app/api/[[...slug]]/route.ts and
+    // `POST /api/__rpc/<method>` is the exact wire request the browser's
+    // type-only `createClient<typeof Backend>()` sends. It rides through
+    // the catch-all route handler at app/api/[[...slug]]/route.ts
+    // (toRouteHandler dispatches the rpc path before route matching),
     // compiled by Next into the same server Lambda. The S3 capability
     // bindings (env + IAM) were collected at plan time.
-    const put = yield* getWhenReady(
-      `${url}/api/message?put=hello-from-integ-test`,
-    );
-    expect(put.status).toBe(200);
-    const res = yield* getWhenReady(`${url}/api/message`);
+    const saved = yield* rpcWhenReady(url, "save", ["hello-from-integ-test"]);
+    expect(saved.status).toBe(200);
+    expect((yield* saved.json) as { value: string }).toEqual({
+      value: "hello-from-integ-test",
+    });
+    const res = yield* rpcWhenReady(url, "get");
     expect(res.status).toBe(200);
-    const body = (yield* res.json) as { message: string | null };
-    expect(body.message).toBe("hello-from-integ-test");
+    const body = (yield* res.json) as { value: string | null };
+    expect(body.value).toBe("hello-from-integ-test");
+  }),
+  { timeout: 180_000 },
+);
+
+test.skipIf(lambdaRoutesBroken)(
+  "SSR renders the backend value loaded in-process by the server component",
+  Effect.gen(function* () {
+    const url = yield* base;
+    // The previous test saved through the wire; the async server
+    // component reads the same S3 object with the VALUE form of
+    // createClient (direct in-process dispatch) and renders it.
+    const html = yield* getBodyWhenReady(url, "hello-from-integ-test");
+    expect(html).toContain("hello-from-integ-test");
   }),
   { timeout: 180_000 },
 );

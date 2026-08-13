@@ -182,6 +182,14 @@ export interface EffectAstroProps extends AstroProps {
  * bridge — wins outright (`server: { takeover: false }` forces that
  * explicit tier).
  *
+ * The impl's non-`fetch` methods are **RPC methods** — the typed API
+ * surface, served at the reserved `POST /api/__rpc/<method>` path
+ * (claimed on the edge router automatically) and called through
+ * `createClient` from `alchemy/client`: type-only form in browser code,
+ * value form for direct in-process dispatch in the frontmatter of
+ * non-prerendered pages. A `fetch` handler is only needed for
+ * hand-rolled routes.
+ *
  * @example Astro site with an effect-native API
  * ```typescript
  * // src/backend.ts — narrow subpath imports keep the IaC engine out of the
@@ -190,8 +198,6 @@ export interface EffectAstroProps extends AstroProps {
  * import { GetItem, GetItemHttp, Table } from "alchemy/AWS/DynamoDB";
  * import { Astro } from "alchemy/AWS/Website";
  * import * as Effect from "effect/Effect";
- * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
- * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  *
  * export const Visits = Table("Visits", {
  *   partitionKey: "pk",
@@ -203,29 +209,30 @@ export interface EffectAstroProps extends AstroProps {
  *   {
  *     rootDir: ".",
  *     main: import.meta.url,
- *     server: { routes: ["/api/*"] },
  *   },
  *   Effect.gen(function* () {
  *     const getItem = yield* GetItem(yield* Visits);
  *     return {
- *       fetch: Effect.gen(function* () {
- *         const request = yield* HttpServerRequest;
- *         const url = new URL(request.url, "http://localhost");
- *         if (url.pathname === "/api/visits") {
- *           const result = yield* getItem({
- *             Key: { pk: { S: "current" } },
- *           }).pipe(Effect.orDie);
- *           return yield* HttpServerResponse.json(result.Item);
- *         }
- *         // the effect owns /api/* — unknown paths get its own 404
- *         return yield* HttpServerResponse.json(
- *           { error: "not found" },
- *           { status: 404 },
- *         );
- *       }),
+ *       visits: () =>
+ *         getItem({ Key: { pk: { S: "current" } } }).pipe(
+ *           Effect.map((result) => result.Item),
+ *         ),
  *     };
  *   }).pipe(Effect.provide(GetItemHttp)),
  * ) {}
+ * ```
+ *
+ * @example Calling it from the frontend (createClient)
+ * ```typescript
+ * // browser code — TYPE-ONLY backend import, zero backend bytes; in the
+ * // frontmatter of a non-prerendered page, value-import the backend and
+ * // call createClient(Backend) for direct in-process dispatch instead.
+ * import { createClient } from "alchemy/client";
+ * import type Backend from "../src/backend.ts";
+ *
+ * const backend = createClient<typeof Backend>();
+ *
+ * const item = await backend.visits(); // POST /api/__rpc/visits
  * ```
  */
 export const Astro: {

@@ -9,11 +9,11 @@ dedicated Lambda at `/_next/image`, and ISR revalidation flows through
 an SQS FIFO queue plus a DynamoDB tag-cache table.
 
 The site is **effectful**: `src/backend.ts` passes an Effect program as the
-third argument, so the same Lambda that renders the app also serves an
-effect-native API with typed AWS capabilities (the S3 bucket's name
-lands as an env var and its IAM policy on the Lambda role, collected at
-plan time). On Next.js the program mounts explicitly through one file —
-a catch-all route handler compiled by Next itself:
+third argument, and the program's RPC methods ARE the API surface — no
+routes, no URL parsing (the S3 bucket's name lands as an env var and its
+IAM policy on the Lambda role, collected at plan time). On Next.js the
+wire path mounts explicitly through one file — a catch-all route handler
+compiled by Next itself:
 
 ```ts
 // app/api/[[...slug]]/route.ts
@@ -24,10 +24,32 @@ const handler = toRouteHandler(Site);
 export { handler as GET, handler as POST /* ... */ };
 ```
 
-- `app/page.jsx` is server-rendered in the Lambda on every request.
+Methods are called through `createClient` (`alchemy/client`), which has
+two forms:
+
+```tsx
+// SSR (app/page.tsx, async server component): VALUE import — direct
+// in-process dispatch, no HTTP
+import Backend from "../src/backend.ts";
+const backend = createClient(Backend);
+const message = await backend.get();
+
+// Browser (app/message-form.tsx, "use client"): TYPE-ONLY import — zero
+// backend bytes in the client bundle; each call POSTs the wire protocol
+// (/api/__rpc/save) through the catch-all route handler
+import { createClient } from "alchemy/client";
+import type Backend from "../src/backend.ts";
+const backend = createClient<typeof Backend>();
+await backend.save(draft);
+```
+
+- `app/page.tsx` is server-rendered in the Lambda on every request
+  (`dynamic = "force-dynamic"` — a prerendered page must not call the
+  backend server-side) and renders the S3-backed message; the
+  `"use client"` child saves a new one over the wire.
 - `app/api/hello/route.ts` is an ordinary app-router route handler —
   more-specific routes keep winning over the catch-all, so Next's own
-  routing and the effect API coexist under `/api/*`.
+  routing and the rpc dispatch coexist under `/api/*`.
 - Everything under `public/` deploys as static assets.
 
 The integration packages must be installed in the project (the source
@@ -69,8 +91,8 @@ bun run dev
 
 Local dev is Next's own dev server (`next dev`, native HMR). The site
 itself creates no cloud resources in dev, but the S3 bucket bound by the
-effect program is pinned `remote()` in `src/backend.ts`, so `/api/message`
-hits the real bucket with your ambient credentials.
+effect program is pinned `remote()` in `src/backend.ts`, so both
+`createClient` forms hit the real bucket with your ambient credentials.
 
 ## Destroy
 

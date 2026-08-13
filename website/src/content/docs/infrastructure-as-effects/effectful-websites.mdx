@@ -139,6 +139,152 @@ server: { routes: ["/api/*", "!/api/auth/*"] }
 `server.routes: ["/*"]` routes every request to the Effect fetch — the
 framework then serves only the paths you exclude.
 
+## Calling the backend
+
+Hand-rolled `fetch` routing is optional. Any other function-valued key
+on the impl shape — beside `fetch` and the platform handlers (`queue`,
+`scheduled`, ...) — is an **RPC method**, served automatically at the
+reserved wire path `POST /api/__rpc/<method>`:
+
+```typescript
+// src/backend.ts
+Effect.gen(function* () {
+  const users = yield* KV.ReadWriteNamespace(yield* Users);
+  return {
+    get: () => users.get("current"),
+    save: (value: string) => users.put("current", value),
+  };
+}).pipe(Effect.provide(KV.ReadWriteNamespaceBinding));
+```
+
+Methods return `Effect` (or a plain value/Promise); arguments and
+results cross the wire as plain JSON. The `/api/__rpc` path is
+**reserved** — user routes must not claim it, and it needs no
+`server.routes` claim of its own. A backend of methods alone needs no
+`fetch` handler at all.
+
+### In the browser: the type-only form
+
+```typescript
+// a client component — note the TYPE-ONLY backend import
+import { createClient } from "alchemy/client";
+import type Backend from "../src/backend.ts";
+
+const backend = createClient<typeof Backend>();
+
+await backend.save("hello"); // POST /api/__rpc/save  ["hello"]
+const value = await backend.get(); // fully typed from the backend
+```
+
+The backend is imported **as a type only**, so zero backend bytes reach
+the client bundle — the proxy POSTs to the page's own origin. Never
+value-import the backend module from client-bundled code: a value
+import would pull the backend program into the browser bundle.
+
+### On the server: the value form
+
+SSR seams — a TanStack/SvelteKit `load`, Astro frontmatter on a
+non-prerendered page, a Next server component — import the backend as a
+**value** and pass the class:
+
+```typescript
+import { createClient } from "alchemy/client";
+import Backend from "../src/backend.ts";
+
+export const load = async () => {
+  const backend = createClient(Backend);
+  return { value: await backend.get() }; // direct dispatch — no HTTP
+};
+```
+
+Same call shape, different transport: on the server, calls dispatch
+**directly into the backend's effects in-process** — there is no HTTP
+round-trip against your own origin once you're already on it.
+
+### Self-authorizing methods
+
+Browser calls are same-origin fetches, so session cookies ride along by
+default. Each RPC call runs with `HttpServerRequest` in context —
+exactly like `fetch` — so a method authorizes itself by reading the
+caller's headers/cookies:
+
+```typescript
+save: (value: string) =>
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest;
+    if (request.cookies.session === undefined) {
+      return yield* Effect.fail(new Unauthorized());
+    }
+    return yield* users.put("current", value);
+  }),
+```
+
+### Per-request identity on the server
+
+The in-process form has no ambient request — hand the incoming
+request's headers over so methods see the caller's cookies:
+
+```typescript
+const backend = createClient(Backend, { headers: request.headers });
+```
+
+For a shared, module-scope client, pass a **thunk** instead — it is
+resolved fresh on every call, so the client stays per-request-correct
+with a framework's ambient accessor (TanStack Start's
+`getRequestHeaders`, Next's `headers`):
+
+```typescript
+import { getRequestHeaders } from "@tanstack/react-start/server";
+
+export const backend = createClient(Backend, { headers: getRequestHeaders });
+```
+
+### Typed failures
+
+A method's typed failure crosses the wire as a 400
+`{"error": {"_tag", ...props}}` envelope and rejects as an `RpcError`
+**structurally** re-carrying the failure's `_tag` + props (the
+backend's error class never ships to the client); defects are sanitized
+server-side to a message-only `RpcDefectError` — no stacks or
+internals. On the in-process path the rejection is the real failure
+instance. Either way, switching on `_tag` works in both worlds:
+
+```typescript
+try {
+  await backend.save(draft);
+} catch (error) {
+  if (error instanceof RpcError && error._tag === "Unauthorized") {
+    // redirect to login
+  }
+}
+```
+
+### Effect mode
+
+`createEffectClient` is the same bridge with methods returning
+`Effect` — the method's typed failure rides the failure channel
+(decoded structurally on the wire path), so `Effect.catchTag` works on
+backend failure tags:
+
+```typescript
+import { createEffectClient } from "alchemy/client";
+import type Backend from "../src/backend.ts";
+
+const backend = createEffectClient<typeof Backend>();
+
+const value = yield* backend.get().pipe(
+  Effect.catchTag("KVError", () => Effect.succeed(null)),
+);
+```
+
+### Prerendered pages
+
+A prerendered page builds in a world with no deployed backend: the
+value form fails with the typed `RpcPrerenderError` instead of
+dispatching. Keep prerendered/static pages backend-free — make the page
+dynamic, or move the call into client code, where it becomes a wire
+call against the deployed site.
+
 ## Per-framework support
 
 How the program's `fetch` reaches the deployed server differs per
@@ -257,10 +403,12 @@ and delete the separate Worker:
  ) {}
 ```
 
-The API now serves same-origin under `/api/*` — no CORS, no second
-deploy, no `API_URL` plumbing — and the frontend calls `fetch("/api/…")`
-directly. Bindings, RPC methods, and (on Cloudflare) Durable Objects and
-event handlers move over unchanged.
+The API now serves same-origin — no CORS, no second deploy, no
+`API_URL` plumbing — and the frontend calls it through the typed
+[`createClient`](/providers/client/createclient) bridge (or plain
+`fetch("/api/…")` against the effect `fetch`). Bindings, RPC methods,
+and (on Cloudflare) Durable Objects and event handlers move over
+unchanged.
 
 ## Where to go next
 
@@ -268,6 +416,8 @@ event handlers move over unchanged.
   the Effectful Constructor pattern the program uses
 - [Bindings](/infrastructure-as-effects/binding) — how capabilities
   collect env/IAM at plan time
+- [`createClient`](/providers/client/createclient) — the typed
+  frontend→backend bridge
 - [`Serve.make`](/providers/serve/make) — the runtime bridge
 - Construct reference:
   [Cloudflare Vite](/providers/cloudflare/website/vite),

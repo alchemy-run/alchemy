@@ -10,6 +10,10 @@
  *   - SSR             → `/` renders through the framework dev server
  *   - routing         → `/about` (prerendered route) serves
  *   - API route       → `/api/hello` serves the nitro handler
+ *   - RPC wire path   → `POST /api/__rpc/save` (createClient's wire
+ *                       protocol) serves through the middleware mount
+ *                       against the real S3 bucket, and the useAsyncData
+ *                       SSR seam renders the saved value
  *   - static assets   → `/robots.txt` from public/
  *   - HOT RELOAD      → editing app/pages/index.vue is served by Nuxt's
  *                       HMR without a redeploy
@@ -163,6 +167,23 @@ test(
     // Static asset from public/.
     const robots = await (await fetchOk(new URL("/robots.txt", url))).text();
     expect(robots).toContain("User-agent:");
+
+    // The rpc wire path rides the nitro dev worker too (through the
+    // middleware mount): this is the exact request the browser's
+    // type-only createClient sends, served by the backend method against
+    // the REAL S3 bucket (remote()).
+    const rpc = await fetch(new URL("/api/__rpc/save", url), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(["hello-from-dev-test"]),
+    });
+    expect(rpc.status).toBe(200);
+    expect(await rpc.json()).toEqual({ value: "hello-from-dev-test" });
+
+    // ...and the SSR seam (useAsyncData, the value form) renders the
+    // saved value into the page.
+    const ssr = await (await fetchOk(url)).text();
+    expect(ssr).toContain("hello-from-dev-test");
 
     // ── HOT RELOAD: rewrite the index page with the CLI still running —
     // the framework dev server serves the new markup without a deploy ──

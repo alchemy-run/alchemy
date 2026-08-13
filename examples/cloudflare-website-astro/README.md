@@ -5,14 +5,31 @@ Deploys an [Astro](https://astro.build) site to Cloudflare Workers with
 Wrangler configuration.
 
 - `src/backend.ts` declares the Website class with an Effect program as its
-  third argument: ONE Worker serves the Astro frontend and an
-  Effect-native API. The program's `fetch` owns `/api/*` and uses a KV
-  namespace through a typed capability binding — the binding is
+  third argument: ONE Worker serves the Astro frontend and a typed
+  backend API. The program's RPC METHODS (`visit`, `visits`) are the API
+  surface, backed by a KV namespace through a typed capability binding —
   collected automatically at plan time, no extra wiring in
   `alchemy.run.ts`.
-- `src/pages/index.astro` is server-rendered in the Worker on every
-  request and calls `/api/visits` from the browser to show the
-  KV-backed visit counter.
+- `src/pages/index.astro` calls the backend from both worlds with
+  `createClient`:
+
+  ```ts
+  // frontmatter (SSR, non-prerendered): VALUE form — direct in-process
+  // dispatch, no HTTP hop
+  import Backend from "../backend";
+  const backend = createClient(Backend, { headers: Astro.request.headers });
+  const visits = await backend.visit();
+  ```
+
+  ```ts
+  // <script> (browser): TYPE-ONLY form — POST /api/__rpc/<method>,
+  // zero backend bytes in the client bundle
+  import { createClient } from "alchemy/client";
+  import type Backend from "../backend";
+  const backend = createClient<typeof Backend>();
+  await backend.visit();
+  ```
+
 - `src/pages/about.astro` opts into prerendering
   (`export const prerender = true`) and is served as a static asset.
 - Everything under `public/` deploys as static assets.

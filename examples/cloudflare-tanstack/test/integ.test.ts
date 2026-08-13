@@ -12,7 +12,7 @@ import Stack from "../alchemy.run.ts";
 // Fresh `workers.dev` URLs transiently 404 while the route propagates.
 // `HttpClient.execute`/`get` resolve successfully on that 404, so a plain
 // `Effect.retry` never fires — these helpers fail on the cold-start window and
-// retry until the real response (which may be 200/204/400) comes back.
+// retry until the real response comes back.
 const { executeWhenReady, getWhenReady } = Test;
 
 class AssetNotReady extends Data.TaggedError("AssetNotReady")<{
@@ -59,12 +59,15 @@ afterAll(
   }),
 );
 
-// The Effect API route served by the same Worker as the frontend —
-// src/backend.ts claims exactly /api/hello and backs it with R2.
-const route = (url: string, key?: string) =>
-  key === undefined
-    ? `${url}/api/hello`
-    : `${url}/api/hello?key=${encodeURIComponent(key)}`;
+// The createClient wire protocol served by the same Worker as the frontend —
+// src/backend.ts exposes RPC methods (`get`, `save`) backed by R2, dispatched
+// at the universal `POST /api/__rpc/<method>` path.
+const rpc = (url: string, method: string, args: unknown[]) =>
+  executeWhenReady(
+    HttpClientRequest.post(`${url}/api/__rpc/${method}`).pipe(
+      HttpClientRequest.bodyText(JSON.stringify(args), "application/json"),
+    ),
+  );
 
 test(
   "deploys and exposes a url",
@@ -100,47 +103,62 @@ test(
 );
 
 test(
-  "Effect API round-trips through R2 (PUT then GET /api/hello)",
+  "RPC methods round-trip through R2 (save then get over /api/__rpc)",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const client = yield* HttpClient.HttpClient;
-    // Stable key so re-runs (e.g. NO_DESTROY=1) overwrite cleanly instead
-    // of leaving stale objects behind.
-    const key = "integ:roundtrip";
+    const base = url.replace(/\/+$/, "");
 
-    const put = yield* executeWhenReady(
-      HttpClientRequest.put(route(url, key)).pipe(
-        HttpClientRequest.bodyText("hello-effect", "text/plain"),
-      ),
-    );
-    expect(put.status).toBe(204);
+    // The wire-level proof: `POST /api/__rpc/save` with a JSON array of
+    // positional args answers the success envelope.
+    const saved = yield* rpc(base, "save", ["hello-from-createClient"]);
+    expect(saved.status).toBe(200);
+    expect(yield* saved.json).toEqual({ value: "hello-from-createClient" });
 
-    const get = yield* client.get(route(url, key));
-    expect(get.status).toBe(200);
-    expect(yield* get.text).toBe("hello-effect");
+    const got = yield* rpc(base, "get", []);
+    expect(got.status).toBe(200);
+    expect(yield* got.json).toEqual({ value: "hello-from-createClient" });
   }),
   { timeout: 180_000 },
 );
 
 test(
-  "missing `key` returns 400",
+  "SSR loader renders the backend value into the HTML",
   Effect.gen(function* () {
     const { url } = yield* stack;
+    const base = url.replace(/\/+$/, "");
 
-    // `400` is the real answer; `getWhenReady` only retries the propagation
-    // `404`/`5xx` window, so it returns the `400` as soon as the route is live.
-    const res = yield* getWhenReady(route(url));
-    expect(res.status).toBe(400);
+    // Seed R2 through the RPC surface, then assert the server-rendered
+    // page contains the value — the loader called `backend.get()` via the
+    // value form (direct in-process dispatch) during SSR.
+    const saved = yield* rpc(base, "save", ["ssr-rendered-message"]);
+    expect(saved.status).toBe(200);
+
+    const html = yield* getBodyWhenReady(base, "ssr-rendered-message");
+    expect(html).toContain("ssr-rendered-message");
   }),
+  { timeout: 180_000 },
 );
 
 test(
-  "GET for a non-existent key returns 404",
+  "unknown RPC methods answer the typed 404 envelope",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const client = yield* HttpClient.HttpClient;
+    const base = url.replace(/\/+$/, "");
 
-    const res = yield* client.get(route(url, "integ:does-not-exist"));
+    // Warm the route first (a real RPC 404 is indistinguishable from the
+    // cold-start 404 that `executeWhenReady` retries through).
+    const warm = yield* rpc(base, "get", []);
+    expect(warm.status).toBe(200);
+
+    const client = yield* HttpClient.HttpClient;
+    const res = yield* client.execute(
+      HttpClientRequest.post(`${base}/api/__rpc/nope`).pipe(
+        HttpClientRequest.bodyText("[]", "application/json"),
+      ),
+    );
     expect(res.status).toBe(404);
+    const body = (yield* res.json) as { error: { _tag: string } };
+    expect(body.error._tag).toBe("RpcMethodNotFound");
   }),
+  { timeout: 180_000 },
 );

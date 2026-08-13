@@ -125,6 +125,13 @@ export interface EffectSvelteKitProps extends SvelteKitProps {
  * `hooks.server.ts` makes the generated arm stand down, and
  * `server: { takeover: false }` forces the explicit tier outright.
  *
+ * The impl's non-`fetch` methods are **RPC methods** — the typed API
+ * surface, served at the reserved `POST /api/__rpc/<method>` path
+ * (claimed on the edge router automatically) and called through
+ * `createClient` from `alchemy/client`: type-only form in browser code,
+ * value form for direct in-process dispatch in `+page.server.ts` `load`
+ * functions. A `fetch` handler is only needed for hand-rolled routes.
+ *
  * @example SvelteKit site with an effect-native API
  * ```typescript
  * // src/backend.ts — narrow subpath imports keep the IaC engine out of the
@@ -133,35 +140,35 @@ export interface EffectSvelteKitProps extends SvelteKitProps {
  * import { Bucket, GetObject, GetObjectHttp } from "alchemy/AWS/S3";
  * import { SvelteKit } from "alchemy/AWS/Website";
  * import * as Effect from "effect/Effect";
- * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
- * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  *
  * export const Data = Bucket("Data");
  *
  * export default class Site extends SvelteKit<Site>()(
  *   "Site",
- *   { main: import.meta.url, server: { routes: ["/api/*"] } },
+ *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     const getObject = yield* GetObject(yield* Data);
  *     return {
- *       fetch: Effect.gen(function* () {
- *         const request = yield* HttpServerRequest;
- *         const url = new URL(request.url, "http://localhost");
- *         if (url.pathname === "/api/hello") {
- *           const object = yield* getObject({ Key: "hello.txt" }).pipe(
- *             Effect.orDie,
- *           );
- *           return HttpServerResponse.text(String(object.Body));
- *         }
- *         // the effect owns /api/* — unknown paths get its own 404
- *         return yield* HttpServerResponse.json(
- *           { error: "not found" },
- *           { status: 404 },
- *         );
- *       }),
+ *       hello: () =>
+ *         getObject({ Key: "hello.txt" }).pipe(
+ *           Effect.map((object) => String(object.Body)),
+ *         ),
  *     };
  *   }).pipe(Effect.provide(GetObjectHttp)),
  * ) {}
+ * ```
+ *
+ * @example Calling it from the frontend (createClient)
+ * ```typescript
+ * // browser code — TYPE-ONLY backend import, zero backend bytes; in a
+ * // `+page.server.ts` `load`, value-import the backend and call
+ * // createClient(Backend) for direct in-process dispatch instead.
+ * import { createClient } from "alchemy/client";
+ * import type Backend from "../src/backend.ts";
+ *
+ * const backend = createClient<typeof Backend>();
+ *
+ * const text = await backend.hello(); // POST /api/__rpc/hello
  * ```
  */
 export const SvelteKit: {

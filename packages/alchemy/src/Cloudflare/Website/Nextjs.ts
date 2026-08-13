@@ -286,6 +286,13 @@ export interface NextjsProps<
  * exclusions win). Durable Object exports and queue/scheduled/cron
  * handlers ride the same wrapper (non-fetch surface).
  *
+ * The impl's non-`fetch` methods are **RPC methods** — the typed API
+ * surface, served at the reserved `POST /api/__rpc/<method>` path (no
+ * routes claim needed) and called through `createClient` from
+ * `alchemy/client`: type-only form in client components, value form for
+ * direct in-process dispatch in server components. A `fetch` handler is
+ * only needed for hand-rolled routes.
+ *
  * The program must live in a dedicated module whose default export is the
  * class, anchored by `main: import.meta.url`. Local dev: `preview` mode
  * serves the takeover artifact with full parity; `hmr` mode (`next dev`) is
@@ -302,33 +309,34 @@ export interface NextjsProps<
  * import * as KV from "alchemy/Cloudflare/KV";
  * import * as Website from "alchemy/Cloudflare/Website";
  * import * as Effect from "effect/Effect";
- * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
- * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  *
  * export const Users = KV.Namespace("Users");
  *
  * export default class Site extends Website.Nextjs<Site>()(
  *   "Site",
- *   { main: import.meta.url, server: { routes: ["/api/*"] } },
+ *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     const users = yield* KV.ReadWriteNamespace(yield* Users);
  *     return {
- *       fetch: Effect.gen(function* () {
- *         const request = yield* HttpServerRequest;
- *         const url = new URL(request.url, "http://localhost");
- *         if (url.pathname === "/api/user") {
- *           const value = yield* users.get("current").pipe(Effect.orDie);
- *           return yield* HttpServerResponse.json({ value });
- *         }
- *         // the effect owns /api/* — unknown paths get its own 404
- *         return yield* HttpServerResponse.json(
- *           { error: "not found" },
- *           { status: 404 },
- *         );
- *       }),
+ *       get: () => users.get("current"),
+ *       save: (value: string) => users.put("current", value),
  *     };
  *   }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),
  * ) {}
+ * ```
+ *
+ * @example Calling it from the frontend (createClient)
+ * ```typescript
+ * // a "use client" component — TYPE-ONLY backend import, zero backend
+ * // bytes; in a server component, value-import the backend and call
+ * // createClient(Backend) for direct in-process dispatch instead.
+ * import { createClient } from "alchemy/client";
+ * import type Backend from "../src/backend.ts";
+ *
+ * const backend = createClient<typeof Backend>();
+ *
+ * await backend.save("hello"); // POST /api/__rpc/save
+ * const value = await backend.get(); // typed end-to-end
  * ```
  *
  * @section Class Form

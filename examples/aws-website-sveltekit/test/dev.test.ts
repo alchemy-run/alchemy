@@ -11,6 +11,10 @@
  *                       (read via `process.env` in +page.server.ts)
  *   - routing         → `/about` (prerendered route) serves
  *   - static assets   → `/robots.txt` from static/
+ *   - RPC wire path   → `POST /api/__rpc/save` (createClient's wire
+ *                       protocol) serves through the dev server against
+ *                       the real S3 bucket, and the +page.server.ts SSR
+ *                       seam renders the saved value
  *   - HOT RELOAD      → editing src/routes/+page.svelte is served by
  *                       Vite's HMR without a redeploy
  */
@@ -157,6 +161,22 @@ test(
     // Static asset from static/.
     const robots = await (await fetchOk(new URL("/robots.txt", url))).text();
     expect(robots).toContain("User-agent:");
+
+    // The rpc wire path rides the dev server too: this is the exact
+    // request the browser's type-only createClient sends, served by the
+    // backend method against the REAL S3 bucket (remote()).
+    const rpc = await fetch(new URL("/api/__rpc/save", url), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(["hello-from-dev-test"]),
+    });
+    expect(rpc.status).toBe(200);
+    expect(await rpc.json()).toEqual({ value: "hello-from-dev-test" });
+
+    // ...and the SSR seam (+page.server.ts, the value form) renders the
+    // saved value into the page.
+    const ssr = await (await fetchOk(url)).text();
+    expect(ssr).toContain("hello-from-dev-test");
 
     // ── HOT RELOAD: rewrite the index page with the CLI still running —
     // the framework dev server serves the new markup without a deploy ──

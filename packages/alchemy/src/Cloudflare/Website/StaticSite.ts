@@ -222,6 +222,12 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * the asset layer. Hand a path back to the assets with an exclusion glob
  * (`routes: ["/api/*", "!/api/foo"]` — exclusions win).
  *
+ * The impl's non-`fetch` methods are **RPC methods** — the typed API
+ * surface, served at the reserved `POST /api/__rpc/<method>` path (no
+ * routes claim needed) and called through `createClient` from
+ * `alchemy/client` in the static frontend. A `fetch` handler is only
+ * needed for hand-rolled routes.
+ *
  * The program must live in a dedicated module whose default export is
  * the class, anchored by `main: import.meta.url` (exactly like
  * `Cloudflare.Worker` — with an impl, `main` is the program's module
@@ -232,8 +238,6 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * import * as KV from "alchemy/Cloudflare/KV";
  * import * as Website from "alchemy/Cloudflare/Website";
  * import * as Effect from "effect/Effect";
- * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
- * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  *
  * export const Users = KV.Namespace("Users");
  *
@@ -244,26 +248,27 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  *     outdir: "dist",
  *     main: import.meta.url,
  *     assets: { notFoundHandling: "single-page-application" },
- *     server: { routes: ["/api/*"] },
  *   },
  *   Effect.gen(function* () {
  *     const users = yield* KV.ReadWriteNamespace(yield* Users);
  *     return {
- *       fetch: Effect.gen(function* () {
- *         const request = yield* HttpServerRequest;
- *         const url = new URL(request.url, "http://localhost");
- *         if (url.pathname === "/api/user") {
- *           const value = yield* users.get("current").pipe(Effect.orDie);
- *           return yield* HttpServerResponse.json({ value });
- *         }
- *         return yield* HttpServerResponse.json(
- *           { error: "unknown api route" },
- *           { status: 404 },
- *         );
- *       }),
+ *       get: () => users.get("current"),
+ *       save: (value: string) => users.put("current", value),
  *     };
  *   }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),
  * ) {}
+ * ```
+ *
+ * @example Calling it from the frontend (createClient)
+ * ```typescript
+ * // frontend code — TYPE-ONLY backend import, zero backend bytes
+ * import { createClient } from "alchemy/client";
+ * import type Backend from "../src/site.ts";
+ *
+ * const backend = createClient<typeof Backend>();
+ *
+ * await backend.save("hello"); // POST /api/__rpc/save
+ * const value = await backend.get(); // typed end-to-end
  * ```
  *
  * @section Class Form

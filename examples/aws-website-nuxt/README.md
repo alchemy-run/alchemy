@@ -2,9 +2,9 @@
 
 Deploys a Nuxt app to AWS with `AWS.Website.Nuxt` — no `nitro.preset` edits, no CDK.
 
-The resource builds the app through the project's own `@nuxt/kit` with nitro's `aws-lambda` preset (your `nuxt.config.ts` loads natively), deploys the nitro server bundle on a streaming Lambda Function URL, and serves client assets + prerendered pages from S3 behind CloudFront. Values passed via `server.environment` are exposed to server routes and SSR through `process.env`.
+The resource builds the app through the project's own `@nuxt/kit` with nitro's `aws-lambda` preset (your `nuxt.config.ts` loads natively), deploys the nitro server bundle on a streaming Lambda Function URL, and serves client assets + prerendered pages from S3 behind CloudFront.
 
-The site is **effectful**: `src/backend.ts` passes an Effect program as the third argument, so the same Lambda that serves the Nuxt app also serves an effect-native API with typed AWS capabilities (the S3 bucket's name lands as an env var and its IAM policy on the Lambda role, collected at plan time):
+The site is **effectful**: `src/backend.ts` passes an Effect program as the third argument, and the program's RPC methods ARE the API surface — no routes, no URL parsing (the S3 bucket's name lands as an env var and its IAM policy on the Lambda role, collected at plan time):
 
 ```ts
 export default class Site extends Nuxt<Site>()(
@@ -14,22 +14,41 @@ export default class Site extends Nuxt<Site>()(
     const bucket = yield* SiteData;
     const putObject = yield* S3.PutObject(bucket);
     const getObject = yield* S3.GetObject(bucket);
-    return { fetch: Effect.gen(function* () { /* /api/message */ }) };
+    return {
+      get: () => Effect.gen(function* () { /* read from S3 */ }),
+      save: (value: string) => Effect.gen(function* () { /* write to S3 */ }),
+    };
   }).pipe(Effect.provide([S3.PutObjectHttp, S3.GetObjectHttp])),
 ) {}
 ```
 
-On Nuxt the program mounts explicitly through one file — a nitro server middleware compiled by nitro itself, running in the deployed Lambda and under `nuxt dev` alike:
+On Nuxt the wire path mounts explicitly through one file — a nitro server middleware compiled by nitro itself, running in the deployed Lambda and under `nuxt dev` alike:
 
 ```ts
 // server/middleware/alchemy.ts
 import { toEventHandler } from "alchemy/serve/nitro";
-import Site, { routes } from "../../src/backend.ts";
+import Site from "../../src/backend.ts";
 
-export default toEventHandler(Site, { routes });
+export default toEventHandler(Site);
 ```
 
-The shared `routes` claim (`["/api/*", "!/api/hello"]` in `src/backend.ts`) decides who serves each path: inside the claim the Effect program is authoritative (even its 404s); outside it the middleware declines and nitro's own handlers answer — `/api/hello` stays a plain nitro route via the exclusion glob while `/api/message` round-trips through the program's S3 binding (the home page demos both).
+Methods are called through `createClient` (`alchemy/client`), which has two forms:
+
+```ts
+// SSR (useAsyncData handler, guarded by import.meta.server): VALUE import —
+// direct in-process dispatch, no HTTP
+const { default: Backend } = await import("../../src/backend");
+const message = await createClient(Backend).get();
+
+// Browser: TYPE-ONLY import — zero backend bytes in the client bundle;
+// each call POSTs the wire protocol (/api/__rpc/save)
+import { createClient } from "alchemy/client";
+import type Backend from "../../src/backend";
+const backend = createClient<typeof Backend>();
+await backend.save(draft);
+```
+
+The middleware dispatches the universal rpc path (`/api/__rpc/*`) and declines everything else, so nitro's own routes keep serving normally — `/api/hello` stays a plain nitro route while the home page reads the S3-backed message in-process during SSR and saves a new one from the browser over the wire.
 
 ## Commands
 
@@ -43,6 +62,6 @@ bun alchemy destroy  # tear down
 
 - `@alchemy.run/frontend-frameworks` must be installed in the project — the server's source provider is loaded from its `/nuxt` export at deploy time.
 - Unchanged projects skip the build and deploy entirely (the project tree is content-hashed, respecting `.gitignore`).
-- In `alchemy dev`, the site is Nuxt's own dev server (native HMR). The site itself creates no AWS resources in dev, but the S3 bucket bound by the effect program is pinned `remote()` in `src/backend.ts`, so `/api/message` hits the real bucket with your ambient credentials.
-- Nitro's `isr` route rule is Vercel/Netlify-only and ignored on AWS Lambda — use `prerender` (as `/about` does here) or `cache` route rules instead.
-- `test/integ.test.ts` deploys the stack and asserts SSR, the API route, the prerendered page, and static assets over HTTP.
+- In `alchemy dev`, the site is Nuxt's own dev server (native HMR). The site itself creates no AWS resources in dev, but the S3 bucket bound by the effect program is pinned `remote()` in `src/backend.ts`, so both `createClient` forms hit the real bucket with your ambient credentials.
+- `/about` is prerendered at build time — prerendered pages must not call the backend server-side (nitro's `isr` route rule is Vercel/Netlify-only and ignored on AWS Lambda; use `prerender` or `cache` route rules instead).
+- `test/integ.test.ts` deploys the stack and asserts SSR (including the backend-rendered value), the rpc wire path, the nitro route, the prerendered page, and static assets over HTTP.

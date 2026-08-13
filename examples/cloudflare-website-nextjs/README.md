@@ -8,17 +8,34 @@ the resulting worker, and deploys the static assets (including
 prerendered pages) alongside it.
 
 - `src/backend.ts` declares the Website class with an Effect program as its
-  third argument: ONE Worker serves the Next.js app and an Effect-native
-  API. The program's `fetch` owns `server.routes`
-  (`["/api/*", "!/api/hello"]` here) and uses a KV namespace through a
-  typed capability binding — collected automatically at plan time. The
-  takeover is automatic (no route.ts mount); inside the routes the
-  program is authoritative (even its 404s), while the `!/api/hello`
-  exclusion statically hands that path back to Next's own route handler.
-- `app/page.jsx` is server-rendered in the Worker on every request and
-  calls `/api/visits` from the browser to show the KV-backed visit
-  counter.
-- `app/api/hello/route.js` is an app-router API route handler.
+  third argument: ONE Worker serves the Next.js app and a typed backend
+  API. The program's RPC METHODS (`visit`, `visits`) are the API surface,
+  backed by a KV namespace through a typed capability binding — collected
+  automatically at plan time. The takeover is automatic (no route.ts
+  mount): the generated entry serves the RPC dispatch at `/api/__rpc/*`
+  first; every other path (including Next's own `/api/hello` route
+  handler) stays Next's.
+- `app/page.tsx` is an async server component using the VALUE form of
+  `createClient` — direct in-process dispatch, no HTTP hop:
+
+  ```tsx
+  import Backend from "../src/backend";
+  const backend = createClient(Backend);
+  const visits = await backend.visit();
+  ```
+
+- `app/visits.tsx` is a `"use client"` component using the TYPE-ONLY
+  form — `POST /api/__rpc/<method>`, zero backend bytes in the client
+  bundle:
+
+  ```tsx
+  import { createClient } from "alchemy/client";
+  import type Backend from "../src/backend";
+  const backend = createClient<typeof Backend>();
+  await backend.visit();
+  ```
+
+- `app/api/hello/route.ts` is an app-router API route handler.
 - Everything under `public/` deploys as static assets.
 - `open-next.config.ts` selects the read-only static-assets incremental
   cache: ISR pages serve their prerendered payloads; revalidation writes

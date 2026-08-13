@@ -5,12 +5,13 @@ import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import Stack from "../alchemy.run.ts";
 
 // Fresh `workers.dev` URLs transiently 404 while the route propagates.
 // `Test.getWhenReady` fails on that cold-start window and retries until the
 // worker serves a real response.
-const { getWhenReady } = Test;
+const { executeWhenReady, getWhenReady } = Test;
 
 class AssetNotReady extends Data.TaggedError("AssetNotReady")<{
   body: string;
@@ -69,13 +70,20 @@ test(
 );
 
 test(
-  "serves the server-rendered home page",
+  "server-renders the backend value into the home page (value form)",
   Effect.gen(function* () {
     const url = yield* base;
+    // app/page.tsx (an async server component) calls `backend.visit()`
+    // through the VALUE form of createClient (direct in-process dispatch)
+    // — the KV-backed count is already in the server-rendered HTML.
     const res = yield* getWhenReady(url);
     expect(res.status).toBe(200);
     const html = yield* res.text;
     expect(html).toContain("Next.js on Cloudflare Workers");
+    expect(html).toContain("rendered on the server via the backend client");
+    const count = html.match(/data-testid="count"[^>]*>(\d+)/);
+    expect(count).not.toBeNull();
+    expect(Number(count![1])).toBeGreaterThanOrEqual(1);
   }),
   { timeout: 180_000 },
 );
@@ -84,9 +92,8 @@ test(
   "serves the dynamic API route",
   Effect.gen(function* () {
     const url = yield* base;
-    // /api/hello is excluded from the effect claim in src/backend.ts
-    // (routes: ["/api/*", "!/api/hello"]) — exclusions win, so Next's own
-    // route handler answers. This doubles as exclusion-glob proof.
+    // Next's own App Router route handler — the backend's RPC dispatch
+    // only claims /api/__rpc/*, so the rest of /api/* stays Next's.
     const res = yield* getWhenReady(`${url}/api/hello`);
     expect(res.status).toBe(200);
     const body = (yield* res.json) as { hello: string };
@@ -96,15 +103,21 @@ test(
 );
 
 test(
-  "serves the Effect API route",
+  "serves the createClient wire protocol (POST /api/__rpc/visit)",
   Effect.gen(function* () {
     const url = yield* base;
-    // Served by the Effect fetch in src/backend.ts (which owns /api/*), backed by
-    // the KV namespace binding collected at plan time.
-    const res = yield* getWhenReady(`${url}/api/visits`);
+    // The wire-level proof of the type-only form used by app/visits.tsx:
+    // the universal `POST /api/__rpc/<method>` dispatch envelope-encodes
+    // the RPC method result — backed by the KV binding collected at plan
+    // time.
+    const res = yield* executeWhenReady(
+      HttpClientRequest.post(`${url}/api/__rpc/visit`).pipe(
+        HttpClientRequest.bodyText("[]", "application/json"),
+      ),
+    );
     expect(res.status).toBe(200);
-    const body = (yield* res.json) as { visits: number };
-    expect(body.visits).toBeGreaterThanOrEqual(1);
+    const body = (yield* res.json) as { value: number };
+    expect(body.value).toBeGreaterThanOrEqual(1);
   }),
   { timeout: 180_000 },
 );

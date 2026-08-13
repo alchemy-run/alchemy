@@ -10,6 +10,9 @@
  *   - SSR             → `/` renders through the framework dev server
  *   - routing         → `/about/` (prerendered route) serves
  *   - static assets   → `/robots.txt` from public/
+ *   - RPC wire path   → `POST /api/__rpc/visit` (createClient's wire
+ *                       protocol) serves through the dev server against
+ *                       the real DynamoDB table
  *   - HOT RELOAD      → editing src/pages/index.astro is served by the
  *                       framework's HMR without a redeploy
  */
@@ -156,6 +159,18 @@ test(
     // Static asset from public/.
     const robots = await (await fetchOk(new URL("/robots.txt", url))).text();
     expect(robots).toContain("User-agent:");
+
+    // The rpc wire path rides the dev server too: this is the exact
+    // request the browser's type-only createClient sends, served by the
+    // backend method against the REAL DynamoDB table (remote()).
+    const rpc = await fetch(new URL("/api/__rpc/visit", url), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "[]",
+    });
+    expect(rpc.status).toBe(200);
+    const envelope = (await rpc.json()) as { value: number };
+    expect(envelope.value).toBeGreaterThanOrEqual(1);
 
     // ── HOT RELOAD: rewrite the index page with the CLI still running —
     // the framework dev server serves the new markup without a deploy ──

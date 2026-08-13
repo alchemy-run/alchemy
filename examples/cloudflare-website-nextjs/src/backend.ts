@@ -6,8 +6,6 @@
 import * as KV from "alchemy/Cloudflare/KV";
 import { Nextjs } from "alchemy/Cloudflare/Website";
 import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 /**
  * KV namespace bound by the site's Effect program. Registered on the stack
@@ -17,19 +15,23 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 export const Visits = KV.Namespace("Visits");
 
 /**
- * ONE Worker serves the Next.js app AND an Effect-native API: the third
+ * ONE Worker serves the Next.js app AND a typed backend API: the third
  * argument is an Effect program (the same shape as `Cloudflare.Worker`)
- * whose `fetch` owns `server.routes`. The takeover is automatic — no
- * route.ts mount needed: alchemy wraps the OpenNext worker artifact with a
- * generated entry that dispatches the effect routes first. Inside the
- * routes the program is authoritative (even its 404s); the exclusion glob
- * `!/api/hello` statically hands that path back to Next, so the app's own
- * `/api/hello` route handler keeps working.
+ * whose RPC METHODS are the API surface. `createClient` calls them — over
+ * `POST /api/__rpc/<method>` from client components (type-only form) and
+ * by direct in-process dispatch from server components (value form). The
+ * takeover is automatic — alchemy wraps the OpenNext worker artifact with
+ * a generated entry that serves the RPC dispatch first; every other path
+ * (including Next's own /api/hello route handler) stays Next's.
+ *
+ * The KV capability the program uses is collected automatically at plan
+ * time — no separate backend worker, service binding, proxy route, or env
+ * shim.
  *
  * Dev caveat: the default `alchemy dev` mode (`preview`) serves the real
  * takeover artifact with full parity. `nextjs: { devMode: "hmr" }` runs
- * `next dev` in Node, where the takeover doesn't exist — there the effect
- * fetch needs the explicit `alchemy/serve/next` route-handler mount.
+ * `next dev` in Node, where the takeover doesn't exist — there the RPC
+ * dispatch needs the explicit `alchemy/serve/next` route-handler mount.
  *
  * `main: import.meta.url` anchors this module — the engine imports it for
  * plan-time binding collection and the generated entry re-imports it at
@@ -39,10 +41,6 @@ export default class Site extends Nextjs<Site>()(
   "Nextjs",
   {
     main: import.meta.url,
-    // The URL space the Effect fetch owns. `!/api/hello` excludes Next's
-    // own route handler from the claim — exclusions win, so Next serves
-    // it; every other /api/* path is answered by the program (even 404s).
-    server: { routes: ["/api/*", "!/api/hello"] },
     // Only hash the files that affect the build, so unchanged sources
     // skip the OpenNext build (and the deploy) entirely.
     memo: {
@@ -63,23 +61,19 @@ export default class Site extends Nextjs<Site>()(
     // again inside the Worker on first request (builds the runtime client).
     const visits = yield* KV.ReadWriteNamespace(yield* Visits);
     return {
-      fetch: Effect.gen(function* () {
-        const request = yield* HttpServerRequest;
-        const url = new URL(request.url, "http://site");
-        if (url.pathname === "/api/visits") {
-          const count =
-            Number((yield* visits.get("count").pipe(Effect.orDie)) ?? "0") + 1;
-          yield* visits.put("count", String(count)).pipe(Effect.orDie);
-          return yield* HttpServerResponse.json({ visits: count });
-        }
-        // The program owns everything inside `server.routes` (with
-        // /api/hello excluded above), so unknown /api/* paths get its own
-        // 404 — never Next.
-        return yield* HttpServerResponse.json(
-          { error: "unknown effect route" },
-          { status: 404 },
-        );
-      }),
+      // RPC methods — the KV-backed visit counter. Served to `createClient`
+      // at the universal `POST /api/__rpc/<method>` dispatch, and invoked
+      // directly (no HTTP) by the value form in server components.
+      visits: () =>
+        Effect.gen(function* () {
+          return Number((yield* visits.get("count")) ?? "0");
+        }).pipe(Effect.orDie),
+      visit: () =>
+        Effect.gen(function* () {
+          const count = Number((yield* visits.get("count")) ?? "0") + 1;
+          yield* visits.put("count", String(count));
+          return count;
+        }).pipe(Effect.orDie),
     };
   }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),
 ) {}

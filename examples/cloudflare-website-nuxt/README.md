@@ -4,22 +4,51 @@ Deploys a Nuxt app to Cloudflare Workers with `Cloudflare.Website.Nuxt` — no `
 
 The resource builds the app through the project's own `@nuxt/kit` with nitro's `cloudflare_module` preset (your `nuxt.config.ts` loads natively), deploys the nitro server bundle as the Worker, and serves client assets + prerendered pages as Worker static assets. Values passed via `env` are exposed to server routes and SSR through `event.context.cloudflare.env`.
 
-The Website class lives in `src/backend.ts` and takes an Effect program as its third argument: ONE Worker serves the Nuxt app and an Effect-native API. The program's `fetch` owns `server.routes` (`["/api/*", "!/api/hello"]` here) and uses a KV namespace through a typed capability binding — collected automatically at plan time. Inside the routes the program is authoritative (even its 404s); the `!/api/hello` exclusion statically hands that path back to nitro, so the app's own route keeps answering.
+The Website class lives in `src/backend.ts` and takes an Effect program as its third argument: ONE Worker serves the Nuxt app and a typed backend API. The program's RPC METHODS (`visit`, `visits`) are the API surface, backed by a KV namespace through a typed capability binding — collected automatically at plan time. The program also keeps a `fetch` owning `server.routes` (`["/api/*", "!/api/hello"]`) to demonstrate route ownership: inside the claim the program is authoritative (even its 404s); the `!/api/hello` exclusion statically hands that path back to nitro, so the app's own route keeps answering.
 
 ```ts
 export default class Site extends Nuxt<Site>()(
   "NuxtSite",
-  { main: import.meta.url },
+  {
+    main: import.meta.url,
+    server: { routes: ["/api/*", "!/api/hello"] },
+  },
   Effect.gen(function* () {
     const visits = yield* KV.ReadWriteNamespace(yield* Visits);
     return {
-      fetch: Effect.gen(function* () {
-        // ... /api/visits handled here; unknown /api/* paths get the
-        // program's own 404 (/api/hello is excluded, so nitro serves it)
-      }),
+      fetch: HttpServerResponse.json(
+        { error: "unknown effect route" },
+        { status: 404 },
+      ),
+      visit: () =>
+        Effect.gen(function* () {
+          const count = Number((yield* visits.get("count")) ?? "0") + 1;
+          yield* visits.put("count", String(count));
+          return count;
+        }).pipe(Effect.orDie),
     };
   }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),
 ) {}
+```
+
+`createClient` bridges both worlds in `app/pages/index.vue`:
+
+```ts
+// browser: TYPE-ONLY form — POST /api/__rpc/<method>, zero backend bytes
+// in the client bundle
+import { createClient } from "alchemy/client";
+import type Backend from "../../src/backend";
+const backend = createClient<typeof Backend>();
+
+// SSR: VALUE form — direct in-process dispatch (compiled out of the
+// client bundle by the import.meta.server guard)
+const { data: visits } = await useAsyncData("visits", async () => {
+  if (import.meta.server) {
+    const { default: Backend } = await import("../../src/backend");
+    return createClient(Backend).visit();
+  }
+  return backend.visit();
+});
 ```
 
 ## Commands

@@ -3,9 +3,14 @@
 // loads the project's own config natively, so the utilities below compile.
 import "../styles/global.css";
 
-// Server-rendered on every request inside the AWS Lambda function.
-// Environment values declared in alchemy.run.ts are available on
-// `process.env`.
+// SSR seam: VALUE import + `createClient(Backend)` — the backend method
+// dispatches directly in-process (no HTTP hop) inside the AWS Lambda on
+// every request (and in `astro dev` alike).
+import { createClient } from "alchemy/client";
+import Backend from "../backend.ts";
+
+const backend = createClient(Backend);
+const count = await backend.visit();
 const now = new Date().toISOString();
 ---
 
@@ -16,23 +21,38 @@ const now = new Date().toISOString();
     <title>Astro on AWS</title>
   </head>
   <body class="bg-slate-50 p-8 text-slate-900">
-    <h1 class="text-3xl font-bold">Astro on AWS</h1>
-    <p class="mt-4 text-slate-600">
-      This page is server-rendered in an AWS Lambda at {now}.
-    </p>
-    <p class="mt-2 text-slate-600">
-      You are visitor <span id="visits">…</span> — counted by the Effect
-      program's <code>/api/visits</code> route (DynamoDB, same Lambda).
-    </p>
-    <p class="mt-2">
-      <a href="/about/" class="text-blue-600 underline">A prerendered page</a>
-    </p>
+    <main class="mx-auto max-w-2xl rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
+      <h1 class="text-3xl font-bold">Astro on AWS</h1>
+      <p class="mt-4 text-slate-600">
+        This page is server-rendered in an AWS Lambda at {now}.
+      </p>
+      <p class="mt-2 text-slate-600">
+        You are visitor <span id="visits" class="font-semibold">{count}</span> —
+        counted in DynamoDB by the backend's <code>visit</code> method (called
+        in-process during SSR).
+      </p>
+      <button
+        id="again"
+        class="mt-4 rounded border border-slate-300 px-3 py-1 hover:bg-slate-100"
+      >
+        Visit again
+      </button>
+      <p class="mt-4">
+        <a href="/about/" class="text-blue-600 underline">A prerendered page</a>
+      </p>
+    </main>
     <script>
-      // The effect fetch owns /api/* — this hits the DynamoDB-backed
-      // handler declared in src/backend.ts.
-      const res = await fetch("/api/visits");
-      const { count } = await res.json();
-      document.querySelector("#visits")!.textContent = String(count);
+      // Browser side: TYPE-ONLY import + type-only form — zero backend
+      // bytes in the client bundle. Each call POSTs the wire protocol
+      // (`/api/__rpc/visit`) to the same Lambda.
+      import { createClient } from "alchemy/client";
+      import type Backend from "../backend.ts";
+
+      const backend = createClient<typeof Backend>();
+      document.querySelector("#again")!.addEventListener("click", async () => {
+        const count = await backend.visit();
+        document.querySelector("#visits")!.textContent = String(count);
+      });
     </script>
   </body>
 </html>

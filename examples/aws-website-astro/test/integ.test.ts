@@ -5,13 +5,23 @@ import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import Stack from "../alchemy.run.ts";
 
 // A fresh CloudFront distribution (and the Lambda behind it) can serve
 // transient 404/5xx responses while it propagates. `Test.getWhenReady`
 // fails on that cold-start window and retries until the site serves a
 // real response.
-const { getWhenReady } = Test;
+const { executeWhenReady, getWhenReady } = Test;
+
+// One RPC wire call, exactly as `createClient`'s type-only form sends it:
+// `POST /api/__rpc/<method>` with a JSON array of positional args.
+const rpcWhenReady = (url: string, method: string, args: unknown[] = []) =>
+  executeWhenReady(
+    HttpClientRequest.post(`${url}/api/__rpc/${method}`).pipe(
+      HttpClientRequest.bodyText(JSON.stringify(args), "application/json"),
+    ),
+  );
 
 class AssetNotReady extends Data.TaggedError("AssetNotReady")<{
   body: string;
@@ -74,13 +84,18 @@ test(
 );
 
 test(
-  "serves the server-rendered home page",
+  "serves the server-rendered home page with the backend's SSR value",
   Effect.gen(function* () {
     const url = yield* base;
     const res = yield* getWhenReady(url);
     expect(res.status).toBe(200);
     const html = yield* res.text;
     expect(html).toContain("server-rendered in an AWS Lambda");
+    // The frontmatter called `backend.visit()` in-process (the value form
+    // of createClient) — the rendered HTML carries the DynamoDB count.
+    const visits = html.match(/id="visits"[^>]*>(\d+)</);
+    expect(visits).not.toBeNull();
+    expect(Number(visits![1])).toBeGreaterThanOrEqual(1);
   }),
   { timeout: 180_000 },
 );
@@ -127,17 +142,22 @@ test(
 );
 
 test(
-  "serves the effect API from the same Lambda",
+  "serves the backend method over the rpc wire path",
   Effect.gen(function* () {
     const url = yield* base;
-    // /api/visits is served by the Effect program in src/backend.ts — the
-    // CloudFront edge router forwards `server.routes` to the server
-    // Lambda before the asset manifest, and the DynamoDB capability
-    // bindings (env + IAM) were collected at plan time.
-    const res = yield* getWhenReady(`${url}/api/visits`);
+    // `POST /api/__rpc/visit` is the exact wire request the browser's
+    // type-only `createClient<typeof Backend>()` sends. The CloudFront
+    // edge router forwards the universal rpc claim to the server Lambda,
+    // and the DynamoDB capability bindings (env + IAM) were collected at
+    // plan time.
+    const res = yield* rpcWhenReady(url, "visit");
     expect(res.status).toBe(200);
-    const body = (yield* res.json) as { count: number };
-    expect(body.count).toBeGreaterThanOrEqual(1);
+    const body = (yield* res.json) as { value: number };
+    expect(body.value).toBeGreaterThanOrEqual(1);
+    // A second call increments — the method really runs per request.
+    const again = yield* rpcWhenReady(url, "visit");
+    const next = (yield* again.json) as { value: number };
+    expect(next.value).toBeGreaterThan(body.value);
   }),
   { timeout: 180_000 },
 );

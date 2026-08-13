@@ -123,6 +123,12 @@ export interface EffectOctaneProps extends OctaneProps {
  * module whose default export is the class (`main: import.meta.url`) and
  * be mounted in Octane's server entry via `alchemy/serve`.
  *
+ * The impl's non-`fetch` methods are **RPC methods** — the typed API
+ * surface, served at the reserved `POST /api/__rpc/<method>` path
+ * (dispatched by the same mount) and called through `createClient` from
+ * `alchemy/client` (type-only import in browser code). A `fetch`
+ * handler is only needed for hand-rolled routes.
+ *
  * @example Octane site with an effect-native API
  * ```typescript
  * // src/backend.ts — narrow subpath imports keep the IaC engine out of the
@@ -131,25 +137,33 @@ export interface EffectOctaneProps extends OctaneProps {
  * import { Bucket, GetObject, GetObjectHttp } from "alchemy/AWS/S3";
  * import { Octane } from "alchemy/AWS/Website";
  * import * as Effect from "effect/Effect";
- * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  *
  * export const Data = Bucket("Data");
  *
  * export default class Site extends Octane<Site>()(
  *   "Site",
- *   { main: import.meta.url, server: { routes: ["/api/*"] } },
+ *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     const getObject = yield* GetObject(yield* Data);
  *     return {
- *       fetch: Effect.gen(function* () {
- *         const object = yield* getObject({ Key: "hello.txt" }).pipe(
- *           Effect.orDie,
- *         );
- *         return HttpServerResponse.text(String(object.Body));
- *       }),
+ *       hello: () =>
+ *         getObject({ Key: "hello.txt" }).pipe(
+ *           Effect.map((object) => String(object.Body)),
+ *         ),
  *     };
  *   }).pipe(Effect.provide(GetObjectHttp)),
  * ) {}
+ * ```
+ *
+ * @example Calling it from the frontend (createClient)
+ * ```typescript
+ * // browser code — TYPE-ONLY backend import, zero backend bytes
+ * import { createClient } from "alchemy/client";
+ * import type Backend from "../src/backend.ts";
+ *
+ * const backend = createClient<typeof Backend>();
+ *
+ * const text = await backend.hello(); // POST /api/__rpc/hello
  * ```
  */
 export const Octane: {
