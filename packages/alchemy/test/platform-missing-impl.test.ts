@@ -122,6 +122,7 @@ describe("tagged platform resource yielded without its impl layer", () => {
       const message = String(Exit.isFailure(exit) ? exit.cause : "");
       expect(message).toContain("Test.PlatformWidget<BareWidget>");
       expect(message).toContain("BareWidget.make(");
+      expect(message).toContain("Provide it to the Stack's program");
       expect(message).toContain("Effect.provide([BareWidgetLive])");
       // The provider must never be reached with undefined props.
       expect(observed.ran).toBe(false);
