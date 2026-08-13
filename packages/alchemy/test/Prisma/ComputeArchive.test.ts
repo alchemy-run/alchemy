@@ -379,6 +379,28 @@ describe("createComputeArchive", () => {
       }).pipe(Effect.provide(PlatformServices)),
   );
 
+  it.effect("validates custom ignore patterns before applying a prefix", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-compute-prefixed-ignore-validation-",
+      });
+      yield* fs.writeFileString(path.join(root, "server.ts"), "safe");
+
+      const unsafe = yield* Effect.exit(
+        createComputeArchive({
+          directory: root,
+          entrypoint: "server.ts",
+          ignore: ["../outside"],
+          ignorePrefix: "public",
+        }),
+      );
+
+      expect(unsafe._tag).toBe("Failure");
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
   it.effect("reports invalid archive limits as typed errors", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;

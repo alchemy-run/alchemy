@@ -3,11 +3,13 @@ import {
   runComputeAutoBuild,
   runComputeStaticBuild,
 } from "@/Prisma/ComputeBuild";
+import { createComputeArchive } from "@/Prisma/ComputeArchive";
 import { PlatformServices } from "@/Util/PlatformServices";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import { gunzipSync } from "node:zlib";
 
 const inspectBuildEnvironmentCommand = [
   JSON.stringify(process.execPath),
@@ -722,6 +724,7 @@ describe("Prisma Compute auto-build", () => {
 
       expect(artifact.entrypoint).toBe("server.mjs");
       expect(artifact.defaultPort).toBe(8080);
+      expect(artifact.archiveIgnorePrefix).toBe("public");
       expect(
         yield* fs.readFileString(
           path.join(artifact.directory, "public", "index.html"),
@@ -1018,37 +1021,85 @@ describe("Prisma Compute static-site build", () => {
     }).pipe(Effect.provide(PlatformServices)),
   );
 
-  it.effect(
-    "returns 404 for unmatched files when SPA fallback is disabled",
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectory({
-          prefix: "alchemy-prisma-static-site-no-spa-",
-        });
-        yield* fs.makeDirectory(path.join(root, "dist"));
-        yield* fs.writeFileString(
-          path.join(root, "dist", "index.html"),
-          "static home",
-        );
+  it.effect("serves a custom root page without enabling SPA fallback", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-static-site-no-spa-",
+      });
+      yield* fs.makeDirectory(path.join(root, "dist"));
+      yield* fs.writeFileString(
+        path.join(root, "dist", "home.html"),
+        "static home",
+      );
 
-        const artifact = yield* runComputeStaticBuild({
-          appPath: root,
-          command: "true",
-          outdir: "dist",
-        });
+      const artifact = yield* runComputeStaticBuild({
+        appPath: root,
+        command: "true",
+        outdir: "dist",
+        indexPage: "home.html",
+      });
 
-        yield* withStaticSiteServer(artifact.directory, (origin) =>
-          Effect.gen(function* () {
-            const response = yield* request(`${origin}/missing`);
-            expect(response.status).toBe(404);
-            expect(yield* responseText(response)).toBe("Not Found");
-          }),
-        );
+      yield* withStaticSiteServer(artifact.directory, (origin) =>
+        Effect.gen(function* () {
+          const rootResponse = yield* request(`${origin}/`);
+          expect(rootResponse.status).toBe(200);
+          expect(yield* responseText(rootResponse)).toBe("static home");
 
-        yield* artifact.cleanup;
-      }).pipe(Effect.provide(PlatformServices)),
+          const missingResponse = yield* request(`${origin}/missing`);
+          expect(missingResponse.status).toBe(404);
+          expect(yield* responseText(missingResponse)).toBe("Not Found");
+        }),
+      );
+
+      yield* artifact.cleanup;
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect("scopes archive ignores to the static output", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-static-site-ignore-",
+      });
+      yield* fs.makeDirectory(path.join(root, "dist", "assets"), {
+        recursive: true,
+      });
+      yield* fs.writeFileString(
+        path.join(root, "dist", "index.html"),
+        "static home",
+      );
+      yield* fs.writeFileString(
+        path.join(root, "dist", "assets", "app.mjs"),
+        "app",
+      );
+      yield* fs.writeFileString(
+        path.join(root, "dist", "assets", "app.js.map"),
+        "source map",
+      );
+
+      const artifact = yield* runComputeStaticBuild({
+        appPath: root,
+        command: "true",
+        outdir: "dist",
+      });
+      const archive = yield* createComputeArchive({
+        directory: artifact.directory,
+        entrypoint: artifact.entrypoint,
+        ignore: ["assets/*.map", "*.mjs"],
+        ignorePrefix: artifact.archiveIgnorePrefix,
+      }).pipe(Effect.ensuring(artifact.cleanup));
+      const tarText = new TextDecoder().decode(
+        yield* Effect.sync(() => gunzipSync(archive)),
+      );
+
+      expect(tarText).toContain("bundle/server.mjs");
+      expect(tarText).toContain("bundle/public/index.html");
+      expect(tarText).toContain("bundle/public/assets/app.mjs");
+      expect(tarText).not.toContain("bundle/public/assets/app.js.map");
+    }).pipe(Effect.provide(PlatformServices)),
   );
 
   it.effect("rejects unsafe output and index paths", () =>

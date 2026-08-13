@@ -39,6 +39,11 @@ export interface ComputeArchiveOptions {
    */
   ignore?: readonly string[];
   /**
+   * Artifact-relative prefix applied to custom ignore patterns after they are
+   * validated.
+   */
+  ignorePrefix?: string;
+  /**
    * Maximum uncompressed bytes accepted across all archived files. Values
    * above the provider's 256 MiB hard ceiling are rejected.
    *
@@ -139,6 +144,7 @@ const createComputeArchiveFile = Effect.fn(function* (
     directory,
     entrypoint,
     ignore = [],
+    ignorePrefix,
     maxUncompressedBytes = MAX_UNCOMPRESSED_BYTES,
     maxFileBytes = MAX_FILE_BYTES,
     maxEntries = MAX_ENTRIES,
@@ -150,7 +156,12 @@ const createComputeArchiveFile = Effect.fn(function* (
   const normalizedEntrypoint = yield* normalizeEntrypoint(entrypoint);
   const validated = yield* Effect.try({
     try: () => ({
-      ignore: [...ALWAYS_IGNORED_PATTERNS, ...ignore].map(compileIgnorePattern),
+      ignore: [
+        ...ALWAYS_IGNORED_PATTERNS.map((pattern) =>
+          compileIgnorePattern(pattern),
+        ),
+        ...ignore.map((pattern) => compileIgnorePattern(pattern, ignorePrefix)),
+      ],
       maxUncompressedBytes: boundedLimit(
         "maxUncompressedBytes",
         maxUncompressedBytes,
@@ -409,7 +420,7 @@ const boundedLimit = (name: string, value: number, hardLimit: number) => {
   return value;
 };
 
-const compileIgnorePattern = (input: string) => {
+const compileIgnorePattern = (input: string, prefix?: string) => {
   const normalized = input.replaceAll("\\", "/").replace(/^\.\//, "");
   if (
     normalized.length === 0 ||
@@ -420,7 +431,8 @@ const compileIgnorePattern = (input: string) => {
   ) {
     throw new Error(`Invalid compute archive ignore pattern: ${input}`);
   }
-  const escaped = normalized
+  const scoped = prefix === undefined ? normalized : `${prefix}/${normalized}`;
+  const escaped = scoped
     .replace(/[.+^${}()|[\]\\]/g, "\\$&")
     .replaceAll("**", "\0")
     .replaceAll("*", "[^/]*")

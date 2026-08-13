@@ -88,6 +88,11 @@ export interface ComputeBuildArtifact {
    */
   defaultPort?: number;
   /**
+   * Directory within the artifact that user-authored archive ignore patterns
+   * are relative to.
+   */
+  archiveIgnorePrefix?: string;
+  /**
    * Removes temporary build output.
    */
   cleanup: Effect.Effect<void, never, FileSystem.FileSystem>;
@@ -628,6 +633,7 @@ export const runComputeStaticBuild = Effect.fn(function* (
           directory: temp.artifactDir,
           entrypoint,
           defaultPort: 8080,
+          archiveIgnorePrefix: "public",
           cleanup: temp.cleanup,
         };
       }),
@@ -693,7 +699,8 @@ const staticSiteServerSource = (options: { indexPage: string; spa: boolean }) =>
     "    const exact = await responseForFile(target, method);",
     "    if (exact) return exact;",
     '    const directoryUrl = target.href.endsWith("/") ? target : new URL(`${target.href}/`);',
-    '    const directoryIndex = await responseForFile(new URL("index.html", directoryUrl), method);',
+    '    const directoryIndexPage = pathname === "/" ? indexPage : "index.html";',
+    "    const directoryIndex = await responseForFile(new URL(encodePath(directoryIndexPage), directoryUrl), method);",
     "    if (directoryIndex) return directoryIndex;",
     "",
     "    if (spa) {",

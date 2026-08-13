@@ -297,10 +297,11 @@ export interface ComputeProps extends PlatformProps {
    */
   path?: string;
   /**
-   * Additional artifact-relative files or directories to exclude from path
-   * deployments. `*` and `**` wildcards are supported; absolute paths,
-   * parent segments, and negated patterns are rejected. `.env*`, `.git`, and
-   * `.alchemy` are always excluded.
+   * Additional files or directories to exclude from path deployments. Static
+   * build patterns are relative to the configured output directory; other
+   * patterns are artifact-relative. `*` and `**` wildcards are supported;
+   * absolute paths, parent segments, and negated patterns are rejected.
+   * `.env*`, `.git`, and `.alchemy` are always excluded.
    */
   archiveIgnore?: readonly string[];
   /**
@@ -1690,6 +1691,7 @@ const resolveArtifact = Effect.fn(function* (props: ComputeProps) {
       directory: artifact.directory,
       entrypoint: artifact.entrypoint,
       ignore: props.archiveIgnore,
+      ignorePrefix: artifact.archiveIgnorePrefix,
       output: "file",
     }).pipe(Effect.ensuring(artifact.cleanup));
     port = props.port ?? artifact.defaultPort ?? 8080;
@@ -1721,6 +1723,7 @@ const resolveArtifact = Effect.fn(function* (props: ComputeProps) {
       directory: artifact.directory,
       entrypoint: artifact.entrypoint,
       ignore: props.archiveIgnore,
+      ignorePrefix: artifact.archiveIgnorePrefix,
       output: "file",
     }).pipe(Effect.ensuring(artifact.cleanup));
     port = props.port ?? artifact.defaultPort ?? 8080;
