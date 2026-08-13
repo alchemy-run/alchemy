@@ -278,10 +278,13 @@ export interface NextjsProps<
  * bindings are collected at plan time exactly like an effect Worker's; at
  * build time alchemy performs an OpenNext artifact takeover — the site
  * module is prebundled next to `.open-next/worker.js` and a generated
- * wrapper entry dispatches `server.routes` (default `/api/*`) to the effect
- * fetch first, falling through to the OpenNext handler on
- * `Serve.passthrough`/`RouteNotFound`. Durable Object exports and
- * queue/scheduled/cron handlers ride the same wrapper (non-fetch surface).
+ * wrapper entry routes by `server.routes` (default `/api/*`): inside the
+ * routes the effect fetch is authoritative — an `HttpRouter` miss renders
+ * as its own 404, never delegation — and the OpenNext handler serves
+ * everything outside them without invoking the effect. Hand a path back
+ * to Next with an exclusion glob (`routes: ["/api/*", "!/api/foo"]` —
+ * exclusions win). Durable Object exports and queue/scheduled/cron
+ * handlers ride the same wrapper (non-fetch surface).
  *
  * The program must live in a dedicated module whose default export is the
  * class, anchored by `main: import.meta.url`. Local dev: `preview` mode
@@ -298,7 +301,6 @@ export interface NextjsProps<
  * // from a site module.
  * import * as KV from "alchemy/Cloudflare/KV";
  * import * as Website from "alchemy/Cloudflare/Website";
- * import { passthrough } from "alchemy/serve";
  * import * as Effect from "effect/Effect";
  * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
  * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -318,7 +320,11 @@ export interface NextjsProps<
  *           const value = yield* users.get("current").pipe(Effect.orDie);
  *           return yield* HttpServerResponse.json({ value });
  *         }
- *         return yield* passthrough; // Next serves everything else
+ *         // the effect owns /api/* — unknown paths get its own 404
+ *         return yield* HttpServerResponse.json(
+ *           { error: "not found" },
+ *           { status: 404 },
+ *         );
  *       }),
  *     };
  *   }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),

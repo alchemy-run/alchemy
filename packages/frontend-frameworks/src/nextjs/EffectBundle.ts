@@ -20,7 +20,7 @@
  *    re-exports exactly those, re-exports the effect program's own DO
  *    bridge classes, and default-exports the `makeWebsiteExports` wrapper
  *    class — effect-first fetch over `server.routes` with the OpenNext
- *    handler as the passthrough fallback, and the full non-fetch handler
+ *    handler as the outside-routes fallback, and the full non-fetch handler
  *    surface (queue/scheduled/email/RPC) from the Worker bridge dispatch.
  * 3. The final esbuild pass then bundles `alchemy-worker.js` instead of
  *    `worker.js`, with the prebundled effect module kept **external** and

@@ -270,14 +270,28 @@ describe("AWS.Website.Astro local (effectful)", () => {
           .pipe(Effect.orDie);
         expect(item.Item?.value?.S).toBe(marker);
 
-        // Passthrough: `/api/astro-echo` is inside the effect scope but
-        // the program declines it (typed `RouteNotFound`) — Astro's own
-        // endpoint answers.
+        // Exclusion glob: `/api/astro-echo` is carved OUT of the effect
+        // claim (`!/api/astro-echo` in server.routes) — Astro's own
+        // endpoint answers; the effect fetch never sees the path.
         yield* expectStatusBody(
           at("/api/astro-echo"),
           200,
           "astro-endpoint-echo",
         );
+
+        // An unknown route INSIDE the claim is the effect fetch's own 404
+        // (its RouteNotFound failure renders as its OWN 404 response —
+        // empty body, not Astro's HTML 404 page).
+        const insideMiss = yield* Effect.tryPromise(async (signal) => {
+          const res = await fetch(at("/api/definitely-not-here"), {
+            signal,
+            cache: "no-store",
+            headers: { "cache-control": "no-cache", accept: "*/*" },
+          });
+          return { status: res.status, body: await res.text() };
+        });
+        expect(insideMiss.status).toBe(404);
+        expect(insideMiss.body).not.toContain("<html");
 
         // Prerender-marked pages render on demand in dev (the guard case
         // proper — the build-time prerenderer never loading the effect

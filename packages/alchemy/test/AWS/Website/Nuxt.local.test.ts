@@ -152,7 +152,6 @@ import { PutObject } from "../../../src/AWS/S3/PutObject.ts";
 import { PutObjectHttp } from "../../../src/AWS/S3/PutObjectHttp.ts";
 import { Nuxt } from "../../../src/AWS/Website/Nuxt.ts";
 import { remote } from "../../../src/ProviderMode.ts";
-import { passthrough } from "../../../src/Serve/Passthrough.ts";
 
 /**
  * S3 bucket bound by the effectful site's program. \`remote()\`: the AWS
@@ -199,9 +198,13 @@ export default class NuxtEffectSite extends Nuxt<NuxtEffectSite>()(
                 );
           return yield* HttpServerResponse.json({ value });
         }
-        // Typed "not mine": the middleware offers EVERY request — nitro's
-        // own routes (/, /api/hello) must keep answering.
-        return yield* passthrough;
+        // Unknown path INSIDE the claim: the effect fetch is authoritative
+        // here, so this is its OWN 404 — never delegation to nitro (paths
+        // outside the middleware's routes never reach this fetch at all).
+        return HttpServerResponse.json(
+          { marker: "effect-404" },
+          { status: 404 },
+        );
       }),
     };
   }).pipe(Effect.provide([PutObjectHttp, GetObjectHttp])),
@@ -211,13 +214,16 @@ export default class NuxtEffectSite extends Nuxt<NuxtEffectSite>()(
 /**
  * The explicit-tier mount (`server/middleware/alchemy.ts` inside the clone
  * — four levels above is `packages/alchemy`). Nitro scans it into the dev
- * worker bundle; the handler answers matched effect routes and returns
- * `undefined` on passthrough so nitro continues to its own handlers.
+ * worker bundle; `routes` decides who serves each path — inside them the
+ * effect fetch is authoritative (its 404s are real 404s), and the handler
+ * returns `undefined` ONLY for paths outside the routes so nitro continues
+ * to its own handlers. The `!/api/hello` exclusion glob carves nitro's own
+ * API route out of the claim.
  */
 const nuxtMiddlewareSource = [
   `import { toEventHandler } from "../../../../src/Serve/nitro.ts";`,
   `import Site from "../../src/site.ts";`,
-  `export default toEventHandler(Site);`,
+  `export default toEventHandler(Site, { routes: ["/api/*", "!/api/hello"] });`,
   ``,
 ].join("\n");
 
@@ -314,12 +320,13 @@ describe("AWS.Website.Nuxt local (effectful)", () => {
           timeout: "240 seconds",
           label: "effectful dev SSR home page",
         });
-        // Nitro's own API route INSIDE /api/* still answers — the effect
-        // fetch declines it (passthrough) and nitro continues.
+        // Nitro's own API route is carved OUT of the effect claim by the
+        // `!/api/hello` exclusion glob — the middleware declines the path
+        // and nitro's handler answers.
         yield* expectUrlContains(
           `${url}/api/hello?echo=dev`,
           "NUXT_AWS_API_MARKER",
-          { label: "framework API route untouched (passthrough)" },
+          { label: "exclusion glob routes to nitro" },
         );
 
         // Effect route through the middleware mount.
@@ -327,6 +334,16 @@ describe("AWS.Website.Nuxt local (effectful)", () => {
           `${url}/api/effect/ping`,
         );
         expect(ping.marker).toBe("effect-fetch");
+
+        // An unknown route INSIDE the claim is the effect's own 404 — the
+        // fetch's marker body proves WHO answered (never nitro's 404).
+        const insideMiss = yield* Effect.gen(function* () {
+          const client = yield* HttpClient.HttpClient;
+          const res = yield* client.get(`${url}/api/definitely-not-here`);
+          return { status: res.status, body: yield* res.text };
+        });
+        expect(insideMiss.status).toBe(404);
+        expect(insideMiss.body).toContain("effect-404");
 
         // S3 round-trip through the binding: the mount's capability
         // clients resolve ambient credentials (`Credentials.fromChain()`)

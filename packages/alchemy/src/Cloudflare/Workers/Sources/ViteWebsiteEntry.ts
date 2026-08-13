@@ -125,9 +125,10 @@ const generateWebsiteEntry = (
   const framework = frameworkEntry
     ? // The framework graph loads lazily on first fallback.
       `() => import(${JSON.stringify(toSpecifier(frameworkEntry))})`
-    : // No framework server entry (SPA / assets-only site): declined and
-      // out-of-scope requests fall through to the static asset layer, which
-      // applies `notFoundHandling` (including the SPA index.html fallback).
+    : // No framework server entry (SPA / assets-only site): requests
+      // outside the effect routes fall through to the static asset layer,
+      // which applies `notFoundHandling` (including the SPA index.html
+      // fallback).
       `() => Promise.resolve({
   default: {
     fetch: (request, env) =>

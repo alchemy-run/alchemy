@@ -34,13 +34,13 @@ import { lambdaServeShell } from "../Lambda/WebsiteHandlers.ts";
 
 /**
  * A Website fetch handler's effect type: `HttpEffect` widened with
- * `RouteNotFound` in the error channel. On delivery paths that compose with
- * a framework (the per-framework AWS composites), the serve bridge maps a
- * `RouteNotFound` failure (or the `Serve.passthrough` subclass) to
- * delegation — the framework's own fetch serves the request. On the
- * effectful `StaticSite`, where the Effect program IS the whole server,
- * there is nothing to fall through to and a `RouteNotFound` failure is
- * answered as a plain 404 by the Lambda HTTP bridge.
+ * `RouteNotFound` in the error channel, which types `HttpRouter` misses.
+ * There is no passthrough protocol — a `RouteNotFound` failure renders as
+ * the fetch's own 404 response through the standard request pipeline;
+ * delegation to the framework is purely a `server.routes` decision made
+ * BEFORE the fetch is invoked. On the effectful `StaticSite`, where the
+ * Effect program IS the whole server, the same rendering applies (the
+ * Lambda HTTP bridge answers the failure as the fetch's own 404).
  */
 export type WebsiteHttpEffect<Req = never> = Effect.Effect<
   HttpServerResponse.HttpServerResponse,
@@ -65,9 +65,10 @@ type WebsiteMain<InitServices = never> = void | {
 /**
  * The shape an effectful AWS Website's Effect program may return: an
  * optional `fetch` handler (the `server.routes`-scoped API surface,
- * passthrough-capable — see {@link WebsiteHttpEffect}) plus any RPC
- * methods, exactly like an effect-native `AWS.Lambda.Function`. Every
- * member is already optional, so a program may also return nothing at all.
+ * authoritative within its routes — see {@link WebsiteHttpEffect}) plus
+ * any RPC methods, exactly like an effect-native `AWS.Lambda.Function`.
+ * Every member is already optional, so a program may also return nothing
+ * at all.
  */
 export type WebsiteShape<Req = never> = WebsiteMain<FunctionServices | Req> &
   MainRpc<FunctionServices | Req>;

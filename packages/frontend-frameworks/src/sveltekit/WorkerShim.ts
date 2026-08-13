@@ -58,8 +58,8 @@
  * the shim wraps kit's fetch handler in `alchemy/serve/worker`'s
  * `makeWebsiteExports`: the Effect fetch owns `routes` and dispatches
  * BEFORE the shim's pragma-cache/static-asset checks — effect responses
- * are never served from (or written to) the shim's edge cache — with
- * passthrough/miss requests falling through to kit unchanged. Durable
+ * are never served from (or written to) the shim's edge cache — and only
+ * requests outside the routes fall through to kit unchanged. Durable
  * Object / Workflow classes from the site's exports are re-exported as
  * bridge classes sharing the one-per-isolate layer build.
  */
@@ -71,7 +71,7 @@ export interface WorkerShimEffectOptions {
    * bundles it as one more input edge.
    */
   readonly main: string;
-  /** Path globs the Effect fetch owns. Omitted = middleware mode. */
+  /** Path globs the Effect fetch owns. @default ["/api/*"] */
   readonly routes?: ReadonlyArray<string> | undefined;
   /** Durable Object class names exported by the site's Effect program. */
   readonly durableObjects?: ReadonlyArray<string> | undefined;
@@ -165,9 +165,10 @@ const effectImports = (effect: WorkerShimEffectOptions): string => {
 /**
  * The effect arm's exports: the `makeWebsiteExports` wrapper as the default
  * export (Effect fetch for `routes` — dispatched before the pragma-cache /
- * asset checks inside `kit_handler` — kit fallback on passthrough/miss,
- * full non-fetch handler surface from the Worker bridge dispatch), plus DO
- * / Workflow bridge class re-exports sharing the one-per-isolate build.
+ * asset checks inside `kit_handler`, authoritative within the routes — kit
+ * serves only paths outside them; full non-fetch handler surface from the
+ * Worker bridge dispatch), plus DO / Workflow bridge class re-exports
+ * sharing the one-per-isolate build.
  */
 const effectExports = (effect: WorkerShimEffectOptions): string => {
   const doClasses = effect.durableObjects ?? [];
@@ -176,7 +177,7 @@ const effectExports = (effect: WorkerShimEffectOptions): string => {
     "// Effectful Website wrapper (alchemy auto-inject tier): the Effect",
     "// fetch owns the routes below and runs BEFORE kit_handler's",
     "// pragma-cache/asset checks — effect responses are never edge-cached",
-    "// by the shim. Passthrough/miss falls through to kit unchanged.",
+    "// by the shim. Only paths outside the routes fall through to kit.",
     "export default makeWebsiteExports(WorkerEntrypoint, {",
     "  site: __alchemy_site,",
     ...(effect.routes !== undefined

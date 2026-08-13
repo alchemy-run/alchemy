@@ -5,7 +5,6 @@
 // capability slice.
 import * as KV from "alchemy/Cloudflare/KV";
 import { SvelteKit } from "alchemy/Cloudflare/Website";
-import { passthrough } from "alchemy/serve";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -20,9 +19,11 @@ export const Visits = KV.Namespace("Visits");
 /**
  * ONE Worker serves the SvelteKit app AND an Effect-native API: the third
  * argument is an Effect program (the same shape as `Cloudflare.Worker`)
- * whose `fetch` owns `/api/*` (the default `server.routes`). Capability
- * bindings the program uses (the KV namespace here) are collected
- * automatically at plan time.
+ * whose `fetch` owns `/api/*` (the default `server.routes`) — inside
+ * that space the program is authoritative (even its 404s); outside it
+ * SvelteKit serves and the program is never invoked. Capability bindings
+ * the program uses (the KV namespace here) are collected automatically
+ * at plan time.
  *
  * `main: import.meta.url` anchors this module — the engine imports it for
  * plan-time binding collection and the generated Worker shim re-imports it
@@ -50,9 +51,13 @@ export default class Site extends SvelteKit<Site>()(
           yield* visits.put("count", String(count)).pipe(Effect.orDie);
           return yield* HttpServerResponse.json({ visits: count });
         }
-        // Typed "not mine": anything else under /api/* falls through to
-        // SvelteKit (its +server endpoints, or its 404).
-        return yield* passthrough;
+        // The program owns everything inside `server.routes`, so unknown
+        // /api/* paths get its own 404 — never SvelteKit. To hand a path
+        // back to kit, exclude it: routes: ["/api/*", "!/api/foo"].
+        return yield* HttpServerResponse.json(
+          { error: "unknown effect route" },
+          { status: 404 },
+        );
       }),
     };
   }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),

@@ -113,7 +113,10 @@ export interface EffectSvelteKitProps extends SvelteKitProps {
  * class (`main: import.meta.url`).
  *
  * Delivery is the auto-inject (wrapper) tier: the AWS deploy target's
- * generated Lambda entry composes the effect fetch ahead of kit's own
+ * generated Lambda entry routes by `server.routes` between the effect
+ * fetch (authoritative inside the routes — an `HttpRouter` miss renders
+ * as its own 404, never delegation; hand a path back to kit with an
+ * exclusion glob like `routes: ["/api/*", "!/api/foo"]`) and kit's own
  * `respond` — inside the single streaming handler wrap, so streamed
  * effect responses ride the Function URL's `RESPONSE_STREAM` pipe — and
  * `alchemy dev` mounts the same dispatch as a middleware in front of
@@ -129,7 +132,6 @@ export interface EffectSvelteKitProps extends SvelteKitProps {
  * // from a site module.
  * import { Bucket, GetObject, GetObjectHttp } from "alchemy/AWS/S3";
  * import { SvelteKit } from "alchemy/AWS/Website";
- * import { passthrough } from "alchemy/serve";
  * import * as Effect from "effect/Effect";
  * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
  * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -151,7 +153,11 @@ export interface EffectSvelteKitProps extends SvelteKitProps {
  *           );
  *           return HttpServerResponse.text(String(object.Body));
  *         }
- *         return yield* passthrough; // kit's +server routes serve the rest
+ *         // the effect owns /api/* — unknown paths get its own 404
+ *         return yield* HttpServerResponse.json(
+ *           { error: "not found" },
+ *           { status: 404 },
+ *         );
  *       }),
  *     };
  *   }).pipe(Effect.provide(GetObjectHttp)),

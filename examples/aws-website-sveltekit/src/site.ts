@@ -11,7 +11,6 @@
 import * as S3 from "alchemy/AWS/S3";
 import { SvelteKit } from "alchemy/AWS/Website";
 import { remote } from "alchemy/ProviderMode";
-import { passthrough } from "alchemy/serve";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -29,9 +28,10 @@ export const SiteData = S3.Bucket("SiteData", {
 /**
  * One Lambda serves the SvelteKit app AND the Effect program's API:
  * requests matching `server.routes` (default `["/api/*"]`) reach the
- * effect `fetch` first — at the CloudFront edge, in the deployed Lambda,
- * and in `vite dev` alike (delivery is automatic for SvelteKit). Anything
- * the program declines falls through to kit's own handlers.
+ * effect `fetch` — at the CloudFront edge, in the deployed Lambda, and in
+ * `vite dev` alike (delivery is automatic for SvelteKit). Inside the
+ * routes the program is authoritative (even its 404s); outside them kit's
+ * own handlers serve and the program is never invoked.
  */
 export default class Site extends SvelteKit<Site>()(
   "SvelteKitSite",
@@ -71,9 +71,13 @@ export default class Site extends SvelteKit<Site>()(
                 );
           return yield* HttpServerResponse.json({ message });
         }
-        // Typed "not mine": everything else under /api/* falls through to
-        // kit's own handlers.
-        return yield* passthrough;
+        // The program owns everything inside `server.routes`, so unknown
+        // /api/* paths get its own 404 — never kit. To hand a path back
+        // to kit, exclude it: routes: ["/api/*", "!/api/foo"].
+        return yield* HttpServerResponse.json(
+          { error: "unknown effect route" },
+          { status: 404 },
+        );
       }),
     };
   }).pipe(Effect.provide([S3.PutObjectHttp, S3.GetObjectHttp])),

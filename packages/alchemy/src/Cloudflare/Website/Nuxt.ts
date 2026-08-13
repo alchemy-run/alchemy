@@ -229,12 +229,14 @@ export interface NuxtProps<
  * class, anchored by `main: import.meta.url` (exactly like
  * `Cloudflare.Worker`). At plan time the program's capability bindings
  * (KV, R2, D1, ...) are collected onto the Worker; at deploy time alchemy
- * generates a nitro entry wrapper that dispatches `server.routes`
- * (default `["/api/*"]`) to the effect fetch first — nitro's own runtime
- * serves everything else, including passthrough
- * (`yield* Serve.passthrough` or an `HttpRouter` miss) within the routes.
- * Durable Object classes and event handlers (cron, queues) declared by
- * the program deploy on the same Worker.
+ * generates a nitro entry wrapper that routes by `server.routes` (default
+ * `["/api/*"]`): inside the routes the effect fetch is authoritative —
+ * an `HttpRouter` miss renders as its own 404, never delegation — and
+ * nitro's own runtime serves everything outside them without invoking
+ * the effect. Hand a path back to nitro with an exclusion glob
+ * (`routes: ["/api/*", "!/api/foo"]` — exclusions win). Durable Object
+ * classes and event handlers (cron, queues) declared by the program
+ * deploy on the same Worker.
  *
  * Under `alchemy dev`, the effect fetch is auto-mounted as a nitro
  * middleware inside Nuxt's own dev server, with bindings served by the
@@ -248,7 +250,6 @@ export interface NuxtProps<
  * // provider barrel from a site module.
  * import * as KV from "alchemy/Cloudflare/KV";
  * import * as Website from "alchemy/Cloudflare/Website";
- * import { passthrough } from "alchemy/serve";
  * import * as Effect from "effect/Effect";
  * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
  * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -268,7 +269,11 @@ export interface NuxtProps<
  *           const value = yield* users.get("current").pipe(Effect.orDie);
  *           return yield* HttpServerResponse.json({ value });
  *         }
- *         return yield* passthrough; // nitro serves everything else
+ *         // the effect owns /api/* — unknown paths get its own 404
+ *         return yield* HttpServerResponse.json(
+ *           { error: "not found" },
+ *           { status: 404 },
+ *         );
  *       }),
  *     };
  *   }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),

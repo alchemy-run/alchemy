@@ -5,7 +5,6 @@
 // the construct + capability slice.
 import * as KV from "alchemy/Cloudflare/KV";
 import { Nextjs } from "alchemy/Cloudflare/Website";
-import { passthrough } from "alchemy/serve";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -20,11 +19,12 @@ export const Visits = KV.Namespace("Visits");
 /**
  * ONE Worker serves the Next.js app AND an Effect-native API: the third
  * argument is an Effect program (the same shape as `Cloudflare.Worker`)
- * whose `fetch` owns `/api/*` (the default `server.routes`). The takeover
- * is automatic — no route.ts mount needed: alchemy wraps the OpenNext
- * worker artifact with a generated entry that dispatches the effect routes
- * first. Routes the program doesn't claim fall through to Next — the app's
- * own `/api/hello` route handler keeps working via the typed `passthrough`.
+ * whose `fetch` owns `server.routes`. The takeover is automatic — no
+ * route.ts mount needed: alchemy wraps the OpenNext worker artifact with a
+ * generated entry that dispatches the effect routes first. Inside the
+ * routes the program is authoritative (even its 404s); the exclusion glob
+ * `!/api/hello` statically hands that path back to Next, so the app's own
+ * `/api/hello` route handler keeps working.
  *
  * Dev caveat: the default `alchemy dev` mode (`preview`) serves the real
  * takeover artifact with full parity. `nextjs: { devMode: "hmr" }` runs
@@ -39,6 +39,10 @@ export default class Site extends Nextjs<Site>()(
   "Nextjs",
   {
     main: import.meta.url,
+    // The URL space the Effect fetch owns. `!/api/hello` excludes Next's
+    // own route handler from the claim — exclusions win, so Next serves
+    // it; every other /api/* path is answered by the program (even 404s).
+    server: { routes: ["/api/*", "!/api/hello"] },
     // Only hash the files that affect the build, so unchanged sources
     // skip the OpenNext build (and the deploy) entirely.
     memo: {
@@ -71,9 +75,13 @@ export default class Site extends Nextjs<Site>()(
           yield* visits.put("count", String(count)).pipe(Effect.orDie);
           return yield* HttpServerResponse.json({ visits: count });
         }
-        // Typed "not mine": Next's own route handlers (e.g. /api/hello)
-        // answer everything else under /api/*.
-        return yield* passthrough;
+        // The program owns everything inside `server.routes` (with
+        // /api/hello excluded above), so unknown /api/* paths get its own
+        // 404 — never Next.
+        return yield* HttpServerResponse.json(
+          { error: "unknown effect route" },
+          { status: 404 },
+        );
       }),
     };
   }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),

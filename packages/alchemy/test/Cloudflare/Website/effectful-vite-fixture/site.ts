@@ -6,8 +6,8 @@
 // subpaths keep it to the runtime slice.
 import * as KV from "alchemy/Cloudflare/KV";
 import * as Website from "alchemy/Cloudflare/Website";
-import { passthrough } from "alchemy/serve";
 import * as Effect from "effect/Effect";
+import { RouteNotFound } from "effect/unstable/http/HttpServerError";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
@@ -23,8 +23,10 @@ export const Users = KV.Namespace("EffectfulViteUsers");
  * `virtual:alchemy:website-entry` worker. Exercises, over real HTTP:
  *
  * - the KV capability binding collected at plan and served at runtime;
- * - the passthrough protocol (`/api/passthrough` falls through to the
- *   static asset layer, which answers with the SPA shell);
+ * - strict route ownership: the `!/api/excluded` exclusion glob carves
+ *   that path back out to the static asset layer (SPA shell), while
+ *   `/api/missing` fails `RouteNotFound` — rendered as the effect's OWN
+ *   empty 404, never delegation;
  * - the SPA shell and client assets outside `server.routes`.
  *
  * `main: import.meta.url` anchors this module: the engine imports it for
@@ -37,6 +39,10 @@ export default class EffectfulViteSite extends Website.Vite<EffectfulViteSite>()
     main: import.meta.url,
     rootDir: import.meta.dirname,
     workersDev: true,
+    // Strict route ownership: the effect fetch owns `/api/*` EXCEPT
+    // `/api/excluded`, which the exclusion glob routes to the framework
+    // (here: the SPA asset layer).
+    server: { routes: ["/api/*", "!/api/excluded"] },
     assets: { notFoundHandling: "single-page-application" },
     memo: {
       include: [
@@ -66,9 +72,10 @@ export default class EffectfulViteSite extends Website.Vite<EffectfulViteSite>()
           const value = yield* users.get(key).pipe(Effect.orDie);
           return yield* HttpServerResponse.json({ value: value ?? null });
         }
-        if (url.pathname === "/api/passthrough") {
-          // Typed "not mine": delegates to the framework/asset fallback.
-          return yield* passthrough;
+        if (url.pathname === "/api/missing") {
+          // The HttpRouter-miss shape: renders as the effect's OWN empty
+          // 404 through the standard pipeline — never delegation.
+          return yield* Effect.fail(new RouteNotFound({ request }));
         }
         return yield* HttpServerResponse.json({
           marker: "effect-fetch",

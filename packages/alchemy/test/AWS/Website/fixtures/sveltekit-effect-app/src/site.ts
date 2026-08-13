@@ -37,8 +37,9 @@ const rootDir = globalThis.__ALCHEMY_RUNTIME__
  * serving the kit app AND an Effect-native API. Delivery is the
  * auto-inject (wrapper) tier — the AWS deploy target's generated Lambda
  * entry composes `site.match(request) ?? respond(request)` inside the one
- * `streamifyResponse` wrap. The Effect fetch owns `/api/*` (default
- * `server.routes`):
+ * `streamifyResponse` wrap. The Effect fetch owns `server.routes`
+ * (`/api/*` minus the `!/api/hello` exclusion glob) — strict route
+ * ownership:
  *
  * - `/api/effect/s3?key=k[&put=v]` — write/read round-trip through the S3
  *   capability bindings collected at plan time (IAM on the server Lambda's
@@ -46,15 +47,20 @@ const rootDir = globalThis.__ALCHEMY_RUNTIME__
  * - `/api/effect/stream` — a STREAMED effect response (multi-chunk body):
  *   must ride the Function URL's `RESPONSE_STREAM` pipe deployed, and the
  *   dev middleware's stream pipe in dev.
- * - everything else under `/api/*` passes through to kit — the fixture's
- *   `/api/hello` +server endpoint keeps working through the passthrough
- *   protocol (`RouteNotFound` ⇒ the wrapper falls through to kit).
+ * - `/api/hello` is carved OUT of the claim by the exclusion glob, so the
+ *   fixture's kit +server endpoint serves it (the effect fetch never sees
+ *   the path).
+ * - any other `/api/*` path renders as the effect fetch's OWN 404 (the
+ *   `RouteNotFound` failure below) — never delegation to kit.
  */
 export default class SvelteKitEffectSite extends Website.SvelteKit<SvelteKitEffectSite>()(
   "SvelteKitEffectSite",
   {
     main: import.meta.url,
     rootDir,
+    // Strict route ownership with an exclusion glob: the effect fetch owns
+    // /api/* EXCEPT /api/hello, which kit's own +server endpoint serves.
+    server: { routes: ["/api/*", "!/api/hello"] },
     forceDestroy: true,
     invalidation: { paths: "all", wait: true },
     memo: { include: ["src/**", "package.json"] },
@@ -98,8 +104,10 @@ export default class SvelteKitEffectSite extends Website.SvelteKit<SvelteKitEffe
             contentType: "text/plain",
           });
         }
-        // Not ours — delegate to kit (e.g. the /api/hello +server route)
-        // through the typed passthrough protocol.
+        // Unknown path INSIDE the claim: the effect fetch is authoritative
+        // here, so the `RouteNotFound` failure renders as its OWN 404
+        // response (what an `HttpRouter` miss produces) — never delegation
+        // to kit.
         return yield* Effect.fail(new RouteNotFound({ request }));
       }),
     };

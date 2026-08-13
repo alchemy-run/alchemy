@@ -1,6 +1,6 @@
 import * as Cloudflare from "alchemy/Cloudflare";
-import { passthrough } from "alchemy/serve";
 import * as Effect from "effect/Effect";
+import { RouteNotFound } from "effect/unstable/http/HttpServerError";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
@@ -19,8 +19,9 @@ export const EffectKv = Cloudflare.KV.Namespace("NuxtEffectKv");
  * the local simulator. Exercises:
  *
  * - `/api/effect/kv` — the effect fetch with the KV binding;
- * - `/api/hello` — passthrough: inside `server.routes` but unclaimed, so
- *   nitro's own scanned route answers;
+ * - `/api/hello` — carved out of the claim by the `!/api/hello` exclusion
+ *   glob, so nitro's own scanned route answers (strict route ownership:
+ *   delegation is purely a `server.routes` decision);
  * - `/` — Nuxt SSR outside the effect routes.
  *
  * `main: import.meta.url` anchors this module: the engine imports it for
@@ -32,6 +33,9 @@ export default class NuxtEffectSite extends Cloudflare.Website.Nuxt<NuxtEffectSi
   {
     main: import.meta.url,
     rootDir: import.meta.dirname,
+    // Strict route ownership: the effect fetch owns `/api/*` EXCEPT
+    // `/api/hello`, which the exclusion glob routes to nitro's own route.
+    server: { routes: ["/api/*", "!/api/hello"] },
     dev: { port: 0 },
     memo: {
       include: [
@@ -64,8 +68,10 @@ export default class NuxtEffectSite extends Cloudflare.Website.Nuxt<NuxtEffectSi
         if (url.pathname === "/api/effect/marker") {
           return yield* HttpServerResponse.json({ marker: "nuxt-effect-dev" });
         }
-        // Typed "not mine": nitro's own routes (e.g. /api/hello) answer.
-        return yield* passthrough;
+        // The HttpRouter-miss shape: renders as the effect's OWN empty
+        // 404 — inside the claim the effect fetch is authoritative
+        // (delegation to nitro happens only via the exclusion glob).
+        return yield* Effect.fail(new RouteNotFound({ request }));
       }),
     };
   }).pipe(Effect.provide(Cloudflare.KV.ReadWriteNamespaceBinding)),

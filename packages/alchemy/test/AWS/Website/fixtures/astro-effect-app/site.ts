@@ -34,15 +34,17 @@ export const Visits = DynamoDB.Table("AstroEffectVisits", {
  * The Astro fetchable-wrapper delivery shape on AWS (DESIGN §6.2c,
  * §7-AWS): one Lambda serves the Astro frontend AND the Effect program's
  * API. The AWS deploy target pre-resolves `virtual:astro:fetchable` to a
- * generated wrapper importing this module by absolute path — effect
- * handlers first for `server.routes` (via the AWS serve shell,
- * `makeWebsiteHandlers`), Astro's own pipeline on passthrough. Exercises:
+ * generated wrapper importing this module by absolute path — the effect
+ * fetch owns `server.routes` (via the AWS serve shell,
+ * `makeWebsiteHandlers`); Astro's own pipeline serves every path outside
+ * them. Exercises:
  *
  * - the DynamoDB capability bindings collected at plan (table-name env
  *   var + IAM onto the server Lambda) and served at runtime;
- * - the passthrough protocol (`/api/astro-echo` is a real Astro endpoint
- *   inside the effect scope — the program declines it with the typed
- *   `RouteNotFound` and Astro serves it);
+ * - strict route ownership (`/api/astro-echo` is a real Astro endpoint
+ *   carved out of the claim by the `!/api/astro-echo` exclusion glob, so
+ *   Astro serves it; an unknown path INSIDE the claim renders as the
+ *   effect fetch's own 404, never delegation);
  * - SSR pages and static assets outside `server.routes`;
  * - the prerender guard (`about.astro` prerenders at build time in the
  *   prerender environment, which never loads the effect wrapper).
@@ -58,7 +60,11 @@ export default class AstroEffectSite extends Astro<AstroEffectSite>()(
   {
     rootDir: import.meta.dirname,
     main: import.meta.url,
-    server: { routes: ["/api/*"] },
+    // The effect fetch owns /api/* EXCEPT /api/astro-echo — the exclusion
+    // glob carves Astro's own endpoint out of the claim (strict route
+    // ownership: exclusions are the only way the framework serves a path
+    // inside the claimed space).
+    server: { routes: ["/api/*", "!/api/astro-echo"] },
     dev: { port: 0 },
     forceDestroy: true,
     invalidation: { paths: "all", wait: true },
@@ -108,15 +114,15 @@ export default class AstroEffectSite extends Astro<AstroEffectSite>()(
             ),
           );
         }
-        // Typed "not mine": everything else in `/api/*` delegates to
-        // Astro's own pipeline (`/api/astro-echo` is a real Astro
-        // endpoint; unknown paths get Astro's 404). `RouteNotFound` is
-        // the passthrough protocol's tag — `HttpRouter` users get it for
-        // free, hand-rolled fetches construct it directly.
+        // Unknown path INSIDE the claim: the effect fetch is
+        // authoritative, so this renders as its OWN 404 response (a
+        // `RouteNotFound` failure is what an `HttpRouter` miss produces —
+        // it flows through the standard pipeline as a 404, never
+        // delegation to Astro).
         return yield* Effect.fail(
           new RouteNotFound({
             request,
-            description: "astro-aws-effect passthrough",
+            description: "astro-aws-effect 404",
           }),
         );
       }),

@@ -9,10 +9,12 @@ prerendered pages) alongside it.
 
 - `site.ts` declares the Website class with an Effect program as its
   third argument: ONE Worker serves the Next.js app and an Effect-native
-  API. The program's `fetch` owns `/api/*` and uses a KV namespace
-  through a typed capability binding — collected automatically at plan
-  time. The takeover is automatic (no route.ts mount); unclaimed routes
-  like `/api/hello` fall through to Next via the typed `passthrough`.
+  API. The program's `fetch` owns `server.routes`
+  (`["/api/*", "!/api/hello"]` here) and uses a KV namespace through a
+  typed capability binding — collected automatically at plan time. The
+  takeover is automatic (no route.ts mount); inside the routes the
+  program is authoritative (even its 404s), while the `!/api/hello`
+  exclusion statically hands that path back to Next's own route handler.
 - `app/page.jsx` is server-rendered in the Worker on every request,
   reads the `GREETING` binding via OpenNext's `getCloudflareContext()`,
   and calls `/api/visits` from the browser to show the KV-backed visit

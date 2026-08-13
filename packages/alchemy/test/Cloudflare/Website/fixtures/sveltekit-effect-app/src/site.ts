@@ -1,6 +1,6 @@
 import * as Cloudflare from "alchemy/Cloudflare";
-import { passthrough } from "alchemy/serve";
 import * as Effect from "effect/Effect";
+import { RouteNotFound } from "effect/unstable/http/HttpServerError";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { fileURLToPath } from "node:url";
@@ -26,17 +26,19 @@ const rootDir = (() => {
 
 /**
  * The effectful SvelteKit Website (DESIGN §6.2b): ONE worker serving the
- * kit app AND an Effect-native API. The Effect fetch owns `/api/*`
- * (default `server.routes`):
+ * kit app AND an Effect-native API. The Effect fetch owns `/api/*` MINUS
+ * the `!/api/ping` exclusion glob (strict route ownership — delegation is
+ * purely a `server.routes` decision):
  *
  * - `/api/effect/kv?key=k` — GET/PUT round-trip through the KV capability
  *   binding collected at plan time.
  * - `/api/effect/uuid` — a *cacheable* response that must NEVER be served
  *   from the shim's pragma cache (effect dispatch happens before the
  *   cache lookup), pinned by asserting two requests differ.
- * - everything else under `/api/*` passes through to kit — the fixture's
- *   `/api/ping` +server endpoint keeps working through the passthrough
- *   protocol.
+ * - `/api/ping` — carved back out to kit by the exclusion glob; the
+ *   fixture's +server endpoint serves it.
+ * - any other path inside the claim fails `RouteNotFound` — rendered as
+ *   the effect's OWN empty 404, never delegation to kit.
  *
  * `rootDir` is derived from this module's location so the fixture works
  * from a temp clone.
@@ -47,6 +49,9 @@ export default class SvelteKitEffectSite extends Cloudflare.Website.SvelteKit<Sv
     main: import.meta.url,
     rootDir,
     workersDev: { enabled: true, previewsEnabled: true },
+    // Strict route ownership: the effect fetch owns `/api/*` EXCEPT
+    // `/api/ping`, which the exclusion glob routes to kit's own handler.
+    server: { routes: ["/api/*", "!/api/ping"] },
     dev: { port: 0 },
     memo: { include: ["src/**", "package.json"] },
     env: {
@@ -78,8 +83,9 @@ export default class SvelteKitEffectSite extends Cloudflare.Website.SvelteKit<Sv
             { headers: { "cache-control": "public, max-age=60" } },
           );
         }
-        // Not ours — delegate to kit (e.g. the /api/ping +server route).
-        return yield* passthrough;
+        // The HttpRouter-miss shape: renders as the effect's OWN empty
+        // 404 — inside the claim the effect fetch is authoritative.
+        return yield* Effect.fail(new RouteNotFound({ request }));
       }),
     };
   }).pipe(Effect.provide(Cloudflare.KV.ReadWriteNamespaceBinding)),

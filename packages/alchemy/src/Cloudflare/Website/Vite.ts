@@ -221,9 +221,12 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * Vite app **and** your effect-native handlers. The program's capability
  * bindings (KV, R2, D1, ...) are collected at plan time exactly like an
  * effect Worker's; at build time alchemy generates a wrapper entry that
- * dispatches `server.routes` (default `["/api/*"]`) to the effect fetch
- * first, falling through to the asset layer / framework handler on
- * `Serve.passthrough` (or an `HttpRouter` `RouteNotFound`). Durable
+ * routes by `server.routes` (default `["/api/*"]`): inside the routes
+ * the effect fetch is authoritative — an `HttpRouter` miss renders as
+ * its own 404, never delegation — and outside them the asset layer /
+ * framework handler serves without ever invoking the effect. Hand a
+ * path back to the framework with an exclusion glob
+ * (`routes: ["/api/*", "!/api/foo"]` — exclusions win). Durable
  * Object classes and queue/scheduled/cron handlers declared by the
  * program ride the same wrapper. With SPA not-found handling, the routes
  * are auto-compiled into `assets.runWorkerFirst` so a static shell can
@@ -241,7 +244,6 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * ```typescript
  * import * as KV from "alchemy/Cloudflare/KV";
  * import * as Website from "alchemy/Cloudflare/Website";
- * import { passthrough } from "alchemy/serve";
  * import * as Effect from "effect/Effect";
  * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
  * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -265,7 +267,11 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  *           const value = yield* users.get("current").pipe(Effect.orDie);
  *           return yield* HttpServerResponse.json({ value });
  *         }
- *         return yield* passthrough; // assets/framework serve the rest
+ *         // the effect owns /api/* — unknown paths get its own 404
+ *         return yield* HttpServerResponse.json(
+ *           { error: "not found" },
+ *           { status: 404 },
+ *         );
  *       }),
  *     };
  *   }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),

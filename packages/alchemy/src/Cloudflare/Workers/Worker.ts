@@ -1350,6 +1350,17 @@ const finalizeWorkerProps = (
           }),
         );
       }
+      // Only the INCLUSION globs compile into `runWorkerFirst`. A
+      // `!`-excluded path must NOT become a negative run_worker_first
+      // rule: Cloudflare's router sends negative-rule matches directly to
+      // the asset worker with no user-worker fallback, so a framework SSR
+      // route carved out by an exclusion glob could never be served. Left
+      // uncompiled, the excluded path takes the default
+      // assets-first-then-worker flow — the wrapper's route gate (which
+      // keeps the exclusion) declines it and the framework side serves.
+      const workerFirstRoutes = routes.filter(
+        (route) => !route.startsWith("!"),
+      );
       // A framework source's `assets` may be config-only (no `directory` —
       // the build supplies it), so the merged shape is cast back onto the
       // props union below.
@@ -1357,7 +1368,12 @@ const finalizeWorkerProps = (
         typeof assets === "string" ? { directory: assets } : assets;
       const runWorkerFirst = config?.runWorkerFirst;
       if (runWorkerFirst === undefined) {
-        assets = { ...config, runWorkerFirst: routes } as WorkerAssetsConfig;
+        if (workerFirstRoutes.length > 0) {
+          assets = {
+            ...config,
+            runWorkerFirst: workerFirstRoutes,
+          } as WorkerAssetsConfig;
+        }
       } else if (runWorkerFirst === false) {
         // Explicit opt-out is the user's billing choice — honored, unless
         // the SPA fallback would answer every miss with index.html and
@@ -1379,7 +1395,7 @@ const finalizeWorkerProps = (
         }
       } else if (Array.isArray(runWorkerFirst)) {
         const merged = [...runWorkerFirst];
-        for (const route of routes) {
+        for (const route of workerFirstRoutes) {
           if (!merged.includes(route)) merged.push(route);
         }
         assets = { ...config, runWorkerFirst: merged } as WorkerAssetsConfig;

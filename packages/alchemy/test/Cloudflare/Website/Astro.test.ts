@@ -11,6 +11,7 @@ import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains, expectUrlRedirect } from "../Utils/Http.ts";
@@ -868,8 +869,9 @@ describe.concurrent("Astro", () => {
   // prerendered/static assets, AND the Effect program's `/api/*` fetch —
   // delivered by the generated fetchable wrapper the integration
   // pre-resolves `virtual:astro:fetchable` to. The KV capability binding
-  // is collected at plan and served from the runtime env; passthrough
-  // delegates into Astro's own routes; `about.astro` prerendering inside
+  // is collected at plan and served from the runtime env; the
+  // `!/api/astro-echo` exclusion glob routes that path to Astro's own
+  // endpoint (strict route ownership); `about.astro` prerendering inside
   // the workerd prerender worker (which keeps astro's default fetchable)
   // is the build-time guard case.
   // ─────────────────────────────────────────────────────────────────────
@@ -987,17 +989,26 @@ describe.concurrent("Astro", () => {
           );
         expect(observed).toBe(marker);
 
-        // Passthrough: `/api/astro-echo` is inside the effect scope but
-        // the program declines it — Astro's own endpoint answers through
-        // the wrapper's fallback.
+        // Exclusion glob routes to the framework: `!/api/astro-echo`
+        // carves the path out of the effect claim, so the wrapper never
+        // dispatches the effect fetch and Astro's own endpoint answers.
         yield* expectUrlContains(
           `${site.url!}/api/astro-echo`,
           "astro-endpoint-echo",
           {
             timeout: "60 seconds",
-            label: "passthrough to astro endpoint",
+            label: "exclusion glob to astro endpoint",
           },
         );
+
+        // Unknown route inside the claim is the effect's OWN 404: the
+        // fixture's RouteNotFound renders as an empty 404 — never Astro's
+        // HTML 404 page.
+        const missing = yield* (yield* HttpClient.HttpClient).get(
+          `${site.url!}/api/nope`,
+        );
+        expect(missing.status).toBe(404);
+        expect(yield* missing.text).not.toContain("<html");
 
         yield* stack.destroy();
         yield* waitForWorkerToBeDeleted(site.workerName, accountId);

@@ -353,9 +353,9 @@ describe.concurrent("Nextjs dev", () => {
         );
         expect(count2.count).toBe(2);
 
-        // Passthrough: /api/hello is inside server.routes but not the
-        // effect program's — the OpenNext handler (middleware included)
-        // serves it.
+        // Exclusion glob routes to the framework: `!/api/hello` carves the
+        // path out of the effect claim, so the OpenNext handler (middleware
+        // included) serves it — the effect fetch never runs for it.
         const client = yield* HttpClient.HttpClient;
         const hello = yield* client
           .get(`${site.url!}/api/hello`)
@@ -365,6 +365,13 @@ describe.concurrent("Nextjs dev", () => {
         expect(hello.status).toBe(200);
         expect(hello.headers["x-fixture-middleware"]).toBe("passed");
         expect(((yield* hello.json) as { hello: string }).hello).toBe("world");
+
+        // Unknown route inside the claim is the effect's OWN 404: the
+        // fixture's RouteNotFound renders as an empty 404 — never Next's
+        // HTML 404 page.
+        const missing = yield* client.get(`${site.url!}/api/nope`);
+        expect(missing.status).toBe(404);
+        expect(yield* missing.text).not.toContain("<html");
 
         // Framework surface outside server.routes: SSR page + static asset.
         yield* expectUrlContains(`${site.url!}/`, "NEXTJS_SSR_MARKER", {

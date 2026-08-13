@@ -27,9 +27,11 @@ export default class Site extends Astro<Site>()(
   request, reads `GREETING` from the environment, and calls
   `/api/visits` — the DynamoDB-backed visit counter declared in
   `site.ts`.
-- Delivery is automatic for Astro: the effect `fetch` runs first for
+- Delivery is automatic for Astro: the effect `fetch` serves
   `server.routes` (default `["/api/*"]`) in the production Lambda and in
-  `astro dev` alike; a `passthrough` falls back to Astro's own pipeline.
+  `astro dev` alike. Inside the routes the program is authoritative
+  (even its 404s); outside them Astro's own pipeline serves. To hand a
+  path back to Astro, exclude it: `routes: ["/api/*", "!/api/foo"]`.
 - `src/pages/about.astro` opts into prerendering
   (`export const prerender = true`) and is served from S3.
 - Everything under `public/` deploys as static assets.

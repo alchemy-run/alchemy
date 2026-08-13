@@ -307,7 +307,7 @@ describe.concurrent("SvelteKit dev", () => {
   );
 
   test.provider(
-    "SvelteKit dev: effectful site serves /api/* through the Effect fetch with local KV; passthrough and kit SSR keep working",
+    "SvelteKit dev: effectful site serves /api/* through the Effect fetch with local KV; exclusion glob routes to kit",
     (stack) =>
       Effect.gen(function* () {
         yield* stack.destroy();
@@ -354,15 +354,23 @@ describe.concurrent("SvelteKit dev", () => {
         );
         expect(kvRead.value).toBe(kvValue);
 
-        // ── Passthrough: a KIT endpoint INSIDE /api/* still answers —
-        // the effect fetch declines it with `Serve.passthrough` and the
-        // middleware falls through to kit ────────────────────────────────
+        // ── Exclusion glob routes to the framework: `!/api/ping` carves
+        // the kit endpoint out of the effect claim, so the dev middleware
+        // never dispatches the effect fetch for it and kit serves it ─────
         const ping = yield* fetchJsonReady<{
           via: string;
           binding: string | null;
         }>(`${site.url!}/api/ping`);
         expect(ping.via).toBe("kit");
         expect(ping.binding).toBe(siteModule.BINDING_MARKER);
+
+        // ── Unknown route inside the claim is the effect's OWN 404: the
+        // fixture's RouteNotFound renders as an empty 404 — never kit's
+        // HTML error page ────────────────────────────────────────────────
+        const client = yield* HttpClient.HttpClient;
+        const missing = yield* client.get(`${site.url!}/api/nope`);
+        expect(missing.status).toBe(404);
+        expect(yield* missing.text).not.toContain("<html");
 
         // ── Framework surface: a +page.svelte SSRs through kit's dev
         // server with `platform.env` (outside the effect routes) ─────────

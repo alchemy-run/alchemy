@@ -405,9 +405,9 @@ describe.concurrent("Nuxt", () => {
   //   worker);
   // - the cron trigger collected from the impl is present in the uploaded
   //   worker metadata (schedules API);
-  // - `/api/hello` (passthrough within the effect routes) and the SSR
-  //   page + static assets keep working through the wrapper's framework
-  //   fallback.
+  // - `/api/hello` (carved out of the effect claim by the `!/api/hello`
+  //   exclusion glob) and the SSR page + static assets keep working
+  //   through the framework side of the routes split.
   // ─────────────────────────────────────────────────────────────────────
   test.provider(
     "Nuxt: effect entry takeover deploys one worker with effect routes, DO export, and cron",
@@ -485,12 +485,21 @@ describe.concurrent("Nuxt", () => {
           "*/5 * * * *",
         );
 
-        // Passthrough within the effect routes: nitro's own /api/hello
-        // still answers.
+        // Exclusion glob routes to the framework: `!/api/hello` carves the
+        // path out of the effect claim, so nitro's own route answers.
         const hello = yield* fetchJsonReady<{ marker: string }>(
           `${base}/api/hello`,
         );
         expect(hello.marker).toBe("api-route-ok");
+
+        // Unknown route inside the claim is the effect's OWN 404: the
+        // fixture's RouteNotFound renders as an empty 404 — never nitro's
+        // 404 payload.
+        const missing = yield* (yield* HttpClient.HttpClient).get(
+          `${base}/api/nope`,
+        );
+        expect(missing.status).toBe(404);
+        expect(yield* missing.text).not.toContain("<html");
 
         // Framework fallback outside the effect routes: SSR page, static
         // asset, and prerendered page all serve through the wrapper.

@@ -5,7 +5,6 @@
 // service-level subpaths keep it to the construct + capability slice.
 import * as KV from "alchemy/Cloudflare/KV";
 import { Astro } from "alchemy/Cloudflare/Website";
-import { passthrough } from "alchemy/serve";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -31,9 +30,10 @@ export default class Site extends Astro<Site>()(
   "Astro",
   {
     main: import.meta.url,
-    // The URL space the Effect fetch owns. Everything else — SSR pages,
+    // The URL space the Effect fetch owns — inside it the program is
+    // authoritative (even its 404s). Everything else — SSR pages,
     // prerendered pages, static assets — is served by Astro exactly as
-    // before.
+    // before, and the effect fetch is never invoked for it.
     server: { routes: ["/api/*"] },
     // Only hash the files that affect the build, so unchanged sources
     // skip the Astro build (and the deploy) entirely.
@@ -64,9 +64,13 @@ export default class Site extends Astro<Site>()(
           yield* visits.put("count", String(count)).pipe(Effect.orDie);
           return yield* HttpServerResponse.json({ visits: count });
         }
-        // Typed "not mine": anything else under /api/* falls through to
-        // Astro (its endpoints, or its 404).
-        return yield* passthrough;
+        // The program owns everything inside `server.routes`, so unknown
+        // /api/* paths get its own 404 — never Astro. To hand a path back
+        // to Astro, exclude it statically: routes: ["/api/*", "!/api/foo"].
+        return yield* HttpServerResponse.json(
+          { error: "unknown effect route" },
+          { status: 404 },
+        );
       }),
     };
   }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),

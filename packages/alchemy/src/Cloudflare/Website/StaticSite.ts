@@ -217,9 +217,10 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * auto-compiled into `assets.runWorkerFirst`, so the API stays reachable
  * even under `single-page-application` not-found handling. Durable
  * Object classes and queue/scheduled/cron handlers declared by the
- * program deploy on the same Worker. There is no framework behind a
- * StaticSite, so a `RouteNotFound`/`Serve.passthrough` inside the routes
- * falls through to the asset layer.
+ * program deploy on the same Worker. Inside the routes the effect fetch
+ * is authoritative — an `HttpRouter` miss renders as its own 404, never
+ * the asset layer. Hand a path back to the assets with an exclusion glob
+ * (`routes: ["/api/*", "!/api/foo"]` — exclusions win).
  *
  * The program must live in a dedicated module whose default export is
  * the class, anchored by `main: import.meta.url` (exactly like

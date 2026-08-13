@@ -76,7 +76,7 @@ const posixify = (str: string): string => str.replace(/\\/g, "/");
 export interface LambdaEntryEffectOptions {
   /** Absolute filesystem path of the user's site module (the impl anchor). */
   readonly main: string;
-  /** Path globs the Effect fetch owns. Omitted = middleware mode. */
+  /** Path globs the Effect fetch owns. @default ["/api/*"] */
   readonly routes?: ReadonlyArray<string> | undefined;
 }
 
@@ -92,10 +92,11 @@ export interface LambdaEntryEffectOptions {
  * the fetch layer BEFORE the single `awslambda.streamifyResponse` wrap, so
  * streamed effect bodies ride the exact same streaming pipe as kit's own
  * responses. `makeWebsiteHandlers` (alchemy's AWS serve shell) owns the
- * routes gate, the four-worlds env guard, the passthrough protocol
- * (`RouteNotFound` ⇒ fall through to kit), and the instance-lifetime layer
- * build; it also embeds the serve sentinel, so the wiring handshake holds
- * for any bundle produced from this entry.
+ * routes gate (strict route ownership: inside the routes the effect
+ * fetch's answer — 404s included — is final; `match` resolves `undefined`
+ * only for paths outside the routes), the four-worlds env guard, and the
+ * instance-lifetime layer build; it also embeds the serve sentinel, so the
+ * wiring handshake holds for any bundle produced from this entry.
  */
 export const generateLambdaEntry = (options: {
   readonly serverImport: string;
@@ -118,7 +119,7 @@ export const generateLambdaEntry = (options: {
 // fetch owns the routes below and dispatches BEFORE kit's respond —
 // composed at the fetch layer, ahead of the single ${wrap} wrap, so
 // streamed effect bodies ride the same streaming pipe as kit's.
-// Passthrough/decline falls through to kit unchanged.
+// Only paths outside the routes fall through to kit.
 const __alchemy_handlers = makeWebsiteHandlers({
   site: __alchemy_site,${
     effect.routes !== undefined

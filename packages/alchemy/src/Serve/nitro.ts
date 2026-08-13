@@ -10,14 +10,15 @@
  * export default toEventHandler(Site);
  * ```
  *
- * The handler answers matched effect routes with a web `Response` (h3
- * ≥ 1.8 sends it natively) and returns `undefined` on passthrough/miss so
- * nitro continues to the framework's own handlers. Structural h3 types
- * only — alchemy does not depend on `h3`.
+ * The handler answers requests inside `options.routes` (default
+ * `["/api/*"]`) with the effect fetch's own web `Response` (h3 ≥ 1.8
+ * sends it natively; the effect's 404s are real 404s) and returns
+ * `undefined` only for paths outside the routes so nitro continues to
+ * the framework's own handlers. Structural h3 types only — alchemy does
+ * not depend on `h3`.
  */
 
-import type { ServeOptions } from "./Bridge.ts";
-import { make, type AnyWebsiteClass } from "./Serve.ts";
+import { make, type AnyWebsiteClass, type MakeOptions } from "./Serve.ts";
 
 /** Defeats static resolution of the specifier by foreign bundlers. */
 const DO_NOT_BUNDLE = "";
@@ -83,9 +84,13 @@ const toWebRequest = async (
  * Mount an effectful Website as Nuxt/nitro server middleware — the
  * explicit Nuxt mount, both clouds. The middleware is compiled by nitro
  * itself, so the program serves in the deployed server bundle and in the
- * nitro dev worker alike. It answers matched effect routes with a web
- * `Response` (h3 ≥ 1.8 sends it natively) and returns `undefined` on
- * passthrough/miss so nitro continues to the framework's own handlers.
+ * nitro dev worker alike. `options.routes` (default `["/api/*"]`,
+ * exclusion globs supported) decides who serves each path: inside the
+ * routes the effect fetch answers with its own web `Response` (h3 ≥ 1.8
+ * sends it natively; an `HttpRouter` miss renders as the effect's own
+ * 404, never delegation), and the middleware returns `undefined` only
+ * for paths outside the routes so nitro continues to the framework's
+ * own handlers.
  *
  * The returned handler carries h3's `__is_handler__` flag, so nitro
  * accepts it without a `defineEventHandler` wrapper — alchemy does not
@@ -105,7 +110,7 @@ const toWebRequest = async (
  */
 export const toEventHandler = (
   site: AnyWebsiteClass,
-  options?: ServeOptions,
+  options?: MakeOptions,
 ) => {
   const handle = make(site, options);
   const handler = async (

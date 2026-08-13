@@ -14,8 +14,7 @@
  * Structural types only — alchemy does not depend on `@sveltejs/kit`.
  */
 
-import type { ServeOptions } from "./Bridge.ts";
-import { make, type AnyWebsiteClass } from "./Serve.ts";
+import { make, type AnyWebsiteClass, type MakeOptions } from "./Serve.ts";
 
 export interface SvelteKitRequestEvent {
   request: Request;
@@ -35,12 +34,16 @@ export interface SvelteKitHandleInput<Event extends SvelteKitRequestEvent> {
  * Mount an effectful Website in SvelteKit's `hooks.server.ts` — the
  * explicit-tier escape hatch (the auto tier covers SvelteKit without any
  * framework-file edit; an explicit mount makes the generated arm stand
- * down). The returned kit `Handle` answers matched effect routes and
- * calls `resolve(event)` on passthrough/miss, so kit's own `+server`
- * endpoints and pages keep working. Env comes from `event.platform.env`
- * when the adapter provides it (Cloudflare), falling back to the
- * bridge's resolution ladder (Node dev → `process.env`). Structural
- * types only — alchemy does not depend on `@sveltejs/kit`.
+ * down). `options.routes` (default `["/api/*"]`, exclusion globs
+ * supported) decides who serves each path: the returned kit `Handle`
+ * answers requests inside the routes with the effect fetch's own
+ * response (404s included — an `HttpRouter` miss is the effect's 404,
+ * never delegation) and calls `resolve(event)` only for paths outside
+ * the routes, so kit's own `+server` endpoints and pages keep working
+ * there. Env comes from `event.platform.env` when the adapter provides
+ * it (Cloudflare), falling back to the bridge's resolution ladder (Node
+ * dev → `process.env`). Structural types only — alchemy does not depend
+ * on `@sveltejs/kit`.
  *
  * @binding
  * @product Serve
@@ -55,7 +58,7 @@ export interface SvelteKitHandleInput<Event extends SvelteKitRequestEvent> {
  * export const handle = sequence(toHandle(Site));
  * ```
  */
-export const toHandle = (site: AnyWebsiteClass, options?: ServeOptions) => {
+export const toHandle = (site: AnyWebsiteClass, options?: MakeOptions) => {
   const handle = make(site, options);
   return async <Event extends SvelteKitRequestEvent>({
     event,

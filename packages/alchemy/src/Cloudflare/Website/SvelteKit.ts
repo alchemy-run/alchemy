@@ -177,11 +177,13 @@ export interface SvelteKitProps<
  * Pass an Effect program as the third argument and ONE Worker serves the
  * SvelteKit app **and** your effect-native handlers. The program's
  * capability bindings (KV, R2, D1, ...) are collected at plan time
- * exactly like an effect Worker's; the generated Worker entry dispatches
- * `server.routes` (default `["/api/*"]`) to the effect fetch first,
- * falling through to kit's own `respond` on `Serve.passthrough` (or an
- * `HttpRouter` `RouteNotFound`) — so kit `+server` endpoints inside the
- * scope keep working. Under `alchemy dev`, the same dispatch mounts as a
+ * exactly like an effect Worker's; the generated Worker entry routes by
+ * `server.routes` (default `["/api/*"]`): inside the routes the effect
+ * fetch is authoritative — an `HttpRouter` miss renders as its own 404,
+ * never delegation — and kit's own `respond` serves everything outside
+ * them without invoking the effect. Keep a kit `+server` endpoint
+ * working with an exclusion glob (`routes: ["/api/*", "!/api/foo"]` —
+ * exclusions win). Under `alchemy dev`, the same dispatch mounts as a
  * middleware in front of kit's Vite dev server. An explicit
  * `alchemy/serve/sveltekit` mount in `hooks.server.ts` remains available
  * as an escape hatch.
@@ -198,7 +200,6 @@ export interface SvelteKitProps<
  * ```typescript
  * import * as KV from "alchemy/Cloudflare/KV";
  * import * as Website from "alchemy/Cloudflare/Website";
- * import { passthrough } from "alchemy/serve";
  * import * as Effect from "effect/Effect";
  * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
  * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -221,7 +222,11 @@ export interface SvelteKitProps<
  *           const value = yield* users.get("current").pipe(Effect.orDie);
  *           return yield* HttpServerResponse.json({ value });
  *         }
- *         return yield* passthrough; // kit serves everything else
+ *         // the effect owns /api/* — unknown paths get its own 404
+ *         return yield* HttpServerResponse.json(
+ *           { error: "not found" },
+ *           { status: 404 },
+ *         );
  *       }),
  *     };
  *   }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),

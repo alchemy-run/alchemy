@@ -1,6 +1,6 @@
 import * as Cloudflare from "alchemy/Cloudflare";
-import { passthrough } from "alchemy/serve";
 import * as Effect from "effect/Effect";
+import { RouteNotFound } from "effect/unstable/http/HttpServerError";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
@@ -53,6 +53,9 @@ export default class NuxtEffectLiveSite extends Cloudflare.Website.Nuxt<NuxtEffe
   {
     main: import.meta.url,
     rootDir: import.meta.dirname,
+    // Strict route ownership: the effect fetch owns `/api/*` EXCEPT
+    // `/api/hello`, which the exclusion glob routes to nitro's own route.
+    server: { routes: ["/api/*", "!/api/hello"] },
     workersDev: { enabled: true, previewsEnabled: true },
     memo: {
       include: [
@@ -99,8 +102,10 @@ export default class NuxtEffectLiveSite extends Cloudflare.Website.Nuxt<NuxtEffe
               : yield* counter.current();
           return yield* HttpServerResponse.json({ count });
         }
-        // Typed "not mine": nitro's own routes (e.g. /api/hello) answer.
-        return yield* passthrough;
+        // The HttpRouter-miss shape: renders as the effect's OWN empty
+        // 404 — inside the claim the effect fetch is authoritative
+        // (delegation to nitro happens only via the exclusion glob).
+        return yield* Effect.fail(new RouteNotFound({ request }));
       }),
     };
   }).pipe(

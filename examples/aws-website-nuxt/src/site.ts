@@ -11,7 +11,6 @@
 import * as S3 from "alchemy/AWS/S3";
 import { Nuxt } from "alchemy/AWS/Website";
 import { remote } from "alchemy/ProviderMode";
-import { passthrough } from "alchemy/serve";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -27,13 +26,21 @@ export const SiteData = S3.Bucket("SiteData", {
 }).pipe(remote());
 
 /**
+ * The URL space the Effect program owns — shared by the construct's
+ * `server.routes` claim and the middleware mount. `!/api/hello` excludes
+ * nitro's own route from the claim (exclusions win), so nitro serves it;
+ * every other /api/* path is answered by the program (even 404s).
+ */
+export const routes = ["/api/*", "!/api/hello"];
+
+/**
  * One Lambda serves the Nuxt app AND the Effect program's API. On Nuxt
  * the effect `fetch` mounts explicitly: the server middleware at
  * `server/middleware/alchemy.ts` (`toEventHandler` from
  * `alchemy/serve/nitro`) is compiled by nitro itself, so it runs in the
- * deployed Lambda and under `nuxt dev` alike. The middleware offers every
- * request; a `passthrough` lets nitro's own handlers (like `/api/hello`)
- * keep answering.
+ * deployed Lambda and under `nuxt dev` alike. `routes` decides who serves
+ * each path: inside the claim the program is authoritative; outside it
+ * the middleware declines and nitro's own handlers answer.
  */
 export default class Site extends Nuxt<Site>()(
   "NuxtSite",
@@ -41,6 +48,7 @@ export default class Site extends Nuxt<Site>()(
     main: import.meta.url,
     forceDestroy: true,
     server: {
+      routes,
       environment: {
         GREETING: "Hello from alchemy",
       },
@@ -73,9 +81,13 @@ export default class Site extends Nuxt<Site>()(
                 );
           return yield* HttpServerResponse.json({ message });
         }
-        // Typed "not mine": nitro's own routes (/, /api/hello, /about)
-        // keep answering.
-        return yield* passthrough;
+        // The program owns everything inside `routes` (with /api/hello
+        // excluded above), so unknown /api/* paths get its own 404 —
+        // never nitro.
+        return yield* HttpServerResponse.json(
+          { error: "unknown effect route" },
+          { status: 404 },
+        );
       }),
     };
   }).pipe(Effect.provide([S3.PutObjectHttp, S3.GetObjectHttp])),

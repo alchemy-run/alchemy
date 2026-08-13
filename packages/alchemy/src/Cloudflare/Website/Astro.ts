@@ -243,10 +243,13 @@ export interface AstroProps<
  * Astro app **and** your effect-native handlers. The program's capability
  * bindings (KV, R2, D1, ...) are collected at plan time exactly like an
  * effect Worker's; alchemy pre-resolves Astro's fetchable seam
- * (`virtual:astro:fetchable`) to a generated wrapper that runs the effect
- * fetch first for `server.routes` (default `["/api/*"]`) and falls back
- * to Astro's own pipeline on `Serve.passthrough` (or an `HttpRouter`
- * `RouteNotFound`) — in the production build and in `astro dev` alike. A
+ * (`virtual:astro:fetchable`) to a generated wrapper that routes by
+ * `server.routes` (default `["/api/*"]`): inside the routes the effect
+ * fetch is authoritative — an `HttpRouter` miss renders as its own 404,
+ * never delegation — and outside them Astro's own pipeline serves
+ * without invoking the effect (hand a path back to Astro with an
+ * exclusion glob: `routes: ["/api/*", "!/api/foo"]`) — in the
+ * production build and in `astro dev` alike. A
  * declared-static build (`astro: { output: "static" }`) deploys no
  * Worker code and therefore rejects an Effect program at plan time.
  *
@@ -262,7 +265,6 @@ export interface AstroProps<
  * ```typescript
  * import * as KV from "alchemy/Cloudflare/KV";
  * import * as Website from "alchemy/Cloudflare/Website";
- * import { passthrough } from "alchemy/serve";
  * import * as Effect from "effect/Effect";
  * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
  * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -285,8 +287,11 @@ export interface AstroProps<
  *           const value = yield* users.get("current").pipe(Effect.orDie);
  *           return yield* HttpServerResponse.json({ value });
  *         }
- *         // Not ours — Astro endpoints and pages serve the rest.
- *         return yield* passthrough;
+ *         // the effect owns /api/* — unknown paths get its own 404
+ *         return yield* HttpServerResponse.json(
+ *           { error: "not found" },
+ *           { status: 404 },
+ *         );
  *       }),
  *     };
  *   }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),
@@ -478,9 +483,10 @@ export const Astro: {
                 // Effectful-Website delivery (auto tier): the integration
                 // pre-resolves Astro's `virtual:astro:fetchable` to a
                 // generated wrapper importing the program module — effect
-                // handlers first for `server.routes`, Astro's pipeline on
-                // passthrough. JSON-serializable by construction (it
-                // crosses the build-child and dev-sidecar boundaries).
+                // handlers own `server.routes`, Astro's pipeline serves
+                // everything outside them. JSON-serializable by
+                // construction (it crosses the build-child and
+                // dev-sidecar boundaries).
                 ...(anchor !== undefined
                   ? {
                       effect: {

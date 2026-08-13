@@ -92,10 +92,10 @@ test(
 test(
   "serves the api route with the environment value",
   Effect.gen(function* () {
-    // /api/hello is a plain nitro route INSIDE the effect scope — the
-    // middleware mount offers it to the Effect program, which declines
-    // with the typed passthrough, so nitro's own handler answers. This
-    // pins the delegation protocol end-to-end.
+    // /api/hello is a plain nitro route excluded from the effect claim
+    // ("!/api/hello" in the shared `routes`) — the middleware mount
+    // declines paths outside the claim, so nitro's own handler answers.
+    // This pins the static route-ownership contract end-to-end.
     const url = yield* base;
     const body = yield* getBodyWhenReady(
       `${url}/api/hello`,

@@ -10,8 +10,8 @@ import {
   ReadWriteNamespaceBinding,
 } from "alchemy/Cloudflare/KV";
 import { Astro } from "alchemy/Cloudflare/Website";
-import { passthrough } from "alchemy/serve";
 import * as Effect from "effect/Effect";
+import { RouteNotFound } from "effect/unstable/http/HttpServerError";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
@@ -27,12 +27,14 @@ export const Users = Namespace("AstroEffectUsers");
  * The Astro fetchable-wrapper delivery shape (DESIGN §6.2c): one Worker
  * serves the Astro frontend AND the Effect program's API. The integration
  * pre-resolves `virtual:astro:fetchable` to a generated wrapper importing
- * this module by absolute path — effect handlers first for
- * `server.routes`, Astro's own pipeline on passthrough. Exercises:
+ * this module by absolute path — the effect fetch is authoritative inside
+ * `server.routes`, Astro's own pipeline serves everything outside them.
+ * Exercises:
  *
  * - the KV capability binding collected at plan and served at runtime;
- * - the passthrough protocol (`/api/astro-echo` is a real Astro endpoint
- *   inside the effect scope — the program declines it and Astro serves it);
+ * - strict route ownership (`/api/astro-echo` is a real Astro endpoint
+ *   carved out of the claim by the `!/api/astro-echo` exclusion glob —
+ *   Astro serves it; unknown in-claim paths get the effect's OWN 404);
  * - SSR pages and static assets outside `server.routes`;
  * - the prerender guard (`about.astro` prerenders in the workerd prerender
  *   worker, which never loads the effect wrapper).
@@ -50,7 +52,10 @@ export default class AstroEffectSite extends Astro<AstroEffectSite>()(
     rootDir: import.meta.dirname,
     workersDev: { enabled: true, previewsEnabled: true },
     compatibility: { date: "2026-03-10" },
-    server: { routes: ["/api/*"] },
+    // Strict route ownership: the effect fetch owns `/api/*` EXCEPT
+    // `/api/astro-echo`, which the exclusion glob routes to Astro's own
+    // endpoint.
+    server: { routes: ["/api/*", "!/api/astro-echo"] },
     dev: { port: 0 },
     memo: {
       include: [
@@ -88,10 +93,10 @@ export default class AstroEffectSite extends Astro<AstroEffectSite>()(
             path: url.pathname,
           });
         }
-        // Typed "not mine": everything else in `/api/*` delegates to
-        // Astro's own pipeline (`/api/astro-echo` is a real Astro
-        // endpoint; unknown paths get Astro's 404).
-        return yield* passthrough;
+        // The HttpRouter-miss shape: renders as the effect's OWN empty
+        // 404 — inside the claim the effect fetch is authoritative
+        // (delegation to Astro happens only via the exclusion glob).
+        return yield* Effect.fail(new RouteNotFound({ request }));
       }),
     };
   }).pipe(Effect.provide(ReadWriteNamespaceBinding)),

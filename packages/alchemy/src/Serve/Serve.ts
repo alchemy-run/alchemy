@@ -17,10 +17,11 @@
 import * as Data from "effect/Data";
 import { markRuntime, matchSite, type ServeOptions } from "./Bridge.ts";
 import { SERVE_SHELL_KEY } from "./constants.ts";
+import { DEFAULT_SERVER_ROUTES, matchRoutes } from "./Routes.ts";
 
 export type { ServeOptions } from "./Bridge.ts";
-export { Passthrough, passthrough } from "./Passthrough.ts";
 export { SERVE_SENTINEL } from "./constants.ts";
+export { DEFAULT_SERVER_ROUTES } from "./Routes.ts";
 
 /**
  * A cloud-specific serve shell a Website class may carry under
@@ -52,13 +53,32 @@ export interface AnyWebsiteClass {
   readonly "~alchemy/Id": string;
 }
 
+/**
+ * Construction options for {@link make}: the shared per-call
+ * {@link ServeOptions} defaults plus the handle's route claim.
+ */
+export interface MakeOptions extends ServeOptions {
+  /**
+   * Path globs the effect fetch owns (the construct's `server.routes`,
+   * `runWorkerFirst` dialect: `*` matches any run including `/`, leading
+   * `!` excludes and exclusions win). Requests outside the claim resolve
+   * `undefined` without invoking the effect fetch — the framework serves
+   * them. Inside the claim the effect fetch is authoritative: its
+   * responses (404s included) are final.
+   * @default DEFAULT_SERVER_ROUTES (["/api/*"])
+   */
+  routes?: readonly string[];
+}
+
 export interface ServeHandle {
   /**
-   * Run the effect fetch for this request. Resolves `undefined` on
-   * passthrough (a `RouteNotFound` failure or `Serve.passthrough`), when
-   * the resolved env carries no alchemy stack markers (build-time
-   * prerender/SSG worlds), or when the site has no fetch handler — the
-   * caller falls through to the framework.
+   * Run the effect fetch for this request. Resolves `undefined` ONLY when
+   * the request is outside the handle's `routes` claim, when the resolved
+   * env carries no alchemy stack markers (build-time prerender/SSG
+   * worlds), or when the site has no fetch handler — the caller falls
+   * through to the framework. Inside the routes the effect fetch is
+   * authoritative: a `RouteNotFound` failure (an `HttpRouter` miss)
+   * renders as the effect's own 404 response, never delegation.
    */
   match(
     request: Request,
@@ -84,6 +104,13 @@ export interface ServeHandle {
  * Websites). The isolate-scope layer build is lazy — nothing happens
  * until the first matched request — and memoized per class per process.
  *
+ * `server.routes` decides who serves each path: requests outside
+ * `options.routes` (default `["/api/*"]`; exclusion globs like
+ * `"!/api/auth/*"` carve paths back out) resolve `undefined` without
+ * invoking the effect fetch, and inside the routes the effect fetch is
+ * authoritative — an `HttpRouter` miss (`RouteNotFound`) renders as the
+ * effect's own 404 response, never delegation.
+ *
  * `defaults` seed every call's options; per-call options win. Env
  * resolution when `options.env` is not given: the guarded
  * `cloudflare:workers` env, then `getCloudflareContext()`-shaped
@@ -101,9 +128,9 @@ export interface ServeHandle {
  * @product Serve
  *
  * @section Mounting in a fetch-shaped entry
- * `match` resolves `undefined` when the request is declined (a
- * `RouteNotFound` failure or `Serve.passthrough`), so the entry composes
- * the framework handler as the fallback.
+ * `match` resolves `undefined` only when the request is outside the
+ * routes claim (or the env carries no alchemy markers), so the entry
+ * composes the framework handler as the fallback.
  *
  * @example TanStack Start server entry (src/server.ts)
  * ```typescript
@@ -138,9 +165,10 @@ export interface ServeHandle {
  */
 export const make = <S extends AnyWebsiteClass>(
   site: S,
-  defaults?: ServeOptions,
+  defaults?: MakeOptions,
 ): ServeHandle => {
   markRuntime();
+  const routes = defaults?.routes ?? DEFAULT_SERVER_ROUTES;
   const merged = (options?: ServeOptions): ServeOptions | undefined =>
     defaults === undefined ? options : { ...defaults, ...options };
   // A class carrying its own cloud-specific shell (AWS Lambda/Node) is
@@ -149,10 +177,17 @@ export const make = <S extends AnyWebsiteClass>(
   const match = (
     request: Request,
     options?: ServeOptions,
-  ): Promise<Response | undefined> =>
-    shell !== undefined
+  ): Promise<Response | undefined> => {
+    // Strict route ownership: outside the claim the framework serves and
+    // the effect fetch is never invoked; inside it the effect's answer
+    // (404s included) is final.
+    if (!matchRoutes(routes, new URL(request.url).pathname)) {
+      return Promise.resolve(undefined);
+    }
+    return shell !== undefined
       ? shell.match(site, request, merged(options))
       : matchSite(site, request, merged(options));
+  };
   return {
     match,
     fetch: async (request, options) => {

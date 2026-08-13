@@ -19,8 +19,9 @@
  * The class reuses the production Worker bridge wholesale
  * (`makeWorkerBridge` for non-fetch events and RPC, `getWorkerExport` for
  * the one-per-isolate layer build shared with the DO/Workflow bridges) and
- * overrides only `fetch`: routes-scoped dispatch to the effect fetch with
- * the passthrough protocol, framework fallback on miss.
+ * overrides only `fetch`: strict route ownership — paths inside `routes`
+ * go to the effect fetch, whose answer (404s included) is final; paths
+ * outside go straight to the framework.
  *
  * This module only ever evaluates inside a worker bundle — there is no plan
  * world here — so the runtime flag is stamped at module evaluation.
@@ -35,7 +36,7 @@ import {
 } from "../Cloudflare/Workers/WorkerBridge.ts";
 import { markRuntime, runSiteFetch } from "./Bridge.ts";
 import { envString, hasStackMarkers, workersEnvOrEmpty } from "./Env.ts";
-import { matchRoutes } from "./Routes.ts";
+import { DEFAULT_SERVER_ROUTES, matchRoutes } from "./Routes.ts";
 import type { AnyWebsiteClass } from "./Serve.ts";
 
 markRuntime();
@@ -65,30 +66,34 @@ export interface WebsiteExportsOptions {
   site: AnyWebsiteClass;
   /**
    * Path globs the effect fetch owns (the construct's `server.routes`).
-   * Requests outside the scope go straight to the framework. Omitted =
-   * every request is offered to the effect fetch first (middleware mode).
+   * Requests outside the claim go straight to the framework; inside it
+   * the effect fetch is authoritative (its 404s are real 404s).
+   * @default DEFAULT_SERVER_ROUTES (["/api/*"])
    */
   routes?: readonly string[];
   /**
    * Lazy loader for the framework's server entry module (kept as a dynamic
-   * `import()` thunk so the framework graph loads on first fallback, not at
-   * wrapper evaluation). The module's `default.fetch` (or `fetch`, or a
-   * default-exported function) serves passthrough/miss requests.
+   * `import()` thunk so the framework graph loads on first out-of-routes
+   * request, not at wrapper evaluation). The module's `default.fetch` (or
+   * `fetch`, or a default-exported function) serves every request outside
+   * `routes`.
    */
   framework?: () => Promise<Record<string, any>>;
 }
 
 /**
- * Build the wrapper worker class: effect fetch for `routes` (with
- * passthrough), framework fallback for everything else, and the full
- * non-fetch handler surface (queue/scheduled/email/RPC) delivered by the
- * underlying Worker bridge dispatch.
+ * Build the wrapper worker class: strict route ownership — the effect
+ * fetch serves `routes` (its answers, 404s included, are final), the
+ * framework serves everything else — plus the full non-fetch handler
+ * surface (queue/scheduled/email/RPC) delivered by the underlying Worker
+ * bridge dispatch.
  */
 export const makeWebsiteExports = (
   Base: any,
   options: WebsiteExportsOptions,
 ): any => {
-  const { site, routes } = options;
+  const { site } = options;
+  const routes = options.routes ?? DEFAULT_SERVER_ROUTES;
   const Bridge = makeWorkerBridge(Base, {
     entrypoint: site,
     stack: lazyStack,
@@ -124,15 +129,14 @@ export const makeWebsiteExports = (
     constructor(workerCtx: any, env: any) {
       super(workerCtx, env);
       // Single-listener law: delegation is composed inside ONE fetch
-      // handler (effect first, framework on miss) — never a second
+      // handler (routes decide effect vs framework) — never a second
       // registered listener, which the Worker runtime would fan out to
       // concurrently.
       (this as any).fetch = async (request: Request): Promise<Response> => {
         const ctx = (this as any).ctx;
         if (
           !hasStackMarkers(env) ||
-          (routes !== undefined &&
-            !matchRoutes(routes, new URL(request.url).pathname))
+          !matchRoutes(routes, new URL(request.url).pathname)
         ) {
           return frameworkFetch(request, env, ctx);
         }
@@ -146,6 +150,8 @@ export const makeWebsiteExports = (
           request,
           { executionContext: ctx },
         );
+        // `undefined` only when the site exposes no fetch handler — inside
+        // the routes the effect fetch's answer (404s included) is final.
         return matched ?? frameworkFetch(request, env, ctx);
       };
     }

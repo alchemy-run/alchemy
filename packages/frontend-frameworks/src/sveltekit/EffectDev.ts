@@ -4,8 +4,9 @@
  * (and its effect arm) never exists in dev. Instead, a `configureServer`
  * middleware mounted IN FRONT of kit runs the Effect fetch for
  * `server.routes` — restoring the "effect before kit" routing parity the
- * deployed shim has — and falls through to kit (`next()`) on passthrough
- * or miss.
+ * deployed shim has. Strict route ownership: inside the routes the effect
+ * fetch's answer (404s included) is final; only paths outside the routes
+ * fall through to kit (`next()`).
  *
  * - The user's site module and the `alchemy/serve` bridge are loaded
  *   through a virtual module in the Vite dev-server graph, so editing
@@ -44,8 +45,9 @@ export interface SvelteKitEffectOptions {
    */
   readonly main: string;
   /**
-   * Path globs the Effect fetch owns (`server.routes`). Omitted =
-   * middleware mode (every request offered to the effect fetch first).
+   * Path globs the Effect fetch owns (`server.routes`). Requests outside
+   * them are kit's; inside them the effect fetch is authoritative.
+   * @default ["/api/*"]
    */
   readonly routes?: ReadonlyArray<string> | undefined;
   /** Durable Object class names from the site's exports (build only). */
@@ -249,7 +251,9 @@ export const makeEffectDevPlugin = (
   args: EffectDevPluginArgs,
 ): ViteModule.Plugin => {
   const mainPath = effectMainPath(args.effect.main);
-  const routes = args.effect.routes;
+  // Mirrors alchemy's DEFAULT_SERVER_ROUTES (this package carries no
+  // alchemy dependency).
+  const routes = args.effect.routes ?? ["/api/*"];
   const stack = args.effect.stack;
   const isAws = args.platform === "aws";
   return {
@@ -292,15 +296,18 @@ export const makeEffectDevPlugin = (
                 // Env resolves from process.env (the sidecar process the
                 // dev server runs in — `alchemy dev` lowered the packed
                 // binding env + stack markers into it). The middleware
-                // already gates routes, so the handlers run in middleware
-                // mode.
-                `export const handle = makeWebsiteHandlers({ site: Site });`,
+                // gates `server.routes` before dispatching, so the
+                // handlers claim everything they receive — a default
+                // claim here would shadow a broader construct claim.
+                `export const handle = makeWebsiteHandlers({ site: Site, routes: ["/*"] });`,
                 `export default Site;`,
               ]
             : [
                 `import Site from ${JSON.stringify(mainPath)};`,
                 `import { make } from "alchemy/serve";`,
-                `export const handle = make(Site);`,
+                // The middleware gates `server.routes` before dispatching
+                // — the handle claims everything it receives.
+                `export const handle = make(Site, { routes: ["/*"] });`,
                 `export default Site;`,
               ]
           ).join("\n")
@@ -318,10 +325,9 @@ export const makeEffectDevPlugin = (
           );
           // Raw pathname, matching the deployed wrapper's dispatch
           // (`makeWebsiteExports` matches `new URL(url).pathname`).
-          if (
-            routes !== undefined &&
-            !matchServerRoutes(routes, url.pathname)
-          ) {
+          // Strict route ownership: only paths outside `server.routes`
+          // fall through to kit.
+          if (!matchServerRoutes(routes, url.pathname)) {
             next();
             return;
           }

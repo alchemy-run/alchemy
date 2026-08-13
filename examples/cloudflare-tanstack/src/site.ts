@@ -6,7 +6,6 @@
 // capability slice.
 import * as R2 from "alchemy/Cloudflare/R2";
 import * as Website from "alchemy/Cloudflare/Website";
-import { passthrough } from "alchemy/serve";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -21,10 +20,11 @@ export const Bucket = R2.Bucket("Bucket");
 /**
  * ONE Worker serves the TanStack Start app AND an Effect-native API: the
  * third argument is an Effect program (the same shape as
- * `Cloudflare.Worker`) whose `fetch` owns `/api/*` (the default
- * `server.routes`). The R2 capability the program uses is collected
- * automatically at plan time — no separate backend worker, service
- * binding, proxy route, or env shim.
+ * `Cloudflare.Worker`) whose `fetch` owns exactly `server.routes` —
+ * claimed narrowly here as `/api/hello`, so every other path (including
+ * the rest of /api/*) stays TanStack Start's. The R2 capability the
+ * program uses is collected automatically at plan time — no separate
+ * backend worker, service binding, proxy route, or env shim.
  *
  * `main: import.meta.url` anchors this module — the engine imports it for
  * plan-time binding collection and the generated worker entry re-imports
@@ -34,6 +34,10 @@ export default class Site extends Website.Vite<Site>()(
   "Website",
   {
     main: import.meta.url,
+    // Claim only the route the program actually implements — inside the
+    // claim the effect fetch is authoritative; everything else is served
+    // by TanStack Start and the program is never invoked.
+    server: { routes: ["/api/hello"] },
     compatibility: {
       flags: ["nodejs_compat"],
     },
@@ -44,14 +48,11 @@ export default class Site extends Website.Vite<Site>()(
     const bucket = yield* R2.ReadWriteBucket(Bucket);
     return {
       // GET/PUT /api/hello?key=<key> — reads/writes R2 through the typed
-      // binding. Everything else under /api/* falls through to TanStack
-      // Start via the typed `passthrough`.
+      // binding. Only /api/hello is claimed by `server.routes`, so this
+      // fetch never sees any other path.
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://site");
-        if (url.pathname !== "/api/hello") {
-          return yield* passthrough;
-        }
         const key = url.searchParams.get("key");
         if (!key) {
           return HttpServerResponse.text("Missing 'key' query parameter", {

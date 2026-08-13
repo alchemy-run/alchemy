@@ -24,12 +24,12 @@ On Nuxt the program mounts explicitly through one file — a nitro server middle
 ```ts
 // server/middleware/alchemy.ts
 import { toEventHandler } from "alchemy/serve/nitro";
-import Site from "../../src/site.ts";
+import Site, { routes } from "../../src/site.ts";
 
-export default toEventHandler(Site);
+export default toEventHandler(Site, { routes });
 ```
 
-The middleware offers every request to the Effect program; a `passthrough` lets nitro's own handlers keep answering — `/api/hello` stays a plain nitro route while `/api/message` round-trips through the program's S3 binding (the home page demos both).
+The shared `routes` claim (`["/api/*", "!/api/hello"]` in `src/site.ts`) decides who serves each path: inside the claim the Effect program is authoritative (even its 404s); outside it the middleware declines and nitro's own handlers answer — `/api/hello` stays a plain nitro route via the exclusion glob while `/api/message` round-trips through the program's S3 binding (the home page demos both).
 
 ## Commands
 

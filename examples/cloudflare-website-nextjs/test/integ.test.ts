@@ -88,9 +88,9 @@ test(
   "serves the dynamic API route",
   Effect.gen(function* () {
     const url = yield* base;
-    // /api/hello is inside the effect scope (/api/*) but unclaimed by the
-    // program in site.ts — passthrough hands it to Next's own route handler,
-    // so this doubles as passthrough proof.
+    // /api/hello is excluded from the effect claim in site.ts
+    // (routes: ["/api/*", "!/api/hello"]) — exclusions win, so Next's own
+    // route handler answers. This doubles as exclusion-glob proof.
     const res = yield* getWhenReady(`${url}/api/hello`);
     expect(res.status).toBe(200);
     const body = (yield* res.json) as { hello: string };

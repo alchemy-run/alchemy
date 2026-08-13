@@ -60,7 +60,7 @@ afterAll(
 );
 
 // The Effect API route served by the same Worker as the frontend —
-// src/site.ts owns /api/* and backs /api/hello with R2.
+// src/site.ts claims exactly /api/hello and backs it with R2.
 const route = (url: string, key?: string) =>
   key === undefined
     ? `${url}/api/hello`

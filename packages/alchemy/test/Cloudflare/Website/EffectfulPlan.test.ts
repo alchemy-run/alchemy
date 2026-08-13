@@ -81,6 +81,32 @@ describe.concurrent("effectful Website plan (collect-only)", () => {
   );
 
   test.provider(
+    "exclusion globs stay OUT of runWorkerFirst (assets-first-then-worker)",
+    (stack) =>
+      Effect.gen(function* () {
+        const plan = yield* stack.plan(
+          Effect.gen(function* () {
+            yield* Cloudflare.Website.Vite(
+              "ExclusionRoutes",
+              {
+                main: import.meta.url,
+                server: { routes: ["/api/*", "!/api/excluded"] },
+              },
+              Effect.succeed(okFetch),
+            );
+          }),
+        );
+        // A `!`-excluded path must not become a negative run_worker_first
+        // rule — Cloudflare's router sends those straight to the asset
+        // worker with no user-worker fallback, so a framework SSR route
+        // carved out by the exclusion could never be served. Only the
+        // inclusions compile; the wrapper's route gate keeps the exclusion.
+        const site = nodeOf(plan, "ExclusionRoutes");
+        expect(site.props.assets.runWorkerFirst).toEqual(["/api/*"]);
+      }),
+  );
+
+  test.provider(
     "plain form: user routes and rules merge into runWorkerFirst",
     (stack) =>
       Effect.gen(function* () {

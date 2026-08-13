@@ -13,25 +13,29 @@
  *          handler as OPTIONS };
  * ```
  *
- * The route already owns its URL space, so a passthrough/decline has no
- * framework handler to fall back to — it becomes a plain 404. Env resolves
- * from OpenNext's `getCloudflareContext()`-shaped global on Cloudflare and
- * `process.env` on AWS/Node (during `next build` prerendering neither
- * carries alchemy markers, so the handler declines instead of building).
+ * Inside `options.routes` (default `["/api/*"]`) the effect fetch is
+ * authoritative — its responses (404s included) are final. The route
+ * already owns its URL space, so a decline (path outside the routes, or a
+ * marker-less build world) has no framework handler to fall back to — it
+ * becomes a plain 404. Env resolves from OpenNext's
+ * `getCloudflareContext()`-shaped global on Cloudflare and `process.env`
+ * on AWS/Node (during `next build` prerendering neither carries alchemy
+ * markers, so the handler declines instead of building).
  */
 
-import type { ServeOptions } from "./Bridge.ts";
 import { cloudflareContextSymbol } from "./Env.ts";
-import { make, type AnyWebsiteClass } from "./Serve.ts";
+import { make, type AnyWebsiteClass, type MakeOptions } from "./Serve.ts";
 
 /**
  * Mount an effectful Website as a Next.js app-router catch-all route
  * handler — the explicit Next mount, both clouds. The route file is
  * compiled by Next itself, so the program serves in the production build
  * and in `next dev` alike. Next's router prefers more specific routes,
- * so your own route handlers keep winning over the catch-all; a
- * passthrough/decline inside the catch-all has no framework handler left
- * to fall back to and becomes a plain 404.
+ * so your own route handlers keep winning over the catch-all. Inside
+ * `options.routes` (default `["/api/*"]`) the effect fetch's answer is
+ * final — an `HttpRouter` miss renders as the effect's own 404; a
+ * decline (path outside the routes) has no framework handler left to
+ * fall back to and becomes a plain 404.
  *
  * Env resolves from OpenNext's `getCloudflareContext()`-shaped global on
  * Cloudflare and `process.env` on AWS/Node. During `next build`
@@ -55,7 +59,7 @@ import { make, type AnyWebsiteClass } from "./Serve.ts";
  */
 export const toRouteHandler = (
   site: AnyWebsiteClass,
-  options?: ServeOptions,
+  options?: MakeOptions,
 ) => {
   const handle = make(site, options);
   return async (request: Request): Promise<Response> => {

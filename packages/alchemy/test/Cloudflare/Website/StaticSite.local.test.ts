@@ -115,7 +115,7 @@ describe.concurrent("StaticSite dev", () => {
           "staticsite-dev-env-marker",
           {
             timeout: "30 seconds",
-            label: "dev.command env passthrough",
+            label: "dev.command env forwarding",
           },
         );
 

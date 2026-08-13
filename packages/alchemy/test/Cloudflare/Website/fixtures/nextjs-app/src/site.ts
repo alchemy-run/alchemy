@@ -1,6 +1,6 @@
 import * as Cloudflare from "alchemy/Cloudflare";
-import { passthrough } from "alchemy/serve";
 import * as Effect from "effect/Effect";
+import { RouteNotFound } from "effect/unstable/http/HttpServerError";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as NodePath from "node:path";
@@ -38,9 +38,10 @@ export class EffectCounter extends Cloudflare.DurableObject<EffectCounter>()(
 /**
  * The effectful Next.js Website (artifact takeover, DESIGN §2.1.1): ONE
  * Worker serves the OpenNext app and the Effect program. The program owns
- * `/api/*` (the default `server.routes`); inside that scope it answers
- * `/api/effect/*` and passes everything else through to the framework
- * (`/api/hello` & co stay Next route handlers).
+ * `/api/*` MINUS the `!/api/hello` exclusion glob (strict route
+ * ownership): inside the claim it answers `/api/effect/*` and renders its
+ * OWN 404 for anything else; `/api/hello` stays a Next route handler
+ * because the exclusion routes it to the framework.
  *
  * Non-fetch surface: a Durable Object export ({@link EffectCounter}) and a
  * cron `scheduled` handler that stamps a KV key each fire — both delivered
@@ -64,6 +65,10 @@ export default class NextjsEffectSite extends Cloudflare.Website.Nextjs<NextjsEf
       ? NodePath.dirname(import.meta.dirname)
       : undefined,
     workersDev: true,
+    // Strict route ownership: the effect fetch owns `/api/*` EXCEPT
+    // `/api/hello`, which the exclusion glob routes to the OpenNext
+    // handler (Next route handler + middleware).
+    server: { routes: ["/api/*", "!/api/hello"] },
     dev: { port: 0 },
     memo: {
       include: [
@@ -119,9 +124,10 @@ export default class NextjsEffectSite extends Cloudflare.Website.Nextjs<NextjsEf
           const fires = yield* counters.getByName("cron").current();
           return yield* HttpServerResponse.json({ fires });
         }
-        // Everything else inside `/api/*` is not ours: the OpenNext handler
-        // serves it (Next route handlers, middleware included).
-        return yield* passthrough;
+        // The HttpRouter-miss shape: renders as the effect's OWN empty
+        // 404 — inside the claim the effect fetch is authoritative
+        // (delegation to OpenNext happens only via the exclusion glob).
+        return yield* Effect.fail(new RouteNotFound({ request }));
       }),
     };
   }).pipe(

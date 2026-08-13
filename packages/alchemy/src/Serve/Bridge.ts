@@ -2,12 +2,17 @@
  * The shared `alchemy/serve` runtime bridge core (DESIGN §3.3, §6.4).
  *
  * One lazy, WeakMap-memoized isolate-scope layer build per Website class per
- * process (mirroring `Cloudflare/Workers/WorkerBridge.ts`), a fresh request
- * `Scope` per event settled via `waitUntil` when the call site has one and
- * inline before the response otherwise (Lambda semantics), and the typed
- * passthrough protocol: a `RouteNotFound` failure (including
- * `Serve.passthrough`) resolves to `undefined` so the caller falls through
- * to the framework.
+ * process (mirroring `Cloudflare/Workers/WorkerBridge.ts`), and a fresh
+ * request `Scope` per event settled via `waitUntil` when the call site has
+ * one and inline before the response otherwise (Lambda semantics).
+ *
+ * Within its routes the effect fetch is AUTHORITATIVE: every outcome of the
+ * effect — including a `RouteNotFound` failure, which the standard request
+ * pipeline (`safeHttpEffect`'s `causeResponse`) renders as the effect's own
+ * 404 response — is the final answer. Delegation to the framework is purely
+ * a `server.routes` decision made by the caller (`Serve.make`, the wrapper
+ * entries) BEFORE the effect fetch is invoked; there is no response-based
+ * fallback protocol.
  *
  * Everything here runs *inside* the deployed function (or a dev server /
  * prerenderer importing the framework entry) — never in the engine's plan
@@ -27,7 +32,6 @@ import * as Logger from "effect/Logger";
 import { MinimumLogLevel } from "effect/References";
 import * as Scope from "effect/Scope";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { CloudflareEnvironment } from "../Cloudflare/CloudflareEnvironment.ts";
 import { makeRequestEffect } from "../Cloudflare/Workers/HttpServer.ts";
 // The RuntimeEnvironment leaf, NOT Worker.ts: the bridge is compiled by
@@ -65,7 +69,7 @@ const SENTINEL: typeof SERVE_SENTINEL = "__ALCHEMY_SERVE_v1__";
  * `if (!globalThis.__ALCHEMY_RUNTIME__)` bind guard is a no-op at runtime
  * even when the framework's bundler defined nothing.
  *
- * Deliberately NOT a module-evaluation side effect: `Serve.passthrough` is
+ * Deliberately NOT a module-evaluation side effect: `alchemy/serve` is
  * imported by the user's `site.ts`, which the engine also imports at plan
  * time — a module-eval flag would poison the plan world (DESIGN §5.3 world
  * 1 requires the flag unset there).
@@ -99,40 +103,6 @@ export interface SiteRuntime {
   readonly shape: () => Record<string, any> | undefined;
   readonly telemetry: () => Layer.Layer<never, any, any> | undefined;
 }
-
-/**
- * Marks the internal passthrough response produced when the fetch effect
- * fails with `RouteNotFound`. The marked response never leaves the bridge —
- * it is translated to `undefined` (delegate to the framework) — but riding
- * a real `HttpServerResponse` through `makeRequestEffect` lets the bridge
- * reuse the exact production request pipeline (`safeHttpEffect`,
- * `toHandled`, streaming scope transfer) instead of forking it.
- */
-const PASSTHROUGH_HEADER = "x-alchemy-serve-passthrough";
-
-const passthroughResponse = () =>
-  HttpServerResponse.empty({
-    status: 404,
-    headers: { [PASSTHROUGH_HEADER]: "1" },
-  });
-
-/**
- * Wrap the user's fetch handler with the passthrough protocol: normalize
- * the `Main.fetch` shape (an Effect resolving to an `HttpEffect`), then map
- * a `RouteNotFound` failure — `HttpRouter`'s natural miss, or an explicit
- * `Serve.passthrough` — to the marked response BEFORE `safeHttpEffect`
- * would convert it into a real 404.
- */
-const guardHandler = (handler: unknown): any =>
-  Effect.flatMap(handler as Effect.Effect<any, any, any>, (value: any) =>
-    HttpServerResponse.isHttpServerResponse(value)
-      ? Effect.succeed(value)
-      : (value as Effect.Effect<any, any, any>),
-  ).pipe(
-    Effect.catchTag("RouteNotFound", () =>
-      Effect.succeed(passthroughResponse()),
-    ),
-  );
 
 /**
  * Close the isolate scope in Lambda's Shutdown window (SIGTERM + 500 ms) so
@@ -319,9 +289,11 @@ export interface SiteFetchOptions {
 
 /**
  * Run one fetch event against a built site: fresh request `Scope`, the
- * production request pipeline (`makeRequestEffect`), per-event telemetry,
- * and the passthrough translation. Resolves the web `Response`, or
- * `undefined` when the effect declined the request.
+ * production request pipeline (`makeRequestEffect`), and per-event
+ * telemetry. The effect fetch is authoritative — a `RouteNotFound` failure
+ * renders as the effect's own 404 response through the standard pipeline.
+ * Resolves the web `Response`, or `undefined` only when the site exposes no
+ * fetch handler.
  */
 export const runSiteFetch = async (
   runtime: SiteRuntime,
@@ -355,10 +327,7 @@ export const runSiteFetch = async (
           )
         : Layer.empty;
 
-  const exit = await makeRequestEffect(
-    request as any,
-    guardHandler(fetchHandler),
-  ).pipe(
+  const exit = await makeRequestEffect(request as any, fetchHandler).pipe(
     // Per-event services take precedence over the built isolate context:
     // the real (or synthesized) WorkerExecutionContext shadows the deferred
     // one, and the fresh request `Scope` is what `Effect.addFinalizer` in a
@@ -401,11 +370,7 @@ export const runSiteFetch = async (
   if (exit._tag !== "Success") {
     throw Cause.squash(exit.cause);
   }
-  const response = exit.value as Response;
-  if (response.headers.get(PASSTHROUGH_HEADER) !== null) {
-    return undefined;
-  }
-  return response;
+  return exit.value as Response;
 };
 
 const noopPin = (): void => {};
@@ -413,8 +378,10 @@ const noopPin = (): void => {};
 /**
  * The explicit-tier entry: resolve the env ladder, apply the four-worlds
  * guard, lazily build the site, and run the fetch effect. Resolves
- * `undefined` on decline (no env markers, no fetch handler, or
- * passthrough) so the caller falls through to the framework.
+ * `undefined` on decline (no env markers or no fetch handler) so the
+ * caller falls through to the framework. Route gating happens in the
+ * caller (`Serve.make`) — a request that reaches this function is inside
+ * the effect's claim, and the effect's answer (404s included) is final.
  */
 export const matchSite = async (
   site: object,

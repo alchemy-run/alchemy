@@ -7,8 +7,8 @@
 // to the workspace root's `alchemy` link).
 import * as KV from "alchemy/Cloudflare/KV";
 import * as Website from "alchemy/Cloudflare/Website";
-import { passthrough } from "alchemy/serve";
 import * as Effect from "effect/Effect";
+import { RouteNotFound } from "effect/unstable/http/HttpServerError";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as NodePath from "node:path";
@@ -71,7 +71,9 @@ export default class NextjsEffectHmrSite extends Website.Nextjs<NextjsEffectHmrS
           const value = yield* users.get(key).pipe(Effect.orDie);
           return yield* HttpServerResponse.json({ value: value ?? null });
         }
-        return yield* passthrough;
+        // The HttpRouter-miss shape: renders as the effect's OWN empty
+        // 404 (the catch-all mount has no framework to fall back to).
+        return yield* Effect.fail(new RouteNotFound({ request }));
       }),
     };
   }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),

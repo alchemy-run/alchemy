@@ -4,7 +4,7 @@ Deploys a Nuxt app to Cloudflare Workers with `Cloudflare.Website.Nuxt` — no `
 
 The resource builds the app through the project's own `@nuxt/kit` with nitro's `cloudflare_module` preset (your `nuxt.config.ts` loads natively), deploys the nitro server bundle as the Worker, and serves client assets + prerendered pages as Worker static assets. Values passed via `env` are exposed to server routes and SSR through `event.context.cloudflare.env`.
 
-The Website class lives in `site.ts` and takes an Effect program as its third argument: ONE Worker serves the Nuxt app and an Effect-native API. The program's `fetch` owns `/api/*` (the default `server.routes`) and uses a KV namespace through a typed capability binding — collected automatically at plan time. Routes it doesn't claim (like the app's own `/api/hello`) fall through to nitro via the typed `passthrough`.
+The Website class lives in `site.ts` and takes an Effect program as its third argument: ONE Worker serves the Nuxt app and an Effect-native API. The program's `fetch` owns `server.routes` (`["/api/*", "!/api/hello"]` here) and uses a KV namespace through a typed capability binding — collected automatically at plan time. Inside the routes the program is authoritative (even its 404s); the `!/api/hello` exclusion statically hands that path back to nitro, so the app's own route keeps answering.
 
 ```ts
 export default class Site extends Nuxt<Site>()(
@@ -14,7 +14,8 @@ export default class Site extends Nuxt<Site>()(
     const visits = yield* KV.ReadWriteNamespace(yield* Visits);
     return {
       fetch: Effect.gen(function* () {
-        // ... /api/visits handled here; everything else `passthrough`s
+        // ... /api/visits handled here; unknown /api/* paths get the
+        // program's own 404 (/api/hello is excluded, so nitro serves it)
       }),
     };
   }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),

@@ -131,7 +131,7 @@ describe.skipIf(!runLive)("AWS.Website.SvelteKit", () => {
   );
 
   test.provider(
-    "effectful SvelteKit: effect fetch owns /api/* with S3 bindings + streamed bodies; kit SSR and passthrough keep working",
+    "effectful SvelteKit: effect fetch owns /api/* with S3 bindings + streamed bodies; the exclusion glob routes /api/hello to kit",
     (stack) =>
       Effect.gen(function* () {
         yield* stack.destroy();
@@ -210,13 +210,13 @@ describe.skipIf(!runLive)("AWS.Website.SvelteKit", () => {
           { timeout: "60 seconds", label: "streamed effect body (CloudFront)" },
         );
 
-        // ── Passthrough: a KIT endpoint INSIDE /api/* still answers — the
-        // effect fetch declines it (RouteNotFound) and the wrapper falls
-        // through to kit's respond ───────────────────────────────────────
+        // ── Exclusion glob: /api/hello is carved OUT of the effect claim
+        // (`!/api/hello` in server.routes), so kit's own +server endpoint
+        // answers — the effect fetch never sees the path ─────────────────
         yield* expectUrlContains(
           `${url}/api/hello?echo=roundtrip`,
           "SVELTEKIT_AWS_EFFECT_KIT_API",
-          { label: "kit endpoint through passthrough" },
+          { label: "exclusion glob routes to kit" },
         );
         yield* expectUrlContains(
           `${url}/api/hello?echo=roundtrip`,
@@ -225,6 +225,15 @@ describe.skipIf(!runLive)("AWS.Website.SvelteKit", () => {
             label: "kit endpoint query echo",
           },
         );
+
+        // ── An unknown route INSIDE the claim is the effect's own 404 —
+        // the fixture's RouteNotFound failure renders as the fetch's OWN
+        // 404 response (empty body, not kit's HTML error page) ───────────
+        const insideMiss = yield* expectStatus(
+          `${url}/api/effect/definitely-not-here`,
+          404,
+        );
+        expect(insideMiss.body).not.toContain("<html");
 
         // ── Framework surface: kit SSR through CloudFront ────────────────
         yield* expectUrlContains(
@@ -261,6 +270,33 @@ describe.skipIf(!runLive)("AWS.Website.SvelteKit", () => {
     { timeout: 2_400_000 },
   );
 });
+
+/**
+ * Fetch `url` until it answers `status` — for real-404 assertions
+ * `expectUrlContains` can't make (it requires `res.ok`). Returns the final
+ * body so callers can also assert WHO answered.
+ */
+const expectStatus = (url: string, status: number) =>
+  Effect.tryPromise(async (signal) => {
+    const res = await fetch(url, {
+      signal,
+      cache: "no-store",
+      headers: { "cache-control": "no-cache", accept: "*/*" },
+    });
+    return { status: res.status, body: await res.text() };
+  }).pipe(
+    Effect.filterOrFail(
+      (r) => r.status === status,
+      (r) =>
+        new Error(
+          `expected ${status} from ${url}, got ${r.status}: ${r.body.slice(0, 300)}`,
+        ),
+    ),
+    Effect.retry({
+      schedule: Schedule.exponential("1 second", 1.5),
+      times: 6,
+    }),
+  );
 
 const assertDistributionDeleted = (distributionId: string) =>
   cloudfront.getDistribution({ Id: distributionId }).pipe(

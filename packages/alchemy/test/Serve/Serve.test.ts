@@ -6,11 +6,13 @@
  *   - `server.routes` glob matching (inclusions, `!` exclusions)
  *   - the four-worlds guard: no `ALCHEMY_STACK_NAME` markers → `match`
  *     declines without building layers
- *   - the passthrough protocol: `RouteNotFound` (and `Serve.passthrough`)
- *     resolve `undefined`; a handler that chose 404 returns a real 404
+ *   - strict route ownership: `match` resolves `undefined` ONLY for paths
+ *     outside the routes claim; inside it the effect fetch is
+ *     authoritative — a `RouteNotFound` failure renders as the effect's
+ *     own 404 response, and a handler that chose 404 returns that 404
  *   - sentinel literal presence in the bridge module source
- *   - `makeWebsiteExports` fetch dispatch: routes → effect fetch,
- *     passthrough/miss → framework fallback
+ *   - `makeWebsiteExports` fetch dispatch: inside routes → effect fetch
+ *     (final), outside routes / exclusion globs → framework
  *
  * The runtime tests stamp `globalThis.__ALCHEMY_RUNTIME__` (as any real
  * bridge construction does), which is process-global state — they take the
@@ -26,7 +28,6 @@ import {
   hasStackMarkers,
   resolveServeEnv,
 } from "@/Serve/Env.ts";
-import { passthrough } from "@/Serve/Passthrough.ts";
 import { matchRoutes } from "@/Serve/Routes.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "alchemy-test";
@@ -51,14 +52,14 @@ class TestSite extends Cloudflare.Website.Vite<TestSite>()(
         if (request.url.startsWith("/api/hello")) {
           return HttpServerResponse.text("hi");
         }
-        if (request.url.startsWith("/api/pass")) {
-          return yield* passthrough;
-        }
         if (request.url.startsWith("/api/gone")) {
-          // A handler that matched and chose 404: must stay a real 404,
-          // never be sniffed into passthrough.
+          // A handler that matched and chose 404: stays a 404 carrying
+          // this body — indistinguishable in authority from the router
+          // miss below, both are the effect's own answer.
           return HttpServerResponse.text("really gone", { status: 404 });
         }
+        // The HttpRouter miss: renders as the effect's own 404 response
+        // through the standard pipeline — never delegation.
         return yield* Effect.fail(new RouteNotFound({ request }));
       }),
     };
@@ -181,7 +182,27 @@ describe("Serve.make", () => {
   );
 
   it(
-    "serves matched requests and maps RouteNotFound to passthrough",
+    "declines outside the routes claim without invoking the effect fetch",
+    () =>
+      restoringRuntimeFlag(async () => {
+        const { make } = await import("@/Serve/index.ts");
+        // A fake class proves no layer build is attempted on a path miss —
+        // the default claim is DEFAULT_SERVER_ROUTES (["/api/*"]).
+        class NeverBuilt {
+          static readonly LogicalId = "NeverBuilt";
+        }
+        const handle = make(NeverBuilt as any);
+        expect(
+          await handle.match(new Request("http://localhost/assets/app.js"), {
+            env: markers,
+          }),
+        ).toBeUndefined();
+      }),
+    { exclusive: true },
+  );
+
+  it(
+    "the effect fetch is authoritative inside the routes (RouteNotFound is its own 404)",
     () =>
       restoringRuntimeFlag(async () => {
         const { make } = await import("@/Serve/index.ts");
@@ -194,41 +215,71 @@ describe("Serve.make", () => {
         expect(hit?.status).toBe(200);
         expect(await hit!.text()).toBe("hi");
 
-        // RouteNotFound (the HttpRouter miss) delegates.
+        // An unknown route INSIDE the claim: the HttpRouter miss renders
+        // as the effect's OWN 404 response — never undefined/delegation.
         const miss = await handle.match(
           new Request("http://localhost/api/unknown"),
           { env: markers },
         );
-        expect(miss).toBeUndefined();
+        expect(miss).toBeDefined();
+        expect(miss!.status).toBe(404);
 
-        // Explicit Serve.passthrough delegates.
-        const passed = await handle.match(
-          new Request("http://localhost/api/pass"),
-          { env: markers },
-        );
-        expect(passed).toBeUndefined();
-
-        // A handler that matched and chose 404 returns a REAL 404 — no
-        // 404-sniffing.
+        // A handler that matched and chose 404 keeps its body.
         const gone = await handle.match(
           new Request("http://localhost/api/gone"),
           { env: markers },
         );
         expect(gone?.status).toBe(404);
         expect(await gone!.text()).toBe("really gone");
+
+        // Outside the claim: undefined — the framework's turn.
+        const outside = await handle.match(
+          new Request("http://localhost/assets/app.js"),
+          { env: markers },
+        );
+        expect(outside).toBeUndefined();
       }),
     { exclusive: true, timeout: 60_000 },
   );
 
   it(
-    "fetch answers declined requests via fallback or 404",
+    "exclusion globs carve paths back out to the framework",
+    () =>
+      restoringRuntimeFlag(async () => {
+        const { make } = await import("@/Serve/index.ts");
+        const handle = make(TestSite, {
+          routes: ["/api/*", "!/api/hello*"],
+        });
+
+        // The excluded path is the framework's even though the effect
+        // fetch has a handler for it.
+        expect(
+          await handle.match(new Request("http://localhost/api/hello"), {
+            env: markers,
+          }),
+        ).toBeUndefined();
+
+        // The rest of the claim stays the effect's — unknown routes are
+        // its own 404.
+        const miss = await handle.match(
+          new Request("http://localhost/api/unknown"),
+          { env: markers },
+        );
+        expect(miss?.status).toBe(404);
+      }),
+    { exclusive: true, timeout: 60_000 },
+  );
+
+  it(
+    "fetch answers path-miss declines via fallback or 404",
     () =>
       restoringRuntimeFlag(async () => {
         const { make } = await import("@/Serve/index.ts");
         const handle = make(TestSite);
 
+        // Outside the claim → the fallback serves.
         const fromFallback = await handle.fetch(
-          new Request("http://localhost/api/pass"),
+          new Request("http://localhost/assets/app.js"),
           {
             env: markers,
             fallback: async () => new Response("framework", { status: 200 }),
@@ -237,10 +288,21 @@ describe("Serve.make", () => {
         expect(await fromFallback.text()).toBe("framework");
 
         const notFound = await handle.fetch(
-          new Request("http://localhost/api/pass"),
+          new Request("http://localhost/assets/app.js"),
           { env: markers },
         );
         expect(notFound.status).toBe(404);
+
+        // Inside the claim the effect's 404 wins — the fallback is never
+        // consulted for an in-claim router miss.
+        const insideMiss = await handle.fetch(
+          new Request("http://localhost/api/unknown"),
+          {
+            env: markers,
+            fallback: async () => new Response("framework", { status: 200 }),
+          },
+        );
+        expect(insideMiss.status).toBe(404);
       }),
     { exclusive: true, timeout: 60_000 },
   );
@@ -248,7 +310,7 @@ describe("Serve.make", () => {
 
 describe("makeWebsiteExports", () => {
   it(
-    "dispatches routes to the effect fetch and falls through to the framework",
+    "routes decide who serves: effect inside (authoritative), framework outside",
     () =>
       restoringRuntimeFlag(async () => {
         const { makeWebsiteExports } = await import("@/Serve/worker.ts");
@@ -287,11 +349,13 @@ describe("makeWebsiteExports", () => {
         );
         expect(await outside.text()).toBe("framework");
 
-        // Inside routes but passthrough → framework fallback.
-        const passed: Response = await worker.fetch(
-          new Request("http://localhost/api/pass"),
+        // An unknown route INSIDE the claim is the effect's own 404 — the
+        // framework is never consulted.
+        const insideMiss: Response = await worker.fetch(
+          new Request("http://localhost/api/unknown"),
         );
-        expect(await passed.text()).toBe("framework");
+        expect(insideMiss.status).toBe(404);
+        expect(await insideMiss.text()).not.toBe("framework");
 
         // No env markers (prerender world) → framework, no layer build.
         const guarded: any = new WebsiteWorker(ctx, {});
@@ -299,6 +363,51 @@ describe("makeWebsiteExports", () => {
           new Request("http://localhost/api/hello"),
         );
         expect(await declined.text()).toBe("framework");
+      }),
+    { exclusive: true, timeout: 60_000 },
+  );
+
+  it(
+    "exclusion glob routes to the framework",
+    () =>
+      restoringRuntimeFlag(async () => {
+        const { makeWebsiteExports } = await import("@/Serve/worker.ts");
+
+        class StubEntrypoint {
+          constructor(
+            public ctx: any,
+            public env: any,
+          ) {}
+        }
+        const WebsiteWorker = makeWebsiteExports(StubEntrypoint, {
+          site: TestSite,
+          routes: ["/api/*", "!/api/hello*"],
+          framework: async () => ({
+            default: {
+              fetch: async () => new Response("framework"),
+            },
+          }),
+        });
+
+        const ctx = {
+          waitUntil: (_promise: Promise<unknown>) => {},
+          passThroughOnException: () => {},
+        };
+        const worker: any = new WebsiteWorker(ctx, markers);
+
+        // The excluded path is the framework's even though the effect
+        // fetch has a handler for it.
+        const excluded: Response = await worker.fetch(
+          new Request("http://localhost/api/hello"),
+        );
+        expect(await excluded.text()).toBe("framework");
+
+        // The rest of the claim stays the effect's.
+        const insideMiss: Response = await worker.fetch(
+          new Request("http://localhost/api/unknown"),
+        );
+        expect(insideMiss.status).toBe(404);
+        expect(await insideMiss.text()).not.toBe("framework");
       }),
     { exclusive: true, timeout: 60_000 },
   );

@@ -296,7 +296,9 @@ describe.concurrent("Astro dev", () => {
   // dev through the generated fetchable wrapper running in the ssr
   // environment inside workerd. The KV capability binding collected at
   // plan resolves to the LOCAL simulator (`dev:` id — proof no cloud call
-  // ran); passthrough delegates into Astro's own routes.
+  // ran); the `!/api/astro-echo` exclusion glob routes that path to
+  // Astro's own endpoint, and unknown in-claim paths are the effect's OWN
+  // 404.
   // ─────────────────────────────────────────────────────────────────────
 
   test.provider(
@@ -383,14 +385,34 @@ describe.concurrent("Astro dev", () => {
           '"value":"astro-effect-dev"',
         );
 
-        // Passthrough: `/api/astro-echo` is inside the effect scope but
-        // the program declines it (`Serve.passthrough`) — Astro's own
-        // endpoint answers.
+        // Exclusion glob routes to the framework: `!/api/astro-echo`
+        // carves the path out of the effect claim, so the wrapper never
+        // dispatches the effect fetch and Astro's own endpoint answers.
         yield* expectStatusBody(
           `${site.url!}/api/astro-echo`,
           200,
           "astro-endpoint-echo",
         );
+
+        // Unknown route inside the claim is the effect's OWN 404: the
+        // fixture's RouteNotFound renders as an empty 404 — never Astro's
+        // HTML 404 page.
+        const missing = yield* Effect.tryPromise({
+          try: async (signal) => {
+            const res = await fetch(`${site.url!}/api/nope`, {
+              signal,
+              cache: "no-store",
+            });
+            return { status: res.status, body: await res.text() };
+          },
+          catch: (e) =>
+            new DevResponseMismatch({
+              url: `${site.url!}/api/nope`,
+              detail: e instanceof Error ? e.message : String(e),
+            }),
+        });
+        expect(missing.status).toBe(404);
+        expect(missing.body).not.toContain("<html");
 
         // Prerender-marked pages render on demand in dev (the guard case
         // proper — the prerender worker never loading the effect graph —

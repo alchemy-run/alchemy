@@ -194,11 +194,12 @@ const getTextReady = (url: string) =>
  * dev`: the effectful Website's generated `virtual:alchemy:website-entry`
  * wrapper is served through the vite module runner inside workerd, the KV
  * capability binding resolves to the local simulator (a `dev:` id — proof
- * no cloud call ran), `server.routes` scopes the effect fetch to `/api/*`,
- * and the passthrough protocol falls through to the SPA asset layer.
+ * no cloud call ran), and `server.routes` decides ownership statically:
+ * the `!/api/excluded` exclusion glob routes that path to the SPA asset
+ * layer, while an unknown in-claim path is the effect's OWN 404.
  */
 test.provider(
-  "Vite dev: effectful website serves effect routes, KV dev binding, and passthrough",
+  "Vite dev: effectful website serves effect routes and KV; exclusion glob routes to the assets",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -241,10 +242,19 @@ test.provider(
       };
       expect(got.value).toBe("hello-from-dev");
 
-      // Passthrough: the effect fetch declines and the request falls
-      // through to the asset layer, whose SPA fallback serves the shell.
-      const fallthrough = yield* getTextReady(`${base}/api/passthrough`);
-      expect(fallthrough).toContain("Effectful Vite fixture");
+      // Exclusion glob routes to the framework: `!/api/excluded` carves
+      // the path out of the claim, so the asset layer's SPA fallback
+      // serves the shell — the effect fetch never runs for it.
+      const excluded = yield* getTextReady(`${base}/api/excluded`);
+      expect(excluded).toContain("Effectful Vite fixture");
+
+      // Unknown route inside the claim is the effect's OWN 404: the
+      // fixture's RouteNotFound renders as an empty 404 — never the SPA
+      // shell.
+      const client = yield* HttpClient.HttpClient;
+      const missing = yield* client.get(`${base}/api/missing`);
+      expect(missing.status).toBe(404);
+      expect(yield* missing.text).not.toContain("Effectful Vite fixture");
 
       yield* stack.destroy();
     }).pipe(logLevel),

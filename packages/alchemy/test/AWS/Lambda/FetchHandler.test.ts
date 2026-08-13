@@ -8,10 +8,12 @@
  *     fetch-layer composition that rides a framework's `toLambdaHandler`
  *     pipe), and the request scope is transferred to the stream (its
  *     finalizers run at stream completion) instead of settling inline;
- *   - `makeWebsiteHandlers` dispatch: routes → effect fetch, outside
- *     routes → decline, RouteNotFound → passthrough (never 404-sniffed),
- *     the four-worlds guard (no stack markers → decline without building
- *     layers), and `fetch`'s fallback/404 answers.
+ *   - `makeWebsiteHandlers` dispatch — strict route ownership: inside
+ *     `routes` the effect fetch is authoritative (a `RouteNotFound`
+ *     failure renders as the effect's own 404 response), `match` resolves
+ *     `undefined` ONLY for paths outside the routes, the four-worlds
+ *     guard (no stack markers → decline without building layers), and
+ *     `fetch`'s fallback/404 answers.
  *
  * The `makeWebsiteHandlers` tests stamp `globalThis.__ALCHEMY_RUNTIME__`
  * (as any real bridge construction does) — process-global state — so they
@@ -64,10 +66,12 @@ class FetchSite extends AWS.Website.StaticSite<FetchSite>()(
           return HttpServerResponse.text("hi from effect");
         }
         if (request.url.startsWith("/api/gone")) {
-          // A handler that matched and chose 404: must stay a real 404,
-          // never be sniffed into passthrough.
+          // A handler that matched and chose 404: stays a 404 carrying
+          // this body.
           return HttpServerResponse.text("really gone", { status: 404 });
         }
+        // The HttpRouter miss: renders as the effect's own 404 response
+        // through the standard pipeline — never delegation.
         return yield* Effect.fail(new RouteNotFound({ request }));
       }),
     };
@@ -159,7 +163,7 @@ describe("makeFunctionFetchHandler", () => {
 
 describe("makeWebsiteHandlers", () => {
   it(
-    "dispatches routes to the effect fetch with the passthrough protocol",
+    "routes decide who serves: effect inside (authoritative), decline outside",
     () =>
       restoringRuntimeFlag(async () => {
         const site = makeWebsiteHandlers({
@@ -178,26 +182,64 @@ describe("makeWebsiteHandlers", () => {
         expect(hit?.status).toBe(200);
         expect(await hit!.text()).toBe("hi from effect");
 
-        // RouteNotFound → passthrough (framework's turn).
-        expect(
-          await site.match(new Request("http://localhost/api/unknown")),
-        ).toBeUndefined();
+        // An unknown route INSIDE the claim: the HttpRouter miss renders
+        // as the effect's OWN 404 response — never undefined/delegation.
+        const miss = await site.match(
+          new Request("http://localhost/api/unknown"),
+        );
+        expect(miss).toBeDefined();
+        expect(miss!.status).toBe(404);
 
-        // A real 404 from a matched handler is never sniffed.
+        // A handler that matched and chose 404 keeps its body.
         const gone = await site.match(new Request("http://localhost/api/gone"));
         expect(gone?.status).toBe(404);
         expect(await gone!.text()).toBe("really gone");
 
-        // fetch answers declines via the fallback, else 404.
+        // fetch answers path-miss declines via the fallback, else 404.
         const fromFallback = await site.fetch(
-          new Request("http://localhost/api/unknown"),
+          new Request("http://localhost/assets/app.js"),
           { fallback: async () => new Response("framework") },
         );
         expect(await fromFallback.text()).toBe("framework");
         const notFound = await site.fetch(
-          new Request("http://localhost/api/unknown"),
+          new Request("http://localhost/assets/app.js"),
         );
         expect(notFound.status).toBe(404);
+
+        // Inside the claim the effect's 404 wins — the fallback is never
+        // consulted for an in-claim router miss.
+        const insideMiss = await site.fetch(
+          new Request("http://localhost/api/unknown"),
+          { fallback: async () => new Response("framework") },
+        );
+        expect(insideMiss.status).toBe(404);
+        expect(await insideMiss.text()).not.toBe("framework");
+      }),
+    { exclusive: true, timeout: 60_000 },
+  );
+
+  it(
+    "exclusion glob routes to the framework",
+    () =>
+      restoringRuntimeFlag(async () => {
+        const site = makeWebsiteHandlers({
+          site: FetchSite,
+          routes: ["/api/*", "!/api/hello*"],
+          env: markers,
+        });
+
+        // The excluded path declines even though the effect fetch has a
+        // handler for it — the framework serves it.
+        expect(
+          await site.match(new Request("http://localhost/api/hello")),
+        ).toBeUndefined();
+
+        // The rest of the claim stays the effect's — unknown routes are
+        // its own 404.
+        const miss = await site.match(
+          new Request("http://localhost/api/unknown"),
+        );
+        expect(miss?.status).toBe(404);
       }),
     { exclusive: true, timeout: 60_000 },
   );
@@ -223,13 +265,13 @@ describe("makeWebsiteHandlers", () => {
   );
 
   it(
-    "middleware mode (no routes) offers every request to the effect fetch",
+    "omitted routes default to DEFAULT_SERVER_ROUTES (/api/*)",
     () =>
       restoringRuntimeFlag(async () => {
         const site = makeWebsiteHandlers({ site: FetchSite, env: markers });
         const hit = await site.match(new Request("http://localhost/api/hello"));
         expect(await hit!.text()).toBe("hi from effect");
-        // Unclaimed paths still pass through via RouteNotFound.
+        // Outside the default claim → decline (the framework serves).
         expect(
           await site.match(new Request("http://localhost/anything")),
         ).toBeUndefined();

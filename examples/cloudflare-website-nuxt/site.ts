@@ -5,7 +5,6 @@
 // service-level subpaths keep it to the construct + capability slice.
 import * as KV from "alchemy/Cloudflare/KV";
 import { Nuxt } from "alchemy/Cloudflare/Website";
-import { passthrough } from "alchemy/serve";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -20,12 +19,12 @@ export const Visits = KV.Namespace("Visits");
 /**
  * ONE Worker serves the Nuxt app AND an Effect-native API: the third
  * argument is an Effect program (the same shape as `Cloudflare.Worker`)
- * whose `fetch` owns `/api/*` (the default `server.routes`). Capability
- * bindings the program uses (the KV namespace here) are collected
- * automatically at plan time.
+ * whose `fetch` owns `server.routes`. Capability bindings the program
+ * uses (the KV namespace here) are collected automatically at plan time.
  *
- * Routes the program doesn't claim fall through to nitro — the app's own
- * `/api/hello` route keeps working via the typed `passthrough`.
+ * Inside the routes the program is authoritative (even its 404s); the
+ * exclusion glob `!/api/hello` statically hands that path back to nitro,
+ * so the app's own `/api/hello` route keeps working.
  *
  * `main: import.meta.url` anchors this module — the engine imports it for
  * plan-time binding collection and the generated entry re-imports it at
@@ -35,6 +34,10 @@ export default class Site extends Nuxt<Site>()(
   "NuxtSite",
   {
     main: import.meta.url,
+    // The URL space the Effect fetch owns. `!/api/hello` excludes nitro's
+    // own route from the claim — exclusions win, so nitro serves it;
+    // every other /api/* path is answered by the program (even 404s).
+    server: { routes: ["/api/*", "!/api/hello"] },
     env: {
       GREETING: "Hello from alchemy",
     },
@@ -53,8 +56,13 @@ export default class Site extends Nuxt<Site>()(
           yield* visits.put("count", String(count)).pipe(Effect.orDie);
           return yield* HttpServerResponse.json({ visits: count });
         }
-        // Typed "not mine": nitro's own routes (e.g. /api/hello) answer.
-        return yield* passthrough;
+        // The program owns everything inside `server.routes` (with
+        // /api/hello excluded above), so unknown /api/* paths get its own
+        // 404 — never nitro.
+        return yield* HttpServerResponse.json(
+          { error: "unknown effect route" },
+          { status: 404 },
+        );
       }),
     };
   }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),

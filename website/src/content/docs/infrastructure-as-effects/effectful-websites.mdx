@@ -41,7 +41,6 @@ so it cannot live inline in `alchemy.run.ts`.
 // src/site.ts — the class + program
 import * as KV from "alchemy/Cloudflare/KV";
 import * as Website from "alchemy/Cloudflare/Website";
-import { passthrough } from "alchemy/serve";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -65,7 +64,11 @@ export default class Site extends Website.Vite<Site>()(
           const value = yield* users.get("current").pipe(Effect.orDie);
           return yield* HttpServerResponse.json({ value });
         }
-        return yield* passthrough; // not ours — the framework serves it
+        // the effect owns /api/* — unknown paths get its own 404
+        return yield* HttpServerResponse.json(
+          { error: "not found" },
+          { status: 404 },
+        );
       }),
     };
   }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),
@@ -88,7 +91,7 @@ workerd. Import the **service-level subpaths** it actually needs:
 import * as KV from "alchemy/Cloudflare/KV"; // ✅
 import * as Website from "alchemy/Cloudflare/Website"; // ✅
 import { Bucket, GetObject } from "alchemy/AWS/S3"; // ✅
-import { passthrough } from "alchemy/serve"; // ✅
+import { make } from "alchemy/serve"; // ✅
 
 import * as Cloudflare from "alchemy/Cloudflare"; // ❌ never
 import * as AWS from "alchemy/AWS"; // ❌ never
@@ -101,31 +104,40 @@ bloats the server bundle and at worst runs workerd out of memory in dev.
 
 ## Routing semantics
 
-One mental model, both clouds:
+**You declare what routes to you.** `server.routes` decides who serves
+each path — statically, before a single request is dispatched. One
+mental model, both clouds:
 
 ```
 request
-  ├─ path matches server.routes? ─ yes ─► Effect fetch ─ passthrough? ─► framework fetch
+  ├─ path inside server.routes? ─ yes ─► Effect fetch (authoritative — even its 404s)
   └─ no ─► platform asset layer ─► framework fetch (SSR / framework API routes)
 ```
 
 `server.routes` (default `["/api/*"]`) is the URL space the Effect
 `fetch` owns. Globs use the `runWorkerFirst` dialect: `*` matches any
-run of characters including `/`, and a leading `!` marks an exclusion.
-On Cloudflare the routes are compiled into `assets.runWorkerFirst`; on
-AWS into the generated CloudFront viewer-request router, checked
-**before** the static-asset manifest — so a static file can never shadow
-an API path, even under SPA fallback.
+run of characters including `/`, and a leading `!` marks an exclusion —
+**exclusions win**. On Cloudflare the routes are compiled into
+`assets.runWorkerFirst`; on AWS into the generated CloudFront
+viewer-request router, checked **before** the static-asset manifest — so
+a static file can never shadow an API path, even under SPA fallback.
 
-Inside the scope, a handler that doesn't own the request **passes it
-through** to the framework with `yield* passthrough` (from
-`alchemy/serve`). Passthrough is typed — it extends `HttpRouter`'s
-`RouteNotFound`, so a fetch built on `HttpRouter` delegates unmatched
-routes automatically. It is never 404-sniffing: a handler that matched
-and chose 404 returns a real 404.
+Inside the routes the Effect fetch is **authoritative**: whatever it
+returns is the response. An `HttpRouter` miss (a `RouteNotFound`
+failure) renders as the effect's *own* 404 — it is never delegation, and
+there is no response sniffing. Outside the routes the framework serves
+and the Effect fetch is never invoked.
 
-`server.routes: ["/*"]` is middleware mode — the Effect fetch is offered
-every request first.
+To hand a path inside the claim back to the framework, carve it out with
+an exclusion glob:
+
+```typescript
+// the effect owns /api/*, except /api/auth/* stays the framework's
+server: { routes: ["/api/*", "!/api/auth/*"] }
+```
+
+`server.routes: ["/*"]` routes every request to the Effect fetch — the
+framework then serves only the paths you exclude.
 
 ## Per-framework support
 
@@ -256,8 +268,7 @@ event handlers move over unchanged.
   the Effectful Constructor pattern the program uses
 - [Bindings](/infrastructure-as-effects/binding) — how capabilities
   collect env/IAM at plan time
-- [`Serve.make`](/providers/serve/make),
-  [`passthrough`](/providers/serve/passthrough) — the runtime bridge
+- [`Serve.make`](/providers/serve/make) — the runtime bridge
 - Construct reference:
   [Cloudflare Vite](/providers/cloudflare/website/vite),
   [Cloudflare StaticSite](/providers/cloudflare/website/staticsite),

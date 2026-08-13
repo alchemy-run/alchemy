@@ -117,7 +117,6 @@ export interface EffectNuxtProps extends NuxtProps {
  * // from a site module.
  * import { Bucket, GetObject, GetObjectHttp } from "alchemy/AWS/S3";
  * import { Nuxt } from "alchemy/AWS/Website";
- * import { passthrough } from "alchemy/serve";
  * import * as Effect from "effect/Effect";
  * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
  * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -139,8 +138,11 @@ export interface EffectNuxtProps extends NuxtProps {
  *           );
  *           return HttpServerResponse.text(String(object.Body));
  *         }
- *         // Not ours — nitro's own scanned routes serve it.
- *         return yield* passthrough;
+ *         // the effect owns /api/* — unknown paths get its own 404
+ *         return yield* HttpServerResponse.json(
+ *           { error: "not found" },
+ *           { status: 404 },
+ *         );
  *       }),
  *     };
  *   }).pipe(Effect.provide(GetObjectHttp)),
@@ -149,8 +151,10 @@ export interface EffectNuxtProps extends NuxtProps {
  *
  * @example Mounting the program (server/middleware/alchemy.ts)
  * The middleware is compiled by nitro itself, so it runs in the deployed
- * Lambda and in `nuxt dev` alike. It answers matched effect routes and
- * no-ops on passthrough/miss, letting nitro continue to its own handlers.
+ * Lambda and in `nuxt dev` alike. Inside `options.routes` (default
+ * `["/api/*"]`, exclusion globs supported) the effect fetch is
+ * authoritative — its 404s are real 404s; outside them the middleware
+ * no-ops, letting nitro continue to its own handlers.
  * ```typescript
  * import { toEventHandler } from "alchemy/serve/nitro";
  * import Site from "../../src/site.ts";

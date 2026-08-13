@@ -172,9 +172,12 @@ export interface EffectAstroProps extends AstroProps {
  * program must live in a dedicated module whose default export is the
  * class, anchored by `main: import.meta.url`. Delivery is automatic: the
  * AWS deploy target pre-resolves Astro's `virtual:astro:fetchable` to a
- * generated wrapper that runs the effect `fetch` first for
- * `server.routes` and falls back to Astro's own pipeline — in the
- * production build and in `astro dev` alike. An existing `src/fetch.ts`
+ * generated wrapper that routes by `server.routes` — inside the routes
+ * the effect `fetch` is authoritative (an `HttpRouter` miss renders as
+ * its own 404, never delegation), outside them Astro's own pipeline
+ * serves; hand a path back to Astro with an exclusion glob
+ * (`routes: ["/api/*", "!/api/foo"]`) — in the production build and in
+ * `astro dev` alike. An existing `src/fetch.ts`
  * is composed as the fallback, or — if it already mounts the alchemy
  * bridge — wins outright (`server: { takeover: false }` forces that
  * explicit tier).
@@ -186,7 +189,6 @@ export interface EffectAstroProps extends AstroProps {
  * // from a site module.
  * import { GetItem, GetItemHttp, Table } from "alchemy/AWS/DynamoDB";
  * import { Astro } from "alchemy/AWS/Website";
- * import { passthrough } from "alchemy/serve";
  * import * as Effect from "effect/Effect";
  * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
  * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -215,8 +217,11 @@ export interface EffectAstroProps extends AstroProps {
  *           }).pipe(Effect.orDie);
  *           return yield* HttpServerResponse.json(result.Item);
  *         }
- *         // Not ours — Astro endpoints and pages serve the rest.
- *         return yield* passthrough;
+ *         // the effect owns /api/* — unknown paths get its own 404
+ *         return yield* HttpServerResponse.json(
+ *           { error: "not found" },
+ *           { status: 404 },
+ *         );
  *       }),
  *     };
  *   }).pipe(Effect.provide(GetItemHttp)),

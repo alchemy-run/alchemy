@@ -19,9 +19,10 @@
  * };
  * ```
  *
- * Effect handlers first (routes-scoped, passthrough on `RouteNotFound`),
- * Astro's whole pipeline as the fallback. When the user authored their own
- * fetch file (`src/fetch.ts` by default):
+ * Strict route ownership: inside `routes` the Effect fetch is
+ * authoritative (a `RouteNotFound` failure renders as the effect's own
+ * 404), and Astro's whole pipeline serves everything outside them. When
+ * the user authored their own fetch file (`src/fetch.ts` by default):
  *
  * - if it already mounts `alchemy/serve` (the explicit tier), the plugin
  *   **stands down** — astro's own fetchable plugin resolves the user file
@@ -335,9 +336,9 @@ export const createEffectFetchablePlugin = (
           // profile under `alchemy dev`), the Lambda shutdown extension,
           // and the wiring-handshake sentinel literal (so the deploy-time
           // sentinel scan over the shipped `dist/server` passes). `match`
-          // resolves `undefined` on decline (outside `routes`, typed
-          // passthrough, marker-less build worlds) and the wrapper falls
-          // through to Astro.
+          // resolves `undefined` only on decline (outside `routes`, or
+          // marker-less build worlds) and the wrapper falls through to
+          // Astro; inside the routes the effect's answer is final.
           return {
             code: [
               `globalThis.__ALCHEMY_RUNTIME__ = true;`,

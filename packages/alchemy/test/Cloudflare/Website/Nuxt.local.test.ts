@@ -321,13 +321,21 @@ describe.concurrent("Nuxt dev", () => {
         );
         expect(got.value).toBe("dev-value");
 
-        // Passthrough: /api/hello is INSIDE the effect routes but
-        // unclaimed — the typed RouteNotFound decline lets nitro's own
-        // scanned route answer.
+        // Exclusion glob routes to the framework: `!/api/hello` carves the
+        // path out of the effect claim, so nitro's own scanned route
+        // answers — the effect fetch never runs for it.
         yield* expectUrlContains(`${base}/api/hello`, "api-route-ok", {
           timeout: "60 seconds",
-          label: "nitro route via effect passthrough",
+          label: "nitro route via exclusion glob",
         });
+
+        // Unknown route inside the claim is the effect's OWN 404: the
+        // fixture's RouteNotFound renders as an empty 404 — never nitro's
+        // 404 payload.
+        const missingClient = yield* HttpClient.HttpClient;
+        const missing = yield* missingClient.get(`${base}/api/nope`);
+        expect(missing.status).toBe(404);
+        expect(yield* missing.text).not.toContain("<html");
 
         // Nuxt SSR outside the effect routes is untouched.
         yield* expectUrlContains(`${base}/`, "NUXT_PAGE_MARKER", {

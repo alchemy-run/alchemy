@@ -6,10 +6,10 @@ interface Platform {
 }
 
 /**
- * A KIT endpoint INSIDE the Effect fetch's `/api/*` route space: the
- * effect program passes requests it does not own through to kit
- * (`Serve.passthrough`), so this route must keep working — proof of the
- * passthrough protocol end to end.
+ * A KIT endpoint carved OUT of the Effect fetch's `/api/*` claim by the
+ * `!/api/ping` exclusion glob in `server.routes`: the framework serves it
+ * without the effect fetch ever running — proof of strict route
+ * ownership's static delegation end to end.
  */
 export const GET = ({ platform }: { platform?: Platform }) =>
   json({

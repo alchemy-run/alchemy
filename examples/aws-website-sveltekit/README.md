@@ -19,7 +19,7 @@ export default class Site extends SvelteKit<Site>()(
 ) {}
 ```
 
-Delivery is automatic for SvelteKit: the effect `fetch` runs first for `server.routes` (default `["/api/*"]`) — in the deployed Lambda and in `vite dev` alike; a `passthrough` falls through to kit's own handlers. The home page reads and writes the S3-backed `/api/message` route.
+Delivery is automatic for SvelteKit: the effect `fetch` serves `server.routes` (default `["/api/*"]`) — in the deployed Lambda and in `vite dev` alike. Inside the routes the program is authoritative (even its 404s); outside them kit's own handlers serve. To hand a path back to kit, exclude it: `routes: ["/api/*", "!/api/foo"]`. The home page reads and writes the S3-backed `/api/message` route.
 
 ## Commands
 

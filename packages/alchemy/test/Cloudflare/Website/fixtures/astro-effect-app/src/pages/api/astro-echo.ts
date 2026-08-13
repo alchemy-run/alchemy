@@ -3,11 +3,11 @@ import type { APIContext } from "astro";
 export const prerender = false;
 
 /**
- * A REAL Astro endpoint inside the effect scope (`/api/*`): the effect
- * fetch declines it (`Serve.passthrough`), the generated fetchable
- * wrapper falls back to Astro's pipeline, and this handler serves the
- * response — proof that passthrough delegates into framework routes, not
- * just static assets.
+ * A REAL Astro endpoint carved out of the effect claim by the
+ * `!/api/astro-echo` exclusion glob in `server.routes`: the generated
+ * fetchable wrapper never dispatches the effect fetch for it, Astro's
+ * pipeline serves it — proof that exclusion globs delegate into framework
+ * routes, not just static assets.
  */
 export function GET({ url }: APIContext) {
   return Response.json({

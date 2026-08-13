@@ -1009,7 +1009,8 @@ if (el) {
   // The flagship wrapper-delivery path (DESIGN §6.2a): one Worker serves the
   // SPA assets AND the Effect program's `/api/*` routes through the generated
   // `virtual:alchemy:website-entry` wrapper — KV capability binding collected
-  // at plan, passthrough falling through to the SPA asset layer. The fixture
+  // at plan, the `!/api/excluded` exclusion glob carving that path back out
+  // to the SPA asset layer (strict route ownership). The fixture
   // is cloned and its `site.ts` dynamically imported so the class's
   // `import.meta.url` / `import.meta.dirname` anchors point at the clone
   // (keeping the repo fixture pristine and isolated from the dev-mode test).
@@ -1079,13 +1080,21 @@ if (el) {
         );
         expect(got.value).toBe("hello-from-live");
 
-        // Passthrough: the effect fetch declines inside its route scope and
-        // the request falls through to the asset layer's SPA fallback.
+        // Exclusion glob routes to the framework: `!/api/excluded` carves
+        // the path out of the claim (compiled out of `runWorkerFirst`), so
+        // the asset layer's SPA fallback serves the shell.
         yield* expectUrlContains(
-          `${base}/api/passthrough`,
+          `${base}/api/excluded`,
           "Effectful Vite fixture",
-          { timeout: "60 seconds", label: "effectful vite passthrough" },
+          { timeout: "60 seconds", label: "effectful vite exclusion glob" },
         );
+
+        // Unknown route inside the claim is the effect's OWN 404 (an empty
+        // RouteNotFound rendering — never the SPA shell).
+        const client = yield* HttpClient.HttpClient;
+        const missing = yield* client.get(`${base}/api/missing`);
+        expect(missing.status).toBe(404);
+        expect(yield* missing.text).not.toContain("Effectful Vite fixture");
 
         yield* stack.destroy();
         yield* waitForWorkerToBeDeleted(deployed.site.workerName, accountId);

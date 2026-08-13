@@ -514,7 +514,7 @@ describe.concurrent("SvelteKit", () => {
   );
 
   test.provider(
-    "SvelteKit effectful: one worker serves the Effect fetch (KV binding, no shim edge-cache) and kit SSR/passthrough over HTTPS",
+    "SvelteKit effectful: one worker serves the Effect fetch (KV binding, no shim edge-cache) and kit SSR/exclusion-glob routes over HTTPS",
     (stack) =>
       Effect.gen(function* () {
         const { accountId } = yield* yield* CloudflareEnvironment;
@@ -608,15 +608,24 @@ describe.concurrent("SvelteKit", () => {
         expect(uuid2.id).toMatch(/^[0-9a-f-]{36}$/);
         expect(uuid2.id).not.toBe(uuid1.id);
 
-        // ── Passthrough: a KIT endpoint INSIDE /api/* still answers (the
-        // effect fetch declines with `Serve.passthrough`; the shim falls
-        // through to kit's handler) ──────────────────────────────────────
+        // ── Exclusion glob routes to the framework: `!/api/ping` carves
+        // the kit endpoint out of the effect claim, so the shim never
+        // dispatches the effect fetch for it and kit's handler serves it ─
         const ping = yield* fetchJsonReady<{
           via: string;
           binding: string | null;
         }>(`${site.url!}/api/ping`);
         expect(ping.via).toBe("kit");
         expect(ping.binding).toBe(siteModule.BINDING_MARKER);
+
+        // ── Unknown route inside the claim is the effect's OWN 404: the
+        // fixture's RouteNotFound renders as an empty 404 — never kit's
+        // HTML error page ────────────────────────────────────────────────
+        const missing = yield* (yield* HttpClient.HttpClient).get(
+          `${site.url!}/api/nope`,
+        );
+        expect(missing.status).toBe(404);
+        expect(yield* missing.text).not.toContain("<html");
 
         // ── Framework surface: kit SSR outside the effect routes, with
         // `platform.env` intact ──────────────────────────────────────────

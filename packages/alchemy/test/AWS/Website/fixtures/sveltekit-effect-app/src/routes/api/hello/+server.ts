@@ -1,12 +1,12 @@
 import { json } from "@sveltejs/kit";
 
 /**
- * A KIT endpoint INSIDE the Effect fetch's `/api/*` route space: the
- * effect program passes requests it does not own through to kit (the
- * `RouteNotFound` passthrough protocol), so this route must keep working —
- * proof of the passthrough protocol end to end, in dev (the effect dev
- * middleware falls through to kit's Vite dev server) and deployed (the
- * generated Lambda entry falls through to kit's `respond`).
+ * A KIT endpoint carved out of the Effect fetch's `/api/*` claim by the
+ * `!/api/hello` exclusion glob in `server.routes`: the path never reaches
+ * the effect fetch, so this route must keep working — proof of strict
+ * route ownership's exclusion globs end to end, in dev (the effect dev
+ * middleware declines the path and kit's Vite dev server serves it) and
+ * deployed (the generated Lambda entry hands it to kit's `respond`).
  */
 export const GET = ({ url }: { url: URL }) =>
   json({

@@ -7,6 +7,15 @@
  * Pure and side-effect free — safe to import from plan-time code and tests.
  */
 
+/**
+ * The default URL space an effectful Website's `fetch` handler owns when
+ * `server.routes` is not configured. Every routes-carrying serve surface
+ * (`Serve.make`, `makeWebsiteExports`, `makeWebsiteHandlers`, the
+ * framework adapters) falls back to this claim, matching the constructs'
+ * own `server.routes` default.
+ */
+export const DEFAULT_SERVER_ROUTES = ["/api/*"];
+
 const escapeRegExp = (value: string): string =>
   value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 

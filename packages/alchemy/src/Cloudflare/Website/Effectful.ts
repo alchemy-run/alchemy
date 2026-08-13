@@ -14,11 +14,12 @@ import type { WorkerServices } from "../Workers/Worker.ts";
 
 /**
  * A Website fetch handler's effect type: `HttpEffect` widened with
- * `RouteNotFound` in the error channel. Websites always run behind the
- * serve bridge, which maps a `RouteNotFound` failure (or the
- * `Serve.passthrough` subclass) to delegation — the framework's own fetch
- * serves the request. Plain Workers have no framework to fall through to,
- * so `WorkerShape` deliberately does not admit it.
+ * `RouteNotFound` in the error channel, which types `HttpRouter` misses.
+ * There is no passthrough protocol — a `RouteNotFound` failure renders as
+ * the fetch's own 404 response through the standard request pipeline;
+ * delegation to the framework is purely a `server.routes` decision made
+ * BEFORE the fetch is invoked. Plain Workers have no router-miss rendering
+ * concern to widen for, so `WorkerShape` deliberately does not admit it.
  */
 export type WebsiteHttpEffect<Req = never> = Effect.Effect<
   HttpServerResponse.HttpServerResponse,
@@ -42,12 +43,12 @@ type WebsiteMain<InitServices = never> = void | {
 
 /**
  * The shape an effectful Website's Effect program may return: an optional
- * `fetch` handler (the `server.routes`-scoped API surface, passthrough-
- * capable — see {@link WebsiteHttpEffect}) plus any RPC methods, exactly
- * like a Worker. Every member is already optional — the `fetch` arm is
- * all-optional and RPC methods are an index signature — so a program may
- * also return nothing at all (e.g. an impl that only registers Durable
- * Object exports).
+ * `fetch` handler (the `server.routes`-scoped API surface, authoritative
+ * within its routes — see {@link WebsiteHttpEffect}) plus any RPC methods,
+ * exactly like a Worker. Every member is already optional — the `fetch`
+ * arm is all-optional and RPC methods are an index signature — so a
+ * program may also return nothing at all (e.g. an impl that only registers
+ * Durable Object exports).
  */
 export type WebsiteShape<Req = never> = WebsiteMain<WorkerServices | Req> &
   MainRpc<WorkerServices | Req>;

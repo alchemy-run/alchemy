@@ -48,7 +48,6 @@ import * as Logger from "effect/Logger";
 import { MinimumLogLevel } from "effect/References";
 import * as Scope from "effect/Scope";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { isScopeEjected } from "../../Http.ts";
 import {
   makeEntrypointLayer,
@@ -58,7 +57,7 @@ import type { BaseRuntimeContext } from "../../RuntimeContext.ts";
 import { Self } from "../../Self.ts";
 import type { SERVE_SENTINEL } from "../../Serve/constants.ts";
 import { envString, hasStackMarkers } from "../../Serve/Env.ts";
-import { matchRoutes } from "../../Serve/Routes.ts";
+import { DEFAULT_SERVER_ROUTES, matchRoutes } from "../../Serve/Routes.ts";
 import type { AnyWebsiteClass } from "../../Serve/Serve.ts";
 import { Stack } from "../../Stack.ts";
 import { buildEventTelemetry } from "../../Telemetry.ts";
@@ -72,39 +71,6 @@ import { registerLambdaExtension } from "./RuntimeExtension.ts";
 // greps the shipped directory for it.
 const SENTINEL: typeof SERVE_SENTINEL = "__ALCHEMY_SERVE_v1__";
 (globalThis as Record<string, any>)[SENTINEL] = true;
-
-/**
- * Marks the internal passthrough response produced when the fetch effect
- * fails with `RouteNotFound` (including `Serve.passthrough`). The marked
- * response never leaves this module — it is translated to `undefined`
- * (delegate to the framework).
- */
-const PASSTHROUGH_HEADER = "x-alchemy-serve-passthrough";
-
-const passthroughResponse = () =>
-  HttpServerResponse.empty({
-    status: 404,
-    headers: { [PASSTHROUGH_HEADER]: "1" },
-  });
-
-/**
- * Wrap the user's fetch handler with the passthrough protocol: normalize
- * the `Main.fetch` shape (an Effect resolving to an `HttpEffect`), then map
- * a `RouteNotFound` failure — `HttpRouter`'s natural miss, or an explicit
- * `Serve.passthrough` — to the marked response BEFORE `safeHttpEffect`
- * would convert it into a real 404. A handler that matched and chose 404
- * returns a real 404 — never sniffed.
- */
-const guardHandler = (handler: unknown): any =>
-  Effect.flatMap(handler as Effect.Effect<any, any, any>, (value: any) =>
-    HttpServerResponse.isHttpServerResponse(value)
-      ? Effect.succeed(value)
-      : (value as Effect.Effect<any, any, any>),
-  ).pipe(
-    Effect.catchTag("RouteNotFound", () =>
-      Effect.succeed(passthroughResponse()),
-    ),
-  );
 
 /** The instance-lifetime artifacts of one site build. */
 interface LambdaSiteRuntime {
@@ -269,10 +235,12 @@ export interface WebsiteHandlersOptions {
    */
   site: AnyWebsiteClass;
   /**
-   * Path globs the Effect fetch owns (`server.routes`). A request outside
-   * them resolves `undefined` immediately — the framework serves it —
-   * without touching the layer build. Omitted = middleware mode: every
-   * request is offered to the effect fetch first.
+   * Path globs the Effect fetch owns (`server.routes`, exclusion globs
+   * supported). A request outside them resolves `undefined` immediately —
+   * the framework serves it — without touching the layer build. Inside
+   * them the effect fetch is authoritative: its responses (404s included)
+   * are final.
+   * @default DEFAULT_SERVER_ROUTES (["/api/*"])
    */
   routes?: readonly string[];
   /**
@@ -285,11 +253,13 @@ export interface WebsiteHandlersOptions {
 
 export interface WebsiteHandlers {
   /**
-   * Run the effect fetch for this request. Resolves `undefined` on
+   * Run the effect fetch for this request. Resolves `undefined` ONLY on
    * decline — pathname outside `routes`, no alchemy stack markers in the
-   * env (build-time prerender/SSG worlds), no fetch handler on the impl,
-   * or the typed passthrough (`RouteNotFound` / `Serve.passthrough`) — so
-   * the caller falls through to the framework's fetch.
+   * env (build-time prerender/SSG worlds), or no fetch handler on the
+   * impl — so the caller falls through to the framework's fetch. Inside
+   * the routes the effect fetch is authoritative: a `RouteNotFound`
+   * failure (an `HttpRouter` miss) renders as the effect's own 404
+   * response, never delegation.
    */
   match(request: Request): Promise<Response | undefined>;
   /**
@@ -303,8 +273,9 @@ export interface WebsiteHandlers {
 }
 
 /**
- * Build the site-match half of a generated AWS wrapper entry: effect fetch
- * first (scoped to `routes`), framework fallback on decline.
+ * Build the site-match half of a generated AWS wrapper entry: strict route
+ * ownership — the effect fetch serves `routes` (its answers, 404s
+ * included, are final), the framework serves everything else.
  *
  * Runtime-only — constructing the handlers stamps
  * `globalThis.__ALCHEMY_RUNTIME__` (so every `host.bind` guard in the
@@ -322,11 +293,11 @@ export const makeWebsiteHandlers = (
   // inside; outside Lambda (`AWS_LAMBDA_RUNTIME_API` unset) it no-ops.
   const extension = registerLambdaExtension();
 
+  const routes = options.routes ?? DEFAULT_SERVER_ROUTES;
   const match = async (request: Request): Promise<Response | undefined> => {
-    if (
-      options.routes !== undefined &&
-      !matchRoutes(options.routes, new URL(request.url).pathname)
-    ) {
+    // Strict route ownership: outside the claim the framework serves and
+    // the effect fetch is never invoked.
+    if (!matchRoutes(routes, new URL(request.url).pathname)) {
       return undefined;
     }
     const env =
@@ -351,9 +322,7 @@ export const makeWebsiteHandlers = (
     // settled inline — or transferred to a streaming body — inside
     // `makeFunctionFetchHandler`).
     const scope = Scope.makeUnsafe();
-    const exit = await makeFunctionFetchHandler(guardHandler(fetchHandler))(
-      request,
-    ).pipe(
+    const exit = await makeFunctionFetchHandler(fetchHandler)(request).pipe(
       Effect.provide(
         Layer.mergeAll(
           Layer.succeed(Scope.Scope, scope),
@@ -377,11 +346,10 @@ export const makeWebsiteHandlers = (
     if (exit._tag !== "Success") {
       throw Cause.squash(exit.cause);
     }
-    const response = exit.value as Response;
-    if (response.headers.get(PASSTHROUGH_HEADER) !== null) {
-      return undefined;
-    }
-    return response;
+    // The effect fetch is authoritative inside the routes: every response
+    // — including the 404 `safeHttpEffect` renders for a `RouteNotFound`
+    // failure — is the final answer.
+    return exit.value as Response;
   };
 
   return {
@@ -414,6 +382,11 @@ const shellHandlers = new WeakMap<object, WebsiteHandlers>();
  * `alchemy dev` lowered the same values into. `waitUntil` is deliberately
  * ignored: request scopes settle inline before the response (Lambda
  * semantics).
+ *
+ * `Serve.make` owns the `server.routes` gate and only dispatches requests
+ * inside the claim, so the shell's handlers claim everything they receive
+ * (`routes: ["/*"]`) — a second gate here would re-apply a default claim
+ * over the handle's possibly-broader one.
  */
 export const lambdaServeShell = {
   match: (
@@ -425,6 +398,7 @@ export const lambdaServeShell = {
     if (handlers === undefined) {
       handlers = makeWebsiteHandlers({
         site: site as AnyWebsiteClass,
+        routes: ["/*"],
         ...(options?.env !== undefined && options.env !== null
           ? { env: options.env as Record<string, unknown> }
           : {}),

@@ -153,7 +153,7 @@ const fetchJsonReady = <T>(url: string) =>
 
 describe("AWS.Website.SvelteKit local (effectful)", () => {
   test.provider.skipIf(!dockerAvailable)(
-    "effectful SvelteKit dev: /api/* serves through the effect middleware with real S3; passthrough, SSR, and streamed bodies work",
+    "effectful SvelteKit dev: /api/* serves through the effect middleware with real S3; the exclusion glob, SSR, and streamed bodies work",
     (stack) =>
       Effect.gen(function* () {
         yield* stack.destroy();
@@ -242,9 +242,9 @@ describe("AWS.Website.SvelteKit local (effectful)", () => {
           { timeout: "60 seconds", label: "streamed effect response (dev)" },
         );
 
-        // ── Passthrough: a KIT endpoint INSIDE /api/* still answers — the
-        // effect fetch declines it (RouteNotFound) and the middleware
-        // falls through to kit ───────────────────────────────────────────
+        // ── Exclusion glob: /api/hello is carved OUT of the effect claim
+        // (`!/api/hello` in server.routes), so the middleware declines the
+        // path and kit's own +server endpoint answers ────────────────────
         const hello = yield* fetchJsonReady<{
           marker: string;
           via: string;
@@ -253,6 +253,19 @@ describe("AWS.Website.SvelteKit local (effectful)", () => {
         expect(hello.marker).toBe("SVELTEKIT_AWS_EFFECT_KIT_API");
         expect(hello.via).toBe("kit");
         expect(hello.echo).toBe("dev");
+
+        // ── An unknown route INSIDE the claim is the effect's own 404 —
+        // the fixture's RouteNotFound failure renders as the fetch's OWN
+        // 404 response (empty body, not kit's HTML error page) ───────────
+        const insideMiss = yield* Effect.gen(function* () {
+          const client = yield* HttpClient.HttpClient;
+          const res = yield* client.get(
+            `${url}/api/effect/definitely-not-here`,
+          );
+          return { status: res.status, body: yield* res.text };
+        });
+        expect(insideMiss.status).toBe(404);
+        expect(insideMiss.body).not.toContain("<html");
 
         // ── Framework surface: kit SSR outside the effect routes ─────────
         yield* expectUrlContains(

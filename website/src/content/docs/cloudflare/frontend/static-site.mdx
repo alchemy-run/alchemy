@@ -91,7 +91,7 @@ The build contract is two required props, plus a handful of optional ones:
   re-runs; `memo: { include: [...] }` narrows the scope, and `memo: false`
   disables memoization so the build runs on every deploy.
 - `main` — an optional custom Worker entrypoint served in front of the
-  assets, instead of the fallback passthrough.
+  assets, instead of the default asset-serving Worker.
 - `assets` — asset routing behavior (`notFoundHandling`, `htmlHandling`,
   `runWorkerFirst`, ...), passed flat. `runWorkerFirst` accepts `true` to
   route every request through the Worker ahead of assets, or a glob array

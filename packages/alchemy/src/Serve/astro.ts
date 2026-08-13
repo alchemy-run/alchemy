@@ -22,32 +22,29 @@
  * Astro's `App.render` requires the fetchable to return a `Response`
  * (there is no undefined-falls-through contract in astro core), so the
  * mounting module composes the fallback itself: `site.fetch` resolves
- * `undefined` on passthrough/miss/outside-`routes`, and the caller then
- * runs Astro's own pipeline (`astro(state)`) — or any other fallback.
+ * `undefined` only for paths outside `routes` (or marker-less build
+ * worlds), and the caller then runs Astro's own pipeline
+ * (`astro(state)`) — or any other fallback. Inside the routes the effect
+ * fetch is authoritative: its responses, 404s included, are final.
  */
 
-import type { ServeOptions } from "./Bridge.ts";
-import { matchRoutes } from "./Routes.ts";
-import { make, type AnyWebsiteClass } from "./Serve.ts";
+import { make, type AnyWebsiteClass, type MakeOptions } from "./Serve.ts";
 
-export interface AstroFetchableOptions extends ServeOptions {
-  /**
-   * Path globs the effect fetch owns (the construct's `server.routes`,
-   * `runWorkerFirst` dialect: `*` matches any run including `/`, leading
-   * `!` excludes). Requests outside the scope resolve `undefined`
-   * immediately — the caller falls through to Astro. Omitted = every
-   * request is offered to the effect fetch first (middleware mode).
-   */
-  routes?: readonly string[];
-}
+/**
+ * Options for {@link toFetchable} — {@link MakeOptions} verbatim: the
+ * per-call serve options plus the `routes` claim (default `["/api/*"]`).
+ */
+export type AstroFetchableOptions = MakeOptions;
 
 export interface AstroFetchable {
   /**
-   * Run the effect fetch. Resolves `undefined` when the request is
-   * outside `routes`, when the effect declined it (`RouteNotFound` /
-   * `Serve.passthrough`), when the resolved env carries no alchemy stack
-   * markers (build-time prerender worlds), or when the site has no fetch
-   * handler — the caller composes Astro's own pipeline as the fallback.
+   * Run the effect fetch. Resolves `undefined` ONLY when the request is
+   * outside `routes` (default `["/api/*"]`), when the resolved env
+   * carries no alchemy stack markers (build-time prerender worlds), or
+   * when the site has no fetch handler — the caller composes Astro's own
+   * pipeline as the fallback. Inside the routes the effect fetch is
+   * authoritative: an `HttpRouter` miss renders as the effect's own 404,
+   * never delegation.
    */
   fetch(request: Request): Promise<Response | undefined>;
 }
@@ -56,12 +53,14 @@ export interface AstroFetchable {
  * Mount an effectful Website in Astro's fetchable (`src/fetch.ts`, Astro
  * 7 `fetchFile`) — the explicit-tier escape hatch (the auto tier
  * pre-resolves `virtual:astro:fetchable` to a generated wrapper that
- * composes this same helper). Astro's `App.render` requires the
- * fetchable to return a `Response` — there is no undefined-falls-through
- * contract in astro core — so the mounting module composes the fallback
- * itself: `site.fetch` resolves `undefined` on passthrough, miss, or
- * outside-`routes`, and the caller then runs Astro's own pipeline (or
- * any other fallback).
+ * composes this same helper). `options.routes` (default `["/api/*"]`,
+ * exclusion globs supported) decides who serves each path. Astro's
+ * `App.render` requires the fetchable to return a `Response` — there is
+ * no undefined-falls-through contract in astro core — so the mounting
+ * module composes the fallback itself: `site.fetch` resolves `undefined`
+ * only for paths outside `routes` (or marker-less build worlds), and the
+ * caller then runs Astro's own pipeline (or any other fallback). Inside
+ * the routes the effect fetch's answer (404s included) is final.
  *
  * @binding
  * @product Serve
@@ -88,17 +87,10 @@ export const toFetchable = (
   site: AnyWebsiteClass,
   options?: AstroFetchableOptions,
 ): AstroFetchable => {
+  // `make` owns the route gate (default DEFAULT_SERVER_ROUTES): `match`
+  // resolves `undefined` on path-miss without invoking the effect fetch.
   const handle = make(site, options);
-  const routes = options?.routes;
   return {
-    fetch: (request) => {
-      if (
-        routes !== undefined &&
-        !matchRoutes(routes, new URL(request.url).pathname)
-      ) {
-        return Promise.resolve(undefined);
-      }
-      return handle.match(request, options);
-    },
+    fetch: (request) => handle.match(request, options),
   };
 };

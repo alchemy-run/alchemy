@@ -217,18 +217,18 @@ describe.skipIf(!runLive)("AWS.Website.Astro", () => {
           .pipe(Effect.orDie);
         expect(item.Item?.value?.S).toBe(marker);
 
-        // Passthrough: the effect fetch declines `/api/astro-echo` (typed
-        // `RouteNotFound`) and Astro's own endpoint answers — through the
-        // same serverRoutes edge path.
+        // Exclusion glob: `/api/astro-echo` is carved OUT of the effect
+        // claim (`!/api/astro-echo` in server.routes), so Astro's own
+        // endpoint answers — the effect fetch never sees the path.
         yield* expectUrlContains(
           `${url}/api/astro-echo`,
           "astro-endpoint-echo",
-          { timeout: "60 seconds", label: "effectful passthrough to astro" },
+          { timeout: "60 seconds", label: "exclusion glob routes to astro" },
         );
 
-        // An unmatched /api/* path gets Astro's own 404 (the effect fetch
-        // passed through, the wrapper fell back to Astro) — a REAL 404,
-        // never a SPA shell.
+        // An unknown route INSIDE the claim is the effect fetch's own 404
+        // (its RouteNotFound failure renders as its OWN 404 response) — a
+        // REAL 404, never delegation and never a SPA shell.
         yield* expectStatus(`${url}/api/definitely-not-here`, 404);
 
         // Prerendered page: astro wrote it into dist/client at build time
