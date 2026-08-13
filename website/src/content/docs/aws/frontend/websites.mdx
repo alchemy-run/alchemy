@@ -1,6 +1,6 @@
 ---
 title: Websites
-description: Deploy Astro, Next.js, Nuxt, SvelteKit, Waku, Octane, or any static build to AWS with first-class Website resources.
+description: Deploy Astro, Next.js, Nuxt, SvelteKit, Waku, Octane, Foldkit, or any static build to AWS with first-class Website resources.
 sidebar:
   label: Overview
   order: 1
@@ -32,6 +32,9 @@ integration on top.
   apps.
 - [`Octane`](/aws/frontend/octane) — OctaneJS fullstack apps built
   through your own `vite build` with the AWS marker adapter.
+- [`Foldkit`](/aws/frontend/foldkit) — Foldkit apps (client-only Vite
+  SPAs) built through your own `vite build` and deployed assets-only,
+  with SPA deep links handled at the edge.
 - [`StaticSite`](/aws/frontend/static-site) — any directory of files,
   optionally produced by a build command, for static generators like
   Zola and Hugo or pre-built SPAs.
@@ -58,6 +61,7 @@ the full live deployment.
 | SvelteKit | `SvelteKit` | [SvelteKit](/aws/frontend/sveltekit) |
 | Waku | `Waku` | [Waku](/aws/frontend/waku) |
 | OctaneJS (fullstack) | `Octane` | [Octane](/aws/frontend/octane) |
+| Foldkit | `Foldkit` | [Foldkit](/aws/frontend/foldkit) |
 | Vite SPA (any build) | `StaticSite` | [Static sites](/aws/frontend/static-site) |
 | Zola, Hugo, or any static generator | `StaticSite` | [Static sites](/aws/frontend/static-site) |
 
@@ -70,9 +74,9 @@ way.
 ## How to choose
 
 Use the resource named after your framework. `Astro`, `Nextjs`,
-`Nuxt`, `SvelteKit`, `Waku`, and `Octane` each drive their
-framework's own programmatic build and know its output layout, config
-surface, and dev server.
+`Nuxt`, `SvelteKit`, `Waku`, `Octane`, and `Foldkit` each drive
+their framework's own programmatic build and know its output layout,
+config surface, and dev server.
 
 Use `StaticSite` when the output is plain files — a pre-built SPA, or
 an arbitrary build command that emits a directory (Zola, Hugo, or any
@@ -92,7 +96,8 @@ minutes to create, and each custom domain can only attach to one.
   [Nuxt](/aws/frontend/nuxt),
   [SvelteKit](/aws/frontend/sveltekit),
   [Waku](/aws/frontend/waku),
-  [Octane](/aws/frontend/octane).
+  [Octane](/aws/frontend/octane),
+  [Foldkit](/aws/frontend/foldkit).
 - [`StaticSite` reference](/providers/aws/website/staticsite) and
   [`Router` reference](/providers/aws/website/router) — every prop
   and attribute.

@@ -852,8 +852,10 @@ export default defineConfig({
                   link: "/aws/frontend/websites",
                 },
                 { label: "Astro", link: "/aws/frontend/astro" },
+                { label: "Foldkit", link: "/aws/frontend/foldkit" },
                 { label: "Next.js", link: "/aws/frontend/nextjs" },
                 { label: "Nuxt", link: "/aws/frontend/nuxt" },
+                { label: "Octane", link: "/aws/frontend/octane" },
                 {
                   label: "Static sites",
                   link: "/aws/frontend/static-site",

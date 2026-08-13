@@ -145,7 +145,7 @@ A linear five-part walkthrough from zero to a tested, locally-developed, CI-depl
 - [Full-stack TanStack Start + RPC + Drizzle](https://alchemy.run/cloudflare/frontend/full-stack-tanstack-rpc-drizzle) — Build a reactive full-stack app on Cloudflare — a TanStack Start UI that drives an Effect RPC backend over Drizzle and Neon Postgres, with browser state wired through Effect 4's native atom RPC.
 - [React Router](https://alchemy.run/cloudflare/frontend/react-router) — Deploy React Router v7 — including React Server Components — to Cloudflare with Cloudflare.Website.Vite and viteEnvironments.
 - [Vue](https://alchemy.run/cloudflare/frontend/vue) — Deploy a Vue single-page app to Cloudflare with the Vite resource — one declaration, no Wrangler config.
-- [Foldkit](https://alchemy.run/cloudflare/frontend/foldkit) — Deploy a Foldkit app to Cloudflare with the Vite resource — one declaration, no Wrangler config.
+- [Foldkit](https://alchemy.run/cloudflare/frontend/foldkit) — Deploy a Foldkit app to Cloudflare with the Foldkit resource — one declaration, no Wrangler config.
 - [SolidStart](https://alchemy.run/cloudflare/frontend/solidstart) — Deploy SolidStart to Cloudflare with Cloudflare.Website.Vite — plus the hand-rolled SolidJS SSR variant for full control over the server entry.
 - [Astro](https://alchemy.run/cloudflare/frontend/astro) — Deploy an Astro site to Cloudflare Workers with Cloudflare.Website.Astro — SSR in the Worker, prerendered pages as static assets, sessions backed by an auto-provisioned KV namespace.
 - [Next.js](https://alchemy.run/cloudflare/frontend/nextjs) — Deploy a Next.js app to Cloudflare Workers with Cloudflare.Website.Nextjs — the OpenNext pipeline, writable ISR, and wrangler-free local dev.
@@ -239,8 +239,15 @@ A linear five-part walkthrough from zero to a tested, CI-deployed AWS project. E
 
 ## AWS — Frontend
 
-- [Deploy a static site](https://alchemy.run/aws/frontend/static-site) — Ship a static site to S3 + CloudFront with AWS.Website.StaticSite — build-step support, Router composition, and cache invalidation on deploy.
-- [Websites](https://alchemy.run/aws/frontend/websites) — Deploy static sites and Vite apps to S3 and CloudFront as a single StaticSite resource.
+- [Websites](https://alchemy.run/aws/frontend/websites) — Deploy Astro, Next.js, Nuxt, SvelteKit, Waku, Octane, Foldkit, or any static build to AWS with first-class Website resources.
+- [Static sites](https://alchemy.run/aws/frontend/static-site) — Ship a static site to S3 + CloudFront with AWS.Website.StaticSite — build-step support, Router composition, and cache invalidation on deploy.
+- [Next.js](https://alchemy.run/aws/frontend/nextjs) — Deploy a Next.js app to AWS with AWS.Website.Nextjs — the OpenNext serverless topology with streaming SSR, image optimization, and ISR wiring, plus next dev under alchemy dev.
+- [Nuxt](https://alchemy.run/aws/frontend/nuxt) — Deploy a Nuxt app to AWS with AWS.Website.Nuxt — nitro's aws-lambda preset on a streaming Lambda Function URL, S3 assets behind CloudFront, and Nuxt's own dev server under alchemy dev.
+- [Astro](https://alchemy.run/aws/frontend/astro) — Deploy an Astro app to AWS with AWS.Website.Astro — SSR on a streaming Lambda Function URL, static output on S3 + CloudFront, and Astro's own dev server under alchemy dev.
+- [SvelteKit](https://alchemy.run/aws/frontend/sveltekit) — Deploy a SvelteKit app to AWS with AWS.Website.SvelteKit — SSR on a streaming Lambda Function URL, assets and prerendered pages on S3 + CloudFront, and Kit's own dev server under alchemy dev.
+- [Waku](https://alchemy.run/aws/frontend/waku) — Deploy a Waku app to AWS with AWS.Website.Waku — RSC server on a streaming Lambda Function URL, SSG pages and assets on S3 + CloudFront, and Waku's own dev server under alchemy dev.
+- [Octane](https://alchemy.run/aws/frontend/octane) — Deploy an OctaneJS app to AWS with AWS.Website.Octane — SSR on a streaming Lambda Function URL, assets on S3 + CloudFront, and Octane's own Vite dev server under alchemy dev.
+- [Foldkit](https://alchemy.run/aws/frontend/foldkit) — Deploy a Foldkit app to AWS with AWS.Website.Foldkit — the client-only Vite build on S3 + CloudFront, SPA deep links at the edge, and Vite's own dev server under alchemy dev.
 
 ## AWS — APIs
 
@@ -363,4 +370,4 @@ Cloud-agnostic local process primitives — memoized builds, one-off commands, a
 
 Per-resource API reference, generated from JSDoc on the source `.ts` files via `bun generate:api-reference`. Each page documents the resource's input properties (with types, defaults, and constraints), output attributes, and Quick Reference / Examples sections derived from `@section` / `@example` JSDoc tags.
 
-The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~855 KB) — only fetch it when you need to locate a specific resource's reference page.
+The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~862 KB) — only fetch it when you need to locate a specific resource's reference page.
