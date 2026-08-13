@@ -1,4 +1,5 @@
 import * as lambda from "@distilled.cloud/aws/lambda";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -13,6 +14,11 @@ import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
 export type StartingPosition = "TRIM_HORIZON" | "LATEST" | "AT_TIMESTAMP";
+
+/** Internal retry signal: the mapping has not reached its desired state yet. */
+class MappingNotSettled extends Data.TaggedError("MappingNotSettled")<{
+  readonly state: string | undefined;
+}> {}
 
 export type FunctionResponseType = "ReportBatchItemFailures";
 
@@ -735,6 +741,43 @@ export const EventSourceMappingProvider = () =>
               retryPermissionsPropagation,
               retryTransient,
             );
+
+          // Wait for the mapping to settle into its desired terminal state.
+          // A fresh mapping sits in `Creating` for up to ~a minute before
+          // Lambda actually starts polling — and for stream sources with
+          // `startingPosition: LATEST`, records written before polling
+          // starts are silently skipped. Returning early would hand the
+          // caller a mapping that looks deployed but drops events.
+          const desiredState = (news.enabled ?? true) ? "Enabled" : "Disabled";
+          if (config.State !== desiredState) {
+            config = yield* lambda.getEventSourceMapping({ UUID: uuid }).pipe(
+              Effect.flatMap((observed) =>
+                observed.State === desiredState
+                  ? Effect.succeed(observed)
+                  : Effect.fail(
+                      new MappingNotSettled({ state: observed.State }),
+                    ),
+              ),
+              Effect.retry({
+                while: (e) => e._tag === "MappingNotSettled",
+                schedule: Schedule.max([
+                  Schedule.spaced("2 seconds"),
+                  Schedule.recurs(45),
+                ]).pipe(
+                  Schedule.tap(({ attempt }) =>
+                    session.note(
+                      `EventSourceMapping ${uuid}: waiting to become ${desiredState} (${(attempt + 1) * 2}s elapsed)`,
+                    ),
+                  ),
+                ),
+              }),
+              // Never wedge a deploy on a mapping stuck in transition —
+              // surface the observed state in the attributes instead.
+              Effect.catchTag("MappingNotSettled", () =>
+                lambda.getEventSourceMapping({ UUID: uuid }),
+              ),
+            );
+          }
 
           // Sync tags — diff observed cloud tags against desired so
           // adoption rewrites ownership tags correctly.

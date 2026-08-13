@@ -18,6 +18,14 @@
  *   - SQS + consumer     → `/queue/send` produces; floci's ESM poller
  *                          delivers to `consumeQueueMessages`, which records
  *                          into the table read back by `/queue/messages`
+ *   - SNS + consumer     → `/topic/send` publishes; the lambda-protocol
+ *                          Subscription + invoke Permission (glue that must
+ *                          be created ON the emulator, not real AWS) deliver
+ *                          to `consumeTopicNotifications`, read back by
+ *                          `/topic/messages`
+ *   - DynamoDB Streams   → `/items` writes; the table stream + its
+ *                          EventSourceMapping deliver the change record to
+ *                          `consumeTableChanges`, read back by `/changes`
  *   - HOT RELOAD         → rewriting src/marker.ts (no redeploy) must serve
  *                          the new marker; restoring it must swap back
  */
@@ -153,8 +161,12 @@ test.skipIf(!dockerAvailable)(
       { tries: 300, delayMs: 1000 },
     );
 
-    // Dev identity: the function URL is served by the emulator, not AWS.
-    expect(api).toContain("localhost:4566");
+    // Dev identity: the function URL is served locally, not by AWS
+    // (e.g. http://<id>.lambda-url.us-east-1.localhost:<port>/). The port
+    // is whatever the emulator bound — never hard-code it, only the URL
+    // captured from the CLI's stdout is authoritative.
+    expect(new URL(api).hostname).toEndWith("localhost");
+    expect(api).not.toContain("amazonaws.com");
 
     // Marker + env: the function reads MY_VARIABLE through effect/Config.
     const home = (await (await fetchOk(api)).json()) as {
@@ -197,6 +209,52 @@ test.skipIf(!dockerAvailable)(
       { tries: 60, delayMs: 500 },
     );
     expect(JSON.parse(received)).toEqual(message);
+
+    // SNS: publish over the binding. Delivery runs through the
+    // lambda-protocol Subscription and the invoke Permission — the glue
+    // resources that regressed by being created against real AWS with
+    // emulator ARNs (InvalidParameterException: TopicArn / Function not
+    // found). Consumption proves both were created on the emulator.
+    const notification = { id: crypto.randomUUID(), text: "hello from sns" };
+    await fetchOk(new URL("/topic/send", api), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(notification),
+    });
+    const delivered = await pollUntil(
+      "topic notification to be consumed",
+      async () => {
+        const res = await fetch(
+          new URL(`/topic/messages?id=${notification.id}`, api),
+        );
+        if (!res.ok) return undefined;
+        const { body } = (await res.json()) as { body: string | null };
+        return body ?? undefined;
+      },
+      { tries: 60, delayMs: 500 },
+    );
+    expect(JSON.parse(delivered)).toEqual(notification);
+
+    // DynamoDB Streams: write a plain item; the table stream's
+    // EventSourceMapping delivers the change record to
+    // `consumeTableChanges`, which records it under `change:<id>`.
+    const itemId = crypto.randomUUID();
+    await fetchOk(new URL("/items", api), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: itemId }),
+    });
+    const change = await pollUntil(
+      "table change record to be consumed",
+      async () => {
+        const res = await fetch(new URL(`/changes?id=${itemId}`, api));
+        if (!res.ok) return undefined;
+        const { body } = (await res.json()) as { body: string | null };
+        return body ?? undefined;
+      },
+      { tries: 60, delayMs: 500 },
+    );
+    expect(change).toBe("INSERT");
 
     // ── HOT RELOAD: rewrite src/marker.ts with the CLI still running. The
     // `--watch` exec child re-runs, the dev provider hot-swaps the function
