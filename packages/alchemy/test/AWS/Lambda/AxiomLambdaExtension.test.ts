@@ -87,7 +87,7 @@ describe("Axiom Lambda platform extension", () => {
                   architecture,
                   memorySize: 256,
                   timeout: Duration.seconds(15),
-                  url: true,
+                  functionUrl: true,
                   layers: [axiomExtensionLayerArn({ region, architecture })],
                   env: {
                     AXIOM_DATASET: eventsDataset,

@@ -16,7 +16,7 @@ export const OtelExtensionReceiverLive = OtelExtensionReceiver.make(
     main: import.meta.url,
     memorySize: 256,
     timeout: Duration.seconds(15),
-    url: true,
+    functionUrl: true,
   },
   Effect.gen(function* () {
     const bucket = yield* S3.Bucket("OtelExtensionSink", {

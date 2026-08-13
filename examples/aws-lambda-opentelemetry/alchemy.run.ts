@@ -22,7 +22,7 @@ export default Alchemy.Stack(
           architecture: "arm64",
           memorySize: 512,
           timeout: Duration.seconds(15),
-          url: true,
+          functionUrl: true,
           // The extension layer, the configuration layer, and the extension's
           // environment are attached by `AWS.Lambda.Collector` inside the
           // Function's Effect — no telemetry plumbing appears in these props.

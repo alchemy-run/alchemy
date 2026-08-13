@@ -287,7 +287,7 @@ test.provider(
             main: timeoutHandlerPath,
             handler: "handler",
             isExternal: true,
-            url: false,
+            functionUrl: false,
             layers: [layer],
           });
           return { layer, fn };

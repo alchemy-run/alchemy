@@ -65,7 +65,7 @@ describe("Effect OpenTelemetry Collector export to Axiom", () => {
                   architecture,
                   memorySize: 512,
                   timeout: Duration.seconds(15),
-                  url: true,
+                  functionUrl: true,
                   axiom: {
                     token: ingest,
                     traces: tracesDataset,

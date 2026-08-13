@@ -106,7 +106,6 @@ export const makeAssumeRoleResolver = (options: {
           ? creds.SecretAccessKey
           : Redacted.make(creds.SecretAccessKey),
         sessionToken: Redacted.make(creds.SessionToken),
-        region: options.region ?? "us-east-1",
         expiration: creds.Expiration?.getTime(),
         // The region the credentials authenticated against, which
         // `@distilled.cloud/aws` falls back to when nothing provides the
