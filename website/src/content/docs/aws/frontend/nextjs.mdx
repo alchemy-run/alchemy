@@ -67,6 +67,23 @@ export default {
 };
 ```
 
+## Configure the build command
+
+By default the build runs your package.json `build` script, or `next
+build` through your package runner (`bunx` / `npx` / `yarn` / `pnpm
+exec`, detected from the nearest lockfile) when there is none. Set
+`build: { command }` to override it:
+
+```typescript
+export const Website = AWS.Website.Nextjs("Website", {
+  build: { command: "npx next build --turbopack" },
+});
+```
+
+The command takes precedence over the package.json `build` script and
+a `buildCommand` in `open-next.config.ts`, and changing it re-runs
+the build.
+
 ## Declare the Website
 
 Declare the site as a module-level const (rather than inline in the

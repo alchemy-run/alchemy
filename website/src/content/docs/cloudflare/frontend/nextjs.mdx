@@ -63,6 +63,21 @@ export default defineCloudflareConfig({
 For revalidation that actually writes, see
 [Writable ISR](#writable-isr) below.
 
+## Configure the build command
+
+By default the build runs `next build` through your package runner
+(`bunx` / `npx` / `yarn` / `pnpm exec`, detected from the nearest
+lockfile). Set `build: { command }` to override it:
+
+```typescript
+export const Website = Cloudflare.Website.Nextjs("Website", {
+  build: { command: "npx next build --turbopack" },
+});
+```
+
+A `buildCommand` set in the project's `open-next.config.ts` takes
+precedence over the prop.
+
 ## Declare the Website
 
 Declare the site as a module-level const (rather than inline in the

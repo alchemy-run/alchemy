@@ -197,7 +197,7 @@ export interface NextjsSourceOptions {
   /**
    * The command the OpenNext pipeline runs to build the Next.js app. A
    * `buildCommand` in the project's `open-next.config.ts` takes precedence.
-   * @default "npx next build"
+   * @default `next build` via the detected package runner (bunx/npx/yarn/pnpm exec)
    */
   readonly buildCommand?: string | undefined;
   /** Skip the internal `next build` (reuse an existing `.next`). */

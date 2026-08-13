@@ -16,6 +16,7 @@
 // Usage: node runner.mjs '<json>' where json is Build.ts's RunnerConfig:
 //   { appDir, configPath, compatibilityDate, skipNextBuild, minify, debug,
 //     buildCommand }
+import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -59,8 +60,35 @@ ensureCloudflareConfig(config);
 
 // The app's package.json `build` script is `e2e build` (which would recurse
 // back into this runner) — run `next build` directly unless the app's
-// open-next.config.ts overrides the command itself.
-config.buildCommand ??= runnerConfig.buildCommand ?? "npx next build";
+// open-next.config.ts overrides the command itself. The default runs through
+// the project's package runner, detected from the nearest lockfile the same
+// way OpenNext does (sync mirror of ../nextjs/packager.ts — this script is
+// standalone and cannot import it).
+const detectPackager = (start) => {
+  let current = start;
+  while (true) {
+    // bun before yarn: `bun install --yarn` can emit a yarn.lock too.
+    for (const [file, packager] of [
+      ["bun.lockb", "bun"],
+      ["bun.lock", "bun"],
+      ["package-lock.json", "npm"],
+      ["yarn.lock", "yarn"],
+      ["pnpm-lock.yaml", "pnpm"],
+    ]) {
+      if (fs.existsSync(path.join(current, file))) return packager;
+    }
+    const parent = path.dirname(current);
+    if (parent === current) return "npm";
+    current = parent;
+  }
+};
+const defaultBuildCommand = {
+  bun: "bunx next build",
+  pnpm: "pnpm exec next build",
+  yarn: "yarn next build",
+  npm: "npx next build",
+}[detectPackager(appDir)];
+config.buildCommand ??= runnerConfig.buildCommand ?? defaultBuildCommand;
 
 // --- getNormalizedOptions equivalent (utils.ts) ---
 const openNextDistDir = path.dirname(

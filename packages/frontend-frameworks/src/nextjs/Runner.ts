@@ -32,8 +32,9 @@ export interface RunnerConfig {
   readonly debug?: boolean | undefined;
   /**
    * The command the pipeline runs to build the Next.js app. Defaults (in the
-   * runner) to `npx next build` — NOT the app's `build` script, which by
-   * fixture convention is `e2e build` and would recurse into this runner.
+   * runner) to `next build` via the packager detected from the nearest
+   * lockfile (bunx/npx/yarn/pnpm exec) — NOT the app's `build` script, which
+   * by fixture convention is `e2e build` and would recurse into this runner.
    */
   readonly buildCommand?: string | undefined;
 }
