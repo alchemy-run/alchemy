@@ -1,6 +1,8 @@
 import { sanitizeLockKey, withLock } from "@/Auth/Lock.ts";
 import { rootDir } from "@/Auth/Profile.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { spawn } from "node:child_process";
+import { resolve } from "node:path";
 import { assert, describe, expect, it, layer } from "alchemy-test";
 import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
@@ -119,6 +121,92 @@ layer(NodeServices.layer, { excludeTestServices: true })("withLock", (it) => {
       expect(order.slice(0, 2)).toEqual([order[0], order[0]]);
       expect(order.slice(2)).toEqual([order[2], order[2]]);
     }),
+  );
+
+  it.effect("allows different-key critical sections to overlap", () =>
+    Effect.gen(function* () {
+      const firstEntered = yield* Deferred.make<void>();
+      const releaseFirst = yield* Deferred.make<void>();
+      const first = yield* withLock(
+        "lock-test-independent-a",
+        Deferred.succeed(firstEntered, undefined).pipe(
+          Effect.andThen(Deferred.await(releaseFirst)),
+        ),
+      ).pipe(Effect.forkScoped);
+
+      yield* Deferred.await(firstEntered);
+      const secondRan = yield* withLock(
+        "lock-test-independent-b",
+        Effect.succeed(true),
+      );
+      expect(secondRan).toBe(true);
+
+      yield* Deferred.succeed(releaseFirst, undefined);
+      yield* Fiber.await(first);
+    }),
+  );
+
+  it.effect(
+    "excludes another process and recovers its lock after a crash",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const key = `lock-test-process-${crypto.randomUUID()}`;
+        const lockPath = yield* lockPathOf(key);
+        const child = spawn(
+          process.execPath,
+          ["test/Auth/fixtures/lock-holder.ts", key],
+          {
+            cwd: resolve(import.meta.dir, "../.."),
+            stdio: ["ignore", "pipe", "inherit"],
+          },
+        );
+
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            if (child.exitCode === null) child.kill("SIGKILL");
+          }),
+        );
+
+        yield* Effect.tryPromise(
+          () =>
+            new Promise<void>((resolve, reject) => {
+              child.once("error", reject);
+              child.once("exit", (code) =>
+                reject(new Error(`lock holder exited before ready: ${code}`)),
+              );
+              child.stdout.once("data", (chunk) => {
+                if (chunk.toString().includes("ready")) resolve();
+              });
+            }),
+        );
+
+        const blocked = yield* withLock(key, Effect.void, {
+          timeout: "250 millis",
+        }).pipe(Effect.exit);
+        assert(Exit.isFailure(blocked));
+        expect(String(blocked.cause)).toContain("Timed out waiting");
+
+        child.kill("SIGKILL");
+        yield* Effect.tryPromise(
+          () =>
+            new Promise<void>((resolve) => {
+              if (child.exitCode !== null) resolve();
+              else child.once("exit", () => resolve());
+            }),
+        );
+        expect(yield* fs.exists(lockPath)).toBe(true);
+
+        const stale = new Date((yield* Clock.currentTimeMillis) - 60_000);
+        yield* fs.utimes(lockPath, stale, stale);
+        expect(
+          yield* withLock(key, Effect.succeed("recovered"), {
+            timeout: "2 seconds",
+          }),
+        ).toBe("recovered");
+        expect(yield* fs.exists(lockPath)).toBe(false);
+      }).pipe(Effect.scoped),
+    { timeout: 10_000 },
   );
 
   it.effect("releases the lock when the critical section fails", () =>
