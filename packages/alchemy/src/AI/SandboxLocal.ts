@@ -98,7 +98,16 @@ export const makeSandboxLocal: Effect.Effect<
           shell: true,
           detached: true,
           ...(options?.env ? { env: options.env, extendEnv: true } : {}),
-        }).pipe(Effect.mapError((error) => String(error)));
+        }).pipe(
+          // classification doctrine: a spawn failure is INFRASTRUCTURE
+          // (the command never ran), distinct from a policy denial (a
+          // containment message) and from the command's own failure
+          // (an exit code) — the model should react differently to each
+          Effect.mapError(
+            (error) =>
+              `[sandbox failure] the command never ran: ${String(error)}`,
+          ),
+        );
         const terminate = handle
           .kill({ killSignal: "SIGTERM", forceKillAfter: "1 second" })
           .pipe(Effect.catch(() => Effect.void));

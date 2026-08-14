@@ -432,6 +432,23 @@ export const dedupeByName = (
   );
 };
 
+/**
+ * FNV-1a 64-bit over UTF-16 code units, as hex — CHANGE DETECTION for
+ * the request envelope (`stance` observation), not security. Pure and
+ * platform-neutral: DriverCore runs on Node, bun, and workerd alike,
+ * so no `node:crypto`, no async `crypto.subtle`.
+ */
+const fnv1a64 = (text: string): string => {
+  let hash = 0xcbf29ce484222325n;
+  const prime = 0x100000001b3n;
+  const mask = 0xffffffffffffffffn;
+  for (let index = 0; index < text.length; index++) {
+    hash ^= BigInt(text.charCodeAt(index));
+    hash = (hash * prime) & mask;
+  }
+  return hash.toString(16).padStart(16, "0");
+};
+
 /** One tool mention in a rendered stance — tagged or inline. */
 export interface CompiledToolRef {
   readonly term: Tool<any, any[]>;
@@ -531,6 +548,19 @@ export interface SessionOps {
   /** The last rendered stance — what `spawn`/`skill` grant from. */
   readonly lastStance: () => Stance | undefined;
   readonly setLastStance: (stance: Stance) => void;
+  /**
+   * The DIRECT wire's session-lifetime tool union, in first-mention
+   * order — the payload stays byte-stable across phase flips
+   * (KV-cache prefix), while mention-is-presence is enforced by
+   * handler: a union tool the CURRENT tick's stance does not mention
+   * rejects model-visibly. In-memory: a restart resets the union to
+   * the tick's own mentions (the provider cache is cold then anyway).
+   */
+  readonly wireUnion: () => Map<string, AiTool.Any>;
+  /** The last logged request envelope's hash — the `stance`
+   *  observation snapshots the full envelope only when it changes. */
+  readonly lastEnvelopeHash: () => string | undefined;
+  readonly setLastEnvelopeHash: (hash: string) => void;
   /** Remember a dispatched child for the supervision cascade. */
   readonly registerChild: (
     agent: string,
@@ -922,28 +952,46 @@ export const compileTick = (
     // the TOOL ENGINE: an optional convention transforms how
     // the capabilities are PRESENTED (e.g. codemode collapses them
     // into one `eval` tool) — mention-is-presence unchanged;
-    // absent, every grant is its own provider tool
+    // absent, every mention is its own provider tool
     const capabilityTools = dedupeByName([
       ...charterTools,
       ...activeTools,
       ...doorTools,
     ]);
     const toolCalling = Context.getOption(ops.context, ToolEngine);
-    const wire: ToolPresentation =
-      Option.isSome(toolCalling) && capabilityTools.length > 0
-        ? yield* toolCalling.value.present(
-            capabilityTools.map((tool) => ({
-              name: tool.name,
-              description: AiTool.getDescription(tool) ?? "",
-              parameters: AiTool.getJsonSchema(tool),
-              returns: AiTool.getJsonSchemaFromSchema(
-                (tool as any).successSchema,
-              ),
-              errors: getToolErrors(tool),
-              handler: capabilityHandlers[tool.name]!,
-            })),
-          )
-        : { tools: capabilityTools, handlers: capabilityHandlers };
+    let wire: ToolPresentation;
+    if (Option.isSome(toolCalling) && capabilityTools.length > 0) {
+      wire = yield* toolCalling.value.present(
+        capabilityTools.map((tool) => ({
+          name: tool.name,
+          description: AiTool.getDescription(tool) ?? "",
+          parameters: AiTool.getJsonSchema(tool),
+          returns: AiTool.getJsonSchemaFromSchema((tool as any).successSchema),
+          errors: getToolErrors(tool),
+          tool,
+          handler: capabilityHandlers[tool.name]!,
+        })),
+      );
+    } else {
+      // DIRECT presentation carries the session's UNION of every tool
+      // mentioned so far, in first-mention order — the provider payload
+      // stays byte-stable across phase flips (KV-cache prefix), and a
+      // union tool the CURRENT stance does not mention rejects
+      // model-visibly, so the stance remains the sole grant authority.
+      const union = ops.wireUnion();
+      for (const tool of capabilityTools) union.set(tool.name, tool);
+      const handlers = { ...capabilityHandlers };
+      for (const name of union.keys()) {
+        if (handlers[name] === undefined) {
+          handlers[name] = () =>
+            Effect.fail(
+              `'${name}' is not available in this phase — your current ` +
+                `instructions name the tools that exist right now`,
+            );
+        }
+      }
+      wire = { tools: [...union.values()], handlers };
+    }
 
     // intrinsics stay DIRECT tools in every convention — they are
     // conversation control, not capabilities
@@ -1020,8 +1068,9 @@ export const compileTick = (
         ? [compileSkillTool([...effectiveSkills.keys()])]
         : []),
     ];
+    const presented = dedupeByName([...wire.tools, ...intrinsics]);
     const toolkit = yield* buildToolkit(
-      dedupeByName([...wire.tools, ...intrinsics]),
+      presented,
       handlers,
       ops.wrapHandler === undefined
         ? undefined
@@ -1033,8 +1082,33 @@ export const compileTick = (
     // (prompt cache); a changed render simply changes the
     // system prompt, on the author's head. Everything dynamic
     // reaches the thread explicitly: says, tool results, steers.
+    const system = stance.blocks.join("\n\n") + NOTE_CODA;
+
+    // MODEL-VISIBLE MEANS LOGGED: the request envelope — the rendered
+    // system prompt and the presented toolkit — is a durable `stance`
+    // observation, so every sampling is reconstructable from storage
+    // alone. The hash is logged every tick; the full snapshot only
+    // when it CHANGED (the envelope is byte-stable across most ticks).
+    const envelopeTools = presented.map((tool) => ({
+      name: tool.name,
+      description: AiTool.getDescription(tool) ?? "",
+      parameters: AiTool.getJsonSchema(tool),
+    }));
+    const envelopeHash = fnv1a64(
+      JSON.stringify({ system, tools: envelopeTools }),
+    );
+    yield* ops.observe({
+      type: "stance",
+      tick: ops.tick(),
+      hash: envelopeHash,
+      ...(envelopeHash === ops.lastEnvelopeHash()
+        ? {}
+        : { prose: system, tools: envelopeTools }),
+    });
+    ops.setLastEnvelopeHash(envelopeHash);
+
     return {
-      system: stance.blocks.join("\n\n") + NOTE_CODA,
+      system,
       toolkit,
     };
   });
@@ -1436,6 +1510,10 @@ interface EngineSession {
   pendingCompaction?: CompactPlan;
   readonly pendingNotes: Array<Fragment>;
   lastStance?: Stance;
+  /** Every tool the direct wire has carried, first-mention order. */
+  readonly wireUnion: Map<string, AiTool.Any>;
+  /** Hash of the last logged request envelope (`stance` observation). */
+  envelopeHash?: string;
   /** Waiters not yet answerable, paired to their input's inbox seq —
    *  a waiter joins a round only when its own input is drained. */
   readonly pendingWaiters: Array<{
@@ -1711,6 +1789,11 @@ export const makeSessionEngine = (
     setLastStance: (stance) => {
       s.lastStance = stance;
     },
+    wireUnion: () => s.wireUnion,
+    lastEnvelopeHash: () => s.envelopeHash,
+    setLastEnvelopeHash: (hash) => {
+      s.envelopeHash = hash;
+    },
     registerChild: (agent, childKey, actor) => {
       s.children.set(`${agent}:${childKey}`, { key: childKey, actor });
     },
@@ -1729,6 +1812,7 @@ export const makeSessionEngine = (
         active: new Set<string>(),
         settledSignal: yield* Deferred.make<unknown>(),
         pendingNotes: [],
+        wireUnion: new Map<string, AiTool.Any>(),
         pendingWaiters: [],
         roundWaiters: [],
         children: new Map(),
@@ -2022,9 +2106,9 @@ export const makeSessionEngine = (
             ),
           ]);
           yield* observe(s, {
-            type: "input",
-            text: `<note>\nrecovering an interrupted round (attempt ${attempts}/${maxAttempts})\n</note>`,
-            kind: "note",
+            type: "interrupted",
+            attempt: attempts,
+            maxAttempts,
           });
           yield* Effect.logInfo(
             `${driver} session '${term}/${s.key}': recovering an interrupted round (attempt ${attempts}/${maxAttempts})`,

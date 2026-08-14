@@ -8,12 +8,12 @@ import { pr } from "../Vocabulary.ts";
 export class ReadDiff extends AI.Tool<ReadDiff>()("readDiff")`
 Read ${pr} in full: its title, body (the "Closes #N" linkage and the
 author's claims), and the unified diff — the change itself, exactly as
-it would merge. Large diffs are tail-noted with their full size.` {}
+it would merge. An oversized diff is head-previewed; the full text is
+retained as an opaque ID readable with readOutput.` {}
 
-/** Cap what one tool result puts in the reviewer's context. */
-const MAX_DIFF_CHARS = 60_000;
-
-/** Header + body via `pulls.get`, then the diff via `format: "diff"`. */
+/** Header + body via `pulls.get`, then the diff via `format: "diff"`.
+ *  Deliberately UNBOUNDED — the spill net (lib/Spill.ts) previews and
+ *  retains oversized results, so nothing is discarded. */
 export const ReadDiffLive = Layer.effect(
   ReadDiff,
   Effect.gen(function* () {
@@ -41,11 +41,7 @@ export const ReadDiffLive = Layer.effect(
           "",
           "--- diff ---",
         ].join("\n");
-        const body =
-          diff.length <= MAX_DIFF_CHARS
-            ? diff
-            : `${diff.slice(0, MAX_DIFF_CHARS)}\n\n[diff truncated: ${diff.length} chars total]`;
-        return `${header}\n${body}`;
+        return `${header}\n${diff}`;
       })) as never;
   }),
 );

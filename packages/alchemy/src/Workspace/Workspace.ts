@@ -61,7 +61,7 @@ const makeContainment = (
   ): Effect.Effect<string, string> => {
     if (relative.length === 0 || path.isAbsolute(relative)) {
       return Effect.fail(
-        `path must be workspace-relative: ${JSON.stringify(relative)}`,
+        `[policy denial] path must be workspace-relative: ${JSON.stringify(relative)} — containment working as intended, not a bug; use a relative path`,
       );
     }
     const candidate = path.resolve(canonicalRoot, relative);
@@ -71,7 +71,9 @@ const makeContainment = (
         fromRoot !== ".." &&
         !path.isAbsolute(fromRoot))
       ? Effect.succeed(candidate)
-      : Effect.fail(`path escapes the workspace: ${JSON.stringify(relative)}`);
+      : Effect.fail(
+          `[policy denial] path escapes the workspace: ${JSON.stringify(relative)} — containment working as intended, not a bug; do not retry another way`,
+        );
   };
 
   const containCanonical = (
@@ -85,7 +87,7 @@ const makeContainment = (
         !path.isAbsolute(fromRoot))
       ? Effect.succeed(canonical)
       : Effect.fail(
-          `path escapes the workspace through a symlink: ${JSON.stringify(relative)}`,
+          `[policy denial] path escapes the workspace through a symlink: ${JSON.stringify(relative)} — containment working as intended, not a bug; do not retry another way`,
         );
   };
 

@@ -26,6 +26,7 @@ import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
 import * as S from "effect/Schema";
 import { testAlchemy } from "./Repos.ts";
+import { Approvals } from "./services/Approvals.ts";
 import { Ledger } from "./services/Ledger.ts";
 import { QualityAssurance } from "./skills/QualityAssurance.ts";
 import { ReadDiff, ReadIssue } from "./tools/index.ts";
@@ -99,6 +100,7 @@ export const ReviewBotLive = ReviewBot.make(
     const workspaces = yield* Git.Workspaces;
     const createComment = yield* GitHub.CreateIssueComment(testAlchemy);
     const createReview = yield* GitHub.CreatePullRequestReview(testAlchemy);
+    const approvals = yield* Approvals;
     const thread = yield* AI.Thread;
     const number = prNumber(thread.key);
 
@@ -176,6 +178,24 @@ export const ReviewBotLive = ReviewBot.make(
       when GitHub refuses the review (bad anchors) — the buffer is
       discarded; re-add corrected comments and submit again.`(
       Effect.fn(function* (p: { verdict: string; message: string }) {
+        // the OPERATOR's gate (services/Approvals.ts): pass-through
+        // unless armed (`ORG_APPROVALS=ask`); armed, only an explicit
+        // allowed-once posts — fail closed, the buffer survives for a
+        // corrected resubmit
+        const outcome = yield* approvals.ask({
+          session: { term: "ReviewBot", key: thread.key },
+          action: `submit_review ${p.verdict.toUpperCase()} on #${number}`,
+        });
+        if (outcome !== "allowed-once") {
+          return yield* Effect.fail(
+            new ReviewRejected({
+              message:
+                `the operator ${outcome === "rejected" ? "rejected" : "did not approve"} ` +
+                `this review — it was NOT posted. Your buffered comments are ` +
+                `intact; adjust per any operator feedback and submit again.`,
+            }),
+          );
+        }
         const comments = yield* Ref.getAndSet(pending, []);
         const banner =
           p.verdict === "approve" ? "**APPROVE**" : "**REQUEST CHANGES**";

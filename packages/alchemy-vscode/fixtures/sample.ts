@@ -4,6 +4,7 @@
  * its normal colors. `Redacted.make(...)` at the bottom must stay untouched.
  */
 declare const AI: {
+  fragment: (t: TemplateStringsArray, ...refs: unknown[]) => unknown;
   prose: (t: TemplateStringsArray, ...refs: unknown[]) => unknown;
   say: (t: TemplateStringsArray, ...refs: unknown[]) => unknown;
   Tool: (name: string) => (t: TemplateStringsArray) => unknown;
@@ -69,6 +70,12 @@ export const CodingLive = Coding.make`
   | Don't | Do |
   | --- | --- |
   | \`await fetch(...)\` | \`HttpClient\` |
+`;
+
+export const review = AI.fragment`
+  You review one pull request. ${Grep} is how you verify.
+
+  A diff that satisfies the spec is **done**, however small.
 `;
 
 export const stance = AI.prose`

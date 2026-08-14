@@ -427,21 +427,33 @@ export const ServiceProvider = () =>
         // like Command.Exec's memo), or the observed process being GONE
         // (liveness repair — reconcile resurrects it).
         diff: Effect.fn(function* ({ olds, news, output }) {
-          if (!output || !isResolved(news)) return undefined;
-          if (news.memo === false || !output.hash.input) {
-            return { action: "update" as const };
-          }
-          // `exports.program` is the plan-time Effect (serialized as {}
-          // in state) — never a meaningful diff input; compare the rest.
-          const { exports: _oldExports, ...oldsRest } = olds ?? {};
-          const { exports: _newExports, ...newsRest } = news;
-          if (havePropsChanged(oldsRest as ServiceProps, newsRest)) {
-            return { action: "update" as const };
-          }
+          if (!output) return undefined;
+          // LIVENESS first, before ANY resolution guard: a dead process
+          // must be resurrected regardless of what plan-time props look
+          // like. (The Effectful form's `exports.program` makes
+          // `isResolved(news)` false for every Effectful service — a
+          // wholesale bail here used to mask this check and the memo
+          // hash entirely, so source edits and dead pids both planned
+          // as noop.)
           if (!(yield* isAlive(output.pid))) {
             return { action: "update" as const };
           }
-          const fresh = yield* inputHash(news);
+          // `exports.program` is the plan-time Effect (serialized as {}
+          // in state) — never a meaningful diff input; strip it BEFORE
+          // the resolution check so the check speaks for the fields the
+          // comparison and the memo hash actually read. (The casts are
+          // destructure-only: `isResolved` remains the runtime guard.)
+          const { exports: _oldExports, ...oldsRest } = (olds ??
+            {}) as ServiceProps;
+          const { exports: _newExports, ...newsRest } = news as ServiceProps;
+          if (!isResolved(newsRest)) return undefined;
+          if (newsRest.memo === false || !output.hash.input) {
+            return { action: "update" as const };
+          }
+          if (havePropsChanged(oldsRest as ServiceProps, newsRest)) {
+            return { action: "update" as const };
+          }
+          const fresh = yield* inputHash(newsRest as ServiceProps);
           return {
             action:
               fresh === output.hash.input

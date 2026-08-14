@@ -6,7 +6,7 @@ import * as AiTool from "effect/unstable/ai/Tool";
 import { Eval, type EvalResult, type EvalTool } from "./Eval.ts";
 import {
   ToolEngine,
-  type ToolGrant,
+  type ToolMention,
   type ToolPresentation,
 } from "./ToolEngine.ts";
 
@@ -50,18 +50,18 @@ const renderType = (schema: any, depth = 0): string => {
 };
 
 /**
- * One `declare function` line per grant, with its doc as a comment —
+ * One `declare function` line per mention, with its doc as a comment —
  * plus a line per DECLARED failure, so the model can see what a call
  * may fail with and handle it. `wrap` reflects the convention's return
  * shape: it receives the success type and the union of error tags
  * (`never` when the tool declares none).
  */
 const renderSignature = (
-  grant: ToolGrant,
+  mention: ToolMention,
   wrap: (returns: string, errors: string) => string,
 ): string => {
-  const lines = grant.description.split("\n");
-  for (const error of grant.errors) {
+  const lines = mention.description.split("\n");
+  for (const error of mention.errors) {
     lines.push(
       error.fields === undefined
         ? `@throws ${error.tag}`
@@ -70,12 +70,12 @@ const renderSignature = (
   }
   const doc = lines.map((line) => `// ${line}`).join("\n");
   const errors =
-    grant.errors.length === 0
+    mention.errors.length === 0
       ? "never"
-      : grant.errors.map((error) => error.tag).join(" | ");
-  return `${doc}\ndeclare function ${grant.name}(input: ${renderType(
-    grant.parameters,
-  )}): ${wrap(renderType(grant.returns), errors)}`;
+      : mention.errors.map((error) => error.tag).join(" | ");
+  return `${doc}\ndeclare function ${mention.name}(input: ${renderType(
+    mention.parameters,
+  )}): ${wrap(renderType(mention.returns), errors)}`;
 };
 
 /** Render an eval result as the tool result the model reads —
@@ -111,7 +111,7 @@ export interface CodeModeOptions {
 
 /**
  * One CODEMODE convention — a {@link ToolEngine} that collapses a
- * tick's grants into ONE `eval` tool and delegates execution to the
+ * tick's mentions into ONE `eval` tool and delegates execution to the
  * {@link Eval} service. It owns the CONVENTION entirely:
  *
  * - `wrap` — the return shape in the generated signatures;
@@ -141,17 +141,17 @@ export const makeCodeMode = (convention: {
   Layer.effect(
     ToolEngine,
     Effect.map(Eval, (evaluator) => ({
-      present: (grants) =>
+      present: (mentions) =>
         Effect.sync((): ToolPresentation => {
-          const signatures = grants
-            .map((grant) => renderSignature(grant, convention.wrap))
+          const signatures = mentions
+            .map((mention) => renderSignature(mention, convention.wrap))
             .join("\n\n");
           const timeout = convention.options?.timeout ?? "120 seconds";
-          const tools: ReadonlyArray<EvalTool> = grants.map((grant) => ({
-            name: grant.name,
-            call: grant.handler,
+          const tools: ReadonlyArray<EvalTool> = mentions.map((mention) => ({
+            name: mention.name,
+            call: mention.handler,
           }));
-          const toolNames = grants.map((grant) => grant.name);
+          const toolNames = mentions.map((mention) => mention.name);
           return {
             tools: [compileEvalTool(convention.teach(signatures))],
             handlers: {

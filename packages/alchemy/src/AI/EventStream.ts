@@ -116,6 +116,39 @@ export type SessionObservation = ObservationEnvelope &
         readonly input: unknown;
       }
     | {
+        /**
+         * The REQUEST ENVELOPE of one sampling — what the model saw:
+         * the rendered system prompt and the presented toolkit.
+         * "Model-visible means logged": with this row, every sampling
+         * is reconstructable from storage alone. The `hash` is logged
+         * every tick; `prose`/`tools` snapshot the full envelope only
+         * when it CHANGED (the envelope is byte-stable across most
+         * ticks, so the log stays cheap). Transcript projections skip
+         * it — it exists for replay, debugging, and evals.
+         */
+        readonly type: "stance";
+        readonly tick: number;
+        readonly hash: string;
+        readonly prose?: string;
+        readonly tools?: ReadonlyArray<{
+          readonly name: string;
+          readonly description: string;
+          readonly parameters: unknown;
+        }>;
+      }
+    | {
+        /**
+         * The previous attempt at this round DIED mid-sampling —
+         * eviction, restart, or crash, indistinguishable on disk —
+         * and the engine is re-entering. Synthesized on recovery,
+         * never emitted by a healthy round: the durable record of
+         * the gap (the model-facing recovery note is separate).
+         */
+        readonly type: "interrupted";
+        readonly attempt: number;
+        readonly maxAttempts: number;
+      }
+    | {
         /** One sampling's response — text and/or tool calls. */
         readonly type: "assistant";
         /** The sampling's ordinal within its session (0-based). */

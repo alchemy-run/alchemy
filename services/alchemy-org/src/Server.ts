@@ -27,14 +27,18 @@ import * as Git from "alchemy/Git";
 import * as GitHub from "alchemy/GitHub";
 import * as Local from "alchemy/Local";
 import * as Workspace from "alchemy/Workspace";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { GeneralEngineer } from "./Engineer.ts";
+import { SpillTools } from "./lib/Spill.ts";
+import { ToolOutputStoreLive } from "./lib/ToolOutputStore.ts";
 import { ReviewBotEvents, ReviewBotLive } from "./ReviewBot.ts";
 import { orgRoutes } from "./Routes.ts";
+import { ApprovalsLocal } from "./services/Approvals.ts";
 import { DriverLocal } from "./services/Driver.ts";
 import { EventsLocal } from "./services/Events.ts";
 import { Credentials, GitHubLocal } from "./services/GitHubLocal.ts";
@@ -43,23 +47,40 @@ import { QualityAssuranceGeneral } from "./skills/QualityAssurance.ts";
 import { ReadDiffLive, ReadIssueLive } from "./tools/index.ts";
 import { ReadTools, RunTools, WriteTools } from "./tools/Toolbox.ts";
 
+/** A directory setting: the named Config when set, else the default
+ *  derived from the process's working directory. */
+const rootConfig = (name: string, fallback: (cwd: string) => string) =>
+  Effect.gen(function* () {
+    const configured = yield* Config.string(name).pipe(
+      Config.withDefault(undefined),
+    );
+    if (configured !== undefined) return configured;
+    return fallback(yield* Effect.sync(() => process.cwd()));
+  });
+
 /** The engineer's desk: the operator's own checkout. */
-const workspaceRoot = process.env.CODER_WORKSPACE ?? `${process.cwd()}/../..`;
+const workspaceRoot = rootConfig("CODER_WORKSPACE", (cwd) => `${cwd}/../..`);
 
 /**
  * The review worktrees ROOT — one directory holds the central blobless
  * clone and the per-PR worktrees (`Git.WorkspacesWorktree` populates
  * it). `ORG_WORKSPACE` overrides the location.
  */
-const worktreesRoot =
-  process.env.ORG_WORKSPACE ?? `${process.cwd()}/.alchemy/workspaces`;
+const worktreesRoot = rootConfig(
+  "ORG_WORKSPACE",
+  (cwd) => `${cwd}/.alchemy/workspaces`,
+);
 
 /** Checkouts as a capability: central clone + one worktree per PR.
  *  ONE instance — the charter's init checkout and the toolbox root
  *  share the cache (same const, memoized by reference). */
-const WorkspacesLive = Git.WorkspacesWorktree({ root: worktreesRoot }).pipe(
-  Layer.provide(GitHub.GitCredentials),
-  Layer.provide(Credentials),
+const WorkspacesLive = Layer.unwrap(
+  Effect.map(worktreesRoot, (root) =>
+    Git.WorkspacesWorktree({ root }).pipe(
+      Layer.provide(GitHub.GitCredentials),
+      Layer.provide(Credentials),
+    ),
+  ),
 );
 
 /**
@@ -71,13 +92,25 @@ const WorkspacesLive = Git.WorkspacesWorktree({ root: worktreesRoot }).pipe(
  * still splits by MENTION: the review charter names only read/run
  * tools, so the editor in context is not in its toolkit.
  */
-const Toolbox = Layer.mergeAll(ReadTools, RunTools, WriteTools).pipe(
-  Layer.provide(AI.SandboxLocal),
-  Layer.provide(Workspace.perRun({ fallback: workspaceRoot })),
+const Toolbox = Layer.unwrap(
+  Effect.map(workspaceRoot, (fallback) =>
+    Layer.mergeAll(ReadTools, RunTools, WriteTools).pipe(
+      Layer.provide(AI.SandboxLocal),
+      Layer.provide(Workspace.perRun({ fallback })),
+    ),
+  ),
 );
 
+/** The SPILL NET (lib/Spill.ts): oversized tool output is retained
+ *  as a readOutput artifact instead of flooding the context. ONE
+ *  instance over the same store the tools' own policies use. */
+const Spill = SpillTools.pipe(Layer.provide(ToolOutputStoreLive));
+
 /** The engineer over the shared toolbox and driver. */
-const EngineerLocal = GeneralEngineer.pipe(Layer.provide(Toolbox));
+const EngineerLocal = GeneralEngineer.pipe(
+  Layer.provide(Toolbox),
+  Layer.provide(Spill),
+);
 
 /** The review pipeline: router + charter + review-only capabilities. */
 const ReviewBotLocal = ReviewBotEvents.pipe(
@@ -86,6 +119,7 @@ const ReviewBotLocal = ReviewBotEvents.pipe(
   Layer.provideMerge(Layer.suspend(() => ReviewBotLive)),
   Layer.provide([QualityAssuranceGeneral, ReadDiffLive, ReadIssueLive]),
   Layer.provide(Toolbox),
+  Layer.provide(Spill),
   Layer.provide(EventsLocal),
   Layer.provideMerge(SqliteLedger(".alchemy/review-ledger.sqlite")),
 );
@@ -102,6 +136,9 @@ export const Org = Layer.mergeAll(EngineerLocal, ReviewBotLocal).pipe(
   Layer.provideMerge(DriverLocal),
   Layer.provideMerge(WorkspacesLive),
   Layer.provideMerge(GitHubLocal),
+  // provideMERGE: the HTTP edge reads/answers the same gate the
+  // review bot's dangerous tools ask (one instance)
+  Layer.provideMerge(ApprovalsLocal),
   Layer.orDie,
 );
 

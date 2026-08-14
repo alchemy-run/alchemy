@@ -89,8 +89,8 @@
       ]
     },
     "prose-template": {
-      "comment": "A tagged template whose tag is a member access ending in .make / .prose / .say — the body is prose, so it is highlighted as Markdown rather than as a string. The begin pattern swallows the whole receiver chain because an injection only outranks the host grammar's own tagged-template rule when both start at the same offset; beginning at the dot would let the host match first and win.",
-      "begin": "((?:[_$[:alpha:]][_$[:alnum:]]*\\s*\\??\\.\\s*)+)(make|prose|say)\\s*(`)",
+      "comment": "A tagged template whose tag is a member access ending in .make / .prose / .say / .fragment — the body is prose, so it is highlighted as Markdown rather than as a string. The begin pattern swallows the whole receiver chain because an injection only outranks the host grammar's own tagged-template rule when both start at the same offset; beginning at the dot would let the host match first and win.",
+      "begin": "((?:[_$[:alpha:]][_$[:alnum:]]*\\s*\\??\\.\\s*)+)(make|prose|say|fragment)\\s*(`)",
       "beginCaptures": {
         "1": {
           "patterns": [

@@ -11,6 +11,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { buildBoard } from "./lib/Board.ts";
 import { testAlchemy } from "./Repos.ts";
 import { ReviewBot } from "./ReviewBot.ts";
+import { Approvals } from "./services/Approvals.ts";
 
 /** `${term}:${key}` → the session it names (the key may contain `:`). */
 const parseSessionId = (id: string): { term: string; key: string } => {
@@ -34,6 +35,7 @@ export const orgRoutes = Effect.gen(function* () {
   const index = yield* AI.SessionIndex;
   const storage = yield* AI.ThreadStorage;
   const bot = yield* ReviewBot;
+  const approvals = yield* Approvals;
   const listPullRequests = yield* GitHub.ListPullRequests(testAlchemy);
   const getPullRequest = yield* GitHub.GetPullRequest(testAlchemy);
 
@@ -198,6 +200,42 @@ export const orgRoutes = Effect.gen(function* () {
     }),
   );
 
+  /** The operator's gate: pending approval requests + the answer door. */
+  const approvalsPending = HttpRouter.add(
+    "GET",
+    "/api/approvals",
+    Effect.gen(function* () {
+      return yield* HttpServerResponse.json(yield* approvals.pending());
+    }),
+  );
+
+  const approvalsAnswer = HttpRouter.add(
+    "POST",
+    "/api/approvals/:id",
+    Effect.gen(function* () {
+      const request = yield* HttpServerRequest;
+      const params = yield* HttpRouter.params;
+      const id = String(params.id ?? "");
+      const body = (yield* request.json.pipe(
+        Effect.catch(() => Effect.succeed({})),
+      )) as { outcome?: string };
+      const outcome =
+        body.outcome === "allowed-once" || body.outcome === "rejected"
+          ? body.outcome
+          : undefined;
+      if (outcome === undefined) {
+        return yield* HttpServerResponse.json(
+          { error: "outcome must be 'allowed-once' or 'rejected'" },
+          { status: 400 },
+        );
+      }
+      const answered = yield* approvals.answer(id, outcome);
+      // an unknown id is fine: answered elsewhere or expired — the
+      // world outranks the click
+      return yield* HttpServerResponse.json({ answered });
+    }),
+  );
+
   const status = HttpRouter.add(
     "GET",
     "/api/status",
@@ -225,6 +263,8 @@ export const orgRoutes = Effect.gen(function* () {
     sessionMessages,
     sessionLog,
     requestReview,
+    approvalsPending,
+    approvalsAnswer,
     status,
   );
 });

@@ -503,8 +503,11 @@ describe("DriverLocal (in-memory)", () => {
         // …and enabled its tools for the run
         expect(names(1)).toEqual(["search", "spawn", "skill"]);
         expect(search.queries).toEqual(["fall of Rome"]);
-        // deactivation retires them
-        expect(names(3)).toEqual(["spawn", "skill"]);
+        // deactivation retires the CAPABILITY, not the payload slot:
+        // the wire keeps the union of every tool ever presented
+        // (byte-stable payload = stable provider prompt cache), and a
+        // retired name rejects model-visibly on call
+        expect(names(3)).toEqual(["search", "spawn", "skill"]);
       }).pipe(
         Effect.scoped,
         // the charter requires the SKILL's tag; the skill's Layer is
@@ -671,12 +674,17 @@ Enter the sandbox.`(() =>
         ]);
 
         // tick 2: the flipped render REPLACED the system prompt —
-        // no diffing, no derived messages — and the tool retired
+        // no diffing, no derived messages. The retired tool KEEPS its
+        // payload slot (the wire carries the session's union, so the
+        // provider prompt cache survives the flip) — the STANCE is
+        // what no longer grants it, and a call would reject
+        // model-visibly.
         const second = Model.promptText(model.calls[1]!);
         expect(second).toContain("You are IN the sandbox");
         expect(second).not.toContain("read-only until");
         expect(second).not.toContain("<situation>");
         expect(model.calls[1]!.tools.map((tool) => tool.name)).toEqual([
+          "enter_sandbox",
           "spawn",
         ]);
 
@@ -686,6 +694,48 @@ Enter the sandbox.`(() =>
         yield* calls(3);
         const third = Model.promptText(model.calls[2]!);
         expect(third.match(/nothing you run is real/g)).toHaveLength(1);
+      }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
+    },
+  );
+
+  it.effect(
+    "a union tool called while unmentioned rejects model-visibly",
+    () => {
+      const model = Model.make([
+        // tick 0: the stance grants enter_sandbox — use it (flips state)
+        () => [Model.toolCall("enter_sandbox", {}), Model.finish("tool-calls")],
+        // tick 1: the flipped stance no longer MENTIONS it, but the
+        // payload slot survives (union) — call it anyway
+        () => [Model.toolCall("enter_sandbox", {}), Model.finish("tool-calls")],
+        // tick 2: read the rejection, answer
+        () => [Model.text("understood"), Model.finish()],
+      ]);
+      return Effect.gen(function* () {
+        const charter = Effect.gen(function* () {
+          const sandboxed = yield* Ref.make(false);
+          const enter = yield* AI.Tool("enter_sandbox")`
+Enter the sandbox.`(() =>
+            Ref.set(sandboxed, true).pipe(Effect.as("you are now sandboxed")),
+          );
+          return Effect.gen(function* () {
+            return yield* (yield* Ref.get(sandboxed))
+              ? AI.fragment`You are IN the sandbox.`
+              : AI.fragment`You are read-only until you ${enter}.`;
+          });
+        });
+        const researcher = yield* interpret(Researcher, charter);
+        const answer = yield* researcher.dispatch("go");
+        expect(answer).toBe("understood");
+
+        // the retired slot is still on the wire (cache-stable union)…
+        expect(model.calls[1]!.tools.map((tool) => tool.name)).toContain(
+          "enter_sandbox",
+        );
+        // …but calling it fails MODEL-VISIBLY: the stance is the sole
+        // grant authority; the rejection is a tool result, not a crash
+        expect(Model.promptText(model.calls[2]!)).toContain(
+          "not available in this phase",
+        );
       }).pipe(Effect.scoped, Effect.provide(testLayer(model, Layer.empty)));
     },
   );
@@ -1280,10 +1330,26 @@ ${
         expect(record.map((observation) => observation.type)).toEqual([
           "admitted",
           "input", // the dispatched task
+          "stance", // tick 0's request envelope — full snapshot (first)
           "assistant", // tick 0: calls search
           "tool-result",
+          "stance", // tick 1's envelope — unchanged, so hash-only
           "assistant", // tick 1: quiesces with the answer
         ]);
+        // the envelope law: first sighting snapshots prose + toolkit;
+        // an unchanged envelope logs its hash alone
+        const stances = record.filter(
+          (observation) => observation.type === "stance",
+        );
+        const [firstStance, secondStance] = stances as [
+          Extract<AI.SessionObservation, { type: "stance" }>,
+          Extract<AI.SessionObservation, { type: "stance" }>,
+        ];
+        expect(firstStance.prose).toContain("Search with");
+        expect(firstStance.tools!.map((tool) => tool.name)).toContain("search");
+        expect(secondStance.hash).toBe(firstStance.hash);
+        expect(secondStance.prose).toBeUndefined();
+        expect(secondStance.tools).toBeUndefined();
         // every observation carries the run identity; DURABLE ones
         // carry a strictly monotonic seq (the resume cursor), while
         // live facts (deltas, in-flight tool calls) repeat the current
@@ -1302,11 +1368,11 @@ ${
               index === 0 || observation.seq > durable[index - 1]!.seq,
           ),
         ).toBe(true);
-        const second = record[2]!;
+        const second = record[3]!;
         if (second.type === "assistant") {
           expect(second.toolCalls[0]!.name).toBe("search");
         }
-        const result = record[3]!;
+        const result = record[4]!;
         if (result.type === "tool-result") {
           expect(result.toolName).toBe("search");
           expect(result.isFailure).toBe(false);

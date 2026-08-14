@@ -181,6 +181,13 @@ const results = [
   expect("---", "punctuation.separator.table.markdown"),
   // splices stay TypeScript
   expect("Grep", "meta.embedded.line.alchemy-splice"),
+  // AI.fragment`…` is a charter: the body is markdown, the tag is a tag
+  expect("fragment", "entity.name.function.tagged-template.alchemy"),
+  expect("done", "markup.bold"),
+  expect(
+    "  You review one pull request. ",
+    "meta.embedded.block.alchemy-prose",
+  ),
   // a call is a tag too, and its arguments keep their own colors
   expect("pull request", "markup.bold"),
   expect("task", "meta.embedded.line.alchemy-splice"),

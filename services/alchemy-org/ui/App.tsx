@@ -71,6 +71,13 @@ interface Board {
   prs: BoardPullRequest[];
 }
 
+interface ApprovalRequest {
+  id: string;
+  session: { term: string; key: string };
+  action: string;
+  at: number;
+}
+
 /** Every thread is one SESSION of the engineer: `Engineer:<key>`. */
 const DEFAULT_THREAD = "Engineer:main";
 
@@ -264,6 +271,37 @@ export const App = () => {
     }
   }, [board.prs, requested]);
 
+  // the OPERATOR's gate: pending approval requests (armed deploys
+  // only — the list stays empty when ORG_APPROVALS is unset)
+  const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
+  useEffect(() => {
+    let live = true;
+    const load = () =>
+      fetch("/api/approvals")
+        .then(
+          (response) =>
+            (response.ok ? response.json() : []) as Promise<ApprovalRequest[]>,
+        )
+        .then((list) => {
+          if (live) setApprovals(list);
+        })
+        .catch(() => {});
+    load();
+    const timer = setInterval(load, 3000);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, []);
+  const answerApproval = (id: string, outcome: "allowed-once" | "rejected") => {
+    setApprovals((current) => current.filter((request) => request.id !== id));
+    void fetch(`/api/approvals/${encodeURIComponent(id)}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ outcome }),
+    }).catch(() => {});
+  };
+
   const newThread = () =>
     open(`Engineer:t-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`);
 
@@ -404,6 +442,45 @@ export const App = () => {
             />
           </div>
         ))}
+        {/* the operator's gate — one card per pending approval */}
+        {approvals.length > 0 && (
+          <div className="absolute bottom-4 right-4 z-20 flex w-96 flex-col gap-2">
+            {approvals.map((request) => (
+              <div
+                key={request.id}
+                className="rounded-lg border border-honey/50 bg-background p-3 shadow-lg"
+              >
+                <div className="mb-1 font-mono text-[10px] uppercase text-honey">
+                  approval requested
+                </div>
+                <button
+                  type="button"
+                  onClick={() => open(`${request.session.term}:${request.session.key}`)}
+                  className="mb-2 block w-full truncate text-left font-mono text-[11px] text-muted-foreground hover:text-foreground"
+                >
+                  {request.session.key}
+                </button>
+                <div className="mb-3 text-sm">{request.action}</div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => answerApproval(request.id, "allowed-once")}
+                    className="flex-1 rounded border border-moss/50 px-2 py-1 text-xs text-moss hover:bg-moss/10"
+                  >
+                    approve once
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => answerApproval(request.id, "rejected")}
+                    className="flex-1 rounded border border-brick/50 px-2 py-1 text-xs text-brick hover:bg-brick/10"
+                  >
+                    reject
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </main>
     </div>
   );

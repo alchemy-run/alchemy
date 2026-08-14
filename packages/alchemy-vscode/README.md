@@ -21,13 +21,14 @@ export const ResourceEngineeringLive = ResourceEngineering.make`
 
 ## What it matches
 
-Two tag shapes. A member access ending in `make`, `prose`, or `say`:
+Two tag shapes. A member access ending in `make`, `prose`, `say`, or `fragment`:
 
-| Matches             | Does not match        |
-| ------------------- | --------------------- |
-| ``Coding.make`…` `` | `Redacted.make(x)`    |
-| ``AI.prose`…` ``    | ``make`…` ``          |
-| ``AI.say`…` ``      | ``foo.makeThing`…` `` |
+| Matches               | Does not match        |
+| --------------------- | --------------------- |
+| ``Coding.make`…` ``   | `Redacted.make(x)`    |
+| ``AI.prose`…` ``      | ``make`…` ``          |
+| ``AI.say`…` ``        | ``foo.makeThing`…` `` |
+| ``AI.fragment`…` ``   | ``fragment`…` ``      |
 
 …and a **call** in tag position, whatever the callee is named:
 

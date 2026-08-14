@@ -28,8 +28,8 @@ algorithm and the defaults, not the personality.
 
 **The algorithm** — `compileTick` (turn → stance → skill-graph
 fixpoint → doors/dispatch/spawn/skill intrinsics → toolkit, through
-the optional `ToolCalling` seam) and `sampleTick` (thread →
-`Model.step` → live parts → response append + observations, malformed
+the optional `ToolEngine` seam) and `sampleTick` (thread →
+`LanguageModel.streamText` → live parts → response append + observations, malformed
 feedback).
 
 **The session engine** — `makeSessionEngine(options)`: the complete
@@ -52,9 +52,9 @@ The engine consumes:
 | Seam | Contract |
 |---|---|
 | `ThreadStorage` | where session facts persist: messages, observation log, meta (tick/cursor/active/busy/settled), and the INBOX with `putInbox`/`listInbox`/`admit` — admit is the ATOMIC drain (messages + watermark + round-open in one write) |
-| `Model` | one model call: streaming consolidation, retry policy, malformed budget |
-| `ToolCalling` | the calling convention (direct tools vs codemode `eval`) |
-| `SessionObserver` | lifecycle facts out (chat projections, boards) |
+| `LanguageModel` | one model call (effect/ai): streaming consolidation; retry/tiering wrap this Layer |
+| `ToolEngine` | how mentions appear on the wire (direct tools vs codemode `eval`) |
+| `EventStream` | lifecycle facts out (session index, boards, live tails) |
 | `PersistentRef.Store` | charter refs, framed per session |
 
 And a placement provides five callbacks: `kick` (trigger execution),
@@ -104,7 +104,7 @@ export const OrgDriver = AI.DriverLocal.pipe(
 A new substrate is a `ThreadStorage` implementation (+ a placement
 only if it can't hold a resident fiber). There is deliberately NO
 core policy hook for oversight: budgets, continuation policies,
-approval gates are userland — wrap `Model`, wrap a tool, or write
+approval gates are userland — wrap `LanguageModel`, wrap a tool, or write
 your own placement.
 
 ## Verification

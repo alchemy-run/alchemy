@@ -9,12 +9,12 @@ everything; everything else is stock Effect.** There is no charter DSL. The
 loop-facing surface is:
 
 ```ts
-AI.prose`...`                                 // Fragment — the render output
+AI.fragment`...`                                 // Fragment — the render output
 yield* AI.Tool("name")`desc ${param}`(impl)   // inline tool (init) — closure over your refs
 yield* AI.Dispatch(Agent, "name")`…`(derive)  // door (init) — policy-constrained delegation
 yield* AI.say`...`                            // one-shot note (the event channel)
 yield* AI.reply(value)                        // answer the current dispatch round (typed)
-const thread = yield* AI.Thread               // the run: key, entries, tokens, compact, remind
+const thread = yield* AI.Thread               // the session: key, entries, tokens, compact, remind
 (tick: AI.TickEvent) => Effect<Fragment>      // guard-tier turn: {count, inputs} as argument
 return fragment                               // stance: keep working (turns return ONLY prose)
 yield* Effect.fail(new AI.Refused({ ... }))   // typed give-up (error channel)
@@ -24,12 +24,17 @@ State is `Ref`. Branching is `Match`/ternaries. Observation is a fetch.
 Caching is `Effect.cachedWithTTL`. Time is a Layer-owned schedule. Goals,
 decorators, and compaction policies are userland functions.
 
+See also: [driver-assembly.md](./driver-assembly.md) — the shipped
+component map (Driver/DriverCore + the pluggable seams);
+[deepseek-harness.md](./deepseek-harness.md) — the external
+cross-reference against DeepSeek's harness.
+
 ---
 
-## 1. The kernel contract
+## 1. The driver contract
 
 ```ts
-// CHARTER — runs once per RUN (the component instance / the "mount").
+// CHARTER — runs once per SESSION (the component instance / the "mount").
 // Allocate state, define inline tools, resolve services. May fail (EInit
 // is a defect — deploy-time error, not a runtime condition).
 type Charter = Effect<Fragment | Turn | TurnFn, EInit, RInit>;
@@ -49,16 +54,16 @@ type TurnFn<In = unknown, E = any, R = any> =
   (tick: TickEvent<In>) => Effect<Fragment, E, R>;
 ```
 
-The kernel's behaviors are interpretations of the turn's result — charters
+The driver's behaviors are interpretations of the turn's result — charters
 never name them:
 
-| turn result | kernel behavior |
+| turn result | driver behavior |
 |---|---|
 | `Fragment` | the render IS the system prompt, verbatim → build toolkit → sample |
-| an `Effect` | **loud defect** — you forgot `yield*` on an `AI.prose` |
+| an `Effect` | **loud defect** — you forgot `yield*` on an `AI.fragment` |
 | any other value | **loud defect** — turns return prose; answer callers with `AI.reply` |
 | failure (`E`), retryable | bounded recovery (backoff, honoring `retryAfter`); exhaustion abandons the ROUND, typed, to waiters |
-| failure (`E`), non-retryable | the round abandons immediately — the typed error rides the error channel to waiters; the run keeps serving |
+| failure (`E`), non-retryable | the round abandons immediately — the typed error rides the error channel to waiters; the session keeps serving |
 | `AI.Refused` failure | typed give-up, rides the error channel to waiters (a special case of the row above) |
 
 Three tiers, static-first — climb only when the lower tier can't say it:
@@ -72,13 +77,13 @@ export const ReviewerLive = Reviewer.make`
 // 2. a closure — inline tools, refs, bindings — returning a STATIC stance
 export const EngineerLive = Engineer.make(Effect.gen(function* () {
   const openPullRequest = yield* AI.Tool("open_pull_request")`…`(…);
-  return AI.prose`…${openPullRequest}…`;        // Fragment → constant turn
+  return AI.fragment`…${openPullRequest}…`;        // Fragment → constant turn
 }));
 
 // 3. the GUARD tier — a function of the tick event, for laws the model
 //    cannot be trusted to enforce on itself
 export const EngineerLive = Engineer.make(Effect.gen(function* () {
-  const stance = AI.prose`…`;
+  const stance = AI.fragment`…`;
   return Effect.fn(function* (tick: AI.TickEvent) {
     if (tick.count >= 60) return yield* Effect.fail(new AI.Refused({ … }));
     if (tick.count === 45) yield* AI.say`45 of 60 spent — converge.`;
@@ -106,14 +111,14 @@ still parks.
 
 ## 2. Prose
 
-`AI.prose` builds a `Fragment` and charges its splices' requirements to the
+`AI.fragment` builds a `Fragment` and charges its splices' requirements to the
 R channel (mention = dependency; capability-by-omission is a type-level
 fact — on the output side too: the Layer's type carries the wire
 surface the mentions produce, §2c-ii). Templates are **margin-stripped**
 so prose indents with the code:
 
 ```ts
-return yield* AI.prose`
+return yield* AI.fragment`
   This process manages issues for ${testAlchemy} from open to close.
 
   A ready issue is handed to ${Engineer}.
@@ -128,7 +133,7 @@ Dedent rules (à la Kotlin `trimIndent`):
 3. relative indentation beyond the margin is preserved (markdown nesting
    works);
 4. splice values are never dedented and never influence the margin — a
-   nested `AI.prose` dedents itself.
+   nested `AI.fragment` dedents itself.
 
 Splice semantics at render (every tick):
 
@@ -147,7 +152,7 @@ Splice semantics at render (every tick):
 A skill's TEACHING may itself splice `Skill` terms — and activating
 the parent EXPOSES them for activation. Access propagates one level
 per activation: the charter's mentions are the roots; each tick the
-kernel walks the ACTIVE frontier to a fixpoint (cycles are fine), and
+driver walks the ACTIVE frontier to a fixpoint (cycles are fine), and
 the reachable set is what the `skill` intrinsic offers. A depth-2
 skill is invisible — not even named — until its parent activates.
 
@@ -163,7 +168,7 @@ export const CodingLive = Coding.make`
 
 This is progressive disclosure at arbitrary depth (the CLAUDE.md
 "tree of files loaded at the right time", but typed): the Engineer's
-charter mentions only `${Coding}`; a run that never touches resource
+charter mentions only `${Coding}`; a session that never touches resource
 providers never spends a token on the Reconciler doctrine, and one
 that does descends exactly as deep as the work demands. The child
 tags ride the parent Layer's requirement channel, so an unprovided
@@ -173,7 +178,7 @@ whole graph stays auditable the same way charters are (`rg
 
 Composition note: the child implementations must be OUTPUTS of the
 provided layer stack (`Layer.provideMerge`, not `Layer.provide`) so
-the kernel can resolve them from the interpret context at activation
+the driver can resolve them from the interpret context at activation
 time.
 
 ### 2b. Mention is presence — and there is deliberately no silent grant
@@ -220,18 +225,18 @@ domain language") and examined; the challenge fails case by case:
   Concretely, the Issues desk's turn renders its phase:
 
   ```ts
-  return yield* AI.prose`
+  return yield* AI.fragment`
     This process manages GitHub issues for ${testAlchemy} from open to
     close.
 
     ${Ref.get(phase).pipe(
       Effect.flatMap((phase) =>
         phase === "triaging"
-          ? AI.prose`
+          ? AI.fragment`
               …until the issue is READY, ${Comment} asks the author for
               exactly what is missing and ${awaitAuthor} parks the issue
               on them.`
-          : AI.prose`
+          : AI.fragment`
               This issue is parked on its author. Judge their latest
               reply: when it closes the gaps, ${resumeTriage} and
               proceed; when it does not, ask again with ${Comment}.`,
@@ -271,25 +276,25 @@ manifest — one artifact, colloquial on purpose.
 
 The one legitimate concern found nearby is WIRE-level, not semantic:
 per-tick toolkit changes churn the provider's tool-block cache. That is
-the deferred **union-toolkit + stance masking** kernel option (§13):
-unmentioned tools may stay in the provider payload and be rejected on
+the **union-toolkit + stance masking** transport (SHIPPED; §13):
+unmentioned tools stay in the provider payload and are rejected on
 call — bytes change, the law does not.
 
-### 2c. The wire seam: `WireMode` and codemode
+### 2c. The wire seam: `ToolEngine` and codemode
 
 Direct tool-calling loses what agents are best post-trained on: writing
 CODE that composes primitives (Bash pipes are the canonical case). It
 gains granular access control. Codemode keeps both: the model writes a
 program; the ONLY functions in scope are this tick's granted handlers.
 
-**`WireMode` is an optional service the kernel resolves from the
-interpret context** at every sampling boundary. Absent: every grant is
-its own provider tool (the default, unchanged). Present: the mode
-transforms the tick's grants into their wire presentation. Semantics
-never move — the stance still decides WHAT exists (mention-is-presence,
-§2b); the mode decides how it APPEARS. Kernel intrinsics (`dispatch`,
-`spawn`, `skill`) stay direct tools in every mode: they are
-conversation control, not capabilities.
+**`ToolEngine` is an optional service the driver resolves from the
+interpret context** at every sampling boundary. Absent: every mention
+is its own provider tool (the default, unchanged). Present: the engine
+transforms the tick's mentions (`ToolMention[]`) into their wire
+presentation. Semantics never move — the stance still decides WHAT
+exists (mention-is-presence, §2b); the engine decides how it APPEARS.
+Driver intrinsics (`dispatch`, `spawn`, `skill`) stay direct tools in
+every engine: they are conversation control, not capabilities.
 
 ```ts
 // swap the wire without touching a single charter:
@@ -298,12 +303,12 @@ IssuesLive.pipe(Layer.provide(AI.CodeModeAsync()))   // async/await + Promises
 // provide neither: direct tool-calling
 ```
 
-Both codemode Layers collapse the grants into ONE `eval` tool whose
-description carries the mode's own TEACHING (how to write the code)
-plus GENERATED SIGNATURES:
+Both codemode Layers collapse the mentions into ONE `eval` tool whose
+description carries the convention's own TEACHING (how to write the
+code) plus GENERATED SIGNATURES:
 
 ```ts
-// from each grant's parameter schemas and its RETURN schema:
+// from each mention's parameter schemas and its RETURN schema:
 declare function readDiff(input: { pr: { owner: string; … } }): Effect<string>
 ```
 
@@ -314,7 +319,7 @@ they exist.
 
 `CodeModeEffect` is the native flavor: the code is the body of a
 function `(Effect, tools) => Effect<A>`, tools are Effect-returning,
-and the whole program runs ON THE KERNEL'S FIBER — interruption,
+and the whole program runs ON THE DRIVER'S FIBER — interruption,
 tracing, and typed tool failures all compose (`Effect.forEach` for
 concurrency, `Effect.catch` for recovery). `CodeModeAsync` bridges each
 handler through `runPromise` for models that write better `await` code.
@@ -337,7 +342,7 @@ can mention: inline `ToolImpl`s, `Tool` class splices, doors, nested
 fragments — conditional branches accumulate, exactly as they do on the
 requirement channel (`AI/Wire.ts`).
 
-The kernel exposes only the FACTS — `AI.ToolNames<L>` (a union of
+The driver exposes only the FACTS — `AI.ToolNames<L>` (a union of
 literal names) and `AI.ToolInput<L, Name>` (that tool's parameter type,
 from its `Parameter` splices). What a consumer builds on them is
 USERLAND: a transcript UI derives its own registry contract and gets
@@ -361,7 +366,7 @@ skill's own `make` Layer, never the host agent's wire type — the UI
 composes one typed pack per layer (`Renderers<typeof CodingGeneral>`
 beside the agent's) and spreads them into its lookup table. Note that
 `Layer.provide` (binding physics) returns a plain Layer: packs type
-against the `make` result, the teaching itself. Kernel intrinsics
+against the `make` result, the teaching itself. Driver intrinsics
 (`dispatch`, `spawn`, `skill`) are conversation control, not
 capabilities (§2c) — they are OFF every agent's wire type; their cards
 are the consumer's untyped remainder.
@@ -431,7 +436,7 @@ there is a constructor:
 
 ```ts
 const charter = Effect.gen(function* () {
-  // INIT — once per run
+  // INIT — once per session
   const phase = yield* Ref.make<"triaging" | "awaiting">("triaging");
   const awaitAuthor = yield* AI.Tool("await_author")`
     Park this issue on its author. ${Comment} your questions first.`(() =>
@@ -442,12 +447,12 @@ const charter = Effect.gen(function* () {
 
   // TURN — per tick; branching is a ternary, reading is Ref.get
   return Effect.gen(function* () {
-    return yield* AI.prose`
+    return yield* AI.fragment`
       This process manages issues for ${testAlchemy} from open to close.
 
       ${(yield* Ref.get(phase)) === "awaiting"
-        ? AI.prose`Parked on the author. When their reply closes the gaps, ${resume}.`
-        : AI.prose`
+        ? AI.fragment`Parked on the author. When their reply closes the gaps, ${resume}.`
+        : AI.fragment`
           Check prior art with ${SearchIssues}; ${LinkIssues} + ${CloseIssue}
           for duplicates. Until ready, ${Comment} asks and ${awaitAuthor}
           parks. A ready issue is handed to ${Engineer}.`}
@@ -460,15 +465,15 @@ Declare outside the tick, mutate within — from the turn, from tool
 handlers, from anything the closure hands out. No call-order rules, no
 dependency arrays, no stale closures (`Ref` is read at use time).
 
-Refs are **ephemeral by doctrine**: if the run must survive passivation,
+Refs are **ephemeral by doctrine**: if the session must survive passivation,
 derive the state from the world (level-triggering) or wait for the durable
-kernel's opt-in named-state variant. Don't tax every charter with naming.
+driver's opt-in named-state variant. Don't tax every charter with naming.
 
-## 4. `AI.Thread` and `AI.Tick` — kernel facts + affordances
+## 4. `AI.Thread` and `AI.Tick` — driver facts + affordances
 
-Two run-scoped `Context.Service`s. `AI.Thread` is the RUN — identity and
+Two session-scoped `Context.Service`s. `AI.Thread` is the SESSION — identity and
 conversation — provided to init, turns, and tool handlers alike: init runs
-once per run at admit, when the thread already exists, so thread-scoped
+once per session at admit, when the thread already exists, so thread-scoped
 setup (a checkout keyed by `thread.key`) belongs there. `AI.Tick` is the
 current sampling iteration — no sampling is under way during init, so only
 turns and tool handlers see it:
@@ -478,17 +483,17 @@ interface ThreadService {
   readonly key: string;                             // world identity (`o/r#7`) or minted
   readonly tokens: Effect<number>;                  // ESTIMATED thread size
   readonly entries: Effect<ReadonlyArray<Message>>; // READ-ONLY thread access
-  /** Request compaction — applied by the kernel at the next sampling
+  /** Request compaction — applied by the driver at the next sampling
    *  boundary, never mid-assembly. Recorded; never silent. */
   readonly compact: (plan: CompactPlan) => Effect<void>;
   /** Answer the current dispatch round (behind AI.reply, §9c). */
   readonly reply: (value: unknown) => Effect<void>;
-  /** Schedule a note to this run's future self (the kernel clock, §9e). */
+  /** Schedule a note to this session's future self (the driver clock, §9e). */
   readonly remind: (delay: Duration.Input, note: string) => Effect<void>;
 }
 
 interface TickService {
-  readonly count: number;                           // samplings so far, this run
+  readonly count: number;                           // samplings so far, this session
   readonly say: (note: Fragment) => Effect<void>;   // the collector behind AI.say
 }
 
@@ -497,15 +502,15 @@ type CompactPlan =
   | { reset: { summary: string } };                       // fresh thread: head + summary
 ```
 
-The thread stays kernel-owned: `entries` is read-only and `compact` is the
+The thread stays driver-owned: `entries` is read-only and `compact` is the
 one, boundary-applied mutation. That asymmetry is the design.
 
 ## 4b. The channels — every message traces to a call site
 
 The design rule (learned the hard way — an earlier iteration DIFFED the
-stance across ticks and injected the delta as kernel-authored
+stance across ticks and injected the delta as driver-authored
 "situation" messages, which worked but made the context window emergent
-rather than legible): **the kernel authors no messages of its own.**
+rather than legible): **the driver authors no messages of its own.**
 The context window an agent author reasons about is exactly what they
 can point to in code:
 
@@ -515,7 +520,7 @@ can point to in code:
 | **note** | events — happen once, never revoked | charter, `yield* AI.say` | on first appearance per thread, `<note>` |
 | **tool result** | the outcome of an action, incl. transitions the handler caused | tool handlers | with the call |
 | **steer** | the world's voice | Layer / tools / humans | immediately, as inputs |
-| **reminder** | the run's own past voice | `Thread.remind` (§9e) | at fireAt, as an input (`[reminder] …`) |
+| **reminder** | the session's own past voice | `Thread.remind` (§9e) | at fireAt, as an input (`[reminder] …`) |
 
 A CHANGED render simply replaces the system prompt (cache bust, on the
 author's head) — no diff, no derived message. Keep the prompt static
@@ -523,7 +528,7 @@ and holistic (state every phase's rules; the conversation carries which
 phase is live) and it behaves exactly as anyone would guess; a tool
 handler that flips a phase announces the flip in its own RESULT.
 
-`AI.say` is a PLAIN append — no dedupe, no memory, no kernel judgment.
+`AI.say` is a PLAIN append — no dedupe, no memory, no driver judgment.
 Calling it is delivering it, so the author's condition IS the delivery
 policy, exactly like any other side effect:
 
@@ -533,14 +538,14 @@ return Effect.gen(function* () {
   if (count === 30) {
     yield* AI.say`30 of 40 samplings spent — converge now.`;
   }
-  return yield* AI.prose`…stance…`;
+  return yield* AI.fragment`…stance…`;
 });
 // tick 30:  <note>30 of 40 samplings spent — converge now.</note>
 // tick 31+: silent — the `===` guard already said it
 ```
 
 An unguarded `say` delivers every tick — occasionally what you want,
-usually a bug you can see at the call site. (One kernel courtesy: a
+usually a bug you can see at the call site. (One driver courtesy: a
 turn attempt that FAILS and retries has its collected says discarded,
 so transient retries never double-deliver.)
 
@@ -573,7 +578,7 @@ const issue = yield* Effect.cachedWithTTL(github.get(key), "2 minutes");
 
 **Materiality is userland discipline**: render only fields that should wake
 the model — no timestamps, no etags — and an unchanged world produces an
-unchanged stance, which the kernel re-parks without sampling.
+unchanged stance, which the driver re-parks without sampling.
 
 ## 5b. Workspaces: the checkout as a capability
 
@@ -586,13 +591,13 @@ physics chosen by the Layer:
 const workspaces = yield* Git.Workspaces;
 const remote = GitHub.remote(testAlchemy);   // provider → Git, never the reverse
 
-// init is per-run — the thread exists at admit, so the checkout is
+// init is per-session — the thread exists at admit, so the checkout is
 // thread-scoped SETUP the turn and tools close over
 const { key } = yield* AI.Thread;
 const ws = yield* workspaces.checkout({ key, remote });
 
 return Effect.gen(function* () {
-  return yield* AI.prose`
+  return yield* AI.fragment`
     …your checkout lives at ${ws.path}; every file you touch lives under it…`;
 });
 ```
@@ -601,10 +606,10 @@ The laws:
 
 - **Idempotent by key.** `checkout` with the same key returns the same tree —
   acquired once in init, and a tool handler that derives the same key
-  (`yield* AI.Thread` in the handler) lands in the exact tree the run
+  (`yield* AI.Thread` in the handler) lands in the exact tree the session
   works in. No workspace value is threaded through prose or params; the
   KEY is the address.
-- **Isolated across keys.** Two concurrent runs get two trees. What crosses
+- **Isolated across keys.** Two concurrent sessions get two trees. What crosses
   agent/machine boundaries is the pushed branch, never a shared filesystem.
 - **Layer-swapped physics.** `Git.WorkspacesWorktree` (local): one central
   blobless clone per remote, `git worktree add` per key. A clean-clone-per-key
@@ -618,13 +623,13 @@ The laws:
   helpers exist — exactly `~/.gitconfig`, as Layers.
 - **Containment composes.** A sandboxed toolbox rooted at the workspaces
   root contains every tree; `ws.path` (root-relative) is what the prose
-  hands the model, so the tools can reach the run's tree but not escape.
+  hands the model, so the tools can reach the session's tree but not escape.
 
 ## 6. Exit, goals, budgets — patterns, not primitives
 
 ```ts
 const EngineerCharter = Effect.gen(function* () {
-  // init: per-run setup — bindings, inline tools
+  // init: per-session setup — bindings, inline tools
   const open = yield* OpenPullRequest;
   const openPullRequest = yield* AI.Tool("open_pull_request")`
     Open the pull request citing ${issue}.`(
@@ -634,7 +639,7 @@ const EngineerCharter = Effect.gen(function* () {
       return `opened ${created.url}`;
     }));
 
-  const stance = AI.prose`
+  const stance = AI.fragment`
     You receive exactly one ${issue}. ${Coding} is your craft; when
     green, ${openPullRequest} citing the issue. You do not review or
     merge.`;
@@ -653,16 +658,16 @@ const EngineerCharter = Effect.gen(function* () {
 
 - **achieve** = `AI.reply(artifact)` at the site that observed success (a
   tool handler that just created the thing), never the model's claim.
-- **maintain** = a run that simply never replies with an artifact —
-  quiescent text answers each round; the run is perpetual either way.
+- **maintain** = a session that simply never replies with an artifact —
+  quiescent text answers each round; the session is perpetual either way.
 - **refuse** = `Effect.fail(new AI.Refused(...))` — the evidence bar
   (repeat-observed blocker) is a counter ref, userland.
 - The world can still `settle` first — it outranks; waiters then resolve
   with the settle outcome.
 
-## 7. Compaction: kernel mechanism, userland policy
+## 7. Compaction: driver mechanism, userland policy
 
-The kernel guarantees three things regardless of who triggers it: applied
+The driver guarantees three things regardless of who triggers it: applied
 at sampling boundaries only, recorded (never silent), drops leave an
 archived marker. Policy has three triggers, all over the same affordance:
 
@@ -705,7 +710,7 @@ A component is the charter shape at smaller scale. Three levels:
 
 ```ts
 // 1. prose function — stateless vocabulary
-const dedupePolicy = (repo: Repository) => AI.prose`
+const dedupePolicy = (repo: Repository) => AI.fragment`
   Check prior art with ${SearchIssues}. Duplicates: ${LinkIssues} to the
   original, ${Comment} the author, ${CloseIssue}.`;
 
@@ -713,8 +718,8 @@ const dedupePolicy = (repo: Repository) => AI.prose`
 const ciBanner = (ci: Ref.Ref<CiState>) => Effect.gen(function* () {
   const s = yield* Ref.get(ci);
   return s.red
-    ? AI.prose`CI is RED (${s.reason}). Restoring it outranks everything below.`
-    : AI.prose``;
+    ? AI.fragment`CI is RED (${s.reason}). Restoring it outranks everything below.`
+    : AI.fragment``;
 });
 
 // 3. stateful component — own refs + tools; init'd in init, spliced in the turn
@@ -724,7 +729,7 @@ const workingNotes = Effect.gen(function* () {
     Replace your working notes — decisions, open threads, blockers.`(
     (p: { text: string }) => Ref.set(notes, p.text).pipe(Effect.as("noted")));
   return Effect.gen(function* () {
-    return yield* AI.prose`
+    return yield* AI.fragment`
       ## Working notes
       ${(yield* Ref.get(notes)) || "(none yet)"}
       Keep these current with ${remember}.`;
@@ -735,7 +740,7 @@ const workingNotes = Effect.gen(function* () {
 const charter = Effect.gen(function* () {
   const notes = yield* workingNotes;              // component INIT
   return Effect.gen(function* () {
-    return yield* AI.prose`
+    return yield* AI.fragment`
       You manage issues for ${testAlchemy}.
       ${notes}                                    // component TURN, per tick
       ...`;
@@ -751,7 +756,7 @@ carry tools take a name parameter.
 
 ```ts
 // (a) prose-mentioned — the model decides; mention = the dispatch affordance
-AI.prose`A ready issue is handed to ${Engineer}, whose PR must cite it.`;
+AI.fragment`A ready issue is handed to ${Engineer}, whose PR must cite it.`;
 
 // (b) code-held — you decide; the tag resolves to the Actor in init,
 //     and delegation policy is ordinary Effect composition
@@ -768,7 +773,7 @@ const survey = yield* AI.Tool("survey")`
     Effect.all(p.questions.map((q) => researcher.dispatch(q)), { concurrency: 4 }));
 
 // (d) spawn — ambient intrinsic; prose SHAPES its use
-AI.prose`
+AI.fragment`
   For broad file surveys, spawn workers with only ${Grep} and ${ReadFile} —
   one question each, never the whole task.`;
 ```
@@ -867,7 +872,7 @@ export const DistilledEngineer = Engineer.make(/* track upstream specs */);
 
 Composition staffs each desk: the IssueOwner's subtree provides
 `IssueEngineer`, the Distilled process's provides `DistilledEngineer`
-— the kernel resolves a charter's `${Engineer}` mention (and a door's
+— the driver resolves a charter's `${Engineer}` mention (and a door's
 target) from THAT charter's own Layer graph, so both missions coexist
 in one runtime. This is §2d's "prose is a property of the binding"
 extended from model-dial to mission.
@@ -881,17 +886,17 @@ charters per binding — the rule just has to be law.
 ### 9c. Call/reply, sessions, and the supervision cascade
 
 **Decision (2026-07-25, refined 2026-07-26): answering a dispatch and
-ending a run are DIFFERENT acts — and the answer is an explicit
+ending a session are DIFFERENT acts — and the answer is an explicit
 `AI.reply`, from wherever the answer is actually produced.** The
 original achieve pattern conflated answer with settle; the first
 refinement kept the turn-return as the reply channel, which still
 forced the artifact through a `Ref` dance (tool stores → next turn
-returns → consume). The kernel rules now:
+returns → consume). The driver rules now:
 
 1. **`AI.reply(value)` answers the round.** Callable from a tool
    handler (the natural site — the moment the artifact provably
    exists) or from turn code. Every pending dispatch waiter resolves
-   with the value; the run neither parks nor ends — the model may
+   with the value; the session neither parks nor ends — the model may
    keep working (wrap up, comment, start CI). A round that never
    replies answers with its quiescent text, the fallback. Turns
    RETURN ONLY PROSE; a non-Fragment return is a loud defect.
@@ -913,17 +918,17 @@ returns → consume). The kernel rules now:
    quiescent text. (Without this pairing, `reply` re-introduces the
    race the achieve pattern had.)
 3. **Sessions on `dispatch`.** The intrinsic takes an optional
-   `session` name; the kernel derives a DETERMINISTIC child key
-   namespaced under the dispatching run
+   `session` name; the driver derives a DETERMINISTIC child key
+   namespaced under the dispatching session
    (`{parent.key}/{agent}/{session}`), so re-dispatching the same
-   agent + session continues the SAME worker run via the existing
+   agent + session continues the SAME worker session via the existing
    admit-or-enqueue semantics. Back-and-forth is just calling again.
-   Omitting `session` mints a fresh run — one-off labor. Namespacing
+   Omitting `session` mints a fresh session — one-off labor. Namespacing
    means two issues' "build" sessions can never collide, and the
    audit story is unchanged: sessions alter memory, never authority.
-4. **The supervision cascade.** The kernel remembers each run's
+4. **The supervision cascade.** The driver remembers each session's
    session workers (the dispatch parentage edge, now load-bearing):
-   when a run settles OR crashes, its children settle with it. Parked
+   when a session settles OR crashes, its children settle with it. Parked
    workers never outlive the conversation that owns them. A crash's
    typed cause propagates to every waiter in the cascade — a
    supervisor's dispatch fails with the reason, not a stringly `Error`
@@ -969,7 +974,7 @@ const HandToEngineer = AI.Dispatch(Engineer, "hand_to_engineer")`
 The split: **userland owns the presentation and the policy** (name,
 prose, parameter schema, the `derive` deriving `{task, key}` — the
 session invariant is enforced by ABSENCE: no session parameter exists
-at the wire for the model to misuse); **the kernel owns the
+at the wire for the model to misuse); **the driver owns the
 mechanism** (executes the dispatch, stamps parentage, registers the
 child for the supervision cascade, emits the `dispatched` observation
 carrying tool + agent + child key, so the UI links worker cards with
@@ -982,18 +987,18 @@ Doors are deliberately NOT in the stance's tool set that `spawn`
 grants from — workers are leaves; a spawn can never hand delegation
 onward.
 
-### 9e. `Thread.remind` — the kernel clock
+### 9e. `Thread.remind` — the driver clock
 
 Time-based self-nudges (`"if the author hasn't replied in a day,
 ping"`) previously required a Layer-level scheduler steering from
-outside. Now the run can set them itself: `AI.Thread.remind(delay,
-note)` schedules a note to the run's FUTURE SELF and returns
+outside. Now the session can set them itself: `AI.Thread.remind(delay,
+note)` schedules a note to the session's FUTURE SELF and returns
 immediately — the note is data `(fireAt, text)`, delivered as an
-ordinary inbox message when due: a wake if the run is parked by then,
-a queued message if busy, dropped if settled. The kernel owns the
-clock, fused to the run's lifetime — a fiber on `KernelMemory` (runs
+ordinary inbox message when due: a wake if the session is parked by then,
+a queued message if busy, dropped if settled. The driver owns the
+clock, fused to the session's lifetime — a fiber on `DriverLocal` (runs
 are process-lifetime there), a Durable Object alarm on a durable
-kernel — which is exactly why it is a kernel method and not userland
+driver — which is exactly why it is a driver method and not userland
 `Effect.sleep`: a sleeping fiber inside a tool handler dies with the
 isolate; the reminder must not.
 
@@ -1010,7 +1015,7 @@ Requirements propagate through R and are discharged at composition:
 // the desk's Shape is a plain Context.Service; the agent behind it is
 // PRIVATE (un-exported), with its own default Layer
 class IssuesAgent extends AI.Agent<IssuesAgent>()("Issues") {}
-const IssuesAgentLive = IssuesAgent.make(charter);   // R: Engineer | Kernel | ...
+const IssuesAgentLive = IssuesAgent.make(charter);   // R: Engineer | Driver | ...
 
 export const IssuesLive = Layer.effect(Issues, Effect.gen(function* () {
   const issuesAgent = yield* IssuesAgent;            // the loop, private
@@ -1020,11 +1025,11 @@ export const IssuesLive = Layer.effect(Issues, Effect.gen(function* () {
 
 const Org = IssuesLive.pipe(
   Layer.provide(Engineer.make(EngineerCharter)),     // or a DevBox-backed variant
-  Layer.provide(KernelMemory),
+  Layer.provide(DriverLocal),
   Layer.provide(MemoryLedger),
 );
 
-// tests: fake a whole agent with one Layer — no kernel, no model
+// tests: fake a whole agent with one Layer — no driver, no model
 const FakeEngineer = Layer.succeed(Engineer, Engineer.of({
   dispatch: () => Effect.succeed({ pr: "…/pull/1" }),
   send: () => Effect.void, steer: () => Effect.void,
@@ -1049,16 +1054,16 @@ Match.tag("CheckRunFailed", (e) =>
   Ref.set(ciRed, true).pipe(Effect.andThen(issues.steer(e.key, e))));
 ```
 
-## 11. Kernel behaviors (invisible to charters)
+## 11. Driver behaviors (invisible to charters)
 
 - **Per-run init**: the charter runs on first admission of a key; its
-  closure is the run's instance. Distinct keys = distinct instances.
+  closure is the session's instance. Distinct keys = distinct instances.
 - **Channel delivery order**: per tick, notes in emission order; notes
   are user-role but delimited (`<note>`), the one contract taught in
   the system prompt's constant coda. The say log is thread-scoped
   (§4b).
 - **The render is the system prompt**: delivered whole at every
-  sampling, no diffing, no kernel-authored messages. A static render is
+  sampling, no diffing, no driver-authored messages. A static render is
   byte-stable (prompt-cache discipline); a changed render replaces the
   system prompt — legibility over cleverness, the cache cost is the
   author's choice.
@@ -1080,14 +1085,14 @@ was thrown. Three lanes:
 
 | lane | audience | mechanism |
 |---|---|---|
-| tool / door-policy failure | **the model** | `failureMode: "return"` — a model-visible tool result; the agent is the error handler. Never touches the kernel's error channel. |
-| round failure (sampling `AiError`, turn `E`, `AI.Refused`) | **the caller** | the round fails TYPED on the error channel — waiters (`dispatch`, doors, HTTP edges) receive the tagged error and `catchTag` it. The run keeps serving; the next event opens a fresh round. |
-| infra defect (storage, RPC, kernel bugs) | **the operator** | crash-and-recover: the busy-marker budget re-enters the round; exhaustion abandons it VISIBLY and fails waiters. |
+| tool / door-policy failure | **the model** | `failureMode: "return"` — a model-visible tool result; the agent is the error handler. Never touches the driver's error channel. |
+| round failure (sampling `AiError`, turn `E`, `AI.Refused`) | **the caller** | the round fails TYPED on the error channel — waiters (`dispatch`, doors, HTTP edges) receive the tagged error and `catchTag` it. The session keeps serving; the next event opens a fresh round. |
+| infra defect (storage, RPC, driver bugs) | **the operator** | crash-and-recover: the busy-marker budget re-enters the round; exhaustion abandons it VISIBLY and fails waiters. |
 
-Retryability is the error's own testimony, never the kernel's guess:
+Retryability is the error's own testimony, never the driver's guess:
 effect AI's `AiError.isRetryable` (rate limit → yes; billing, auth,
 content policy → no) decides whether a round failure enters recovery
-or abandons on the spot. The kernel adds NO retry the error itself
+or abandons on the spot. The driver adds NO retry the error itself
 doesn't justify — `Effect.orDie` on a sampling is a spec violation:
 it erases the typed error into the defect lane and condemns a
 deterministic failure to pointless recovery. (This is exactly how the
@@ -1095,18 +1100,18 @@ org burned ~15 identical Anthropic calls on one billing error: a blind
 3× retry inside the sampling step, times a 5-attempt recovery loop,
 with the reason visible only in worker logs.)
 
-"Fatal" always means fatal to the ROUND, never the run: the run parks
+"Fatal" always means fatal to the ROUND, never the session: the session parks
 with its thread intact and the next event opens a fresh round. Account-
-level conditions (billing) are handled emergently — every run fails its
+level conditions (billing) are handled emergently — every session fails its
 round fast and typed, no retry storm; a global circuit breaker, if ever
-wanted, is a `Models`-seam Layer concern, not a kernel primitive.
+wanted, is a `Models`-seam Layer concern, not a driver primitive.
 
-The kernel never RENDERS an error. The `crashed` observation carries
+The driver never RENDERS an error. The `crashed` observation carries
 the ENCODED tagged error (`_tag`, `message`, retryability — stacks and
 `Cause` wrappers stripped); projections, boards, and UIs own
 presentation (userspace). The agent's own view of a failed round is
 thread content: a note on the next wake ("the previous round failed:
-<error> — it was not retried"), the same channel every other kernel
+<error> — it was not retried"), the same channel every other driver
 fact uses.
 
 ## 12. Per-tick configuration (model, sampling params)
@@ -1117,17 +1122,17 @@ lives: the turn's return, as pipeable Fragment annotations (the one
 extension mechanism, per [notes-effect-native](./research/notes-effect-native.md)):
 
 ```ts
-return yield* AI.prose`
+return yield* AI.fragment`
   Survey the failures across all 40 files and group them.
 `.pipe(AI.model("fast"));            // cheap tier for bulk work
 
-return yield* AI.prose`
+return yield* AI.fragment`
   Decide: merge or request changes. Cite the diff.
 `.pipe(AI.model("default"));         // judgment gets the big model
 ```
 
-- Tier names are resolved by a `Models` SERVICE the kernel requires (the
-  same seam pattern as `LanguageModel`/`Sandbox` — never kernel
+- Tier names are resolved by a `Models` SERVICE the driver requires (the
+  same seam pattern as `LanguageModel`/`Sandbox` — never driver
   constructor options): `Layer.succeed(Models, { fast: haiku, default:
   sonnet })` at composition; charters name tiers, never providers.
   Level-triggered like everything else: the tier is re-declared every
@@ -1138,12 +1143,12 @@ return yield* AI.prose`
   MODEL-managed working set (activation returns prose as a tool result,
   cache-safe); code-managed capability is just stance content.
 - Not yet implemented: the annotation combinators and the multi-model
-  registry. The mechanism (Fragment metadata the kernel may read) is
+  registry. The mechanism (Fragment metadata the driver may read) is
   already load-bearing elsewhere.
 
-## 13. Deferred (designed, not yet implemented)
+## 13. Deferred designs — and what has since shipped
 
-- **`AI.Workflow` — deterministic orchestration as a first-class run
+- **`AI.Workflow` — deterministic orchestration as a first-class session
   (designed 2026-07-27).** The taxonomy question every orchestration
   answers is *who owns the control flow*:
 
@@ -1153,8 +1158,8 @@ return yield* AI.prose`
   | `AI.Agent` | the model's | the thread | a CONVERSATION: owned, cascaded |
   | `AI.Workflow` | code's | the journal | a JOB: autonomous, explicitly cancelled |
 
-  A workflow is a run whose "turn" is a typed function instead of a
-  sampling — same keyed runs, verbs, waiters-ride-inputs, `remind`,
+  A workflow is a session whose "turn" is a typed function instead of a
+  sampling — same keyed sessions, verbs, waiters-ride-inputs, `remind`,
   observations, and board presence; different brain. The declaration
   carries the signature as a TYPE PARAMETER (no schemas, no prose —
   a workflow is never model-visible; a tool or door bridges that gap
@@ -1167,7 +1172,7 @@ return yield* AI.prose`
   >()("ResourceWave") {}
 
   // make: the function, or an init Effect returning it (init once
-  // per run key — re-dispatch to the same key hits the same closure)
+  // per session key — re-dispatch to the same key hits the same closure)
   export const ResourceWaveLive = ResourceWave.make(
     Effect.gen(function* () {
       const engineer = yield* Engineer;                 // INIT
@@ -1184,7 +1189,7 @@ return yield* AI.prose`
   ```
 
   Supervision semantics differ from agents ON PURPOSE (link vs
-  monitor): a dispatched workflow is NOT registered in `run.children`
+  monitor): a dispatched workflow is NOT registered in `session.children`
   — no cascade, no lifetime coupling. A half-done deterministic plot
   should finish or fail on its own terms, never die because the
   conversation that started it went quiet; subordination, where
@@ -1193,55 +1198,86 @@ return yield* AI.prose`
 
   Build when the first real deterministic plot lands (the factory
   wave over distilled services); durability semantics (journal +
-  replay on a DO kernel) get decided against that use, not
+  replay on a DO host) get decided against that use, not
   speculatively. Note `AI.Process` (a `{main, charter}` bundle) was
   CONSIDERED AND REJECTED here — it packaged a router with an agent,
   and bundles aren't semantics; routers stay plain Layers.
 
-- Kernel options: supervision (`restart`/`intensity`/`onGiveUp`), resync
+- Driver options: supervision (`restart`/`intensity`/`onGiveUp`), resync
   schedules, lanes + sampling token bucket, per-tool cooldowns, self-event
   filtering.
-- KernelDurable: snapshot-at-park, passivation, reminders (time as a wake
-  source that survives eviction), named-state variant of `Ref`.
-- Union-toolkit + stance masking (cache-stable wire representation of
-  mention-is-presence): unmentioned tools stay in the provider payload
-  (tool-block cache intact) and are rejected on call with a
-  model-visible "not in your current stance". A transport decision —
-  the SEMANTICS stay §2b's mention-is-presence, unchanged.
-- **Codemode: SHIPPED as `WireMode` Layers** (§2c) —
+- **Durable placement: SHIPPED** as the Durable Object host
+  (`Cloudflare/AI/DriverCloudflare.ts`) over the same `DriverCore`
+  engine; the named-state variant of `Ref` shipped as
+  `PersistentRef`.
+- **Union-toolkit + stance masking: SHIPPED 2026-08-14**
+  (dsh-informed; see [deepseek-harness.md](./deepseek-harness.md)):
+  the direct wire carries the session's union of every tool ever
+  mentioned, in first-mention order — the provider payload is
+  byte-stable across phase flips — and a union tool the CURRENT
+  stance does not mention rejects model-visibly. The SEMANTICS stay
+  §2b's mention-is-presence, unchanged; an explicit `ToolEngine` owns
+  the policy for its own presentation (codemode's single `eval` tool
+  is stable by construction).
+- **Request-envelope logging — SHIPPED 2026-08-14** (dsh's
+  "model-visible means logged", adopted): every sampling appends a
+  durable `stance` observation — envelope hash every tick, full
+  snapshot (rendered prose + presented toolkit) when it changed — so
+  any tick's request is reconstructable from `ThreadStorage` alone.
+  Crash recovery likewise appends a typed `interrupted` observation
+  (never emitted by a healthy round). Deferred residue: a runtime
+  assertion that the sampled prompt equals the last logged envelope.
+- **Compaction, the concrete design (recorded 2026-08-14, still
+  userland policy per §7).** Three independent, log-replayable
+  pressure valves, adopted from dsh's proven shape:
+  1. **Spill at result time** — oversized tool output parked behind a
+     preview + retrieval id; best-effort (a spill failure keeps the
+     inline original, never fails the call). Shipped in userland as a
+     `ToolEngine` wrapper (`alchemy-org/src/lib/Spill.ts`) — the seam
+     already exposes every mention's handler, so no new core surface.
+  2. **Deterministic tool-result pruning** — head/middle/tail shrink
+     of oversized results, each replacement logged with the shadowed
+     range, run BEFORE any LLM summarization.
+  3. **Summary compaction as surface replacement** — the summary rides
+     an ordinary message carrying a `replace` op citing the shadowed
+     observation range; the model surface and the human transcript
+     become two projections of one log (the transcript keeps reading
+     the originals). Bracketed by lock observations whose orphaned
+     start is crash evidence; tool-call/result pairing balanced across
+     boundaries. Prerequisite: a `TokenMeter` seam anchored on real
+     provider usage with per-node heuristic prices.
+- **Self-inspection tools (deferred; the recursive-improvement
+  precursor).** dsh's `cordis_inspect_*` pattern: before the agent
+  authors changes to its own charters/Layers, give it tools that query
+  the LIVE composition — seams present, tool schemas, event vocabulary
+  — so self-edits are written against reality, not recall. Pairs with
+  the approval gate for the apply step.
+- **Codemode: SHIPPED as `ToolEngine` Layers** (§2c) —
   `AI.CodeModeEffect()` / `AI.CodeModeAsync()` collapse the tick's
-  grants into one `eval` tool with generated signatures; evaluation is
-  v0 in-process. STILL DEFERRED: the sandbox-as-service extraction
-  below (isolation + the RLM bridge). The sandbox is a **service,
-  not a kernel property** — the same seam pattern as `LanguageModel` and
-  the Ledger:
+  mentions into one `eval` tool with generated signatures; evaluation
+  is v0 in-process behind the **`Eval` seam** (`run({ modules, main,
+  tools, timeout }) → { output, logs }`), with `EvalFunction` as the
+  in-process default and `EvalWorkerLoader` for Cloudflare isolates.
+  STILL DEFERRED: hardened local isolation (a subprocess `Eval`) and
+  the RLM bridge. The evaluator is a **service, not a driver
+  property** — the same seam pattern as `LanguageModel`:
 
   ```ts
-  export class Sandbox extends Context.Service<Sandbox, {
-    /** Execute code against a set of bridged capabilities. The bridge is
-     *  the enforcement point: only this tick's granted handlers exist,
-     *  and guards/budgets/cooldowns meter every bridged call. */
-    readonly execute: (options: {
-      readonly code: string;
-      readonly bindings: Record<string, (input: unknown) => Effect.Effect<unknown>>;
-      readonly timeout?: Duration.DurationInput;
-    }) => Effect.Effect<SandboxResult, SandboxError>;
-  }>()("alchemy/AI/Sandbox") {}
-
-  // KernelCodemode: Layer<Kernel, never, LanguageModel | Sandbox>
-  KernelCodemode.pipe(Layer.provide(SandboxBun));      // local subprocess
-  KernelCodemode.pipe(Layer.provide(SandboxWorkerd));  // DO kernel: native isolates
-  KernelCodemode.pipe(Layer.provide(SandboxFake));     // tests: scripted execution
+  // the engine requires the seam; placements pick the physics:
+  AI.CodeModeEffect()                                  // Layer<ToolEngine, never, Eval>
+    .pipe(Layer.provide(AI.EvalFunction))              // in-process (v0, composition seam)
+    .pipe(Layer.provide(Cloudflare.EvalWorkerLoader))  // DO host: native isolates
   ```
 
   Exposing the thread and a cheap sub-model through the same bridge
-  (`thread.grep(...)`, `llm(...)`) IS the RLM configuration — and because
-  `Sandbox` is an ordinary service, userland can reach the same seam (an
-  opt-in `eval` tool in a charter resolves `Sandbox` from context like any
-  other capability). Mode chosen per term at Layer composition; switch at
-  run start or compaction boundaries, not per tick.
+  (`thread.grep(...)`, `llm(...)`) IS the RLM configuration — and
+  because `Eval` is an ordinary service, userland can reach the same
+  seam (an opt-in `eval` tool in a charter resolves `Eval` from
+  context like any other capability). Engine chosen per term at Layer
+  composition; switch at session start or compaction boundaries, not
+  per tick.
 - `spawn` context grants (pass-by-reference thread spans) + model tier.
-- **Auto-memory: a library pattern, NOT a kernel seam.** Both halves are
+- **Auto-memory: a library pattern, NOT a driver seam.** Both halves are
   ordinary userland: the write side is a granted tool (or plain
   `Workspace` file convention), the read side is an effectful splice in
   the turn (`${memory.recall()}`) — per-tick stance assembly IS the
@@ -1249,5 +1285,5 @@ return yield* AI.prose`
   compaction policy (author-owned, §7) is the natural distill-before-
   evict write point. Deferred work is only packaging: a reusable
   `Memory` service with swappable stores (workspace files, DO, R2).
-- `AI.model`/sampling-param annotations + multi-model kernel registry (§12).
+- `AI.model`/sampling-param annotations + multi-model driver registry (§12).
 - Whole-program head vs frozen-first-branch (empirical; needs a benchmark).

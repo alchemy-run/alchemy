@@ -1,7 +1,7 @@
 {
   "name": "alchemy-vscode",
   "displayName": "Alchemy Prose",
-  "description": "Markdown syntax highlighting inside alchemy prose templates — .make`…`, .prose`…`, .say`…`",
+  "description": "Markdown syntax highlighting inside alchemy prose templates — .make`…`, .prose`…`, .say`…`, .fragment`…`",
   "version": "0.0.1",
   "private": true,
   "license": "Apache-2.0",
