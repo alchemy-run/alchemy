@@ -3316,6 +3316,95 @@ describe("engine-level adoption", () => {
     }),
   );
 
+  // Unresolved sibling Outputs in `news` (e.g. env referencing a resource
+  // created in the same plan) must NOT suppress the adoption probe: a
+  // resource with a deterministic physical identity can pre-exist even
+  // while carrying unresolved non-identity inputs. Skipping the probe here
+  // let reconcile silently converge onto an existing unowned resource —
+  // adoption without consent.
+  test(
+    "Unowned read result + adopt disabled -> OwnedBySomeoneElse even when props carry unresolved sibling Outputs",
+    Effect.gen(function* () {
+      const probed: string[] = [];
+      const exit = yield* makeAdoptPlan(
+        Effect.gen(function* () {
+          const upstream = yield* TestResource("Upstream", { string: "up" });
+          // `upstream.string` is an unresolved Output at plan time.
+          yield* TestResource("Foreign", { string: upstream.string });
+        }),
+        {
+          adopt: false,
+          readHook: (id) =>
+            Effect.suspend(() => {
+              probed.push(id);
+              return id === "Foreign"
+                ? Effect.succeed(Unowned(ownedAttrs))
+                : Effect.succeed(undefined);
+            }),
+        },
+      ).pipe(Effect.exit);
+
+      expect(probed).toContain("Foreign");
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const reason = exit.cause.reasons.find(Cause.isFailReason);
+        expect((reason?.error as any)?._tag).toBe("OwnedBySomeoneElse");
+        expect((reason?.error as any)?.resourceType).toBe("Test.TestResource");
+      }
+    }),
+  );
+
+  test(
+    "owned read result is adopted even when props carry unresolved sibling Outputs",
+    Effect.gen(function* () {
+      const plan = yield* makeAdoptPlan(
+        Effect.gen(function* () {
+          const upstream = yield* TestResource("Upstream", { string: "up" });
+          yield* TestResource("Adopted", { string: upstream.string });
+        }),
+        {
+          readHook: (id) =>
+            id === "Adopted"
+              ? Effect.succeed(ownedAttrs)
+              : Effect.succeed(undefined),
+        },
+      );
+
+      expect(plan.resources.Adopted!.action).toBe("update");
+      expect(plan.resources.Adopted).toMatchObject({
+        adopting: true,
+        state: { status: "created" },
+      });
+      // The sibling itself is a plain create.
+      expect(plan.resources.Upstream!.action).toBe("create");
+    }),
+  );
+
+  // With unresolved inputs the probe hands `read` a stripped (sanitized)
+  // props shape; a read whose identity genuinely lived in the stripped
+  // value may fail. That probe is best-effort: failure degrades to "not
+  // pre-existing" (the pre-probe behavior) instead of failing the plan.
+  test(
+    "probe failure with unresolved inputs degrades to an ordinary create",
+    Effect.gen(function* () {
+      const plan = yield* makeAdoptPlan(
+        Effect.gen(function* () {
+          const upstream = yield* TestResource("Upstream", { string: "up" });
+          yield* TestResource("Fresh", { string: upstream.string });
+        }),
+        {
+          readHook: (id) =>
+            id === "Fresh"
+              ? Effect.fail(new Error("identity not derivable"))
+              : Effect.succeed(undefined),
+        },
+      );
+
+      expect(plan.resources.Fresh!.action).toBe("create");
+      expect(plan.resources.Fresh!.state).toBeUndefined();
+    }),
+  );
+
   test(
     "read returns undefined -> ordinary create",
     Effect.gen(function* () {
