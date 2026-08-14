@@ -192,7 +192,7 @@ const mintToken = Effect.fn(function* ({
 export const EdgeConfigTokenProvider = () =>
   Provider.succeed(EdgeConfigToken, {
     stables: ["edgeConfigId"],
-    diff: Effect.fn(function* ({ olds, news = {}, output }) {
+    diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;
       // Moving the token to another Edge Config is a replacement (the new
       // parent must exist before the old token dies); label changes are

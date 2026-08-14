@@ -177,6 +177,12 @@ export const InvokeFunctionHttp: Layer.Layer<
   InvokeFunction,
   Effect.gen(function* () {
     const base = yield* HttpClient.HttpClient;
+    // Yield the forward-ref class here (its own Effect identity resolves
+    // the requirement-free constructor) instead of calling the class
+    // inside the runtime callable — a direct class call would drag the
+    // Function resource's `Providers` union into the callable's `R`,
+    // which the Binding.Service contract declares as `never`.
+    const forwardRef = yield* FunctionForwardRef;
     return Effect.fn(function* (fn: Function) {
       const logicalId = (fn as { LogicalId?: string }).LogicalId;
       if (logicalId === undefined) {
@@ -199,7 +205,7 @@ export const InvokeFunctionHttp: Layer.Layer<
         if (isFunction(host)) {
           const target = isFunction(fn)
             ? fn
-            : yield* FunctionForwardRef(logicalId, undefined);
+            : yield* forwardRef(logicalId, undefined);
           yield* host.bind`InvokeFunction(${host}, ${logicalId})`({
             env: {
               [urlKey]: target.url,

@@ -25,16 +25,34 @@ export const makeReadBlobClient = (
   head: (pathname: string) =>
     scope.pipe(
       Effect.flatMap((s) => headBlobRaw(s, pathname)),
+      // Reads cannot conflict on create or fail an etag precondition —
+      // those tags are impossible by construction; a hit is a defect.
+      Effect.catchTag(
+        ["Vercel.Blob.AlreadyExists", "Vercel.Blob.PreconditionFailed"],
+        (e) => Effect.die(e),
+      ),
       Effect.provideContext(context),
     ),
   get: (pathname: string) =>
     scope.pipe(
       Effect.flatMap((s) => getBlobRaw(s, pathname)),
+      Effect.catchTag(
+        ["Vercel.Blob.AlreadyExists", "Vercel.Blob.PreconditionFailed"],
+        (e) => Effect.die(e),
+      ),
       Effect.provideContext(context),
     ),
   list: (options?: ListBlobsOptions) =>
     scope.pipe(
       Effect.flatMap((s) => listBlobsRaw(s, options)),
+      Effect.catchTag(
+        [
+          "Vercel.Blob.AlreadyExists",
+          "Vercel.Blob.NotFound",
+          "Vercel.Blob.PreconditionFailed",
+        ],
+        (e) => Effect.die(e),
+      ),
       Effect.provideContext(context),
     ),
 });

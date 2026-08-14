@@ -24,6 +24,8 @@ export const makeWriteBlobClient = (
   put: (pathname: string, body: PutBlobBody, options?: PutBlobOptions) =>
     scope.pipe(
       Effect.flatMap((s) => putBlobRaw(s, pathname, body, options)),
+      // A put never observes a missing blob — impossible by construction.
+      Effect.catchTag("Vercel.Blob.NotFound", (e) => Effect.die(e)),
       Effect.provideContext(context),
     ),
   del: (pathnames: string | readonly string[]) =>
@@ -33,6 +35,16 @@ export const makeWriteBlobClient = (
           s,
           typeof pathnames === "string" ? [pathnames] : pathnames,
         ),
+      ),
+      // Delete is idempotent (missing blobs succeed) and carries no
+      // conditional-write options — these tags are impossible here.
+      Effect.catchTag(
+        [
+          "Vercel.Blob.AlreadyExists",
+          "Vercel.Blob.NotFound",
+          "Vercel.Blob.PreconditionFailed",
+        ],
+        (e) => Effect.die(e),
       ),
       Effect.provideContext(context),
     ),
