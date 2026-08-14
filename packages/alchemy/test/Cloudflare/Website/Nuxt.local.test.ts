@@ -361,6 +361,117 @@ describe.concurrent("Nuxt dev", () => {
       }).pipe(logLevel),
     { timeout: 300_000 },
   );
+
+  test.provider(
+    "Nuxt dev: an explicit alchemy/Nitro mount stands the injected middleware down",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const rootDir = yield* cloneFixture(fixtureDir, {
+          prefix: "alchemy-nuxt-mount-dev-",
+          tempRoot,
+          entries: effectFixtureEntries,
+        });
+
+        // A hand-written explicit mount claiming a NARROWER slice than the
+        // construct's `server.routes` (`/api/*`): with the stand-down, the
+        // mount alone dispatches — `/api/nope` (inside the construct claim,
+        // outside the mount claim) must fall back to nitro's 404 instead
+        // of the injected middleware's authoritative empty 404.
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const middlewareDir = path.join(rootDir, "server", "middleware");
+        yield* fs.makeDirectory(middlewareDir, { recursive: true });
+        yield* fs.writeFileString(
+          path.join(middlewareDir, "alchemy-mount.ts"),
+          [
+            `import { toEventHandler } from "alchemy/Nitro";`,
+            `import Site from "../../site.ts";`,
+            ``,
+            `export default toEventHandler(Site, { routes: ["/api/effect/*"] });`,
+            ``,
+          ].join("\n"),
+        );
+
+        const site = yield* importEffectSite(rootDir, "site.ts");
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            const attrs = yield* site.default;
+            return { attrs };
+          }),
+        );
+        const base = deployed.attrs.url!;
+
+        // The explicit mount serves its claim (and the universal rpc path).
+        const marker = yield* fetchJsonReady<{ marker: string }>(
+          `${base}/api/effect/marker`,
+        );
+        expect(marker.marker).toBe("nuxt-effect-dev");
+        const rpc = yield* HttpClient.execute(
+          HttpClientRequest.post(`${base}/api/__rpc/greet`).pipe(
+            HttpClientRequest.bodyText('["mount"]', "application/json"),
+          ),
+        ).pipe(
+          Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
+        );
+        expect(rpc.status).toBe(200);
+        expect(yield* rpc.json).toEqual({ value: "hello mount" });
+
+        // Stand-down proof: inside the CONSTRUCT claim but outside the
+        // MOUNT claim, nitro answers with its own 404 payload — the
+        // injected middleware (which renders an authoritative EMPTY 404
+        // there) was never mounted.
+        const client = yield* HttpClient.HttpClient;
+        const missing = yield* client.get(`${base}/api/nope`);
+        expect(missing.status).toBe(404);
+        expect(yield* missing.text).toContain("404");
+
+        yield* stack.destroy();
+      }).pipe(logLevel),
+    { timeout: 300_000 },
+  );
+
+  test.provider(
+    "Nuxt dev: server.takeover false suppresses the injected middleware entirely",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const rootDir = yield* cloneFixture(fixtureDir, {
+          prefix: "alchemy-nuxt-takeover-dev-",
+          tempRoot,
+          entries: [...fixtureEntries, "site-takeover.ts"],
+        });
+
+        const site = yield* importEffectSite(rootDir, "site-takeover.ts");
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            const attrs = yield* site.default;
+            return { attrs };
+          }),
+        );
+        const base = deployed.attrs.url!;
+
+        // The app itself is up (nitro's own scanned route answers).
+        yield* expectUrlContains(`${base}/api/hello`, "api-route-ok", {
+          timeout: "60 seconds",
+          label: "nitro route with takeover: false",
+        });
+
+        // No injection: the claimed routes and the rpc path both fall to
+        // nitro — the effect fetch's marker never serves.
+        const client = yield* HttpClient.HttpClient;
+        const claimed = yield* client.get(`${base}/api/effect/marker`);
+        expect(claimed.status).toBe(404);
+        expect(yield* claimed.text).not.toContain("must-not-serve");
+        const rpc = yield* client.post(`${base}/api/__rpc/greet`);
+        expect(rpc.status).toBe(404);
+
+        yield* stack.destroy();
+      }).pipe(logLevel),
+    { timeout: 300_000 },
+  );
 });
 
 /** Structural shape of a dynamically imported effect site fixture module. */

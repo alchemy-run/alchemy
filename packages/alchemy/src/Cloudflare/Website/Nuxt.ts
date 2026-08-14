@@ -462,6 +462,12 @@ export const Nuxt: {
                       effect: {
                         main: anchor,
                         routes: props?.server?.routes ?? DEFAULT_SERVER_ROUTES,
+                        // `takeover: false` opts out of automatic dev
+                        // delivery — the source's dev half stands down
+                        // for the explicit `alchemy/Nitro` mount tier.
+                        ...(props?.server?.takeover !== undefined
+                          ? { takeover: props.server.takeover }
+                          : undefined),
                       },
                     }
                   : undefined),

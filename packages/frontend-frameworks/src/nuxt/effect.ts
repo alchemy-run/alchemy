@@ -84,6 +84,12 @@ export interface NuxtEffectOptions {
   readonly main: string;
   /** Path globs the effect fetch owns. @default ["/api/*"] */
   readonly routes?: ReadonlyArray<string> | undefined;
+  /**
+   * `server.takeover` from the construct: `false` opts out of automatic
+   * delivery — the dev half then never injects the effect middleware
+   * (the explicit `alchemy/Nitro` mount tier owns the dispatch).
+   */
+  readonly takeover?: boolean | undefined;
 }
 
 /** Normalize a `main` anchor (path or `file://` URL) to an absolute path. */

@@ -51,6 +51,7 @@ import {
   effectMainToPath,
   renderEffectHandler,
   renderWorkerEntry,
+  scanForExplicitServeMount,
   writeGeneratedModule,
   type NuxtEffectOptions,
 } from "./effect.ts";
@@ -937,19 +938,27 @@ export const makeNuxtSource = (options: NuxtSourceOptions): SourceProvider => {
       // handlers (queue/scheduled/DO classes) are production-only: the
       // dev server runs nitro's dev preset entry, not the deploy entry.
       const effect = resolveEffectEntry(ctx, options);
-      const devHandlerPath =
-        effect === undefined
-          ? undefined
-          : yield* writeGeneratedModule(
-              NodePath.join(
-                effectGeneratedDir(rootDir, ctx.id),
-                "dev-handler.mjs",
-              ),
-              renderEffectHandler({
-                sitePath: effect.mainPath,
-                routes: effect.routes,
-              }),
-            );
+      // Stand-down (DESIGN §6.3), mirroring the framework-core makeNuxt
+      // path AWS rides: the explicit tier always wins — never two bridges
+      // in one nitro app. A hand-mounted `alchemy/Nitro` handler under
+      // `server/` or `server: { takeover: false }` suppresses the
+      // injected dev middleware.
+      const inject =
+        effect !== undefined &&
+        options.effect?.takeover !== false &&
+        !(yield* scanForExplicitServeMount(NodePath.join(rootDir, "server")));
+      const devHandlerPath = !inject
+        ? undefined
+        : yield* writeGeneratedModule(
+            NodePath.join(
+              effectGeneratedDir(rootDir, ctx.id),
+              "dev-handler.mjs",
+            ),
+            renderEffectHandler({
+              sitePath: effect!.mainPath,
+              routes: effect!.routes,
+            }),
+          );
       const framework = yield* makeNuxt(
         frameworkOptions(ctx, {
           env: resolveDevEnvOverrides(ctx.env),
