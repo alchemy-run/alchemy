@@ -175,7 +175,10 @@ bundled into a generated image instead — the same authoring model as
 `Deployment` accepts the same `{ env, policyStatements }` binding
 contract as a Lambda `Function`, so every AWS `Binding.Service`
 attaches environment variables to the Pod spec and IAM policy
-statements to a generated **Pod Identity role**:
+statements to a generated **Pod Identity role**.
+
+The compact form lets Deployment own the bundle and the per-workload
+ECR repository:
 
 ```typescript
 const api = yield* Kubernetes.Deployment(
@@ -191,6 +194,25 @@ const api = yield* Kubernetes.Deployment(
     };
   }).pipe(Effect.provide(AWS.DynamoDB.PutItemHttp)),
 );
+```
+
+To own the repository and the image as their own resources, bundle
+`main` on `AWS.ECR.Image` and pass the result into Deployment.
+The image is not mirrored again — Deployment writes `apiImage.imageUri`
+onto the pod:
+
+```typescript
+const repository = yield* AWS.ECR.Repository("ApiRepository", {});
+const apiImage = yield* AWS.ECR.Image("ApiImage", {
+  repositoryUri: repository.repositoryUri,
+  main: import.meta.url,
+});
+const api = yield* Kubernetes.Deployment("Api", {
+  cluster,
+  image: apiImage,
+  port: 3000,
+  replicas: 2,
+});
 ```
 
 Every Kubernetes workload on EKS gets Pod Identity as standard:

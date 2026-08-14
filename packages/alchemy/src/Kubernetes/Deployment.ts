@@ -326,6 +326,19 @@ export interface DeploymentRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
+ * @example Bundle an Effect program as an explicit ECR image
+ * ```typescript
+ * const repository = yield* AWS.ECR.Repository("ApiRepository", {});
+ * const apiImage = yield* AWS.ECR.Image("ApiImage", {
+ *   repositoryUri: repository.repositoryUri,
+ *   main: import.meta.url,
+ * });
+ * const api = yield* Kubernetes.Deployment("Api", {
+ *   cluster,
+ *   image: apiImage,
+ * });
+ * ```
+ *
  * @example Any cluster via kubeconfig
  * ```typescript
  * const local = Kubernetes.KubeConfig({ context: "kind-dev" });

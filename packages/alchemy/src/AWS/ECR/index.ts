@@ -38,6 +38,8 @@ export {
   Image,
   ImageProvider,
   type EcrRegistryCredentials,
+  type BundledImageProps,
+  type DockerfileImageProps,
   type ImageProps,
 } from "./Image.ts";
 export {
