@@ -20,9 +20,14 @@ import { Function } from "../Functions/Function.ts";
 import { FunctionEnvironment } from "../Functions/FunctionBridge.ts";
 import { decryptRow, encryptRow, importStateKey } from "./Codec.ts";
 import {
+  isFamilyMember,
+  latestOfFamily,
   outputKey,
   parseRowKey,
   parseStackIndexKey,
+  pickLatestPerFamily,
+  revisionedKey,
+  revisionToken,
   rowKey,
   STACK_INDEX_PREFIX,
   stackIndexKey,
@@ -48,8 +53,12 @@ export const STATE_STORE_PROJECT_NAME =
  * way an older deployed copy can no longer satisfy. Clients query
  * `/version` on the deployed function and compare against this constant;
  * a mismatch (or 404) triggers a redeploy via the bootstrap flow.
+ *
+ * v2: immutable revisioned row pathnames (`{base}@{rev}` + LIST-resolved
+ * latest) — restores read-after-write consistency over Vercel Blob's
+ * eventually-consistent overwrite/delete GETs.
  */
-export const STATE_STORE_VERSION = 1 as const;
+export const STATE_STORE_VERSION = 2 as const;
 
 /**
  * The private Blob store holding one encrypted JSON blob per state row.
@@ -150,8 +159,8 @@ export default class Api extends Function<Api>()(
       return pathnames;
     });
 
-    /** Read + decrypt a row; `undefined` when absent. */
-    const readRow = (pathname: string) =>
+    /** Read + decrypt one specific (already-resolved) pathname. */
+    const readPathname = (pathname: string) =>
       blob.get(pathname).pipe(
         Effect.flatMap((got) => got.text),
         Effect.flatMap((framed) =>
@@ -164,22 +173,77 @@ export default class Api extends Function<Api>()(
         Effect.orDie,
       );
 
-    /** Encrypt + write a row (whole-blob PUT — atomic per key). */
-    const writeRow = (pathname: string, value: unknown) =>
-      Effect.flatMap(cryptoKey, (key) => encryptRow(key, value)).pipe(
-        Effect.flatMap((framed) =>
-          blob.put(pathname, framed, { contentType: ROW_CONTENT_TYPE }),
-        ),
-        Effect.asVoid,
-        runtime,
-        Effect.orDie,
-      );
+    /** Every pathname in `base`'s row family, fresh from LIST. */
+    const listFamily = Effect.fn(function* (base: string) {
+      const pathnames = yield* listAll(base);
+      return pathnames.filter((pathname) => isFamilyMember(base, pathname));
+    });
 
-    /** Idempotent batch delete. */
+    /**
+     * Read a row family's current content; `undefined` when absent.
+     *
+     * Blob content GETs are eventually consistent for OVERWRITTEN or
+     * recreated pathnames, but prefix LISTs and never-overwritten
+     * pathnames are read-after-write consistent (live-verified). So:
+     * resolve the family's latest immutable revision via LIST, then GET
+     * it. A revision can vanish between the list and the get when a
+     * concurrent writer prunes it — re-resolve, bounded.
+     */
+    const readRow = (base: string) =>
+      Effect.gen(function* () {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const family = yield* listFamily(base);
+          const target = latestOfFamily(base, family);
+          if (target === undefined) return undefined;
+          const value = yield* readPathname(target);
+          if (value !== undefined) return value;
+          // Deleted between list and get (a newer writer pruned it, or
+          // the legacy base GET served a cached 404) — resolve again.
+        }
+        return undefined;
+      });
+
+    /**
+     * Encrypt + write a row as a NEW immutable revision, then prune
+     * superseded revisions (and the legacy unrevisioned row)
+     * best-effort. Readers always pick the highest revision, so a
+     * failed prune only costs storage. Never prunes revisions newer
+     * than ours — a concurrent writer may already have superseded us.
+     */
+    const writeRow = (base: string, value: unknown) =>
+      Effect.gen(function* () {
+        const target = yield* Effect.sync(() =>
+          revisionedKey(
+            base,
+            revisionToken(
+              Date.now(),
+              Math.random().toString(36).slice(2, 10).padEnd(8, "0"),
+            ),
+          ),
+        );
+        const framed = yield* Effect.flatMap(cryptoKey, (key) =>
+          encryptRow(key, value),
+        ).pipe(Effect.orDie);
+        yield* blob
+          .put(target, framed, { contentType: ROW_CONTENT_TYPE })
+          .pipe(runtime, Effect.orDie);
+        const family = yield* listFamily(base);
+        const superseded = family.filter(
+          (pathname) =>
+            pathname === base || (pathname !== target && pathname < target),
+        );
+        yield* removeRows(superseded).pipe(Effect.ignore);
+      });
+
+    /** Idempotent batch delete of specific pathnames. */
     const removeRows = (pathnames: readonly string[]) =>
       pathnames.length === 0
         ? Effect.void
         : blob.del(pathnames).pipe(runtime, Effect.orDie);
+
+    /** Delete a row family: every revision plus the legacy base row. */
+    const removeRowFamily = (base: string) =>
+      Effect.flatMap(listFamily(base), removeRows);
 
     /** Register a stack in the global index (idempotent overwrite). */
     const registerStack = (stack: string) =>
@@ -232,12 +296,15 @@ export default class Api extends Function<Api>()(
         )
         .handle("listResources", ({ params }) =>
           listAll(stagePrefix(params.stack, params.stage)).pipe(
-            Effect.map((pathnames) =>
-              pathnames.flatMap((pathname) => {
+            Effect.map((pathnames) => {
+              // Revisions of one row all parse to the same fqn — dedupe.
+              const fqns = new Set<string>();
+              for (const pathname of pathnames) {
                 const parsed = parseRowKey(pathname);
-                return parsed === undefined ? [] : [parsed.fqn];
-              }),
-            ),
+                if (parsed !== undefined) fqns.add(parsed.fqn);
+              }
+              return [...fqns];
+            }),
             Effect.withSpan("state_store.listResources", {
               attributes: {
                 "alchemy.state_store.op": "listResources",
@@ -280,7 +347,7 @@ export default class Api extends Function<Api>()(
         })
         .handle("deleteState", ({ params }) => {
           const fqn = decodeURIComponent(params.fqn);
-          return removeRows([rowKey(params.stack, params.stage, fqn)]).pipe(
+          return removeRowFamily(rowKey(params.stack, params.stage, fqn)).pipe(
             Effect.withSpan("state_store.deleteState", {
               attributes: {
                 "alchemy.state_store.op": "deleteState",
@@ -293,8 +360,11 @@ export default class Api extends Function<Api>()(
         })
         .handle("getReplacedResources", ({ params }) =>
           listAll(stagePrefix(params.stack, params.stage)).pipe(
+            // One read per row family (its latest revision) — older
+            // revisions and legacy rows are superseded content.
+            Effect.map(pickLatestPerFamily),
             Effect.flatMap((pathnames) =>
-              Effect.forEach(pathnames, readRow, {
+              Effect.forEach(pathnames, readPathname, {
                 concurrency: 8,
               }),
             ),
@@ -345,10 +415,10 @@ export default class Api extends Function<Api>()(
               const rows = yield* listAll(
                 stagePrefix(params.stack, query.stage),
               );
-              yield* removeRows([
-                ...rows,
+              const outputs = yield* listFamily(
                 outputKey(params.stack, query.stage),
-              ]);
+              );
+              yield* removeRows([...rows, ...outputs]);
             } else {
               const rows = yield* listAll(stackRowsPrefix(params.stack));
               const outputs = yield* listAll(stackOutputsPrefix(params.stack));

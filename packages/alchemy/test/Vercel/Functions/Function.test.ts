@@ -112,7 +112,16 @@ test.provider(
       const updated = yield* stack.deploy(makeFn("bonjour"));
       expect(updated.projectId).toEqual(created.projectId);
       expect(updated.deploymentId).not.toEqual(created.deploymentId);
-      const updatedEnv = (yield* getJson(`${updated.url}/env`)) as {
+      const updatedEnv = (yield* getJson(`${updated.url}/env`).pipe(
+        // The production alias may briefly serve the previous deployment
+        // (same bounded re-poll as the sensitive-env rotation test below).
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (body) =>
+            (body as { greeting: string | null }).greeting === "bonjour",
+          times: 15,
+        }),
+      )) as {
         greeting: string | null;
       };
       expect(updatedEnv.greeting).toEqual("bonjour");

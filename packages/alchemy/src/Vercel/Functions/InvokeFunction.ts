@@ -166,6 +166,22 @@ export const invoke = (
  * `x-vercel-protection-bypass` when the target has a bypass secret (it may
  * not, e.g. a tenant-mode target on a foreign project without one).
  *
+ * ## Runtime authorization
+ *
+ * The caller is authorized by the target's **automation protection-bypass
+ * secret** — minted once per target project at ensure time (before the
+ * first deploy, never regenerated) and bound here as a `sensitive` env var
+ * (`{LogicalId}_BYPASS`). It grants exactly one thing: passing Vercel's
+ * deployment protection (team SSO / preview protection) on requests to
+ * that one project's deployments — it is NOT a management credential and
+ * cannot touch the Vercel API. Targets without a secret (foreign tenant
+ * projects) are called unauthenticated.
+ *
+ * Raw-HTTP note: this client is deliberately a plain `HttpClient`, not a
+ * distilled service — the requests go to the **user's own deployed
+ * Function** (an arbitrary application endpoint), not to a Vercel API;
+ * there is no API contract for distilled to type.
+ *
  * Provide on the Function's init Effect:
  * `Effect.provide(Vercel.InvokeFunctionHttp)`.
  */

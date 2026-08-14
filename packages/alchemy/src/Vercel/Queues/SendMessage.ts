@@ -1,10 +1,13 @@
+import * as QueuesData from "@distilled.cloud/vercel/queues_data";
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { ambientOidcTokenUnsafe } from "./OidcToken.ts";
-import { queueBaseUrl, sendMessageRaw } from "./QueueApi.ts";
+import { sendMessageRaw } from "./QueueData.ts";
 import {
   resolveQueueDeploymentId,
   resolveQueueToken,
@@ -211,45 +214,33 @@ export const sendMessageFromEnv = <
           );
         }
       }
-      const headers: Record<string, string> = {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      };
-      if (deploymentId !== undefined) {
-        headers["Vqs-Deployment-Id"] = deploymentId;
-      }
-      if (sendOptions?.idempotencyKey !== undefined) {
-        headers["Vqs-Idempotency-Key"] = sendOptions.idempotencyKey;
-      }
-      const retentionSeconds =
-        sendOptions?.retentionSeconds ?? topic.retentionSeconds;
-      if (retentionSeconds !== undefined) {
-        headers["Vqs-Retention-Seconds"] = String(retentionSeconds);
-      }
-      const delaySeconds = sendOptions?.delaySeconds ?? topic.delaySeconds;
-      if (delaySeconds !== undefined) {
-        headers["Vqs-Delay-Seconds"] = String(delaySeconds);
-      }
-      const response = await fetch(
-        `${queueBaseUrl(topic.region)}/api/v3/topic/${encodeURIComponent(topic.topicName)}`,
-        {
-          method: "POST",
-          headers,
-          body: JSON.stringify(encodeSync(message)),
-        },
+      // Same distilled data-plane op as the Effect clients — hosts, Vqs-*
+      // headers, and the VERCEL_QUEUE_BASE_URL override all live there. Run
+      // one-shot on a fetch-backed client; failures become plain Errors.
+      const result = await Effect.runPromise(
+        QueuesData.sendMessage({
+          region: topic.region,
+          token,
+          topic: topic.topicName,
+          deploymentId,
+          contentType: "application/json",
+          idempotencyKey: sendOptions?.idempotencyKey,
+          retentionSeconds:
+            sendOptions?.retentionSeconds ?? topic.retentionSeconds,
+          delaySeconds: sendOptions?.delaySeconds ?? topic.delaySeconds,
+          payload: JSON.stringify(encodeSync(message)),
+        }).pipe(Effect.result, Effect.provide(FetchHttpClient.layer)),
       );
-      if (response.status === 202) {
-        await response.text();
-        return { messageId: null };
-      }
-      if (!response.ok) {
-        const body = await response.text();
+      if (Result.isFailure(result)) {
+        const error = result.failure;
         throw new Error(
-          `Vercel.sendMessageFromEnv(${topic.topicName}): send failed with ${response.status} ${response.statusText}: ${body}`,
+          `Vercel.sendMessageFromEnv(${topic.topicName}): send failed (${error._tag})` +
+            ("message" in error && error.message !== undefined
+              ? `: ${String(error.message)}`
+              : ""),
         );
       }
-      const json = (await response.json()) as { messageId?: string } | null;
-      return { messageId: json?.messageId ?? null };
+      return { messageId: result.success.messageId ?? null };
     },
   };
 };

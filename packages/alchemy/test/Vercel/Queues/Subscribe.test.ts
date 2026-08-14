@@ -130,11 +130,36 @@ test.provider(
       // …under the stable per-Function consumer group the trigger declares.
       expect(echo!.consumerGroup).toEqual("alchemy-SubscribeFn");
 
-      // 4. Public routing still intact after deliveries.
+      // 4. Async-mode producer (`sendMessageFromEnv`): the Promise-based
+      //    fromEnv client resolves the ambient OIDC token + deployment pin
+      //    itself — same push-delivery loop verifies the send landed.
+      const asyncRunId = yield* Effect.sync(() => crypto.randomUUID());
+      const queuedAsync = (yield* getJson(
+        `${fn.url}/send-async?runId=${asyncRunId}&orderId=fromenv-1`,
+      )) as { queued: boolean; via: string };
+      expect(queuedAsync.queued).toBe(true);
+      expect(queuedAsync.via).toEqual("fromEnv");
+      const drainedAsync = yield* getJson(`${fn.url}/received`).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (body) =>
+            (body as unknown as { received: Echo[] }).received.some(
+              (echo) => echo.runId === asyncRunId,
+            ),
+          times: 40,
+        }),
+      );
+      const asyncEcho = (
+        drainedAsync as unknown as { received: Echo[] }
+      ).received.find((e) => e.runId === asyncRunId);
+      expect(asyncEcho).toBeDefined();
+      expect(asyncEcho!.orderId).toEqual("fromenv-1");
+
+      // 5. Public routing still intact after deliveries.
       const after = (yield* getJson(`${fn.url}/`)) as { ok: boolean };
       expect(after.ok).toBe(true);
 
-      // 5. Cleanup: owned project cascades; queue messages expire on their
+      // 6. Cleanup: owned project cascades; queue messages expire on their
       //    own (300s retention on both topics).
       yield* stack.destroy();
       yield* expectProjectGone(fn.projectId);

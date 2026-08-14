@@ -2,7 +2,6 @@ import {
   createStorageStoreConnection,
   createStorageStoresBlob,
   deleteStorageStoreConnection,
-  deleteStorageStoresBlobById,
   getStorageStoreConnections,
   getStorageStores,
   getStorageStoresById,
@@ -17,6 +16,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { VercelEnvironment } from "../VercelEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { purgeAndDeleteBlobStore } from "./PurgeStore.ts";
 
 const DEFAULT_ACCESS: BlobStoreAccess = "public";
 const DEFAULT_REGION: BlobStoreRegion = "iad1";
@@ -73,6 +73,16 @@ export interface BlobStoreProps {
    * @default "iad1"
    */
   region?: BlobStoreRegion;
+  /**
+   * Whether to delete all blobs when the store is destroyed. Vercel
+   * refuses to delete a non-empty store (409 `not_empty`) and offers no
+   * force parameter, so with `forceDestroy` the provider purges the
+   * store's contents through the data plane before deletion. Without it,
+   * destroying a non-empty store fails with the typed Conflict — the
+   * data-protection default (mirrors S3's `forceDestroy`).
+   * @default false
+   */
+  forceDestroy?: boolean;
   /**
    * Project IDs to connect the store to. Connecting a project injects a
    * `BLOB_READ_WRITE_TOKEN` (encrypted) environment variable into the
@@ -236,7 +246,16 @@ export const BlobStoreProvider = () =>
         (news.region ?? output?.region ?? DEFAULT_REGION) !==
           (output?.region ?? olds.region ?? DEFAULT_REGION)
       ) {
-        return { action: "replace" } as const;
+        return {
+          action: "replace",
+          // A project can hold at most ONE blob-store connection (the
+          // injected env name is fixed: `BLOB_READ_WRITE_TOKEN`, live-
+          // verified 400 `project_env_var_not_unique` on a second connect).
+          // A create-first replacement's successor therefore cannot connect
+          // while the predecessor's connection is still live — delete the
+          // old store first whenever it is connected to any project.
+          deleteFirst: (output?.projectIds.length ?? 0) > 0,
+        } as const;
       }
       return undefined;
     }),
@@ -400,31 +419,21 @@ export const BlobStoreProvider = () =>
         envVarEnvironments: desiredEnvs,
       };
     }),
-    delete: Effect.fn(function* ({ output }) {
-      const { teamId } = yield* VercelEnvironment.current;
-      // Deleting a store does NOT remove the env vars its connections
-      // injected into projects (observed live), so disconnect first.
-      yield* getStorageStoreConnections({
+    delete: Effect.fn(function* ({ olds, output }) {
+      // Vercel refuses to delete a non-empty store (409 `not_empty`, no
+      // force parameter). With `forceDestroy` the helper purges the
+      // contents through the data plane first — harvesting the token
+      // through a live connection, or a throwaway reaper project when the
+      // store is unconnected; without it, a non-empty store surfaces the
+      // platform's typed Conflict (data protection). Either way the helper
+      // disconnects every connection BEFORE the delete (store deletion
+      // does not remove the env vars its connections injected).
+      yield* purgeAndDeleteBlobStore({
         storeId: output.storeId,
-        teamId,
-      }).pipe(
-        Effect.flatMap((observed) =>
-          Effect.forEach(
-            observed.connections,
-            (connection) =>
-              deleteStorageStoreConnection({
-                storeId: output.storeId,
-                connectionId: connection.id,
-                teamId,
-              }).pipe(Effect.catchTag("NotFound", () => Effect.void)),
-            { discard: true },
-          ),
-        ),
-        Effect.catchTag("NotFound", () => Effect.void),
-      );
-      yield* deleteStorageStoresBlobById({ id: output.storeId, teamId }).pipe(
-        Effect.catchTag("NotFound", () => Effect.void),
-      );
+        name: output.name,
+        access: output.access,
+        forceDestroy: olds?.forceDestroy === true,
+      });
     }),
   });
 

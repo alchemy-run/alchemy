@@ -10,9 +10,15 @@ import {
   NONCE_BYTES,
 } from "@/Vercel/StateStore/Codec";
 import {
+  familyBaseOf,
+  isFamilyMember,
+  latestOfFamily,
   outputKey,
   parseRowKey,
   parseStackIndexKey,
+  pickLatestPerFamily,
+  revisionedKey,
+  revisionToken,
   rowKey,
   stackIndexKey,
   stackOutputsPrefix,
@@ -123,5 +129,69 @@ describe("Vercel StateStore Keys", () => {
     expect(parseStackIndexKey("s/")).toBeUndefined();
     expect(parseStackIndexKey("s/a/b")).toBeUndefined();
     expect(parseStackIndexKey("r/a")).toBeUndefined();
+  });
+});
+
+describe("Vercel StateStore Revisions", () => {
+  const base = rowKey("stack", "stage", "my/fqn");
+
+  test("revision tokens sort by timestamp, revisioned keys parse to the base", () => {
+    const older = revisionToken(999, "zzzzzz");
+    const newer = revisionToken(1_000, "aaaaaa");
+    expect(older < newer).toBe(true);
+    const key = revisionedKey(base, newer);
+    expect(familyBaseOf(key)).toBe(base);
+    expect(parseRowKey(key)).toEqual(parseRowKey(base));
+  });
+
+  test("the @ delimiter cannot appear in encoded segments", () => {
+    // `@` in stack/stage/fqn is URI-encoded, so a literal `@` always
+    // marks the revision suffix.
+    const tricky = rowKey("st@ck", "sta@ge", "fq@n");
+    expect(tricky).not.toContain("@");
+    expect(parseRowKey(revisionedKey(tricky, revisionToken(1, "x")))).toEqual({
+      stack: "st@ck",
+      stage: "sta@ge",
+      fqn: "fq@n",
+    });
+  });
+
+  test("latestOfFamily prefers the highest revision over the legacy base", () => {
+    const r1 = revisionedKey(base, revisionToken(1_000, "aa"));
+    const r2 = revisionedKey(base, revisionToken(2_000, "aa"));
+    // Sibling rows sharing the base as a name prefix are NOT family.
+    const sibling = `${base}x`;
+    const siblingRev = revisionedKey(`${base}x`, revisionToken(9_000, "zz"));
+    expect(latestOfFamily(base, [base, r1, r2, sibling, siblingRev])).toBe(r2);
+    expect(latestOfFamily(base, [r2, r1])).toBe(r2);
+    expect(latestOfFamily(base, [base])).toBe(base);
+    expect(latestOfFamily(base, [sibling, siblingRev])).toBeUndefined();
+    expect(latestOfFamily(base, [])).toBeUndefined();
+  });
+
+  test("isFamilyMember distinguishes revisions from prefix-sharing siblings", () => {
+    expect(isFamilyMember(base, base)).toBe(true);
+    expect(isFamilyMember(base, revisionedKey(base, "r"))).toBe(true);
+    expect(isFamilyMember(base, `${base}x`)).toBe(false);
+    expect(isFamilyMember(base, revisionedKey(`${base}x`, "r"))).toBe(false);
+  });
+
+  test("pickLatestPerFamily returns one pathname per row", () => {
+    const otherBase = rowKey("stack", "stage", "other");
+    const picked = pickLatestPerFamily([
+      base,
+      revisionedKey(base, revisionToken(1_000, "aa")),
+      revisionedKey(base, revisionToken(2_000, "aa")),
+      otherBase,
+      revisionedKey(otherBase, revisionToken(500, "bb")),
+      outputKey("stack", "stage"),
+    ]);
+    expect(picked.sort()).toEqual(
+      [
+        revisionedKey(base, revisionToken(2_000, "aa")),
+        revisionedKey(otherBase, revisionToken(500, "bb")),
+        outputKey("stack", "stage"),
+      ].sort(),
+    );
   });
 });

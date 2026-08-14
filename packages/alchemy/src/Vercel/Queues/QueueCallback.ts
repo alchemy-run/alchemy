@@ -4,7 +4,7 @@ import {
   acknowledgeMessageRaw,
   receiveMessageByIdRaw,
   type RawQueueMessage,
-} from "./QueueApi.ts";
+} from "./QueueData.ts";
 import { resolveQueueDeploymentId, resolveQueueToken } from "./QueueClient.ts";
 import { QueueMessageCorrupted, type QueueDeliveryMeta } from "./QueueTypes.ts";
 import type { Topic } from "./Topic.ts";

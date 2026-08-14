@@ -65,6 +65,17 @@ export const makeReadBlobClient = (
  * makes the platform inject `BLOB_READ_WRITE_TOKEN`). Runtime half: the
  * read-only client over `https://blob.vercel-storage.com`.
  *
+ * ## Runtime authorization
+ *
+ * Deployed compute is authorized by the **platform-injected
+ * `BLOB_READ_WRITE_TOKEN`** that Vercel provisions when the store is
+ * connected to the Function's project — alchemy never mints, stores, or
+ * syncs a Blob credential itself; the deploy half only declares the
+ * store↔project connection. The token is store-scoped but read-write: the
+ * platform offers no read-only variant, so this binding's least-privilege
+ * guarantee is enforced at the **client surface** (no `put`/`del` methods
+ * exist on {@link ReadBlobClient}), not at the credential.
+ *
  * Provide on the Function's init Effect:
  * `Effect.provide(Vercel.ReadBlobHttp)`.
  */

@@ -215,7 +215,18 @@ export const DnsRecordProvider = () =>
         "domain" in news
           ? resolveDomainName(news.domain as DnsRecordDomainSource)
           : undefined;
-      if (oldDomain !== undefined && oldDomain !== newDomain) {
+      // Only a RESOLVED differing name is a move. An unresolved domain
+      // input (the parent Domain has its own pending change, e.g. a
+      // delete-first flag replacement under the SAME name) must NOT plan a
+      // replacement: record ids are content-addressed, so a create-first
+      // replacement of an unchanged record re-mints the SAME id and the
+      // old-generation cleanup would delete the successor. Reconcile
+      // observes the actual zone and heals (recreate or move) instead.
+      if (
+        oldDomain !== undefined &&
+        newDomain !== undefined &&
+        oldDomain !== newDomain
+      ) {
         return { action: "replace" } as const;
       }
       if (!isResolved(news)) return undefined;
@@ -300,9 +311,24 @@ export const DnsRecordProvider = () =>
       // Observe — the record id from prior output is a cache, not a
       // guarantee: the record may have been deleted out-of-band, and Vercel
       // mints a new id on every update.
-      const observed = output?.recordId
+      let observed = output?.recordId
         ? yield* observeRecord(output.recordId)
         : undefined;
+
+      // A record cannot be moved across zones via update — when the
+      // desired zone differs from the observed one (a move that diff could
+      // not classify because the parent Domain's output was unresolved at
+      // plan time), remove the old record and fall through to create.
+      if (observed !== undefined && observed.domain !== domain) {
+        yield* dns
+          .removeRecord({
+            domain: observed.domain,
+            recordId: observed.id,
+            teamId,
+          })
+          .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        observed = undefined;
+      }
 
       if (observed === undefined) {
         // Ensure — create. Vercel upserts an identical (name, type, value)

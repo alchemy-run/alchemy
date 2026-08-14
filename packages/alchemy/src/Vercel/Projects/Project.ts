@@ -144,7 +144,17 @@ const createProjectName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {
     return (
       name ??
-      (yield* createPhysicalName({ id, maxLength: 100, lowercase: true }))
+      // 35 chars, not Vercel's 100-char cap: the auto-assigned
+      // `{name}.vercel.app` domain truncates to the first 35 chars of the
+      // name, and Vercel's taken-label disambiguation races under
+      // concurrent creation — the loser gets NO domain (see
+      // Functions/Function.ts createProjectName for the probe references).
+      (yield* createPhysicalName({
+        id,
+        maxLength: 35,
+        suffixLength: 8,
+        lowercase: true,
+      }))
     );
   });
 

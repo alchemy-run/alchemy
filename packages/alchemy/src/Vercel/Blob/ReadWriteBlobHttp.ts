@@ -16,6 +16,14 @@ import { ReadWriteBlob, type ReadWriteBlobClient } from "./ReadWriteBlob.ts";
  * makes the platform inject `BLOB_READ_WRITE_TOKEN`). Runtime half: the
  * full read/write client over `https://blob.vercel-storage.com`.
  *
+ * ## Runtime authorization
+ *
+ * Deployed compute is authorized by the **platform-injected
+ * `BLOB_READ_WRITE_TOKEN`** provisioned via the store↔project connection
+ * the deploy half declares — alchemy never mints or syncs a Blob
+ * credential itself, and the token is exactly the store-scoped read-write
+ * authority this binding's client exposes.
+ *
  * Provide on the Function's init Effect:
  * `Effect.provide(Vercel.ReadWriteBlobHttp)`.
  */

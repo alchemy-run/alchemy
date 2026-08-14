@@ -20,11 +20,19 @@ import type { EdgeConfig } from "./EdgeConfig.ts";
  * Provide on the Function's init Effect:
  * `Effect.provide(Vercel.ReadEdgeConfigHttp)`.
  *
- * There is deliberately no Write/ReadWrite sibling: Edge Config writes go
- * through the Vercel management API, which only accepts account/team API
- * tokens — there is no scoped or OIDC-mintable write credential that would
- * be safe to place in Function env. Write items at deploy time via the
- * {@link EdgeConfig} resource's declarative `items` instead.
+ * ## Runtime authorization
+ *
+ * Read access is least-privilege by construction: the minted
+ * {@link EdgeConfigToken} is a **read-only, per-config data-plane token**
+ * (plaintext disclosed once at mint) — it grants nothing beyond reading
+ * this one config. No management credential ever reaches the Function.
+ *
+ * Writes are NOT auto-bound: the management API only accepts team/user-wide
+ * tokens (live-verified — project-scoped tokens cannot see team-owned Edge
+ * Configs), so runtime writes are an explicit opt-in via
+ * `WriteEdgeConfigHttp({ token })` (see the security note on
+ * `EdgeConfigWrite`). Prefer deploy-time declarative `items` on the
+ * {@link EdgeConfig} resource where possible.
  */
 export const ReadEdgeConfigHttp = Layer.effect(
   EdgeConfigRead,

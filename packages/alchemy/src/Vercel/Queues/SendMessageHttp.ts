@@ -23,6 +23,18 @@ import type { Topic } from "./Topic.ts";
  * authenticated with the ambient OIDC token and pinned to
  * `VERCEL_DEPLOYMENT_ID` unless the topic is `partition: "shared"`.
  *
+ * ## Runtime authorization
+ *
+ * Deployed compute is authorized by the **ambient per-deployment OIDC
+ * token** the platform provisions on every invocation (request-context
+ * `x-vercel-oidc-token` header, falling back to `VERCEL_OIDC_TOKEN`) — no
+ * credential is ever minted, bound, or synced by alchemy; the deploy half
+ * registers only non-secret topic metadata (name, region, partition mode).
+ * The token is scoped to the (project, environment) queue namespace and
+ * expires on its own. External (non-Vercel) producers mint a
+ * development-scoped token via `projects.getProjectToken`
+ * (`mintProjectOidcToken` / `projectOidcToken` in `OidcToken.ts`).
+ *
  * Provide on the Function's init Effect:
  * `Effect.provide(Vercel.SendMessageHttp)`.
  */

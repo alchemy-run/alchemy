@@ -30,6 +30,26 @@ import { Uploads } from "./fixtures/uploads-store.ts";
 
 const { test } = Test.make({ providers: Vercel.providers() });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Least-privilege pins (compile-time): the platform only issues a read-write
+// store token, so access-level separation lives entirely on the CLIENT
+// surface — these pins fail the type-check if a write method ever leaks onto
+// the read client (or vice versa).
+// ─────────────────────────────────────────────────────────────────────────────
+type KeysOf<T> = keyof T & string;
+type ReadCannotWrite =
+  Extract<KeysOf<Vercel.ReadBlobClient>, "put" | "del"> extends never
+    ? true
+    : never;
+type WriteCannotRead =
+  Extract<KeysOf<Vercel.WriteBlobClient>, "get" | "head" | "list"> extends never
+    ? true
+    : never;
+const _readCannotWrite: ReadCannotWrite = true;
+const _writeCannotRead: WriteCannotRead = true;
+void _readCannotWrite;
+void _writeCannotRead;
+
 const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
@@ -188,14 +208,23 @@ test.provider(
       )) as { text: string };
       expect(readOnly.text).toEqual("hello-v2");
 
-      // 7. Delete, then the typed NotFound surfaces on get.
+      // 7. Delete, then the typed NotFound surfaces on get. Content reads
+      //    ride the CDN, so read-after-delete is eventually consistent —
+      //    bounded poll.
       const del = (yield* getJson(
         `${fn.url}/blob/del?path=${encodeURIComponent(path)}`,
       )) as { ok: boolean };
       expect(del.ok).toBe(true);
-      const gone = (yield* getJson(
+      const gone = yield* getJson(
         `${fn.url}/blob/get?path=${encodeURIComponent(path)}`,
-      )) as { notFound?: boolean };
+      ).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (body) => (body as { notFound?: boolean }).notFound === true,
+          times: 10,
+        }),
+        Effect.map((body) => body as { notFound?: boolean }),
+      );
       expect(gone.notFound).toBe(true);
 
       // 8. Churn regression: an identical redeploy is a skip-on-hash no-op —

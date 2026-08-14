@@ -205,7 +205,21 @@ export const ProjectDomainProvider = () =>
           ? resolveProjectId(news.project as ProjectDomainProjectSource)
           : undefined;
       if (oldProjectId !== undefined && oldProjectId !== newProjectId) {
-        return { action: "replace" } as const;
+        // A domain name can only be attached to ONE project on the team at
+        // a time — a create-first replacement that re-points the SAME name
+        // at a new project Conflicts while the old attachment still exists,
+        // so it must detach first. When the name changes too (or is not yet
+        // resolved), the successor's add cannot collide with the old row
+        // only if the resolved name is known to differ.
+        const oldName = output?.name ?? olds.name;
+        const newName =
+          "name" in news && typeof news.name === "string"
+            ? news.name
+            : undefined;
+        return oldName !== undefined &&
+          (newName === undefined || newName === oldName)
+          ? ({ action: "replace", deleteFirst: true } as const)
+          : ({ action: "replace" } as const);
       }
       if (!isResolved(news)) return undefined;
       if (!output) return undefined;
@@ -241,22 +255,36 @@ export const ProjectDomainProvider = () =>
 
       if (observed === undefined) {
         // Ensure — attach. A concurrent attach races as Conflict
-        // (`domain_already_in_use` on this project); re-observe.
-        yield* projects
-          .addProjectDomain({
-            idOrName: projectId,
-            teamId,
-            name: news.name,
-            ...(news.gitBranch !== undefined
-              ? { gitBranch: news.gitBranch }
-              : {}),
-            ...(news.redirect !== undefined ? { redirect: news.redirect } : {}),
-            ...(news.redirectStatusCode !== undefined
-              ? { redirectStatusCode: news.redirectStatusCode }
-              : {}),
-          })
-          .pipe(Effect.catchTag("Conflict", () => Effect.void));
-        observed = yield* observeProjectDomain(projectId, news.name);
+        // (`domain_already_in_use` on this project); re-observe. A domain
+        // that was detached or deleted moments earlier (multi-cycle
+        // redeploys, replacement successors) can transiently Conflict or
+        // lag out of the list — retry the add+observe loop boundedly until
+        // the attachment is visible.
+        observed = yield* Effect.gen(function* () {
+          yield* projects
+            .addProjectDomain({
+              idOrName: projectId,
+              teamId,
+              name: news.name,
+              ...(news.gitBranch !== undefined
+                ? { gitBranch: news.gitBranch }
+                : {}),
+              ...(news.redirect !== undefined
+                ? { redirect: news.redirect }
+                : {}),
+              ...(news.redirectStatusCode !== undefined
+                ? { redirectStatusCode: news.redirectStatusCode }
+                : {}),
+            })
+            .pipe(Effect.catchTag("Conflict", () => Effect.void));
+          return yield* observeProjectDomain(projectId, news.name);
+        }).pipe(
+          Effect.repeat({
+            schedule: Schedule.exponential("1 second"),
+            until: (o) => o !== undefined,
+            times: 5,
+          }),
+        );
         if (observed === undefined) {
           return yield* Effect.die(
             `Vercel project domain ${news.name} not observable after add on project ${projectId}`,

@@ -9,7 +9,7 @@ import {
   receiveMessageByIdRaw,
   receiveMessagesRaw,
   type RawQueueMessage,
-} from "./QueueApi.ts";
+} from "./QueueData.ts";
 import {
   resolveQueueDeploymentId,
   resolveQueueToken,

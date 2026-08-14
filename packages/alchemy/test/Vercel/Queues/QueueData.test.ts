@@ -1,26 +1,29 @@
 /**
- * Pure unit tests for the queue data plane's multipart/mixed parsing — no
- * cloud access. The live protocol is pinned by `Queues.test.ts`.
+ * Pure unit tests pinning the DISTILLED multipart/mixed parser the queue
+ * receive path rides (`@distilled.cloud/vercel` data-protocol) — no cloud
+ * access. The live protocol is pinned by `Queues.test.ts`.
  */
 import {
-  parseBoundary,
+  parseMultipartBoundary,
   parseMultipartMixed,
-} from "@/Vercel/Queues/QueueApi.ts";
+} from "@distilled.cloud/vercel";
 import { expect, it } from "alchemy-test";
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 
-it("parseBoundary extracts quoted and unquoted boundaries", () => {
-  expect(parseBoundary("multipart/mixed; boundary=abc123")).toEqual("abc123");
-  expect(parseBoundary('multipart/mixed; boundary="abc 123"')).toEqual(
+it("parseMultipartBoundary extracts quoted and unquoted boundaries", () => {
+  expect(parseMultipartBoundary("multipart/mixed; boundary=abc123")).toEqual(
+    "abc123",
+  );
+  expect(parseMultipartBoundary('multipart/mixed; boundary="abc 123"')).toEqual(
     "abc 123",
   );
-  expect(parseBoundary("multipart/mixed;boundary=x;charset=utf-8")).toEqual(
-    "x",
-  );
-  expect(parseBoundary("application/json")).toEqual(undefined);
-  expect(parseBoundary(undefined)).toEqual(undefined);
+  expect(
+    parseMultipartBoundary("multipart/mixed;boundary=x;charset=utf-8"),
+  ).toEqual("x");
+  expect(parseMultipartBoundary("application/json")).toEqual(undefined);
+  expect(parseMultipartBoundary(undefined)).toEqual(undefined);
 });
 
 it("parseMultipartMixed parses a two-part body with Vqs headers", () => {

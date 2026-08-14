@@ -207,7 +207,15 @@ export const LocalFunctionProvider = () =>
         }
         const name =
           props.name ??
-          (yield* createPhysicalName({ id, maxLength: 100, lowercase: true }));
+          // Mirrors the live provider's createProjectName (35-char cap —
+          // see Function.ts for the domain-truncation rationale) so dev
+          // and live generate identical names.
+          (yield* createPhysicalName({
+            id,
+            maxLength: 35,
+            suffixLength: 8,
+            lowercase: true,
+          }));
         // Merge the binding channel (same shape as the live provider's
         // collectBindings).
         const active = bindings.filter(
@@ -537,9 +545,12 @@ startVercelFunctionDevServer({
           const name =
             typeof props.name === "string"
               ? props.name
-              : yield* createPhysicalName({
+              : // Mirrors the live createProjectName (35-char cap, see
+                // Function.ts).
+                yield* createPhysicalName({
                   id,
-                  maxLength: 100,
+                  maxLength: 35,
+                  suffixLength: 8,
                   lowercase: true,
                 });
           const proxy = yield* ensureProxy(

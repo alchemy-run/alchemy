@@ -133,6 +133,16 @@ export interface FunctionProps extends PlatformProps {
    * shadow it (live-verified precedence). Destroying the stage removes
    * only its alias and its meta-stamped deployments, leaving the shared
    * project and every other stage untouched.
+   *
+   * Caveat (live-verified platform behavior): when the shared project has
+   * NO production deployment yet, Vercel auto-promotes the first
+   * deployment to production even though the tenant requested a preview —
+   * the tenant's content then serves on the project's production domain
+   * until a real production deployment supersedes it. Deploy a production
+   * owner first if that matters. A preview-intent tenant still destroys
+   * cleanly (deleting its auto-promoted deployment restores the project's
+   * pre-tenant state); only an explicit `target: "production"` tenant
+   * refuses to delete its active production deployment on destroy.
    */
   project?: string;
   /**
@@ -632,7 +642,24 @@ const createProjectName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {
     return (
       name ??
-      (yield* createPhysicalName({ id, maxLength: 100, lowercase: true }))
+      // maxLength 35, NOT Vercel's 100-char project-name cap: Vercel
+      // truncates the auto-assigned `{name}.vercel.app` domain to the FIRST
+      // 35 CHARS of the project name (live-verified,
+      // .probes/depth2e-name-lengths.ts) and disambiguates taken labels
+      // with a random word suffix — a process that RACES under concurrent
+      // project creation and can leave the losing project with NO assigned
+      // domain at all (.probes/depth2d-concurrent-collide.ts), i.e. no
+      // public URL. Engine-generated names sharing a stack/stage prefix
+      // would collide past 35 chars whenever a stack deploys two+
+      // Functions, so keep the whole name inside the never-truncated
+      // budget (8-char suffix + createPhysicalName's 8-char truncation
+      // hash keep it unique).
+      (yield* createPhysicalName({
+        id,
+        maxLength: 35,
+        suffixLength: 8,
+        lowercase: true,
+      }))
     );
   });
 
@@ -878,6 +905,18 @@ export const FunctionProvider = () =>
             const url =
               fresh !== undefined ? readProductionUrl(fresh) : undefined;
             if (url !== undefined) return url;
+            // The project body often carries no alias rows right after a
+            // deploy — read the ASSIGNED production domain off the project's
+            // domains listing instead. This must come before any
+            // deployment-derived fallback: for >63-char project names
+            // Vercel truncates hostnames, and the deployment's `alias`
+            // array then contains a team-suffixed alias that is SSO-gated
+            // AND identical across projects sharing the truncated prefix
+            // (live-verified, .probes/depth2c-dep-alias.ts) — while the
+            // domains listing is always project-unique (Vercel
+            // disambiguates with a suffix).
+            const assigned = yield* readAssignedProductionUrl(input.projectId);
+            if (assigned !== undefined) return assigned;
           }
           return input.deploymentUrl !== undefined
             ? `https://${input.deploymentUrl}`
@@ -1288,7 +1327,12 @@ export const FunctionProvider = () =>
                 : yield* functionUrl({
                     projectId: project.id,
                     target,
-                    deploymentUrl: result.aliases[0] ?? result.deploymentUrl,
+                    // NOT `result.aliases[0]`: the deployment alias rows are
+                    // nondeterministically ordered and can lead with the
+                    // truncated team-suffixed alias, which is SSO-gated and
+                    // collides across long-named projects. The
+                    // deployment-specific URL is always unique.
+                    deploymentUrl: result.deploymentUrl,
                   }),
             stageAlias,
             hash: { artifact: artifact.hash, code: codeHash, env: envHash },
@@ -1315,7 +1359,18 @@ export const FunctionProvider = () =>
               (d) =>
                 d.target === "production" && d.readySubstate === "PROMOTED",
             );
-            if (activeProduction !== undefined) {
+            // The refusal keys on the tenant's declared INTENT, not the
+            // observed target: Vercel auto-promotes the first deployment of
+            // a project that has no production deployment, even when
+            // `target` is omitted (live-verified — a preview-intent tenant
+            // deployed into a fresh shared project lands `target:
+            // "production"`, PROMOTED). Deleting that auto-promoted
+            // deployment restores the project's pre-tenant state (no
+            // production existed before us), so a preview-intent tenant
+            // always drains its own deployments; only an explicit
+            // `target: "production"` tenant refuses to brick the site.
+            const productionIntent = olds.target === "production";
+            if (activeProduction !== undefined && productionIntent) {
               return yield* new TenantProductionDeleteRefused({
                 message:
                   `Vercel.Function(${id}): refusing to delete deployment ${activeProduction.uid} — it is the active production deployment of foreign project ${output.projectId}. ` +

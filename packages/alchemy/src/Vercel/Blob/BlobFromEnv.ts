@@ -1,22 +1,35 @@
 /**
  * Promise-based Blob client for **plain async Functions** (no Effect
- * runtime shipped in the bundle). Deliberately dependency-free (plain
- * `fetch`) so bundling it into an async Function stays cheap and safe.
+ * runtime exposed to the caller). Rides the same distilled Blob data-plane
+ * operations (`@distilled.cloud/vercel/blob_data`) as the Effect bindings —
+ * one live-verified wire protocol for every client — run one-shot on a
+ * fetch-backed HttpClient with failures surfaced as plain `Error`s.
  * For Effect code use the `ReadBlob`/`WriteBlob`/`ReadWriteBlob` bindings.
  */
-import type {
-  BlobListItem,
-  BlobObject,
-  ListBlobsOptions,
-  ListBlobsResult,
-  PutBlobBody,
-  PutBlobOptions,
-  PutBlobResult,
+import * as blobData from "@distilled.cloud/vercel/blob_data";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import {
+  BLOB_API_URL_ENV,
+  bareStoreId,
+  blobUrlOf,
+  contentUrlOf,
+  DEFAULT_BLOB_API_URL,
+  type BlobScope,
+} from "./BlobHttp.ts";
+import {
+  BLOB_TOKEN_ENV,
+  type BlobObject,
+  type ListBlobsOptions,
+  type ListBlobsResult,
+  type PutBlobBody,
+  type PutBlobOptions,
+  type PutBlobResult,
 } from "./BlobTypes.ts";
-
-const DEFAULT_BLOB_API_URL = "https://blob.vercel-storage.com";
-const BLOB_TOKEN_ENV = "BLOB_READ_WRITE_TOKEN";
-const BLOB_API_VERSION = "12";
 
 export interface BlobFromEnvOptions {
   /**
@@ -30,7 +43,13 @@ export interface BlobFromEnvOptions {
    * @default "public"
    */
   readonly access?: "public" | "private";
-  /** Data-plane endpoint override (defaults to `VERCEL_BLOB_API_URL` or the public endpoint). */
+  /**
+   * Explicit data-plane endpoint override for THIS client (out-of-band use,
+   * e.g. a test process pointing at the local emulator). Inside a Function
+   * you never need it: the distilled operations read the
+   * `VERCEL_BLOB_API_URL` env var per request, which dev-mode emulation
+   * injects automatically.
+   */
   readonly apiUrl?: string;
 }
 
@@ -68,9 +87,6 @@ const resolveToken = (options?: BlobFromEnvOptions): string => {
   return token;
 };
 
-const encodePathname = (pathname: string): string =>
-  pathname.split("/").map(encodeURIComponent).join("/");
-
 /** Derive the bare store id from the token (`vercel_blob_rw_{storeId}_…`). */
 const storeIdOfToken = (token: string): string => {
   const part = token.split("_")[3];
@@ -82,19 +98,83 @@ const storeIdOfToken = (token: string): string => {
   return part;
 };
 
-const raise = async (operation: string, res: Response): Promise<never> => {
-  const body = await res.text();
-  let message = body !== "" ? body : `HTTP ${res.status}`;
-  try {
-    const parsed = JSON.parse(body) as { error?: { message?: string } };
-    message = parsed?.error?.message ?? message;
-  } catch {
-    // non-JSON error body — keep the raw text
-  }
-  throw new Error(
-    `Vercel.readWriteBlobFromEnv: ${operation} failed with ${res.status}: ${message}`,
-  );
+/** The full error union across the distilled Blob data-plane operations. */
+type BlobDataError =
+  | blobData.PutBlobError
+  | blobData.HeadBlobError
+  | blobData.GetBlobContentError
+  | blobData.ListBlobsError
+  | blobData.DeleteBlobsError;
+
+/** HTTP status behind each typed data-plane error tag (for error messages). */
+const ERROR_STATUS: Record<string, number> = {
+  BlobAlreadyExists: 400,
+  BlobBadRequest: 400,
+  BlobUnauthorized: 401,
+  BlobForbidden: 403,
+  BlobNotFound: 404,
+  BlobPreconditionFailed: 412,
+  Unauthorized: 401,
+  PaymentRequired: 402,
+  Gone: 410,
+  TooManyRequests: 429,
+  InternalServerError: 500,
+  BadGateway: 502,
+  ServiceUnavailable: 503,
+  GatewayTimeout: 504,
 };
+
+const statusOf = (error: BlobDataError): number | undefined =>
+  error._tag === "HttpClientError"
+    ? error.response?.status
+    : ERROR_STATUS[error._tag];
+
+const stripTrailingSlash = (value: string): string => value.replace(/\/+$/, "");
+
+const PER_STORE_HOST_SUFFIX = ".blob.vercel-storage.com";
+
+/**
+ * Re-home a data-plane request onto an explicit `apiUrl` override (used
+ * out-of-band, where injecting `VERCEL_BLOB_API_URL` process-wide would
+ * race concurrent live-endpoint calls). Mirrors the distilled protocol's
+ * own override mapping: control ops move to `{override}`, per-store content
+ * reads to `{override}/{store}`.
+ */
+const rehomeRequest =
+  (override: string) =>
+  (
+    request: HttpClientRequest.HttpClientRequest,
+  ): HttpClientRequest.HttpClientRequest => {
+    const base = stripTrailingSlash(override);
+    // Already re-homed by a VERCEL_BLOB_API_URL env override — swap prefixes.
+    const envOverride = process.env[BLOB_API_URL_ENV];
+    if (envOverride !== undefined && envOverride !== "") {
+      const envBase = stripTrailingSlash(envOverride);
+      return request.url.startsWith(envBase)
+        ? HttpClientRequest.setUrl(
+            request,
+            `${base}${request.url.slice(envBase.length)}`,
+          )
+        : request;
+    }
+    const url = new URL(request.url);
+    // Control operations ride the default endpoint.
+    if (url.origin === DEFAULT_BLOB_API_URL) {
+      return HttpClientRequest.setUrl(
+        request,
+        `${base}${url.pathname}${url.search}`,
+      );
+    }
+    // Content reads ride the per-store host — move to the override's path form.
+    if (url.hostname.endsWith(PER_STORE_HOST_SUFFIX)) {
+      const store = url.hostname.slice(0, -PER_STORE_HOST_SUFFIX.length);
+      return HttpClientRequest.setUrl(
+        request,
+        `${base}/${store}${url.pathname}${url.search}`,
+      );
+    }
+    return request;
+  };
 
 /**
  * Build a promise-based Blob client for a plain async Function from the
@@ -120,124 +200,151 @@ export const readWriteBlobFromEnv = (
   options?: BlobFromEnvOptions,
 ): AsyncReadWriteBlobClient => {
   const access = options?.access ?? "public";
-  const apiUrl = () =>
-    options?.apiUrl ?? process.env.VERCEL_BLOB_API_URL ?? DEFAULT_BLOB_API_URL;
-  const blobUrl = (token: string, pathname: string) =>
-    `https://${storeIdOfToken(token).toLowerCase()}.${access}.blob.vercel-storage.com/${encodePathname(pathname)}`;
-  // With a data-plane override (`VERCEL_BLOB_API_URL`, dev-mode emulation)
-  // content is served by the override host under
-  // `/{storeIdLower}.{access}/{pathname}` instead of the canonical host.
-  const contentUrl = (token: string, pathname: string) => {
-    const base = apiUrl();
-    return base === DEFAULT_BLOB_API_URL
-      ? blobUrl(token, pathname)
-      : `${base}/${storeIdOfToken(token).toLowerCase()}.${access}/${encodePathname(pathname)}`;
-  };
-  const headers = (token: string, extra?: Record<string, string>) => ({
-    authorization: `Bearer ${token}`,
-    "x-api-version": BLOB_API_VERSION,
-    ...extra,
+  const apiUrlOverride = options?.apiUrl;
+  const scopeOf = (token: string): BlobScope => ({
+    token: Redacted.make(token),
+    storeId: storeIdOfToken(token),
+    access,
+    apiUrl:
+      apiUrlOverride ?? process.env[BLOB_API_URL_ENV] ?? DEFAULT_BLOB_API_URL,
   });
+  // Same distilled data-plane ops as the Effect clients — endpoint
+  // resolution (`VERCEL_BLOB_API_URL`), `x-api-version`, and the typed
+  // error matchers all live there. Run one-shot on a fetch-backed client;
+  // failures become plain Errors.
+  const run = async <A>(
+    operation: string,
+    effect: Effect.Effect<A, BlobDataError, HttpClient.HttpClient>,
+  ): Promise<A> => {
+    const rehomed =
+      apiUrlOverride === undefined
+        ? effect
+        : effect.pipe(
+            Effect.updateService(HttpClient.HttpClient, (client) =>
+              HttpClient.mapRequest(client, rehomeRequest(apiUrlOverride)),
+            ),
+          );
+    const result = await Effect.runPromise(
+      Effect.result(rehomed).pipe(Effect.provide(FetchHttpClient.layer)),
+    );
+    if (Result.isFailure(result)) {
+      const cause = result.failure;
+      const status = statusOf(cause);
+      const message =
+        "message" in cause && cause.message !== undefined
+          ? String(cause.message)
+          : cause._tag;
+      throw new Error(
+        `Vercel.readWriteBlobFromEnv: ${operation} failed with ${status ?? cause._tag}: ${message}`,
+        { cause },
+      );
+    }
+    return result.success;
+  };
 
   return {
     async put(pathname, body, putOptions) {
-      const token = resolveToken(options);
-      const res = await fetch(
-        `${apiUrl()}/?pathname=${encodeURIComponent(pathname)}`,
-        {
-          method: "PUT",
-          headers: headers(token, {
-            "x-vercel-blob-access": access,
-            "content-type":
-              putOptions?.contentType ?? "application/octet-stream",
-            ...(putOptions?.ifMatch !== undefined
-              ? { "x-if-match": putOptions.ifMatch }
-              : {}),
-            // The data plane's WIRE default (header absent) is to REFUSE
-            // overwrites — send the header explicitly so the documented
-            // client default (`allowOverwrite: true`) actually overwrites,
-            // matching the Effect client (`putBlobRaw`).
-            "x-allow-overwrite":
-              putOptions?.allowOverwrite === false ? "0" : "1",
-          }),
-          body: body as BodyInit,
-        },
+      const scope = scopeOf(resolveToken(options));
+      const response = await run(
+        "put",
+        blobData.putBlob({
+          token: scope.token,
+          pathname,
+          access,
+          contentType: putOptions?.contentType ?? "application/octet-stream",
+          ifMatch: putOptions?.ifMatch,
+          // The data plane's WIRE default (header absent) is to REFUSE
+          // overwrites — send the header explicitly so the documented
+          // client default (`allowOverwrite: true`) actually overwrites,
+          // matching the Effect client (`putBlobRaw`).
+          allowOverwrite: putOptions?.allowOverwrite === false ? "0" : "1",
+          body,
+        }),
       );
-      if (!res.ok) return raise("put", res);
-      return (await res.json()) as PutBlobResult;
+      return {
+        url: response.url,
+        downloadUrl: response.downloadUrl,
+        pathname: response.pathname,
+        contentType: response.contentType,
+        contentDisposition: response.contentDisposition,
+        etag: response.etag,
+      } satisfies PutBlobResult;
     },
     async head(pathname) {
-      const token = resolveToken(options);
-      const res = await fetch(
-        `${apiUrl()}/?url=${encodeURIComponent(blobUrl(token, pathname))}`,
-        { headers: headers(token) },
+      const scope = scopeOf(resolveToken(options));
+      const response = await run(
+        "head",
+        blobData.headBlob({
+          token: scope.token,
+          url: blobUrlOf(scope, pathname),
+        }),
       );
-      if (!res.ok) return raise("head", res);
-      const json = (await res.json()) as Omit<BlobObject, "uploadedAt"> & {
-        uploadedAt: string;
-      };
-      return { ...json, uploadedAt: new Date(json.uploadedAt) };
+      return {
+        url: response.url,
+        downloadUrl: response.downloadUrl,
+        pathname: response.pathname,
+        contentType: response.contentType,
+        contentDisposition: response.contentDisposition,
+        size: response.size,
+        uploadedAt: new Date(response.uploadedAt),
+        cacheControl: response.cacheControl,
+        etag: response.etag,
+      } satisfies BlobObject;
     },
     async get(pathname) {
-      const token = resolveToken(options);
-      const url = contentUrl(token, pathname);
-      const res = await fetch(url, { headers: headers(token) });
-      if (!res.ok) return raise("get", res);
-      const bytes = new Uint8Array(await res.arrayBuffer());
+      const scope = scopeOf(resolveToken(options));
+      const response = await run(
+        "get",
+        blobData.getBlobContent({
+          store: `${bareStoreId(scope.storeId).toLowerCase()}.${access}`,
+          token: scope.token,
+          pathname,
+        }),
+      );
+      const bytes = response.body;
       return {
         pathname,
-        url,
-        contentType: res.headers.get("content-type") ?? undefined,
-        etag: res.headers.get("etag") ?? undefined,
+        url: contentUrlOf(scope, pathname),
+        contentType: response.contentType,
+        etag: response.etag,
         size: bytes.byteLength,
         bytes,
         text: new TextDecoder().decode(bytes),
       };
     },
     async list(listOptions) {
-      const token = resolveToken(options);
-      const params = new URLSearchParams();
-      if (listOptions?.prefix !== undefined)
-        params.set("prefix", listOptions.prefix);
-      if (listOptions?.limit !== undefined)
-        params.set("limit", String(listOptions.limit));
-      if (listOptions?.cursor !== undefined)
-        params.set("cursor", listOptions.cursor);
-      const query = params.toString();
-      const res = await fetch(
-        `${apiUrl()}/${query === "" ? "" : `?${query}`}`,
-        { headers: headers(token) },
+      const scope = scopeOf(resolveToken(options));
+      const response = await run(
+        "list",
+        blobData.listBlobs({
+          token: scope.token,
+          prefix: listOptions?.prefix,
+          limit: listOptions?.limit,
+          cursor: listOptions?.cursor,
+        }),
       );
-      if (!res.ok) return raise("list", res);
-      const json = (await res.json()) as {
-        hasMore: boolean;
-        cursor?: string;
-        blobs: Array<Omit<BlobListItem, "uploadedAt"> & { uploadedAt: string }>;
-      };
       return {
-        hasMore: json.hasMore,
-        cursor: json.cursor,
-        blobs: json.blobs.map((blob) => ({
-          ...blob,
+        hasMore: response.hasMore,
+        cursor: response.cursor,
+        blobs: response.blobs.map((blob) => ({
+          url: blob.url,
+          downloadUrl: blob.downloadUrl,
+          pathname: blob.pathname,
+          size: blob.size,
           uploadedAt: new Date(blob.uploadedAt),
+          etag: blob.etag,
         })),
-      };
+      } satisfies ListBlobsResult;
     },
     async del(pathnames) {
-      const token = resolveToken(options);
+      const scope = scopeOf(resolveToken(options));
       const list = typeof pathnames === "string" ? [pathnames] : pathnames;
       const urls = list.map((pathname) =>
         // Accept full content URLs (canonical https, or the local
         // emulator's http form) as well as bare pathnames.
-        /^https?:\/\//.test(pathname) ? pathname : blobUrl(token, pathname),
+        /^https?:\/\//.test(pathname) ? pathname : blobUrlOf(scope, pathname),
       );
-      const res = await fetch(`${apiUrl()}/delete`, {
-        method: "POST",
-        headers: headers(token, { "content-type": "application/json" }),
-        body: JSON.stringify({ urls }),
-      });
-      if (!res.ok) return raise("del", res);
-      await res.text();
+      await run("del", blobData.deleteBlobs({ token: scope.token, urls }));
     },
   };
 };

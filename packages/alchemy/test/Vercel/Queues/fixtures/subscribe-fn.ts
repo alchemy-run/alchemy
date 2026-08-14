@@ -106,6 +106,25 @@ export default class SubscribeFn extends Vercel.Function<SubscribeFn>()(
             runId,
           });
         }
+        if (url.pathname === "/send-async") {
+          // Async-mode producer path: `sendMessageFromEnv` resolves the
+          // ambient OIDC token + deployment pin from the live environment
+          // and returns a Promise — the exact client a plain (non-Effect)
+          // Function would use. Driving it from here pins the fromEnv
+          // variant without a second deployed fixture.
+          const runId = url.searchParams.get("runId") ?? "missing-run-id";
+          const orderId = url.searchParams.get("orderId") ?? "order-async-1";
+          const asyncOrders = Vercel.sendMessageFromEnv(Orders);
+          yield* Effect.tryPromise(() =>
+            asyncOrders.send({ orderId, amountCents: 100, runId }),
+          ).pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({
+            queued: true,
+            orderId,
+            runId,
+            via: "fromEnv",
+          });
+        }
         if (url.pathname === "/received") {
           // One bounded drain per call; the test polls this route.
           const batch = yield* echoReader

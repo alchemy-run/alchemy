@@ -70,6 +70,14 @@ type AliasAttributes = Alias["Attributes"];
  * (`x-vercel-protection-bypass`), minted *before* the aliased deployment
  * was created.
  *
+ * Note (live-verified): {@link rollbackProduction} /
+ * {@link promoteToProduction} SWEEP custom aliases — every alias riding the
+ * outgoing production deployment is re-pointed to the rollback/promote
+ * target along with the production domains. An `Alias` pinned to the
+ * *active production* deployment therefore tracks production through those
+ * actions; pin a non-production (e.g. superseded) deployment when you need
+ * a version URL that stays put.
+ *
  * @resource
  * @section Aliasing a deployment
  * @example Pin a stable URL to the current deployment
@@ -162,6 +170,21 @@ export const AliasProvider = () =>
           `Vercel.Alias(${id}): invalid deployment source — must be a Function, { deploymentId } or a plain deployment id`,
         );
       }
+      if (deploymentId === "") {
+        // The upstream is a precreate STUB (a Function's `deploymentId` is
+        // `""` until its first deploy resolves — engine phase 1 may hand
+        // consumers of cycle members the stub output). Return an inert row
+        // instead of calling the API with an empty id; phase-3 convergence
+        // re-runs reconcile with the final deployment id (the props delta
+        // `"" -> dpl_…` marks this node changed).
+        return {
+          uid: "",
+          alias: aliasName,
+          url: `https://${aliasName}`,
+          deploymentId: undefined,
+          projectId: undefined,
+        } satisfies AliasAttributes;
+      }
 
       // Observe — the alias may already exist (crash recovery, re-point).
       let observed = yield* observeAlias(aliasName);
@@ -195,9 +218,10 @@ export const AliasProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const { teamId } = yield* VercelEnvironment.current;
       // deleteAlias accepts the alias id or hostname; the uid is stable
-      // across re-points, the hostname is the fallback for legacy rows.
+      // across re-points, the hostname is the fallback for legacy rows and
+      // for inert stub rows (uid `""`, never assigned — NotFound is caught).
       yield* aliases
-        .deleteAlias({ aliasId: output.uid ?? output.alias, teamId })
+        .deleteAlias({ aliasId: output.uid || output.alias, teamId })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
     }),
   });
