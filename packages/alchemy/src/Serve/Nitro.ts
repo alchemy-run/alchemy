@@ -1,11 +1,11 @@
 /**
- * `alchemy/serve/nitro` — mount an effectful Website as Nuxt/nitro server
+ * `alchemy/Nitro` — mount an effectful Website as Nuxt/nitro server
  * middleware (the v1 explicit Nuxt path, both clouds; runs in prod and in
  * the nitro dev worker):
  *
  * ```ts
  * // server/middleware/alchemy.ts
- * import { toEventHandler } from "alchemy/serve/nitro";
+ * import { toEventHandler } from "alchemy/Nitro";
  * import Site from "../../site";
  * export default toEventHandler(Site);
  * ```
@@ -102,7 +102,7 @@ const toWebRequest = async (
  * @section Mounting the middleware
  * @example server/middleware/alchemy.ts
  * ```typescript
- * import { toEventHandler } from "alchemy/serve/nitro";
+ * import { toEventHandler } from "alchemy/Nitro";
  * import Site from "../../src/backend.ts";
  *
  * export default toEventHandler(Site);

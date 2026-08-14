@@ -33,18 +33,6 @@ import { make, type NuxtTarget, type NuxtTargetConfig } from "./Nuxt.ts";
 /** The nitro deployment preset this target builds with. */
 export const NITRO_PRESET = "aws-lambda";
 
-/**
- * The importable specifier of nitro's aws-lambda streaming runtime handler —
- * the module a USER entry re-exports to wrap the framework's handler:
- *
- * ```ts
- * // lambda-entry.mjs
- * export { handler } from "nitropack/presets/aws-lambda/runtime/aws-lambda-streaming";
- * ```
- */
-export const NITRO_HANDLER_SPECIFIER =
-  "nitropack/presets/aws-lambda/runtime/aws-lambda-streaming";
-
 /** AWS-specific knobs carried on the shared {@link NuxtTargetConfig}. */
 export interface NuxtAwsTargetConfig extends NuxtTargetConfig {
   /**

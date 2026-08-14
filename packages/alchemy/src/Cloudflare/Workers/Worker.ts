@@ -61,7 +61,7 @@ export const isWorker = <T>(value: T): value is T & Worker =>
 
 // The Worker runtime-environment surface lives in the RuntimeEnvironment.ts
 // leaf (WorkerEnvironment, WorkerExecutionContext + the deferred/live
-// per-event machinery, WorkerEvent/isWorkerEvent) so the `alchemy/serve`
+// per-event machinery, WorkerEvent/isWorkerEvent) so the `alchemy/Serve`
 // bridge — compiled by foreign bundlers (Next/turbopack, nitro) — never
 // traverses this module's provider import graph, which reaches the workerd
 // native binary through the local-runtime chain. Re-exported here so the
@@ -457,7 +457,7 @@ export interface WorkerServerOptions {
   routes?: string[];
   /**
    * Verify at deploy time that the framework server bundle actually mounts
-   * the `alchemy/serve` bridge (the wiring handshake — a sentinel scan over
+   * the `alchemy/Serve` bridge (the wiring handshake — a sentinel scan over
    * the built bundle). Set `false` to skip the scan for exotic setups.
    * @default true
    */
@@ -466,7 +466,7 @@ export interface WorkerServerOptions {
    * Whether alchemy may take over the framework's server entry to deliver
    * the runtime half automatically (the auto-inject tier). Set `false` to
    * force the explicit tier: the framework bundle deploys byte-for-byte
-   * and you mount the program yourself via `alchemy/serve`.
+   * and you mount the program yourself via `alchemy/Serve`.
    * @default the framework integration's tier (auto where supported)
    */
   takeover?: boolean;
@@ -561,7 +561,7 @@ export interface WorkerProps<
    * How the impl's runtime half reaches the deployed bundle when combined
    * with a framework source: `"wrapper"` (the source generates the entry
    * wrapper — auto tier) or `"external"` (the framework bundle deploys
-   * byte-for-byte and the user mounts `alchemy/serve` — explicit tier).
+   * byte-for-byte and the user mounts `alchemy/Serve` — explicit tier).
    * Stamped on the resolved props by the engine's collect-only mode;
    * Website constructs pass their tier default. Do not set manually.
    * @internal

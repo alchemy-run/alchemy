@@ -3,7 +3,7 @@
   // in the client bundle. Each call POSTs the wire protocol
   // (`/api/__rpc/bump`) to the same Lambda. The SSR value arrives via
   // +page.server.ts, which calls `visits()` in-process (value form).
-  import { createClient } from "alchemy/client";
+  import { createClient } from "alchemy/Client";
   import type Backend from "../backend.ts";
 
   const backend = createClient<typeof Backend>();

@@ -112,14 +112,22 @@ test(
     // the universal `POST /api/__rpc/<method>` dispatch envelope-encodes
     // the RPC method result — backed by the KV binding collected at plan
     // time.
-    const res = yield* executeWhenReady(
-      HttpClientRequest.post(`${url}/api/__rpc/bump`).pipe(
-        HttpClientRequest.bodyText("[]", "application/json"),
-      ),
-    );
-    expect(res.status).toBe(200);
-    const body = (yield* res.json) as { value: number };
-    expect(body.value).toBeGreaterThanOrEqual(1);
+    const bump = Effect.gen(function* () {
+      const res = yield* executeWhenReady(
+        HttpClientRequest.post(`${url}/api/__rpc/bump`).pipe(
+          HttpClientRequest.bodyText("[]", "application/json"),
+        ),
+      );
+      expect(res.status).toBe(200);
+      const body = (yield* res.json) as { value: number };
+      return body.value;
+    });
+    const first = yield* bump;
+    expect(first).toBeGreaterThanOrEqual(1);
+    // A second bump observes the first write — the counter persists in KV
+    // rather than answering a constant.
+    const second = yield* bump;
+    expect(second).toBeGreaterThanOrEqual(first + 1);
   }),
   { timeout: 180_000 },
 );

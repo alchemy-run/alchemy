@@ -289,7 +289,7 @@ export interface NextjsProps<
  * The impl's non-`fetch` methods are **RPC methods** — the typed API
  * surface, served at the reserved `POST /api/__rpc/<method>` path (no
  * routes claim needed) and called through `createClient` from
- * `alchemy/client`: type-only form in client components, value form for
+ * `alchemy/Client`: type-only form in client components, value form for
  * direct in-process dispatch in server components. A `fetch` handler is
  * only needed for hand-rolled routes.
  *
@@ -333,7 +333,7 @@ export interface NextjsProps<
  * // a "use client" component — TYPE-ONLY backend import, zero backend
  * // bytes; in a server component, value-import the backend and call
  * // createClient(Backend) for direct in-process dispatch instead.
- * import { createClient } from "alchemy/client";
+ * import { createClient } from "alchemy/Client";
  * import type Backend from "../src/backend.ts";
  *
  * const backend = createClient<typeof Backend>();

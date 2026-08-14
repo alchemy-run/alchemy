@@ -117,7 +117,7 @@ export interface EffectNuxtProps extends NuxtProps {
  * The impl's non-`fetch` methods are **RPC methods** — the typed API
  * surface, served at the reserved `POST /api/__rpc/<method>` path
  * (dispatched by the same mount) and called through `createClient` from
- * `alchemy/client`: type-only form in browser code, value form for
+ * `alchemy/Client`: type-only form in browser code, value form for
  * direct in-process dispatch in server routes / `useAsyncData` server
  * branches. A `fetch` handler is only needed for hand-rolled routes.
  *
@@ -162,7 +162,7 @@ export interface EffectNuxtProps extends NuxtProps {
  * // server route or a `useAsyncData` server branch, value-import the
  * // backend and call createClient(Backend) for direct in-process
  * // dispatch instead.
- * import { createClient } from "alchemy/client";
+ * import { createClient } from "alchemy/Client";
  * import type Backend from "../src/backend.ts";
  *
  * const backend = createClient<typeof Backend>();
@@ -172,12 +172,12 @@ export interface EffectNuxtProps extends NuxtProps {
  *
  * @example Escape hatch: mounting the program yourself
  * Auto-injection stands down whenever the `server/` tree already mounts
- * `alchemy/serve` explicitly (or with `server: { takeover: false }`), so
+ * `alchemy/Serve` explicitly (or with `server: { takeover: false }`), so
  * a hand-written `server/middleware` mount keeps working unchanged — use
  * it when you need to customize the mount itself:
  * ```typescript
  * // server/middleware/alchemy.ts
- * import { toEventHandler } from "alchemy/serve/nitro";
+ * import { toEventHandler } from "alchemy/Nitro";
  * import Site from "../../src/backend.ts";
  *
  * export default toEventHandler(Site);

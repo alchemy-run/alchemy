@@ -414,7 +414,7 @@ export interface NuxtOptions {
    * Effectful-Website middleware delivery ({@link NuxtEffectMiddleware}):
    * write the generated effect middleware and inject it through
    * `nitro.handlers` in BOTH `build` and `dev`. Stands down when the
-   * user's `server/` tree already mounts `alchemy/serve` explicitly.
+   * user's `server/` tree already mounts `alchemy/Serve` explicitly.
    */
   readonly effect?: NuxtEffectMiddleware | undefined;
   readonly dev?:
@@ -538,7 +538,7 @@ export const make: (
    * prerenderer's `nitro-prerender` clone — the alchemy graph never
    * compiles into (or runs during) prerender. Stands down (returns
    * `undefined`) when the user's `server/` tree already mounts
-   * `alchemy/serve` explicitly: the explicit tier always wins — never two
+   * `alchemy/Serve` explicitly: the explicit tier always wins — never two
    * bridges in one nitro app.
    */
   const prepareEffectMiddleware = Effect.fnUntraced(function* (
@@ -551,7 +551,7 @@ export const make: (
     }
     if (yield* scanForExplicitServeMount(NodePath.join(root, "server"))) {
       yield* Effect.logInfo(
-        "alchemy: explicit alchemy/serve mount detected in server/ — the " +
+        "alchemy: explicit alchemy/Serve mount detected in server/ — the " +
           "injected effect middleware stands down",
       );
       return undefined;

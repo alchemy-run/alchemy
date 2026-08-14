@@ -2,7 +2,7 @@
   // The TYPE-ONLY form: zero backend bytes in the browser bundle — methods
   // POST to /api/__rpc/<method> on this same Worker. The SSR value comes
   // from +page.server.ts (the value form, direct in-process dispatch).
-  import { createClient } from "alchemy/client";
+  import { createClient } from "alchemy/Client";
   import type Backend from "../backend.ts";
 
   const backend = createClient<typeof Backend>();

@@ -158,7 +158,7 @@ export interface EffectFrameworkSiteProps extends FrameworkSiteProps {
    * The module URL default-exporting this class (`main: import.meta.url`)
    * — identical to `AWS.Lambda.Function`'s Effect form. Required with an
    * impl: the framework-built server bundle re-imports the program by path
-   * (via the `alchemy/serve` mount or the generated wrapper entry).
+   * (via the `alchemy/Serve` mount or the generated wrapper entry).
    */
   main: string;
   /**
@@ -245,7 +245,7 @@ export interface FrameworkSiteConfig {
   /**
    * Tier default for an Effect program's runtime delivery on this
    * framework: `"external"` (the explicit tier — the framework artifact
-   * deploys byte-for-byte and the user mounts `alchemy/serve` in the
+   * deploys byte-for-byte and the user mounts `alchemy/Serve` in the
    * framework's server entry; the deploy-time sentinel scan enforces the
    * wiring) or `"wrapper"` (the auto-inject tier — the framework
    * integration generates the mounting entry). Every AWS framework
@@ -514,12 +514,12 @@ export const effectServerFunctionProps = (props: EffectFrameworkSiteProps) => ({
  *   statements, intercepted `Config` reads pack into the Lambda env), the
  *   framework-built artifact ships byte-for-byte, and the resolved props
  *   are stamped with `runtimeDelivery` (the deploy-time sentinel scan
- *   enforces the `alchemy/serve` mount on the explicit tier).
+ *   enforces the `alchemy/Serve` mount on the explicit tier).
  *   `server.routes` compiles into the site's CloudFront `serverRoutes`
  *   check so a static file can never shadow an API path.
  * - **dev** — the framework's own dev server runs in the sidecar with the
  *   collected env map lowered into its process environment (plus the
- *   alchemy stack markers, so the in-process `alchemy/serve` mount engages)
+ *   alchemy stack markers, so the in-process `alchemy/Serve` mount engages)
  *   while the effect program also deploys into the local Lambda emulator
  *   as the sibling function.
  * - **runtime** — the deployed bundle re-imports the class; delegate
@@ -614,7 +614,7 @@ const makeEffectSite = Effect.fn("AWS.Website.EffectFrameworkSite")(function* (
     // binding values and intercepted Config reads — is lowered into the
     // dev `Server` resource's env, which applies it to the framework dev
     // server's process environment. The stack markers make the in-process
-    // `alchemy/serve` mount engage (its four-worlds guard declines
+    // `alchemy/Serve` mount engage (its four-worlds guard declines
     // marker-less environments); the runtime phase is forced by the bridge
     // itself, so `ALCHEMY_PHASE` is deliberately NOT set here.
     // `AWS_REGION` mirrors the Lambda sandbox (which always provides it):

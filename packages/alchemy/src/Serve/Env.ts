@@ -1,5 +1,5 @@
 /**
- * Environment resolution for the `alchemy/serve` runtime bridge.
+ * Environment resolution for the `alchemy/Serve` runtime bridge.
  *
  * The bridge runs inside whatever process the framework put it in — workerd
  * (Cloudflare), a Lambda sandbox, a Node dev server, or a build-time
@@ -45,7 +45,7 @@ const cloudflareWorkersEnv: Promise<Record<string, unknown> | undefined> =
 /**
  * Synchronous view of the workerd env once the guarded import has settled
  * (it always has by the time the first event is dispatched). `{}` outside
- * workerd. Used by `alchemy/serve/worker` to derive the stack identity for
+ * workerd. Used by `alchemy/Serve/Worker` to derive the stack identity for
  * bridge classes that must be constructed synchronously at module scope.
  */
 export const workersEnvOrEmpty = (): Record<string, unknown> =>

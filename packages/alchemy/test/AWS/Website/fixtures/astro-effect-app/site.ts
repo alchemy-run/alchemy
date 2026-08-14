@@ -74,6 +74,10 @@ export default class AstroEffectSite extends Astro<AstroEffectSite>()(
     const getItem = yield* DynamoDB.GetItem(table);
     const putItem = yield* DynamoDB.PutItem(table);
     return {
+      /** RPC method — served at POST /api/__rpc/greet by the serve
+       * shell's rpc-first dispatch (the edge rides the universal rpc
+       * claim alongside the routes). */
+      greet: (name: string) => Effect.succeed("hello " + name),
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         // `request.url` is path-shaped inside the effect fetch; the base

@@ -69,7 +69,7 @@ export const makeCloudflareTarget = (
   config: SvelteKitTargetConfig = {},
 ): SvelteKitTarget => {
   // The finishing pass needs the adapter's effect decision (stand-down on
-  // an explicit alchemy/serve mount; DO/Workflow export names) — `adapt()`
+  // an explicit alchemy/Serve mount; DO/Workflow export names) — `adapt()`
   // records it on `result.current.effect`, and the target captures the
   // adapter it constructed so `finish` can read it. A target instance is
   // created per build invocation (`resolveDeployTarget` applies the

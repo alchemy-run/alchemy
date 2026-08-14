@@ -1,5 +1,5 @@
 /**
- * `alchemy/serve/astro` — mount an effectful Website in Astro's fetchable
+ * `alchemy/Astro` — mount an effectful Website in Astro's fetchable
  * (`src/fetch.ts`, Astro 7 `fetchFile`; the explicit-tier escape hatch —
  * the auto tier pre-resolves `virtual:astro:fetchable` to a generated
  * wrapper that composes this same helper):
@@ -7,7 +7,7 @@
  * ```ts
  * // src/fetch.ts
  * import { FetchState, astro } from "astro/fetch";
- * import { toFetchable } from "alchemy/serve/astro";
+ * import { toFetchable } from "alchemy/Astro";
  * import Site from "./src/backend.ts";
  * const site = toFetchable(Site, { routes: ["/api/*"] });
  * export default {
@@ -69,7 +69,7 @@ export interface AstroFetchable {
  * @example src/fetch.ts
  * ```typescript
  * import { FetchState, astro } from "astro/fetch";
- * import { toFetchable } from "alchemy/serve/astro";
+ * import { toFetchable } from "alchemy/Astro";
  * import Site from "./src/backend.ts";
  *
  * const site = toFetchable(Site, { routes: ["/api/*"] });

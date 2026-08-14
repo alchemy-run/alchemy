@@ -32,7 +32,7 @@ export default class Site extends Nextjs<Site>()(
 ) {}
 ```
 
-Methods are called through `createClient` (`alchemy/client`), which has
+Methods are called through `createClient` (`alchemy/Client`), which has
 two forms:
 
 ```tsx
@@ -45,7 +45,7 @@ const visits = await backend.visits();
 // Browser (app/visits.tsx, "use client"): TYPE-ONLY import — zero
 // backend bytes in the client bundle; each call POSTs the wire protocol
 // (/api/__rpc/bump) through the catch-all route handler
-import { createClient } from "alchemy/client";
+import { createClient } from "alchemy/Client";
 import type Backend from "./backend.ts";
 const backend = createClient<typeof Backend>();
 const count = await backend.bump();
@@ -85,7 +85,7 @@ imported and extended).
 - `app/api/hello/route.ts` is an ordinary app-router route handler —
   Next's own routing and the effect dispatch coexist under `/api/*`.
 - Everything under `public/` deploys as static assets.
-- Escape hatch: mounting `toRouteHandler` from `alchemy/serve/next` in a
+- Escape hatch: mounting `toRouteHandler` from `alchemy/Next` in a
   catch-all route yourself makes the auto-injection stand down.
 
 The integration packages must be installed in the project (the source

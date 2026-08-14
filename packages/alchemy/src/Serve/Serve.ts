@@ -1,11 +1,11 @@
 /**
- * The public `alchemy/serve` surface (DESIGN §3.3) — the explicit-tier
+ * The public `alchemy/Serve` surface (DESIGN §3.3) — the explicit-tier
  * runtime helper mounted in framework server entries:
  *
  * ```ts
  * // src/server.ts (TanStack shown — any fetch-shaped entry)
  * import handler from "@tanstack/react-start/server-entry";
- * import { Serve } from "alchemy/serve";
+ * import { Serve } from "alchemy/Serve";
  * import Site from "./src/backend.ts";
  * const site = Serve.make(Site);
  * export default {
@@ -20,13 +20,14 @@ import {
   matchSite,
   rpcSite,
   type ServeOptions,
+  type SiteRuntime,
 } from "./Bridge.ts";
 import { SERVE_SHELL_KEY, type SERVE_MOUNT_MARKER } from "./constants.ts";
 
 // The explicit-mount marker, written as a literal (type-checked against
 // `constants.ts`) so the exact byte sequence provably survives bundling and
 // minification into any framework server bundle that imports the PUBLIC
-// `alchemy/serve` surface. Framework integrations' stand-down scans grep
+// `alchemy/Serve` surface. Framework integrations' stand-down scans grep
 // built output for it to detect an explicit mount. Deliberately NOT the
 // bridge's `SERVE_SENTINEL`: the bridge also rides the value-form
 // `createClient` graph, so its literal appears in every effectful website's
@@ -53,7 +54,7 @@ export {
  * {@link SERVE_SHELL_KEY}: the runtime half {@link make} dispatches matched
  * requests to instead of the default (Cloudflare-flavored) bridge. AWS
  * Website classes attach the Lambda/Node shell here at class construction
- * so it rides the site module's own import graph — `alchemy/serve` never
+ * so it rides the site module's own import graph — `alchemy/Serve` never
  * statically imports both clouds' runtime recipes.
  */
 export interface ServeShell {
@@ -70,6 +71,15 @@ export interface ServeShell {
    * leaks its layer stack for the process lifetime.
    */
   dispose?(site: object): Promise<void>;
+  /**
+   * Build (memoized per class) the site's isolate runtime against a
+   * resolved env — the cloud-flavored twin of `Serve/Bridge.ts`'s
+   * `getSiteRuntime`. Consulted by `alchemy/Client`'s value form so an
+   * in-process dispatch on an AWS class builds the Lambda/Node layer
+   * recipe (credentials chain, Node services) instead of the default
+   * Cloudflare-flavored bridge.
+   */
+  runtime?(site: object, env: Record<string, unknown>): Promise<SiteRuntime>;
 }
 
 const shellOf = (site: object): ServeShell | undefined =>
@@ -132,7 +142,7 @@ export interface ServeHandle {
 
 /**
  * Create the runtime handle for an effectful Website class — the
- * `alchemy/serve` bridge that runs the class's Effect `fetch` inside a
+ * `alchemy/Serve` bridge that runs the class's Effect `fetch` inside a
  * framework-built server bundle (the explicit tier of effectful
  * Websites). The isolate-scope layer build is lazy — nothing happens
  * until the first matched request — and memoized per class per process.
@@ -152,9 +162,9 @@ export interface ServeHandle {
  * every request instead of building the runtime.
  *
  * Prefer the per-framework mounts where one exists — `toRouteHandler`
- * (`alchemy/serve/next`), `toEventHandler` (`alchemy/serve/nitro`),
- * `toHandle` (`alchemy/serve/sveltekit`), `toFetchable`
- * (`alchemy/serve/astro`) — and reach for `make` in any other
+ * (`alchemy/Next`), `toEventHandler` (`alchemy/Nitro`),
+ * `toHandle` (`alchemy/SvelteKit`), `toFetchable`
+ * (`alchemy/Astro`) — and reach for `make` in any other
  * fetch-shaped server entry.
  *
  * @binding
@@ -168,7 +178,7 @@ export interface ServeHandle {
  * @example TanStack Start server entry (src/server.ts)
  * ```typescript
  * import handler from "@tanstack/react-start/server-entry";
- * import * as Serve from "alchemy/serve";
+ * import * as Serve from "alchemy/Serve";
  * import Site from "./src/backend.ts";
  *
  * const site = Serve.make(Site);
@@ -186,7 +196,7 @@ export interface ServeHandle {
  *
  * @example Standalone fetch entry
  * ```typescript
- * import * as Serve from "alchemy/serve";
+ * import * as Serve from "alchemy/Serve";
  * import Site from "./src/backend.ts";
  *
  * const site = Serve.make(Site);

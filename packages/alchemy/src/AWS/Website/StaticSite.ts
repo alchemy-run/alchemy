@@ -43,6 +43,7 @@ import { Bucket } from "../S3/Bucket.ts";
 import { AssetDeployment } from "./AssetDeployment.ts";
 import { buildHostRedirectInjection, CF_ROUTER_INJECTION } from "./cfcode.ts";
 import {
+  attachLambdaServeShell,
   compileServerRoutes,
   DEFAULT_SERVER_ROUTES,
   RPC_CLAIM,
@@ -378,7 +379,7 @@ export interface EffectStaticSiteAttributes extends StaticSiteAttributes {
  * The impl's non-`fetch` methods are **RPC methods** — the typed API
  * surface, served at the reserved `POST /api/__rpc/<method>` path
  * (claimed on the edge router automatically) and called through
- * `createClient` from `alchemy/client` in the static frontend. A
+ * `createClient` from `alchemy/Client` in the static frontend. A
  * `fetch` handler is only needed for hand-rolled routes.
  *
  * The program is a full effect Lambda, so its non-`fetch` surface — an
@@ -421,7 +422,7 @@ export interface EffectStaticSiteAttributes extends StaticSiteAttributes {
  * @example Calling it from the frontend (createClient)
  * ```typescript
  * // frontend code — TYPE-ONLY backend import, zero backend bytes
- * import { createClient } from "alchemy/client";
+ * import { createClient } from "alchemy/Client";
  * import type Backend from "../src/backend.ts";
  *
  * const backend = createClient<typeof Backend>();
@@ -481,7 +482,7 @@ export const StaticSite: {
 } = ((id?: any, props?: any, impl?: any) =>
   id === undefined
     ? (id: string, props: any, impl?: any) =>
-        effectClass(makeStaticSite(id, props, impl))
+        attachLambdaServeShell(effectClass(makeStaticSite(id, props, impl)))
     : makeStaticSite(id, props, impl)) as any;
 
 const makeStaticSite = (

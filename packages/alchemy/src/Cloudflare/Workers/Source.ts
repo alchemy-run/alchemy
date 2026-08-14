@@ -140,7 +140,7 @@ export interface DevContext extends SourceContext {
   /** RuntimeServices context for providers that embed cloudflare-runtime. */
   readonly runtimeContext: Context.Context<RuntimeServices>;
   /**
-   * Host-resolved path (`file://` URL) of the `alchemy/serve` surface
+   * Host-resolved path (`file://` URL) of the `alchemy/Serve` surface
    * module (`Serve/Serve.ts` re-exports), from THIS process's own module
    * graph — server-mode framework sources use it to run the effect front
    * dispatch (rpc + `server.routes` ahead of the framework's dev handler)
@@ -436,7 +436,7 @@ export const makeSourceContext = (params: {
   // Collect-only "external" delivery deliberately maps to an external
   // entry: the impl ran at plan time for binding collection, but the
   // framework-built bundle deploys byte-for-byte (the user mounts
-  // `alchemy/serve` themselves). Only "wrapper" delivery hands the source
+  // `alchemy/Serve` themselves). Only "wrapper" delivery hands the source
   // an effect entry to generate around.
   entry:
     params.props.isExternal || params.props.runtimeDelivery === "external"

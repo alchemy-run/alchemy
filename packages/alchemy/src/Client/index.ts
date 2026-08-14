@@ -1,12 +1,12 @@
 /**
- * `alchemy/client` — the frontend→backend bridge of effectful Websites.
+ * `alchemy/Client` — the frontend→backend bridge of effectful Websites.
  *
  * One export, two overloads, world-appropriate:
  *
  * ```ts
  * // BROWSER / client components: TYPE-ONLY import — zero backend bytes
  * // in the client bundle, on every bundler.
- * import { createClient } from "alchemy/client";
+ * import { createClient } from "alchemy/Client";
  * import type Backend from "../src/backend.ts";
  * const backend = createClient<typeof Backend>();
  * const n = await backend.bump();          // typed; POST /api/__rpc/bump
@@ -53,7 +53,7 @@ export {
 
 /**
  * The guarded server branch: only ever evaluated when the VALUE form runs
- * outside a browser world, so importing `alchemy/client` never statically
+ * outside a browser world, so importing `alchemy/Client` never statically
  * pulls the serve-bridge graph (and the `"browser"` condition removes
  * even this dynamic edge from client bundles).
  */
@@ -64,7 +64,7 @@ const serverDispatch: ServerDispatch = async (site, method, args, options) => {
 
 /**
  * Create a typed client for an effectful Website backend — the
- * frontend→backend bridge of effectful Websites (`alchemy/client`).
+ * frontend→backend bridge of effectful Websites (`alchemy/Client`).
  *
  * The RPC methods of the backend's impl shape (every own function-valued
  * key except `fetch` and the platform handlers `queue`, `scheduled`,
@@ -125,7 +125,7 @@ const serverDispatch: ServerDispatch = async (site, method, args, options) => {
  *
  * @example A client component
  * ```typescript
- * import { createClient } from "alchemy/client";
+ * import { createClient } from "alchemy/Client";
  * import type Backend from "../src/backend.ts";
  *
  * const backend = createClient<typeof Backend>();
@@ -143,7 +143,7 @@ const serverDispatch: ServerDispatch = async (site, method, args, options) => {
  *
  * @example An SSR loader
  * ```typescript
- * import { createClient } from "alchemy/client";
+ * import { createClient } from "alchemy/Client";
  * import Backend from "../src/backend.ts";
  *
  * export const load = async ({ request }: { request: Request }) => {
@@ -161,7 +161,7 @@ const serverDispatch: ServerDispatch = async (site, method, args, options) => {
  * @example Module-scope client with an ambient accessor
  * ```typescript
  * import { getRequestHeaders } from "@tanstack/react-start/server";
- * import { createClient } from "alchemy/client";
+ * import { createClient } from "alchemy/Client";
  * import Backend from "../src/backend.ts";
  *
  * export const backend = createClient(Backend, {
@@ -182,7 +182,7 @@ const serverDispatch: ServerDispatch = async (site, method, args, options) => {
  *
  * @example Handling a typed failure
  * ```typescript
- * import { createClient, RpcError } from "alchemy/client";
+ * import { createClient, RpcError } from "alchemy/Client";
  * import type Backend from "../src/backend.ts";
  *
  * const backend = createClient<typeof Backend>();
@@ -205,7 +205,7 @@ const serverDispatch: ServerDispatch = async (site, method, args, options) => {
  *
  * @example Effect-mode client
  * ```typescript
- * import { createEffectClient } from "alchemy/client";
+ * import { createEffectClient } from "alchemy/Client";
  * import type Backend from "../src/backend.ts";
  * import * as Effect from "effect/Effect";
  *

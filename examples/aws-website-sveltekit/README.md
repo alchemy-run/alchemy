@@ -24,7 +24,7 @@ export default class Site extends SvelteKit<Site>()(
 ) {}
 ```
 
-Methods are called through `createClient` (`alchemy/client`), which has two forms:
+Methods are called through `createClient` (`alchemy/Client`), which has two forms:
 
 ```ts
 // SSR (src/routes/+page.server.ts): VALUE import — direct in-process dispatch
@@ -34,7 +34,7 @@ export const load = async () => ({ visits: await backend.visits() });
 
 // Browser (src/routes/+page.svelte): TYPE-ONLY import — zero backend bytes in
 // the client bundle; each call POSTs the wire protocol (/api/__rpc/bump)
-import { createClient } from "alchemy/client";
+import { createClient } from "alchemy/Client";
 import type Backend from "../backend.ts";
 const backend = createClient<typeof Backend>();
 const count = await backend.bump();

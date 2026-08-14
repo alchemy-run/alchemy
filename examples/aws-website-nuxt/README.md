@@ -24,7 +24,7 @@ export default class Site extends Nuxt<Site>()(
 ) {}
 ```
 
-Methods are called through `createClient` (`alchemy/client`), which has two forms:
+Methods are called through `createClient` (`alchemy/Client`), which has two forms:
 
 ```ts
 // SSR (app/pages/index.vue, useAsyncData handler guarded by
@@ -34,7 +34,7 @@ const visits = await createClient(Backend).visits();
 
 // Browser (app/pages/index.vue): TYPE-ONLY import — zero backend bytes in
 // the client bundle; each call POSTs the wire protocol (/api/__rpc/bump)
-import { createClient } from "alchemy/client";
+import { createClient } from "alchemy/Client";
 import type Backend from "../../server/backend";
 const backend = createClient<typeof Backend>();
 const count = await backend.bump();
@@ -52,11 +52,11 @@ Zero setup: alchemy generates the mounting middleware itself (`.alchemy/nuxt/Nux
 
 The middleware dispatches the universal rpc path (`/api/__rpc/*`) and declines everything else (the backend exposes no `fetch` and claims no routes here), so nitro's own routes keep serving normally — `/api/hello` stays a plain nitro route.
 
-**Escape hatch:** auto-injection stands down whenever a file in `server/` already mounts `alchemy/serve` explicitly (or with `server: { takeover: false }`), so a hand-written mount keeps working unchanged:
+**Escape hatch:** auto-injection stands down whenever a file in `server/` already mounts `alchemy/Serve` explicitly (or with `server: { takeover: false }`), so a hand-written mount keeps working unchanged:
 
 ```ts
 // server/middleware/alchemy.ts
-import { toEventHandler } from "alchemy/serve/nitro";
+import { toEventHandler } from "alchemy/Nitro";
 import Site from "../backend.ts";
 
 export default toEventHandler(Site);

@@ -6,7 +6,7 @@ import "../styles/global.css";
 // SSR seam: VALUE import + `createClient(Backend)` — the backend method
 // dispatches directly in-process (no HTTP hop) inside the AWS Lambda on
 // every request (and in `astro dev` alike).
-import { createClient } from "alchemy/client";
+import { createClient } from "alchemy/Client";
 import Backend from "../backend.ts";
 
 const backend = createClient(Backend);
@@ -67,7 +67,7 @@ const processed = await backend.processed();
       // Browser side: TYPE-ONLY import + type-only form — zero backend
       // bytes in the client bundle. Each call POSTs the wire protocol
       // (`/api/__rpc/bump`) to the same Lambda.
-      import { createClient } from "alchemy/client";
+      import { createClient } from "alchemy/Client";
       import type Backend from "../backend.ts";
 
       const backend = createClient<typeof Backend>();

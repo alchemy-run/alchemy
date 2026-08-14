@@ -1,5 +1,5 @@
 /**
- * Unit coverage for the `alchemy/serve` runtime bridge (pure-local, no
+ * Unit coverage for the `alchemy/Serve` runtime bridge (pure-local, no
  * cloud):
  *   - env resolution ladder (explicit → getCloudflareContext global →
  *     process.env)
@@ -18,7 +18,7 @@
  * bridge construction does), which is process-global state — they take the
  * runner's whole-process write lock via `{ exclusive: true }` and restore
  * the flag in `finally`. The bridge modules that stamp at module evaluation
- * (`@/Serve/worker.ts`) are imported dynamically inside those tests for the
+ * (`@/Serve/Worker.ts`) are imported dynamically inside those tests for the
  * same reason.
  */
 import * as Cloudflare from "@/Cloudflare/index.ts";
@@ -362,7 +362,7 @@ describe("makeWebsiteExports", () => {
     "routes decide who serves: effect inside (authoritative), framework outside",
     () =>
       restoringRuntimeFlag(async () => {
-        const { makeWebsiteExports } = await import("@/Serve/worker.ts");
+        const { makeWebsiteExports } = await import("@/Serve/Worker.ts");
 
         class StubEntrypoint {
           constructor(
@@ -420,7 +420,7 @@ describe("makeWebsiteExports", () => {
     "exclusion glob routes to the framework",
     () =>
       restoringRuntimeFlag(async () => {
-        const { makeWebsiteExports } = await import("@/Serve/worker.ts");
+        const { makeWebsiteExports } = await import("@/Serve/Worker.ts");
 
         class StubEntrypoint {
           constructor(
@@ -873,7 +873,7 @@ describe("makeWebsiteExports rpc dispatch", () => {
     "the wrapper dispatches the rpc path before routes; framework never consulted",
     () =>
       restoringRuntimeFlag(async () => {
-        const { makeWebsiteExports } = await import("@/Serve/worker.ts");
+        const { makeWebsiteExports } = await import("@/Serve/Worker.ts");
         class StubEntrypoint {
           constructor(
             public ctx: any,

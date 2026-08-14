@@ -1,4 +1,4 @@
-import { createClient } from "alchemy/client";
+import { createClient } from "alchemy/Client";
 import Backend from "../backend.ts";
 
 /**

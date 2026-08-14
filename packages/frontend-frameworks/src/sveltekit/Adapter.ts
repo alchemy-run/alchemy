@@ -52,7 +52,7 @@ import {
 export interface CloudflareAdapterEffectResult {
   /**
    * `true` when the worker shim was generated WITH the effect arm. `false`
-   * when an explicit `alchemy/serve` mount was detected in kit's built
+   * when an explicit `alchemy/Serve` mount was detected in kit's built
    * server graph and the wrapper generator stood down (DESIGN §6.3 — the
    * explicit mount wins; no double bridging).
    */
@@ -117,7 +117,7 @@ export interface CloudflareAdapterOptions {
    * Effectful-Website wrapper delivery: generate the worker shim's effect
    * arm (see `WorkerShim.ts`). The adapter stands down — emitting the
    * plain shim — when kit's built server graph already mounts
-   * `alchemy/serve` explicitly (the sentinel scan below).
+   * `alchemy/Serve` explicitly (the sentinel scan below).
    */
   readonly effect?: WorkerShimEffectOptions | undefined;
 }
@@ -212,14 +212,14 @@ export const makeCloudflareAdapter = (
       const root = options.root ?? process.cwd();
       const assetsBinding = options.assetsBinding ?? "ASSETS";
       // Effectful wrapper delivery: stand down when kit's server graph
-      // already mounts alchemy/serve explicitly (the explicit tier wins —
+      // already mounts alchemy/Serve explicitly (the explicit tier wins —
       // never two bridges on one worker).
       const explicitServeMount =
         options.effect !== undefined &&
         scanForExplicitServeMount(builder.getServerDirectory());
       if (explicitServeMount) {
         builder.log.minor(
-          "alchemy: explicit alchemy/serve mount detected in the server " +
+          "alchemy: explicit alchemy/Serve mount detected in the server " +
             "graph - the generated worker shim's effect arm stands down",
         );
       }

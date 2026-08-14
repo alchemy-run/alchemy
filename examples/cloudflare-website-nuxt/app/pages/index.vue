@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // The TYPE-ONLY form for the browser: zero backend bytes in the client
 // bundle — methods POST to /api/__rpc/<method> on this same Worker.
-import { createClient } from "alchemy/client";
+import { createClient } from "alchemy/Client";
 import type Backend from "~~/server/backend";
 
 const backend = createClient<typeof Backend>();

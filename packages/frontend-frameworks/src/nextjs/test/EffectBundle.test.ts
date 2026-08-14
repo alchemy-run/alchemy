@@ -63,7 +63,7 @@ describe("EffectBundle", () => {
     expect(source).toContain(
       `export class Counter extends __AlchemyDurableObjectBridge("Counter") {}`,
     );
-    expect(source).toContain(`from "alchemy/serve/worker"`);
+    expect(source).toContain(`from "alchemy/Serve/Worker"`);
   });
 
   it("generates the takeover wrapper re-exporting probed + effect DO classes", () => {
@@ -106,7 +106,7 @@ describe("EffectBundle", () => {
     );
     expect(await runScan(openNext)).toBe(false);
 
-    // A compiled route handler that mounts alchemy/serve IS a user mount.
+    // A compiled route handler that mounts alchemy/Serve IS a user mount.
     NodeFs.writeFileSync(
       NodePath.join(openNext, "server-functions", "default", "handler.mjs"),
       `/* compiled */ globalThis["${SERVE_MOUNT_MARKER}"] = true;`,

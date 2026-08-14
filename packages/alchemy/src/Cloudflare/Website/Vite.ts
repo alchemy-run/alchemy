@@ -237,7 +237,7 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * The impl's non-`fetch` methods are **RPC methods** — the typed API
  * surface, served at the reserved `POST /api/__rpc/<method>` path (no
  * routes claim needed) and called through `createClient` from
- * `alchemy/client`: type-only form in the browser, value form for
+ * `alchemy/Client`: type-only form in the browser, value form for
  * direct in-process dispatch in SSR code. A `fetch` handler is only
  * needed for hand-rolled routes.
  *
@@ -276,7 +276,7 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * @example Calling it from the frontend (createClient)
  * ```typescript
  * // a client component — TYPE-ONLY backend import, zero backend bytes
- * import { createClient } from "alchemy/client";
+ * import { createClient } from "alchemy/Client";
  * import type Backend from "../src/backend.ts";
  *
  * const backend = createClient<typeof Backend>();

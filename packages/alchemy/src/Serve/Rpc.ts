@@ -26,7 +26,7 @@
  * and with `HttpServerRequest` in context, so methods can self-authorize
  * by reading headers/cookies.
  *
- * The client half is `alchemy/client` ({@link createClient} /
+ * The client half is `alchemy/Client` ({@link createClient} /
  * `createEffectClient`): the type-only form POSTs this protocol from the
  * browser and decodes the envelope into typed rejections/failures; the
  * value form skips the wire entirely with direct in-process dispatch on
@@ -48,7 +48,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 /**
  * The universal URL prefix under which an effectful Website's RPC methods
  * are dispatched: `POST /api/__rpc/<method>` — the path
- * `alchemy/client`'s {@link createClient} targets on the wire. One path
+ * `alchemy/Client`'s {@link createClient} targets on the wire. One path
  * on every framework and both clouds — it sits inside the `/api/*`
  * catch-all convention the explicit Next mounts already own, so no
  * per-framework variance exists. The path is RESERVED: user routes must

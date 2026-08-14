@@ -101,7 +101,7 @@ export interface NextjsFrameworkOptions {
    * OpenNext artifact takeover ({@link EffectBundle}) — the site module is
    * rolldown-prebundled and a generated `alchemy-worker.js` wrapping
    * `worker.js` becomes the final bundle pass's entry. Stands down when
-   * the app already mounts `alchemy/serve` explicitly (sentinel scan).
+   * the app already mounts `alchemy/Serve` explicitly (sentinel scan).
    */
   readonly effectEntry?: EffectBundle.NextjsEffectEntry | undefined;
   /**
@@ -114,7 +114,7 @@ export interface NextjsFrameworkOptions {
    */
   readonly services?: unknown;
   /**
-   * Dev-only: absolute path (or `file://` URL) of the `alchemy/serve`
+   * Dev-only: absolute path (or `file://` URL) of the `alchemy/Serve`
    * surface module, resolved by the alchemy host from its own module graph
    * (`DevContext.serveModule`). With {@link effectEntry} present, the
    * `hmr` dev mode uses it to run the effect front dispatch ahead of
@@ -382,7 +382,7 @@ export const make = (
         // 1.75. Artifact takeover (effectful Website): prebundle the site
         // module, generate the wrapping entry, and point the final bundle
         // pass at it. Stands down when the app compiled an explicit
-        // `alchemy/serve` mount (sentinel in the OpenNext output).
+        // `alchemy/Serve` mount (sentinel in the OpenNext output).
         let takeover = false;
         if (options?.effectEntry !== undefined) {
           const effectEntry = options.effectEntry;
@@ -417,7 +417,7 @@ export const make = (
             ) {
               return yield* Effect.fail(
                 fail(
-                  `The app mounts alchemy/serve explicitly (the ` +
+                  `The app mounts alchemy/Serve explicitly (the ` +
                     `"${EffectBundle.SERVE_MOUNT_MARKER}" mount marker is compiled into ` +
                     `the OpenNext output), so the artifact takeover stands ` +
                     `down — but the effect program exports Durable ` +
@@ -432,7 +432,7 @@ export const make = (
               );
             }
             yield* Effect.logInfo(
-              "alchemy: explicit alchemy/serve mount detected in the Next.js " +
+              "alchemy: explicit alchemy/Serve mount detected in the Next.js " +
                 "build — artifact takeover stands down (the framework-built " +
                 "worker deploys unchanged).",
             );

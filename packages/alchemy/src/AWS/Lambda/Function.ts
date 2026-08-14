@@ -192,7 +192,7 @@ export interface FunctionServerOptions {
   routes?: string[];
   /**
    * Verify at deploy time that the framework server bundle actually mounts
-   * the `alchemy/serve` bridge (the wiring handshake — a sentinel scan over
+   * the `alchemy/Serve` bridge (the wiring handshake — a sentinel scan over
    * the shipped `bundle: false` directory). Set `false` to skip the scan
    * for exotic setups.
    * @default true
@@ -202,7 +202,7 @@ export interface FunctionServerOptions {
    * Whether alchemy may take over the framework's server entry to deliver
    * the runtime half automatically (the auto-inject tier). Set `false` to
    * force the explicit tier: the framework artifact deploys byte-for-byte
-   * and you mount the program yourself via `alchemy/serve`.
+   * and you mount the program yourself via `alchemy/Serve`.
    * @default the framework integration's tier (auto where supported)
    */
   takeover?: boolean;
@@ -252,7 +252,7 @@ export interface FunctionProps extends PlatformProps {
    * with a prebuilt framework artifact: `"wrapper"` (the framework
    * integration generates the entry wrapper before the build — auto tier)
    * or `"external"` (the framework artifact deploys byte-for-byte and the
-   * user mounts `alchemy/serve` — explicit tier). Stamped on the resolved
+   * user mounts `alchemy/Serve` — explicit tier). Stamped on the resolved
    * props by the engine's collect-only mode; Website composites pass their
    * tier default. Do not set manually.
    * @internal
@@ -530,7 +530,7 @@ export const DEFAULT_SERVER_ROUTES = ["/api/*"];
 
 /**
  * The Lambda flavor of the Serverless FunctionContext, extended with the
- * introspection surface the collect-only mode (and the `alchemy/serve`
+ * introspection surface the collect-only mode (and the `alchemy/Serve`
  * runtime bridge) needs: the served impl shape and the number of
  * registered listeners.
  *
@@ -747,7 +747,7 @@ const finalizeFunctionProps = (
  * the Effect program runs at plan time only — its capability bindings
  * collect env vars, IAM policy statements, and VPC/EFS requests onto the
  * function. At runtime the program is re-imported and served *inside*
- * the framework bundle through the `alchemy/serve` bridge.
+ * the framework bundle through the `alchemy/Serve` bridge.
  *
  * This mode is what the effectful `AWS.Website.*` composites drive under
  * the hood — reach for those rather than wiring it by hand. `server`
@@ -1042,7 +1042,7 @@ export const Function: Platform<
       env,
       // The served impl shape + listener census, consumed by the
       // collect-only `finalizeProps` hook at plan time and by the
-      // `alchemy/serve` runtime bridge (site fetch dispatch) at runtime.
+      // `alchemy/Serve` runtime bridge (site fetch dispatch) at runtime.
       shape: () => userShape,
       listenerCount: () => listeners.length,
       set: (id: string, output: Output.Output) =>
@@ -1065,7 +1065,7 @@ export const Function: Platform<
       ) => {
         // Capture the user's full impl shape so plan-time finalization can
         // distinguish the served fetch from event-source listeners, and so
-        // the `alchemy/serve` bridge can dispatch the fetch handler when
+        // the `alchemy/Serve` bridge can dispatch the fetch handler when
         // the program runs inside a framework-built server bundle.
         if (options?.shape) userShape = options.shape;
         // @ts-ignore

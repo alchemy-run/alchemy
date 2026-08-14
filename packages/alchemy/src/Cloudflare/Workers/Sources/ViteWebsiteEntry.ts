@@ -102,7 +102,7 @@ const captureFrameworkEntry = (
 
 /**
  * Generate the wrapper module source. Import order is load-bearing:
- * `alchemy/serve/worker` must evaluate before the user's site module so
+ * `alchemy/Serve/Worker` must evaluate before the user's site module so
  * `globalThis.__ALCHEMY_RUNTIME__` is stamped (at that module's evaluation)
  * before any user code can observe it.
  */
@@ -113,7 +113,7 @@ const generateWebsiteEntry = (
   const doClasses = entry.exports.filter((e) => e.kind === "durableObject");
   const wfClasses = entry.exports.filter((e) => e.kind === "workflow");
   if (wfClasses.length > 0) {
-    // The `alchemy/serve/worker` shell exposes a DurableObject bridge but no
+    // The `alchemy/Serve/Worker` shell exposes a DurableObject bridge but no
     // Workflow bridge yet; emitting a class that cannot run would fail at
     // workerd startup with a much worse message.
     throw new Error(
@@ -139,7 +139,7 @@ const generateWebsiteEntry = (
 })`;
   return [
     // Evaluates first: stamps __ALCHEMY_RUNTIME__ at module evaluation.
-    `import { makeWebsiteExports, DurableObjectBridge } from "alchemy/serve/worker";`,
+    `import { makeWebsiteExports, DurableObjectBridge } from "alchemy/Serve/Worker";`,
     `import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";`,
     `import Site from ${JSON.stringify(toSpecifier(entry.mainPath))};`,
     `export default makeWebsiteExports(WorkerEntrypoint, {`,
@@ -169,7 +169,7 @@ const generateWebsiteEntry = (
  *    DESIGN §6.2a wrapper (site import + `makeWebsiteExports` + DO stubs);
  * 2. defines `globalThis.__ALCHEMY_RUNTIME__` as `true` in every *worker*
  *    environment (never the client env) so plan-only `host.bind` branches
- *    fold at build time — the wrapper's `alchemy/serve/worker` import also
+ *    fold at build time — the wrapper's `alchemy/Serve/Worker` import also
  *    stamps the flag at module evaluation, so correctness holds even where
  *    the define can't reach;
  * 3. captures the framework's own entry-environment input before the

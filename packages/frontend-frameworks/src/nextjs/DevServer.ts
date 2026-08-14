@@ -91,7 +91,7 @@ export interface DevServerOptions {
         readonly mainPath: string;
         /** Path globs the effect fetch owns (`server.routes`). */
         readonly routes?: ReadonlyArray<string> | undefined;
-        /** Engine-resolved path of the `alchemy/serve` surface module. */
+        /** Engine-resolved path of the `alchemy/Serve` surface module. */
         readonly serveModule: string;
       }
     | undefined;

@@ -160,7 +160,7 @@ ${exports}
 export interface SvelteKitAwsAdapterEffectResult {
   /**
    * `true` when the Lambda entry was generated WITH the effect arm.
-   * `false` when an explicit `alchemy/serve` mount was detected in kit's
+   * `false` when an explicit `alchemy/Serve` mount was detected in kit's
    * built server graph and the wrapper generator stood down (DESIGN §6.3 —
    * the explicit mount wins; no double bridging).
    */
@@ -190,7 +190,7 @@ export const makeAwsAdapter = (options: {
    * Effectful-Website wrapper delivery: generate the Lambda entry's effect
    * arm (see {@link generateLambdaEntry}). The adapter stands down —
    * emitting the plain entry — when kit's built server graph already
-   * mounts `alchemy/serve` explicitly.
+   * mounts `alchemy/Serve` explicitly.
    */
   readonly effect?: SvelteKitEffectOptions | undefined;
 }): SvelteKitAwsAdapter => {
@@ -200,14 +200,14 @@ export const makeAwsAdapter = (options: {
     result,
     async adapt(builder: Builder) {
       // Effectful wrapper delivery: stand down when kit's server graph
-      // already mounts alchemy/serve explicitly (the explicit tier wins —
+      // already mounts alchemy/Serve explicitly (the explicit tier wins —
       // never two bridges on one Lambda).
       const explicitServeMount =
         options.effect !== undefined &&
         scanForExplicitServeMount(builder.getServerDirectory());
       if (explicitServeMount) {
         builder.log.minor(
-          "alchemy: explicit alchemy/serve mount detected in the server " +
+          "alchemy: explicit alchemy/Serve mount detected in the server " +
             "graph - the generated Lambda entry's effect arm stands down",
         );
       }
@@ -288,7 +288,7 @@ const makeAwsAdapterTarget = (
   config: SvelteKitAwsTargetConfig = {},
 ): SvelteKitTarget => {
   // The finishing pass needs the adapter's effect decision (stand-down on
-  // an explicit alchemy/serve mount) — `adapt()` records it on
+  // an explicit alchemy/Serve mount) — `adapt()` records it on
   // `result.current.effect`, and the target captures the adapter it
   // constructed so `finish` can read it. A target instance is created per
   // build invocation (`resolveDeployTarget` applies the factory each

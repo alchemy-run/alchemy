@@ -11,7 +11,7 @@ import type {
   FunctionTypeId,
 } from "../Lambda/Function.ts";
 import type { Providers } from "../Providers.ts";
-import type { WebsiteShape } from "./Effectful.ts";
+import { attachLambdaServeShell, type WebsiteShape } from "./Effectful.ts";
 import {
   makeEffectFrameworkSite,
   makeFrameworkSite,
@@ -185,7 +185,7 @@ export interface EffectAstroProps extends AstroProps {
  * The impl's non-`fetch` methods are **RPC methods** — the typed API
  * surface, served at the reserved `POST /api/__rpc/<method>` path
  * (claimed on the edge router automatically) and called through
- * `createClient` from `alchemy/client`: type-only form in browser code,
+ * `createClient` from `alchemy/Client`: type-only form in browser code,
  * value form for direct in-process dispatch in the frontmatter of
  * non-prerendered pages. A `fetch` handler is only needed for
  * hand-rolled routes.
@@ -236,7 +236,7 @@ export interface EffectAstroProps extends AstroProps {
  * // browser code — TYPE-ONLY backend import, zero backend bytes; in the
  * // frontmatter of a non-prerendered page, value-import the backend and
  * // call createClient(Backend) for direct in-process dispatch instead.
- * import { createClient } from "alchemy/client";
+ * import { createClient } from "alchemy/Client";
  * import type Backend from "../src/backend.ts";
  *
  * const backend = createClient<typeof Backend>();
@@ -306,7 +306,7 @@ export const Astro: {
 } = ((id?: any, props?: any, impl?: any) =>
   id === undefined
     ? (id: string, props: any, impl?: any) =>
-        effectClass(makeAstro(id, props, impl))
+        attachLambdaServeShell(effectClass(makeAstro(id, props, impl)))
     : makeAstro(id, props, impl)) as any;
 
 const makeAstro = (

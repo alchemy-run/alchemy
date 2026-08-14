@@ -185,7 +185,7 @@ export interface SvelteKitProps<
  * working with an exclusion glob (`routes: ["/api/*", "!/api/foo"]` —
  * exclusions win). Under `alchemy dev`, the same dispatch mounts as a
  * middleware in front of kit's Vite dev server. An explicit
- * `alchemy/serve/sveltekit` mount in `hooks.server.ts` remains available
+ * `alchemy/SvelteKit` mount in `hooks.server.ts` remains available
  * as an escape hatch.
  *
  * The program's non-`fetch` surface — Durable Object classes and event
@@ -198,7 +198,7 @@ export interface SvelteKitProps<
  * The impl's non-`fetch` methods are **RPC methods** — the typed API
  * surface, served at the reserved `POST /api/__rpc/<method>` path (no
  * routes claim needed) and called through `createClient` from
- * `alchemy/client`: type-only form in browser code, value form for
+ * `alchemy/Client`: type-only form in browser code, value form for
  * direct in-process dispatch in `+page.server.ts` `load` functions. A
  * `fetch` handler is only needed for hand-rolled routes.
  *
@@ -236,7 +236,7 @@ export interface SvelteKitProps<
  * // browser code — TYPE-ONLY backend import, zero backend bytes; in a
  * // `+page.server.ts` `load`, value-import the backend and call
  * // createClient(Backend) for direct in-process dispatch instead.
- * import { createClient } from "alchemy/client";
+ * import { createClient } from "alchemy/Client";
  * import type Backend from "../src/backend.ts";
  *
  * const backend = createClient<typeof Backend>();

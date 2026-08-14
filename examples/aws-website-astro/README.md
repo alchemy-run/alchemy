@@ -30,7 +30,7 @@ export default class Site extends Astro<Site>()(
 ) {}
 ```
 
-Methods are called through `createClient` (`alchemy/client`), which has
+Methods are called through `createClient` (`alchemy/Client`), which has
 two forms:
 
 ```ts
@@ -43,7 +43,7 @@ const visits = await backend.visits();
 // Browser (inline <script> in index.astro): TYPE-ONLY import — zero
 // backend bytes in the client bundle; each call POSTs the wire protocol
 // (/api/__rpc/bump)
-import { createClient } from "alchemy/client";
+import { createClient } from "alchemy/Client";
 import type Backend from "../backend.ts";
 const backend = createClient<typeof Backend>();
 const count = await backend.bump();

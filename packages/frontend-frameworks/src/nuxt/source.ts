@@ -932,7 +932,7 @@ export const makeNuxtSource = (options: NuxtSourceOptions): SourceProvider => {
       // overrides layer (`nitro.handlers`). It runs inside nitro's dev SSR
       // worker thread, where `event.context.cloudflare.env` — served by
       // the platform proxy — carries the alchemy stack markers and the
-      // plan-collected bindings, so `alchemy/serve/nitro` resolves the
+      // plan-collected bindings, so `alchemy/Nitro` resolves the
       // same capabilities against the local simulators. Non-fetch
       // handlers (queue/scheduled/DO classes) are production-only: the
       // dev server runs nitro's dev preset entry, not the deploy entry.

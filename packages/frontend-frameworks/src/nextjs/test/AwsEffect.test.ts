@@ -152,7 +152,7 @@ describe("generateDerivedOpenNextConfig", () => {
     );
     expect(message).toContain('"aws-lambda"');
     expect(message).toContain("takeover: false");
-    expect(message).toContain("alchemy/serve/next");
+    expect(message).toContain("alchemy/Next");
   });
 
   it("refuses a custom (function-form) wrapper", async () => {
@@ -193,7 +193,7 @@ describe("scanForExplicitNextServeMount", () => {
     NodeFs.mkdirSync(routeDir, { recursive: true });
     NodeFs.writeFileSync(
       NodePath.join(routeDir, "route.ts"),
-      'import { toRouteHandler } from "alchemy/serve/next";\n' +
+      'import { toRouteHandler } from "alchemy/Next";\n' +
         'import Site from "../../backend.ts";\n' +
         "const handler = toRouteHandler(Site);\n" +
         "export { handler as GET, handler as POST };\n",
@@ -207,7 +207,7 @@ describe("scanForExplicitNextServeMount", () => {
     NodeFs.mkdirSync(routeDir, { recursive: true });
     NodeFs.writeFileSync(
       NodePath.join(routeDir, "route.ts"),
-      'import { toRouteHandler } from "alchemy/serve/next";\n',
+      'import { toRouteHandler } from "alchemy/Next";\n',
     );
     expect(scanForExplicitNextServeMount(root)).toBe(true);
   });
@@ -218,9 +218,9 @@ describe("scanForExplicitNextServeMount", () => {
     NodeFs.mkdirSync(appDir, { recursive: true });
     NodeFs.writeFileSync(
       NodePath.join(appDir, "page.tsx"),
-      // The value-form createClient graph (alchemy/client) must NOT
+      // The value-form createClient graph (alchemy/Client) must NOT
       // false-positive the stand-down.
-      'import { createClient } from "alchemy/client";\n' +
+      'import { createClient } from "alchemy/Client";\n' +
         'import type Backend from "./backend.ts";\n' +
         "export default () => createClient<typeof Backend>();\n",
     );

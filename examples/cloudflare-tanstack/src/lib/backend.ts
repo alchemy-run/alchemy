@@ -11,7 +11,7 @@
 //   the Backend value import are compiled out).
 import { createIsomorphicFn } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
-import { createClient, type RpcClient } from "alchemy/client";
+import { createClient, type RpcClient } from "alchemy/Client";
 import Backend from "../backend.ts";
 
 const getBackend = createIsomorphicFn()

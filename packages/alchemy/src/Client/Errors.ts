@@ -1,5 +1,5 @@
 /**
- * Typed errors of the `alchemy/client` bridge (`createClient`).
+ * Typed errors of the `alchemy/Client` bridge (`createClient`).
  *
  * These are the client-side halves of the wire protocol defined in
  * `Serve/Rpc.ts`: the decoded envelope failures plus the world/transport

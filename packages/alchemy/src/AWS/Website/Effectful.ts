@@ -271,7 +271,7 @@ export const siblingHandlersId = (siteId: string): string =>
   `${siteId}-Handlers`;
 
 /**
- * Opt-in env var the `alchemy/serve` Lambda bridge
+ * Opt-in env var the `alchemy/Serve` Lambda bridge
  * (`AWS/Lambda/WebsiteHandlers.ts`) honors: when set, capability clients
  * built by the bridge target this local AWS emulator gateway with the
  * emulator's fixed dummy identity instead of `Credentials.fromChain()`.

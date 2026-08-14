@@ -45,7 +45,7 @@ export const Jobs = SQS.Queue("Jobs", {
 /**
  * One Lambda serves the Nuxt app AND the Effect program's backend. The
  * program's RPC METHODS are the API surface: each method is callable
- * through `createClient` (`alchemy/client`) — in-process during SSR (the
+ * through `createClient` (`alchemy/Client`) — in-process during SSR (the
  * value form) and over the wire from the browser
  * (`POST /api/__rpc/<method>`, the type-only form). The wire path mounts
  * itself: alchemy generates a nitro middleware

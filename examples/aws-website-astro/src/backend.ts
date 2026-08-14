@@ -44,7 +44,7 @@ export const Jobs = SQS.Queue("Jobs", {
 /**
  * One Lambda serves the Astro frontend AND the Effect program's backend.
  * The program's RPC METHODS are the API surface: each method is callable
- * through `createClient` (`alchemy/client`) — in-process from Astro
+ * through `createClient` (`alchemy/Client`) — in-process from Astro
  * frontmatter (the value form) and over the wire from the browser
  * (`POST /api/__rpc/<method>`, the type-only form) — in the deployed
  * Lambda and in `astro dev` alike.

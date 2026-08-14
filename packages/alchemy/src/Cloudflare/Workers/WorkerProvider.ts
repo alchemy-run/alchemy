@@ -200,7 +200,7 @@ export class WorkerVersionConfigError extends Data.TaggedError(
  * The wiring handshake failed: this Worker carries an Effect program in
  * collect-only `"external"` delivery — the framework-built bundle deploys
  * byte-for-byte and the user is expected to mount the program via
- * `alchemy/serve` in the framework's server entry — but the built bundle
+ * `alchemy/Serve` in the framework's server entry — but the built bundle
  * does not contain the serve sentinel, so the handlers would be dead code
  * in production. The message carries a per-framework fix-it snippet.
  * Opt out of the scan with `server: { verify: false }`.
@@ -222,7 +222,7 @@ const serveMountFixIt = (props: WorkerProps): string => {
   if (provider.includes("/nuxt/")) {
     return (
       `// server/middleware/alchemy.ts\n` +
-      `import { toEventHandler } from "alchemy/serve/nitro";\n` +
+      `import { toEventHandler } from "alchemy/Nitro";\n` +
       `import Site from "../../site.ts";\n` +
       `export default toEventHandler(Site);`
     );
@@ -230,7 +230,7 @@ const serveMountFixIt = (props: WorkerProps): string => {
   if (provider.includes("/nextjs/")) {
     return (
       `// app/api/[[...slug]]/route.ts\n` +
-      `import { toRouteHandler } from "alchemy/serve/next";\n` +
+      `import { toRouteHandler } from "alchemy/Next";\n` +
       `import Site from "@/site";\n` +
       `const handler = toRouteHandler(Site);\n` +
       `export { handler as GET, handler as POST, handler as PUT, handler as PATCH,\n` +
@@ -240,7 +240,7 @@ const serveMountFixIt = (props: WorkerProps): string => {
   if (provider.includes("/sveltekit/")) {
     return (
       `// src/hooks.server.ts\n` +
-      `import { toHandle } from "alchemy/serve/sveltekit";\n` +
+      `import { toHandle } from "alchemy/SvelteKit";\n` +
       `import Site from "./site.ts";\n` +
       `export const handle = toHandle(Site);`
     );
@@ -248,14 +248,14 @@ const serveMountFixIt = (props: WorkerProps): string => {
   if (provider.includes("/astro/")) {
     return (
       `// src/fetch.ts\n` +
-      `import { toFetchable } from "alchemy/serve/astro";\n` +
+      `import { toFetchable } from "alchemy/Astro";\n` +
       `import Site from "./site.ts";\n` +
       `export default toFetchable(Site);`
     );
   }
   return (
     `// your framework's server entry (the module the deployed bundle is built from)\n` +
-    `import { Serve } from "alchemy/serve";\n` +
+    `import { Serve } from "alchemy/Serve";\n` +
     `import Site from "./site.ts";\n` +
     `const site = Serve.make(Site);\n` +
     `export default {\n` +
@@ -268,7 +268,7 @@ const serveMountFixIt = (props: WorkerProps): string => {
 const SENTINEL_SKIP_EXTENSIONS = /\.(wasm|bin)$/;
 
 /**
- * Scan a built server bundle's modules for the `alchemy/serve` sentinel
+ * Scan a built server bundle's modules for the `alchemy/Serve` sentinel
  * (`SERVE_SENTINEL`), the deploy-time half of the wiring handshake. The
  * files are already in memory for upload, so the scan is a string search
  * away from free.
@@ -3074,7 +3074,7 @@ export const LiveWorkerProvider = () =>
         });
         // The wiring handshake (collect-only mode): with `"external"`
         // delivery the framework bundle deploys byte-for-byte and the user
-        // must have mounted the Effect program via `alchemy/serve` — verify
+        // must have mounted the Effect program via `alchemy/Serve` — verify
         // the built bundle actually contains the serve sentinel before
         // uploading, or the collected handlers would be dead code. The
         // inverse (sentinel present but no impl — the entry is wired but
@@ -3103,7 +3103,7 @@ export const LiveWorkerProvider = () =>
             const mounted = yield* scanForServeSentinel(bundle.files);
             if (mounted) {
               yield* Effect.logWarning(
-                `Worker "${id}"'s server bundle mounts alchemy/serve, but the ` +
+                `Worker "${id}"'s server bundle mounts alchemy/Serve, but the ` +
                   `construct declares no Effect program (no third argument) — ` +
                   `the mount will decline every request at runtime. Pass the ` +
                   `program as the construct's third argument so its bindings ` +

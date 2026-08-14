@@ -43,12 +43,12 @@ export const Jobs = SQS.Queue("Jobs", {
 /**
  * One Lambda serves the Next.js app AND the Effect program's backend. The
  * program's RPC METHODS are the API surface: each method is callable
- * through `createClient` (`alchemy/client`) — in-process from server
+ * through `createClient` (`alchemy/Client`) — in-process from server
  * components (the value form) and over the wire from client components
  * (`POST /api/__rpc/<method>`, the type-only form). On Next.js the wire
  * path mounts explicitly: the catch-all route handler at
  * `app/api/[[...slug]]/route.ts` (`toRouteHandler` from
- * `alchemy/serve/next`) is compiled by Next itself, so it runs in the
+ * `alchemy/Next`) is compiled by Next itself, so it runs in the
  * deployed OpenNext Lambda and under `next dev` alike. More-specific
  * routes like `app/api/hello/route.ts` keep winning over the catch-all —
  * Next's own routing is the fallback.

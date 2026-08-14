@@ -306,7 +306,7 @@ describe.concurrent("prebuilt artifact + sentinel scan (bundler unit)", () => {
       );
       const failure = failureOf(exit);
       expect(failure?._tag).toBe("MissingServeMountError");
-      expect(String(failure?.message)).toContain("alchemy/serve");
+      expect(String(failure?.message)).toContain("alchemy/Serve");
     }),
   );
 

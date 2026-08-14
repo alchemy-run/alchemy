@@ -10,7 +10,7 @@ import type {
   FunctionTypeId,
 } from "../Lambda/Function.ts";
 import type { Providers } from "../Providers.ts";
-import type { WebsiteShape } from "./Effectful.ts";
+import { attachLambdaServeShell, type WebsiteShape } from "./Effectful.ts";
 import {
   makeEffectFrameworkSite,
   makeFrameworkSite,
@@ -121,14 +121,14 @@ export interface EffectSvelteKitProps extends SvelteKitProps {
  * effect responses ride the Function URL's `RESPONSE_STREAM` pipe — and
  * `alchemy dev` mounts the same dispatch as a middleware in front of
  * kit's Vite dev server (dev bindings hit the real cloud with your
- * ambient credentials). An explicit `alchemy/serve/sveltekit` mount in
+ * ambient credentials). An explicit `alchemy/SvelteKit` mount in
  * `hooks.server.ts` makes the generated arm stand down, and
  * `server: { takeover: false }` forces the explicit tier outright.
  *
  * The impl's non-`fetch` methods are **RPC methods** — the typed API
  * surface, served at the reserved `POST /api/__rpc/<method>` path
  * (claimed on the edge router automatically) and called through
- * `createClient` from `alchemy/client`: type-only form in browser code,
+ * `createClient` from `alchemy/Client`: type-only form in browser code,
  * value form for direct in-process dispatch in `+page.server.ts` `load`
  * functions. A `fetch` handler is only needed for hand-rolled routes.
  *
@@ -172,7 +172,7 @@ export interface EffectSvelteKitProps extends SvelteKitProps {
  * // browser code — TYPE-ONLY backend import, zero backend bytes; in a
  * // `+page.server.ts` `load`, value-import the backend and call
  * // createClient(Backend) for direct in-process dispatch instead.
- * import { createClient } from "alchemy/client";
+ * import { createClient } from "alchemy/Client";
  * import type Backend from "../src/backend.ts";
  *
  * const backend = createClient<typeof Backend>();
@@ -242,7 +242,7 @@ export const SvelteKit: {
 } = ((id?: any, props?: any, impl?: any) =>
   id === undefined
     ? (id: string, props: any, impl?: any) =>
-        effectClass(makeSvelteKit(id, props, impl))
+        attachLambdaServeShell(effectClass(makeSvelteKit(id, props, impl)))
     : makeSvelteKit(id, props, impl)) as any;
 
 const svelteKitConfig = (props: SvelteKitProps): FrameworkSiteConfig => ({

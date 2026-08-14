@@ -1,5 +1,5 @@
 /**
- * The shared `alchemy/serve` runtime bridge core (DESIGN §3.3, §6.4).
+ * The shared `alchemy/Serve` runtime bridge core (DESIGN §3.3, §6.4).
  *
  * One lazy, WeakMap-memoized isolate-scope layer build per Website class per
  * process (mirroring `Cloudflare/Workers/WorkerBridge.ts`), and a fresh
@@ -70,7 +70,7 @@ const SENTINEL: typeof SERVE_SENTINEL = "__ALCHEMY_SERVE_v1__";
  * `if (!globalThis.__ALCHEMY_RUNTIME__)` bind guard is a no-op at runtime
  * even when the framework's bundler defined nothing.
  *
- * Deliberately NOT a module-evaluation side effect: `alchemy/serve` is
+ * Deliberately NOT a module-evaluation side effect: `alchemy/Serve` is
  * imported by the user's `src/backend.ts`, which the engine also imports at plan
  * time — a module-eval flag would poison the plan world (DESIGN §5.3 world
  * 1 requires the flag unset there).
@@ -221,7 +221,7 @@ const buildSiteRuntime = (
               shape: () => {
                 if (typeof runtimeContext.shape !== "function") {
                   throw new Error(
-                    `alchemy/serve: the ${runtimeContext.Type} platform does ` +
+                    `alchemy/Serve: the ${runtimeContext.Type} platform does ` +
                       "not expose a runtime fetch surface yet — only " +
                       "Cloudflare Website/Worker classes are supported by " +
                       "this release (AWS Website support lands with the " +

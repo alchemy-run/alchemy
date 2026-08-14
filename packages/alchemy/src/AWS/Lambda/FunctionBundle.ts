@@ -56,7 +56,7 @@ export const matchesConfiguredExternal = (
 /**
  * A collect-only Function (impl + `bundle: false`) whose runtime delivery is
  * `"external"` shipped a framework artifact that never mounts the
- * `alchemy/serve` bridge — the wiring handshake (a sentinel scan over the
+ * `alchemy/Serve` bridge — the wiring handshake (a sentinel scan over the
  * prebuilt directory) found no `SERVE_SENTINEL` byte sequence, so the
  * Effect program's handlers would be dead code in the deployed Lambda.
  */
@@ -158,7 +158,7 @@ export const makeFunctionBundler = Effect.gen(function* () {
     }
     // The wiring handshake (DESIGN §6.3): a collect-only Function with
     // "external" delivery knows the impl exists but not whether the user
-    // mounted the `alchemy/serve` bridge in the framework's server entry —
+    // mounted the `alchemy/Serve` bridge in the framework's server entry —
     // the sentinel byte sequence survives any bundler/minifier, so its
     // absence from the shipped directory means the Effect handlers would be
     // dead code.
@@ -168,7 +168,7 @@ export const makeFunctionBundler = Effect.gen(function* () {
           message:
             `Function "${options.requireServeSentinel.functionId}" carries an ` +
             `Effect program with "external" runtime delivery, but the shipped ` +
-            `server directory (${dir}) never mounts the alchemy/serve bridge ` +
+            `server directory (${dir}) never mounts the alchemy/Serve bridge ` +
             `— the program's handlers would be dead code. Mount it in the ` +
             `framework's server entry (e.g. \`Serve.make(Site)\` in a ` +
             `fetch-shaped entry, \`toRouteHandler(Site)\` in a Next.js ` +

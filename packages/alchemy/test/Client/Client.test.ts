@@ -1,5 +1,5 @@
 /**
- * Unit coverage for `alchemy/client` (`createClient` — the
+ * Unit coverage for `alchemy/Client` (`createClient` — the
  * frontend→backend bridge; pure-local, no cloud):
  *
  *   - the type-only form's HTTP path: proxy method call → the wire
@@ -34,9 +34,11 @@ import {
   RpcTransportError,
 } from "@/Client/index.ts";
 import * as Cloudflare from "@/Cloudflare/index.ts";
+import { SERVE_SHELL_KEY } from "@/Serve/constants.ts";
 import { RPC_PATH } from "@/Serve/Rpc.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -453,14 +455,54 @@ describe("headers thunk (shared-client per-request identity)", () => {
         const a = backend.whoAmI();
         current = "second";
         const b = backend.whoAmI();
-        // The second thunk resolution must not clobber the first call's
-        // synthesized request (headers resolve before dispatch, per call).
+        // Each call snapshots the thunk synchronously AT CALL TIME —
+        // before the dispatch's env/runtime awaits yield to the other
+        // call — so concurrent identities never cross.
         const [ra, rb] = await Promise.all([a, b]);
-        expect([ra, rb]).toContain("second");
+        expect(ra).toBe("first");
+        expect(rb).toBe("second");
         // Sequential calls definitely observe the latest ambient value.
         current = "third";
         expect(await backend.whoAmI()).toBe("third");
       }),
     { exclusive: true },
+  );
+});
+
+describe("serve-shell runtime seam (AWS classes)", () => {
+  it(
+    "the value form dispatches through the class's shell runtime when one is attached",
+    () =>
+      restoringRuntimeFlag(async () => {
+        // A backend class carrying a cloud-flavored serve shell under
+        // SERVE_SHELL_KEY — the shape AWS Website classes attach at class
+        // construction (lambdaServeShell). The in-process dispatch must
+        // build the runtime THROUGH the shell (Lambda/Node recipe), never
+        // the default Cloudflare-flavored bridge.
+        const seen: Array<Record<string, unknown>> = [];
+        const ShellSite = Object.assign(function ShellSite() {}, {
+          "~alchemy/Id": "ShellSite",
+          [SERVE_SHELL_KEY]: {
+            match: () => Promise.resolve(undefined),
+            runtime: (_site: object, env: Record<string, unknown>) => {
+              seen.push(env);
+              return Promise.resolve({
+                context: Context.empty(),
+                shape: () => ({
+                  ping: (n: number) => Effect.succeed(n * 10),
+                }),
+                telemetry: () => undefined,
+              });
+            },
+          },
+        }) as any;
+
+        const backend = createClient(ShellSite, { env: markers }) as any;
+        expect(await backend.ping(4)).toBe(40);
+        // The shell was consulted with the resolved env (not bypassed).
+        expect(seen.length).toBe(1);
+        expect(seen[0]?.ALCHEMY_STACK_NAME).toBe("client-test");
+      }),
+    { exclusive: true, timeout: 60_000 },
   );
 });

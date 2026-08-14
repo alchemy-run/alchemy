@@ -91,7 +91,7 @@ workerd. Import the **service-level subpaths** it actually needs:
 import * as KV from "alchemy/Cloudflare/KV"; // ✅
 import * as Website from "alchemy/Cloudflare/Website"; // ✅
 import { Bucket, GetObject } from "alchemy/AWS/S3"; // ✅
-import { make } from "alchemy/serve"; // ✅
+import { make } from "alchemy/Serve"; // ✅
 
 import * as Cloudflare from "alchemy/Cloudflare"; // ❌ never
 import * as AWS from "alchemy/AWS"; // ❌ never
@@ -167,7 +167,7 @@ results cross the wire as plain JSON. The `/api/__rpc` path is
 
 ```typescript
 // a client component — note the TYPE-ONLY backend import
-import { createClient } from "alchemy/client";
+import { createClient } from "alchemy/Client";
 import type Backend from "../src/backend.ts";
 
 const backend = createClient<typeof Backend>();
@@ -188,7 +188,7 @@ non-prerendered page, a Next server component — import the backend as a
 **value** and pass the class:
 
 ```typescript
-import { createClient } from "alchemy/client";
+import { createClient } from "alchemy/Client";
 import Backend from "../src/backend.ts";
 
 export const load = async () => {
@@ -267,7 +267,7 @@ try {
 backend failure tags:
 
 ```typescript
-import { createEffectClient } from "alchemy/client";
+import { createEffectClient } from "alchemy/Client";
 import type Backend from "../src/backend.ts";
 
 const backend = createEffectClient<typeof Backend>();
@@ -291,7 +291,7 @@ How the program's `fetch` reaches the deployed server differs per
 framework. *Automatic* means alchemy delivers it for you (a generated
 entry wrapper, entry takeover, or the framework's fetchable seam);
 *one-file mount* means you add one framework-native file that mounts the
-program via `alchemy/serve`.
+program via `alchemy/Serve`.
 
 | Framework | Cloudflare | AWS |
 | --- | --- | --- |
@@ -310,7 +310,7 @@ and `server: { takeover: false }` forces the explicit tier outright:
 
 ```typescript
 // Next.js — app/api/[[...slug]]/route.ts (both clouds)
-import { toRouteHandler } from "alchemy/serve/next";
+import { toRouteHandler } from "alchemy/Next";
 import Site from "../../../src/backend.ts";
 
 const handler = toRouteHandler(Site);
@@ -321,7 +321,7 @@ export { handler as GET, handler as POST, handler as PUT,
 
 ```typescript
 // Nuxt — server/middleware/alchemy.ts (both clouds)
-import { toEventHandler } from "alchemy/serve/nitro";
+import { toEventHandler } from "alchemy/Nitro";
 import Site from "../../src/backend.ts";
 
 export default toEventHandler(Site);
@@ -333,7 +333,7 @@ For any other fetch-shaped server entry, compose
 ```typescript
 // src/server.ts (TanStack Start shown)
 import handler from "@tanstack/react-start/server-entry";
-import * as Serve from "alchemy/serve";
+import * as Serve from "alchemy/Serve";
 import Site from "./src/backend.ts";
 
 const site = Serve.make(Site);

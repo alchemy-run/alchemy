@@ -1,11 +1,11 @@
 /**
- * `alchemy/serve/next` — mount an effectful Website as a Next.js app-router
+ * `alchemy/Next` — mount an effectful Website as a Next.js app-router
  * catch-all route handler (the v1 explicit Next path, both clouds; compiled
  * by Next itself):
  *
  * ```ts
  * // app/api/[[...slug]]/route.ts
- * import { toRouteHandler } from "alchemy/serve/next";
+ * import { toRouteHandler } from "alchemy/Next";
  * import Site from "@/site";
  * const handler = toRouteHandler(Site);
  * export { handler as GET, handler as POST, handler as PUT,
@@ -48,7 +48,7 @@ import { make, type AnyWebsiteClass, type MakeOptions } from "./Serve.ts";
  * @section Mounting the catch-all route
  * @example app/api/[[...slug]]/route.ts
  * ```typescript
- * import { toRouteHandler } from "alchemy/serve/next";
+ * import { toRouteHandler } from "alchemy/Next";
  * import Site from "../../../src/backend.ts";
  *
  * const handler = toRouteHandler(Site);

@@ -10,7 +10,7 @@ import type {
   FunctionTypeId,
 } from "../Lambda/Function.ts";
 import type { Providers } from "../Providers.ts";
-import type { WebsiteShape } from "./Effectful.ts";
+import { attachLambdaServeShell, type WebsiteShape } from "./Effectful.ts";
 import {
   makeEffectFrameworkSite,
   makeFrameworkSite,
@@ -121,12 +121,12 @@ export interface EffectOctaneProps extends OctaneProps {
  * router forwards `server.routes` (default `["/api/*"]`) to the server
  * BEFORE the static-asset manifest. The program must live in a dedicated
  * module whose default export is the class (`main: import.meta.url`) and
- * be mounted in Octane's server entry via `alchemy/serve`.
+ * be mounted in Octane's server entry via `alchemy/Serve`.
  *
  * The impl's non-`fetch` methods are **RPC methods** — the typed API
  * surface, served at the reserved `POST /api/__rpc/<method>` path
  * (dispatched by the same mount) and called through `createClient` from
- * `alchemy/client` (type-only import in browser code). A `fetch`
+ * `alchemy/Client` (type-only import in browser code). A `fetch`
  * handler is only needed for hand-rolled routes.
  *
  * @example Octane site with an effect-native API
@@ -158,7 +158,7 @@ export interface EffectOctaneProps extends OctaneProps {
  * @example Calling it from the frontend (createClient)
  * ```typescript
  * // browser code — TYPE-ONLY backend import, zero backend bytes
- * import { createClient } from "alchemy/client";
+ * import { createClient } from "alchemy/Client";
  * import type Backend from "../src/backend.ts";
  *
  * const backend = createClient<typeof Backend>();
@@ -228,7 +228,7 @@ export const Octane: {
 } = ((id?: any, props?: any, impl?: any) =>
   id === undefined
     ? (id: string, props: any, impl?: any) =>
-        effectClass(makeOctane(id, props, impl))
+        attachLambdaServeShell(effectClass(makeOctane(id, props, impl)))
     : makeOctane(id, props, impl)) as any;
 
 const octaneConfig = (): FrameworkSiteConfig => ({

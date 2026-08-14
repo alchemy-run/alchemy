@@ -28,12 +28,12 @@ describe("generateWorkerShim effect arm", () => {
     });
     expect(plain).toContain("export default kit_handler;");
     expect(plain).not.toContain("makeWebsiteExports");
-    expect(plain).not.toContain("alchemy/serve");
+    expect(plain).not.toContain("alchemy/Serve");
   });
 
   it("wraps kit in makeWebsiteExports with the site module and routes", () => {
     expect(effect).toContain(
-      `import { makeWebsiteExports, DurableObjectBridge } from "alchemy/serve/worker";`,
+      `import { makeWebsiteExports, DurableObjectBridge } from "alchemy/Serve/Worker";`,
     );
     expect(effect).toContain(
       `import __alchemy_site from "/abs/project/src/site.ts";`,
@@ -106,12 +106,12 @@ describe("scanForExplicitServeMount", () => {
     NodeFs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it("detects an alchemy/serve import specifier in emitted chunks", () => {
+  it("detects an alchemy/Serve import specifier in emitted chunks", () => {
     const chunks = NodePath.join(dir, "specifier", "chunks");
     NodeFs.mkdirSync(chunks, { recursive: true });
     NodeFs.writeFileSync(
       NodePath.join(chunks, "hooks.server.js"),
-      'import { toHandle } from "alchemy/serve/sveltekit";\n',
+      'import { toHandle } from "alchemy/SvelteKit";\n',
     );
     expect(scanForExplicitServeMount(NodePath.join(dir, "specifier"))).toBe(
       true,
@@ -154,7 +154,7 @@ describe("scanForExplicitServeMount", () => {
     // non-JS files are never read
     NodeFs.writeFileSync(
       NodePath.join(root, "notes.txt"),
-      "alchemy/serve is mentioned in prose only",
+      "alchemy/Serve is mentioned in prose only",
     );
     expect(scanForExplicitServeMount(root)).toBe(false);
   });

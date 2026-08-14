@@ -8,7 +8,7 @@
  * fetch's answer (404s included) is final; only paths outside the routes
  * fall through to kit (`next()`).
  *
- * - The user's site module and the `alchemy/serve` bridge are loaded
+ * - The user's site module and the `alchemy/Serve` bridge are loaded
  *   through a virtual module in the Vite dev-server graph, so editing
  *   `site.ts` hot-invalidates the module chain and the next request
  *   rebuilds the Effect layer stack against the fresh class (server-side
@@ -95,11 +95,11 @@ export const matchServerRoutes = (
 };
 
 /**
- * Signals of an explicit `alchemy/serve` mount inside kit's built server
- * graph (`hooks.server.ts` importing `alchemy/serve/sveltekit`'s `toHandle`
+ * Signals of an explicit `alchemy/Serve` mount inside kit's built server
+ * graph (`hooks.server.ts` importing `alchemy/SvelteKit`'s `toHandle`
  * etc.): either the explicit-MOUNT marker byte literal (embedded by
  * `alchemy/src/Serve/Serve.ts`, the module only explicit mounts import,
- * when it was bundled into the output) or an import of an `alchemy/serve`
+ * when it was bundled into the output) or an import of an `alchemy/Serve`
  * specifier (kit's Vite SSR build externalizes deps, leaving the specifier
  * in the emitted chunks). Deliberately NOT the bridge's
  * `__ALCHEMY_SERVE_v1__` sentinel: the bridge module also rides the
@@ -110,10 +110,10 @@ export const matchServerRoutes = (
  * deliberately carries no alchemy dependency.
  */
 const SERVE_MOUNT_PATTERN =
-  /__ALCHEMY_SERVE_MOUNT_v1__|["']alchemy\/serve(?:\/[a-z-]+)?["']/;
+  /__ALCHEMY_SERVE_MOUNT_v1__|["']alchemy\/(?:Serve(?:\/Worker)?|Next|Nitro|Astro|SvelteKit)["']/;
 
 /**
- * Scan kit's built server directory for an explicit `alchemy/serve` mount
+ * Scan kit's built server directory for an explicit `alchemy/Serve` mount
  * (DESIGN §6.3: auto tier stands down when the user mounted the bridge
  * themselves). Synchronous framework-callback code, shared by the
  * Cloudflare and AWS adapters — cloud-agnostic, so it lives here rather
@@ -170,7 +170,7 @@ export interface EffectDevPluginArgs {
    *   recipe carries `Credentials.fromChain()` / `Region.fromEnv()`, so
    *   dev bindings hit the real cloud with the developer's ambient
    *   profile — the AWS dev model.
-   * - anything else (default) — `alchemy/serve`'s `make`, with env served
+   * - anything else (default) — `alchemy/Serve`'s `make`, with env served
    *   by the adapter's platform proxy ({@link emulate}).
    */
   readonly platform?: string | undefined;
@@ -309,7 +309,7 @@ export const makeEffectDevPlugin = (
               ]
             : [
                 `import Site from ${JSON.stringify(mainPath)};`,
-                `import { make } from "alchemy/serve";`,
+                `import { make } from "alchemy/Serve";`,
                 // The middleware gates `server.routes` before dispatching
                 // — the handle claims everything it receives.
                 `export const handle = make(Site, { routes: ["/*"] });`,

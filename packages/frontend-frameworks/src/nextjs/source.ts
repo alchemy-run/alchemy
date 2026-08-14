@@ -179,7 +179,7 @@ export interface DevContext extends SourceContext {
    */
   readonly runtimeContext: unknown;
   /**
-   * Host-resolved path (or `file://` URL) of the `alchemy/serve` surface
+   * Host-resolved path (or `file://` URL) of the `alchemy/Serve` surface
    * module — powers the `hmr` mode's effect front dispatch. In-memory
    * only (never persisted); absent on older hosts, in which case hmr
    * falls back to requiring the explicit mount.

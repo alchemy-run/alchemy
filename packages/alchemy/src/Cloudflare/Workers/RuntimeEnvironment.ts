@@ -1,13 +1,13 @@
 /**
  * Leaf module holding the Worker runtime-environment surface the
- * `alchemy/serve` bridge (and the Worker runtime bridges) build on:
+ * `alchemy/Serve` bridge (and the Worker runtime bridges) build on:
  * {@link WorkerEnvironment}, {@link WorkerExecutionContext} (+ the
  * deferred/live per-event context machinery), and the {@link WorkerEvent}
  * envelope.
  *
  * Extracted from `Worker.ts` (which re-exports everything here, so the
  * public surface is unchanged) so that foreign bundlers compiling a serve
- * mount (`alchemy/serve/next` inside a Next.js app, `alchemy/serve/nitro`
+ * mount (`alchemy/Next` inside a Next.js app, `alchemy/Nitro`
  * inside nitro, …) never traverse `Worker.ts`'s provider import graph —
  * that graph reaches the local-runtime chain
  * (`WorkerAsyncBindings` → `KV/Namespace` → `LocalRuntime` →

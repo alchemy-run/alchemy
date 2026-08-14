@@ -1,6 +1,6 @@
 "use client";
 
-import { createClient } from "alchemy/client";
+import { createClient } from "alchemy/Client";
 import { useState } from "react";
 import type Backend from "./backend";
 

@@ -37,6 +37,8 @@ const rootDir = (() => {
  *   cache lookup), pinned by asserting two requests differ.
  * - `/api/ping` — carved back out to kit by the exclusion glob; the
  *   fixture's +server endpoint serves it.
+ * - the non-`fetch` `stamp` method — the universal RPC surface at
+ *   `POST /api/__rpc/stamp`, dispatched before the routes check.
  * - any other path inside the claim fails `RouteNotFound` — rendered as
  *   the effect's OWN empty 404, never delegation to kit.
  *
@@ -62,6 +64,7 @@ export default class SvelteKitEffectSite extends Cloudflare.Website.SvelteKit<Sv
     const namespace = yield* Users;
     const users = yield* Cloudflare.KV.ReadWriteNamespace(namespace);
     return {
+      stamp: () => Effect.succeed({ marker: "sveltekit-effect-rpc" }),
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         // `HttpServerRequest.url` is the path (+ query), not a full URL.

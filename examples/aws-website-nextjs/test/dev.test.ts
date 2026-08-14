@@ -11,9 +11,9 @@
  *   - API route       → `/api/hello` serves the route handler
  *   - static assets   → `/robots.txt` from public/
  *   - RPC wire path   → `POST /api/__rpc/bump` (createClient's wire
- *                       protocol) serves through the catch-all route
- *                       handler against the real DynamoDB table, and the
- *                       async server component renders the counter
+ *                       protocol) serves through the dev server's effect
+ *                       front dispatch against the real DynamoDB table,
+ *                       and the async server component renders the counter
  *   - HOT RELOAD      → editing app/page.tsx is served by Next's HMR
  *                       without a redeploy
  */
@@ -163,10 +163,11 @@ test(
     const robots = await (await fetchOk(new URL("/robots.txt", url))).text();
     expect(robots).toContain("User-agent:");
 
-    // The rpc wire path rides `next dev` too (through the catch-all route
-    // handler): this is the exact request the browser's type-only
-    // createClient sends, served by the backend method against the REAL
-    // DynamoDB table (remote()).
+    // The rpc wire path rides `next dev` too (the effect front dispatch
+    // runs ahead of Next's handler in the alchemy-owned custom-server
+    // child — no route file): this is the exact request the browser's
+    // type-only createClient sends, served by the backend method against
+    // the REAL DynamoDB table (remote()).
     const rpc = await fetch(new URL("/api/__rpc/bump", url), {
       method: "POST",
       headers: { "content-type": "application/json" },

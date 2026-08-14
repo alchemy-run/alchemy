@@ -75,17 +75,17 @@ describe("EffectDev aws arm", () => {
     expect(code).toContain(
       `export const handle = makeWebsiteHandlers({ site: Site, routes: ["/*"] });`,
     );
-    expect(code).not.toContain(`"alchemy/serve"`);
+    expect(code).not.toContain(`"alchemy/Serve"`);
   });
 
-  it("cloudflare arm still mounts alchemy/serve", () => {
+  it("cloudflare arm still mounts alchemy/Serve", () => {
     const cf = makeEffectDevPlugin({
       effect: { main: "/abs/project/src/site.ts" },
       emulate: () => undefined,
     });
     const load = cf.load as (id: string) => string | undefined;
     const code = load("\0virtual:alchemy-sveltekit-effect");
-    expect(code).toContain(`import { make } from "alchemy/serve";`);
+    expect(code).toContain(`import { make } from "alchemy/Serve";`);
     expect(code).not.toContain("makeWebsiteHandlers");
   });
 });

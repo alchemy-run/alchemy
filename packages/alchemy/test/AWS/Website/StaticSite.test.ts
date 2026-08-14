@@ -7,6 +7,8 @@ import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { fileURLToPath } from "node:url";
 import {
   expectDirectStatus,
@@ -163,6 +165,22 @@ describe.skipIf(!runLive)("AWS.Website.StaticSite", () => {
           timeout: "120 seconds",
           label: "effectful api ping",
         });
+
+        // RPC wire protocol: the server Lambda dispatches
+        // POST /api/__rpc/<method> rpc-first, and the edge router forwards
+        // the universal rpc claim alongside `server.routes`.
+        const rpc = yield* HttpClient.execute(
+          HttpClientRequest.post(`${url}/api/__rpc/greet`).pipe(
+            HttpClientRequest.bodyText('["live"]', "application/json"),
+          ),
+        ).pipe(
+          Effect.filterOrFail(
+            (res): boolean => res.status === 200,
+            (res) => new Error(`rpc expected 200, got ${res.status}`),
+          ),
+          Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 10 }),
+        );
+        expect(yield* rpc.json).toEqual({ value: "hello live" });
 
         // S3 binding roundtrip: the impl's PutObject/GetObject bindings
         // carried the bucket env var + IAM onto the server Lambda.

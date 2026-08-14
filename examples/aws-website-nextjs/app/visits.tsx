@@ -4,7 +4,7 @@
 // the client bundle. Each call POSTs the wire protocol
 // (`/api/__rpc/bump`), which reaches the backend through the catch-all
 // route handler at app/api/[[...slug]]/route.ts.
-import { createClient } from "alchemy/client";
+import { createClient } from "alchemy/Client";
 import { useState } from "react";
 import type Backend from "./backend.ts";
 

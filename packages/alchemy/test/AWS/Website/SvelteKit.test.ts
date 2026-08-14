@@ -6,6 +6,8 @@ import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { pathToFileURL } from "node:url";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
@@ -209,6 +211,25 @@ describe.skipIf(!runLive)("AWS.Website.SvelteKit", () => {
           siteModule.STREAM_MARKER,
           { timeout: "60 seconds", label: "streamed effect body (CloudFront)" },
         );
+
+        // ── RPC wire protocol: the generated entry dispatches
+        // POST /api/__rpc/<method> rpc-first, and the edge rides the
+        // universal rpc claim alongside the routes ───────────────────────
+        const rpc = yield* HttpClient.execute(
+          HttpClientRequest.post(`${url}/api/__rpc/greet`).pipe(
+            HttpClientRequest.bodyText('["live"]', "application/json"),
+          ),
+        ).pipe(
+          Effect.filterOrFail(
+            (res): boolean => res.status === 200,
+            (res) => new Error(`rpc expected 200, got ${res.status}`),
+          ),
+          Effect.retry({
+            schedule: Schedule.exponential("1 second", 1.5),
+            times: 8,
+          }),
+        );
+        expect(yield* rpc.json).toEqual({ value: "hello live" });
 
         // ── Exclusion glob: /api/hello is carved OUT of the effect claim
         // (`!/api/hello` in server.routes), so kit's own +server endpoint

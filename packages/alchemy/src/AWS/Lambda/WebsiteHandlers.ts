@@ -1,5 +1,5 @@
 /**
- * The AWS (Lambda / Node) shell of the `alchemy/serve` runtime bridge —
+ * The AWS (Lambda / Node) shell of the `alchemy/Serve` runtime bridge —
  * the helper the generated effectful-Website wrapper entries call
  * (DESIGN §6.2 AWS mechanics):
  *
@@ -425,7 +425,7 @@ export const makeWebsiteHandlers = (
 const shellHandlers = new WeakMap<object, WebsiteHandlers>();
 
 /**
- * The `alchemy/serve` shell for AWS-hosted Website classes (attached under
+ * The `alchemy/Serve` shell for AWS-hosted Website classes (attached under
  * `SERVE_SHELL_KEY` by the effectful AWS Website constructs at class
  * construction). `Serve.make` — and therefore the framework mounts
  * `toRouteHandler` (Next.js) and `toEventHandler` (Nuxt/nitro) — dispatches
@@ -463,6 +463,17 @@ export const lambdaServeShell = {
     return handlers.match(request);
   },
   dispose: (site: object): Promise<void> => disposeWebsiteRuntime(site),
+  /**
+   * The value-form `createClient(Backend)` seam: hand `alchemy/Client`'s
+   * in-process dispatch the Lambda/Node-flavored isolate runtime (same
+   * per-class memo as the fetch path) so backend methods resolve AWS
+   * services (credentials chain, Node platform) instead of dying on the
+   * Cloudflare-flavored default bridge.
+   */
+  runtime: (
+    site: object,
+    env: Record<string, unknown>,
+  ): Promise<LambdaSiteRuntime> => getLambdaSiteRuntime(site, env),
 };
 
 /**

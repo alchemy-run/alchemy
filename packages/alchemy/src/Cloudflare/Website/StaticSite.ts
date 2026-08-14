@@ -225,7 +225,7 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * The impl's non-`fetch` methods are **RPC methods** — the typed API
  * surface, served at the reserved `POST /api/__rpc/<method>` path (no
  * routes claim needed) and called through `createClient` from
- * `alchemy/client` in the static frontend. A `fetch` handler is only
+ * `alchemy/Client` in the static frontend. A `fetch` handler is only
  * needed for hand-rolled routes.
  *
  * The program must live in a dedicated module whose default export is
@@ -262,7 +262,7 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * @example Calling it from the frontend (createClient)
  * ```typescript
  * // frontend code — TYPE-ONLY backend import, zero backend bytes
- * import { createClient } from "alchemy/client";
+ * import { createClient } from "alchemy/Client";
  * import type Backend from "../src/site.ts";
  *
  * const backend = createClient<typeof Backend>();

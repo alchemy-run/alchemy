@@ -1,12 +1,12 @@
 /**
- * `alchemy/serve/sveltekit` — mount an effectful Website in SvelteKit's
+ * `alchemy/SvelteKit` — mount an effectful Website in SvelteKit's
  * `hooks.server.ts` (the explicit-tier escape hatch; the auto tier covers
  * SvelteKit without any framework-file edit):
  *
  * ```ts
  * // src/hooks.server.ts
  * import { sequence } from "@sveltejs/kit/hooks";
- * import { toHandle } from "alchemy/serve/sveltekit";
+ * import { toHandle } from "alchemy/SvelteKit";
  * import Site from "./src/backend.ts";
  * export const handle = sequence(toHandle(Site));
  * ```
@@ -52,7 +52,7 @@ export interface SvelteKitHandleInput<Event extends SvelteKitRequestEvent> {
  * @example src/hooks.server.ts
  * ```typescript
  * import { sequence } from "@sveltejs/kit/hooks";
- * import { toHandle } from "alchemy/serve/sveltekit";
+ * import { toHandle } from "alchemy/SvelteKit";
  * import Site from "./src/backend.ts";
  *
  * export const handle = sequence(toHandle(Site));

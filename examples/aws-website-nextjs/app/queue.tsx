@@ -6,7 +6,7 @@
 // `processed()` (bounded) until the count moves so the catch-up is
 // visible. The SSR-rendered initial value arrives via props from the
 // server component (the value form of createClient).
-import { createClient } from "alchemy/client";
+import { createClient } from "alchemy/Client";
 import { useState } from "react";
 import type Backend from "./backend.ts";
 

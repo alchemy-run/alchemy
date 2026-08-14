@@ -49,7 +49,7 @@ const visits = await backend.visits();
 ```ts
 // src/pages/index.astro <script> (browser): TYPE-ONLY form —
 // POST /api/__rpc/<method>, zero backend bytes in the client bundle
-import { createClient } from "alchemy/client";
+import { createClient } from "alchemy/Client";
 import type Backend from "../backend";
 const backend = createClient<typeof Backend>();
 await backend.bump();

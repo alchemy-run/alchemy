@@ -571,7 +571,7 @@ export function distilledCloudflare(
               } satisfies vite.Plugin,
               // Effectful-Website delivery: pre-resolve the fetchable to
               // the generated effect wrapper (stands down when the user's
-              // own fetch file already mounts `alchemy/serve`), and take
+              // own fetch file already mounts `alchemy/Serve`), and take
               // over the ssr worker ENTRY so non-fetch handlers + DO
               // classes deliver through the Worker bridge (fetch stays
               // with the fetchable).

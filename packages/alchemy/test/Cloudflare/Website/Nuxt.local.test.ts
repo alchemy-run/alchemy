@@ -266,7 +266,7 @@ describe.concurrent("Nuxt dev", () => {
   // ─────────────────────────────────────────────────────────────────────
   // Effect entry takeover (DESIGN Amendment §2.1.2), dev half: the impl's
   // fetch is auto-mounted as an alchemy-generated nitro middleware
-  // (routes-scoped `alchemy/serve/nitro` toEventHandler) inside nitro's
+  // (routes-scoped `alchemy/Nitro` toEventHandler) inside nitro's
   // dev SSR worker thread — zero framework-file edits. The KV capability
   // collected at plan resolves through the platform proxy to the LOCAL
   // simulator (`dev:` namespace id — proof no cloud call ran). Non-fetch
@@ -310,6 +310,20 @@ describe.concurrent("Nuxt dev", () => {
           `${base}/api/effect/marker`,
         );
         expect(marker.marker).toBe("nuxt-effect-dev");
+
+        // The universal RPC dispatch (`POST /api/__rpc/<method>`, the
+        // `createClient` wire protocol) round-trips the method result in
+        // the `{"value": ...}` envelope through the same injected
+        // middleware.
+        const rpc = yield* HttpClient.execute(
+          HttpClientRequest.post(`${base}/api/__rpc/greet`).pipe(
+            HttpClientRequest.bodyText('["dev"]', "application/json"),
+          ),
+        ).pipe(
+          Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
+        );
+        expect(rpc.status).toBe(200);
+        expect(yield* rpc.json).toEqual({ value: "hello dev" });
 
         // KV capability round-trip against the local simulator.
         const put = yield* putJsonReady<{ put: boolean }>(

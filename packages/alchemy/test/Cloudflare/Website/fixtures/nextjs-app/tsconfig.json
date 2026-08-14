@@ -25,9 +25,9 @@
     "baseUrl": ".",
     "paths": {
       "alchemy": ["../../src/index.ts"],
-      "alchemy/serve": ["../../src/Serve/index.ts"],
-      "alchemy/serve/next": ["../../src/Serve/next.ts"],
-      "alchemy/serve/worker": ["../../src/Serve/worker.ts"],
+      "alchemy/Serve": ["../../src/Serve/index.ts"],
+      "alchemy/Next": ["../../src/Serve/next.ts"],
+      "alchemy/Serve/Worker": ["../../src/Serve/worker.ts"],
       "alchemy/Cloudflare": ["../../src/Cloudflare/index.ts"],
       "alchemy/Cloudflare/*": ["../../src/Cloudflare/*/index.ts"],
       "alchemy/*": ["../../src/*.ts"]

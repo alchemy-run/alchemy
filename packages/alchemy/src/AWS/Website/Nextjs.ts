@@ -171,7 +171,7 @@ export interface EffectNextjsProps extends NextjsProps {
   /**
    * The module URL default-exporting this class (`main: import.meta.url`).
    * Required with an impl: the OpenNext-built server bundle re-imports the
-   * program by path (the `alchemy/serve/next` route-handler mount).
+   * program by path (the `alchemy/Next` route-handler mount).
    */
   main: string;
   /**
@@ -317,7 +317,7 @@ export interface EffectNextjsAttributes extends NextjsAttributes {
  * The impl's non-`fetch` methods are **RPC methods** — the typed API
  * surface, served at the reserved `POST /api/__rpc/<method>` path
  * (dispatched by the same mount) and called through `createClient` from
- * `alchemy/client`: type-only form in client components, value form for
+ * `alchemy/Client`: type-only form in client components, value form for
  * direct in-process dispatch in server components. A `fetch` handler is
  * only needed for hand-rolled routes.
  *
@@ -361,7 +361,7 @@ export interface EffectNextjsAttributes extends NextjsAttributes {
  * // a "use client" component — TYPE-ONLY backend import, zero backend
  * // bytes; in a server component, value-import the backend and call
  * // createClient(Backend) for direct in-process dispatch instead.
- * import { createClient } from "alchemy/client";
+ * import { createClient } from "alchemy/Client";
  * import type Backend from "../src/backend.ts";
  *
  * const backend = createClient<typeof Backend>();
@@ -371,14 +371,14 @@ export interface EffectNextjsAttributes extends NextjsAttributes {
  *
  * @example Escape hatch: mounting the program yourself
  * Auto-injection stands down whenever the Next route tree already mounts
- * `alchemy/serve` explicitly (or with `server: { takeover: false }`), so a
+ * `alchemy/Serve` explicitly (or with `server: { takeover: false }`), so a
  * hand-written catch-all route handler keeps working unchanged — use it
  * when you need to customize the mount itself. Dispatch then happens
  * inside Next's router, so more-specific user routes win over the
  * catch-all:
  * ```typescript
  * // app/api/[[...slug]]/route.ts
- * import { toRouteHandler } from "alchemy/serve/next";
+ * import { toRouteHandler } from "alchemy/Next";
  * import Site from "../../backend.ts";
  *
  * const handler = toRouteHandler(Site);
@@ -451,7 +451,7 @@ const makeNextjs = (
   impl?: Effect.Effect<any, any, any>,
 ): Effect.Effect<any, never, any> =>
   Effect.gen(function* () {
-    // Runtime world: the deployed OpenNext bundle's `alchemy/serve/next`
+    // Runtime world: the deployed OpenNext bundle's `alchemy/Next`
     // mount re-imports this module's default export and re-evaluates the
     // program inside the Lambda — delegate straight to the Lambda platform
     // call, which owns the runtime re-evaluation contract.
@@ -509,7 +509,7 @@ const makeNextjsSite = Effect.fn("AWS.Website.Nextjs")(function* (
   if (isLocal) {
     // Effectful dev: the effect program deploys into the local Lambda
     // emulator (the sibling function) and the collected env map — plus the
-    // alchemy stack markers the in-process `alchemy/serve` mount needs —
+    // alchemy stack markers the in-process `alchemy/Serve` mount needs —
     // is lowered into the dev `Server` resource's env, which applies it to
     // the `next dev` process environment.
     const server =
@@ -550,7 +550,7 @@ const makeNextjsSite = Effect.fn("AWS.Website.Nextjs")(function* (
     // (the custom-server `next dev`) runs the Serve dispatch ahead of
     // Next's handler — same rpc-first + strict-ownership gate as the
     // deployed wrapper, so dev and deploy agree on route precedence.
-    // `serveModule` is THIS engine's own `alchemy/serve` surface
+    // `serveModule` is THIS engine's own `alchemy/Serve` surface
     // (`import.meta.resolve`), so the child's bridge and the backend
     // module's bare `alchemy/*` imports share one module graph. The
     // effect-module content hash is deliberately NOT part of these
@@ -621,7 +621,7 @@ const makeNextjsSite = Effect.fn("AWS.Website.Nextjs")(function* (
   // inputs ride the build options (JSON-serializable; they participate in
   // the Server memo hash, and `effectHash` folds the effect module's
   // content in so effect edits rebuild). `takeover: false` forces the
-  // explicit tier; an explicit `alchemy/serve` mount in the route tree
+  // explicit tier; an explicit `alchemy/Serve` mount in the route tree
   // makes the build-side generator stand down on its own.
   const effectExtra =
     impl !== undefined &&
@@ -768,7 +768,7 @@ const makeNextjsSite = Effect.fn("AWS.Website.Nextjs")(function* (
   // the InternalEvent layer, inside the one `streamifyResponse` wrap — so
   // the deploy-time sentinel scan's missing-mount error is retired here;
   // `server: { takeover: false }` forces the explicit tier back (the scan
-  // then enforces the hand-written `alchemy/serve/next` mount).
+  // then enforces the hand-written `alchemy/Next` mount).
   const server =
     siteImpl !== undefined
       ? ((yield* (LambdaFunction as any)(

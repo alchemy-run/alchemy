@@ -76,6 +76,9 @@ export default class EffectStaticSite extends Cloudflare.Website.StaticSite<Effe
     const kv = yield* Cloudflare.KV.ReadWriteNamespace(namespace);
     const counters = yield* SiteCounter;
     return {
+      // Non-fetch method: the universal RPC surface at
+      // `POST /api/__rpc/stamp`, dispatched before the fetch handler.
+      stamp: () => Effect.succeed({ marker: "effect-static-rpc" }),
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         // `request.url` is path-shaped inside the effect fetch; the base

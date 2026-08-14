@@ -1,11 +1,11 @@
 /**
- * `alchemy/serve/worker` — the workerd shell the construct-generated
+ * `alchemy/Serve/Worker` — the workerd shell the construct-generated
  * wrappers call (DESIGN §6.2a). A generated `virtual:alchemy:website-entry`
  * (or hand-written custom entry) looks like:
  *
  * ```ts
  * import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
- * import { makeWebsiteExports, DurableObjectBridge } from "alchemy/serve/worker";
+ * import { makeWebsiteExports, DurableObjectBridge } from "alchemy/Serve/Worker";
  * import Site from "/abs/path/to/src/backend.ts";
  * export default makeWebsiteExports(WorkerEntrypoint, {
  *   site: Site,

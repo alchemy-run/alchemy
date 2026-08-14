@@ -1,9 +1,9 @@
 /**
- * The server-only half of `alchemy/client` — the direct in-process
+ * The server-only half of `alchemy/Client` — the direct in-process
  * dispatch behind the value form (`createClient(Backend)`).
  *
  * Loaded ONLY through the guarded dynamic import in `index.ts` (and never
- * from `browser.ts`), so client bundles that import `alchemy/client`
+ * from `browser.ts`), so client bundles that import `alchemy/Client`
  * carry none of the serve-bridge graph.
  *
  * Dispatch semantics mirror the HTTP dispatch's per-event pipeline
@@ -24,8 +24,10 @@ import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import * as ServerRequest from "effect/unstable/http/HttpServerRequest";
 import { getSiteRuntime, markRuntime } from "../Serve/Bridge.ts";
+import { SERVE_SHELL_KEY } from "../Serve/constants.ts";
 import { hasStackMarkers, resolveServeEnv } from "../Serve/Env.ts";
 import { RPC_PATH, rpcMethodsOf } from "../Serve/Rpc.ts";
+import type { ServeShell } from "../Serve/Serve.ts";
 import { buildEventTelemetry } from "../Telemetry.ts";
 import { decodeRpcErrorPayload, RpcPrerenderError } from "./Errors.ts";
 import { resolveHeaders, type ServerClientOptions } from "./Core.ts";
@@ -46,6 +48,17 @@ export const invokeServerMethod = async (
   options: ServerClientOptions | undefined,
 ): Promise<unknown> => {
   markRuntime();
+  // Snapshot the per-call identity FIRST, before any await: a headers
+  // thunk backed by a framework's ambient accessor (TanStack's
+  // getRequestHeaders, Next's headers) must run in the calling request's
+  // synchronous window — awaiting env/runtime first would let a
+  // concurrent call's ambient context bleed into this one. The thunk
+  // itself fires synchronously inside `resolveHeaders`; only its result
+  // is awaited later. The no-op catch marks an eventual rejection as
+  // observed so an earlier throw (e.g. prerender) can't surface it as an
+  // unhandled rejection.
+  const headersPromise = resolveHeaders(options?.headers);
+  headersPromise.catch(() => {});
   const env = await resolveServeEnv(options?.env);
   if (!hasStackMarkers(env)) {
     throw new RpcPrerenderError({
@@ -56,7 +69,17 @@ export const invokeServerMethod = async (
         "move the call client-side.",
     });
   }
-  const runtime = await getSiteRuntime(site, env, noopPin);
+  // Cloud-flavored runtime: an AWS Website class carries a serve shell
+  // whose `runtime` builds the Lambda/Node layer recipe (credentials
+  // chain, Node services); without a shell the default
+  // (Cloudflare-flavored) bridge applies.
+  const shell = (site as Record<string, unknown>)[SERVE_SHELL_KEY] as
+    | ServeShell
+    | undefined;
+  const runtime =
+    shell?.runtime !== undefined
+      ? await shell.runtime(site, env)
+      : await getSiteRuntime(site, env, noopPin);
   const fn = rpcMethodsOf(runtime.shape())[method];
   if (fn === undefined) {
     throw decodeRpcErrorPayload({
@@ -72,7 +95,7 @@ export const invokeServerMethod = async (
   const request = ServerRequest.fromWeb(
     new Request(`http://localhost${RPC_PATH}/${encodeURIComponent(method)}`, {
       method: "POST",
-      headers: await resolveHeaders(options?.headers),
+      headers: await headersPromise,
     }),
   );
 

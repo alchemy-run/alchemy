@@ -1,10 +1,11 @@
 // Narrow package-subpath imports, deliberately NOT the `alchemy/Cloudflare`
-// barrel: this module is compiled by Next (turbopack) for the hmr explicit
-// tier, and the provider barrels pull the local-provider chain whose import
-// graph ends at the workerd native binary — unparseable by turbopack. The
-// service-level subpaths resolve identically for bun (plan world) and
-// turbopack (the fixture clone under `packages/alchemy/.tmp/<dir>/` walks up
-// to the workspace root's `alchemy` link).
+// barrel: this module is imported by the hmr dev server's effect front
+// dispatch (plain Node) and by the engine at plan time, and the provider
+// barrels pull the local-provider chain whose import graph ends at the
+// workerd native binary. The service-level subpaths keep the graph to the
+// construct + capability slice (the fixture clone under
+// `packages/alchemy/.tmp/<dir>/` walks up to the workspace root's `alchemy`
+// link).
 import * as KV from "alchemy/Cloudflare/KV";
 import * as Website from "alchemy/Cloudflare/Website";
 import * as Effect from "effect/Effect";
@@ -13,16 +14,18 @@ import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as NodePath from "node:path";
 
-/** KV namespace bound by the hmr-mode explicit-tier program. */
+/** KV namespace bound by the hmr-mode zero-setup program. */
 export const HmrUsers = KV.Namespace("NextjsEffectHmrUsers");
 
 /**
- * The hmr-mode (`next dev` in Node) explicit-tier site: fetch-only, served
- * through the `toRouteHandler` catch-all mount the test writes into
- * `app/api/effect/[[...slug]]/route.ts` — the documented Next.js hmr path
- * (the artifact takeover only exists in `preview` dev and deploys).
+ * The hmr-mode (`next dev` in Node) zero-setup site: fetch + RPC served by
+ * the dev server's effect front dispatch, which checks `/api/__rpc` and
+ * `server.routes` ahead of Next's handler — the same rpc-first +
+ * strict-ownership gate as the deployed takeover, with no route mount
+ * anywhere in the app tree (the artifact takeover itself only exists in
+ * `preview` dev and deploys).
  *
- * Kept free of DO/cron surface: hmr delivery is fetch-only by design.
+ * Kept free of DO/cron surface: hmr delivery is fetch + RPC only by design.
  */
 export default class NextjsEffectHmrSite extends Website.Nextjs<NextjsEffectHmrSite>()(
   "NextjsEffectHmrSite",

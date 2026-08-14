@@ -10,7 +10,7 @@ import type {
   FunctionTypeId,
 } from "../Lambda/Function.ts";
 import type { Providers } from "../Providers.ts";
-import type { WebsiteShape } from "./Effectful.ts";
+import { attachLambdaServeShell, type WebsiteShape } from "./Effectful.ts";
 import {
   makeEffectFrameworkSite,
   makeFrameworkSite,
@@ -108,12 +108,12 @@ export interface EffectWakuProps extends WakuProps {
  * forwards `server.routes` (default `["/api/*"]`) to the server BEFORE the
  * static-asset manifest. The program must live in a dedicated module whose
  * default export is the class (`main: import.meta.url`) and be mounted in
- * the server entry via `alchemy/serve`.
+ * the server entry via `alchemy/Serve`.
  *
  * The impl's non-`fetch` methods are **RPC methods** — the typed API
  * surface, served at the reserved `POST /api/__rpc/<method>` path
  * (dispatched by the same mount) and called through `createClient` from
- * `alchemy/client` (type-only import in browser code). A `fetch`
+ * `alchemy/Client` (type-only import in browser code). A `fetch`
  * handler is only needed for hand-rolled routes.
  *
  * @example Waku site with an effect-native API
@@ -145,7 +145,7 @@ export interface EffectWakuProps extends WakuProps {
  * @example Calling it from the frontend (createClient)
  * ```typescript
  * // browser code — TYPE-ONLY backend import, zero backend bytes
- * import { createClient } from "alchemy/client";
+ * import { createClient } from "alchemy/Client";
  * import type Backend from "../src/backend.ts";
  *
  * const backend = createClient<typeof Backend>();
@@ -215,7 +215,7 @@ export const Waku: {
 } = ((id?: any, props?: any, impl?: any) =>
   id === undefined
     ? (id: string, props: any, impl?: any) =>
-        effectClass(makeWaku(id, props, impl))
+        attachLambdaServeShell(effectClass(makeWaku(id, props, impl)))
     : makeWaku(id, props, impl)) as any;
 
 const wakuConfig = (props: WakuProps): FrameworkSiteConfig => ({

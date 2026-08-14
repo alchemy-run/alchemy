@@ -4,6 +4,7 @@ import {
   makeEffectFrameworkSite,
   prepareServerWrapperEntry,
 } from "@/AWS/Website/FrameworkSite.ts";
+import { SERVE_SHELL_KEY } from "@/Serve/constants.ts";
 import * as Test from "@/Test/Alchemy";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "alchemy-test";
@@ -170,6 +171,34 @@ describe.concurrent("effectful Website composites plan (collect-only)", () => {
           verify: false,
           takeover: false,
         });
+      }),
+  );
+
+  test.provider(
+    "Waku impl arm: explicit tier by default — external delivery, default routes, no effect build options",
+    (stack) =>
+      Effect.gen(function* () {
+        const plan = yield* stack.plan(
+          Effect.gen(function* () {
+            yield* AWS.Website.Waku(
+              "WakuDefaults",
+              { main: import.meta.url },
+              Effect.succeed(okFetch),
+            );
+          }),
+        );
+        const server = nodeOf(plan, "Server", "AWS.Lambda.Function");
+        expect(server).toBeDefined();
+        expect(server.props.runtimeDelivery).toBe("external");
+        expect(server.props.bundle).toBe(false);
+        expect(server.props.server.routes).toEqual(["/api/*"]);
+        // No wrapperEntry/effectOptions on the Waku config: the sentinel
+        // scan enforces the hand-written mount at deploy, and no effect
+        // build options ride the framework build.
+        const build = nodeOf(plan, "Build", "AWS.Website.Server");
+        expect(build).toBeDefined();
+        expect(build.props.options?.effect).toBeUndefined();
+        expect(build.props.options?.effectHash).toBeUndefined();
       }),
   );
 
@@ -346,7 +375,7 @@ describe.concurrent("effectful Website composites plan (collect-only)", () => {
           }),
         );
         // External delivery: no effect build options, and the deploy-time
-        // sentinel scan enforces the hand-written alchemy/serve/next mount.
+        // sentinel scan enforces the hand-written alchemy/Next mount.
         const server = nodeOf(plan, "Server", "AWS.Lambda.Function");
         expect(server.props.runtimeDelivery).toBe("external");
         expect(server.props.server.takeover).toBe(false);
@@ -544,7 +573,7 @@ describe.concurrent("effectful Website composites plan (collect-only)", () => {
 // ─────────────────────────────────────────────────────────────────────
 // Dev mode: no CDN resources; the effect program deploys as the local
 // emulator sibling and the collected env map (plus the alchemy stack
-// markers the in-process `alchemy/serve` mount needs) is lowered into the
+// markers the in-process `alchemy/Serve` mount needs) is lowered into the
 // dev `Server` resource's env — which applies it to the framework dev
 // server's process environment (`Server.ts` start).
 // ─────────────────────────────────────────────────────────────────────
@@ -666,7 +695,7 @@ describe.concurrent("effectful Website composites plan (dev)", () => {
         );
         // The framework module's dev child runs the Serve front dispatch
         // from these options: the impl anchor (absolute path), the routes
-        // claim, and the ENGINE-resolved `alchemy/serve` module (one
+        // claim, and the ENGINE-resolved `alchemy/Serve` module (one
         // alchemy instance for the child's bridge and the backend's own
         // imports). The effect-module content hash is deliberately NOT
         // part of the dev restart surface — backend edits hot-reload
@@ -720,7 +749,7 @@ describe.concurrent("effectful Website composites plan (dev)", () => {
 // The wiring handshake over a framework-shaped prebuilt artifact: the
 // composite ships the server directory as-is (`bundle: false`), so the
 // deploy-time sentinel scan is the only proof the user actually mounted
-// the program via `alchemy/serve` on the explicit tier.
+// the program via `alchemy/Serve` on the explicit tier.
 // ─────────────────────────────────────────────────────────────────────
 
 describe.concurrent("composite artifact sentinel scan (bundler unit)", () => {
@@ -743,7 +772,7 @@ describe.concurrent("composite artifact sentinel scan (bundler unit)", () => {
         );
         const failure = failureOf(exit);
         expect(failure?._tag).toBe("MissingServeMountError");
-        expect(String(failure?.message)).toContain("alchemy/serve");
+        expect(String(failure?.message)).toContain("alchemy/Serve");
       }),
   );
 
@@ -823,4 +852,66 @@ describe.concurrent("prepareServerWrapperEntry", () => {
       yield* fs.remove(root, { recursive: true });
     }).pipe(Effect.provide(NodeServices.layer)),
   );
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// The Lambda serve shell rides EVERY effectful class arm: the shell is
+// attached at class construction (no deploy involved), so `Serve.make` —
+// and the framework mounts built on it — dispatches through the
+// Lambda/Node layer recipe instead of the Cloudflare-flavored bridge.
+// ─────────────────────────────────────────────────────────────────────
+
+describe.concurrent("effectful class arms carry the Lambda serve shell", () => {
+  it("all seven framework class arms attach the shell statics", () => {
+    class ShellPlanAstro extends AWS.Website.Astro<ShellPlanAstro>()(
+      "ShellPlanAstro",
+      { main: import.meta.url },
+      Effect.succeed(okFetch),
+    ) {}
+    class ShellPlanSvelte extends AWS.Website.SvelteKit<ShellPlanSvelte>()(
+      "ShellPlanSvelte",
+      { main: import.meta.url },
+      Effect.succeed(okFetch),
+    ) {}
+    class ShellPlanWaku extends AWS.Website.Waku<ShellPlanWaku>()(
+      "ShellPlanWaku",
+      { main: import.meta.url },
+      Effect.succeed(okFetch),
+    ) {}
+    class ShellPlanOctane extends AWS.Website.Octane<ShellPlanOctane>()(
+      "ShellPlanOctane",
+      { main: import.meta.url },
+      Effect.succeed(okFetch),
+    ) {}
+    class ShellPlanStatic extends AWS.Website.StaticSite<ShellPlanStatic>()(
+      "ShellPlanStatic",
+      { main: import.meta.url },
+      Effect.succeed(okFetch),
+    ) {}
+    class ShellPlanNext extends AWS.Website.Nextjs<ShellPlanNext>()(
+      "ShellPlanNext",
+      { main: import.meta.url },
+      Effect.succeed(okFetch),
+    ) {}
+    class ShellPlanNuxt extends AWS.Website.Nuxt<ShellPlanNuxt>()(
+      "ShellPlanNuxt",
+      { main: import.meta.url },
+      Effect.succeed(okFetch),
+    ) {}
+    for (const cls of [
+      ShellPlanAstro,
+      ShellPlanSvelte,
+      ShellPlanWaku,
+      ShellPlanOctane,
+      ShellPlanStatic,
+      ShellPlanNext,
+      ShellPlanNuxt,
+    ]) {
+      const shell = (cls as any)[SERVE_SHELL_KEY];
+      expect(shell).toBeDefined();
+      expect(typeof shell.match).toBe("function");
+      expect(typeof shell.dispose).toBe("function");
+      expect(typeof shell.runtime).toBe("function");
+    }
+  });
 });

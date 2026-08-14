@@ -9,7 +9,7 @@
  *
  * ```js
  * import { FetchState, astro } from "astro/fetch";
- * import { toFetchable } from "alchemy/serve/astro";
+ * import { toFetchable } from "alchemy/Astro";
  * import Site from "/abs/path/to/site.ts";
  * const site = toFetchable(Site, { routes: ["/api/*"] });
  * export default {
@@ -24,7 +24,7 @@
  * 404), and Astro's whole pipeline serves everything outside them. When
  * the user authored their own fetch file (`src/fetch.ts` by default):
  *
- * - if it already mounts `alchemy/serve` (the explicit tier), the plugin
+ * - if it already mounts `alchemy/Serve` (the explicit tier), the plugin
  *   **stands down** — astro's own fetchable plugin resolves the user file
  *   directly and no double bridging occurs;
  * - otherwise the user fetchable is composed as the fallback in place of
@@ -164,14 +164,14 @@ const OPTIMIZE_EXCLUDES = [
 
 /**
  * Marks a user fetch file that already mounts the alchemy runtime bridge
- * (the explicit tier): the serve sentinel literal, an `alchemy/serve`
+ * (the explicit tier): the serve sentinel literal, an `alchemy/Serve`
  * import specifier, or the AWS serve shell
  * (`alchemy/AWS/Lambda/WebsiteHandlers`). Any one makes the wrapper
  * generator stand down.
  */
 const mountsServe = (source: string): boolean =>
   source.includes("__ALCHEMY_SERVE_v1__") ||
-  /["']alchemy\/(?:serve|AWS\/Lambda\/WebsiteHandlers)/.test(source);
+  /["']alchemy\/(?:Serve|Astro|AWS\/Lambda\/WebsiteHandlers)/.test(source);
 
 export interface EffectFetchablePluginOptions {
   /**
@@ -204,7 +204,7 @@ export interface EffectFetchablePluginOptions {
    *   shutdown extension, sentinel literal) — which resolves the alchemy
    *   env from `process.env` (the Lambda sandbox env, or the dev-server
    *   process env `alchemy dev` lowered the packed binding values into).
-   *   Deliberately NOT `alchemy/serve/astro`: the Cloudflare-flavored
+   *   Deliberately NOT `alchemy/Astro`: the Cloudflare-flavored
    *   bridge would drag the whole `@distilled.cloud/cloudflare` graph
    *   into every AWS server bundle. Applies to the `ssr` and `astro`
    *   (dev) environments.
@@ -361,7 +361,7 @@ export const createEffectFetchablePlugin = (
         return {
           code: [
             `globalThis.__ALCHEMY_RUNTIME__ = true;`,
-            `import { toFetchable } from "alchemy/serve/astro";`,
+            `import { toFetchable } from "alchemy/Astro";`,
             `import { env as __alchemyWorkerEnv } from "cloudflare:workers";`,
             fallback.imports,
             `import Site from ${JSON.stringify(mainPath)};`,

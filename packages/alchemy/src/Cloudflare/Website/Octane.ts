@@ -302,7 +302,7 @@ export const Octane: {
           // (`main: import.meta.url`). Octane is explicit-tier for now:
           // upstream `@octanejs/adapter-cloudflare` owns the emitted
           // worker entry, so the framework bundle deploys byte-for-byte
-          // and the user mounts the program via `alchemy/serve` in an
+          // and the user mounts the program via `alchemy/Serve` in an
           // Octane ServerRoute (the sentinel scan verifies the wiring).
           const anchor =
             impl === undefined

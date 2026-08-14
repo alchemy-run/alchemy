@@ -1,7 +1,7 @@
 // SSR seam: VALUE import + `createClient(Backend)` — the backend method
 // dispatches directly in-process (no HTTP hop) inside the async server
 // component, in the deployed Lambda and under `next dev` alike.
-import { createClient } from "alchemy/client";
+import { createClient } from "alchemy/Client";
 import Backend from "./backend.ts";
 import Queue from "./queue.tsx";
 import Visits from "./visits.tsx";

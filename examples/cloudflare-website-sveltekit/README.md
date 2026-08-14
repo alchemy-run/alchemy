@@ -48,7 +48,7 @@ export const load = async ({ request }) => {
 <!-- src/routes/+page.svelte (browser): TYPE-ONLY form — POST
      /api/__rpc/<method>, zero backend bytes in the client bundle -->
 <script lang="ts">
-  import { createClient } from "alchemy/client";
+  import { createClient } from "alchemy/Client";
   import type Backend from "../backend.ts";
   const backend = createClient<typeof Backend>();
   // await backend.bump()

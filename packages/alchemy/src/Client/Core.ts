@@ -1,5 +1,5 @@
 /**
- * The shared `alchemy/client` core — everything `createClient` needs in
+ * The shared `alchemy/Client` core — everything `createClient` needs in
  * BOTH worlds (browser and server), parameterized over the server-only
  * in-process dispatch so the browser build of this subpath carries zero
  * backend bytes.
@@ -282,6 +282,29 @@ export const resolveHeaders = async (
 ): Promise<HeadersInit | undefined> =>
   typeof headers === "function" ? headers() : headers;
 
+/**
+ * Snapshot a headers thunk SYNCHRONOUSLY at method-call time — before the
+ * server dispatch's async boundaries (the guarded dynamic import of
+ * `Server.ts`, env/runtime resolution) yield to other requests. A thunk
+ * backed by a framework's ambient request accessor (TanStack's
+ * `getRequestHeaders`, Next's `headers`) must run in the calling
+ * request's synchronous window or concurrent calls cross identities. The
+ * thunk fires here (inside `resolveHeaders`, sync up to its first await);
+ * downstream consumers get a thunk returning the memoized promise. The
+ * no-op catch marks an eventual rejection as observed so a dispatch that
+ * throws earlier (e.g. prerender) can't surface it as unhandled.
+ */
+const snapshotHeaders = <O extends ClientOptions | undefined>(
+  options: O,
+): O => {
+  if (typeof options?.headers !== "function") {
+    return options;
+  }
+  const promise = resolveHeaders(options.headers);
+  promise.catch(() => {});
+  return { ...options, headers: () => promise };
+};
+
 /** Decode one wire response per the envelope protocol. */
 const decodeEnvelope = (
   method: string,
@@ -463,7 +486,7 @@ export const makeCreateClient = (
       const options = second as ServerClientOptions | undefined;
       return makeProxy((method) => (...args) => {
         if (serverDispatch !== undefined && !isBrowserWorld()) {
-          return serverDispatch(site, method, args, options);
+          return serverDispatch(site, method, args, snapshotHeaders(options));
         }
         return runAsPromise(httpCall(method, args, options));
       });
@@ -488,9 +511,12 @@ export const makeCreateEffectClient = (
       return makeProxy((method) => (...args) => {
         if (serverDispatch !== undefined && !isBrowserWorld()) {
           // The in-process dispatch throws the REAL failure value; keep
-          // it as the typed failure channel.
+          // it as the typed failure channel. Headers snapshot when the
+          // effect RUNS (Effect semantics: identity at execution time),
+          // still synchronously before the dispatch's async boundaries.
           return Effect.tryPromise({
-            try: () => serverDispatch(site, method, args, options),
+            try: () =>
+              serverDispatch(site, method, args, snapshotHeaders(options)),
             catch: (error) => error,
           });
         }

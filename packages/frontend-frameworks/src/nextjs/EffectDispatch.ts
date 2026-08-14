@@ -38,7 +38,7 @@ import * as NodePath from "node:path";
 import { Readable } from "node:stream";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-/** The structural slice of `alchemy/serve` (`Serve/Serve.ts`) we drive. */
+/** The structural slice of `alchemy/Serve` (`Serve/Serve.ts`) we drive. */
 interface ServeModule {
   readonly make: (
     site: object,
@@ -69,7 +69,7 @@ export interface EffectDispatchConfig {
    */
   readonly routes?: readonly string[] | undefined;
   /**
-   * Absolute path or `file://` URL of the `alchemy/serve` surface module
+   * Absolute path or `file://` URL of the `alchemy/Serve` surface module
    * (`Serve/Serve.ts` re-exports), resolved BY THE ENGINE from its own
    * alchemy — see the module doc's identity contract.
    */

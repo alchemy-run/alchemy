@@ -336,6 +336,98 @@ describe.concurrent("effectful Website plan (collect-only)", () => {
   );
 
   test.provider(
+    "source-provider construct (Astro): impl stamps wrapper and threads the effect descriptor",
+    (stack) =>
+      Effect.gen(function* () {
+        const plan = yield* stack.plan(
+          Effect.gen(function* () {
+            yield* Cloudflare.Website.Astro(
+              "AstroPlanSite",
+              { main: import.meta.url },
+              Effect.succeed(okFetch),
+            );
+          }),
+        );
+        const site = nodeOf(plan, "AstroPlanSite");
+        expect(site.props.runtimeDelivery).toBe("wrapper");
+        expect(typeof site.props.main).toBe("string");
+        expect(site.props.source?.provider).toBe(
+          "@alchemy.run/frontend-frameworks/astro/source",
+        );
+        // The integration pre-resolves `virtual:astro:fetchable` to a
+        // generated wrapper importing the program module — the descriptor
+        // rides the source options (Astro's channel names it `mainPath`).
+        expect(site.props.source?.options?.effect?.mainPath).toBe(
+          site.props.main,
+        );
+        expect(site.props.source?.options?.effect?.routes).toEqual(["/api/*"]);
+        // Server output is forced (astro's zero-config default is static,
+        // which would prerender inside workerd without bindings).
+        expect(site.props.source?.options?.astro?.output).toBe("server");
+        expect(site.props.assets.runWorkerFirst).toEqual(["/api/*"]);
+        // The session namespace auto-provisions alongside the site.
+        expect(nodeOf(plan, "AstroPlanSiteSession")).toBeDefined();
+      }),
+  );
+
+  test.provider(
+    "source-provider construct (SvelteKit): impl stamps wrapper and threads the dev effect descriptor",
+    (stack) =>
+      Effect.gen(function* () {
+        const plan = yield* stack.plan(
+          Effect.gen(function* () {
+            yield* Cloudflare.Website.SvelteKit(
+              "SveltePlanSite",
+              { main: import.meta.url },
+              Effect.succeed(okFetch),
+            );
+          }),
+        );
+        const site = nodeOf(plan, "SveltePlanSite");
+        expect(site.props.runtimeDelivery).toBe("wrapper");
+        expect(typeof site.props.main).toBe("string");
+        expect(site.props.source?.provider).toBe(
+          "@alchemy.run/frontend-frameworks/sveltekit/source",
+        );
+        // The descriptor is the dev channel (the vite-child's DevContext
+        // hardcodes an external entry); build reads SourceContext.entry.
+        expect(site.props.source?.options?.effect?.main).toBe(site.props.main);
+        expect(site.props.source?.options?.effect?.routes).toEqual(["/api/*"]);
+        expect(site.props.assets.runWorkerFirst).toEqual(["/api/*"]);
+      }),
+  );
+
+  test.provider(
+    "source-provider construct (Waku): impl stamps wrapper and keeps the anchor",
+    (stack) =>
+      Effect.gen(function* () {
+        const plan = yield* stack.plan(
+          Effect.gen(function* () {
+            yield* Cloudflare.Website.Waku(
+              "WakuPlanSite",
+              { main: import.meta.url },
+              Effect.succeed(okFetch),
+            );
+          }),
+        );
+        const site = nodeOf(plan, "WakuPlanSite");
+        expect(site.props.runtimeDelivery).toBe("wrapper");
+        expect(typeof site.props.main).toBe("string");
+        expect(site.props.source?.provider).toBe(
+          "@alchemy.run/frontend-frameworks/waku/source",
+        );
+        // With an impl, `main` is the program anchor — the waku
+        // custom-entry seam is NOT forwarded to the source provider.
+        expect(site.props.source?.options?.main).toBeUndefined();
+        expect(site.props.assets.runWorkerFirst).toEqual(["/api/*"]);
+        // Waku's server runtime needs AsyncLocalStorage — nodejs_als is
+        // defaulted in, and SSG pages serve extensionless.
+        expect(site.props.compatibility?.flags).toContain("nodejs_als");
+        expect(site.props.assets.htmlHandling).toBe("drop-trailing-slash");
+      }),
+  );
+
+  test.provider(
     "Nextjs composite: worker-first true keeps the rpc path reachable (zero variance)",
     (stack) =>
       Effect.gen(function* () {

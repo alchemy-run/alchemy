@@ -27,7 +27,7 @@ describe("renderEffectHandler", () => {
   });
 
   it("imports only the serve mount and the site module", () => {
-    expect(source).toContain('from "alchemy/serve/nitro"');
+    expect(source).toContain('from "alchemy/Nitro"');
     expect(source).toContain('"/abs/project/src/site.ts"');
     // No other imports: the matcher is inlined.
     expect(
@@ -67,28 +67,28 @@ describe("scanForExplicitServeMount", () => {
       ),
     );
 
-  it("detects an alchemy/serve/nitro import in server/middleware", async () => {
+  it("detects an alchemy/Nitro import in server/middleware", async () => {
     const root = makeTempDir();
     const middlewareDir = NodePath.join(root, "server", "middleware");
     NodeFs.mkdirSync(middlewareDir, { recursive: true });
     NodeFs.writeFileSync(
       NodePath.join(middlewareDir, "alchemy.ts"),
-      'import { toEventHandler } from "alchemy/serve/nitro";\n' +
+      'import { toEventHandler } from "alchemy/Nitro";\n' +
         'import Site from "../../src/site.ts";\n' +
         "export default toEventHandler(Site);\n",
     );
     await expect(scan(NodePath.join(root, "server"))).resolves.toBe(true);
   });
 
-  it("ignores server files that do not mount alchemy/serve", async () => {
+  it("ignores server files that do not mount alchemy/Serve", async () => {
     const root = makeTempDir();
     const apiDir = NodePath.join(root, "server", "api");
     NodeFs.mkdirSync(apiDir, { recursive: true });
     NodeFs.writeFileSync(
       NodePath.join(apiDir, "hello.ts"),
-      // The value-form createClient graph (alchemy/client) must NOT
+      // The value-form createClient graph (alchemy/Client) must NOT
       // false-positive the stand-down.
-      'import { createClient } from "alchemy/client";\n' +
+      'import { createClient } from "alchemy/Client";\n' +
         "export default () => createClient;\n",
     );
     await expect(scan(NodePath.join(root, "server"))).resolves.toBe(false);

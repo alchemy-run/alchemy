@@ -43,7 +43,7 @@ export const Jobs = Queues.Queue("Jobs");
  * Dev caveat: the default `alchemy dev` mode (`preview`) serves the real
  * takeover artifact with full parity. `nextjs: { devMode: "hmr" }` runs
  * `next dev` in Node, where the takeover doesn't exist — there the RPC
- * dispatch needs the explicit `alchemy/serve/next` route-handler mount.
+ * dispatch needs the explicit `alchemy/Next` route-handler mount.
  *
  * `main: import.meta.url` anchors this module — the engine imports it for
  * plan-time binding collection and the generated entry re-imports it at

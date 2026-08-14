@@ -14,7 +14,7 @@
  *
  * ```js
  * import { WorkerEntrypoint, DurableObject } from "cloudflare:workers";
- * import { makeWebsiteEntryExports, DurableObjectBridge } from "alchemy/serve/worker";
+ * import { makeWebsiteEntryExports, DurableObjectBridge } from "alchemy/Serve/Worker";
  * import __astroEntry from "/abs/path/to/vendored/server.js";
  * import Site from "/abs/path/to/site.ts";
  * export default makeWebsiteEntryExports(WorkerEntrypoint, {
@@ -104,7 +104,7 @@ export const makeEntryWrapperSource = (options: {
     `// non-fetch handlers + DO classes come from the Worker bridge.`,
     `globalThis.__ALCHEMY_RUNTIME__ = true;`,
     `import { WorkerEntrypoint${hasDo ? ", DurableObject" : ""} } from "cloudflare:workers";`,
-    `import { makeWebsiteEntryExports${hasDo ? ", DurableObjectBridge" : ""} } from "alchemy/serve/worker";`,
+    `import { makeWebsiteEntryExports${hasDo ? ", DurableObjectBridge" : ""} } from "alchemy/Serve/Worker";`,
     `import __astroEntry from ${JSON.stringify(options.entryId)};`,
     `import Site from ${JSON.stringify(options.mainPath)};`,
     `export default makeWebsiteEntryExports(WorkerEntrypoint, {`,

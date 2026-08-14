@@ -2,7 +2,7 @@
 // Browser side: TYPE-ONLY import + type-only form — zero backend bytes
 // in the client bundle. Each call POSTs the wire protocol
 // (`/api/__rpc/bump`), dispatched by the alchemy server middleware.
-import { createClient } from "alchemy/client";
+import { createClient } from "alchemy/Client";
 import type Backend from "../../server/backend";
 
 const backend = createClient<typeof Backend>();

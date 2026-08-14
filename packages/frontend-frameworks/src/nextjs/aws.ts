@@ -83,7 +83,7 @@ export interface NextjsAwsEffectOptions {
   /** Path globs the Effect fetch owns (`server.routes`). */
   readonly routes: ReadonlyArray<string>;
   /**
-   * Dev-only: absolute path (or `file://` URL) of the `alchemy/serve`
+   * Dev-only: absolute path (or `file://` URL) of the `alchemy/Serve`
    * surface module, resolved by the ENGINE from its own alchemy instance
    * (`import.meta.resolve`) so the dev child's Serve bridge and the
    * backend module's own bare `alchemy/*` imports share one module graph.
@@ -192,10 +192,10 @@ export const EFFECT_WRAPPER_NAME = "opennext-wrapper.mjs";
 export const OPENNEXT_TESTED_RANGE = "4.x";
 
 /**
- * Signals of an explicit `alchemy/serve` mount in the user's Next route
+ * Signals of an explicit `alchemy/Serve` mount in the user's Next route
  * trees (`toRouteHandler` in a catch-all route handler): the explicit-mount
  * marker byte literal (embedded by `alchemy/src/Serve/Serve.ts`, the module
- * only explicit mounts import) or an `alchemy/serve` import specifier.
+ * only explicit mounts import) or an `alchemy/Serve` import specifier.
  * Deliberately NOT the bridge's `__ALCHEMY_SERVE_v1__` sentinel: the bridge
  * also rides the value-form `createClient` graph (server components
  * importing the backend), so that literal appears in every effectful site
@@ -204,7 +204,7 @@ export const OPENNEXT_TESTED_RANGE = "4.x";
  * deliberately carries no alchemy dependency.
  */
 const SERVE_MOUNT_PATTERN =
-  /__ALCHEMY_SERVE_MOUNT_v1__|["']alchemy\/serve(?:\/[a-z-]+)?["']/;
+  /__ALCHEMY_SERVE_MOUNT_v1__|["']alchemy\/(?:Serve(?:\/Worker)?|Next|Nitro|Astro|SvelteKit)["']/;
 
 const SOURCE_FILE_PATTERN = /\.(?:ts|tsx|js|jsx|mjs|cjs)$/;
 
@@ -244,7 +244,7 @@ const scanTreeForServeMount = (directory: string): boolean => {
 
 /**
  * Scan the project's Next route trees (`app`, `src/app`, `pages`,
- * `src/pages`) for an explicit `alchemy/serve` mount (DESIGN §6.3: the
+ * `src/pages`) for an explicit `alchemy/Serve` mount (DESIGN §6.3: the
  * auto-inject tier stands down when the user mounted the bridge
  * themselves — never two bridges on one Lambda). Route handlers cannot
  * live outside these trees, so the scan is exact for the mount that could
@@ -265,7 +265,7 @@ export const scanForExplicitNextServeMount = (root: string): boolean =>
 export const openNextEffectSupportIssue = (cli: string): string | undefined => {
   const optOut =
     "To keep deploying with an untested OpenNext, opt out of auto-injection " +
-    "with `server: { takeover: false }` and mount `alchemy/serve/next` in a " +
+    "with `server: { takeover: false }` and mount `alchemy/Next` in a " +
     "catch-all route handler instead.";
   const distDir = NodePath.dirname(cli);
   const packageJsonPath = NodePath.join(distDir, "..", "package.json");
@@ -473,7 +473,7 @@ import userConfig from ${JSON.stringify(options.userConfigPath)};
 
 const optOut =
   "To keep this config, opt out of auto-injection with server: " +
-  "{ takeover: false } and mount alchemy/serve/next in a catch-all route " +
+  "{ takeover: false } and mount alchemy/Next in a catch-all route " +
   "handler instead.";
 
 const userWrapper = userConfig?.default?.override?.wrapper;
@@ -891,7 +891,7 @@ export const make: (
       const cli = yield* resolveOpenNextCli(root);
 
       // Effectful zero-setup delivery: stand down when the user's route
-      // tree already mounts alchemy/serve explicitly (the explicit tier
+      // tree already mounts alchemy/Serve explicitly (the explicit tier
       // wins — never two bridges on one Lambda).
       let effect = options?.effect;
       if (
@@ -900,7 +900,7 @@ export const make: (
       ) {
         yield* Effect.sync(() =>
           process.stderr.write(
-            "alchemy: explicit alchemy/serve mount detected in the Next " +
+            "alchemy: explicit alchemy/Serve mount detected in the Next " +
               "route tree - the OpenNext wrapper override stands down\n",
           ),
         );

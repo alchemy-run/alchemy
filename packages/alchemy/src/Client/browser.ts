@@ -1,5 +1,5 @@
 /**
- * The `"browser"`-condition build of `alchemy/client` — the identical
+ * The `"browser"`-condition build of `alchemy/Client` — the identical
  * public surface with NO server branch at all: the value form
  * (`createClient(Backend)`) falls back to the HTTP wire path (harmless —
  * same protocol), and nothing in this module's graph can reach the
