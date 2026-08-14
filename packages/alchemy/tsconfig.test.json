@@ -5,7 +5,8 @@
     "test",
     // JSON modules imported by fixtures (plain `include: ["test"]` only
     // sweeps .ts files).
-    "test/Cloudflare/Workers/fixtures/prisma-orm/generated/contract.json"
+    "test/Cloudflare/Workers/fixtures/prisma-orm/generated/contract.json",
+    "test/Prisma/ORM/fixtures/client/generated/contract.json"
   ],
   "exclude": [
     // prisma-next migration packages are self-emitting Node scripts whose
@@ -15,6 +16,8 @@
     // Executed by the prisma-next CLI (which resolves its own toolchain
     // types); its inferred config type is not portable from this project.
     "test/Cloudflare/Workers/fixtures/prisma-orm/prisma-next.config.ts",
+    "test/Prisma/ORM/fixtures/client/migrations",
+    "test/Prisma/ORM/fixtures/client/prisma-next.config.ts",
     "test/Local/fixtures/rpc-server-entry.ts",
     "test/Local/fixtures/rpc-spawner-parent.ts",
     "test/Local/fixtures/rpc-spawner-devserver-parent.ts",

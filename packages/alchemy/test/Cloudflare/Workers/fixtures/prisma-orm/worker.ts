@@ -8,12 +8,16 @@ import contractJson from "./generated/contract.json";
 import { Hyperdrive } from "./db.ts";
 
 /**
- * Worker exercising the prisma-next runtime client on workerd. The client is
+ * Worker exercising the prisma-next Effect client on workerd. The client is
  * created once at init (no I/O — prisma-next connects lazily), and each fetch
  * event builds (and closes) its own `pg` pool against its per-event scope via
  * the execution memo. The test hammers the query routes sequentially and
  * concurrently to pin cross-request pool isolation: no "Cannot perform I/O on
  * behalf of a different request", no "Cannot use a pool after calling end".
+ *
+ * Routes cover the Effect-native surfaces: the orm lane (`yield*` directly),
+ * the pure sql builder lane through `db.execute`, transactions with typed
+ * rollback, and the typed error taxonomy.
  */
 export default class PrismaOrmWorker extends Cloudflare.Worker<PrismaOrmWorker>()(
   "PrismaOrmWorker",
@@ -33,9 +37,9 @@ export default class PrismaOrmWorker extends Cloudflare.Worker<PrismaOrmWorker>(
 
         if (request.url.startsWith("/widgets/create/")) {
           const name = request.url.split("/widgets/create/")[1] ?? "unnamed";
-          const widget = yield* db
-            .use((c) => c.orm.public.Widget.create({ name }))
-            .pipe(Effect.orDie);
+          const widget = yield* db.orm.public.Widget.create({ name }).pipe(
+            Effect.orDie,
+          );
           return yield* HttpServerResponse.json({
             id: widget.id,
             name: widget.name,
@@ -44,8 +48,8 @@ export default class PrismaOrmWorker extends Cloudflare.Worker<PrismaOrmWorker>(
 
         if (request.url.startsWith("/widgets/get/")) {
           const id = Number(request.url.split("/widgets/get/")[1] ?? "0");
-          const widget = yield* db
-            .use((c) => c.orm.public.Widget.where({ id }).first())
+          const widget = yield* db.orm.public.Widget.where({ id })
+            .first()
             .pipe(Effect.orDie);
           return yield* HttpServerResponse.json({
             found: widget !== null,
@@ -53,14 +57,24 @@ export default class PrismaOrmWorker extends Cloudflare.Worker<PrismaOrmWorker>(
           });
         }
 
+        if (request.url.startsWith("/widgets/sql")) {
+          // Pure plan built by the static sql lane, run by the Effect executor.
+          const rows = yield* db
+            .execute(db.sql.public.widget.select("id", "name").build())
+            .pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({ count: rows.length });
+        }
+
         if (request.url.startsWith("/widgets/tx/")) {
           const name = request.url.split("/widgets/tx/")[1] ?? "tx-widget";
           // Round-trip a transaction: create + read back inside one tx.
           const readBack = yield* db
-            .use((c) =>
-              c.transaction(async (tx) => {
-                const created = await tx.orm.public.Widget.create({ name });
-                return tx.orm.public.Widget.where({ id: created.id }).first();
+            .transaction((tx) =>
+              Effect.gen(function* () {
+                const created = yield* tx.orm.public.Widget.create({ name });
+                return yield* tx.orm.public.Widget.where({
+                  id: created.id,
+                }).first();
               }),
             )
             .pipe(Effect.orDie);
@@ -69,17 +83,45 @@ export default class PrismaOrmWorker extends Cloudflare.Worker<PrismaOrmWorker>(
           });
         }
 
-        if (request.url.startsWith("/widgets/error")) {
-          // A query against a constraint that cannot exist — the typed
-          // PrismaError tag must surface (not a defect).
+        if (request.url.startsWith("/widgets/rollback/")) {
+          const name = request.url.split("/widgets/rollback/")[1] ?? "nope";
           const outcome = yield* db
-            .use((c) => c.orm.public.Widget.where({ id: Number.NaN }).first())
+            .transaction((tx) =>
+              Effect.gen(function* () {
+                yield* tx.orm.public.Widget.create({ name });
+                return yield* tx.rollback();
+              }),
+            )
+            .pipe(
+              Effect.as("committed" as const),
+              Effect.catchTag("Prisma.PrismaRollbackError", () =>
+                Effect.succeed("rolled-back" as const),
+              ),
+              Effect.orDie,
+            );
+          // Prove the write did not survive the rollback.
+          const after = yield* db.orm.public.Widget.where({ name })
+            .first()
+            .pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({
+            outcome,
+            visible: after !== null,
+          });
+        }
+
+        if (request.url.startsWith("/widgets/error")) {
+          // A duplicate-free probe of the typed taxonomy: querying with a
+          // NaN id fails in the encode/query pipeline — the typed tags must
+          // surface (not a defect).
+          const outcome = yield* db.orm.public.Widget.where({
+            id: Number.NaN,
+          })
+            .first()
             .pipe(
               Effect.as("ok" as const),
-              // Pins that the typed tag narrows the union — the remaining
-              // channel (the connection source's own errors) dies.
-              Effect.catchTag("Prisma.PrismaError", (error) =>
-                Effect.succeed(`caught:${error._tag}` as const),
+              Effect.catchTag(
+                ["Prisma.PrismaError", "Prisma.PrismaQueryError"],
+                (error) => Effect.succeed(`caught:${error._tag}`),
               ),
               Effect.orDie,
             );

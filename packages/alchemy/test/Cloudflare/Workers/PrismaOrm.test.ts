@@ -87,6 +87,26 @@ test(
 );
 
 test(
+  "sql lane and typed rollback on workerd",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+
+    const sql = yield* getOk(`${url}/widgets/sql`).pipe(
+      Effect.flatMap((res) => res.json),
+      Effect.map((json) => json as { count: number }),
+    );
+    expect(sql.count).toBeGreaterThanOrEqual(0);
+
+    const rollback = yield* getOk(`${url}/widgets/rollback/ghost-widget`).pipe(
+      Effect.flatMap((res) => res.json),
+      Effect.map((json) => json as { outcome: string; visible: boolean }),
+    );
+    expect(rollback).toEqual({ outcome: "rolled-back", visible: false });
+  }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test(
   "sequential and concurrent events each get their own pool (no cross-request I/O)",
   Effect.gen(function* () {
     const { url } = yield* stack;

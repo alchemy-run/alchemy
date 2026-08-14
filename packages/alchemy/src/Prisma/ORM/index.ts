@@ -6,5 +6,6 @@
 // peer is optional, and keeping it out of the barrel keeps the peer out of
 // every non-user's module graph. Import it as `alchemy/Prisma/ORM/Postgres`.
 export * from "./Contract.ts";
+export * from "./Errors.ts";
 export * from "./Migrate.ts";
 export { PrismaNextError } from "./internal.ts";

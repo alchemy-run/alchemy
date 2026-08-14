@@ -150,7 +150,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 
     return {
       fetch: Effect.gen(function* () {
-        const users = yield* db.use((c) => c.orm.public.User.all());
+        const users = yield* db.orm.public.User.all();
         return yield* HttpServerResponse.json({ users });
       }),
     };
@@ -163,41 +163,74 @@ opens on the first query, and `close()` runs when the event settles
 (see [Connection lifecycle](/sql/effect-sql/lifecycle)). Plan and
 deploy never open a connection.
 
-## Queries are Effects through `use`
+## Queries are Effects
 
-prisma-next's client is promise-based, so queries run through
-`db.use`, which converts each call into an Effect with
-`Prisma.PrismaError` in the typed error channel:
+The `orm` lane chains exactly like prisma-next's own client
+(namespaced per Postgres schema — `db.orm.public.*`), but every
+terminal yields an Effect with typed errors. Queries are lazy and
+re-runnable: `Effect.retry` re-issues the query.
 
 ```typescript
-const user = yield* db.use((c) =>
-  c.orm.public.User.where({ email }).first(),
-);
+const user = yield* db.orm.public.User.where({ email })
+  .include("posts")
+  .first();
 
-const created = yield* db.use((c) =>
-  c.orm.public.Post.create({ title, authorId: user.id }),
-);
+const created = yield* db.orm.public.Post.create({
+  title,
+  authorId: user.id,
+});
 
-// transactions run inside one use call
-const posts = yield* db.use((c) =>
-  c.transaction(async (tx) => tx.orm.public.Post.all()),
+// row types narrow with the chain: select projects, include augments
+const slim = yield* db.orm.public.User.select("id", "email").all();
+```
+
+`update` and `delete` require a prior `.where(...)` — at compile
+time, same as prisma-next. Failures surface as tagged errors:
+`Prisma.PrismaQueryError` (with `sqlState`/`constraint`; unique
+violations expose `isUniqueViolation`), `Prisma.PrismaConnectionError`
+(with the driver's `transient` retry hint), and `Prisma.PrismaError`
+for ORM validation codes:
+
+```typescript
+const outcome = yield* db.orm.public.User.create({ email }).pipe(
+  Effect.catchTag("Prisma.PrismaQueryError", (error) =>
+    error.isUniqueViolation
+      ? Effect.succeed("already registered")
+      : Effect.fail(error),
+  ),
 );
 ```
 
-The full client surface is available inside `use`: the `orm` lane
-(namespaced per Postgres schema — `c.orm.public.*`), the `sql` query
-builder lane, the `raw` tag, and `transaction`. Failures carry
-prisma-next's structured error code:
+## The sql lane and raw SQL
+
+`db.sql` is prisma-next's pure query builder — plans are data, no
+connection behind them — and `db.execute` / `db.stream` run them:
 
 ```typescript
-const result = yield* db
-  .use((c) => c.orm.public.User.create({ email }))
-  .pipe(
-    Effect.catchTag("Prisma.PrismaError", (error) =>
-      Effect.succeed(`failed with ${error.code}`),
-    ),
-  );
+const plan = db.sql.public.user.select("id", "email").build();
+const rows = yield* db.execute(plan);          // Effect<{id, email}[]>
+const feed = db.stream(plan);                  // Stream<{id, email}>
 ```
+
+## Transactions
+
+`db.transaction` runs an Effect on a dedicated connection — commit on
+success, rollback on failure or interruption. `tx.rollback()` aborts
+with a typed `Prisma.PrismaRollbackError`:
+
+```typescript
+yield* db.transaction((tx) =>
+  Effect.gen(function* () {
+    const user = yield* tx.orm.public.User.create({ email });
+    if (!invited) return yield* tx.rollback();
+    return user;
+  }),
+);
+```
+
+Surfaces the Effect facade does not cover yet (`groupBy`, `combine`,
+`variant`, `prepare`) remain reachable through the promise-land
+escape hatch: `db.use((c) => ...)`.
 
 ## Where next
 

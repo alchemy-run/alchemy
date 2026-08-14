@@ -25,7 +25,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
         switch (request.method) {
           case "GET": {
             if (request.url === "/") {
-              const users = yield* db.use((c) => c.orm.public.User.all());
+              const users = yield* db.orm.public.User.all();
               return yield* HttpServerResponse.json({ users });
             }
             const id = Number(request.url.split("/").pop());
@@ -35,18 +35,16 @@ export default class Api extends Cloudflare.Worker<Api>()(
                 { status: 400 },
               );
             }
-            const user = yield* db.use((c) =>
-              c.orm.public.User.where({ id }).include("posts").first(),
-            );
+            const user = yield* db.orm.public.User.where({ id })
+              .include("posts")
+              .first();
             return yield* HttpServerResponse.json({ user });
           }
           case "POST": {
-            const user = yield* db.use((c) =>
-              c.orm.public.User.create({
-                name: crypto.randomUUID(),
-                email: crypto.randomUUID(),
-              }),
-            );
+            const user = yield* db.orm.public.User.create({
+              name: crypto.randomUUID(),
+              email: crypto.randomUUID(),
+            });
             return yield* HttpServerResponse.json({ user });
           }
           case "DELETE": {
@@ -57,11 +55,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
                 { status: 400 },
               );
             }
-            const user = yield* db.use(async (c) => {
-              const existing = await c.orm.public.User.where({ id }).first();
-              if (existing) await c.orm.public.User.where({ id }).delete();
-              return existing;
-            });
+            const user = yield* db.orm.public.User.where({ id }).delete();
             return yield* HttpServerResponse.json({ user });
           }
           default: {
