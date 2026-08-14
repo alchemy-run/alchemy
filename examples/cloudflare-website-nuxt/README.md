@@ -19,13 +19,29 @@ mechanics vary between examples.
 - `app/pages/index.vue` is the UI: the `useAsyncData` server branch
   server-renders the count and the button bumps it from the browser.
 
+### The async leg
+
+The same backend class also carries the demo's async leg: a Cloudflare
+Queue (`Jobs`) produced to by the `enqueue(message)` RPC method and
+consumed ON THE SAME CLASS by `consumeQueueMessages` — each message bumps
+`processed-count` and records `processed-last` in the `Visits` KV
+namespace, and `processed()` reads that state back. The entry takeover
+wraps the nitro artifact so the queue handler is delivered alongside
+`fetch` — no separate consumer worker. (Queue delivery is prod-only for
+Nuxt: `alchemy dev` serves the frontend, but consumed batches only flow
+in a real deploy.) The UI's queue section sends a message
+("Send to queue") and then polls `processed()` (bounded, once per second)
+until the count grows, so the asynchronous catch-up — queue → consumer →
+KV → UI — is visible in the `Queue-processed: {count} — last: {last}`
+line.
+
 ## createClient — both forms
 
 ```ts
 // app/pages/index.vue (browser): TYPE-ONLY form — POST
 // /api/__rpc/<method>, zero backend bytes in the client bundle
 import { createClient } from "alchemy/client";
-import type Backend from "../backend";
+import type Backend from "~~/server/backend";
 const backend = createClient<typeof Backend>();
 // await backend.bump()
 ```
@@ -35,12 +51,19 @@ const backend = createClient<typeof Backend>();
 // (compiled out of the client bundle by the import.meta.server guard)
 const { data: visits } = await useAsyncData("visits", async () => {
   if (import.meta.server) {
-    const { default: Backend } = await import("../backend");
+    const { default: Backend } = await import("~~/server/backend");
     return createClient(Backend).visits();
   }
   return backend.visits();
 });
 ```
+
+> KNOWN GAP (Cloudflare deploys): the value form currently errors inside
+> the deployed Worker's vue server graph (nuxt's vite-builder resolves the
+> alchemy/effect graph node-flavored; it breaks on workerd), so the SSR
+> branch yields `null` and the page catches up client-side through the
+> type-only form (`onMounted` in `app/pages/index.vue`). The gated test in
+> `test/integ.test.ts` documents the exact failure.
 
 ## Mechanics: route ownership
 

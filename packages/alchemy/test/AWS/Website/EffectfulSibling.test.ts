@@ -174,6 +174,105 @@ describe.concurrent("sibling-function non-fetch delivery (plan)", () => {
   );
 
   test.provider(
+    "Astro (FrameworkSite path): the sibling threads through the shared composite",
+    (stack) =>
+      Effect.gen(function* () {
+        const plan = yield* stack.plan(
+          Effect.gen(function* () {
+            const queue = yield* AWS.SQS.Queue("AstroJobs", {});
+            yield* AWS.Website.Astro(
+              "AstroSiblingSite",
+              { main: import.meta.url },
+              Effect.gen(function* () {
+                yield* AWS.SQS.consumeQueueMessages(queue, (records) =>
+                  records.pipe(
+                    Stream.runForEach((record) => Effect.log(record.body)),
+                  ),
+                );
+                return okFetch;
+              }).pipe(Effect.provide(AWS.Lambda.QueueEventSource)),
+            );
+          }),
+        );
+
+        const sibling = nodeOf(
+          plan,
+          "AstroSiblingSite-Handlers",
+          "AWS.Lambda.Function",
+        );
+        expect(sibling).toBeDefined();
+        expect(sibling.props.functionUrl).toBe(false);
+        expect(hasAction(statementsOf(sibling), "sqs:ReceiveMessage")).toBe(
+          true,
+        );
+
+        const mapping = entryOf(plan, "AstroJobs-EventSource");
+        expect(mapping).toBeDefined();
+        expect(mapping![0]).toBe(
+          "AstroSiblingSite-Handlers/AstroJobs-EventSource",
+        );
+
+        // Astro is the auto-inject (wrapper) tier on AWS; the site Lambda
+        // stays fetch-only either way — the queue consumer rides the
+        // sibling, never the framework artifact.
+        const server = nodeOf(plan, "Server", "AWS.Lambda.Function");
+        expect(server).toBeDefined();
+        expect(server.props.runtimeDelivery).toBe("wrapper");
+        expect(hasAction(statementsOf(server), "sqs:ReceiveMessage")).toBe(
+          false,
+        );
+      }),
+  );
+
+  test.provider(
+    "SvelteKit (FrameworkSite path): the sibling threads through the shared composite",
+    (stack) =>
+      Effect.gen(function* () {
+        const plan = yield* stack.plan(
+          Effect.gen(function* () {
+            const queue = yield* AWS.SQS.Queue("KitJobs", {});
+            yield* AWS.Website.SvelteKit(
+              "KitSiblingSite",
+              { main: import.meta.url },
+              Effect.gen(function* () {
+                yield* AWS.SQS.consumeQueueMessages(queue, (records) =>
+                  records.pipe(
+                    Stream.runForEach((record) => Effect.log(record.body)),
+                  ),
+                );
+                return okFetch;
+              }).pipe(Effect.provide(AWS.Lambda.QueueEventSource)),
+            );
+          }),
+        );
+
+        const sibling = nodeOf(
+          plan,
+          "KitSiblingSite-Handlers",
+          "AWS.Lambda.Function",
+        );
+        expect(sibling).toBeDefined();
+        expect(sibling.props.functionUrl).toBe(false);
+        expect(hasAction(statementsOf(sibling), "sqs:ReceiveMessage")).toBe(
+          true,
+        );
+
+        const mapping = entryOf(plan, "KitJobs-EventSource");
+        expect(mapping).toBeDefined();
+        expect(mapping![0]).toBe("KitSiblingSite-Handlers/KitJobs-EventSource");
+
+        // SvelteKit is the auto-inject (wrapper) tier on AWS; the site
+        // Lambda stays fetch-only either way.
+        const server = nodeOf(plan, "Server", "AWS.Lambda.Function");
+        expect(server).toBeDefined();
+        expect(server.props.runtimeDelivery).toBe("wrapper");
+        expect(hasAction(statementsOf(server), "sqs:ReceiveMessage")).toBe(
+          false,
+        );
+      }),
+  );
+
+  test.provider(
     "Nuxt (FrameworkSite path): the sibling threads through the shared composite",
     (stack) =>
       Effect.gen(function* () {

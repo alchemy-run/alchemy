@@ -4,8 +4,10 @@
 // barrel would drag the entire IaC engine into that graph — the
 // service-level subpaths keep it to the construct + capability slice.
 import * as KV from "alchemy/Cloudflare/KV";
+import * as Queues from "alchemy/Cloudflare/Queues";
 import { Nuxt } from "alchemy/Cloudflare/Website";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 /**
@@ -14,6 +16,16 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  * alchemy.run.ts needed.
  */
 export const Visits = KV.Namespace("Visits");
+
+/**
+ * Queue bound by the site's Effect program — the async leg. The program
+ * both produces to it (the `enqueue` RPC method) and CONSUMES it on the
+ * SAME class via `consumeQueueMessages`; the entry takeover wraps the
+ * nitro artifact so the queue handler is delivered alongside `fetch`.
+ * (Local queue delivery is prod-only for Nuxt — `alchemy dev` serves the
+ * frontend, but consumed batches only flow in a real deploy.)
+ */
+export const Jobs = Queues.Queue("Jobs");
 
 /**
  * ONE Worker serves the Nuxt app AND a typed backend API: the third
@@ -48,6 +60,34 @@ export default class Site extends Nuxt<Site>()(
     // Init: runs at plan time in the engine (collects the KV binding) and
     // again inside the Worker on first request (builds the runtime client).
     const visits = yield* KV.ReadWriteNamespace(yield* Visits);
+    const jobsQueue = yield* Jobs;
+    const jobs = yield* Queues.WriteQueue(jobsQueue);
+
+    // The async leg's consumer — a queue listener on the SAME class. At
+    // plan time this yields the `Cloudflare.Queues.Consumer` resource; at
+    // runtime queue batches dispatch to it. Each message bumps
+    // `processed-count` and records `processed-last` in KV, where the
+    // `processed` RPC method reads them back.
+    yield* Queues.consumeQueueMessages<string>(
+      jobsQueue,
+      {
+        batchSize: 5,
+        maxRetries: 2,
+        maxWaitTime: "1 second",
+        retryDelay: "2 seconds",
+      },
+      (stream) =>
+        Stream.runForEach(stream, (msg) =>
+          Effect.gen(function* () {
+            const count = Number(
+              (yield* visits.get("processed-count")) ?? "0",
+            );
+            yield* visits.put("processed-count", String(count + 1));
+            yield* visits.put("processed-last", String(msg.body));
+          }).pipe(Effect.orDie),
+        ),
+    );
+
     return {
       // The program owns everything inside `server.routes` (with
       // /api/hello excluded above), so /api/* paths get its own 404 —
@@ -69,6 +109,23 @@ export default class Site extends Nuxt<Site>()(
           yield* visits.put("count", String(count));
           return count;
         }).pipe(Effect.orDie),
+      // The async leg's producer (RPC: POST /api/__rpc/enqueue) — sends a
+      // message to the queue; the consumer above catches up asynchronously.
+      enqueue: (message: string) =>
+        jobs
+          .send(message, { contentType: "text" })
+          .pipe(Effect.asVoid, Effect.orDie),
+      // Read the consumer's async state (RPC: POST /api/__rpc/processed).
+      processed: () =>
+        Effect.gen(function* () {
+          const count = yield* visits.get("processed-count");
+          const last = yield* visits.get("processed-last");
+          return { count: Number(count ?? "0"), last: last ?? null };
+        }).pipe(Effect.orDie),
     };
-  }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),
+  }).pipe(
+    Effect.provide(KV.ReadWriteNamespaceBinding),
+    Effect.provide(Queues.WriteQueueBinding),
+    Effect.provide(Queues.EventSourceLive),
+  ),
 ) {}

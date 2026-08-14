@@ -119,6 +119,23 @@ const EFFECT_ENTRY_EXTERNALS = [
   EFFECT_VIRTUAL_SPECIFIER,
 ];
 
+/** Fold an existing rollup/rolldown `external` option into a predicate. */
+const matchesExternal = (
+  previous: unknown,
+  id: string,
+  importer: string | undefined,
+  isResolved: boolean,
+): boolean =>
+  typeof previous === "function"
+    ? (previous(id, importer, isResolved) ?? false)
+    : Array.isArray(previous)
+      ? previous.some((entry) =>
+          entry instanceof RegExp ? entry.test(id) : entry === id,
+        )
+      : previous instanceof RegExp
+        ? previous.test(id)
+        : false;
+
 const wrapRollupExternal = (rollupConfig: RollupConfigSlice): void => {
   const previous = rollupConfig.external;
   rollupConfig.external = (
@@ -127,15 +144,53 @@ const wrapRollupExternal = (rollupConfig: RollupConfigSlice): void => {
     isResolved: boolean,
   ): boolean =>
     EFFECT_ENTRY_EXTERNALS.includes(id) ||
-    (typeof previous === "function"
-      ? (previous(id, importer, isResolved) ?? false)
-      : Array.isArray(previous)
-        ? previous.some((entry) =>
-            entry instanceof RegExp ? entry.test(id) : entry === id,
-          )
-        : previous instanceof RegExp
-          ? previous.test(id)
-          : false);
+    matchesExternal(previous, id, importer, isResolved);
+};
+
+/** The structural slice of the vite config `vite:extendConfig` receives. */
+interface ViteConfigSlice {
+  build?: {
+    rollupOptions?: RollupConfigSlice;
+    rolldownOptions?: RollupConfigSlice;
+  };
+}
+
+/**
+ * Externalize workerd-only modules (`cloudflare:*`) plus the effect-entry
+ * externals in nuxt's VUE SERVER vite build. The value-form
+ * `createClient` seam (`app/pages/*.vue` importing the backend module for
+ * SSR) pulls the alchemy runtime graph — including capnweb's workerd RPC
+ * transport, which imports `cloudflare:workers` — into that build, and
+ * nuxt's vite-builder inlines everything by default. The emitted server
+ * chunks are consumed by nitro's own rollup pass, whose workerd preset
+ * (`cloudflare_module`) resolves `cloudflare:*` at deploy — so leaving the
+ * import statements external here is exactly right.
+ *
+ * KNOWN GAP: this makes the vue server build COMPILE, but the value form
+ * still fails at SSR runtime on workerd — nuxt's vite-builder resolves the
+ * inlined alchemy/effect graph NODE-flavored (platform-node sockets etc.),
+ * and those modules break on unenv mocks (`.once is not a function`).
+ * Externalizing the whole alchemy graph instead is not an option: nitro's
+ * `noExternals` pass then tries to inline it and dies on native/wasm
+ * optional deps (sharp). The real fix is sharing the entry's prebundled
+ * effect module (one Site class instance, one runtime) with the vue server
+ * graph — until then, nuxt pages should render initial values client-side
+ * (type-only form) or via nitro routes.
+ */
+const wrapViteServerExternal = (viteConfig: ViteConfigSlice): void => {
+  const build = (viteConfig.build ??= {});
+  for (const key of ["rollupOptions", "rolldownOptions"] as const) {
+    const bundlerOptions = (build[key] ??= {});
+    const previous = bundlerOptions.external;
+    bundlerOptions.external = (
+      id: string,
+      importer: string | undefined,
+      isResolved: boolean,
+    ): boolean =>
+      id.startsWith("cloudflare:") ||
+      EFFECT_ENTRY_EXTERNALS.includes(id) ||
+      matchesExternal(previous, id, importer, isResolved);
+  }
 };
 
 /** Inputs the framework passes when consulting the target's nitro hook. */
@@ -498,6 +553,19 @@ export const make: (
         // initializes nitro.
         let outputDirs: NitroInstanceSlice["options"]["output"] | undefined;
         yield* Effect.sync(() => {
+          if (options?.effectEntry === true) {
+            // The vue server build must not inline workerd-only modules the
+            // value-form backend import graph reaches (see
+            // `wrapViteServerExternal`).
+            nuxt.hook(
+              "vite:extendConfig",
+              (viteConfig: ViteConfigSlice, ctx: { isServer?: boolean }) => {
+                if (ctx?.isServer === true) {
+                  wrapViteServerExternal(viteConfig);
+                }
+              },
+            );
+          }
           nuxt.hook("nitro:config", (nitroConfig: NitroConfigSlice) => {
             enforceNitroConfig(nitroConfig, {
               preset: target.nitroPreset,

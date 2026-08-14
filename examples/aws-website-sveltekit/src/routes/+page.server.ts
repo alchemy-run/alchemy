@@ -8,4 +8,5 @@ const backend = createClient(Backend);
 
 export const load = async () => ({
   visits: await backend.visits(),
+  processed: await backend.processed(),
 });

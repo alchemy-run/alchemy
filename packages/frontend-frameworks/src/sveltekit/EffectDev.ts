@@ -97,15 +97,20 @@ export const matchServerRoutes = (
 /**
  * Signals of an explicit `alchemy/serve` mount inside kit's built server
  * graph (`hooks.server.ts` importing `alchemy/serve/sveltekit`'s `toHandle`
- * etc.): either the serve sentinel byte literal (when the bridge was
- * bundled into the output) or an import of an `alchemy/serve` specifier
- * (kit's Vite SSR build externalizes deps, leaving the specifier in the
- * emitted chunks). Kept in sync with `alchemy/src/Serve/constants.ts` —
- * duplicated here because this package deliberately carries no alchemy
- * dependency.
+ * etc.): either the explicit-MOUNT marker byte literal (embedded by
+ * `alchemy/src/Serve/Serve.ts`, the module only explicit mounts import,
+ * when it was bundled into the output) or an import of an `alchemy/serve`
+ * specifier (kit's Vite SSR build externalizes deps, leaving the specifier
+ * in the emitted chunks). Deliberately NOT the bridge's
+ * `__ALCHEMY_SERVE_v1__` sentinel: the bridge module also rides the
+ * value-form `createClient` graph (`+page.server.ts` importing the
+ * backend), so its literal appears in EVERY effectful website's kit server
+ * bundle and would false-positive the stand-down. Kept in sync with
+ * `alchemy/src/Serve/constants.ts` — duplicated here because this package
+ * deliberately carries no alchemy dependency.
  */
 const SERVE_MOUNT_PATTERN =
-  /__ALCHEMY_SERVE_v1__|["']alchemy\/serve(?:\/[a-z-]+)?["']/;
+  /__ALCHEMY_SERVE_MOUNT_v1__|["']alchemy\/serve(?:\/[a-z-]+)?["']/;
 
 /**
  * Scan kit's built server directory for an explicit `alchemy/serve` mount

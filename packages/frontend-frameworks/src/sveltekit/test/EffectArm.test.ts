@@ -118,14 +118,30 @@ describe("scanForExplicitServeMount", () => {
     );
   });
 
-  it("detects the bundled serve sentinel literal", () => {
+  it("detects the bundled explicit-mount marker literal", () => {
     const root = NodePath.join(dir, "sentinel");
+    NodeFs.mkdirSync(root, { recursive: true });
+    NodeFs.writeFileSync(
+      NodePath.join(root, "index.js"),
+      'globalThis["__ALCHEMY_SERVE_MOUNT_v1__"]=true;\n',
+    );
+    expect(scanForExplicitServeMount(root)).toBe(true);
+  });
+
+  it("ignores the bridge's own sentinel literal (value-form client graph)", () => {
+    // The runtime bridge (`Serve/Bridge.ts`, which stamps
+    // `__ALCHEMY_SERVE_v1__`) rides the value-form `createClient` graph —
+    // `+page.server.ts` importing the backend bundles it into EVERY
+    // effectful website's kit server output. Its literal must NOT read as
+    // an explicit mount, or the auto tier stands down on every site that
+    // server-renders a backend value.
+    const root = NodePath.join(dir, "bridge-only");
     NodeFs.mkdirSync(root, { recursive: true });
     NodeFs.writeFileSync(
       NodePath.join(root, "index.js"),
       'globalThis["__ALCHEMY_SERVE_v1__"]=true;\n',
     );
-    expect(scanForExplicitServeMount(root)).toBe(true);
+    expect(scanForExplicitServeMount(root)).toBe(false);
   });
 
   it("stays quiet for a server graph without a mount", () => {

@@ -136,7 +136,7 @@ const composePlugins = (
     pluginOptions: options,
     plugins: [
       cloudflare(options),
-      websiteEntryPlugin({ entry: effectEntry, environments }),
+      ...websiteEntryPlugin({ entry: effectEntry, environments }),
     ],
   };
 };

@@ -1,5 +1,6 @@
 import { createClient } from "alchemy/client";
 import Backend from "./backend";
+import Queue from "./queue";
 import Visits from "./visits";
 
 // Server-rendered in the Worker on every request — the value form must
@@ -13,11 +14,13 @@ export default async function Home() {
   // safe here; client components use the type-only form (see visits.tsx).
   const backend = createClient(Backend);
   const visits = await backend.visits();
+  const processed = await backend.processed();
 
   return (
     <main className="mx-auto max-w-2xl p-8">
       <h1 className="text-3xl font-bold">Next.js on Cloudflare Workers</h1>
       <Visits initial={visits} />
+      <Queue initial={processed} />
     </main>
   );
 }

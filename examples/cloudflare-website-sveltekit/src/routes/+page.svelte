@@ -9,6 +9,23 @@
 
   let { data } = $props();
   let bumped: number | null = $state(null);
+  let processed: { count: number; last: string | null } = $state(
+    data.processed,
+  );
+  let queueText = $state("");
+
+  // The async leg: enqueue a message, then poll processed() so the
+  // consumer's catch-up is visible (bounded — stop once count grows).
+  async function sendToQueue() {
+    const before = (await backend.processed()).count;
+    await backend.enqueue(queueText || "hello queue");
+    for (let i = 0; i < 15; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const p = await backend.processed();
+      processed = p;
+      if (p.count > before) break;
+    }
+  }
 </script>
 
 <main class="mx-auto max-w-2xl p-8">
@@ -30,6 +47,25 @@
     {#if bumped !== null}
       <p class="mt-4 text-sm" data-testid="bumped">Client bump → {bumped}</p>
     {/if}
+  </div>
+  <div
+    class="mt-6 max-w-md rounded-xl border border-slate-300 bg-white p-6 shadow-sm"
+  >
+    <input
+      class="w-full rounded-lg border border-slate-300 px-3 py-2"
+      placeholder="hello queue"
+      bind:value={queueText}
+    />
+    <button
+      class="mt-4 cursor-pointer rounded-lg bg-slate-900 px-4 py-2 text-white"
+      onclick={sendToQueue}
+    >
+      Send to queue
+    </button>
+    <p class="mt-4 text-sm text-gray-500" data-testid="processed">
+      Queue-processed: <span data-testid="processed-count">{processed.count}</span>
+      — last: <span data-testid="processed-last">{processed.last ?? "—"}</span>
+    </p>
   </div>
   <a class="mt-6 inline-block underline" href="/about">about (prerendered)</a>
 </main>

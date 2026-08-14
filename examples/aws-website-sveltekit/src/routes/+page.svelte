@@ -14,6 +14,22 @@
   async function bump() {
     bumped = await backend.bump();
   }
+
+  // The async leg: `enqueue` sends to SQS and returns immediately — the
+  // sibling consumer Lambda catches up out of band. Poll `processed()`
+  // (bounded) until the count moves so the catch-up is visible.
+  let queueText = $state("");
+  let processed = $state(data.processed);
+
+  async function enqueue() {
+    const before = processed.count;
+    await backend.enqueue(queueText || "hello queue");
+    for (let i = 0; i < 15; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      processed = await backend.processed();
+      if (processed.count > before) break;
+    }
+  }
 </script>
 
 <main class="mx-auto max-w-2xl p-8">
@@ -31,6 +47,25 @@
     {#if bumped !== null}
       <p class="mt-2">Client bump → <span class="font-semibold">{bumped}</span></p>
     {/if}
+    <div class="mt-6 border-t border-slate-200 pt-4">
+      <div class="flex gap-2">
+        <input
+          class="rounded border border-slate-300 px-3 py-1"
+          placeholder="hello queue"
+          bind:value={queueText}
+        />
+        <button
+          class="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100"
+          onclick={enqueue}
+        >
+          Send to queue
+        </button>
+      </div>
+      <p class="mt-2">
+        Queue-processed: <span class="font-semibold">{processed.count}</span>
+        — last: <span class="font-semibold">{processed.last ?? "—"}</span>
+      </p>
+    </div>
     <p class="mt-4">
       <a class="underline" href="/about">about (prerendered)</a>
     </p>

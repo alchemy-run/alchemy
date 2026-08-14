@@ -50,6 +50,7 @@ import {
 import { fileURLToPath } from "node:url";
 import type * as vite from "vite";
 import { createConfigPlugin } from "./config-plugin.ts";
+import { createEffectEntryPlugin } from "./entry-plugin.ts";
 import { NODE_ENVIRONMENTS } from "./environments.ts";
 import { createEffectFetchablePlugin } from "./fetchable-plugin.ts";
 import { buildAssetsHeadersContent } from "./headers.ts";
@@ -121,16 +122,22 @@ export interface DistilledCloudflareOptions {
    * Effectful-Website delivery (DESIGN §6.2c): pre-resolve Astro's
    * `virtual:astro:fetchable` to a generated wrapper that runs the effect
    * program's `fetch` for `routes` first and falls back to Astro's own
-   * pipeline (or the user's fetch file). `mainPath` is the user module
-   * default-exporting the Website class (`props.main` — absolute path or
-   * `file://` URL). Applies to the `ssr` and `astro` (dev) environments;
-   * the prerender worker keeps astro's default fetchable so prerendering
-   * never touches the effect graph.
+   * pipeline (or the user's fetch file), AND take over the `ssr`
+   * environment's worker ENTRY with a generated wrapper that keeps that
+   * fetch delivery verbatim while spreading the program's non-fetch
+   * handlers (queue/scheduled/...) and re-exporting its Durable Object
+   * classes (`doClasses`) as bridge classes — see `entry-plugin.ts`.
+   * `mainPath` is the user module default-exporting the Website class
+   * (`props.main` — absolute path or `file://` URL). Applies to the `ssr`
+   * environment (and `astro` in dev for the fetchable); the prerender
+   * worker keeps astro's default fetchable AND the plain vendored entry so
+   * prerendering never touches the effect graph.
    */
   readonly effect?:
     | {
         readonly mainPath: string;
         readonly routes: ReadonlyArray<string>;
+        readonly doClasses?: ReadonlyArray<string> | undefined;
       }
     | undefined;
   /**
@@ -466,7 +473,18 @@ export function distilledCloudflare(
                     return {
                       optimizeDeps: {
                         include: [
-                          SERVER_ENTRYPOINT,
+                          // With an effect program the `ssr` worker ENTRY is
+                          // taken over by the generated wrapper (see
+                          // `entry-plugin.ts`); the vendored entry must NOT
+                          // be a pre-optimized dep there — vite's pre-alias
+                          // would redirect the module runner's bare-specifier
+                          // entry import to the dep cache BEFORE the
+                          // takeover plugin's resolveId ever runs, silently
+                          // standing the wrapper down in dev.
+                          ...(options.effect !== undefined &&
+                          environmentName === "ssr"
+                            ? []
+                            : [SERVER_ENTRYPOINT]),
                           "astro",
                           "astro/runtime/**",
                           "astro > html-escaper",
@@ -504,6 +522,15 @@ export function distilledCloudflare(
                             : []),
                         ],
                         exclude: [
+                          // See the include-side note: with the entry
+                          // takeover active the vendored entry must never
+                          // become an optimized dep (discovery would register
+                          // it even off the include list), or pre-alias
+                          // short-circuits the takeover plugin in dev.
+                          ...(options.effect !== undefined &&
+                          environmentName === "ssr"
+                            ? [SERVER_ENTRYPOINT]
+                            : []),
                           "unstorage/drivers/cloudflare-kv-binding",
                           "astro:*",
                           "virtual:astro:*",
@@ -544,7 +571,10 @@ export function distilledCloudflare(
               } satisfies vite.Plugin,
               // Effectful-Website delivery: pre-resolve the fetchable to
               // the generated effect wrapper (stands down when the user's
-              // own fetch file already mounts `alchemy/serve`).
+              // own fetch file already mounts `alchemy/serve`), and take
+              // over the ssr worker ENTRY so non-fetch handlers + DO
+              // classes deliver through the Worker bridge (fetch stays
+              // with the fetchable).
               ...(options.effect !== undefined
                 ? [
                     createEffectFetchablePlugin({
@@ -553,6 +583,11 @@ export function distilledCloudflare(
                       srcDir: config.srcDir,
                       fetchFile: config.fetchFile,
                       platform: "cloudflare",
+                    }),
+                    createEffectEntryPlugin({
+                      mainPath: options.effect.mainPath,
+                      doClasses: options.effect.doClasses,
+                      serverEntrypoint: SERVER_ENTRYPOINT,
                     }),
                   ]
                 : []),

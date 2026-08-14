@@ -9,8 +9,16 @@ import {
   ReadWriteNamespace,
   ReadWriteNamespaceBinding,
 } from "alchemy/Cloudflare/KV";
+import {
+  consumeQueueMessages,
+  EventSourceLive,
+  Queue,
+  WriteQueue,
+  WriteQueueBinding,
+} from "alchemy/Cloudflare/Queues";
 import { Astro } from "alchemy/Cloudflare/Website";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { RouteNotFound } from "effect/unstable/http/HttpServerError";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -22,6 +30,16 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  * (`dev:`-prefixed locally, a real namespace id live).
  */
 export const Users = Namespace("AstroEffectUsers");
+
+/**
+ * Queue bound by the effectful Website's program — the async leg. The
+ * impl both produces to it (the `enqueue` RPC method) and CONSUMES it on
+ * the same class via `consumeQueueMessages`, whose listener is delivered
+ * by the entry-takeover wrapper (the vendored astro worker entry is
+ * wrapped with the Worker bridge's non-fetch handler surface — fetch
+ * stays with the fetchable).
+ */
+export const Jobs = Queue("AstroEffectJobs");
 
 /**
  * The Astro fetchable-wrapper delivery shape (DESIGN §6.2c): one Worker
@@ -71,7 +89,49 @@ export default class AstroEffectSite extends Astro<AstroEffectSite>()(
   Effect.gen(function* () {
     const namespace = yield* Users;
     const users = yield* ReadWriteNamespace(namespace);
+    const jobsQueue = yield* Jobs;
+    const jobs = yield* WriteQueue(jobsQueue);
+
+    // The async leg's consumer — a queue listener on the SAME class. At
+    // plan time this yields the `Cloudflare.Queues.Consumer` resource; at
+    // runtime the entry-takeover wrapper dispatches queue batches to it.
+    // Each message bumps `processed-count` and records `processed-last`
+    // in KV, where the `processed` RPC method reads them back.
+    yield* consumeQueueMessages<string>(
+      jobsQueue,
+      {
+        batchSize: 5,
+        maxRetries: 2,
+        maxWaitTime: "1 second",
+        retryDelay: "2 seconds",
+      },
+      (stream) =>
+        Stream.runForEach(stream, (msg) =>
+          Effect.gen(function* () {
+            const count = Number(
+              (yield* users.get("processed-count").pipe(Effect.orDie)) ?? "0",
+            );
+            yield* users
+              .put("processed-count", String(count + 1))
+              .pipe(Effect.orDie);
+            yield* users
+              .put("processed-last", String(msg.body))
+              .pipe(Effect.orDie);
+          }),
+        ),
+    );
+
     return {
+      /** Send a message to the queue (RPC: POST /api/__rpc/enqueue). */
+      enqueue: (message: string) =>
+        jobs.send(message, { contentType: "text" }).pipe(Effect.orDie),
+      /** Read the consumer's async state (RPC: POST /api/__rpc/processed). */
+      processed: () =>
+        Effect.gen(function* () {
+          const count = yield* users.get("processed-count").pipe(Effect.orDie);
+          const last = yield* users.get("processed-last").pipe(Effect.orDie);
+          return { count: Number(count ?? "0"), last: last ?? null };
+        }),
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         // `request.url` is path-shaped inside the effect fetch; the base
@@ -99,5 +159,9 @@ export default class AstroEffectSite extends Astro<AstroEffectSite>()(
         return yield* Effect.fail(new RouteNotFound({ request }));
       }),
     };
-  }).pipe(Effect.provide(ReadWriteNamespaceBinding)),
+  }).pipe(
+    Effect.provide(ReadWriteNamespaceBinding),
+    Effect.provide(WriteQueueBinding),
+    Effect.provide(EventSourceLive),
+  ),
 ) {}

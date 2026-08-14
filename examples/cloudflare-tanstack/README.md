@@ -20,6 +20,19 @@ mechanics vary between examples.
 - `src/routes/index.tsx` is the UI: the route `loader` server-renders the
   count and the button bumps it from the browser.
 
+### The async leg
+
+The same backend class also carries the demo's async leg: a Cloudflare
+Queue (`Jobs`) produced to by the `enqueue(message)` RPC method and
+consumed ON THE SAME CLASS by `consumeQueueMessages` — each message bumps
+`processed-count` and records `processed-last` in the `Visits` KV
+namespace, and `processed()` reads that state back. The generated worker
+entry delivers the queue handler alongside `fetch` — no separate consumer
+worker. The UI's queue section sends a message ("Send to queue") and then
+polls `processed()` (bounded, once per second) until the count grows, so
+the asynchronous catch-up — queue → consumer → KV → UI — is visible in
+the `Queue-processed: {count} — last: {last}` line.
+
 ## createClient — both forms
 
 `src/lib/backend.ts` builds ONE shared backend client — the same file

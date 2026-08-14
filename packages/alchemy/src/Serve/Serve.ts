@@ -21,12 +21,23 @@ import {
   rpcSite,
   type ServeOptions,
 } from "./Bridge.ts";
-import { SERVE_SHELL_KEY } from "./constants.ts";
+import { SERVE_SHELL_KEY, type SERVE_MOUNT_MARKER } from "./constants.ts";
+
+// The explicit-mount marker, written as a literal (type-checked against
+// `constants.ts`) so the exact byte sequence provably survives bundling and
+// minification into any framework server bundle that imports the PUBLIC
+// `alchemy/serve` surface. Framework integrations' stand-down scans grep
+// built output for it to detect an explicit mount. Deliberately NOT the
+// bridge's `SERVE_SENTINEL`: the bridge also rides the value-form
+// `createClient` graph, so its literal appears in every effectful website's
+// server bundle — this module only rides explicit mounts.
+const MOUNT_MARKER: typeof SERVE_MOUNT_MARKER = "__ALCHEMY_SERVE_MOUNT_v1__";
+(globalThis as Record<string, any>)[MOUNT_MARKER] = true;
 import { DEFAULT_SERVER_ROUTES, matchRoutes } from "./Routes.ts";
 import { isRpcPath } from "./Rpc.ts";
 
 export type { ServeOptions } from "./Bridge.ts";
-export { SERVE_SENTINEL } from "./constants.ts";
+export { SERVE_MOUNT_MARKER, SERVE_SENTINEL } from "./constants.ts";
 export { DEFAULT_SERVER_ROUTES } from "./Routes.ts";
 export {
   RPC_CLAIM,

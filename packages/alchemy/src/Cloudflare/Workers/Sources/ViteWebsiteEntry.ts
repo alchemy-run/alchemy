@@ -161,7 +161,7 @@ const generateWebsiteEntry = (
 };
 
 /**
- * The alchemy-injected vite plugin for effectful Websites (wrapper
+ * The alchemy-injected vite plugins for effectful Websites (wrapper
  * delivery). Composed next to the Cloudflare plugin in `viteDev` /
  * `viteBuildInProcess` when the Worker carries a {@link ViteEffectEntry}:
  *
@@ -175,13 +175,33 @@ const generateWebsiteEntry = (
  * 3. captures the framework's own entry-environment input before the
  *    Cloudflare options plugin overwrites it with the wrapper id, and hands
  *    it to the wrapper as the fallback fetch.
+ *
+ * The capture (3) is a separate `enforce: "pre"` plugin: the Cloudflare
+ * options plugin REPLACES the entry environment's `input` with the wrapper
+ * id in its own (normal-enforce) `config` hook, and it sits earlier in the
+ * composed plugin array — a normal-enforce capture would only ever observe
+ * the already-replaced input (every SSR route then 404s through the
+ * assets-only fallback). Framework config plugins (e.g. TanStack Start's)
+ * are `enforce: "pre"` in the user's config file, and config-file plugins
+ * order before injected inline plugins within the same enforce bucket, so
+ * the pre capture still sees the framework's input. The normal-enforce
+ * capture in the main plugin remains as a fallback for frameworks that
+ * only set their input in a normal-enforce hook (the wrapper-id guard in
+ * `captureFrameworkEntry` keeps it from ever capturing the replacement).
  */
 export const websiteEntryPlugin = (
   options: WebsiteEntryPluginOptions,
-): vite.Plugin => {
+): vite.Plugin[] => {
   const [entryEnvironment] = options.environments;
   let frameworkEntry: string | undefined;
-  return {
+  const capturePlugin: vite.Plugin = {
+    name: "alchemy:website-entry:capture-framework-entry",
+    enforce: "pre",
+    config(userConfig) {
+      frameworkEntry ??= captureFrameworkEntry(userConfig, entryEnvironment);
+    },
+  };
+  const mainPlugin: vite.Plugin = {
     name: "alchemy:website-entry",
     config(userConfig) {
       frameworkEntry ??= captureFrameworkEntry(userConfig, entryEnvironment);
@@ -240,4 +260,5 @@ export const websiteEntryPlugin = (
       }
     },
   };
+  return [capturePlugin, mainPlugin];
 };

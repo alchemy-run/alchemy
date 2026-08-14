@@ -188,6 +188,13 @@ export interface SvelteKitProps<
  * `alchemy/serve/sveltekit` mount in `hooks.server.ts` remains available
  * as an escape hatch.
  *
+ * The program's non-`fetch` surface — Durable Object classes and event
+ * handlers (a queue consumer registered with
+ * `Queues.consumeQueueMessages`, `scheduled`, ...) — ships on the same
+ * Worker in the production build via the generated worker entry; under
+ * `alchemy dev` the kit dev server delivers `fetch` only, so queue
+ * batches are not dispatched locally — the consumer engages on deploy.
+ *
  * The impl's non-`fetch` methods are **RPC methods** — the typed API
  * surface, served at the reserved `POST /api/__rpc/<method>` path (no
  * routes claim needed) and called through `createClient` from

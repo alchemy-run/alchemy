@@ -381,6 +381,13 @@ export interface EffectStaticSiteAttributes extends StaticSiteAttributes {
  * `createClient` from `alchemy/client` in the static frontend. A
  * `fetch` handler is only needed for hand-rolled routes.
  *
+ * The program is a full effect Lambda, so its non-`fetch` surface — an
+ * SQS consumer registered with `SQS.consumeQueueMessages`, and other
+ * event sources — attaches directly to the site's own function (no
+ * sibling function, unlike the framework composites). Event delivery
+ * engages on deploy — `alchemy dev` does not dispatch queue events
+ * locally.
+ *
  * @example Static site with an effect-native API
  * ```typescript
  * // src/backend.ts — narrow subpath imports keep the IaC engine out of any

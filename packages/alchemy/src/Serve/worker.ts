@@ -175,6 +175,58 @@ export const makeWebsiteExports = (
   };
 };
 
+export interface WebsiteEntryExportsOptions {
+  /** The user's Website class (the default export of `src/backend.ts`). */
+  site: AnyWebsiteClass;
+  /**
+   * The framework-delivered fetch handler, exported-handler signature
+   * `(request, env, ctx)`. Called verbatim for every fetch event — the
+   * wrapper never route-gates or re-bridges it.
+   */
+  fetch: (
+    request: Request,
+    env: unknown,
+    ctx: unknown,
+  ) => Response | Promise<Response>;
+}
+
+/**
+ * Entry-level wrapper for frameworks whose delivered `fetch` is already
+ * effect-composed INSIDE the framework bundle (Astro's pre-resolved
+ * fetchable, DESIGN §6.2c): `fetch` delegates verbatim to the
+ * framework-delivered handler — route ownership, the universal RPC path,
+ * and the four-worlds env guard all stay exactly where the framework
+ * integration put them — while every non-fetch handler
+ * (queue/scheduled/email/tail) and workerd JS-RPC dispatch comes from the
+ * underlying Worker bridge, sharing the one-per-isolate layer build with
+ * the {@link DurableObjectBridge} classes exported next to it.
+ *
+ * Contrast with {@link makeWebsiteExports}, which owns the fetch
+ * composition itself (routes-gated effect fetch over a lazy framework
+ * fallback) — use that when alchemy generates the whole entry; use this
+ * when the framework's own entry already delivers fetch and only the
+ * non-fetch surface needs the entry seam.
+ */
+export const makeWebsiteEntryExports = (
+  Base: any,
+  options: WebsiteEntryExportsOptions,
+): any => {
+  const Bridge = makeWorkerBridge(Base, {
+    entrypoint: options.site,
+    stack: lazyStack,
+  });
+  return class WebsiteEntryBridge extends Bridge {
+    constructor(workerCtx: any, env: any) {
+      super(workerCtx, env);
+      // Single-listener law: the framework-delivered fetch IS the one
+      // fetch handler — the bridge's own fetch dispatch (which would run
+      // the effect fetch listeners a second time) is replaced wholesale.
+      (this as any).fetch = async (request: Request): Promise<Response> =>
+        options.fetch(request, env, (this as any).ctx);
+    }
+  };
+};
+
 /**
  * Durable Object bridge factory for wrapper entries. Shares the
  * one-per-isolate layer build with {@link makeWebsiteExports} (both key on

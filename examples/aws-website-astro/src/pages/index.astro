@@ -11,6 +11,7 @@ import Backend from "../backend.ts";
 
 const backend = createClient(Backend);
 const visits = await backend.visits();
+const processed = await backend.processed();
 ---
 
 <html lang="en">
@@ -35,6 +36,28 @@ const visits = await backend.visits();
         <p id="client-bump" class="mt-2" hidden>
           Client bump → <span id="bump-count" class="font-semibold"></span>
         </p>
+        <div class="mt-6 border-t border-slate-200 pt-4">
+          <div class="flex gap-2">
+            <input
+              id="queue-input"
+              placeholder="hello queue"
+              class="rounded border border-slate-300 px-3 py-1"
+            />
+            <button
+              id="enqueue"
+              class="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100"
+            >
+              Send to queue
+            </button>
+          </div>
+          <p class="mt-2">
+            Queue-processed: <span id="processed-count" class="font-semibold"
+              >{processed.count}</span
+            > — last: <span id="processed-last" class="font-semibold"
+              >{processed.last ?? "—"}</span
+            >
+          </p>
+        </div>
         <p class="mt-4">
           <a href="/about/" class="underline">about (prerendered)</a>
         </p>
@@ -54,6 +77,28 @@ const visits = await backend.visits();
         document.querySelector<HTMLParagraphElement>("#client-bump")!.hidden =
           false;
       });
+
+      // The async leg: `enqueue` sends to SQS and returns immediately —
+      // the sibling consumer Lambda catches up out of band. Poll
+      // `processed()` (bounded) until the count moves so the catch-up is
+      // visible in the UI.
+      const countEl = document.querySelector("#processed-count")!;
+      const lastEl = document.querySelector("#processed-last")!;
+      document
+        .querySelector("#enqueue")!
+        .addEventListener("click", async () => {
+          const input =
+            document.querySelector<HTMLInputElement>("#queue-input")!;
+          const before = Number(countEl.textContent);
+          await backend.enqueue(input.value || "hello queue");
+          for (let i = 0; i < 15; i++) {
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            const processed = await backend.processed();
+            countEl.textContent = String(processed.count);
+            lastEl.textContent = processed.last ?? "—";
+            if (processed.count > before) break;
+          }
+        });
     </script>
   </body>
 </html>

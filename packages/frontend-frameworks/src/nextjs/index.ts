@@ -30,7 +30,7 @@ export {
   makeTakeoverWorkerSource,
   probeOpenNextDoExports,
   scanForServeSentinel,
-  SERVE_SENTINEL,
+  SERVE_MOUNT_MARKER,
   TAKEOVER_ENTRY_NAME,
   type NextjsEffectEntry,
 } from "./EffectBundle.ts";

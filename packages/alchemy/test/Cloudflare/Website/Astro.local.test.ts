@@ -84,6 +84,41 @@ const fetchSession = (url: string, cookie?: string) =>
   });
 
 /**
+ * POST an `/api/__rpc/<method>` dispatch (the `createClient` wire
+ * protocol: JSON array body, `{"value": ...}` success envelope).
+ */
+const rpcPost = (base: string, method: string, args: ReadonlyArray<unknown>) =>
+  Effect.tryPromise({
+    try: async (signal) => {
+      const res = await fetch(`${base}/api/__rpc/${method}`, {
+        signal,
+        method: "POST",
+        cache: "no-store",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(args),
+      });
+      const body = (await res.json().catch(() => undefined)) as
+        | { value?: unknown }
+        | undefined;
+      return { status: res.status, body };
+    },
+    catch: (e) =>
+      new DevResponseMismatch({
+        url: `${base}/api/__rpc/${method}`,
+        detail: e instanceof Error ? e.message : String(e),
+      }),
+  }).pipe(
+    Effect.filterOrFail(
+      (r) => r.status === 200,
+      (r) =>
+        new DevResponseMismatch({
+          url: `${base}/api/__rpc/${method}`,
+          detail: `expected 200, got ${r.status} ${JSON.stringify(r.body)?.slice(0, 240)}`,
+        }),
+    ),
+  );
+
+/**
  * Fetch `url` and assert the exact `status` with a body containing
  * `marker` — used for the dev 404 page, which `expectUrlContains` can't
  * assert (it requires `res.ok`).
@@ -298,7 +333,11 @@ describe.concurrent("Astro dev", () => {
   // plan resolves to the LOCAL simulator (`dev:` id — proof no cloud call
   // ran); the `!/api/astro-echo` exclusion glob routes that path to
   // Astro's own endpoint, and unknown in-claim paths are the effect's OWN
-  // 404.
+  // 404. The queue leg pins ENTRY-LEVEL non-fetch delivery: the impl's
+  // `consumeQueueMessages` listener is dispatched by the entry-takeover
+  // wrapper, and the local queue broker delivers produced messages to the
+  // astro dev child (same restart machinery as Website.Vite — the sibling
+  // Consumer reconcile restarts the child with the fresh wiring).
   // ─────────────────────────────────────────────────────────────────────
 
   test.provider(
@@ -326,19 +365,21 @@ describe.concurrent("Astro dev", () => {
           () => import(pathe.join(rootDir, "site.ts")),
         )) as typeof import("./fixtures/astro-effect-app/site.ts");
 
-        const { site, users } = yield* stack.deploy(
+        const { site, users, jobs } = yield* stack.deploy(
           Effect.gen(function* () {
             const site = yield* siteModule.default;
             const users = yield* siteModule.Users;
-            return { site, users };
+            const jobs = yield* siteModule.Jobs;
+            return { site, users, jobs };
           }),
         );
 
         // Local identity: the site is served by the alchemy dev proxy, and
-        // the impl-bound namespace is emulated locally — a `dev:` id is
-        // proof no cloud call ran.
+        // the impl-bound namespace + queue are emulated locally — `dev:`
+        // ids are proof no cloud call ran.
         expect(site.url).toMatch(/^http:\/\/localhost:\d+/);
         expect(isLocalId(users.namespaceId)).toBe(true);
+        expect(jobs.queueId).toMatch(/^dev:/);
 
         // SSR page outside `server.routes` renders through Astro as usual.
         yield* expectUrlContains(`${site.url!}/`, "astro-effect-home", {
@@ -384,6 +425,25 @@ describe.concurrent("Astro dev", () => {
           200,
           '"value":"astro-effect-dev"',
         );
+
+        // ── the async leg (entry-level non-fetch delivery): enqueue via
+        // the universal RPC path, the impl's queue consumer — dispatched
+        // through the entry-takeover wrapper by the LOCAL queue broker —
+        // updates KV, and the processed() RPC observes the catch-up. ─────
+        const queueMarker = "astro-effect-dev-queue";
+        yield* rpcPost(site.url!, "enqueue", [queueMarker]).pipe(devRetry);
+        const processed = yield* rpcPost(site.url!, "processed", []).pipe(
+          Effect.map(
+            (r) => r.body?.value as { count: number; last: string | null },
+          ),
+          Effect.repeat({
+            schedule: Schedule.spaced("1 second"),
+            until: (v) => v.count >= 1,
+            times: 30,
+          }),
+        );
+        expect(processed.count).toBeGreaterThanOrEqual(1);
+        expect(processed.last).toBe(queueMarker);
 
         // Exclusion glob routes to the framework: `!/api/astro-echo`
         // carves the path out of the effect claim, so the wrapper never

@@ -69,8 +69,11 @@ describe("EffectDev aws arm", () => {
       `import { makeWebsiteHandlers } from "alchemy/AWS/Lambda/WebsiteHandlers";`,
     );
     expect(code).toContain(`import Site from "/abs/project/src/site.ts";`);
+    // The middleware gates `server.routes` before dispatching, so the
+    // handlers claim everything they receive ("/*") — a narrower claim
+    // here would shadow a broader construct claim.
     expect(code).toContain(
-      "export const handle = makeWebsiteHandlers({ site: Site });",
+      `export const handle = makeWebsiteHandlers({ site: Site, routes: ["/*"] });`,
     );
     expect(code).not.toContain(`"alchemy/serve"`);
   });

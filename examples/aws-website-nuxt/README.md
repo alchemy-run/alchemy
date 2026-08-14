@@ -42,6 +42,10 @@ const count = await backend.bump();
 
 The home page renders "Server-rendered visits: N" during SSR and a "Bump visits" button re-calls the backend from the browser over the wire.
 
+### The async leg
+
+The same class also owns an SQS-backed async flow: `enqueue(message)` sends to the `Jobs` queue, and a `consumeQueueMessages` listener **on the same class** consumes it — each message bumps a `processed-count` item and records `processed-last` in the same DynamoDB table, which the `processed()` method reads back. Because the nitro-built Lambda entry only serves HTTP, the consumer deploys automatically as a **sibling effect Lambda** (`NuxtSite-Handlers`) from the same `server/backend.ts` module: the event-source mapping and its `sqs:ReceiveMessage` IAM target the sibling, while the site Lambda stays fetch-only. In the UI, "Send to queue" calls `enqueue` and then polls `processed()` until the count moves — making the queue → consumer → state catch-up visible.
+
 ## Mechanics
 
 On Nuxt the wire path mounts explicitly through one file — a nitro server middleware compiled by nitro itself, running in the deployed Lambda and under `nuxt dev` alike:
@@ -69,5 +73,6 @@ bun alchemy destroy  # tear down
 - `@alchemy.run/frontend-frameworks` must be installed in the project — the server's source provider is loaded from its `/nuxt` export at deploy time.
 - Unchanged projects skip the build and deploy entirely (the project tree is content-hashed, respecting `.gitignore`).
 - In `alchemy dev`, the site is Nuxt's own dev server (native HMR). The site itself creates no AWS resources in dev, but the DynamoDB table bound by the effect program is pinned `remote()` in `server/backend.ts`, so both `createClient` forms hit the real table with your ambient credentials.
+- The async leg runs in the local Lambda emulator in dev: the `Jobs` queue, its event-source mapping, and the consumer all deploy there together (a real queue cannot feed an emulated consumer, so the queue is deliberately not `remote()`). The dev server's `enqueue` produce path is not wired to the emulator yet — deploy to exercise the full async leg end-to-end.
 - `/about` is prerendered at build time — prerendered pages must not call the backend server-side (nitro's `isr` route rule is Vercel/Netlify-only and ignored on AWS Lambda; use `prerender` or `cache` route rules instead).
 - `test/integ.test.ts` deploys the stack and asserts SSR (including the backend-rendered counter), the rpc wire path, the nitro route, the prerendered page, and static assets over HTTP.

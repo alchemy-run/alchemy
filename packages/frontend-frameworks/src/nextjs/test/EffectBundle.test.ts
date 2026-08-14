@@ -9,7 +9,7 @@ import {
   makeTakeoverWorkerSource,
   probeOpenNextDoExports,
   scanForServeSentinel,
-  SERVE_SENTINEL,
+  SERVE_MOUNT_MARKER,
   TAKEOVER_ENTRY_NAME,
 } from "../EffectBundle.ts";
 import { effectEntryOf } from "../source.ts";
@@ -102,14 +102,14 @@ describe("EffectBundle", () => {
     // count as a user mount.
     NodeFs.writeFileSync(
       NodePath.join(openNext, "alchemy-effect", "alchemy-effect.mjs"),
-      `globalThis["${SERVE_SENTINEL}"] = true;`,
+      `globalThis["${SERVE_MOUNT_MARKER}"] = true;`,
     );
     expect(await runScan(openNext)).toBe(false);
 
     // A compiled route handler that mounts alchemy/serve IS a user mount.
     NodeFs.writeFileSync(
       NodePath.join(openNext, "server-functions", "default", "handler.mjs"),
-      `/* compiled */ globalThis["${SERVE_SENTINEL}"] = true;`,
+      `/* compiled */ globalThis["${SERVE_MOUNT_MARKER}"] = true;`,
     );
     expect(await runScan(openNext)).toBe(true);
   });

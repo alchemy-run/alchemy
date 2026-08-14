@@ -137,6 +137,48 @@ test(
     const count = html.match(/data-testid="count"[^>]*>(?:<!--[^>]*-->)?\s*(\d+)/);
     expect(count).not.toBeNull();
     expect(Number(count![1])).toBeGreaterThanOrEqual(0);
+    // The queue section's initial state is server-rendered the same way
+    // (the loader calls `backend.processed()` through the value form).
+    expect(html).toContain("Queue-processed:");
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "queue leg: enqueue → consumer on the same class → processed",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const base = url.replace(/\/+$/, "");
+    const marker = `queue-marker-${crypto.randomUUID()}`;
+
+    const readProcessed = Effect.gen(function* () {
+      const res = yield* rpc(base, "processed", []);
+      expect(res.status).toBe(200);
+      const body = (yield* res.json) as {
+        value: { count: number; last: string | null };
+      };
+      return body.value;
+    });
+
+    // Baseline first — a rerun against a kept deployment (NO_DESTROY) may
+    // already have processed messages.
+    const before = yield* readProcessed;
+
+    // Produce through the RPC surface; the queue consumer registered on
+    // the SAME class catches up asynchronously.
+    const sent = yield* rpc(base, "enqueue", [marker]);
+    expect(sent.status).toBe(200);
+
+    // Poll until the consumer's KV writes are observed.
+    const after = yield* readProcessed.pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("2 seconds"),
+        until: (p) => p.count > before.count,
+        times: 30,
+      }),
+    );
+    expect(after.count).toBeGreaterThan(before.count);
+    expect(after.last).toBe(marker);
   }),
   { timeout: 180_000 },
 );

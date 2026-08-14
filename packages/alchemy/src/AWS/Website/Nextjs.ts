@@ -299,6 +299,15 @@ export interface EffectNextjsAttributes extends NextjsAttributes {
  * direct in-process dispatch in server components. A `fetch` handler is
  * only needed for hand-rolled routes.
  *
+ * The program's non-`fetch` surface — an SQS consumer registered with
+ * `SQS.consumeQueueMessages`, and other event sources — rides a
+ * **sibling effect Lambda** (`<SiteId>-Handlers`) deployed automatically
+ * from the same module: event sources register their mappings and IAM
+ * against the sibling, shared capabilities collect env and IAM onto both
+ * functions, and a fetch-only program deploys no sibling at all. Event
+ * delivery engages on deploy — `alchemy dev` does not dispatch queue
+ * events locally.
+ *
  * @example Next.js site with an effect-native API
  * ```typescript
  * // src/backend.ts — narrow subpath imports keep the IaC engine out of the

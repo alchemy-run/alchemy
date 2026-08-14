@@ -9,6 +9,7 @@ import Backend from "../backend";
 // form dispatches the backend method in-process — no HTTP hop.
 const backend = createClient(Backend, { headers: Astro.request.headers });
 const visits = await backend.visits();
+const processed = await backend.processed();
 ---
 
 <html lang="en">
@@ -32,6 +33,22 @@ const visits = await backend.visits();
         </button>
         <p id="bumped" class="mt-4 hidden text-sm" data-testid="bumped"></p>
       </div>
+      <div class="mt-6 max-w-md rounded-xl border border-slate-300 bg-white p-6 shadow-sm">
+        <input
+          id="queue-text"
+          placeholder="hello queue"
+          class="w-full rounded-lg border border-slate-300 px-3 py-2"
+        />
+        <button
+          id="queue-send"
+          class="mt-4 cursor-pointer rounded-lg border-none bg-slate-900 px-4 py-2 text-white"
+        >
+          Send to queue
+        </button>
+        <p class="mt-4 text-sm text-gray-500" data-testid="processed">
+          Queue-processed: <span data-testid="processed-count">{processed.count}</span> — last: <span data-testid="processed-last">{processed.last ?? "—"}</span>
+        </p>
+      </div>
       <p class="mt-6">
         <a href="/about/" class="text-blue-600 underline">A prerendered page</a>
       </p>
@@ -51,6 +68,30 @@ const visits = await backend.visits();
           bumped.classList.remove("hidden");
         }
       });
+
+      // The async leg: enqueue a message, then poll processed() so the
+      // consumer's catch-up is visible (bounded — stop once count grows).
+      const countEl = document.querySelector('[data-testid="processed-count"]');
+      const lastEl = document.querySelector('[data-testid="processed-last"]');
+      const render = (p: { count: number; last: string | null }) => {
+        if (countEl) countEl.textContent = String(p.count);
+        if (lastEl) lastEl.textContent = p.last ?? "—";
+      };
+      document
+        .getElementById("queue-send")
+        ?.addEventListener("click", async () => {
+          const input = document.getElementById(
+            "queue-text",
+          ) as HTMLInputElement | null;
+          const before = (await backend.processed()).count;
+          await backend.enqueue(input?.value || "hello queue");
+          for (let i = 0; i < 15; i++) {
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            const p = await backend.processed();
+            render(p);
+            if (p.count > before) break;
+          }
+        });
     </script>
   </body>
 </html>

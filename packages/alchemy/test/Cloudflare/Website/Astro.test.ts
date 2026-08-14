@@ -905,11 +905,12 @@ describe.concurrent("Astro", () => {
 
         const marker = `astro-effect-${Date.now()}`;
 
-        const { site, users } = yield* stack.deploy(
+        const { site, users, jobs } = yield* stack.deploy(
           Effect.gen(function* () {
             const site = yield* siteModule.default;
             const users = yield* siteModule.Users;
-            return { site, users };
+            const jobs = yield* siteModule.Jobs;
+            return { site, users, jobs };
           }),
         );
 
@@ -1009,6 +1010,80 @@ describe.concurrent("Astro", () => {
         );
         expect(missing.status).toBe(404);
         expect(yield* missing.text).not.toContain("<html");
+
+        // ── the async leg (entry-level non-fetch delivery): the impl's
+        // queue consumer is dispatched through the entry-takeover wrapper
+        // (the vendored astro entry wrapped with the Worker bridge's
+        // non-fetch surface — its presence is what let the auto-created
+        // Queues.Consumer reconcile at all). Enqueue via the universal
+        // RPC path, then poll processed() until the consumer's KV write
+        // is observed. ─────────────────────────────────────────────────
+        expect(jobs.queueId).toBeDefined();
+        const queueMarker = `astro-queue-${Date.now()}`;
+        yield* Effect.tryPromise({
+          try: async (signal) => {
+            const res = await fetch(`${site.url!}/api/__rpc/enqueue`, {
+              signal,
+              method: "POST",
+              cache: "no-store",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify([queueMarker]),
+            });
+            return { status: res.status, body: await res.text() };
+          },
+          catch: (e) =>
+            new AstroResponseMismatch({
+              url: `${site.url!}/api/__rpc/enqueue`,
+              detail: e instanceof Error ? e.message : String(e),
+            }),
+        }).pipe(
+          Effect.filterOrFail(
+            (r) => r.status === 200,
+            (r) =>
+              new AstroResponseMismatch({
+                url: `${site.url!}/api/__rpc/enqueue`,
+                detail: `${r.status} ${r.body.slice(0, 240)}`,
+              }),
+          ),
+          responseRetry,
+        );
+        const processed = yield* Effect.tryPromise({
+          try: async (signal) => {
+            const res = await fetch(`${site.url!}/api/__rpc/processed`, {
+              signal,
+              method: "POST",
+              cache: "no-store",
+              headers: { "content-type": "application/json" },
+              body: "[]",
+            });
+            const body = (await res.json().catch(() => undefined)) as
+              | { value?: { count: number; last: string | null } }
+              | undefined;
+            return { status: res.status, value: body?.value };
+          },
+          catch: (e) =>
+            new AstroResponseMismatch({
+              url: `${site.url!}/api/__rpc/processed`,
+              detail: e instanceof Error ? e.message : String(e),
+            }),
+        }).pipe(
+          Effect.filterOrFail(
+            (r) => r.status === 200 && r.value !== undefined,
+            (r) =>
+              new AstroResponseMismatch({
+                url: `${site.url!}/api/__rpc/processed`,
+                detail: `${r.status} ${JSON.stringify(r.value)}`,
+              }),
+          ),
+          Effect.map((r) => r.value!),
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            until: (v) => v.count >= 1,
+            times: 30,
+          }),
+        );
+        expect(processed.count).toBeGreaterThanOrEqual(1);
+        expect(processed.last).toBe(queueMarker);
 
         yield* stack.destroy();
         yield* waitForWorkerToBeDeleted(site.workerName, accountId);

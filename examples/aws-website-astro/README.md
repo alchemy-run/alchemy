@@ -52,6 +52,20 @@ const count = await backend.bump();
 The page renders "Server-rendered visits: N" during SSR and a
 "Bump visits" button re-calls the backend from the browser over the wire.
 
+### The async leg
+
+The same class also owns an SQS-backed async flow: `enqueue(message)`
+sends to the `Jobs` queue, and a `consumeQueueMessages` listener **on the
+same class** consumes it — each message bumps a `processed-count` item and
+records `processed-last` in the same DynamoDB table, which the
+`processed()` method reads back. Because the framework-built Lambda entry
+only serves HTTP, the consumer deploys automatically as a **sibling
+effect Lambda** (`Astro-Handlers`) from the same `src/backend.ts` module:
+the event-source mapping and its `sqs:ReceiveMessage` IAM target the
+sibling, while the site Lambda stays fetch-only. In the UI, "Send to
+queue" calls `enqueue` and then polls `processed()` until the count moves
+— making the queue → consumer → state catch-up visible.
+
 ## Mechanics
 
 - Zero-setup mount: on Astro the rpc wire path is served without any
@@ -82,6 +96,12 @@ bun run dev
 Astro's own dev server serves the frontend; both `createClient` forms run
 the same backend methods against the real DynamoDB table (pinned
 `remote()` in `src/backend.ts`) using your ambient AWS credentials.
+
+The async leg runs in the local Lambda emulator in dev: the `Jobs` queue,
+its event-source mapping, and the consumer all deploy there together (a
+real queue cannot feed an emulated consumer, so the queue is deliberately
+not `remote()`). The dev server's `enqueue` produce path is not wired to
+the emulator yet — deploy to exercise the full async leg end-to-end.
 
 ## Destroy
 

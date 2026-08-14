@@ -165,6 +165,45 @@ test(
 );
 
 test(
+  "queue round-trip: enqueue over rpc, the sibling consumer catches up",
+  Effect.gen(function* () {
+    const url = yield* base;
+    // Each run sends a unique marker so the assertion can't match a
+    // message from an earlier run.
+    const marker = `queue-marker-${crypto.randomUUID()}`;
+
+    const readProcessed = Effect.gen(function* () {
+      const res = yield* rpcWhenReady(url, "processed");
+      expect(res.status).toBe(200);
+      const body = (yield* res.json) as {
+        value: { count: number; last: string | null };
+      };
+      return body.value;
+    });
+    const before = yield* readProcessed;
+
+    // `POST /api/__rpc/enqueue` sends to SQS and returns immediately;
+    // the CONSUMER runs out of band on the sibling effect Lambda
+    // (`<site>-Handlers`), whose event-source mapping was registered by
+    // the same backend module.
+    const res = yield* rpcWhenReady(url, "enqueue", [marker]);
+    expect(res.status).toBe(200);
+
+    // Bounded poll until the sibling's write lands in DynamoDB.
+    const processed = yield* readProcessed.pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("2 seconds"),
+        until: (state) => state.count > before.count,
+        times: 45,
+      }),
+    );
+    expect(processed.count).toBeGreaterThan(before.count);
+    expect(processed.last).toBe(marker);
+  }),
+  { timeout: 180_000 },
+);
+
+test(
   "serves a static asset from static/",
   Effect.gen(function* () {
     const url = yield* base;

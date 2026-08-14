@@ -28,9 +28,9 @@
  *    uploads) so esbuild never re-processes rolldown output.
  *
  * **Stand-down rule**: when the user already mounted the bridge explicitly
- * (`toRouteHandler` in a catch-all route — the `"__ALCHEMY_SERVE_v1__"`
- * sentinel appears in the OpenNext build output), the takeover stands down
- * and the framework-built artifact deploys unchanged.
+ * (`toRouteHandler` in a catch-all route — the `"__ALCHEMY_SERVE_MOUNT_v1__"`
+ * mount marker appears in the OpenNext build output), the takeover stands
+ * down and the framework-built artifact deploys unchanged.
  */
 
 import * as Data from "effect/Data";
@@ -83,12 +83,17 @@ export const EFFECT_MODULE_NAME = "alchemy-effect.mjs";
 const EFFECT_ENTRY_SOURCE_NAME = "alchemy-effect-entry.mjs";
 
 /**
- * The wiring-handshake sentinel embedded by `alchemy/serve` (structural
- * mirror of `alchemy/src/Serve/constants.ts` — this package deliberately
- * does not import alchemy). Its presence in the OpenNext build output means
- * the user mounted the bridge explicitly and the takeover must stand down.
+ * The explicit-mount marker embedded by the PUBLIC `alchemy/serve` surface
+ * (structural mirror of `alchemy/src/Serve/constants.ts` — this package
+ * deliberately does not import alchemy). Its presence in the OpenNext build
+ * output means the user mounted the bridge explicitly (`toRouteHandler` /
+ * `Serve.make`) and the takeover must stand down. Deliberately NOT the
+ * bridge's `__ALCHEMY_SERVE_v1__` sentinel: the bridge module also rides
+ * the value-form `createClient` graph (server components importing the
+ * backend), so that literal appears in EVERY effectful site's OpenNext
+ * output and would false-positive the stand-down.
  */
-export const SERVE_SENTINEL = "__ALCHEMY_SERVE_v1__";
+export const SERVE_MOUNT_MARKER = "__ALCHEMY_SERVE_MOUNT_v1__";
 
 /**
  * The Durable Object classes OpenNext's `worker.js` template re-exports
@@ -209,7 +214,7 @@ export const scanForServeSentinel = Effect.fn(function* (
     const content = yield* fs
       .readFileString(file)
       .pipe(Effect.orElseSucceed(() => ""));
-    if (content.includes(SERVE_SENTINEL)) {
+    if (content.includes(SERVE_MOUNT_MARKER)) {
       return true;
     }
   }

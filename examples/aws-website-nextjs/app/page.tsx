@@ -3,6 +3,7 @@
 // component, in the deployed Lambda and under `next dev` alike.
 import { createClient } from "alchemy/client";
 import Backend from "./backend.ts";
+import Queue from "./queue.tsx";
 import Visits from "./visits.tsx";
 
 // Server-rendered in the Lambda on every request — a prerendered page
@@ -13,6 +14,7 @@ const backend = createClient(Backend);
 
 export default async function Home() {
   const visits = await backend.visits();
+  const processed = await backend.processed();
   return (
     <main className="mx-auto max-w-2xl p-8">
       <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
@@ -24,6 +26,7 @@ export default async function Home() {
           </span>
         </p>
         <Visits />
+        <Queue initial={processed} />
       </div>
     </main>
   );

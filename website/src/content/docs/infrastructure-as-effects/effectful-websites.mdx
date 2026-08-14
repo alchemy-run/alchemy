@@ -345,16 +345,118 @@ export default {
 ## Beyond fetch
 
 On Cloudflare, the program's non-fetch surface — Durable Object classes,
-queue consumers, cron `scheduled` handlers — deploys on the same Worker
-through the generated entry (Vite, StaticSite, and the Next.js entry
-takeover today; Nuxt's non-fetch surface is production-only).
+queue consumers, cron `scheduled` handlers — deploys on the same Worker:
+every automatic tier ships it in production, through the generated entry
+(Vite, StaticSite, SvelteKit, Nuxt) or the entry takeover (Astro,
+Next.js).
 
 On AWS there is no entry seam in a pre-streamified framework bundle, so
 the non-fetch half of the program rides a **sibling effect Lambda**
 (`<SiteId>-Handlers`), deployed automatically from the same impl: event
 sources register their mappings and IAM against the sibling, and a
-fetch-only program deploys no extra Lambda at all. You still write one
-program.
+fetch-only program deploys no extra Lambda at all. The exception is the
+effectful `AWS.Website.StaticSite`, whose program **is** the server
+Lambda — event sources attach to it directly, no sibling. Either way you
+still write one program.
+
+## Async work
+
+The request/response leg is only half of a backend: a method can
+**enqueue** work, and a queue consumer **on the same class** processes it
+in the background. Producer, consumer, and the queue itself are all
+declared by the one program — the same init Effect that collects
+bindings at plan time deploys the queue, grants the send capability, and
+registers the consumer.
+
+Declare the queue next to the class, like any other resource:
+
+```typescript
+// src/backend.ts
+import { Queue } from "alchemy/Cloudflare/Queues";
+
+export const Jobs = Queue("Jobs");
+```
+
+The producer side is a capability binding like any other — expose it as
+an RPC method:
+
+```typescript
+const jobs = yield* WriteQueue(yield* Jobs);
+return {
+  enqueue: (message: string) =>
+    jobs.send(message, { contentType: "text" }).pipe(Effect.orDie),
+};
+```
+
+The consumer registers in the same init Effect, on the same class —
+`consumeQueueMessages` wires both halves in one call: at plan time it
+yields the `Queues.Consumer` resource that points the queue at the
+site's Worker, and at runtime it registers the `queue` event listener:
+
+```typescript
+yield* consumeQueueMessages<string>(
+  yield* Jobs,
+  { batchSize: 5, maxRetries: 2 },
+  (stream) =>
+    Stream.runForEach(stream, (msg) =>
+      recordProcessed(String(msg.body)), // e.g. bump a counter in KV
+    ),
+);
+```
+
+Provide `Queues.EventSourceLive` alongside the producer's
+`WriteQueueBinding` on the program, and delivery follows the
+[Beyond fetch](#beyond-fetch) mechanics — the batch dispatches on the
+same Worker that served the enqueue.
+
+AWS is symmetric — `AWS.SQS.consumeQueueMessages` with the
+`Lambda.QueueEventSource` layer, and `SQS.SendMessage` (provided by
+`SQS.SendMessageHttp`) as the producer capability:
+
+```typescript
+import { consumeQueueMessages, Queue, SendMessage } from "alchemy/AWS/SQS";
+
+const send = yield* SendMessage(yield* Jobs);
+yield* consumeQueueMessages(yield* Jobs, (records) =>
+  Stream.runForEach(records, (record) => recordProcessed(record.body)),
+);
+return {
+  enqueue: (message: string) =>
+    send({ MessageBody: message }).pipe(Effect.orDie),
+};
+```
+
+On AWS the consumer rides the sibling effect Lambda (or, for
+`StaticSite`, the site's own Lambda) — shared capabilities collect their
+env and IAM onto **both** functions, so `recordProcessed` above can
+write to the same DynamoDB table the fetch side reads.
+
+Because the consumer runs asynchronously, the frontend observes the
+catch-up by polling a read method — a `processed()` RPC method that
+returns whatever state the consumer writes (the counter above) — over
+the same typed bridge:
+
+```typescript
+// client code — same type-only createClient bridge
+await backend.enqueue("hello queue");
+// poll until the consumer's write lands
+const { count, last } = await backend.processed();
+```
+
+### Queue delivery in dev
+
+`alchemy dev` delivers queue events locally only where the site worker's
+non-fetch surface actually runs under the local runtime:
+
+| Tier | Queue delivery under `alchemy dev` |
+| --- | --- |
+| Cloudflare Vite, StaticSite, Astro | **yes** — the local queue broker delivers batches to the consumer on the local site worker |
+| Cloudflare Next.js | `preview` mode **yes** (full takeover artifact); `hmr` mode no (fetch-only) |
+| Cloudflare SvelteKit, Nuxt | no — the dev servers mount the effect fetch only; queue batches are not dispatched locally |
+| AWS (all tiers) | no — event-source mappings are cloud wiring that cannot target a locally emulated Lambda; deploy to exercise the consumer |
+
+Where delivery is unavailable in dev, `enqueue` and the rest of the
+program still work — the async leg simply engages on `alchemy deploy`.
 
 ## Dev mode
 
@@ -372,6 +474,9 @@ production:
   credentials (capability resources are typically piped through
   `Alchemy.remote()` under dev); the effectful StaticSite's Lambda runs
   in the local emulator.
+
+Queue-consumer support under dev differs per tier — see the
+[dev delivery matrix](#queue-delivery-in-dev) above.
 
 ## Migrating from two workers
 

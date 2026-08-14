@@ -68,14 +68,17 @@ export interface AstroCloudflareConfig {
   readonly sessionDevKV?: boolean | undefined;
   /**
    * Effectful-Website delivery: the effect program module (`mainPath`,
-   * absolute path or `file://` URL) and the path globs its `fetch` owns.
-   * Forwarded to the integration's fetchable wrapper (see
+   * absolute path or `file://` URL), the path globs its `fetch` owns, and
+   * the program's Durable Object class names (`doClasses`, re-exported
+   * from the entry-takeover wrapper as bridge classes). Forwarded to the
+   * integration's fetchable wrapper and entry-takeover plugin (see
    * `DistilledCloudflareOptions.effect`).
    */
   readonly effect?:
     | {
         readonly mainPath: string;
         readonly routes: ReadonlyArray<string>;
+        readonly doClasses?: ReadonlyArray<string> | undefined;
       }
     | undefined;
 }

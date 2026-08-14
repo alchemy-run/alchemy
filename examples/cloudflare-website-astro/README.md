@@ -22,6 +22,20 @@ mechanics vary between examples.
 - `src/pages/index.astro` is the UI: the frontmatter server-renders the
   count and the inline `<script>` bumps it from the browser.
 
+### The async leg
+
+The same backend class also carries the demo's async leg: a Cloudflare
+Queue (`Jobs`) produced to by the `enqueue(message)` RPC method and
+consumed ON THE SAME CLASS by `consumeQueueMessages` — each message bumps
+`processed-count` and records `processed-last` in the `Visits` KV
+namespace, and `processed()` reads that state back. The entry takeover
+wraps the vendored Astro worker entry so the queue handler is delivered
+alongside `fetch` — no separate consumer worker. The UI's queue section
+sends a message ("Send to queue") and then polls `processed()` (bounded,
+once per second) until the count grows, so the asynchronous catch-up —
+queue → consumer → KV → UI — is visible in the
+`Queue-processed: {count} — last: {last}` line.
+
 ## createClient — both forms
 
 ```ts

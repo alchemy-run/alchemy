@@ -14,6 +14,22 @@
 export const SERVE_SENTINEL = "__ALCHEMY_SERVE_v1__";
 
 /**
+ * Explicit-mount marker for the `alchemy/serve` PUBLIC surface.
+ *
+ * Distinct from {@link SERVE_SENTINEL} (which the runtime bridge module
+ * `Bridge.ts` embeds): the bridge is a legitimate transitive dependency of
+ * the value-form `createClient` (`Client/Server.ts`), so the SENTINEL byte
+ * sequence appears in ANY effectful website's framework server bundle —
+ * making it useless as an "explicit mount" signal. This marker is embedded
+ * only by `Serve.ts` (the `Serve.make` module every explicit mount —
+ * `alchemy/serve`, `alchemy/serve/{sveltekit,astro,nitro,next}`, the AWS
+ * `WebsiteHandlers` shell — imports), so framework integrations' stand-down
+ * scans can grep built output for it without false-positiving on capability
+ * or client imports.
+ */
+export const SERVE_MOUNT_MARKER = "__ALCHEMY_SERVE_MOUNT_v1__";
+
+/**
  * Static property key under which a Website class may carry its own
  * cloud-specific serve shell — the runtime half `Serve.make` dispatches to
  * instead of the default (Cloudflare-flavored) bridge in `Bridge.ts`.

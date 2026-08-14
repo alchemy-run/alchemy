@@ -253,6 +253,16 @@ export interface AstroProps<
  * declared-static build (`astro: { output: "static" }`) deploys no
  * Worker code and therefore rejects an Effect program at plan time.
  *
+ * Non-`fetch` event handlers (a queue consumer registered with
+ * `Queues.consumeQueueMessages`, `scheduled`, ...) and the program's
+ * Durable Object classes are delivered too: alchemy wraps the vendored
+ * Astro worker entry with a generated module that keeps `fetch` exactly
+ * as the fetchable delivers it and spreads the non-fetch handler surface
+ * (plus DO bridge class re-exports) from the Worker bridge — in the
+ * production build and in `astro dev` alike (local queue delivery
+ * included). Workflow classes are not deliverable yet and fail the build
+ * with an actionable error.
+ *
  * The impl's non-`fetch` methods are **RPC methods** — the typed API
  * surface, served at the reserved `POST /api/__rpc/<method>` path (no
  * routes claim needed) and called through `createClient` from

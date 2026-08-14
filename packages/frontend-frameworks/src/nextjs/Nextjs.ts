@@ -409,7 +409,7 @@ export const make = (
               return yield* Effect.fail(
                 fail(
                   `The app mounts alchemy/serve explicitly (the ` +
-                    `"${EffectBundle.SERVE_SENTINEL}" sentinel is compiled into ` +
+                    `"${EffectBundle.SERVE_MOUNT_MARKER}" mount marker is compiled into ` +
                     `the OpenNext output), so the artifact takeover stands ` +
                     `down — but the effect program exports Durable ` +
                     `Object/Workflow classes (${[

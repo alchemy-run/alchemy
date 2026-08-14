@@ -24,6 +24,22 @@ mechanics vary between examples.
 - `app/page.tsx` (async server component) server-renders the count;
   `app/visits.tsx` (`"use client"`) bumps it from the browser.
 
+### The async leg
+
+The same backend class also carries the demo's async leg: a Cloudflare
+Queue (`Jobs`) produced to by the `enqueue(message)` RPC method and
+consumed ON THE SAME CLASS by `consumeQueueMessages` — each message bumps
+`processed-count` and records `processed-last` in the `Visits` KV
+namespace, and `processed()` reads that state back. The entry takeover
+wraps the OpenNext worker artifact so the queue handler is delivered
+alongside `fetch` — no separate consumer worker. (Queue delivery is
+prod-only for Next: `alchemy dev` serves the frontend, but consumed
+batches only flow in a real deploy.) The UI's queue section
+(`app/queue.tsx`) sends a message ("Send to queue") and then polls
+`processed()` (bounded, once per second) until the count grows, so the
+asynchronous catch-up — queue → consumer → KV → UI — is visible in the
+`Queue-processed: {count} — last: {last}` line.
+
 ## createClient — both forms
 
 ```tsx
