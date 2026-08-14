@@ -24,6 +24,7 @@ import { inspect } from "node:util";
 import { pathToFileURL } from "node:url";
 
 import { makeFileLog } from "./FileLog.ts";
+import { writeDirect } from "./StrayOutput.ts";
 import type { FileSuite, Hook, LogEntry, Suite, TestCase } from "./Model.ts";
 import { containsOnly, forEachTest, titlePath } from "./Model.ts";
 import * as Registry from "./Registry.ts";
@@ -381,11 +382,40 @@ interface TestAttempt {
   readonly afterEach: Exit.Exit<void, unknown>;
 }
 
+/**
+ * Marker failure for a body that hit its per-test timeout. Distinguished
+ * from ordinary failures because a timed-out attempt is NEVER retried —
+ * see {@link attemptNeedsRetry}.
+ */
+class TestTimeoutError extends Error {
+  override name = "TestTimeoutError";
+}
+
+/** Did the attempt's body fail by hitting its per-test timeout? */
+const failedByTimeout = (exit: Exit.Exit<TestAttempt, unknown>): boolean =>
+  Exit.isSuccess(exit) &&
+  exit.value.body !== undefined &&
+  Exit.isFailure(exit.value.body) &&
+  exit.value.body.cause.reasons.some(
+    (reason) =>
+      reason._tag === "Fail" && reason.error instanceof TestTimeoutError,
+  );
+
 const attemptNeedsRetry = (
   exit: Exit.Exit<TestAttempt, unknown>,
   expectsFailure: boolean | undefined,
 ): boolean => {
   if (Exit.isFailure(exit)) return !wasInterrupted(exit);
+  // A per-test timeout is never retried. The attempt already consumed the
+  // test's ENTIRE time budget, and its body fiber may have been abandoned
+  // mid-teardown (still running detached, still holding locks/state) — a
+  // re-run races the abandoned attempt AND multiplies the wall-clock cost
+  // by (1 + retries). On real cloud suites that pushed a single wedged
+  // 120s-timeout test past external wall clocks (`timeout 240`, CI limits,
+  // Ctrl+C), which killed the whole runner with a SIGTERM/SIGINT-style
+  // exit 130 and a truncated run log before the failure was ever reported.
+  // Hitting the timeout IS the result; report it immediately.
+  if (failedByTimeout(exit)) return false;
   if (
     Exit.isFailure(exit.value.beforeEach) ||
     Exit.isFailure(exit.value.afterEach)
@@ -397,6 +427,17 @@ const attemptNeedsRetry = (
     exit.value.body !== undefined &&
     Exit.isFailure(exit.value.body)
   );
+};
+
+/** Compact description of why an attempt failed (for TestRetry events). */
+const attemptFailure = (exit: Exit.Exit<TestAttempt, unknown>): string => {
+  if (Exit.isFailure(exit)) return prettyCause(exit.cause);
+  const hook = hookError(exit.value);
+  if (hook !== undefined) return hook;
+  const body = exit.value.body;
+  return body !== undefined && Exit.isFailure(body)
+    ? prettyCause(body.cause)
+    : "unknown failure";
 };
 
 const hookError = (attempt: TestAttempt): string | undefined => {
@@ -451,7 +492,7 @@ const runBodyWithTimeout = Effect.fn(function* (
     Effect.timeoutOption(Duration.millis(INTERRUPT_GRACE_MS)),
   );
   return Exit.fail(
-    new Error(
+    new TestTimeoutError(
       Option.isNone(settled)
         ? `test timed out after ${timeoutMs}ms (teardown did not settle within ${INTERRUPT_GRACE_MS}ms and was abandoned)`
         : `test timed out after ${timeoutMs}ms`,
@@ -542,6 +583,15 @@ const runTest = Effect.fn(function* (test: TestCase, ctx: ExecContext) {
     retries < (test.retry ?? ctx.options.retry)
   ) {
     retries++;
+    // Announce the failed attempt BEFORE re-running: the retry may take
+    // minutes (or the run may be killed during it) — the attempt's error
+    // must already be on the console and in the run log by then.
+    yield* ctx.emit({
+      _tag: "TestRetry",
+      test: meta,
+      attempt: retries,
+      error: attemptFailure(exit),
+    });
     // Clear IN PLACE — TestStart handed this array's reference out.
     logs.length = 0;
     exit = yield* runAttempt();
@@ -727,6 +777,49 @@ export const run = Effect.fn(function* (options: RunOptions) {
   const emit = (event: TestEvent): Effect.Effect<void> =>
     reporter.emit(event).pipe(Effect.andThen(fileLog.append(event)));
 
+  // Hoisted run state, shared with the interruption trailer below: results
+  // reported so far, currently-executing test fibers, and the announced
+  // test total.
+  const allResults: Array<{ meta: TestMeta; result: TestResult }> = [];
+  const running = new Map<string, Fiber.Fiber<unknown, unknown>>();
+  const totals = { tests: 0 };
+
+  // When the process is killed externally (Ctrl+C, a `timeout N` wrapper,
+  // a CI wall clock — all of which the platform runMain converts into an
+  // interruption of this fiber and an exit-130), the run would otherwise
+  // die silently: no failure report, and a run log that simply stops after
+  // `running N tests...`. This finalizer runs on the CLI scope's close with
+  // the run's exit; on interruption it drains the live hook-line queue and
+  // appends an attributed trailer so the log always records what was in
+  // flight when the run was killed.
+  yield* Effect.addFinalizer((exit) =>
+    Effect.gen(function* () {
+      if (!wasInterrupted(exit)) return;
+      const passed = allResults.filter(
+        (r) => r.result.status === "pass",
+      ).length;
+      const failed = allResults.filter(
+        (r) => r.result.status === "fail",
+      ).length;
+      const inFlight = [...running.keys()];
+      const lines = [
+        `RUN INTERRUPTED (killed by signal — Ctrl+C, timeout wrapper, or CI limit) after ${((Date.now() - startedAt) / 1000).toFixed(1)}s`,
+        `${allResults.length}/${totals.tests} tests reported (${passed} passed, ${failed} failed)`,
+        ...(inFlight.length === 0
+          ? []
+          : ["still running when killed:", ...inFlight.map((id) => `  ${id}`)]),
+      ];
+      // Drain queued hook lines first so the trailer is the log's last word.
+      yield* fileLog.close;
+      yield* fileLog.appendRaw(`\n${lines.join("\n")}\n`);
+      yield* Effect.sync(() => {
+        writeDirect(
+          `\nrun interrupted — partial results in ${options.logFile}\n`,
+        );
+      });
+    }),
+  );
+
   const absoluteFiles = yield* discover(options).pipe(Effect.orDie);
   const relative = absoluteFiles.map((f) => path.relative(options.root, f));
   yield* emit({ _tag: "CollectStart", files: relative });
@@ -779,6 +872,7 @@ export const run = Effect.fn(function* (options: RunOptions) {
     };
     walk(c.suite);
   }
+  totals.tests = allMetas.length;
   yield* emit({
     _tag: "RunStart",
     files: collected.length,
@@ -786,10 +880,8 @@ export const run = Effect.fn(function* (options: RunOptions) {
   });
 
   // Phase 2 — run files concurrently.
-  const allResults: Array<{ meta: TestMeta; result: TestResult }> = [];
   const fileFailures: Array<{ file: string; error: string }> = [];
   const lock = yield* Semaphore.make(EXCLUSIVE_PERMITS);
-  const running = new Map<string, Fiber.Fiber<unknown, unknown>>();
   const completed = new Set<string>();
   const testIndex = new Map<string, { test: TestCase; ctx: ExecContext }>();
 

@@ -96,6 +96,22 @@ export type TestEvent =
       readonly logs?: ReadonlyArray<LogEntry>;
     }
   | {
+      /**
+       * An attempt failed and the test is about to be re-run. Emitted BEFORE
+       * the retry starts so the failed attempt's error reaches the console
+       * and the run log immediately — without this, a test that spends
+       * several timeouts' worth of wall clock across retries leaves no trace
+       * on disk until its final TestEnd, and an externally-killed run
+       * (SIGTERM/SIGINT) loses the failure entirely.
+       */
+      readonly _tag: "TestRetry";
+      readonly test: TestMeta;
+      /** 1-based number of the attempt that just failed. */
+      readonly attempt: number;
+      /** Pretty-printed failure of that attempt. */
+      readonly error: string;
+    }
+  | {
       readonly _tag: "TestEnd";
       readonly test: TestMeta;
       readonly result: TestResult;
