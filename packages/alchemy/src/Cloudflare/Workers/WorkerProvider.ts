@@ -2,7 +2,6 @@ import * as durableObjectsApi from "@distilled.cloud/cloudflare/durable-objects"
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
-import * as zones from "@distilled.cloud/cloudflare/zones";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -31,7 +30,7 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { localRuntimeServices } from "../LocalRuntime.ts";
 import { detachQueueConsumersOfScript } from "../Queues/Consumer.ts";
 import { CloudflareLogs } from "../Logs.ts";
-import { resolveZoneId } from "../Zone/lookup.ts";
+import { findZoneByName, resolveZoneId } from "../Zone/lookup.ts";
 import {
   getAssetsPathPrefix,
   mergeAssetsConfigFiles,
@@ -1073,7 +1072,6 @@ export const LiveWorkerProvider = () =>
       // const putDomain = yield* workers.putDomain;
       // const listDomains = yield* workers.listDomains;
       // const deleteDomain = yield* workers.deleteDomain;
-      // const listZones = yield* zones.listZones;
       const telemetry = yield* CloudflareLogs;
 
       // Account subdomain is invariant for the life of a provider layer —
@@ -1210,9 +1208,20 @@ export const LiveWorkerProvider = () =>
         });
 
       /**
-       * Infer the Cloudflare Zone ID for a given hostname by listing the
-       * account's zones and matching the hostname against each zone's name —
-       * walking up the DNS label hierarchy until a match is found.
+       * Infer the Cloudflare Zone ID for a given hostname by walking up the
+       * DNS label hierarchy and asking Cloudflare for each candidate zone
+       * name until one matches.
+       *
+       * Deliberately an exact-name lookup per candidate rather than listing
+       * the account's zones: `GET /zones` pages at 20 by default, so any
+       * account with more zones than that would silently fail to resolve the
+       * ones past the first page. The lookup is also scoped to `accountId`,
+       * so a token with access to several accounts can't match a zone the
+       * Worker's account doesn't own.
+       *
+       * `zoneCache` memoizes both the resolved hostname and the zone name it
+       * resolved through, so sibling hostnames on the same zone (`api.x.com`,
+       * `app.x.com`) cost one request in total.
        */
       const inferZoneIdForHostname = (
         hostname: string,
@@ -1222,20 +1231,20 @@ export const LiveWorkerProvider = () =>
           const cached = zoneCache.get(hostname);
           if (cached) return cached;
 
-          const zoneList = yield* zones
-            .listZones({})
-            .pipe(Effect.map((response) => response.result ?? []));
-          for (const zone of zoneList) {
-            zoneCache.set(zone.name, zone.id);
-          }
+          const { accountId } = yield* yield* CloudflareEnvironment;
 
           const parts = hostname.split(".");
           for (let i = 0; i < parts.length - 1; i++) {
             const candidate = parts.slice(i).join(".");
-            const match = zoneList.find((z) => z.name === candidate);
-            if (match) {
-              zoneCache.set(hostname, match.id);
-              return match.id;
+            const hit =
+              zoneCache.get(candidate) ??
+              (yield* findZoneByName({ accountId, name: candidate }).pipe(
+                Effect.map((zone) => zone?.id),
+              ));
+            if (hit) {
+              zoneCache.set(candidate, hit);
+              zoneCache.set(hostname, hit);
+              return hit;
             }
           }
           return yield* Effect.die(
