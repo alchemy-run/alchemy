@@ -167,10 +167,15 @@ export interface PostgresDatabase<
  *
  * Queries are lazy and re-runnable: each evaluation replays the chain
  * against the execution's client, so `Effect.retry` re-issues the query.
- * Failures surface as tagged errors — `Prisma.PrismaQueryError` (with
- * `sqlState`/`constraint`; unique violations expose `isUniqueViolation`),
- * `Prisma.PrismaConnectionError` (with the driver's `transient` verdict),
- * and `Prisma.PrismaError` for ORM/pipeline codes.
+ * Failures surface as granular tagged errors: the SQL-standard integrity
+ * violations each get their own tag (`Prisma.PrismaUniqueViolationError`,
+ * `Prisma.PrismaForeignKeyViolationError`, `Prisma.PrismaNotNullViolationError`,
+ * `Prisma.PrismaCheckViolationError`), other statement failures are
+ * `Prisma.PrismaQueryError` (with the normalized `sqlState`), connection
+ * failures are `Prisma.PrismaConnectionError` (with the driver's
+ * `transient` verdict), and prisma-next's structured codes split by
+ * category into `Prisma.PrismaOrmError` / `Prisma.PrismaRuntimeError`
+ * with an autocompleting `code` field.
  *
  * @binding
  * @category ORM

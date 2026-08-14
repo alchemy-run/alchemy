@@ -203,18 +203,20 @@ const slim = yield* db.orm.public.User.select("id", "email").all();
 ```
 
 `update` and `delete` require a prior `.where(...)` — at compile
-time, same as prisma-next. Failures surface as tagged errors:
-`Prisma.PrismaQueryError` (with `sqlState`/`constraint`; unique
-violations expose `isUniqueViolation`), `Prisma.PrismaConnectionError`
-(with the driver's `transient` retry hint), and `Prisma.PrismaError`
-for ORM validation codes:
+time, same as prisma-next. Failures surface as granular tagged
+errors: each SQL integrity violation has its own tag
+(`PrismaUniqueViolationError`, `PrismaForeignKeyViolationError`,
+`PrismaNotNullViolationError`, `PrismaCheckViolationError`), other
+statement failures are `PrismaQueryError` (with the normalized
+`sqlState`), connection failures are `PrismaConnectionError` (with
+the driver's `transient` retry hint), and prisma-next's structured
+codes split by category into `PrismaOrmError` / `PrismaRuntimeError`
+with an autocompleting `code` field:
 
 ```typescript
 const outcome = yield* db.orm.public.User.create({ email }).pipe(
-  Effect.catchTag("Prisma.PrismaQueryError", (error) =>
-    error.isUniqueViolation
-      ? Effect.succeed("already registered")
-      : Effect.fail(error),
+  Effect.catchTag("Prisma.PrismaUniqueViolationError", () =>
+    Effect.succeed("already registered"),
   ),
 );
 ```

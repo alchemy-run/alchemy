@@ -120,7 +120,12 @@ export default class PrismaOrmWorker extends Cloudflare.Worker<PrismaOrmWorker>(
             .pipe(
               Effect.as("ok" as const),
               Effect.catchTag(
-                ["Prisma.PrismaError", "Prisma.PrismaQueryError"],
+                [
+                  "Prisma.PrismaError",
+                  "Prisma.PrismaQueryError",
+                  "Prisma.PrismaOrmError",
+                  "Prisma.PrismaRuntimeError",
+                ],
                 (error) => Effect.succeed(`caught:${error._tag}`),
               ),
               Effect.orDie,

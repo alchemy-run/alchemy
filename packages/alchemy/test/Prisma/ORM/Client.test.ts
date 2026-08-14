@@ -121,20 +121,49 @@ test.provider(
           }).all();
           expect(repeats).toHaveLength(2);
 
-          // typed unique-violation
+          // granular constraint tags: unique violation is its own error
           const dup = yield* db.orm.public.User.create({
             email: "alice@example.com",
           }).pipe(
             Effect.as("created" as const),
-            Effect.catchTag("Prisma.PrismaQueryError", (error) =>
+            Effect.catchTag("Prisma.PrismaUniqueViolationError", (error) =>
               Effect.succeed(
-                error.isUniqueViolation
+                error.sqlState === "23505"
                   ? ("unique" as const)
                   : ("other" as const),
               ),
             ),
           );
           expect(dup).toEqual("unique");
+
+          // ...and so is a foreign-key violation
+          const fk = yield* db.orm.public.Post.create({
+            title: "orphan",
+            authorId: 999_999,
+          }).pipe(
+            Effect.as("created" as const),
+            Effect.catchTag("Prisma.PrismaForeignKeyViolationError", () =>
+              Effect.succeed("fk-violation" as const),
+            ),
+          );
+          expect(fk).toEqual("fk-violation");
+
+          // ORM misuse surfaces as the ORM category tag with a typed code.
+          // (`count()` is refinement-only; even prisma's own types reject
+          // this call, so the cast is deliberate — the test pins the
+          // *runtime* classification of the thrown ORM.* error.)
+          const misuse = yield* db
+            .use(
+              (c) =>
+                c.orm.public.User.count() as unknown as PromiseLike<unknown>,
+            )
+            .pipe(
+              Effect.as("ok" as const),
+              Effect.catchTag("Prisma.PrismaOrmError", (error) =>
+                Effect.succeed(error.code),
+              ),
+            );
+          expect(misuse).toEqual("ORM.INCLUDE_INVALID");
 
           // delete gating + row-returning delete
           const deleted = yield* db.orm.public.User.where({
