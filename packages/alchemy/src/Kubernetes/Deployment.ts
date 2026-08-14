@@ -280,7 +280,9 @@ export interface DeploymentRuntimeContext extends HostRuntimeContext {
  * cluster's platform adapter — workload identity and a container image
  * from exactly one of three sources flat on props: `main` (bundle an
  * inline Effect program), `context` (build your own Dockerfile), or
- * `image` (a pre-built registry reference). On `AWS.EKS.Cluster` targets
+ * `image` (a pre-built registry reference — a string is mirrored into
+ * ECR on EKS; {@link Image.ref} or `{ imageUri }` is used verbatim).
+ * On `AWS.EKS.Cluster` targets
  * it accepts the same `{ env, policyStatements }` host binding contract as
  * `AWS.Lambda.Function` and `AWS.ECS.Task`: every AWS `Binding.Service`
  * (S3, DynamoDB, SQS, …) attaches env vars to the pod spec and IAM policy

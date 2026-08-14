@@ -269,7 +269,9 @@ export interface JobRuntimeContext extends HostRuntimeContext {
  * target cluster's platform adapter — workload identity and a container
  * image from exactly one of three sources flat on props: `main` (bundle an
  * inline Effect program whose impl returns `{ run }`), `context` (build
- * your own Dockerfile), or `image` (a pre-built registry reference). On
+ * your own Dockerfile), or `image` (a pre-built registry reference — a
+ * string is mirrored into ECR on EKS; {@link Image.ref} or `{ imageUri }`
+ * is used verbatim). On
  * `AWS.EKS.Cluster` targets, bindings attach env vars to the pod and IAM
  * policy statements to a generated pod-identity role, exactly like
  * `Kubernetes.Deployment`.
@@ -281,6 +283,14 @@ export interface JobRuntimeContext extends HostRuntimeContext {
  *   cluster,
  *   image: "ghcr.io/acme/migrator:v3",
  *   backoffLimit: 2,
+ * });
+ * ```
+ *
+ * @example Pull a pre-built image directly (skip the EKS mirror)
+ * ```typescript
+ * const migrate = yield* Kubernetes.Job("DbMigrate", {
+ *   cluster,
+ *   image: Kubernetes.Image.ref("ghcr.io/acme/migrator@sha256:…"),
  * });
  * ```
  *
