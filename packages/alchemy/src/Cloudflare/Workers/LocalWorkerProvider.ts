@@ -1,16 +1,15 @@
-import {
-  Runtime,
-  type RuntimeServices,
-  type BindingHook,
-  type BindingServices,
-  type HyperdriveOrigin,
-  type Module,
-  type DurableObjectNamespace as RuntimeDurableObject,
-  type QueueConsumer as RuntimeQueueConsumer,
-  type Workflow as RuntimeWorkflow,
+import type {
+  RuntimeServices,
+  BindingHook,
+  BindingServices,
+  HyperdriveOrigin,
+  Module,
+  DurableObjectNamespace as RuntimeDurableObject,
+  QueueConsumer as RuntimeQueueConsumer,
+  Workflow as RuntimeWorkflow,
 } from "@alchemy.run/cloudflare-runtime/core";
 import type { ContainerImage } from "@alchemy.run/cloudflare-runtime/core/Docker";
-import * as WorkerProxy from "@alchemy.run/cloudflare-runtime/core/proxy/WorkerProxy";
+import type * as WorkerProxy from "@alchemy.run/cloudflare-runtime/core/proxy/WorkerProxy";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
@@ -36,6 +35,7 @@ import {
   LocalRuntimeState,
   localStorageDirectory,
 } from "../LocalRuntime.ts";
+import { importRuntime, importRuntimeWorkerProxy } from "../RuntimeImport.ts";
 import type { ConsumerSettings } from "../Queues/Consumer.ts";
 import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
 import { readAssetsConfigFiles } from "./Assets.ts";
@@ -108,13 +108,18 @@ export const LocalWorkerProvider = () =>
     Worker,
     LOCAL_ENTRY_URL,
     Effect.gen(function* () {
+      // Deferred runtime imports — keeps workerd out of the
+      // `alchemy/Cloudflare/Workers` subpath's static graph so foreign
+      // bundlers never see it (see `RuntimeImport.ts`). Node's module
+      // cache guarantees the lazily-loaded tags are the same instances
+      // the runtime layer provided.
       const bundler = yield* WorkerBundle;
-      const runtime = yield* Runtime;
+      const runtime = yield* (yield* importRuntime).Runtime;
       const stack = yield* Stack;
       const storageDirectory = yield* localStorageDirectory;
       const path = yield* Path.Path;
       const localRuntimeState = yield* LocalRuntimeState;
-      const workerProxy = yield* WorkerProxy.WorkerProxy;
+      const workerProxy = yield* (yield* importRuntimeWorkerProxy).WorkerProxy;
       const cloudflareEnv = yield* CloudflareEnvironment;
       const context = yield* Effect.context<RuntimeServices>();
       const rootScope = yield* Effect.scope;

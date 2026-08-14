@@ -17,12 +17,14 @@
  *
  * NOT exported from `index.ts` — capability-internal scaffolding.
  */
-import { KvNamespace } from "@alchemy.run/cloudflare-runtime/core/bindings";
-import { open } from "@alchemy.run/cloudflare-runtime/core/platform-proxy";
 import type * as runtime from "@cloudflare/workers-types";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import { gatewayName, localGatewayRuntime } from "../LocalGateway.ts";
+import {
+  importRuntimeBindings,
+  importRuntimePlatformProxy,
+} from "../RuntimeImport.ts";
 import type { makeKVNamespaceHelpers } from "./NamespaceBinding.ts";
 import { NamespaceError } from "./NamespaceTypes.ts";
 
@@ -57,6 +59,10 @@ export const makeProxyKVNamespaceHelpers = (
   ): Effect.Effect<T, NamespaceError> =>
     Effect.scoped(
       Effect.gen(function* () {
+        // Deferred runtime imports — keeps workerd out of the capability
+        // subpath's static graph (see `RuntimeImport.ts`).
+        const { open } = yield* importRuntimePlatformProxy;
+        const { KvNamespace } = yield* importRuntimeBindings;
         const proxy = yield* open({
           name: gatewayName("alchemy-kv-gateway", namespaceId),
           bindings: [KvNamespace.local({ binding: "KV", id: namespaceId })],

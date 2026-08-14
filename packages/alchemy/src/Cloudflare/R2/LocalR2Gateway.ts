@@ -17,12 +17,14 @@
  *
  * NOT exported from `index.ts` — capability-internal scaffolding.
  */
-import { R2Bucket } from "@alchemy.run/cloudflare-runtime/core/bindings";
-import { open } from "@alchemy.run/cloudflare-runtime/core/platform-proxy";
 import type * as runtime from "@cloudflare/workers-types";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import { gatewayName, localGatewayRuntime } from "../LocalGateway.ts";
+import {
+  importRuntimeBindings,
+  importRuntimePlatformProxy,
+} from "../RuntimeImport.ts";
 import { makeR2ObjectWrappers, type makeHelpers } from "./BucketBinding.ts";
 import { R2Error } from "./BucketTypes.ts";
 
@@ -55,6 +57,10 @@ export const makeProxyBucketHelpers = (
   ): Effect.Effect<T, R2Error> =>
     Effect.scoped(
       Effect.gen(function* () {
+        // Deferred runtime imports — keeps workerd out of the capability
+        // subpath's static graph (see `RuntimeImport.ts`).
+        const { open } = yield* importRuntimePlatformProxy;
+        const { R2Bucket } = yield* importRuntimeBindings;
         const proxy = yield* open({
           name: gatewayName("alchemy-r2-gateway", bucketName),
           bindings: [R2Bucket.local({ binding: "R2", id: bucketName })],

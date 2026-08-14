@@ -59,7 +59,6 @@ export default class Site extends Nextjs<Site>()(
       include: [
         "app/**",
         "public/**",
-        "stubs/**",
         "package.json",
         "next.config.mjs",
         "postcss.config.mjs",

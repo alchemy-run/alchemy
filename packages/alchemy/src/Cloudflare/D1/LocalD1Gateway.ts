@@ -19,13 +19,15 @@
  *
  * NOT exported from `index.ts` — provider-internal scaffolding.
  */
-import { open } from "@alchemy.run/cloudflare-runtime/core/platform-proxy";
-import { D1 } from "@alchemy.run/cloudflare-runtime/core/bindings";
-import { SERVICE_D1 } from "@alchemy.run/cloudflare-runtime/core/bindings/d1/D1Options";
 import type { BindingHook } from "@alchemy.run/cloudflare-runtime/core/PluginContext";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { gatewayName, localGatewayRuntime } from "../LocalGateway.ts";
+import {
+  importRuntimeBindings,
+  importRuntimeD1Options,
+  importRuntimePlatformProxy,
+} from "../RuntimeImport.ts";
 import type { D1QueryResult, D1SqlExecutor } from "./ApplyMigrations.ts";
 
 export { localGatewayRuntime as localD1GatewayRuntime };
@@ -56,11 +58,11 @@ interface D1StatementResponse {
  * bypassing the `cloudflare-internal:d1-api` wrapper so the proxy's fetch
  * passthrough can POST the full D1 HTTP protocol.
  */
-const rawD1Binding = (databaseId: string): BindingHook =>
+const rawD1Binding = (databaseId: string, serviceD1: string): BindingHook =>
   Effect.succeed({
     name: "D1_RAW",
     service: {
-      name: SERVICE_D1,
+      name: serviceD1,
       props: { json: JSON.stringify({ databaseId }) },
     },
   });
@@ -80,6 +82,11 @@ export const withLocalD1Query = <A, E, R>(
 ) =>
   Effect.scoped(
     Effect.gen(function* () {
+      // Deferred runtime imports — keeps workerd out of the capability
+      // subpath's static graph (see `RuntimeImport.ts`).
+      const { open } = yield* importRuntimePlatformProxy;
+      const { D1 } = yield* importRuntimeBindings;
+      const { SERVICE_D1 } = yield* importRuntimeD1Options;
       const proxy = yield* open({
         name: gatewayName("alchemy-d1-gateway", databaseId),
         bindings: [
@@ -87,7 +94,7 @@ export const withLocalD1Query = <A, E, R>(
           // hook registers the database with the D1 plugin so the `d1`
           // service is emitted into this workerd config.
           D1.local({ binding: "DB", id: databaseId }),
-          rawD1Binding(databaseId),
+          rawD1Binding(databaseId, SERVICE_D1),
         ],
       });
       const raw = (proxy.env as Record<string, unknown>).D1_RAW as {

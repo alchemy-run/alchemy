@@ -1,4 +1,3 @@
-import { layerRuntime } from "@alchemy.run/cloudflare-runtime/core";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -8,6 +7,7 @@ import { AlchemyContext } from "../AlchemyContext.ts";
 import * as RpcProvider from "../Local/RpcProvider.ts";
 import { LOCAL_ID_PREFIX } from "../ProviderMode.ts";
 import { CloudflareEnvironment } from "./CloudflareEnvironment.ts";
+import { importRuntime } from "./RuntimeImport.ts";
 import type { Queue } from "./Queues/Queue.ts";
 import type { Consumer } from "./Queues/Consumer.ts";
 
@@ -85,6 +85,10 @@ export const localStorageDirectory = Effect.gen(function* () {
 const makeLocalRuntimeServices = () =>
   RpcProvider.providerServicesEffect(
     Effect.gen(function* () {
+      // Deferred so the capability subpaths that import this module never
+      // put the runtime package (workerd, sharp) in a bundler's static
+      // graph — see `RuntimeImport.ts`.
+      const { layerRuntime } = yield* importRuntime;
       const getEnv = yield* CloudflareEnvironment;
       return Layer.merge(
         LocalRuntimeStateLive,

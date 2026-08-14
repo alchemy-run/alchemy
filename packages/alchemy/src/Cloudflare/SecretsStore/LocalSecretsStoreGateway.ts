@@ -17,11 +17,13 @@
  * NOT exported from `index.ts` — provider-internal scaffolding.
  */
 import type * as runtime from "@cloudflare/workers-types";
-import { SecretsStore } from "@alchemy.run/cloudflare-runtime/core/bindings";
-import { open } from "@alchemy.run/cloudflare-runtime/core/platform-proxy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { gatewayName } from "../LocalGateway.ts";
+import {
+  importRuntimeBindings,
+  importRuntimePlatformProxy,
+} from "../RuntimeImport.ts";
 
 export class LocalSecretsStoreError extends Data.TaggedError(
   "LocalSecretsStoreError",
@@ -42,6 +44,10 @@ export const withLocalSecretsStore = <A, E, R>(
 ) =>
   Effect.scoped(
     Effect.gen(function* () {
+      // Deferred runtime imports — keeps workerd out of the capability
+      // subpath's static graph (see `RuntimeImport.ts`).
+      const { open } = yield* importRuntimePlatformProxy;
+      const { SecretsStore } = yield* importRuntimeBindings;
       const proxy = yield* open({
         name: gatewayName("alchemy-secrets-store-gateway", storeId),
         bindings: [SecretsStore.admin({ binding: "STORE", storeId })],

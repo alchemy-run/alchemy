@@ -10,13 +10,13 @@
  *
  * NOT exported from `index.ts` — provider/capability-internal scaffolding.
  */
-import { layerRuntime } from "@alchemy.run/cloudflare-runtime/core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import { AlchemyContext } from "../AlchemyContext.ts";
 import { CloudflareEnvironment } from "./CloudflareEnvironment.ts";
 import { isLocalId } from "./LocalRuntime.ts";
+import { importRuntime } from "./RuntimeImport.ts";
 
 /**
  * A standalone local-runtime layer for gateway consumers OUTSIDE the
@@ -27,6 +27,10 @@ import { isLocalId } from "./LocalRuntime.ts";
  */
 export const localGatewayRuntime = Layer.unwrap(
   Effect.gen(function* () {
+    // Deferred so capability subpaths that reach this module never put the
+    // runtime package (workerd, sharp) in a bundler's static graph — see
+    // `RuntimeImport.ts`.
+    const { layerRuntime } = yield* importRuntime;
     const getEnv = yield* CloudflareEnvironment;
     const { dotAlchemy } = yield* AlchemyContext;
     const path = yield* Path.Path;

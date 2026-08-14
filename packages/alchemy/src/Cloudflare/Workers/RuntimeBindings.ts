@@ -2,44 +2,11 @@ import type {
   BindingHook,
   BindingServices,
 } from "@alchemy.run/cloudflare-runtime/core";
-import {
-  Ai,
-  AiSearch,
-  AnalyticsEngine,
-  Artifacts,
-  Assets,
-  Browser,
-  D1,
-  Data,
-  DispatchNamespace,
-  DurableObjectNamespace,
-  Flagship,
-  Hyperdrive,
-  Images,
-  Json,
-  KvNamespace,
-  MtlsCertificate,
-  Pipelines,
-  Queue,
-  R2Bucket,
-  RateLimit,
-  SecretKey,
-  SecretsStore,
-  SendEmail,
-  Service,
-  Stream as StreamSim,
-  Text,
-  Vectorize,
-  VersionMetadata,
-  VpcService,
-  WasmModule,
-  WorkerLoader,
-  Workflows,
-} from "@alchemy.run/cloudflare-runtime/core/bindings";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import { isLocalId } from "../LocalRuntime.ts";
+import { importRuntimeBindings } from "../RuntimeImport.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
 
 export class WorkerValidationError extends Schema.TaggedError<WorkerValidationError>()(
@@ -61,6 +28,43 @@ export const toRuntimeBinding = Effect.fn(function* (
    */
   devRemote?: Record<string, boolean>,
 ) {
+  // Deferred runtime import — keeps workerd (and the simulators' sharp)
+  // out of the `alchemy/Cloudflare/Workers` subpath's static graph so
+  // foreign bundlers never see them (see `RuntimeImport.ts`).
+  const {
+    Ai,
+    AiSearch,
+    AnalyticsEngine,
+    Artifacts,
+    Assets,
+    Browser,
+    D1,
+    Data,
+    DispatchNamespace,
+    DurableObjectNamespace,
+    Flagship,
+    Hyperdrive,
+    Images,
+    Json,
+    KvNamespace,
+    MtlsCertificate,
+    Pipelines,
+    Queue,
+    R2Bucket,
+    RateLimit,
+    SecretKey,
+    SecretsStore,
+    SendEmail,
+    Service,
+    Stream: StreamSim,
+    Text,
+    Vectorize,
+    VersionMetadata,
+    VpcService,
+    WasmModule,
+    WorkerLoader,
+    Workflows,
+  } = yield* importRuntimeBindings;
   const unsupported = () =>
     new WorkerValidationError({
       message: `${b.type} bindings are not supported in local mode`,
@@ -293,6 +297,8 @@ export const materializeRuntimeBindings = Effect.fn(function* (
     stack: { name: string; stage: string };
   },
 ) {
+  // Deferred runtime import — see `toRuntimeBinding` above.
+  const { Assets, Json, Text } = yield* importRuntimeBindings;
   // Resource-backed env entries (e.g. `env: { KV: namespace }`) are
   // represented by their binding descriptor (same name) — don't ALSO
   // serialize the resolved attributes as a duplicate json binding.
