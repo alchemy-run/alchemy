@@ -53,6 +53,9 @@
       "path": "../../distilled/packages/axiom/tsconfig.json"
     },
     {
+      "path": "../../distilled/packages/datadog/tsconfig.json"
+    },
+    {
       "path": "../../distilled/packages/neon/tsconfig.json"
     },
     {

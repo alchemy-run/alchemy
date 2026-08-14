@@ -1,3 +1,4 @@
+import { DEFAULT_SITE } from "@distilled.cloud/datadog/Credentials";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Match from "effect/Match";
@@ -12,8 +13,6 @@ import { getEnv, getEnvRedacted, retryOnce } from "../Auth/Env.ts";
 import * as Clank from "../Util/Clank.ts";
 
 const STORAGE_KEY = "datadog-stored";
-
-const DEFAULT_SITE = "datadoghq.com";
 
 const options: Array<{
   value: DatadogAuthConfig["method"];

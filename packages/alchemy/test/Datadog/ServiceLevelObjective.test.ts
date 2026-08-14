@@ -105,7 +105,7 @@ test.provider.skipIf(!hasDatadogCreds)(
           const slo = yield* Datadog.ServiceLevelObjective("TestMonitorSlo", {
             name: MONITOR_SLO_NAME,
             type: "monitor",
-            monitor_ids: [monitor.id],
+            monitor_ids: [monitor.id.as<number>()],
             thresholds: [{ timeframe: "30d", target: 99.9 }],
             timeframe: "30d",
             target_threshold: 99.9,
