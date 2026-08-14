@@ -17,9 +17,7 @@ import { exec } from "../../Util/exec.ts";
  * fields are surfaced verbatim so callers can match on `code` and users get
  * the CLI's own remediation text.
  */
-export class PrismaNextError extends Data.TaggedError(
-  "Prisma.PrismaNextError",
-)<{
+export class CliError extends Data.TaggedError("Prisma.CliError")<{
   /** Stable machine code reported by the CLI (e.g. `CONTRACT.VERIFY_FAILED`). */
   code?: string | undefined;
   message: string;
@@ -34,7 +32,7 @@ export class PrismaNextError extends Data.TaggedError(
  * provisioned earlier in the same deploy may not be accepting connections
  * yet (eventual consistency), so `Prisma.Migrate` retries these briefly.
  */
-export const isTransientDbError = (error: PrismaNextError): boolean => {
+export const isTransientDbError = (error: CliError): boolean => {
   const meta = error.meta ?? {};
   const metaCode = typeof meta.code === "string" ? meta.code : "";
   return (
@@ -59,21 +57,21 @@ export const resolvePrismaNextBin = Effect.gen(function* () {
   const url = yield* Effect.try({
     try: () => import.meta.resolve("@prisma/orm-postgres/bin/prisma-next"),
     catch: (cause) =>
-      new PrismaNextError({
+      new CliError({
         message: `Failed to resolve @prisma/orm-postgres (is it installed?): ${cause}`,
       }),
   });
   const fileUrl = yield* Effect.try({
     try: () => new URL(url),
     catch: (cause) =>
-      new PrismaNextError({
+      new CliError({
         message: `Failed to parse @prisma/orm-postgres bin URL: ${cause}`,
       }),
   });
   return yield* path.fromFileUrl(fileUrl).pipe(
     Effect.mapError(
       (cause) =>
-        new PrismaNextError({
+        new CliError({
           message: `Failed to convert @prisma/orm-postgres bin URL to a path: ${cause}`,
         }),
     ),
@@ -98,7 +96,7 @@ interface CliFailure {
 export const runPrismaNext = <T extends { ok: true }>(
   args: readonly string[],
   options: { readonly cwd: string },
-): Effect.Effect<T, PrismaNextError, Path.Path | ChildProcessSpawner> =>
+): Effect.Effect<T, CliError, Path.Path | ChildProcessSpawner> =>
   Effect.gen(function* () {
     const bin = yield* resolvePrismaNextBin;
     const nodeExecPath = yield* Effect.sync(() => process.execPath);
@@ -118,7 +116,7 @@ export const runPrismaNext = <T extends { ok: true }>(
       Effect.scoped,
       Effect.mapError(
         (cause) =>
-          new PrismaNextError({
+          new CliError({
             message: `prisma-next ${args.join(" ")} failed to spawn: ${String(cause)}`,
           }),
       ),
@@ -141,7 +139,7 @@ export const runPrismaNext = <T extends { ok: true }>(
     }
     if (parsed && parsed.ok === false) {
       return yield* Effect.fail(
-        new PrismaNextError({
+        new CliError({
           code: parsed.code,
           message: `prisma-next ${args.join(" ")} failed: ${parsed.summary ?? parsed.why ?? "unknown error"}`,
           fix: parsed.fix,
@@ -150,7 +148,7 @@ export const runPrismaNext = <T extends { ok: true }>(
       );
     }
     return yield* Effect.fail(
-      new PrismaNextError({
+      new CliError({
         message: `prisma-next ${args.join(" ")} failed (exit ${result.exitCode}): ${result.stdout}\n${result.stderr}`,
       }),
     );
@@ -245,7 +243,7 @@ export const rewriteEmittedTypes = (dtsPath: string) =>
         .split("\n")
         .find((line) => line.includes("@internal/"));
       return yield* Effect.fail(
-        new PrismaNextError({
+        new CliError({
           message: [
             `Emitted ${dtsPath} references an unpublished @internal/* module this`,
             `integration does not know how to map yet: ${leftover?.trim()}`,
@@ -300,7 +298,7 @@ export const readMigrationPackages = (migrationsDirAbs: string) =>
                 migrationHash: string;
               },
             catch: (cause) =>
-              new PrismaNextError({
+              new CliError({
                 message: `Failed to parse ${metaPath}: ${cause}`,
               }),
           }),

@@ -33,7 +33,7 @@ import type {
   UniqueConstraintCriterion,
 } from "@prisma/orm-postgres/orm-client";
 import * as Effect from "effect/Effect";
-import { type PrismaClientError, wrapPrismaError } from "./Errors.ts";
+import { type ClientError, wrapPrismaError } from "./Errors.ts";
 
 type AnyContract = Contract<SqlStorage>;
 
@@ -125,7 +125,7 @@ type IncludedValue<
 /**
  * The Effect-native view of one prisma-next model collection. Chainables
  * mirror `Collection`'s row/filter typing; terminals return Effects with
- * {@link PrismaClientError} in the error channel. `HasWhere` reproduces
+ * {@link ClientError} in the error channel. `HasWhere` reproduces
  * prisma-next's compile-time gate: `update`/`delete` require a prior
  * `.where(...)`.
  */
@@ -186,56 +186,54 @@ export interface EffectCollection<
 
   // ── read terminals ────────────────────────────────────────────────
 
-  all(): Effect.Effect<Row[], PrismaClientError | E, R>;
+  all(): Effect.Effect<Row[], ClientError | E, R>;
   first(
     filter?: WhereFilter<C, M, Ns>,
-  ): Effect.Effect<Row | null, PrismaClientError | E, R>;
+  ): Effect.Effect<Row | null, ClientError | E, R>;
   aggregate<Spec extends AggregateSpec>(
     fn: (aggregate: AggregateBuilder<C, M, Ns>) => Spec,
-  ): Effect.Effect<AggregateResult<Spec>, PrismaClientError | E, R>;
+  ): Effect.Effect<AggregateResult<Spec>, ClientError | E, R>;
 
   // ── write terminals ───────────────────────────────────────────────
 
-  create(
-    data: CreateInput<C, M, Ns>,
-  ): Effect.Effect<Row, PrismaClientError | E, R>;
+  create(data: CreateInput<C, M, Ns>): Effect.Effect<Row, ClientError | E, R>;
   createAll(
     data: readonly CreateInput<C, M, Ns>[],
-  ): Effect.Effect<Row[], PrismaClientError | E, R>;
+  ): Effect.Effect<Row[], ClientError | E, R>;
   createAndCount(
     data: readonly CreateInput<C, M, Ns>[],
-  ): Effect.Effect<number, PrismaClientError | E, R>;
+  ): Effect.Effect<number, ClientError | E, R>;
   upsert(input: {
     create: CreateInput<C, M, Ns>;
     update: Partial<DefaultModelRow<C, M, Ns>>;
     conflictOn?: UniqueConstraintCriterion<C, M>;
-  }): Effect.Effect<Row, PrismaClientError | E, R>;
+  }): Effect.Effect<Row, ClientError | E, R>;
 
   update(
     data: HasWhere extends true ? Partial<CreateInput<C, M, Ns>> : never,
-  ): Effect.Effect<Row | null, PrismaClientError | E, R>;
+  ): Effect.Effect<Row | null, ClientError | E, R>;
   updateAll(
     data: HasWhere extends true ? Partial<DefaultModelRow<C, M, Ns>> : never,
-  ): Effect.Effect<Row[], PrismaClientError | E, R>;
+  ): Effect.Effect<Row[], ClientError | E, R>;
   updateAndCount(
     data: HasWhere extends true ? Partial<DefaultModelRow<C, M, Ns>> : never,
-  ): Effect.Effect<number, PrismaClientError | E, R>;
+  ): Effect.Effect<number, ClientError | E, R>;
 
   delete(
     this: HasWhere extends true
       ? EffectCollection<C, Ns, M, Row, HasWhere, E, R>
       : never,
-  ): Effect.Effect<Row | null, PrismaClientError | E, R>;
+  ): Effect.Effect<Row | null, ClientError | E, R>;
   deleteAll(
     this: HasWhere extends true
       ? EffectCollection<C, Ns, M, Row, HasWhere, E, R>
       : never,
-  ): Effect.Effect<Row[], PrismaClientError | E, R>;
+  ): Effect.Effect<Row[], ClientError | E, R>;
   deleteAndCount(
     this: HasWhere extends true
       ? EffectCollection<C, Ns, M, Row, HasWhere, E, R>
       : never,
-  ): Effect.Effect<number, PrismaClientError | E, R>;
+  ): Effect.Effect<number, ClientError | E, R>;
 }
 
 /** `db.orm.<namespace>.<Model>` — every model as an {@link EffectCollection}. */

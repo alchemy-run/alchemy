@@ -171,9 +171,7 @@ export const MigrateProvider = () =>
           ).pipe(
             // An unreachable database is not evidence the resource is gone —
             // keep the last observed state rather than failing refresh.
-            Effect.catchTag("Prisma.PrismaNextError", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("Prisma.CliError", () => Effect.succeed(undefined)),
           );
           if (show === undefined) return output;
           const pending = show.migrations;

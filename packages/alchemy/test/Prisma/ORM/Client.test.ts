@@ -126,7 +126,7 @@ test.provider(
             email: "alice@example.com",
           }).pipe(
             Effect.as("created" as const),
-            Effect.catchTag("Prisma.PrismaUniqueViolationError", (error) =>
+            Effect.catchTag("Prisma.UniqueViolationError", (error) =>
               Effect.succeed(
                 error.sqlState === "23505"
                   ? ("unique" as const)
@@ -142,7 +142,7 @@ test.provider(
             authorId: 999_999,
           }).pipe(
             Effect.as("created" as const),
-            Effect.catchTag("Prisma.PrismaForeignKeyViolationError", () =>
+            Effect.catchTag("Prisma.ForeignKeyViolationError", () =>
               Effect.succeed("fk-violation" as const),
             ),
           );
@@ -159,7 +159,7 @@ test.provider(
             )
             .pipe(
               Effect.as("ok" as const),
-              Effect.catchTag("Prisma.PrismaOrmError", (error) =>
+              Effect.catchTag("Prisma.OrmError", (error) =>
                 Effect.succeed(error.code),
               ),
             );
@@ -233,7 +233,7 @@ test.provider(
             )
             .pipe(
               Effect.as("committed" as const),
-              Effect.catchTag("Prisma.PrismaRollbackError", () =>
+              Effect.catchTag("Prisma.RollbackError", () =>
                 Effect.succeed("rolled-back" as const),
               ),
             );

@@ -205,17 +205,17 @@ const slim = yield* db.orm.public.User.select("id", "email").all();
 `update` and `delete` require a prior `.where(...)` — at compile
 time, same as prisma-next. Failures surface as granular tagged
 errors: each SQL integrity violation has its own tag
-(`PrismaUniqueViolationError`, `PrismaForeignKeyViolationError`,
-`PrismaNotNullViolationError`, `PrismaCheckViolationError`), other
-statement failures are `PrismaQueryError` (with the normalized
-`sqlState`), connection failures are `PrismaConnectionError` (with
+(`UniqueViolationError`, `ForeignKeyViolationError`,
+`NotNullViolationError`, `CheckViolationError`), other
+statement failures are `QueryError` (with the normalized
+`sqlState`), connection failures are `ConnectionError` (with
 the driver's `transient` retry hint), and prisma-next's structured
-codes split by category into `PrismaOrmError` / `PrismaRuntimeError`
+codes split by category into `OrmError` / `RuntimeError`
 with an autocompleting `code` field:
 
 ```typescript
 const outcome = yield* db.orm.public.User.create({ email }).pipe(
-  Effect.catchTag("Prisma.PrismaUniqueViolationError", () =>
+  Effect.catchTag("Prisma.UniqueViolationError", () =>
     Effect.succeed("already registered"),
   ),
 );
@@ -236,7 +236,7 @@ const feed = db.stream(plan);                  // Stream<{id, email}>
 
 `db.transaction` runs an Effect on a dedicated connection — commit on
 success, rollback on failure or interruption. `tx.rollback()` aborts
-with a typed `Prisma.PrismaRollbackError`:
+with a typed `Prisma.RollbackError`:
 
 ```typescript
 yield* db.transaction((tx) =>

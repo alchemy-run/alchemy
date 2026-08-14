@@ -10,7 +10,7 @@ import {
   type EmitResult,
   type MigrationPackage,
   type PlanResult,
-  PrismaNextError,
+  CliError,
   readMigrationPackages,
   rewriteEmittedTypes,
   resolveGraphHead,
@@ -318,7 +318,7 @@ export const ContractProvider = () =>
                 ? relative(path.resolve(configDir(news), plan.dir))
                 : "the planned migration directory";
               return yield* Effect.fail(
-                new PrismaNextError({ message: placeholderGuidance(dir) }),
+                new CliError({ message: placeholderGuidance(dir) }),
               );
             }
             if (!plan.noOp && plan.dir !== undefined) {
@@ -328,7 +328,7 @@ export const ContractProvider = () =>
               const planDir = path.resolve(configDir(news), plan.dir);
               if (!planDir.startsWith(migrationsDir + path.sep)) {
                 return yield* Effect.fail(
-                  new PrismaNextError({
+                  new CliError({
                     message: [
                       `prisma-next wrote the migration package to ${relative(planDir)},`,
                       `outside this resource's migrationsDir (${relative(migrationsDir)}).`,
@@ -349,7 +349,7 @@ export const ContractProvider = () =>
               path.join(migrationsDir, "app", finalHead.dirName),
             );
             return yield* Effect.fail(
-              new PrismaNextError({ message: placeholderGuidance(dir) }),
+              new CliError({ message: placeholderGuidance(dir) }),
             );
           }
 

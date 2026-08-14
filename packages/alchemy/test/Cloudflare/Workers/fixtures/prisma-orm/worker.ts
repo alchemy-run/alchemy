@@ -94,7 +94,7 @@ export default class PrismaOrmWorker extends Cloudflare.Worker<PrismaOrmWorker>(
             )
             .pipe(
               Effect.as("committed" as const),
-              Effect.catchTag("Prisma.PrismaRollbackError", () =>
+              Effect.catchTag("Prisma.RollbackError", () =>
                 Effect.succeed("rolled-back" as const),
               ),
               Effect.orDie,
@@ -121,10 +121,10 @@ export default class PrismaOrmWorker extends Cloudflare.Worker<PrismaOrmWorker>(
               Effect.as("ok" as const),
               Effect.catchTag(
                 [
-                  "Prisma.PrismaError",
-                  "Prisma.PrismaQueryError",
-                  "Prisma.PrismaOrmError",
-                  "Prisma.PrismaRuntimeError",
+                  "Prisma.UnknownError",
+                  "Prisma.QueryError",
+                  "Prisma.OrmError",
+                  "Prisma.RuntimeError",
                 ],
                 (error) => Effect.succeed(`caught:${error._tag}`),
               ),

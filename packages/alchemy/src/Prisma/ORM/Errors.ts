@@ -16,7 +16,7 @@ import * as Data from "effect/Data";
  * (`string` stays assignable) so new RC codes never break, while known ones
  * autocomplete.
  */
-export type PrismaErrorCode =
+export type ErrorCode =
   | "ORM.TABLE_UNKNOWN"
   | "ORM.COLUMN_UNKNOWN"
   | "ORM.RELATION_UNKNOWN"
@@ -63,36 +63,36 @@ interface QueryErrorFields {
  * registered" case:
  *
  * ```typescript
- * Effect.catchTag("Prisma.PrismaUniqueViolationError", () =>
+ * Effect.catchTag("Prisma.UniqueViolationError", () =>
  *   Effect.succeed("already registered"),
  * )
  * ```
  */
-export class PrismaUniqueViolationError extends Data.TaggedError(
-  "Prisma.PrismaUniqueViolationError",
+export class UniqueViolationError extends Data.TaggedError(
+  "Prisma.UniqueViolationError",
 )<QueryErrorFields> {}
 
 /** Foreign-key violation (SQLSTATE `23503`) — a referenced row is missing. */
-export class PrismaForeignKeyViolationError extends Data.TaggedError(
-  "Prisma.PrismaForeignKeyViolationError",
+export class ForeignKeyViolationError extends Data.TaggedError(
+  "Prisma.ForeignKeyViolationError",
 )<QueryErrorFields> {}
 
 /** NOT NULL violation (SQLSTATE `23502`). */
-export class PrismaNotNullViolationError extends Data.TaggedError(
-  "Prisma.PrismaNotNullViolationError",
+export class NotNullViolationError extends Data.TaggedError(
+  "Prisma.NotNullViolationError",
 )<QueryErrorFields> {}
 
 /** CHECK constraint violation (SQLSTATE `23514`). */
-export class PrismaCheckViolationError extends Data.TaggedError(
-  "Prisma.PrismaCheckViolationError",
+export class CheckViolationError extends Data.TaggedError(
+  "Prisma.CheckViolationError",
 )<QueryErrorFields> {}
 
 /** Every integrity-constraint tag (SQLSTATE class 23). */
-export type PrismaConstraintViolationError =
-  | PrismaUniqueViolationError
-  | PrismaForeignKeyViolationError
-  | PrismaNotNullViolationError
-  | PrismaCheckViolationError;
+export type ConstraintViolationError =
+  | UniqueViolationError
+  | ForeignKeyViolationError
+  | NotNullViolationError
+  | CheckViolationError;
 
 // ── other SQL / connection failures ───────────────────────────────────
 
@@ -101,8 +101,8 @@ export type PrismaConstraintViolationError =
  * ...). `sqlState` carries the driver-normalized SQLSTATE for finer
  * refinement.
  */
-export class PrismaQueryError extends Data.TaggedError(
-  "Prisma.PrismaQueryError",
+export class QueryError extends Data.TaggedError(
+  "Prisma.QueryError",
 )<QueryErrorFields> {}
 
 /**
@@ -111,13 +111,13 @@ export class PrismaQueryError extends Data.TaggedError(
  *
  * ```typescript
  * Effect.retry(effect, {
- *   while: (e) => e._tag === "Prisma.PrismaConnectionError" && e.transient === true,
+ *   while: (e) => e._tag === "Prisma.ConnectionError" && e.transient === true,
  *   times: 3,
  * })
  * ```
  */
-export class PrismaConnectionError extends Data.TaggedError(
-  "Prisma.PrismaConnectionError",
+export class ConnectionError extends Data.TaggedError(
+  "Prisma.ConnectionError",
 )<{
   message: string;
   transient?: boolean | undefined;
@@ -131,8 +131,8 @@ export class PrismaConnectionError extends Data.TaggedError(
  * table/column/relation, invalid include, unsupported aggregate, ...).
  * Almost always a programming bug — don't retry.
  */
-export class PrismaOrmError extends Data.TaggedError("Prisma.PrismaOrmError")<{
-  code: PrismaErrorCode;
+export class OrmError extends Data.TaggedError("Prisma.OrmError")<{
+  code: ErrorCode;
   message: string;
   cause: unknown;
 }> {}
@@ -143,17 +143,15 @@ export class PrismaOrmError extends Data.TaggedError("Prisma.PrismaOrmError")<{
  * codec registry, transaction lifecycle, row budgets, marker
  * verification, ...). `code` pins the exact failure.
  */
-export class PrismaRuntimeError extends Data.TaggedError(
-  "Prisma.PrismaRuntimeError",
-)<{
-  code: PrismaErrorCode;
+export class RuntimeError extends Data.TaggedError("Prisma.RuntimeError")<{
+  code: ErrorCode;
   message: string;
   cause: unknown;
 }> {}
 
 /** A failure prisma-next did not classify at all (no kind, no code). */
-export class PrismaError extends Data.TaggedError("Prisma.PrismaError")<{
-  code?: PrismaErrorCode | undefined;
+export class UnknownError extends Data.TaggedError("Prisma.UnknownError")<{
+  code?: ErrorCode | undefined;
   message: string;
   cause: unknown;
 }> {}
@@ -162,20 +160,20 @@ export class PrismaError extends Data.TaggedError("Prisma.PrismaError")<{
  * Deliberate transaction rollback. Yield `tx.rollback()` inside
  * `db.transaction` to abort: the transaction rolls back and this error
  * surfaces in the caller's error channel, catchable with
- * `Effect.catchTag("Prisma.PrismaRollbackError", ...)`.
+ * `Effect.catchTag("Prisma.RollbackError", ...)`.
  */
-export class PrismaRollbackError extends Data.TaggedError(
-  "Prisma.PrismaRollbackError",
+export class RollbackError extends Data.TaggedError(
+  "Prisma.RollbackError",
 )<{}> {}
 
 /** Everything a prisma-next query can fail with. */
-export type PrismaClientError =
-  | PrismaConstraintViolationError
-  | PrismaQueryError
-  | PrismaConnectionError
-  | PrismaOrmError
-  | PrismaRuntimeError
-  | PrismaError;
+export type ClientError =
+  | ConstraintViolationError
+  | QueryError
+  | ConnectionError
+  | OrmError
+  | RuntimeError
+  | UnknownError;
 
 const field = (value: unknown, key: string): string | undefined => {
   if (typeof value !== "object" || value === null) return undefined;
@@ -193,7 +191,7 @@ const message = (cause: unknown): string =>
  * integrity violations onto their own tags), and the `CATEGORY.NAME`
  * structured `code` on ORM/pipeline errors.
  */
-export const wrapPrismaError = (cause: unknown): PrismaClientError => {
+export const wrapPrismaError = (cause: unknown): ClientError => {
   const kind = field(cause, "kind");
   if (kind === "sql_query") {
     const fields: QueryErrorFields = {
@@ -207,20 +205,20 @@ export const wrapPrismaError = (cause: unknown): PrismaClientError => {
     };
     switch (fields.sqlState) {
       case "23505":
-        return new PrismaUniqueViolationError(fields);
+        return new UniqueViolationError(fields);
       case "23503":
-        return new PrismaForeignKeyViolationError(fields);
+        return new ForeignKeyViolationError(fields);
       case "23502":
-        return new PrismaNotNullViolationError(fields);
+        return new NotNullViolationError(fields);
       case "23514":
-        return new PrismaCheckViolationError(fields);
+        return new CheckViolationError(fields);
       default:
-        return new PrismaQueryError(fields);
+        return new QueryError(fields);
     }
   }
   if (kind === "sql_connection") {
     const transient = (cause as { transient?: unknown }).transient;
-    return new PrismaConnectionError({
+    return new ConnectionError({
       message: message(cause),
       transient: typeof transient === "boolean" ? transient : undefined,
       cause,
@@ -229,10 +227,10 @@ export const wrapPrismaError = (cause: unknown): PrismaClientError => {
   const code = field(cause, "code");
   if (code !== undefined) {
     return code.startsWith("ORM.")
-      ? new PrismaOrmError({ code, message: message(cause), cause })
-      : new PrismaRuntimeError({ code, message: message(cause), cause });
+      ? new OrmError({ code, message: message(cause), cause })
+      : new RuntimeError({ code, message: message(cause), cause });
   }
-  return new PrismaError({
+  return new UnknownError({
     code: undefined,
     message: message(cause),
     cause,

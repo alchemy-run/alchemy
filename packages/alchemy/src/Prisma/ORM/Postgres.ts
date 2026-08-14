@@ -21,11 +21,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { makeExecutionMemo } from "../../Runtime/ExecutionMemo.ts";
-import {
-  type PrismaClientError,
-  PrismaRollbackError,
-  wrapPrismaError,
-} from "./Errors.ts";
+import { type ClientError, RollbackError, wrapPrismaError } from "./Errors.ts";
 import { type EffectOrm, makeOrmProxy } from "./OrmClient.ts";
 
 export * from "./Errors.ts";
@@ -58,12 +54,12 @@ export interface PostgresTransaction<C extends AnyPostgresContract> {
   /** The orm lane, executing on this transaction's connection. */
   readonly orm: EffectOrm<C>;
   /** Run a `sql`-lane or `raw` plan on this transaction's connection. */
-  execute<Row>(plan: Plan<Row>): Effect.Effect<Row[], PrismaClientError>;
+  execute<Row>(plan: Plan<Row>): Effect.Effect<Row[], ClientError>;
   /**
    * Abort the transaction: rolls back and fails the `transaction` effect
-   * with {@link PrismaRollbackError} (catchable by tag).
+   * with {@link RollbackError} (catchable by tag).
    */
-  rollback(): Effect.Effect<never, PrismaRollbackError>;
+  rollback(): Effect.Effect<never, RollbackError>;
 }
 
 export interface PostgresDatabase<
@@ -86,7 +82,7 @@ export interface PostgresDatabase<
    */
   readonly use: <A>(
     f: (client: PostgresClient<C>) => PromiseLike<A>,
-  ) => Effect.Effect<A, PrismaClientError | E, R>;
+  ) => Effect.Effect<A, ClientError | E, R>;
   /**
    * The Effect-native orm lane — chain like prisma-next, yield the
    * terminal:
@@ -95,7 +91,7 @@ export interface PostgresDatabase<
    * const user = yield* db.orm.public.User.where({ email }).include("posts").first();
    * ```
    */
-  readonly orm: EffectOrm<C, PrismaClientError | E, R>;
+  readonly orm: EffectOrm<C, ClientError | E, R>;
   /**
    * The pure `sql` builder lane (no connection — plans are data):
    * `db.sql.public.user.select("id", "email").build()`.
@@ -104,17 +100,17 @@ export interface PostgresDatabase<
   /** The raw SQL tagged-template lane (pure — produces expressions/plans). */
   readonly raw: PostgresStaticContext<C>["raw"];
   /** Execute a plan, buffering all rows. */
-  execute<Row>(plan: Plan<Row>): Effect.Effect<Row[], PrismaClientError | E, R>;
+  execute<Row>(plan: Plan<Row>): Effect.Effect<Row[], ClientError | E, R>;
   /** Execute a plan as a row stream (each run re-executes the plan). */
-  stream<Row>(plan: Plan<Row>): Stream.Stream<Row, PrismaClientError | E, R>;
+  stream<Row>(plan: Plan<Row>): Stream.Stream<Row, ClientError | E, R>;
   /**
    * Run `f` inside a database transaction on a dedicated connection.
    * Commits on success; rolls back on failure or interruption. Yield
-   * `tx.rollback()` to abort with a typed {@link PrismaRollbackError}.
+   * `tx.rollback()` to abort with a typed {@link RollbackError}.
    */
   transaction<A, E2, R2>(
     f: (tx: PostgresTransaction<C>) => Effect.Effect<A, E2, R2>,
-  ): Effect.Effect<A, E2 | PrismaClientError | E, R | R2>;
+  ): Effect.Effect<A, E2 | ClientError | E, R | R2>;
 }
 
 /**
@@ -168,13 +164,13 @@ export interface PostgresDatabase<
  * Queries are lazy and re-runnable: each evaluation replays the chain
  * against the execution's client, so `Effect.retry` re-issues the query.
  * Failures surface as granular tagged errors: the SQL-standard integrity
- * violations each get their own tag (`Prisma.PrismaUniqueViolationError`,
- * `Prisma.PrismaForeignKeyViolationError`, `Prisma.PrismaNotNullViolationError`,
- * `Prisma.PrismaCheckViolationError`), other statement failures are
- * `Prisma.PrismaQueryError` (with the normalized `sqlState`), connection
- * failures are `Prisma.PrismaConnectionError` (with the driver's
+ * violations each get their own tag (`Prisma.UniqueViolationError`,
+ * `Prisma.ForeignKeyViolationError`, `Prisma.NotNullViolationError`,
+ * `Prisma.CheckViolationError`), other statement failures are
+ * `Prisma.QueryError` (with the normalized `sqlState`), connection
+ * failures are `Prisma.ConnectionError` (with the driver's
  * `transient` verdict), and prisma-next's structured codes split by
- * category into `Prisma.PrismaOrmError` / `Prisma.PrismaRuntimeError`
+ * category into `Prisma.OrmError` / `Prisma.RuntimeError`
  * with an autocompleting `code` field.
  *
  * @binding
@@ -222,7 +218,7 @@ export const Postgres =
 
       const execute = <Row>(
         plan: Plan<Row>,
-      ): Effect.Effect<Row[], PrismaClientError | E, R> =>
+      ): Effect.Effect<Row[], ClientError | E, R> =>
         Effect.flatMap(client, (c) =>
           Effect.tryPromise({
             try: (signal) => c.runtime().execute(plan, { signal }).toArray(),
@@ -232,7 +228,7 @@ export const Postgres =
 
       const stream = <Row>(
         plan: Plan<Row>,
-      ): Stream.Stream<Row, PrismaClientError | E, R> =>
+      ): Stream.Stream<Row, ClientError | E, R> =>
         // unwrap re-evaluates per run, so each run gets a fresh
         // AsyncIterableResult (they are single-consumption).
         Stream.unwrap(
@@ -257,14 +253,14 @@ export const Postgres =
                 Promise.resolve(txn.execute(plan) as PromiseLike<Row[]>),
               catch: wrapPrismaError,
             }),
-          rollback: () => Effect.fail(new PrismaRollbackError()),
+          rollback: () => Effect.fail(new RollbackError()),
         };
         return tx;
       };
 
       const transaction = <A, E2, R2>(
         f: (tx: PostgresTransaction<C>) => Effect.Effect<A, E2, R2>,
-      ): Effect.Effect<A, E2 | PrismaClientError | E, R | R2> =>
+      ): Effect.Effect<A, E2 | ClientError | E, R | R2> =>
         Effect.flatMap(client, (c) =>
           Effect.acquireUseRelease(
             Effect.tryPromise({
@@ -319,7 +315,7 @@ export const Postgres =
               catch: wrapPrismaError,
             }),
           ),
-        orm: makeOrmProxy<C, PrismaClientError | E, R>(
+        orm: makeOrmProxy<C, ClientError | E, R>(
           Effect.map(client, (c) => c.orm),
         ),
         sql: statics.sql,
