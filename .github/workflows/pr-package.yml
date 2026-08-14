@@ -1,4 +1,4 @@
-name: pr-package
+name: PR Package
 
 on:
   push:
@@ -17,24 +17,28 @@ permissions:
 
 jobs:
   pr-package:
+    name: Publish PR preview packages
     if: >-
       github.event_name == 'push' ||
       (github.event_name == 'pull_request' && github.event.action != 'closed' &&
        github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: blacksmith-8vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # pnpm needs the distilled submodule (workspace member)
+          submodules: true
           fetch-depth: 0
-          submodules: "true"
 
-      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
-
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      - name: Setup pnpm, Node.js, Bun
+        uses: pnpm/setup@84cb39b217b10273981911c288cd62326dc7c6d2 # v2.0.2
         with:
-          cache: pnpm
+          cache: true
+          install: false
 
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - name: Install Node 24
+        run: pnpm runtime set node 24 -g
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -49,10 +53,11 @@ jobs:
             turbo-${{ runner.os }}-${{ github.repository_id }}-
 
       - name: Build packages
-        run: bun run build:pr-packages
+        run: pnpm build:pr-packages
 
-      - id: publish
-        uses: alchemy-run/actions/actions/pr-package@ab9b8d7a9e09390ba578b85373dcac972bf3edc4 # actions#10
+      - name: Publish packages
+        id: publish
+        uses: alchemy-run/actions/actions/pr-package@1936076679cb6ccd4514873fb2f7e777d3900ca6 # actions#11
         with:
           rebuild-all-paths: distilled
           packages: >-
@@ -87,7 +92,7 @@ jobs:
         if: >-
           github.event_name == 'pull_request' &&
           fromJson(steps.publish.outputs.plan).packages[0] != null
-        uses: alchemy-run/actions/actions/pr-package-comment@ab9b8d7a9e09390ba578b85373dcac972bf3edc4 # actions#10
+        uses: alchemy-run/actions/actions/pr-package-comment@1936076679cb6ccd4514873fb2f7e777d3900ca6 # actions#11
         with:
           plan: ${{ steps.publish.outputs.plan }}
           token: ${{ steps.bot-token.outputs.token }}
