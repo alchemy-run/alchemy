@@ -90,14 +90,13 @@ export default class Site extends Nextjs<Site>()(
         retryDelay: "2 seconds",
       },
       (stream) =>
-        Stream.runForEach(stream, (msg) =>
-          Effect.gen(function* () {
+        Stream.runForEach(stream, Effect.fn(function* (msg) {
             const count = Number(
               (yield* visits.get("processed-count")) ?? "0",
             );
             yield* visits.put("processed-count", String(count + 1));
             yield* visits.put("processed-last", String(msg.body));
-          }).pipe(Effect.orDie),
+          }, Effect.orDie),
         ),
     );
 
@@ -105,16 +104,14 @@ export default class Site extends Nextjs<Site>()(
       // RPC methods — the KV-backed visit counter. Served to `createClient`
       // at the universal `POST /api/__rpc/<method>` dispatch, and invoked
       // directly (no HTTP) by the value form in server components.
-      visits: () =>
-        Effect.gen(function* () {
+      visits: Effect.fn(function* () {
           return Number((yield* visits.get("count")) ?? "0");
-        }).pipe(Effect.orDie),
-      bump: () =>
-        Effect.gen(function* () {
+        }, Effect.orDie),
+      bump: Effect.fn(function* () {
           const count = Number((yield* visits.get("count")) ?? "0") + 1;
           yield* visits.put("count", String(count));
           return count;
-        }).pipe(Effect.orDie),
+        }, Effect.orDie),
       // The async leg's producer (RPC: POST /api/__rpc/enqueue) — sends a
       // message to the queue; the consumer above catches up asynchronously.
       enqueue: (message: string) =>
@@ -122,12 +119,11 @@ export default class Site extends Nextjs<Site>()(
           .send(message, { contentType: "text" })
           .pipe(Effect.asVoid, Effect.orDie),
       // Read the consumer's async state (RPC: POST /api/__rpc/processed).
-      processed: () =>
-        Effect.gen(function* () {
+      processed: Effect.fn(function* () {
           const count = yield* visits.get("processed-count");
           const last = yield* visits.get("processed-last");
           return { count: Number(count ?? "0"), last: last ?? null };
-        }).pipe(Effect.orDie),
+        }, Effect.orDie),
     };
   }).pipe(
     Effect.provide(KV.ReadWriteNamespaceBinding),

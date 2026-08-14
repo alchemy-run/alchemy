@@ -68,8 +68,7 @@ export default class Site extends Nuxt<Site>()(
     const sendMessage = yield* SQS.SendMessage(queue);
 
     /** Read one string attribute from a keyed item (undefined when unset). */
-    const readItem = (pk: string, attr: "count" | "value") =>
-      Effect.gen(function* () {
+    const readItem = Effect.fn(function* (pk: string, attr: "count" | "value") {
         const current = yield* getItem({
           Key: { pk: { S: pk } },
           ConsistentRead: true,
@@ -86,8 +85,7 @@ export default class Site extends Nuxt<Site>()(
     // DynamoDB, where the `processed` RPC method reads them back.
     yield* SQS.consumeQueueMessages(queue, (records) =>
       records.pipe(
-        Stream.runForEach((record) =>
-          Effect.gen(function* () {
+        Stream.runForEach(Effect.fn(function* (record) {
             const count = Number((yield* readItem("processed-count", "count")) ?? "0");
             yield* putItem({
               Item: {
@@ -105,8 +103,7 @@ export default class Site extends Nuxt<Site>()(
 
     return {
       /** Read the visit counter (0 when unset). */
-      visits: () =>
-        Effect.gen(function* () {
+      visits: Effect.fn(function* () {
           const current = yield* getItem({
             Key: { pk: { S: "count" } },
             ConsistentRead: true,
@@ -114,8 +111,7 @@ export default class Site extends Nuxt<Site>()(
           return Number(current.Item?.count?.N ?? "0");
         }),
       /** Increment the counter, persist it, and return the new count. */
-      bump: () =>
-        Effect.gen(function* () {
+      bump: Effect.fn(function* () {
           const current = yield* getItem({
             Key: { pk: { S: "count" } },
             ConsistentRead: true,
@@ -127,13 +123,11 @@ export default class Site extends Nuxt<Site>()(
           return count;
         }),
       /** Send a message to the queue (RPC: POST /api/__rpc/enqueue). */
-      enqueue: (message: string) =>
-        Effect.gen(function* () {
+      enqueue: Effect.fn(function* (message: string) {
           yield* sendMessage({ MessageBody: message }).pipe(Effect.orDie);
         }),
       /** Read the consumer's async state (RPC: POST /api/__rpc/processed). */
-      processed: () =>
-        Effect.gen(function* () {
+      processed: Effect.fn(function* () {
           const count = yield* readItem("processed-count", "count");
           const last = yield* readItem("processed-last", "value");
           return { count: Number(count ?? "0"), last: last ?? null };

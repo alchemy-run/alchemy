@@ -30,8 +30,7 @@ class AssetNotReady extends Data.TaggedError("AssetNotReady")<{
 // While the asset manifest and CloudFront edge caches are still
 // propagating, a 200 body can be stale — the status alone can't
 // distinguish "not yet" from "served", so retry until the body matches.
-const getBodyWhenReady = (url: string, expected: string) =>
-  Effect.gen(function* () {
+const getBodyWhenReady = Effect.fn(function* (url: string, expected: string) {
     const res = yield* getWhenReady(url);
     expect(res.status).toBe(200);
     const body = yield* res.text;
@@ -39,7 +38,7 @@ const getBodyWhenReady = (url: string, expected: string) =>
       return yield* Effect.fail(new AssetNotReady({ body }));
     }
     return body;
-  }).pipe(
+  }, 
     Effect.retry({
       while: (error) => error instanceof AssetNotReady,
       schedule: Schedule.max([
