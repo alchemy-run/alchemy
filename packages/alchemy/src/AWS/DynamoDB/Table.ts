@@ -89,6 +89,10 @@ export type TableProps = {
   tableName?: string;
   /**
    * Partition key attribute name for the table.
+   *
+   * Base-table primary keys are always a single partition attribute plus an
+   * optional single sort attribute — DynamoDB supports multi-attribute keys
+   * only on global secondary indexes (see `globalSecondaryIndexes`).
    */
   partitionKey: string;
   /**
@@ -99,7 +103,20 @@ export type TableProps = {
    * Attribute definitions used by the primary key and any secondary indexes.
    */
   attributes: Record<string, ScalarAttributeType>;
+  /**
+   * Local secondary indexes, created with the table. LSI keys are always a
+   * single `HASH` element (the table's partition key) plus a single `RANGE`
+   * element. Changing this property replaces the table.
+   */
   localSecondaryIndexes?: DynamoDB.LocalSecondaryIndex[];
+  /**
+   * Global secondary indexes. A GSI's `KeySchema` may use multi-attribute
+   * keys: up to four `HASH` elements (hashed together as the composite
+   * partition key) and up to four `RANGE` elements (sorted and queried
+   * left-to-right, in declaration order). Element order is significant —
+   * reordering the attributes defines a different index and replaces the
+   * table. Every key attribute must appear in `attributes`.
+   */
   globalSecondaryIndexes?: DynamoDB.GlobalSecondaryIndex[];
   billingMode?: DynamoDB.BillingMode;
   deletionProtectionEnabled?: boolean;
@@ -234,6 +251,51 @@ export interface Table extends Resource<
  *     ],
  *     Projection: { ProjectionType: "ALL" },
  *   }],
+ * });
+ * ```
+ *
+ * @example Multi-Attribute GSI Keys
+ * GSI partition and sort keys may be composed of up to four attributes each,
+ * indexing natural domain attributes directly instead of synthetic
+ * concatenated keys. Partition attributes are hashed together (queries must
+ * specify all of them with equality); sort attributes are queried
+ * left-to-right in declaration order.
+ * ```typescript
+ * const matches = yield* DynamoDB.Table("TournamentMatches", {
+ *   partitionKey: "matchId",
+ *   attributes: {
+ *     matchId: "S",
+ *     tournamentId: "S",
+ *     region: "S",
+ *     round: "S",
+ *   },
+ *   globalSecondaryIndexes: [{
+ *     IndexName: "TournamentRegionIndex",
+ *     KeySchema: [
+ *       { AttributeName: "tournamentId", KeyType: "HASH" },  // PK attribute 1
+ *       { AttributeName: "region", KeyType: "HASH" },        // PK attribute 2
+ *       { AttributeName: "round", KeyType: "RANGE" },        // SK attribute 1
+ *       { AttributeName: "matchId", KeyType: "RANGE" },      // SK attribute 2
+ *     ],
+ *     Projection: { ProjectionType: "ALL" },
+ *   }],
+ * });
+ *
+ * // init
+ * const query = yield* AWS.DynamoDB.Query(matches);
+ *
+ * // runtime: query with every partition attribute, then narrow the sort
+ * // attributes left-to-right
+ * const response = yield* query({
+ *   IndexName: "TournamentRegionIndex",
+ *   KeyConditionExpression:
+ *     "tournamentId = :t AND #r = :r AND round = :round",
+ *   ExpressionAttributeNames: { "#r": "region" },
+ *   ExpressionAttributeValues: {
+ *     ":t": { S: "WINTER2024" },
+ *     ":r": { S: "NA-EAST" },
+ *     ":round": { S: "SEMIFINALS" },
+ *   },
  * });
  * ```
  *
@@ -1205,14 +1267,25 @@ export const TableProvider = () =>
           (indexes ?? []).map((index) => [index.IndexName!, index]),
         ) as Record<string, T>;
 
-      const sortKeySchema = (
+      // KeySchema order is significant with multi-attribute keys: partition
+      // attributes are hashed together in declaration order and sort key
+      // attributes are queried left-to-right. Only the HASH/RANGE grouping is
+      // normalized (DescribeTable reports all HASH elements before all RANGE
+      // elements regardless of how the request interleaved them); the relative
+      // order within each group must be preserved — reordering attributes
+      // defines a different index.
+      const normalizeKeySchema = (
         keySchema: readonly DynamoDB.KeySchemaElement[] | undefined,
-      ) =>
-        [...(keySchema ?? [])].sort((a, b) =>
-          `${a.KeyType}:${a.AttributeName}`.localeCompare(
-            `${b.KeyType}:${b.AttributeName}`,
-          ),
-        );
+      ) => {
+        const elements = (keySchema ?? []).map((element) => ({
+          AttributeName: element.AttributeName,
+          KeyType: element.KeyType,
+        }));
+        return [
+          ...elements.filter((element) => element.KeyType === "HASH"),
+          ...elements.filter((element) => element.KeyType === "RANGE"),
+        ];
+      };
 
       const normalizeProjection = (
         projection: DynamoDB.Projection | undefined,
@@ -1225,8 +1298,8 @@ export const TableProvider = () =>
         left: DynamoDB.GlobalSecondaryIndex,
         right: DynamoDB.GlobalSecondaryIndex,
       ) =>
-        JSON.stringify(sortKeySchema(left.KeySchema)) ===
-          JSON.stringify(sortKeySchema(right.KeySchema)) &&
+        JSON.stringify(normalizeKeySchema(left.KeySchema)) ===
+          JSON.stringify(normalizeKeySchema(right.KeySchema)) &&
         JSON.stringify(normalizeProjection(left.Projection)) ===
           JSON.stringify(normalizeProjection(right.Projection));
 
