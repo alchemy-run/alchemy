@@ -46,7 +46,7 @@ catalogs:
     "@cloudflare/containers": ^0.3.7
     "@cloudflare/puppeteer": ^1.1.0
     "@cloudflare/vite-plugin": ^1.13.12
-    "@cloudflare/workers-types": ^4.20250805.0
+    "@cloudflare/workers-types": 4.20260702.1
     wrangler: ^4.103.0
   cloudflare-runtime:
     "@cloudflare/unenv-preset": ^2.16.0
@@ -143,8 +143,8 @@ catalogs:
     "@playwright/test": ^1.61.1
     vitest: ^4.1.8
   tooling:
-    "@types/bun": latest
-    "@types/node": latest
+    "@types/bun": 1.3.14
+    "@types/node": 26.1.2
     dedent: ^1.7.0
     husky: ^9.1.7
     oxfmt: latest
@@ -156,6 +156,7 @@ overrides:
   "@effect/platform-browser": 4.0.0-rc.110
   drizzle-kit: 1.0.0-rc.5-ab785fc
   drizzle-orm: 1.0.0-rc.5-ab785fc
+  rolldown: 1.1.5
 patchedDependencies:
   "@astrojs/starlight@0.41.7": patches/@astrojs%2Fstarlight@0.41.7.patch
   starlight-blog@0.28.0: patches/starlight-blog@0.28.0.patch
