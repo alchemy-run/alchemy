@@ -277,12 +277,10 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
       attributes: { tag: "S", path: "S", revalidatedAt: "N" },
       globalSecondaryIndexes: [
         {
-          IndexName: "revalidate",
-          KeySchema: [
-            { AttributeName: "path", KeyType: "HASH" },
-            { AttributeName: "revalidatedAt", KeyType: "RANGE" },
-          ],
-          Projection: { ProjectionType: "ALL" },
+          indexName: "revalidate",
+          partitionKey: "path",
+          sortKey: "revalidatedAt",
+          projection: { ProjectionType: "ALL" },
         },
       ],
       billingMode: "PAY_PER_REQUEST",

@@ -511,21 +511,18 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
               },
               localSecondaryIndexes: [
                 {
-                  IndexName: "lsi-by-sk",
-                  KeySchema: [
-                    { AttributeName: "pk", KeyType: "HASH" },
-                    { AttributeName: "sk", KeyType: "RANGE" },
-                  ],
-                  Projection: {
+                  indexName: "lsi-by-sk",
+                  sortKey: "sk",
+                  projection: {
                     ProjectionType: "ALL",
                   },
                 },
               ],
               globalSecondaryIndexes: [
                 {
-                  IndexName: "gsi-by-lookup",
-                  KeySchema: [{ AttributeName: "gsi1pk", KeyType: "HASH" }],
-                  Projection: {
+                  indexName: "gsi-by-lookup",
+                  partitionKey: "gsi1pk",
+                  projection: {
                     ProjectionType: "ALL",
                   },
                 },
@@ -595,14 +592,10 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
             },
             globalSecondaryIndexes: [
               {
-                IndexName: "TournamentRegionIndex",
-                KeySchema: [
-                  { AttributeName: "tournamentId", KeyType: "HASH" },
-                  { AttributeName: "region", KeyType: "HASH" },
-                  { AttributeName: "round", KeyType: "RANGE" },
-                  { AttributeName: "matchId", KeyType: "RANGE" },
-                ],
-                Projection: { ProjectionType: "ALL" },
+                indexName: "TournamentRegionIndex",
+                partitionKey: ["tournamentId", "region"],
+                sortKey: ["round", "matchId"],
+                projection: { ProjectionType: "ALL" },
               },
             ],
           });
@@ -708,9 +701,7 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
         yield* logTestStep("starting multi-attribute GSI reorder test");
         yield* stack.destroy();
 
-        const makeTable = (
-          keySchema: { AttributeName: string; KeyType: "HASH" | "RANGE" }[],
-        ) =>
+        const makeTable = (sortKey: string[]) =>
           Effect.gen(function* () {
             return yield* Table("ReorderedMultiAttrKeyTable", {
               partitionKey: "id",
@@ -721,34 +712,23 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
               },
               globalSecondaryIndexes: [
                 {
-                  IndexName: "CategoryIndex",
-                  KeySchema: keySchema,
-                  Projection: { ProjectionType: "KEYS_ONLY" },
+                  indexName: "CategoryIndex",
+                  partitionKey: "category",
+                  sortKey,
+                  projection: { ProjectionType: "KEYS_ONLY" },
                 },
               ],
             });
           });
 
         yield* logTestStep("deploying table with ordered sort attributes");
-        const original = yield* stack.deploy(
-          makeTable([
-            { AttributeName: "category", KeyType: "HASH" },
-            { AttributeName: "subcategory", KeyType: "RANGE" },
-            { AttributeName: "id", KeyType: "RANGE" },
-          ]),
-        );
+        const original = yield* stack.deploy(makeTable(["subcategory", "id"]));
 
-        // Swapping the two RANGE attributes defines a different index
+        // Swapping the two sort attributes defines a different index
         // (sort attributes are queried left-to-right in declaration order),
         // so the deploy must replace the table, not no-op.
         yield* logTestStep("reordering sort attributes (expect replacement)");
-        const replaced = yield* stack.deploy(
-          makeTable([
-            { AttributeName: "category", KeyType: "HASH" },
-            { AttributeName: "id", KeyType: "RANGE" },
-            { AttributeName: "subcategory", KeyType: "RANGE" },
-          ]),
-        );
+        const replaced = yield* stack.deploy(makeTable(["id", "subcategory"]));
         expect(replaced.tableName).not.toEqual(original.tableName);
 
         const replacedTable = yield* expectTableIndexes(replaced.tableName, {
@@ -812,9 +792,9 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
               },
               globalSecondaryIndexes: [
                 {
-                  IndexName: "gsi-by-lookup-1",
-                  KeySchema: [{ AttributeName: "gsi1pk", KeyType: "HASH" }],
-                  Projection: {
+                  indexName: "gsi-by-lookup-1",
+                  partitionKey: "gsi1pk",
+                  projection: {
                     ProjectionType: "ALL",
                   },
                 },
@@ -863,16 +843,16 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
               },
               globalSecondaryIndexes: [
                 {
-                  IndexName: "gsi-by-lookup-1",
-                  KeySchema: [{ AttributeName: "gsi1pk", KeyType: "HASH" }],
-                  Projection: {
+                  indexName: "gsi-by-lookup-1",
+                  partitionKey: "gsi1pk",
+                  projection: {
                     ProjectionType: "ALL",
                   },
                 },
                 {
-                  IndexName: "gsi-by-lookup-2",
-                  KeySchema: [{ AttributeName: "gsi2pk", KeyType: "HASH" }],
-                  Projection: {
+                  indexName: "gsi-by-lookup-2",
+                  partitionKey: "gsi2pk",
+                  projection: {
                     ProjectionType: "ALL",
                   },
                 },
@@ -900,9 +880,9 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
               },
               globalSecondaryIndexes: [
                 {
-                  IndexName: "gsi-by-lookup-2",
-                  KeySchema: [{ AttributeName: "gsi2pk", KeyType: "HASH" }],
-                  Projection: {
+                  indexName: "gsi-by-lookup-2",
+                  partitionKey: "gsi2pk",
+                  projection: {
                     ProjectionType: "ALL",
                   },
                 },
@@ -983,12 +963,9 @@ describe.skipIf(!!process.env.FAST)("AWS.DynamoDB.Table", () => {
               },
               localSecondaryIndexes: [
                 {
-                  IndexName: "lsi-by-sk",
-                  KeySchema: [
-                    { AttributeName: "pk", KeyType: "HASH" },
-                    { AttributeName: "sk", KeyType: "RANGE" },
-                  ],
-                  Projection: {
+                  indexName: "lsi-by-sk",
+                  sortKey: "sk",
+                  projection: {
                     ProjectionType: "ALL",
                   },
                 },

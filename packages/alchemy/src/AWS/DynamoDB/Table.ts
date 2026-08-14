@@ -75,6 +75,58 @@ export interface KinesisStreamingDestination {
   approximateCreationDateTimePrecision?: DynamoDB.ApproximateCreationDateTimePrecision;
 }
 
+/**
+ * One or more attribute names forming an index key. DynamoDB's wire format
+ * flattens both key segments into a single ordered `KeySchema` list, but
+ * semantically a key is two ordered segments — this type captures one of
+ * them. Order is significant: partition attributes are hashed together in
+ * declaration order, and sort attributes are queried left-to-right.
+ */
+export type IndexKey = string | string[];
+
+export interface LocalSecondaryIndexProps {
+  /**
+   * Name of the index, unique within the table.
+   */
+  indexName: string;
+  /**
+   * Sort key attribute name. An LSI always shares the table's partition
+   * key, so only the sort key is declared; multi-attribute keys are not
+   * supported on LSIs.
+   */
+  sortKey: string;
+  /**
+   * Attributes projected from the table into the index.
+   */
+  projection: DynamoDB.Projection;
+}
+
+export interface GlobalSecondaryIndexProps {
+  /**
+   * Name of the index, unique within the table.
+   */
+  indexName: string;
+  /**
+   * Partition key attribute name(s). Up to four attributes may be listed;
+   * they are hashed together in declaration order and every one must be
+   * specified with an equality condition when querying the index.
+   */
+  partitionKey: IndexKey;
+  /**
+   * Optional sort key attribute name(s). Up to four attributes may be
+   * listed; items sort by each attribute in declaration order and queries
+   * narrow them left-to-right (no gaps, inequality last).
+   */
+  sortKey?: IndexKey;
+  /**
+   * Attributes projected from the table into the index.
+   */
+  projection: DynamoDB.Projection;
+  provisionedThroughput?: DynamoDB.ProvisionedThroughput;
+  onDemandThroughput?: DynamoDB.OnDemandThroughput;
+  warmThroughput?: DynamoDB.WarmThroughput;
+}
+
 export type TableProps = {
   /**
    * Name of the table. If omitted, Alchemy generates a deterministic physical
@@ -104,20 +156,19 @@ export type TableProps = {
    */
   attributes: Record<string, ScalarAttributeType>;
   /**
-   * Local secondary indexes, created with the table. LSI keys are always a
-   * single `HASH` element (the table's partition key) plus a single `RANGE`
-   * element. Changing this property replaces the table.
+   * Local secondary indexes, created with the table. An LSI always shares
+   * the table's partition key and declares a single sort key. Changing this
+   * property replaces the table.
    */
-  localSecondaryIndexes?: DynamoDB.LocalSecondaryIndex[];
+  localSecondaryIndexes?: LocalSecondaryIndexProps[];
   /**
-   * Global secondary indexes. A GSI's `KeySchema` may use multi-attribute
-   * keys: up to four `HASH` elements (hashed together as the composite
-   * partition key) and up to four `RANGE` elements (sorted and queried
-   * left-to-right, in declaration order). Element order is significant —
-   * reordering the attributes defines a different index and replaces the
-   * table. Every key attribute must appear in `attributes`.
+   * Global secondary indexes. GSIs support multi-attribute keys: up to four
+   * partition attributes (hashed together as the composite partition key)
+   * and up to four sort attributes (sorted and queried left-to-right).
+   * Attribute order is significant — reordering defines a different index
+   * and replaces the table. Every key attribute must appear in `attributes`.
    */
-  globalSecondaryIndexes?: DynamoDB.GlobalSecondaryIndex[];
+  globalSecondaryIndexes?: GlobalSecondaryIndexProps[];
   billingMode?: DynamoDB.BillingMode;
   deletionProtectionEnabled?: boolean;
   onDemandThroughput?: DynamoDB.OnDemandThroughput;
@@ -244,12 +295,10 @@ export interface Table extends Resource<
  *     gsi1sk: "S",
  *   },
  *   globalSecondaryIndexes: [{
- *     IndexName: "GSI1",
- *     KeySchema: [
- *       { AttributeName: "gsi1pk", KeyType: "HASH" },
- *       { AttributeName: "gsi1sk", KeyType: "RANGE" },
- *     ],
- *     Projection: { ProjectionType: "ALL" },
+ *     indexName: "GSI1",
+ *     partitionKey: "gsi1pk",
+ *     sortKey: "gsi1sk",
+ *     projection: { ProjectionType: "ALL" },
  *   }],
  * });
  * ```
@@ -270,14 +319,10 @@ export interface Table extends Resource<
  *     round: "S",
  *   },
  *   globalSecondaryIndexes: [{
- *     IndexName: "TournamentRegionIndex",
- *     KeySchema: [
- *       { AttributeName: "tournamentId", KeyType: "HASH" },  // PK attribute 1
- *       { AttributeName: "region", KeyType: "HASH" },        // PK attribute 2
- *       { AttributeName: "round", KeyType: "RANGE" },        // SK attribute 1
- *       { AttributeName: "matchId", KeyType: "RANGE" },      // SK attribute 2
- *     ],
- *     Projection: { ProjectionType: "ALL" },
+ *     indexName: "TournamentRegionIndex",
+ *     partitionKey: ["tournamentId", "region"],
+ *     sortKey: ["round", "matchId"],
+ *     projection: { ProjectionType: "ALL" },
  *   }],
  * });
  *
@@ -418,6 +463,79 @@ export const TableProvider = () =>
             ]
           : []),
       ];
+
+      const toKeyAttributeNames = (key: IndexKey | undefined) =>
+        key === undefined ? [] : typeof key === "string" ? [key] : key;
+
+      // AWS's wire format flattens an index key into one ordered KeySchema
+      // list and validates that all HASH elements precede all RANGE
+      // elements; deriving the list from the two typed segments makes the
+      // invalid orderings unrepresentable in props.
+      const toIndexKeySchema = (
+        partitionKey: IndexKey,
+        sortKey: IndexKey | undefined,
+      ): DynamoDB.KeySchemaElement[] => [
+        ...toKeyAttributeNames(partitionKey).map((name) => ({
+          AttributeName: name,
+          KeyType: "HASH" as const,
+        })),
+        ...toKeyAttributeNames(sortKey).map((name) => ({
+          AttributeName: name,
+          KeyType: "RANGE" as const,
+        })),
+      ];
+
+      // Pre-typed-props state may persist index props in the legacy wire
+      // shape ({ IndexName, KeySchema, ... }). Tolerate it when converting
+      // `olds` so upgrading alchemy never plans a spurious table
+      // replacement over a shape-only difference.
+      const isLegacyWireIndex = (
+        index: unknown,
+      ): index is DynamoDB.GlobalSecondaryIndex =>
+        typeof index === "object" && index !== null && "KeySchema" in index;
+
+      const toWireGlobalSecondaryIndex = (
+        index: GlobalSecondaryIndexProps,
+      ): DynamoDB.GlobalSecondaryIndex =>
+        isLegacyWireIndex(index)
+          ? index
+          : {
+              IndexName: index.indexName,
+              KeySchema: toIndexKeySchema(index.partitionKey, index.sortKey),
+              Projection: index.projection,
+              ProvisionedThroughput: index.provisionedThroughput,
+              OnDemandThroughput: index.onDemandThroughput,
+              WarmThroughput: index.warmThroughput,
+            };
+
+      const toWireLocalSecondaryIndex = (
+        tablePartitionKey: string,
+        index: LocalSecondaryIndexProps,
+      ): DynamoDB.LocalSecondaryIndex =>
+        isLegacyWireIndex(index)
+          ? index
+          : {
+              IndexName: index.indexName,
+              KeySchema: toIndexKeySchema(tablePartitionKey, index.sortKey),
+              Projection: index.projection,
+            };
+
+      const toWireGlobalSecondaryIndexes = (
+        indexes: readonly GlobalSecondaryIndexProps[] | undefined,
+      ) =>
+        indexes === undefined || indexes.length === 0
+          ? undefined
+          : indexes.map(toWireGlobalSecondaryIndex);
+
+      const toWireLocalSecondaryIndexes = (
+        tablePartitionKey: string,
+        indexes: readonly LocalSecondaryIndexProps[] | undefined,
+      ) =>
+        indexes === undefined || indexes.length === 0
+          ? undefined
+          : indexes.map((index) =>
+              toWireLocalSecondaryIndex(tablePartitionKey, index),
+            );
 
       const toAttributeDefinitions = (
         attrs: Record<string, ScalarAttributeType>,
@@ -1538,17 +1656,32 @@ export const TableProvider = () =>
               return replace;
             }
           }
+          // Compare secondary indexes in the wire shape so legacy state
+          // (persisted before the typed index props) diffs cleanly against
+          // the new prop shape.
           if (
             havePropsChanged(
-              { localSecondaryIndexes: olds.localSecondaryIndexes ?? [] },
-              { localSecondaryIndexes: news.localSecondaryIndexes ?? [] },
+              {
+                localSecondaryIndexes:
+                  toWireLocalSecondaryIndexes(
+                    olds.partitionKey,
+                    olds.localSecondaryIndexes,
+                  ) ?? [],
+              },
+              {
+                localSecondaryIndexes:
+                  toWireLocalSecondaryIndexes(
+                    news.partitionKey,
+                    news.localSecondaryIndexes,
+                  ) ?? [],
+              },
             )
           ) {
             return replace;
           }
           const { requiresReplacement } = diffGlobalSecondaryIndexes(
-            olds.globalSecondaryIndexes,
-            news.globalSecondaryIndexes,
+            toWireGlobalSecondaryIndexes(olds.globalSecondaryIndexes),
+            toWireGlobalSecondaryIndexes(news.globalSecondaryIndexes),
           );
           if (requiresReplacement) {
             return replace;
@@ -1587,8 +1720,13 @@ export const TableProvider = () =>
                 TableClass: news.tableClass,
                 KeySchema: toKeySchema(news),
                 AttributeDefinitions: toAttributeDefinitions(news.attributes),
-                LocalSecondaryIndexes: news.localSecondaryIndexes,
-                GlobalSecondaryIndexes: news.globalSecondaryIndexes,
+                LocalSecondaryIndexes: toWireLocalSecondaryIndexes(
+                  news.partitionKey,
+                  news.localSecondaryIndexes,
+                ),
+                GlobalSecondaryIndexes: toWireGlobalSecondaryIndexes(
+                  news.globalSecondaryIndexes,
+                ),
                 BillingMode: news.billingMode ?? "PAY_PER_REQUEST",
                 SSESpecification: news.sseSpecification,
                 StreamSpecification: desiredStreamSpecification,
@@ -1618,7 +1756,7 @@ export const TableProvider = () =>
               yield* waitForGlobalSecondaryIndexesStable(
                 session,
                 tableName,
-                news.globalSecondaryIndexes?.map((index) => index.IndexName) ??
+                news.globalSecondaryIndexes?.map((index) => index.indexName) ??
                   [],
               );
             }
@@ -1680,7 +1818,7 @@ export const TableProvider = () =>
               state.table.GlobalSecondaryIndexes as
                 | readonly DynamoDB.GlobalSecondaryIndex[]
                 | undefined,
-              news.globalSecondaryIndexes,
+              toWireGlobalSecondaryIndexes(news.globalSecondaryIndexes),
             );
 
           for (const globalSecondaryIndexUpdate of globalSecondaryIndexUpdates) {
@@ -1702,7 +1840,7 @@ export const TableProvider = () =>
 
           if (globalSecondaryIndexUpdates.length > 0) {
             const expectedNames =
-              news.globalSecondaryIndexes?.map((index) => index.IndexName) ??
+              news.globalSecondaryIndexes?.map((index) => index.indexName) ??
               [];
             yield* session.note(
               `Table ${tableName}: waiting for GSIs to stabilize (${expectedNames.join(", ") || "none"})`,

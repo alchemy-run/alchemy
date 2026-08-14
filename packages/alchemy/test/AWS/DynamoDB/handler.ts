@@ -31,17 +31,13 @@ export default DynamoDBTestFunction.make(
       },
       globalSecondaryIndexes: [
         {
-          // Multi-attribute keys: composite HASH (category + subcategory)
-          // and composite RANGE (rank + sk). Sparse — only items written
-          // with all four attributes appear in the index.
-          IndexName: "MultiAttrIndex",
-          KeySchema: [
-            { AttributeName: "category", KeyType: "HASH" },
-            { AttributeName: "subcategory", KeyType: "HASH" },
-            { AttributeName: "rank", KeyType: "RANGE" },
-            { AttributeName: "sk", KeyType: "RANGE" },
-          ],
-          Projection: { ProjectionType: "ALL" },
+          // Multi-attribute keys: composite partition key (category +
+          // subcategory) and composite sort key (rank + sk). Sparse — only
+          // items written with all four attributes appear in the index.
+          indexName: "MultiAttrIndex",
+          partitionKey: ["category", "subcategory"],
+          sortKey: ["rank", "sk"],
+          projection: { ProjectionType: "ALL" },
         },
       ],
     });
