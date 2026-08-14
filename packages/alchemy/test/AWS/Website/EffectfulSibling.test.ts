@@ -125,12 +125,13 @@ describe.concurrent("sibling-function non-fetch delivery (plan)", () => {
           true,
         );
 
-        // The collect-only site server Lambda: external delivery, the
+        // The collect-only site server Lambda: wrapper delivery (the
+        // derived OpenNext config's custom wrapper mounts the fetch), the
         // shared capability IAM/env (fetch surface), and NO event-source
         // IAM — the framework artifact never sees raw events.
         const server = nodeOf(plan, "Server", "AWS.Lambda.Function");
         expect(server).toBeDefined();
-        expect(server.props.runtimeDelivery).toBe("external");
+        expect(server.props.runtimeDelivery).toBe("wrapper");
         expect(server.props.bundle).toBe(false);
         const serverStatements = statementsOf(server);
         expect(hasAction(serverStatements, "dynamodb:GetItem")).toBe(true);
@@ -160,7 +161,7 @@ describe.concurrent("sibling-function non-fetch delivery (plan)", () => {
       expect(nodeOf(plan, "FetchOnlySite-Handlers")).toBeUndefined();
       const server = nodeOf(plan, "Server", "AWS.Lambda.Function");
       expect(server).toBeDefined();
-      expect(server.props.runtimeDelivery).toBe("external");
+      expect(server.props.runtimeDelivery).toBe("wrapper");
       expect(
         (Object.values(plan.resources) as any[]).filter(
           (node: any) =>
@@ -311,7 +312,10 @@ describe.concurrent("sibling-function non-fetch delivery (plan)", () => {
 
         const server = nodeOf(plan, "Server", "AWS.Lambda.Function");
         expect(server).toBeDefined();
-        expect(server.props.runtimeDelivery).toBe("external");
+        // Nuxt is the auto-inject (wrapper) tier: the framework
+        // integration injects the generated effect middleware via
+        // `nitro.handlers`.
+        expect(server.props.runtimeDelivery).toBe("wrapper");
         expect(hasAction(statementsOf(server), "sqs:ReceiveMessage")).toBe(
           false,
         );

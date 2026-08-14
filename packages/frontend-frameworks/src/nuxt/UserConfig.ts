@@ -100,6 +100,7 @@ export interface NuxtOverridesInput {
         readonly route?: string | undefined;
         readonly middleware?: boolean | undefined;
         readonly handler: string;
+        readonly env?: ReadonlyArray<string> | undefined;
       }>
     | undefined;
 }

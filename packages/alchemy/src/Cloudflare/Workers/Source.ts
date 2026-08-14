@@ -139,6 +139,15 @@ export interface DevContext extends SourceContext {
   };
   /** RuntimeServices context for providers that embed cloudflare-runtime. */
   readonly runtimeContext: Context.Context<RuntimeServices>;
+  /**
+   * Host-resolved path (`file://` URL) of the `alchemy/serve` surface
+   * module (`Serve/Serve.ts` re-exports), from THIS process's own module
+   * graph — server-mode framework sources use it to run the effect front
+   * dispatch (rpc + `server.routes` ahead of the framework's dev handler)
+   * against the same alchemy instance the site module's bare imports
+   * resolve. In-memory only; never part of the persisted descriptor.
+   */
+  readonly serveModule?: string | undefined;
 }
 
 /**

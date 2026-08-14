@@ -113,6 +113,15 @@ export interface NextjsFrameworkOptions {
    * narrowed internally.
    */
   readonly services?: unknown;
+  /**
+   * Dev-only: absolute path (or `file://` URL) of the `alchemy/serve`
+   * surface module, resolved by the alchemy host from its own module graph
+   * (`DevContext.serveModule`). With {@link effectEntry} present, the
+   * `hmr` dev mode uses it to run the effect front dispatch ahead of
+   * Next's request handler — zero-setup effect routes under the real
+   * `next dev`. In-memory only; never persisted.
+   */
+  readonly serveModule?: string | undefined;
 }
 
 /**
@@ -578,9 +587,26 @@ export const make = (
         if (options?.dev?.mode === "hmr") {
           const worker = options?.vite?.worker;
           const context = yield* resolveRuntimeContext();
+          // Zero-setup effect routes under the real `next dev`: with a
+          // wrapper-delivery effect entry (and the host-resolved serve
+          // module), the dev server dispatches `/api/__rpc` +
+          // `server.routes` to the Effect program before Next's handler —
+          // the explicit `toRouteHandler` mount is no longer required.
+          // An external-entry Worker (explicit tier / `takeover: false`)
+          // has no effect entry, so the dispatch stands down.
+          const effect =
+            options?.effectEntry !== undefined &&
+            options?.serveModule !== undefined
+              ? {
+                  mainPath: options.effectEntry.mainPath,
+                  routes: options.effectEntry.routes,
+                  serveModule: options.serveModule,
+                }
+              : undefined;
           const server = yield* DevServer.start({
             root,
             port: devOptions?.port,
+            effect,
             bindings: worker?.bindings ?? [],
             compatibilityDate:
               options?.vite?.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,

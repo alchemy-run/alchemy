@@ -340,29 +340,32 @@ export const prepareServerWrapperEntry = Effect.fn(
  * options from the anchor's absolute path, plus a content hash over the
  * effect module folded into the build options so effect-module edits
  * rebuild even when the module lives outside the hashed project tree.
+ * Exported for composites that do not ride {@link makeEffectFrameworkSite}
+ * (Nextjs owns its own OpenNext topology) but deliver through the same
+ * framework-integrated wrapper channel.
  * @internal
  */
-const prepareEffectBuildOptions = Effect.fn("AWS.Website.EffectBuildOptions")(
-  function* (options: {
-    /** The user's effect module (`props.main` — a path or `file:` URL). */
-    main: string;
-    routes: readonly string[];
-    code: (ctx: ServerWrapperEntryContext) => Record<string, unknown>;
-  }) {
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    const mainPath = options.main.startsWith("file:")
-      ? yield* path.fromFileUrl(new URL(options.main)).pipe(Effect.orDie)
-      : path.resolve(initialCwd, options.main);
-    const extra = options.code({ mainPath, routes: options.routes });
-    const mainSource = yield* fs.readFileString(mainPath).pipe(Effect.orDie);
-    const effectHash = yield* sha256Object({
-      options: extra,
-      main: mainSource,
-    });
-    return { extra, effectHash };
-  },
-);
+export const prepareEffectBuildOptions = Effect.fn(
+  "AWS.Website.EffectBuildOptions",
+)(function* (options: {
+  /** The user's effect module (`props.main` — a path or `file:` URL). */
+  main: string;
+  routes: readonly string[];
+  code: (ctx: ServerWrapperEntryContext) => Record<string, unknown>;
+}) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const mainPath = options.main.startsWith("file:")
+    ? yield* path.fromFileUrl(new URL(options.main)).pipe(Effect.orDie)
+    : path.resolve(initialCwd, options.main);
+  const extra = options.code({ mainPath, routes: options.routes });
+  const mainSource = yield* fs.readFileString(mainPath).pipe(Effect.orDie);
+  const effectHash = yield* sha256Object({
+    options: extra,
+    main: mainSource,
+  });
+  return { extra, effectHash };
+});
 
 /**
  * The shared implementation behind the framework website composites:

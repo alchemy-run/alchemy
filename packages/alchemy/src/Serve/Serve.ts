@@ -38,7 +38,7 @@ import { isRpcPath } from "./Rpc.ts";
 
 export type { ServeOptions } from "./Bridge.ts";
 export { SERVE_MOUNT_MARKER, SERVE_SENTINEL } from "./constants.ts";
-export { DEFAULT_SERVER_ROUTES } from "./Routes.ts";
+export { DEFAULT_SERVER_ROUTES, matchRoutes } from "./Routes.ts";
 export {
   RPC_CLAIM,
   RPC_PATH,
@@ -62,6 +62,14 @@ export interface ServeShell {
     request: Request,
     options?: ServeOptions,
   ): Promise<Response | undefined>;
+  /**
+   * Tear down the shell's per-class runtime for `site` — close the
+   * instance-lifetime layer scope and evict the per-class memos. Used by
+   * dev servers that hot-swap the site class (cache-busted re-import →
+   * fresh class identity): without eviction every reloaded generation
+   * leaks its layer stack for the process lifetime.
+   */
+  dispose?(site: object): Promise<void>;
 }
 
 const shellOf = (site: object): ServeShell | undefined =>
@@ -236,6 +244,23 @@ export const make = <S extends AnyWebsiteClass>(
       return new Response("Not Found", { status: 404 });
     },
   };
+};
+
+/**
+ * Tear down the runtime built for a Website class by a previous
+ * {@link make} handle: the class's cloud shell closes its
+ * instance-lifetime layer scope (init finalizers run) and evicts its
+ * per-class memos. A class without a shell (the default Cloudflare
+ * bridge) resolves immediately — its builds are keyed by a `WeakMap` and
+ * reclaimed with the class.
+ *
+ * Dev-server machinery: called after a hot swap (cache-busted re-import
+ * of the backend module → fresh class → fresh `make` handle) retires the
+ * previous generation, once its in-flight requests settle.
+ */
+export const dispose = <S extends AnyWebsiteClass>(site: S): Promise<void> => {
+  const shell = shellOf(site);
+  return shell?.dispose !== undefined ? shell.dispose(site) : Promise.resolve();
 };
 
 export class ServeExportsUnavailableError extends Data.TaggedError(

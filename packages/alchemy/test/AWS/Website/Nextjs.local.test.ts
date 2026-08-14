@@ -8,6 +8,7 @@ import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import * as pathe from "pathe";
@@ -153,16 +154,19 @@ describe("AWS.Website.Nextjs local", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
-// Effectful Next.js (explicit tier, DESIGN §7-AWS): the Effect program
-// rides the `toRouteHandler` catch-all mount (`app/api/effect/[[...slug]]/
-// route.ts`), compiled by Next itself — under `next dev` the mount runs
-// in-process in the sidecar-hosted dev server, its env lowered by the
-// composite (stack markers + packed binding values + AWS_REGION), its
-// credentials resolved from the developer's ambient profile (the AWS dev
-// model: bindings hit real cloud, so the bound bucket is `remote()`),
-// while the effect program also deploys into the floci Lambda emulator as
-// the dev server Lambda. Docker required (floci); live credentials
-// required (--profile testing).
+// Effectful Next.js (zero-setup, DESIGN §7-AWS): NO user mount file. The
+// dev `Server` runs the alchemy-owned custom-server child (`next dev`
+// through the programmatic API) with the Serve bridge dispatching
+// `/api/__rpc` + `server.routes` BEFORE Next's handler — the same
+// rpc-first + strict-ownership gate as the deployed wrapper. Env is
+// lowered by the composite (stack markers + packed binding values +
+// AWS_REGION), credentials resolve from the developer's ambient profile
+// (the AWS dev model: bindings hit real cloud, so the bound bucket is
+// `remote()`), and the effect program also deploys into the floci Lambda
+// emulator as the dev server Lambda. Editing the backend module mid-run
+// hot-swaps the effect handlers in the child (watch + cache-busted
+// re-import). Docker required (floci); live credentials required
+// (--profile testing).
 // ─────────────────────────────────────────────────────────────────────
 
 // Clone INSIDE the workspace (unlike the plain dev test above, which
@@ -177,9 +181,16 @@ const alchemySrcFrom = (relDepth: number) => `${"../".repeat(relDepth)}src`;
 /**
  * The effectful site module written into the clone at `src/site.ts`
  * (clone sits at `packages/alchemy/.tmp/<dir>/`, so `../../../src` is
- * `packages/alchemy/src`).
+ * `packages/alchemy/src`). Parameterized by `marker` so the effect-HMR
+ * case can rewrite it mid-test and observe the hot-swapped handlers —
+ * both the effect `fetch` and the `stamp` RPC method surface it.
+ *
+ * `server.routes` claims only `/api/effect/*` (strict ownership inside
+ * the claim), so the fixture's own Next route at `/api/hello` stays
+ * outside the claim and behaves identically in dev and deploy — the §5
+ * route-precedence parity pin.
  */
-const nextEffectSiteSource = `
+const nextEffectSiteSource = (marker: string) => `
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -192,6 +203,8 @@ import { PutObject } from "${alchemySrcFrom(3)}/AWS/S3/PutObject.ts";
 import { PutObjectHttp } from "${alchemySrcFrom(3)}/AWS/S3/PutObjectHttp.ts";
 import { Nextjs } from "${alchemySrcFrom(3)}/AWS/Website/Nextjs.ts";
 import { remote } from "${alchemySrcFrom(3)}/ProviderMode.ts";
+
+const MARKER = "${marker}";
 
 /**
  * S3 bucket bound by the effectful site's program. \`remote()\`: the AWS
@@ -211,17 +224,19 @@ export default class NextEffectSite extends Nextjs<NextEffectSite>()(
     rootDir: import.meta.dirname
       ? NodePath.dirname(import.meta.dirname)
       : undefined,
+    server: { routes: ["/api/effect/*"] },
   },
   Effect.gen(function* () {
     const bucket = yield* SiteData;
     const putObject = yield* PutObject(bucket);
     const getObject = yield* GetObject(bucket);
     return {
+      stamp: () => Effect.succeed({ marker: MARKER }),
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://fixture");
         if (url.pathname === "/api/effect/ping") {
-          return yield* HttpServerResponse.json({ marker: "effect-fetch" });
+          return yield* HttpServerResponse.json({ marker: MARKER });
         }
         if (url.pathname === "/api/effect/s3") {
           const key = url.searchParams.get("key") ?? "current";
@@ -248,20 +263,32 @@ export default class NextEffectSite extends Nextjs<NextEffectSite>()(
 ) {}
 `;
 
-/**
- * The explicit-tier mount (`app/api/effect/[[...slug]]/route.ts` inside the
- * clone — six levels above is `packages/alchemy`). Relative into
- * `packages/alchemy/src` so the mount runs the CURRENT serve sources.
- */
-const nextRouteMountSource = [
-  `import { toRouteHandler } from "${alchemySrcFrom(6)}/Serve/next.ts";`,
-  `import Site from "../../../../src/site.ts";`,
-  `const handler = toRouteHandler(Site);`,
-  `export { handler as GET, handler as POST, handler as PUT,`,
-  `         handler as PATCH, handler as DELETE, handler as HEAD,`,
-  `         handler as OPTIONS };`,
-  ``,
-].join("\n");
+/** POST `/api/__rpc/<method>` (empty args) until it answers 200 JSON. */
+const rpcCallReady = <T>(base: string, method: string, times = 30) =>
+  Effect.gen(function* () {
+    return yield* HttpClient.execute(
+      HttpClientRequest.post(`${base}/api/__rpc/${method}`).pipe(
+        HttpClientRequest.bodyText("[]", "application/json"),
+      ),
+    ).pipe(
+      Effect.flatMap((res) =>
+        Effect.flatMap(res.text, (body) =>
+          res.status === 200
+            ? Effect.try({
+                try: () => JSON.parse(body) as { value: T },
+                catch: () =>
+                  new Error(`non-json rpc body: ${body.slice(0, 300)}`),
+              })
+            : Effect.fail(
+                new Error(
+                  `rpc not ready (${res.status}): ${body.slice(0, 300)}`,
+                ),
+              ),
+        ),
+      ),
+      Effect.retry({ schedule: Schedule.spaced("2 seconds"), times }),
+    );
+  });
 
 /** GET `url` until it answers 200 JSON — bounded (first hit compiles the
  * route + the alchemy graph under turbopack, be patient). */
@@ -287,7 +314,7 @@ const fetchJsonReady = <T>(url: string, times = 60) =>
 
 describe("AWS.Website.Nextjs local (effectful)", () => {
   test.provider.skipIf(!dockerAvailable)(
-    "effectful Next.js dev: toRouteHandler mount serves /api/effect/* with the real S3 binding",
+    "effectful Next.js dev (zero-setup): front dispatch serves /api/effect/* + rpc with the real S3 binding, no mount file",
     (stack) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
@@ -308,25 +335,15 @@ describe("AWS.Website.Nextjs local (effectful)", () => {
           cwd: rootDir,
         });
 
-        // Write the site module + the explicit route mount into the clone.
+        // ZERO-SETUP: only the site module is written — no route mount,
+        // no generated file in the user's `app/` tree. The dev child's
+        // front dispatch delivers the effect routes.
         yield* fs.makeDirectory(path.join(rootDir, "src"), {
           recursive: true,
         });
         yield* fs.writeFileString(
           path.join(rootDir, "src", "site.ts"),
-          nextEffectSiteSource,
-        );
-        const routeDir = path.join(
-          rootDir,
-          "app",
-          "api",
-          "effect",
-          "[[...slug]]",
-        );
-        yield* fs.makeDirectory(routeDir, { recursive: true });
-        yield* fs.writeFileString(
-          path.join(routeDir, "route.ts"),
-          nextRouteMountSource,
+          nextEffectSiteSource("effect-fetch-v1"),
         );
 
         // Bun resolves the clone's relative imports to the same
@@ -369,19 +386,38 @@ describe("AWS.Website.Nextjs local (effectful)", () => {
           timeout: "240 seconds",
           label: "effectful dev SSR home page",
         });
-        // Next's own API route INSIDE /api/* still answers — the effect
-        // mount owns only /api/effect/*.
+        // Next's own API route OUTSIDE the claim (`routes:
+        // ["/api/effect/*"]`) still answers — route-precedence parity
+        // with the deployed wrapper: outside the claim the framework
+        // serves, in dev exactly as on deploy.
         yield* expectUrlContains(
           `${url}/api/hello?echo=dev`,
           "NEXTJS_AWS_API_MARKER",
           { label: "framework API route untouched" },
         );
 
-        // Effect route through the explicit mount.
+        // Effect route through the front dispatch — no mount file exists.
         const ping = yield* fetchJsonReady<{ marker: string }>(
           `${url}/api/effect/ping`,
         );
-        expect(ping.marker).toBe("effect-fetch");
+        expect(ping.marker).toBe("effect-fetch-v1");
+
+        // Strict ownership inside the claim: an unknown path is the
+        // effect's OWN 404 (the fixture's JSON), never Next's HTML 404 —
+        // the dispatch answered before Next's router ever ran.
+        const client = yield* HttpClient.HttpClient;
+        const missing = yield* client.get(`${url}/api/effect/nope`);
+        expect(missing.status).toBe(404);
+        const missingBody = yield* missing.text;
+        expect(missingBody).not.toContain("<html");
+        expect(JSON.parse(missingBody)).toEqual({
+          error: "unknown effect route",
+        });
+
+        // The universal RPC dispatch (`POST /api/__rpc/<method>`) needs no
+        // routes claim and no mount either.
+        const stamped = yield* rpcCallReady<{ marker: string }>(url, "stamp");
+        expect(stamped.value.marker).toBe("effect-fetch-v1");
 
         // S3 round-trip through the binding: the mount's capability
         // clients resolve ambient credentials (`Credentials.fromChain()`)
@@ -414,6 +450,34 @@ describe("AWS.Website.Nextjs local (effectful)", () => {
             }),
           );
         expect(observed).toBe(value);
+
+        // ── Effect-handler HMR: rewrite the backend module in place. The
+        // stack is NOT re-applied — the dev child's watcher re-imports the
+        // module (cache-busted → fresh class identity → fresh layer build)
+        // and the next dispatch serves the new marker. Bounded poll ──────
+        yield* fs.writeFileString(
+          path.join(rootDir, "src", "site.ts"),
+          nextEffectSiteSource("effect-fetch-v2"),
+        );
+        const swapped = yield* fetchJsonReady<{ marker: string }>(
+          `${url}/api/effect/ping`,
+        ).pipe(
+          Effect.repeat({
+            until: (body): boolean => body.marker === "effect-fetch-v2",
+            schedule: Schedule.spaced("2 seconds"),
+            times: 30,
+          }),
+        );
+        expect(swapped.marker).toBe("effect-fetch-v2");
+        // The RPC surface hot-swapped with the same generation.
+        const restamped = yield* rpcCallReady<{ marker: string }>(url, "stamp");
+        expect(restamped.value.marker).toBe("effect-fetch-v2");
+        // The S3 binding survived the swap (env-packed values re-resolve
+        // against the same lowered process env).
+        const reread = yield* fetchJsonReady<{ value: string | undefined }>(
+          `${url}/api/effect/s3?key=greeting`,
+        );
+        expect(reread.value).toBe(value);
 
         yield* stack.destroy();
 

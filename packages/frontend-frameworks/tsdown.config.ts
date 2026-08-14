@@ -19,6 +19,9 @@ export default defineConfig([
         "src/astro/runtime/entrypoints/image-passthrough-endpoint.ts",
       "nextjs/index": "src/nextjs/index.ts",
       "nextjs/aws": "src/nextjs/aws.ts",
+      // Standalone dev-child entry (spawned by nextjs/aws.ts, never
+      // imported) — must keep its own stable file at dist/nextjs/.
+      "nextjs/aws-dev-entry": "src/nextjs/aws-dev-entry.ts",
       "nextjs/source": "src/nextjs/source.ts",
       "aws-lambda/index": "src/aws-lambda/index.ts",
       "nuxt/index": "src/nuxt/index.ts",

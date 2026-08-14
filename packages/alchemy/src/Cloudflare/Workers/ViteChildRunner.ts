@@ -118,6 +118,16 @@ const program = Effect.scoped(
                 assets: config.worker.assets,
               },
               runtimeContext,
+              // The serve surface, from THIS child's own alchemy graph —
+              // server-mode sources (Next hmr) run the effect front
+              // dispatch in-process, so the bridge and the site module's
+              // bare `alchemy/*` imports must share one module instance.
+              serveModule: import.meta.resolve(
+                import.meta.url.endsWith(".ts")
+                  ? "../../Serve/Serve.ts"
+                  : "../../Serve/Serve.js",
+                import.meta.url,
+              ),
             }),
           ),
           Effect.flatMap((handle) =>

@@ -178,6 +178,13 @@ export interface DevContext extends SourceContext {
    * internal layer, so `Alchemy.remote()` bindings resolve in dev.
    */
   readonly runtimeContext: unknown;
+  /**
+   * Host-resolved path (or `file://` URL) of the `alchemy/serve` surface
+   * module — powers the `hmr` mode's effect front dispatch. In-memory
+   * only (never persisted); absent on older hosts, in which case hmr
+   * falls back to requiring the explicit mount.
+   */
+  readonly serveModule?: string | undefined;
 }
 
 export type SourceDevHandle = { readonly mode: "server"; readonly url: URL };
@@ -776,10 +783,11 @@ const makeProvider = (options: NextjsSourceOptions): SourceProvider => {
       const devOptions: Nextjs.NextjsFrameworkOptions = {
         ...frameworkOptions(ctx),
         // Preview dev serves the takeover artifact — effect routes work
-        // with production parity. (The "hmr" mode runs the real `next dev`
-        // in Node and ignores the entry: effect routes there require the
-        // explicit `toRouteHandler` mount, documented on the resource.)
+        // with production parity. The "hmr" mode runs the real `next dev`
+        // in Node and dispatches the same entry's routes to the Effect
+        // program ahead of Next's handler (via `serveModule` below).
         effectEntry: effectEntryOf(ctx),
+        serveModule: ctx.serveModule,
         // The host's runtime stack (includes remote-bindings support) — the
         // dev binding proxy is hosted in it instead of the credential-free
         // internal layer, so `Alchemy.remote()` bindings resolve in dev.

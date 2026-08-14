@@ -146,7 +146,7 @@ test.skipIf(lambdaRoutesBroken)(
     const url = yield* base;
     // `POST /api/__rpc/bump` is the exact wire request the browser's
     // type-only `createClient<typeof Backend>()` sends. It rides through
-    // the catch-all route handler at app/api/[[...slug]]/route.ts
+    // the zero-setup wrapper override (no mount file in this project)
     // (toRouteHandler dispatches the rpc path before route matching),
     // compiled by Next into the same server Lambda. The DynamoDB
     // capability bindings (env + IAM) were collected at plan time.

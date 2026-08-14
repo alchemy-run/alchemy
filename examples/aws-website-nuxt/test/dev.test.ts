@@ -11,7 +11,7 @@
  *   - routing         → `/about` (prerendered route) serves
  *   - API route       → `/api/hello` serves the nitro handler
  *   - RPC wire path   → `POST /api/__rpc/bump` (createClient's wire
- *                       protocol) serves through the middleware mount
+ *                       protocol) serves through the injected middleware
  *                       against the real DynamoDB table, and the
  *                       useAsyncData SSR seam renders the counter
  *   - static assets   → `/robots.txt` from public/
@@ -169,7 +169,8 @@ test(
     expect(robots).toContain("User-agent:");
 
     // The rpc wire path rides the nitro dev worker too (through the
-    // middleware mount): this is the exact request the browser's
+    // injected alchemy middleware — no mount file): this is the exact
+    // request the browser's
     // type-only createClient sends, served by the backend method against
     // the REAL DynamoDB table (remote()).
     const rpc = await fetch(new URL("/api/__rpc/bump", url), {

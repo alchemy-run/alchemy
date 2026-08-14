@@ -1,8 +1,9 @@
 // The effectful site module: default-exports the Website class, anchored
 // by `main: import.meta.url`. The engine imports it at plan time (binding
-// collection — table-name env var + IAM onto the server Lambda) and the
-// middleware mount (server/middleware/alchemy.ts) imports it inside the
-// nitro server bundle to serve the backend's RPC methods.
+// collection — table-name env var + IAM onto the server Lambda), and the
+// alchemy-generated middleware (`.alchemy/nuxt/NuxtSite/effect-handler.mjs`,
+// injected through `nitro.handlers`) imports it inside the nitro server
+// bundle to serve the backend's RPC methods — no mount file needed.
 //
 // Narrow subpath imports only (`alchemy/AWS/DynamoDB`, not `alchemy/AWS`):
 // this module is compiled by nitro into the server bundle and evaluated by
@@ -46,13 +47,13 @@ export const Jobs = SQS.Queue("Jobs", {
  * program's RPC METHODS are the API surface: each method is callable
  * through `createClient` (`alchemy/client`) — in-process during SSR (the
  * value form) and over the wire from the browser
- * (`POST /api/__rpc/<method>`, the type-only form). On Nuxt the wire path
- * mounts explicitly: the server middleware at
- * `server/middleware/alchemy.ts` (`toEventHandler` from
- * `alchemy/serve/nitro`) is compiled by nitro itself, so it runs in the
- * deployed Lambda and under `nuxt dev` alike. The middleware dispatches
- * the universal rpc path and declines everything else, so nitro's own
- * routes (e.g. `/api/hello`) keep serving normally.
+ * (`POST /api/__rpc/<method>`, the type-only form). The wire path mounts
+ * itself: alchemy generates a nitro middleware
+ * (`.alchemy/nuxt/NuxtSite/effect-handler.mjs`, injected through
+ * `nitro.handlers`) that nitro compiles into the server bundle, so it
+ * runs in the deployed Lambda and under `nuxt dev` alike. The middleware
+ * dispatches the universal rpc path and declines everything else, so
+ * nitro's own routes (e.g. `/api/hello`) keep serving normally.
  */
 export default class Site extends Nuxt<Site>()(
   "NuxtSite",

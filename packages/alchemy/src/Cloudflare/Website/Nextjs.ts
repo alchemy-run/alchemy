@@ -295,11 +295,14 @@ export interface NextjsProps<
  *
  * The program must live in a dedicated module whose default export is the
  * class, anchored by `main: import.meta.url`. Local dev: `preview` mode
- * serves the takeover artifact with full parity; `hmr` mode (`next dev`) is
- * fetch-only via the explicit `toRouteHandler` mount from
- * `alchemy/serve/next` (mounting it explicitly also makes the takeover
- * stand down on deploy). `server: { takeover: false }` forces the explicit
- * tier.
+ * serves the takeover artifact with full parity; `hmr` mode (the real
+ * `next dev`) serves effect routes and the RPC dispatch through the dev
+ * server's front dispatch — the same rpc-first + strict-ownership gate as
+ * the deployed wrapper, zero user files (fetch + RPC only: DO/queue
+ * surfaces and site-module edits still need `preview`, which rebuilds the
+ * artifact). `server: { takeover: false }` forces the explicit
+ * `toRouteHandler` tier everywhere (mounting it explicitly also makes the
+ * takeover stand down on deploy).
  *
  * @example Effectful Next.js site (src/backend.ts)
  * ```typescript

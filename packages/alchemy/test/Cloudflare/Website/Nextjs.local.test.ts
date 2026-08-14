@@ -43,23 +43,72 @@ const fixtureEntries = [
 const effectFixtureEntries = [...fixtureEntries, "src", "stubs"];
 
 /**
- * The explicit-tier mount the hmr test writes into the clone
- * (`app/api/effect/[[...slug]]/route.ts`) — the documented Next.js escape
- * hatch: the catch-all route handler is compiled by Next itself, so effect
- * routes work under the real `next dev` (fetch-only).
+ * The hmr-mode zero-setup site module the test writes over the clone's
+ * `src/site-hmr.ts` (clone sits at `packages/alchemy/.tmp/<dir>/`, so
+ * `../../../src` is `packages/alchemy/src`). Written as a string with
+ * RELATIVE alchemy imports — the effect front dispatch imports this
+ * module under plain node in the vite dev child, where the bare
+ * `alchemy/*` specifiers would resolve through the `import` condition to
+ * the possibly-stale `lib/` in this workspace (and split module identity
+ * with the child's own `src/`-resolved serve bridge).
  */
-const explicitRouteSource = [
-  // Relative into packages/alchemy/src (see the note in src/site-hmr.ts):
-  // the bare "alchemy/serve/next" specifier would resolve through the
-  // `import` condition to the unbuilt lib/ in this workspace.
-  `import { toRouteHandler } from "../../../../../../src/Serve/next.ts";`,
-  `import Site from "../../../../src/site-hmr";`,
-  `const handler = toRouteHandler(Site);`,
-  `export { handler as GET, handler as POST, handler as PUT,`,
-  `         handler as PATCH, handler as DELETE, handler as HEAD,`,
-  `         handler as OPTIONS };`,
-  ``,
-].join("\n");
+const hmrSiteSource = `
+import * as Effect from "effect/Effect";
+import { RouteNotFound } from "effect/unstable/http/HttpServerError";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as NodePath from "node:path";
+import * as KV from "../../../src/Cloudflare/KV/index.ts";
+import * as Website from "../../../src/Cloudflare/Website/index.ts";
+
+/** KV namespace bound by the hmr-mode zero-setup program. */
+export const HmrUsers = KV.Namespace("NextjsEffectHmrUsers");
+
+/**
+ * The hmr-mode (\`next dev\` in Node) zero-setup site: the dev server's
+ * effect front dispatch serves \`/api/__rpc\` + \`server.routes\` ahead of
+ * Next's handler — no route mount exists anywhere in the app tree.
+ */
+export default class NextjsEffectHmrSite extends Website.Nextjs<NextjsEffectHmrSite>()(
+  "NextjsEffectHmrSite",
+  {
+    main: import.meta.url,
+    rootDir: import.meta.dirname
+      ? NodePath.dirname(import.meta.dirname)
+      : undefined,
+    workersDev: true,
+    dev: { port: 0 },
+    nextjs: { devMode: "hmr" },
+  },
+  Effect.gen(function* () {
+    const namespace = yield* HmrUsers;
+    const users = yield* KV.ReadWriteNamespace(namespace);
+    return {
+      stamp: () => Effect.succeed({ marker: "hmr-rpc" }),
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const url = new URL(request.url, "http://localhost");
+        if (url.pathname === "/api/effect/ping") {
+          return yield* HttpServerResponse.json({ marker: "effect-fetch" });
+        }
+        if (url.pathname === "/api/effect/kv") {
+          const key = url.searchParams.get("key") ?? "default";
+          if (request.method === "PUT") {
+            const body = yield* request.text;
+            yield* users.put(key, body).pipe(Effect.orDie);
+            return yield* HttpServerResponse.json({ ok: true });
+          }
+          const value = yield* users.get(key).pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({ value: value ?? null });
+        }
+        // The HttpRouter-miss shape: inside the routes claim this renders
+        // as the effect's OWN empty 404 — never Next's HTML 404 page.
+        return yield* Effect.fail(new RouteNotFound({ request }));
+      }),
+    };
+  }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),
+) {}
+`;
 
 const memoInclude = [
   "app/**",
@@ -390,13 +439,14 @@ describe.concurrent("Nextjs dev", () => {
   );
 
   // ─────────────────────────────────────────────────────────────────────
-  // Effectful Website, hmr mode: the real `next dev` cannot serve the
-  // takeover artifact — effect routes ride the explicit `toRouteHandler`
-  // catch-all mount (fetch-only), compiled by Next itself.
+  // Effectful Website, hmr mode (zero-setup): the real `next dev` runs
+  // behind the dev server's effect front dispatch — `/api/__rpc` and
+  // `server.routes` are answered by the Effect program BEFORE Next's
+  // handler, so NO route mount exists anywhere in the app tree.
   // ─────────────────────────────────────────────────────────────────────
 
   test.provider(
-    "Nextjs dev (hmr): explicit toRouteHandler mount serves effect routes under next dev",
+    "Nextjs dev (hmr): front dispatch serves effect routes + rpc under next dev, no mount file",
     (stack) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
@@ -411,26 +461,21 @@ describe.concurrent("Nextjs dev", () => {
         });
         yield* linkJsApiTypeScript(rootDir);
 
-        // Mount the explicit tier: the catch-all route handler module.
-        const routeDir = path.join(
-          rootDir,
-          "app",
-          "api",
-          "effect",
-          "[[...slug]]",
-        );
-        yield* fs.makeDirectory(routeDir, { recursive: true });
+        // ZERO-SETUP: only the site module exists — no catch-all route
+        // handler is written. (The clone's copy is replaced with the
+        // relative-import variant the plain-node dispatch can load; see
+        // `hmrSiteSource`.)
         yield* fs.writeFileString(
-          path.join(routeDir, "route.ts"),
-          explicitRouteSource,
+          path.join(rootDir, "src", "site-hmr.ts"),
+          hmrSiteSource,
         );
 
-        const mod = yield* Effect.promise(
-          () =>
-            import(pathe.join(rootDir, "src/site-hmr.ts")) as Promise<
-              typeof import("./fixtures/nextjs-app/src/site-hmr.ts")
-            >,
-        );
+        const mod = (yield* Effect.promise(
+          () => import(pathe.join(rootDir, "src/site-hmr.ts")),
+        )) as {
+          default: Effect.Effect<any, never, any>;
+          HmrUsers: Effect.Effect<Cloudflare.KV.Namespace, never, any>;
+        };
 
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {
@@ -450,15 +495,29 @@ describe.concurrent("Nextjs dev", () => {
           label: "nextjs effect hmr SSR home page",
         });
 
-        // Effect route through the explicit mount (first hit compiles the
-        // route + the alchemy graph under turbopack — be patient).
+        // Effect route through the front dispatch — no mount compiled by
+        // Next anywhere.
         const ping = yield* fetchJsonReady<{ marker: string }>(
           `${site.url!}/api/effect/ping`,
         );
         expect(ping.marker).toBe("effect-fetch");
 
-        // KV round-trip through the binding proxied onto
-        // getCloudflareContext() by the hmr dev server.
+        // The universal RPC dispatch works in hmr mode now (the old
+        // explicit-mount tier only served `fetch`).
+        const stamp = yield* HttpClient.execute(
+          HttpClientRequest.post(`${site.url!}/api/__rpc/stamp`).pipe(
+            HttpClientRequest.bodyText("[]", "application/json"),
+          ),
+        ).pipe(
+          Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
+        );
+        expect(stamp.status).toBe(200);
+        expect((yield* stamp.json) as object).toEqual({
+          value: { marker: "hmr-rpc" },
+        });
+
+        // KV round-trip through the binding planted on the
+        // getCloudflareContext() contract by the hmr dev server.
         const put = yield* HttpClient.execute(
           HttpClientRequest.put(`${site.url!}/api/effect/kv?key=hmr-key`).pipe(
             HttpClientRequest.bodyText("hmr-value"),

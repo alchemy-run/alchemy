@@ -11,6 +11,7 @@ import { pathToFileURL } from "node:url";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
@@ -188,11 +189,17 @@ describe.skipIf(!runLive)("AWS.Website.Nextjs", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
-// Effectful Next.js live (explicit tier, DESIGN §7-AWS): the Effect
-// program rides the `toRouteHandler` catch-all route compiled by Next into
-// the OpenNext server function (collect-only mode — the artifact ships
-// as-is; the deploy-time sentinel scan proves the mount), and the edge
-// serverRoutes check forwards /api/* to the server BEFORE the manifest.
+// Effectful Next.js live (zero-setup wrapper override, DESIGN §7-AWS):
+// no route file, no config edit — alchemy derives an OpenNext config under
+// `.alchemy/generated/<id>/` whose function-form custom wrapper composes
+// `makeWebsiteHandlers.match` at the InternalEvent layer and delegates the
+// one `streamifyResponse` wrap to the stock aws-lambda-streaming wrapper;
+// the site module + serve shell are prebundled beside the deployed config.
+// The clone's own `open-next.config.ts` (webpack buildCommand) exercises
+// the user-config import-and-spread merge live. The edge serverRoutes
+// check forwards the claim (plus `/api/__rpc*`) to the server BEFORE the
+// manifest; `!/api/hello` is carved out, so Next's own route keeps
+// serving it (strict ownership shadows everything else inside `/api/*`).
 //
 // The clone lives OUTSIDE the workspace (OpenNext monorepo detection), so
 // `alchemy`/`effect` are symlinked into the clone post-install (the
@@ -203,6 +210,9 @@ describe.skipIf(!runLive)("AWS.Website.Nextjs", () => {
 // ─────────────────────────────────────────────────────────────────────
 
 const workspaceRoot = pathe.resolve(import.meta.dirname, "../../../../..");
+
+/** Concatenated, the streamed chunks spell this marker. */
+const STREAM_MARKER = "NEXTJS_AWS_EFFECT_STREAMED_BODY";
 
 /** The live effectful site module (written into the clone at `src/site.ts`). */
 const nextEffectLiveSiteSource = `
@@ -217,6 +227,8 @@ import * as NodePath from "node:path";
 /** S3 bucket bound by the effectful site's program. */
 export const SiteData = Bucket("NextEffectLiveData", { forceDestroy: true });
 
+export const STREAM_MARKER = ${JSON.stringify(STREAM_MARKER)};
+
 export default class NextEffectLiveSite extends Nextjs<NextEffectLiveSite>()(
   "NextEffectSite",
   {
@@ -225,6 +237,9 @@ export default class NextEffectLiveSite extends Nextjs<NextEffectLiveSite>()(
     // CacheBucket during the test — without forceDestroy the teardown races
     // a fresh cache write and dies with BucketNotEmpty.
     forceDestroy: true,
+    // Strict route ownership: the effect fetch owns /api/*; the exclusion
+    // glob routes Next's own /api/hello route handler back to Next.
+    server: { routes: ["/api/*", "!/api/hello"] },
     // Plan-only (guarded: undefined when the module re-evaluates inside a
     // deployed bundle where import.meta has no path).
     rootDir: import.meta.dirname
@@ -236,11 +251,26 @@ export default class NextEffectLiveSite extends Nextjs<NextEffectLiveSite>()(
     const putObject = yield* PutObject(bucket);
     const getObject = yield* GetObject(bucket);
     return {
+      /** RPC method — served at POST /api/__rpc/greet by the wrapper's
+       * rpc-first dispatch (the edge rides the universal rpc claim). */
+      greet: (name: string) => Effect.succeed("hello " + name),
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://fixture");
         if (url.pathname === "/api/effect/ping") {
           return yield* HttpServerResponse.json({ marker: "effect-fetch" });
+        }
+        if (url.pathname === "/api/effect/stream") {
+          // A genuinely incremental multi-chunk body: concatenated it
+          // spells the stream marker.
+          const chunks = Stream.fromIterable([
+            STREAM_MARKER.slice(0, 8),
+            STREAM_MARKER.slice(8, 16),
+            STREAM_MARKER.slice(16),
+          ]).pipe(Stream.map((chunk) => new TextEncoder().encode(chunk)));
+          return HttpServerResponse.stream(chunks, {
+            contentType: "text/plain",
+          });
         }
         if (url.pathname === "/api/effect/s3") {
           const key = url.searchParams.get("key") ?? "current";
@@ -267,17 +297,6 @@ export default class NextEffectLiveSite extends Nextjs<NextEffectLiveSite>()(
 ) {}
 `;
 
-/** The explicit-tier mount (`app/api/effect/[[...slug]]/route.ts`). */
-const nextLiveRouteMountSource = [
-  `import { toRouteHandler } from "alchemy/serve/next";`,
-  `import Site from "../../../../src/site";`,
-  `const handler = toRouteHandler(Site);`,
-  `export { handler as GET, handler as POST, handler as PUT,`,
-  `         handler as PATCH, handler as DELETE, handler as HEAD,`,
-  `         handler as OPTIONS };`,
-  ``,
-].join("\n");
-
 /** GET `url` until it answers 200 JSON — bounded. */
 const fetchJsonReady = <T>(url: string, times = 40) =>
   Effect.gen(function* () {
@@ -301,13 +320,18 @@ const fetchJsonReady = <T>(url: string, times = 40) =>
 
 describe.skipIf(!runLive)("AWS.Website.Nextjs (effectful)", () => {
   test.provider(
-    "effectful site: toRouteHandler mount serves /api/effect/* through CloudFront with the S3 binding",
+    "zero-setup: the OpenNext wrapper override serves /api/* through CloudFront with the S3 binding, RPC, and streamed bodies",
     (stack) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
 
-        yield* stack.destroy();
+        // NO_DESTROY=1 keeps the stack warm across iterations (skip the
+        // clean-slate teardown too, so a re-run reconciles the live stack
+        // instead of paying a full destroy+create cycle).
+        if (!process.env.NO_DESTROY) {
+          yield* stack.destroy();
+        }
 
         const rootDir = yield* cloneFixture(fixtureDir, {
           prefix: "alchemy-nextjs-aws-effect-",
@@ -351,11 +375,13 @@ describe.skipIf(!runLive)("AWS.Website.Nextjs (effectful)", () => {
           yield* fs.remove(linkPath, { recursive: true }).pipe(Effect.ignore);
           yield* fs.symlink(target, linkPath);
         }
-        // Build with webpack: Turbopack refuses to resolve the symlinked
-        // packages outside its root (which OpenNext pins to the app dir via
+        // A USER open-next.config.ts — the zero-setup tier must import and
+        // spread it into the derived config (buildCommand passes through;
+        // only default.override.wrapper is re-pointed). Webpack because
+        // Turbopack refuses to resolve the symlinked packages outside its
+        // root (which OpenNext pins to the app dir via
         // outputFileTracingRoot), while webpack follows them to their
-        // realpaths. Same default config alchemy generates, plus the
-        // buildCommand override.
+        // realpaths.
         yield* fs.writeFileString(
           path.join(rootDir, "open-next.config.ts"),
           [
@@ -373,25 +399,15 @@ describe.skipIf(!runLive)("AWS.Website.Nextjs (effectful)", () => {
           ].join("\n"),
         );
 
-        // Write the site module + the explicit route mount into the clone.
+        // The site module is the ONLY file the effectful tier needs — no
+        // route mount, no config edit (zero-setup: the derived config's
+        // wrapper override mounts the dispatch).
         yield* fs.makeDirectory(path.join(rootDir, "src"), {
           recursive: true,
         });
         yield* fs.writeFileString(
           path.join(rootDir, "src", "site.ts"),
           nextEffectLiveSiteSource,
-        );
-        const routeDir = path.join(
-          rootDir,
-          "app",
-          "api",
-          "effect",
-          "[[...slug]]",
-        );
-        yield* fs.makeDirectory(routeDir, { recursive: true });
-        yield* fs.writeFileString(
-          path.join(routeDir, "route.ts"),
-          nextLiveRouteMountSource,
         );
 
         const mod = (yield* Effect.tryPromise(
@@ -412,30 +428,77 @@ describe.skipIf(!runLive)("AWS.Website.Nextjs (effectful)", () => {
 
         const url = deployed.site.url! as string;
         expect(url).toMatch(/^https:\/\//);
-        yield* Effect.log(
-          `site url: ${url} | server url: ${deployed.site.serverUrl}`,
-        );
+        const serverUrl = deployed.site.serverUrl! as string;
+        yield* Effect.log(`site url: ${url} | server url: ${serverUrl}`);
 
-        // SSR still serves (the collect-only OpenNext artifact shipped
-        // as-is).
+        // ── Effect surface, direct from the streaming Function URL —
+        // isolates the wrapper composition + layer build from the edge
+        // routing ─────────────────────────────────────────────────────────
+        const directPing = yield* fetchJsonReady<{ marker: string }>(
+          `${serverUrl}api/effect/ping`,
+        );
+        expect(directPing.marker).toBe("effect-fetch");
+
+        // SSR still serves (the OpenNext artifact shipped as-is; only the
+        // wrapper — named by the derived config — changed).
         yield* expectUrlContains(`${url}/`, "NEXTJS_AWS_PAGE_MARKER", {
           timeout: "300 seconds",
           label: "SSR home page (effectful)",
         });
-        // Next's own API route INSIDE /api/* still answers — the effect
-        // mount owns only /api/effect/*.
+
+        // The exclusion glob (`!/api/hello`) carves Next's own route
+        // handler out of the claim — strict ownership shadows everything
+        // else inside /api/*, but this path reaches Next.
         yield* expectUrlContains(
           `${url}/api/hello?echo=roundtrip`,
           "NEXTJS_AWS_API_MARKER",
-          { label: "framework API route untouched" },
+          { label: "exclusion glob routes to Next" },
         );
 
         // Effect fetch through CloudFront (edge serverRoutes → server
-        // Lambda → Next router → catch-all mount).
+        // Lambda → wrapper dispatch, BEFORE Next's router).
         const ping = yield* fetchJsonReady<{ marker: string }>(
           `${url}/api/effect/ping`,
         );
         expect(ping.marker).toBe("effect-fetch");
+
+        // RPC: the wrapper dispatches /api/__rpc/<method> rpc-first, and
+        // the edge rides the universal rpc claim alongside the routes.
+        const rpc = yield* HttpClient.execute(
+          HttpClientRequest.post(`${url}/api/__rpc/greet`).pipe(
+            HttpClientRequest.bodyText('["live"]', "application/json"),
+          ),
+        ).pipe(
+          Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 10 }),
+        );
+        expect(rpc.status).toBe(200);
+        expect(yield* rpc.json).toEqual({ value: "hello live" });
+
+        // Streamed effect response through the RESPONSE_STREAM pipe (the
+        // stock wrapper's compression + prelude machinery) — direct and
+        // through CloudFront.
+        yield* expectUrlContains(
+          `${serverUrl}api/effect/stream`,
+          STREAM_MARKER,
+          { timeout: "60 seconds", label: "streamed effect body (Lambda URL)" },
+        );
+        yield* expectUrlContains(`${url}/api/effect/stream`, STREAM_MARKER, {
+          timeout: "60 seconds",
+          label: "streamed effect body (CloudFront)",
+        });
+
+        // An unknown route INSIDE the claim is the effect's own 404 — the
+        // marker body proves WHO answered (never Next's 404 page). This is
+        // the strict-ownership semantic the wrapper tier documents.
+        const insideMiss = yield* Effect.gen(function* () {
+          const client = yield* HttpClient.HttpClient;
+          const res = yield* client.get(
+            `${url}/api/definitely-not-here-${crypto.randomUUID()}`,
+          );
+          return { status: res.status, body: yield* res.text };
+        });
+        expect(insideMiss.status).toBe(404);
+        expect(insideMiss.body).toContain("unknown effect route");
 
         // S3 round-trip through the binding collected onto the server
         // Lambda (env + IAM). Random payload defeats stale objects.

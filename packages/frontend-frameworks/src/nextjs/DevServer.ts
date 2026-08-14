@@ -39,6 +39,10 @@ import * as NodeHttp from "node:http";
 import { createRequire } from "node:module";
 import type * as NodeNet from "node:net";
 import type * as NodeVm from "node:vm";
+import {
+  createEffectDispatch,
+  type EffectDispatchHandle,
+} from "./EffectDispatch.ts";
 
 /** The symbol OpenNext uses to store/read the Cloudflare context. Must stay
  * in sync with `@opennextjs/cloudflare`'s `cloudflareContextSymbol`. */
@@ -72,6 +76,25 @@ export interface DevServerOptions {
   /** Name of the binding-proxy workerd service. @default "nextjs-dev-platform-proxy" */
   readonly proxyName?: string | undefined;
   readonly logging?: WorkerdLogging | undefined;
+  /**
+   * Effectful front dispatch: offer each request to the Effect program
+   * (`Serve.make(Site).match` — rpc-first + strict route ownership, the
+   * deployed wrapper's exact gate) BEFORE Next's request handler. This is
+   * what makes the `hmr` dev mode serve effect routes with zero user
+   * files — the explicit `toRouteHandler` mount is no longer required.
+   * Env resolves through the planted `getCloudflareContext()` contract
+   * (the serve bridge's env ladder), so bindings ride the platform proxy.
+   */
+  readonly effect?:
+    | {
+        /** The user's site module (`props.main` — path or `file://` URL). */
+        readonly mainPath: string;
+        /** Path globs the effect fetch owns (`server.routes`). */
+        readonly routes?: ReadonlyArray<string> | undefined;
+        /** Engine-resolved path of the `alchemy/serve` surface module. */
+        readonly serveModule: string;
+      }
+    | undefined;
 }
 
 export interface DevServerInstance {
@@ -345,7 +368,42 @@ export const start = Effect.fn("Nextjs.DevServer.start")(function* (
     }),
     (app) => Effect.promise(() => app.close().catch(() => undefined)),
   );
-  http.setHandler(app.getRequestHandler());
+  const nextHandler = app.getRequestHandler();
+
+  // 5. Effectful front dispatch (zero-setup hmr): the Serve bridge answers
+  //    `/api/__rpc` and `server.routes` requests; everything else falls
+  //    through to Next. Constructed AFTER the context was planted (the
+  //    bridge's env ladder reads the getCloudflareContext global) and
+  //    without a watcher — this process may be bun-hosted, where the
+  //    cache-busted re-import that powers the AWS child's effect-handler
+  //    hot reload doesn't work (bun ignores import query strings). Site-
+  //    module edits need a dev-server restart in hmr mode; `preview` mode
+  //    rebuilds the artifact and remains the parity mode.
+  if (options.effect !== undefined) {
+    const dispatch: EffectDispatchHandle = yield* Effect.tryPromise({
+      try: () =>
+        createEffectDispatch({
+          main: options.effect!.mainPath,
+          routes: options.effect!.routes,
+          serveModule: options.effect!.serveModule,
+          watch: false,
+        }),
+      catch: fail(
+        "Failed to construct the effect dispatch for next dev (is the site module importable?)",
+      ),
+    });
+    yield* Effect.addFinalizer(() =>
+      Effect.promise(() => dispatch.close().catch(() => undefined)),
+    );
+    http.setHandler(async (req, res) => {
+      if (await dispatch.dispatch(req, res)) {
+        return;
+      }
+      return nextHandler(req, res);
+    });
+  } else {
+    http.setHandler(nextHandler);
+  }
 
   const urlHost =
     hostname === "0.0.0.0" || hostname === "::" ? "127.0.0.1" : hostname;

@@ -219,12 +219,15 @@ describe.skipIf(!runLive)("AWS.Website.Nuxt", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
-// Effectful Nuxt live (explicit tier + sibling, DESIGN §2.1.3 / §7-AWS):
-// ONE Website whose Effect program owns /api/effect/* through the
-// `toEventHandler` middleware compiled into the nitro Lambda (collect-only
-// mode — the artifact ships as-is, bindings collected env + IAM at plan),
-// while its SQS consumer rides the SIBLING effect Lambda deployed from the
-// same site module with the event-source mapping targeting it.
+// Effectful Nuxt live (zero-setup wrapper tier + sibling, DESIGN §2.1.3 /
+// §7-AWS): ONE Website whose Effect program owns its routes through the
+// GENERATED middleware — no user mount file: the framework integration
+// writes `.alchemy/nuxt/<id>/effect-handler.mjs` and injects it via
+// `nitro.handlers`, and nitro compiles it into the Lambda bundle
+// (collect-only mode — the artifact ships as-is, bindings collected env +
+// IAM at plan) — while its SQS consumer rides the SIBLING effect Lambda
+// deployed from the same site module with the event-source mapping
+// targeting it.
 // ─────────────────────────────────────────────────────────────────────
 
 /**
@@ -263,6 +266,9 @@ export default class NuxtEffectLiveSite extends Nuxt<NuxtEffectLiveSite>()(
   "NuxtEffectSite",
   {
     main: import.meta.url,
+    // The injected middleware carries this claim; the \`!/api/hello\`
+    // exclusion glob carves nitro's own API route out of it.
+    server: { routes: ["/api/*", "!/api/hello"] },
     // Plan-only (guarded: undefined when the module re-evaluates inside a
     // deployed bundle where import.meta has no path).
     rootDir: import.meta.dirname
@@ -328,19 +334,6 @@ export default class NuxtEffectLiveSite extends Nuxt<NuxtEffectLiveSite>()(
 ) {}
 `;
 
-/**
- * The explicit-tier mount (`server/middleware/alchemy.ts` in the clone).
- * `routes` decides who serves each path — inside them the effect fetch is
- * authoritative; the `!/api/hello` exclusion glob carves nitro's own API
- * route out of the claim.
- */
-const nuxtLiveMiddlewareSource = [
-  `import { toEventHandler } from "../../../../src/Serve/nitro.ts";`,
-  `import Site from "../../src/site.ts";`,
-  `export default toEventHandler(Site, { routes: ["/api/*", "!/api/hello"] });`,
-  ``,
-].join("\n");
-
 /** GET `url` until it answers 200 JSON — bounded. */
 const fetchJsonReady = <T>(url: string, times = 40) =>
   Effect.gen(function* () {
@@ -364,7 +357,7 @@ const fetchJsonReady = <T>(url: string, times = 40) =>
 
 describe.skipIf(!runLive)("AWS.Website.Nuxt (effectful)", () => {
   test.provider(
-    "effectful site: /api/effect/* through the edge serverRoutes + queue handler on the sibling Lambda",
+    "effectful site: /api/effect/* through the edge serverRoutes (injected middleware, no mount file) + queue handler on the sibling Lambda",
     (stack) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
@@ -377,19 +370,15 @@ describe.skipIf(!runLive)("AWS.Website.Nuxt (effectful)", () => {
           tempRoot,
           entries: fixtureEntries,
         });
+        // NO mount file: the framework integration writes the generated
+        // middleware under `.alchemy/nuxt/<id>/` in the build child and
+        // injects it via `nitro.handlers` (zero-setup delivery).
         yield* fs.makeDirectory(path.join(rootDir, "src"), {
           recursive: true,
         });
         yield* fs.writeFileString(
           path.join(rootDir, "src", "site.ts"),
           nuxtEffectLiveSiteSource,
-        );
-        yield* fs.makeDirectory(path.join(rootDir, "server", "middleware"), {
-          recursive: true,
-        });
-        yield* fs.writeFileString(
-          path.join(rootDir, "server", "middleware", "alchemy.ts"),
-          nuxtLiveMiddlewareSource,
         );
 
         const mod = (yield* Effect.tryPromise(

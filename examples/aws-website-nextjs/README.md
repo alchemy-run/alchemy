@@ -72,22 +72,21 @@ queue" calls `enqueue` and then polls `processed()` until the count moves
 
 ## Mechanics
 
-On Next.js the wire path mounts explicitly through one file — a
-catch-all route handler compiled by Next itself:
-
-```ts
-// app/api/[[...slug]]/route.ts
-import { toRouteHandler } from "alchemy/serve/next";
-import Site from "../../backend.ts";
-
-const handler = toRouteHandler(Site);
-export { handler as GET, handler as POST /* ... */ };
-```
+Zero-setup: alchemy composes the effect dispatch into the OpenNext build
+automatically — a custom OpenNext `wrapper` override (generated under
+`.alchemy/generated/`, never in your project) runs `fetch` + `/api/__rpc`
+dispatch at the fetch layer and delegates the Lambda streaming wrap to
+OpenNext's stock wrapper. Under `alchemy dev`, an alchemy-owned dev server
+embeds Next (`next({ dev: true })`) with the same dispatch in front, so
+dev and deploy route identically. No mount file, no `open-next.config.ts`
+in your project (a derived one is generated; if you have your own it is
+imported and extended).
 
 - `app/api/hello/route.ts` is an ordinary app-router route handler —
-  more-specific routes keep winning over the catch-all, so Next's own
-  routing and the rpc dispatch coexist under `/api/*`.
+  Next's own routing and the effect dispatch coexist under `/api/*`.
 - Everything under `public/` deploys as static assets.
+- Escape hatch: mounting `toRouteHandler` from `alchemy/serve/next` in a
+  catch-all route yourself makes the auto-injection stand down.
 
 The integration packages must be installed in the project (the source
 provider is loaded dynamically at deploy time):
@@ -95,11 +94,6 @@ provider is loaded dynamically at deploy time):
 ```sh
 bun add -d @alchemy.run/frontend-frameworks @opennextjs/aws
 ```
-
-`open-next.config.ts` is the minimal default the AWS deploy target
-generates when a project has none: the server uses the
-`aws-lambda-streaming` wrapper so the emitted handler streams on the
-Function URL (`invokeMode: RESPONSE_STREAM`).
 
 > [!NOTE]
 > Running this example from inside the alchemy monorepo hits a known

@@ -100,9 +100,10 @@ test(
 test(
   "serves the plain nitro api route",
   Effect.gen(function* () {
-    // /api/hello is a plain nitro route — the alchemy middleware only
-    // dispatches the rpc path and declines everything else (the backend
-    // exposes no fetch), so nitro's own handler answers. This pins the
+    // /api/hello is a plain nitro route — the injected alchemy
+    // middleware only dispatches the rpc path and declines everything
+    // else (the backend exposes no fetch), so nitro's own handler
+    // answers. This pins the
     // coexistence contract end-to-end.
     const url = yield* base;
     const body = yield* getBodyWhenReady(`${url}/api/hello`, "from nitro");
@@ -153,9 +154,9 @@ test(
     const url = yield* base;
     // `POST /api/__rpc/bump` is the exact wire request the browser's
     // type-only `createClient<typeof Backend>()` sends. It is dispatched
-    // by the middleware mount (toEventHandler at
-    // server/middleware/alchemy.ts, compiled by nitro into the same
-    // server Lambda) before route matching. The DynamoDB capability
+    // by the alchemy-generated middleware (.alchemy/nuxt/NuxtSite/
+    // effect-handler.mjs, injected via nitro.handlers and compiled by
+    // nitro into the same server Lambda) before route matching. The DynamoDB capability
     // bindings (env + IAM) were collected at plan time.
     const res = yield* rpcWhenReady(url, "bump");
     expect(res.status).toBe(200);

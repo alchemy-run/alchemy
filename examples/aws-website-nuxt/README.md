@@ -48,7 +48,11 @@ The same class also owns an SQS-backed async flow: `enqueue(message)` sends to t
 
 ## Mechanics
 
-On Nuxt the wire path mounts explicitly through one file — a nitro server middleware compiled by nitro itself, running in the deployed Lambda and under `nuxt dev` alike:
+Zero setup: alchemy generates the mounting middleware itself (`.alchemy/nuxt/NuxtSite/effect-handler.mjs`) and injects it through nitro's `handlers` config. Nitro compiles it into the server bundle exactly like a scanned `server/middleware/*` file, so it runs in the deployed Lambda and under `nuxt dev` alike — one mechanism, both modes.
+
+The middleware dispatches the universal rpc path (`/api/__rpc/*`) and declines everything else (the backend exposes no `fetch` and claims no routes here), so nitro's own routes keep serving normally — `/api/hello` stays a plain nitro route.
+
+**Escape hatch:** auto-injection stands down whenever a file in `server/` already mounts `alchemy/serve` explicitly (or with `server: { takeover: false }`), so a hand-written mount keeps working unchanged:
 
 ```ts
 // server/middleware/alchemy.ts
@@ -57,8 +61,6 @@ import Site from "../backend.ts";
 
 export default toEventHandler(Site);
 ```
-
-The middleware dispatches the universal rpc path (`/api/__rpc/*`) and declines everything else, so nitro's own routes keep serving normally — `/api/hello` stays a plain nitro route.
 
 ## Commands
 

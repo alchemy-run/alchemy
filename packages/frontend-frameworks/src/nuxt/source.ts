@@ -49,7 +49,7 @@ import {
   EFFECT_MODULE_NAME,
   effectGeneratedDir,
   effectMainToPath,
-  renderDevHandler,
+  renderEffectHandler,
   renderWorkerEntry,
   writeGeneratedModule,
   type NuxtEffectOptions,
@@ -945,7 +945,7 @@ export const makeNuxtSource = (options: NuxtSourceOptions): SourceProvider => {
                 effectGeneratedDir(rootDir, ctx.id),
                 "dev-handler.mjs",
               ),
-              renderDevHandler({
+              renderEffectHandler({
                 sitePath: effect.mainPath,
                 routes: effect.routes,
               }),

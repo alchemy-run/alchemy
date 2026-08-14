@@ -119,6 +119,10 @@ export const buildInChild = (config: NuxtAwsBuildChildConfig) =>
       compatibilityFlags: config.config.compatibilityFlags,
       main: config.config.main,
       nuxt: config.config.nuxt,
+      // Effect-middleware delivery (JSON-serializable by construction —
+      // the hard child-process constraint): the child's `build` writes the
+      // generated handler and injects it through `nitro.handlers`.
+      effect: config.config.effect,
     });
     return yield* framework.build({ root: config.rootDir });
   });

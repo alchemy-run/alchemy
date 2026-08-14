@@ -8,6 +8,7 @@ import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { pathToFileURL } from "node:url";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
@@ -124,20 +125,28 @@ describe("AWS.Website.Nuxt local", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
-// Effectful Nuxt (explicit tier, DESIGN §7-AWS): the Effect program rides
-// the `toEventHandler` server-middleware mount, compiled by nitro into the
-// dev worker — env lowered by the composite (stack markers + packed
-// binding values + AWS_REGION), credentials resolved from the developer's
-// ambient profile (the AWS dev model: bindings hit real cloud, so the
-// bound bucket is `remote()`) — while the effect program also deploys into
-// the floci Lambda emulator as the dev server Lambda. Docker required
-// (floci); live credentials required (--profile testing).
+// Effectful Nuxt (zero-setup wrapper tier, DESIGN §7-AWS): NO user mount
+// file — the framework integration writes the generated effect middleware
+// under `<root>/.alchemy/nuxt/<id>/` and injects it through
+// `nitro.handlers`, so nitro compiles it into the dev worker exactly as it
+// would a scanned `server/middleware/*` file. Env lowered by the composite
+// (stack markers + packed binding values + AWS_REGION), credentials
+// resolved from the developer's ambient profile (the AWS dev model:
+// bindings hit real cloud, so the bound bucket is `remote()`) — while the
+// effect program also deploys into the floci Lambda emulator as the dev
+// server Lambda. Docker required (floci); live credentials required
+// (--profile testing).
 // ─────────────────────────────────────────────────────────────────────
 
 /**
  * The effectful site module written into the clone at `src/site.ts`
  * (clone sits at `packages/alchemy/.tmp/<dir>/`, so `../../../src` is
  * `packages/alchemy/src` — the CURRENT sources, not a stale built `lib/`).
+ *
+ * `server.routes` deliberately does NOT cover `/api/__rpc` — the injected
+ * middleware's pre-gate must admit the universal rpc path regardless of
+ * the routes claim (the RPC-claim fix), which the `greet` RPC method
+ * pins over the wire.
  */
 const nuxtEffectSiteSource = `
 import * as Effect from "effect/Effect";
@@ -166,6 +175,10 @@ export default class NuxtEffectSite extends Nuxt<NuxtEffectSite>()(
   "NuxtEffectSite",
   {
     main: import.meta.url,
+    // Narrow claim: /api/hello (nitro's own route) sits OUTSIDE it, and
+    // /api/__rpc is NOT covered — the injected pre-gate must admit the
+    // universal rpc path on its own.
+    server: { routes: ["/api/effect/*"] },
     // Plan-only (guarded: undefined when the module re-evaluates inside a
     // deployed bundle where import.meta has no path).
     rootDir: import.meta.dirname
@@ -177,6 +190,10 @@ export default class NuxtEffectSite extends Nuxt<NuxtEffectSite>()(
     const putObject = yield* PutObject(bucket);
     const getObject = yield* GetObject(bucket);
     return {
+      /** RPC method (POST /api/__rpc/greet — outside server.routes). */
+      greet: Effect.fn(function* (name) {
+        return \`hello \${name}\`;
+      }),
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://fixture");
@@ -211,22 +228,6 @@ export default class NuxtEffectSite extends Nuxt<NuxtEffectSite>()(
 ) {}
 `;
 
-/**
- * The explicit-tier mount (`server/middleware/alchemy.ts` inside the clone
- * — four levels above is `packages/alchemy`). Nitro scans it into the dev
- * worker bundle; `routes` decides who serves each path — inside them the
- * effect fetch is authoritative (its 404s are real 404s), and the handler
- * returns `undefined` ONLY for paths outside the routes so nitro continues
- * to its own handlers. The `!/api/hello` exclusion glob carves nitro's own
- * API route out of the claim.
- */
-const nuxtMiddlewareSource = [
-  `import { toEventHandler } from "../../../../src/Serve/nitro.ts";`,
-  `import Site from "../../src/site.ts";`,
-  `export default toEventHandler(Site, { routes: ["/api/*", "!/api/hello"] });`,
-  ``,
-].join("\n");
-
 /** GET `url` until it answers 200 JSON — bounded (the first hit boots the
  * dev worker bundle including the alchemy graph, be patient). */
 const fetchJsonReady = <T>(url: string, times = 60) =>
@@ -251,7 +252,7 @@ const fetchJsonReady = <T>(url: string, times = 60) =>
 
 describe("AWS.Website.Nuxt local (effectful)", () => {
   test.provider.skipIf(!dockerAvailable)(
-    "effectful Nuxt dev: toEventHandler middleware serves /api/effect/* with the real S3 binding",
+    "effectful Nuxt dev: the injected middleware serves /api/effect/* + RPC with NO mount file",
     (stack) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
@@ -265,21 +266,15 @@ describe("AWS.Website.Nuxt local (effectful)", () => {
           entries: fixtureEntries,
         });
 
-        // Write the site module + the explicit middleware mount into the
-        // clone.
+        // Write the site module into the clone. NO mount file: the
+        // framework integration generates the middleware itself and
+        // injects it via `nitro.handlers` (zero-setup delivery).
         yield* fs.makeDirectory(path.join(rootDir, "src"), {
           recursive: true,
         });
         yield* fs.writeFileString(
           path.join(rootDir, "src", "site.ts"),
           nuxtEffectSiteSource,
-        );
-        yield* fs.makeDirectory(path.join(rootDir, "server", "middleware"), {
-          recursive: true,
-        });
-        yield* fs.writeFileString(
-          path.join(rootDir, "server", "middleware", "alchemy.ts"),
-          nuxtMiddlewareSource,
         );
 
         // Bun resolves the clone's relative imports to the same
@@ -314,32 +309,62 @@ describe("AWS.Website.Nuxt local (effectful)", () => {
         // emulator's dummy account.
         expect(deployed.data.bucketArn).not.toContain(":000000000000:");
 
+        // The generated middleware exists under the clone's `.alchemy/`
+        // (the ONLY generated artifact — nothing in the user's server/
+        // tree).
+        const generatedHandler = path.join(
+          rootDir,
+          ".alchemy",
+          "nuxt",
+          "NuxtEffectSite",
+          "effect-handler.mjs",
+        );
+        expect(yield* fs.exists(generatedHandler)).toBe(true);
+        expect(
+          yield* fs.exists(
+            path.join(rootDir, "server", "middleware", "alchemy.ts"),
+          ),
+        ).toBe(false);
+
         // The framework page proves nuxt dev serves (middleware passes /
         // through).
         yield* expectUrlContains(`${url}/`, "NUXT_AWS_PAGE_MARKER", {
           timeout: "240 seconds",
           label: "effectful dev SSR home page",
         });
-        // Nitro's own API route is carved OUT of the effect claim by the
-        // `!/api/hello` exclusion glob — the middleware declines the path
+        // Nitro's own API route sits OUTSIDE the effect claim
+        // (`/api/effect/*`) — the injected middleware declines the path
         // and nitro's handler answers.
         yield* expectUrlContains(
           `${url}/api/hello?echo=dev`,
           "NUXT_AWS_API_MARKER",
-          { label: "exclusion glob routes to nitro" },
+          { label: "path outside the claim routes to nitro" },
         );
 
-        // Effect route through the middleware mount.
+        // Effect route through the injected middleware.
         const ping = yield* fetchJsonReady<{ marker: string }>(
           `${url}/api/effect/ping`,
         );
         expect(ping.marker).toBe("effect-fetch");
 
+        // The universal rpc path — NOT covered by `server.routes` — is
+        // admitted by the injected pre-gate on its own (the RPC-claim
+        // fix): the wire protocol envelope round-trips the method result.
+        const rpc = yield* HttpClient.execute(
+          HttpClientRequest.post(`${url}/api/__rpc/greet`).pipe(
+            HttpClientRequest.bodyText('["dev"]', "application/json"),
+          ),
+        );
+        expect(rpc.status).toBe(200);
+        expect(yield* rpc.json).toEqual({ value: "hello dev" });
+
         // An unknown route INSIDE the claim is the effect's own 404 — the
         // fetch's marker body proves WHO answered (never nitro's 404).
         const insideMiss = yield* Effect.gen(function* () {
           const client = yield* HttpClient.HttpClient;
-          const res = yield* client.get(`${url}/api/definitely-not-here`);
+          const res = yield* client.get(
+            `${url}/api/effect/definitely-not-here`,
+          );
           return { status: res.status, body: yield* res.text };
         });
         expect(insideMiss.status).toBe(404);

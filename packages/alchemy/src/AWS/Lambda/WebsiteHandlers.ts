@@ -81,6 +81,38 @@ interface LambdaSiteRuntime {
 }
 
 /**
+ * Every live instance-lifetime scope, drained by ONE process-level
+ * SIGTERM listener (registered on the first build). One listener — not
+ * one per build — so a dev server hot-swapping site classes (a fresh
+ * class per edit, each with its own layer build) never accumulates
+ * listeners toward `MaxListenersExceededWarning`.
+ */
+const instanceScopes = new Set<Scope.Closeable>();
+let sigtermRegistered = false;
+
+const registerInstanceScope = (scope: Scope.Closeable): void => {
+  instanceScopes.add(scope);
+  if (sigtermRegistered || typeof process?.on !== "function") {
+    return;
+  }
+  sigtermRegistered = true;
+  process.on("SIGTERM", () => {
+    for (const live of instanceScopes) {
+      void Effect.runPromise(Scope.close(live, Exit.void)).catch(() => {});
+    }
+    instanceScopes.clear();
+  });
+};
+
+/**
+ * The instance-lifetime scope of each site's build, for
+ * {@link disposeWebsiteRuntime}. Keyed by the class (same key as
+ * {@link siteBuilds}); registered as soon as the build starts so a
+ * dispose during a failing build still closes the scope.
+ */
+const siteScopes = new WeakMap<object, Scope.Closeable>();
+
+/**
  * Build the instance-lifetime layer stack for a Website/Function class
  * against a resolved env — the same recipe the generated `FunctionBundle`
  * entry uses, with the env injected explicitly (the bridge may be running
@@ -172,14 +204,12 @@ const buildLambdaSiteRuntime = (
   // Shutdown window (SIGTERM + 500 ms — bought by the extension
   // registration below) so init-level finalizers run before the sandbox
   // dies. No `process.exit` here: the framework runtime owns the process.
+  // The scope registers into the shared SIGTERM drain (one listener per
+  // process) and the per-site map (so `disposeWebsiteRuntime` can close
+  // it when a dev server retires this class generation).
   const instanceScope = Scope.makeUnsafe();
-  if (typeof process?.on === "function") {
-    process.on("SIGTERM", () => {
-      void Effect.runPromise(Scope.close(instanceScope, Exit.void)).catch(
-        () => {},
-      );
-    });
-  }
+  registerInstanceScope(instanceScope);
+  siteScopes.set(site, instanceScope);
   const memoMap = Layer.makeMemoMapUnsafe();
 
   return Effect.runPromise(
@@ -432,4 +462,36 @@ export const lambdaServeShell = {
     }
     return handlers.match(request);
   },
+  dispose: (site: object): Promise<void> => disposeWebsiteRuntime(site),
+};
+
+/**
+ * Tear down the per-class runtime built for `site`: evict the shell and
+ * layer-build memos and close the instance-lifetime scope (init-level
+ * finalizers run). Idempotent; a never-dispatched class resolves
+ * immediately.
+ *
+ * This is the invalidation half of effect-handler hot reload in dev
+ * servers (`Serve.dispose`): a cache-busted re-import produces a fresh
+ * class identity whose first matched request lazily builds a fresh layer
+ * stack — but the OLD generation's build, scope, and SIGTERM registration
+ * would otherwise be retained for the process lifetime (node's module
+ * registry pins every re-imported namespace, so `WeakMap` entries keyed
+ * by old classes are never reclaimed).
+ */
+export const disposeWebsiteRuntime = async (site: object): Promise<void> => {
+  shellHandlers.delete(site);
+  const build = siteBuilds.get(site);
+  siteBuilds.delete(site);
+  if (build !== undefined) {
+    // Settle the in-flight build first so the scope close below observes
+    // every registered finalizer (a failed build already cleared itself).
+    await build.catch(() => undefined);
+  }
+  const scope = siteScopes.get(site);
+  if (scope !== undefined) {
+    siteScopes.delete(site);
+    instanceScopes.delete(scope);
+    await Effect.runPromise(Scope.close(scope, Exit.void)).catch(() => {});
+  }
 };

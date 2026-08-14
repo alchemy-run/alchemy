@@ -106,9 +106,13 @@ export interface EffectNuxtProps extends NuxtProps {
  * while the nitro-built bundle ships as-is, and the CloudFront edge router
  * forwards `server.routes` (default `["/api/*"]`) to the server BEFORE the
  * static-asset manifest. The program must live in a dedicated module whose
- * default export is the class (`main: import.meta.url`) and be mounted in
- * the nitro server via `alchemy/serve/nitro` (a `server/middleware`
- * handler).
+ * default export is the class (`main: import.meta.url`) — nothing else:
+ * alchemy generates the mounting middleware itself
+ * (`.alchemy/nuxt/<id>/effect-handler.mjs`, injected through
+ * `nitro.handlers`), and nitro compiles it into the deployed Lambda bundle
+ * and the `nuxt dev` server alike. Inside `server.routes` the effect fetch
+ * is authoritative — its 404s are real 404s; outside them nitro's own
+ * handlers serve.
  *
  * The impl's non-`fetch` methods are **RPC methods** — the typed API
  * surface, served at the reserved `POST /api/__rpc/<method>` path
@@ -166,13 +170,13 @@ export interface EffectNuxtProps extends NuxtProps {
  * const text = await backend.hello(); // POST /api/__rpc/hello
  * ```
  *
- * @example Mounting the program (server/middleware/alchemy.ts)
- * The middleware is compiled by nitro itself, so it runs in the deployed
- * Lambda and in `nuxt dev` alike. Inside `options.routes` (default
- * `["/api/*"]`, exclusion globs supported) the effect fetch is
- * authoritative — its 404s are real 404s; outside them the middleware
- * no-ops, letting nitro continue to its own handlers.
+ * @example Escape hatch: mounting the program yourself
+ * Auto-injection stands down whenever the `server/` tree already mounts
+ * `alchemy/serve` explicitly (or with `server: { takeover: false }`), so
+ * a hand-written `server/middleware` mount keeps working unchanged — use
+ * it when you need to customize the mount itself:
  * ```typescript
+ * // server/middleware/alchemy.ts
  * import { toEventHandler } from "alchemy/serve/nitro";
  * import Site from "../../src/backend.ts";
  *
@@ -247,11 +251,21 @@ export const Nuxt: {
         attachLambdaServeShell(effectClass(makeNuxt(id, props, impl)))
     : makeNuxt(id, props, impl)) as any;
 
-const nuxtConfig = (props: NuxtProps): FrameworkSiteConfig => ({
+const nuxtConfig = (id: string, props: NuxtProps): FrameworkSiteConfig => ({
   name: "Nuxt",
   framework: NUXT_FRAMEWORK_SPECIFIER,
   target: NUXT_AWS_TARGET_SPECIFIER,
   options: props.nuxt ? { nuxt: props.nuxt } : undefined,
+  // Auto-inject (wrapper) tier: the framework integration writes the
+  // generated effect middleware under `<root>/.alchemy/nuxt/<id>/` and
+  // injects it through `nitro.handlers` — nitro compiles config-injected
+  // handlers into the aws-lambda prod bundle AND the dev SSR worker
+  // through the same virtual module, so ONE mechanism delivers deploy and
+  // dev dispatch. Only consulted on the impl arms; plain sites are
+  // untouched.
+  effectOptions: ({ mainPath, routes }) => ({
+    effect: { id, main: mainPath, routes: [...routes] },
+  }),
 });
 
 const makeNuxt = (
@@ -260,10 +274,12 @@ const makeNuxt = (
   impl?: Effect.Effect<any, any, any>,
 ): Effect.Effect<any, never, any> =>
   impl === undefined
-    ? makeFrameworkSite(id, props, nuxtConfig(props)).pipe(Namespace.push(id))
+    ? makeFrameworkSite(id, props, nuxtConfig(id, props)).pipe(
+        Namespace.push(id),
+      )
     : makeEffectFrameworkSite(
         id,
         props as EffectNuxtProps,
-        nuxtConfig(props),
+        nuxtConfig(id, props),
         impl,
       );
