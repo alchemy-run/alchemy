@@ -44,15 +44,18 @@ import type {
   KubernetesObjectDefinition,
   KubernetesObjectRef,
 } from "./internal/objects.ts";
+import type { ImageValue } from "./Image.ts";
 import {
   collectBindingEnv,
   connectionIdentity,
   connectionOfOutput,
   deepMerge,
   imagePlatformOf,
+  imageSourceKind,
   makeJobBootstrap,
   resolveWorkloadImage,
   tryConnectionOf,
+  usesManagedRegistry,
   workloadImageHash,
 } from "./internal/workload.ts";
 import type { Providers } from "./Providers.ts";
@@ -190,11 +193,10 @@ export interface DockerfileJobProps extends JobPropsBase {
 /** Run a pre-built registry image. */
 export interface ImageJobProps extends JobPropsBase {
   /**
-   * A pre-built image reference, e.g. `ghcr.io/acme/migrator:v3`. On
-   * clusters with a managed registry (EKS) the image is mirrored into it;
-   * elsewhere the reference is used verbatim.
+   * A pre-built image. A `string` is mirrored into the managed registry
+   * on EKS; {@link Image.ref} or `{ imageUri }` is used verbatim.
    */
-  image: string;
+  image: string | ImageValue;
 }
 
 export type JobProps = BundledJobProps | DockerfileJobProps | ImageJobProps;
@@ -429,14 +431,16 @@ export const JobProvider = () =>
               Effect.map((name) => name.replaceAll(/[^a-z0-9-]/g, "-")),
             );
 
+      const stableAttributes: Array<keyof Job["Attributes"]> = [
+        "connection",
+        "namespace",
+        "serviceAccountName",
+        "identity",
+        "registry",
+      ];
+
       return {
-        stables: [
-          "connection",
-          "namespace",
-          "serviceAccountName",
-          "identity",
-          "registry",
-        ],
+        stables: stableAttributes,
         // A Job's identity spans in-cluster Kubernetes objects plus
         // adapter-owned cloud resources — no single enumeration
         // reconstructs the composite, so enumeration is empty; `read`
@@ -458,6 +462,19 @@ export const JobProvider = () =>
             (olds.namespace ?? "default") !== (news.namespace ?? "default")
           ) {
             return { action: "replace" } as const;
+          }
+          const oldSource = olds as WorkloadImageSource;
+          const newSource = news as WorkloadImageSource;
+          if (
+            imageSourceKind(oldSource) !== undefined &&
+            usesManagedRegistry(oldSource) !== usesManagedRegistry(newSource)
+          ) {
+            return {
+              action: "update",
+              stables: stableAttributes.filter(
+                (attribute) => attribute !== "registry",
+              ),
+            } as const;
           }
           // Content drift (see Deployment).
           const connection = tryConnectionOf(news.cluster);

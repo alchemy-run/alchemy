@@ -13,6 +13,7 @@ import type { ResourceBinding } from "../../Resource.ts";
 import { Self } from "../../Self.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import type {
+  AdapterLifecycleServices,
   ClusterAdapterService,
   IdentityState,
   RegistryState,
@@ -20,6 +21,7 @@ import type {
   WorkloadImageSource,
 } from "../ClusterAdapter.ts";
 import type { ClusterLike, Connection, ConnectionAuth } from "../Connection.ts";
+import { directPullSpec, isDirectImage } from "../Image.ts";
 
 /**
  * Structural deep merge: objects merge recursively; arrays and primitives
@@ -168,6 +170,29 @@ export const imageSourceKind = (
         : undefined;
 
 /**
+ * True when this source goes through the cluster adapter's managed
+ * registry (ECR on EKS). `main` / `context` always do; a pre-built
+ * `image` string does; {@link Image.ref} and `{ imageUri }` do not.
+ */
+export const usesManagedRegistry = (source: WorkloadImageSource): boolean => {
+  const kind = imageSourceKind(source);
+  if (kind === "main" || kind === "context") return true;
+  if (kind === "image") return !isDirectImage(source.image);
+  return false;
+};
+
+/** Resolved pull spec for a pre-built image source, if one is known. */
+export const imagePullSpec = (
+  source: WorkloadImageSource,
+): string | undefined => {
+  if (imageSourceKind(source) !== "image" || source.image === undefined) {
+    return undefined;
+  }
+  if (typeof source.image === "string") return source.image;
+  return directPullSpec(source.image);
+};
+
+/**
  * Content hash for image sources whose identity is computable without a
  * bundler: `image` (the ref + platform) and `context` (the build-context
  * directory + Dockerfile content + platform). `main` returns `undefined`
@@ -179,10 +204,9 @@ export const computeStaticWorkloadImageHash = Effect.fn(function* (
 ) {
   const kind = imageSourceKind(source);
   if (kind === "image") {
-    return (yield* sha256Object({ image: source.image!, platform })).slice(
-      0,
-      16,
-    );
+    const spec = imagePullSpec(source);
+    if (spec === undefined) return undefined;
+    return (yield* sha256Object({ image: spec, platform })).slice(0, 16);
   }
   if (kind === "context") {
     if (
@@ -230,18 +254,62 @@ export interface ResolveWorkloadImageOptions {
   session: { note: (message: string) => Effect.Effect<void> };
 }
 
+export interface ResolvedWorkloadImage {
+  imageUri: string;
+  codeHash: string;
+  state: RegistryState | undefined;
+  /** Previous managed-registry state to delete after the new image is live. */
+  cleanupState: Record<string, unknown> | undefined;
+}
+
+const resolveDirectImage = Effect.fn(function* (
+  options: ResolveWorkloadImageOptions,
+) {
+  const spec = imagePullSpec(options.source);
+  if (spec === undefined) {
+    return yield* Effect.die(
+      new Error(
+        `'${options.id}': direct image did not resolve to a registry ` +
+          "reference. Pass Image.ref(...) or a resource with a string " +
+          "`imageUri` (Outputs must be resolved at deploy time).",
+      ),
+    );
+  }
+  const codeHash = (yield* computeStaticWorkloadImageHash(
+    options.source,
+    options.platform,
+  ))!;
+  return {
+    imageUri: spec,
+    codeHash,
+    state: undefined,
+    cleanupState:
+      options.adapter.registry === undefined ? undefined : options.state,
+  } satisfies ResolvedWorkloadImage;
+});
+
 /**
- * Resolve the container image for a workload: through the cluster
- * adapter's managed registry when it has one (build/mirror + push), or —
- * on registry-less clusters — pass a pre-built `image` reference through
- * verbatim. `main`/`context` sources require a managed registry.
+ * Resolve the container image for a workload.
+ *
+ * A pre-built {@link Image.ref} or `{ imageUri }` is used verbatim and
+ * never invokes the managed registry. A bare `image: string` is still
+ * mirrored when the cluster adapter has a registry (EKS → ECR) — the
+ * existing default. `main` / `context` always require a managed registry.
  */
 export const resolveWorkloadImage = Effect.fn(function* (
   options: ResolveWorkloadImageOptions,
-) {
+): Effect.fn.Return<
+  ResolvedWorkloadImage,
+  any,
+  AdapterLifecycleServices | FileSystem.FileSystem | Path.Path
+> {
   const { adapter, source } = options;
+  if (imageSourceKind(source) === "image" && isDirectImage(source.image)) {
+    return yield* resolveDirectImage(options);
+  }
+
   if (adapter.registry !== undefined) {
-    return yield* adapter.registry.resolve({
+    const resolved = yield* adapter.registry.resolve({
       id: options.id,
       source,
       platform: options.platform,
@@ -252,19 +320,12 @@ export const resolveWorkloadImage = Effect.fn(function* (
       state: options.state,
       session: options.session,
     });
+    return { ...resolved, cleanupState: undefined };
   }
 
   const kind = imageSourceKind(source);
   if (kind === "image") {
-    const codeHash = (yield* computeStaticWorkloadImageHash(
-      source,
-      options.platform,
-    ))!;
-    return {
-      imageUri: source.image!,
-      codeHash,
-      state: undefined,
-    };
+    return yield* resolveDirectImage(options);
   }
 
   return yield* Effect.die(
@@ -286,6 +347,15 @@ export const workloadImageHash = Effect.fn(function* (options: {
   isExternal?: boolean | undefined;
   bootstrap: (importPath: string) => string;
 }) {
+  if (
+    imageSourceKind(options.source) === "image" &&
+    isDirectImage(options.source.image)
+  ) {
+    return yield* computeStaticWorkloadImageHash(
+      options.source,
+      options.platform,
+    );
+  }
   if (options.adapter.registry !== undefined) {
     return yield* options.adapter.registry.hash({
       source: options.source,

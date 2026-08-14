@@ -40,15 +40,18 @@ import {
   type KubernetesObjectDefinition,
   type KubernetesObjectRef,
 } from "./internal/objects.ts";
+import type { ImageValue } from "./Image.ts";
 import {
   collectBindingEnv,
   connectionIdentity,
   connectionOfOutput,
   deepMerge,
   imagePlatformOf,
+  imageSourceKind,
   makeServerBootstrap,
   resolveWorkloadImage,
   tryConnectionOf,
+  usesManagedRegistry,
   workloadImageHash,
 } from "./internal/workload.ts";
 import type { Providers } from "./Providers.ts";
@@ -195,11 +198,17 @@ export interface DockerfileDeploymentProps extends DeploymentPropsBase {
 /** Run a pre-built registry image. */
 export interface ImageDeploymentProps extends DeploymentPropsBase {
   /**
-   * A pre-built image reference, e.g. `nginx:1.27`. On clusters with a
-   * managed registry (EKS) the image is mirrored into it; elsewhere the
-   * reference is used verbatim.
+   * A pre-built image.
+   *
+   * - `string` — on EKS, mirrored into a per-deployment ECR repository
+   *   (existing behaviour). On registry-less clusters the string is used
+   *   verbatim.
+   * - {@link Image.ref} — used verbatim; the cluster must be able to pull
+   *   it. Does not invoke the managed registry.
+   * - `{ imageUri }` — a produced image resource (e.g. `AWS.ECR.Image`).
+   *   Same as {@link Image.ref}: the uri is written onto the pod spec.
    */
-  image: string;
+  image: string | ImageValue;
 }
 
 export type DeploymentProps =
@@ -294,6 +303,25 @@ export interface DeploymentRuntimeContext extends HostRuntimeContext {
  * });
  * nginx.url;            // LB URL, e.g. "http://k8s-….elb.amazonaws.com"
  * nginx.deploymentName; // K8s-native attrs
+ * ```
+ *
+ * @example Pull a pre-built image directly (skip the EKS mirror)
+ * ```typescript
+ * const cache = yield* Kubernetes.Deployment("Cache", {
+ *   cluster,
+ *   image: Kubernetes.Image.ref(
+ *     "2956….dkr.ecr.us-east-1.amazonaws.com/apps@sha256:…",
+ *   ),
+ * });
+ * ```
+ *
+ * @example Run an image produced by AWS.ECR.Image
+ * ```typescript
+ * const apiImage = yield* AWS.ECR.Image("ApiImage", { context: "./api" });
+ * const api = yield* Kubernetes.Deployment("Api", {
+ *   cluster,
+ *   image: apiImage,
+ * });
  * ```
  *
  * @example Any cluster via kubeconfig
@@ -450,6 +478,37 @@ const retryUntilServiceReady = <A, E, R>(
 const isNotFound = (error: unknown): error is KubernetesApiError =>
   error instanceof KubernetesApiError && error.statusCode === 404;
 
+interface ObservedDeployment {
+  metadata?: { generation?: number };
+  spec?: { replicas?: number; progressDeadlineSeconds?: number };
+  status?: {
+    observedGeneration?: number;
+    replicas?: number;
+    updatedReplicas?: number;
+    availableReplicas?: number;
+  };
+}
+
+/** Kubernetes' completed-rollout conditions, exposed for unit testing. */
+export const isDeploymentRolloutComplete = (
+  deployment: ObservedDeployment,
+): boolean => {
+  const generation = deployment.metadata?.generation;
+  const desired = deployment.spec?.replicas ?? 1;
+  const status = deployment.status;
+  return (
+    generation !== undefined &&
+    (status?.observedGeneration ?? -1) >= generation &&
+    (status?.updatedReplicas ?? 0) === desired &&
+    (status?.replicas ?? 0) === desired &&
+    (status?.availableReplicas ?? 0) === desired
+  );
+};
+
+class DeploymentRolloutPending extends Data.TaggedError(
+  "Kubernetes.DeploymentRolloutPending",
+) {}
+
 export const DeploymentProvider = () =>
   Provider.effect(
     Deployment,
@@ -498,16 +557,44 @@ export const DeploymentProvider = () =>
           ),
         );
 
+      const stableAttributes: Array<keyof Deployment["Attributes"]> = [
+        "connection",
+        "namespace",
+        "serviceAccountName",
+        "deploymentName",
+        "serviceName",
+        "identity",
+        "registry",
+      ];
+
+      const waitForDeploymentRollout = (
+        transport: ClusterTransport,
+        deployment: KubernetesObjectDefinition,
+      ) => {
+        const deadlineSeconds =
+          (deployment.spec as { progressDeadlineSeconds?: number })
+            .progressDeadlineSeconds ?? 600;
+        return readObject({
+          transport,
+          object: toKubernetesObjectRef(deployment),
+        }).pipe(
+          Effect.flatMap((observed) =>
+            isDeploymentRolloutComplete(observed as ObservedDeployment)
+              ? Effect.succeed(observed)
+              : Effect.fail(new DeploymentRolloutPending()),
+          ),
+          Effect.retry({
+            while: (error) => error instanceof DeploymentRolloutPending,
+            schedule: Schedule.max([
+              Schedule.spaced("5 seconds"),
+              Schedule.recurs(Math.ceil(deadlineSeconds / 5)),
+            ]),
+          }),
+        );
+      };
+
       return {
-        stables: [
-          "connection",
-          "namespace",
-          "serviceAccountName",
-          "deploymentName",
-          "serviceName",
-          "identity",
-          "registry",
-        ],
+        stables: stableAttributes,
         // A Deployment's identity spans in-cluster Kubernetes objects plus
         // adapter-owned cloud resources (identity role, image repository).
         // There is no single enumeration that faithfully reconstructs that
@@ -538,6 +625,21 @@ export const DeploymentProvider = () =>
             (olds.namespace ?? "default") !== (news.namespace ?? "default")
           ) {
             return { action: "replace" } as const;
+          }
+          const oldSource = olds as WorkloadImageSource;
+          const newSource = news as WorkloadImageSource;
+          if (
+            imageSourceKind(oldSource) !== undefined &&
+            usesManagedRegistry(oldSource) !== usesManagedRegistry(newSource)
+          ) {
+            return {
+              action: "update",
+              // Registry ownership changes when a mirrored string becomes
+              // Image.ref / { imageUri }, or the reverse.
+              stables: stableAttributes.filter(
+                (attribute) => attribute !== "registry",
+              ),
+            } as const;
           }
           // Content drift: the props don't change when files under a build
           // context (or the bundled program) do, so surface hash drift as
@@ -778,6 +880,14 @@ export const DeploymentProvider = () =>
           yield* session.note(
             `Applied Kubernetes Deployment ${namespace}/${baseName}`,
           );
+
+          if (resolved.cleanupState !== undefined && adapter.registry) {
+            yield* waitForDeploymentRollout(transport, deploymentObject);
+            yield* adapter.registry.delete({ state: resolved.cleanupState });
+            yield* session.note(
+              `Removed previous managed image registry for ${namespace}/${baseName}`,
+            );
+          }
 
           // Resolve the LoadBalancer URL if applicable. The cloud listener
           // is the Service `port` (Kubernetes maps `spec.ports[].port` 1:1
