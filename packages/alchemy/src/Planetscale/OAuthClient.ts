@@ -62,25 +62,31 @@ export const OAUTH_CLIENT_SECRET = env(
   "pscale_app_secret_yyZ3Q8oe99GP9_yA5wrA5er6RuN6Lz9dC66Bj1OJzpg",
 );
 
+export const OAUTH_LOCAL_CALLBACK_URI = "http://localhost:9976/auth/callback";
+
 /**
  * PlanetScale validates `redirect_uri` against the OAuth application's
  * registered redirect URIs with an **exact string match** at the authorize
- * step, before consent. If the registration drifts from this constant the
- * user sees `invalid redirect uri` and no code is ever issued (#1166).
- * Note the live page 307s to `/auth/callback/` (trailing slash) — the
- * registered URI must match what the CLI sends, not the canonical URL.
+ * step, before consent — a mismatch shows `invalid redirect uri` and no
+ * code is ever issued.
  *
- * Override with `ALCHEMY_PLANETSCALE_OAUTH_REDIRECT_URI` (together with the
- * client id/secret overrides above) to use a self-registered PlanetScale
- * OAuth application. Registering `http://localhost:9976/auth/callback` and
- * setting it as the override skips the hosted relay entirely — the CLI's
- * loopback server receives the callback directly.
+ * The app's registered Redirect URI must be exactly this value, with no
+ * trailing slash — the live relay page 307s to `/auth/callback/`, but the
+ * registered value must match what the CLI *sends*, not the canonical URL.
+ * #962 switched this constant from the loopback URI to the hosted relay
+ * while the app registration still listed only the loopback URI, which
+ * broke PlanetScale login with `invalid redirect uri` until the
+ * registration was updated to match (#1166). If these ever drift again,
+ * that error at the authorize step (before consent) is the symptom.
+ *
+ * Override with `ALCHEMY_PLANETSCALE_OAUTH_REDIRECT_URI` (together with
+ * the client id/secret overrides above) to use a self-registered
+ * PlanetScale OAuth application.
  */
 export const OAUTH_REDIRECT_URI = env(
   "ALCHEMY_PLANETSCALE_OAUTH_REDIRECT_URI",
   "https://alchemy.run/auth/callback",
 );
-export const OAUTH_LOCAL_CALLBACK_URI = "http://localhost:9976/auth/callback";
 export const OAUTH_ENDPOINTS = {
   // PlanetScale's own .well-known OAuth discovery doc declares this as
   // the authorization_endpoint — NOT auth.planetscale.com/oauth/authorize
