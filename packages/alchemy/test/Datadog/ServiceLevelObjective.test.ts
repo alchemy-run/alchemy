@@ -50,6 +50,25 @@ test.provider.skipIf(!hasDatadogCreds)(
       expect(deployed.id).toBeTruthy();
       expect(deployed.name).toEqual(METRIC_SLO_NAME);
       expect(deployed.type).toEqual("metric");
+      expect(
+        deployed.tags?.some((tag) => tag.startsWith("alchemy_stack:")),
+      ).toBe(true);
+      expect(
+        deployed.tags?.some((tag) => tag.startsWith("alchemy_stage:")),
+      ).toBe(true);
+      expect(deployed.tags?.some((tag) => tag.startsWith("alchemy_id:"))).toBe(
+        true,
+      );
+
+      const provider = yield* Provider.findProvider(
+        Datadog.ServiceLevelObjective,
+      );
+      const all = yield* provider.list();
+      const found = all.find((s) => s.id === deployed.id);
+      expect(found).toBeDefined();
+      expect(found?.tags?.some((tag) => tag.startsWith("alchemy_stack:"))).toBe(
+        true,
+      );
 
       // Update in place — tighten the target. The id must be stable.
       const updated = yield* stack.deploy(
@@ -75,9 +94,6 @@ test.provider.skipIf(!hasDatadogCreds)(
 
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Datadog.ServiceLevelObjective,
-      );
       const afterDestroy = yield* provider.list();
       expect(afterDestroy.find((s) => s.id === deployed.id)).toBeUndefined();
     }).pipe(logLevel),

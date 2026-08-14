@@ -4,6 +4,11 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import type { Providers } from "./Providers.ts";
+import {
+  createDatadogOwnershipTags,
+  hasDatadogStackOwnershipTags,
+  withDatadogOwnershipTags,
+} from "./Tags.ts";
 
 /**
  * Desired state of a Datadog Service Level Objective — the Datadog
@@ -149,11 +154,19 @@ export const ServiceLevelObjectiveProvider = () =>
         // is the same shape `read` produces.
         list: () =>
           Effect.gen(function* () {
+            const [stackTag] = yield* createDatadogOwnershipTags();
             const all: ServiceLevelObjectiveAttributes[] = [];
             for (let offset = 0; ; offset += PAGE_SIZE) {
-              const res = yield* list({ limit: PAGE_SIZE, offset });
+              const res = yield* list({
+                limit: PAGE_SIZE,
+                offset,
+                tags_query: stackTag,
+              });
               const batch = res.data ?? [];
-              all.push(...batch);
+              const owned = yield* Effect.filter(batch, (slo) =>
+                hasDatadogStackOwnershipTags(slo.tags),
+              );
+              all.push(...owned);
               if (batch.length < PAGE_SIZE) break;
             }
             return all;
@@ -165,7 +178,12 @@ export const ServiceLevelObjectiveProvider = () =>
           }
           return undefined;
         }),
-        reconcile: Effect.fn(function* ({ news, output }) {
+        reconcile: Effect.fn(function* ({ id, news, output }) {
+          const desired = {
+            ...news,
+            tags: yield* withDatadogOwnershipTags(id, news.tags),
+          };
+
           // Observe — the SLO id is server-assigned; probe with the cached
           // `output.id` and treat NotFound (deleted out-of-band) as "no
           // observed state" so we converge by re-creating.
@@ -180,14 +198,14 @@ export const ServiceLevelObjectiveProvider = () =>
 
           // Ensure — POST mints a new SLO with a fresh id.
           if (existingId === undefined || observed === undefined) {
-            return yield* create(news).pipe(
+            return yield* create(desired).pipe(
               Effect.flatMap((res) => single(res, "create")),
             );
           }
 
           // Sync — PUT replaces the SLO definition with the desired props.
           // `type` changes are replacement-only (handled in diff).
-          return yield* update({ ...news, slo_id: existingId }).pipe(
+          return yield* update({ ...desired, slo_id: existingId }).pipe(
             Effect.flatMap((res) => single(res, "update")),
           );
         }),

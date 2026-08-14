@@ -15,6 +15,7 @@ export {
 } from "./Binding.ts";
 export * from "./Destroy.ts";
 export * from "./Diff.ts";
+export * as Datadog from "./Datadog/index.ts";
 export * from "./Input.ts";
 export * from "./InstanceId.ts";
 export * from "./KeyPair.ts";

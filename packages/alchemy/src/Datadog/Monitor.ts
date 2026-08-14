@@ -4,6 +4,11 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import type { Providers } from "./Providers.ts";
+import {
+  createDatadogOwnershipTags,
+  hasDatadogStackOwnershipTags,
+  withDatadogOwnershipTags,
+} from "./Tags.ts";
 
 /**
  * Desired state of a Datadog monitor — the Datadog `CreateMonitor` request
@@ -118,10 +123,18 @@ export const MonitorProvider = () =>
         // directly usable by `delete` with no follow-up get.
         list: () =>
           Effect.gen(function* () {
+            const [stackTag, stageTag] = yield* createDatadogOwnershipTags();
             const all: MonitorAttributes[] = [];
             for (let page = 0; ; page++) {
-              const batch = yield* list({ page, page_size: PAGE_SIZE });
-              all.push(...batch);
+              const batch = yield* list({
+                page,
+                page_size: PAGE_SIZE,
+                monitor_tags: [stackTag, stageTag].join(","),
+              });
+              const owned = yield* Effect.filter(batch, (monitor) =>
+                hasDatadogStackOwnershipTags(monitor.tags),
+              );
+              all.push(...owned);
               if (batch.length < PAGE_SIZE) break;
             }
             return all;
@@ -133,7 +146,12 @@ export const MonitorProvider = () =>
           }
           return undefined;
         }),
-        reconcile: Effect.fn(function* ({ news, output }) {
+        reconcile: Effect.fn(function* ({ id, news, output }) {
+          const desired = {
+            ...news,
+            tags: yield* withDatadogOwnershipTags(id, news.tags),
+          };
+
           // Observe — Datadog assigns the monitor id server-side, so the only
           // handle to a previously-created monitor is the cached `output.id`.
           // Treat NotFound (deleted out-of-band) as "no observed state" so we
@@ -148,12 +166,12 @@ export const MonitorProvider = () =>
 
           // Ensure — POST mints a new monitor with a fresh id.
           if (existingId === undefined || observed === undefined) {
-            return yield* create(news);
+            return yield* create(desired);
           }
 
           // Sync — PUT replaces the monitor definition with the desired
           // props. `type` changes are replacement-only (handled in diff).
-          return yield* update({ ...news, monitor_id: existingId });
+          return yield* update({ ...desired, monitor_id: existingId });
         }),
         delete: Effect.fn(function* ({ output }) {
           if (output.id === undefined) return;

@@ -56,9 +56,19 @@ test.provider.skipIf(!hasDatadogCreds)(
       // Datadog normalizes between the equivalent "query alert" /
       // "metric alert" pair, so accept either.
       expect(["query alert", "metric alert"]).toContain(deployed.type);
+      expect(
+        deployed.tags?.some((tag) => tag.startsWith("alchemy_stack:")),
+      ).toBe(true);
+      expect(
+        deployed.tags?.some((tag) => tag.startsWith("alchemy_stage:")),
+      ).toBe(true);
+      expect(deployed.tags?.some((tag) => tag.startsWith("alchemy_id:"))).toBe(
+        true,
+      );
 
       // list() paginates the account's monitors and hydrates each row into
-      // the exact `read` Attributes shape.
+      // the exact `read` Attributes shape, limited to this stack's owned
+      // Datadog resources.
       const provider = yield* Provider.findProvider(Datadog.Monitor);
       const all = yield* provider.list();
       const found = all.find((m) => m.id === deployed.id);
