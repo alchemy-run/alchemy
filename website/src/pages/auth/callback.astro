@@ -36,7 +36,7 @@ import Auth from "../../layouts/Auth.astro";
 
   const showManual = () => {
     connecting.textContent = error
-      ? "Cloudflare did not authorize the request."
+      ? "The provider did not authorize the request."
       : "Couldn't connect to your local Alchemy process.";
     if (!code || !state) return;
     codeBox.textContent = `${code}#${state}`;

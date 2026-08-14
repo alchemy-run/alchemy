@@ -41,12 +41,45 @@ export interface Authorization {
  * {@link OAUTH_REDIRECT_URI}. Scopes are configured on the application
  * itself, not requested per-authorization. Rotate by registering a new
  * secret and cutting a release.
+ *
+ * All three values (client id, client secret, redirect URI) can be
+ * overridden via `ALCHEMY_PLANETSCALE_OAUTH_CLIENT_ID` /
+ * `ALCHEMY_PLANETSCALE_OAUTH_CLIENT_SECRET` /
+ * `ALCHEMY_PLANETSCALE_OAUTH_REDIRECT_URI` to point the CLI at a
+ * self-registered PlanetScale OAuth application.
  */
-export const OAUTH_CLIENT_ID = "pscale_app_aa12e3938baebb788aac443f66e422da";
-export const OAUTH_CLIENT_SECRET =
-  "pscale_app_secret_yyZ3Q8oe99GP9_yA5wrA5er6RuN6Lz9dC66Bj1OJzpg";
+const env = (key: string, fallback: string): string => {
+  const value = process.env[key];
+  return value !== undefined && value !== "" ? value : fallback;
+};
 
-export const OAUTH_REDIRECT_URI = "https://alchemy.run/auth/callback";
+export const OAUTH_CLIENT_ID = env(
+  "ALCHEMY_PLANETSCALE_OAUTH_CLIENT_ID",
+  "pscale_app_aa12e3938baebb788aac443f66e422da",
+);
+export const OAUTH_CLIENT_SECRET = env(
+  "ALCHEMY_PLANETSCALE_OAUTH_CLIENT_SECRET",
+  "pscale_app_secret_yyZ3Q8oe99GP9_yA5wrA5er6RuN6Lz9dC66Bj1OJzpg",
+);
+
+/**
+ * PlanetScale validates `redirect_uri` against the OAuth application's
+ * registered redirect URIs with an **exact string match** at the authorize
+ * step, before consent. If the registration drifts from this constant the
+ * user sees `invalid redirect uri` and no code is ever issued (#1166).
+ * Note the live page 307s to `/auth/callback/` (trailing slash) — the
+ * registered URI must match what the CLI sends, not the canonical URL.
+ *
+ * Override with `ALCHEMY_PLANETSCALE_OAUTH_REDIRECT_URI` (together with the
+ * client id/secret overrides above) to use a self-registered PlanetScale
+ * OAuth application. Registering `http://localhost:9976/auth/callback` and
+ * setting it as the override skips the hosted relay entirely — the CLI's
+ * loopback server receives the callback directly.
+ */
+export const OAUTH_REDIRECT_URI = env(
+  "ALCHEMY_PLANETSCALE_OAUTH_REDIRECT_URI",
+  "https://alchemy.run/auth/callback",
+);
 export const OAUTH_LOCAL_CALLBACK_URI = "http://localhost:9976/auth/callback";
 export const OAUTH_ENDPOINTS = {
   // PlanetScale's own .well-known OAuth discovery doc declares this as
