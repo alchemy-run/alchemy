@@ -1,0 +1,13 @@
+{
+  "runtime": "nodejs22.x",
+  "handler": "index.mjs",
+  "launcherType": "Nodejs",
+  "supportsResponseStreaming": true,
+  "experimentalTriggers": [
+    {
+      "type": "queue/v2beta",
+      "topic": "alchemy-queues-foundation",
+      "consumer": "alchemy-platform"
+    }
+  ]
+}

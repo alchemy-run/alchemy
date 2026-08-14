@@ -30,6 +30,7 @@ import { GitHubAuth } from "../../GitHub/AuthProvider.ts";
 import { NeonAuth } from "../../Neon/AuthProvider.ts";
 import { PlanetscaleAuth } from "../../Planetscale/AuthProvider.ts";
 import { PrismaAuth } from "../../Prisma/AuthProvider.ts";
+import { VercelAuth } from "../../Vercel/AuthProvider.ts";
 import * as Stack from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import { recordCli } from "../../Telemetry/Metrics.ts";
@@ -462,6 +463,7 @@ export const builtinAuth = Layer.mergeAll(
   NeonAuth,
   PlanetscaleAuth,
   PrismaAuth,
+  VercelAuth,
 );
 
 /**
