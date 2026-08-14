@@ -63,15 +63,29 @@ const toWebRequest = async (
   const host = headers.get("host") ?? "localhost";
   const url = new URL(event.path ?? req.url ?? "/", `${proto}://${host}`);
   const method = (event.method ?? req.method ?? "GET").toUpperCase();
-  let body: ReadableStream | undefined;
+  let body: BodyInit | undefined;
   if (method !== "GET" && method !== "HEAD") {
-    // Lazy, non-bundleable import: only the node runtime reaches this
-    // branch (workerd nitro events carry `event.web.request`).
-    const { Readable } = await import(
-      /* @vite-ignore */ /* webpackIgnore: true */
-      DO_NOT_BUNDLE + "node:stream"
-    );
-    body = Readable.toWeb(req) as ReadableStream;
+    // Server-preset mocks (nitro's aws-lambda entry) hand h3 a mock
+    // IncomingMessage that carries the already-decoded event body as a
+    // property and never emits it as a stream — streaming such a req
+    // yields an EMPTY body (the deployed rpc POST decoded to a JSON
+    // defect). Mirror h3's readRawBody source order: a stashed
+    // rawBody/body wins; a real socket-backed req streams.
+    const mock = req as { rawBody?: unknown; body?: unknown };
+    const raw = mock.rawBody ?? mock.body;
+    if (typeof raw === "string") {
+      body = raw;
+    } else if (raw instanceof Uint8Array) {
+      body = new Uint8Array(raw);
+    } else {
+      // Lazy, non-bundleable import: only the node runtime reaches this
+      // branch (workerd nitro events carry `event.web.request`).
+      const { Readable } = await import(
+        /* @vite-ignore */ /* webpackIgnore: true */
+        DO_NOT_BUNDLE + "node:stream"
+      );
+      body = Readable.toWeb(req) as ReadableStream;
+    }
   }
   return new Request(url, {
     method,
