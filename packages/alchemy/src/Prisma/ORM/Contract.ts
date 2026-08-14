@@ -12,6 +12,7 @@ import {
   type PlanResult,
   PrismaNextError,
   readMigrationPackages,
+  rewriteEmittedTypes,
   resolveGraphHead,
   runPrismaNext,
 } from "./internal.ts";
@@ -285,6 +286,9 @@ export const ContractProvider = () =>
             `${output ? "Re-emitting" : "Emitting"} prisma-next contract`,
           );
           const emitted = yield* emit(news);
+          // TS-authored emits leak unpublished @internal/* specifiers in
+          // rc.1; rewrite them to the public subpaths (no-op for PSL).
+          yield* rewriteEmittedTypes(emitted.files.dts);
           const migrationsDir = resolveMigrationsDir(news);
           let packages = yield* readMigrationPackages(migrationsDir);
           const head = resolveGraphHead(packages);

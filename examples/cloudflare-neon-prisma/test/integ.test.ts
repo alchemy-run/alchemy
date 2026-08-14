@@ -29,7 +29,7 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 const { getWhenReady } = Test;
 
 interface UserRow {
-  id: number;
+  id: string;
   email: string;
   name: string;
   posts?: unknown[];
@@ -66,7 +66,7 @@ test(
     const { user: createdUser } = (yield* createResponse.json) as unknown as {
       user: UserRow;
     };
-    expect(createdUser.id).toBeNumber();
+    expect(createdUser.id).toBeString();
     expect(createdUser.email).toBeString();
 
     const readResponse = yield* HttpClient.get(`${baseUrl}/${createdUser.id}`);
@@ -80,8 +80,11 @@ test(
       posts: [],
     });
 
-    const invalidReadResponse = yield* HttpClient.get(`${baseUrl}/not-a-user`);
-    expect(invalidReadResponse.status).toBe(400);
+    const missingResponse = yield* HttpClient.get(
+      `${baseUrl}/00000000-0000-0000-0000-000000000000`,
+    );
+    expect(missingResponse.status).toBe(200);
+    expect(yield* missingResponse.json).toEqual({ user: null });
 
     const deleteResponse = yield* HttpClient.execute(
       HttpClientRequest.delete(`${baseUrl}/${createdUser.id}`),

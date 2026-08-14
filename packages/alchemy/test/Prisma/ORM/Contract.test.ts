@@ -45,6 +45,33 @@ const PLACEHOLDER_CONTRACT_SOURCE = CONTRACT_SOURCE.replace(
   "name  String",
 );
 
+const TS_CONFIG_SOURCE = `
+import { defineConfig } from "@prisma/orm-postgres/config";
+
+export default defineConfig({
+  contract: "./contract.ts",
+  output: "./generated",
+});
+`;
+
+// The TypeScript-authored form (Prisma 8's headline direction): the same
+// contract as CONTRACT_SOURCE, via the defineContract builder DSL.
+const TS_CONTRACT_SOURCE = `
+import { defineContract } from "@prisma/orm-postgres/contract-builder";
+
+export const contract = defineContract({}, ({ field, model }) => ({
+  models: {
+    User: model("User", {
+      fields: {
+        id: field.id.uuidv7String(),
+        email: field.text().unique(),
+        name: field.text().optional(),
+      },
+    }),
+  },
+}));
+`;
+
 const stageWorkspace = (contractSource: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -187,6 +214,45 @@ test.provider(
       const newMeta = yield* readPackageMeta(ws.migrationsDir, newDir!);
       expect(newMeta.from).toEqual(initialMeta.to);
       expect(newMeta.to).toEqual(drifted.contractHash);
+    }),
+);
+
+test.provider(
+  "TypeScript-authored contracts emit, plan, and get resolvable types",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const ws = yield* stageWorkspace(CONTRACT_SOURCE);
+      // Swap in the TS-authored form of the same workspace.
+      yield* fs.remove(ws.contractPath);
+      yield* fs.writeFileString(
+        path.join(ws.root, "prisma-next.config.ts"),
+        TS_CONFIG_SOURCE,
+      );
+      yield* fs.writeFileString(
+        path.join(ws.root, "contract.ts"),
+        TS_CONTRACT_SOURCE,
+      );
+
+      const contract = yield* stack.deploy(
+        Prisma.Contract("ts-contract", { config: ws.configPath }),
+      );
+
+      const dirs = yield* readPackageDirs(ws.migrationsDir);
+      expect(dirs).toHaveLength(1);
+      expect((yield* readPackageMeta(ws.migrationsDir, dirs[0]!)).to).toEqual(
+        contract.contractHash,
+      );
+
+      // rc.1 emits unpublished @internal/* specifiers for TS-authored
+      // contracts; the resource must rewrite them to the public subpaths or
+      // the emitted types cannot resolve in a user project.
+      const dts = yield* fs.readFileString(
+        path.join(ws.root, "generated", "contract.d.ts"),
+      );
+      expect(dts).not.toContain("@internal/");
+      expect(dts).toContain("@prisma/orm-postgres/");
     }),
 );
 

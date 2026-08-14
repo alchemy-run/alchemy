@@ -209,6 +209,55 @@ export interface MigrateShowResult {
 }
 
 /**
+ * prisma-next 8.0.0-rc.1 bug workaround: `contract emit` for a
+ * **TypeScript-authored** contract writes the Prisma monorepo's `@internal/*`
+ * aliases into `contract.d.ts` instead of the public `@prisma/orm-postgres/*`
+ * subpaths (PSL-authored emits map them correctly). Those packages are not
+ * published, so the emitted types would not resolve in a user project.
+ * Longest-prefix-first so `sql-contract` is not eaten by `contract`.
+ */
+const INTERNAL_SPECIFIER_REWRITES: ReadonlyArray<readonly [string, string]> = [
+  ["@internal/adapter-postgres/", "@prisma/orm-postgres/adapter/"],
+  ["@internal/target-postgres/", "@prisma/orm-postgres/target/"],
+  ["@internal/sql-contract/", "@prisma/orm-postgres/family-contract/"],
+  ["@internal/contract/", "@prisma/orm-postgres/contract/"],
+];
+
+/**
+ * Rewrite leaked `@internal/*` import specifiers in an emitted
+ * `contract.d.ts` to their public `@prisma/orm-postgres/*` equivalents.
+ * A no-op for PSL-authored emits (which never contain them); fails
+ * actionably if an unmapped `@internal/*` specifier remains.
+ */
+export const rewriteEmittedTypes = (dtsPath: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const exists = yield* fs.exists(dtsPath);
+    if (!exists) return;
+    const original = yield* fs.readFileString(dtsPath);
+    if (!original.includes("@internal/")) return;
+    let rewritten = original;
+    for (const [internal, publicPrefix] of INTERNAL_SPECIFIER_REWRITES) {
+      rewritten = rewritten.replaceAll(internal, publicPrefix);
+    }
+    if (rewritten.includes("@internal/")) {
+      const leftover = rewritten
+        .split("\n")
+        .find((line) => line.includes("@internal/"));
+      return yield* Effect.fail(
+        new PrismaNextError({
+          message: [
+            `Emitted ${dtsPath} references an unpublished @internal/* module this`,
+            `integration does not know how to map yet: ${leftover?.trim()}`,
+            "Please report this — the emitted types will not resolve until it is mapped.",
+          ].join("\n"),
+        }),
+      );
+    }
+    yield* fs.writeFileString(dtsPath, rewritten);
+  });
+
+/**
  * One on-disk migration package under `{migrationsDir}/app/`.
  *
  * `opsEmpty` distinguishes a fully-emitted package (`ops.json` holds the

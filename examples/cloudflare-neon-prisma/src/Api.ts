@@ -28,13 +28,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
               const users = yield* db.orm.public.User.all();
               return yield* HttpServerResponse.json({ users });
             }
-            const id = Number(request.url.split("/").pop());
-            if (Number.isNaN(id)) {
-              return yield* HttpServerResponse.json(
-                { error: "Invalid user ID" },
-                { status: 400 },
-              );
-            }
+            const id = request.url.split("/").pop() ?? "";
             const user = yield* db.orm.public.User.where({ id })
               .include("posts")
               .first();
@@ -48,13 +42,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
             return yield* HttpServerResponse.json({ user });
           }
           case "DELETE": {
-            const id = Number(request.url.split("/").pop());
-            if (Number.isNaN(id)) {
-              return yield* HttpServerResponse.json(
-                { error: "Invalid user ID" },
-                { status: 400 },
-              );
-            }
+            const id = request.url.split("/").pop() ?? "";
             const user = yield* db.orm.public.User.where({ id }).delete();
             return yield* HttpServerResponse.json({ user });
           }

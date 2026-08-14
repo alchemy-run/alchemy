@@ -40,28 +40,46 @@ Install the toolchain — all optional peers of alchemy:
 
 ## Define the contract
 
-Prisma v8 is contract-first: your models live in a `contract.prisma`
-(or a TypeScript builder), and everything — types, runtime IR, the
-migration graph — derives from it:
+Prisma v8 is contract-first, and TypeScript is the headline authoring
+form — models are code, built with the `defineContract` DSL.
+Everything — types, runtime IR, the migration graph — derives from
+it:
 
-```prisma
-// src/prisma/contract.prisma
-// use prisma-next
+```typescript
+// src/prisma/contract.ts
+import { defineContract } from "@prisma/orm-postgres/contract-builder";
 
-model User {
-  id    Int     @id @default(autoincrement())
-  email String  @unique
-  name  String?
-  posts Post[]
-}
+export const contract = defineContract({}, ({ field, model, rel }) => ({
+  models: {
+    User: model("User", {
+      fields: {
+        id: field.id.uuidv7String(),
+        email: field.text().unique(),
+        name: field.text(),
+        createdAt: field.temporal.createdAt(),
+      },
+      relations: {
+        posts: rel.hasMany("Post", { by: "authorId" }),
+      },
+    }),
 
-model Post {
-  id       Int    @id @default(autoincrement())
-  title    String
-  author   User   @relation(fields: [authorId], references: [id])
-  authorId Int
-}
+    Post: model("Post", {
+      fields: {
+        id: field.id.uuidv7String(),
+        title: field.text(),
+        authorId: field.uuidString(),
+      },
+      relations: {
+        author: rel.belongsTo("User", { from: "authorId", to: "id" }),
+      },
+    }),
+  },
+}));
 ```
+
+The classic `.prisma` schema language is equally supported — point
+the config at a `contract.prisma` instead and everything downstream
+is identical.
 
 ## Point the config at it
 
@@ -73,7 +91,7 @@ toolchain — the CLI and alchemy's resources both read it:
 import { defineConfig } from "@prisma/orm-postgres/config";
 
 export default defineConfig({
-  contract: "./src/prisma/contract.prisma",
+  contract: "./src/prisma/contract.ts",
   output: "./src/prisma", // contract.json + contract.d.ts land here
 });
 ```

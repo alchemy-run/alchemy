@@ -1,6 +1,6 @@
 #!/usr/bin/env -S bun
-import type { Contract as End } from '../../snapshots/ad16c7a3be66d13eaf7649d6221b01a7aaae06660363090d433ca20af1d6b31a/contract';
-import endContract from '../../snapshots/ad16c7a3be66d13eaf7649d6221b01a7aaae06660363090d433ca20af1d6b31a/contract.json' with { type: 'json' };
+import type { Contract as End } from '../../snapshots/90a59ca7b970821d3fe8a749c47d63209f96e0a56aa295c7c14fba0078872574/contract';
+import endContract from '../../snapshots/90a59ca7b970821d3fe8a749c47d63209f96e0a56aa295c7c14fba0078872574/contract.json' with { type: 'json' };
 import { Migration, MigrationCLI, col, fn, primaryKey } from '@prisma/orm-postgres/migration';
 
 export default class M extends Migration<never, End> {
@@ -11,17 +11,23 @@ export default class M extends Migration<never, End> {
       this.createSchema({ schema: 'public' }),
       this.createTable({
         schema: 'public',
-        table: 'post',
+        table: 'Post',
         columns: [
-          col('authorId', 'int4', { notNull: true, codecRef: { codecId: 'pg/int4@1' } }),
-          col('id', 'SERIAL', { notNull: true, codecRef: { codecId: 'pg/int4@1' } }),
+          col('authorId', 'character(36)', {
+            notNull: true,
+            codecRef: { codecId: 'sql/char@1', typeParams: { length: 36 } },
+          }),
+          col('id', 'character(36)', {
+            notNull: true,
+            codecRef: { codecId: 'sql/char@1', typeParams: { length: 36 } },
+          }),
           col('title', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
         ],
         constraints: [primaryKey(['id'])],
       }),
       this.createTable({
         schema: 'public',
-        table: 'user',
+        table: 'User',
         columns: [
           col('createdAt', 'timestamptz', {
             notNull: true,
@@ -29,31 +35,19 @@ export default class M extends Migration<never, End> {
             codecRef: { codecId: 'pg/timestamptz@1' },
           }),
           col('email', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
-          col('id', 'SERIAL', { notNull: true, codecRef: { codecId: 'pg/int4@1' } }),
+          col('id', 'character(36)', {
+            notNull: true,
+            codecRef: { codecId: 'sql/char@1', typeParams: { length: 36 } },
+          }),
           col('name', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
         ],
         constraints: [primaryKey(['id'])],
       }),
       this.addUnique({
         schema: 'public',
-        table: 'user',
-        constraint: 'user_email_key',
+        table: 'User',
+        constraint: 'User_email_key',
         columns: ['email'],
-      }),
-      this.createIndex({
-        schema: 'public',
-        table: 'post',
-        index: 'post_authorId_idx_e47547ed',
-        columns: ['authorId'],
-      }),
-      this.addForeignKey({
-        schema: 'public',
-        table: 'post',
-        foreignKey: {
-          name: 'post_authorId_fkey',
-          columns: ['authorId'],
-          references: { schema: 'public', table: 'user', columns: ['id'] },
-        },
       }),
     ];
   }
