@@ -60,7 +60,7 @@ import { envString, hasStackMarkers } from "../../Serve/Env.ts";
 import { DEFAULT_SERVER_ROUTES, matchRoutes } from "../../Serve/Routes.ts";
 import { dispatchRpc, isRpcPath } from "../../Serve/Rpc.ts";
 import type { AnyWebsiteClass } from "../../Serve/Serve.ts";
-import { Stack } from "../../Stack.ts";
+import { StackTag as Stack } from "../../StackTag.ts";
 import { buildEventTelemetry } from "../../Telemetry.ts";
 import { makeFunctionFetchHandler } from "./HttpServer.ts";
 import { registerLambdaExtension } from "./RuntimeExtension.ts";

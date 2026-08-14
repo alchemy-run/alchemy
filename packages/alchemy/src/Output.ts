@@ -7,7 +7,11 @@ import { SingleShotGen } from "effect/Utils";
 import { getRefMetadata, isRef, type Ref } from "./Ref.ts";
 import { isResource, type Resource, type ResourceLike } from "./Resource.ts";
 import { RuntimeContext, sanitizeKey } from "./RuntimeContext.ts";
-import { Stack } from "./Stack.ts";
+// The leaf tag, not `Stack.ts`: Output rides runtime bridge graphs
+// (Telemetry → Client/Serve) that foreign bundlers compile into workerd
+// server bundles, where Stack.ts's engine closure (`node:os`, `node:net`)
+// is fatal at module scope.
+import { StackTag as Stack } from "./StackTag.ts";
 import { Stage } from "./Stage.ts";
 import * as State from "./State/State.ts";
 import { isPlainData, isPrimitive, type Primitive } from "./Util/data.ts";

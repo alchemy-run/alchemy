@@ -18,7 +18,11 @@ import { ref as makeRef } from "./Ref.ts";
 import { RemovalPolicy } from "./RemovalPolicy.ts";
 import { RenamePolicy } from "./Rename.ts";
 import { Self } from "./Self.ts";
-import { Stack } from "./Stack.ts";
+// The leaf tag, not `Stack.ts` — Resource rides the runtime bridge graphs
+// (Output → Telemetry → Client/Serve) compiled into workerd server
+// bundles, where Stack.ts's engine closure (`node:os`, `node:net`) is
+// fatal at module scope.
+import { StackTag as Stack } from "./StackTag.ts";
 
 export type ResourceConstructor<R extends ResourceLike, Req = never> = {
   Type: R["Type"];

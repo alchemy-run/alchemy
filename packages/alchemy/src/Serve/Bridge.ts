@@ -21,7 +21,6 @@
  * touching any I/O.
  */
 
-import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Cause from "effect/Cause";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
@@ -32,7 +31,12 @@ import * as Logger from "effect/Logger";
 import { MinimumLogLevel } from "effect/References";
 import * as Scope from "effect/Scope";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import { CloudflareEnvironment } from "../Cloudflare/CloudflareEnvironment.ts";
+// Leaf tag modules, NOT the engine modules: `CloudflareEnvironment.ts`
+// reaches the OAuth client (`node:http`) and `Stack.ts` reaches
+// `Util/Node.ts` (`node:net`) — module-scope `node:*` externals are fatal
+// in foreign-bundled workerd server bundles (see the platform note in
+// `buildSiteRuntime`).
+import { CloudflareEnvironment } from "../Cloudflare/CloudflareEnvironmentTag.ts";
 import { makeRequestEffect } from "../Cloudflare/Workers/HttpServer.ts";
 // The RuntimeEnvironment leaf, NOT Worker.ts: the bridge is compiled by
 // foreign bundlers (Next/turbopack, nitro rollup), and Worker.ts's provider
@@ -48,7 +52,7 @@ import { isScopeEjected } from "../Http.ts";
 import { makeEntrypointLayer, reifyBoundConfigProvider } from "../Runtime.ts";
 import type { BaseRuntimeContext } from "../RuntimeContext.ts";
 import { Self } from "../Self.ts";
-import { Stack } from "../Stack.ts";
+import { StackTag as Stack } from "../StackTag.ts";
 import { buildEventTelemetry } from "../Telemetry.ts";
 import type { SERVE_SENTINEL } from "./constants.ts";
 import { envString, hasStackMarkers, resolveServeEnv } from "./Env.ts";
@@ -137,7 +141,7 @@ const registerInstanceShutdown = (scope: Scope.Closeable): void => {
  * `cloudflare:workers` importable env (the bridge may be running in a
  * Lambda sandbox or a Node dev server).
  */
-const buildSiteRuntime = (
+const buildSiteRuntime = async (
   site: object,
   env: Record<string, unknown>,
 ): Promise<SiteRuntime> => {
@@ -148,11 +152,26 @@ const buildSiteRuntime = (
 
   const layer = makeEntrypointLayer(tag, site);
 
-  const platform = Layer.mergeAll(
-    NodeServices.layer,
+  // Platform by world. On workerd the Node platform must stay OUT of the
+  // graph entirely: the bridge rides the value-form `createClient` graph
+  // into framework server bundles (Next/turbopack, nitro rollup), which
+  // externalize `node:*` imports that OpenNext/nitro's runtime loaders
+  // cannot satisfy — a static NodeServices import 500s every SSR dispatch
+  // ("Failed to load external module node:process"). The dynamic import
+  // below is only evaluated in Node worlds (framework dev servers,
+  // prerenderers), where platform-node genuinely exists.
+  const basePlatform = Layer.mergeAll(
     FetchHttpClient.layer,
     Logger.layer([Logger.consolePretty()]),
   );
+  const platform =
+    typeof navigator !== "undefined" &&
+    navigator.userAgent === "Cloudflare-Workers"
+      ? basePlatform
+      : Layer.mergeAll(
+          (await import("@effect/platform-node/NodeServices")).layer,
+          basePlatform,
+        );
 
   const globalContext = layer.pipe(
     Layer.provideMerge(

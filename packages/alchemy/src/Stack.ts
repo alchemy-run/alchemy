@@ -26,6 +26,7 @@ import { Stage } from "./Stage.ts";
 import type { State } from "./State/State.ts";
 import { loadConfigProvider } from "./Util/ConfigProvider.ts";
 import { effectClass, taggedFunction } from "./Util/effect.ts";
+import { StackTag } from "./StackTag.ts";
 import { fileLogger } from "./Util/FileLogger.ts";
 import { PlatformServices } from "./Util/PlatformServices.ts";
 
@@ -137,7 +138,7 @@ export const Stack: Context.ServiceClass<
   ): Effect.Effect<CompiledStack<A>, ConfigError>;
 } = Object.assign(
   taggedFunction(
-    Context.Service<Stack, Omit<StackSpec, "output">>()("Stack"),
+    StackTag,
     <A, Req>(
       stackName?: string,
       options?: StackProps<NoInfer<Req>>,
