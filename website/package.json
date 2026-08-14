@@ -48,7 +48,8 @@
     "satori": "^0.26.0",
     "satteri": "^0.9.5",
     "starlight-blog": "^0.28.0",
-    "tailwindcss": "^4.1.14"
+    "tailwindcss": "^4.1.14",
+    "yaml": "catalog:shared"
   },
   "devDependencies": {
     "@iconify-json/simple-icons": "^1.2.87",

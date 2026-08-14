@@ -50,7 +50,7 @@ jobs:
         run: pnpm typecheck:cloudflare-packages
 
       - name: Test
-        run: pnpm test:cloudflare-packages -- ${{ runner.os == 'Windows' && '--concurrency=3' || runner.os == 'macOS' && '--concurrency=2' || '' }}
+        run: pnpm test:cloudflare-packages ${{ runner.os == 'Windows' && '--concurrency=3' || runner.os == 'macOS' && '--concurrency=2' || '' }}
         env:
           TEST_MYSQL_URL: ${{ secrets.TEST_MYSQL_URL }}
           TEST_POSTGRES_URL: ${{ secrets.TEST_POSTGRES_URL }}
