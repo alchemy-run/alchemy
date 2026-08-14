@@ -27,8 +27,11 @@ const REQUEST_CONTEXT = Symbol.for("@vercel/request-context");
 /**
  * Synchronously resolve the ambient OIDC token (or `undefined`), mirroring
  * `@vercel/oidc`'s order: request-context `x-vercel-oidc-token` header, then
- * the `VERCEL_OIDC_TOKEN` env var. Plain function so the promise-based
- * async-mode client can share it; Effect code uses {@link ambientOidcToken}.
+ * the `VERCEL_QUEUE_TOKEN` env var (the queue-specific override the official
+ * `vercel dev` — and alchemy's local dev broker — injects alongside
+ * `VERCEL_QUEUE_BASE_URL`), then the `VERCEL_OIDC_TOKEN` env var. Plain
+ * function so the promise-based async-mode client can share it; Effect code
+ * uses {@link ambientOidcToken}.
  */
 export const ambientOidcTokenUnsafe = (): string | undefined => {
   const holder = (globalThis as Record<PropertyKey, unknown>)[
@@ -42,6 +45,7 @@ export const ambientOidcTokenUnsafe = (): string | undefined => {
     | undefined;
   const token =
     holder?.get?.()?.headers?.["x-vercel-oidc-token"] ??
+    process.env.VERCEL_QUEUE_TOKEN ??
     process.env.VERCEL_OIDC_TOKEN;
   return token !== undefined && token !== "" ? token : undefined;
 };

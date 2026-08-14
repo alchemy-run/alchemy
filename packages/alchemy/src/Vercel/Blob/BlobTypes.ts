@@ -74,8 +74,11 @@ export interface PutBlobOptions {
   /**
    * Set `false` for a conditional CREATE: the write fails with the typed
    * {@link BlobAlreadyExists} if the pathname already exists (wire:
-   * `x-allow-overwrite: 0` → 400). The data plane's default (no header) is
-   * to overwrite.
+   * `x-allow-overwrite: 0` → 400). The client default is `true`
+   * (overwrite) — note the data plane's WIRE default with the header
+   * absent is to refuse overwrites, so the client always sends the
+   * header explicitly.
+   * @default true
    */
   readonly allowOverwrite?: boolean | undefined;
 }

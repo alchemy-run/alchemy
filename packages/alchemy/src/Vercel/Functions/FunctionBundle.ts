@@ -21,12 +21,13 @@
  * bundle via the `__ALCHEMY_RUNTIME__` define.
  */
 import * as Effect from "effect/Effect";
+import type * as rolldown from "rolldown";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import * as TempRoot from "../../Bundle/TempRoot.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import { sha256 } from "../../Util/sha256.ts";
-import type { FunctionProps } from "./Function.ts";
+import type { FunctionBuildOptions, FunctionProps } from "./Function.ts";
 
 export interface FunctionBundleResult {
   /** Identity hash driving change detection in `diff`. */
@@ -47,6 +48,61 @@ const toBytes = (content: string | Uint8Array): Uint8Array =>
  * the init-registered `subscribe` handlers instead of user `fetch`.
  */
 export type FunctionBundleVariant = "fetch" | "queue";
+
+/**
+ * Assemble the rolldown input/output options shared by the one-shot deploy
+ * build ({@link makeFunctionBundler}) and the dev-mode watch bundler
+ * (`LocalFunctionProvider`) — keeping them identical is what keeps dev and
+ * prod bundles from skewing.
+ */
+export const functionRolldownOptions = (input: {
+  readonly realMain: string;
+  readonly cwd: string;
+  readonly build: FunctionBuildOptions | undefined;
+  readonly entryPlugin: rolldown.Plugin | undefined;
+}): {
+  readonly inputOptions: rolldown.InputOptions;
+  readonly outputOptions: rolldown.OutputOptions;
+} => {
+  const {
+    output: buildOutput,
+    pure: _pure,
+    bundleAnalyzer: _bundleAnalyzer,
+    ...inputOptions
+  } = input.build ?? {};
+  return {
+    inputOptions: {
+      ...inputOptions,
+      input: input.realMain,
+      cwd: input.cwd,
+      platform: "node",
+      plugins: [inputOptions.plugins, input.entryPlugin],
+      resolve: {
+        ...inputOptions.resolve,
+        conditionNames: [
+          "bun",
+          ...(
+            inputOptions.resolve?.conditionNames ?? [
+              "node",
+              "import",
+              "module",
+              "default",
+            ]
+          ).filter((condition) => condition !== "bun"),
+        ],
+      },
+    },
+    outputOptions: {
+      ...buildOutput,
+      format: "esm",
+      sourcemap: buildOutput?.sourcemap ?? false,
+      minify: buildOutput?.minify ?? false,
+      entryFileNames: "index.mjs",
+      chunkFileNames: buildOutput?.chunkFileNames ?? "[name]-[hash].mjs",
+      codeSplitting: buildOutput?.codeSplitting ?? false,
+    },
+  };
+};
 
 export const makeFunctionBundler = Effect.gen(function* () {
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
@@ -86,12 +142,6 @@ export const makeFunctionBundler = Effect.gen(function* () {
 
     const realMain = yield* TempRoot.resolveMainPath(props.main);
     const cwd = yield* TempRoot.findCwdForBundle(realMain);
-    const {
-      output: buildOutput,
-      pure: _pure,
-      bundleAnalyzer: _bundleAnalyzer,
-      ...inputOptions
-    } = props.build ?? {};
 
     // Effect mode: wrap `main` with the runtime bridge via a virtual entry.
     // Async (external) mode ships the user's module as the entry directly.
@@ -114,37 +164,15 @@ export default makeVercelBridge(entrypoint, {
       );
     }
 
+    const { inputOptions, outputOptions } = functionRolldownOptions({
+      realMain,
+      cwd,
+      build: props.build,
+      entryPlugin,
+    });
     const bundleOutput = yield* Bundle.build(
-      {
-        ...inputOptions,
-        input: realMain,
-        cwd,
-        platform: "node",
-        plugins: [inputOptions.plugins, entryPlugin],
-        resolve: {
-          ...inputOptions.resolve,
-          conditionNames: [
-            "bun",
-            ...(
-              inputOptions.resolve?.conditionNames ?? [
-                "node",
-                "import",
-                "module",
-                "default",
-              ]
-            ).filter((condition) => condition !== "bun"),
-          ],
-        },
-      },
-      {
-        ...buildOutput,
-        format: "esm",
-        sourcemap: buildOutput?.sourcemap ?? false,
-        minify: buildOutput?.minify ?? false,
-        entryFileNames: "index.mjs",
-        chunkFileNames: buildOutput?.chunkFileNames ?? "[name]-[hash].mjs",
-        codeSplitting: buildOutput?.codeSplitting ?? false,
-      },
+      inputOptions,
+      outputOptions,
       props.build,
     );
 

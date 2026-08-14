@@ -57,14 +57,23 @@ export interface QueueRequestBase {
   readonly deploymentId?: string | undefined;
 }
 
+/**
+ * Data-plane base URL. `VERCEL_QUEUE_BASE_URL` overrides the per-region
+ * host — the env contract the official `vercel dev` (and alchemy's local
+ * dev broker) uses to redirect queue traffic to a local emulator.
+ */
+export const queueBaseUrl = (region: string): string => {
+  const override = process.env.VERCEL_QUEUE_BASE_URL;
+  return override !== undefined && override !== ""
+    ? override.replace(/\/$/, "")
+    : `https://${region}.vercel-queue.com`;
+};
+
 const topicUrl = (
   options: Pick<QueueRequestBase, "region" | "topic">,
   ...segments: string[]
 ): string =>
-  `https://${options.region}.vercel-queue.com/api/v3/topic/${[
-    options.topic,
-    ...segments,
-  ]
+  `${queueBaseUrl(options.region)}/api/v3/topic/${[options.topic, ...segments]
     .map((s) => encodeURIComponent(s))
     .join("/")}`;
 

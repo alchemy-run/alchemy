@@ -7,6 +7,7 @@
  *
  * NOT exported from `Vercel/index.ts`.
  */
+import * as aliases from "@distilled.cloud/vercel/aliases";
 import * as deployments from "@distilled.cloud/vercel/deployments";
 import * as projects from "@distilled.cloud/vercel/projects";
 import * as Data from "effect/Data";
@@ -915,10 +916,17 @@ export const readProductionUrl = (
   project: projects.GetProjectResponse,
 ): string | undefined => {
   const aliases = project.alias ?? [];
-  const production = aliases.find(
+  const production = aliases.filter(
     (a) => String(a.target).toLowerCase() === "production",
   );
-  const domain = (production ?? aliases[0])?.domain;
+  const candidates = production.length > 0 ? production : aliases;
+  // The alias rows carry BOTH the public assigned domain
+  // (`{name}.vercel.app`) and the SSO-gated team-suffixed variant
+  // (`{name}-{team}.vercel.app`) in nondeterministic order (PROBES.md
+  // probe 0) — prefer the shortest hostname, which is the public one.
+  const domain = [...candidates].sort(
+    (x, y) => (x.domain?.length ?? 0) - (y.domain?.length ?? 0),
+  )[0]?.domain;
   return domain !== undefined ? `https://${domain}` : undefined;
 };
 
@@ -948,6 +956,159 @@ export const readAssignedProductionUrl = (idOrName: string) =>
     const assigned =
       candidates.find((d) => d.name.endsWith(".vercel.app")) ?? candidates[0];
     return assigned !== undefined ? `https://${assigned.name}` : undefined;
+  });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage aliases (DESIGN §5.1) — a preview tenant's stable per-stage hostname
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Collapse a name into a valid lowercase DNS label (≤63 chars). */
+const aliasLabel = (name: string): string =>
+  name
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 63)
+    .replace(/-$/, "");
+
+/**
+ * The deterministic per-stage alias hostname a preview tenant claims:
+ * `{projectName}-{stage}.vercel.app` (DESIGN §5.1).
+ */
+export const stageAliasName = (projectName: string, stage: string): string =>
+  `${aliasLabel(`${projectName}-${stage}`)}.vercel.app`;
+
+/**
+ * Deterministic fallback hostname when the base per-stage alias is taken —
+ * `.vercel.app` is a global namespace, so `{project}-{stage}` can be owned
+ * by another team. The suffix hashes the stack name so it is stable across
+ * reconciles.
+ */
+export const stageAliasFallbackName = (input: {
+  readonly projectName: string;
+  readonly stage: string;
+  readonly stack: string;
+}) =>
+  Effect.map(
+    sha256(`${input.stack}:${input.stage}`),
+    (hash) =>
+      `${aliasLabel(`${input.projectName}-${input.stage}-${hash.slice(0, 6)}`)}.vercel.app`,
+  );
+
+export interface StageAliasResult {
+  /** The unique identifier of the alias record. */
+  readonly uid: string;
+  /** The alias hostname actually claimed (base or suffix fallback). */
+  readonly alias: string;
+}
+
+/** Observe an alias record; `undefined` when missing or not ours. */
+const observeAliasRecord = (aliasName: string) =>
+  Effect.gen(function* () {
+    const { teamId } = yield* VercelEnvironment.current;
+    return yield* aliases.getAlias({ idOrAlias: aliasName, teamId }).pipe(
+      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      // A hostname owned by another team is unreadable — treated as absent
+      // here; the subsequent assign surfaces the taken-domain failure.
+      Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
+    );
+  });
+
+/**
+ * Converge a preview tenant's stable per-stage alias onto a deployment
+ * (DESIGN §5.1): observe first (skip the write when the alias already
+ * points at the deployment), then `assignAlias` — an upsert (live-verified):
+ * it creates the alias or atomically re-points an existing one.
+ *
+ * `.vercel.app` is a global namespace, so the base `{project}-{stage}` name
+ * can be taken by another team (`Forbidden`/`Conflict` on assign). That
+ * falls back — loudly, via a logged warning, never silently — to the
+ * deterministic {@link stageAliasFallbackName}; if that is taken too, a
+ * typed {@link AliasAssignmentFailed} surfaces.
+ *
+ * `previous` (the alias persisted in state) takes precedence over the
+ * computed base name so an earlier suffix-fallback stays stable across
+ * reconciles.
+ *
+ * NOTE (live-verified, PROBES.md probe 5): assign-created `.vercel.app`
+ * aliases are SSO-gated on team accounts even for production deployments —
+ * drive them with the project's automation bypass secret
+ * (`x-vercel-protection-bypass`), which only opens deployments created
+ * AFTER the secret was minted.
+ */
+export const ensureStageAlias = (input: {
+  readonly projectName: string;
+  readonly stage: string;
+  readonly stack: string;
+  readonly deploymentId: string;
+  readonly previous?: StageAliasResult | undefined;
+}) =>
+  Effect.gen(function* () {
+    const { teamId } = yield* VercelEnvironment.current;
+
+    const assign = (aliasName: string) =>
+      Effect.gen(function* () {
+        const observed = yield* observeAliasRecord(aliasName);
+        if (
+          observed !== undefined &&
+          observed.deploymentId === input.deploymentId
+        ) {
+          return {
+            uid: observed.uid,
+            alias: observed.alias,
+          } satisfies StageAliasResult;
+        }
+        const assigned = yield* aliases.assignAlias({
+          id: input.deploymentId,
+          alias: aliasName,
+          teamId,
+        });
+        return {
+          uid: assigned.uid,
+          alias: assigned.alias,
+        } satisfies StageAliasResult;
+      });
+
+    const base =
+      input.previous?.alias ?? stageAliasName(input.projectName, input.stage);
+    return yield* assign(base).pipe(
+      Effect.catchTag(["Forbidden", "Conflict"], (error) =>
+        Effect.gen(function* () {
+          const fallback = yield* stageAliasFallbackName(input);
+          if (fallback === base) {
+            return yield* new AliasAssignmentFailed({
+              message: `Vercel stage alias ${base} could not be assigned to deployment ${input.deploymentId}: ${error._tag}`,
+              deploymentId: input.deploymentId,
+              code: error._tag,
+            });
+          }
+          yield* Effect.logWarning(
+            `Vercel stage alias ${base} is taken (${error._tag}) — falling back to ${fallback}`,
+          );
+          return yield* assign(fallback).pipe(
+            Effect.catchTag(
+              ["Forbidden", "Conflict"],
+              (fallbackError) =>
+                new AliasAssignmentFailed({
+                  message: `Vercel stage alias unavailable: ${base} and fallback ${fallback} are both taken (${fallbackError._tag})`,
+                  deploymentId: input.deploymentId,
+                  code: fallbackError._tag,
+                }),
+            ),
+          );
+        }),
+      ),
+    );
+  });
+
+/** Idempotent alias delete (by uid or hostname). */
+export const deleteAliasByIdOrName = (aliasId: string) =>
+  Effect.gen(function* () {
+    const { teamId } = yield* VercelEnvironment.current;
+    yield* aliases
+      .deleteAlias({ aliasId, teamId })
+      .pipe(Effect.catchTag("NotFound", () => Effect.void));
   });
 
 /** Normalize the `getProjects` response union into a plain project list. */

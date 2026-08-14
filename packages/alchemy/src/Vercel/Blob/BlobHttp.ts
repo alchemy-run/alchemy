@@ -62,9 +62,18 @@ export interface BlobScope {
   readonly apiUrl: string;
 }
 
-/** Strip the management `store_` prefix off a store id. */
-export const bareStoreId = (storeId: string): string =>
-  storeId.startsWith("store_") ? storeId.slice("store_".length) : storeId;
+/**
+ * Strip the management `store_` prefix (and the local provider's `dev:`
+ * marker) off a store id, leaving the bare host-label id.
+ */
+export const bareStoreId = (storeId: string): string => {
+  const withoutMode = storeId.startsWith("dev:")
+    ? storeId.slice("dev:".length)
+    : storeId;
+  return withoutMode.startsWith("store_")
+    ? withoutMode.slice("store_".length)
+    : withoutMode;
+};
 
 /** Encode a pathname for use inside a URL, preserving `/` separators. */
 const encodePathname = (pathname: string): string =>
@@ -79,6 +88,17 @@ export const blobUrlOf = (
   pathname: string,
 ): string =>
   `https://${bareStoreId(scope.storeId).toLowerCase()}.${scope.access}.blob.vercel-storage.com/${encodePathname(pathname)}`;
+
+/**
+ * The URL blob CONTENT is fetched from. On the live platform this is the
+ * canonical `…blob.vercel-storage.com` URL; with a data-plane override
+ * (`VERCEL_BLOB_API_URL`, dev-mode emulation) content is served by the
+ * override host under `/{storeIdLower}.{access}/{pathname}`.
+ */
+export const contentUrlOf = (scope: BlobScope, pathname: string): string =>
+  scope.apiUrl === DEFAULT_BLOB_API_URL
+    ? blobUrlOf(scope, pathname)
+    : `${scope.apiUrl}/${bareStoreId(scope.storeId).toLowerCase()}.${scope.access}/${encodePathname(pathname)}`;
 
 const parseRetryAfterSeconds = (
   value: string | undefined,
@@ -232,9 +252,16 @@ export const putBlobRaw = Effect.fn("Vercel.Blob.put")(function* (
       options.ifMatch,
     );
   }
-  if (options?.allowOverwrite === false) {
-    request = HttpClientRequest.setHeader(request, "x-allow-overwrite", "0");
-  }
+  // The data plane's WIRE default (header absent) is to REFUSE overwrites
+  // (400 "This blob already exists…") — live-verified. Send the header
+  // explicitly on every put so the client's documented default
+  // (`allowOverwrite: true`) actually overwrites; `false` opts into the
+  // typed conditional-create failure.
+  request = HttpClientRequest.setHeader(
+    request,
+    "x-allow-overwrite",
+    options?.allowOverwrite === false ? "0" : "1",
+  );
   const response = yield* client.execute(request);
   if (response.status < 200 || response.status >= 300) {
     return yield* failBlob({ operation: "put", pathname, response });
@@ -351,7 +378,9 @@ export const deleteBlobsRaw = Effect.fn("Vercel.Blob.del")(function* (
 ) {
   const client = yield* HttpClient.HttpClient;
   const urls = pathnames.map((pathname) =>
-    pathname.startsWith("https://") ? pathname : blobUrlOf(scope, pathname),
+    // Accept full content URLs (canonical https, or the local emulator's
+    // http form) as well as bare pathnames.
+    /^https?:\/\//.test(pathname) ? pathname : blobUrlOf(scope, pathname),
   );
   const request = withAuth(
     HttpClientRequest.bodyText(
@@ -374,7 +403,7 @@ export const getBlobRaw = Effect.fn("Vercel.Blob.get")(function* (
   pathname: string,
 ) {
   const client = yield* HttpClient.HttpClient;
-  const url = blobUrlOf(scope, pathname);
+  const url = contentUrlOf(scope, pathname);
   // The bearer is required for private stores and harmless for public ones.
   const request = HttpClientRequest.bearerToken(
     HttpClientRequest.get(url),
@@ -442,6 +471,20 @@ export const makeBlobHttpBinding = <Client>(options: {
           // capability never calls the connections API itself.
           yield* store.bind`Blob(${store.LogicalId}, ${host.LogicalId})`({
             projects: [host.projectId],
+          });
+          // Dev-mode env injection: the LOCAL store provider publishes its
+          // emulator endpoint + deterministic token as attributes; both are
+          // `undefined` on the live platform (undefined env values are
+          // skipped by env sync — the InvokeFunction `protectionBypass`
+          // precedent), where the platform injects `BLOB_READ_WRITE_TOKEN`
+          // through the store↔project connection instead. Injecting real
+          // env vars (not just captures) keeps `@vercel/blob` and the
+          // async `readWriteBlobFromEnv` client working locally too.
+          yield* host.bind`BlobEnv(${store.LogicalId}, ${host.LogicalId})`({
+            env: {
+              [BLOB_API_URL_ENV]: store.localApiUrl,
+              [BLOB_TOKEN_ENV]: store.localToken,
+            },
           });
         }
       }

@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
+import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -189,91 +190,141 @@ const mintToken = Effect.fn(function* ({
   return toTokenAttributes(meta, Redacted.make(created.token));
 });
 
-export const EdgeConfigTokenProvider = () =>
-  Provider.succeed(EdgeConfigToken, {
-    stables: ["edgeConfigId"],
-    diff: Effect.fn(function* ({ olds, news, output }) {
-      if (!isResolved(news)) return undefined;
-      // Moving the token to another Edge Config is a replacement (the new
-      // parent must exist before the old token dies); label changes are
-      // in-place updates (reconcile mints a successor + deletes the old).
-      const oldEdgeConfigId = output?.edgeConfigId ?? olds?.edgeConfigId;
-      if (
-        oldEdgeConfigId !== undefined &&
-        news.edgeConfigId !== oldEdgeConfigId
-      ) {
-        return { action: "replace" } as const;
-      }
-    }),
-    read: Effect.fn(function* ({ output }) {
-      // Cold read is impossible: the plaintext (the only lookup key that
-      // returns full metadata) lives solely in our state.
-      if (output?.token === undefined) return undefined;
-      const { teamId } = yield* VercelEnvironment.current;
-      const observed = yield* observeToken(
-        output.edgeConfigId,
-        output.token,
-        teamId,
+/**
+ * The live lifecycle implementation of {@link EdgeConfigToken} — extracted
+ * so the dev-mode provider (`LocalEdgeConfigProvider.ts`) can delegate to
+ * it when a token targets a REAL Edge Config (an `Alchemy.remote()` config
+ * bound during `alchemy dev`: the mixed local-Function/live-EdgeConfig
+ * stack still needs a real read token).
+ *
+ * @internal
+ */
+export const makeEdgeConfigTokenService = () => ({
+  stables: ["edgeConfigId" as const],
+  diff: Effect.fn(function* ({
+    olds,
+    news,
+    output,
+  }: {
+    olds: EdgeConfigTokenProps;
+    news: Input<EdgeConfigTokenProps>;
+    output: EdgeConfigTokenAttributes | undefined;
+  }) {
+    if (!isResolved(news)) return undefined;
+    // Moving the token to another Edge Config is a replacement (the new
+    // parent must exist before the old token dies); label changes are
+    // in-place updates (reconcile mints a successor + deletes the old).
+    const oldEdgeConfigId = output?.edgeConfigId ?? olds?.edgeConfigId;
+    if (
+      oldEdgeConfigId !== undefined &&
+      news.edgeConfigId !== oldEdgeConfigId
+    ) {
+      return { action: "replace" } as const;
+    }
+  }),
+  read: Effect.fn(function* ({
+    output,
+  }: {
+    output: EdgeConfigTokenAttributes | undefined;
+  }) {
+    // Cold read is impossible: the plaintext (the only lookup key that
+    // returns full metadata) lives solely in our state.
+    if (output?.token === undefined) return undefined;
+    const { teamId } = yield* VercelEnvironment.current;
+    const observed = yield* observeToken(
+      output.edgeConfigId,
+      output.token,
+      teamId,
+    );
+    if (observed === undefined) return undefined;
+    return toTokenAttributes(observed, output.token);
+  }),
+  reconcile: Effect.fn(function* ({
+    id,
+    news = {},
+    output,
+    session,
+  }: {
+    id: string;
+    news?: Partial<EdgeConfigTokenProps> | undefined;
+    output: EdgeConfigTokenAttributes | undefined;
+    session: ScopedPlanStatusSession;
+  }) {
+    const { teamId } = yield* VercelEnvironment.current;
+    const edgeConfigId = news.edgeConfigId ?? output?.edgeConfigId;
+    if (edgeConfigId === undefined) {
+      return yield* Effect.die(
+        `Vercel.EdgeConfigToken(${id}): \`edgeConfigId\` is required`,
       );
-      if (observed === undefined) return undefined;
-      return toTokenAttributes(observed, output.token);
-    }),
-    reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
-      const { teamId } = yield* VercelEnvironment.current;
-      const edgeConfigId = news.edgeConfigId ?? output?.edgeConfigId;
-      if (edgeConfigId === undefined) {
-        return yield* Effect.die(
-          `Vercel.EdgeConfigToken(${id}): \`edgeConfigId\` is required`,
-        );
-      }
-      const label = yield* createLabel(id, news.label);
+    }
+    if (edgeConfigId.startsWith("dev:")) {
+      // A locally emulated (`dev:`) Edge Config reached the LIVE token
+      // lifecycle — e.g. an `Alchemy.remote()` Function binding a local
+      // config. Real Vercel cannot reach the local data plane.
+      return yield* Effect.die(
+        `Vercel.EdgeConfigToken(${id}): "${edgeConfigId}" is a local (dev) ` +
+          `Edge Config id — a live token cannot be minted for it. Pipe the ` +
+          `Edge Config through Alchemy.remote() too, or run the consuming ` +
+          `Function locally.`,
+      );
+    }
+    const label = yield* createLabel(id, news.label);
 
-      // 1. Observe — the persisted plaintext is a hint, not a guarantee.
-      const observed =
-        output?.token !== undefined && output.edgeConfigId === edgeConfigId
-          ? yield* observeToken(edgeConfigId, output.token, teamId)
-          : undefined;
+    // 1. Observe — the persisted plaintext is a hint, not a guarantee.
+    const observed =
+      output?.token !== undefined && output.edgeConfigId === edgeConfigId
+        ? yield* observeToken(edgeConfigId, output.token, teamId)
+        : undefined;
 
-      // 2. Converged: same token, same label — keep it (never re-mint; a
-      //    rotation would invalidate the value baked into every dependent
-      //    env row and older deployment).
-      if (observed !== undefined && observed.label === label) {
-        return toTokenAttributes(observed, output!.token);
-      }
+    // 2. Converged: same token, same label — keep it (never re-mint; a
+    //    rotation would invalidate the value baked into every dependent
+    //    env row and older deployment).
+    if (observed !== undefined && observed.label === label) {
+      return toTokenAttributes(observed, output!.token);
+    }
 
-      // 3. Label drift: tokens are immutable — mint the successor first,
-      //    then retire the old token.
-      const attributes = yield* mintToken({
-        edgeConfigId,
-        label,
-        teamId,
-        session,
-      });
-      if (observed !== undefined) {
-        yield* globalConfig
-          .deleteEdgeConfigTokens({
-            edgeConfigId,
-            ids: [observed.id],
-            teamId,
-          })
-          .pipe(Effect.catchTag("NotFound", () => Effect.void));
-        yield* session.note(
-          `Replaced Edge Config token: ${observed.label} -> ${label}`,
-        );
-      }
-      return attributes;
-    }),
-    delete: Effect.fn(function* ({ output, session }) {
-      const { teamId } = yield* VercelEnvironment.current;
-      // Idempotent: a token already gone — or a parent Edge Config already
-      // deleted (which cascades its tokens) — reports NotFound.
+    // 3. Label drift: tokens are immutable — mint the successor first,
+    //    then retire the old token.
+    const attributes = yield* mintToken({
+      edgeConfigId,
+      label,
+      teamId,
+      session,
+    });
+    if (observed !== undefined) {
       yield* globalConfig
         .deleteEdgeConfigTokens({
-          edgeConfigId: output.edgeConfigId,
-          ids: [output.tokenId],
+          edgeConfigId,
+          ids: [observed.id],
           teamId,
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
-      yield* session.note(`Deleted Edge Config token: ${output.label}`);
-    }),
-  });
+      yield* session.note(
+        `Replaced Edge Config token: ${observed.label} -> ${label}`,
+      );
+    }
+    return attributes;
+  }),
+  delete: Effect.fn(function* ({
+    output,
+    session,
+  }: {
+    output: EdgeConfigTokenAttributes;
+    session: ScopedPlanStatusSession;
+  }) {
+    const { teamId } = yield* VercelEnvironment.current;
+    // Idempotent: a token already gone — or a parent Edge Config already
+    // deleted (which cascades its tokens) — reports NotFound.
+    yield* globalConfig
+      .deleteEdgeConfigTokens({
+        edgeConfigId: output.edgeConfigId,
+        ids: [output.tokenId],
+        teamId,
+      })
+      .pipe(Effect.catchTag("NotFound", () => Effect.void));
+    yield* session.note(`Deleted Edge Config token: ${output.label}`);
+  }),
+});
+
+export const EdgeConfigTokenProvider = () =>
+  Provider.succeed(EdgeConfigToken, makeEdgeConfigTokenService());

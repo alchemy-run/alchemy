@@ -10,6 +10,7 @@ import {
 } from "@distilled.cloud/vercel/storage";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import type * as Redacted from "effect/Redacted";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -119,6 +120,22 @@ export type BlobStore = Resource<
     projectIds: string[];
     /** Environments the injected token env var targets on each connection. */
     envVarEnvironments: BlobStoreEnvironment[];
+    /**
+     * Dev-mode only (`alchemy dev`): the local blob emulator's data-plane
+     * endpoint (`http://localhost:<port>`). Always `undefined` on the live
+     * platform. The Blob capability bindings inject it into the host
+     * Function as `VERCEL_BLOB_API_URL` — undefined values are skipped by
+     * env sync, so live deployments are untouched.
+     */
+    localApiUrl?: string | undefined;
+    /**
+     * Dev-mode only: the emulator's deterministic RW token for this store
+     * (`vercel_blob_rw_…`, same shape as the platform's). Injected into the
+     * host Function as `BLOB_READ_WRITE_TOKEN` in dev; `undefined` live
+     * (there the platform injects the token through the store↔project
+     * connection instead).
+     */
+    localToken?: Redacted.Redacted<string> | undefined;
   },
   BlobStoreBinding,
   Providers
@@ -295,7 +312,19 @@ export const BlobStoreProvider = () =>
           (b: ResourceBinding<BlobStoreBinding> & { action?: string }) =>
             b.action !== "delete",
         )
-        .flatMap((b) => b?.data?.projects ?? []);
+        .flatMap((b) => b?.data?.projects ?? [])
+        // A LOCAL (dev-emulated) Function binding a live (`Alchemy.remote()`)
+        // store contributes its `dev:`-marked project id — not a real
+        // project, so never hand it to the connections API. (The local
+        // Function cannot receive the platform-injected token anyway; its
+        // runtime client reports the missing token with guidance.)
+        // An EMPTY id is a Function precreate's inert stub (its tenant
+        // `project:` ref hadn't resolved yet) — skip it rather than 500
+        // against the API; the connection reconciles once the host's real
+        // project id flows through the binding.
+        .filter(
+          (projectId) => projectId !== "" && !projectId.startsWith("dev:"),
+        );
       const desiredProjects = [
         ...new Set([...(news.projects ?? []), ...contributedProjects]),
       ];

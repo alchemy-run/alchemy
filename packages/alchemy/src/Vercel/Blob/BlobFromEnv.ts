@@ -124,6 +124,15 @@ export const readWriteBlobFromEnv = (
     options?.apiUrl ?? process.env.VERCEL_BLOB_API_URL ?? DEFAULT_BLOB_API_URL;
   const blobUrl = (token: string, pathname: string) =>
     `https://${storeIdOfToken(token).toLowerCase()}.${access}.blob.vercel-storage.com/${encodePathname(pathname)}`;
+  // With a data-plane override (`VERCEL_BLOB_API_URL`, dev-mode emulation)
+  // content is served by the override host under
+  // `/{storeIdLower}.{access}/{pathname}` instead of the canonical host.
+  const contentUrl = (token: string, pathname: string) => {
+    const base = apiUrl();
+    return base === DEFAULT_BLOB_API_URL
+      ? blobUrl(token, pathname)
+      : `${base}/${storeIdOfToken(token).toLowerCase()}.${access}/${encodePathname(pathname)}`;
+  };
   const headers = (token: string, extra?: Record<string, string>) => ({
     authorization: `Bearer ${token}`,
     "x-api-version": BLOB_API_VERSION,
@@ -144,9 +153,12 @@ export const readWriteBlobFromEnv = (
             ...(putOptions?.ifMatch !== undefined
               ? { "x-if-match": putOptions.ifMatch }
               : {}),
-            ...(putOptions?.allowOverwrite === false
-              ? { "x-allow-overwrite": "0" }
-              : {}),
+            // The data plane's WIRE default (header absent) is to REFUSE
+            // overwrites — send the header explicitly so the documented
+            // client default (`allowOverwrite: true`) actually overwrites,
+            // matching the Effect client (`putBlobRaw`).
+            "x-allow-overwrite":
+              putOptions?.allowOverwrite === false ? "0" : "1",
           }),
           body: body as BodyInit,
         },
@@ -168,7 +180,7 @@ export const readWriteBlobFromEnv = (
     },
     async get(pathname) {
       const token = resolveToken(options);
-      const url = blobUrl(token, pathname);
+      const url = contentUrl(token, pathname);
       const res = await fetch(url, { headers: headers(token) });
       if (!res.ok) return raise("get", res);
       const bytes = new Uint8Array(await res.arrayBuffer());
@@ -215,7 +227,9 @@ export const readWriteBlobFromEnv = (
       const token = resolveToken(options);
       const list = typeof pathnames === "string" ? [pathnames] : pathnames;
       const urls = list.map((pathname) =>
-        pathname.startsWith("https://") ? pathname : blobUrl(token, pathname),
+        // Accept full content URLs (canonical https, or the local
+        // emulator's http form) as well as bare pathnames.
+        /^https?:\/\//.test(pathname) ? pathname : blobUrl(token, pathname),
       );
       const res = await fetch(`${apiUrl()}/delete`, {
         method: "POST",

@@ -4,7 +4,7 @@ import type * as HttpClient from "effect/unstable/http/HttpClient";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { ambientOidcTokenUnsafe } from "./OidcToken.ts";
-import { sendMessageRaw } from "./QueueApi.ts";
+import { queueBaseUrl, sendMessageRaw } from "./QueueApi.ts";
 import {
   resolveQueueDeploymentId,
   resolveQueueToken,
@@ -231,7 +231,7 @@ export const sendMessageFromEnv = <
         headers["Vqs-Delay-Seconds"] = String(delaySeconds);
       }
       const response = await fetch(
-        `https://${topic.region}.vercel-queue.com/api/v3/topic/${encodeURIComponent(topic.topicName)}`,
+        `${queueBaseUrl(topic.region)}/api/v3/topic/${encodeURIComponent(topic.topicName)}`,
         {
           method: "POST",
           headers,

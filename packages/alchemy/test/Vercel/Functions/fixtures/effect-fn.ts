@@ -20,10 +20,7 @@ export default class EffectFn extends Vercel.Function<EffectFn>()(
     main: import.meta.url,
   },
   Effect.gen(function* () {
-    // init phase — resolves the deferred self-URL accessor and registers
-    // the cron (deploy half contributes config.json crons + CRON_SECRET).
     const selfUrl = yield* Vercel.Function.URL;
-
     yield* Vercel.cron(
       "0 3 * * *",
       Effect.sync(() => {

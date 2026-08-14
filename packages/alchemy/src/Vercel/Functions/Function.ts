@@ -27,26 +27,31 @@ import {
 } from "../Deploy/BuildOutput.ts";
 import {
   ALCHEMY_META_KEY,
+  deleteAliasByIdOrName,
   deleteDeploymentById,
   deleteProjectByIdOrName,
   deployArtifact,
   ensureProject,
   ensureProtectionBypass,
+  ensureStageAlias,
   findAutomationBypassSecret,
   findDeploymentByContentHash,
   readAssignedProductionUrl,
   hashDesiredEnv,
   listOwnDeployments,
+  listProjectEnvs,
   makeDeploymentMeta,
   makeOwnershipStamp,
   observeProject,
   readOwnershipStamp,
   readProductionUrl,
+  stageAliasName,
   syncProjectEnv,
   syncProjectSettings,
   type DesiredEnv,
   type ManagedEnvEntry,
   type ProjectSettingsDesired,
+  type StageAliasResult,
 } from "../Deploy/Engine.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -62,6 +67,7 @@ import {
   type VercelFunctionContext,
 } from "./FunctionBridge.ts";
 import { makeFunctionBundler } from "./FunctionBundle.ts";
+import { VercelFunctionLogs } from "./Logs.ts";
 
 export const FunctionTypeId = "Vercel.Function" as const;
 export type FunctionTypeId = typeof FunctionTypeId;
@@ -112,9 +118,21 @@ export interface FunctionProps extends PlatformProps {
   /**
    * Tenant mode: deploy into an existing project (a `Vercel.Project`'s
    * `projectId`, or a foreign project id/name) instead of auto-provisioning
-   * one. In tenant mode the Function owns only its deployments and the env
-   * keys it binds — never the project's settings or lifecycle — and deploys
-   * `target: "preview"` by default.
+   * one. In tenant mode the Function owns only its deployments, its stable
+   * per-stage alias, and the env it delivers — never the project's
+   * settings or lifecycle — and deploys `target: "preview"` by default.
+   *
+   * Preview tenants (the default) are **additive**: any number of stages
+   * (PR stacks, per-dev scratch) can share one project without clobbering
+   * each other. Each stage serves from a stable
+   * `{projectName}-{stage}.vercel.app` alias (SSO-gated on team accounts —
+   * drive it with the `protectionBypass` secret), and its env is delivered
+   * per-deployment via the generated `.vc-config.json` — a tenant env key
+   * that already exists in project env is a typed
+   * `Vercel.TenantEnvConflict` error, because project env would silently
+   * shadow it (live-verified precedence). Destroying the stage removes
+   * only its alias and its meta-stamped deployments, leaving the shared
+   * project and every other stage untouched.
    */
   project?: string;
   /**
@@ -148,6 +166,17 @@ export interface FunctionProps extends PlatformProps {
   target?: "production" | "preview";
   /** Bundler configuration for {@link main}. */
   build?: FunctionBuildOptions;
+  /**
+   * Local dev-server options (`alchemy dev`). Ignored by live deploys.
+   */
+  dev?: {
+    /**
+     * Preferred port for the function's stable local URL. Falls back to an
+     * ephemeral port when unavailable (a warning is logged).
+     * @default an ephemeral port, stable for the dev session
+     */
+    port?: number;
+  };
 }
 
 export interface Function extends Resource<
@@ -163,6 +192,15 @@ export interface Function extends Resource<
      * never computed.
      */
     url: string | undefined;
+    /**
+     * The stable per-stage alias a preview tenant claims on the shared
+     * project — `{projectName}-{stage}.vercel.app` (or the deterministic
+     * suffix fallback when that hostname is taken). `undefined` outside
+     * tenant-preview mode. Assigned via `assignAlias` (an upsert) after
+     * every deploy, so any number of PR stages coexist in one project,
+     * each behind its own stable hostname (DESIGN §5.1).
+     */
+    stageAlias: { uid: string; alias: string } | undefined;
     hash: {
       /** Full artifact tree hash (THE deploy skip key). */
       artifact: string;
@@ -242,6 +280,22 @@ export class TenantProjectNotFound extends Data.TaggedError(
 }> {}
 
 /**
+ * A tenant Function's env key already exists in the shared project's env
+ * (DESIGN §5.1). Tenant env is delivered per-deployment via
+ * `.vc-config.json` `environment`, and project env WINS on key conflict
+ * (live-verified, PROBES.md probe 3) — the tenant's value would be
+ * silently shadowed, so the conflict is a hard typed error, not advisory.
+ */
+export class TenantEnvConflict extends Data.TaggedError(
+  "Vercel.TenantEnvConflict",
+)<{
+  readonly message: string;
+  readonly projectId: string;
+  /** The env keys present both on the tenant and in project env. */
+  readonly keys: ReadonlyArray<string>;
+}> {}
+
+/**
  * Tenant-mode destroy refuses to delete a foreign project's active
  * production deployment (DESIGN §5.3).
  */
@@ -311,7 +365,7 @@ export const isSelfUrl = (
  * silently uploading garbage.
  */
 export const bindFunctionAsyncEnv = Effect.fn(function* (
-  _resource: Function,
+  resource: Function,
   props: InputProps<FunctionProps>,
 ) {
   if (globalThis.__ALCHEMY_RUNTIME__) return;
@@ -331,8 +385,16 @@ export const bindFunctionAsyncEnv = Effect.fn(function* (
     const value = env[bindingName];
     // `Function.URL` is Effect-shaped but is a sentinel, not a runnable env
     // value — the provider substitutes the read-back production URL during
-    // env sync. Check it before the Output/Effect guards below.
+    // env sync. Check it before the Output/Effect guards below. It is also
+    // mirrored onto the binding channel as its PLAIN marker: the local
+    // (dev) provider's config pipeline strips Effect-valued prop leaves,
+    // so the binding-channel copy is what carries the self-URL request
+    // into `alchemy dev`. The live provider reads the sentinel from the
+    // merged env either way, so the duplicate key is harmless.
     if (isSelfUrl(value)) {
+      yield* resource.bind(bindingName, {
+        env: { [bindingName]: SELF_URL_MARKER },
+      });
       continue;
     }
     if (Output.isResourceExpr(value) || Output.isRefExpr(value)) {
@@ -467,6 +529,48 @@ export const bindFunctionAsyncEnv = Effect.fn(function* (
  * });
  * ```
  *
+ * @example Ephemeral PR stages sharing a durable stage's project
+ * ```typescript
+ * // staging stage: owns the shared project, exports it
+ * const shared = yield* Vercel.Project("Shared");
+ * return { projectId: shared.projectId.as<string>() };
+ *
+ * // PR stage: a preview tenant of staging's project (cross-stage ref).
+ * // Deploys are additive (staging's production is untouched); the stage
+ * // serves from a stable {project}-{stage}.vercel.app alias, its env is
+ * // delivered per-deployment, and stack.destroy() removes only this
+ * // stage's alias + deployments.
+ * const fn = yield* Vercel.Function("Api", {
+ *   main: "./src/api.ts",
+ *   project: App.stage.staging.projectId,
+ *   env: { FEATURE_FLAG: "pr-preview" },
+ * });
+ * ```
+ *
+ * @section Local development
+ * During `alchemy dev` the Function runs locally instead of deploying: the
+ * same bundle (Effect bridge included) serves from a stable
+ * `http://localhost:<port>` URL with hot rebuilds, the Vercel platform env
+ * (`VERCEL=1`, `VERCEL_ENV=development`, `VERCEL_URL`,
+ * `VERCEL_DEPLOYMENT_ID=dev:…`) injected, and crons fired on schedule with
+ * the platform invoker's exact request shape.
+ *
+ * @example Pin the local port
+ * ```typescript
+ * const api = yield* Vercel.Function("Api", {
+ *   main: "./src/api.ts",
+ *   dev: { port: 3000 },
+ * });
+ * ```
+ *
+ * @example Opt out of local emulation
+ * ```typescript
+ * // Deploys to real Vercel even during `alchemy dev`
+ * const api = yield* Vercel.Function("Api", {
+ *   main: "./src/api.ts",
+ * }).pipe(Alchemy.remote());
+ * ```
+ *
  * @see https://vercel.com/docs/functions
  */
 export const Function: Platform<
@@ -562,6 +666,7 @@ export const FunctionProvider = () =>
     Function,
     Effect.gen(function* () {
       const { bundleFunctionCode } = yield* makeFunctionBundler;
+      const functionLogs = yield* VercelFunctionLogs;
 
       /** Merge the binding channel into env/crons/routes/queues. */
       const collectBindings = (
@@ -641,6 +746,12 @@ export const FunctionProvider = () =>
         crons: CronEntry[];
         routes: BuildOutputRoute[];
         queues: QueueTriggerEntry[];
+        /**
+         * Per-deployment env baked into `.vc-config.json` `environment`
+         * (tenant mode, DESIGN §5.1). Part of the artifact — and therefore
+         * the artifact hash — so tenant env changes force a redeploy.
+         */
+        environment?: Record<string, string>;
       }) =>
         Effect.gen(function* () {
           if (
@@ -650,6 +761,14 @@ export const FunctionProvider = () =>
             if (input.queues.length > 0) {
               return yield* Effect.die(
                 `Vercel.Function(${input.id}): queue subscriptions require an Effect-mode \`main\` Function — a source/prebuilt output tree cannot carry the generated consumer function`,
+              );
+            }
+            if (
+              input.environment !== undefined &&
+              Object.keys(input.environment).length > 0
+            ) {
+              return yield* Effect.die(
+                `Vercel.Function(${input.id}): tenant-mode env delivery rewrites the generated \`.vc-config.json\` — a source/prebuilt output tree cannot carry per-deployment env. Move the env onto the shared project (Vercel.ProjectEnv) or use a \`main\` Function`,
               );
             }
           }
@@ -669,6 +788,10 @@ export const FunctionProvider = () =>
             handler: "index.mjs",
             launcherType: "Nodejs",
             supportsResponseStreaming: true,
+            ...(input.environment !== undefined &&
+            Object.keys(input.environment).length > 0
+              ? { environment: input.environment }
+              : {}),
             ...(input.news.resources?.maxDuration !== undefined
               ? { maxDuration: input.news.resources.maxDuration }
               : {}),
@@ -732,8 +855,10 @@ export const FunctionProvider = () =>
             }
             return { project, tenant: true as const };
           }
+          // `|| undefined` guards the inert precreate stub (empty strings),
+          // which must never become a project name.
           const name =
-            input.output?.projectName ??
+            (input.output?.projectName || undefined) ??
             (yield* createProjectName(input.id, input.news.name));
           const project = yield* ensureProject({
             name,
@@ -800,8 +925,9 @@ export const FunctionProvider = () =>
           return undefined;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
+          // `|| undefined` guards the inert precreate stub (empty strings).
           const idOrName =
-            output?.projectId ??
+            (output?.projectId || undefined) ??
             olds?.project ??
             (yield* createProjectName(id, olds?.name));
           const project = yield* observeProject(idOrName);
@@ -811,7 +937,11 @@ export const FunctionProvider = () =>
             projectId: project.id,
             projectName: project.name,
             deploymentId: output?.deploymentId ?? "",
-            url: readProductionUrl(project) ?? output?.url,
+            url:
+              output?.stageAlias !== undefined
+                ? `https://${output.stageAlias.alias}`
+                : (readProductionUrl(project) ?? output?.url),
+            stageAlias: output?.stageAlias,
             hash: output?.hash ?? { artifact: "", code: "", env: "" },
             managedEnv: output?.managedEnv ?? [],
             protectionBypass:
@@ -835,24 +965,51 @@ export const FunctionProvider = () =>
             : Unowned(attrs);
         }),
         precreate: Effect.fn(function* ({ id, news }) {
+          // Precreate runs BEFORE upstream resolution (it exists to break
+          // binding cycles), so props may still carry unresolved Inputs.
+          // The `env` and `exports` channels are EXPECTED to be unresolved
+          // here — cycle partners' init captures (e.g. a blob store's
+          // `storeId` accessor riding the env channel) resolve only after
+          // the partner reconciles against the pre-created stub, and
+          // precreate never reads either channel. Gate the inert stub only
+          // on the project-facing props precreate actually consumes
+          // (tenant `project:` ref, `name`, settings): if e.g. a tenant
+          // `project:` still references an unreconciled Project there is
+          // nothing to pre-create against — return the stub and let
+          // reconcile observe the real project once the reference
+          // resolves.
+          const {
+            env: _cycleEnv,
+            exports: _cycleExports,
+            ...projectFacing
+          } = (news ?? {}) as Record<string, unknown>;
+          if (!isResolved(projectFacing)) {
+            return {
+              projectId: "",
+              projectName: "",
+              deploymentId: "",
+              url: undefined,
+              stageAlias: undefined,
+              hash: { artifact: "", code: "", env: "" },
+              managedEnv: [],
+              protectionBypass: undefined,
+              cronSecret: undefined,
+            } satisfies Function["Attributes"];
+          }
           // Ensure the project exists and READ BACK the assigned domain —
           // the computed `https://{name}.vercel.app` is never load-bearing
           // (DESIGN §6.5).
           const { project, tenant } = yield* resolveProject({
             id,
-            news,
+            news: projectFacing as FunctionProps,
             output: undefined,
           });
           // Mint the automation bypass secret at project ensure, BEFORE any
           // deploy exists — bypass secrets only open deployments created
-          // AFTER them (§6.7, live-verified). Tenant mode never mutates a
-          // foreign project's protection settings.
-          const existingBypass = findAutomationBypassSecret(project);
-          const protectionBypass = tenant
-            ? existingBypass !== undefined
-              ? Redacted.make(existingBypass)
-              : undefined
-            : yield* ensureProtectionBypass(project);
+          // AFTER them (§6.7, live-verified). Minted in tenant mode too
+          // (additive; the tenant's SSO-gated stage alias needs it), while
+          // an existing secret is always kept, never regenerated.
+          const protectionBypass = yield* ensureProtectionBypass(project);
           let managedEnv: ManagedEnvEntry[] = [];
           if (!tenant) {
             const stamp = yield* makeOwnershipStamp(id);
@@ -881,6 +1038,7 @@ export const FunctionProvider = () =>
             url:
               readProductionUrl(project) ??
               (yield* readAssignedProductionUrl(project.id)),
+            stageAlias: undefined,
             hash: { artifact: "", code: "", env: "" },
             managedEnv,
             protectionBypass,
@@ -905,14 +1063,13 @@ export const FunctionProvider = () =>
 
           // 1b. Protection bypass (§6.7): observe-and-keep — mint only when
           //     absent, always BEFORE deploying (a bypass secret only opens
-          //     deployments created after it). Tenant mode never mutates a
-          //     foreign project's protection settings.
-          const existingBypass = findAutomationBypassSecret(project);
-          const protectionBypass = tenant
-            ? existingBypass !== undefined
-              ? Redacted.make(existingBypass)
-              : undefined
-            : yield* ensureProtectionBypass(project);
+          //     deployments created after it). Minted in TENANT mode too:
+          //     the tenant's stage alias and deployment URLs are SSO-gated
+          //     on team accounts, and the automation bypass secret is the
+          //     only way to drive them. Minting is additive — it never
+          //     changes the foreign project's protection level, and an
+          //     existing secret is always kept, never regenerated.
+          const protectionBypass = yield* ensureProtectionBypass(project);
 
           // 2. Sync settings (owned mode only — a tenant never touches a
           //    foreign project's settings).
@@ -923,7 +1080,10 @@ export const FunctionProvider = () =>
             });
           }
 
-          // 3. Sync env against the OBSERVED project env (adoption-safe).
+          // 3. Desired env. Owned mode syncs PROJECT env against the
+          //    observed rows (adoption-safe); tenant mode delivers env
+          //    PER-DEPLOYMENT via `.vc-config.json` `environment`
+          //    (DESIGN §5.1) and never touches the shared project's env.
           const contributed = collectBindings(bindings);
           // Cron secret: stable across reconciles (a rotating value would
           // force a redeploy every deploy); dropped with the last cron.
@@ -931,20 +1091,26 @@ export const FunctionProvider = () =>
             contributed.crons.length > 0
               ? (output?.cronSecret ?? (yield* mintCronSecret))
               : undefined;
+          const stamp = yield* makeOwnershipStamp(id);
           // Self-URL for `Function.URL` bindings, resolved BEFORE the
-          // deploy (env only takes effect on new deployments): the project
-          // body's alias when it exists, else the assigned project domain
-          // (greenfield — no deployment yet, but the production domain is
-          // assigned at project creation). Always read back, never computed.
+          // deploy (env only takes effect on new deployments). Owned mode:
+          // the project body's alias when it exists, else the assigned
+          // project domain (greenfield — no deployment yet, but the
+          // production domain is assigned at project creation), always read
+          // back. Tenant preview: the stable per-stage alias this reconcile
+          // is about to claim — the persisted alias when present (it
+          // survives a suffix fallback), else the deterministic base name.
           const needsSelfUrl = Object.values({
             ...contributed.env,
             ...news.env,
           }).some(isSelfUrl);
           const selfUrl = !needsSelfUrl
             ? undefined
-            : (readProductionUrl(project) ??
-              (yield* readAssignedProductionUrl(project.id)) ??
-              output?.url);
+            : tenant && target === "preview"
+              ? `https://${output?.stageAlias?.alias ?? stageAliasName(project.name, stamp.stage)}`
+              : (readProductionUrl(project) ??
+                (yield* readAssignedProductionUrl(project.id)) ??
+                output?.url);
           const envRows = yield* desiredEnvRows({
             id,
             news,
@@ -954,19 +1120,65 @@ export const FunctionProvider = () =>
             cronSecret,
           });
           const envHash = yield* hashDesiredEnv(envRows);
-          const envSync = yield* syncProjectEnv({
-            idOrName: project.id,
-            desired: envRows,
-            managedEnv: output?.managedEnv ?? [],
-          });
 
-          // 4. Build the artifact.
+          // 3b. Tenant mode: the MANDATORY cross-tenant conflict check —
+          //     project env WINS over `.vc-config.json` env on key conflict
+          //     (live-verified, PROBES.md probe 3), so a conflicting tenant
+          //     key would be silently shadowed. Hard typed error, then
+          //     resolve the per-deployment environment map. Owned mode:
+          //     sync project env by observed-vs-desired delta.
+          let tenantEnvironment: Record<string, string> | undefined;
+          let envChanged = false;
+          let managedEnv: ManagedEnvEntry[] = [...(output?.managedEnv ?? [])];
+          if (tenant) {
+            const observedProjectEnv = yield* listProjectEnvs(project.id);
+            const projectKeys = new Set(
+              observedProjectEnv.map((row) => row.key),
+            );
+            const conflicts = envRows
+              .map((row) => row.key)
+              .filter((key) => projectKeys.has(key));
+            if (conflicts.length > 0) {
+              return yield* new TenantEnvConflict({
+                message:
+                  `Vercel.Function(${id}): tenant env key(s) [${conflicts.join(", ")}] already exist in shared project ${project.id}'s env — ` +
+                  "project env wins over per-deployment env on conflict, so the tenant's value would be silently shadowed. " +
+                  "Rename the key(s) or manage them on the shared project instead.",
+                projectId: project.id,
+                keys: conflicts,
+              });
+            }
+            tenantEnvironment = Object.fromEntries(
+              envRows.map((row) => [
+                row.key,
+                Redacted.isRedacted(row.value)
+                  ? Redacted.value(row.value)
+                  : row.value,
+              ]),
+            );
+          } else {
+            const envSync = yield* syncProjectEnv({
+              idOrName: project.id,
+              desired: envRows,
+              managedEnv: output?.managedEnv ?? [],
+            });
+            envChanged = envSync.changed;
+            managedEnv = [...envSync.managedEnv];
+          }
+
+          // 4. Build the artifact. Tenant env rides inside the generated
+          //    `.vc-config.json`, so it participates in the artifact hash
+          //    (tenant env changes force a redeploy through the artifact,
+          //    not through `envChanged`).
           const { artifact, codeHash } = yield* buildArtifact({
             id,
             news,
             crons: contributed.crons,
             routes: contributed.routes,
             queues: contributed.queues,
+            ...(tenantEnvironment !== undefined
+              ? { environment: tenantEnvironment }
+              : {}),
           });
           // Target participates in the content identity: retargeting
           // production ↔ preview must produce a new deployment even when
@@ -974,8 +1186,24 @@ export const FunctionProvider = () =>
           const contentHash = yield* sha256(
             `${artifact.hash}:${envHash}:${target}`,
           );
-          const stamp = yield* makeOwnershipStamp(id);
           const meta = makeDeploymentMeta(stamp, contentHash);
+
+          // Tenant-preview: converge the stable per-stage alias onto the
+          // final deployment — on EVERY path (skip, crash recovery, fresh
+          // deploy), so an out-of-band alias deletion or re-point heals.
+          const settleStageAlias = (deploymentId: string) =>
+            tenant && target === "preview"
+              ? Effect.map(
+                  ensureStageAlias({
+                    projectName: project.name,
+                    stage: stamp.stage,
+                    stack: stamp.stack,
+                    deploymentId,
+                    previous: output?.stageAlias,
+                  }),
+                  (alias): StageAliasResult | undefined => alias,
+                )
+              : Effect.succeed<StageAliasResult | undefined>(undefined);
 
           // 5. Skip-on-hash: same artifact + same env + a live deployment
           //    means nothing to deploy (env changes force a redeploy —
@@ -988,16 +1216,20 @@ export const FunctionProvider = () =>
             output.deploymentId !== "" &&
             output.hash.artifact === artifact.hash &&
             output.hash.env === envHash &&
-            !envSync.changed &&
+            !envChanged &&
             olds !== undefined &&
             previousTarget === target
           ) {
+            const stageAlias = yield* settleStageAlias(output.deploymentId);
             return {
               ...output,
               projectId: project.id,
               projectName: project.name,
+              ...(stageAlias !== undefined
+                ? { stageAlias, url: `https://${stageAlias.alias}` }
+                : {}),
               hash: { artifact: artifact.hash, code: codeHash, env: envHash },
-              managedEnv: [...envSync.managedEnv],
+              managedEnv,
               protectionBypass,
               cronSecret,
             } satisfies Function["Attributes"];
@@ -1011,17 +1243,22 @@ export const FunctionProvider = () =>
             contentHash,
           });
           if (recovered !== undefined) {
+            const stageAlias = yield* settleStageAlias(recovered.uid);
             return {
               projectId: project.id,
               projectName: project.name,
               deploymentId: recovered.uid,
-              url: yield* functionUrl({
-                projectId: project.id,
-                target,
-                deploymentUrl: recovered.url,
-              }),
+              url:
+                stageAlias !== undefined
+                  ? `https://${stageAlias.alias}`
+                  : yield* functionUrl({
+                      projectId: project.id,
+                      target,
+                      deploymentUrl: recovered.url,
+                    }),
+              stageAlias,
               hash: { artifact: artifact.hash, code: codeHash, env: envHash },
-              managedEnv: [...envSync.managedEnv],
+              managedEnv,
               protectionBypass,
               cronSecret,
             } satisfies Function["Attributes"];
@@ -1038,27 +1275,37 @@ export const FunctionProvider = () =>
             meta,
           });
 
-          // 8. Return fresh attributes — URL read back, never computed.
+          // 8. Converge the tenant stage alias onto the fresh deployment,
+          //    then return fresh attributes — URL read back, never computed.
+          const stageAlias = yield* settleStageAlias(result.deploymentId);
           return {
             projectId: project.id,
             projectName: project.name,
             deploymentId: result.deploymentId,
-            url: yield* functionUrl({
-              projectId: project.id,
-              target,
-              deploymentUrl: result.aliases[0] ?? result.deploymentUrl,
-            }),
+            url:
+              stageAlias !== undefined
+                ? `https://${stageAlias.alias}`
+                : yield* functionUrl({
+                    projectId: project.id,
+                    target,
+                    deploymentUrl: result.aliases[0] ?? result.deploymentUrl,
+                  }),
+            stageAlias,
             hash: { artifact: artifact.hash, code: codeHash, env: envHash },
-            managedEnv: [...envSync.managedEnv],
+            managedEnv,
             protectionBypass,
             cronSecret,
           } satisfies Function["Attributes"];
         }),
         delete: Effect.fn(function* ({ id, olds, output }) {
+          // An inert precreate stub (props never resolved, reconcile never
+          // ran) tracks no cloud state.
+          if (output.projectId === "") return;
           if (olds?.project !== undefined) {
-            // Tenant mode: remove only our own meta-stamped deployments and
-            // the env keys we manage — never the foreign project itself, and
-            // never its active production deployment.
+            // Tenant mode: remove ONLY this stage's alias and our own
+            // meta-stamped deployments plus the env keys we manage — never
+            // the shared project itself, and never its active production
+            // deployment.
             const stamp = yield* makeOwnershipStamp(id);
             const own = yield* listOwnDeployments({
               projectId: output.projectId,
@@ -1076,6 +1323,11 @@ export const FunctionProvider = () =>
                 projectId: output.projectId,
                 deploymentId: activeProduction.uid,
               });
+            }
+            // Stage alias first (after the refusal gate, so a refused
+            // destroy leaves the tenant fully intact), then deployments.
+            if (output.stageAlias !== undefined) {
+              yield* deleteAliasByIdOrName(output.stageAlias.uid);
             }
             for (const deployment of own) {
               yield* deleteDeploymentById(deployment.uid);
@@ -1096,6 +1348,19 @@ export const FunctionProvider = () =>
           // domains). Idempotent on the typed NotFound.
           yield* deleteProjectByIdOrName(output.projectId);
         }),
+        tail: ({ output }) =>
+          functionLogs.tail({
+            projectId: output.projectId,
+            deploymentId: output.deploymentId,
+          }),
+        logs: ({ output, options }) =>
+          functionLogs.logs({
+            target: {
+              projectId: output.projectId,
+              deploymentId: output.deploymentId,
+            },
+            options,
+          }),
       };
     }),
   );
