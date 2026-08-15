@@ -115,7 +115,10 @@ export default class ApiFunction extends Lambda.Function<ApiFunction>()(
     // that window — a write shortly after deploy would never arrive.
     yield* DynamoDB.consumeTableChanges(
       table,
-      { streamViewType: "NEW_AND_OLD_IMAGES", startingPosition: "TRIM_HORIZON" },
+      {
+        streamViewType: "NEW_AND_OLD_IMAGES",
+        startingPosition: "TRIM_HORIZON",
+      },
       (changes) =>
         changes.pipe(
           Stream.mapEffect((record) => {
@@ -148,10 +151,10 @@ export default class ApiFunction extends Lambda.Function<ApiFunction>()(
         if (url.pathname === "/s3") {
           yield* putObject({ Key: "hello.txt", Body: "hello from s3" });
           const object = yield* getObject({ Key: "hello.txt" });
-          const text = yield* (object.Body?.pipe(
-            Stream.decodeText,
-            Stream.mkString,
-          ) ?? Effect.succeed(""));
+          const text = yield* (
+            object.Body?.pipe(Stream.decodeText, Stream.mkString) ??
+              Effect.succeed("")
+          );
           return yield* HttpServerResponse.json({ text });
         }
 

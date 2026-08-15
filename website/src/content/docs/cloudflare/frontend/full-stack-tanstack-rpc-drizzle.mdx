@@ -140,7 +140,7 @@ export const NeonDatabase = Effect.gen(function* () {
 
   const branch = yield* Neon.Branch("Branch", {
     project,
-    migrationsDir: schema.out,
+    migrations: schema,
   });
 
   return { project, branch, schema };

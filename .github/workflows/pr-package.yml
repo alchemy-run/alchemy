@@ -60,6 +60,7 @@ jobs:
               { "dir": "packages/frontend-frameworks",   "name": "@alchemy.run/frontend-frameworks",   "group": "Alchemy" },
               { "dir": "packages/node-utils",            "name": "@alchemy.run/node-utils",            "group": "Alchemy" },
               { "dir": "packages/pr-package",            "name": "@alchemy.run/pr-package",            "group": "Alchemy" },
+              { "dir": "packages/floci",                 "name": "@alchemy.run/floci",                 "group": "Alchemy" },
               { "dir": "distilled/packages/core",        "name": "@distilled.cloud/core",              "group": "Distilled", "submodule": true },
               { "dir": "distilled/packages/aws",         "name": "@distilled.cloud/aws",               "group": "Distilled", "submodule": true },
               { "dir": "distilled/packages/axiom",       "name": "@distilled.cloud/axiom",             "group": "Distilled", "submodule": true },

@@ -13,5 +13,10 @@
     "jsx": "react-jsx",
     "jsxImportSource": "octane"
   },
-  "include": ["src/**/*", "octane.config.ts", "vite.config.ts", "alchemy.run.ts"]
+  "include": [
+    "src/**/*",
+    "octane.config.ts",
+    "vite.config.ts",
+    "alchemy.run.ts"
+  ]
 }

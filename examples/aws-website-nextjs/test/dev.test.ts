@@ -92,8 +92,7 @@ const fetchOk = async (
 };
 
 /** Extract the stack-output URL the CLI prints on stdout. */
-const outputUrl = () =>
-  output.match(/\burl:\s*['"]?(http[^\s'",]+)/)?.[1];
+const outputUrl = () => output.match(/\burl:\s*['"]?(http[^\s'",]+)/)?.[1];
 
 /**
  * Discover a server action's id from the dev server's client chunks:

@@ -12,7 +12,15 @@ import * as RpcProvider from "../../Local/RpcProvider.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
-import { listSqlFiles, readSqlFile } from "../../SQL/SqlFile.ts";
+import {
+  diffMigrations,
+  migrationsAttrs,
+  migrationsInputOf,
+  runMigrations,
+  stampedOf,
+  type MigrationsInput,
+} from "../../SQL/Migrations/index.ts";
+import { hashImports, readSqlFile } from "../../SQL/SqlFile.ts";
 import { recordsEqual } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import {
@@ -21,7 +29,7 @@ import {
   localRuntimeServices,
 } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
-import { applyMigrations, applyMigrationsWith } from "./ApplyMigrations.ts";
+import { makeD1MigrationExecutor } from "./ApplyMigrations.ts";
 import { cloneDatabase } from "./CloneDatabase.ts";
 import { importD1Database } from "./ImportDatabase.ts";
 import { withLocalD1Executor } from "./LocalD1Gateway.ts";
@@ -37,8 +45,6 @@ export type PrimaryLocationHint =
   | "eeur"
   | "apac"
   | "oc";
-
-const DEFAULT_MIGRATIONS_TABLE = "d1_migrations";
 
 export type CloneSource = Database | { databaseId: string } | { name: string };
 
@@ -77,24 +83,21 @@ export type DatabaseProps = {
    */
   jurisdiction?: Jurisdiction;
   /**
-   * Directory containing `.sql` migration files. Files are sorted by their
-   * numeric prefix (e.g. `0001_init.sql`, `0002_add_users.sql`) and applied
-   * in order. Pending migrations are detected on each deploy and applied as
-   * part of `update`. Equivalent to wrangler's `migrations_dir`.
-   */
-  migrationsDir?: string;
-  /**
-   * Name of the table used to track applied migrations. Useful for
-   * compatibility with frameworks that expect a specific name (e.g.
-   * `drizzle_migrations`).
+   * SQL migrations to apply on deploy. Accepts a directory path, a
+   * `Drizzle.Schema` resource, or a `{ dir, table? }` object.
    *
-   * The table schema is the wrangler-compatible
-   * `(id TEXT PRIMARY KEY, name TEXT, applied_at TEXT)`. A pre-existing
-   * legacy 2-column table is migrated in place.
+   * Bookkeeping always lives in Alchemy's `__alchemy_migrations` table. A
+   * database previously migrated with `drizzle-kit migrate` or
+   * `wrangler d1 migrations apply` is adopted by a ONE-WAY conversion on
+   * first deploy: the old tool's applied history is copied into Alchemy's
+   * table (validated against the local files) and the old table is left
+   * frozen — never written, never dropped. From then on Alchemy owns the
+   * migration state.
    *
-   * @default "d1_migrations"
+   * Pending migrations are detected on each deploy and applied in order as
+   * part of `update`.
    */
-  migrationsTable?: string;
+  migrations?: MigrationsInput;
   /**
    * Paths to additional `.sql` files to import after migrations are
    * applied. Each file is uploaded via Cloudflare's D1 import API and
@@ -175,28 +178,40 @@ export type Database = Resource<
  * ```
  *
  * @section Migrations
- * Point `migrationsDir` at a folder of `.sql` files. Files are sorted by
- * numeric prefix (e.g. `0001_`, `0002_`) and applied in order. Already-applied
+ * Point `migrations` at a folder of migration files. Already-applied
  * migrations are skipped on subsequent deploys; new files are detected
  * automatically and applied as part of the next update.
  *
- * Migration tracking uses the wrangler-compatible
- * `(id TEXT PRIMARY KEY, name TEXT, applied_at TEXT)` schema. The resource
- * also detects and upgrades a legacy 2-column tracking table in place if one
- * already exists.
+ * Bookkeeping always lives in Alchemy's `__alchemy_migrations` table —
+ * one format, owned by Alchemy. A database previously migrated with
+ * drizzle-kit, Prisma, or wrangler is adopted by a one-way conversion on
+ * first deploy: the old tool's applied history is copied into Alchemy's
+ * table and the old table is left frozen (never written, never dropped).
+ * No baselining required. Legacy Alchemy tracking tables are detected by
+ * column shape and upgraded in place.
  *
  * @example Apply migrations from a directory
  * ```typescript
  * const db = yield* Cloudflare.D1.Database("my-db", {
- *   migrationsDir: "./migrations",
+ *   migrations: "./migrations",
  * });
  * ```
  *
- * @example Custom migrations table (e.g. for Drizzle)
+ * @example Drizzle migrations (adopts an existing drizzle-kit-migrated database)
+ * ```typescript
+ * const schema = yield* Drizzle.Schema("app-schema", {
+ *   schema: "./src/schema.ts",
+ *   dialect: "sqlite",
+ * });
+ * const db = yield* Cloudflare.D1.Database("my-db", {
+ *   migrations: schema,
+ * });
+ * ```
+ *
+ * @example Custom bookkeeping table name
  * ```typescript
  * const db = yield* Cloudflare.D1.Database("my-db", {
- *   migrationsDir: "./migrations",
- *   migrationsTable: "drizzle_migrations",
+ *   migrations: { dir: "./migrations", table: "my_migrations" },
  * });
  * ```
  *
@@ -293,24 +308,8 @@ export const ProviderLive = () =>
         return { action: "update" } as const;
       }
       // Detect migration/import file drift.
-      if (news.migrationsDir) {
-        const newHashes = yield* hashMigrations(news.migrationsDir);
-        const oldHashes = output?.migrationsHashes ?? {};
-        if (!recordsEqual(newHashes, oldHashes)) {
-          return { action: "update" } as const;
-        }
-        if (
-          (news.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE) !==
-          (output?.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE)
-        ) {
-          return { action: "update" } as const;
-        }
-      } else if (
-        output?.migrationsHashes &&
-        Object.keys(output.migrationsHashes).length > 0
-      ) {
-        // migrationsDir was removed but state still tracks migrations: nothing
-        // to do remotely (we never un-apply), but no diff needed either.
+      if (yield* diffMigrations({ news, output })) {
+        return { action: "update" } as const;
       }
       if (news.importFiles?.length) {
         const newHashes = yield* hashImports(news.importFiles, yield* rootDir);
@@ -391,8 +390,8 @@ export const ProviderLive = () =>
           jurisdiction: (olds?.jurisdiction ?? "default") as Jurisdiction,
           readReplication: olds?.readReplication,
           accountId,
-          migrationsDir: olds?.migrationsDir,
-          migrationsTable: olds?.migrationsTable,
+          migrationsDir: (olds && migrationsInputOf(olds))?.dir,
+          migrationsTable: (olds && migrationsInputOf(olds))?.table,
           migrationsHashes: {},
           importHashes: {},
         };
@@ -510,23 +509,27 @@ export const ProviderLive = () =>
         });
       }
 
-      // Sync migrations — `applyMigrations` is itself idempotent (it
-      // skips already-applied entries), so this works for both first
-      // create and ongoing updates.
-      const migrationsTable =
-        news.migrationsTable ??
-        output?.migrationsTable ??
-        DEFAULT_MIGRATIONS_TABLE;
-      const migrationsHashes = news.migrationsDir
-        ? yield* runMigrations(
-            acct,
-            databaseId,
-            news.migrationsDir,
-            migrationsTable,
-          )
-        : isFirstCreation
-          ? {}
-          : (output?.migrationsHashes ?? {});
+      // Sync migrations — the shared pipeline is idempotent
+      // (already-applied entries are skipped), so this works for both
+      // first create and ongoing updates. Foreign (drizzle/prisma/
+      // wrangler) or legacy history is converted into
+      // __alchemy_migrations on first contact.
+      const migrationsInput = migrationsInputOf(news);
+      const migrations = migrationsInput
+        ? yield* runMigrations({
+            input: migrationsInput,
+            stamped: stampedOf(output),
+            withExecutor: (apply) =>
+              Effect.gen(function* () {
+                const queryDb = yield* d1.queryDatabase;
+                yield* apply(
+                  makeD1MigrationExecutor((sql) =>
+                    queryDb({ accountId: acct, databaseId, sql }),
+                  ),
+                );
+              }),
+          })
+        : undefined;
 
       // Sync imports — `runImports` skips files whose hash matches
       // previously-imported state. On first create the previous map
@@ -547,9 +550,13 @@ export const ProviderLive = () =>
         jurisdiction: (output?.jurisdiction ?? jurisdiction) as Jurisdiction,
         readReplication: news.readReplication,
         accountId: acct,
-        migrationsDir: news.migrationsDir,
-        migrationsTable: news.migrationsDir ? migrationsTable : undefined,
-        migrationsHashes,
+        // On first creation prior state is meaningless; otherwise removing
+        // `migrations` keeps the stamp and hashes for a later re-add.
+        ...migrationsAttrs({
+          input: migrationsInput,
+          run: migrations,
+          output: isFirstCreation ? undefined : output,
+        }),
         importHashes,
       };
     }),
@@ -606,17 +613,8 @@ export const ProviderLocal = () =>
           }
           // Detect migration/import file drift — same rules as the live
           // provider.
-          if (news.migrationsDir) {
-            const newHashes = yield* hashMigrations(news.migrationsDir);
-            if (!recordsEqual(newHashes, output.migrationsHashes ?? {})) {
-              return { action: "update" } as const;
-            }
-            if (
-              (news.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE) !==
-              (output.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE)
-            ) {
-              return { action: "update" } as const;
-            }
+          if (yield* diffMigrations({ news, output })) {
+            return { action: "update" } as const;
           }
           if (news.importFiles?.length) {
             const newHashes = yield* hashImports(
@@ -637,27 +635,20 @@ export const ProviderLocal = () =>
           const { accountId } = yield* yield* CloudflareEnvironment;
           const databaseId = output?.databaseId ?? generateLocalId();
 
-          // Sync migrations — the shared flow is idempotent (skips applied
-          // entries), driven through the ephemeral local gateway.
-          const migrationsTable =
-            news.migrationsTable ??
-            output?.migrationsTable ??
-            DEFAULT_MIGRATIONS_TABLE;
-          let migrationsHashes: Record<string, string> = {};
-          if (news.migrationsDir) {
-            const files = yield* listSqlFiles(news.migrationsDir);
-            if (files.length > 0) {
-              yield* withLocalD1Executor(databaseId, (executor) =>
-                applyMigrationsWith(executor, {
-                  migrationsTable,
-                  migrationsFiles: files,
-                }),
-              ).pipe(Effect.provideContext(runtimeContext));
-            }
-            for (const file of files) migrationsHashes[file.id] = file.hash;
-          } else {
-            migrationsHashes = output?.migrationsHashes ?? {};
-          }
+          // Sync migrations — the shared pipeline, driven through the
+          // ephemeral local gateway so the SAME bookkeeping applies
+          // locally as in the cloud.
+          const migrationsInput = migrationsInputOf(news);
+          const migrations = migrationsInput
+            ? yield* runMigrations({
+                input: migrationsInput,
+                stamped: stampedOf(output),
+                withExecutor: (apply) =>
+                  withLocalD1Executor(databaseId, (executor) =>
+                    apply(makeD1MigrationExecutor(executor)),
+                  ).pipe(Effect.provideContext(runtimeContext)),
+              })
+            : undefined;
 
           // Sync imports — locally an import file is just multi-statement
           // SQL, executed through the same gateway. Files whose hash matches
@@ -692,9 +683,11 @@ export const ProviderLocal = () =>
             jurisdiction: (news.jurisdiction ?? "default") as Jurisdiction,
             readReplication: news.readReplication,
             accountId: output?.accountId ?? accountId,
-            migrationsDir: news.migrationsDir,
-            migrationsTable: news.migrationsDir ? migrationsTable : undefined,
-            migrationsHashes,
+            ...migrationsAttrs({
+              input: migrationsInput,
+              run: migrations,
+              output,
+            }),
             importHashes,
           };
         }),
@@ -756,31 +749,6 @@ const resolveCloneSource = (source: CloneSource, accountId: string) =>
   });
 
 /**
- * Read all migration files from `migrationsDir`, run pending migrations,
- * and return the per-file content hashes for state tracking.
- */
-const runMigrations = (
-  accountId: string,
-  databaseId: string,
-  migrationsDir: string,
-  migrationsTable: string,
-) =>
-  Effect.gen(function* () {
-    const files = yield* listSqlFiles(migrationsDir);
-    if (files.length > 0) {
-      yield* applyMigrations({
-        accountId,
-        databaseId,
-        migrationsTable,
-        migrationsFiles: files,
-      });
-    }
-    const hashes: Record<string, string> = {};
-    for (const file of files) hashes[file.id] = file.hash;
-    return hashes;
-  });
-
-/**
  * Read each `importFiles` entry and run it through the D1 import flow,
  * skipping files whose hash matches the previously-imported hash.
  */
@@ -811,29 +779,6 @@ const runImports = (
     const tracked = new Set(importFiles);
     for (const key of Object.keys(hashes)) {
       if (!tracked.has(key)) delete hashes[key];
-    }
-    return hashes;
-  });
-
-/**
- * Hash all `.sql` files in `migrationsDir` without applying them; used by
- * `diff` to detect drift relative to previously-applied state.
- */
-const hashMigrations = (migrationsDir: string) =>
-  listSqlFiles(migrationsDir).pipe(
-    Effect.map((files) => {
-      const hashes: Record<string, string> = {};
-      for (const file of files) hashes[file.id] = file.hash;
-      return hashes;
-    }),
-  );
-
-const hashImports = (importFiles: ReadonlyArray<string>, rootDir: string) =>
-  Effect.gen(function* () {
-    const hashes: Record<string, string> = {};
-    for (const filePath of importFiles) {
-      const file = yield* readSqlFile(rootDir, filePath);
-      hashes[filePath] = file.hash;
     }
     return hashes;
   });

@@ -7,11 +7,16 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { hashImports, hashMigrations } from "../../SQL/SqlFile.ts";
+import {
+  diffMigrations,
+  migrationsAttrs,
+  migrationsInputOf,
+  stampedOf,
+} from "../../SQL/Migrations/index.ts";
 import { recordsEqual } from "../../Util/equal.ts";
 import type { BaseDatabaseAttributes, BaseDatabaseProps } from "../Database.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_MIGRATIONS_TABLE,
   PlanetscaleConflict,
   waitForBranchReady,
   waitForDatabaseReady,
@@ -146,17 +151,8 @@ export const PostgresDatabaseProvider = () =>
         return { action: "replace" } as const;
       }
 
-      if (news.migrationsDir) {
-        const newHashes = yield* hashMigrations(news.migrationsDir);
-        if (!recordsEqual(newHashes, output?.migrationsHashes ?? {})) {
-          return { action: "update", stables } as const;
-        }
-        if (
-          (news.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE) !==
-          (output?.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE)
-        ) {
-          return { action: "update", stables } as const;
-        }
+      if (yield* diffMigrations({ news, output })) {
+        return { action: "update", stables } as const;
       }
       if (news.importFiles?.length) {
         const newHashes = yield* hashImports(news.importFiles, yield* rootDir);
@@ -230,8 +226,10 @@ export const PostgresDatabaseProvider = () =>
         updatedAt: data.updated_at,
         htmlUrl: data.html_url,
         region: { slug: data.region.slug },
-        migrationsDir: output?.migrationsDir ?? olds?.migrationsDir,
-        migrationsTable: output?.migrationsTable ?? olds?.migrationsTable,
+        migrationsDir:
+          output?.migrationsDir ?? (olds && migrationsInputOf(olds))?.dir,
+        migrationsTable:
+          output?.migrationsTable ?? (olds && migrationsInputOf(olds))?.table,
         migrationsHashes: output?.migrationsHashes ?? {},
         importHashes: output?.importHashes ?? {},
         clusterSize,
@@ -353,20 +351,17 @@ export const PostgresDatabaseProvider = () =>
         database: updated.name,
         branch,
       };
-      if (news.migrationsDir || news.importFiles?.length) {
+      const migrationsInput = migrationsInputOf(news);
+      if (migrationsInput || news.importFiles?.length) {
         yield* waitForBranchReady(organization, updated.name, branch, session);
       }
-      const migrationsTable =
-        news.migrationsTable ??
-        output?.migrationsTable ??
-        DEFAULT_MIGRATIONS_TABLE;
-      const migrationsHashes = news.migrationsDir
+      const migrations = migrationsInput
         ? yield* runPostgresMigrations(
             migrationTarget,
-            news.migrationsDir,
-            migrationsTable,
+            migrationsInput,
+            stampedOf(output),
           )
-        : (output?.migrationsHashes ?? {});
+        : undefined;
       const importHashes = news.importFiles?.length
         ? yield* runPostgresImports(
             migrationTarget,
@@ -388,9 +383,7 @@ export const PostgresDatabaseProvider = () =>
         htmlUrl: updated.html_url,
         region: { slug: updated.region.slug },
         clusterSize: clusterSize,
-        migrationsDir: news.migrationsDir,
-        migrationsTable: news.migrationsDir ? migrationsTable : undefined,
-        migrationsHashes,
+        ...migrationsAttrs({ input: migrationsInput, run: migrations, output }),
         importHashes,
         arch: news.arch ?? output?.arch ?? "x86",
         requireApprovalForDeploy: updated.require_approval_for_deploy ?? false,
