@@ -64,8 +64,19 @@ CREATE TABLE IF NOT EXISTS "__alchemy_migrations" (
 ```
 
 Detection is by `name`, so renaming an applied file is a schema
-change, not a cosmetic one. `migrations: { dir, table }` points the
-bookkeeping at a different table name when you need one.
+change, not a cosmetic one.
+
+To put the bookkeeping in a differently-named table, use the object
+form of the prop:
+
+```typescript
+const db = yield* Cloudflare.D1.Database("app-db", {
+  migrations: {
+    dir: "./migrations",
+    table: "my_migrations", // default: "__alchemy_migrations"
+  },
+});
+```
 
 ## Adopting an existing database
 
