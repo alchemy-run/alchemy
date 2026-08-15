@@ -15,24 +15,19 @@ const fixtureDir = fileURLToPath(
 
 // Gated: CloudFront Distribution create blocks on Status === "Deployed"
 // (~5-15 min) and destroy requires disable -> wait -> delete (another
-// ~5-15 min), so the full Router lifecycle exceeds any sane test budget.
-// Run with ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS=true (same gate as the
+// ~5-15 min). Runs by default; skipped under --fast (same gate as the
 // AWS.CloudFront suites).
-const runLive = process.env.ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS === "true";
+const runLive = !process.env.FAST;
 
 describe.skipIf(!runLive)("AWS.Website.Router", () => {
-  // Additionally gated (ALCHEMY_TEST_ROUTER_STATIC_LIVE=1): on 2026-08-15
-  // this case went green once at 355s (clean account, isolated) and then
-  // timed out at the full 40-minute budget in 5 consecutive runs — batch
-  // and isolated, clean account or not, with and without invalidation
-  // wait — ALWAYS with every assertion green and the clock consumed by
-  // CloudFront deploy/disable pacing on the KVS-associated distribution
-  // (per-read timeout guards and the bounded 10s×60 retry are in place
-  // and were not the sink). The Router+KV routing behavior itself is
-  // covered composition-level by RouterHostnameBinding.test.ts and at
-  // full fidelity by the aws-vite / aws-tanstack example integ suites,
-  // which exercise Router-attached sites end to end in ~6 minutes.
-  test.provider.skipIf(!process.env.ALCHEMY_TEST_ROUTER_STATIC_LIVE)(
+  // Regression context: this case used to eat its whole 40-minute budget.
+  // The sink was the destroy's concurrent KvEntries purge + KvRoutesUpdate
+  // removal racing on the same KeyValueStore etag — the loser retried with
+  // a STALE etag (never convergent) on an uncapped exponential schedule
+  // (attempt 14 sleeps ~14 minutes). Fixed in KvEntries/KvRoutesUpdate:
+  // etag re-fetch on Pre-Condition failure + the shared 2s-capped retry
+  // schedule. Full lifecycle now measures ~8.5 minutes.
+  test.provider(
     "create router with static-site attached via KV routing",
     (stack) =>
       Effect.gen(function* () {

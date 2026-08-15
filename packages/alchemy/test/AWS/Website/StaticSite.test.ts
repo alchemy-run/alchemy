@@ -18,9 +18,9 @@ const { test } = Test.make({ providers: AWS.providers() });
 
 // Gated: CloudFront Distribution create blocks on Status === "Deployed"
 // (~5-15 min) and destroy requires disable -> wait -> delete (another
-// ~5-15 min). Run with ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS=true (same gate
-// as the AWS.CloudFront suites).
-const runLive = process.env.ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS === "true";
+// ~5-15 min). Runs by default; skipped under --fast (same gate as the
+// AWS.CloudFront suites).
+const runLive = !process.env.FAST;
 
 const fixtureDir = fileURLToPath(
   new URL("./fixtures/static-site", import.meta.url),

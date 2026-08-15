@@ -146,8 +146,15 @@ export const LoggingCli = Layer.succeed(
           // apply progress instead of having it leak to stdout.
           emit: (event: ApplyEvent) =>
             Effect.suspend(() => {
+              // Wall-clock stamp on every plain-mode status line. Captured
+              // test logs have no other timestamps, so without this a
+              // multi-minute stall between two ops is invisible — phase
+              // attribution in a 40-minute live run depends on it.
+              const ts = new Date().toISOString().slice(11, 23);
               if (event.kind === "annotate") {
-                return Console.log(`${tag(event.id)} ${blue(event.message)}`);
+                return Console.log(
+                  `${ts} ${tag(event.id)} ${blue(event.message)}`,
+                );
               }
               const id = event.bindingId
                 ? `${event.id}/${event.bindingId}`
@@ -163,7 +170,7 @@ export const LoggingCli = Layer.succeed(
                 if (event.status === "fail") counts.fail++;
                 else counts.ok++;
               }
-              return Console.log(`${tag(id)} ${status}${mode}${msg}`);
+              return Console.log(`${ts} ${tag(id)} ${status}${mode}${msg}`);
             }),
           done: () =>
             Console.log(

@@ -1,11 +1,11 @@
 import * as kvs from "@distilled.cloud/aws/cloudfront-keyvaluestore";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 import {
+  cappedKvsRetrySchedule,
   extractValue,
   getKvsEtag,
   isKvsPreconditionFailed,
@@ -136,20 +136,34 @@ export const KvEntriesProvider = () =>
             BATCH_SIZE - batchPuts.length,
           );
 
-          const resp = yield* sendBatch(
-            store,
-            currentEtag,
-            batchPuts,
-            batchDeletes,
+          // A Pre-Condition failure means a sibling mutator (e.g. a
+          // KvRoutesUpdate delete running in the same destroy pass) bumped
+          // the store's etag between our read and this write. The retried
+          // effect MUST re-fetch the etag — retrying `sendBatch` with the
+          // stale one can never succeed, and with the old uncapped
+          // exponential schedule that non-convergence slept for the whole
+          // test budget (the Router destroy's 34-minute black hole).
+          const resp = yield* Effect.suspend(() =>
+            sendBatch(store, currentEtag, batchPuts, batchDeletes),
           ).pipe(
+            Effect.tapError((error) =>
+              error._tag === "ValidationException" &&
+              isKvsPreconditionFailed(error)
+                ? getKvsEtag(store).pipe(
+                    Effect.map((fresh) => {
+                      currentEtag = fresh;
+                    }),
+                    // Keep the precondition error as the retry driver —
+                    // a failed refresh just retries with the old etag.
+                    Effect.ignore,
+                  )
+                : Effect.void,
+            ),
             Effect.retry({
               while: (error) =>
                 error._tag === "ValidationException" &&
                 isKvsPreconditionFailed(error),
-              schedule: Schedule.max([
-                Schedule.exponential("100 millis"),
-                Schedule.recurs(24),
-              ]),
+              schedule: cappedKvsRetrySchedule,
             }),
           );
 

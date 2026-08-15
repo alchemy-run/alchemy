@@ -1,6 +1,5 @@
 import * as kvs from "@distilled.cloud/aws/cloudfront-keyvaluestore";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -8,6 +7,7 @@ import type { Providers } from "../Providers.ts";
 import type { Credentials } from "../Credentials.ts";
 import type { Region } from "../Region.ts";
 import {
+  cappedKvsRetrySchedule,
   extractValue,
   getKvsEtag,
   isKvsPreconditionFailed,
@@ -199,10 +199,7 @@ export const KvRoutesUpdateProvider = () =>
             while: (error) =>
               error._tag === "ValidationException" &&
               isKvsPreconditionFailed(error),
-            schedule: Schedule.max([
-              Schedule.exponential("100 millis"),
-              Schedule.recurs(24),
-            ]),
+            schedule: cappedKvsRetrySchedule,
           }),
         );
 
@@ -232,10 +229,7 @@ export const KvRoutesUpdateProvider = () =>
             while: (error) =>
               error._tag === "ValidationException" &&
               isKvsPreconditionFailed(error),
-            schedule: Schedule.max([
-              Schedule.exponential("100 millis"),
-              Schedule.recurs(24),
-            ]),
+            schedule: cappedKvsRetrySchedule,
           }),
         );
 
