@@ -1,3 +1,8 @@
+import type {
+  MigrationFormatTag,
+  MigrationsInput,
+} from "../SQL/Migrations/index.ts";
+
 /**
  * Region selector for a PlanetScale Database.
  */
@@ -58,14 +63,29 @@ export interface BaseDatabaseProps {
   defaultBranch?: string;
 
   /**
-   * Directory containing `.sql` migration files. Files are sorted by numeric
-   * prefix (for example `0001_init.sql`) and applied in order against the
-   * default branch.
+   * SQL migrations to apply against the default branch. Accepts a directory
+   * path, a `Drizzle.Schema` resource, or `{ dir, format?, table?, schema? }`.
+   *
+   * The applied-migrations format is detected from the directory layout:
+   * drizzle-kit dirs delegate to drizzle-orm's own migrator, Prisma dirs
+   * delegate to `prisma migrate deploy`, and plain `.sql` dirs use
+   * Alchemy's neutral `__alchemy_migrations` table. A database previously
+   * migrated by drizzle-kit or Prisma is picked up where that tool left
+   * off — no baselining required.
+   */
+  migrations?: MigrationsInput;
+
+  /**
+   * Directory containing `.sql` migration files.
+   *
+   * @deprecated Use {@link migrations}.
    */
   migrationsDir?: string;
 
   /**
    * Name of the table used to track applied migrations.
+   *
+   * @deprecated Use {@link migrations}.
    * @default "__alchemy_migrations"
    */
   migrationsTable?: string;
@@ -107,6 +127,8 @@ export interface BaseDatabaseAttributes {
   migrationsDir: string | undefined;
   /** Table used to track applied migrations, if configured. */
   migrationsTable: string | undefined;
+  /** Applied-migrations table format, stamped on each deploy. */
+  migrationsFormat: MigrationFormatTag | undefined;
   /** Content hashes for the last applied migration files. */
   migrationsHashes: Record<string, string>;
   /** Content hashes for the last applied import files. */

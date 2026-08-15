@@ -28,6 +28,7 @@ const branchOutput = (
   region: { slug: "us-east" },
   migrationsDir: undefined,
   migrationsTable: undefined,
+  migrationsFormat: undefined,
   migrationsHashes: {},
   importHashes: {},
   desiredReplicas: undefined,

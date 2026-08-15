@@ -70,6 +70,14 @@ export type Schema = Resource<
     snapshotHash: string;
     /** Names of all migration directories under `out`, in order. */
     migrations: string[];
+    /**
+     * The applied-migrations bookkeeping format this directory belongs to.
+     * Database resources read this tag when the Schema is passed as their
+     * `migrations` input, pinning drizzle's own `__drizzle_migrations`
+     * bookkeeping (delegated to drizzle-orm's migrator) without relying on
+     * layout detection.
+     */
+    format: "drizzle";
   },
   never,
   Providers
@@ -91,7 +99,7 @@ export type Schema = Resource<
  *
  * const branch = yield* Neon.Branch("app-branch", {
  *   project,
- *   migrationsDir: schema.out,
+ *   migrations: schema,
  * });
  * ```
  *
@@ -429,6 +437,7 @@ export const SchemaProvider = () =>
               out: relativeOut(drift.out),
               snapshotHash,
               migrations,
+              format: "drizzle" as const,
             };
           }
 
@@ -455,6 +464,7 @@ export const SchemaProvider = () =>
             out: relativeOut(out),
             snapshotHash,
             migrations,
+            format: "drizzle" as const,
           };
         });
 
@@ -498,6 +508,7 @@ export const SchemaProvider = () =>
             out: relativeOut(out),
             snapshotHash: latest?.hash ?? output.snapshotHash,
             migrations,
+            format: "drizzle" as const,
           };
         }),
         reconcile: Effect.fn(function* ({ news, output, session }) {

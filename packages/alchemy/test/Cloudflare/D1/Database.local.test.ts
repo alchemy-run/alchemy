@@ -178,10 +178,11 @@ test.provider(
 
 /**
  * Migrations apply against the local simulator: reconcile boots an
- * ephemeral gateway workerd and drives the same executor-agnostic migration
- * flow the live provider uses (wrangler-compatible `d1_migrations` table,
- * idempotent re-application, sequential ids). Verified through the deployed
- * worker's binding — the same DO SQLite storage the gateway wrote to.
+ * ephemeral gateway workerd and drives the same format-registry migration
+ * flow the live provider uses (wrangler's real `d1_migrations` table,
+ * idempotent re-application, autoincrement ids). Verified through the
+ * deployed worker's binding — the same DO SQLite storage the gateway wrote
+ * to.
  */
 test.provider(
   "D1 migrations apply against the local simulator and re-apply incrementally",
@@ -248,12 +249,13 @@ test.provider(
         "0002_posts.sql",
       ]);
 
+      // wrangler's real shape: INTEGER AUTOINCREMENT ids, name-keyed.
       const migrations = (yield* getJsonReady(`${url}/migrations`)) as {
-        migrations: Array<{ id: string; name: string }>;
+        migrations: Array<{ id: number; name: string }>;
       };
       expect(migrations.migrations).toEqual([
-        { id: "00001", name: "0001_users.sql" },
-        { id: "00002", name: "0002_posts.sql" },
+        { id: 1, name: "0001_users.sql" },
+        { id: 2, name: "0002_posts.sql" },
       ]);
 
       // Data written by 0001 survived the second deploy (not re-applied).

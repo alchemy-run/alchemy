@@ -1,20 +1,29 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import type * as FileSystem from "effect/FileSystem";
+import type * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import type { Client } from "pg";
+import {
+  applyMigrations,
+  MigrationError,
+  resolveMigrations,
+  type DrizzleV0LayoutError,
+  type MigrationFormatMismatchError,
+  type MigrationFormatUnsupportedError,
+  type MigrationHistoryConflictError,
+  type NormalizedMigrationsInput,
+  type ResolvedMigrations,
+  type SqlExecutor,
+  type StampedMigrationsState,
+} from "../SQL/Migrations/index.ts";
 import { importPg } from "../SQL/PostgresDriver.ts";
-import type { SqlFile } from "../SQL/SqlFile.ts";
+import { hashMigrations } from "../SQL/SqlFile.ts";
 
 export class PgError extends Data.TaggedError("PgError")<{
   message: string;
   cause?: unknown;
 }> {}
-
-export interface ApplyMigrationsOptions {
-  connectionUri: Redacted.Redacted<string>;
-  migrationsTable: string;
-  migrationsFiles: ReadonlyArray<SqlFile>;
-}
 
 /**
  * Strip query-string SSL flags from a Neon connection URI. Neon's URIs
@@ -39,92 +48,140 @@ const stripSslQueryParams = (uri: string): string => {
   }
 };
 
-const withClient = <A, E>(
-  connectionUri: Redacted.Redacted<string>,
-  fn: (client: Client) => Promise<A>,
-): Effect.Effect<A, PgError | E> =>
-  Effect.tryPromise({
-    try: async () => {
-      const { Client } = await importPg();
-      const client = new Client({
-        connectionString: stripSslQueryParams(Redacted.value(connectionUri)),
-        ssl: { rejectUnauthorized: false },
-      });
-      await client.connect();
-      try {
-        return await fn(client);
-      } finally {
-        await client.end().catch(() => {});
-      }
-    },
-    catch: (cause) =>
-      new PgError({
-        message: cause instanceof Error ? cause.message : String(cause),
-        cause,
-      }),
+const toPgError = (cause: unknown) =>
+  new PgError({
+    message: cause instanceof Error ? cause.message : String(cause),
+    cause,
   });
 
-const ensureMigrationsTable = (client: Client, migrationsTable: string) =>
-  client.query(
-    `CREATE TABLE IF NOT EXISTS "${migrationsTable}" (
-       id TEXT PRIMARY KEY,
-       name TEXT NOT NULL,
-       applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
-     );`,
+/** Open a pg client for the scope of `use`, closing it afterwards. */
+export const withPgClient = <A, E, R>(
+  connectionUri: Redacted.Redacted<string>,
+  use: (client: Client) => Effect.Effect<A, E, R>,
+): Effect.Effect<A, PgError | E, R> =>
+  Effect.acquireUseRelease(
+    Effect.tryPromise({
+      try: async () => {
+        const { Client } = await importPg();
+        const client = new Client({
+          connectionString: stripSslQueryParams(Redacted.value(connectionUri)),
+          ssl: { rejectUnauthorized: false },
+        });
+        await client.connect();
+        return client;
+      },
+      catch: toPgError,
+    }),
+    use,
+    (client) => Effect.promise(() => client.end().catch(() => {})),
   );
 
-const getApplied = (client: Client, migrationsTable: string) =>
-  client
-    .query<{ name: string }>(`SELECT name FROM "${migrationsTable}";`)
-    .then((r) => new Set(r.rows.map((row) => row.name)));
-
-const getNextSeq = (client: Client, migrationsTable: string) =>
-  client
-    .query<{ id: string }>(`SELECT id FROM "${migrationsTable}";`)
-    .then((r) => {
-      let max = 0;
-      for (const { id } of r.rows) {
-        if (/^\d+$/.test(id)) {
-          max = Math.max(max, Number.parseInt(id, 10));
+/**
+ * Adapt an open pg client into the registry's {@link SqlExecutor}. Batches
+ * run in a transaction so a migration and its bookkeeping INSERT commit
+ * (or roll back) together.
+ */
+export const makePgMigrationExecutor = (client: Client): SqlExecutor => ({
+  dialect: "postgres",
+  query: (sql, params) =>
+    Effect.tryPromise({
+      try: () =>
+        client
+          .query(sql, (params ?? []) as unknown[])
+          .then((result) => result.rows as Array<Record<string, unknown>>),
+      catch: (cause) =>
+        new MigrationError({
+          message: `postgres query failed: ${String(cause)}`,
+          cause,
+        }),
+    }),
+  batch: (statements) =>
+    Effect.tryPromise({
+      try: async () => {
+        await client.query("BEGIN");
+        try {
+          for (const statement of statements) {
+            await client.query(statement);
+          }
+          await client.query("COMMIT");
+        } catch (error) {
+          await client.query("ROLLBACK").catch(() => {});
+          throw error;
         }
-      }
-      return max + 1;
-    });
+      },
+      catch: (cause) =>
+        new MigrationError({
+          message: `postgres migration batch failed: ${String(cause)}`,
+          cause,
+        }),
+    }),
+});
+
+export type PgMigrationError =
+  | PgError
+  | MigrationError
+  | MigrationFormatMismatchError
+  | MigrationFormatUnsupportedError
+  | MigrationHistoryConflictError
+  | DrizzleV0LayoutError;
 
 /**
- * Apply pending Postgres migrations in order, tracked in `migrationsTable`.
- * Each migration runs inside a transaction together with the bookkeeping
- * INSERT so partial application is impossible.
+ * Resolve the migration format for `input` and apply pending migrations
+ * over the given connection. Inline formats (`drizzle`/`alchemy`) run
+ * through a scoped pg client; the `prisma` format delegates to
+ * `prisma migrate deploy` with the connection URI and never opens a client
+ * of ours. Returns the resolved format/table (for stamping into state) and
+ * the per-file content hashes (for drift detection).
  */
-export const applyMigrations = (options: ApplyMigrationsOptions) =>
-  withClient(options.connectionUri, async (client) => {
-    await ensureMigrationsTable(client, options.migrationsTable);
-    const applied = await getApplied(client, options.migrationsTable);
-    let nextSeq = await getNextSeq(client, options.migrationsTable);
-
-    for (const file of options.migrationsFiles) {
-      if (applied.has(file.id)) continue;
-      const migrationId = nextSeq.toString().padStart(5, "0");
-      nextSeq += 1;
-      await client.query("BEGIN");
-      try {
-        await client.query(file.sql);
-        await client.query(
-          `INSERT INTO "${options.migrationsTable}" (id, name) VALUES ($1, $2);`,
-          [migrationId, file.id],
+export const runPgMigrations = (options: {
+  connectionUri: Redacted.Redacted<string>;
+  input: NormalizedMigrationsInput;
+  stamped: StampedMigrationsState;
+}): Effect.Effect<
+  { resolved: ResolvedMigrations; hashes: Record<string, string> },
+  PgMigrationError,
+  FileSystem.FileSystem | Path.Path
+> =>
+  Effect.gen(function* () {
+    const hashes = yield* hashMigrations(options.input.dir).pipe(
+      Effect.mapError(
+        (cause) =>
+          new MigrationError({
+            message: `Failed to read migrations from ${options.input.dir}: ${String(cause)}`,
+            cause,
+          }),
+      ),
+    );
+    const resolved = yield* resolveMigrations({
+      input: options.input,
+      stamped: options.stamped,
+      dialect: "postgres",
+    });
+    if (Object.keys(hashes).length > 0) {
+      if (resolved.format === "prisma") {
+        yield* applyMigrations({
+          resolved,
+          connectionUrl: options.connectionUri,
+        });
+      } else {
+        yield* withPgClient(options.connectionUri, (client) =>
+          applyMigrations({
+            resolved,
+            executor: makePgMigrationExecutor(client),
+          }),
         );
-        await client.query("COMMIT");
-      } catch (err) {
-        await client.query("ROLLBACK").catch(() => {});
-        throw err;
       }
     }
+    return { resolved, hashes };
   });
 
 /**
  * Run a single SQL script against the database (used for `importFiles`).
  */
 export const runSql = (connectionUri: Redacted.Redacted<string>, sql: string) =>
-  withClient(connectionUri, async (client) => {
-    await client.query(sql);
-  });
+  withPgClient(connectionUri, (client) =>
+    Effect.tryPromise({
+      try: () => client.query(sql),
+      catch: toPgError,
+    }),
+  ).pipe(Effect.asVoid);

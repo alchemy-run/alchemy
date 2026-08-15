@@ -17,7 +17,16 @@ import {
   waitForPendingPostgresChanges,
 } from "./Postgres/PostgresClusterSize.ts";
 import {
-  DEFAULT_MIGRATIONS_TABLE,
+  migrationsInputOf,
+  resolveMigrations,
+  stampedOf,
+  type MigrationFormatTag,
+  type MigrationsInput,
+  type NormalizedMigrationsInput,
+  type ResolvedMigrations,
+  type StampedMigrationsState,
+} from "../SQL/Migrations/index.ts";
+import {
   PlanetscaleConflict,
   isKnownError,
   waitForBranchReady,
@@ -57,15 +66,24 @@ export interface BaseBranchProps {
   region?: { slug: string };
 
   /**
-   * Directory containing `.sql` migration files. Files are sorted by numeric
-   * prefix (for example `0001_init.sql`) and applied in order against this
-   * branch.
+   * SQL migrations to apply against this branch. Accepts a directory path,
+   * a `Drizzle.Schema` resource, or `{ dir, format?, table?, schema? }`.
+   * The applied-migrations format is detected from the directory layout
+   * (drizzle-kit / Prisma / plain `.sql`).
+   */
+  migrations?: MigrationsInput;
+
+  /**
+   * Directory containing `.sql` migration files.
+   *
+   * @deprecated Use {@link migrations}.
    */
   migrationsDir?: string;
 
   /**
    * Name of the table used to track applied migrations.
-   * @default "__alchemy_migrations"
+   *
+   * @deprecated Use {@link migrations}.
    */
   migrationsTable?: string;
 
@@ -102,6 +120,8 @@ export interface BaseBranchAttributes {
   migrationsDir: string | undefined;
   /** Table used to track applied migrations, if configured. */
   migrationsTable: string | undefined;
+  /** Applied-migrations table format, stamped on each deploy. */
+  migrationsFormat: MigrationFormatTag | undefined;
   /** Content hashes for the last applied migration files. */
   migrationsHashes: Record<string, string>;
   /** Content hashes for the last applied import files. */
@@ -157,9 +177,13 @@ const createBranchName = (id: string, name: string | undefined) =>
 export interface BranchMigrationRunners {
   runMigrations: (
     target: { organization: string; database: string; branch: string },
-    migrationsDir: string,
-    migrationsTable: string,
-  ) => Effect.Effect<Record<string, string>, any, any>;
+    input: NormalizedMigrationsInput,
+    stamped: StampedMigrationsState,
+  ) => Effect.Effect<
+    { resolved: ResolvedMigrations; hashes: Record<string, string> },
+    any,
+    any
+  >;
   runImports: (
     target: { organization: string; database: string; branch: string },
     importFiles: string[],
@@ -239,6 +263,7 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
                           region: { slug: branch.region.slug },
                           migrationsDir: undefined,
                           migrationsTable: undefined,
+                          migrationsFormat: undefined,
                           migrationsHashes: {},
                           importHashes: {},
                           desiredReplicas: undefined,
@@ -324,14 +349,22 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
         }
       }
 
-      if (news.migrationsDir) {
-        const newHashes = yield* hashMigrations(news.migrationsDir);
+      const migrationsInput = migrationsInputOf(news);
+      if (migrationsInput) {
+        const newHashes = yield* hashMigrations(migrationsInput.dir);
         if (!recordsEqual(newHashes, output?.migrationsHashes ?? {})) {
           return { action: "update", stables } as const;
         }
+        // Resolution also fails the plan when an explicit format
+        // contradicts the stamped one — the providerMode doctrine.
+        const resolved = yield* resolveMigrations({
+          input: migrationsInput,
+          stamped: stampedOf(output),
+          dialect: opts.expectedKind === "mysql" ? "mysql" : "postgres",
+        });
         if (
-          (news.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE) !==
-          (output?.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE)
+          resolved.table !== (output?.migrationsTable ?? resolved.table) ||
+          resolved.format !== (output?.migrationsFormat ?? resolved.format)
         ) {
           return { action: "update", stables } as const;
         }
@@ -395,6 +428,7 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
               region: { slug: data.region.slug },
               migrationsDir: output?.migrationsDir ?? olds?.migrationsDir,
               migrationsTable: output?.migrationsTable ?? olds?.migrationsTable,
+              migrationsFormat: output?.migrationsFormat,
               migrationsHashes: output?.migrationsHashes ?? {},
               importHashes: output?.importHashes ?? {},
               desiredReplicas:
@@ -626,17 +660,14 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
         branch: updated.name,
       };
 
-      const migrationsTable =
-        news.migrationsTable ??
-        output?.migrationsTable ??
-        DEFAULT_MIGRATIONS_TABLE;
-      const migrationsHashes = news.migrationsDir
+      const migrationsInput = migrationsInputOf(news);
+      const migrations = migrationsInput
         ? yield* opts.runners.runMigrations(
             migrationTarget,
-            news.migrationsDir,
-            migrationsTable,
+            migrationsInput,
+            stampedOf(output),
           )
-        : (output?.migrationsHashes ?? {});
+        : undefined;
       const importHashes = news.importFiles?.length
         ? yield* opts.runners.runImports(
             migrationTarget,
@@ -656,9 +687,13 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
         updatedAt: updated.updated_at,
         htmlUrl: updated.html_url,
         region: { slug: updated.region.slug },
-        migrationsDir: news.migrationsDir,
-        migrationsTable: news.migrationsDir ? migrationsTable : undefined,
-        migrationsHashes,
+        migrationsDir: migrationsInput?.dir,
+        // When migrations are removed, keep the stamp (like the hashes) so
+        // a later re-add resolves against the same bookkeeping table.
+        migrationsTable: migrations?.resolved.table ?? output?.migrationsTable,
+        migrationsFormat:
+          migrations?.resolved.format ?? output?.migrationsFormat,
+        migrationsHashes: migrations?.hashes ?? output?.migrationsHashes ?? {},
         importHashes,
         desiredReplicas: news.replicas ?? output?.desiredReplicas,
         hasReplicas: updated.has_replicas,

@@ -176,7 +176,11 @@ test.provider(
         }),
       );
 
-      expect(project.migrationsTable).toEqual("neon_migrations");
+      // Fresh flat-dir state defaults to the neutral alchemy format
+      // (drizzle's column shape under __alchemy_migrations). Legacy rows
+      // stamped with neon_migrations keep their table via state.
+      expect(project.migrationsTable).toEqual("__alchemy_migrations");
+      expect(project.migrationsFormat).toEqual("alchemy");
       expect(Object.keys(project.migrationsHashes).sort()).toEqual([
         "0001_users.sql",
       ]);
