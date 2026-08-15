@@ -1567,6 +1567,17 @@ describe.concurrent("Cloudflare.Worker", () => {
       expect(found?.workerId).toEqual(worker.workerId);
       expect(found?.accountId).toEqual(accountId);
 
+      // workerId is the immutable script tag, not the script name. Pin the
+      // equality chain: persist (putScript.tag) === list (script.tag) ===
+      // Beta GET (id). If this ever fails, switch the source to Beta GET.
+      const beta = yield* workers.getBetaWorker({
+        accountId,
+        workerId: worker.workerName,
+      });
+      expect(worker.workerId).toEqual(beta.id);
+      expect(found?.workerId).toEqual(beta.id);
+      expect(worker.workerId).not.toEqual(worker.workerName);
+
       yield* stack.destroy();
       yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
     }).pipe(logLevel),

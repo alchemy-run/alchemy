@@ -1,7 +1,9 @@
 import {
   encodeDurableObjectTags,
   getDurableObjectTagMap,
+  needsWorkerIdMigration,
   normalizeStateDomains,
+  resolveVersionParentWorkerId,
   resolveWorkerDomain,
   resolveWorkersDev,
   shouldObserveWorkerCrons,
@@ -451,6 +453,63 @@ describe("WorkerProvider", () => {
 
     test("observes when prior state has crons (e.g. Effect-native cron())", () => {
       expect(shouldObserveWorkerCrons({}, { crons: ["0 * * * *"] })).toBe(true);
+    });
+  });
+
+  describe("needsWorkerIdMigration", () => {
+    test("legacy-shaped output (workerId === workerName) needs an update", () => {
+      expect(
+        needsWorkerIdMigration({
+          workerId: "my-worker",
+          workerName: "my-worker",
+        }),
+      ).toBe(true);
+    });
+
+    test("a persisted script tag is already migrated", () => {
+      expect(
+        needsWorkerIdMigration({
+          workerId: "5a1b2c3d4e5f6789",
+          workerName: "my-worker",
+        }),
+      ).toBe(false);
+    });
+
+    test("dispatch-namespace and version rows are excluded", () => {
+      expect(
+        needsWorkerIdMigration({
+          workerId: "my-worker",
+          workerName: "my-worker",
+          namespace: "customers",
+        }),
+      ).toBe(false);
+      expect(
+        needsWorkerIdMigration({
+          workerId: "my-worker",
+          workerName: "my-worker",
+          versionOf: "parent-worker",
+        }),
+      ).toBe(false);
+    });
+
+    test("missing output is not a migration", () => {
+      expect(needsWorkerIdMigration(undefined)).toBe(false);
+    });
+  });
+
+  describe("resolveVersionParentWorkerId", () => {
+    test("a resolved Worker reference supplies the parent's tag", () => {
+      expect(
+        resolveVersionParentWorkerId({
+          parent: { workerId: "tag-abc", workerName: "parent" } as never,
+        }),
+      ).toEqual("tag-abc");
+    });
+
+    test("a literal-name parent cannot supply a tag", () => {
+      expect(
+        resolveVersionParentWorkerId({ parent: "parent-script" }),
+      ).toBeUndefined();
     });
   });
 });

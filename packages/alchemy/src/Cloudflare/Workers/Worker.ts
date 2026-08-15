@@ -68,6 +68,13 @@ export class CachePurgeError extends Data.TaggedError("CachePurgeError")<{
   cause?: unknown;
 }> {}
 
+export class AccessIdentityError extends Data.TaggedError(
+  "AccessIdentityError",
+)<{
+  message: string;
+  cause?: unknown;
+}> {}
+
 /**
  * Effect-native view of the Workers Cache runtime API on the execution
  * context (`ctx.cache`). Only available when the Worker has Workers Cache
@@ -103,6 +110,19 @@ export class WorkerExecutionContext extends Context.Service<
      * The Workers Cache runtime API (`ctx.cache`).
      */
     readonly cache: WorkerExecutionContextCache;
+    /**
+     * Cloudflare Access identity on this request. `ctx.access` is
+     * `undefined` when Access did not authenticate the request (no
+     * application, bypass policy, or local `alchemy dev`).
+     */
+    readonly access: {
+      readonly aud: Effect.Effect<string | undefined, never, RuntimeContext>;
+      readonly identity: Effect.Effect<
+        cf.CloudflareAccessIdentity | undefined,
+        AccessIdentityError,
+        RuntimeContext
+      >;
+    };
     /**
      * The raw workerd ExecutionContext, for interop with async APIs.
      */
@@ -147,6 +167,22 @@ export const fromExecutionContext = (
             }),
           ),
   },
+  access: {
+    aud: Effect.sync(() => ctx.access?.aud),
+    identity: ctx.access
+      ? Effect.tryPromise({
+          try: () => ctx.access!.getIdentity(),
+          catch: (cause) =>
+            new AccessIdentityError({
+              message:
+                cause instanceof Error
+                  ? cause.message
+                  : "Unknown Access identity error",
+              cause,
+            }),
+        })
+      : Effect.succeed(undefined),
+  },
 });
 
 /**
@@ -176,6 +212,18 @@ export const deferredExecutionContext: WorkerExecutionContext["Service"] = {
       liveExecutionContext.pipe(
         Effect.flatMap((live) => live.cache.purge(options)),
       ) as Effect.Effect<cf.CachePurgeResult, CachePurgeError, RuntimeContext>,
+  },
+  access: {
+    aud: Effect.suspend(() =>
+      liveExecutionContext.pipe(Effect.flatMap((live) => live.access.aud)),
+    ) as Effect.Effect<string | undefined, never, RuntimeContext>,
+    identity: Effect.suspend(() =>
+      liveExecutionContext.pipe(Effect.flatMap((live) => live.access.identity)),
+    ) as Effect.Effect<
+      cf.CloudflareAccessIdentity | undefined,
+      AccessIdentityError,
+      RuntimeContext
+    >,
   },
 };
 
@@ -486,7 +534,10 @@ export interface WorkerVersionOptions {
    * (their migrations would mutate the parent).
    *
    * Changing the parent replaces the resource (a version belongs to
-   * exactly one script).
+   * exactly one script). A Worker reference supplies the parent's
+   * immutable `workerId` (script tag); a literal script name cannot —
+   * Access destinations that target this version need a resolved
+   * reference.
    */
   parent?: string | Worker;
   /**
@@ -1047,7 +1098,17 @@ export type Worker<Bindings = any> = Resource<
   WorkerTypeId,
   WorkerProps<Bindings>,
   {
+    /**
+     * The Worker's immutable identifier (the script `tag`). Distinct from
+     * {@link workerName}, the script name used in URLs and routes. Use
+     * this value as `Access.Application` `destinations[].workerId`.
+     * Workers for Platforms user workers also receive a tag, but they
+     * are not Access targets — Access protects the dispatch Worker only.
+     */
     workerId: string;
+    /**
+     * The script name used in URLs, routes, and the workers.dev hostname.
+     */
     workerName: string;
     /**
      * The Workers for Platforms dispatch namespace this Worker was deployed
@@ -2101,6 +2162,16 @@ export const isSelf = (value: unknown): value is Self =>
  *     return HttpServerResponse.fromClientResponse(res);
  *   }),
  * };
+ * ```
+ *
+ * @section Access identity
+ * @example Read the Access audience and identity on a protected Worker
+ * ```typescript
+ * const ctx = yield* Cloudflare.WorkerExecutionContext;
+ * const aud = yield* ctx.access.aud;
+ * const identity = yield* ctx.access.identity;
+ * // or: yield* Cloudflare.Access.getIdentity
+ * // identity is undefined when Access did not authenticate the request
  * ```
  */
 export const Worker: ResourceClassLike<Worker> &

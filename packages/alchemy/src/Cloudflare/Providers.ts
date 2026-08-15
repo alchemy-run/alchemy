@@ -387,14 +387,11 @@ export const providers = () =>
     Layer.provide(
       Layer.mergeAll(
         AccessApp.ApplicationProvider(),
-        AccessApp.ApplicationProvider(),
         AccessCert.CertificateProvider(),
         AccessIdp.IdentityProviderProvider(),
         AccessInfraTarget.InfrastructureTargetProvider(),
         AccessKeyConfig.KeyConfigurationProvider(),
         AccessOrg.OrganizationProvider(),
-        AccessOrg.OrganizationProvider(),
-        AccessPol.PolicyProvider(),
         AccessPol.PolicyProvider(),
         AccessSvcToken.ServiceTokenProvider(),
         Account.AccountProvider(),

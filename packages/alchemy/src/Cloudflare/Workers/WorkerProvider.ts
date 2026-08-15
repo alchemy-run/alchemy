@@ -213,6 +213,62 @@ export const resolveVersionParentName = (
 };
 
 /**
+ * Resolve the parent's immutable script tag from a resolved Worker
+ * reference. A literal-name `version.parent` has no tag — callers fall
+ * back to the script name (see {@link resolveVersionParentName}).
+ *
+ * @internal
+ */
+export const resolveVersionParentWorkerId = (
+  version: WorkerProps["version"],
+): string | undefined => {
+  const parent = version?.parent;
+  if (parent == null || typeof parent === "string") return undefined;
+  const workerId = (parent as { workerId?: unknown }).workerId;
+  return typeof workerId === "string" ? workerId : undefined;
+};
+
+/**
+ * Legacy Worker state stored `workerId` as the script name. Unchanged
+ * workers never reconcile, so the planner would keep projecting that
+ * name to downstream Access destinations. Dispatch-namespace and
+ * version rows are excluded — they are not Access targets. Local-mode
+ * rows never enter this live provider (engine replacement).
+ *
+ * @internal
+ */
+export const needsWorkerIdMigration = (
+  output:
+    | {
+        workerId: string;
+        workerName: string;
+        namespace?: string;
+        versionOf?: string;
+      }
+    | undefined,
+): boolean =>
+  output != null &&
+  output.workerId === output.workerName &&
+  output.namespace == null &&
+  output.versionOf == null;
+
+/**
+ * Look up the immutable script tag for a named Worker. Used on cold
+ * read (no persisted `output.workerId`) so we don't persist the name
+ * as the id. Falls back to `undefined` when the script is missing.
+ */
+const lookupScriptTag = Effect.fn(function* (
+  accountId: string,
+  workerName: string,
+) {
+  const matches = yield* workers.searchScript({
+    accountId,
+    name: workerName,
+  });
+  return matches.find((worker) => worker.scriptName === workerName)?.id;
+});
+
+/**
  * The traffic percentage a *self-owned* Worker's new version should receive,
  * or `undefined` for the default full cutover. Only a `version` prop without
  * a `parent` participates — version workers handle traffic separately.
@@ -2903,7 +2959,7 @@ export const LiveWorkerProvider = () =>
           ...(versionedUrl ? [versionedUrl] : []),
         ];
         return {
-          workerId: parentName,
+          workerId: resolveVersionParentWorkerId(version) ?? parentName,
           workerName: parentName,
           namespace: undefined,
           logpush: undefined,
@@ -3459,7 +3515,11 @@ export const LiveWorkerProvider = () =>
         const rolloutTraffic = getSelfRolloutTraffic(news);
         let versionId: string | undefined;
         let deploymentId: string | undefined;
-        let worker: { id?: string | null; logpush?: boolean | null };
+        let worker: {
+          id?: string | null;
+          tag?: string | null;
+          logpush?: boolean | null;
+        };
         // A gradual rollout (`version.traffic` < 100) deploys through the
         // versions API instead of the full-cutover script PUT. That's only
         // possible when the script already has a live deployment to split
@@ -3548,7 +3608,14 @@ export const LiveWorkerProvider = () =>
               message: news.version?.message,
             });
           }
-          worker = { id: name, logpush: existingSettings.logpush };
+          worker = {
+            id: name,
+            tag:
+              output?.workerId !== undefined && output.workerId !== name
+                ? output.workerId
+                : yield* lookupScriptTag(accountId, name),
+            logpush: existingSettings.logpush,
+          };
         } else {
           if (rolloutTraffic !== undefined) {
             // First deploy of this script (or a pre-create placeholder is
@@ -3613,10 +3680,11 @@ export const LiveWorkerProvider = () =>
         // Workers for Platforms user workers are invoked via dynamic dispatch,
         // never routed directly — they have no workers.dev subdomain, custom
         // domains, zone routes, or cron triggers. Skip all of that
-        // reconciliation.
+        // reconciliation. They still receive an immutable script tag, but
+        // they are not Access targets (Access protects the dispatch Worker).
         if (dispatchNamespace) {
           return {
-            workerId: worker.id ?? name,
+            workerId: worker.tag ?? name,
             workerName: name,
             namespace: dispatchNamespace,
             logpush: worker.logpush ?? undefined,
@@ -3863,7 +3931,7 @@ export const LiveWorkerProvider = () =>
             ? yield* reconcileCrons(name, desiredCrons, previousCrons, session)
             : [];
         return {
-          workerId: worker.id ?? name,
+          workerId: worker.tag ?? name,
           workerName: name,
           namespace: undefined,
           logpush: worker.logpush ?? undefined,
@@ -4102,7 +4170,7 @@ export const LiveWorkerProvider = () =>
                         ? [
                             {
                               accountId,
-                              workerId: script.id,
+                              workerId: script.tag ?? script.id,
                               workerName: script.id,
                               namespace: undefined,
                               logpush: script.logpush ?? undefined,
@@ -4187,6 +4255,10 @@ export const LiveWorkerProvider = () =>
           if (!output) {
             return;
           }
+          const migrateWorkerId =
+            needsWorkerIdMigration(output) &&
+            !newIsVersion &&
+            newNamespace == null;
           // Compare the full domain config — name, aliases (ordered: they
           // drive `urls` order), and redirects — against persisted state
           // (with legacy `domains`-list state migrated on the fly).
@@ -4279,7 +4351,23 @@ export const LiveWorkerProvider = () =>
             oldWorkerName === workerName &&
             newDoClassNames.length === oldDoClassNames.length &&
             newDoClassNames.every((name, i) => name === oldDoClassNames[i]);
+          // `workerId` is always stable across an update; seed it so it
+          // survives now that `diff.stables` overrides `provider.stables`
+          // rather than being merged with it. Legacy rows that stored the
+          // script name as `workerId` omit it so reconcile can persist the
+          // immutable tag.
+          const stables: string[] = migrateWorkerId ? [] : ["workerId"];
+          if (oldWorkerName === workerName) {
+            stables.push("workerName");
+          }
+          if (urlStable) {
+            stables.push("url");
+          }
+          if (doNamespacesStable) {
+            stables.push("durableObjectNamespaces");
+          }
           if (
+            migrateWorkerId ||
             domainsChanged ||
             routesChanged ||
             cronsChanged ||
@@ -4293,19 +4381,6 @@ export const LiveWorkerProvider = () =>
               accountId,
             ))
           ) {
-            // `workerId` is always stable across an update; seed it so it
-            // survives now that `diff.stables` overrides `provider.stables`
-            // rather than being merged with it.
-            const stables: string[] = ["workerId"];
-            if (oldWorkerName === workerName) {
-              stables.push("workerName");
-            }
-            if (urlStable) {
-              stables.push("url");
-            }
-            if (doNamespacesStable) {
-              stables.push("durableObjectNamespaces");
-            }
             return {
               action: "update",
               stables: stables.length > 0 ? stables : undefined,
@@ -4659,7 +4734,10 @@ export const LiveWorkerProvider = () =>
               );
               const attrs = {
                 accountId,
-                workerId: workerName,
+                workerId:
+                  output?.workerId ??
+                  (yield* lookupScriptTag(accountId, workerName)) ??
+                  workerName,
                 workerName,
                 namespace: dispatchNamespace,
                 logpush: settings.logpush ?? undefined,
@@ -4786,7 +4864,10 @@ export const LiveWorkerProvider = () =>
             );
             const attrs = {
               accountId,
-              workerId: workerName,
+              workerId:
+                output?.workerId ??
+                (yield* lookupScriptTag(accountId, workerName)) ??
+                workerName,
               workerName,
               namespace: undefined,
               logpush: settings.logpush ?? undefined,
