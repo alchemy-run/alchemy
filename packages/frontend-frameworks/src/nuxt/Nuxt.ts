@@ -183,8 +183,8 @@ interface ViteConfigSlice {
  * `noExternals` pass then tries to inline it and dies on native/wasm
  * optional deps (sharp). The real fix is sharing the entry's prebundled
  * effect module (one Site class instance, one runtime) with the vue server
- * graph — until then, nuxt pages should render initial values client-side
- * (type-only form) or via nitro routes.
+ * graph — until then, nuxt pages should fetch initial values via nitro
+ * routes (or a schema the user mounts on the effect fetch).
  */
 const wrapViteServerExternal = (viteConfig: ViteConfigSlice): void => {
   const build = (viteConfig.build ??= {});
@@ -279,8 +279,7 @@ export interface NuxtEffectMiddleware {
    */
   readonly main: string;
   /**
-   * Path globs the effect fetch owns (`server.routes`). The universal rpc
-   * path (`/api/__rpc`) is always claimed alongside them.
+   * Path globs the effect fetch owns (`server.routes`).
    * @default ["/api/*"]
    */
   readonly routes?: ReadonlyArray<string> | undefined;

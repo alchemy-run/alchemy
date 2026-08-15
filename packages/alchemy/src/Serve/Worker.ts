@@ -34,10 +34,9 @@ import {
   getWorkerExport,
   makeWorkerBridge,
 } from "../Cloudflare/Workers/WorkerBridge.ts";
-import { markRuntime, runSiteFetch, runSiteRpc } from "./Bridge.ts";
+import { markRuntime, runSiteFetch } from "./Bridge.ts";
 import { envString, hasStackMarkers, workersEnvOrEmpty } from "./Env.ts";
 import { DEFAULT_SERVER_ROUTES, matchRoutes } from "./Routes.ts";
-import { isRpcPath } from "./Rpc.ts";
 import type { AnyWebsiteClass } from "./Serve.ts";
 
 markRuntime();
@@ -139,21 +138,6 @@ export const makeWebsiteExports = (
         if (!hasStackMarkers(env)) {
           return frameworkFetch(request, env, ctx);
         }
-        // The universal rpc path ("/api/__rpc") is checked BEFORE routes
-        // matching — the RPC dispatch needs no routes claim, and its
-        // answer (404 envelopes included) is always final.
-        if (isRpcPath(pathname)) {
-          const built = await build((promise) => ctx.waitUntil(promise));
-          return runSiteRpc(
-            {
-              context: built.context,
-              shape: built.shape,
-              telemetry: built.telemetry,
-            },
-            request,
-            { executionContext: ctx },
-          );
-        }
         if (!matchRoutes(routes, pathname)) {
           return frameworkFetch(request, env, ctx);
         }
@@ -194,9 +178,9 @@ export interface WebsiteEntryExportsOptions {
  * Entry-level wrapper for frameworks whose delivered `fetch` is already
  * effect-composed INSIDE the framework bundle (Astro's pre-resolved
  * fetchable, DESIGN §6.2c): `fetch` delegates verbatim to the
- * framework-delivered handler — route ownership, the universal RPC path,
- * and the four-worlds env guard all stay exactly where the framework
- * integration put them — while every non-fetch handler
+ * framework-delivered handler — route ownership and the four-worlds env
+ * guard stay exactly where the framework integration put them — while
+ * every non-fetch handler
  * (queue/scheduled/email/tail) and workerd JS-RPC dispatch comes from the
  * underlying Worker bridge, sharing the one-per-isolate layer build with
  * the {@link DurableObjectBridge} classes exported next to it.

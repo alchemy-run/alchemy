@@ -1,26 +1,22 @@
 /**
- * `alchemy/Client` — the frontend→backend bridge of effectful Websites.
- *
- * One export, two overloads, world-appropriate:
+ * `alchemy/Client` — the server-side bridge into an effectful Website's
+ * backend methods.
  *
  * ```ts
- * // BROWSER / client components: TYPE-ONLY import — zero backend bytes
- * // in the client bundle, on every bundler.
- * import { createClient } from "alchemy/Client";
- * import type Backend from "../src/backend.ts";
- * const backend = createClient<typeof Backend>();
- * const n = await backend.bump();          // typed; POST /api/__rpc/bump
- *
  * // SSR / server code: VALUE import — direct in-process dispatch, no HTTP.
+ * import { createClient } from "alchemy/Client";
  * import Backend from "../src/backend.ts";
  * const backend = createClient(Backend, { headers: request.headers });
  * const n = await backend.bump();          // direct effect invocation
  * ```
  *
- * This is the default (server-capable) entry: the value form's in-process
- * dispatch lives behind a guarded dynamic import of `./Server.ts`, and
- * the `"browser"` export condition swaps this module for `browser.ts`
- * (identical surface, no server branch) so client bundles stay tiny.
+ * Schema-less RPC is for TRUSTED callers only — there is no public HTTP
+ * wire. Untrusted browser clients talk to the backend through a schema
+ * the user owns (effect `HttpApi` / `@effect/rpc`) mounted on the
+ * backend's `fetch` handler. The in-process dispatch lives behind a
+ * guarded dynamic import of `./Server.ts`, and the `"browser"` export
+ * condition swaps this module for `browser.ts` (a guidance-throwing
+ * stub) so client bundles never carry backend bytes.
  */
 
 import {
@@ -42,20 +38,13 @@ export type {
   RpcSuccess,
   ServerClientOptions,
 } from "./Core.ts";
-export {
-  RpcDefectError,
-  RpcError,
-  RpcMissingUrlError,
-  RpcPrerenderError,
-  RpcTransportError,
-  type RpcClientError,
-} from "./Errors.ts";
+export { RpcError, RpcPrerenderError, type RpcClientError } from "./Errors.ts";
 
 /**
- * The guarded server branch: only ever evaluated when the VALUE form runs
- * outside a browser world, so importing `alchemy/Client` never statically
- * pulls the serve-bridge graph (and the `"browser"` condition removes
- * even this dynamic edge from client bundles).
+ * The guarded server branch: only ever evaluated when a method call
+ * dispatches, so importing `alchemy/Client` never statically pulls the
+ * serve-bridge graph (and the `"browser"` condition removes even this
+ * dynamic edge from client bundles).
  */
 const serverDispatch: ServerDispatch = async (site, method, args, options) => {
   const server = await import("./Server.ts");
@@ -63,38 +52,32 @@ const serverDispatch: ServerDispatch = async (site, method, args, options) => {
 };
 
 /**
- * Create a typed client for an effectful Website backend — the
- * frontend→backend bridge of effectful Websites (`alchemy/Client`).
+ * Create a typed server-side client for an effectful Website backend
+ * (`alchemy/Client`).
  *
  * The RPC methods of the backend's impl shape (every own function-valued
  * key except `fetch` and the platform handlers `queue`, `scheduled`,
- * `email`, `tail`, ...) are the site's API surface, dispatched at the
- * reserved wire path `POST /api/__rpc/<method>` on the site's own origin
- * — no route wiring, no `server.routes` claim. `createClient` has one
- * form per world:
- *
- * - **Type-only form** — browser / client-component code:
- *   `createClient<typeof Backend>()` with a **type-only** import of the
- *   backend. Methods POST to the wire path at
- *   `options.url ?? location.origin`; zero backend bytes reach the
- *   client bundle.
- * - **Value form** — SSR / server code: `createClient(Backend)` with a
- *   value import. Methods dispatch **directly in-process** (no HTTP),
- *   with `HttpServerRequest` synthesized from `options.headers`.
- *
- * Never value-import the backend module from client-bundled code — a
- * value import pulls the backend program (and everything it touches)
- * into the browser bundle. Components use `import type` + the type-only
- * form; the value form belongs in SSR seams only (loaders, Astro
+ * `email`, `tail`, ...) are the site's API surface for TRUSTED callers.
+ * `createClient(Backend)` takes a **value** import of the backend class
+ * and dispatches every method call **directly in-process** — no HTTP, no
+ * serialization — with `HttpServerRequest` synthesized from
+ * `options.headers`. It belongs in SSR seams only (loaders, Astro
  * frontmatter, server components, `+page.server.ts` `load`).
+ *
+ * There is no browser form: schema-less RPC never crosses a trust
+ * boundary. For browser/client-component code, define a schema you own —
+ * an effect `HttpApi` (or `@effect/rpc` group) — mount it on the
+ * backend's `fetch` handler, and build the browser client from the
+ * schema import.
  *
  * @binding
  * @product Client
  *
  * @section The backend's methods are the API
- * Any function-valued key on the impl shape beside `fetch` is an RPC
- * method. Methods return `Effect` (or a plain value/Promise); arguments
- * and results cross the wire as plain JSON.
+ * Any function-valued key on the impl shape beside `fetch` and the
+ * platform handlers is an RPC method. Methods return `Effect` (or a
+ * plain value/Promise); the value form invokes them in-process, so
+ * arguments and results never serialize.
  *
  * @example src/backend.ts
  * ```typescript
@@ -117,27 +100,9 @@ const serverDispatch: ServerDispatch = async (site, method, args, options) => {
  * ) {}
  * ```
  *
- * @section Browser: the type-only form
- * In client-bundled code, import the backend **as a type only** and call
- * `createClient<typeof Backend>()`. Every method call POSTs to
- * `/api/__rpc/<method>` on the page's own origin — same-origin fetches,
- * so session cookies ride along by default.
- *
- * @example A client component
- * ```typescript
- * import { createClient } from "alchemy/Client";
- * import type Backend from "../src/backend.ts";
- *
- * const backend = createClient<typeof Backend>();
- *
- * await backend.save("hello");        // POST /api/__rpc/save  ["hello"]
- * const value = await backend.get();  // POST /api/__rpc/get   []
- * ```
- *
  * @section Server: the value form
  * In SSR seams, import the backend **as a value** and pass the class:
- * calls dispatch straight into the backend's effects in-process — no
- * HTTP round-trip, even though the code reads identically. Pass the
+ * calls dispatch straight into the backend's effects in-process. Pass the
  * incoming request's headers so methods that self-authorize (by reading
  * `HttpServerRequest` cookies/headers) see the caller's identity.
  *
@@ -169,29 +134,24 @@ const serverDispatch: ServerDispatch = async (site, method, args, options) => {
  * });
  * ```
  *
- * @section Typed failures and the error envelope
- * A method's typed failure crosses the wire as a 400
- * `{"error": {"_tag", ...props}}` envelope and rejects as an
- * `RpcError` **structurally** re-carrying the failure's `_tag` +
- * props (the backend's error class never ships to the client). Defects
- * are sanitized server-side to `{"defect": {"message"}}` (500, no
- * stacks) and reject as `RpcDefectError`; transport problems
- * reject as `RpcTransportError`. On the in-process path the
- * rejection is the REAL failure instance — same `_tag` discipline,
- * so code that switches on `_tag` works in both worlds.
+ * @section Typed failures are real instances
+ * A failing method rejects with its typed failure AS-IS — the real error
+ * instance, so `instanceof` and `_tag` checks against your own error
+ * classes both work. Calling a method the backend doesn't expose rejects
+ * with an `RpcError` tagged `RpcMethodNotFound`.
  *
  * @example Handling a typed failure
  * ```typescript
- * import { createClient, RpcError } from "alchemy/Client";
- * import type Backend from "../src/backend.ts";
+ * import { createClient } from "alchemy/Client";
+ * import Backend, { UserNotFound } from "../src/backend.ts";
  *
- * const backend = createClient<typeof Backend>();
+ * const backend = createClient(Backend);
  *
  * try {
  *   await backend.save("hello");
  * } catch (error) {
- *   if (error instanceof RpcError && error._tag === "KVError") {
- *     // the decoded envelope: _tag + the failure's own props
+ *   if (error instanceof UserNotFound) {
+ *     // the method's own typed failure — the real instance
  *   }
  * }
  * ```
@@ -199,37 +159,51 @@ const serverDispatch: ServerDispatch = async (site, method, args, options) => {
  * @section Effect mode
  * `createEffectClient` is the same bridge with methods returning
  * `Effect`: the failure channel carries the method's typed failure
- * (decoded structurally on the wire path) alongside the client's own
- * `RpcClientError`s — so `Effect.catchTag` works on backend failure
- * tags.
+ * alongside the client's own `RpcClientError`s — so `Effect.catchTag`
+ * works on backend failure tags.
  *
  * @example Effect-mode client
  * ```typescript
  * import { createEffectClient } from "alchemy/Client";
- * import type Backend from "../src/backend.ts";
+ * import Backend from "../src/backend.ts";
  * import * as Effect from "effect/Effect";
  *
- * const backend = createEffectClient<typeof Backend>();
+ * const backend = createEffectClient(Backend);
  *
  * const value = yield* backend.get().pipe(
  *   Effect.catchTag("KVError", () => Effect.succeed(null)),
  * );
  * ```
  *
+ * @section Browser clients bring their own schema
+ * Untrusted callers never get schema-less dispatch. Define an effect
+ * `HttpApi` (or `@effect/rpc`) schema, serve it from the backend's
+ * `fetch` handler, and derive the browser client from the schema import
+ * — the schema module is plain types + Schema values, safe to bundle.
+ *
+ * @example Mounting an HttpApi on the fetch handler
+ * ```typescript
+ * import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+ * import { api } from "./api.ts"; // your HttpApi schema — browser-safe
+ *
+ * // inside the backend's impl shape:
+ * return {
+ *   fetch: HttpApiBuilder.toWebHandler(apiLayers),
+ * };
+ * ```
+ *
  * @section Prerendering
  * A prerendered (build-time) world has no deployed backend: the value
- * form fails with the typed `RpcPrerenderError` instead of
- * dispatching. Keep prerendered/static pages backend-free — make the
- * page dynamic, or move the call into client code where it becomes a
- * wire call against the deployed site.
+ * form fails with the typed `RpcPrerenderError` instead of dispatching.
+ * Keep prerendered/static pages backend-free — make the page dynamic, or
+ * fetch through your schema'd API at runtime instead.
  */
 export const createClient = makeCreateClient(serverDispatch);
 
 /**
  * The Effect-mode variant of {@link createClient}: methods return
- * `Effect` whose failure channel carries the decoded envelope (the
- * method's typed failure, structurally) alongside the client's own
- * {@link RpcClientError}s. Same two forms, same worlds, same options —
- * see {@link createClient}.
+ * `Effect` whose failure channel carries the method's REAL typed failure
+ * alongside the client's own {@link RpcClientError}s. Same form, same
+ * options — see {@link createClient}.
  */
 export const createEffectClient = makeCreateEffectClient(serverDispatch);

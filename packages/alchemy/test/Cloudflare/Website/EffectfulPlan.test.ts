@@ -65,9 +65,6 @@ describe.concurrent("effectful Website plan (collect-only)", () => {
         // dead code).
         expect(site.props.assets).toMatchObject({
           notFoundHandling: "single-page-application",
-          // The default "/api/*" claim already covers the universal
-          // "/api/__rpc*" rpc claim, so no extra rule is appended
-          // (Cloudflare's run_worker_first parser rejects redundant rules).
           runWorkerFirst: ["/api/*"],
         });
 
@@ -131,13 +128,12 @@ describe.concurrent("effectful Website plan (collect-only)", () => {
         expect(site.props.assets.runWorkerFirst).toEqual([
           "/admin/*",
           "/rpc/*",
-          "/api/__rpc*",
         ]);
       }),
   );
 
   test.provider(
-    "rpc-only impl (no fetch) still claims the universal rpc path",
+    "method-only impl (no fetch) compiles no worker-first rules",
     (stack) =>
       Effect.gen(function* () {
         const plan = yield* stack.plan(
@@ -154,12 +150,12 @@ describe.concurrent("effectful Website plan (collect-only)", () => {
             );
           }),
         );
-        // No fetch handler → no server.routes compile — but the rpc claim
-        // is unconditional (no plan-time shape sniffing beyond the served
-        // shape): `POST /api/__rpc/bump` must reach the worker past the
-        // SPA asset layer.
+        // No fetch handler → no server.routes compile. RPC methods have
+        // no HTTP wire (trusted callers reach them in-process or over
+        // workerd JS-RPC), so nothing needs to route past the SPA asset
+        // layer.
         const site = nodeOf(plan, "RpcOnlySite");
-        expect(site.props.assets.runWorkerFirst).toEqual(["/api/__rpc*"]);
+        expect(site.props.assets.runWorkerFirst).toBeUndefined();
       }),
   );
 
@@ -428,24 +424,23 @@ describe.concurrent("effectful Website plan (collect-only)", () => {
   );
 
   test.provider(
-    "Nextjs composite: worker-first true keeps the rpc path reachable (zero variance)",
+    "Nextjs composite: worker-first true is kept verbatim (zero variance)",
     (stack) =>
       Effect.gen(function* () {
         const plan = yield* stack.plan(
           Effect.gen(function* () {
             yield* Cloudflare.Website.Nextjs(
-              "NextRpcClaim",
+              "NextWorkerFirst",
               { main: import.meta.url },
               Effect.succeed(okFetch),
             );
           }),
         );
-        const site = nodeOf(plan, "NextRpcClaim");
+        const site = nodeOf(plan, "NextWorkerFirst");
         expect(site.props.runtimeDelivery).toBe("wrapper");
         // OpenNext owns routing with `runWorkerFirst: true` — EVERY path
-        // (the universal `/api/__rpc` included) is worker-first, so the
-        // rpc claim is inherently satisfied and the boolean is kept
-        // verbatim (no glob merge on `true`).
+        // is worker-first, so the boolean is kept verbatim (no glob merge
+        // on `true`).
         expect(site.props.assets.runWorkerFirst).toBe(true);
       }),
   );

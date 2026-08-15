@@ -12,7 +12,7 @@
  * Next-handled request; no proxy, no second port.
  *
  * With an `effect` config, the alchemy Serve bridge dispatches
- * `/api/__rpc` and `server.routes` requests BEFORE Next's handler
+ * `server.routes` requests BEFORE Next's handler
  * (strict route ownership — the deployed wrapper's exact gate) and the
  * backend module hot-reloads via watch + cache-busted re-import (see
  * `EffectDispatch.ts`). Env and credentials are inherited: the sidecar

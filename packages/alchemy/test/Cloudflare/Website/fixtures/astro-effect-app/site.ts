@@ -33,11 +33,11 @@ export const Users = Namespace("AstroEffectUsers");
 
 /**
  * Queue bound by the effectful Website's program — the async leg. The
- * impl both produces to it (the `enqueue` RPC method) and CONSUMES it on
- * the same class via `consumeQueueMessages`, whose listener is delivered
- * by the entry-takeover wrapper (the vendored astro worker entry is
- * wrapped with the Worker bridge's non-fetch handler surface — fetch
- * stays with the fetchable).
+ * impl both produces to it (the `/api/enqueue` fetch route) and CONSUMES
+ * it on the same class via `consumeQueueMessages`, whose listener is
+ * delivered by the entry-takeover wrapper (the vendored astro worker
+ * entry is wrapped with the Worker bridge's non-fetch handler surface —
+ * fetch stays with the fetchable).
  */
 export const Jobs = Queue("AstroEffectJobs");
 
@@ -96,7 +96,7 @@ export default class AstroEffectSite extends Astro<AstroEffectSite>()(
     // plan time this yields the `Cloudflare.Queues.Consumer` resource; at
     // runtime the entry-takeover wrapper dispatches queue batches to it.
     // Each message bumps `processed-count` and records `processed-last`
-    // in KV, where the `processed` RPC method reads them back.
+    // in KV, where the `/api/processed` fetch route reads them back.
     yield* consumeQueueMessages<string>(
       jobsQueue,
       {
@@ -122,21 +122,24 @@ export default class AstroEffectSite extends Astro<AstroEffectSite>()(
     );
 
     return {
-      /** Send a message to the queue (RPC: POST /api/__rpc/enqueue). */
-      enqueue: (message: string) =>
-        jobs.send(message, { contentType: "text" }).pipe(Effect.orDie),
-      /** Read the consumer's async state (RPC: POST /api/__rpc/processed). */
-      processed: () =>
-        Effect.gen(function* () {
-          const count = yield* users.get("processed-count").pipe(Effect.orDie);
-          const last = yield* users.get("processed-last").pipe(Effect.orDie);
-          return { count: Number(count ?? "0"), last: last ?? null };
-        }),
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         // `request.url` is path-shaped inside the effect fetch; the base
         // makes the parse total either way.
         const url = new URL(request.url, "http://fixture");
+        if (url.pathname === "/api/enqueue" && request.method === "POST") {
+          const message = url.searchParams.get("message") ?? "";
+          yield* jobs.send(message, { contentType: "text" }).pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({ enqueued: message });
+        }
+        if (url.pathname === "/api/processed") {
+          const count = yield* users.get("processed-count").pipe(Effect.orDie);
+          const last = yield* users.get("processed-last").pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({
+            count: Number(count ?? "0"),
+            last: last ?? null,
+          });
+        }
         if (url.pathname === "/api/kv") {
           const key = url.searchParams.get("key") ?? "default";
           if (request.method === "PUT") {

@@ -51,12 +51,11 @@ const state = (): ServeTestState =>
 /**
  * A structural stand-in for `alchemy/Serve` (the `ServeModule` slice) —
  * the dispatch is exercised against the seam's CONTRACT (pre-gate on
- * `isRpcPath`/`matchRoutes`, `match` → write-or-decline, `dispose`), not
- * against alchemy itself (this package deliberately does not import it).
+ * `matchRoutes`, `match` → write-or-decline, `dispose`), not against
+ * alchemy itself (this package deliberately does not import it).
  */
 const SERVE_FIXTURE = `
 export const DEFAULT_SERVER_ROUTES = ["/api/*"];
-export const isRpcPath = (pathname) => pathname === "/api/__rpc";
 export const matchRoutes = (routes, pathname) =>
   routes.some((route) =>
     route.endsWith("/*")
@@ -292,18 +291,12 @@ describe("createEffectDispatch", () => {
     expect(state().calls).toEqual([]);
   });
 
-  it("always claims the rpc path, even outside the routes claim", async () => {
-    state().match = async (_site, request) =>
-      new Response(`rpc:${await request.text()}`);
+  it("declines every path outside a narrowed routes claim", async () => {
     const url = await serveWith(await makeDispatch({ routes: ["/never/*"] }));
-    const rpc = await fetch(`${url}/api/__rpc`, {
-      method: "POST",
-      body: "ping",
-    });
-    expect(await rpc.text()).toBe("rpc:ping");
     // The narrowed claim excludes plain /api paths — the framework serves.
     const outside = await fetch(`${url}/api/hello`);
     expect(outside.headers.get("x-served-by")).toBe("framework");
+    expect(state().calls).toEqual([]);
   });
 
   it("falls through to the framework when the effect program declines a claimed path", async () => {

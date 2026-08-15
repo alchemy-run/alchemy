@@ -6,15 +6,14 @@
  * from `browser.ts`), so client bundles that import `alchemy/Client`
  * carry none of the serve-bridge graph.
  *
- * Dispatch semantics mirror the HTTP dispatch's per-event pipeline
+ * Dispatch semantics mirror the fetch bridge's per-event pipeline
  * (`Serve/Bridge.ts`): the same lazy WeakMap-memoized isolate build per
  * backend class, a fresh request `Scope` per call (settled inline before
  * the promise resolves — tRPC-caller style), per-event telemetry, and a
  * synthesized `HttpServerRequest` in context so methods can
- * self-authorize from `options.headers` (empty when absent). Unlike the
- * HTTP path there is no envelope: the method's success value and typed
- * failure are returned/thrown AS-IS (real instances, not structural
- * decodes).
+ * self-authorize from `options.headers` (empty when absent). There is no
+ * envelope: the method's success value and typed failure are
+ * returned/thrown AS-IS (real instances, not structural decodes).
  */
 
 import * as Cause from "effect/Cause";
@@ -26,10 +25,10 @@ import * as ServerRequest from "effect/unstable/http/HttpServerRequest";
 import { getSiteRuntime, markRuntime } from "../Serve/Bridge.ts";
 import { SERVE_SHELL_KEY } from "../Serve/constants.ts";
 import { hasStackMarkers, resolveServeEnv } from "../Serve/Env.ts";
-import { RPC_PATH, rpcMethodsOf } from "../Serve/Rpc.ts";
+import { rpcMethodsOf } from "../Serve/Rpc.ts";
 import type { ServeShell } from "../Serve/Serve.ts";
 import { buildEventTelemetry } from "../Telemetry.ts";
-import { decodeRpcErrorPayload, RpcPrerenderError } from "./Errors.ts";
+import { RpcError, RpcPrerenderError } from "./Errors.ts";
 import { resolveHeaders, type ServerClientOptions } from "./Core.ts";
 
 const noopPin = (): void => {};
@@ -66,7 +65,7 @@ export const invokeServerMethod = async (
       message:
         `backend method "${method}" was called during prerender (no ` +
         "alchemy stack in the environment) — make the page dynamic or " +
-        "move the call client-side.",
+        "move the call behind a request-time seam.",
     });
   }
   // Cloud-flavored runtime: an AWS Website class carries a serve shell
@@ -82,7 +81,7 @@ export const invokeServerMethod = async (
       : await getSiteRuntime(site, env, noopPin);
   const fn = rpcMethodsOf(runtime.shape())[method];
   if (fn === undefined) {
-    throw decodeRpcErrorPayload({
+    throw new RpcError({
       _tag: "RpcMethodNotFound",
       method,
       message: `the backend does not expose an RPC method named "${method}"`,
@@ -91,9 +90,9 @@ export const invokeServerMethod = async (
 
   // Synthesize the per-request identity: headers (cookies/authorization)
   // ride into `HttpServerRequest` so methods self-authorize exactly as
-  // they do over the HTTP dispatch. Empty when no headers were given.
+  // they do under the fetch bridge. Empty when no headers were given.
   const request = ServerRequest.fromWeb(
-    new Request(`http://localhost${RPC_PATH}/${encodeURIComponent(method)}`, {
+    new Request(`http://localhost/__rpc/${encodeURIComponent(method)}`, {
       method: "POST",
       headers: await headersPromise,
     }),

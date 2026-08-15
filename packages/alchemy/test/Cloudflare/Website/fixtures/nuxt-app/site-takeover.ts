@@ -6,8 +6,8 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  * The stand-down twin of `site.ts`: `server: { takeover: false }` opts out
  * of automatic delivery, so the dev server must NOT inject the effect
  * middleware — with no explicit `alchemy/Nitro` mount in `server/`, the
- * claimed routes fall back to nitro (its own 404), and the rpc path is
- * never claimed. Pins the CF dev half of the explicit-tier stand-down.
+ * claimed routes fall back to nitro (its own 404). Pins the CF dev half
+ * of the explicit-tier stand-down.
  */
 export default class NuxtTakeoverSite extends Cloudflare.Website.Nuxt<NuxtTakeoverSite>()(
   "NuxtTakeoverSite",

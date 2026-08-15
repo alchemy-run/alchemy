@@ -8,7 +8,6 @@ import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { pathToFileURL } from "node:url";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
@@ -142,11 +141,6 @@ describe("AWS.Website.Nuxt local", () => {
  * The effectful site module written into the clone at `src/site.ts`
  * (clone sits at `packages/alchemy/.tmp/<dir>/`, so `../../../src` is
  * `packages/alchemy/src` — the CURRENT sources, not a stale built `lib/`).
- *
- * `server.routes` deliberately does NOT cover `/api/__rpc` — the injected
- * middleware's pre-gate must admit the universal rpc path regardless of
- * the routes claim (the RPC-claim fix), which the `greet` RPC method
- * pins over the wire.
  */
 const nuxtEffectSiteSource = `
 import * as Effect from "effect/Effect";
@@ -175,9 +169,7 @@ export default class NuxtEffectSite extends Nuxt<NuxtEffectSite>()(
   "NuxtEffectSite",
   {
     main: import.meta.url,
-    // Narrow claim: /api/hello (nitro's own route) sits OUTSIDE it, and
-    // /api/__rpc is NOT covered — the injected pre-gate must admit the
-    // universal rpc path on its own.
+    // Narrow claim: /api/hello (nitro's own route) sits OUTSIDE it.
     server: { routes: ["/api/effect/*"] },
     // Plan-only (guarded: undefined when the module re-evaluates inside a
     // deployed bundle where import.meta has no path).
@@ -190,10 +182,6 @@ export default class NuxtEffectSite extends Nuxt<NuxtEffectSite>()(
     const putObject = yield* PutObject(bucket);
     const getObject = yield* GetObject(bucket);
     return {
-      /** RPC method (POST /api/__rpc/greet — outside server.routes). */
-      greet: Effect.fn(function* (name) {
-        return \`hello \${name}\`;
-      }),
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://fixture");
@@ -252,7 +240,7 @@ const fetchJsonReady = <T>(url: string, times = 60) =>
 
 describe("AWS.Website.Nuxt local (effectful)", () => {
   test.provider.skipIf(!dockerAvailable)(
-    "effectful Nuxt dev: the injected middleware serves /api/effect/* + RPC with NO mount file",
+    "effectful Nuxt dev: the injected middleware serves /api/effect/* with NO mount file",
     (stack) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
@@ -346,17 +334,6 @@ describe("AWS.Website.Nuxt local (effectful)", () => {
           `${url}/api/effect/ping`,
         );
         expect(ping.marker).toBe("effect-fetch");
-
-        // The universal rpc path — NOT covered by `server.routes` — is
-        // admitted by the injected pre-gate on its own (the RPC-claim
-        // fix): the wire protocol envelope round-trips the method result.
-        const rpc = yield* HttpClient.execute(
-          HttpClientRequest.post(`${url}/api/__rpc/greet`).pipe(
-            HttpClientRequest.bodyText('["dev"]', "application/json"),
-          ),
-        );
-        expect(rpc.status).toBe(200);
-        expect(yield* rpc.json).toEqual({ value: "hello dev" });
 
         // An unknown route INSIDE the claim is the effect's own 404 — the
         // fetch's marker body proves WHO answered (never nitro's 404).

@@ -182,13 +182,13 @@ export interface EffectAstroProps extends AstroProps {
  * bridge — wins outright (`server: { takeover: false }` forces that
  * explicit tier).
  *
- * The impl's non-`fetch` methods are **RPC methods** — the typed API
- * surface, served at the reserved `POST /api/__rpc/<method>` path
- * (claimed on the edge router automatically) and called through
- * `createClient` from `alchemy/Client`: type-only form in browser code,
- * value form for direct in-process dispatch in the frontmatter of
- * non-prerendered pages. A `fetch` handler is only needed for
- * hand-rolled routes.
+ * The impl's non-`fetch` methods are **RPC methods** — the typed method
+ * surface for trusted callers: value-import the backend in the
+ * frontmatter of non-prerendered pages and call `createClient(Backend)`
+ * from `alchemy/Client` for direct in-process dispatch. Browser code is
+ * untrusted — it reaches the backend through the `fetch` handler (mount
+ * a schema-validated surface like effect `HttpApi` / `@effect/rpc` on it
+ * under `server.routes`).
  *
  * The program's non-`fetch` surface — an SQS consumer registered with
  * `SQS.consumeQueueMessages`, and other event sources — rides a
@@ -231,17 +231,16 @@ export interface EffectAstroProps extends AstroProps {
  * ) {}
  * ```
  *
- * @example Calling it from the frontend (createClient)
+ * @example Calling it from page frontmatter (createClient)
  * ```typescript
- * // browser code — TYPE-ONLY backend import, zero backend bytes; in the
- * // frontmatter of a non-prerendered page, value-import the backend and
- * // call createClient(Backend) for direct in-process dispatch instead.
+ * // the frontmatter of a non-prerendered page — value-import the
+ * // backend; dispatch is direct and in-process, no HTTP hop.
  * import { createClient } from "alchemy/Client";
- * import type Backend from "../src/backend.ts";
+ * import Backend from "../src/backend.ts";
  *
- * const backend = createClient<typeof Backend>();
+ * const backend = createClient(Backend);
  *
- * const item = await backend.visits(); // POST /api/__rpc/visits
+ * const item = await backend.visits();
  * ```
  */
 export const Astro: {

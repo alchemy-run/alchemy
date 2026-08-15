@@ -221,8 +221,8 @@ describe("scanForExplicitNextServeMount", () => {
       // The value-form createClient graph (alchemy/Client) must NOT
       // false-positive the stand-down.
       'import { createClient } from "alchemy/Client";\n' +
-        'import type Backend from "./backend.ts";\n' +
-        "export default () => createClient<typeof Backend>();\n",
+        'import Backend from "./backend.ts";\n' +
+        "export default () => createClient(Backend);\n",
     );
     // The backend module itself (capability imports) is not a mount either.
     NodeFs.writeFileSync(

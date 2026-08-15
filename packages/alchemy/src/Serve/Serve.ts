@@ -18,7 +18,6 @@ import * as Data from "effect/Data";
 import {
   markRuntime,
   matchSite,
-  rpcSite,
   type ServeOptions,
   type SiteRuntime,
 } from "./Bridge.ts";
@@ -35,19 +34,10 @@ import { SERVE_SHELL_KEY, type SERVE_MOUNT_MARKER } from "./constants.ts";
 const MOUNT_MARKER: typeof SERVE_MOUNT_MARKER = "__ALCHEMY_SERVE_MOUNT_v1__";
 (globalThis as Record<string, any>)[MOUNT_MARKER] = true;
 import { DEFAULT_SERVER_ROUTES, matchRoutes } from "./Routes.ts";
-import { isRpcPath } from "./Rpc.ts";
 
 export type { ServeOptions } from "./Bridge.ts";
 export { SERVE_MOUNT_MARKER, SERVE_SENTINEL } from "./constants.ts";
 export { DEFAULT_SERVER_ROUTES, matchRoutes } from "./Routes.ts";
-export {
-  RPC_CLAIM,
-  RPC_PATH,
-  dispatchRpc,
-  encodeRpcFailure,
-  isRpcPath,
-  rpcMethodsOf,
-} from "./Rpc.ts";
 
 /**
  * A cloud-specific serve shell a Website class may carry under
@@ -222,15 +212,6 @@ export const make = <S extends AnyWebsiteClass>(
     options?: ServeOptions,
   ): Promise<Response | undefined> => {
     const pathname = new URL(request.url).pathname;
-    // The universal rpc path ("/api/__rpc") is checked BEFORE
-    // server.routes matching — the RPC dispatch needs no routes claim. A
-    // shell-carrying class dispatches in its own shell (which checks the
-    // same universal path first); the default bridge dispatches here.
-    if (isRpcPath(pathname)) {
-      return shell !== undefined
-        ? shell.match(site, request, merged(options))
-        : rpcSite(site, request, merged(options));
-    }
     // Strict route ownership: outside the claim the framework serves and
     // the effect fetch is never invoked; inside it the effect's answer
     // (404s included) is final.

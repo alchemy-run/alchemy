@@ -56,7 +56,6 @@ import { StackTag as Stack } from "../StackTag.ts";
 import { buildEventTelemetry } from "../Telemetry.ts";
 import type { SERVE_SENTINEL } from "./constants.ts";
 import { envString, hasStackMarkers, resolveServeEnv } from "./Env.ts";
-import { dispatchRpc } from "./Rpc.ts";
 
 // The wiring-handshake sentinel, written as a literal (type-checked against
 // `constants.ts`) so the exact byte sequence provably survives bundling and
@@ -327,25 +326,6 @@ export const runSiteFetch = (
   return runSiteHandler(runtime, request, fetchHandler, options);
 };
 
-/**
- * Run one RPC dispatch event against a built site: the same per-event
- * pipeline as {@link runSiteFetch} (fresh request `Scope`, telemetry,
- * `HttpServerRequest` in context) with the serve core's `dispatchRpc` as
- * the handler. Always answers — a method-less shape (or an impl that
- * served nothing) envelope-encodes `RpcMethodNotFound`.
- */
-export const runSiteRpc = (
-  runtime: SiteRuntime,
-  request: Request,
-  options?: SiteFetchOptions,
-): Promise<Response> =>
-  runSiteHandler(
-    runtime,
-    request,
-    dispatchRpc(runtime.shape()),
-    options,
-  ) as Promise<Response>;
-
 const runSiteHandler = async (
   runtime: SiteRuntime,
   request: Request,
@@ -446,30 +426,4 @@ export const matchSite = async (
     options?.waitUntil ?? noopPin,
   );
   return runSiteFetch(runtime, request, { waitUntil: options?.waitUntil });
-};
-
-/**
- * The RPC twin of {@link matchSite}: env ladder + four-worlds guard, then
- * one `dispatchRpc` run through the same per-event pipeline. Resolves
- * `undefined` only in a marker-less (build-time prerender) world — the
- * caller falls through to the framework, which 404s the reserved path.
- */
-export const rpcSite = async (
-  site: object,
-  request: Request,
-  options?: ServeOptions,
-): Promise<Response | undefined> => {
-  markRuntime();
-  const env = await resolveServeEnv(options?.env);
-  if (!hasStackMarkers(env)) {
-    return undefined;
-  }
-  const runtime = await getSiteRuntime(
-    site,
-    env,
-    options?.waitUntil ?? noopPin,
-  );
-  return runSiteRpc(runtime, request, {
-    waitUntil: options?.waitUntil,
-  });
 };

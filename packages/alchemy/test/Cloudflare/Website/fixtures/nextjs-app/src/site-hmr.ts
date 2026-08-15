@@ -18,14 +18,13 @@ import * as NodePath from "node:path";
 export const HmrUsers = KV.Namespace("NextjsEffectHmrUsers");
 
 /**
- * The hmr-mode (`next dev` in Node) zero-setup site: fetch + RPC served by
- * the dev server's effect front dispatch, which checks `/api/__rpc` and
- * `server.routes` ahead of Next's handler — the same rpc-first +
- * strict-ownership gate as the deployed takeover, with no route mount
- * anywhere in the app tree (the artifact takeover itself only exists in
- * `preview` dev and deploys).
+ * The hmr-mode (`next dev` in Node) zero-setup site: fetch served by the
+ * dev server's effect front dispatch, which checks `server.routes` ahead
+ * of Next's handler — the same strict-ownership gate as the deployed
+ * takeover, with no route mount anywhere in the app tree (the artifact
+ * takeover itself only exists in `preview` dev and deploys).
  *
- * Kept free of DO/cron surface: hmr delivery is fetch + RPC only by design.
+ * Kept free of DO/cron surface: hmr delivery is fetch-only by design.
  */
 export default class NextjsEffectHmrSite extends Website.Nextjs<NextjsEffectHmrSite>()(
   "NextjsEffectHmrSite",

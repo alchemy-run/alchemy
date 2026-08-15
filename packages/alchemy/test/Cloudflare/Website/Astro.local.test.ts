@@ -84,27 +84,21 @@ const fetchSession = (url: string, cookie?: string) =>
   });
 
 /**
- * POST an `/api/__rpc/<method>` dispatch (the `createClient` wire
- * protocol: JSON array body, `{"value": ...}` success envelope).
+ * POST (or GET) a fixture route and decode the JSON body — used for the
+ * queue-leg routes (`/api/enqueue`, `/api/processed`).
  */
-const rpcPost = (base: string, method: string, args: ReadonlyArray<unknown>) =>
+const fetchJson = (url: string, method: "GET" | "POST" = "GET") =>
   Effect.tryPromise({
     try: async (signal) => {
-      const res = await fetch(`${base}/api/__rpc/${method}`, {
-        signal,
-        method: "POST",
-        cache: "no-store",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(args),
-      });
+      const res = await fetch(url, { signal, method, cache: "no-store" });
       const body = (await res.json().catch(() => undefined)) as
-        | { value?: unknown }
+        | Record<string, unknown>
         | undefined;
       return { status: res.status, body };
     },
     catch: (e) =>
       new DevResponseMismatch({
-        url: `${base}/api/__rpc/${method}`,
+        url,
         detail: e instanceof Error ? e.message : String(e),
       }),
   }).pipe(
@@ -112,7 +106,7 @@ const rpcPost = (base: string, method: string, args: ReadonlyArray<unknown>) =>
       (r) => r.status === 200,
       (r) =>
         new DevResponseMismatch({
-          url: `${base}/api/__rpc/${method}`,
+          url,
           detail: `expected 200, got ${r.status} ${JSON.stringify(r.body)?.slice(0, 240)}`,
         }),
     ),
@@ -427,14 +421,18 @@ describe.concurrent("Astro dev", () => {
         );
 
         // ── the async leg (entry-level non-fetch delivery): enqueue via
-        // the universal RPC path, the impl's queue consumer — dispatched
-        // through the entry-takeover wrapper by the LOCAL queue broker —
-        // updates KV, and the processed() RPC observes the catch-up. ─────
+        // the fixture's /api/enqueue route, the impl's queue consumer —
+        // dispatched through the entry-takeover wrapper by the LOCAL
+        // queue broker — updates KV, and /api/processed observes the
+        // catch-up. ──────────────────────────────────────────────────────
         const queueMarker = "astro-effect-dev-queue";
-        yield* rpcPost(site.url!, "enqueue", [queueMarker]).pipe(devRetry);
-        const processed = yield* rpcPost(site.url!, "processed", []).pipe(
+        yield* fetchJson(
+          `${site.url!}/api/enqueue?message=${queueMarker}`,
+          "POST",
+        ).pipe(devRetry);
+        const processed = yield* fetchJson(`${site.url!}/api/processed`).pipe(
           Effect.map(
-            (r) => r.body?.value as { count: number; last: string | null },
+            (r) => r.body as unknown as { count: number; last: string | null },
           ),
           Effect.repeat({
             schedule: Schedule.spaced("1 second"),

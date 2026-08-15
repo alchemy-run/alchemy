@@ -68,9 +68,9 @@ const toWebRequest = async (
     // Server-preset mocks (nitro's aws-lambda entry) hand h3 a mock
     // IncomingMessage that carries the already-decoded event body as a
     // property and never emits it as a stream — streaming such a req
-    // yields an EMPTY body (the deployed rpc POST decoded to a JSON
-    // defect). Mirror h3's readRawBody source order: a stashed
-    // rawBody/body wins; a real socket-backed req streams.
+    // yields an EMPTY body (a deployed POST's body silently vanishes).
+    // Mirror h3's readRawBody source order: a stashed rawBody/body wins;
+    // a real socket-backed req streams.
     const mock = req as { rawBody?: unknown; body?: unknown };
     const raw = mock.rawBody ?? mock.body;
     if (typeof raw === "string") {

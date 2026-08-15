@@ -4,8 +4,8 @@
  * Cloudflare `hmr` dev server (`DevServer.ts`, in the vite dev child).
  *
  * One listener, no proxy: the dev http server offers each request to the
- * effect program FIRST (`Serve.make(Site).match` — rpc-first + strict
- * route ownership, byte-for-byte the deployed wrapper's gate) and falls
+ * effect program FIRST (`Serve.make(Site).match` — strict route
+ * ownership, byte-for-byte the deployed wrapper's gate) and falls
  * through to Next's `getRequestHandler()` on a decline. This erases the
  * explicit `toRouteHandler` mount from both clouds' `next dev` stories.
  *
@@ -47,7 +47,6 @@ interface ServeModule {
     readonly match: (request: Request) => Promise<Response | undefined>;
   };
   readonly dispose?: (site: object) => Promise<void>;
-  readonly isRpcPath: (pathname: string) => boolean;
   readonly matchRoutes: (
     routes: readonly string[],
     pathname: string,
@@ -63,8 +62,7 @@ export interface EffectDispatchConfig {
    */
   readonly main: string;
   /**
-   * Path globs the effect fetch owns (`server.routes`). The universal
-   * `/api/__rpc` path is always dispatched regardless.
+   * Path globs the effect fetch owns (`server.routes`).
    * @default the serve module's DEFAULT_SERVER_ROUTES (["/api/*"])
    */
   readonly routes?: readonly string[] | undefined;
@@ -86,9 +84,9 @@ export interface EffectDispatchConfig {
 export interface EffectDispatchHandle {
   /**
    * Offer the request to the effect program. Resolves `true` when the
-   * response was written to `res` (rpc dispatch, or a path inside the
-   * routes claim); `false` when the framework should serve it — in that
-   * case `req`/`res` are untouched.
+   * response was written to `res` (a path inside the routes claim);
+   * `false` when the framework should serve it — in that case `req`/`res`
+   * are untouched.
    */
   readonly dispatch: (
     req: NodeHttp.IncomingMessage,
@@ -255,10 +253,9 @@ export const createEffectDispatch = async (
   ): Promise<boolean> => {
     const pathname = new URL(req.url ?? "/", "http://localhost").pathname;
     // Cheap pre-gate BEFORE constructing a body-carrying Request: outside
-    // the claim (and off the rpc path) the framework serves — its Next
-    // server actions, route handlers, and pages must receive a pristine
-    // node stream.
-    if (!serve.isRpcPath(pathname) && !serve.matchRoutes(routes, pathname)) {
+    // the claim the framework serves — its Next server actions, route
+    // handlers, and pages must receive a pristine node stream.
+    if (!serve.matchRoutes(routes, pathname)) {
       return false;
     }
     const active = current;

@@ -11,7 +11,6 @@ import { pathToFileURL } from "node:url";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
@@ -197,9 +196,9 @@ describe.skipIf(!runLive)("AWS.Website.Nextjs", () => {
 // the site module + serve shell are prebundled beside the deployed config.
 // The clone's own `open-next.config.ts` (webpack buildCommand) exercises
 // the user-config import-and-spread merge live. The edge serverRoutes
-// check forwards the claim (plus `/api/__rpc*`) to the server BEFORE the
-// manifest; `!/api/hello` is carved out, so Next's own route keeps
-// serving it (strict ownership shadows everything else inside `/api/*`).
+// check forwards the claim to the server BEFORE the manifest;
+// `!/api/hello` is carved out, so Next's own route keeps serving it
+// (strict ownership shadows everything else inside `/api/*`).
 //
 // The clone lives OUTSIDE the workspace (OpenNext monorepo detection), so
 // `alchemy`/`effect` are symlinked into the clone post-install (the
@@ -251,9 +250,6 @@ export default class NextEffectLiveSite extends Nextjs<NextEffectLiveSite>()(
     const putObject = yield* PutObject(bucket);
     const getObject = yield* GetObject(bucket);
     return {
-      /** RPC method — served at POST /api/__rpc/greet by the wrapper's
-       * rpc-first dispatch (the edge rides the universal rpc claim). */
-      greet: (name: string) => Effect.succeed("hello " + name),
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://fixture");
@@ -461,18 +457,6 @@ describe.skipIf(!runLive)("AWS.Website.Nextjs (effectful)", () => {
           `${url}/api/effect/ping`,
         );
         expect(ping.marker).toBe("effect-fetch");
-
-        // RPC: the wrapper dispatches /api/__rpc/<method> rpc-first, and
-        // the edge rides the universal rpc claim alongside the routes.
-        const rpc = yield* HttpClient.execute(
-          HttpClientRequest.post(`${url}/api/__rpc/greet`).pipe(
-            HttpClientRequest.bodyText('["live"]', "application/json"),
-          ),
-        ).pipe(
-          Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 10 }),
-        );
-        expect(rpc.status).toBe(200);
-        expect(yield* rpc.json).toEqual({ value: "hello live" });
 
         // Streamed effect response through the RESPONSE_STREAM pipe (the
         // stock wrapper's compression + prelude machinery) — direct and

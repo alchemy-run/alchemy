@@ -354,21 +354,6 @@ describe.concurrent("SvelteKit dev", () => {
         );
         expect(kvRead.value).toBe(kvValue);
 
-        // ── Universal RPC dispatch: the impl's non-fetch `stamp` method
-        // answers at the reserved POST /api/__rpc/<method> path through
-        // the same dev middleware, in the `{"value": ...}` envelope ──────
-        const stamp = yield* HttpClient.execute(
-          HttpClientRequest.post(`${site.url!}/api/__rpc/stamp`).pipe(
-            HttpClientRequest.bodyText("[]", "application/json"),
-          ),
-        ).pipe(
-          Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
-        );
-        expect(stamp.status).toBe(200);
-        expect((yield* stamp.json) as object).toEqual({
-          value: { marker: "sveltekit-effect-rpc" },
-        });
-
         // ── Exclusion glob routes to the framework: `!/api/ping` carves
         // the kit endpoint out of the effect claim, so the dev middleware
         // never dispatches the effect fetch for it and kit serves it ─────

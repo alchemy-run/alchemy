@@ -70,10 +70,6 @@ export default class SvelteKitEffectSite extends Website.SvelteKit<SvelteKitEffe
     const putObject = yield* S3.PutObject(bucket);
     const getObject = yield* S3.GetObject(bucket);
     return {
-      /** RPC method — served at POST /api/__rpc/greet by the generated
-       * entry's rpc-first dispatch (the edge rides the universal rpc
-       * claim alongside the routes). */
-      greet: (name: string) => Effect.succeed("hello " + name),
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         // `HttpServerRequest.url` is the path (+ query), not a full URL.

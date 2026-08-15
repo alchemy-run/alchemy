@@ -37,8 +37,6 @@ const rootDir = (() => {
  *   cache lookup), pinned by asserting two requests differ.
  * - `/api/ping` — carved back out to kit by the exclusion glob; the
  *   fixture's +server endpoint serves it.
- * - the non-`fetch` `stamp` method — the universal RPC surface at
- *   `POST /api/__rpc/stamp`, dispatched before the routes check.
  * - any other path inside the claim fails `RouteNotFound` — rendered as
  *   the effect's OWN empty 404, never delegation to kit.
  *

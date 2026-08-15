@@ -125,12 +125,13 @@ export interface EffectSvelteKitProps extends SvelteKitProps {
  * `hooks.server.ts` makes the generated arm stand down, and
  * `server: { takeover: false }` forces the explicit tier outright.
  *
- * The impl's non-`fetch` methods are **RPC methods** — the typed API
- * surface, served at the reserved `POST /api/__rpc/<method>` path
- * (claimed on the edge router automatically) and called through
- * `createClient` from `alchemy/Client`: type-only form in browser code,
- * value form for direct in-process dispatch in `+page.server.ts` `load`
- * functions. A `fetch` handler is only needed for hand-rolled routes.
+ * The impl's non-`fetch` methods are **RPC methods** — the typed method
+ * surface for trusted callers: value-import the backend in
+ * `+page.server.ts` `load` functions and call `createClient(Backend)`
+ * from `alchemy/Client` for direct in-process dispatch. Browser code is
+ * untrusted — it reaches the backend through the `fetch` handler (mount
+ * a schema-validated surface like effect `HttpApi` / `@effect/rpc` on it
+ * under `server.routes`).
  *
  * The program's non-`fetch` surface — an SQS consumer registered with
  * `SQS.consumeQueueMessages`, and other event sources — rides a
@@ -167,17 +168,16 @@ export interface EffectSvelteKitProps extends SvelteKitProps {
  * ) {}
  * ```
  *
- * @example Calling it from the frontend (createClient)
+ * @example Calling it from a `+page.server.ts` load (createClient)
  * ```typescript
- * // browser code — TYPE-ONLY backend import, zero backend bytes; in a
- * // `+page.server.ts` `load`, value-import the backend and call
- * // createClient(Backend) for direct in-process dispatch instead.
+ * // server-side load — value-import the backend; dispatch is direct
+ * // and in-process, no HTTP hop.
  * import { createClient } from "alchemy/Client";
- * import type Backend from "../src/backend.ts";
+ * import Backend from "../src/backend.ts";
  *
- * const backend = createClient<typeof Backend>();
+ * const backend = createClient(Backend);
  *
- * const text = await backend.hello(); // POST /api/__rpc/hello
+ * const text = await backend.hello();
  * ```
  */
 export const SvelteKit: {

@@ -82,10 +82,9 @@ export default class EffectfulViteSite extends Website.Vite<EffectfulViteSite>()
           path: url.pathname,
         });
       }),
-      // RPC methods, served to `createClient` at the universal
-      // `POST /api/__rpc/<method>` dispatch (checked BEFORE
-      // `server.routes`). `bumpStored` proves capability bindings work
-      // inside RPC method bodies too.
+      // RPC methods (trusted callers: in-process createClient, workerd
+      // JS-RPC). `bumpStored` proves capability bindings work inside RPC
+      // method bodies too.
       bump: (n: number) => Effect.succeed(n + 1),
       bumpStored: (key: string) =>
         Effect.gen(function* () {

@@ -66,8 +66,8 @@ export const HmrUsers = KV.Namespace("NextjsEffectHmrUsers");
 
 /**
  * The hmr-mode (\`next dev\` in Node) zero-setup site: the dev server's
- * effect front dispatch serves \`/api/__rpc\` + \`server.routes\` ahead of
- * Next's handler — no route mount exists anywhere in the app tree.
+ * effect front dispatch serves \`server.routes\` ahead of Next's handler —
+ * no route mount exists anywhere in the app tree.
  */
 export default class NextjsEffectHmrSite extends Website.Nextjs<NextjsEffectHmrSite>()(
   "NextjsEffectHmrSite",
@@ -84,7 +84,6 @@ export default class NextjsEffectHmrSite extends Website.Nextjs<NextjsEffectHmrS
     const namespace = yield* HmrUsers;
     const users = yield* KV.ReadWriteNamespace(namespace);
     return {
-      stamp: () => Effect.succeed({ marker: "hmr-rpc" }),
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://localhost");
@@ -440,13 +439,13 @@ describe.concurrent("Nextjs dev", () => {
 
   // ─────────────────────────────────────────────────────────────────────
   // Effectful Website, hmr mode (zero-setup): the real `next dev` runs
-  // behind the dev server's effect front dispatch — `/api/__rpc` and
-  // `server.routes` are answered by the Effect program BEFORE Next's
-  // handler, so NO route mount exists anywhere in the app tree.
+  // behind the dev server's effect front dispatch — `server.routes` are
+  // answered by the Effect program BEFORE Next's handler, so NO route
+  // mount exists anywhere in the app tree.
   // ─────────────────────────────────────────────────────────────────────
 
   test.provider(
-    "Nextjs dev (hmr): front dispatch serves effect routes + rpc under next dev, no mount file",
+    "Nextjs dev (hmr): front dispatch serves effect routes under next dev, no mount file",
     (stack) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
@@ -501,20 +500,6 @@ describe.concurrent("Nextjs dev", () => {
           `${site.url!}/api/effect/ping`,
         );
         expect(ping.marker).toBe("effect-fetch");
-
-        // The universal RPC dispatch works in hmr mode now (the old
-        // explicit-mount tier only served `fetch`).
-        const stamp = yield* HttpClient.execute(
-          HttpClientRequest.post(`${site.url!}/api/__rpc/stamp`).pipe(
-            HttpClientRequest.bodyText("[]", "application/json"),
-          ),
-        ).pipe(
-          Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
-        );
-        expect(stamp.status).toBe(200);
-        expect((yield* stamp.json) as object).toEqual({
-          value: { marker: "hmr-rpc" },
-        });
 
         // KV round-trip through the binding planted on the
         // getCloudflareContext() contract by the hmr dev server.

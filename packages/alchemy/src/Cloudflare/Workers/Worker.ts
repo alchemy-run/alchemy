@@ -27,7 +27,6 @@ import {
 } from "../../Resource.ts";
 import type { Rpc } from "../../Rpc.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import { withRpcClaim } from "../../Serve/Rpc.ts";
 import type { Self as SelfService } from "../../Self.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Container } from "../Containers/Container.ts";
@@ -1377,16 +1376,10 @@ const finalizeWorkerProps = (
           ? (false as const)
           : config?.runWorkerFirst;
       if (runWorkerFirst === undefined) {
-        // Every effectful Website ALWAYS claims the universal rpc path
-        // ("/api/__rpc*") — no plan-time shape sniffing: method-less
-        // backends 404-envelope at the dispatch. `withRpcClaim` skips the
-        // append when an existing glob already covers it (Cloudflare's
-        // run_worker_first parser rejects redundant rules).
-        const rules = withRpcClaim(workerFirstRoutes);
-        if (rules.length > 0) {
+        if (workerFirstRoutes.length > 0) {
           assets = {
             ...config,
-            runWorkerFirst: rules,
+            runWorkerFirst: workerFirstRoutes,
           } as WorkerAssetsConfig;
         }
       } else if (runWorkerFirst === false) {
@@ -1418,8 +1411,7 @@ const finalizeWorkerProps = (
         }
         assets = {
           ...config,
-          // The rpc claim rides the merge too, unless already covered.
-          runWorkerFirst: withRpcClaim(merged),
+          runWorkerFirst: merged,
         } as WorkerAssetsConfig;
       }
       // `runWorkerFirst: true` already routes everything worker-first.

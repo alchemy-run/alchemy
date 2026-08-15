@@ -18,8 +18,6 @@ export const EffectKv = Cloudflare.KV.Namespace("NuxtEffectKv");
  * worker thread; the KV capability resolves through the platform proxy to
  * the local simulator. Exercises:
  *
- * - `POST /api/__rpc/greet` — the universal rpc dispatch (`createClient`
- *   wire protocol), claimed by the middleware ahead of route matching;
  * - `/api/effect/kv` — the effect fetch with the KV binding;
  * - `/api/hello` — carved out of the claim by the `!/api/hello` exclusion
  *   glob, so nitro's own scanned route answers (strict route ownership:
@@ -54,7 +52,7 @@ export default class NuxtEffectSite extends Cloudflare.Website.Nuxt<NuxtEffectSi
     const namespace = yield* EffectKv;
     const kv = yield* Cloudflare.KV.ReadWriteNamespace(namespace);
     return {
-      /** RPC method (POST /api/__rpc/greet — the universal rpc dispatch). */
+      /** RPC method (trusted callers only — no HTTP wire). */
       greet: (name: string) => Effect.succeed(`hello ${name}`),
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;

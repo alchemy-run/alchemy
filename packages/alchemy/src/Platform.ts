@@ -29,7 +29,6 @@ import {
   sanitizeKey,
   type BaseRuntimeContext,
 } from "./RuntimeContext.ts";
-import { withRpcDispatch } from "./Serve/Rpc.ts";
 import { Self } from "./Self.ts";
 import { ServerHost, type ProcessContext } from "./Server/Process.ts";
 import type { Stack, StackServices } from "./Stack.ts";
@@ -106,11 +105,12 @@ export interface MainRpc<Req = never> {
       >
     | ((...args: any[]) =>
         // `HttpServerRequest` is legal in a method's requirements: the
-        // `createClient` RPC dispatch runs each call inside the same
-        // per-request pipeline as `fetch`, so methods can self-authorize
-        // by reading headers/cookies. (The worker-to-worker JS-RPC
-        // transport carries no HTTP request — a method that reads
-        // `HttpServerRequest` is only invocable over the HTTP dispatch.)
+        // value-form `createClient` in-process dispatch synthesizes one
+        // per call (from the caller's headers snapshot), so methods can
+        // self-authorize by reading headers/cookies. (The
+        // worker-to-worker JS-RPC transport carries no HTTP request — a
+        // method that reads `HttpServerRequest` is only invocable
+        // through the in-process dispatch.)
         | Effect.Effect<
             any,
             any,
@@ -534,10 +534,11 @@ export const Platform = <
                   if (!impl) return Effect.void;
                   const shape = impl as Record<string, unknown>;
                   // Serve when there's a `fetch` handler OR any RPC shape
-                  // methods. A pure-RPC impl (methods, no `fetch`) still needs
-                  // the server to boot — hand `serveRpc` a default 404 fallback
-                  // so `/__rpc__/*` is dispatched to the shape methods and
-                  // everything else 404s.
+                  // methods. A pure-RPC impl (methods, no `fetch`) still
+                  // needs the server to boot so the shape methods are
+                  // exposed to the trusted transports (the workerd JS-RPC
+                  // bridge and the value-form `createClient` in-process
+                  // dispatch) — its HTTP surface is a plain 404.
                   // May be an `HttpEffect` or an Effect resolving to one (the
                   // `Main.fetch` shape); `serve` accepts both.
                   const fetch = shape.fetch as any;
@@ -545,26 +546,17 @@ export const Platform = <
                     (key) => key !== "fetch",
                   );
                   if (!fetch && !hasRpcMethods) return Effect.void;
-                  // Compose the `createClient` RPC dispatch in front of the
-                  // fetch handler (the plain effect path of the wire
-                  // protocol): requests at `/api/__rpc/…` (the universal
-                  // RPC_PATH) are envelope-dispatched to the shape's
-                  // methods before the fetch handler runs. `/__rpc__/…`
-                  // (the internal RPC transport) is unaffected.
                   // Hand the full impl to `serve` so the runtime can expose any
                   // non-handler methods on the impl shape (RPC methods)
                   // alongside the standard `fetch` handler.
                   return (
                     runtimeContext.serve?.(
-                      withRpcDispatch(
-                        shape,
-                        fetch ??
-                          Effect.succeed(
-                            HttpServerResponse.text("Not Found", {
-                              status: 404,
-                            }),
-                          ),
-                      ),
+                      fetch ??
+                        Effect.succeed(
+                          HttpServerResponse.text("Not Found", {
+                            status: 404,
+                          }),
+                        ),
                       { shape },
                     ) ?? Effect.die("No serve handler")
                   );

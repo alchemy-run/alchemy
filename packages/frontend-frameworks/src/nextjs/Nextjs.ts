@@ -589,9 +589,9 @@ export const make = (
           const context = yield* resolveRuntimeContext();
           // Zero-setup effect routes under the real `next dev`: with a
           // wrapper-delivery effect entry (and the host-resolved serve
-          // module), the dev server dispatches `/api/__rpc` +
-          // `server.routes` to the Effect program before Next's handler —
-          // the explicit `toRouteHandler` mount is no longer required.
+          // module), the dev server dispatches `server.routes` to the
+          // Effect program before Next's handler — the explicit
+          // `toRouteHandler` mount is no longer required.
           // An external-entry Worker (explicit tier / `takeover: false`)
           // has no effect entry, so the dispatch stands down.
           const effect =

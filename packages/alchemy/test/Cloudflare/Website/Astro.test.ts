@@ -1015,25 +1015,24 @@ describe.concurrent("Astro", () => {
         // queue consumer is dispatched through the entry-takeover wrapper
         // (the vendored astro entry wrapped with the Worker bridge's
         // non-fetch surface — its presence is what let the auto-created
-        // Queues.Consumer reconcile at all). Enqueue via the universal
-        // RPC path, then poll processed() until the consumer's KV write
-        // is observed. ─────────────────────────────────────────────────
+        // Queues.Consumer reconcile at all). Enqueue via the fixture's
+        // /api/enqueue route, then poll /api/processed until the
+        // consumer's KV write is observed. ─────────────────────────────
         expect(jobs.queueId).toBeDefined();
         const queueMarker = `astro-queue-${Date.now()}`;
+        const enqueueUrl = `${site.url!}/api/enqueue?message=${queueMarker}`;
         yield* Effect.tryPromise({
           try: async (signal) => {
-            const res = await fetch(`${site.url!}/api/__rpc/enqueue`, {
+            const res = await fetch(enqueueUrl, {
               signal,
               method: "POST",
               cache: "no-store",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify([queueMarker]),
             });
             return { status: res.status, body: await res.text() };
           },
           catch: (e) =>
             new AstroResponseMismatch({
-              url: `${site.url!}/api/__rpc/enqueue`,
+              url: enqueueUrl,
               detail: e instanceof Error ? e.message : String(e),
             }),
         }).pipe(
@@ -1041,7 +1040,7 @@ describe.concurrent("Astro", () => {
             (r) => r.status === 200,
             (r) =>
               new AstroResponseMismatch({
-                url: `${site.url!}/api/__rpc/enqueue`,
+                url: enqueueUrl,
                 detail: `${r.status} ${r.body.slice(0, 240)}`,
               }),
           ),
@@ -1049,21 +1048,18 @@ describe.concurrent("Astro", () => {
         );
         const processed = yield* Effect.tryPromise({
           try: async (signal) => {
-            const res = await fetch(`${site.url!}/api/__rpc/processed`, {
+            const res = await fetch(`${site.url!}/api/processed`, {
               signal,
-              method: "POST",
               cache: "no-store",
-              headers: { "content-type": "application/json" },
-              body: "[]",
             });
             const body = (await res.json().catch(() => undefined)) as
-              | { value?: { count: number; last: string | null } }
+              | { count: number; last: string | null }
               | undefined;
-            return { status: res.status, value: body?.value };
+            return { status: res.status, value: body };
           },
           catch: (e) =>
             new AstroResponseMismatch({
-              url: `${site.url!}/api/__rpc/processed`,
+              url: `${site.url!}/api/processed`,
               detail: e instanceof Error ? e.message : String(e),
             }),
         }).pipe(
@@ -1071,7 +1067,7 @@ describe.concurrent("Astro", () => {
             (r) => r.status === 200 && r.value !== undefined,
             (r) =>
               new AstroResponseMismatch({
-                url: `${site.url!}/api/__rpc/processed`,
+                url: `${site.url!}/api/processed`,
                 detail: `${r.status} ${JSON.stringify(r.value)}`,
               }),
           ),

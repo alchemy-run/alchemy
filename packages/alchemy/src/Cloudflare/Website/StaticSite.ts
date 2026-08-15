@@ -222,11 +222,14 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * the asset layer. Hand a path back to the assets with an exclusion glob
  * (`routes: ["/api/*", "!/api/foo"]` — exclusions win).
  *
- * The impl's non-`fetch` methods are **RPC methods** — the typed API
- * surface, served at the reserved `POST /api/__rpc/<method>` path (no
- * routes claim needed) and called through `createClient` from
- * `alchemy/Client` in the static frontend. A `fetch` handler is only
- * needed for hand-rolled routes.
+ * The impl's non-`fetch` methods are **RPC methods** — a typed API
+ * surface for TRUSTED callers only: sibling Workers call them over
+ * Cloudflare JS-RPC service bindings (`Workers.bindWorker`), and
+ * server-side code dispatches them in-process through the value form of
+ * `createClient` from `alchemy/Client`. There is no public HTTP wire —
+ * the static frontend talks to the backend through a schema you own
+ * (effect `HttpApi` / `@effect/rpc`) mounted on the `fetch` handler,
+ * which also serves any hand-rolled routes.
  *
  * The program must live in a dedicated module whose default export is
  * the class, anchored by `main: import.meta.url` (exactly like
@@ -259,16 +262,17 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * ) {}
  * ```
  *
- * @example Calling it from the frontend (createClient)
+ * @example Calling it from a sibling Worker (JS-RPC)
  * ```typescript
- * // frontend code — TYPE-ONLY backend import, zero backend bytes
- * import { createClient } from "alchemy/Client";
- * import type Backend from "../src/site.ts";
+ * import * as Cloudflare from "alchemy/Cloudflare";
+ * import * as Effect from "effect/Effect";
+ * import Site from "./site.ts";
  *
- * const backend = createClient<typeof Backend>();
+ * // inside another Worker's impl — typed stub over a service binding
+ * const site = yield* Cloudflare.Workers.bindWorker(Site);
  *
- * await backend.save("hello"); // POST /api/__rpc/save
- * const value = await backend.get(); // typed end-to-end
+ * yield* site.save("hello"); // workerd JS-RPC, typed end-to-end
+ * const value = yield* site.get();
  * ```
  *
  * @section Class Form

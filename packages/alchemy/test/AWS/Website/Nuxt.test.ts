@@ -10,7 +10,6 @@ import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { pathToFileURL } from "node:url";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
@@ -298,10 +297,6 @@ export default class NuxtEffectLiveSite extends Nuxt<NuxtEffectLiveSite>()(
     );
 
     return {
-      /** RPC method — served at POST /api/__rpc/greet by the injected
-       * middleware's rpc-first pre-gate (the edge rides the universal rpc
-       * claim alongside the routes). */
-      greet: (name: string) => Effect.succeed("hello " + name),
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://fixture");
@@ -432,22 +427,6 @@ describe.skipIf(!runLive)("AWS.Website.Nuxt (effectful)", () => {
           `${url}/api/effect/ping`,
         );
         expect(ping.marker).toBe("effect-fetch");
-
-        // RPC wire protocol: the injected middleware's pre-gate admits
-        // POST /api/__rpc/<method> regardless of `server.routes`, and the
-        // edge rides the universal rpc claim.
-        const rpc = yield* HttpClient.execute(
-          HttpClientRequest.post(`${url}/api/__rpc/greet`).pipe(
-            HttpClientRequest.bodyText('["live"]', "application/json"),
-          ),
-        ).pipe(
-          Effect.filterOrFail(
-            (res): boolean => res.status === 200,
-            (res) => new Error(`rpc expected 200, got ${res.status}`),
-          ),
-          Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 10 }),
-        );
-        expect(yield* rpc.json).toEqual({ value: "hello live" });
 
         // An unknown route INSIDE the claim is the effect's own 404 — the
         // fetch's marker body proves WHO answered (never nitro's 404),

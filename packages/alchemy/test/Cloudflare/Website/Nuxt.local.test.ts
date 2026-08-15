@@ -311,20 +311,6 @@ describe.concurrent("Nuxt dev", () => {
         );
         expect(marker.marker).toBe("nuxt-effect-dev");
 
-        // The universal RPC dispatch (`POST /api/__rpc/<method>`, the
-        // `createClient` wire protocol) round-trips the method result in
-        // the `{"value": ...}` envelope through the same injected
-        // middleware.
-        const rpc = yield* HttpClient.execute(
-          HttpClientRequest.post(`${base}/api/__rpc/greet`).pipe(
-            HttpClientRequest.bodyText('["dev"]', "application/json"),
-          ),
-        ).pipe(
-          Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
-        );
-        expect(rpc.status).toBe(200);
-        expect(yield* rpc.json).toEqual({ value: "hello dev" });
-
         // KV capability round-trip against the local simulator.
         const put = yield* putJsonReady<{ put: boolean }>(
           `${base}/api/effect/kv?key=dev-key&value=dev-value`,
@@ -403,20 +389,11 @@ describe.concurrent("Nuxt dev", () => {
         );
         const base = deployed.attrs.url!;
 
-        // The explicit mount serves its claim (and the universal rpc path).
+        // The explicit mount serves its claim.
         const marker = yield* fetchJsonReady<{ marker: string }>(
           `${base}/api/effect/marker`,
         );
         expect(marker.marker).toBe("nuxt-effect-dev");
-        const rpc = yield* HttpClient.execute(
-          HttpClientRequest.post(`${base}/api/__rpc/greet`).pipe(
-            HttpClientRequest.bodyText('["mount"]', "application/json"),
-          ),
-        ).pipe(
-          Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
-        );
-        expect(rpc.status).toBe(200);
-        expect(yield* rpc.json).toEqual({ value: "hello mount" });
 
         // Stand-down proof: inside the CONSTRUCT claim but outside the
         // MOUNT claim, nitro answers with its own 404 payload — the
@@ -459,14 +436,12 @@ describe.concurrent("Nuxt dev", () => {
           label: "nitro route with takeover: false",
         });
 
-        // No injection: the claimed routes and the rpc path both fall to
-        // nitro — the effect fetch's marker never serves.
+        // No injection: the claimed routes fall to nitro — the effect
+        // fetch's marker never serves.
         const client = yield* HttpClient.HttpClient;
         const claimed = yield* client.get(`${base}/api/effect/marker`);
         expect(claimed.status).toBe(404);
         expect(yield* claimed.text).not.toContain("must-not-serve");
-        const rpc = yield* client.post(`${base}/api/__rpc/greet`);
-        expect(rpc.status).toBe(404);
 
         yield* stack.destroy();
       }).pipe(logLevel),

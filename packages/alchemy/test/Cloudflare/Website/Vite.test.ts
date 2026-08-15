@@ -1096,23 +1096,6 @@ if (el) {
         expect(missing.status).toBe(404);
         expect(yield* missing.text).not.toContain("Effectful Vite fixture");
 
-        // The deployed RPC dispatch — the wire the browser's type-only
-        // `createClient` speaks. Pins /api/__rpc end-to-end on real
-        // Cloudflare, including a method that uses the KV binding.
-        const rpc = yield* client.execute(
-          HttpClientRequest.post(`${base}/api/__rpc/bump`).pipe(
-            HttpClientRequest.bodyText("[41]", "application/json"),
-          ),
-        );
-        expect(rpc.status).toBe(200);
-        expect(yield* rpc.json).toEqual({ value: 42 });
-        const stored = yield* client.execute(
-          HttpClientRequest.post(`${base}/api/__rpc/bumpStored`).pipe(
-            HttpClientRequest.bodyText('["live-rpc"]', "application/json"),
-          ),
-        );
-        expect(yield* stored.json).toEqual({ value: 1 });
-
         yield* stack.destroy();
         yield* waitForWorkerToBeDeleted(deployed.site.workerName, accountId);
       }).pipe(logLevel),

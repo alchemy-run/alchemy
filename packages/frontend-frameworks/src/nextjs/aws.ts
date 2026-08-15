@@ -29,8 +29,8 @@
  *   API (`next({ dev: true })` + `prepare()` + `getRequestHandler()` on an
  *   http server we own, in a spawned `aws-dev-entry.ts` child) — plain Node,
  *   which is already the AWS Lambda programming model. On effectful sites the
- *   Serve bridge dispatches `/api/__rpc` and `server.routes` requests before
- *   Next's handler, with watch + cache-busted re-import hot-reloading the
+ *   Serve bridge dispatches `server.routes` requests before Next's
+ *   handler, with watch + cache-busted re-import hot-reloading the
  *   backend module. Scoped: closing the Scope stops the child. `next.config`
  *   edits do not auto-restart the server (documented delta from the CLI).
  *
@@ -311,7 +311,7 @@ export const openNextEffectSupportIssue = (cli: string): string | undefined => {
 /**
  * The generated OpenNext wrapper module (`opennext-wrapper.mjs`): a
  * function-form wrapper override composing `makeWebsiteHandlers.match` at
- * the `InternalEvent` (fetch) layer — rpc-first, strict route ownership,
+ * the `InternalEvent` (fetch) layer — strict route ownership,
  * four-worlds env guard — then delegating the single
  * `awslambda.streamifyResponse` wrap to the stock `aws-lambda-streaming`
  * wrapper, so effect responses ride the exact compression + Function-URL
@@ -410,7 +410,7 @@ const wrapper = async (handler, converter) => {
   );
   const site = makeWebsiteHandlers({ site: Site, routes: ROUTES });
   const composed = async (internalEvent, options) => {
-    // rpc-first + strict route ownership + the four-worlds env guard live
+    // Strict route ownership + the four-worlds env guard live
     // inside match; undefined means "the framework serves".
     const matched = await site.match(toWebRequest(internalEvent));
     if (matched === undefined) return handler(internalEvent, options);

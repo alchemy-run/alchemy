@@ -10,7 +10,6 @@ import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
@@ -364,21 +363,6 @@ describe.concurrent("StaticSite dev (effectful)", () => {
         const missingBody = yield* missing.text;
         expect(missingBody).toContain("unknown api route");
         expect(missingBody).not.toContain("effect-staticsite-shell");
-
-        // Universal RPC dispatch through the same worker-first claim: the
-        // impl's non-fetch `stamp` method answers at the reserved
-        // POST /api/__rpc/<method> path in the `{"value": ...}` envelope.
-        const stamp = yield* HttpClient.execute(
-          HttpClientRequest.post(`${url}/api/__rpc/stamp`).pipe(
-            HttpClientRequest.bodyText("[]", "application/json"),
-          ),
-        ).pipe(
-          Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
-        );
-        expect(stamp.status).toBe(200);
-        expect((yield* stamp.json) as object).toEqual({
-          value: { marker: "effect-static-rpc" },
-        });
 
         // The Durable Object export works exactly as on a plain effect
         // worker: sequential calls against one DO name observe increasing

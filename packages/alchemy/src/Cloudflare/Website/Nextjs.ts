@@ -286,21 +286,23 @@ export interface NextjsProps<
  * exclusions win). Durable Object exports and queue/scheduled/cron
  * handlers ride the same wrapper (non-fetch surface).
  *
- * The impl's non-`fetch` methods are **RPC methods** — the typed API
- * surface, served at the reserved `POST /api/__rpc/<method>` path (no
- * routes claim needed) and called through `createClient` from
- * `alchemy/Client`: type-only form in client components, value form for
- * direct in-process dispatch in server components. A `fetch` handler is
- * only needed for hand-rolled routes.
+ * The impl's non-`fetch` methods are **RPC methods** — a typed API
+ * surface for TRUSTED callers only: server components dispatch them
+ * directly in-process through the value form of `createClient` from
+ * `alchemy/Client`, and sibling Workers call them over Cloudflare
+ * JS-RPC service bindings. There is no public HTTP wire — client
+ * components talk to the backend through a schema you own (effect
+ * `HttpApi` / `@effect/rpc`) mounted on the `fetch` handler, which also
+ * serves any hand-rolled routes.
  *
  * The program must live in a dedicated module whose default export is the
  * class, anchored by `main: import.meta.url`. Local dev: `preview` mode
  * serves the takeover artifact with full parity; `hmr` mode (the real
- * `next dev`) serves effect routes and the RPC dispatch through the dev
- * server's front dispatch — the same rpc-first + strict-ownership gate as
- * the deployed wrapper, zero user files (fetch + RPC only: DO/queue
- * surfaces and site-module edits still need `preview`, which rebuilds the
- * artifact). `server: { takeover: false }` forces the explicit
+ * `next dev`) serves effect routes through the dev server's front
+ * dispatch — the same strict-ownership gate as the deployed wrapper,
+ * zero user files (fetch only: DO/queue surfaces and site-module edits
+ * still need `preview`, which rebuilds the artifact).
+ * `server: { takeover: false }` forces the explicit
  * `toRouteHandler` tier everywhere (mounting it explicitly also makes the
  * takeover stand down on deploy).
  *
@@ -328,17 +330,15 @@ export interface NextjsProps<
  * ) {}
  * ```
  *
- * @example Calling it from the frontend (createClient)
+ * @example Calling it from a server component (createClient)
  * ```typescript
- * // a "use client" component — TYPE-ONLY backend import, zero backend
- * // bytes; in a server component, value-import the backend and call
- * // createClient(Backend) for direct in-process dispatch instead.
+ * // a server component — VALUE import, direct in-process dispatch
  * import { createClient } from "alchemy/Client";
- * import type Backend from "../src/backend.ts";
+ * import Backend from "../src/backend.ts";
  *
- * const backend = createClient<typeof Backend>();
+ * const backend = createClient(Backend);
  *
- * await backend.save("hello"); // POST /api/__rpc/save
+ * await backend.save("hello"); // direct effect invocation, no HTTP
  * const value = await backend.get(); // typed end-to-end
  * ```
  *

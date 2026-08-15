@@ -58,7 +58,6 @@ import { Self } from "../../Self.ts";
 import type { SERVE_SENTINEL } from "../../Serve/constants.ts";
 import { envString, hasStackMarkers } from "../../Serve/Env.ts";
 import { DEFAULT_SERVER_ROUTES, matchRoutes } from "../../Serve/Routes.ts";
-import { dispatchRpc, isRpcPath } from "../../Serve/Rpc.ts";
 import type { AnyWebsiteClass } from "../../Serve/Serve.ts";
 import { StackTag as Stack } from "../../StackTag.ts";
 import { buildEventTelemetry } from "../../Telemetry.ts";
@@ -380,15 +379,6 @@ export const makeWebsiteHandlers = (
     // build-time prerender/SSG world — decline without building layers.
     if (!hasStackMarkers(env)) {
       return undefined;
-    }
-    // The universal rpc path ("/api/__rpc") is checked BEFORE routes
-    // matching — the RPC dispatch needs no routes claim, and its answer
-    // (404 envelopes included) is always final. It runs through the same
-    // per-event pipeline as fetch.
-    if (isRpcPath(pathname)) {
-      await extension;
-      const runtime = await getLambdaSiteRuntime(options.site, env!);
-      return runHandler(request, dispatchRpc(runtime.shape()));
     }
     // Strict route ownership: outside the claim the framework serves and
     // the effect fetch is never invoked.

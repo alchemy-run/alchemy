@@ -28,7 +28,7 @@
  * - **fetch stays exactly as delivered today**: the wrapper's fetch
  *   delegates verbatim to the vendored astro entry, whose `App.render`
  *   runs through the pre-resolved fetchable (effect-first over
- *   `server.routes`, universal RPC path, env-marker guard). No double
+ *   `server.routes`, env-marker guard). No double
  *   bridging, no route logic at the entry.
  * - **Non-fetch handlers** (queue/scheduled/email/tail) and workerd JS-RPC
  *   dispatch come from the Worker bridge inside

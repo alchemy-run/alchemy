@@ -195,12 +195,14 @@ export interface SvelteKitProps<
  * `alchemy dev` the kit dev server delivers `fetch` only, so queue
  * batches are not dispatched locally — the consumer engages on deploy.
  *
- * The impl's non-`fetch` methods are **RPC methods** — the typed API
- * surface, served at the reserved `POST /api/__rpc/<method>` path (no
- * routes claim needed) and called through `createClient` from
- * `alchemy/Client`: type-only form in browser code, value form for
- * direct in-process dispatch in `+page.server.ts` `load` functions. A
- * `fetch` handler is only needed for hand-rolled routes.
+ * The impl's non-`fetch` methods are **RPC methods** — a typed API
+ * surface for TRUSTED callers only: `+page.server.ts` `load` functions
+ * dispatch them directly in-process through the value form of
+ * `createClient` from `alchemy/Client`, and sibling Workers call them
+ * over Cloudflare JS-RPC service bindings. There is no public HTTP wire
+ * — browser code talks to the backend through a schema you own (effect
+ * `HttpApi` / `@effect/rpc`) mounted on the `fetch` handler, which also
+ * serves any hand-rolled routes.
  *
  * The program must live in a dedicated module whose default export is
  * the class, anchored by `main: import.meta.url` (exactly like
@@ -231,18 +233,17 @@ export interface SvelteKitProps<
  * ) {}
  * ```
  *
- * @example Calling it from the frontend (createClient)
+ * @example Calling it from a `+page.server.ts` load (createClient)
  * ```typescript
- * // browser code — TYPE-ONLY backend import, zero backend bytes; in a
- * // `+page.server.ts` `load`, value-import the backend and call
- * // createClient(Backend) for direct in-process dispatch instead.
+ * // +page.server.ts — VALUE import, direct in-process dispatch
  * import { createClient } from "alchemy/Client";
- * import type Backend from "../src/backend.ts";
+ * import Backend from "../src/backend.ts";
  *
- * const backend = createClient<typeof Backend>();
- *
- * await backend.save("hello"); // POST /api/__rpc/save
- * const value = await backend.get(); // typed end-to-end
+ * export const load = async ({ request }) => {
+ *   const backend = createClient(Backend, { headers: request.headers });
+ *   await backend.save("hello"); // direct effect invocation, no HTTP
+ *   return { value: await backend.get() }; // typed end-to-end
+ * };
  * ```
  *
  * @section Class Form

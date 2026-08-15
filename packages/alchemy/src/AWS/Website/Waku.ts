@@ -110,11 +110,13 @@ export interface EffectWakuProps extends WakuProps {
  * default export is the class (`main: import.meta.url`) and be mounted in
  * the server entry via `alchemy/Serve`.
  *
- * The impl's non-`fetch` methods are **RPC methods** — the typed API
- * surface, served at the reserved `POST /api/__rpc/<method>` path
- * (dispatched by the same mount) and called through `createClient` from
- * `alchemy/Client` (type-only import in browser code). A `fetch`
- * handler is only needed for hand-rolled routes.
+ * The impl's non-`fetch` methods are **RPC methods** — the typed method
+ * surface for trusted callers: value-import the backend in server code
+ * (RSC handlers, server functions) and call `createClient(Backend)` from
+ * `alchemy/Client` for direct in-process dispatch. Browser code is
+ * untrusted — it reaches the backend through the `fetch` handler (mount
+ * a schema-validated surface like effect `HttpApi` / `@effect/rpc` on it
+ * under `server.routes`).
  *
  * @example Waku site with an effect-native API
  * ```typescript
@@ -142,15 +144,16 @@ export interface EffectWakuProps extends WakuProps {
  * ) {}
  * ```
  *
- * @example Calling it from the frontend (createClient)
+ * @example Calling it from server code (createClient)
  * ```typescript
- * // browser code — TYPE-ONLY backend import, zero backend bytes
+ * // an RSC handler or server function — value-import the backend;
+ * // dispatch is direct and in-process, no HTTP hop.
  * import { createClient } from "alchemy/Client";
- * import type Backend from "../src/backend.ts";
+ * import Backend from "../src/backend.ts";
  *
- * const backend = createClient<typeof Backend>();
+ * const backend = createClient(Backend);
  *
- * const text = await backend.hello(); // POST /api/__rpc/hello
+ * const text = await backend.hello();
  * ```
  */
 export const Waku: {

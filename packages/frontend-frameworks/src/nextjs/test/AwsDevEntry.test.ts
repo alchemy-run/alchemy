@@ -52,7 +52,6 @@ const writeServeFixture = (dir: string): string => {
   NodeFs.writeFileSync(
     file,
     `export const DEFAULT_SERVER_ROUTES = ["/api/*"];
-export const isRpcPath = (pathname) => pathname === "/api/__rpc";
 export const matchRoutes = () => false;
 export const make = () => ({ match: async () => undefined });
 `,

@@ -83,10 +83,14 @@ describe.skipIf(!runLive)("AWS.Website.Router", () => {
     // small — the run died mid-destroy with green assertions.
     // CloudFront full lifecycle (create + KV-routed assertions + disable +
     // delete) measures ~6m with bounded polls; generous headroom for
-    // propagation variance. If this ever times out mid-destroy again,
+    // propagation variance. The initial stack.destroy() may also inherit a
+    // PREVIOUS timed-out attempt's abandoned mid-delete distribution
+    // (disable→delete is 5-15m on its own), so the budget covers one
+    // generation of inherited teardown debt — without it, a single timeout
+    // cascades into every later run. If this times out on a CLEAN account,
     // suspect a hung poll first (see the Effect.timeout guards in
     // Distribution.ts), not CloudFront.
-    { timeout: 1_500_000 },
+    { timeout: 2_400_000 },
   );
 });
 

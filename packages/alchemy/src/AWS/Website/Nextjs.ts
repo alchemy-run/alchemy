@@ -36,7 +36,6 @@ import {
   compileServerRoutes,
   DEFAULT_SERVER_ROUTES,
   deploySiblingHandlers,
-  RPC_CLAIM,
   validateImplAnchor,
   type WebsiteServerOptions,
   type WebsiteShape,
@@ -309,17 +308,18 @@ export interface EffectNextjsAttributes extends NextjsAttributes {
  * `alchemy dev` matches this byte-for-byte: the dev server is the real
  * `next dev` (Turbopack) embedded through Next's custom-server API in an
  * alchemy-owned Node child, with the same Serve dispatch running ahead of
- * Next's handler — rpc-first, strict route ownership, identical route
- * precedence in dev and deploy. Editing the backend module hot-swaps the
- * effect handlers in place (no dev-server restart); `next.config` edits
- * still need an `alchemy dev` restart.
+ * Next's handler — strict route ownership, identical route precedence in
+ * dev and deploy. Editing the backend module hot-swaps the effect
+ * handlers in place (no dev-server restart); `next.config` edits still
+ * need an `alchemy dev` restart.
  *
- * The impl's non-`fetch` methods are **RPC methods** — the typed API
- * surface, served at the reserved `POST /api/__rpc/<method>` path
- * (dispatched by the same mount) and called through `createClient` from
- * `alchemy/Client`: type-only form in client components, value form for
- * direct in-process dispatch in server components. A `fetch` handler is
- * only needed for hand-rolled routes.
+ * The impl's non-`fetch` methods are **RPC methods** — the typed method
+ * surface for trusted callers: value-import the backend in server
+ * components and call `createClient(Backend)` from `alchemy/Client` for
+ * direct in-process dispatch. Client components are untrusted — they
+ * reach the backend through the `fetch` handler (mount a
+ * schema-validated surface like effect `HttpApi` / `@effect/rpc` on it
+ * under `server.routes`).
  *
  * The program's non-`fetch` surface — an SQS consumer registered with
  * `SQS.consumeQueueMessages`, and other event sources — rides a
@@ -356,17 +356,16 @@ export interface EffectNextjsAttributes extends NextjsAttributes {
  * ) {}
  * ```
  *
- * @example Calling it from the frontend (createClient)
+ * @example Calling it from a server component (createClient)
  * ```typescript
- * // a "use client" component — TYPE-ONLY backend import, zero backend
- * // bytes; in a server component, value-import the backend and call
- * // createClient(Backend) for direct in-process dispatch instead.
+ * // a server component — value-import the backend; dispatch is direct
+ * // and in-process, no HTTP hop.
  * import { createClient } from "alchemy/Client";
- * import type Backend from "../src/backend.ts";
+ * import Backend from "../src/backend.ts";
  *
- * const backend = createClient<typeof Backend>();
+ * const backend = createClient(Backend);
  *
- * const text = await backend.hello(); // POST /api/__rpc/hello
+ * const text = await backend.hello();
  * ```
  *
  * @example Escape hatch: mounting the program yourself
@@ -548,8 +547,8 @@ const makeNextjsSite = Effect.fn("AWS.Website.Nextjs")(function* (
 
     // Zero-setup effect delivery in dev: the framework module's dev child
     // (the custom-server `next dev`) runs the Serve dispatch ahead of
-    // Next's handler — same rpc-first + strict-ownership gate as the
-    // deployed wrapper, so dev and deploy agree on route precedence.
+    // Next's handler — same strict-ownership gate as the deployed
+    // wrapper, so dev and deploy agree on route precedence.
     // `serveModule` is THIS engine's own `alchemy/Serve` surface
     // (`import.meta.resolve`), so the child's bridge and the backend
     // module's bare `alchemy/*` imports share one module graph. The
@@ -928,12 +927,8 @@ const makeNextjsSite = Effect.fn("AWS.Website.Nextjs")(function* (
     serverHost,
     image: { route: "/_next/image", host: imageHost },
     // Effect routes reach the server BEFORE the asset-manifest lookup;
-    // manifest misses keep forwarding to the same server for SSR. The
-    // universal rpc claim rides alongside so `POST /api/__rpc/<method>`
-    // always reaches the server Lambda.
-    ...(routes !== undefined
-      ? { serverRoutes: [...routes, RPC_CLAIM] }
-      : undefined),
+    // manifest misses keep forwarding to the same server for SSR.
+    ...(routes !== undefined ? { serverRoutes: [...routes] } : undefined),
   });
 
   // Seed the ISR/fetch cache: `.open-next/cache/<buildId>/...` uploaded

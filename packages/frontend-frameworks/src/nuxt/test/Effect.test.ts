@@ -41,16 +41,9 @@ describe("renderEffectHandler", () => {
     expect(source).toContain("toEventHandler(Site, { routes })");
   });
 
-  it("pre-gates on the universal rpc path alongside the routes claim", () => {
-    // The RPC-claim fix: custom routes that don't cover `/api/__rpc` must
-    // not decline it — `make().match` dispatches RPC before route
-    // matching, so the pre-gate has to admit it too.
-    expect(source).toContain('const RPC_PATH = "/api/__rpc"');
-    expect(source).toContain("if (!isRpcPath(pathname) && !matches(pathname))");
-    // Method-boundary-safe: RPC_PATH itself or RPC_PATH + "/...".
-    expect(source).toContain(
-      'pathname === RPC_PATH || pathname.startsWith(RPC_PATH + "/")',
-    );
+  it("pre-gates on the routes claim alone (no reserved rpc path)", () => {
+    expect(source).toContain("if (!matches(pathname))");
+    expect(source).not.toContain("__rpc");
   });
 
   it("is an h3 v1 handler (no defineEventHandler dependency)", () => {

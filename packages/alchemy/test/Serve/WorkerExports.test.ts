@@ -2,9 +2,9 @@
  * Unit coverage for the entry-level wrapper seam in `@/Serve/Worker.ts`
  * (pure-local, no cloud):
  *   - `makeWebsiteEntryExports` fetch: verbatim delegation to the
- *     framework-delivered handler — no route gating, no rpc interception,
- *     no env-marker guard (route ownership lives inside the framework's
- *     composed fetch, DESIGN §6.2c)
+ *     framework-delivered handler — no route gating, no env-marker guard
+ *     (route ownership lives inside the framework's composed fetch,
+ *     DESIGN §6.2c)
  *   - non-fetch handlers (scheduled/queue) ride the underlying Worker
  *     bridge dispatch: a registered listener receives the event; an
  *     unhandled event type rejects through the bridge, never the framework
@@ -21,7 +21,6 @@ import * as Cloudflare from "@/Cloudflare/index.ts";
 import { isWorkerEvent } from "@/Cloudflare/Workers/Worker.ts";
 import { ErrorTag } from "@/Rpc.ts";
 import { RuntimeContext } from "@/RuntimeContext.ts";
-import { RPC_PATH } from "@/Serve/Rpc.ts";
 import type { FunctionContext } from "@/Serverless/Function.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -63,7 +62,9 @@ class EntrySite extends Cloudflare.Website.Vite<EntrySite>()(
         return HttpServerResponse.text("effect-fetch");
       }),
       bump: (n: number) => Effect.succeed(n + 1),
+      concat: (a: string, b: string) => Effect.succeed(a + b),
       fail: (reason: string) => Effect.fail(new EntryTestError({ reason })),
+      boom: () => Effect.die(new Error("secret internals")),
     };
   }),
 ) {}
@@ -118,16 +119,6 @@ describe("makeWebsiteEntryExports", () => {
         expect(calls[0]!.env).toBe(markers);
         expect(calls[0]!.ctx).toBe(ctx);
 
-        // The universal rpc path is NOT intercepted at the wrapper — the
-        // framework's composed fetch owns it.
-        const rpc: Response = await worker.fetch(
-          new Request(`http://localhost${RPC_PATH}/bump`, {
-            method: "POST",
-            body: "[41]",
-          }),
-        );
-        expect(await rpc.text()).toBe("framework");
-
         // No env-marker guard either: a marker-less env still delegates
         // (the guard, where needed, lives inside the framework handler).
         const bare: any = new WebsiteWorker(makeCtx(), {});
@@ -135,7 +126,7 @@ describe("makeWebsiteEntryExports", () => {
           new Request("http://localhost/api/hello"),
         );
         expect(await declined.text()).toBe("framework");
-        expect(calls.length).toBe(3);
+        expect(calls.length).toBe(2);
       }),
     { exclusive: true },
   );
@@ -185,15 +176,28 @@ describe("makeWebsiteEntryExports", () => {
         });
         const worker: any = new WebsiteWorker(makeCtx(), markers);
 
-        // Success resolves the raw value (the JS-RPC transport, not the
-        // HTTP envelope).
+        // Success resolves the raw value (the JS-RPC transport — no HTTP
+        // wire, no JSON envelope on success).
         expect(await worker.bump(41)).toBe(42);
+
+        // Positional arguments are applied in order.
+        expect(await worker.concat("a", "b")).toBe("ab");
 
         // Typed failures envelope-encode for the client-side decoder.
         const envelope = await worker.fail("nope");
         expect(envelope._tag).toBe(ErrorTag);
         expect(envelope.error._tag).toBe("EntryTestError");
         expect(envelope.error.reason).toBe("nope");
+
+        // Defects reject with the defect itself — never a failure
+        // envelope, so the caller can't mistake a crash for a typed error.
+        let boomError: unknown;
+        try {
+          await worker.boom();
+        } catch (error) {
+          boomError = error;
+        }
+        expect(String(boomError)).toContain("secret internals");
 
         // Unknown methods reject as defects.
         let missingError: unknown;

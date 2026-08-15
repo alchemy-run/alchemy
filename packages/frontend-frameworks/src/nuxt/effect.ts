@@ -18,9 +18,8 @@
  *
  * - **Dev** ({@link renderEffectHandler}): a nitro middleware handler (h3
  *   v1 `__is_handler__` marker, injected through `nitro.handlers` on the
- *   dev overrides layer) that scopes itself to the effect routes (plus the
- *   universal rpc path) and delegates to `alchemy/Nitro`'s
- *   `toEventHandler`. It runs inside nitro's dev SSR worker thread, where
+ *   dev overrides layer) that scopes itself to the effect routes and
+ *   delegates to `alchemy/Nitro`'s `toEventHandler`. It runs inside nitro's dev SSR worker thread, where
  *   `event.context.cloudflare.env` is served by the platform proxy — so
  *   the same bindings resolve in dev, against the local simulators.
  *   Non-fetch handlers (queue/scheduled/DO classes) are production-only on
@@ -385,10 +384,7 @@ export const bundleNuxtEffectModule = (
  *
  * The route matcher is inlined (same glob dialect as Cloudflare's
  * `runWorkerFirst` rules / alchemy's `Serve/Routes.ts`: `*` matches any
- * run including `/`, leading `!` is an exclusion and exclusions win). The
- * pre-gate admits the universal rpc path (`/api/__rpc`) alongside the
- * routes claim — `make().match` dispatches RPC BEFORE route matching, so
- * custom routes that don't cover `/api/__rpc` must not decline it here.
+ * run including `/`, leading `!` is an exclusion and exclusions win).
  */
 export const renderEffectHandler = (options: {
   readonly sitePath: string;
@@ -408,13 +404,6 @@ export const renderEffectHandler = (options: {
     "  !exclusions.some((pattern) => pattern.test(pathname)) &&",
     "  inclusions.some((pattern) => pattern.test(pathname));",
     "",
-    "// The universal rpc path is claimed regardless of the routes globs",
-    "// (`make().match` checks it before route matching; sibling paths like",
-    '// "/api/__rpcx" stay with the routes).',
-    'const RPC_PATH = "/api/__rpc";',
-    "const isRpcPath = (pathname) =>",
-    '  pathname === RPC_PATH || pathname.startsWith(RPC_PATH + "/");',
-    "",
     "// The middleware gates the routes itself (above, without the web-",
     "// request conversion cost); the handler carries the same claim, so",
     "// inside it the effect fetch is authoritative — its 404s are final.",
@@ -422,7 +411,7 @@ export const renderEffectHandler = (options: {
     "const middleware = async (event) => {",
     '  const raw = event.path ?? event.node?.req?.url ?? "/";',
     '  const pathname = raw.split("?")[0];',
-    "  if (!isRpcPath(pathname) && !matches(pathname)) {",
+    "  if (!matches(pathname)) {",
     "    return; // outside the effect routes — nitro serves",
     "  }",
     "  return handler(event);",

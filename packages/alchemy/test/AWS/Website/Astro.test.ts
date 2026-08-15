@@ -7,8 +7,6 @@ import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
@@ -198,32 +196,6 @@ describe.skipIf(!runLive)("AWS.Website.Astro", () => {
           "astro-aws-effect-fetch",
           { timeout: "60 seconds", label: "effectful api marker" },
         );
-
-        // RPC wire protocol: the serve shell dispatches
-        // POST /api/__rpc/<method> rpc-first, and the edge rides the
-        // universal rpc claim alongside the routes.
-        const rpc = yield* HttpClient.execute(
-          HttpClientRequest.post(`${url}/api/__rpc/greet`).pipe(
-            HttpClientRequest.bodyText('["live"]', "application/json"),
-          ),
-        ).pipe(
-          Effect.filterOrFail(
-            (res): boolean => res.status === 200,
-            (res) =>
-              new LiveResponseMismatch({
-                url: `${url}/api/__rpc/greet`,
-                detail: `expected 200, got ${res.status}`,
-              }),
-          ),
-          Effect.retry({
-            schedule: Schedule.min([
-              Schedule.exponential("1 second", 1.5),
-              Schedule.spaced("5 seconds"),
-            ]),
-            times: 10,
-          }),
-        );
-        expect(yield* rpc.json).toEqual({ value: "hello live" });
 
         // DynamoDB round-trip through the capability bindings (table-name
         // env var + IAM collected onto the server Lambda at plan).
