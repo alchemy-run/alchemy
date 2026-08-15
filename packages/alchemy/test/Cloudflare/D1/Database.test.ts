@@ -324,6 +324,96 @@ test.provider(
 );
 
 /**
+ * Adopting a wrangler-migrated database: `wrangler d1 migrations apply`
+ * left its real table behind; the first Alchemy deploy converts that
+ * history into `__alchemy_migrations` (hashes backfilled from local
+ * files) and freezes wrangler's table.
+ */
+test.provider(
+  "adopts a wrangler-migrated database via one-way conversion",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const migrationsDir = yield* fs.makeTempDirectory({
+        prefix: "alchemy-d1-wrangler-",
+      });
+      yield* fs.writeFileString(
+        path.join(migrationsDir, "0001_users.sql"),
+        "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL);",
+      );
+      yield* fs.writeFileString(
+        path.join(migrationsDir, "0002_posts.sql"),
+        "CREATE TABLE posts (id INTEGER PRIMARY KEY, title TEXT NOT NULL);",
+      );
+
+      yield* stack.destroy();
+
+      // Phase 1: what `wrangler d1 migrations apply` left behind.
+      const seeded = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.D1.Database("WranglerAdoptionDb");
+        }),
+      );
+      yield* execSql(
+        accountId,
+        seeded.databaseId,
+        "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL);",
+      );
+      yield* execSql(
+        accountId,
+        seeded.databaseId,
+        `CREATE TABLE d1_migrations(
+           id         INTEGER PRIMARY KEY AUTOINCREMENT,
+           name       TEXT UNIQUE,
+           applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+         );`,
+      );
+      yield* execSql(
+        accountId,
+        seeded.databaseId,
+        "INSERT INTO d1_migrations (name) VALUES ('0001_users.sql');",
+      );
+
+      // Phase 2: first Alchemy deploy — converts, applies only 0002.
+      const database = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.D1.Database("WranglerAdoptionDb", {
+            migrations: migrationsDir,
+          });
+        }),
+      );
+      expect(database.databaseId).toEqual(seeded.databaseId);
+      expect(database.migrationsTable).toEqual("__alchemy_migrations");
+
+      const applied = yield* queryAll<{ name: string; hash: string }>(
+        accountId,
+        database.databaseId,
+        "SELECT name, hash FROM __alchemy_migrations ORDER BY id;",
+      );
+      expect(applied.map((r) => r.name)).toEqual([
+        "0001_users.sql",
+        "0002_posts.sql",
+      ]);
+      expect(applied[0].hash).toMatch(/^[0-9a-f]{64}$/);
+      const tables = yield* listTables(accountId, database.databaseId);
+      expect(tables).toContain("posts");
+
+      // wrangler's table is frozen.
+      const frozen = yield* queryAll<{ name: string }>(
+        accountId,
+        database.databaseId,
+        "SELECT name FROM d1_migrations ORDER BY id;",
+      );
+      expect(frozen.map((r) => r.name)).toEqual(["0001_users.sql"]);
+
+      yield* stack.destroy();
+      yield* waitForDatabaseToBeDeleted(database.databaseId, accountId);
+    }).pipe(logLevel),
+);
+
+/**
  * True roll-forward: state row AND physical table are rewritten to exactly
  * what pre-registry Alchemy persisted (3-column `id TEXT PK` table,
  * `migrationsHashes` + `migrationsTable` in state), then a normal deploy

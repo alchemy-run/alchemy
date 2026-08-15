@@ -3,6 +3,7 @@ import {
   convertedRowInsertSql,
   findForeignHistory,
   matchForeignRows,
+  toTimestampString,
 } from "./Convert.ts";
 import {
   MigrationError,
@@ -106,10 +107,7 @@ const rebuildInPlace = (options: {
             name: String(row.name),
             hash: undefined,
             createdAtMillis: undefined,
-            appliedAt:
-              row.applied_at === null || row.applied_at === undefined
-                ? undefined
-                : String(row.applied_at),
+            appliedAt: toTimestampString(row.applied_at),
           })),
       },
       records,

@@ -31,6 +31,19 @@ export interface ForeignHistory {
   rows: ConvertedRow[];
 }
 
+/**
+ * Normalize a timestamp-ish column value for re-insertion as a SQL
+ * literal. Drivers differ: pg hands back JS Dates (whose default
+ * stringification pg itself cannot parse — "GMT-0700 (…)"), sqlite hands
+ * back strings.
+ */
+export const toTimestampString = (value: unknown): string | undefined =>
+  value === null || value === undefined
+    ? undefined
+    : value instanceof Date
+      ? value.toISOString()
+      : String(value);
+
 const qualify = (
   table: string,
   dialect: SqlExecutor["dialect"],
@@ -96,10 +109,7 @@ export const findForeignHistory = (options: {
                 row.created_at === null || row.created_at === undefined
                   ? undefined
                   : Number(row.created_at),
-              appliedAt:
-                row.applied_at === null || row.applied_at === undefined
-                  ? undefined
-                  : String(row.applied_at),
+              appliedAt: toTimestampString(row.applied_at),
             })),
         };
       }
@@ -147,10 +157,7 @@ export const findForeignHistory = (options: {
               createdAtMillis: timestampPrefixMillis(
                 String(row.migration_name),
               ),
-              appliedAt:
-                row.finished_at instanceof Date
-                  ? row.finished_at.toISOString()
-                  : String(row.finished_at),
+              appliedAt: toTimestampString(row.finished_at),
             })),
         };
       }
@@ -183,10 +190,7 @@ export const findForeignHistory = (options: {
               name: String(row.name),
               hash: undefined,
               createdAtMillis: timestampPrefixMillis(String(row.name)),
-              appliedAt:
-                row.applied_at === null || row.applied_at === undefined
-                  ? undefined
-                  : String(row.applied_at),
+              appliedAt: toTimestampString(row.applied_at),
             })),
         };
       }

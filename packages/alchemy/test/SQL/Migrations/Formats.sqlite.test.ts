@@ -324,6 +324,89 @@ describe("one-way conversion from foreign tables", (it) => {
       }),
   );
 
+  it.effect(
+    "adopts a state-lost legacy 3-column d1_migrations as a conversion source",
+    () =>
+      // Old Alchemy deploys wrote a 3-column d1_migrations; if state was
+      // lost (adoption), the resolved table is __alchemy_migrations and
+      // the legacy table must be picked up as a source, not replayed.
+      Effect.gen(function* () {
+        const db = new Database(":memory:");
+        db.run(
+          "CREATE TABLE d1_migrations (id TEXT PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL);",
+        );
+        db.run(
+          "INSERT INTO d1_migrations (id, name, applied_at) VALUES ('00001', '0001_users.sql', '2024-01-01 00:00:00');",
+        );
+        db.run(
+          "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL);",
+        );
+
+        const executor = makeSqliteExecutor(db);
+        const records = yield* readFlatRecords(fixture("flat"));
+        yield* applyAlchemyFormat({
+          executor,
+          table: "__alchemy_migrations",
+          records,
+        });
+
+        const rows = migrationRows(db);
+        expect(rows.map((r) => r.name)).toEqual([
+          "0001_users.sql",
+          "0002_posts.sql",
+        ]);
+        expect(rows[0].hash).toBe(records[0].hash);
+        // The legacy table is frozen as a source, still 3 columns.
+        const legacyColumns = db
+          .query("PRAGMA table_info(d1_migrations);")
+          .all() as Array<{ name: string }>;
+        expect(legacyColumns.map((c) => c.name)).toEqual([
+          "id",
+          "name",
+          "applied_at",
+        ]);
+      }),
+  );
+
+  it.effect("prefers drizzle history when multiple foreign sources exist", () =>
+    Effect.gen(function* () {
+      const db = new Database(":memory:");
+      const records = yield* readDrizzleDirRecords(fixture("drizzle-v1"));
+      // Both a drizzle table and a wrangler table exist; drizzle's is
+      // probed first and carries hashes, so it wins.
+      db.run(
+        "CREATE TABLE __drizzle_migrations (id INTEGER PRIMARY KEY, hash text NOT NULL, created_at numeric, name text, applied_at TEXT);",
+      );
+      db.run(
+        `INSERT INTO __drizzle_migrations (hash, created_at, name) VALUES ('${records[0].hash}', 1704067200000, '20240101000000_init');`,
+      );
+      db.run(
+        "CREATE TABLE d1_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL);",
+      );
+      db.run(
+        "INSERT INTO d1_migrations (name) VALUES ('20240101000000_init');",
+      );
+      db.run(
+        "CREATE TABLE users (id integer PRIMARY KEY NOT NULL, name text NOT NULL);",
+      );
+      db.run("CREATE UNIQUE INDEX users_name_unique ON users (name);");
+
+      const executor = makeSqliteExecutor(db);
+      yield* applyAlchemyFormat({
+        executor,
+        table: "__alchemy_migrations",
+        records,
+      });
+      const rows = migrationRows(db);
+      expect(rows.map((r) => r.name)).toEqual([
+        "20240101000000_init",
+        "20240102000000_add_posts",
+      ]);
+      // Hash came from drizzle's table (wrangler has none).
+      expect(rows[0].hash).toBe(records[0].hash);
+    }),
+  );
+
   it.effect("adopts a prisma-migrated database via _prisma_migrations", () =>
     Effect.gen(function* () {
       const db = new Database(":memory:");
