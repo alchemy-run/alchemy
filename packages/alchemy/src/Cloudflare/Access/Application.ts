@@ -10,11 +10,15 @@ import { Resource } from "../../Resource.ts";
 import { arrayEquals } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
-import type {
-  PolicyDecision,
-  PolicyExcludeRule,
-  PolicyRequireRule,
-  PolicyRule,
+import {
+  normalizePolicyRules,
+  type PolicyDecision,
+  type PolicyExcludeRule,
+  type PolicyExcludeRuleInput,
+  type PolicyRequireRule,
+  type PolicyRequireRuleInput,
+  type PolicyRule,
+  type PolicyRuleInput,
 } from "./Policy.ts";
 
 /**
@@ -105,11 +109,11 @@ export interface InlineApplicationPolicy {
   /** The action Access takes when a user matches this policy. */
   decision: PolicyDecision;
   /** Rules evaluated with OR — matching any one grants the policy. */
-  include: ReadonlyArray<PolicyRule>;
+  include: ReadonlyArray<PolicyRuleInput>;
   /** Rules evaluated with NOT — matching any one denies the policy. */
-  exclude?: ReadonlyArray<PolicyExcludeRule>;
+  exclude?: ReadonlyArray<PolicyExcludeRuleInput>;
   /** Rules evaluated with AND — all must match. */
-  require?: ReadonlyArray<PolicyRequireRule>;
+  require?: ReadonlyArray<PolicyRequireRuleInput>;
   /** Display name. Cloudflare generates one when omitted. */
   name?: string;
   /** Execution order of this policy within the application. */
@@ -229,7 +233,7 @@ export interface ApplicationProps {
    * @example
    * ```ts
    * policies: [
-   *   { decision: "allow", include: [{ emailDomain: { domain: "example.com" } }] },
+   *   { decision: "allow", include: [{ emailDomain: "example.com" }] },
    * ]
    * ```
    */
@@ -367,7 +371,7 @@ export type Application = Resource<
  * const App = Cloudflare.Access.Application("TeamOnly", {
  *   type: "self_hosted",
  *   policies: [
- *     { decision: "allow", include: [{ emailDomain: { domain: "example.com" } }] },
+ *     { decision: "allow", include: [{ emailDomain: "example.com" }] },
  *   ],
  * });
  *
@@ -389,7 +393,7 @@ export type Application = Resource<
  *     Cloudflare.Access.AllWorkerPreviews,  // every Worker's preview URLs
  *   ],
  *   policies: [
- *     { decision: "allow", include: [{ emailDomain: { domain: "example.com" } }] },
+ *     { decision: "allow", include: [{ emailDomain: "example.com" }] },
  *   ],
  * });
  * ```
@@ -1049,15 +1053,15 @@ const toRequestPolicy = (p: ResolvedPolicy): RequestPolicy => {
       // application-owned policy in place (attachObservedPolicyIds).
       id: p.id,
       decision: p.decision,
-      include: Array.from(p.include) as zeroTrust.InlineAccessPolicy["include"],
-      exclude:
-        p.exclude === undefined
-          ? undefined
-          : (Array.from(p.exclude) as zeroTrust.InlineAccessPolicy["exclude"]),
-      require:
-        p.require === undefined
-          ? undefined
-          : (Array.from(p.require) as zeroTrust.InlineAccessPolicy["require"]),
+      include: normalizePolicyRules(
+        p.include,
+      ) as zeroTrust.InlineAccessPolicy["include"],
+      exclude: normalizePolicyRules(
+        p.exclude,
+      ) as zeroTrust.InlineAccessPolicy["exclude"],
+      require: normalizePolicyRules(
+        p.require,
+      ) as zeroTrust.InlineAccessPolicy["require"],
       name: p.name,
       precedence: p.precedence,
       sessionDuration: p.sessionDuration,
@@ -1320,18 +1324,23 @@ const policiesEq = (
       // id-less inline items would mint fresh policies every deploy.
       if (o.reusable === true) return false;
       if (d.decision !== o.decision) return false;
-      if (!jsonEq(d.include, (o.include ?? []) as typeof d.include)) {
+      // Compare in wire shape: the caller may have used the scalar
+      // shorthand while Cloudflare echoes expanded rules.
+      const include = normalizePolicyRules(d.include);
+      if (!jsonEq(include, (o.include ?? []) as typeof include)) {
         return false;
       }
+      const exclude = normalizePolicyRules(d.exclude);
       if (
-        d.exclude !== undefined &&
-        !jsonEq(d.exclude, (o.exclude ?? []) as typeof d.exclude)
+        exclude !== undefined &&
+        !jsonEq(exclude, (o.exclude ?? []) as typeof exclude)
       ) {
         return false;
       }
+      const require = normalizePolicyRules(d.require);
       if (
-        d.require !== undefined &&
-        !jsonEq(d.require, (o.require ?? []) as typeof d.require)
+        require !== undefined &&
+        !jsonEq(require, (o.require ?? []) as typeof require)
       ) {
         return false;
       }

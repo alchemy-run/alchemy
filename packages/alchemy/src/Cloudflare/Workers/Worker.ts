@@ -843,7 +843,7 @@ export interface WorkerProps<
    *   main: import.meta.url,
    *   access: {
    *     policies: [
-   *       { decision: "allow", include: [{ emailDomain: { domain: "example.com" } }] },
+   *       { decision: "allow", include: [{ emailDomain: "example.com" }] },
    *     ],
    *   },
    * }, ...) {}
@@ -852,7 +852,7 @@ export interface WorkerProps<
    * const App = Cloudflare.Access.Application("TeamOnly", {
    *   type: "self_hosted",
    *   policies: [
-   *     { decision: "allow", include: [{ emailDomain: { domain: "example.com" } }] },
+   *     { decision: "allow", include: [{ emailDomain: "example.com" }] },
    *   ],
    * });
    *

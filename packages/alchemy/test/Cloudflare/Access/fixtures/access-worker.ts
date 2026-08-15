@@ -12,7 +12,7 @@ export const App = Cloudflare.Access.Application("WorkerAccessApp", {
   policies: [
     {
       decision: "allow",
-      include: [{ emailDomain: { domain: "example.com" } }],
+      include: [{ emailDomain: "example.com" }],
     },
   ],
 });
