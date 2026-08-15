@@ -7,7 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import AccessProtectedWorker from "./fixtures/access-worker.ts";
+import AccessProtectedWorker, { App } from "./fixtures/access-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -76,63 +76,61 @@ const expectAccessLoginRedirect = (url: string) =>
     );
   });
 
+/** Structural view of the live application for out-of-band assertions. */
+interface LiveApp {
+  destinations?: ReadonlyArray<{
+    type?: string | null;
+    workerId?: string | null;
+  }> | null;
+  policies?: ReadonlyArray<{
+    id?: string | null;
+    decision?: string | null;
+    reusable?: boolean | null;
+  }> | null;
+}
+
 test.provider(
-  "protect a Worker with worker + preview_worker destinations",
+  "the access prop enrolls a Worker into an Access application with inline policies",
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
       yield* stack.destroy();
 
-      const { worker, app, policy } = yield* stack.deploy(
-        Effect.gen(function* () {
-          const worker = yield* AccessProtectedWorker;
-          const policy = yield* Cloudflare.Access.Policy("AllowExample", {
-            name: "Allow example.com (worker access test)",
-            decision: "allow",
-            include: [{ emailDomain: { domain: "example.com" } }],
-          });
-          const app = yield* Cloudflare.Access.Application("WorkerAccessApp", {
-            type: "self_hosted",
-            name: "Access for alchemy worker-destination test",
-            destinations: [
-              Cloudflare.Access.Worker(worker),
-              Cloudflare.Access.WorkerPreview(worker),
-            ],
-            policies: [policy],
-          });
-          return { worker, app, policy };
-        }),
-      );
+      const deployStack = Effect.gen(function* () {
+        const worker = yield* AccessProtectedWorker;
+        const app = yield* App;
+        return { worker, app };
+      });
 
-      // The Worker exposes its immutable script id, and the Access app's
-      // destinations resolved to it.
-      expect(worker.scriptTag).toBeDefined();
-      expect(worker.scriptTag!.length).toBeGreaterThan(0);
+      const { worker, app } = yield* stack.deploy(deployStack);
+
+      // The application carries the inline (application-owned) policy.
       expect(app.applicationId).toBeDefined();
       expect(app.aud.length).toBeGreaterThan(0);
-      expect(policy.policyId.length).toBeGreaterThan(0);
-      expect(app.destinations).toEqual(
-        expect.arrayContaining([
-          { type: "worker", workerId: worker.scriptTag },
-          { type: "preview_worker", workerId: worker.scriptTag },
-        ]),
-      );
-
-      // Out-of-band: Cloudflare recorded the worker destinations.
-      const live = yield* zeroTrust.getAccessApplicationForAccount({
+      const live = (yield* zeroTrust.getAccessApplicationForAccount({
         accountId,
         appId: app.applicationId,
-      });
-      const liveDestinations = (
-        live as unknown as {
-          destinations?: ReadonlyArray<{
-            type?: string | null;
-            workerId?: string | null;
-          }> | null;
-        }
-      ).destinations;
-      expect(liveDestinations).toEqual(
+      })) as unknown as LiveApp;
+      expect(live.policies?.length).toBe(1);
+      expect(live.policies![0].decision).toBe("allow");
+      expect(live.policies![0].reusable).toBe(false);
+      const inlinePolicyId = live.policies![0].id;
+      expect(inlinePolicyId).toBeDefined();
+
+      // The Worker enrolled itself: worker + preview destinations keyed by
+      // its immutable script id, contributed through the application's
+      // binding contract.
+      expect(worker.scriptTag).toBeDefined();
+      expect(app.destinations).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: "worker",
+            workerId: worker.scriptTag,
+          }),
+        ]),
+      );
+      expect(live.destinations).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             type: "worker",
@@ -145,16 +143,31 @@ test.provider(
         ]),
       );
 
-      // The workers.dev URL is now behind Access: an unauthenticated
-      // request is redirected to the Access login page instead of reaching
-      // the worker.
+      // Unauthenticated requests are redirected to the Access login page
+      // instead of reaching the worker.
       const location = yield* expectAccessLoginRedirect(worker.url!);
       expect(location).toContain("cloudflareaccess.com");
 
+      // Idempotence: a second deploy must not churn the inline policy (an
+      // id-less inline item in an update PUT would mint a fresh policy) or
+      // duplicate the destinations.
+      yield* stack.deploy(deployStack);
+      const liveAfter = (yield* zeroTrust.getAccessApplicationForAccount({
+        accountId,
+        appId: app.applicationId,
+      })) as unknown as LiveApp;
+      expect(liveAfter.policies?.length).toBe(1);
+      expect(liveAfter.policies![0].id).toBe(inlinePolicyId);
+      expect(
+        (liveAfter.destinations ?? []).filter(
+          (d) => d.workerId === worker.scriptTag,
+        ),
+      ).toHaveLength(2);
+
       yield* stack.destroy();
 
-      // The application is gone.
-      const liveAfter = yield* zeroTrust
+      // The application (and its inline policy with it) is gone.
+      const gone = yield* zeroTrust
         .getAccessApplicationForAccount({ accountId, appId: app.applicationId })
         .pipe(
           Effect.map(() => "still-exists" as const),
@@ -162,7 +175,7 @@ test.provider(
             Effect.succeed("gone" as const),
           ),
         );
-      expect(liveAfter).toBe("gone");
+      expect(gone).toBe("gone");
     }).pipe(logLevel),
   { timeout: 300_000 },
 );

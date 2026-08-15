@@ -3,20 +3,36 @@ import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 /**
- * Minimal worker for the Access worker-destination test. Serves a marker
- * body plus the request's `ctx.access` view, so the test can distinguish
- * "worker answered directly" from "Access intercepted the request".
+ * The Access application this Worker enrolls into — policies authored
+ * inline (application-owned), no separate Policy resource.
+ */
+export const App = Cloudflare.Access.Application("WorkerAccessApp", {
+  type: "self_hosted",
+  name: "Access for alchemy worker-enrollment test",
+  policies: [
+    {
+      decision: "allow",
+      include: [{ emailDomain: { domain: "example.com" } }],
+    },
+  ],
+});
+
+/**
+ * Worker protected by Access via the `access` prop: the provider enrolls it
+ * into {@link App} (worker + preview destinations). The fetch handler
+ * serves a marker body plus its `ctx.access` view, so the test can
+ * distinguish "worker answered directly" from "Access intercepted".
  */
 export default class AccessProtectedWorker extends Cloudflare.Worker<AccessProtectedWorker>()(
   "AccessProtectedWorker",
   {
     main: import.meta.url,
+    access: { application: App },
   },
   Effect.gen(function* () {
-    const exec = yield* Cloudflare.WorkerExecutionContext;
     return {
       fetch: Effect.gen(function* () {
-        const access = yield* exec.access;
+        const access = yield* Cloudflare.Access.Context;
         const identity =
           access === undefined
             ? undefined

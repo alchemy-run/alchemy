@@ -10,6 +10,12 @@ import { Resource } from "../../Resource.ts";
 import { arrayEquals } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import type {
+  PolicyDecision,
+  PolicyExcludeRule,
+  PolicyRequireRule,
+  PolicyRule,
+} from "./Policy.ts";
 
 /**
  * Application type literal — every value Cloudflare's Access service
@@ -39,9 +45,10 @@ export type ApplicationType =
  * - `via_mcp_server_portal` — routes via a managed MCP server portal.
  * - `worker` / `preview_worker` — a specific Cloudflare Worker's production
  *   traffic (custom domains, routes, `workers.dev`) or its version preview
- *   URLs. `workerId` is the Worker's immutable script id — pass a deployed
- *   Worker's `scriptTag` attribute, or use the {@link Worker} /
- *   {@link WorkerPreview} helpers.
+ *   URLs, keyed by the Worker's immutable script id (its `scriptTag`
+ *   attribute). Usually you don't write these by hand — set the `access`
+ *   prop on the `Cloudflare.Worker` instead, and the Worker enrolls itself
+ *   into the application.
  * - `all_workers` / `all_preview_workers` — every Worker on the account
  *   (including ones created later), production or preview traffic
  *   respectively. Hostname-level policies take precedence over Worker-level
@@ -87,6 +94,42 @@ export interface OAuthConfiguration {
     /** Whether any loopback-address redirect URI is allowed. */
     allowAnyOnLoopback?: boolean;
   };
+}
+
+/**
+ * An Access policy defined inline on (and owned by) an application: created
+ * with the application, updated in place, and deleted with it. Uses the same
+ * rule model as the reusable `Cloudflare.Access.Policy` resource.
+ */
+export interface InlineApplicationPolicy {
+  /** The action Access takes when a user matches this policy. */
+  decision: PolicyDecision;
+  /** Rules evaluated with OR — matching any one grants the policy. */
+  include: ReadonlyArray<PolicyRule>;
+  /** Rules evaluated with NOT — matching any one denies the policy. */
+  exclude?: ReadonlyArray<PolicyExcludeRule>;
+  /** Rules evaluated with AND — all must match. */
+  require?: ReadonlyArray<PolicyRequireRule>;
+  /** Display name. Cloudflare generates one when omitted. */
+  name?: string;
+  /** Execution order of this policy within the application. */
+  precedence?: number;
+  /** Session lifetime for this policy, e.g. `"24h"`, `"2h45m"`. */
+  sessionDuration?: string;
+  /** Require admin approval at the start of each session. */
+  approvalRequired?: boolean;
+  /** Administrators who can approve a temporary authentication request. */
+  approvalGroups?: ReadonlyArray<{
+    approvalsNeeded: number;
+    emailAddresses?: ReadonlyArray<string>;
+    emailListUuid?: string;
+  }>;
+  /** Serve the application in an isolated browser for matching users. */
+  isolationRequired?: boolean;
+  /** Require a login justification from matching users. */
+  purposeJustificationRequired?: boolean;
+  /** Custom message shown on the justification screen. */
+  purposeJustificationPrompt?: string;
 }
 
 export interface ApplicationProps {
@@ -164,23 +207,36 @@ export interface ApplicationProps {
    */
   tags?: string[];
   /**
-   * Reusable Access policies that gate access to this application, in
-   * ascending order of precedence. Author each policy with the
-   * `Cloudflare.Access.Policy` resource and pass the resource itself (or its
-   * `policyId`, or a bare policy UUID) here — Access applications no longer
-   * accept inline policy bodies in this provider.
+   * Access policies that gate access to this application, in ascending
+   * order of precedence.
    *
    * Each entry can be:
-   * - a deployed `Cloudflare.Access.Policy` (`policies: [allowTeam]`),
+   * - an **inline policy** owned by this application —
+   *   `{ decision, include, ... }` with the same rule model as
+   *   `Cloudflare.Access.Policy` (created, updated, and deleted with the
+   *   application; no separate resource needed),
+   * - a deployed reusable `Cloudflare.Access.Policy`
+   *   (`policies: [allowTeam]`),
    * - a policy id (`string`),
    * - `{ id, precedence? }`, or
    * - the same with per-application overrides (`approvalRequired`,
    *   `isolationRequired`, `purposeJustificationRequired`,
    *   `purposeJustificationPrompt`, `sessionDuration`, `approvalGroups`).
+   *
+   * Cloudflare treats inline and reusable policies as mutually exclusive on
+   * one application — mixing the two forms fails validation.
+   *
+   * @example
+   * ```ts
+   * policies: [
+   *   { decision: "allow", include: [{ emailDomain: { domain: "example.com" } }] },
+   * ]
+   * ```
    */
   policies?: ReadonlyArray<
     | string
     | { policyId: string }
+    | InlineApplicationPolicy
     | { id: string; precedence?: number }
     | {
         id: string;
@@ -232,11 +288,22 @@ export interface ApplicationAttributes {
   updatedAt: string | undefined;
 }
 
+/**
+ * Data other resources attach to an Access application via bindings.
+ * Workers enrolling themselves (the `access` prop on `Cloudflare.Worker`)
+ * push their `worker`/`preview_worker` destinations here; the application
+ * deploys with — and converges on — the union of its own `destinations`
+ * prop and every bound contribution.
+ */
+export interface ApplicationBinding {
+  destinations?: ApplicationDestination[];
+}
+
 export type Application = Resource<
   "Cloudflare.Access.Application",
   ApplicationProps,
   ApplicationAttributes,
-  never,
+  ApplicationBinding,
   Providers
 >;
 
@@ -291,23 +358,23 @@ export type Application = Resource<
  * ```
  *
  * @section Protecting Cloudflare Workers
- * @example Require Access on a specific Worker (production + previews)
+ * @example Require Access on a specific Worker
  * ```typescript
- * const api = yield* ApiWorker;
- *
- * const allowTeam = yield* Cloudflare.Access.Policy("AllowTeam", {
- *   decision: "allow",
- *   include: [{ emailDomain: { domain: "example.com" } }],
- * });
- *
- * yield* Cloudflare.Access.Application("ApiAccess", {
+ * // The application owns the policies (inline here — no separate Policy
+ * // resource needed); the Worker enrolls itself via its `access` prop,
+ * // covering its custom domains, routes, workers.dev URL, and version
+ * // preview URLs.
+ * const App = Cloudflare.Access.Application("TeamOnly", {
  *   type: "self_hosted",
- *   destinations: [
- *     Cloudflare.Access.Worker(api),        // production traffic
- *     Cloudflare.Access.WorkerPreview(api), // version preview URLs
+ *   policies: [
+ *     { decision: "allow", include: [{ emailDomain: { domain: "example.com" } }] },
  *   ],
- *   policies: [allowTeam],
  * });
+ *
+ * export default class Api extends Cloudflare.Worker<Api>()("Api", {
+ *   main: import.meta.url,
+ *   access: { application: App },
+ * }, /* ... *​/) {}
  * ```
  *
  * @example Require Access on every Worker in the account
@@ -321,7 +388,9 @@ export type Application = Resource<
  *     Cloudflare.Access.AllWorkers,         // production traffic of every Worker
  *     Cloudflare.Access.AllWorkerPreviews,  // every Worker's preview URLs
  *   ],
- *   policies: [allowTeam],
+ *   policies: [
+ *     { decision: "allow", include: [{ emailDomain: { domain: "example.com" } }] },
+ *   ],
  * });
  * ```
  *
@@ -472,18 +541,48 @@ export const ApplicationProvider = () =>
       return output?.applicationId ? attrs : Unowned(attrs);
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news, output, bindings }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
       const resolvedName = yield* resolveName(id, news.name);
       const resolvedIdps = resolveAllowedIdps(news.allowedIdps);
       const resolvedPolicies = resolvePolicies(news.policies);
+      if (
+        resolvedPolicies !== undefined &&
+        resolvedPolicies.some(
+          (p) => typeof p !== "string" && isInlinePolicy(p),
+        ) &&
+        resolvedPolicies.some(
+          (p) => typeof p === "string" || !isInlinePolicy(p),
+        )
+      ) {
+        return yield* Effect.fail(
+          new Error(
+            "Cloudflare Access applications cannot mix inline policies with " +
+              "reusable policy references — use one form for the whole " +
+              "`policies` list.",
+          ),
+        );
+      }
       const body = buildMutableBody(
         news,
         resolvedName,
         resolvedIdps,
         resolvedPolicies,
       );
+      // Destinations contributed through the binding contract (e.g. Workers
+      // enrolling via their `access` prop) extend the declared ones. The
+      // engine dedupes and sid-sorts bindings, so the merged order is
+      // stable across deploys.
+      const boundDestinations = (bindings ?? []).flatMap(
+        (b) => (b.data.destinations ?? []) as ApplicationDestination[],
+      );
+      if (boundDestinations.length > 0) {
+        body.destinations = [
+          ...(body.destinations ?? []),
+          ...boundDestinations,
+        ];
+      }
 
       // 1. Observe
       let observed: ObservedApp | undefined;
@@ -564,7 +663,9 @@ export const ApplicationProvider = () =>
             autoRedirectToIdentity: body.autoRedirectToIdentity,
             appLauncherVisible: body.appLauncherVisible,
             tags: body.tags === undefined ? undefined : Array.from(body.tags),
-            policies: toRequestPolicies(body.policies),
+            policies: toRequestPolicies(
+              attachObservedPolicyIds(body.policies, observed.policies),
+            ),
             destinations:
               body.destinations === undefined
                 ? undefined
@@ -750,6 +851,18 @@ const observeById = (accountId: string, appId: string) =>
 interface ObservedPolicy {
   readonly id?: string;
   readonly precedence?: number;
+  /** false for application-owned (inline) policies, true for reusable. */
+  readonly reusable?: boolean;
+  readonly decision?: string;
+  readonly name?: string;
+  readonly include?: ReadonlyArray<unknown>;
+  readonly exclude?: ReadonlyArray<unknown>;
+  readonly require?: ReadonlyArray<unknown>;
+  readonly sessionDuration?: string;
+  readonly approvalRequired?: boolean;
+  readonly isolationRequired?: boolean;
+  readonly purposeJustificationRequired?: boolean;
+  readonly purposeJustificationPrompt?: string;
 }
 
 interface ObservedApp {
@@ -872,8 +985,21 @@ const narrowApp = (raw: {
 // correctly — no cast-to-Parameters needed.
 // ---------------------------------------------------------------------------
 
+/**
+ * Reconciler-side inline policy: `InlineApplicationPolicy` plus the optional
+ * `id` of the observed application-owned policy it updates in place (see
+ * `attachObservedPolicyIds`).
+ */
+interface InlineResolvedPolicy extends InlineApplicationPolicy {
+  id?: string;
+}
+
+const isInlinePolicy = (p: ResolvedPolicy): p is InlineResolvedPolicy =>
+  typeof p !== "string" && "decision" in p;
+
 type ResolvedPolicy =
   | string
+  | InlineResolvedPolicy
   | { id: string; precedence?: number }
   | {
       id: string;
@@ -890,16 +1016,13 @@ type ResolvedPolicy =
       }>;
     };
 
-// Distilled now types `policies` as `Array<refOrId> | Array<inlinePolicy>` —
-// a union at the array level. We only ever emit the references form, so
-// exclude the inline arm (discriminated by its required `decision` field)
-// to keep `Array<RequestPolicy>` assignable to distilled's first arm.
-type RequestPolicy = Exclude<
-  NonNullable<
-    zeroTrust.CreateAccessApplicationForAccountRequest["policies"]
-  >[number],
-  { decision: unknown }
->;
+// The self-hosted policies item union: references (id string / link /
+// per-app overrides) plus application-owned inline policies
+// (`InlineAccessPolicy`, added to distilled's model — the API docs only
+// carry the inline arm for infrastructure apps, but the live API accepts
+// it for self_hosted).
+type RequestPolicy =
+  zeroTrust.AccessApplicationsCreateForAccountRequestPoliciesSelfHostedApplicationItem;
 
 interface AppMutableBody {
   domain?: string;
@@ -915,11 +1038,46 @@ interface AppMutableBody {
   policies?: ReadonlyArray<ResolvedPolicy>;
 }
 
-const policyIdOf = (p: ResolvedPolicy): string =>
+const policyIdOf = (p: ResolvedPolicy): string | undefined =>
   typeof p === "string" ? p : p.id;
 
 const toRequestPolicy = (p: ResolvedPolicy): RequestPolicy => {
   if (typeof p === "string") return p;
+  if (isInlinePolicy(p)) {
+    return {
+      // `id` present when this inline body updates an observed
+      // application-owned policy in place (attachObservedPolicyIds).
+      id: p.id,
+      decision: p.decision,
+      include: Array.from(p.include) as zeroTrust.InlineAccessPolicy["include"],
+      exclude:
+        p.exclude === undefined
+          ? undefined
+          : (Array.from(p.exclude) as zeroTrust.InlineAccessPolicy["exclude"]),
+      require:
+        p.require === undefined
+          ? undefined
+          : (Array.from(p.require) as zeroTrust.InlineAccessPolicy["require"]),
+      name: p.name,
+      precedence: p.precedence,
+      sessionDuration: p.sessionDuration,
+      approvalRequired: p.approvalRequired,
+      approvalGroups:
+        p.approvalGroups === undefined
+          ? undefined
+          : p.approvalGroups.map((g) => ({
+              approvalsNeeded: g.approvalsNeeded,
+              emailAddresses:
+                g.emailAddresses === undefined
+                  ? undefined
+                  : Array.from(g.emailAddresses),
+              emailListUuid: g.emailListUuid,
+            })),
+      isolationRequired: p.isolationRequired,
+      purposeJustificationRequired: p.purposeJustificationRequired,
+      purposeJustificationPrompt: p.purposeJustificationPrompt,
+    } satisfies zeroTrust.InlineAccessPolicy;
+  }
   // The simple `{ id, precedence? }` form lacks the per-app override fields;
   // narrow once to a permissive view so we can copy them through uniformly.
   const rich = p as {
@@ -1154,6 +1312,67 @@ const policiesEq = (
   for (let i = 0; i < desired.length; i++) {
     const d = desired[i];
     const o = observed[i];
+    if (typeof d !== "string" && isInlinePolicy(d)) {
+      // Inline (application-owned) policy: compare the fields the caller
+      // set against the observed policy body. Cloudflare echoes rule
+      // objects structurally, so JSON equality is stable; getting this
+      // wrong is costly — a false inequality re-PUTs the policy list and
+      // id-less inline items would mint fresh policies every deploy.
+      if (o.reusable === true) return false;
+      if (d.decision !== o.decision) return false;
+      if (!jsonEq(d.include, (o.include ?? []) as typeof d.include)) {
+        return false;
+      }
+      if (
+        d.exclude !== undefined &&
+        !jsonEq(d.exclude, (o.exclude ?? []) as typeof d.exclude)
+      ) {
+        return false;
+      }
+      if (
+        d.require !== undefined &&
+        !jsonEq(d.require, (o.require ?? []) as typeof d.require)
+      ) {
+        return false;
+      }
+      if (d.name !== undefined && d.name !== o.name) return false;
+      if (
+        d.precedence !== undefined &&
+        o.precedence !== undefined &&
+        d.precedence !== o.precedence
+      ) {
+        return false;
+      }
+      if (
+        d.sessionDuration !== undefined &&
+        d.sessionDuration !== o.sessionDuration
+      ) {
+        return false;
+      }
+      if (
+        d.approvalRequired !== undefined &&
+        d.approvalRequired !== (o.approvalRequired ?? false)
+      ) {
+        return false;
+      }
+      if (
+        d.isolationRequired !== undefined &&
+        d.isolationRequired !== (o.isolationRequired ?? false)
+      ) {
+        return false;
+      }
+      if (
+        d.purposeJustificationRequired !== undefined &&
+        d.purposeJustificationRequired !==
+          (o.purposeJustificationRequired ?? false)
+      ) {
+        return false;
+      }
+      continue;
+    }
+    // Reference forms: an observed application-owned policy can never
+    // satisfy a reusable reference.
+    if (o.reusable === false) return false;
     if (policyIdOf(d) !== o.id) return false;
     if (typeof d !== "string") {
       if (
@@ -1167,6 +1386,33 @@ const policiesEq = (
   }
   return true;
 };
+
+/**
+ * Zip desired inline policies with the observed application-owned policies
+ * so an update PUT carries their ids and updates them in place — an id-less
+ * inline item in an update creates a brand-new policy (and drops the old
+ * one), churning policy ids on every deploy that touches any app field.
+ * Positional matching, guarded on `reusable === false` (never attach a
+ * reusable policy's id to an inline body — that would mutate the shared
+ * policy) and on a matching decision.
+ */
+const attachObservedPolicyIds = (
+  desired: ReadonlyArray<ResolvedPolicy> | undefined,
+  observed: ReadonlyArray<ObservedPolicy> | undefined,
+): ReadonlyArray<ResolvedPolicy> | undefined =>
+  desired === undefined || observed === undefined
+    ? desired
+    : desired.map((p, i) => {
+        const o = observed[i];
+        return typeof p !== "string" &&
+          isInlinePolicy(p) &&
+          p.id === undefined &&
+          o?.id !== undefined &&
+          o.reusable === false &&
+          o.decision === p.decision
+          ? { ...p, id: o.id }
+          : p;
+      });
 
 const bodyEqualsObserved = (
   desired: AppMutableBody,

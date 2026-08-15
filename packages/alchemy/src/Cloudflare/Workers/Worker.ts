@@ -37,6 +37,7 @@ import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace
 import type { WorkflowExport } from "../Workflows/Workflow.ts";
 import type { Reference as ZoneReference } from "../Zone/lookup.ts";
 import { type Assets, type AssetsProps } from "./Assets.ts";
+import type { Application } from "../Access/Application.ts";
 import { type DurableObjectExport } from "./DurableObject.ts";
 import { Request } from "./Request.ts";
 import type { ModuleRule } from "./Sources/Prebuilt.ts";
@@ -80,6 +81,25 @@ export interface WorkerExecutionContextCache {
   purge(
     options: cf.CachePurgeOptions,
   ): Effect.Effect<cf.CachePurgeResult, CachePurgeError, RuntimeContext>;
+}
+
+/**
+ * Enroll this Worker into a Cloudflare Access application (`access` prop).
+ * The application owns the policies; enrolling pushes this Worker's
+ * `worker` destination (and a `preview_worker` destination unless
+ * `previews: false`) onto the application through its binding contract, so
+ * the application deploys with — and converges on — the destinations of
+ * every enrolled Worker. Removing the prop (or the Worker) un-enrolls it
+ * on the application's next reconcile.
+ */
+export interface WorkerAccessConfig {
+  /** The `Cloudflare.Access.Application` to enroll into. */
+  application: Application;
+  /**
+   * Also protect the Worker's version preview URLs.
+   * @default true
+   */
+  previews?: boolean;
 }
 
 export class WorkerAccessIdentityError extends Data.TaggedError(
@@ -761,6 +781,35 @@ export interface WorkerProps<
    * @default true
    */
   workersDev?: boolean | WorkersDevConfig;
+  /**
+   * Protect this Worker with Cloudflare Access by enrolling it into an
+   * Access application. The application owns the policies (author them
+   * inline on the application or as `Cloudflare.Access.Policy` resources);
+   * the provider adds this Worker as a `worker` destination — and a
+   * `preview_worker` destination unless `previews: false` — covering its
+   * custom domains, routes, `workers.dev` URL, and version preview URLs.
+   * Removing the prop (or deleting the Worker) un-enrolls it.
+   *
+   * At runtime, read the authenticated identity from `ctx.access` via
+   * `Cloudflare.Access.Context`; under `alchemy dev`, simulate it with
+   * `dev: { access: ... }`.
+   *
+   * @example
+   * ```ts
+   * const App = Cloudflare.Access.Application("TeamOnly", {
+   *   type: "self_hosted",
+   *   policies: [
+   *     { decision: "allow", include: [{ emailDomain: { domain: "example.com" } }] },
+   *   ],
+   * });
+   *
+   * export default class Api extends Cloudflare.Worker<Api>()("Api", {
+   *   main: import.meta.url,
+   *   access: { application: App },
+   * }, ...) {}
+   * ```
+   */
+  access?: WorkerAccessConfig;
   /**
    * Static assets to serve. Can be:
    * - A string path to the assets directory

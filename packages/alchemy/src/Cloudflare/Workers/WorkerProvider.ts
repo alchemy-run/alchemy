@@ -2632,6 +2632,7 @@ export const LiveWorkerProvider = () =>
             ["placement", news.placement],
             ["limits", news.limits],
             ["workersDev", news.workersDev],
+            ["access", news.access],
             ["vite", news.vite],
           ] as const
         ).flatMap(([key, value]) => (value !== undefined ? [key] : []));

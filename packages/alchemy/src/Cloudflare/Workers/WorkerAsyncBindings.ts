@@ -5,6 +5,7 @@ import type { InputProps } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { isYieldableEffectLike } from "../../Util/effect.ts";
+import type { Application } from "../Access/Application.ts";
 import { isAiGateway } from "../AI/Gateway.ts";
 import { isSearchInstance } from "../AI/SearchInstance.ts";
 import { isSearchNamespace } from "../AI/SearchNamespace.ts";
@@ -59,6 +60,43 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
   resource: Worker,
   props: InputProps<WorkerProps<WorkerBindingProps>>,
 ) {
+  // Access enrollment (`access` prop): push this Worker's
+  // `worker`/`preview_worker` destinations onto the application's binding
+  // contract. The application deploys with — and converges on — every
+  // enrolled Worker's destinations, including at create time, where
+  // Cloudflare requires a self-hosted app to be born with a domain or
+  // destinations.
+  if (props.access) {
+    const accessInput = props.access;
+    const access = (
+      isYieldableEffectLike(accessInput) && !Output.isOutput(accessInput)
+        ? yield* accessInput as Effect.Effect<unknown>
+        : accessInput
+    ) as { application: unknown; previews?: unknown };
+    // The application can be the declaration Effect (module-scope
+    // `const App = Cloudflare.Access.Application(...)`) or an
+    // already-yielded resource.
+    const application = (
+      isYieldableEffectLike(access.application) &&
+      !Output.isOutput(access.application)
+        ? yield* access.application as Effect.Effect<unknown>
+        : access.application
+    ) as Application;
+    const previews = access.previews !== false;
+    yield* application.bind(`access:${resource.FQN}`, {
+      destinations: [
+        { type: "worker", workerId: resource.scriptTag.as<string>() },
+        ...(previews
+          ? [
+              {
+                type: "preview_worker" as const,
+                workerId: resource.scriptTag.as<string>(),
+              },
+            ]
+          : []),
+      ],
+    });
+  }
   if (props.env) {
     for (const bindingName in props.env) {
       // @ts-expect-error
