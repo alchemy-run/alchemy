@@ -118,7 +118,7 @@ publishes a proper `1.0.0-rc.5` (or stable `1.0.0`).
 ## Add `Drizzle.Schema` to your Db effect
 
 Inline the schema resource directly into `NeonDb` — its `out`
-output becomes the input to `Neon.Branch`'s `migrationsDir`, so
+output becomes the input to `Neon.Branch`'s `migrations`, so
 alchemy automatically schedules `Drizzle.Schema` *before* the
 branch resource each deploy:
 
@@ -139,7 +139,7 @@ export const NeonDb = Effect.gen(function* () {
 -  const branch = yield* Neon.Branch("app-branch", { project });
 +  const branch = yield* Neon.Branch("app-branch", {
 +    project,
-+    migrationsDir: schema.out,
++    migrations: schema,
 +  });
 -  return { project, branch };
 +  return { project, branch, schema };
@@ -310,8 +310,8 @@ Add a column or a table to `src/schema.ts` and run
 1. Diffs the new schema against the latest snapshot.
 2. Writes a *new* migration directory with just the delta SQL.
 3. `Neon.Branch` notices the new file, runs it inside a
-   transaction, and records it in the `neon_migrations` tracking
-   table so it's not re-applied.
+   transaction, and records it in the `__alchemy_migrations`
+   tracking table so it's not re-applied.
 
 Roll back simply by reverting your schema change and redeploying —
 or by spinning up a `Neon.Branch` that forks from a point-in-time
@@ -348,7 +348,7 @@ import * as Layer from "effect/Layer";
 
 Then rebuild `src/Db.ts` around a PlanetScale Postgres database,
 branch, and role. `Drizzle.Schema` is unchanged, and
-`Planetscale.PostgresBranch` accepts the same `migrationsDir`
+`Planetscale.PostgresBranch` accepts the same `migrations`
 contract `Neon.Branch` did — it scans the directory and applies
 pending migrations transactionally on every deploy:
 
@@ -372,7 +372,7 @@ export const PlanetscaleDb = Effect.gen(function* () {
 
   const branch = yield* Planetscale.PostgresBranch("app-branch", {
     database,
-    migrationsDir: schema.out,
+    migrations: schema,
   });
 
   const role = yield* Planetscale.PostgresRole("app-role", {
@@ -472,7 +472,7 @@ export const PlanetscaleDb = Effect.gen(function* () {
   const branch = yield* Planetscale.MySQLBranch("app-branch", {
     database,
     isProduction: false,
-    migrationsDir: schema.out,
+    migrations: schema,
   });
 
   const password = yield* Planetscale.MySQLPassword("app-password", {
