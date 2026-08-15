@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+/* shadcn-style tokens (single dark theme). Tailwind v4 derives the
+   bg-, text-, and border- utilities from these @theme colors. */
+@theme {
+  --color-background: #020617;
+  --color-foreground: #e2e8f0;
+  --color-card: #0f172a;
+  --color-card-foreground: #e2e8f0;
+  --color-primary: #60a5fa;
+  --color-primary-foreground: #0b1120;
+  --color-muted: #1e293b;
+  --color-muted-foreground: #94a3b8;
+  --color-accent: #1e293b;
+  --color-accent-foreground: #e2e8f0;
+  --color-border: #1e293b;
+  --color-ring: #60a5fa;
+}
+
+body {
+  min-height: 100vh;
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}

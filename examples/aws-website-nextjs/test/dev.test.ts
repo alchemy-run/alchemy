@@ -10,10 +10,10 @@
  *   - SSR             → `/` renders through the framework dev server
  *   - API route       → `/api/hello` serves the route handler
  *   - static assets   → `/robots.txt` from public/
- *   - RPC wire path   → `POST /api/__rpc/bump` (createClient's wire
- *                       protocol) serves through the dev server's effect
- *                       front dispatch against the real DynamoDB table,
- *                       and the async server component renders the counter
+ *   - server action   → the `bumpVisits` action (Next's own transport)
+ *                       dispatches the backend method via the value form
+ *                       against the real DynamoDB table, and the async
+ *                       server component renders the counter
  *   - HOT RELOAD      → editing app/page.tsx is served by Next's HMR
  *                       without a redeploy
  */
@@ -95,6 +95,34 @@ const fetchOk = async (
 const outputUrl = () =>
   output.match(/\burl:\s*['"]?(http[^\s'",]+)/)?.[1];
 
+/**
+ * Discover a server action's id from the dev server's client chunks:
+ * every chunk that imports an action from app/actions.ts carries
+ * `createServerReference("<id>", …, "<exportedName>")`.
+ */
+const findActionId = async (base: string, name: string) => {
+  const html = await (await fetchOk(base)).text();
+  const chunkPaths = [
+    ...new Set(
+      [...html.matchAll(/(?:\/_next\/)?static\/chunks\/[\w.[\]%-]+\.js/g)].map(
+        (m) => (m[0].startsWith("/_next/") ? m[0] : `/_next/${m[0]}`),
+      ),
+    ),
+  ];
+  for (const chunkPath of chunkPaths) {
+    const res = await fetch(new URL(chunkPath, base));
+    if (!res.ok) continue;
+    const js = await res.text();
+    const match = js.match(
+      new RegExp(
+        `createServerReference\\)?\\("([0-9a-f]{40,})"[^)]*?"${name}"\\)`,
+      ),
+    );
+    if (match) return match[1];
+  }
+  return undefined;
+};
+
 afterAll(async () => {
   // Always leave the repo tree clean, even on a mid-reload failure.
   fs.writeFileSync(pagePath, pageSource);
@@ -163,19 +191,25 @@ test(
     const robots = await (await fetchOk(new URL("/robots.txt", url))).text();
     expect(robots).toContain("User-agent:");
 
-    // The rpc wire path rides `next dev` too (the effect front dispatch
-    // runs ahead of Next's handler in the alchemy-owned custom-server
-    // child — no route file): this is the exact request the browser's
-    // type-only createClient sends, served by the backend method against
-    // the REAL DynamoDB table (remote()).
-    const rpc = await fetch(new URL("/api/__rpc/bump", url), {
+    // The server-action transport rides `next dev` too: this is the
+    // exact request Next's client runtime sends for `bumpVisits`, which
+    // dispatches the backend method via the value form of createClient
+    // against the REAL DynamoDB table (remote()).
+    const actionId = await pollUntil(
+      "bumpVisits server action id in the client chunks",
+      () => findActionId(url, "bumpVisits"),
+    );
+    const action = await fetch(url, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "next-action": actionId,
+        origin: new URL(url).origin,
+        accept: "text/x-component",
+        "content-type": "text/plain;charset=UTF-8",
+      },
       body: "[]",
     });
-    expect(rpc.status).toBe(200);
-    const envelope = (await rpc.json()) as { value: number };
-    expect(envelope.value).toBeGreaterThanOrEqual(1);
+    expect(action.status).toBe(200);
 
     // ...and the async server component (the value form) renders the
     // counter into the page.

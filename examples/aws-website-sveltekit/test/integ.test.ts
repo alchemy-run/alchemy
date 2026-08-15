@@ -14,12 +14,17 @@ import Stack from "../alchemy.run.ts";
 // real response.
 const { executeWhenReady, getWhenReady } = Test;
 
-// One RPC wire call, exactly as `createClient`'s type-only form sends it:
-// `POST /api/__rpc/<method>` with a JSON array of positional args.
-const rpcWhenReady = (url: string, method: string, args: unknown[] = []) =>
+// One SvelteKit form-action POST, exactly as `use:enhance` submits it:
+// urlencoded body, `x-sveltekit-action` for a JSON ActionResult, and a
+// matching `origin` for kit's CSRF check.
+const actionWhenReady = (url: string, action: string, body = "") =>
   executeWhenReady(
-    HttpClientRequest.post(`${url}/api/__rpc/${method}`).pipe(
-      HttpClientRequest.bodyText(JSON.stringify(args), "application/json"),
+    HttpClientRequest.post(`${url}/?/${action}`).pipe(
+      HttpClientRequest.setHeaders({
+        origin: new URL(url).origin,
+        "x-sveltekit-action": "true",
+      }),
+      HttpClientRequest.bodyText(body, "application/x-www-form-urlencoded"),
     ),
   );
 
@@ -38,7 +43,7 @@ const getBodyWhenReady = Effect.fn(function* (url: string, expected: string) {
       return yield* Effect.fail(new AssetNotReady({ body }));
     }
     return body;
-  }, 
+  },
     Effect.retry({
       while: (error) => error instanceof AssetNotReady,
       schedule: Schedule.max([
@@ -72,6 +77,19 @@ const base = Effect.map(stack, ({ url }) => {
   if (!url) throw new Error("expected the site to expose a CloudFront url");
   return String(url).replace(/\/+$/, "");
 });
+
+// Read the server-rendered visits count out of the home page HTML. Svelte 5
+// SSR may emit hydration comment anchors around the text, so match the first
+// digits after the element opening tag.
+const readCount = (url: string) =>
+  Effect.gen(function* () {
+    const res = yield* getWhenReady(url);
+    expect(res.status).toBe(200);
+    const html = yield* res.text;
+    const count = html.match(/data-testid="count"[^>]*>(?:<!---->)?\s*(\d+)/);
+    expect(count).not.toBeNull();
+    return Number(count![1]);
+  });
 
 test(
   "deploys and exposes a url",
@@ -128,64 +146,62 @@ test(
 );
 
 test(
-  "serves the backend methods over the rpc wire path",
+  "the bump form action is the public write surface",
   Effect.gen(function* () {
     const url = yield* base;
-    // `POST /api/__rpc/bump` is the exact wire request the browser's
-    // type-only `createClient<typeof Backend>()` sends. The CloudFront
-    // edge router forwards the universal rpc claim to the server Lambda,
-    // and the DynamoDB capability bindings (env + IAM) were collected at
-    // plan time.
-    const res = yield* rpcWhenReady(url, "bump");
+    const before = yield* readCount(url);
+    // POST `/?/bump` is the exact request `use:enhance` sends. CloudFront
+    // forwards it to the server Lambda, where the action calls
+    // `backend.bump()` in-process (value form) against the DynamoDB
+    // capability bindings (env + IAM) collected at plan time.
+    const res = yield* actionWhenReady(url, "bump");
     expect(res.status).toBe(200);
-    const body = (yield* res.json) as { value: number };
-    expect(body.value).toBeGreaterThanOrEqual(1);
-    // A second call increments — the method really runs per request.
-    const again = yield* rpcWhenReady(url, "bump");
-    const next = (yield* again.json) as { value: number };
-    expect(next.value).toBeGreaterThan(body.value);
+    const result = (yield* res.json) as { type: string };
+    expect(result.type).toBe("success");
+    // A second bump observes the first write — the action really runs per
+    // request against the persisted counter.
+    const again = yield* actionWhenReady(url, "bump");
+    expect(again.status).toBe(200);
+    // The writes landed in DynamoDB: the server-rendered count reflects
+    // them (poll through any stale edge cache).
+    const after = yield* readCount(url).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("2 seconds"),
+        until: (count) => count >= before + 2,
+        times: 15,
+      }),
+    );
+    expect(after).toBeGreaterThanOrEqual(before + 2);
   }),
   { timeout: 180_000 },
 );
 
 test(
-  "SSR renders the backend value loaded in-process by +page.server.ts",
-  Effect.gen(function* () {
-    const url = yield* base;
-    // The previous test bumped through the wire; the page's load function
-    // reads the same DynamoDB counter with the VALUE form of createClient
-    // (direct in-process dispatch) and renders it into the HTML.
-    const html = yield* getBodyWhenReady(url, "Server-rendered visits:");
-    const visits = html.match(/Server-rendered visits:[\s\S]{0,200}?(\d+)/);
-    expect(visits).not.toBeNull();
-    expect(Number(visits![1])).toBeGreaterThanOrEqual(2);
-  }),
-  { timeout: 180_000 },
-);
-
-test(
-  "queue round-trip: enqueue over rpc, the sibling consumer catches up",
+  "queue round-trip: enqueue action, the sibling consumer catches up",
   Effect.gen(function* () {
     const url = yield* base;
     // Each run sends a unique marker so the assertion can't match a
     // message from an earlier run.
     const marker = `queue-marker-${crypto.randomUUID()}`;
 
+    // The JSON route the page polls — a plain framework API route backed
+    // by the value-form client.
     const readProcessed = Effect.gen(function* () {
-      const res = yield* rpcWhenReady(url, "processed");
+      const res = yield* getWhenReady(`${url}/api/processed`);
       expect(res.status).toBe(200);
-      const body = (yield* res.json) as {
-        value: { count: number; last: string | null };
-      };
-      return body.value;
+      return (yield* res.json) as { count: number; last: string | null };
     });
     const before = yield* readProcessed;
 
-    // `POST /api/__rpc/enqueue` sends to SQS and returns immediately;
-    // the CONSUMER runs out of band on the sibling effect Lambda
+    // The enqueue form action sends to SQS and returns immediately; the
+    // CONSUMER runs out of band on the sibling effect Lambda
     // (`<site>-Handlers`), whose event-source mapping was registered by
     // the same backend module.
-    const res = yield* rpcWhenReady(url, "enqueue", [marker]);
+    const res = yield* actionWhenReady(
+      url,
+      "enqueue",
+      `message=${encodeURIComponent(marker)}`,
+    );
     expect(res.status).toBe(200);
 
     // Bounded poll until the sibling's write lands in DynamoDB.

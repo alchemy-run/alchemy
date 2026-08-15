@@ -32,29 +32,41 @@ export default class Site extends Nextjs<Site>()(
 ) {}
 ```
 
-Methods are called through `createClient` (`alchemy/Client`), which has
-two forms:
+Methods are called through `createClient` (`alchemy/Client`) — the
+server-only VALUE form, dispatched in-process. The browser reaches the
+backend through Next's own transport: the server actions in
+`app/actions.ts` are the public API, and inside them the same value form
+runs (trusted server code):
 
 ```tsx
 // SSR (app/page.tsx, async server component): VALUE import — direct
 // in-process dispatch, no HTTP
-import Backend from "./backend.ts";
+import Backend from "./backend";
 const backend = createClient(Backend);
 const visits = await backend.visits();
+```
 
-// Browser (app/visits.tsx, "use client"): TYPE-ONLY import — zero
-// backend bytes in the client bundle; each call POSTs the wire protocol
-// (/api/__rpc/bump) through the catch-all route handler
-import { createClient } from "alchemy/Client";
-import type Backend from "./backend.ts";
-const backend = createClient<typeof Backend>();
-const count = await backend.bump();
+```ts
+// app/actions.ts ("use server"): the actions ARE the public API
+const backend = createClient(Backend, { headers });
+export async function bumpVisits(): Promise<number> {
+  return backend.bump();
+}
+```
+
+```tsx
+// app/visits-card.tsx ("use client"): imports ONLY ./actions — zero
+// backend bytes in the client bundle
+import { bumpVisits } from "./actions";
+setBumped(await bumpVisits());
 ```
 
 The home page renders "Server-rendered visits: N" during SSR
 (`dynamic = "force-dynamic"` — a prerendered page must not call the
-backend server-side) and the `"use client"` child's "Bump visits" button
-re-calls the backend from the browser over the wire.
+backend server-side) and the `"use client"` card's "Bump visits" button
+re-calls the backend from the browser through the `bumpVisits` server
+action. The UI is Tailwind with hand-copied shadcn-style components
+(`app/components/ui/`).
 
 ### The async leg
 
@@ -67,26 +79,29 @@ only serves HTTP, the consumer deploys automatically as a **sibling
 effect Lambda** (`Nextjs-Handlers`) from the same `app/backend.ts` module:
 the event-source mapping and its `sqs:ReceiveMessage` IAM target the
 sibling, while the site Lambda stays fetch-only. In the UI, "Send to
-queue" calls `enqueue` and then polls `processed()` until the count moves
-— making the queue → consumer → state catch-up visible.
+queue" (`app/queue-card.tsx`) calls the `enqueueJob` server action and
+then polls `getProcessed` until the count moves — making the queue →
+consumer → state catch-up visible.
 
 ## Mechanics
 
-Zero-setup: alchemy composes the effect dispatch into the OpenNext build
-automatically — a custom OpenNext `wrapper` override (generated under
-`.alchemy/generated/`, never in your project) runs `fetch` + `/api/__rpc`
-dispatch at the fetch layer and delegates the Lambda streaming wrap to
-OpenNext's stock wrapper. Under `alchemy dev`, an alchemy-owned dev server
-embeds Next (`next({ dev: true })`) with the same dispatch in front, so
-dev and deploy route identically. No mount file, no `open-next.config.ts`
-in your project (a derived one is generated; if you have your own it is
+Zero-setup: alchemy composes into the OpenNext build automatically — a
+custom OpenNext `wrapper` override (generated under
+`.alchemy/generated/`, never in your project) resolves the effect
+runtime at the fetch layer and delegates the Lambda streaming wrap to
+OpenNext's stock wrapper, so the server actions' value-form dispatch
+runs inside the same server Lambda. Under `alchemy dev`, an
+alchemy-owned dev server embeds Next (`next({ dev: true })`), so dev and
+deploy route identically. No mount file, no `open-next.config.ts` in
+your project (a derived one is generated; if you have your own it is
 imported and extended).
 
 - `app/api/hello/route.ts` is an ordinary app-router route handler —
-  Next's own routing and the effect dispatch coexist under `/api/*`.
+  Next's own routing is untouched under `/api/*`.
 - Everything under `public/` deploys as static assets.
-- Escape hatch: mounting `toRouteHandler` from `alchemy/Next` in a
-  catch-all route yourself makes the auto-injection stand down.
+- To expose a public HTTP API of your own (for untrusted clients),
+  define an effect `HttpApi` schema and mount it — e.g. via
+  `toRouteHandler` from `alchemy/Next` in a catch-all route.
 
 The integration packages must be installed in the project (the source
 provider is loaded dynamically at deploy time):
@@ -122,8 +137,9 @@ bun run dev
 
 Local dev is Next's own dev server (`next dev`, native HMR). The site
 itself creates no cloud resources in dev, but the DynamoDB table bound by
-the effect program is pinned `remote()` in `app/backend.ts`, so both
-`createClient` forms hit the real table with your ambient credentials.
+the effect program is pinned `remote()` in `app/backend.ts`, so the
+value-form dispatch (server components and server actions alike) hits
+the real table with your ambient credentials.
 
 The async leg runs in the local Lambda emulator in dev: the `Jobs` queue,
 its event-source mapping, and the consumer all deploy there together (a

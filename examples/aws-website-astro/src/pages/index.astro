@@ -3,13 +3,16 @@
 // loads the project's own config natively, so the utilities below compile.
 import "../styles/global.css";
 
-// SSR seam: VALUE import + `createClient(Backend)` — the backend method
-// dispatches directly in-process (no HTTP hop) inside the AWS Lambda on
-// every request (and in `astro dev` alike).
+// SSR seam: VALUE import + `createClient(Backend)` — the backend methods
+// dispatch directly in-process (no HTTP hop) inside the AWS Lambda on
+// every request (and in `astro dev` alike). Browser interactivity lives
+// in the React island, which talks to the same backend through Astro
+// Actions (src/actions/index.ts).
 import { createClient } from "alchemy/Client";
 import Backend from "../backend.ts";
+import VisitsCard from "../components/VisitsCard";
 
-const backend = createClient(Backend);
+const backend = createClient(Backend, { headers: Astro.request.headers });
 const visits = await backend.visits();
 const processed = await backend.processed();
 ---
@@ -20,85 +23,17 @@ const processed = await backend.processed();
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Astro on AWS</title>
   </head>
-  <body class="bg-slate-50 text-slate-900">
-    <main class="mx-auto max-w-2xl p-8">
-      <div class="rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
-        <h1 class="text-3xl font-bold">Astro on AWS</h1>
-        <p class="mt-4">
-          Server-rendered visits: <span id="visits" class="font-semibold">{visits}</span>
-        </p>
-        <button
-          id="bump"
-          class="mt-2 rounded border border-slate-300 px-3 py-1 hover:bg-slate-100"
-        >
-          Bump visits
-        </button>
-        <p id="client-bump" class="mt-2" hidden>
-          Client bump → <span id="bump-count" class="font-semibold"></span>
-        </p>
-        <div class="mt-6 border-t border-slate-200 pt-4">
-          <div class="flex gap-2">
-            <input
-              id="queue-input"
-              placeholder="hello queue"
-              class="rounded border border-slate-300 px-3 py-1"
-            />
-            <button
-              id="enqueue"
-              class="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100"
-            >
-              Send to queue
-            </button>
-          </div>
-          <p class="mt-2">
-            Queue-processed: <span id="processed-count" class="font-semibold"
-              >{processed.count}</span
-            > — last: <span id="processed-last" class="font-semibold"
-              >{processed.last ?? "—"}</span
-            >
-          </p>
-        </div>
-        <p class="mt-4">
-          <a href="/about/" class="underline">about (prerendered)</a>
-        </p>
-      </div>
+  <body class="bg-slate-50 p-8 text-slate-900">
+    <main class="mx-auto max-w-2xl">
+      <h1 class="text-3xl font-bold">Astro on AWS</h1>
+      <VisitsCard
+        client:load
+        initialVisits={visits}
+        initialProcessed={processed}
+      />
+      <p class="mt-6">
+        <a href="/about/" class="text-blue-600 underline">A prerendered page</a>
+      </p>
     </main>
-    <script>
-      // Browser side: TYPE-ONLY import + type-only form — zero backend
-      // bytes in the client bundle. Each call POSTs the wire protocol
-      // (`/api/__rpc/bump`) to the same Lambda.
-      import { createClient } from "alchemy/Client";
-      import type Backend from "../backend.ts";
-
-      const backend = createClient<typeof Backend>();
-      document.querySelector("#bump")!.addEventListener("click", async () => {
-        const count = await backend.bump();
-        document.querySelector("#bump-count")!.textContent = String(count);
-        document.querySelector<HTMLParagraphElement>("#client-bump")!.hidden =
-          false;
-      });
-
-      // The async leg: `enqueue` sends to SQS and returns immediately —
-      // the sibling consumer Lambda catches up out of band. Poll
-      // `processed()` (bounded) until the count moves so the catch-up is
-      // visible in the UI.
-      const countEl = document.querySelector("#processed-count")!;
-      const lastEl = document.querySelector("#processed-last")!;
-      document
-        .querySelector("#enqueue")!
-        .addEventListener("click", async () => {
-          const input =
-            document.querySelector<HTMLInputElement>("#queue-input")!;
-          const before = Number(countEl.textContent);
-          await backend.enqueue(input.value || "hello queue");
-          for (let i = 0; i < 15; i++) {
-            await new Promise((resolve) => setTimeout(resolve, 1000));
-            const processed = await backend.processed();
-            countEl.textContent = String(processed.count);
-            lastEl.textContent = processed.last ?? "—";
-            if (processed.count > before) break;
-          }
-        });
-    </script>
   </body>
 </html>

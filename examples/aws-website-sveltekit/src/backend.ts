@@ -1,8 +1,8 @@
 // The effectful site module: default-exports the Website class, anchored
 // by `main: import.meta.url`. The engine imports it at plan time (binding
 // collection — table-name env var + IAM onto the server Lambda) and the
-// deployed Lambda re-imports it inside the SvelteKit server bundle to
-// serve the backend's RPC methods.
+// deployed Lambda re-imports it inside the SvelteKit server bundle so
+// server code can dispatch the backend's methods in-process.
 //
 // Narrow subpath imports only (`alchemy/AWS/DynamoDB`, not `alchemy/AWS`):
 // this module is bundled into the framework server build and evaluated by
@@ -28,7 +28,7 @@ export const Visits = DynamoDB.Table("Visits", {
 
 /**
  * SQS queue for the async leg: the site's program both produces to it (the
- * `enqueue` RPC method) and CONSUMES it — the consumer deploys as a sibling
+ * `enqueue` method) and CONSUMES it — the consumer deploys as a sibling
  * effect Lambda from this same module, with the event-source mapping and
  * its IAM targeting the sibling (the framework-built site Lambda stays
  * fetch-only). Deliberately NOT `remote()`: under `alchemy dev` the queue,
@@ -43,11 +43,12 @@ export const Jobs = SQS.Queue("Jobs", {
 
 /**
  * One Lambda serves the SvelteKit app AND the Effect program's backend.
- * The program's RPC METHODS are the API surface: each method is callable
- * through `createClient` (`alchemy/Client`) — in-process from
- * `+page.server.ts` (the value form) and over the wire from the browser
- * (`POST /api/__rpc/<method>`, the type-only form) — in the deployed
- * Lambda and in `vite dev` alike.
+ * The program's methods are the API surface for TRUSTED callers:
+ * SvelteKit's own server code (`+page.server.ts` load + form actions,
+ * `+server.ts` routes) dispatches them in-process through
+ * `createClient(Backend)` — the value form — in the deployed Lambda and
+ * in `vite dev` alike. Those framework transports are what the browser
+ * talks to.
  */
 export default class Site extends SvelteKit<Site>()(
   "SvelteKitSite",
@@ -77,7 +78,7 @@ export default class Site extends SvelteKit<Site>()(
     // (`SvelteKitSite-Handlers`) with the event-source mapping targeting
     // it; at runtime the sibling dispatches each SQS batch here. Each
     // message bumps the `processed-count` item and records
-    // `processed-last` in DynamoDB, where the `processed` RPC method
+    // `processed-last` in DynamoDB, where the `processed` method
     // reads them back.
     yield* SQS.consumeQueueMessages(queue, (records) =>
       records.pipe(
@@ -118,11 +119,11 @@ export default class Site extends SvelteKit<Site>()(
           }).pipe(Effect.orDie);
           return count;
         }),
-      /** Send a message to the queue (RPC: POST /api/__rpc/enqueue). */
+      /** Send a message to the queue (behind the `enqueue` form action). */
       enqueue: Effect.fn(function* (message: string) {
           yield* sendMessage({ MessageBody: message }).pipe(Effect.orDie);
         }),
-      /** Read the consumer's async state (RPC: POST /api/__rpc/processed). */
+      /** Read the consumer's async state (served by GET /api/processed). */
       processed: Effect.fn(function* () {
           const count = yield* readItem("processed-count", "count");
           const last = yield* readItem("processed-last", "value");

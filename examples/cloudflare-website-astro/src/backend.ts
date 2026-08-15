@@ -27,11 +27,12 @@ export const Jobs = Queues.Queue("Jobs");
 /**
  * ONE Worker serves the Astro frontend AND a typed backend API: the third
  * argument is an Effect program (the same shape as `Cloudflare.Worker`)
- * whose RPC METHODS are the API surface. `createClient` calls them — over
- * `POST /api/__rpc/<method>` from the browser (type-only form) and by
- * direct in-process dispatch from server-rendered frontmatter (value
- * form). Capability bindings the program uses (the KV namespace here) are
- * collected automatically at plan time.
+ * whose RPC METHODS are the API surface for TRUSTED callers.
+ * `createClient(Backend)` (the value form) dispatches them in-process
+ * from server code — Astro frontmatter and Astro Action handlers; the
+ * browser only ever talks to the framework's own transport
+ * (`/_actions/*`). Capability bindings the program uses (the KV namespace
+ * here) are collected automatically at plan time.
  *
  * `main: import.meta.url` anchors this module — the engine imports it for
  * plan-time binding collection and the generated Worker entry re-imports it
@@ -85,9 +86,9 @@ export default class Site extends Astro<Site>()(
     );
 
     return {
-      // RPC methods — the KV-backed visit counter. Served to `createClient`
-      // at the universal `POST /api/__rpc/<method>` dispatch, and invoked
-      // directly (no HTTP) by the value form during SSR.
+      // RPC methods — the KV-backed visit counter. Invoked in-process by
+      // `createClient(Backend)` from Astro frontmatter (SSR) and from the
+      // Astro Action handlers in src/actions/index.ts.
       visits: Effect.fn(function* () {
           return Number((yield* visits.get("count")) ?? "0");
         }, Effect.orDie),
@@ -96,13 +97,14 @@ export default class Site extends Astro<Site>()(
           yield* visits.put("count", String(count));
           return count;
         }, Effect.orDie),
-      // The async leg's producer (RPC: POST /api/__rpc/enqueue) — sends a
-      // message to the queue; the consumer above catches up asynchronously.
+      // The async leg's producer (called by the `enqueue` action) — sends
+      // a message to the queue; the consumer above catches up
+      // asynchronously.
       enqueue: (message: string) =>
         jobs
           .send(message, { contentType: "text" })
           .pipe(Effect.asVoid, Effect.orDie),
-      // Read the consumer's async state (RPC: POST /api/__rpc/processed).
+      // Read the consumer's async state (called by the `processed` action).
       processed: Effect.fn(function* () {
           const count = yield* visits.get("processed-count");
           const last = yield* visits.get("processed-last");

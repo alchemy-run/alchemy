@@ -14,12 +14,18 @@ import Stack from "../alchemy.run.ts";
 // real response.
 const { executeWhenReady, getWhenReady } = Test;
 
-// One RPC wire call, exactly as `createClient`'s type-only form sends it:
-// `POST /api/__rpc/<method>` with a JSON array of positional args.
-const rpcWhenReady = (url: string, method: string, args: unknown[] = []) =>
+// The browser's transport is Astro Actions: `POST /_actions/<name>` with
+// a JSON input body — CloudFront forwards the manifest miss to the server
+// Lambda, where Astro's own pipeline runs the action handler. Successful
+// results come back devalue-encoded (`application/json+devalue`), a flat
+// array whose index 0 is the root.
+const action = (url: string, name: string, input?: unknown) =>
   executeWhenReady(
-    HttpClientRequest.post(`${url}/api/__rpc/${method}`).pipe(
-      HttpClientRequest.bodyText(JSON.stringify(args), "application/json"),
+    HttpClientRequest.post(`${url}/_actions/${name}`).pipe(
+      HttpClientRequest.bodyText(
+        JSON.stringify(input ?? {}),
+        "application/json",
+      ),
     ),
   );
 
@@ -38,7 +44,7 @@ const getBodyWhenReady = Effect.fn(function* (url: string, expected: string) {
       return yield* Effect.fail(new AssetNotReady({ body }));
     }
     return body;
-  }, 
+  },
     Effect.retry({
       while: (error) => error instanceof AssetNotReady,
       schedule: Schedule.max([
@@ -91,8 +97,9 @@ test(
     const html = yield* res.text;
     expect(html).toContain("Server-rendered visits:");
     // The frontmatter called `backend.visits()` in-process (the value form
-    // of createClient) — the rendered HTML carries the DynamoDB count.
-    const visits = html.match(/id="visits"[^>]*>(\d+)</);
+    // of createClient) — the server-rendered HTML of the React island
+    // carries the DynamoDB count.
+    const visits = html.match(/data-testid="count"[^>]*>(\d+)</);
     expect(visits).not.toBeNull();
     expect(Number(visits![1])).toBeGreaterThanOrEqual(0);
   }),
@@ -141,28 +148,27 @@ test(
 );
 
 test(
-  "serves the backend method over the rpc wire path",
+  "the bump action dispatches the backend method (Astro Actions)",
   Effect.gen(function* () {
     const url = yield* base;
-    // `POST /api/__rpc/bump` is the exact wire request the browser's
-    // type-only `createClient<typeof Backend>()` sends. The CloudFront
-    // edge router forwards the universal rpc claim to the server Lambda,
-    // and the DynamoDB capability bindings (env + IAM) were collected at
-    // plan time.
-    const res = yield* rpcWhenReady(url, "bump");
+    // The exact request the React island's `actions.bump()` sends: the
+    // action handler calls the backend's `bump()` in-process (the value
+    // form), and the DynamoDB capability bindings (env + IAM) were
+    // collected at plan time.
+    const res = yield* action(url, "bump");
     expect(res.status).toBe(200);
-    const body = (yield* res.json) as { value: number };
-    expect(body.value).toBeGreaterThanOrEqual(1);
+    const [count] = JSON.parse(yield* res.text) as [number];
+    expect(count).toBeGreaterThanOrEqual(1);
     // A second call increments — the method really runs per request.
-    const again = yield* rpcWhenReady(url, "bump");
-    const next = (yield* again.json) as { value: number };
-    expect(next.value).toBeGreaterThan(body.value);
+    const again = yield* action(url, "bump");
+    const [next] = JSON.parse(yield* again.text) as [number];
+    expect(next).toBeGreaterThan(count);
   }),
   { timeout: 180_000 },
 );
 
 test(
-  "queue round-trip: enqueue over rpc, the sibling consumer catches up",
+  "queue round-trip: enqueue action, the sibling consumer catches up",
   Effect.gen(function* () {
     const url = yield* base;
     // Each run sends a unique marker so the assertion can't match a
@@ -170,21 +176,25 @@ test(
     const marker = `queue-marker-${crypto.randomUUID()}`;
 
     const readProcessed = Effect.gen(function* () {
-      const res = yield* rpcWhenReady(url, "processed");
+      const res = yield* action(url, "processed");
       expect(res.status).toBe(200);
-      const body = (yield* res.json) as {
-        value: { count: number; last: string | null };
+      // Devalue-decode the `{ count, last }` object: index 0 holds the
+      // root's field → index mapping.
+      const arr = JSON.parse(yield* res.text) as unknown[];
+      const root = arr[0] as { count: number; last: number };
+      return {
+        count: arr[root.count] as number,
+        last: arr[root.last] as string | null,
       };
-      return body.value;
     });
     const before = yield* readProcessed;
 
-    // `POST /api/__rpc/enqueue` sends to SQS and returns immediately;
-    // the CONSUMER runs out of band on the sibling effect Lambda
-    // (`<site>-Handlers`), whose event-source mapping was registered by
-    // the same backend module.
-    const res = yield* rpcWhenReady(url, "enqueue", [marker]);
-    expect(res.status).toBe(200);
+    // The enqueue action sends to SQS and returns immediately (a void
+    // handler result answers 204); the CONSUMER runs out of band on the
+    // sibling effect Lambda (`<site>-Handlers`), whose event-source
+    // mapping was registered by the same backend module.
+    const res = yield* action(url, "enqueue", { message: marker });
+    expect(res.status).toBe(204);
 
     // Bounded poll until the sibling's write lands in DynamoDB.
     const processed = yield* readProcessed.pipe(

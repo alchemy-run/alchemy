@@ -10,9 +10,10 @@
  *   - SSR             → `/` renders through the framework dev server
  *   - routing         → `/about/` (prerendered route) serves
  *   - static assets   → `/robots.txt` from public/
- *   - RPC wire path   → `POST /api/__rpc/bump` (createClient's wire
- *                       protocol) serves through the dev server against
- *                       the real DynamoDB table
+ *   - Astro Actions   → `POST /_actions/bump` (the browser transport)
+ *                       serves through the dev server; the action handler
+ *                       calls the backend in-process against the real
+ *                       DynamoDB table
  *   - HOT RELOAD      → editing src/pages/index.astro is served by the
  *                       framework's HMR without a redeploy
  */
@@ -162,17 +163,18 @@ test(
     const robots = await (await fetchOk(new URL("/robots.txt", url))).text();
     expect(robots).toContain("User-agent:");
 
-    // The rpc wire path rides the dev server too: this is the exact
-    // request the browser's type-only createClient sends, served by the
-    // backend method against the REAL DynamoDB table (remote()).
-    const rpc = await fetch(new URL("/api/__rpc/bump", url), {
+    // Astro Actions ride the dev server too: this is the exact request
+    // the island's `actions.bump()` sends, and the handler calls the
+    // backend in-process against the REAL DynamoDB table (remote()).
+    // Successful results are devalue-encoded (index 0 is the root).
+    const rpc = await fetch(new URL("/_actions/bump", url), {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: "[]",
+      body: "{}",
     });
     expect(rpc.status).toBe(200);
-    const envelope = (await rpc.json()) as { value: number };
-    expect(envelope.value).toBeGreaterThanOrEqual(1);
+    const [count] = (await rpc.json()) as [number];
+    expect(count).toBeGreaterThanOrEqual(1);
 
     // ── HOT RELOAD: rewrite the index page with the CLI still running —
     // the framework dev server serves the new markup without a deploy ──

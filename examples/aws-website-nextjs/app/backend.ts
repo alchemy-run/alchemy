@@ -1,8 +1,8 @@
 // The effectful site module: default-exports the Website class, anchored
 // by `main: import.meta.url`. The engine imports it at plan time (binding
 // collection — table-name env var + IAM onto the server Lambda) and the
-// route-handler mount (app/api/[[...slug]]/route.ts) imports it inside the
-// OpenNext server bundle to serve the backend's RPC methods.
+// server actions in app/actions.ts import it inside the OpenNext server
+// bundle to dispatch the backend's RPC methods in-process.
 //
 // Narrow subpath imports only (`alchemy/AWS/DynamoDB`, not `alchemy/AWS`):
 // this module is compiled by Next into the server bundle — the provider
@@ -42,16 +42,13 @@ export const Jobs = SQS.Queue("Jobs", {
 
 /**
  * One Lambda serves the Next.js app AND the Effect program's backend. The
- * program's RPC METHODS are the API surface: each method is callable
- * through `createClient` (`alchemy/Client`) — in-process from server
- * components (the value form) and over the wire from client components
- * (`POST /api/__rpc/<method>`, the type-only form). On Next.js the wire
- * path mounts explicitly: the catch-all route handler at
- * `app/api/[[...slug]]/route.ts` (`toRouteHandler` from
- * `alchemy/Next`) is compiled by Next itself, so it runs in the
- * deployed OpenNext Lambda and under `next dev` alike. More-specific
- * routes like `app/api/hello/route.ts` keep winning over the catch-all —
- * Next's own routing is the fallback.
+ * program's RPC METHODS are the API surface for TRUSTED callers only —
+ * there is no public wire. `createClient(Backend)` (the value form of
+ * `alchemy/Client`) dispatches them in-process from server code: async
+ * server components and the server actions in app/actions.ts, which are
+ * Next's own transport for the browser. Both run inside the deployed
+ * OpenNext Lambda and under `next dev` alike; Next's own routing (e.g.
+ * `app/api/hello/route.ts`) is untouched.
  */
 export default class Site extends Nextjs<Site>()(
   "Nextjs",
@@ -135,11 +132,11 @@ export default class Site extends Nextjs<Site>()(
           }).pipe(Effect.orDie);
           return count;
         }),
-      /** Send a message to the queue (RPC: POST /api/__rpc/enqueue). */
+      /** Send a message to the queue (the `enqueueJob` server action). */
       enqueue: Effect.fn(function* (message: string) {
           yield* sendMessage({ MessageBody: message }).pipe(Effect.orDie);
         }),
-      /** Read the consumer's async state (RPC: POST /api/__rpc/processed). */
+      /** Read the consumer's async state (the `getProcessed` server action). */
       processed: Effect.fn(function* () {
           const count = yield* readItem("processed-count", "count");
           const last = yield* readItem("processed-last", "value");

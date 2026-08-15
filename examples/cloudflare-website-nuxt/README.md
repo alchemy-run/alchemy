@@ -5,95 +5,74 @@ Deploys a Nuxt app to Cloudflare Workers with `Cloudflare.Website.Nuxt` — no `
 ## The demo
 
 Every effectful website example is the same app: a visit counter in a KV
-namespace (`Visits`, key `count`) exposed by two RPC methods on the
-backend program — `visits()` reads the count and `bump()` increments it.
-The page server-renders `Server-rendered visits: {n}` and a "Bump visits"
-button calls `bump()` from the browser. Only the framework and cloud
+namespace (`Visits`, key `count`) exposed by two methods on the backend
+program — `visits()` reads the count and `bump()` increments it. The page
+server-renders `Server-rendered visits: {n}` and a "Bump visits" button
+bumps it (optimistically) from the browser. Only the framework and cloud
 mechanics vary between examples.
 
 - `server/backend.ts` declares the Website class with an Effect program as
-  its third argument: ONE Worker serves the Nuxt app and a typed backend
-  API. The program's RPC METHODS (`visits`, `bump`) are the API surface,
-  backed by the KV namespace through a typed capability binding —
-  collected automatically at plan time.
-- `app/pages/index.vue` is the UI: the `useAsyncData` server branch
-  server-renders the count and the button bumps it from the browser.
+  its third argument: ONE Worker serves the Nuxt app and a typed backend.
+  The program's METHODS (`visits`, `bump`, `enqueue`, `processed`) are the
+  API surface for trusted callers, backed by the KV namespace and queue
+  through typed capability bindings — collected automatically at plan time.
+- `server/api/*.ts` are ordinary nitro server routes — Nuxt's own
+  server-function story. They ARE the public API: each one value-imports
+  the backend and dispatches a method in-process via `createClient`.
+- `app/pages/index.vue` is the UI (shadcn-style components in
+  `app/components/ui/`): `useFetch("/api/visits")` server-renders the
+  count, and the buttons drive the same routes from the browser.
 
 ### The async leg
 
 The same backend class also carries the demo's async leg: a Cloudflare
-Queue (`Jobs`) produced to by the `enqueue(message)` RPC method and
-consumed ON THE SAME CLASS by `consumeQueueMessages` — each message bumps
+Queue (`Jobs`) produced to by the `enqueue(message)` method and consumed
+ON THE SAME CLASS by `consumeQueueMessages` — each message bumps
 `processed-count` and records `processed-last` in the `Visits` KV
 namespace, and `processed()` reads that state back. The entry takeover
 wraps the nitro artifact so the queue handler is delivered alongside
 `fetch` — no separate consumer worker. (Queue delivery is prod-only for
 Nuxt: `alchemy dev` serves the frontend, but consumed batches only flow
 in a real deploy.) The UI's queue section sends a message
-("Send to queue") and then polls `processed()` (bounded, once per second)
-until the count grows, so the asynchronous catch-up — queue → consumer →
-KV → UI — is visible in the `Queue-processed: {count} — last: {last}`
-line.
+("Send to queue") and then polls `GET /api/jobs` (bounded, once per
+second) until the count grows, so the asynchronous catch-up — queue →
+consumer → KV → UI — is visible in the
+`Queue-processed: {count} — last: {last}` line.
 
-## createClient — both forms
+## The public API is nitro routes; the backend is trusted-only
+
+Schema-less RPC never crosses a trust boundary: `createClient(Backend)`
+is the server-side VALUE form — direct in-process dispatch, no HTTP wire.
+Nuxt has a first-class server-function story (nitro server routes), so
+those routes are the public API and the backend methods are called only
+inside them:
 
 ```ts
-// app/pages/index.vue (browser): TYPE-ONLY form — POST
-// /api/__rpc/<method>, zero backend bytes in the client bundle
+// server/api/visits.post.ts — the public API surface
 import { createClient } from "alchemy/Client";
-import type Backend from "~~/server/backend";
-const backend = createClient<typeof Backend>();
-// await backend.bump()
-```
+import Backend from "../backend.ts";
 
-```ts
-// app/pages/index.vue (SSR): VALUE form — direct in-process dispatch
-// (compiled out of the client bundle by the import.meta.server guard)
-const { data: visits } = await useAsyncData("visits", async () => {
-  if (import.meta.server) {
-    const { default: Backend } = await import("~~/server/backend");
-    return createClient(Backend).visits();
-  }
-  return backend.visits();
+export default defineEventHandler(async (event) => {
+  const backend = createClient(Backend, { headers: event.headers });
+  return { count: await backend.bump() }; // direct dispatch — no HTTP
 });
 ```
 
-> KNOWN GAP (Cloudflare deploys): the value form currently errors inside
-> the deployed Worker's vue server graph (nuxt's vite-builder resolves the
-> alchemy/effect graph node-flavored; it breaks on workerd), so the SSR
-> branch yields `null` and the page catches up client-side through the
-> type-only form (`onMounted` in `app/pages/index.vue`). The gated test in
-> `test/integ.test.ts` documents the exact failure.
-
-## Mechanics: route ownership
-
-The program also keeps a `fetch` owning `server.routes`
-(`["/api/*", "!/api/hello"]`) to demonstrate route ownership: inside the
-claim the program is authoritative (even its 404s); the `!/api/hello`
-exclusion statically hands that path back to nitro, so the app's own
-`server/api/hello.ts` route keeps answering. (The RPC dispatch at
-`/api/__rpc/*` needs no claim — it is checked before `server.routes` on
-every effectful Website.)
+The browser only ever talks to the nitro routes:
 
 ```ts
-export default class Site extends Nuxt<Site>()(
-  "NuxtSite",
-  {
-    main: import.meta.url,
-    server: { routes: ["/api/*", "!/api/hello"] },
-  },
-  Effect.gen(function* () {
-    // ...
-    return {
-      fetch: HttpServerResponse.json(
-        { error: "unknown effect route" },
-        { status: 404 },
-      ),
-      // visits, bump ...
-    };
-  }).pipe(Effect.provide(KV.ReadWriteNamespaceBinding)),
-) {}
+// app/pages/index.vue
+const { data: visits } = await useFetch<{ count: number }>("/api/visits");
+// SSR: nitro runs the handler in-process inside the Worker; the value
+// hydrates into the client without a second request.
+
+await $fetch("/api/visits", { method: "POST" }); // the bump button
 ```
+
+Because the route handlers live in the nitro server graph (the same graph
+as the generated Worker entry), the value form dispatches in-process on
+workerd — the backend is never bundled into the vue client (or server)
+build.
 
 ## Notes
 
@@ -107,7 +86,7 @@ export default class Site extends Nuxt<Site>()(
 - Unchanged projects skip the build and deploy entirely (the project tree is content-hashed, respecting `.gitignore`).
 - In `alchemy dev`, `event.context.cloudflare` is served wrangler-free through cloudflare-runtime's platform proxy: resource bindings (KV, R2, D1, ...) resolve against a local workerd instance, and literal `env` values overlay them.
 - Nitro's `isr` route rule is Vercel/Netlify-only and silently ignored on Cloudflare — use `prerender` (as `/about` does here) or `cache` route rules instead.
-- `test/integ.test.ts` deploys the stack and asserts SSR, the RPC surface, the exclusion demo, the prerendered page, and static assets over HTTP.
+- `test/integ.test.ts` deploys the stack and asserts SSR (including the backend-rendered counter), the nitro API routes, the queue round-trip, the prerendered page, and static assets over HTTP.
 
 ## Commands
 

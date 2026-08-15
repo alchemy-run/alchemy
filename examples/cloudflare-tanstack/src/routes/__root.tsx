@@ -45,7 +45,7 @@ function Document(props: Readonly<{ children: ReactNode }>) {
       <head>
         <HeadContent />
       </head>
-      <body className="m-0 bg-slate-50 font-sans text-slate-900">
+      <body className="m-0 font-sans antialiased">
         {props.children}
         <Scripts />
       </body>

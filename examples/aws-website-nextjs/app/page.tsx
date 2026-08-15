@@ -1,33 +1,26 @@
-// SSR seam: VALUE import + `createClient(Backend)` — the backend method
-// dispatches directly in-process (no HTTP hop) inside the async server
-// component, in the deployed Lambda and under `next dev` alike.
 import { createClient } from "alchemy/Client";
-import Backend from "./backend.ts";
-import Queue from "./queue.tsx";
-import Visits from "./visits.tsx";
+import Backend from "./backend";
+import QueueCard from "./queue-card";
+import VisitsCard from "./visits-card";
 
-// Server-rendered in the Lambda on every request — a prerendered page
-// must not call the backend server-side.
+// Server-rendered in the Lambda on every request — the value form must
+// never run during prerender (there is no backend at build time).
 export const dynamic = "force-dynamic";
 
-const backend = createClient(Backend);
-
 export default async function Home() {
+  // The SSR seam: a VALUE import of the backend + `createClient(Backend)`
+  // dispatches the methods in-process inside the Lambda — no HTTP hop.
+  // Server components never ship to the browser; the client cards reach
+  // the same methods only through the server actions in app/actions.ts.
+  const backend = createClient(Backend);
   const visits = await backend.visits();
   const processed = await backend.processed();
+
   return (
     <main className="mx-auto max-w-2xl p-8">
-      <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
-        <h1 className="text-3xl font-bold">Next.js on AWS</h1>
-        <p className="mt-4">
-          Server-rendered visits:{" "}
-          <span id="visits" className="font-semibold">
-            {visits}
-          </span>
-        </p>
-        <Visits />
-        <Queue initial={processed} />
-      </div>
+      <h1 className="text-3xl font-bold">Next.js on AWS</h1>
+      <VisitsCard initial={visits} />
+      <QueueCard initial={processed} />
     </main>
   );
 }

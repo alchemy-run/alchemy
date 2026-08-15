@@ -5,7 +5,6 @@ import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import Stack from "../alchemy.run.ts";
 
@@ -13,6 +12,19 @@ import Stack from "../alchemy.run.ts";
 // `Test.getWhenReady` fails on that cold-start window and retries until the
 // worker serves a real response.
 const { executeWhenReady, getWhenReady } = Test;
+
+// One request against the public API — the nitro server routes in
+// server/api/, which dispatch the backend in-process (createClient's value
+// form). This is the exact request the browser sends.
+const postJsonWhenReady = (url: string, body?: unknown) =>
+  executeWhenReady(
+    HttpClientRequest.post(url).pipe(
+      HttpClientRequest.bodyText(
+        JSON.stringify(body ?? {}),
+        "application/json",
+      ),
+    ),
+  );
 
 class AssetNotReady extends Data.TaggedError("AssetNotReady")<{
   body: string;
@@ -29,7 +41,7 @@ const getBodyWhenReady = Effect.fn(function* (url: string, expected: string) {
       return yield* Effect.fail(new AssetNotReady({ body }));
     }
     return body;
-  }, 
+  },
     Effect.retry({
       while: (error) => error instanceof AssetNotReady,
       schedule: Schedule.max([
@@ -83,22 +95,14 @@ test(
   { timeout: 180_000 },
 );
 
-// KNOWN GAP: the value form (direct in-process dispatch) currently fails
-// inside the deployed Worker's VUE SERVER graph — nuxt's vite-builder
-// resolves the alchemy/effect graph node-flavored, and it breaks on
-// workerd ("r.once is not a function", surfaced as a NuxtError in the
-// payload), so useAsyncData's server branch yields null and the count is
-// not server-rendered. The page catches up client-side via the type-only
-// form (not assertable over plain HTTP). Ungate once the entry's
-// prebundled effect module is shared with the vue server graph.
-test.skipIf(!process.env.CLOUDFLARE_NUXT_SSR_VALUE_FORM)(
-  "server-renders the backend value into the home page (value form)",
+test(
+  "server-renders the backend value into the home page",
   Effect.gen(function* () {
     const url = yield* base;
-    // app/pages/index.vue calls `backend.visits()` in its useAsyncData
-    // server branch through the VALUE form of createClient (direct
-    // in-process dispatch) — the KV-backed count is already in the
-    // server-rendered HTML.
+    // app/pages/index.vue useFetches /api/visits during SSR — nitro runs
+    // the route handler in-process inside the Worker (the nitro server
+    // graph, where the value form dispatches directly), so the KV-backed
+    // count is already in the server-rendered HTML.
     const res = yield* getWhenReady(url);
     expect(res.status).toBe(200);
     const html = yield* res.text;
@@ -110,41 +114,35 @@ test.skipIf(!process.env.CLOUDFLARE_NUXT_SSR_VALUE_FORM)(
 );
 
 test(
-  "the exclusion glob hands /api/hello back to nitro",
+  "nitro serves its own api routes in the same Worker",
   Effect.gen(function* () {
     const url = yield* base;
-    // server/backend.ts claims ["/api/*", "!/api/hello"] — exclusions win,
-    // so nitro's own route answers /api/hello...
+    // /api/hello touches no backend — plain nitro, same Worker.
     const body = yield* getBodyWhenReady(`${url}/api/hello`, "from nitro");
     expect(JSON.parse(body)).toEqual({ hello: "from nitro" });
 
-    // ...while every other /api/* path is answered by the program (even
-    // its 404s — never nitro).
-    const client = yield* HttpClient.HttpClient;
-    const owned = yield* client.get(`${url}/api/anything-else`);
-    expect(owned.status).toBe(404);
-    expect(yield* owned.json).toEqual({ error: "unknown effect route" });
+    // /api/visits dispatches the backend method in-process and answers
+    // with the KV-backed count.
+    const visits = yield* getWhenReady(`${url}/api/visits`);
+    expect(visits.status).toBe(200);
+    const value = (yield* visits.json) as { count: number };
+    expect(value.count).toBeGreaterThanOrEqual(0);
   }),
   { timeout: 180_000 },
 );
 
 test(
-  "serves the createClient wire protocol (POST /api/__rpc/bump)",
+  "bumps the counter through the nitro route (POST /api/visits)",
   Effect.gen(function* () {
     const url = yield* base;
-    // The wire-level proof of the browser's type-only form: the universal
-    // `POST /api/__rpc/<method>` dispatch (checked before `server.routes`)
-    // envelope-encodes the RPC method result — backed by the KV binding
-    // collected at plan time.
+    // The exact request the "Bump visits" button sends. The route handler
+    // value-imports the backend and calls `bump()` in-process — backed by
+    // the KV binding collected at plan time.
     const bump = Effect.gen(function* () {
-      const res = yield* executeWhenReady(
-        HttpClientRequest.post(`${url}/api/__rpc/bump`).pipe(
-          HttpClientRequest.bodyText("[]", "application/json"),
-        ),
-      );
+      const res = yield* postJsonWhenReady(`${url}/api/visits`);
       expect(res.status).toBe(200);
-      const body = (yield* res.json) as { value: number };
-      return body.value;
+      const body = (yield* res.json) as { count: number };
+      return body.count;
     });
     const first = yield* bump;
     expect(first).toBeGreaterThanOrEqual(1);
@@ -163,33 +161,21 @@ test(
     const marker = `queue-marker-${crypto.randomUUID()}`;
 
     const readProcessed = Effect.gen(function* () {
-      const res = yield* executeWhenReady(
-        HttpClientRequest.post(`${url}/api/__rpc/processed`).pipe(
-          HttpClientRequest.bodyText("[]", "application/json"),
-        ),
-      );
+      const res = yield* getWhenReady(`${url}/api/jobs`);
       expect(res.status).toBe(200);
-      const body = (yield* res.json) as {
-        value: { count: number; last: string | null };
-      };
-      return body.value;
+      return (yield* res.json) as { count: number; last: string | null };
     });
 
     // Baseline first — a rerun against a kept deployment (NO_DESTROY) may
     // already have processed messages.
     const before = yield* readProcessed;
 
-    // Produce through the RPC surface (the entry takeover delivers the
+    // Produce through the nitro route (the entry takeover delivers the
     // queue handler alongside fetch); the consumer registered on the SAME
     // class catches up asynchronously.
-    const sent = yield* executeWhenReady(
-      HttpClientRequest.post(`${url}/api/__rpc/enqueue`).pipe(
-        HttpClientRequest.bodyText(
-          JSON.stringify([marker]),
-          "application/json",
-        ),
-      ),
-    );
+    const sent = yield* postJsonWhenReady(`${url}/api/jobs`, {
+      message: marker,
+    });
     expect(sent.status).toBe(200);
 
     // Poll until the consumer's KV writes are observed.

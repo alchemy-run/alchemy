@@ -28,7 +28,7 @@ const getBodyWhenReady = Effect.fn(function* (url: string, expected: string) {
       return yield* Effect.fail(new AssetNotReady({ body }));
     }
     return body;
-  }, 
+  },
     Effect.retry({
       while: (error) => error instanceof AssetNotReady,
       schedule: Schedule.max([
@@ -39,6 +39,20 @@ const getBodyWhenReady = Effect.fn(function* (url: string, expected: string) {
         Schedule.recurs(20),
       ]),
     }),
+  );
+
+// One SvelteKit form-action POST, exactly as `use:enhance` submits it:
+// urlencoded body, `x-sveltekit-action` for a JSON ActionResult, and a
+// matching `origin` for kit's CSRF check.
+const actionWhenReady = (url: string, action: string, body = "") =>
+  executeWhenReady(
+    HttpClientRequest.post(`${url}/?/${action}`).pipe(
+      HttpClientRequest.setHeaders({
+        origin: new URL(url).origin,
+        "x-sveltekit-action": "true",
+      }),
+      HttpClientRequest.bodyText(body, "application/x-www-form-urlencoded"),
+    ),
   );
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -58,6 +72,19 @@ const base = Effect.map(stack, ({ url }) => {
   if (!url) throw new Error("expected the site to expose a workers.dev url");
   return url.replace(/\/+$/, "");
 });
+
+// Read the server-rendered visits count out of the home page HTML. Svelte 5
+// SSR may emit hydration comment anchors around the text, so match the first
+// digits after the element opening tag.
+const readCount = (url: string) =>
+  Effect.gen(function* () {
+    const res = yield* getWhenReady(url);
+    expect(res.status).toBe(200);
+    const html = yield* res.text;
+    const count = html.match(/data-testid="count"[^>]*>(?:<!---->)?\s*(\d+)/);
+    expect(count).not.toBeNull();
+    return Number(count![1]);
+  });
 
 test(
   "deploys and exposes a url",
@@ -80,11 +107,8 @@ test(
     const html = yield* res.text;
     expect(html).toContain("SvelteKit on Cloudflare Workers");
     expect(html).toContain("Server-rendered visits:");
-    // Svelte 5 SSR may emit hydration comment anchors around the text, so
-    // match the first digits after the element opening tag.
-    const count = html.match(/data-testid="count"[^>]*>(?:<!---->)?\s*(\d+)/);
-    expect(count).not.toBeNull();
-    expect(Number(count![1])).toBeGreaterThanOrEqual(0);
+    const count = yield* readCount(url);
+    expect(count).toBeGreaterThanOrEqual(0);
     // The queue section's initial state is server-rendered the same way
     // (the value form calls `backend.processed()` in +page.server.ts).
     expect(html).toContain("Queue-processed:");
@@ -93,64 +117,54 @@ test(
 );
 
 test(
-  "serves the createClient wire protocol (POST /api/__rpc/bump)",
+  "the bump form action is the public write surface",
   Effect.gen(function* () {
     const url = yield* base;
-    // The wire-level proof of the browser's type-only form: the universal
-    // `POST /api/__rpc/<method>` dispatch envelope-encodes the RPC method
-    // result — backed by the KV binding collected at plan time.
-    const bump = Effect.gen(function* () {
-      const res = yield* executeWhenReady(
-        HttpClientRequest.post(`${url}/api/__rpc/bump`).pipe(
-          HttpClientRequest.bodyText("[]", "application/json"),
-        ),
-      );
-      expect(res.status).toBe(200);
-      const body = (yield* res.json) as { value: number };
-      return body.value;
-    });
-    const first = yield* bump;
-    expect(first).toBeGreaterThanOrEqual(1);
-    // A second bump observes the first write — the counter persists in KV
-    // rather than answering a constant.
-    const second = yield* bump;
-    expect(second).toBeGreaterThanOrEqual(first + 1);
+    const before = yield* readCount(url);
+    // POST `/?/bump` is the exact request `use:enhance` sends — the action
+    // calls `backend.bump()` in-process (value form) inside the Worker.
+    const res = yield* actionWhenReady(url, "bump");
+    expect(res.status).toBe(200);
+    const result = (yield* res.json) as { type: string };
+    expect(result.type).toBe("success");
+    // The write landed in KV: the server-rendered count reflects it (KV
+    // reads can lag a moment, so poll).
+    const after = yield* readCount(url).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("2 seconds"),
+        until: (count) => count > before,
+        times: 15,
+      }),
+    );
+    expect(after).toBeGreaterThan(before);
   }),
   { timeout: 180_000 },
 );
 
 test(
-  "queue leg: enqueue → consumer on the same class → processed",
+  "queue leg: enqueue action → consumer on the same class → /api/processed",
   Effect.gen(function* () {
     const url = yield* base;
     const marker = `queue-marker-${crypto.randomUUID()}`;
 
+    // The JSON route the page polls — a plain framework API route backed
+    // by the value-form client.
     const readProcessed = Effect.gen(function* () {
-      const res = yield* executeWhenReady(
-        HttpClientRequest.post(`${url}/api/__rpc/processed`).pipe(
-          HttpClientRequest.bodyText("[]", "application/json"),
-        ),
-      );
+      const res = yield* getWhenReady(`${url}/api/processed`);
       expect(res.status).toBe(200);
-      const body = (yield* res.json) as {
-        value: { count: number; last: string | null };
-      };
-      return body.value;
+      return (yield* res.json) as { count: number; last: string | null };
     });
 
     // Baseline first — a rerun against a kept deployment (NO_DESTROY) may
     // already have processed messages.
     const before = yield* readProcessed;
 
-    // Produce through the RPC surface; the queue consumer registered on
-    // the SAME class catches up asynchronously.
-    const sent = yield* executeWhenReady(
-      HttpClientRequest.post(`${url}/api/__rpc/enqueue`).pipe(
-        HttpClientRequest.bodyText(
-          JSON.stringify([marker]),
-          "application/json",
-        ),
-      ),
+    // Produce through the enqueue form action; the queue consumer
+    // registered on the SAME class catches up asynchronously.
+    const sent = yield* actionWhenReady(
+      url,
+      "enqueue",
+      `message=${encodeURIComponent(marker)}`,
     );
     expect(sent.status).toBe(200);
 

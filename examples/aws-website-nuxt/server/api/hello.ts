@@ -1,5 +1,5 @@
-// An ordinary nitro API route — the alchemy middleware declines non-rpc
-// paths, so nitro itself serves this in the same Lambda.
+// An ordinary nitro API route with no backend involvement — nitro serves
+// it in the same Lambda, alongside the routes that dispatch the backend.
 export default defineEventHandler(() => {
   return { hello: "from nitro" };
 });

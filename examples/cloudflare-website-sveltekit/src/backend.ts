@@ -18,20 +18,21 @@ export const Visits = KV.Namespace("Visits");
 
 /**
  * Queue bound by the site's Effect program — the async leg. The program
- * both produces to it (the `enqueue` RPC method) and CONSUMES it on the
+ * both produces to it (the `enqueue` method) and CONSUMES it on the
  * SAME class via `consumeQueueMessages`; the generated Worker shim
  * delivers the queue handler alongside `fetch`.
  */
 export const Jobs = Queues.Queue("Jobs");
 
 /**
- * ONE Worker serves the SvelteKit app AND a typed backend API: the third
+ * ONE Worker serves the SvelteKit app AND a typed backend: the third
  * argument is an Effect program (the same shape as `Cloudflare.Worker`)
- * whose RPC METHODS are the API surface. `createClient` calls them — over
- * `POST /api/__rpc/<method>` from the browser (type-only form) and by
- * direct in-process dispatch from `+page.server.ts` load functions (value
- * form). Capability bindings the program uses (the KV namespace here) are
- * collected automatically at plan time.
+ * whose methods are the API surface for TRUSTED callers. SvelteKit's own
+ * server code (`+page.server.ts` load + form actions, `+server.ts` routes)
+ * calls them in-process through `createClient(Backend)` — the value form —
+ * and those framework transports are what the browser talks to. Capability
+ * bindings the program uses (the KV namespace here) are collected
+ * automatically at plan time.
  *
  * `main: import.meta.url` anchors this module — the engine imports it for
  * plan-time binding collection and the generated Worker shim re-imports it
@@ -53,7 +54,7 @@ export default class Site extends SvelteKit<Site>()(
     // plan time this yields the `Cloudflare.Queues.Consumer` resource; at
     // runtime queue batches dispatch to it. Each message bumps
     // `processed-count` and records `processed-last` in KV, where the
-    // `processed` RPC method reads them back.
+    // `processed` method reads them back.
     yield* Queues.consumeQueueMessages<string>(
       jobsQueue,
       {
@@ -74,9 +75,8 @@ export default class Site extends SvelteKit<Site>()(
     );
 
     return {
-      // RPC methods — the KV-backed visit counter. Served to `createClient`
-      // at the universal `POST /api/__rpc/<method>` dispatch, and invoked
-      // directly (no HTTP) by the value form during SSR.
+      // Backend methods — the KV-backed visit counter. Invoked directly
+      // (no HTTP) by the value form from load and the `bump` form action.
       visits: Effect.fn(function* () {
           return Number((yield* visits.get("count")) ?? "0");
         }, Effect.orDie),
@@ -85,13 +85,14 @@ export default class Site extends SvelteKit<Site>()(
           yield* visits.put("count", String(count));
           return count;
         }, Effect.orDie),
-      // The async leg's producer (RPC: POST /api/__rpc/enqueue) — sends a
-      // message to the queue; the consumer above catches up asynchronously.
+      // The async leg's producer (behind the `enqueue` form action) —
+      // sends a message to the queue; the consumer above catches up
+      // asynchronously.
       enqueue: (message: string) =>
         jobs
           .send(message, { contentType: "text" })
           .pipe(Effect.asVoid, Effect.orDie),
-      // Read the consumer's async state (RPC: POST /api/__rpc/processed).
+      // Read the consumer's async state (served by GET /api/processed).
       processed: Effect.fn(function* () {
           const count = yield* visits.get("processed-count");
           const last = yield* visits.get("processed-last");

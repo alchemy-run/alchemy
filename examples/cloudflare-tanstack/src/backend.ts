@@ -26,12 +26,13 @@ export const Visits = KV.Namespace("Visits");
 export const Jobs = Queues.Queue("Jobs");
 
 /**
- * ONE Worker serves the TanStack Start app AND a typed backend API: the
- * third argument is an Effect program (the same shape as
- * `Cloudflare.Worker`) whose RPC METHODS are the API surface. `createClient`
- * calls them — over `POST /api/__rpc/<method>` from the browser (type-only
- * form) and by direct in-process dispatch from SSR loaders (value form).
- * No routes, no URL parsing, no envelope handling: just typed methods.
+ * ONE Worker serves the TanStack Start app AND a typed backend: the third
+ * argument is an Effect program (the same shape as `Cloudflare.Worker`)
+ * whose RPC METHODS are the API surface for TRUSTED callers.
+ * `createClient(Backend)` dispatches them directly in-process from the
+ * TanStack server functions in src/server/visits.ts — the browser only
+ * ever talks to those server functions over Start's own transport. No
+ * routes, no URL parsing, no envelope handling: just typed methods.
  *
  * The KV capability the program uses is collected automatically at plan
  * time — no separate backend worker, service binding, proxy route, or env
@@ -81,9 +82,9 @@ export default class Site extends Website.Vite<Site>()(
     );
 
     return {
-      // RPC methods — the KV-backed visit counter. Served to `createClient`
-      // at the universal `POST /api/__rpc/<method>` dispatch, and invoked
-      // directly (no HTTP) by the value form during SSR.
+      // RPC methods — the KV-backed visit counter. Invoked directly (no
+      // HTTP) by the value-form client inside server functions and SSR
+      // loaders.
       visits: Effect.fn(function* () {
           return Number((yield* visits.get("count")) ?? "0");
         }, Effect.orDie),
@@ -92,13 +93,13 @@ export default class Site extends Website.Vite<Site>()(
           yield* visits.put("count", String(count));
           return count;
         }, Effect.orDie),
-      // The async leg's producer (RPC: POST /api/__rpc/enqueue) — sends a
-      // message to the queue; the consumer above catches up asynchronously.
+      // The async leg's producer — sends a message to the queue; the
+      // consumer above catches up asynchronously.
       enqueue: (message: string) =>
         jobs
           .send(message, { contentType: "text" })
           .pipe(Effect.asVoid, Effect.orDie),
-      // Read the consumer's async state (RPC: POST /api/__rpc/processed).
+      // Read the consumer's async state.
       processed: Effect.fn(function* () {
           const count = yield* visits.get("processed-count");
           const last = yield* visits.get("processed-last");

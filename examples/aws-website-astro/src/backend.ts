@@ -43,11 +43,12 @@ export const Jobs = SQS.Queue("Jobs", {
 
 /**
  * One Lambda serves the Astro frontend AND the Effect program's backend.
- * The program's RPC METHODS are the API surface: each method is callable
- * through `createClient` (`alchemy/Client`) — in-process from Astro
- * frontmatter (the value form) and over the wire from the browser
- * (`POST /api/__rpc/<method>`, the type-only form) — in the deployed
- * Lambda and in `astro dev` alike.
+ * The program's RPC METHODS are the API surface for TRUSTED callers:
+ * `createClient(Backend)` (`alchemy/Client`, the value form) dispatches
+ * them in-process from server code — Astro frontmatter and the Astro
+ * Action handlers in src/actions/index.ts — in the deployed Lambda and
+ * in `astro dev` alike. The browser only ever talks to the framework's
+ * own transport (`/_actions/*`).
  */
 export default class Site extends Astro<Site>()(
   "Astro",
@@ -128,11 +129,11 @@ export default class Site extends Astro<Site>()(
           }).pipe(Effect.orDie);
           return count;
         }),
-      /** Send a message to the queue (RPC: POST /api/__rpc/enqueue). */
+      /** Send a message to the queue (called by the `enqueue` action). */
       enqueue: Effect.fn(function* (message: string) {
           yield* sendMessage({ MessageBody: message }).pipe(Effect.orDie);
         }),
-      /** Read the consumer's async state (RPC: POST /api/__rpc/processed). */
+      /** Read the consumer's async state (called by the `processed` action). */
       processed: Effect.fn(function* () {
           const count = yield* readItem("processed-count", "count");
           const last = yield* readItem("processed-last", "value");

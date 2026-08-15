@@ -10,10 +10,10 @@
  *   - SSR             → `/` renders through the framework dev server
  *   - routing         → `/about` (prerendered route) serves
  *   - API route       → `/api/hello` serves the nitro handler
- *   - RPC wire path   → `POST /api/__rpc/bump` (createClient's wire
- *                       protocol) serves through the injected middleware
- *                       against the real DynamoDB table, and the
- *                       useAsyncData SSR seam renders the counter
+ *   - backend route   → `POST /api/visits` (the nitro route dispatching
+ *                       the backend in-process via createClient) serves
+ *                       against the real DynamoDB table, and the useFetch
+ *                       SSR seam renders the counter
  *   - static assets   → `/robots.txt` from public/
  *   - HOT RELOAD      → editing app/pages/index.vue is served by Nuxt's
  *                       HMR without a redeploy
@@ -168,22 +168,19 @@ test(
     const robots = await (await fetchOk(new URL("/robots.txt", url))).text();
     expect(robots).toContain("User-agent:");
 
-    // The rpc wire path rides the nitro dev worker too (through the
-    // injected alchemy middleware — no mount file): this is the exact
-    // request the browser's
-    // type-only createClient sends, served by the backend method against
-    // the REAL DynamoDB table (remote()).
-    const rpc = await fetch(new URL("/api/__rpc/bump", url), {
+    // The backend routes ride the nitro dev worker too: this is the
+    // exact request the "Bump visits" button sends, and the route handler
+    // dispatches the backend method in-process (createClient's value
+    // form) against the REAL DynamoDB table (remote()).
+    const bump = await fetch(new URL("/api/visits", url), {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: "[]",
     });
-    expect(rpc.status).toBe(200);
-    const envelope = (await rpc.json()) as { value: number };
-    expect(envelope.value).toBeGreaterThanOrEqual(1);
+    expect(bump.status).toBe(200);
+    const bumped = (await bump.json()) as { count: number };
+    expect(bumped.count).toBeGreaterThanOrEqual(1);
 
-    // ...and the SSR seam (useAsyncData, the value form) renders the
-    // counter into the page.
+    // ...and the SSR seam (useFetch running the same handler in-process)
+    // renders the counter into the page.
     const ssr = await (await fetchOk(url)).text();
     expect(ssr).toContain("Server-rendered visits:");
 

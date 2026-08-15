@@ -14,12 +14,50 @@ import Stack from "../alchemy.run.ts";
 // real response.
 const { executeWhenReady, getWhenReady } = Test;
 
-// One RPC wire call, exactly as `createClient`'s type-only form sends it:
-// `POST /api/__rpc/<method>` with a JSON array of positional args.
-const rpcWhenReady = (url: string, method: string, args: unknown[] = []) =>
+// Discover the production ids of named server actions: the page's client
+// chunks carry `createServerReference("<id>", …, "<exportedName>")` for
+// every action the client components import from app/actions.ts.
+const findActionIds = Effect.fn(function* (base: string, names: string[]) {
+  const page = yield* getWhenReady(base);
+  const html = yield* page.text;
+  const chunks = [
+    ...new Set(
+      [...html.matchAll(/(?:\/_next\/)?static\/chunks\/[\w.[\]%-]+\.js/g)].map(
+        (m) => (m[0].startsWith("/_next/") ? m[0] : `/_next/${m[0]}`),
+      ),
+    ),
+  ];
+  const ids: Record<string, string> = {};
+  for (const chunk of chunks) {
+    const res = yield* getWhenReady(`${base}${chunk}`);
+    const js = yield* res.text;
+    for (const match of js.matchAll(
+      /createServerReference\)?\("([0-9a-f]{40,})"[^)]*?"(\w+)"\)/g,
+    )) {
+      ids[match[2]!] = match[1]!;
+    }
+  }
+  for (const name of names) {
+    if (!ids[name]) throw new Error(`no server action id found for ${name}`);
+  }
+  return ids;
+});
+
+// One server-action call, exactly as Next's client runtime sends it:
+// POST to the page with the `Next-Action` header and a JSON array of
+// positional args (the `origin` header satisfies Next's CSRF check).
+const callAction = (base: string, id: string, args: unknown[] = []) =>
   executeWhenReady(
-    HttpClientRequest.post(`${url}/api/__rpc/${method}`).pipe(
-      HttpClientRequest.bodyText(JSON.stringify(args), "application/json"),
+    HttpClientRequest.post(`${base}/`).pipe(
+      HttpClientRequest.setHeaders({
+        "next-action": id,
+        origin: base,
+        accept: "text/x-component",
+      }),
+      HttpClientRequest.bodyText(
+        JSON.stringify(args),
+        "text/plain;charset=UTF-8",
+      ),
     ),
   );
 
@@ -140,66 +178,71 @@ test.skipIf(lambdaRoutesBroken)(
   { timeout: 180_000 },
 );
 
+// The DynamoDB-backed count as the SSR page renders it (the value form
+// of createClient in app/page.tsx).
+const readCount = (url: string) =>
+  Effect.gen(function* () {
+    const res = yield* getWhenReady(url);
+    const html = yield* res.text;
+    const match = html.match(/data-testid="count"[^>]*>(\d+)/);
+    expect(match).not.toBeNull();
+    return Number(match![1]);
+  });
+
 test.skipIf(lambdaRoutesBroken)(
-  "serves the backend methods over the rpc wire path",
+  "bumps the counter through the server-action transport",
   Effect.gen(function* () {
     const url = yield* base;
-    // `POST /api/__rpc/bump` is the exact wire request the browser's
-    // type-only `createClient<typeof Backend>()` sends. It rides through
-    // the zero-setup wrapper override (no mount file in this project)
-    // (toRouteHandler dispatches the rpc path before route matching),
-    // compiled by Next into the same server Lambda. The DynamoDB
-    // capability bindings (env + IAM) were collected at plan time.
-    const res = yield* rpcWhenReady(url, "bump");
+    // The browser's path to the backend: app/visits-card.tsx calls the
+    // `bumpVisits` server action, which dispatches `backend.bump()`
+    // in-process via the value form — compiled by Next into the same
+    // server Lambda. The DynamoDB capability bindings (env + IAM) were
+    // collected at plan time. Drive the exact wire Next's client runtime
+    // uses — the action id discovered from the client chunks.
+    const ids = yield* findActionIds(url, ["bumpVisits"]);
+    const before = yield* readCount(url);
+    const res = yield* callAction(url, ids.bumpVisits!);
     expect(res.status).toBe(200);
-    const body = (yield* res.json) as { value: number };
-    expect(body.value).toBeGreaterThanOrEqual(1);
-    // A second call increments — the method really runs per request.
-    const again = yield* rpcWhenReady(url, "bump");
-    const next = (yield* again.json) as { value: number };
-    expect(next.value).toBeGreaterThan(body.value);
+    // The write persisted in DynamoDB — the server-rendered count
+    // observes it.
+    const after = yield* readCount(url).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("1 second"),
+        until: (count) => count > before,
+        times: 15,
+      }),
+    );
+    expect(after).toBeGreaterThan(before);
   }),
   { timeout: 180_000 },
 );
 
 test.skipIf(lambdaRoutesBroken)(
-  "SSR renders the backend value loaded in-process by the server component",
-  Effect.gen(function* () {
-    const url = yield* base;
-    // The previous test bumped through the wire; the async server
-    // component reads the same DynamoDB counter with the VALUE form of
-    // createClient (direct in-process dispatch) and renders it.
-    const html = yield* getBodyWhenReady(url, "Server-rendered visits:");
-    const visits = html.match(/Server-rendered visits:[\s\S]{0,200}?(\d+)/);
-    expect(visits).not.toBeNull();
-    expect(Number(visits![1])).toBeGreaterThanOrEqual(2);
-  }),
-  { timeout: 180_000 },
-);
-
-test.skipIf(lambdaRoutesBroken)(
-  "queue round-trip: enqueue over rpc, the sibling consumer catches up",
+  "queue round-trip: enqueue via server action, the sibling consumer catches up",
   Effect.gen(function* () {
     const url = yield* base;
     // Each run sends a unique marker so the assertion can't match a
     // message from an earlier run.
     const marker = `queue-marker-${crypto.randomUUID()}`;
 
+    // The consumer's state as the SSR page renders it (the value form
+    // calls `backend.processed()` in app/page.tsx).
     const readProcessed = Effect.gen(function* () {
-      const res = yield* rpcWhenReady(url, "processed");
-      expect(res.status).toBe(200);
-      const body = (yield* res.json) as {
-        value: { count: number; last: string | null };
-      };
-      return body.value;
+      const res = yield* getWhenReady(url);
+      const html = yield* res.text;
+      const count = html.match(/data-testid="processed-count"[^>]*>(\d+)/);
+      const last = html.match(/data-testid="processed-last"[^>]*>([^<]*)</);
+      expect(count).not.toBeNull();
+      return { count: Number(count![1]), last: last?.[1] ?? null };
     });
     const before = yield* readProcessed;
 
-    // `POST /api/__rpc/enqueue` sends to SQS and returns immediately;
-    // the CONSUMER runs out of band on the sibling effect Lambda
-    // (`<site>-Handlers`), whose event-source mapping was registered by
-    // the same backend module.
-    const res = yield* rpcWhenReady(url, "enqueue", [marker]);
+    // The `enqueueJob` server action sends to SQS and returns
+    // immediately; the CONSUMER runs out of band on the sibling effect
+    // Lambda (`<site>-Handlers`), whose event-source mapping was
+    // registered by the same backend module.
+    const ids = yield* findActionIds(url, ["enqueueJob"]);
+    const res = yield* callAction(url, ids.enqueueJob!, [marker]);
     expect(res.status).toBe(200);
 
     // Bounded poll until the sibling's write lands in DynamoDB.

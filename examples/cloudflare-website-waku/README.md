@@ -15,6 +15,15 @@ const site = yield* Cloudflare.Website.Waku("WakuSite", {
 });
 ```
 
+## The app
+
+A minimal Waku site — a framework showcase, not a backend demo (no bindings beyond `env`):
+
+- `src/pages/index.tsx` — dynamic RSC page, rendered by the Worker on every request; reads `GREETING` via `getEnv`
+- `src/pages/about.tsx` — static page, prerendered at build time and served from assets
+- `src/components/Counter.tsx` — a `"use client"` island hydrated into the server-rendered page
+- `src/components/ui/` — hand-copied shadcn-style components (`button.tsx`, `card.tsx` + the `cn` util) styled with Tailwind CSS v4
+
 ## Commands
 
 ```sh

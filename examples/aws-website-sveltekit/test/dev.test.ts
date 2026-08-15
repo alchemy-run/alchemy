@@ -11,10 +11,11 @@
  *                       (read via `process.env` in +page.server.ts)
  *   - routing         → `/about` (prerendered route) serves
  *   - static assets   → `/robots.txt` from static/
- *   - RPC wire path   → `POST /api/__rpc/bump` (createClient's wire
- *                       protocol) serves through the dev server against
- *                       the real DynamoDB table, and the +page.server.ts
- *                       SSR seam renders the counter
+ *   - form actions    → `POST /?/bump` (the request `use:enhance` sends)
+ *                       serves through the dev server, dispatching the
+ *                       backend in-process (value form) against the real
+ *                       DynamoDB table, and the +page.server.ts SSR seam
+ *                       renders the counter
  *   - HOT RELOAD      → editing src/routes/+page.svelte is served by
  *                       Vite's HMR without a redeploy
  */
@@ -162,17 +163,27 @@ test(
     const robots = await (await fetchOk(new URL("/robots.txt", url))).text();
     expect(robots).toContain("User-agent:");
 
-    // The rpc wire path rides the dev server too: this is the exact
-    // request the browser's type-only createClient sends, served by the
-    // backend method against the REAL DynamoDB table (remote()).
-    const rpc = await fetch(new URL("/api/__rpc/bump", url), {
+    // The public surface rides the dev server too: this is the exact
+    // request `use:enhance` sends for the bump form action, which
+    // dispatches the backend in-process (value form) against the REAL
+    // DynamoDB table (remote()).
+    const action = await fetch(new URL("/?/bump", url), {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: "[]",
+      headers: {
+        origin: new URL(url).origin,
+        "x-sveltekit-action": "true",
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: "",
     });
-    expect(rpc.status).toBe(200);
-    const envelope = (await rpc.json()) as { value: number };
-    expect(envelope.value).toBeGreaterThanOrEqual(1);
+    expect(action.status).toBe(200);
+    const result = (await action.json()) as { type: string };
+    expect(result.type).toBe("success");
+
+    // ...and the JSON route the queue section polls serves as well.
+    const processed = await fetchOk(new URL("/api/processed", url));
+    const state = (await processed.json()) as { count: number };
+    expect(state.count).toBeGreaterThanOrEqual(0);
 
     // ...and the SSR seam (+page.server.ts, the value form) renders the
     // counter into the page.

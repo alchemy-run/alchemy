@@ -27,23 +27,20 @@ export const Visits = KV.Namespace("Visits");
 export const Jobs = Queues.Queue("Jobs");
 
 /**
- * ONE Worker serves the Next.js app AND a typed backend API: the third
+ * ONE Worker serves the Next.js app AND a typed backend: the third
  * argument is an Effect program (the same shape as `Cloudflare.Worker`)
- * whose RPC METHODS are the API surface. `createClient` calls them — over
- * `POST /api/__rpc/<method>` from client components (type-only form) and
- * by direct in-process dispatch from server components (value form). The
- * takeover is automatic — alchemy wraps the OpenNext worker artifact with
- * a generated entry that serves the RPC dispatch first; every other path
- * (including Next's own /api/hello route handler) stays Next's.
+ * whose RPC METHODS are the API surface for TRUSTED callers only. There
+ * is no public wire — `createClient(Backend)` (the value form) dispatches
+ * them in-process from server code: async server components and the
+ * server actions in app/actions.ts, which are Next's own transport for
+ * the browser. The takeover is automatic — alchemy wraps the OpenNext
+ * worker artifact with a generated entry that delivers the program's
+ * platform handlers (the queue consumer below) alongside `fetch`; every
+ * HTTP path (including Next's own /api/hello route handler) stays Next's.
  *
  * The KV capability the program uses is collected automatically at plan
  * time — no separate backend worker, service binding, proxy route, or env
  * shim.
- *
- * Dev caveat: the default `alchemy dev` mode (`preview`) serves the real
- * takeover artifact with full parity. `nextjs: { devMode: "hmr" }` runs
- * `next dev` in Node, where the takeover doesn't exist — there the RPC
- * dispatch needs the explicit `alchemy/Next` route-handler mount.
  *
  * `main: import.meta.url` anchors this module — the engine imports it for
  * plan-time binding collection and the generated entry re-imports it at
@@ -100,9 +97,9 @@ export default class Site extends Nextjs<Site>()(
     );
 
     return {
-      // RPC methods — the KV-backed visit counter. Served to `createClient`
-      // at the universal `POST /api/__rpc/<method>` dispatch, and invoked
-      // directly (no HTTP) by the value form in server components.
+      // RPC methods — the KV-backed visit counter. Invoked directly (no
+      // HTTP) by the value form of `createClient` from trusted server
+      // code: the async server component and the server actions.
       visits: Effect.fn(function* () {
           return Number((yield* visits.get("count")) ?? "0");
         }, Effect.orDie),
@@ -111,13 +108,14 @@ export default class Site extends Nextjs<Site>()(
           yield* visits.put("count", String(count));
           return count;
         }, Effect.orDie),
-      // The async leg's producer (RPC: POST /api/__rpc/enqueue) — sends a
-      // message to the queue; the consumer above catches up asynchronously.
+      // The async leg's producer (called by the `enqueueJob` server
+      // action) — sends a message to the queue; the consumer above
+      // catches up asynchronously.
       enqueue: (message: string) =>
         jobs
           .send(message, { contentType: "text" })
           .pipe(Effect.asVoid, Effect.orDie),
-      // Read the consumer's async state (RPC: POST /api/__rpc/processed).
+      // Read the consumer's async state (the `getProcessed` server action).
       processed: Effect.fn(function* () {
           const count = yield* visits.get("processed-count");
           const last = yield* visits.get("processed-last");

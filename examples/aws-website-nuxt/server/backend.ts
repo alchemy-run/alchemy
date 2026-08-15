@@ -1,9 +1,8 @@
 // The effectful site module: default-exports the Website class, anchored
 // by `main: import.meta.url`. The engine imports it at plan time (binding
 // collection — table-name env var + IAM onto the server Lambda), and the
-// alchemy-generated middleware (`.alchemy/nuxt/NuxtSite/effect-handler.mjs`,
-// injected through `nitro.handlers`) imports it inside the nitro server
-// bundle to serve the backend's RPC methods — no mount file needed.
+// nitro server routes in server/api/ import it inside the nitro server
+// bundle to dispatch the backend's methods in-process.
 //
 // Narrow subpath imports only (`alchemy/AWS/DynamoDB`, not `alchemy/AWS`):
 // this module is compiled by nitro into the server bundle and evaluated by
@@ -29,7 +28,7 @@ export const Visits = DynamoDB.Table("Visits", {
 
 /**
  * SQS queue for the async leg: the site's program both produces to it (the
- * `enqueue` RPC method) and CONSUMES it — the consumer deploys as a sibling
+ * `enqueue` method) and CONSUMES it — the consumer deploys as a sibling
  * effect Lambda from this same module, with the event-source mapping and
  * its IAM targeting the sibling (the framework-built site Lambda stays
  * fetch-only). Deliberately NOT `remote()`: under `alchemy dev` the queue,
@@ -44,16 +43,11 @@ export const Jobs = SQS.Queue("Jobs", {
 
 /**
  * One Lambda serves the Nuxt app AND the Effect program's backend. The
- * program's RPC METHODS are the API surface: each method is callable
- * through `createClient` (`alchemy/Client`) — in-process during SSR (the
- * value form) and over the wire from the browser
- * (`POST /api/__rpc/<method>`, the type-only form). The wire path mounts
- * itself: alchemy generates a nitro middleware
- * (`.alchemy/nuxt/NuxtSite/effect-handler.mjs`, injected through
- * `nitro.handlers`) that nitro compiles into the server bundle, so it
- * runs in the deployed Lambda and under `nuxt dev` alike. The middleware
- * dispatches the universal rpc path and declines everything else, so
- * nitro's own routes (e.g. `/api/hello`) keep serving normally.
+ * program's METHODS are the API surface for TRUSTED callers only — the
+ * nitro server routes in server/api/ value-import this class and dispatch
+ * the methods directly in-process via `createClient` (`alchemy/Client`),
+ * in the deployed Lambda and under `nuxt dev` alike. There is no public
+ * wire for the methods; the browser talks to the nitro routes.
  */
 export default class Site extends Nuxt<Site>()(
   "NuxtSite",
@@ -83,7 +77,7 @@ export default class Site extends Nuxt<Site>()(
     // (`NuxtSite-Handlers`) with the event-source mapping targeting it;
     // at runtime the sibling dispatches each SQS batch here. Each message
     // bumps the `processed-count` item and records `processed-last` in
-    // DynamoDB, where the `processed` RPC method reads them back.
+    // DynamoDB, where the `processed` method reads them back.
     yield* SQS.consumeQueueMessages(queue, (records) =>
       records.pipe(
         Stream.runForEach(Effect.fn(function* (record) {
@@ -123,11 +117,11 @@ export default class Site extends Nuxt<Site>()(
           }).pipe(Effect.orDie);
           return count;
         }),
-      /** Send a message to the queue (RPC: POST /api/__rpc/enqueue). */
+      /** Send a message to the queue (server/api/jobs.post.ts). */
       enqueue: Effect.fn(function* (message: string) {
           yield* sendMessage({ MessageBody: message }).pipe(Effect.orDie);
         }),
-      /** Read the consumer's async state (RPC: POST /api/__rpc/processed). */
+      /** Read the consumer's async state (server/api/jobs.get.ts). */
       processed: Effect.fn(function* () {
           const count = yield* readItem("processed-count", "count");
           const last = yield* readItem("processed-last", "value");

@@ -14,12 +14,16 @@ import Stack from "../alchemy.run.ts";
 // real response.
 const { executeWhenReady, getWhenReady } = Test;
 
-// One RPC wire call, exactly as `createClient`'s type-only form sends it:
-// `POST /api/__rpc/<method>` with a JSON array of positional args.
-const rpcWhenReady = (url: string, method: string, args: unknown[] = []) =>
+// One request against the public API — the nitro server routes in
+// server/api/, which dispatch the backend in-process (createClient's value
+// form). This is the exact request the browser sends.
+const postJsonWhenReady = (url: string, body?: unknown) =>
   executeWhenReady(
-    HttpClientRequest.post(`${url}/api/__rpc/${method}`).pipe(
-      HttpClientRequest.bodyText(JSON.stringify(args), "application/json"),
+    HttpClientRequest.post(url).pipe(
+      HttpClientRequest.bodyText(
+        JSON.stringify(body ?? {}),
+        "application/json",
+      ),
     ),
   );
 
@@ -38,7 +42,7 @@ const getBodyWhenReady = Effect.fn(function* (url: string, expected: string) {
       return yield* Effect.fail(new AssetNotReady({ body }));
     }
     return body;
-  }, 
+  },
     Effect.retry({
       while: (error) => error instanceof AssetNotReady,
       schedule: Schedule.max([
@@ -90,9 +94,10 @@ test(
     expect(res.status).toBe(200);
     const html = yield* res.text;
     expect(html).toContain("Nuxt on AWS");
-    // The SSR seam (useAsyncData server branch, the value form) rendered
-    // the counter.
+    // The SSR seam (useFetch running the nitro route in-process, the
+    // value form) rendered the counter.
     expect(html).toContain("Server-rendered visits:");
+    expect(html).toContain("Queue-processed:");
   }),
   { timeout: 180_000 },
 );
@@ -100,11 +105,9 @@ test(
 test(
   "serves the plain nitro api route",
   Effect.gen(function* () {
-    // /api/hello is a plain nitro route — the injected alchemy
-    // middleware only dispatches the rpc path and declines everything
-    // else (the backend exposes no fetch), so nitro's own handler
-    // answers. This pins the
-    // coexistence contract end-to-end.
+    // /api/hello touches no backend — nitro's own handler answers in the
+    // same Lambda, alongside the routes that dispatch the backend. This
+    // pins the coexistence contract end-to-end.
     const url = yield* base;
     const body = yield* getBodyWhenReady(`${url}/api/hello`, "from nitro");
     expect(JSON.parse(body)).toEqual({ hello: "from nitro" });
@@ -149,37 +152,34 @@ test(
 );
 
 test(
-  "serves the backend methods over the rpc wire path",
+  "bumps the counter through the nitro route (POST /api/visits)",
   Effect.gen(function* () {
     const url = yield* base;
-    // `POST /api/__rpc/bump` is the exact wire request the browser's
-    // type-only `createClient<typeof Backend>()` sends. It is dispatched
-    // by the alchemy-generated middleware (.alchemy/nuxt/NuxtSite/
-    // effect-handler.mjs, injected via nitro.handlers and compiled by
-    // nitro into the same server Lambda) before route matching. The DynamoDB capability
-    // bindings (env + IAM) were collected at plan time.
-    const res = yield* rpcWhenReady(url, "bump");
+    // The exact request the "Bump visits" button sends. The route handler
+    // value-imports the backend and calls `bump()` in-process — the
+    // DynamoDB capability bindings (env + IAM) were collected at plan
+    // time.
+    const res = yield* postJsonWhenReady(`${url}/api/visits`);
     expect(res.status).toBe(200);
-    const body = (yield* res.json) as { value: number };
-    expect(body.value).toBeGreaterThanOrEqual(1);
+    const body = (yield* res.json) as { count: number };
+    expect(body.count).toBeGreaterThanOrEqual(1);
     // A second call increments — the method really runs per request.
-    const again = yield* rpcWhenReady(url, "bump");
-    const next = (yield* again.json) as { value: number };
-    expect(next.value).toBeGreaterThan(body.value);
+    const again = yield* postJsonWhenReady(`${url}/api/visits`);
+    const next = (yield* again.json) as { count: number };
+    expect(next.count).toBeGreaterThan(body.count);
   }),
   { timeout: 180_000 },
 );
 
 test(
-  "SSR renders the backend value loaded in-process by useAsyncData",
+  "SSR renders the backend value loaded in-process by useFetch",
   Effect.gen(function* () {
     const url = yield* base;
-    // The previous test bumped through the wire; the page's useAsyncData
-    // handler reads the same DynamoDB counter with the VALUE form of
-    // createClient (direct in-process dispatch) during SSR and renders
-    // it into the HTML.
+    // The previous test bumped through the route; the page's useFetch
+    // runs the same nitro handler in-process during SSR — the value form
+    // reads the same DynamoDB counter and renders it into the HTML.
     const html = yield* getBodyWhenReady(url, "Server-rendered visits:");
-    const visits = html.match(/Server-rendered visits:[\s\S]{0,200}?(\d+)/);
+    const visits = html.match(/data-testid="count"[^>]*>(\d+)/);
     expect(visits).not.toBeNull();
     expect(Number(visits![1])).toBeGreaterThanOrEqual(2);
   }),
@@ -187,7 +187,7 @@ test(
 );
 
 test(
-  "queue round-trip: enqueue over rpc, the sibling consumer catches up",
+  "queue round-trip: enqueue via the nitro route, the sibling consumer catches up",
   Effect.gen(function* () {
     const url = yield* base;
     // Each run sends a unique marker so the assertion can't match a
@@ -195,20 +195,19 @@ test(
     const marker = `queue-marker-${crypto.randomUUID()}`;
 
     const readProcessed = Effect.gen(function* () {
-      const res = yield* rpcWhenReady(url, "processed");
+      const res = yield* getWhenReady(`${url}/api/jobs`);
       expect(res.status).toBe(200);
-      const body = (yield* res.json) as {
-        value: { count: number; last: string | null };
-      };
-      return body.value;
+      return (yield* res.json) as { count: number; last: string | null };
     });
     const before = yield* readProcessed;
 
-    // `POST /api/__rpc/enqueue` sends to SQS and returns immediately;
-    // the CONSUMER runs out of band on the sibling effect Lambda
-    // (`<site>-Handlers`), whose event-source mapping was registered by
-    // the same backend module.
-    const res = yield* rpcWhenReady(url, "enqueue", [marker]);
+    // `POST /api/jobs` sends to SQS and returns immediately; the CONSUMER
+    // runs out of band on the sibling effect Lambda (`<site>-Handlers`),
+    // whose event-source mapping was registered by the same backend
+    // module.
+    const res = yield* postJsonWhenReady(`${url}/api/jobs`, {
+      message: marker,
+    });
     expect(res.status).toBe(200);
 
     // Bounded poll until the sibling's write lands in DynamoDB.

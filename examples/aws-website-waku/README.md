@@ -14,6 +14,15 @@ const site = yield* AWS.Website.Waku("WakuSite", {
 });
 ```
 
+## The app
+
+A minimal Waku site — a framework showcase, not a backend demo (no bindings beyond `server.environment`):
+
+- `src/pages/index.tsx` — dynamic RSC page, rendered by the Lambda on every request; reads `GREETING` via `getEnv`
+- `src/pages/about.tsx` — static page, prerendered at build time and served from S3
+- `src/components/Counter.tsx` — a `"use client"` island hydrated into the server-rendered page
+- `src/components/ui/` — hand-copied shadcn-style components (`button.tsx`, `card.tsx` + the `cn` util) styled with Tailwind CSS v4
+
 ## Commands
 
 ```sh

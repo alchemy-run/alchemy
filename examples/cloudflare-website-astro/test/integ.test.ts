@@ -28,7 +28,7 @@ const getBodyWhenReady = Effect.fn(function* (url: string, expected: string) {
       return yield* Effect.fail(new AssetNotReady({ body }));
     }
     return body;
-  }, 
+  },
     Effect.retry({
       while: (error) => error instanceof AssetNotReady,
       schedule: Schedule.max([
@@ -39,6 +39,19 @@ const getBodyWhenReady = Effect.fn(function* (url: string, expected: string) {
         Schedule.recurs(20),
       ]),
     }),
+  );
+
+// The browser's transport is Astro Actions: `POST /_actions/<name>` with a
+// JSON input body. Successful results come back devalue-encoded
+// (`application/json+devalue`), a flat array whose index 0 is the root.
+const action = (url: string, name: string, input?: unknown) =>
+  executeWhenReady(
+    HttpClientRequest.post(`${url}/_actions/${name}`).pipe(
+      HttpClientRequest.bodyText(
+        JSON.stringify(input ?? {}),
+        "application/json",
+      ),
+    ),
   );
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -74,7 +87,7 @@ test(
     const url = yield* base;
     // The frontmatter calls `backend.visits()` through the VALUE form of
     // createClient (direct in-process dispatch) — the KV-backed count is
-    // already in the server-rendered HTML.
+    // in the server-rendered HTML of the React island.
     const res = yield* getWhenReady(url);
     expect(res.status).toBe(200);
     const html = yield* res.text;
@@ -90,21 +103,17 @@ test(
 );
 
 test(
-  "serves the createClient wire protocol (POST /api/__rpc/bump)",
+  "the bump action dispatches the backend method (Astro Actions)",
   Effect.gen(function* () {
     const url = yield* base;
-    // The wire-level proof of the browser's type-only form: the universal
-    // `POST /api/__rpc/<method>` dispatch envelope-encodes the RPC method
-    // result — backed by the KV binding collected at plan time.
+    // The exact request the React island's `actions.bump()` sends: the
+    // action handler calls the backend's `bump()` in-process (the value
+    // form) — backed by the KV binding collected at plan time.
     const bump = Effect.gen(function* () {
-      const res = yield* executeWhenReady(
-        HttpClientRequest.post(`${url}/api/__rpc/bump`).pipe(
-          HttpClientRequest.bodyText("[]", "application/json"),
-        ),
-      );
+      const res = yield* action(url, "bump");
       expect(res.status).toBe(200);
-      const body = (yield* res.json) as { value: number };
-      return body.value;
+      const [count] = JSON.parse(yield* res.text) as [number];
+      return count;
     });
     const first = yield* bump;
     expect(first).toBeGreaterThanOrEqual(1);
@@ -117,39 +126,33 @@ test(
 );
 
 test(
-  "queue leg: enqueue → consumer on the same class → processed",
+  "queue leg: enqueue action → consumer on the same class → processed",
   Effect.gen(function* () {
     const url = yield* base;
     const marker = `queue-marker-${crypto.randomUUID()}`;
 
     const readProcessed = Effect.gen(function* () {
-      const res = yield* executeWhenReady(
-        HttpClientRequest.post(`${url}/api/__rpc/processed`).pipe(
-          HttpClientRequest.bodyText("[]", "application/json"),
-        ),
-      );
+      const res = yield* action(url, "processed");
       expect(res.status).toBe(200);
-      const body = (yield* res.json) as {
-        value: { count: number; last: string | null };
+      // Devalue-decode the `{ count, last }` object: index 0 holds the
+      // root's field → index mapping.
+      const arr = JSON.parse(yield* res.text) as unknown[];
+      const root = arr[0] as { count: number; last: number };
+      return {
+        count: arr[root.count] as number,
+        last: arr[root.last] as string | null,
       };
-      return body.value;
     });
 
     // Baseline first — a rerun against a kept deployment (NO_DESTROY) may
     // already have processed messages.
     const before = yield* readProcessed;
 
-    // Produce through the RPC surface; the queue consumer registered on
-    // the SAME class catches up asynchronously.
-    const sent = yield* executeWhenReady(
-      HttpClientRequest.post(`${url}/api/__rpc/enqueue`).pipe(
-        HttpClientRequest.bodyText(
-          JSON.stringify([marker]),
-          "application/json",
-        ),
-      ),
-    );
-    expect(sent.status).toBe(200);
+    // Produce through the enqueue action; the queue consumer registered
+    // on the SAME class catches up asynchronously. A void handler result
+    // answers 204.
+    const sent = yield* action(url, "enqueue", { message: marker });
+    expect(sent.status).toBe(204);
 
     // Poll until the consumer's KV writes are observed.
     const after = yield* readProcessed.pipe(

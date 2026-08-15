@@ -1,7 +1,7 @@
 # Cloudflare Website: Astro
 
 Deploys an [Astro](https://astro.build) site to Cloudflare Workers with
-`Cloudflare.Website.Astro` — no `astro.config.*`, adapter setup, or
+`Cloudflare.Website.Astro` — no `astro.config.*` adapter setup or
 Wrangler configuration.
 
 ## The demo
@@ -10,8 +10,8 @@ Every effectful website example is the same app: a visit counter in a KV
 namespace (`Visits`, key `count`) exposed by two RPC methods on the
 backend program — `visits()` reads the count and `bump()` increments it.
 The page server-renders `Server-rendered visits: {n}` and a "Bump visits"
-button calls `bump()` from the browser. Only the framework and cloud
-mechanics vary between examples.
+button bumps it from the browser. Only the framework and cloud mechanics
+vary between examples.
 
 - `src/backend.ts` declares the Website class with an Effect program as
   its third argument: ONE Worker serves the Astro frontend and a typed
@@ -19,8 +19,15 @@ mechanics vary between examples.
   surface, backed by the KV namespace through a typed capability binding —
   collected automatically at plan time, no extra wiring in
   `alchemy.run.ts`.
-- `src/pages/index.astro` is the UI: the frontmatter server-renders the
-  count and the inline `<script>` bumps it from the browser.
+- `src/pages/index.astro` server-renders the initial state and mounts the
+  React island.
+- `src/components/VisitsCard.tsx` is the UI — a React island styled with
+  Tailwind and hand-copied shadcn-style components
+  (`src/components/ui/`). It bumps optimistically and polls the queue
+  state through Astro Actions.
+- `src/actions/index.ts` is the public API: Astro Actions
+  (`POST /_actions/<name>`) validate input with zod and call the backend
+  in-process.
 
 ### The async leg
 
@@ -30,29 +37,49 @@ consumed ON THE SAME CLASS by `consumeQueueMessages` — each message bumps
 `processed-count` and records `processed-last` in the `Visits` KV
 namespace, and `processed()` reads that state back. The entry takeover
 wraps the vendored Astro worker entry so the queue handler is delivered
-alongside `fetch` — no separate consumer worker. The UI's queue section
-sends a message ("Send to queue") and then polls `processed()` (bounded,
-once per second) until the count grows, so the asynchronous catch-up —
-queue → consumer → KV → UI — is visible in the
+alongside `fetch` — no separate consumer worker. The island's queue card
+sends a message ("Send to queue") and then polls the `processed` action
+(bounded, once per second) until the count grows, so the asynchronous
+catch-up — queue → consumer → KV → UI — is visible in the
 `Queue-processed: {count} — last: {last}` line.
 
-## createClient — both forms
+## The API surface: Astro Actions over the value form
+
+Schema-less RPC is for trusted callers only — there is no public RPC
+wire. Astro Actions are the framework's own transport, and inside them
+the backend is called through the in-process value form:
 
 ```ts
-// src/pages/index.astro frontmatter (SSR, non-prerendered): VALUE form —
-// direct in-process dispatch, no HTTP hop
-import Backend from "../backend";
+// src/actions/index.ts — the PUBLIC API (framework-validated)
+import { defineAction, type ActionAPIContext } from "astro:actions";
+import { createClient } from "alchemy/Client";
+import { z } from "astro/zod";
+import Backend from "../backend.ts";
+
+const backend = (ctx: ActionAPIContext) =>
+  createClient(Backend, { headers: ctx.request.headers });
+
+export const server = {
+  bump: defineAction({ handler: (_input, ctx) => backend(ctx).bump() }),
+  enqueue: defineAction({
+    input: z.object({ message: z.string().min(1).max(256) }),
+    handler: ({ message }, ctx) => backend(ctx).enqueue(message),
+  }),
+};
+```
+
+```ts
+// src/pages/index.astro frontmatter (SSR, non-prerendered): the same
+// value form — direct in-process dispatch, no HTTP hop
+import Backend from "../backend.ts";
 const backend = createClient(Backend, { headers: Astro.request.headers });
 const visits = await backend.visits();
 ```
 
-```ts
-// src/pages/index.astro <script> (browser): TYPE-ONLY form —
-// POST /api/__rpc/<method>, zero backend bytes in the client bundle
-import { createClient } from "alchemy/Client";
-import type Backend from "../backend";
-const backend = createClient<typeof Backend>();
-await backend.bump();
+```tsx
+// src/components/VisitsCard.tsx (browser): the framework's typed client
+import { actions } from "astro:actions";
+const count = await actions.bump.orThrow();
 ```
 
 ## Mechanics

@@ -7,6 +7,8 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import { createHash } from "node:crypto";
+import { toJSONAsync } from "seroval";
 import Stack from "../alchemy.run.ts";
 
 // Fresh `workers.dev` URLs transiently 404 while the route propagates.
@@ -30,7 +32,7 @@ const getBodyWhenReady = Effect.fn(function* (url: string, expected: string) {
       return yield* Effect.fail(new AssetNotReady({ body }));
     }
     return body;
-  }, 
+  },
     Effect.retry({
       while: (error) => error instanceof AssetNotReady,
       schedule: Schedule.max([
@@ -58,15 +60,46 @@ afterAll(
   }),
 );
 
-// The createClient wire protocol served by the same Worker as the frontend —
-// src/backend.ts exposes RPC methods (`visits`, `bump`) backed by KV,
-// dispatched at the universal `POST /api/__rpc/<method>` path.
-const rpc = (url: string, method: string, args: unknown[]) =>
-  executeWhenReady(
-    HttpClientRequest.post(`${url}/api/__rpc/${method}`).pipe(
-      HttpClientRequest.bodyText(JSON.stringify(args), "application/json"),
-    ),
+// TanStack server functions are the site's public API (src/server/visits.ts).
+// Start's production compiler assigns each one a deterministic id — the
+// sha256 of "<root-relative file>--<variable>_createServerFn_handler" —
+// served under the default /_serverFn base. This is exactly the URL the
+// compiled browser client posts to.
+const serverFnUrl = (base: string, name: string) =>
+  `${base}/_serverFn/${createHash("sha256")
+    .update(`src/server/visits.ts--${name}_createServerFn_handler`)
+    .digest("hex")}`;
+
+// One server-function call, as Start's client runtime sends it: POST with
+// the x-tsr-serverFn marker header and, when the fn takes data, the
+// seroval-serialized `{ data }` payload as JSON.
+const callServerFn = (base: string, name: string, data?: unknown) =>
+  Effect.gen(function* () {
+    let request = HttpClientRequest.post(serverFnUrl(base, name)).pipe(
+      HttpClientRequest.setHeader("x-tsr-serverFn", "true"),
+    );
+    if (data !== undefined) {
+      const payload = yield* Effect.promise(() => toJSONAsync({ data }));
+      request = request.pipe(
+        HttpClientRequest.bodyText(
+          JSON.stringify(payload),
+          "application/json",
+        ),
+      );
+    }
+    return yield* executeWhenReady(request);
+  });
+
+// The page server-renders the demo state (the loader runs the server
+// functions in-process during SSR) — read it back from the HTML.
+const readCount = Effect.fn(function* (base: string, testid: string) {
+  const html = yield* getBodyWhenReady(base, `data-testid="${testid}"`);
+  const match = html.match(
+    new RegExp(`data-testid="${testid}"[^>]*>(?:<!--[^>]*-->)?\\s*(\\d+)`),
   );
+  expect(match).not.toBeNull();
+  return Number(match![1]);
+});
 
 test(
   "deploys and exposes a url",
@@ -102,43 +135,49 @@ test(
 );
 
 test(
-  "RPC methods round-trip through KV (bump then visits over /api/__rpc)",
-  Effect.gen(function* () {
-    const { url } = yield* stack;
-    const base = url.replace(/\/+$/, "");
-
-    // The wire-level proof: `POST /api/__rpc/bump` with a JSON array of
-    // positional args answers the success envelope.
-    const bumped = yield* rpc(base, "bump", []);
-    expect(bumped.status).toBe(200);
-    const bumpedBody = (yield* bumped.json) as { value: number };
-    expect(bumpedBody.value).toBeGreaterThanOrEqual(1);
-
-    const got = yield* rpc(base, "visits", []);
-    expect(got.status).toBe(200);
-    const gotBody = (yield* got.json) as { value: number };
-    expect(gotBody.value).toBeGreaterThanOrEqual(bumpedBody.value);
-  }),
-  { timeout: 180_000 },
-);
-
-test(
   "SSR loader renders the backend value into the HTML",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const base = url.replace(/\/+$/, "");
 
-    // The loader called `backend.visits()` via the value form (direct
-    // in-process dispatch) during SSR — the KV-backed count is already in
-    // the server-rendered HTML.
+    // The loader called `getVisits()` — the server function dispatches
+    // `backend.visits()` through the value form (direct in-process
+    // dispatch) — so the KV-backed count is already in the
+    // server-rendered HTML.
     const html = yield* getBodyWhenReady(base, "Server-rendered visits:");
     expect(html).toContain("Server-rendered visits:");
     const count = html.match(/data-testid="count"[^>]*>(?:<!--[^>]*-->)?\s*(\d+)/);
     expect(count).not.toBeNull();
     expect(Number(count![1])).toBeGreaterThanOrEqual(0);
     // The queue section's initial state is server-rendered the same way
-    // (the loader calls `backend.processed()` through the value form).
+    // (the loader calls `getProcessed()`).
     expect(html).toContain("Queue-processed:");
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "bump server function round-trips through KV (Start's transport)",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const base = url.replace(/\/+$/, "");
+
+    const before = yield* readCount(base, "count");
+
+    // The transport-level proof: POST the compiled `bumpVisits` server
+    // function exactly as the browser client would.
+    const bumped = yield* callServerFn(base, "bumpVisits");
+    expect(bumped.status).toBe(200);
+
+    // The write is visible to the next server render.
+    const after = yield* readCount(base, "count").pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("2 seconds"),
+        until: (count) => count > before,
+        times: 10,
+      }),
+    );
+    expect(after).toBeGreaterThan(before);
   }),
   { timeout: 180_000 },
 );
@@ -150,58 +189,53 @@ test(
     const base = url.replace(/\/+$/, "");
     const marker = `queue-marker-${crypto.randomUUID()}`;
 
-    const readProcessed = Effect.gen(function* () {
-      const res = yield* rpc(base, "processed", []);
-      expect(res.status).toBe(200);
-      const body = (yield* res.json) as {
-        value: { count: number; last: string | null };
-      };
-      return body.value;
-    });
-
     // Baseline first — a rerun against a kept deployment (NO_DESTROY) may
     // already have processed messages.
-    const before = yield* readProcessed;
+    const before = yield* readCount(base, "processed-count");
 
-    // Produce through the RPC surface; the queue consumer registered on
-    // the SAME class catches up asynchronously.
-    const sent = yield* rpc(base, "enqueue", [marker]);
+    // Produce through the `enqueueJob` server function; the queue consumer
+    // registered on the SAME class catches up asynchronously.
+    const sent = yield* callServerFn(base, "enqueueJob", marker);
     expect(sent.status).toBe(200);
 
-    // Poll until the consumer's KV writes are observed.
-    const after = yield* readProcessed.pipe(
+    // Poll the server-rendered page until the consumer's KV writes are
+    // observed by the SSR loader.
+    const after = yield* readCount(base, "processed-count").pipe(
       Effect.repeat({
         schedule: Schedule.spaced("2 seconds"),
-        until: (p) => p.count > before.count,
+        until: (count) => count > before,
         times: 30,
       }),
     );
-    expect(after.count).toBeGreaterThan(before.count);
-    expect(after.last).toBe(marker);
+    expect(after).toBeGreaterThan(before);
+    const html = yield* getBodyWhenReady(base, "Queue-processed:");
+    expect(html).toContain(marker);
   }),
   { timeout: 180_000 },
 );
 
 test(
-  "unknown RPC methods answer the typed 404 envelope",
+  "the schema-less RPC wire is not publicly served",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const base = url.replace(/\/+$/, "");
 
-    // Warm the route first (a real RPC 404 is indistinguishable from the
-    // cold-start 404 that `executeWhenReady` retries through).
-    const warm = yield* rpc(base, "visits", []);
-    expect(warm.status).toBe(200);
+    // Warm the deployment first so the cold-start 404 window can't be
+    // mistaken for the assertion below.
+    yield* getBodyWhenReady(base, "Server-rendered visits:");
 
+    // createClient's in-process dispatch has no HTTP surface: the old
+    // universal `POST /api/__rpc/<method>` path falls through to the
+    // router and answers its not-found page, never an RPC envelope.
     const client = yield* HttpClient.HttpClient;
     const res = yield* client.execute(
-      HttpClientRequest.post(`${base}/api/__rpc/nope`).pipe(
+      HttpClientRequest.post(`${base}/api/__rpc/bump`).pipe(
         HttpClientRequest.bodyText("[]", "application/json"),
       ),
     );
     expect(res.status).toBe(404);
-    const body = (yield* res.json) as { error: { _tag: string } };
-    expect(body.error._tag).toBe("RpcMethodNotFound");
+    const body = yield* res.text;
+    expect(body).not.toContain('"value"');
   }),
   { timeout: 180_000 },
 );

@@ -1,112 +1,134 @@
 <script setup lang="ts">
-// The TYPE-ONLY form for the browser: zero backend bytes in the client
-// bundle — methods POST to /api/__rpc/<method> on this same Worker.
-import { createClient } from "alchemy/Client";
-import type Backend from "~~/server/backend";
+import Button from "~/components/ui/Button.vue";
+import Card from "~/components/ui/Card.vue";
+import CardContent from "~/components/ui/CardContent.vue";
+import CardDescription from "~/components/ui/CardDescription.vue";
+import CardHeader from "~/components/ui/CardHeader.vue";
+import CardTitle from "~/components/ui/CardTitle.vue";
+import Input from "~/components/ui/Input.vue";
 
-const backend = createClient<typeof Backend>();
+// The nitro routes in server/api/ are the public API — they dispatch the
+// backend in-process (createClient's value form). During SSR, useFetch
+// runs the route handler inside the Worker (no HTTP hop) and the value
+// hydrates into the client without a second request.
+const { data: visits } = await useFetch<{ count: number }>("/api/visits");
+const { data: processed } = await useFetch<{
+  count: number;
+  last: string | null;
+}>("/api/jobs");
 
-// SSR seam: during server rendering the VALUE form dispatches the backend
-// method in-process (no HTTP). The `import.meta.server` branch (and the
-// dynamic backend import inside it) is compiled out of the client bundle,
-// where the type-only client above serves client-side navigations instead.
-const { data: visits } = await useAsyncData("visits", async () => {
-  if (import.meta.server) {
-    const { default: Backend } = await import("~~/server/backend");
-    return createClient(Backend).visits();
-  }
-  return backend.visits();
-});
-
-// The queue leg's SSR-rendered initial value — same isomorphic split as
-// `visits` above.
-const { data: processed } = await useAsyncData("processed", async () => {
-  if (import.meta.server) {
-    const { default: Backend } = await import("~~/server/backend");
-    return createClient(Backend).processed();
-  }
-  return backend.processed();
-});
-
-// KNOWN GAP (Cloudflare deploys): nuxt's vite-builder resolves the
-// value-form graph node-flavored in the vue SERVER build, so the SSR
-// branches above currently error inside workerd ("r.once is not a
-// function") and `visits`/`processed` arrive null. Until the entry's
-// prebundled effect module is shared with the vue server graph, catch up
-// client-side through the type-only form so the page is fully functional.
-onMounted(async () => {
-  if (visits.value == null) {
-    visits.value = await backend.visits();
-  }
-  if (processed.value == null) {
-    processed.value = await backend.processed();
-  }
-});
-
-const bumped = ref<number | null>(null);
-
+// Optimistic bump: reflect the click immediately, then settle on the
+// server's authoritative count.
+const bumping = ref(false);
 async function bump() {
-  bumped.value = await backend.bump();
+  visits.value = { count: (visits.value?.count ?? 0) + 1 };
+  bumping.value = true;
+  try {
+    visits.value = await $fetch<{ count: number }>("/api/visits", {
+      method: "POST",
+    });
+  } finally {
+    bumping.value = false;
+  }
 }
 
+// The async leg: enqueue a message, then poll the consumer's state until
+// the catch-up lands (bounded — stop once the count grows).
 const queueText = ref("");
-
-// The async leg: enqueue a message, then poll processed() so the
-// consumer's catch-up is visible (bounded — stop once count grows).
+const sending = ref(false);
 async function sendToQueue() {
-  const before = (await backend.processed()).count;
-  await backend.enqueue(queueText.value || "hello queue");
-  for (let i = 0; i < 15; i++) {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    const p = await backend.processed();
-    processed.value = p;
-    if (p.count > before) break;
+  const before = processed.value?.count ?? 0;
+  sending.value = true;
+  try {
+    await $fetch("/api/jobs", {
+      method: "POST",
+      body: { message: queueText.value || "hello queue" },
+    });
+    for (let i = 0; i < 15; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const next = await $fetch<{ count: number; last: string | null }>(
+        "/api/jobs",
+      );
+      processed.value = next;
+      if (next.count > before) break;
+    }
+  } finally {
+    sending.value = false;
   }
 }
 </script>
 
 <template>
-  <main class="mx-auto max-w-2xl p-8">
-    <h1 class="text-3xl font-bold">Nuxt on Cloudflare Workers</h1>
-    <div
-      class="mt-6 max-w-md rounded-xl border border-slate-300 bg-white p-6 shadow-sm"
-    >
-      <p class="m-0 text-sm text-gray-500">
-        Server-rendered visits: <span data-testid="count">{{ visits }}</span>
-      </p>
-      <button
-        class="mt-4 cursor-pointer rounded-lg bg-slate-900 px-4 py-2 text-white"
-        @click="bump"
-      >
-        Bump visits
-      </button>
-      <p v-if="bumped !== null" class="mt-4 text-sm" data-testid="bumped">
-        Client bump → {{ bumped }}
+  <main class="mx-auto max-w-2xl space-y-6 p-8">
+    <div>
+      <h1 class="text-3xl font-bold tracking-tight">
+        Nuxt on Cloudflare Workers
+      </h1>
+      <p class="mt-2 text-muted-foreground">
+        One Worker serves the app, the backend, and the queue consumer.
       </p>
     </div>
-    <div
-      class="mt-6 max-w-md rounded-xl border border-slate-300 bg-white p-6 shadow-sm"
+    <Card>
+      <CardHeader>
+        <CardTitle>Visits</CardTitle>
+        <CardDescription>
+          Counted in KV, server-rendered, bumped optimistically from the
+          browser.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <p class="text-sm text-muted-foreground">
+          Server-rendered visits:
+          <span class="font-semibold text-foreground" data-testid="count">{{
+            visits?.count ?? 0
+          }}</span>
+        </p>
+        <Button class="mt-4" :disabled="bumping" @click="bump">
+          Bump visits
+        </Button>
+      </CardContent>
+    </Card>
+    <Card>
+      <CardHeader>
+        <CardTitle>Queue</CardTitle>
+        <CardDescription>
+          Messages land on a queue consumed by the same backend class — watch
+          it catch up.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div class="flex gap-2">
+          <Input v-model="queueText" placeholder="hello queue" />
+          <Button
+            class="shrink-0"
+            variant="outline"
+            :disabled="sending"
+            @click="sendToQueue"
+          >
+            {{ sending ? "Sending…" : "Send to queue" }}
+          </Button>
+        </div>
+        <p class="mt-4 text-sm text-muted-foreground" data-testid="processed">
+          Queue-processed:
+          <span
+            class="font-semibold text-foreground"
+            data-testid="processed-count"
+            >{{ processed?.count ?? 0 }}</span
+          >
+          — last:
+          <span
+            class="font-semibold text-foreground"
+            data-testid="processed-last"
+            >{{ processed?.last ?? "—" }}</span
+          >
+        </p>
+      </CardContent>
+    </Card>
+    <NuxtLink
+      class="inline-block text-sm underline underline-offset-4"
+      to="/about"
     >
-      <input
-        v-model="queueText"
-        placeholder="hello queue"
-        class="w-full rounded-lg border border-slate-300 px-3 py-2"
-      />
-      <button
-        class="mt-4 cursor-pointer rounded-lg bg-slate-900 px-4 py-2 text-white"
-        @click="sendToQueue"
-      >
-        Send to queue
-      </button>
-      <p class="mt-4 text-sm text-gray-500" data-testid="processed">
-        Queue-processed:
-        <span data-testid="processed-count">{{ processed?.count ?? 0 }}</span>
-        — last:
-        <span data-testid="processed-last">{{ processed?.last ?? "—" }}</span>
-      </p>
-    </div>
-    <NuxtLink class="mt-6 inline-block underline" to="/about"
-      >about (prerendered)</NuxtLink
-    >
+      about (prerendered)
+    </NuxtLink>
   </main>
 </template>

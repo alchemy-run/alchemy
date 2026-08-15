@@ -1,99 +1,133 @@
 <script setup lang="ts">
-// Browser side: TYPE-ONLY import + type-only form — zero backend bytes
-// in the client bundle. Each call POSTs the wire protocol
-// (`/api/__rpc/bump`), dispatched by the alchemy server middleware.
-import { createClient } from "alchemy/Client";
-import type Backend from "../../server/backend";
+import Button from "~/components/ui/Button.vue";
+import Card from "~/components/ui/Card.vue";
+import CardContent from "~/components/ui/CardContent.vue";
+import CardDescription from "~/components/ui/CardDescription.vue";
+import CardHeader from "~/components/ui/CardHeader.vue";
+import CardTitle from "~/components/ui/CardTitle.vue";
+import Input from "~/components/ui/Input.vue";
 
-const backend = createClient<typeof Backend>();
+// The nitro routes in server/api/ are the public API — they dispatch the
+// backend in-process (createClient's value form). During SSR, useFetch
+// runs the route handler inside the Lambda (no HTTP hop) and the value
+// hydrates into the client without a second request.
+const { data: visits } = await useFetch<{ count: number }>("/api/visits");
+const { data: processed } = await useFetch<{
+  count: number;
+  last: string | null;
+}>("/api/jobs");
 
-// SSR seam: `useAsyncData` runs the handler on the server during SSR —
-// there the VALUE form dispatches the backend method in-process (no HTTP
-// hop). The `import.meta.server` guard keeps the dynamic backend import
-// out of the client bundle; on client-side navigation the handler takes
-// the wire path through the same typed client.
-const { data: visits } = await useAsyncData("visits", async () => {
-  if (import.meta.server) {
-    const { default: Backend } = await import("../../server/backend");
-    return createClient(Backend).visits();
+// Optimistic bump: reflect the click immediately, then settle on the
+// server's authoritative count.
+const bumping = ref(false);
+async function bump() {
+  visits.value = { count: (visits.value?.count ?? 0) + 1 };
+  bumping.value = true;
+  try {
+    visits.value = await $fetch<{ count: number }>("/api/visits", {
+      method: "POST",
+    });
+  } finally {
+    bumping.value = false;
   }
-  return backend.visits();
-});
+}
 
-const bumped = ref<number | null>(null);
-
-const bump = async () => {
-  bumped.value = await backend.bump();
-};
-
-// The async leg: SSR renders the initial `processed()` value (the value
-// form during SSR, the wire path on client-side navigation).
-const { data: processed } = await useAsyncData("processed", async () => {
-  if (import.meta.server) {
-    const { default: Backend } = await import("../../server/backend");
-    return createClient(Backend).processed();
-  }
-  return backend.processed();
-});
-
-// `enqueue` sends to SQS and returns immediately — the sibling consumer
-// Lambda catches up out of band. Poll `processed()` (bounded) until the
-// count moves so the catch-up is visible.
+// The async leg: enqueue a message, then poll the consumer's state until
+// the catch-up lands (bounded — stop once the count grows).
 const queueText = ref("");
-
-const enqueue = async () => {
+const sending = ref(false);
+async function sendToQueue() {
   const before = processed.value?.count ?? 0;
-  await backend.enqueue(queueText.value || "hello queue");
-  for (let i = 0; i < 15; i++) {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    const next = await backend.processed();
-    processed.value = next;
-    if (next.count > before) break;
+  sending.value = true;
+  try {
+    await $fetch("/api/jobs", {
+      method: "POST",
+      body: { message: queueText.value || "hello queue" },
+    });
+    for (let i = 0; i < 15; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const next = await $fetch<{ count: number; last: string | null }>(
+        "/api/jobs",
+      );
+      processed.value = next;
+      if (next.count > before) break;
+    }
+  } finally {
+    sending.value = false;
   }
-};
+}
 </script>
 
 <template>
-  <main class="mx-auto max-w-2xl p-8">
-    <div class="rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
-      <h1 class="text-3xl font-bold">Nuxt on AWS</h1>
-      <p class="mt-4">
-        Server-rendered visits:
-        <span id="visits" class="font-semibold">{{ visits }}</span>
-      </p>
-      <button
-        class="mt-2 rounded border border-slate-300 px-3 py-1 hover:bg-slate-100"
-        @click="bump"
-      >
-        Bump visits
-      </button>
-      <p v-if="bumped !== null" class="mt-2">
-        Client bump → <span class="font-semibold">{{ bumped }}</span>
-      </p>
-      <div class="mt-6 border-t border-slate-200 pt-4">
-        <div class="flex gap-2">
-          <input
-            v-model="queueText"
-            class="rounded border border-slate-300 px-3 py-1"
-            placeholder="hello queue"
-          />
-          <button
-            class="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100"
-            @click="enqueue"
-          >
-            Send to queue
-          </button>
-        </div>
-        <p class="mt-2">
-          Queue-processed:
-          <span class="font-semibold">{{ processed?.count ?? 0 }}</span>
-          — last:
-          <span class="font-semibold">{{ processed?.last ?? "—" }}</span>
-        </p>
-      </div>
-      <p class="mt-4">
-        <NuxtLink class="underline" to="/about">about (prerendered)</NuxtLink>
+  <main class="mx-auto max-w-2xl space-y-6 p-8">
+    <div>
+      <h1 class="text-3xl font-bold tracking-tight">Nuxt on AWS</h1>
+      <p class="mt-2 text-muted-foreground">
+        One Lambda serves the app and the backend; a sibling consumes the
+        queue.
       </p>
     </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>Visits</CardTitle>
+        <CardDescription>
+          Counted in DynamoDB, server-rendered, bumped optimistically from the
+          browser.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <p class="text-sm text-muted-foreground">
+          Server-rendered visits:
+          <span class="font-semibold text-foreground" data-testid="count">{{
+            visits?.count ?? 0
+          }}</span>
+        </p>
+        <Button class="mt-4" :disabled="bumping" @click="bump">
+          Bump visits
+        </Button>
+      </CardContent>
+    </Card>
+    <Card>
+      <CardHeader>
+        <CardTitle>Queue</CardTitle>
+        <CardDescription>
+          Messages land on an SQS queue consumed by the same backend class —
+          watch it catch up.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div class="flex gap-2">
+          <Input v-model="queueText" placeholder="hello queue" />
+          <Button
+            class="shrink-0"
+            variant="outline"
+            :disabled="sending"
+            @click="sendToQueue"
+          >
+            {{ sending ? "Sending…" : "Send to queue" }}
+          </Button>
+        </div>
+        <p class="mt-4 text-sm text-muted-foreground" data-testid="processed">
+          Queue-processed:
+          <span
+            class="font-semibold text-foreground"
+            data-testid="processed-count"
+            >{{ processed?.count ?? 0 }}</span
+          >
+          — last:
+          <span
+            class="font-semibold text-foreground"
+            data-testid="processed-last"
+            >{{ processed?.last ?? "—" }}</span
+          >
+        </p>
+      </CardContent>
+    </Card>
+    <NuxtLink
+      class="inline-block text-sm underline underline-offset-4"
+      to="/about"
+    >
+      about (prerendered)
+    </NuxtLink>
   </main>
 </template>
