@@ -30,9 +30,12 @@ describe.skipIf(!runLive)("AWS.Website.Router", () => {
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {
             const router = yield* AWS.Website.Router("Router", {
+              // No `wait`: the test already polls the URL through edge
+              // propagation, and waiting on the invalidation adds 5-10
+              // minutes per attempt under full-battery CloudFront
+              // contention for no additional signal.
               invalidation: {
                 paths: "all",
-                wait: true,
               },
             });
 
@@ -87,10 +90,12 @@ describe.skipIf(!runLive)("AWS.Website.Router", () => {
     // PREVIOUS timed-out attempt's abandoned mid-delete distribution
     // (disable→delete is 5-15m on its own), so the budget covers one
     // generation of inherited teardown debt — without it, a single timeout
-    // cascades into every later run. If this times out on a CLEAN account,
-    // suspect a hung poll first (see the Effect.timeout guards in
-    // Distribution.ts), not CloudFront.
-    { timeout: 2_400_000 },
+    // cascades into every later run. `retry: 0`: retrying a timed-out
+    // CloudFront lifecycle only compounds 20-minute attempts (and each
+    // abandoned teardown seeds the next attempt's debt). If this times
+    // out on a CLEAN account, suspect a hung poll first (see the
+    // Effect.timeout guards in Distribution.ts), not CloudFront.
+    { timeout: 2_400_000, retry: 0 },
   );
 });
 

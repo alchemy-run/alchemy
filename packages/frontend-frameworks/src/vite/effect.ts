@@ -55,9 +55,19 @@ export interface ViteEffectOptions {
     | undefined;
 }
 
-/** Convert the `main` anchor (path or `file://` URL) to an absolute path. */
+/**
+ * Convert the `main` anchor (path or `file://` URL) to a forward-slash
+ * absolute path. The anchor arrives absolute from the construct
+ * (`main: import.meta.url`), so it is used VERBATIM apart from the URL
+ * unwrap — `NodePath.resolve` would prepend a drive letter on Windows and
+ * emit backslashes, which are invalid in the generated ESM import
+ * specifiers (vite and rolldown both want `C:/...` style there).
+ */
 export const effectMainPath = (main: string): string =>
-  main.startsWith("file://") ? fileURLToPath(main) : NodePath.resolve(main);
+  (main.startsWith("file://") ? fileURLToPath(main) : main).replaceAll(
+    "\\",
+    "/",
+  );
 
 /**
  * `server.routes` glob matching — the `assets.runWorkerFirst` dialect:
