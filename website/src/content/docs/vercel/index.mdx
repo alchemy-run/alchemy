@@ -3,12 +3,12 @@ title: Vercel
 description: Build and deploy full applications on Vercel with alchemy — one Effect Function plus Edge Config, Blob, and Queues wired by typed bindings, shipped as prebuilt immutable deployments with no git integration and no build pipeline.
 ---
 
-An alchemy app on Vercel is one **Function** — a project serving a
-single fetch handler — plus the resources it talks to: Edge Configs,
-Blob stores, queue topics, cron schedules — all declared in the same
-TypeScript program and wired together by typed bindings. Deploy the
-whole thing with `bun alchemy deploy`; alchemy figures out what
-changed.
+An alchemy app on Vercel is any number of **Functions** and
+**Websites** — each one owning its own Vercel project — plus the
+resources they talk to: Edge Configs, Blob stores, queue topics,
+cron schedules — all declared in the same TypeScript program and
+wired together by typed bindings. Deploy the whole thing with
+`bun alchemy deploy`; alchemy figures out what changed.
 
 New here? [Set up your token](/vercel/setup), then start the
 [tutorial](/vercel/tutorial/part-1).
@@ -24,7 +24,7 @@ is a pure traffic operation: `Vercel.rollbackProduction` re-points
 production at an earlier deployment without rebuilding anything —
 see [Deployments & rollback](/vercel/compute/deployments-and-rollback).
 
-## The whole surface in one Function
+## The whole surface in one file
 
 One file declares the config, the storage, the queue, and the
 Function that binds them all:
