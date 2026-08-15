@@ -182,7 +182,10 @@ test(
     const after = yield* readProcessed.pipe(
       Effect.repeat({
         schedule: Schedule.spaced("2 seconds"),
-        until: (p) => p.count > before.count,
+        // Both keys must land: the consumer writes count THEN last as
+        // separate KV puts, and KV propagates them independently — waiting
+        // on count alone races the gap and reads a stale/absent last.
+        until: (p) => p.count > before.count && p.last === marker,
         times: 30,
       }),
     );
