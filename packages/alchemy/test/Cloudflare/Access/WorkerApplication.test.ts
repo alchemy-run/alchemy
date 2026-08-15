@@ -96,8 +96,8 @@ test.provider(
             type: "self_hosted",
             name: "Access for alchemy worker-destination test",
             destinations: [
-              Cloudflare.Access.worker(worker),
-              Cloudflare.Access.previewWorker(worker),
+              Cloudflare.Access.Worker(worker),
+              Cloudflare.Access.WorkerPreview(worker),
             ],
             policies: [policy.policyId],
           });

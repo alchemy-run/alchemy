@@ -26,16 +26,20 @@ export interface WorkerApplicationDestination<
  * Destination covering a specific Worker's **production** traffic — custom
  * domains, routes, and its `workers.dev` URL.
  *
+ * Resolves the Worker's immutable script id (`scriptTag`) — the id the
+ * Access API keys on. Note this is NOT the Worker's `workerId` attribute
+ * (which carries the script *name*).
+ *
  * ```typescript
  * const api = yield* ApiWorker;
  * yield* Cloudflare.Access.Application("ApiAccess", {
  *   type: "self_hosted",
- *   destinations: [Cloudflare.Access.worker(api)],
+ *   destinations: [Cloudflare.Access.Worker(api)],
  *   policies: [allowTeam.policyId],
  * });
  * ```
  */
-export const worker = (
+export const Worker = (
   worker: AccessProtectableWorker,
 ): WorkerApplicationDestination<"worker"> => ({
   type: "worker",
@@ -53,14 +57,47 @@ export const worker = (
  * const api = yield* ApiWorker;
  * yield* Cloudflare.Access.Application("ApiPreviewAccess", {
  *   type: "self_hosted",
- *   destinations: [Cloudflare.Access.previewWorker(api)],
+ *   destinations: [Cloudflare.Access.WorkerPreview(api)],
  *   policies: [allowTeam.policyId],
  * });
  * ```
  */
-export const previewWorker = (
+export const WorkerPreview = (
   worker: AccessProtectableWorker,
 ): WorkerApplicationDestination<"preview_worker"> => ({
   type: "preview_worker",
   workerId: worker.scriptTag.as<string>(),
 });
+
+/**
+ * Destination covering the **production** traffic of every Worker on the
+ * account — including Workers created later. Hostname-level policies take
+ * precedence over Worker-level policies, which take precedence over this
+ * account-level policy, so an individual Worker can still be opened up with
+ * its own application.
+ *
+ * ```typescript
+ * yield* Cloudflare.Access.Application("ProtectAllWorkers", {
+ *   type: "self_hosted",
+ *   destinations: [Cloudflare.Access.AllWorkers],
+ *   policies: [allowTeam.policyId],
+ * });
+ * ```
+ */
+export const AllWorkers: { type: "all_workers" } = { type: "all_workers" };
+
+/**
+ * Destination covering the **version preview URLs** of every Worker on the
+ * account — including Workers created later.
+ *
+ * ```typescript
+ * yield* Cloudflare.Access.Application("ProtectAllPreviews", {
+ *   type: "self_hosted",
+ *   destinations: [Cloudflare.Access.AllWorkerPreviews],
+ *   policies: [allowTeam.policyId],
+ * });
+ * ```
+ */
+export const AllWorkerPreviews: { type: "all_preview_workers" } = {
+  type: "all_preview_workers",
+};

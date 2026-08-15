@@ -40,8 +40,8 @@ export type ApplicationType =
  * - `worker` / `preview_worker` — a specific Cloudflare Worker's production
  *   traffic (custom domains, routes, `workers.dev`) or its version preview
  *   URLs. `workerId` is the Worker's immutable script id — pass a deployed
- *   Worker's `scriptTag` attribute, or use the {@link worker} /
- *   {@link previewWorker} helpers.
+ *   Worker's `scriptTag` attribute, or use the {@link Worker} /
+ *   {@link WorkerPreview} helpers.
  * - `all_workers` / `all_preview_workers` — every Worker on the account
  *   (including ones created later), production or preview traffic
  *   respectively. Hostname-level policies take precedence over Worker-level
@@ -301,8 +301,8 @@ export type Application = Resource<
  * yield* Cloudflare.Access.Application("ApiAccess", {
  *   type: "self_hosted",
  *   destinations: [
- *     Cloudflare.Access.worker(api),        // production traffic
- *     Cloudflare.Access.previewWorker(api), // version preview URLs
+ *     Cloudflare.Access.Worker(api),        // production traffic
+ *     Cloudflare.Access.WorkerPreview(api), // version preview URLs
  *   ],
  *   policies: [allowTeam.policyId],
  * });
@@ -316,8 +316,8 @@ export type Application = Resource<
  * yield* Cloudflare.Access.Application("ProtectAllWorkers", {
  *   type: "self_hosted",
  *   destinations: [
- *     { type: "all_workers" },         // production traffic of every Worker
- *     { type: "all_preview_workers" }, // every Worker's preview URLs
+ *     Cloudflare.Access.AllWorkers,         // production traffic of every Worker
+ *     Cloudflare.Access.AllWorkerPreviews,  // every Worker's preview URLs
  *   ],
  *   policies: [allowTeam.policyId],
  * });
