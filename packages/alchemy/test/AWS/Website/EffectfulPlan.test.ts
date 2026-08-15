@@ -467,6 +467,138 @@ describe.concurrent("effectful Website composites plan (collect-only)", () => {
   );
 
   test.provider(
+    "Vite SSR impl arm: specifier threading + wrapper tier + collected DynamoDB binding",
+    (stack) =>
+      Effect.gen(function* () {
+        const plan = yield* stack.plan(
+          Effect.gen(function* () {
+            const table = yield* AWS.DynamoDB.Table("ViteSsrVisits", {
+              partitionKey: "pk",
+              attributes: { pk: "S" },
+            });
+            yield* AWS.Website.Vite(
+              "ViteSsrSite",
+              { ssr: true, main: import.meta.url },
+              Effect.gen(function* () {
+                const getItem = yield* AWS.DynamoDB.GetItem(table);
+                void getItem;
+                return okFetch;
+              }).pipe(Effect.provide(AWS.DynamoDB.GetItemHttp)),
+            );
+          }),
+        );
+
+        // The framework build rides the generic vite integration + its AWS
+        // deploy target (loaded from the PROJECT's node_modules at build
+        // time — never at plan).
+        const build = nodeOf(plan, "Build", "AWS.Website.Server");
+        expect(build).toBeDefined();
+        expect(build.props.framework).toBe(
+          "@alchemy.run/frontend-frameworks/vite",
+        );
+        expect(build.props.target).toBe(
+          "@alchemy.run/frontend-frameworks/vite/aws",
+        );
+        // Auto-inject (wrapper) tier: the deploy target's generated Lambda
+        // entry composes the effect fetch, driven by the `effect` build
+        // options; the effect module's content hash keys rebuilds.
+        const options = build.props.options as {
+          effect: { main: string; routes: string[] };
+          effectHash: string;
+        };
+        expect(options.effect.routes).toEqual(["/api/*"]);
+        expect(options.effect.main).toContain("EffectfulPlan.test.ts");
+        expect(typeof options.effectHash).toBe("string");
+
+        // The composite's server Lambda runs in collect-only mode over the
+        // framework artifact (`bundle: false`, streaming Function URL).
+        const server = nodeOf(plan, "Server", "AWS.Lambda.Function");
+        expect(server).toBeDefined();
+        expect(server.props.runtimeDelivery).toBe("wrapper");
+        expect(server.props.bundle).toBe(false);
+        expect(server.props.handler).toBe("handler");
+        expect(server.props.server.routes).toEqual(["/api/*"]);
+        expect(server.props.functionUrl).toMatchObject({
+          authType: "NONE",
+          invokeMode: "RESPONSE_STREAM",
+        });
+
+        // The impl's init ran at plan time: the DynamoDB capability
+        // collected IAM + the table-name env var through the binding
+        // channel.
+        const statements = (server.bindings ?? []).flatMap(
+          (binding: any) => binding.data?.policyStatements ?? [],
+        );
+        expect(
+          statements.some((statement: any) =>
+            (statement.Action ?? []).includes("dynamodb:GetItem"),
+          ),
+        ).toBe(true);
+        const envKeys = Object.keys(server.props.env ?? {});
+        expect(envKeys.some((key) => key.includes("tableName"))).toBe(true);
+      }),
+  );
+
+  test.provider(
+    "Vite SSR: viteEnvironments thread into the build options; takeover false stands the wrapper down",
+    (stack) =>
+      Effect.gen(function* () {
+        const plan = yield* stack.plan(
+          Effect.gen(function* () {
+            yield* AWS.Website.Vite(
+              "ViteRscSite",
+              {
+                ssr: true,
+                main: import.meta.url,
+                viteEnvironments: { entry: "rsc", children: ["ssr"] },
+                server: { takeover: false },
+              },
+              Effect.succeed(okFetch),
+            );
+          }),
+        );
+        // The environment split reaches the framework integration through
+        // the build options, while `takeover: false` forces the explicit
+        // tier: no effect build options, external delivery (the sentinel
+        // scan enforces the hand-written mount at deploy).
+        const build = nodeOf(plan, "Build", "AWS.Website.Server");
+        expect(build.props.options?.viteEnvironments).toEqual({
+          entry: "rsc",
+          children: ["ssr"],
+        });
+        expect(build.props.options?.effect).toBeUndefined();
+        expect(build.props.options?.effectHash).toBeUndefined();
+        const server = nodeOf(plan, "Server", "AWS.Lambda.Function");
+        expect(server.props.runtimeDelivery).toBe("external");
+        expect(server.props.server.takeover).toBe(false);
+      }),
+  );
+
+  test.provider(
+    "Vite SSR no-impl arm: plain framework site, no stamp, no route threading",
+    (stack) =>
+      Effect.gen(function* () {
+        const plan = yield* stack.plan(
+          Effect.gen(function* () {
+            yield* AWS.Website.Vite("PlainViteSsr", { ssr: true });
+          }),
+        );
+        const build = nodeOf(plan, "Build", "AWS.Website.Server");
+        expect(build).toBeDefined();
+        expect(build.props.framework).toBe(
+          "@alchemy.run/frontend-frameworks/vite",
+        );
+        expect(build.props.options).toBeUndefined();
+        const server = nodeOf(plan, "Server", "AWS.Lambda.Function");
+        expect(server).toBeDefined();
+        expect(server.props.isExternal).toBe(true);
+        expect(server.props.bundle).toBe(false);
+        expect(server.props.runtimeDelivery).toBeUndefined();
+        expect(server.props.server).toBeUndefined();
+      }),
+  );
+
+  test.provider(
     "wrapper tier: config.wrapperEntry generates the entry, threads options.main + effectHash, stamps wrapper",
     (stack) =>
       Effect.gen(function* () {
@@ -674,6 +806,42 @@ describe.concurrent("effectful Website composites plan (dev)", () => {
         };
         expect(options.effect.routes).toEqual(["/api/*"]);
         expect(options.effect.main).toContain("EffectfulPlan.test.ts");
+      }),
+  );
+
+  dev.test.provider(
+    "dev: Vite SSR (wrapper tier) threads the effect build options into the dev Server",
+    (stack) =>
+      Effect.gen(function* () {
+        const plan = yield* stack.plan(
+          Effect.gen(function* () {
+            yield* AWS.Website.Vite(
+              "DevViteSsr",
+              { ssr: true, main: import.meta.url },
+              Effect.succeed(okFetch),
+            );
+          }),
+        );
+        // The framework's `make()` mounts the effect dev middleware in
+        // front of vite's own dev server from these options — the dev
+        // analogue of the generated Lambda entry's effect arm.
+        const build = nodeOf(plan, "Build", "AWS.Website.Server");
+        expect(build).toBeDefined();
+        expect(build.props.framework).toBe(
+          "@alchemy.run/frontend-frameworks/vite",
+        );
+        const options = build.props.options as {
+          effect: { main: string; routes: string[] };
+        };
+        expect(options.effect.routes).toEqual(["/api/*"]);
+        expect(options.effect.main).toContain("EffectfulPlan.test.ts");
+        // The effect program deploys as the local emulator sibling.
+        const server = nodeOf(plan, "Server", "AWS.Lambda.Function");
+        expect(server).toBeDefined();
+        expect(server.props.main).toBe(import.meta.url);
+        expect(server.props.runtimeDelivery).toBeUndefined();
+        // No CDN resources are declared in dev.
+        expect(nodeOf(plan, "Distribution")).toBeUndefined();
       }),
   );
 
@@ -903,6 +1071,11 @@ describe.concurrent("effectful class arms carry the Lambda serve shell", () => {
       { main: import.meta.url },
       Effect.succeed(okFetch),
     ) {}
+    class ShellPlanViteSsr extends AWS.Website.Vite<ShellPlanViteSsr>()(
+      "ShellPlanViteSsr",
+      { ssr: true, main: import.meta.url },
+      Effect.succeed(okFetch),
+    ) {}
     for (const cls of [
       ShellPlanAstro,
       ShellPlanSvelte,
@@ -912,6 +1085,7 @@ describe.concurrent("effectful class arms carry the Lambda serve shell", () => {
       ShellPlanNext,
       ShellPlanNuxt,
       ShellPlanVite,
+      ShellPlanViteSsr,
     ]) {
       const shell = (cls as any)[SERVE_SHELL_KEY];
       expect(shell).toBeDefined();
@@ -939,6 +1113,11 @@ describe.concurrent("effectful class arms carry the Lambda serve shell", () => {
     const binPrefix = `${process.cwd()}/apps/web/node_modules/.bin`;
     expect(defaulted.environment.PATH.startsWith(binPrefix)).toBe(true);
     expect(defaulted.dev.env.PATH.startsWith(binPrefix)).toBe(true);
+
+    // The SPA discriminant never leaks into the StaticSite props (it
+    // would otherwise persist in resource state).
+    const discriminated = viteDefaults({ ssr: false }) as any;
+    expect("ssr" in discriminated).toBe(false);
 
     const overridden = viteDefaults({
       spa: false,

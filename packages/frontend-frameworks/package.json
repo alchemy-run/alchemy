@@ -40,6 +40,7 @@
     "test:nuxt": "vitest run src/nuxt/test",
     "test:octane": "vitest run src/octane/test",
     "test:sveltekit": "vitest run src/sveltekit/test",
+    "test:vite": "vitest run src/vite/test",
     "test:waku": "vitest run src/waku/test",
     "typecheck": "tsc -b tsconfig.json && tsc --noEmit -p tsconfig.test.json"
   },
@@ -271,6 +272,18 @@
       "bun": "./dist/sveltekit/source.js",
       "worker": "./dist/sveltekit/source.js",
       "import": "./dist/sveltekit/source.js"
+    },
+    "./vite": {
+      "types": "./dist/vite/index.d.ts",
+      "bun": "./dist/vite/index.js",
+      "worker": "./dist/vite/index.js",
+      "import": "./dist/vite/index.js"
+    },
+    "./vite/aws": {
+      "types": "./dist/vite/aws.d.ts",
+      "bun": "./dist/vite/aws.js",
+      "worker": "./dist/vite/aws.js",
+      "import": "./dist/vite/aws.js"
     },
     "./waku": {
       "types": "./dist/waku/index.d.ts",

@@ -37,6 +37,8 @@ export default defineConfig([
       "sveltekit/aws": "src/sveltekit/aws.ts",
       "sveltekit/cloudflare": "src/sveltekit/cloudflare.ts",
       "sveltekit/source": "src/sveltekit/source.ts",
+      "vite/index": "src/vite/index.ts",
+      "vite/aws": "src/vite/aws.ts",
       "waku/index": "src/waku/index.ts",
       "waku/adapter": "src/waku/adapter.ts",
       "waku/aws": "src/waku/aws.ts",
