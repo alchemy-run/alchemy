@@ -107,7 +107,7 @@ test(
     const before = (yield* visits.json) as { count: number };
     expect(before.count).toBeGreaterThanOrEqual(0);
 
-    // POST /api/visits/bump increments — the DynamoDB capability bindings
+    // POST /api/visits/bump increments — the S3 capability bindings
     // (env + IAM) were collected from the program at plan time.
     const bumped = yield* postWhenReady(`${url}/api/visits/bump`);
     expect(bumped.status).toBe(200);
@@ -155,7 +155,7 @@ test(
     const res = yield* postWhenReady(`${url}/api/queue`, { message: marker });
     expect(res.status).toBe(200);
 
-    // Bounded poll until the consumer's write lands in DynamoDB.
+    // Bounded poll until the consumer's write lands in the bucket.
     const processed = yield* readProcessed.pipe(
       Effect.repeat({
         schedule: Schedule.spaced("2 seconds"),

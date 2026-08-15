@@ -9,7 +9,7 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     // The Website class (declared in src/backend.ts with its Effect
     // program) is itself the construct — yielding it deploys the Vite
-    // build, the CloudFront edge, the backend Lambda, the DynamoDB table,
+    // build, the CloudFront edge, the backend Lambda, the S3 data bucket,
     // and the SQS queue + consumer mapping.
     const site = yield* Site;
 

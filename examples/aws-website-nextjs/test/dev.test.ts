@@ -113,11 +113,18 @@ const findActionId = async (base: string, name: string) => {
     const res = await fetch(new URL(chunkPath, base));
     if (!res.ok) continue;
     const js = await res.text();
-    const match = js.match(
-      new RegExp(
-        `createServerReference\\)?\\("([0-9a-f]{40,})"[^)]*?"${name}"\\)`,
-      ),
-    );
+    // Dev (Turbopack) carries the id→name mapping as the action-entry
+    // annotation; production chunks inline the name as the trailing
+    // createServerReference argument. Try both.
+    const match =
+      js.match(
+        new RegExp(`"([0-9a-f]{40,})":\\{"name":"${name}"\\}`),
+      ) ??
+      js.match(
+        new RegExp(
+          `createServerReference\\)?\\("([0-9a-f]{40,})"[^)]*?"${name}"\\)`,
+        ),
+      );
     if (match) return match[1];
   }
   return undefined;

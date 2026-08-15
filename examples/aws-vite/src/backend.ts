@@ -1,16 +1,15 @@
 // The effectful site module: default-exports the Website class, anchored
 // by `main: import.meta.url`. The engine imports it at plan time (binding
-// collection — table/queue env vars + IAM onto the server Lambda) and the
+// collection — bucket/queue env vars + IAM onto the server Lambda) and the
 // deployed Lambda's virtual entry re-imports it to serve `/api/*`.
 //
-// Narrow subpath imports only (`alchemy/AWS/DynamoDB`, not `alchemy/AWS`):
-// this module is bundled into the Lambda — the provider barrel would drag
-// the whole IaC engine along with it.
-import * as DynamoDB from "alchemy/AWS/DynamoDB";
+// Narrow subpath imports only (`alchemy/AWS/S3`, not `alchemy/AWS`): this
+// module is bundled into the Lambda — the provider barrel would drag the
+// whole IaC engine along with it.
 import { QueueEventSource } from "alchemy/AWS/Lambda/QueueEventSource";
+import * as S3 from "alchemy/AWS/S3";
 import * as SQS from "alchemy/AWS/SQS";
 import { StaticSite } from "alchemy/AWS/Website";
-import { remote } from "alchemy/ProviderMode";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
@@ -22,23 +21,21 @@ import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 import { Processed, SiteApi, VisitCount } from "./api.ts";
 
 /**
- * DynamoDB table bound by the site's program. `remote()` keeps the table
- * REAL even under `alchemy dev` — the emulated Lambda's capability clients
- * hit AWS directly with your ambient credentials.
+ * S3 bucket backing the demo's state (visit counter + the queue
+ * consumer's progress). S3 is fully emulated by the local runtime, so
+ * `alchemy dev` runs the whole demo offline — no cloud calls, no
+ * credentials — while a deploy uses a real bucket.
  */
-export const Visits = DynamoDB.Table("Visits", {
-  partitionKey: "pk",
-  attributes: { pk: "S" },
-}).pipe(remote());
+export const Data = S3.Bucket("Data", {
+  forceDestroy: true,
+});
 
 /**
  * SQS queue for the async leg: the site's program both produces to it (the
  * `enqueue` endpoint) and CONSUMES it — the program IS a full effect
  * Lambda, so the event-source mapping attaches to the site's own function
- * (no sibling, unlike the framework composites). Deliberately NOT
- * `remote()`: a real queue cannot feed a locally emulated consumer, so
- * under `alchemy dev` the queue stays local too (event delivery engages
- * on deploy).
+ * (no sibling, unlike the framework composites). Like the bucket, the
+ * queue and its event delivery are emulated locally under `alchemy dev`.
  */
 export const Jobs = SQS.Queue("Jobs", {
   // Lambda event-source polling needs the visibility timeout to cover the
@@ -113,33 +110,41 @@ export default class Site extends StaticSite<Site>()(
     },
   },
   Effect.gen(function* () {
-    const table = yield* Visits;
-    const getItem = yield* DynamoDB.GetItem(table);
-    const putItem = yield* DynamoDB.PutItem(table);
+    const bucket = yield* Data;
+    const getObject = yield* S3.GetObject(bucket);
+    const putObject = yield* S3.PutObject(bucket);
     const queue = yield* Jobs;
     const sendMessage = yield* SQS.SendMessage(queue);
 
-    /** Read one string attribute from a keyed item (undefined when unset). */
-    const readItem = Effect.fn(function* (pk: string, attr: "count" | "value") {
-      const current = yield* getItem({
-        Key: { pk: { S: pk } },
-        ConsistentRead: true,
+    /** Read one key's text content (undefined when the key is unset). */
+    const readKey = Effect.fn(function* (key: string) {
+      return yield* getObject({ Key: key }).pipe(
+        Effect.flatMap((result) =>
+          Stream.mkString(Stream.decodeText(result.Body!)),
+        ),
+        Effect.catchTag("NoSuchKey", () => Effect.succeed(undefined)),
+        Effect.orDie,
+      );
+    });
+
+    /** Write one key's text content. */
+    const writeKey = Effect.fn(function* (key: string, value: string) {
+      yield* putObject({
+        Key: key,
+        Body: value,
+        ContentType: "text/plain",
       }).pipe(Effect.orDie);
-      const item = current.Item?.[attr];
-      return item && "N" in item ? item.N : item?.S;
     });
 
     /** Read the visit counter (0 when unset). */
     const visits = Effect.fn(function* () {
-      return Number((yield* readItem("count", "count")) ?? "0");
+      return Number((yield* readKey("count")) ?? "0");
     });
 
     /** Increment the counter, persist it, and return the new count. */
     const bump = Effect.fn(function* () {
       const count = (yield* visits()) + 1;
-      yield* putItem({
-        Item: { pk: { S: "count" }, count: { N: String(count) } },
-      }).pipe(Effect.orDie);
+      yield* writeKey("count", String(count));
       return count;
     });
 
@@ -150,31 +155,22 @@ export default class Site extends StaticSite<Site>()(
 
     /** Read the consumer's async state. */
     const processed = Effect.fn(function* () {
-      const count = yield* readItem("processed-count", "count");
-      const last = yield* readItem("processed-last", "value");
+      const count = yield* readKey("processed-count");
+      const last = yield* readKey("processed-last");
       return { count: Number(count ?? "0"), last: last ?? null };
     });
 
     // The async leg's CONSUMER — registered on the SAME program, so the
     // event-source mapping targets the site's own Lambda. Each message
-    // bumps `processed-count` and records `processed-last` in DynamoDB,
+    // bumps `processed-count` and records `processed-last` in the bucket,
     // where the `processed` endpoint reads them back.
     yield* SQS.consumeQueueMessages(queue, (records) =>
       records.pipe(
         Stream.runForEach(
           Effect.fn(function* (record) {
-            const count = Number(
-              (yield* readItem("processed-count", "count")) ?? "0",
-            );
-            yield* putItem({
-              Item: {
-                pk: { S: "processed-count" },
-                count: { N: String(count + 1) },
-              },
-            }).pipe(Effect.orDie);
-            yield* putItem({
-              Item: { pk: { S: "processed-last" }, value: { S: record.body } },
-            }).pipe(Effect.orDie);
+            const count = Number((yield* readKey("processed-count")) ?? "0");
+            yield* writeKey("processed-count", String(count + 1));
+            yield* writeKey("processed-last", record.body);
           }),
         ),
       ),
@@ -213,11 +209,7 @@ export default class Site extends StaticSite<Site>()(
       processed,
     };
   }).pipe(
-    Effect.provide([
-      DynamoDB.GetItemHttp,
-      DynamoDB.PutItemHttp,
-      SQS.SendMessageHttp,
-    ]),
+    Effect.provide([S3.GetObjectHttp, S3.PutObjectHttp, SQS.SendMessageHttp]),
     Effect.provide(QueueEventSource),
   ),
 ) {}

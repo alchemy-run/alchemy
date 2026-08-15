@@ -7,7 +7,7 @@ A React + Vite SPA with an effect-native backend, deployed as ONE
 - the Effect program in `src/backend.ts` deploys as an effect Lambda that
   the CloudFront edge router consults FIRST for `/api/*` — a static file
   can never shadow an API path, even with `spa: true`
-- the program binds DynamoDB (visits counter) and SQS (jobs queue), and
+- the program binds S3 (visits counter) and SQS (jobs queue), and
   registers the queue CONSUMER on the same Lambda with
   `SQS.consumeQueueMessages`
 

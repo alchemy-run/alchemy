@@ -77,6 +77,9 @@ const callServerFn = (base: string, name: string, data?: unknown) =>
   Effect.gen(function* () {
     let request = HttpClientRequest.post(serverFnUrl(base, name)).pipe(
       HttpClientRequest.setHeader("x-tsr-serverFn", "true"),
+      // Start's transport rejects cross-site-looking POSTs (403): a real
+      // browser call is same-origin, so imitate it.
+      HttpClientRequest.setHeader("origin", new URL(base).origin),
     );
     if (data !== undefined) {
       const payload = yield* Effect.promise(() => toJSONAsync({ data }));

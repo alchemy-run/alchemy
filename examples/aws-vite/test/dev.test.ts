@@ -4,7 +4,7 @@
  * is Vite's own dev server (`dev.command`); the effect backend deploys
  * into the local Lambda emulator (Docker) and serves /api/* at the
  * stack's `serverUrl` output. No CloudFront, no S3 — the only cloud touch
- * is the state store and the `remote()` DynamoDB table.
+ * is the state store — S3, SQS, and the Lambda are all emulated locally.
  *
  * Coverage:
  *   - stack outputs   → `url` is the Vite dev server, `serverUrl` the
@@ -168,7 +168,7 @@ test.skipIf(!dockerAvailable)(
     expect(app).toContain(MARKER);
 
     // The HttpApi answers from the emulated effect Lambda against the
-    // REAL DynamoDB table (`remote()`). First invoke pulls the Lambda
+    // locally emulated S3 bucket. First invoke pulls the Lambda
     // runtime image, so give it a generous window.
     const visits = (await (
       await fetchOk(new URL("/api/visits", serverUrl), {
