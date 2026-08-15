@@ -192,6 +192,12 @@
       "worker": "./src/Axiom/index.ts",
       "import": "./lib/Axiom/index.js"
     },
+    "./Datadog": {
+      "types": "./lib/Datadog/index.d.ts",
+      "bun": "./src/Datadog/index.ts",
+      "worker": "./src/Datadog/index.ts",
+      "import": "./lib/Datadog/index.js"
+    },
     "./GitHub": {
       "types": "./lib/GitHub/index.d.ts",
       "bun": "./src/GitHub/index.ts",
@@ -373,6 +379,7 @@
     "@distilled.cloud/axiom": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
+    "@distilled.cloud/datadog": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",
     "@effect/sql-d1": "catalog:",
