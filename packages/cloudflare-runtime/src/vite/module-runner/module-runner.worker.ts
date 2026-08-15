@@ -93,7 +93,14 @@ export class ModuleRunnerDO extends DurableObject<Env> {
     this.webSockets.set(environmentName, server);
     server.addEventListener("message", ({ data }) => {
       if (isRequestExportTypes(data)) {
-        void this.reportExportTypes(environmentName);
+        // Not awaited (the listener itself cannot be async), but this must still
+        // keep the Durable Object alive until it settles: workerd ties I/O to the
+        // event that's currently being handled, and a plain fire-and-forget call
+        // here can end up running `reportExportTypes`'s own `import()` calls (and
+        // whatever async work module evaluation triggers) after this message
+        // event is considered done, throwing "Disallowed operation called within
+        // global scope" for whatever I/O happens next.
+        this.ctx.waitUntil(this.reportExportTypes(environmentName));
       }
     });
     return new Response(null, { status: 101, webSocket: client });
