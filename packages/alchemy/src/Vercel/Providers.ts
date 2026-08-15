@@ -39,10 +39,6 @@ import {
   LocalEdgeConfigProvider,
   LocalEdgeConfigTokenProvider,
 } from "./EdgeConfig/LocalEdgeConfigProvider.ts";
-import {
-  CustomEnvironment,
-  CustomEnvironmentProvider,
-} from "./Environments/CustomEnvironment.ts";
 import { SharedEnv, SharedEnvProvider } from "./Environments/SharedEnv.ts";
 import {
   FeatureFlag,
@@ -154,7 +150,6 @@ export const providers = () =>
       ProjectDomain,
       Cert,
       BlobStore,
-      CustomEnvironment,
       SharedEnv,
       Alias,
       ProjectEnv,
@@ -218,7 +213,6 @@ export const providers = () =>
           local: () =>
             LocalBlobStoreProvider().pipe(Layer.provide(localVercelServices())),
         }),
-        CustomEnvironmentProvider(),
         SharedEnvProvider(),
         AliasProvider(),
         ProjectEnvProvider(),
