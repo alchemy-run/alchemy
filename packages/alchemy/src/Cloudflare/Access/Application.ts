@@ -166,11 +166,12 @@ export interface ApplicationProps {
   /**
    * Reusable Access policies that gate access to this application, in
    * ascending order of precedence. Author each policy with the
-   * `Cloudflare.Access.Policy` resource and pass `policy.policyId` (or a bare
-   * policy UUID) here — Access applications no longer accept inline policy
-   * bodies in this provider.
+   * `Cloudflare.Access.Policy` resource and pass the resource itself (or its
+   * `policyId`, or a bare policy UUID) here — Access applications no longer
+   * accept inline policy bodies in this provider.
    *
    * Each entry can be:
+   * - a deployed `Cloudflare.Access.Policy` (`policies: [allowTeam]`),
    * - a policy id (`string`),
    * - `{ id, precedence? }`, or
    * - the same with per-application overrides (`approvalRequired`,
@@ -179,6 +180,7 @@ export interface ApplicationProps {
    */
   policies?: ReadonlyArray<
     | string
+    | { policyId: string }
     | { id: string; precedence?: number }
     | {
         id: string;
@@ -264,7 +266,7 @@ export type Application = Resource<
  *   type: "self_hosted",
  *   domain: "dashboard.example.com",
  *   sessionDuration: "24h",
- *   policies: [allowMyOrg.policyId],
+ *   policies: [allowMyOrg],
  * });
  * ```
  *
@@ -304,7 +306,7 @@ export type Application = Resource<
  *     Cloudflare.Access.Worker(api),        // production traffic
  *     Cloudflare.Access.WorkerPreview(api), // version preview URLs
  *   ],
- *   policies: [allowTeam.policyId],
+ *   policies: [allowTeam],
  * });
  * ```
  *
@@ -319,7 +321,7 @@ export type Application = Resource<
  *     Cloudflare.Access.AllWorkers,         // production traffic of every Worker
  *     Cloudflare.Access.AllWorkerPreviews,  // every Worker's preview URLs
  *   ],
- *   policies: [allowTeam.policyId],
+ *   policies: [allowTeam],
  * });
  * ```
  *
@@ -339,7 +341,7 @@ export type Application = Resource<
  *   allowedIdps: [googleIdpId],
  *   autoRedirectToIdentity: true,
  *   sessionDuration: "720h",
- *   policies: [allowCorp.policyId],
+ *   policies: [allowCorp],
  * });
  * ```
  *
@@ -364,7 +366,7 @@ export type Application = Resource<
  *   domain: "admin.example.com",
  *   allowedIdps: [googleIdpUuid],
  *   autoRedirectToIdentity: true,
- *   policies: [admins.policyId],
+ *   policies: [admins],
  * });
  * ```
  */
@@ -1023,9 +1025,13 @@ const resolvePolicies = (
 ): ReadonlyArray<ResolvedPolicy> | undefined =>
   policies === undefined
     ? undefined
-    : // Inputs are concrete strings here — the Plan layer resolved them
-      // before the reconciler ran.
-      (policies as ReadonlyArray<ResolvedPolicy>);
+    : // Inputs are concrete values here — the Plan layer resolved them
+      // before the reconciler ran. A whole `Access.Policy` resource resolves
+      // to its Attributes; normalize it to the bare policy id so everything
+      // downstream (diffing, request building) sees one shape.
+      (policies as ReadonlyArray<ResolvedPolicy | { policyId: string }>).map(
+        (p) => (typeof p !== "string" && "policyId" in p ? p.policyId : p),
+      );
 
 const buildMutableBody = (
   news: ApplicationProps,

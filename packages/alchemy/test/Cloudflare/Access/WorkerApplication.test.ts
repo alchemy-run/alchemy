@@ -99,7 +99,7 @@ test.provider(
               Cloudflare.Access.Worker(worker),
               Cloudflare.Access.WorkerPreview(worker),
             ],
-            policies: [policy.policyId],
+            policies: [policy],
           });
           return { worker, app, policy };
         }),

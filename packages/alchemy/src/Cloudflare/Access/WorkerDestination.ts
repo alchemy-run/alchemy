@@ -35,7 +35,7 @@ export interface WorkerApplicationDestination<
  * yield* Cloudflare.Access.Application("ApiAccess", {
  *   type: "self_hosted",
  *   destinations: [Cloudflare.Access.Worker(api)],
- *   policies: [allowTeam.policyId],
+ *   policies: [allowTeam],
  * });
  * ```
  */
@@ -58,7 +58,7 @@ export const Worker = (
  * yield* Cloudflare.Access.Application("ApiPreviewAccess", {
  *   type: "self_hosted",
  *   destinations: [Cloudflare.Access.WorkerPreview(api)],
- *   policies: [allowTeam.policyId],
+ *   policies: [allowTeam],
  * });
  * ```
  */
@@ -80,7 +80,7 @@ export const WorkerPreview = (
  * yield* Cloudflare.Access.Application("ProtectAllWorkers", {
  *   type: "self_hosted",
  *   destinations: [Cloudflare.Access.AllWorkers],
- *   policies: [allowTeam.policyId],
+ *   policies: [allowTeam],
  * });
  * ```
  */
@@ -94,7 +94,7 @@ export const AllWorkers: { type: "all_workers" } = { type: "all_workers" };
  * yield* Cloudflare.Access.Application("ProtectAllPreviews", {
  *   type: "self_hosted",
  *   destinations: [Cloudflare.Access.AllWorkerPreviews],
- *   policies: [allowTeam.policyId],
+ *   policies: [allowTeam],
  * });
  * ```
  */
