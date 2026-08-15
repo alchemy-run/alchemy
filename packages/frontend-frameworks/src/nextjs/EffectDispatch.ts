@@ -221,7 +221,17 @@ export const createEffectDispatch = async (
   let debounce: NodeJS.Timeout | undefined;
   let reloading: Promise<void> = Promise.resolve();
   if (config.watch === true) {
-    const watchDir = NodePath.dirname(fileURLToPath(mainUrl));
+    // realpath expands Windows 8.3 short paths (C:\Users\RUNNER~1\...);
+    // libuv's fs-event watcher hard-aborts the process (assertion in
+    // win/fs-event.c) when the watched dir string doesn't prefix-match
+    // the long-form paths ReadDirectoryChangesW reports.
+    const watchDir = ((dir: string): string => {
+      try {
+        return NodeFs.realpathSync.native(dir);
+      } catch {
+        return dir;
+      }
+    })(NodePath.dirname(fileURLToPath(mainUrl)));
     const reload = async (): Promise<void> => {
       try {
         const next = await load();
