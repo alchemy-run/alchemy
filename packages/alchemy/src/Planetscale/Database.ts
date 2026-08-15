@@ -72,21 +72,6 @@ export interface BaseDatabaseProps {
   migrations?: MigrationsInput;
 
   /**
-   * Directory containing `.sql` migration files.
-   *
-   * @deprecated Use {@link migrations}.
-   */
-  migrationsDir?: string;
-
-  /**
-   * Name of the table used to track applied migrations.
-   *
-   * @deprecated Use {@link migrations}.
-   * @default "__alchemy_migrations"
-   */
-  migrationsTable?: string;
-
-  /**
    * Paths to additional `.sql` files to apply after migrations. Each file is
    * hashed; only files whose contents change are re-applied on later deploys.
    */

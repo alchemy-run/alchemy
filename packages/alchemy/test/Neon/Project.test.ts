@@ -210,7 +210,7 @@ test.provider(
       const project = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Neon.Project("DrizzleAdoptionProject", {
-            migrationsDir,
+            migrations: migrationsDir,
           });
         }),
       );
@@ -269,7 +269,7 @@ test.provider(
       const { project, branch } = yield* stack.deploy(
         Effect.gen(function* () {
           const project = yield* Neon.Project("MigrationProject", {
-            migrationsDir,
+            migrations: migrationsDir,
             importFiles: [seedPath],
           });
           const branch = yield* Neon.Branch("FeatureBranch", {

@@ -89,8 +89,12 @@ const assignTags = (
     ),
   );
 
-const getPackage = (client: Client, url: string, project: string, hash: string) =>
-  client.get(`${url}/projects/${project}/packages/${hash}`);
+const getPackage = (
+  client: Client,
+  url: string,
+  project: string,
+  hash: string,
+) => client.get(`${url}/projects/${project}/packages/${hash}`);
 
 const getTag = (client: Client, url: string, project: string, tag: string) =>
   client.get(`${url}/projects/${project}/tags/${tag}`);

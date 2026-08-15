@@ -236,8 +236,10 @@ export const PostgresDatabaseProvider = () =>
         updatedAt: data.updated_at,
         htmlUrl: data.html_url,
         region: { slug: data.region.slug },
-        migrationsDir: output?.migrationsDir ?? olds?.migrationsDir,
-        migrationsTable: output?.migrationsTable ?? olds?.migrationsTable,
+        migrationsDir:
+          output?.migrationsDir ?? (olds && migrationsInputOf(olds))?.dir,
+        migrationsTable:
+          output?.migrationsTable ?? (olds && migrationsInputOf(olds))?.table,
         migrationsHashes: output?.migrationsHashes ?? {},
         importHashes: output?.importHashes ?? {},
         clusterSize,

@@ -89,8 +89,7 @@ const fetchOk = async (
 };
 
 /** Extract the stack-output URL the CLI prints on stdout. */
-const outputUrl = () =>
-  output.match(/\burl:\s*['"]?(http[^\s'",]+)/)?.[1];
+const outputUrl = () => output.match(/\burl:\s*['"]?(http[^\s'",]+)/)?.[1];
 
 afterAll(async () => {
   // Always leave the repo tree clean, even on a mid-reload failure.

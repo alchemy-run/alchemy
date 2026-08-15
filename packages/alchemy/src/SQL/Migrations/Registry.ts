@@ -52,20 +52,13 @@ export const normalizeMigrationsInput = (
 };
 
 /**
- * Normalize a resource's `migrations` prop (or its deprecated
- * `migrationsDir`/`migrationsTable` pair) into the registry input shape.
+ * Normalize a resource's `migrations` prop into the registry input shape.
  * Shared by every SQL database resource.
  */
 export const migrationsInputOf = (props: {
   migrations?: MigrationsInput;
-  migrationsDir?: string;
-  migrationsTable?: string;
 }): NormalizedMigrationsInput | undefined =>
-  props.migrations
-    ? normalizeMigrationsInput(props.migrations)
-    : props.migrationsDir
-      ? { dir: props.migrationsDir, table: props.migrationsTable }
-      : undefined;
+  props.migrations ? normalizeMigrationsInput(props.migrations) : undefined;
 
 /**
  * What prior state remembers about migrations — the bookkeeping table a

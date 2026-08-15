@@ -107,7 +107,7 @@ export type ProjectProps = {
   /**
    * SQL migrations to apply against the default branch's primary database.
    * Accepts a directory path, a `Drizzle.Schema` resource, or
-   * `{ dir, format?, table?, schema? }`.
+   * `{ dir, table? }`.
    *
    * Bookkeeping always lives in Alchemy's `__alchemy_migrations` table. A
    * database previously migrated by drizzle-kit or Prisma is adopted by a
@@ -116,18 +116,6 @@ export type ProjectProps = {
    * baselining required.
    */
   migrations?: MigrationsInput;
-  /**
-   * Directory containing `.sql` migration files.
-   *
-   * @deprecated Use {@link migrations}.
-   */
-  migrationsDir?: string;
-  /**
-   * Name of the table used to track applied migrations.
-   *
-   * @deprecated Use {@link migrations}.
-   */
-  migrationsTable?: string;
   /**
    * Paths to additional `.sql` files to apply after migrations. Each file
    * is hashed; only files whose contents change are re-applied on
@@ -320,8 +308,8 @@ export const ProjectProvider = () =>
       if (!match) return undefined;
       return yield* hydrateProjectAttributes(match, {
         defaultBranchName: olds?.defaultBranchName,
-        migrationsDir: olds?.migrationsDir,
-        migrationsTable: olds?.migrationsTable,
+        migrationsDir: (olds && migrationsInputOf(olds))?.dir,
+        migrationsTable: (olds && migrationsInputOf(olds))?.table,
       });
     }),
     reconcile: Effect.fn(function* ({ id, news = {}, output }) {

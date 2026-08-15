@@ -50,23 +50,26 @@ export const JobStorageDynamoDB = Layer.provideMerge(
       const putItem = yield* DynamoDB.PutItem(table);
       const sink = yield* SQS.QueueSink(queue);
 
-      yield* DynamoDB.consumeTableChanges(table, {
-        streamViewType: "NEW_AND_OLD_IMAGES",
-        startingPosition: "LATEST",
-        batchSize: 10,
-      }, (stream) =>
-        stream.pipe(
-          Stream.map((record) => ({
-            MessageBody: JSON.stringify({
-              eventName: record.eventName,
-              keys: record.dynamodb.Keys,
-              newImage: record.dynamodb.NewImage,
-              oldImage: record.dynamodb.OldImage,
-            }),
-          })),
-          Stream.run(sink),
-          Effect.orDie,
-        ),
+      yield* DynamoDB.consumeTableChanges(
+        table,
+        {
+          streamViewType: "NEW_AND_OLD_IMAGES",
+          startingPosition: "LATEST",
+          batchSize: 10,
+        },
+        (stream) =>
+          stream.pipe(
+            Stream.map((record) => ({
+              MessageBody: JSON.stringify({
+                eventName: record.eventName,
+                keys: record.dynamodb.Keys,
+                newImage: record.dynamodb.NewImage,
+                oldImage: record.dynamodb.OldImage,
+              }),
+            })),
+            Stream.run(sink),
+            Effect.orDie,
+          ),
       );
 
       const putJob = (job: Job) =>

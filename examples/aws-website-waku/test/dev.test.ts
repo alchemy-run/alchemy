@@ -39,7 +39,8 @@ const STAGE = "dev-cli-test";
 const pagePath = path.join(root, "src", "pages", "index.tsx");
 const pageSource = fs.readFileSync(pagePath, "utf8");
 const MARKER = "This page is rendered by the server on every request.";
-const MARKER_V2 = "This page is rendered by the server on every request. [dev-v2]";
+const MARKER_V2 =
+  "This page is rendered by the server on every request. [dev-v2]";
 
 let proc: ReturnType<typeof spawn> | undefined;
 let output = "";
@@ -89,8 +90,7 @@ const fetchOk = async (
 };
 
 /** Extract the stack-output URL the CLI prints on stdout. */
-const outputUrl = () =>
-  output.match(/\burl:\s*['"]?(http[^\s'",]+)/)?.[1];
+const outputUrl = () => output.match(/\burl:\s*['"]?(http[^\s'",]+)/)?.[1];
 
 afterAll(async () => {
   // Always leave the repo tree clean, even on a mid-reload failure.

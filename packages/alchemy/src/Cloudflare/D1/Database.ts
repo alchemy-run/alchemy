@@ -99,21 +99,6 @@ export type DatabaseProps = {
    */
   migrations?: MigrationsInput;
   /**
-   * Directory containing `.sql` migration files.
-   *
-   * @deprecated Use {@link migrations} — `migrations: "./migrations"` is
-   * equivalent.
-   */
-  migrationsDir?: string;
-  /**
-   * Name of the table used to track applied migrations.
-   *
-   * @deprecated Use {@link migrations} — `migrations: { dir, table }`.
-   * @default "__alchemy_migrations" (legacy deploys that persisted another
-   * name keep converging against it)
-   */
-  migrationsTable?: string;
-  /**
    * Paths to additional `.sql` files to import after migrations are
    * applied. Each file is uploaded via Cloudflare's D1 import API and
    * hashed; only files whose contents change are re-imported on subsequent
@@ -423,8 +408,8 @@ export const ProviderLive = () =>
           jurisdiction: (olds?.jurisdiction ?? "default") as Jurisdiction,
           readReplication: olds?.readReplication,
           accountId,
-          migrationsDir: olds?.migrationsDir,
-          migrationsTable: olds?.migrationsTable,
+          migrationsDir: (olds && migrationsInputOf(olds))?.dir,
+          migrationsTable: (olds && migrationsInputOf(olds))?.table,
           migrationsHashes: {},
           importHashes: {},
         };

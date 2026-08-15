@@ -112,7 +112,7 @@ test.provider("applies migrations from migrationsDir", (stack) =>
     const database = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.D1.Database("MigrationDatabase", {
-          migrationsDir,
+          migrations: migrationsDir,
         });
       }),
     );
@@ -151,7 +151,7 @@ test.provider("applies migrations from migrationsDir", (stack) =>
     const updated = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.D1.Database("MigrationDatabase", {
-          migrationsDir,
+          migrations: migrationsDir,
         });
       }),
     );
@@ -194,8 +194,10 @@ test.provider("applies migrations using a custom migrationsTable", (stack) =>
     const database = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.D1.Database("CustomMigrationsTableDb", {
-          migrationsDir,
-          migrationsTable: "custom_migration_tracking",
+          migrations: {
+            dir: migrationsDir,
+            table: "custom_migration_tracking",
+          },
         });
       }),
     );
@@ -446,7 +448,7 @@ test.provider(
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Cloudflare.D1.Database("RollForwardDb", {
-            migrationsDir,
+            migrations: migrationsDir,
           });
         }),
       );
@@ -504,7 +506,7 @@ test.provider(
       const rolled = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Cloudflare.D1.Database("RollForwardDb", {
-            migrationsDir,
+            migrations: migrationsDir,
           });
         }),
       );
@@ -736,7 +738,7 @@ test.provider(
       const upgraded = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Cloudflare.D1.Database("LegacyMigrationDb", {
-            migrationsDir,
+            migrations: migrationsDir,
           });
         }),
       );

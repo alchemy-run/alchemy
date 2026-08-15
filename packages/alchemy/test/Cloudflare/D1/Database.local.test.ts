@@ -45,10 +45,7 @@ const RpcMigrationStack = Alchemy.Stack(
     state: Alchemy.localState(),
   },
   Cloudflare.D1.Database("RpcMigratedDB", {
-    migrationsDir: pathe.resolve(
-      import.meta.dirname,
-      "fixtures/rpc-migrations",
-    ),
+    migrations: pathe.resolve(import.meta.dirname, "fixtures/rpc-migrations"),
   }),
 );
 
@@ -117,7 +114,7 @@ inProcessTest.provider(
 
       const db = yield* stack.deploy(
         Cloudflare.D1.Database("InProcessMigratedDB", {
-          migrationsDir: pathe.resolve(
+          migrations: pathe.resolve(
             import.meta.dirname,
             "fixtures/rpc-migrations",
           ),
@@ -204,7 +201,7 @@ test.provider(
 
       const deploy = Effect.gen(function* () {
         const db = yield* Cloudflare.D1.Database("LocalMigratedDB", {
-          migrationsDir,
+          migrations: migrationsDir,
         });
         const worker = yield* Cloudflare.Worker("d1-migrations-worker", {
           main: pathe.resolve(

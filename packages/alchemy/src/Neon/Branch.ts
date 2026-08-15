@@ -106,18 +106,6 @@ export type BranchProps = {
    */
   migrations?: MigrationsInput;
   /**
-   * Directory containing `.sql` migration files.
-   *
-   * @deprecated Use {@link migrations}.
-   */
-  migrationsDir?: string;
-  /**
-   * Name of the table used to track applied migrations.
-   *
-   * @deprecated Use {@link migrations}.
-   */
-  migrationsTable?: string;
-  /**
    * Paths to additional `.sql` files to apply after migrations.
    */
   importFiles?: string[];
@@ -351,8 +339,8 @@ export const BranchProvider = () =>
         pooledConnectionUri: conn.pooled,
         origin: parsePostgresOrigin(conn.uri),
         pooledOrigin: parsePostgresOrigin(conn.pooled),
-        migrationsDir: olds?.migrationsDir,
-        migrationsTable: olds?.migrationsTable,
+        migrationsDir: (olds && migrationsInputOf(olds))?.dir,
+        migrationsTable: (olds && migrationsInputOf(olds))?.table,
         migrationsHashes: {},
         importHashes: {},
       };
