@@ -898,6 +898,11 @@ describe.concurrent("effectful class arms carry the Lambda serve shell", () => {
       { main: import.meta.url },
       Effect.succeed(okFetch),
     ) {}
+    class ShellPlanVite extends AWS.Website.Vite<ShellPlanVite>()(
+      "ShellPlanVite",
+      { main: import.meta.url },
+      Effect.succeed(okFetch),
+    ) {}
     for (const cls of [
       ShellPlanAstro,
       ShellPlanSvelte,
@@ -906,6 +911,7 @@ describe.concurrent("effectful class arms carry the Lambda serve shell", () => {
       ShellPlanStatic,
       ShellPlanNext,
       ShellPlanNuxt,
+      ShellPlanVite,
     ]) {
       const shell = (cls as any)[SERVE_SHELL_KEY];
       expect(shell).toBeDefined();
@@ -913,5 +919,37 @@ describe.concurrent("effectful class arms carry the Lambda serve shell", () => {
       expect(typeof shell.dispose).toBe("function");
       expect(typeof shell.runtime).toBe("function");
     }
+  });
+
+  it("the Vite arm is StaticSite with the Vite conventions defaulted", async () => {
+    // The thin-arm contract: `rootDir` becomes `path`, the build/dev
+    // commands are the standard Vite invocations resolved against the
+    // PROJECT's node_modules/.bin (PATH-prepended — `npx` walks node's
+    // package tree and can land on an unrelated vite), spa fallback is
+    // on, and explicit overrides win untouched.
+    const { viteDefaults } = await import("@/AWS/Website/Vite.ts");
+
+    const defaulted = viteDefaults({ rootDir: "apps/web" }) as any;
+    expect(defaulted.path).toBe("apps/web");
+    expect(defaulted.spa).toBe(true);
+    expect(defaulted.build.command).toBe("vite build");
+    expect(defaulted.build.output).toBe("dist");
+    expect(defaulted.dev.command).toBe("vite dev");
+    // The project's bin dir leads PATH for both the build and dev worlds.
+    const binPrefix = `${process.cwd()}/apps/web/node_modules/.bin`;
+    expect(defaulted.environment.PATH.startsWith(binPrefix)).toBe(true);
+    expect(defaulted.dev.env.PATH.startsWith(binPrefix)).toBe(true);
+
+    const overridden = viteDefaults({
+      spa: false,
+      build: { command: "bun run build", output: "out" },
+      dev: { command: "bun run dev" },
+    }) as any;
+    expect(overridden.spa).toBe(false);
+    expect(overridden.build.command).toBe("bun run build");
+    expect(overridden.build.output).toBe("out");
+    expect(overridden.dev.command).toBe("bun run dev");
+    // An explicit build keeps the user's environment untouched.
+    expect(overridden.environment).toBeUndefined();
   });
 });

@@ -9,7 +9,7 @@
 import { QueueEventSource } from "alchemy/AWS/Lambda/QueueEventSource";
 import * as S3 from "alchemy/AWS/S3";
 import * as SQS from "alchemy/AWS/SQS";
-import { StaticSite } from "alchemy/AWS/Website";
+import { Vite } from "alchemy/AWS/Website";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
@@ -81,18 +81,11 @@ const domainAliases = process.env.WEBSITE_ALIASES?.split(",")
  * bindings from sibling functions). The static frontend is untrusted — it
  * talks ONLY through the schema-validated HttpApi mounted on `fetch`.
  */
-export default class Site extends StaticSite<Site>()(
+export default class Site extends Vite<Site>()(
   "Site",
   {
-    path: ".",
-    build: {
-      command: "bun run build",
-      output: "dist",
-      // Only hash the files that affect the build, so unchanged sources
-      // skip the Vite build (and the upload) entirely.
-      include: ["src/**", "index.html", "package.json", "vite.config.ts"],
-    },
-    spa: true,
+    // The Vite conventions are the defaults: `npx vite build` → dist/,
+    // `npx vite dev` under `alchemy dev`, spa fallback on.
     main: import.meta.url,
     invalidation: {
       paths: "all",
@@ -101,9 +94,6 @@ export default class Site extends StaticSite<Site>()(
       domainName && hostedZoneId
         ? { name: domainName, hostedZoneId, aliases: domainAliases }
         : undefined,
-    // Dev: Vite serves the frontend; the effect Lambda (and the queue
-    // consumer) run in the local emulator at the stack's `serverUrl`.
-    dev: { command: "bun run dev:vite" },
     tags: {
       Example: "aws-vite",
       Surface: "website",

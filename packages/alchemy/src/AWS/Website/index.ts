@@ -10,5 +10,6 @@ export * from "./Server.ts";
 export * from "./shared.ts";
 export * from "./SsrSite.ts";
 export * from "./StaticSite.ts";
+export * from "./Vite.ts";
 export * from "./SvelteKit.ts";
 export * from "./Waku.ts";

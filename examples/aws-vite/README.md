@@ -1,7 +1,7 @@
 # AWS Vite Example
 
 A React + Vite SPA with an effect-native backend, deployed as ONE
-`AWS.Website.StaticSite`:
+`AWS.Website.Vite`:
 
 - the Vite build uploads to a private S3 bucket behind CloudFront
 - the Effect program in `src/backend.ts` deploys as an effect Lambda that
