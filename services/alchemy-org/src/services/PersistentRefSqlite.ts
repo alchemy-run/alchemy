@@ -4,7 +4,7 @@
  * written through this store survive the reload cycle (process exit +
  * resurrection), so run state persists while behavior code changes.
  *
- * Same physics decisions as {@link SqliteLedger}: no finalizer (layer
+ * Same physics decisions as {@link LedgerSqlite}: no finalizer (layer
  * construction is isolate-scoped; sqlite commits per statement; the
  * OS closing the fd at exit is enough), one file, keys flattened with
  * the canonical {@link PersistentRef.pathKey} encoding.
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS refs (
  * `JSON.stringify({ v: undefined })` is `"{}"`, which parses back to
  * `undefined` — while a legitimate `null` stays `null`.
  */
-export const SqlitePersistentRefStore = (
+export const PersistentRefSqlite = (
   path: string,
 ): Layer.Layer<PersistentRef.Store> =>
   Layer.effect(
@@ -38,7 +38,7 @@ export const SqlitePersistentRefStore = (
           return database;
         },
         catch: (cause) =>
-          new Error(`SqlitePersistentRefStore failed to open ${path}: ${cause}`),
+          new Error(`PersistentRefSqlite failed to open ${path}: ${cause}`),
       }).pipe(Effect.orDie);
 
       return PersistentRef.Store.of({

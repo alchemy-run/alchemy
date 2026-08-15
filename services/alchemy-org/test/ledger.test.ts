@@ -11,8 +11,9 @@ import { expect, test } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import type * as Layer from "effect/Layer";
-import { Ledger, MemoryLedger } from "../src/services/Ledger.ts";
-import { SqliteLedger } from "../src/services/LedgerSqlite.ts";
+import { Ledger } from "../src/services/Ledger.ts";
+import { LedgerMemory } from "../src/services/LedgerMemory.ts";
+import { LedgerSqlite } from "../src/services/LedgerSqlite.ts";
 
 /** The contract, physics-agnostic: run under any Ledger Layer. */
 const contract = Effect.gen(function* () {
@@ -53,20 +54,20 @@ const contract = Effect.gen(function* () {
 const run = (layer: Layer.Layer<Ledger>) =>
   Effect.runPromise(contract.pipe(Effect.provide(layer)));
 
-test("MemoryLedger: offer/duplicate/settle", () => run(MemoryLedger));
+test("LedgerMemory: offer/duplicate/settle", () => run(LedgerMemory));
 
-test("SqliteLedger: offer/duplicate/settle over a real file", () =>
+test("LedgerSqlite: offer/duplicate/settle over a real file", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const dir = yield* fs.makeTempDirectoryScoped({
         prefix: "alchemy-org-ledger-",
       });
-      yield* contract.pipe(Effect.provide(SqliteLedger(`${dir}/factory.db`)));
+      yield* contract.pipe(Effect.provide(LedgerSqlite(`${dir}/factory.db`)));
     }).pipe(Effect.provide(BunFileSystem.layer), Effect.scoped),
   ));
 
-test("SqliteLedger: restart-resume — a new Layer over the same file still dedupes", () =>
+test("LedgerSqlite: restart-resume — a new Layer over the same file still dedupes", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -85,7 +86,7 @@ test("SqliteLedger: restart-resume — a new Layer over the same file still dedu
           "accepted",
         );
         yield* ledger.settle("issues", "o/r#2");
-      }).pipe(Effect.provide(SqliteLedger(path)));
+      }).pipe(Effect.provide(LedgerSqlite(path)));
 
       // the process is killed and restarted: a NEW Layer instance over
       // the same file — the re-poll's redeliveries collapse, new work
@@ -101,6 +102,6 @@ test("SqliteLedger: restart-resume — a new Layer over the same file still dedu
         expect((yield* ledger.offer("issues", "o/r#3", null)).status).toBe(
           "accepted",
         );
-      }).pipe(Effect.provide(SqliteLedger(path)));
+      }).pipe(Effect.provide(LedgerSqlite(path)));
     }).pipe(Effect.provide(BunFileSystem.layer), Effect.scoped),
   ));

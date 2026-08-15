@@ -10,10 +10,8 @@ import { expect, test } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { SpillTools } from "../src/lib/Spill.ts";
-import {
-  ToolOutputStore,
-  ToolOutputStoreLive,
-} from "../src/lib/ToolOutputStore.ts";
+import { ToolOutputStore } from "../src/lib/ToolOutputStore.ts";
+import { ToolOutputStoreLocal } from "../src/lib/ToolOutputStoreLocal.ts";
 
 const mention = (
   name: string,
@@ -61,7 +59,7 @@ test("oversized output spills to an artifact; bounded output passes through", as
     }).pipe(
       Effect.provide(
         Layer.mergeAll(SpillTools, Layer.empty).pipe(
-          Layer.provideMerge(ToolOutputStoreLive),
+          Layer.provideMerge(ToolOutputStoreLocal),
         ),
       ),
       Effect.provide(BunServices.layer),

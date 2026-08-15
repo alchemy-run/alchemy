@@ -34,7 +34,7 @@ import { ToolOutputStoreSandbox } from "./lib/ToolOutputStoreSandbox.ts";
 import { ReviewBotEvents, ReviewBotLive } from "./ReviewBot.ts";
 import { orgRoutes } from "./Routes.ts";
 import { ApprovalsD1 } from "./services/ApprovalsD1.ts";
-import { DriverWorker } from "./services/DriverCloudflare.ts";
+import { DriverCloudflare } from "./services/DriverCloudflare.ts";
 import { GitHubWorker } from "./services/GitHubWorker.ts";
 import { LedgerD1 } from "./services/LedgerD1.ts";
 import { CheckoutsSandbox } from "./services/CheckoutsSandbox.ts";
@@ -106,7 +106,7 @@ const ReviewBotWorker = ReviewBotEvents.pipe(
 
 /** The whole org over CLOUDFLARE physics. */
 const Org = Layer.mergeAll(EngineerWorker, ReviewBotWorker).pipe(
-  Layer.provideMerge(DriverWorker),
+  Layer.provideMerge(DriverCloudflare),
   Layer.provideMerge(GitHubWorker),
   Layer.provideMerge(ApprovalsD1),
   Layer.provide(Cloudflare.D1.QueryDatabaseBinding),

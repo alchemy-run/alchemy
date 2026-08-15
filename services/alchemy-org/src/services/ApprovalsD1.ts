@@ -1,6 +1,6 @@
 /**
  * The approval gate's CLOUDFLARE physics (the durable sibling of
- * {@link ApprovalsLocal}): pending requests are D1 rows, so the gate
+ * `ApprovalsLocal`): pending requests are D1 rows, so the gate
  * works across a stateless Worker fleet — a tool asking inside one
  * session's Durable Object and the operator answering through any
  * Worker instance agree in the database.

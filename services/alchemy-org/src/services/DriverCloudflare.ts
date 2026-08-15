@@ -1,5 +1,5 @@
 /**
- * The org's DRIVER ASSEMBLY on Cloudflare — the mirror of Driver.ts
+ * The org's DRIVER ASSEMBLY on Cloudflare — the mirror of DriverLocal.ts
  * (its own module: the Worker never bundles `bun:sqlite`, the laptop
  * never bundles the DO host). Every seam answered by a Cloudflare
  * primitive:
@@ -21,7 +21,7 @@ import * as Layer from "effect/Layer";
 import { Model } from "./Model.ts";
 import { SessionIndexD1 } from "./SessionIndexD1.ts";
 
-export const DriverWorker = Layer.mergeAll(
+export const DriverCloudflare = Layer.mergeAll(
   Cloudflare.AI.DriverCloudflare.pipe(
     Layer.provide(Model),
     // the driver's `Sessions.list` delegates to the index

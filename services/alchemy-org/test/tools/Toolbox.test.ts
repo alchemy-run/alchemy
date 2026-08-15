@@ -6,7 +6,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
-import { ToolOutputStoreLive } from "../../src/lib/ToolOutputStore.ts";
+import { ToolOutputStoreLocal } from "../../src/lib/ToolOutputStoreLocal.ts";
 import {
   Bash,
   BashLive,
@@ -53,7 +53,7 @@ const withWorkspace = <A, E>(program: Effect.Effect<A, E, any>): Promise<A> =>
       const Support = Layer.mergeAll(
         WorkspaceLayer,
         SandboxLocal.pipe(Layer.provide(WorkspaceLayer)),
-        ToolOutputStoreLive,
+        ToolOutputStoreLocal,
       );
       const Tools = Layer.mergeAll(
         GrepLive,

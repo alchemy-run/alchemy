@@ -2,7 +2,7 @@ import * as AI from "alchemy/AI";
 import { ThreadStorageSqlite } from "alchemy/SQLite";
 import * as Layer from "effect/Layer";
 import { Model } from "./Model.ts";
-import { SqlitePersistentRefStore } from "./PersistentRefSqlite.ts";
+import { PersistentRefSqlite } from "./PersistentRefSqlite.ts";
 import { SessionIndexSqlite } from "./SessionIndexSqlite.ts";
 
 /**
@@ -36,5 +36,5 @@ export const DriverLocal = Layer.mergeAll(
   ),
   // provideMERGE: the HTTP surface reads the index the stream writes
   AI.SessionIndexStream.pipe(Layer.provideMerge(EngineerIndex)),
-  SqlitePersistentRefStore(".alchemy/engineer-state.sqlite"),
+  PersistentRefSqlite(".alchemy/engineer-state.sqlite"),
 );

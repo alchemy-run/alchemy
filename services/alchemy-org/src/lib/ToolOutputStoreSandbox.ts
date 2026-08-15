@@ -1,6 +1,6 @@
 /**
  * The artifact store over the session {@link AI.Sandbox} — the
- * Cloudflare sibling of {@link ToolOutputStoreLive} (which needs a
+ * Cloudflare sibling of `ToolOutputStoreLocal` (which needs a
  * host filesystem the Durable Object doesn't have). Artifacts are
  * files under `.tool-output/` on the session's OWN machine: written
  * where the output was produced, readable by `readOutput`, and

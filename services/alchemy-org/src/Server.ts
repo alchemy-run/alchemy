@@ -35,14 +35,14 @@ import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { GeneralEngineer } from "./Engineer.ts";
 import { SpillTools } from "./lib/Spill.ts";
-import { ToolOutputStoreLive } from "./lib/ToolOutputStore.ts";
+import { ToolOutputStoreLocal } from "./lib/ToolOutputStoreLocal.ts";
 import { ReviewBotEvents, ReviewBotLive } from "./ReviewBot.ts";
 import { orgRoutes } from "./Routes.ts";
-import { ApprovalsLocal } from "./services/Approvals.ts";
-import { DriverLocal } from "./services/Driver.ts";
-import { EventsLocal } from "./services/Events.ts";
+import { ApprovalsLocal } from "./services/ApprovalsLocal.ts";
+import { DriverLocal } from "./services/DriverLocal.ts";
+import { EventsLocal } from "./services/EventsLocal.ts";
 import { Credentials, GitHubLocal } from "./services/GitHubLocal.ts";
-import { SqliteLedger } from "./services/LedgerSqlite.ts";
+import { LedgerSqlite } from "./services/LedgerSqlite.ts";
 import { QualityAssuranceGeneral } from "./skills/QualityAssurance.ts";
 import { ReadDiffLive, ReadIssueLive } from "./tools/index.ts";
 import { ReadTools, RunTools, WriteTools } from "./tools/Toolbox.ts";
@@ -95,7 +95,7 @@ const CheckoutsLive = Layer.unwrap(
 const Toolbox = Layer.unwrap(
   Effect.map(workspaceRoot, (fallback) =>
     Layer.mergeAll(ReadTools, RunTools, WriteTools).pipe(
-      Layer.provide(ToolOutputStoreLive),
+      Layer.provide(ToolOutputStoreLocal),
       Layer.provide(AI.SandboxLocal),
       Layer.provide(Workspace.perRun({ fallback })),
     ),
@@ -105,7 +105,7 @@ const Toolbox = Layer.unwrap(
 /** The SPILL NET (lib/Spill.ts): oversized tool output is retained
  *  as a readOutput artifact instead of flooding the context. ONE
  *  instance over the same store the tools' own policies use. */
-const Spill = SpillTools.pipe(Layer.provide(ToolOutputStoreLive));
+const Spill = SpillTools.pipe(Layer.provide(ToolOutputStoreLocal));
 
 /** The engineer over the shared toolbox and driver. */
 const EngineerLocal = GeneralEngineer.pipe(
@@ -122,7 +122,7 @@ const ReviewBotLocal = ReviewBotEvents.pipe(
   Layer.provide(Toolbox),
   Layer.provide(Spill),
   Layer.provide(EventsLocal),
-  Layer.provideMerge(SqliteLedger(".alchemy/review-ledger.sqlite")),
+  Layer.provideMerge(LedgerSqlite(".alchemy/review-ledger.sqlite")),
 );
 
 /**

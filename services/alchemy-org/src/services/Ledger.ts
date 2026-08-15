@@ -16,12 +16,12 @@
  * Process implementations only ever `yield* Ledger`; which physics
  * answers is decided entirely at composition:
  *
- * - {@link MemoryLedger} — tests.
- * - `SqliteLedger` (LedgerSqlite.ts) — the laptop: restart-resume (kill
+ * - `LedgerMemory` (LedgerMemory.ts) — tests.
+ * - `LedgerSqlite` (LedgerSqlite.ts) — the laptop: restart-resume (kill
  *   the factory, restart it, re-polled deliveries collapse against the
  *   same file and coordination metadata survives). Its OWN module:
  *   `bun:sqlite` must never enter the Worker bundle.
- * - `D1Ledger` (LedgerD1.ts) — Cloudflare: any number of concurrent
+ * - `LedgerD1` (LedgerD1.ts) — Cloudflare: any number of concurrent
  *   Worker instances agree through the D1 transaction, never instance
  *   memory. Its own module for the same hygiene, mirrored.
  *
@@ -31,8 +31,7 @@
  * the factory-components design: keep the name Ledger).
  */
 import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
+import type * as Effect from "effect/Effect";
 
 /**
  * The answer to an `offer`: `accepted` — first sighting of `(queue,
@@ -78,31 +77,6 @@ export class Ledger extends Context.Service<
     get(key: string): Effect.Effect<unknown>;
   }
 >()("alchemy-org/Ledger") {}
-
-// ─── memory: tests ─────────────────────────────────────────────────
-
-export const MemoryLedger: Layer.Layer<Ledger> = Layer.sync(Ledger, () => {
-  const rows = new Map<string, "open" | "settled">();
-  const meta = new Map<string, unknown>();
-  const rowKey = (queue: string, key: string) => `${queue}\u0000${key}`;
-  return Ledger.of({
-    offer: (queue, key, _task) =>
-      Effect.sync(() => {
-        const id = rowKey(queue, key);
-        if (rows.has(id)) return { status: "duplicate" as const };
-        rows.set(id, "open");
-        return { status: "accepted" as const };
-      }),
-    settle: (queue, key) =>
-      Effect.sync(() => {
-        const id = rowKey(queue, key);
-        if (rows.has(id)) rows.set(id, "settled");
-      }),
-    put: (key, value) => Effect.sync(() => void meta.set(key, value)),
-    get: (key) => Effect.sync(() => meta.get(key)),
-  });
-});
-
 
 /** The tables, shared by the sqlite and D1 physics (one dialect). */
 export const LEDGER_TABLE = `

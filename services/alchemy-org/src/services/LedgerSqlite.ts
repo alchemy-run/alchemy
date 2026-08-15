@@ -14,7 +14,7 @@ import { LEDGER_TABLE, Ledger, META_TABLE } from "./Ledger.ts";
  * offer was the first. Deterministic delivery/identity keys make the
  * dedupe hold across process restarts over the same file.
  */
-export const SqliteLedger = (path: string): Layer.Layer<Ledger> =>
+export const LedgerSqlite = (path: string): Layer.Layer<Ledger> =>
   Layer.effect(
     Ledger,
     Effect.gen(function* () {
@@ -34,7 +34,7 @@ export const SqliteLedger = (path: string): Layer.Layer<Ledger> =>
           return database;
         },
         catch: (cause) =>
-          new Error(`SqliteLedger failed to open ${path}: ${cause}`),
+          new Error(`LedgerSqlite failed to open ${path}: ${cause}`),
       }).pipe(Effect.orDie);
 
       return Ledger.of({
