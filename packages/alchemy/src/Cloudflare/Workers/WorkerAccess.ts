@@ -15,7 +15,7 @@ import type { Application, ApplicationProps } from "../Access/Application.ts";
  *   Worker, created/updated/deleted with it. Access configuration
  *   (policies, session duration, IdPs) lives on applications, so
  *   per-Worker configuration means a per-Worker application — this form
- *   declares one for you (logical id `<WorkerId>Access`).
+ *   declares one for you, namespaced under the Worker (`<Worker>/Access`).
  *
  * Either way, enrolling pushes this Worker's `worker` destination (and a
  * `preview_worker` destination unless `previews: false`) onto the

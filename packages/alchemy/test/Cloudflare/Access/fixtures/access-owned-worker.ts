@@ -5,7 +5,8 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 /**
  * Worker protected by a **dedicated** Access application declared through
  * the `access.policies` form — no Application resource in sight. The
- * application is auto-declared with logical id `OwnedAccessWorkerAccess`.
+ * application is auto-declared in the Worker's namespace
+ * (`OwnedAccessWorker/Access`).
  */
 export default class OwnedAccessWorker extends Cloudflare.Worker<OwnedAccessWorker>()(
   "OwnedAccessWorker",

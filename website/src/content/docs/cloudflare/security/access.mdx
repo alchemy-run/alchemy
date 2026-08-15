@@ -15,7 +15,8 @@ alchemy this is a property of the Worker: set the `access` prop.
 The simplest form declares the policies right on the Worker. Alchemy
 creates a dedicated Access application for it (Cloudflare attaches
 policies to *applications*, so per-Worker policies mean a per-Worker
-application — it is created, updated, and deleted with the Worker):
+application — created, updated, and deleted with the Worker, and
+namespaced under it in the plan as `Api/Access`):
 
 ```typescript
 import * as Cloudflare from "alchemy/Cloudflare";

@@ -4,6 +4,7 @@ import type { Json } from "effect/Schema";
 import type { InputProps } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import type { ResourceBinding } from "../../Resource.ts";
+import * as Namespace from "../../Namespace.ts";
 import { isYieldableEffectLike } from "../../Util/effect.ts";
 import {
   Application,
@@ -86,8 +87,9 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
       ? access
       : // Dedicated form: declare an application owned by this Worker —
         // per-Worker Access configuration means a per-Worker application
-        // (Cloudflare attaches policies to applications, not Workers).
-        yield* Application(`${resource.LogicalId}Access`, {
+        // (Cloudflare attaches policies to applications, not Workers). It
+        // lives in the Worker's namespace: `<Worker>/Access`.
+        yield* Application("Access", {
           type: "self_hosted",
           name: access.name,
           policies: access.policies,
@@ -95,9 +97,9 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
           allowedIdps: access.allowedIdps,
           autoRedirectToIdentity: access.autoRedirectToIdentity,
           appLauncherVisible: access.appLauncherVisible,
-        });
+        }).pipe(Namespace.push(resource.LogicalId));
     const previews = isApplication(access) || access.previews !== false;
-    yield* application.bind(`access:${resource.FQN}`, {
+    yield* application.bind(`enroll:${resource.FQN}`, {
       destinations: [
         { type: "worker", workerId: resource.scriptTag.as<string>() },
         ...(previews
